@@ -13,7 +13,8 @@ public abstract class StateModelBinding : ObjectBinding {
     private readonly Func<DurableSchema, StateReaderBinding>? _sourceReaderResolver;
 
     private protected StateModelBinding(DurableSchema currentSchema, Type domainType, IEnumerable<StateReaderBinding> readers,
-        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null)
+        Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null,
+        bool isImmutableLeaf = false)
         : base(domainType, ObjectLayout.ForDurable(currentSchema)) {
         ArgumentNullException.ThrowIfNull(currentSchema);
         currentSchema.RequireReferenceObject();
@@ -21,6 +22,7 @@ public abstract class StateModelBinding : ObjectBinding {
         ArgumentNullException.ThrowIfNull(readers);
         CurrentSchema = currentSchema;
         _sourceReaderResolver = sourceReaderResolver;
+        IsImmutableLeaf = isImmutableLeaf;
         _readers = readers.ToArray();
         HashSet<int> versions = [];
         foreach (StateReaderBinding reader in _readers) {
@@ -37,6 +39,9 @@ public abstract class StateModelBinding : ObjectBinding {
 
     public DurableSchema CurrentSchema { get; }
     public IReadOnlyList<StateReaderBinding> Readers { get; }
+
+    /// <summary>True when the generator proved every instance field of this exact model is a readonly immutable value leaf.</summary>
+    internal bool IsImmutableLeaf { get; }
 
     internal void RequireSource(ObjectStateRecord source) {
         ArgumentNullException.ThrowIfNull(source);
@@ -83,8 +88,9 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         Func<TDomain, CaptureContext, TState> capture,
         StateReferenceVisitor<TState> visitReferences,
         Func<DurableSchema, StateReaderBinding>? sourceReaderResolver = null,
-        bool supportsBaseProjection = false)
-        : base((preparation ?? throw new ArgumentNullException(nameof(preparation))).Schema, typeof(TDomain), readers, sourceReaderResolver) {
+        bool supportsBaseProjection = false,
+        bool isImmutableLeaf = false)
+        : base((preparation ?? throw new ArgumentNullException(nameof(preparation))).Schema, typeof(TDomain), readers, sourceReaderResolver, isImmutableLeaf) {
         ArgumentNullException.ThrowIfNull(normalize);
         ArgumentNullException.ThrowIfNull(allocate);
         ArgumentNullException.ThrowIfNull(hydrate);
