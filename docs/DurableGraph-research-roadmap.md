@@ -18,11 +18,11 @@
 承接，验收从该分片与 PROJECT-STATE 进入。后继仍与下游真实接入互相校准：
 
 第三轮真实模型反馈触发的 record class 与接口迁移已由 [DB-068](design-branches/0068-record-class-model-slice.md)
-完成，具体能力与证据从 PROJECT-STATE/分片进入；不再列为待施工。
+完成；[DB-072](design-branches/0072-generator-immutable-leaf-classification-slice.md) ImmutableLeaf 分类已实施
+（2026-09-22，路由可达面见其 §3.1）。二者具体能力与证据从 PROJECT-STATE/分片进入；不再列为待施工。
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-072 ImmutableLeaf 分类](design-branches/0072-generator-immutable-leaf-classification-slice.md) | 先用 Generator 建立保守的 non-generic reference-object 不可变叶分类，经公共可选构造参数登记 binding（通道已裁定）；生成侧见证分类矩阵，运行时复用见证归 DB-073 |
 | [DB-073 Repository 作用域 WeakReference 缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) | 在 opened repository scope 内复用 ImmutableLeaf hydrated 实例，形成 fork/read 性能基线 |
 | [DB-074 高效 fork 暂缓方向](design-branches/0074-efficient-fork-deferred-directions.md) | 记录 DeepImmutable、泛型、string、Transient、deep clone、公开 fork API、opened repo session 等后续触发条件 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |

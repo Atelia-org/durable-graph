@@ -1,6 +1,6 @@
 # DB-072：Generator 侧 ImmutableLeaf 分类与生成侧见证
 
-> 状态：**Chosen / Not implemented**。2026-09-21 立项；2026-09-22 裁定 capability 通道并放宽 API 边界。用户已认可先做本片，再进入 [DB-073](0073-repository-scoped-weak-reference-cache.md)。
+> 状态：**Implemented**（2026-09-22）。2026-09-21 立项；2026-09-22 裁定 capability 通道、放宽 API 边界并完成实施。验证：`dotnet build DurableGraph.slnx -t:Rebuild` 0 警告 0 错误；ImmutableLeaf 焦点测试 21/21；全解决方案测试 2690/2690（Serialization 163、Storage 202、Persistence 732、DurableGraph.Tests 1593）。
 > 问题：为后续高效 fork 与跨操作实例复用，先在编译期识别一类可安全共享的 hydrated 领域对象。
 > 最小验收：生成器对一组代表性模型给出保守、可测试的 `ImmutableLeaf` 分类，并经构造参数登记到 binding；生成侧测试见证分类矩阵；现有 `ReadPair` 共享路径对 `ImmutableLeaf` 输入不回归。
 > 边界：不改变现有公共 API 行为（仅允许追加 `isImmutableLeaf` 公共可选构造参数）；不改持久格式，不引入 deep clone，不引入 deep-immutable 闭包，**不实现任何运行时复用机制**。
@@ -113,6 +113,15 @@ Generator 已能看见：
 分类在 Generator 内计算，结果直接经生成的 binding 构造调用传入 `isImmutableLeaf` 参数（见 §3.2），
 不经过任何运行时反射或跨程序集命名约定。
 
+实现事实（2026-09-22 实施时核实）：`UsesGenericTemplates`（`DurableSchemaGenerator.TemplateHistory.cs`）
+在编译内存在任一 durable enum、record、或带类型实参的字段形状（数组/List/Dictionary/Nullable）时返回 true；
+跨程序集 durable 引用与升级注册同样触发整编译切换（`DurableSchemaGenerator.cs` 主分流）。
+这些编译全部走 GenericProjection 路径，不发射 `isImmutableLeaf`，binding 默认 false。
+因此 §2.2 中 enum / Nullable / record 形状的正分类在二进制路径上**当前不可达**：
+分类代码按规格保留为纵深防御，测试以 family 路径保守 false 见证。
+正分类的实际可达面：无 enum/record/Nullable/容器/跨程序集引用/升级注册的编译中，
+全部实例字段为 readonly 标量或 readonly inline struct（递归）的模型。
+
 ### 3.2 Capability 通道（已裁定）
 
 2026-09-22 用户裁定：采用**公共可选构造参数**方案，并放宽原“不改公开 API”边界。
@@ -154,12 +163,12 @@ public StateModelBinding(..., bool supportsBaseProjection = false,
 
 | 验收点 | 结果 |
 |---|---|
-| 生成器分类 | 覆盖空对象、纯标量 readonly（含全部 19 种内建标量）、durable enum、Nullable、递归 inline struct、继承链、record class |
-| 保守排除 | mutable 字段、string、object ref、array、List、Dictionary、Transient、非 record 类的隐式 backing 字段、跨程序集 inline 成员、手写模型均不分类为 ImmutableLeaf |
+| 生成器分类 | 二进制路径可达面：空对象、19 种内建标量 readonly、递归 inline struct、继承链（正/负双模型）；enum / Nullable / record 因编译级路由经 family 路径保守 false（见 §3.1） |
+| 保守排除 | mutable 字段、string、object ref、array、List、Dictionary、Transient、非 record 类的隐式 backing 字段（auto-property / field-like event）、可变 inline 成员、泛型 family、跨程序集成员、手写模型均不分类为 ImmutableLeaf；非 durable 基类在分类之前已被 DG0020 拒绝 |
 | 通道 | StateModelBinding 追加公共可选构造参数 isImmutableLeaf；基类 internal IsImmutableLeaf；手写模型默认 false |
-| 生成侧见证 | 分类矩阵与 binding 登记断言通过；现有 ReadPair 共享路径对 ImmutableLeaf 输入不回归 |
+| 生成侧见证 | 分类矩阵与 binding 登记断言（生成模型 true/false、手写默认 false）通过；现有 ReadPair 共享路径对 ImmutableLeaf 输入不回归 |
 | 合同 | 不改现有公共 API 行为（仅追加 isImmutableLeaf 可选参数）、持久格式、append-only 生命周期；无运行时复用机制 |
-| 构建 | `dotnet build DurableGraph.slnx` 通过；相关 Generator/Runtime/Persistence tests 通过 |
+| 构建 | `dotnet build DurableGraph.slnx -t:Rebuild` 通过（0 警告 0 错误）；ImmutableLeaf 焦点测试与全量 `DurableGraph.Tests` 通过（2026-09-22） |
 
 ## 5. 非目标
 

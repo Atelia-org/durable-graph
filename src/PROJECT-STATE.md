@@ -20,11 +20,15 @@
 ## 当前焦点
 
 2026-09-21 起补充**高效 fork**方向：先做
-[DB-072 ImmutableLeaf 分类](../docs/design-branches/0072-generator-immutable-leaf-classification-slice.md)，
-再做 [DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)。
+[DB-072 ImmutableLeaf 分类](../docs/design-branches/0072-generator-immutable-leaf-classification-slice.md)
+（**已实施**，2026-09-22），
+再做 [DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)
+（下一片）。
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 集中记录暂缓方向。
 2026-09-22 裁定 capability 通道为公共可选构造参数 `isImmutableLeaf`，并放宽原“不改公开 API”边界。
-本轮只建立设计与施工边界，尚未修改产品代码。
+DB-072 能力现状：`StateModelBinding.IsImmutableLeaf`（公共可选构造参数 `isImmutableLeaf` 通道）；
+Generator 二进制路径发射分类。正分类可达面限于无 enum/record/Nullable/容器/跨程序集引用/升级注册编译中的
+纯 readonly 标量与 inline struct 模型；GenericProjection 路径保守 false（详见 DB-072 §3.1）。
 
 存储依赖已改为独立 `atelia-storage` 的版本包与显式源码联调。
 版本/来源 pin 统一记录在 [StorageDependency.props](../eng/StorageDependency.props)。

@@ -212,6 +212,7 @@ DurableGraph 后续可以考虑：
 | 方向 | 触发条件 |
 |---|---|
 | DeepImmutable | ImmutableLeaf 覆盖率不足，且真实 fork 负载中 immutable 引用图占主导 |
+| GenericProjection 发射 | enum/Nullable/record/容器模型需要缓存命中，且 DB-073 基线显示 ImmutableLeaf 覆盖不足（发射点为 GenericProjection 的 binding 构造，复用 DB-072 分类函数） |
 | 泛型分类 | 下游真实模型大量使用泛型 leaf |
 | string 例外 | 现有排除导致主要模型无法受益 |
 | Transient 策略 | readonly Transient 成为常见模式 |
