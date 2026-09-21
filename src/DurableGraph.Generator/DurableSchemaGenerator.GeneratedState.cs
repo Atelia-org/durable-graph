@@ -25,7 +25,8 @@ public sealed partial class DurableSchemaGenerator {
         List<DurableTypeModel> types,
         List<DurableTypeModel> validatedSchemaOnlyTypes,
         List<SchemaHistoryModel> history,
-        bool historyParsedSuccessfully) {
+        bool historyParsedSuccessfully,
+        INamedTypeSymbol? halfType) {
         // The metadata generator has already validated contiguous own versions and exact ancestry.
         // Historical layouts below must still resolve exclusively from accepted history.
         List<SchemaHistoryModel> available = new(history);
@@ -121,7 +122,7 @@ public sealed partial class DurableSchemaGenerator {
 
             if (valid) {
                 if (type.IsInline) AppendInlineCaptureType(source, type, layouts[type.Symbol][type.Version - 1]);
-                else AppendGeneratedStateType(source, type, layouts[type.Symbol]);
+                else AppendGeneratedStateType(source, type, layouts[type.Symbol], IsImmutableLeafModel(type, types, halfType));
                 emitted = true;
             }
         }
@@ -156,7 +157,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendGeneratedStateType(
-        StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions) {
+        StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions, bool isImmutableLeaf) {
         bool hasNamespace = !type.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) {
             source.Append("namespace ").Append(type.Symbol.ContainingNamespace.ToDisplayString(QualifiedNameFormat)).AppendLine(" {");
@@ -185,7 +186,7 @@ public sealed partial class DurableSchemaGenerator {
 
         BinaryVersionModel current = versions[versions.Count - 1];
         AppendBinaryCapture(source, type, current, bodyIndent, hasDomainBase);
-        AppendBinaryStateModel(source, type, versions, bodyIndent, hasDomainBase);
+        AppendBinaryStateModel(source, type, versions, bodyIndent, hasDomainBase, isImmutableLeaf);
         if (!type.Symbol.IsAbstract) {
             AppendBinaryAddRoot(source, type, current, bodyIndent);
         }

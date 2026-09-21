@@ -268,7 +268,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 return;
             }
             List<DurableTypeModel> schemaTypes = GenerateSchemas(context, validTypes, history);
-            GenerateStates(context, validTypes, schemaTypes, history, historyParsedSuccessfully);
+            GenerateStates(context, validTypes, schemaTypes, history, historyParsedSuccessfully, halfType);
         }
     }
 

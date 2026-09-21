@@ -36,7 +36,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendBinaryStateModel(
         StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions,
-        string indent, bool hasDomainBase) {
+        string indent, bool hasDomainBase, bool isImmutableLeaf) {
         BinaryVersionModel current = versions[versions.Count - 1];
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
         source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.Runtime.CapturedStatePreparation<")
@@ -67,7 +67,8 @@ public sealed partial class DurableSchemaGenerator {
             source.Append("Reader").Append(versions[index].Name);
         }
         source.AppendLine(" }, Normalize, Allocate, Hydrate,");
-        source.Append(indent).AppendLine("    CaptureDelegate, VisitReferences);");
+        source.Append(indent).Append("    CaptureDelegate, VisitReferences, isImmutableLeaf: ")
+            .Append(isImmutableLeaf ? "true" : "false").AppendLine(");");
         source.Append(indent).AppendLine("internal static void RegisterModel(global::Atelia.DurableGraph.IStateModelRegistration models) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(models);");
         source.Append(indent).AppendLine("    models.Register(Model);");
