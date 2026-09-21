@@ -1,7 +1,7 @@
 # DB-063：EventJournal 驱动的 EventHistory 外观
 
 > 状态：已实施，2026-09-11；依赖 [DB-062](0062-independent-graph-workspace-slice.md)。完成证据见 §8。
-> 消费者合同：[DramaBoard 草稿](../../../drama-board/docs/research/event-journal-state-store-draft.md)。
+> 消费者合同：[DramaBoard 草稿](../../../drama-board/archive/firstboard-llm/docs/research/event-journal-state-store-draft.md)。
 > 实验性合并读取 API 随本片首版交付；[DB-064](0064-shared-revision-decoding-design.md) 的实际去重/共享算法低优先级后置。
 
 ## 1. 目标与范围

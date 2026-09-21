@@ -1,7 +1,7 @@
 # DB-062：独立图读取与可由外层发布的工作区
 
 > 状态：已实施，2026-09-11；内部核心已交付，公开 EventHistory 外观与 Journal 发布由 DB-063 接续。施工与验证见 §7。
-> 消费者来源：[DramaBoard 需求稿](../../../drama-board/docs/research/event-journal-state-store-draft.md)。该稿中的其他路径按 DramaBoard 仓库解释。
+> 消费者来源：[DramaBoard 需求稿](../../../drama-board/archive/firstboard-llm/docs/research/event-journal-state-store-draft.md)。该稿中的其他路径按 DramaBoard 仓库解释。
 > 后继：[DB-063 EventHistory 外观](0063-event-history-journal-slice.md)、[DB-064 合并读取](0064-shared-revision-decoding-design.md)。
 
 ## 1. 问题与最小成功标准

@@ -9,7 +9,7 @@
 
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
-2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/docs/research/event-journal-state-store-draft.md)
+2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/archive/firstboard-llm/docs/research/event-journal-state-store-draft.md)
 触发独立历史图、外部发布和分支需求。[DB-063](design-branches/0063-event-history-journal-slice.md) 已完成 EventHistory 外观。
 操作内解码复用与只读闭包共享的能力/验收从 [DB-064](design-branches/0064-shared-revision-decoding-design.md) 和 PROJECT-STATE 进入，不再列为待施工项。
 首轮 [API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 是接口评审，尚非真实接入故障或长轨迹测量；
@@ -22,6 +22,9 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
+| [DB-072 ImmutableLeaf 分类](design-branches/0072-generator-immutable-leaf-classification-slice.md) | 先用 Generator 建立保守的 non-generic reference-object 不可变叶分类，经公共可选构造参数登记 binding（通道已裁定）；生成侧见证分类矩阵，运行时复用见证归 DB-073 |
+| [DB-073 Repository 作用域 WeakReference 缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) | 在 opened repository scope 内复用 ImmutableLeaf hydrated 实例，形成 fork/read 性能基线 |
+| [DB-074 高效 fork 暂缓方向](design-branches/0074-efficient-fork-deferred-directions.md) | 记录 DeepImmutable、泛型、string、Transient、deep clone、公开 fork API、opened repo session 等后续触发条件 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |
 | 读取优化的后继 | 已交付读缓存的机制与预算证据从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md) 进入；默认容量调整、构建器替换、Normalize 复用和进一步共享比较优化均由真实工作负载触发，见 §4。不承诺跨图实例复用，不改变可写 Resume 隔离 |
 

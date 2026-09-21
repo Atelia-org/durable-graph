@@ -23,6 +23,9 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-074 高效 fork 暂缓方向](0074-efficient-fork-deferred-directions.md) | Deferred | 汇总 DeepImmutable、泛型、string、Transient、deep clone、公开 fork API、opened repo session、性能与内存管理的后续触发条件 |
+| [DB-073 Repository 作用域的 ImmutableLeaf WeakReference 缓存](0073-repository-scoped-weak-reference-cache.md) | Chosen / Not implemented | 以 opened repository 为 scope，用 `(ObjectId, head, exact binding)` 缓存 ImmutableLeaf hydrated 实例；跨 repo 拒绝，Dispose 清空 |
+| [DB-072 Generator 侧 ImmutableLeaf 分类与生成侧见证](0072-generator-immutable-leaf-classification-slice.md) | Chosen / Not implemented | 从全部实例字段计算 non-generic reference-object 的 ImmutableLeaf 分类，经公共可选构造参数 isImmutableLeaf 登记 binding；生成侧见证，无运行时复用机制；不改持久格式 |
 | [DB-071 程序集与命名空间组织](0071-assembly-namespace-organization-review.md) | Implemented | 保留七项目依赖图，落实 Serialization/Storage/Persistence 与根/Schema/Runtime 分组；[工单](0071-assembly-namespace-implementation-work-order.md) 的签名、产品测试、真实包、旧包续写及隔离下游证据见[验收记录](0071-assembly-namespace-validation.md) |
 | [DB-070 读取放大阈值的默认选择](0070-read-amplification-default.md) | Implemented / 已验收 | EventHistory 默认 `{5,5}`；稳态摊销依据、`3/5/11` 调优示例与交互函数图；测试基准独立保持 `{3,5}`，源码回归与 README 原文真包验收通过 |
 | [DB-069 热保存基线的增量重建计量](0069-incremental-save-baseline.md) | Implemented / 已验收 | 已验证 head/H 随 DTO 基线增量推进，消除受控保存的旧对象链重复读取；精确 payload、发布与冷读验证保持；独立审阅、前后测量、源码回归及真实包通过 |

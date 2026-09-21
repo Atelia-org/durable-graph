@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-12；产品实现截至 [DB-071](../docs/design-branches/0071-assembly-namespace-organization-review.md)。后续优先真实业务长轨迹与保存成本反馈。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-21；产品实现截至 [DB-071](../docs/design-branches/0071-assembly-namespace-organization-review.md)。当前新增高效 fork 方向，近端先做 ImmutableLeaf 分类与 repository-scoped WeakReference 缓存。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,6 +18,13 @@
 [归档恢复索引](../experiments/ARCHIVE.md)，不要把旧项目整体恢复为续工上下文。
 
 ## 当前焦点
+
+2026-09-21 起补充**高效 fork**方向：先做
+[DB-072 ImmutableLeaf 分类](../docs/design-branches/0072-generator-immutable-leaf-classification-slice.md)，
+再做 [DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)。
+[DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 集中记录暂缓方向。
+2026-09-22 裁定 capability 通道为公共可选构造参数 `isImmutableLeaf`，并放宽原“不改公开 API”边界。
+本轮只建立设计与施工边界，尚未修改产品代码。
 
 存储依赖已改为独立 `atelia-storage` 的版本包与显式源码联调。
 版本/来源 pin 统一记录在 [StorageDependency.props](../eng/StorageDependency.props)。
