@@ -1,6 +1,7 @@
 # DB-073：Repository 作用域的 ImmutableLeaf WeakReference 缓存
 
 > 状态：**Chosen / Not implemented**。2026-09-21。前置为 [DB-072](0072-generator-immutable-leaf-classification-slice.md)。
+> 2026-09-22 前置复核：[DB-075](0075-immutable-leaf-proof-and-family-refactor.md) 提出修复最终类型证明缺口与 Family 覆盖；尚未实施。该缺口闭合并验收前，不直接依赖当前 DB-072 的 true 标记启用缓存。
 > 问题：同一 opened repository 内，跨读取/跨 fork 操作复用已证明为 `ImmutableLeaf` 的 hydrated 领域实例。
 > 最小验收：同 `(ObjectId, head, exact model binding)` 命中并复用；不同 head/model/repo 不命中；Dispose 后缓存不可用；不改公开 API 与持久格式。
 

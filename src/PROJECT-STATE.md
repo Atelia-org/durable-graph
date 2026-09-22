@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-21；产品实现截至 [DB-071](../docs/design-branches/0071-assembly-namespace-organization-review.md)。当前新增高效 fork 方向，近端先做 ImmutableLeaf 分类与 repository-scoped WeakReference 缓存。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-22；DB-072 已实施，审阅发现的证明缺口待 DB-075 方案修复；之后再推进 repository-scoped WeakReference 缓存。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,11 +19,11 @@
 
 ## 当前焦点
 
-2026-09-21 起补充**高效 fork**方向：先做
-[DB-072 ImmutableLeaf 分类](../docs/design-branches/0072-generator-immutable-leaf-classification-slice.md)
-（**已实施**，2026-09-22），
-再做 [DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)
-（下一片）。
+当前先审定 [DB-075 ImmutableLeaf 证明与 Family 重构](../docs/design-branches/0075-immutable-leaf-proof-and-family-refactor.md)
+（**Proposed / 已辩证评审，未实施**）：修复 [DB-072](../docs/design-branches/0072-generator-immutable-leaf-classification-slice.md)
+对其他生成器新增状态的误判，并让 Family 中的非泛型叶正常分类。
+最小验收和机制证据集中在 DB-075；闭合后才推进
+[DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)。
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 集中记录暂缓方向。
 2026-09-22 裁定 capability 通道为公共可选构造参数 `isImmutableLeaf`，并放宽原“不改公开 API”边界。
 DB-072 能力现状：`StateModelBinding.IsImmutableLeaf`（公共可选构造参数 `isImmutableLeaf` 通道）；

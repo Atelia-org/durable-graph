@@ -19,11 +19,13 @@
 
 第三轮真实模型反馈触发的 record class 与接口迁移已由 [DB-068](design-branches/0068-record-class-model-slice.md)
 完成；[DB-072](design-branches/0072-generator-immutable-leaf-classification-slice.md) ImmutableLeaf 分类已实施
-（2026-09-22，路由可达面见其 §3.1）。二者具体能力与证据从 PROJECT-STATE/分片进入；不再列为待施工。
+（2026-09-22，路由可达面见其 §3.1），但实施后审阅发现最终类型证明缺口；修复提案列于下表。
+既有能力与证据从 PROJECT-STATE/分片进入，不重开已完成工作。
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-073 Repository 作用域 WeakReference 缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) | 在 opened repository scope 内复用 ImmutableLeaf hydrated 实例，形成 fork/read 性能基线 |
+| [DB-075 ImmutableLeaf 证明与 Family 重构](design-branches/0075-immutable-leaf-proof-and-family-refactor.md) | Proposed：共同候选分类 + 生成的最终结构核对；修复其他生成器误判与普通 Family 接入全 false，验收前不启用依赖该证明的缓存 |
+| [DB-073 Repository 作用域 WeakReference 缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) | 前置证明修复验收后，在 opened repository scope 内复用 ImmutableLeaf hydrated 实例，形成 fork/read 性能基线 |
 | [DB-074 高效 fork 暂缓方向](design-branches/0074-efficient-fork-deferred-directions.md) | 记录 DeepImmutable、泛型、string、Transient、deep clone、公开 fork API、opened repo session 等后续触发条件 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |
 | 读取优化的后继 | 已交付读缓存的机制与预算证据从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md) 进入；默认容量调整、构建器替换、Normalize 复用和进一步共享比较优化均由真实工作负载触发，见 §4。不承诺跨图实例复用，不改变可写 Resume 隔离 |
