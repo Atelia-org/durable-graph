@@ -40,7 +40,14 @@ public abstract class StateModelBinding : ObjectBinding {
     public DurableSchema CurrentSchema { get; }
     public IReadOnlyList<StateReaderBinding> Readers { get; }
 
-    /// <summary>True when the generator proved every instance field of this exact model is a readonly immutable value leaf.</summary>
+    /// <summary>True when the exact model's instance state is proven to be readonly immutable value leaves.</summary>
+    /// <remarks>
+    /// Generated bindings verify the final compiled structure (exact base type, complete declared
+    /// instance field set, and per-field identity, trusted type and init-only state) before passing
+    /// true. A manual caller passing true asserts the same invariants for the exact runtime type
+    /// itself, including any state introduced after the model source was written; the runtime does
+    /// not re-verify manual assertions.
+    /// </remarks>
     internal bool IsImmutableLeaf { get; }
 
     internal void RequireSource(ObjectStateRecord source) {

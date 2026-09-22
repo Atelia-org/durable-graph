@@ -5,7 +5,7 @@
 > 最小验收：生成器对一组代表性模型给出保守、可测试的 `ImmutableLeaf` 分类，并经构造参数登记到 binding；生成侧测试见证分类矩阵；现有 `ReadPair` 共享路径对 `ImmutableLeaf` 输入不回归。
 > 边界：不改变现有公共 API 行为（仅允许追加 `isImmutableLeaf` 公共可选构造参数）；不改持久格式，不引入 deep clone，不引入 deep-immutable 闭包，**不实现任何运行时复用机制**。
 > 2026-09-22 实施后审阅：已复现其他生成器补入可变状态仍被判 true；Family 推荐接入也无法获得正分类。
-> 修复与范围澄清见 [DB-075 重构方案](0075-immutable-leaf-proof-and-family-refactor.md)（Proposed，未实施）。下文保留原实施合同与记录；当前标记尚不能直接作为 DB-073 的完整共享证明。
+> 2026-09-23 修复已由 [DB-075](0075-immutable-leaf-proof-and-family-refactor.md)（Implemented）实施并验收：候选须通过生成的最终结构核对才传 true，Family 中的非泛型合格叶可达 true。下文保留原实施合同与记录；§3.1 的 Family 路由限制描述已被 DB-075 取代。
 
 ## 1. 为什么先做这一片
 

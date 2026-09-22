@@ -1,7 +1,10 @@
 # DB-075：ImmutableLeaf 完整证明与 Family 路径重构
 
-> 状态：**Proposed / 已完成辩证评审，未实施**。2026-09-22。
-> 来源：DB-072 实施后的审阅；本轮用户授权撰写和改进设计，不授权产品实现。
+> 状态：**Implemented**（2026-09-23 实施并完成集成验收）。2026-09-22 辩证评审定稿并批准[施工工单](0075-immutable-leaf-implementation-work-order.md)，2026-09-23 主线程完成核心实现、两委派包集成与全量验证。
+> 来源：DB-072 实施后的审阅；用户授权按施工工单（含六项施工约束 C1–C6）实施。
+> 验证：`dotnet build DurableGraph.slnx -t:Rebuild` 0 警告 0 错误；DurableGraph.Tests 全量 1617/1617（含 ImmutableLeaf 焦点 43、sibling 反例与 System 影子编译阶段见证）；[真包消费者探针](../../experiments/PackageConsumerProbe/ImmutableLeafConsumer/README.md)双 marker 通过（Family flag true + 保存/重开；sibling flag false）。
+> 施工约束执行情况、阶段记录与发现（System 全名影子为编译阶段失败、Roslyn 5.3.0 API 替代等）见施工工单 §6/§7。
+> 2026-09-23 复核修正：主构造参数仅在物化为隐式实例字段时排除（仅用于显式字段初始化器或未使用时不产生实例状态，不再按主构造语法一律拒绝）；单元测试 sibling 夹具改用 IIncrementalGenerator（删除 RS1042 豁免）；System 影子编译阶段见证钉住预期错误 ID。见施工工单 §7。
 > 问题：其他生成器补入的状态可能逃过分类；Family 路径使合法非泛型叶模型一律失去 capability。
 > 最小验收：双生成器补入可变状态不能交付 true capability；README 的 Family 接入中 readonly 标量叶可得到 true；两者共用同一分类合同。
 > 不改持久格式，不实现 DB-073 缓存，不扩张泛型 closed-instantiation、DeepImmutable、string 或 Transient 共享。
@@ -90,7 +93,8 @@ public partial class Leaf {
 - 自身、领域基类、递归 inline struct 必须都是当前编译已建模的非泛型声明。
   泛型基类/inline 的已闭合实例仍不进入本片，不能通过 OriginalDefinition 查找绕过这个限制。
 - 全部实例字段必须是**显式声明**、readonly、已进入有效 durable 字段管线且没有 Transient。
-  static 不参与；field-like event、隐式 backing、主构造捕获都排除。
+  static 不参与；field-like event、隐式 backing、物化为隐式实例字段的主构造捕获都排除；
+  仅用于显式字段初始化器或未使用的主构造参数不产生实例状态，不因此失去资格。
 - 允许 DB-072 的 19 种真实内建值、同编译 durable enum、其 Nullable 和递归合格 inline 值。
   enum 是不可被另一 partial 扩展的终端；Nullable 只展开 child，不扫描 BCL 私有实现。
 - string、对象引用、容器与其他引用形状继续 false。

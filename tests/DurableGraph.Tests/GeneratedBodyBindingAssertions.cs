@@ -8,6 +8,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         var root = CSharpSyntaxTree.ParseText(generated, ParseOptions).GetRoot();
         foreach (TypeOfExpressionSyntax typeOf in root.DescendantNodes().OfType<TypeOfExpressionSyntax>()) {
             MethodDeclarationSyntax owner = Assert.Single(typeOf.Ancestors().OfType<MethodDeclarationSyntax>());
+            // DB-075: the immutable-leaf final structure check owns runtime typeof lookups by
+            // design; it runs once at binding creation, outside the statically bound
+            // read/compare/Allocate/Hydrate paths this assertion protects.
+            if (owner.Identifier.ValueText == "__DurableCheckImmutableLeafShape") continue;
             Assert.Equal("Allocate", owner.Identifier.ValueText);
             ArgumentSyntax argument = Assert.IsType<ArgumentSyntax>(typeOf.Parent);
             ArgumentListSyntax arguments = Assert.IsType<ArgumentListSyntax>(argument.Parent);

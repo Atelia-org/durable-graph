@@ -70,8 +70,9 @@ public sealed partial class DurableSchemaGenerator {
         internal string Type => RuntimeName + "StateBaseProjection<" + Domain + ", " + Dto + ">";
     }
 
-    private static void AppendGenericDomainProjection(StringBuilder output, DurableTypeModel type, GenericLayout layout, List<DurableTypeModel> types, List<SchemaHistoryModel> available) {
+    private static void AppendGenericDomainProjection(StringBuilder output, DurableTypeModel type, GenericLayout layout, List<DurableTypeModel> types, List<SchemaHistoryModel> available, INamedTypeSymbol? halfType) {
         if (type.IsEnum) { AppendEnumDomainProjection(output, type, layout); return; }
+        ImmutableLeafCandidate? candidate = TryBuildImmutableLeafCandidate(type, types, halfType);
         bool hasNamespace = !type.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) output.Append("namespace ").Append(type.Symbol.ContainingNamespace.ToDisplayString()).AppendLine(" {");
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
@@ -83,7 +84,8 @@ public sealed partial class DurableSchemaGenerator {
         output.Append(type.Symbol.IsRecord ? (type.IsInline ? "partial record struct " : "partial record class ") : type.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(type.Symbol.Name))
             .Append(DomainParameters(type.Symbol)).Append(DomainConstraints(type.Symbol)).AppendLine(" {");
         AppendGenericFieldAccessors(output, type);
-        AppendGenericCurrentFactory(output, type, layout, fields, ancestor);
+        if (candidate is not null) AppendImmutableLeafShapeCheck(output, candidate, "    ");
+        AppendGenericCurrentFactory(output, type, layout, fields, ancestor, candidate);
         output.Append("    private static ").Append(dto).Append(" __DurableCapture").Append(parameters).Append('(')
             .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value, ").Append(RuntimeName).Append("CaptureContext context, ")
             .Append(SchemaName).Append("DurableSchema schema");
@@ -196,7 +198,7 @@ public sealed partial class DurableSchemaGenerator {
         output.AppendLine("    }");
     }
 
-    private static void AppendGenericCurrentFactory(StringBuilder output, DurableTypeModel type, GenericLayout layout, List<GenericDomainField> fields, GenericBaseProjection? ancestor) {
+    private static void AppendGenericCurrentFactory(StringBuilder output, DurableTypeModel type, GenericLayout layout, List<GenericDomainField> fields, GenericBaseProjection? ancestor, ImmutableLeafCandidate? candidate) {
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
         string dto = CurrentDto(type, layout);
         string body = CurrentBody(type, layout);
@@ -262,7 +264,9 @@ public sealed partial class DurableSchemaGenerator {
             output.Append("            (value, capture) => __DurableCapture").Append(parameters).Append("(value, capture, schema")
                 .Append(ancestor is null ? string.Empty : ", baseProjection").AppendLine("),");
             output.Append("            (in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor) => ").Append(body).AppendLine(".Visit(in state, visitor, schema),");
-            output.AppendLine("            sourceReaderResolver: context.ResolveReader, supportsBaseProjection: true);");
+            output.Append("            sourceReaderResolver: context.ResolveReader, supportsBaseProjection: true");
+            if (candidate is not null) output.Append(", isImmutableLeaf: __DurableCheckImmutableLeafShape()");
+            output.AppendLine(");");
         }
         output.AppendLine("    }");
     }

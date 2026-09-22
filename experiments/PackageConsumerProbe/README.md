@@ -378,3 +378,15 @@ The second build deletes the old struct CLR declaration while retaining exact hi
 the child conversion, rewrites upgraded owners as Base and resumes Delta. Clearing nullable values
 removes the unreachable cyclic island. History v9 hashes and counts are checked in packaged Publish
 and Verify modes; the runner also accepts an existing matching nine-package feed.
+
+## Immutable leaf proof capability
+
+Run `./experiments/PackageConsumerProbe/Run-ImmutableLeafProbe.ps1` for the
+[immutable leaf consumer](ImmutableLeafConsumer/README.md). Its two package builds verify the DB-075
+structural proof through real package delivery. A plain consumer forces Family definitions and requires
+its non-generic readonly leaf binding to resolve with internal `IsImmutableLeaf=true` (reflection only)
+before round-tripping the leaf value through `EventHistoryRepository`; a second consumer compiles the
+identical model with a local sibling source generator wired as an analyzer in the same compiler pass,
+and the same model must then resolve with `IsImmutableLeaf=false` because the sibling's added mutable
+state is visible to the structural proof but not to durable classification. Pass
+`-PackageSource <feed> -Version <version>` to reuse a matching nine-package feed.

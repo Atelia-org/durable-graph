@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-22；DB-072 已实施，审阅发现的证明缺口待 DB-075 方案修复；之后再推进 repository-scoped WeakReference 缓存。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-23；DB-075 已实施并验收（ImmutableLeaf 证明与 Family 重构闭合）；下一步推进 DB-073 repository-scoped WeakReference 缓存。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,16 +19,22 @@
 
 ## 当前焦点
 
-当前先审定 [DB-075 ImmutableLeaf 证明与 Family 重构](../docs/design-branches/0075-immutable-leaf-proof-and-family-refactor.md)
-（**Proposed / 已辩证评审，未实施**）：修复 [DB-072](../docs/design-branches/0072-generator-immutable-leaf-classification-slice.md)
-对其他生成器新增状态的误判，并让 Family 中的非泛型叶正常分类。
-最小验收和机制证据集中在 DB-075；闭合后才推进
-[DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)。
+[DB-075 ImmutableLeaf 完整证明与 Family 路径重构](../docs/design-branches/0075-immutable-leaf-proof-and-family-refactor.md)
+（**Implemented / 2026-09-23 已验收**）已完成：Generator 侧共同候选规则与生成的最终结构核对
+（`__DurableCheckImmutableLeafShape`：基类核对、完整声明实例字段集、逐字段 MetadataName/受信 Type/IsInitOnly），
+二进制与 Family 两条路径共用同一合同。同轮其他生成器补入实例状态经核对拒绝（返回 false，不升级为错误）；
+Family 中的非泛型合格叶可达 true。验证：solution Rebuild 0 警告 0 错误、DurableGraph.Tests 1617/1617、
+[真包消费者探针](../experiments/PackageConsumerProbe/ImmutableLeafConsumer/README.md)双 marker 通过；
+六项施工约束、阶段记录与发现见[施工工单](../docs/design-branches/0075-immutable-leaf-implementation-work-order.md)。
+
+下一步进入 [DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)：
+ImmutableLeaf 前置已闭合；参与测试与实际接入的模型程序集须在 DB-073 首次使用 capability 前重编译
+（旧 DB-072 已编译消费者内嵌常量 true，只升级 runtime 不修复）。
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 集中记录暂缓方向。
-2026-09-22 裁定 capability 通道为公共可选构造参数 `isImmutableLeaf`，并放宽原“不改公开 API”边界。
-DB-072 能力现状：`StateModelBinding.IsImmutableLeaf`（公共可选构造参数 `isImmutableLeaf` 通道）；
-Generator 二进制路径发射分类。正分类可达面限于无 enum/record/Nullable/容器/跨程序集引用/升级注册编译中的
-纯 readonly 标量与 inline struct 模型；GenericProjection 路径保守 false（详见 DB-072 §3.1）。
+能力现状（经 DB-075 修订）：`StateModelBinding.IsImmutableLeaf` 通道保持公共可选构造参数、手写默认 false；
+候选资格由同编译非泛型闭包决定——全部实例字段显式声明 readonly 且进入 durable 管线，允许 19 种内建、
+同编译 enum/Nullable/递归 inline 与显式 readonly 字段的 record；record 全部隐式 backing、物化为隐式实例字段的主构造捕获、
+闭合泛型、外部成员与 string/引用/Transient 仍 false；最终结构在每次 binding 创建时核对，失败仅失去资格。
 
 存储依赖已改为独立 `atelia-storage` 的版本包与显式源码联调。
 版本/来源 pin 统一记录在 [StorageDependency.props](../eng/StorageDependency.props)。

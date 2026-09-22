@@ -375,7 +375,14 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static GeneratorTestRun RunGenerator(
         string source,
-        params AdditionalText[] additionalTexts) {
+        params AdditionalText[] additionalTexts) =>
+        RunGenerator(source, additionalTexts, extraGenerators: null, forceDefinitions: null);
+
+    private static GeneratorTestRun RunGenerator(
+        string source,
+        AdditionalText[] additionalTexts,
+        ISourceGenerator[]? extraGenerators,
+        string? forceDefinitions) {
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions);
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: $"GeneratorTests_{Guid.NewGuid():N}",
@@ -388,10 +395,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
+        ISourceGenerator durableGenerator = new DurableSchemaGenerator().AsSourceGenerator();
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            generators: [new DurableSchemaGenerator().AsSourceGenerator()],
+            generators: extraGenerators is null ? [durableGenerator] : [durableGenerator, .. extraGenerators],
             additionalTexts: additionalTexts,
-            parseOptions: ParseOptions);
+            parseOptions: ParseOptions,
+            optionsProvider: new CrossAssemblyOptions(forceDefinitions));
 
         driver = driver.RunGeneratorsAndUpdateCompilation(
             compilation,

@@ -12,6 +12,9 @@ public sealed partial class DurableSchemaGenerator {
     private static void GenerateGenericStates(SourceProductionContext context, List<DurableTypeModel> types,
         List<SchemaHistoryModel> history, bool historyParsedSuccessfully, Compilation compilation, List<SchemaHistoryModel> references) {
         if (!historyParsedSuccessfully) return;
+        // Resolve from the actual core library, not a source-defined System.Half lookalike.
+        INamedTypeSymbol? halfType = compilation.GetSpecialType(SpecialType.System_Object)
+            .ContainingAssembly.GetTypeByMetadataName("System.Half");
         HashSet<string> owned = new(history.Select(shape => shape.SchemaId), StringComparer.Ordinal);
         foreach (DurableTypeModel type in types) owned.Add(type.SchemaId);
         List<SchemaHistoryModel> available = new(history);
@@ -55,7 +58,7 @@ public sealed partial class DurableSchemaGenerator {
         output.AppendLine("}");
         foreach (DurableTypeModel type in types) {
             GenericLayout layout = families[type.SchemaId].Single(item => item.Shape.Version == type.Version);
-            AppendGenericDomainProjection(output, type, layout, types, available);
+            AppendGenericDomainProjection(output, type, layout, types, available, halfType);
         }
         context.AddSource("DurableGenericStates.g.cs", SourceText.From(output.ToString().Replace("\r\n", "\n"), Encoding.UTF8));
     }
