@@ -1,6 +1,6 @@
 # DB-081：热 State 提交材料进入恢复接缝
 
-> 状态：**Proposed / 已按 DB-083 校准的条件实验，未实施；不是实施授权**。2026-09-27；当前实现事实另见源码。
+> 状态：**前置资格实验形成否定结论，热提交准入未实施**。2026-09-28；按 §6 暂停接线，证据、备选与重启条件见[实验记录](0081-hot-commit-restoration-material-experiment.md)。下文保留重启时须满足的合同，不表示已交付。
 > 产品合同以 [DB-083](0083-repository-checkpoint-api-user-stories.md) 为准；Fork/Checkout 有最近 State 才恢复该图，不交付 PendingEvent。
 > 顺序：第 5 片；依赖 [DB-080](0080-prepared-checkpoint-reuse-slice.md) 的材料/证书与驻留接缝，下一片 [DB-082](0082-prepared-immutable-leaf-reuse-slice.md)。
 > DB-080 的实际证书链、单槽边界与测量限制见[实施记录](0080-prepared-checkpoint-reuse-implementation.md)；本片仍须单独证明新 State 的冷恢复等价，不能直接复用旧历史证书。

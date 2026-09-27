@@ -483,6 +483,10 @@ Checkout/Fork 的最近 State 材料复用以精确 State/revision/root、同 St
 完整冷恢复与工作副本构造成功后才具备入槽资格，Fork 所有候选构造先于 ref 发布，成功后仅安装引用；失败不替换，fault/Dispose 释放。
 领域 mutable 实例和保存身份每次独立，工作副本保留完整保存来源；单槽不是字节或总堆上限。见 [DB-080 记录](design-branches/0080-prepared-checkpoint-reuse-implementation.md)。
 
+提交侧 owned DTO 与 factory 闭合证书不自动证明冷 reader body 的完整依赖；已读过同一 reader 的其他值也不是充分证明。
+未来热准入必须对应新 State 的实际持久链与完整来源，不能继承已不相关的历史 Upgrade 依赖。
+现有合同不足时保留正常提交与冷恢复，不为优化放宽验证；反例与停点见 [DB-081 实验](design-branches/0081-hot-commit-restoration-material-experiment.md)。
+
 分配领域实例时不执行实例构造器、基类实例构造器或实例字段初始化表达式；因此 `_cache = new()`
 等 Transient 初始化也不会执行。交付后的 Transient 重建由用户代码负责，属于宿主阶段。MVP 不提供自动 Transient hook，
 也不承诺撤销用户重建期间的副作用或把其失败变成库的加载失败；用户负责在业务使用前完成初始化。

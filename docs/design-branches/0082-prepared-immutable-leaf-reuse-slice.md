@@ -4,7 +4,7 @@
 > 状态：**Proposed / 按 DB-083 校准的条件实验，未实施**。2026-09-27；此前源码事实基线 `343bfa6`。
 > 目标合同：[DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md)。本片只优化非泛型 Fork/Checkout 已存在的最近 State 恢复，不恢复 Event，不改变 Event-first、自由 E/S、精确 Head 或默认 Checkpoint 的独立图语义。
 > 推荐顺序：第 6 片；硬前置是 [DB-080](0080-prepared-checkpoint-reuse-slice.md) 已交付可用材料驻留，
-> [DB-081](0081-hot-commit-restoration-material-slice.md) 不是正确性前置，但先完成它可一起测量热 fork。
+> [DB-081](0081-hot-commit-restoration-material-slice.md) 不是正确性前置；其[资格实验](0081-hot-commit-restoration-material-experiment.md)已暂停热接线，本片可直接从 DB-080 成功冷物化继续。
 > 消费已实施 DB-075 的 capability；不把 [DB-073](0073-repository-scoped-weak-reference-cache.md) 的旧 weak cache 正文当施工依据。
 > 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` 与 named Fork 已由 [078-C](0078-c-branch-checkout-fork-implementation.md) 交付；材料与证书接缝见 [080 记录](0080-prepared-checkpoint-reuse-implementation.md)，本片叶实例复用尚未实施。
 
@@ -33,7 +33,7 @@ root/reachable 固定，第一次完整成功物化时可一次构造全部合�
 
 初版只有 Fork/Checkout 消费和填充此表。ReadCheckpoint、ReadState/Event、ReadPair 不读取也不回填它；
 它们仍共用 DB-079 物化核心。默认 Checkpoint 的两图独立物化，ReadPair 仍使用自己的只读引用闭包规划。
-Event 提交按 DB-081 不改槽；新的 State 材料即使包含同 ID/head 或同值对象，也不继承旧材料的叶表。
+Event 提交不改槽；新的 State 材料即使包含同 ID/head 或同值对象，也不继承旧材料的叶表。
 跨实际类型根替换、旧根成为新根子对象或已有子对象升根也遵守此规则：候选保存可以保留正常实例 ID，
 但新 revision 的恢复准备证书与叶表不因此获得跨材料继承资格。根的实际 binding 来自新选择。
 
@@ -67,7 +67,7 @@ Checkout 在交付门安装；Fork 在 ref 发布前构造好表，确认发布�
 用 DB-080 的内部收集机制将相关依赖并入候选表的不可变证书，一起安装、每次命中先复核。
 尤其热材料尚未执行物化，不能假定其最初恢复准备证书已经包含这些检查；不因叶缓存跳过原本应报告的权威冲突。
 这些额外依赖随叶表和所在槽存活，不能因已交付工作副本持有叶引用而让仓库另行永久保留它们。
-新 State revision 按 DB-081 建立自己的准备证书，首次物化时再收集其叶依赖；不得机械继承旧 State 的历史 Upgrade
+新 State revision 按 DB-080 冷恢复建立自己的准备证书，首次物化时收集其叶依赖；未来 DB-081 热来源另须证明。不得机械继承旧 State 的历史 Upgrade
 中间依赖或旧叶表证书。旧依赖若仍被新布局或其实际恢复回调使用，应由新材料的证明与标准检查重新纳入。
 
 ## 5. 施工与验收

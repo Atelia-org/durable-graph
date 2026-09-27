@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079/080 已实施并验收；081–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079/080 已实施并验收；081 资格实验否定、热准入未接线，082 未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,6 +19,10 @@
 
 ## 当前焦点
 
+[DB-081 热提交资格实验](../docs/design-branches/0081-hot-commit-restoration-material-experiment.md) 按原分片停点保留否定结论。
+现有 reader body 可执行 Capture/factory 未触及、随数据变化的标准依赖检查；没有充分的无读回资格证明，热提交不接入槽。
+反例与历史证书隔离见证进入回归；未改产品 API、发布或 provider 合同。重启条件与备选只维护在实验记录及路线图。
+
 [DB-080：最近 State 准备材料复用](../docs/design-branches/0080-prepared-checkpoint-reuse-implementation.md) 已实施并独立验收。
 Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽；每次命中复核完整 live Schema 证书，仍独立物化和导入保存身份。
 证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
@@ -33,10 +37,10 @@ Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽�
 DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标仍独立待办。
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
-[DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的后续顺序保持：
-下一停点为 [081 热 State 准入](../docs/design-branches/0081-hot-commit-restoration-material-slice.md)：先证明新 State 的冷恢复依赖与完整来源，
-不能以 Capture 成功或旧历史 Upgrade 证书代替。082 immutable 叶实验仅硬依赖 080，仍须单独测量与验收。
-无 State 请求绕过材料槽/未来叶表，优化关闭仍须正确；081/082 尚未实施。
+[DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的当前续工入口：
+下一候选为 [082 immutable 叶实验](../docs/design-branches/0082-prepared-immutable-leaf-reuse-slice.md)，仅硬依赖 080，须单独测量与验收。
+081 不再作为必经工单；一般新 State 的 reader 完整证明需要先解决，不能以 Capture 或旧历史证书代替。
+无 State 请求绕过材料槽/未来叶表，优化关闭仍须正确；热提交准入与叶实例复用均尚未实施。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
 DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /
