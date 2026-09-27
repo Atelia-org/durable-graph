@@ -158,16 +158,99 @@ public sealed class Repository : IDisposable {
             .Select(address => Issue(_history.Read(address))).ToArray();
     }
 
-    /// <summary>Fully materializes the branch's logical chain, then returns its Events from oldest to newest.</summary>
-    /// <param name="branchName">The branch whose head is obtained once for this operation.</param>
-    /// <returns>A fully materialized, chronological Event list owned by this open repository.</returns>
+    /// <summary>Enumerates Event addresses in the fixed logical history ending at endInclusive.</summary>
+    /// <param name="endInclusive">The committed end of the query, unaffected by later branch changes.</param>
+    /// <param name="order">NewestFirst reads ancestors on demand unless lower-bound validation is required.</param>
+    /// <param name="afterExclusive">An optional ancestor excluded from the range; the same end gives an empty range.</param>
+    /// <returns>Event addresses only; State records are traversed without materializing domain graphs.</returns>
     /// <remarks>
-    /// Uses ReadFrames and filters by Event role, excluding orphan appends and records unique to other
-    /// branches. No domain objects are restored. Taking only the latest N results still incurs the
-    /// complete chain read and materialization; this API supplies no pagination benefit. Repository
-    /// opening has separate full physical-history validation, including orphan records.
+    /// Both addresses must belong to this open repository. A supplied lower bound is checked against
+    /// the logical ancestor chain before the first result; an unrelated position is rejected. That
+    /// validation can scan the complete range. OldestFirst buffers the selected Event addresses before
+    /// delivery. Neither direction materializes domain objects, and NewestFirst without a lower bound
+    /// does not prepare the complete chain. Opening has separate full physical-history validation costs.
+    /// Each advance requires an available repository, but no busy guard or backing lease remains held
+    /// between results. Call ReadEvent or perform other serial operations inside the loop. This query
+    /// describes recorded Events, not pending work or application progress.
     /// </remarks>
-    public IReadOnlyList<CheckpointAddress> ReadEvents(string branchName) => ReadFrames(branchName).Where(frame => frame.Kind == GraphFrameKind.Event).ToArray();
+    public IEnumerable<CheckpointAddress> EnumerateEvents(CheckpointAddress endInclusive,
+        HistoryOrder order = HistoryOrder.NewestFirst, CheckpointAddress? afterExclusive = null) {
+        RequireAvailable();
+        CheckFrame(endInclusive);
+        if (afterExclusive is not null) { CheckFrame(afterExclusive); }
+        if (order is not HistoryOrder.OldestFirst and not HistoryOrder.NewestFirst) {
+            throw new ArgumentOutOfRangeException(nameof(order));
+        }
+        return new EventHistoryEnumerable(this, endInclusive, order, afterExclusive);
+    }
+
+    private IEnumerable<CheckpointAddress> EnumerateEventsCore(CheckpointAddress endInclusive,
+        HistoryOrder order, CheckpointAddress? afterExclusive) {
+        EventAddress? cursor = endInclusive.Address;
+        List<CheckpointAddress>? buffered = null;
+        int bufferedIndex = -1;
+        bool prepared = false;
+        while (true) {
+            CheckpointAddress? next;
+            _busy = true;
+            try {
+                if (!prepared) {
+                    if (order == HistoryOrder.OldestFirst) { buffered = []; }
+                    if (afterExclusive is not null || buffered is not null) {
+                        CheckpointAddress? probe = endInclusive;
+                        while (probe is not null && probe != afterExclusive) {
+                            if (probe.Kind == GraphFrameKind.Event) { buffered?.Add(probe); }
+                            probe = probe.Parent is { } parent ? Issue(_history.Read(parent)) : null;
+                        }
+                        if (afterExclusive is not null && probe is null) {
+                            throw new ArgumentException("The lower bound is not an ancestor of the selected end.", nameof(afterExclusive));
+                        }
+                        bufferedIndex = (buffered?.Count ?? 0) - 1;
+                    }
+                    prepared = true;
+                }
+                next = buffered is not null
+                    ? bufferedIndex >= 0 ? buffered[bufferedIndex--] : null
+                    : ReadNextEventCore(endInclusive, afterExclusive, ref cursor);
+            } finally { _busy = false; }
+            // HistoryJournal.Read has already disposed its frame/lease. No repository guard
+            // survives the yield, including when the caller stops before completing the range.
+            if (next is null) { yield break; }
+            yield return next;
+        }
+    }
+
+    private CheckpointAddress? ReadNextEventCore(CheckpointAddress endInclusive,
+        CheckpointAddress? afterExclusive, ref EventAddress? cursor) {
+        while (cursor is { } address && address != afterExclusive?.Address) {
+            CheckpointAddress frame = address == endInclusive.Address ? endInclusive : Issue(_history.Read(address));
+            cursor = frame.Parent;
+            if (frame.Kind == GraphFrameKind.Event) { return frame; }
+        }
+        return null;
+    }
+
+    private sealed class EventHistoryEnumerable(Repository repository, CheckpointAddress endInclusive,
+        HistoryOrder order, CheckpointAddress? afterExclusive) : IEnumerable<CheckpointAddress> {
+        public IEnumerator<CheckpointAddress> GetEnumerator() => new EventHistoryEnumerator(repository,
+            repository.EnumerateEventsCore(endInclusive, order, afterExclusive).GetEnumerator());
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class EventHistoryEnumerator(Repository repository,
+        IEnumerator<CheckpointAddress> inner) : IEnumerator<CheckpointAddress> {
+        public CheckpointAddress Current => inner.Current;
+        object System.Collections.IEnumerator.Current => Current;
+        public bool MoveNext() {
+            // Compiler-generated iterators skip their body after completion. Keep the check
+            // outside that body so every advance, including an exhausted query, checks lifetime.
+            repository.RequireAvailable();
+            return inner.MoveNext();
+        }
+        public void Reset() => throw new NotSupportedException();
+        public void Dispose() => inner.Dispose();
+    }
+
     /// <summary>Finds the nearest strict ancestor State of an Event, or null in an Event-only prefix.</summary>
     public CheckpointAddress? GetPreviousState(CheckpointAddress eventFrame) {
         RequireAvailable();
@@ -193,6 +276,33 @@ public sealed class Repository : IDisposable {
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
     public IDurableObject ReadState(CheckpointAddress frame) => Read(frame, GraphFrameKind.State);
+
+    /// <summary>Restores the selected graph and its nearest strict ancestor of the opposite role.</summary>
+    /// <remarks>
+    /// Eagerly restores at most two independent graphs, preserving actual root types, aliases and cycles
+    /// within each graph. Both restores must succeed before a Checkpoint is returned. PreviousState or
+    /// PreviousEvent and its address are both null when no such ancestor exists; no older graphs are
+    /// materialized. Repeated getters return the same roots, retaining application edits and Transient
+    /// initialization. Editing a result changes memory only and does not advance a branch or checkout.
+    /// Application callback side effects are not rolled back on failure. For just one Event graph,
+    /// use ReadEvent; ReadPair instead has an explicit read-only sharing contract.
+    /// </remarks>
+    public Checkpoint ReadCheckpoint(CheckpointAddress address) {
+        RequireAvailable();
+        CheckFrame(address);
+        _busy = true;
+        try {
+            GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
+            CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
+            var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
+            IDurableObject root = GraphReader.Read<IDurableObject>(session, address.RevisionAddress, address.RootId).Root;
+            IDurableObject? previous = previousAddress is null ? null
+                : GraphReader.Read<IDurableObject>(session, previousAddress.RevisionAddress, previousAddress.RootId).Root;
+            return address.Kind == GraphFrameKind.Event
+                ? new EventCheckpoint(address, root, previous, previousAddress)
+                : new StateCheckpoint(address, root, previous, previousAddress);
+        } finally { _busy = false; }
+    }
 
     private IDurableObject Read(CheckpointAddress frame, GraphFrameKind kind) {
         RequireAvailable();
@@ -334,8 +444,15 @@ public sealed class Repository : IDisposable {
         EventAddress head = _history.Journal.GetHead(branch) ?? throw new InvalidDataException("EventHistory branches cannot have empty heads.");
         return Issue(_history.Read(head));
     }
-    private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) =>
-        frame.Parent is { } parent ? NearestStateCore(Issue(_history.Read(parent))) : null;
+    private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, GraphFrameKind.State);
+
+    private CheckpointAddress? PreviousCore(CheckpointAddress frame, GraphFrameKind kind) {
+        while (frame.Parent is { } parent) {
+            frame = Issue(_history.Read(parent));
+            if (frame.Kind == kind) { return frame; }
+        }
+        return null;
+    }
 
     private CheckpointAddress? NearestStateCore(CheckpointAddress frame) {
         while (frame.Kind != GraphFrameKind.State) {

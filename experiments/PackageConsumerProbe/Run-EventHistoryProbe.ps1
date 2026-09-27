@@ -42,7 +42,7 @@ try {
     $contents = @{}
     foreach ($stage in @(
         @{ Number = 1; Count = 9; Expected = "EventHistorySeed:True:Siblings:True:EventHead:True:IndependentEvent:True:SharedReadSeed:True" },
-        @{ Number = 2; Count = 11; Expected = "EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True" }
+        @{ Number = 2; Count = 11; Expected = "EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True:IndependentCheckpoint:True:FixedHistoryQuery:True" }
     )) {
         $stageProperties = $properties + "-p:HistoryVersion=$($stage.Number)"
         # Assert every accepted file before the next Publish, then again after Publish/Verify.

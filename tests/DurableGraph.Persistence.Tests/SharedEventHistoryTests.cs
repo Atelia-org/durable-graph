@@ -75,7 +75,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
 
         using Repository reader = Repository.OpenReadOnlyExisting(_root, SharedReadModel.Models());
         Node coldState = ((Node)reader.ReadState(reader.GetHead("main")));
-        Node coldEvent = ((Node)reader.ReadEvent(Assert.Single(reader.ReadEvents("main"))));
+        Node coldEvent = ((Node)reader.ReadEvent(Assert.Single(reader.EnumerateEvents(reader.GetHead("main"), HistoryOrder.OldestFirst).ToArray())));
         Assert.Equal(editState ? (byte)9 : (byte)2, coldState.Next!.Value);
         Assert.Equal(editState ? 0 : 2, coldState.Links!.Count);
         Assert.Equal((byte)2, coldEvent.Next!.Value);

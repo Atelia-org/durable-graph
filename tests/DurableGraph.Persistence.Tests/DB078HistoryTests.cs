@@ -56,7 +56,7 @@ public sealed class DB078HistoryTests : IDisposable {
             Assert.Equal(s1.Address, s2.Parent);
             Assert.Equal(s0, repository.GetPreviousState(e2));
             Assert.Equal(5, repository.ReadFrames("main").Count);
-            Assert.Equal(2, repository.ReadEvents("main").Count);
+            Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Length);
             Assert.Equal((byte)1, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
         using (SegmentStore segments = OpenState()) {
@@ -109,7 +109,7 @@ public sealed class DB078HistoryTests : IDisposable {
             beta.Value = 31;
             s2 = checkout.CommitState(NoRebase);
             Assert.Equal(s1.RootId, s2.RootId);
-            Assert.Equal((byte)7, Assert.IsType<Message>(repository.ReadEvent(repository.ReadEvents("main").First())).Value);
+            Assert.Equal((byte)7, Assert.IsType<Message>(repository.ReadEvent(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().First())).Value);
             Assert.Equal((byte)20, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
         using (SegmentStore segments = OpenState()) {
@@ -177,6 +177,41 @@ public sealed class DB078HistoryTests : IDisposable {
         var pair = repository.ReadPair(s, e);
         Assert.Equal((byte)2, Assert.IsType<Message>(pair.First).Value);
         Assert.Equal((byte)1, Assert.IsType<Message>(pair.Second).Value);
+    }
+
+    [Fact]
+    public void CheckpointPreservesActualRootTypesAcrossStateReplacement() {
+        using Repository repository = Create();
+        using BranchCheckout checkout = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase);
+        CheckpointAddress first = checkout.Head;
+        CheckpointAddress message = checkout.CommitEvent(new Message { Value = 2 }, NoRebase);
+        CheckpointAddress replacement = checkout.CommitState(new Beta { Value = 3 }, NoRebase);
+        EventCheckpoint eventView = Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(message));
+        Assert.Equal((byte)2, Assert.IsType<Message>(eventView.Event).Value);
+        Assert.Equal((byte)1, Assert.IsType<Alpha>(eventView.PreviousState).Value);
+        Assert.Equal(first, eventView.PreviousStateAddress);
+        StateCheckpoint stateView = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(replacement));
+        Assert.Equal((byte)3, Assert.IsType<Beta>(stateView.State).Value);
+        Assert.Equal((byte)2, Assert.IsType<Message>(stateView.PreviousEvent).Value);
+        Assert.Equal(message, stateView.PreviousEventAddress);
+        Assert.NotSame(checkout.State, stateView.State);
+        Assert.NotSame(eventView.Event, stateView.PreviousEvent);
+    }
+
+    [Fact]
+    public void MissingPreviousEventModelFailsCheckpointEvenWhenCurrentStateIsReadable() {
+        using (Repository repository = Create()) {
+            using BranchCheckout branch = repository.CreateBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
+            branch.CommitState(new Alpha { Value = 2 }, NoRebase);
+        }
+        using Repository stateOnly = Repository.OpenReadOnlyExisting(_root, Models(includeMessage: false));
+        CheckpointAddress state = stateOnly.GetHead("main");
+        Assert.Equal((byte)2, Assert.IsType<Alpha>(stateOnly.ReadState(state)).Value);
+        Checkpoint? delivered = null;
+        Assert.ThrowsAny<Exception>(() => delivered = stateOnly.ReadCheckpoint(state));
+        Assert.Null(delivered);
+        Assert.False(stateOnly.IsFaulted);
+        Assert.Equal((byte)2, Assert.IsType<Alpha>(stateOnly.ReadState(state)).Value);
     }
 
     [Fact]
@@ -302,6 +337,12 @@ public sealed class DB078HistoryTests : IDisposable {
             Assert.Equal(mainEvent.Address, mainEvent2.Parent);
             Assert.Equal(mainEvent2.Address, mainState.Parent);
             Assert.Equal(root, repository.GetPreviousState(mainEvent2));
+            StateCheckpoint mainView = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(mainState));
+            Assert.Equal(mainEvent2, mainView.PreviousEventAddress);
+            Assert.Equal((byte)3, Assert.IsType<Message>(mainView.PreviousEvent).Value);
+            StateCheckpoint siblingView = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(otherState));
+            Assert.Null(siblingView.PreviousEvent);
+            Assert.Null(siblingView.PreviousEventAddress);
         }
         using (SegmentStore segments = OpenState()) {
             using StateRevisionStore states = new(segments);

@@ -113,7 +113,8 @@ internal static class Program {
         File.WriteAllText(Path.Combine(directory, "metrics.txt"), $"TotalRbfBytes={bytes}\nForcedBaseObjectWrites=2\nNoChangeObjectWrites=0\nDeltaObjectWrites=1\n");
         SharedReadProbe.Verify(directory + "-shared-read");
         VerifyFreeHistory(directory + "-free-history");
-        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True");
+        VerifyCheckpointHistory(directory + "-checkpoint-history");
+        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True:IndependentCheckpoint:True:FixedHistoryQuery:True");
 #endif
     }
 
@@ -129,6 +130,9 @@ internal static class Program {
             Record(checkout, new Bob { Score = 12 });
             Require(checkout.State is null && checkout.StateId is null && checkout.StateRevisionAddress is null,
                 "E/E history invented a State.");
+            var checkpoint = (EventCheckpoint)repository.ReadCheckpoint(checkout.Head);
+            Require(checkpoint.Event is Bob { Score: 12 } && checkpoint.PreviousState is null && checkpoint.PreviousStateAddress is null,
+                "Event-only Checkpoint invented a PreviousState.");
         }
         // An Event-only checkout restores no Event graph and needs no application model capability.
         using (var repository = Repository.OpenExisting(directory, new StateModelRegistry(), Options)) {
@@ -144,6 +148,10 @@ internal static class Program {
             alice.Self = alice;
             World world = new() { Alice = alice, Bob = new Bob { Score = 40 } };
             firstState = Save(checkout, world).RevisionAddress;
+            var firstCheckpoint = (StateCheckpoint)repository.ReadCheckpoint(checkout.Head);
+            Require(firstCheckpoint.PreviousEvent is Bob { Score: 12 } &&
+                firstCheckpoint.PreviousEventAddress == repository.EnumerateEvents(checkout.Head).First(),
+                "First State lost its strictly preceding Event.");
             // The unrelated Alice domain type is already a reachable child, then becomes the root.
             replacement = Save(checkout, alice).RevisionAddress;
             aliceId = checkout.StateId!.Value;
@@ -182,6 +190,84 @@ internal static class Program {
             using var checkout = repository.Checkout("free");
             Require(checkout.State is Bob { Score: 60 }, "Same CLR Event/State role or cold replacement failed.");
         }
+    }
+
+    private static void VerifyCheckpointHistory(string directory) {
+        using var repository = Repository.CreateNew(directory, Models(), Options);
+        Alice alice = new() { Score = 10, Labels = ["stable"] };
+        alice.Self = alice;
+        World world = new() { Alice = alice, Bob = new() { Score = 20 } };
+        CheckpointAddress s0, e1, s1, e2, s2;
+        using (var checkout = repository.CreateBranch("main", world, Policy)) {
+            s0 = checkout.Head;
+            var initial = (StateCheckpoint)repository.ReadCheckpoint(s0);
+            Require(initial.PreviousEvent is null && initial.PreviousEventAddress is null,
+                "Initial State invented a PreviousEvent.");
+            e1 = checkout.CommitEvent(new Observed(alice), Policy);
+            s1 = checkout.CommitState(Policy);
+            e2 = checkout.CommitEvent(new Observed(alice), Policy);
+            s2 = checkout.CommitState(Policy);
+            CheckpointAddress s3 = checkout.CommitState(Policy);
+
+            var atEvent = (EventCheckpoint)repository.ReadCheckpoint(e2);
+            var atState = (StateCheckpoint)repository.ReadCheckpoint(s3);
+            Observed occurrence = (Observed)atEvent.Event;
+            World previous = (World)atEvent.PreviousState!;
+            World restored = (World)atState.State;
+            Observed previousEvent = (Observed)atState.PreviousEvent!;
+            Require(atEvent.Address == e2 && atEvent.PreviousStateAddress == s1 &&
+                atState.Address == s3 && atState.PreviousEventAddress == e2,
+                "Checkpoint selection did not follow nearest strict logical ancestors.");
+            Require(ReferenceEquals(occurrence.Target, occurrence.Alias) && ReferenceEquals(occurrence.Target.Self, occurrence.Target),
+                "Independent Checkpoint lost graph-local aliases or cycles.");
+            previous.Alice.Score = 101;
+            occurrence.Target.Score = 102;
+            restored.Alice.Score = 103;
+            previousEvent.Target.Score = 104;
+            Require(previous.Alice.Score == 101 && occurrence.Target.Score == 102 &&
+                restored.Alice.Score == 103 && previousEvent.Target.Score == 104 && alice.Score == 10,
+                "Checkpoint graphs shared mutable objects with each other or the active checkout.");
+            Require(ReferenceEquals(atEvent.Event, occurrence) && ReferenceEquals(atEvent.PreviousState, previous) &&
+                ReferenceEquals(atState.State, restored) && ReferenceEquals(atState.PreviousEvent, previousEvent),
+                "Repeated Checkpoint getters discarded local edits.");
+            var fresh = (EventCheckpoint)repository.ReadCheckpoint(e2);
+            Require(((Observed)fresh.Event).Target.Score == 10 && ((World)fresh.PreviousState!).Alice.Score == 10,
+                "An independent Checkpoint read reused mutable results from a previous read.");
+
+            // Each MoveNext releases the repository guard, so reads and commits are legal in the loop.
+            var fixedQuery = repository.EnumerateEvents(s2);
+            using (var cursor = fixedQuery.GetEnumerator()) {
+                Require(cursor.MoveNext() && cursor.Current == e2 && repository.ReadEvent(cursor.Current) is Observed,
+                    "Default history order was not newest first or held a guard across yield.");
+                checkout.CommitEvent(new Observed(alice), Policy);
+                Require(cursor.MoveNext() && cursor.Current == e1 && !cursor.MoveNext(),
+                    "Advancing the branch changed an already selected history end.");
+            }
+            var values = new List<long>();
+            foreach (CheckpointAddress address in repository.EnumerateEvents(s2, HistoryOrder.OldestFirst)) {
+                values.Add(((Observed)repository.ReadEvent(address)).Target.Score);
+            }
+            Require(values.SequenceEqual(new long[] { 10, 10 }) &&
+                repository.EnumerateEvents(s2, HistoryOrder.OldestFirst).SequenceEqual(new[] { e1, e2 }),
+                "Chronological query failed to cross intervening States.");
+            Require(repository.EnumerateEvents(s2, afterExclusive: s1).SequenceEqual(new[] { e2 }) &&
+                !repository.EnumerateEvents(s2, afterExclusive: s2).Any(), "Exclusive lower bound selected the wrong range.");
+        }
+        var beforeMove = repository.EnumerateEvents(s2);
+        repository.MoveBranch("main", repository.GetHead("main"), s0);
+        Require(beforeMove.SequenceEqual(new[] { e2, e1 }), "Moving a branch changed a fixed history query.");
+        CheckpointAddress unrelated;
+        using (var other = repository.CreateBranchFromEvent("other", new Bob { Score = 99 }, Policy)) {
+            unrelated = other.Head;
+        }
+        bool rejected = false;
+        try {
+            using var cursor = repository.EnumerateEvents(s2, afterExclusive: unrelated).GetEnumerator();
+            cursor.MoveNext();
+        } catch (ArgumentException) {
+            rejected = true;
+        }
+        Require(rejected, "A non-ancestor lower bound was not rejected before the first result.");
     }
 
     private static void CheckEvent(Observed e) {

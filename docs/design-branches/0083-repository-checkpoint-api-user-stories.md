@@ -1,8 +1,8 @@
 # DB-083：从用户故事推导 Repository 与 Checkpoint API
 
-> 状态：**目标语义已选定；公共基础 A 已实施并验收，B/C 与 tag 尚未实施；不是执行工单**。2026-09-27 纳入用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag。
+> 状态：**目标语义已选定；A/B 已实施并验收；C 与 tag 尚未实施；不是执行工单**。2026-09-27 纳入用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag。
 > 本文重新检验 DB-076–082 所依赖的公共使用模型；不是继续按旧 Event/State 交替合同施工的授权。
-> 当前产品事实仍以源码为准。`Repository`、`BranchCheckout` 与地址/自由历史的实现范围见 [078-A 记录](0078-a-repository-free-history-implementation.md)；`Checkpoint`、事件枚举与 Fork 仍为后续合同。
+> 当前产品事实仍以源码为准。公共基础见 [078-A 记录](0078-a-repository-free-history-implementation.md)；独立 Checkpoint 与固定查询见 [078-B 记录](0078-b-checkpoint-history-query-implementation.md)；多分支工作副本与 Fork 仍为后续合同。
 
 ## 1. 本轮需求账本
 
@@ -57,7 +57,7 @@ DramaBoard 可继续在自己的 adapter 中执行 E/S 交替；LLM 可以连续
 
 ## 3. API 草图与读取形状
 
-以下为完整目标形状，包含尚未交付的 B/C 能力；构造器、保存策略等非本轮差异省略。
+以下为完整目标形状，包含尚未交付的 C 能力；构造器、保存策略等非本轮差异省略。
 公开门面建议使用根命名空间 `Atelia.DurableGraph`，实现可以继续位于现有 Persistence 程序集。
 不新增一个转发门面与旧公开类型并行维护，也不为命名反转程序集依赖。
 
@@ -229,7 +229,7 @@ ReadCheckpoint 服务“当前图 + 邻近上下文”的高频读取；ReadEven
 - 只返回轻量事件地址；经过 State 记录不物化其领域图。
 - 可选 afterExclusive 界定祖先范围；同一位置得空范围，不在该祖先链的起点拒绝，不能拼接别的分支。
   提供下界时，在首项交付前验证其祖先关系；这可能需要完整范围的元数据回溯，不伪称该校验没有准备成本。
-- 默认逆序，允许用户提前停止；不要先调用现有全链 ReadEvents 再包装成 IEnumerable 冒充按需路径。
+- 默认逆序，允许用户提前停止；不要先准备全链再包装成 IEnumerable 冒充按需路径。
 - 正序可先准备所需范围的轻量地址再输出。首版不承诺正序首项 O(1)、有界地址缓冲或每返回一项只读取一帧。
 - 库操作仍串行。枚举器不跨 yield 保持 `_busy` 或底层借用 lease，调用者才能在循环内调用 ReadEvent；
   每次推进/读取分别检查仓库可用性，固定 end 保证其间其他串行提交不改变所选历史。
@@ -283,7 +283,8 @@ ShowBranch(candidateBranch, candidate.Head); // 无领域根类型参数或反�
 
 已有 [HistoryJournal](../../src/DurableGraph.Persistence/HistoryJournal.cs) 用 OpaqueEventKind 区分 E/S，
 每条记录的小 envelope 定位对应图；不要求仅为两种公开 Checkpoint 派生类就新增两种 RBF 物理格式。
-A 保留的全量 [ReadEvents](../../src/DurableGraph.Persistence/Repository.cs) 已不物化 State 领域图，但先取得完整历史句柄再筛选。
+A 曾保留的全量 ReadEvents 由 B 移除；当前 [EnumerateEvents](../../src/DurableGraph.Persistence/Repository.cs) 默认逆序按需，
+只返回所选历史范围内的事件地址，不物化 State 领域图；ReadFrames 保留全链元数据检查用途。
 实际 storage pin 以 [StorageDependency.props](../../eng/StorageDependency.props) 为准；本轮查的是该 commit 的头部读取、Parent、refs 与 forward-plan 源码。
 
 放开交替后仍区分 Journal Parent 与图保存 Parent。统一规则：提交前 Head 为 P（首次创建时无），

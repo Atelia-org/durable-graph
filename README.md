@@ -165,21 +165,31 @@ exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍�
 
 ```csharp
 using var history = Repository.OpenReadOnlyExisting(path, models);
-var events = history.ReadEvents("main");
-foreach (var eventFrame in events) {
+var end = history.GetHead("main"); // 固定本次查询的结尾。
+foreach (var eventFrame in history.EnumerateEvents(end, HistoryOrder.OldestFirst)) {
     var damage = (DamageEvent)history.ReadEvent(eventFrame);
     Console.WriteLine(damage.Amount);
 }
-var lastEvent = events.Last(); // 此示例已经保存过事件。
-var before = history.GetPreviousState(lastEvent)
-    ?? throw new InvalidOperationException("This example starts with a State.");
-var pair = history.ReadPair(before, lastEvent);
+var lastEvent = history.EnumerateEvents(end).First(); // 默认从新到旧；此例已有事件。
+var checkpoint = (EventCheckpoint)history.ReadCheckpoint(lastEvent);
+var occurrence = (DamageEvent)checkpoint.Event;
+var before = (World)checkpoint.PreviousState!; // 此例从 State 开始。
+before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence 或持久历史。
 ```
 
-`ReadFrames` / `ReadEvents` 按本次取得的 branch head 返回**从旧到新的完整逻辑链**，排除未连入该链的 orphan 和其他分支独有记录。
-返回值已完整物化；`Reverse().Take(n)` 不会减少底层枚举量。枚举只取得 frame，不恢复领域图；ReadEvent 等操作才恢复对象。
+`EnumerateEvents(end)` 沿固定的逻辑祖先链从新到旧返回事件地址，允许提前停止，跨过 State 时不恢复其领域图。
+后续分支推进或移动不改变所选结尾；循环内可以调用 `ReadEvent`。`HistoryOrder.OldestFirst` 先准备范围内的轻量地址，再从旧到新输出。
+可选 `afterExclusive` 排除下界及其更早历史；同点得到空范围，非祖先下界在交付首项前拒绝。这个校验可能需要完整范围的元数据回溯。
+`ReadFrames` 仍返回从旧到新的**完整元数据链**，用于检查所有 E/S 位置；它有全量成本。两种查询都排除其他分支独有记录和未连入所选链的 orphan。
 严格打开仓库仍校验全历史及相关元数据，包括 orphan；不要把只读一个 Event 等同于跳过这些检查。
-需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`；可写打开下的枚举可能保存 Journal 派生缓存。
+需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`。
+
+`ReadCheckpoint` 一次恢复当前图与最近严格祖先中另一角色的图，最多两份，全部成功才返回。
+`EventCheckpoint` 提供 `Event` / `PreviousState`；`StateCheckpoint` 提供 `State` / `PreviousEvent`，前驱另有对应地址。
+不存在相应祖先时，前驱根和地址同时为 null，包括首 State 之前的 Event。
+这些图彼此独立，也与其他读取和工作副本的可变对象隔离；重复 getter 保留同一实例及你的本地修改。
+`PreviousEvent` 仅表示历史中的邻近事件，不能证明它已经处理或是本次 State 的唯一原因。消息处理进度由应用 State 表达。
+这些历史恢复结果不安装保存基线，修改它们不会自动写盘。只需要事件时仍使用 `ReadEvent`，避免额外恢复前置 State。
 
 `ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
 默认返回两个 `IDurableObject`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
@@ -190,7 +200,7 @@ var pair = history.ReadPair(before, lastEvent);
 `WorldView` / 索引持有。即使两个视图引用同一个 Actor，各自的查询仍使用各自的世界上下文。
 不能只用全局 Actor→context 表代替视图：共享的 Actor 会命中同一个 key。
 不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
-需要原位初始化每份历史图的 Transient 时，分别调用 `ReadState` / `ReadEvent` 即可，不需要开启 writer；
+需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `ReadState` / `ReadEvent`，不需要开启 writer；
 持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `Checkout`。
 可执行的[图外视图示例](experiments/PackageConsumerProbe/EventHistoryConsumer/README.md#per-view-transient-context)
 展示了两份世界各建索引、共享候选 Actor 不携带视图上下文的用法。
@@ -201,6 +211,7 @@ Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享�
 `MoveBranch("main", expectedHead, targetFrame)`；随后用 `Checkout` 从目标分支签出工作副本。
 handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
 位置统一使用 `CheckpointAddress`；它只用于本次打开，不是可序列化的外部地址。
+当前每个仓库仍至多一个活动工作副本；每分支各一个工作副本、一步 `Fork` 与持久 tag 尚未交付。
 历史可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
 Journal Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
 Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。

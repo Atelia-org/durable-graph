@@ -32,7 +32,7 @@ internal static class Program {
             try {
                 if (mode == "verify") {
                     // This catalog intentionally excludes World and Character.
-                    var events = repository.ReadEvents("main");
+                    var events = repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray();
                     DamageEvent first = ((DamageEvent)repository.ReadEvent(events.First()));
                     CheckSnapshot(first, 10);
                     Require(events.Count() is 1 or 2, "Unexpected event count.");

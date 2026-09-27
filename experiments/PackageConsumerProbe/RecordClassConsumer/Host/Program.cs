@@ -26,11 +26,11 @@ internal static class Program {
         string mode = args[0], directory = Path.GetFullPath(args[1]);
         if (mode == "events") {
             using (var eventRepository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
-                var first = ((IDurableObject)eventRepository.ReadEvent(eventRepository.ReadEvents("main").First()));
+                var first = eventRepository.ReadEvent(eventRepository.EnumerateEvents(eventRepository.GetHead("main"), HistoryOrder.OldestFirst).First());
                 Require(first is Damage<string> { Actor: "hero", Amount: 3 }, "Event-only catalog lost the exact record or its inherited field.");
             }
             using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
-            var events = repository.ReadEvents("main");
+            var events = repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray();
             var pair = repository.ReadPair(events.First(), repository.GetPreviousState(events.First())!);
             Require(pair.First is Damage<string> { Actor: "hero", Amount: 3 } && pair.Second is World { Hp: 10 },
                 "Non-generic ReadPair must preserve the requested Event/State order and each root's actual type and content.");

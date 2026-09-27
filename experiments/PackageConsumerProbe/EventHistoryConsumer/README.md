@@ -104,3 +104,15 @@ with retained identity, no-argument saving after replacement, and cold reads of 
 The same Bob CLR type is used in both Event and State roles. Low-level revision diagnostics verify
 first-State null parent, nearest-State graph parents and NoChange after replacement. The historical
 alternating fixture explicitly reads Events; it no longer relies on an implicit PendingEvent contract.
+
+DB-078-B adds the `database-checkpoint-history` repository. It verifies eager Checkpoint selection,
+graph-local cycles and aliases, independent mutable Event/State graphs and active checkout, stable
+getters after edits, and fresh results from a second read. Consecutive States retain the nearest
+strictly preceding Event; the Event-first fixture checks absent PreviousState and the first State's
+PreviousEvent. These navigational fields do not represent application processing progress.
+
+The fixed event query crosses States in both orders and permits ReadEvent in a foreach body. The
+probe commits between MoveNext calls and moves the branch after creating a query, retaining its
+selected end. Exclusive State/same-position bounds and rejection of a non-ancestor bound before
+the first result run against real packages. This complements the product tests for early stopping,
+fault/disposal and capability boundaries; it introduces no new schema or benchmark assertion.

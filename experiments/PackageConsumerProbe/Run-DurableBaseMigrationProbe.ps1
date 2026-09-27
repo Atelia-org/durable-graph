@@ -162,6 +162,8 @@ try {
             $generationProgram = $generationProgram.Replace('session.PendingEvent is null', 'session.Head.Kind == GraphFrameKind.State')
             $generationProgram = $generationProgram.Replace('session.PendingEvent', 'repository.ReadEvent(session.Head)').Replace('session.State', '((World)session.State!)')
             $generationProgram = $generationProgram.Replace('repository.ReadState<World>(', '(World)repository.ReadState(').Replace('repository.ReadEvent<World>(', '(World)repository.ReadEvent(')
+            # DB-078-B replaces the full event query only in the current lane.
+            $generationProgram = $generationProgram.Replace('repository.ReadEvents("main")', 'repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst)')
         }
         [IO.File]::WriteAllText($project, $generationProject, $utf8)
         $marker = if ($isLegacy) { "DurableBase" } else { "IDurableObject" }

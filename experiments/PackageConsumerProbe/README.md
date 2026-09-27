@@ -193,6 +193,10 @@ Root replacement is checked separately. Readonly browsing preserves every file's
 DB-077 fixes the model registry at each Open; Event-only and complete catalogs use separate opens.
 The consumer forces Family definitions (`DurableGraphGenerateDefinitions=true`) and registers the
 generated Family definitions explicitly before opening, so package acceptance covers that path too.
+DB-078-B extends this lane with independent Event/State Checkpoints, stable edited getters,
+Event-first predecessor nullability and fixed event queries across States, commits and branch moves.
+Recovery and RecordClass use EnumerateEvents with explicit oldest-first ordering; the recovery runner
+also checks the new Checkpoint/query XML documentation in the actual restored package.
 
 StateStore and all model/history consumer lanes now use `Repository` and
 `BranchCheckout`. The existing model probes use a deliberate alternating application fixture; the facade also supports Event-first and free E/E/S/S histories. `CreateBranch` publishes S0 and preserves the original instances;

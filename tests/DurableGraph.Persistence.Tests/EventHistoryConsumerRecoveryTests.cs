@@ -66,7 +66,7 @@ public sealed partial class EventHistoryRepositoryTests {
         // Writable browsing may persist a derived Journal forward-plan cache; keep it outside
         // the zero-write observation of Resume + the application's no-Pending recovery branch.
         Assert.Equal(3, verification.ReadFrames("main").Count());
-        Assert.Single(verification.ReadEvents("main"));
+        Assert.Single(verification.EnumerateEvents(verification.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
     }
 
     [Theory]
@@ -115,7 +115,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(1, applications);
             Assert.Equal((byte)7, ((Node)session.State!).Value);
             Assert.Equal(GraphFrameKind.State, session.Head.Kind);
-            Assert.Single(repository.ReadEvents("main"));
+            Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
             Assert.Equal(3, repository.ReadFrames("main").Count());
         }
         using Repository verification = Repository.OpenExisting(_root, Models());

@@ -1,6 +1,6 @@
 # DurableGraph 项目术语表
 
-> 用语校准：2026-09-27；公共基础已迁移至 DB-078-A，具体交付与验证范围见 [实施记录](design-branches/0078-a-repository-free-history-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
+> 用语校准：2026-09-27；公共基础见 [078-A 记录](design-branches/0078-a-repository-free-history-implementation.md)，Checkpoint/固定查询见 [078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
 > 本文是项目首选术语的维护入口；定义概念、区分歧义并映射代码，不代替各分片合同。
 > 公共入口为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`；签出操作为 `Checkout`。旧名只作历史映射，固定模型环境由本次 Open 持有。
 > 当前能力查 [PROJECT-STATE](../src/PROJECT-STATE.md)，长期约束查[目标设计](DurableGraph-target-design-v0.md)，未完成工作查[路线图](DurableGraph-research-roadmap.md)。
@@ -35,7 +35,7 @@ Checkout 不切换 Repository 的全局“当前分支”。Commit 后工作副�
 | <a id="state-event"></a>**领域状态 / 领域事件（State / Event）** | 逻辑历史中的两种角色，不由 CLR 类型名决定。允许 Event-first、连续 E 或 S，同一 CLR 类型也可承担两种角色；应用自己规定处理顺序，每份持久图仍选非空根。 | 当前 `GraphFrameKind` 与 `CommitEvent` / `CommitState`。 |
 | <a id="pending-event"></a>**待完成事件（PendingEvent，历史交替协议用语）** | 旧协议中已记录、等待后继 State 提交的 Event；不是尚未提交的事件。当前仓库不判定业务处理进度，应用可自行使用此概念；不保证外部副作用 exactly-once。 | 旧 `EventHistorySession.PendingEvent` 已移除；当前 Checkout 不恢复 Event。 |
 | <a id="checkpoint"></a>**已提交检查点（committed checkpoint）** | 可用来恢复或分叉的已发布 State/Event 历史位置。其角色与图内容由该位置确定；不因分支继续推进而改变。读取视图与可保存工作副本分别定义，不能从 Event 位置自动推断业务已完成。 | 在本次仓库实例中用 [CheckpointAddress](#checkpoint-address) 指代；仅 RevisionAddress 不足以表达其完整含义。 |
-| <a id="checkpoint-view"></a>**检查点读取视图（Checkpoint，目标）** | 非泛型 EventCheckpoint / StateCheckpoint，直接提供本项与最近严格祖先异种角色的领域根及地址；PreviousX 缺失时两者均空，不递归构造视图。读出图可用于内存计算，修改不自动保存；两图可变隔离。 | [DB-083 §3](design-branches/0083-repository-checkpoint-api-user-stories.md#3-api-草图与读取形状)，尚未实施；当前项根始终非空。 |
+| <a id="checkpoint-view"></a>**检查点读取视图（Checkpoint）** | 非泛型 EventCheckpoint / StateCheckpoint，直接提供本项与最近严格祖先异种角色的领域根及地址；PreviousX 缺失时两者均空，不递归构造视图。首版 eager 至多两图，各根 getter 稳定；修改不自动保存，两图可变隔离。 | [Checkpoint](../src/DurableGraph.Persistence/Checkpoint.cs)、[078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)；当前项根始终非空。 |
 | <a id="checkpoint-address"></a>**检查点地址（CheckpointAddress）** | 定位 Journal 逻辑历史位置的 opaque 地址；不是裸 StateRevision 地址。限同次打开，以 owner 和逻辑位置判等；重开从持久 branch ref 取得新地址，null 与外实例地址拒绝，无外部序列化入口。 | 当前 sealed class [CheckpointAddress](../src/DurableGraph.Persistence/CheckpointAddress.cs)，只由库签发；公开 Kind、RootId 与诊断用 RevisionAddress 不构成来源认证。 |
 | <a id="immutable-tag"></a>**不可变标签（tag，目标）** | 仓库内持久名字绑定固定历史位置；创建后不移动、覆盖或删除，按名解析签发本次打开的新地址。与可移动 branch 分名空间，不占工作副本。 | [DB-084](design-branches/0084-eventjournal-immutable-tags-slice.md)，持久权威归上游 EventJournal；上游本地包已交付，当前 DG pin 与公开 API 尚未接入。 |
 | <a id="fork"></a>**分叉（Fork，目标一步操作）** | 从已提交检查点创建新命名分支并交付工作副本，Head 保持精确选点；有 State 则独立恢复，无 State 则 State=null；准备完成后发布 ref。源工作副本未提交的修改不参与；发布后失败仍须检查实际结果。 | 当前可分步 `CreateBranch(name, address)` + `Checkout(name)`，失败边界不同；[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的一步 `Fork(name, address)` 属 DB-078-C，未实施。 |

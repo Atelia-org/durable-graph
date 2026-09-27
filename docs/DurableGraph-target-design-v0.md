@@ -411,8 +411,8 @@ CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担
 
 Journal ref 是唯一发布前沿，图追加与 head 发布分开。提交仍检查工作副本所有权、精确 head、最近 State 的 exact 基线并执行最终 CAS，
 防重入、fault 和 publication outcome 不因自由历史放宽。当前每仓库至多一个活动工作副本，ref-only CreateBranch 或 Move 前须关闭它；
-ref-only CreateBranch 不恢复领域图，也不占用工作副本。DB-078-B 的独立 Checkpoint/按需事件查询与 DB-078-C 的每 branch 单工作副本、
-named Fork 仍是后续交付，不增加多 writer 或并行操作承诺。后续 Checkpoint 的 PreviousX 选最近严格祖先相应角色，缺失时根/地址成对为空。
+ref-only CreateBranch 不恢复领域图，也不占用工作副本。DB-078-C 的每 branch 单工作副本与 named Fork 仍是后续交付，
+不增加多 writer 或并行操作承诺。
 
 历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与逻辑 Journal 位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
@@ -424,7 +424,16 @@ ReadState/ReadEvent 按角色校验地址并独立恢复实际领域根；实验
 按只读快照使用且不承诺跨图实例共享。共享候选以完整当前持久状态比较作证明，不依赖对象 Base/Delta preparation；
 缺少比较能力时保守不共享，比较与验证错误仍传播，Dictionary 的 canonical key 校验不省略。
 Checkout 使用独立可变 State 恢复路径；热调用中用户创建的别名仍由用户管理。
-当前 ReadFrames/ReadEvents 读取全逻辑链并返回地址，切片结果不节省该成本；按需事件枚举由 DB-078-B 迁移交付。
+ReadCheckpoint 在指定地址独立恢复当前图及最近严格祖先的相反角色图；PreviousX 是领域根与地址，缺失时两者同时为 null。
+首版 eager 至多两图，全部成功才交付，各根 getter 稳定；两图间、不同读取间及与工作副本间不共享可变实例。
+操作内解码复用不改变独立分配和 singleton 拒绝。ReadPair 的显式共享不能用来实现默认 Checkpoint。
+PreviousEvent 不表示处理完成或唯一原因，ReadEvent 不因便利上下文额外物化 PreviousState。
+
+EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclusive 在首项前验证为该位置的祖先，同点为空范围。
+无下界的默认 NewestFirst 按需回溯，OldestFirst 可先缓冲所需事件地址；不物化沿途 State。
+每次 MoveNext 检查可用性，交付前释放操作 guard 与底层 lease，循环体可 ReadEvent 或进行其他串行操作。
+后续提交/Move 不改变所选历史。ReadFrames 保持全逻辑链元数据读取，切片结果不节省其成本；旧 ReadEvents 已移除。
+实现与验证见 [DB-078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)，Open 的全物理校验成本另计。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，

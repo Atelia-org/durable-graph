@@ -1,10 +1,10 @@
 # DB-078：分支工作副本与可编辑检查点 fork
 <a id="db-078多会话与可编辑检查点-fork"></a>
 
-> 状态：**A 已实施并验收；B/C 尚未实施**。2026-09-27 按 DB-083 已选产品语义施工。原源码核对基线 `343bfa6`。
+> 状态：**A/B 已实施并验收；C 尚未实施**。2026-09-27 按 DB-083 已选产品语义施工。原源码核对基线 `343bfa6`。
 > 目标以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；本文拆成 A/B/C 三个独立可验收阶段，不承诺一个主会话完成全文。
 > 顺序：第 2 片；依赖 [DB-077](0077-repository-model-environment-slice.md)，下一片 [DB-079](0079-shared-graph-restoration-core-slice.md)。
-> A 的分工与验收见[实施记录](0078-a-repository-free-history-implementation.md)；B/C 保留后续合同。需求与约束来源见 [DB-076](0076-efficient-graph-fork-technical-path.md)。
+> 分工与验收见 [A 记录](0078-a-repository-free-history-implementation.md)、[B 记录](0078-b-checkpoint-history-query-implementation.md)；C 保留后续合同。需求与约束来源见 [DB-076](0076-efficient-graph-fork-technical-path.md)。
 > 每 branch 单工作副本及故障边界的原裁决见 [历史专项评审](0077-0078-api-dialectical-review.md)；本次公开 API 与阶段范围以本文和 DB-083 为准，不开放同 branch 竞争提交或新增专用 head 冲突异常。
 > 术语遵循[项目术语表](../DurableGraph-glossary.md#branch-checkout)：A 已采用 `BranchCheckout` / `Checkout`；旧名仅在实施前事实说明中保留。
 

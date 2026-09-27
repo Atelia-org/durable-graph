@@ -67,24 +67,24 @@ generated Family surface for all its durable declarations. A model library can a
 request this surface with `<DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>`.
 Unset or false retains automatic selection; false does not disable an otherwise required Family path.
 Register the
-definition factories once; the operation snapshot closes actual supported types as needed:
+definition factories once; the repository's frozen model environment closes actual supported types as needed:
 
 ```csharp
 var models = new StateModelRegistry();
 Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 
-using var repository = EventHistoryRepository.CreateNew(repositoryPath);
+using var repository = Repository.CreateNew(repositoryPath, models);
 using var session = repository.CreateBranch(
-    "main", world, models, new ReadAmplificationBaseBudgetParameters(3, 5));
+    "main", world, new ReadAmplificationBaseBudgetParameters(3, 5));
 var initialStateFrame = session.Head; // S0 is already published; world retains its identity.
 ```
 
 These storage APIs require `Atelia.DurableGraph.Persistence` in addition to the runtime package.
 The [repository quickstart](../../README.md) provides the complete Event/State commit, reopen and
-pending-Event example. Event and succeeding State both compare against the preceding State;
+application recovery example. Event and succeeding State both compare against the preceding State;
 committing an Event does not advance the State baseline.
 For stored-exact decoding, register the same generated definitions into a `StateReaderRegistry`.
-An operation freezes its definition/model directory; later registration cannot alter that operation.
+Repository Open freezes its definition/model directory; later registration affects future opens only.
 Current bindings use actual closed CLR types, while historical readers bind retained templates
 against the complete stored Schema. The framework does not discover models by assembly scanning.
 
@@ -401,27 +401,38 @@ accepted graph, although allocated numeric IDs can remain consumed.
 
 ## Typed persistence path
 
-Register generated models or definition factories with `StateModelRegistry`, then use
-`EventHistoryRepository` for product persistence. `CreateBranch(name, initialState, models)` commits
-S0 and returns a session retaining the supplied domain instances. `CommitDomainEvent` records an
-independent Event snapshot; `CommitDomainState` saves its processing result and installs the frozen
-State candidate. These calls alternate. State may be replaced with another root of the same exact CLR
-type, while Event roots may have different registered durable types. The session owns the previous
-State's Revision, DTO baseline and instance-ID bindings; callers do not pass these separately.
+Register generated models or definition factories with `StateModelRegistry`, then supply it when
+creating or opening a `Repository`. That open instance freezes the model configuration.
+`CreateBranch(name, initialState)` commits S0 and returns a non-generic `BranchCheckout` retaining
+the supplied domain instances. `CreateBranchFromEvent(name, initialEvent)` commits E0 and returns
+a checkout with no State. `CommitEvent` records an independent Event snapshot; `CommitState`
+installs the frozen State candidate after publication. Either role may be committed consecutively.
+`CommitState(nextState)` accepts any registered nonnull root, including a different CLR type;
+the parameterless overload requires an existing State. The checkout owns the nearest State's
+Revision, DTO baseline and instance-ID bindings; callers do not pass these separately.
 
 All these save calls have an optional policy; an override applies to that call only, not to later
-session defaults. The Persistence package includes XML documentation for the EventHistory facade.
+checkout defaults. The Persistence package includes XML documentation for the Repository facade.
 The [snapshot/recovery example](../../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)
-separates new commands from completing an existing PendingEvent after reopening. A recovery with no
-PendingEvent does not create replacement work. Publication outcome and IsFaulted are independent;
-failed attempts do not undo caller mutations. The example abandons old references before resuming.
+uses an explicit application protocol to distinguish new commands from completing recorded work.
+The library does not infer pending work or completion from E/S order. Publication outcome and
+IsFaulted are independent; failed attempts do not undo caller mutations. Reopen faulted repositories
+and inspect their actual history before deciding whether to retry.
 
-`Resume<TState>` restores a branch's State and, at an Event head, its `PendingEvent`; it does not
-replay business handlers. `ReadState<T>` and `ReadEvent<T>` independently materialize a selected
-repository-issued `GraphFrame`. Experimental `ReadPair(first, second, models)` returns two
+`Checkout` retains the exact branch head and restores only its nearest State, or no graph for a
+pure Event prefix. It does not materialize Events or replay business handlers. `ReadState` and
+`ReadEvent` independently materialize a selected repository-issued `CheckpointAddress`.
+`ReadCheckpoint(address)` eagerly returns an `EventCheckpoint` or `StateCheckpoint`, containing
+the selected root and the nearest strict ancestor of the opposite role. PreviousState/PreviousEvent
+and its address are both null only when no such ancestor exists. At most two graphs are restored;
+they have independent mutable instances, and repeated root getters retain the same objects.
+Changing a read result neither writes history nor advances a checkout. PreviousEvent is navigation,
+not evidence of causality or application progress.
+
+Experimental `ReadPair(first, second)` returns two
 `IDurableObject` roots with their actual types preserved, in input order after both reads succeed.
 Selections may have either State/Event kind and need not be adjacent. Use each input frame's `Kind`
-for its role and pattern matching for its domain type; `ReadPair<A,B>` remains available for known root types.
+for its role and pattern matching for its domain type.
 Within one operation it reuses stored-exact decoding and may
 share domain instances whose complete current reference closure is safe to share. It makes no
 cross-graph sharing or separation guarantee: do not use cross-graph `ReferenceEquals` to infer
@@ -432,22 +443,28 @@ not on potentially shared nodes. A global Actor-to-context table is insufficient
 to both views. See the executable [external view example](../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md#per-view-transient-context).
 For per-view in-place Transient initialization, use independent `ReadState`/`ReadEvent` calls. These work
 without a writer; persistent members remain historical snapshots and no saving baseline is installed.
-Use `Resume` to continue editing and committing. Sharing comparison uses persistent-state equality
+Use `Checkout` to continue editing and committing. Sharing comparison uses persistent-state equality
 without preparing object Base/Delta payloads; ordinary read validation may still encode canonical
-Dictionary keys. Writable `Resume` can reuse frozen
-DTOs and strings but allocates separate mutable State/Event graphs. Upgrade and validation still
+Dictionary keys. Independent restoration can reuse frozen
+DTOs and strings but allocates separate mutable graphs. Upgrade and validation still
 run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design.md)
 for the internal sharing boundary; there is no public cache configuration or new wire format.
-Close an active session before forking from a historical frame or moving a branch with an expected head.
-ReadFrames/ReadEvents return a fully materialized oldest-first logical chain, excluding orphan appends;
-they do not restore domain objects. Taking only the last N results does not reduce enumeration work.
-Strict Open still performs separate physical-history validation. GraphFrame handles are valid only
+Close the active checkout before creating a ref at a historical address or moving a branch with an
+expected head. One-step Fork and multiple active branch checkouts are not yet provided.
+`EnumerateEvents(endInclusive, order, afterExclusive)` returns only Event addresses in a fixed
+logical history, even if a branch later advances or moves. Default `HistoryOrder.NewestFirst`
+supports early stopping without preparing the full chain. `OldestFirst` may buffer addresses;
+an optional lower bound must be an ancestor or the same point and is validated before the first item.
+Each MoveNext checks repository availability and releases its operation guard before returning, so
+the loop body can call ReadEvent. No traversed State graph is materialized. `ReadFrames(branch)`
+still returns the full oldest-first metadata chain; slicing that list does not reduce its cost.
+Strict Open performs separate physical-history validation. CheckpointAddress values are valid only
 in their issuing open repository, and their diagnostic addresses are not persistent bookmarks.
 
 Graph materialization decodes the complete stored-exact directory, validates and upgrades its rows,
 then allocates all reachable objects before hydrating references. Durable classes use
 `RuntimeHelpers.GetUninitializedObject`; constructors, field initializers and Transient hooks do
-not run. User code rebuilds Transient state after delivery on Resume or independent reads; paired
+not run. User code rebuilds Transient state after delivery on Checkout or independent reads; paired
 views keep their context outside the graphs as described above. For explicit stored-exact DTO inspection,
 register retained readers/definitions with `StateReaderRegistry` and use `RevisionDecoder`.
 `LoadedWorld` and its prepare/load surface are internal mechanism helpers, not application APIs.

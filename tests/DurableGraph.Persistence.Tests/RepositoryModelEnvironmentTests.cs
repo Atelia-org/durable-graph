@@ -34,7 +34,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             Assert.Equal(0, reads.Factories);
             Assert.Equal(0, reads.Comparers);
             CheckpointAddress head = repository.GetHead("main");
-            CheckpointAddress domainEvent = Assert.Single(repository.ReadEvents("main"));
+            CheckpointAddress domainEvent = Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
             for (int iteration = 0; iteration < 2; iteration++) {
                 Assert.Equal(7, ((RootModel)repository.ReadState(head)).Values!["key"]);
                 Assert.Equal(9, ((RootModel)repository.ReadEvent(domainEvent)).Values!["key"]);

@@ -24,9 +24,9 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md) | 目标语义已选定；A 公共基础与自由历史已迁移，余项是 B 独立 Checkpoint/nearest PreviousX/固定结尾查询，C 多分支与一步 Fork，tag 独立 |
+| [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md) | A 公共基础与 B 独立 Checkpoint/固定查询的实际状态见 PROJECT-STATE；余项是 C 多分支与一步 Fork，tag 独立 |
 | [DB-084 EventJournal 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) | 目标已纳入、工程独立：上游已交付本地包 `0.1.2-dev.20260927.1`；DG 待更新 pin 并验收创建/解析、严格 Open/持久确认；DG 接入依赖 078-A，不依赖优化片。首片外部序列化地址不提供 |
-| [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | Proposed，已按 DB-083 校准：077 固定模型 → 078-A 公共基础/自由历史、B Checkpoint/查询、C 多分支/Fork → 079 共用恢复 → 080 单 State 准备槽 → 081 热 State 准入；082 叶实例实验只硬依赖080。078三个阶段分别验收，全部完成即可使用；077 已验收；078-A 已验收，B/C 及优化片未实施 |
+| [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | 后续顺序为 078-C 多分支/Fork → 079 共用恢复 → 080 单 State 准备槽 → 081 热 State 准入；082 叶实例实验只硬依赖080。078 全部阶段完成才形成 named Fork 产品停点；C 与优化片尚未实施 |
 | [DB-077 固定模型环境](design-branches/0077-repository-model-environment-slice.md) | 已实施，验收见[记录](design-branches/0077-model-environment-implementation.md)；固定 Open 模型与 durable current 恒等；公共基础迁移由 [078-A](design-branches/0078-a-repository-free-history-implementation.md) 承接。[旧专项评审](design-branches/0077-0078-api-dialectical-review.md)保留历史，不作为新公开合同 |
 | [DB-073 实例缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) / [DB-074 方向清单](design-branches/0074-efficient-fork-deferred-directions.md) | Draft：均尚待进一步修订；不作为 DB-077–082 的并行工单或前置，缓存/更深优化取舍待分片实测后再处理 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |

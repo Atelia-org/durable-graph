@@ -44,7 +44,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             third = session.CommitState(NoRebase).RevisionAddress;
             Assert.Equal(third, repository.GetHead("main").RevisionAddress);
             Assert.Equal(5, repository.ReadFrames("main").Count());
-            Assert.Equal(2, repository.ReadEvents("main").Count());
+            Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Count());
         }
         using (SegmentStore segments = OpenState()) {
             using StateRevisionStore store = new(segments);
@@ -90,7 +90,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Throws<ArgumentException>(() => repository.ReadEvent(session.Head));
         }
         using Repository read = Repository.OpenReadOnlyExisting(_root, Models());
-        var eventFrame = Assert.Single(read.ReadEvents("main"));
+        var eventFrame = Assert.Single(read.EnumerateEvents(read.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
         var stateFrame = read.GetHead("main");
         var pair = (((Node First, Node Second))read.ReadPair(eventFrame, stateFrame));
         Assert.Equal((byte)2, pair.First.Left!.Value);
@@ -420,7 +420,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         StateModelRegistry eventOnly = Models(onReadValue: value => { if (value == 3) bobReads++; },
             onHydrate: node => { if (node.Value == 3) bobHydrates++; });
         using (Repository repository = Repository.OpenReadOnlyExisting(_root, eventOnly)) {
-            var e = Assert.Single(repository.ReadEvents("main"));
+            var e = Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
             Node read = ((Node)repository.ReadEvent(e));
             Assert.Equal(0, bobReads);
             Assert.Equal(0, bobHydrates);
@@ -436,7 +436,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Throws<ArgumentException>(() => ((Node)repository.ReadState(e)));
         }
         using (Repository repository = Repository.OpenReadOnlyExisting(_root, all)) {
-            var e = Assert.Single(repository.ReadEvents("main"));
+            var e = Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
             Assert.Equal((byte)8, Assert.IsType<Node>(((IDurableObject)repository.ReadEvent(e))).Value);
         }
         AssertFiles(before);

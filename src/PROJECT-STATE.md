@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-27；DB-077 已实施并验收；DB-083 目标语义已选定，DB-078-A 已实施并验收；B/C 与 079–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-27；DB-077 与 DB-078-A/B 已实施并验收；C 与 079–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,20 +19,18 @@
 
 ## 当前焦点
 
-[DB-078-A 非泛型入口与自由历史](../docs/design-branches/0078-a-repository-free-history-implementation.md) 已完成并验收：
-根命名空间的 `Repository` / 非泛型 `BranchCheckout` / `CheckpointAddress` 已迁移，允许 Event-first、连续 E/S 与跨实际类型 State 替换。
-模型继续由 DB-077 在每次 Open 固定。Checkout 只恢复最近 State；纯 Event 前缀的 State=null，不恢复或 replay Event。
-地址按本次打开实例与 Journal 位置判等；重开必须从持久 ref 重新取得，不提供外部序列化入口。
-源码回归、真实包消费者、旧数据续写与独立审阅已通过；实际证据只记录在本片实施记录。
+[DB-078-B：独立 Checkpoint 与固定历史查询](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 已实施并独立验收。
+ReadCheckpoint eager 至多两张独立图，PreviousX 为最近严格祖先相应角色，缺失时根与地址同时为空；根 getter 稳定。
+EnumerateEvents 固定 end、可选排他下界，默认逆序按需，正序可缓冲地址；不恢复沿途 State，循环体可以 ReadEvent。
+每次推进检查可用性，交付前释放 guard/lease。旧全量 ReadEvents 已删除，ReadFrames 保留全链元数据用途。
+非泛型入口、自由历史、跨类型 State 与地址来源由 [078-A](../docs/design-branches/0078-a-repository-free-history-implementation.md) 交付，Open 模型环境由 DB-077 固定。
 
-下一停点是 [DB-078-B](../docs/design-branches/0078-editable-checkpoint-fork-slice.md#12-078-b独立-checkpoint-与固定历史查询)：
-独立 Checkpoint、nearest 严格祖先 PreviousX、固定历史事件枚举。之后 C 交付每 branch 占用与 named Fork。
-本片仍每 repo 至多一个活动工作副本，尚无便利 Checkpoint/EnumerateEvents/Fork；全量 ReadFrames/ReadEvents 保持明确的全链成本。
-[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 是目标合同，不能把已交付的 A 等同于完整目标。
+下一停点是 [DB-078-C](../docs/design-branches/0078-editable-checkpoint-fork-slice.md#2-078-cfork-api-与恢复行为)：每 branch 占用与 named Fork。
+当前仍每 repo 至多一个活动工作副本，尚无一步 Fork；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的完整目标尚未完成。
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
 [DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的后续顺序保持：
-078-B/C 分别验收 → 079 按用途恢复核心 → 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
+078-C → 079 按用途恢复核心 → 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
 无 State 请求绕过材料槽/叶表，优化关闭仍须正确；这些优化尚未实施。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
 DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
@@ -92,7 +90,7 @@ positional/backing storage、泛型、跨库继承及历史升级复用现有对
 [DramaBoard 首轮 API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 的近期改进已由
 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md) 完成：默认调用、包内 XML 文档、
 [引用事件快照与恢复示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)，以及 README 原文执行验证。
-恢复示例与内部故障测试共用 Pending 判断；已发布 S 不重放，失败后重新取得 State/Event，不复用旧的可变图。
+恢复示例与内部故障测试采用应用自身的 E/S 协议判断处理进度；已发布 S 不重放，失败后重新取得 State/Event，不复用旧的可变图。
 现有提交/格式、DB-064 只读共享与可写隔离合同保持。
 第二轮 [ReadPair 反馈](../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md) 已完成于
 [DB-066](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md)：共享判断改用可选完整状态比较，
@@ -241,6 +239,8 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   冷 Event-only 历史不导入 Event ID；不同 Revision 的对象数字 ID 可以重合，身份须在具体 Revision 内解释。
   CheckpointAddress 由本次打开签发，相等性为 owner+Journal 位置；跨 repo/重开旧地址拒绝，裸 RevisionAddress 只作诊断。
   ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 和 Move 须先关闭活动工作副本。
+  ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
+  EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。
   提交按 Schema/State → Journal EventFrame → branch ref 的持久屏障发布，发布前准备安装，发布后不重新 Capture 或运行模型回调。
   GraphCommitException 区分 NotPublished / Unknown / Published；NotPublished 也须检查 IsFaulted，故障后 dispose/reopen，无透明重试或领域修改回滚。
   严格重开校验全部物理 Journal（含 orphan）、逻辑 Parent 与最近 State 图 Parent、引用 Revision/类型头及根成员；只读不创建、flush 或修尾。

@@ -44,7 +44,8 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.Repository.CreateBranchFromEvent(' = 1
         'M:Atelia.DurableGraph.Repository.Checkout(' = 1
         'M:Atelia.DurableGraph.Repository.ReadFrames(' = 1
-        'M:Atelia.DurableGraph.Repository.ReadEvents(' = 1
+        'M:Atelia.DurableGraph.Repository.EnumerateEvents(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadCheckpoint(' = 1
         'M:Atelia.DurableGraph.Repository.ReadState(' = 1
         'M:Atelia.DurableGraph.Repository.ReadEvent(' = 1
         'M:Atelia.DurableGraph.Repository.ReadPair(' = 1
@@ -55,6 +56,10 @@ function Test-PackageDocumentation {
         'P:Atelia.DurableGraph.BranchCheckout.IsFaulted' = 1
         'T:Atelia.DurableGraph.Persistence.GraphCommitException' = 1
         'T:Atelia.DurableGraph.CheckpointAddress' = 1
+        'T:Atelia.DurableGraph.Checkpoint' = 1
+        'T:Atelia.DurableGraph.EventCheckpoint' = 1
+        'T:Atelia.DurableGraph.StateCheckpoint' = 1
+        'T:Atelia.DurableGraph.HistoryOrder' = 1
     }
     foreach ($prefix in $expected.Keys) {
         $members = @($documentation.doc.members.member | Where-Object {
@@ -76,6 +81,18 @@ function Test-PackageDocumentation {
             }
         }
     }
+    $checkpointProperties = @('Checkpoint.Address', 'EventCheckpoint.Event', 'EventCheckpoint.PreviousState',
+        'EventCheckpoint.PreviousStateAddress', 'StateCheckpoint.State', 'StateCheckpoint.PreviousEvent',
+        'StateCheckpoint.PreviousEventAddress')
+    foreach ($property in $checkpointProperties) {
+        $members = @($documentation.doc.members.member | Where-Object { $_.name -ceq "P:Atelia.DurableGraph.$property" })
+        if ($members.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$members[0].summary)) {
+            throw "Missing Checkpoint property documentation: $property"
+        }
+    }
+    if (@($documentation.doc.members.member | Where-Object {
+        $_.name.StartsWith('M:Atelia.DurableGraph.Repository.ReadEvents(', [StringComparison]::Ordinal)
+    }).Count -ne 0) { throw 'The obsolete ReadEvents API must not remain in the current package.' }
     Write-Host "FacadeDocumentation:Packaged:Restored:MembersVerified"
 }
 

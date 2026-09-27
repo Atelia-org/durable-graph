@@ -68,7 +68,8 @@ try {
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
         (Get-Example "csharp" 'using var history = Repository.OpenReadOnlyExisting(path, models);') +
-        "`nif (events.Count != 3 || pair.First is not World || pair.Second is not DamageEvent) { throw new InvalidOperationException(); }`n"
+        "`nif (history.EnumerateEvents(end).Count() != 3 || occurrence.Amount != 1 || before.Hero.Hp != 100 ||`n" +
+        "    !ReferenceEquals(before, checkpoint.PreviousState) || ((World)history.ReadState(checkpoint.PreviousStateAddress!)).Hero.Hp != 98) { throw new InvalidOperationException(); }`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $browse, $utf8)
     Invoke-DotNet (@("run", "--project", $project, "--no-restore") + $properties + @("--", $database))
 
