@@ -383,21 +383,29 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
 缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)。
 
-上层 API 采用由 EventHistoryRepository 创建/恢复的 EventHistorySession，对外提供
-创建分支/Resume、访问 State 根及交错提交 Event/State。它同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
+公共使用模型见 [DB-083 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md)：统一 Repository、非泛型 BranchCheckout/Checkpoint、自由 E/S 提交；下文的交替/PendingEvent 属当前实现。
+[DB-076–082](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 已按目标校准为候选分片，均未实施。
+用户已选定 Event-first 与跨类型 State 替换：工作副本 State 可空仅表示尚无 State，持久 E/S 根仍必须非空；
+无 State 不自动执行 Event，首 State 建立基线，后续实际根类型限制归应用。PreviousX 取最近严格祖先的相应种类，缺失时根/地址成对为空。
+首片 CheckpointAddress 只属于本次打开；[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 由上游 EventJournal 独立交付后接入，
+DG 不另立持久权威，也不把 tag 名当作跨仓库外部地址。下面保留旧实现事实，不能据它恢复 S0 必需或同型根的目标限制。
+
+当前实现的上层 API 采用由 EventHistoryRepository 创建/恢复的 `EventHistorySession`，对外提供
+创建分支/`Resume`、访问 State 根及交错提交 Event/State。它是当前术语中的分支工作副本，同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
 领域实例到 ObjectId 的绑定及分配状态；普通调用方不分别传入或设置这几份状态。
 仅由受控加载和成功提交流程建立、推进其对应关系，不为此另造独立的认证或 receipt 框架。
-Capture/Prepare/Accept 是会话内部组件；其单独可调用不意味着完成持久 Commit。
+Capture/Prepare/Accept 是工作副本内部组件；其单独可调用不意味着完成持久 Commit。
 
 提交以这次冻结候选完成追加、规定的持久化屏障和 head 发布后，再推进基线与身份绑定；
-不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离会话所选 Journal head；MVP 可用仓库内
-单活动工作会话和受控修改保证，不提前承诺多 checkout / 多 writer。branch 的持久引用与内存工作
-会话是不同概念，但不要求为命名立即拆类或程序集。
+不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离工作副本所选 Journal head；当前实现以仓库内
+单活动工作副本和受控修改保证。候选路线中 DB-077 仅固定模型环境；DB-078-A 迁移统一 Repository/非泛型 BranchCheckout 并放开交替，
+DB-078-B 交付 Checkpoint/事件查询，DB-078-C 再允许不同 branch 各一个工作副本与 named Fork；同 branch 的第二次签出仍拒绝。
+这些分片都不增加多 writer 或并行仓库操作承诺。branch 的持久引用与内存工作副本是不同概念。
 
-无历史的新分支必须提交非空 S0 后才能交付会话并公开名字，不暴露空 head。
-移动分支或从历史帧分叉须先关闭活动会话，再 Resume 目标；从 E 恢复时同时恢复 preceding State 与 PendingEvent，
-不重放业务处理器。State 可替换同 exact 类型根；null/清空另行裁决。
-EventHistory 收敛仓库/会话外观，用户无需分别维护 Parent、DTO baseline 或实例-ID 绑定。
+当前实现的无历史新分支必须提交非空 S0 后才交付工作副本并公开名字；目标允许首个非空 E 或 S，均不暴露空 head。
+当前实现中，移动分支或从历史帧分叉须先关闭活动工作副本，再 `Resume` 目标；从 E 恢复时同时恢复 preceding State 与 PendingEvent，
+不重放业务处理器。当前 State 仅可替换同 exact 类型非空根；目标允许异型替换，仍不接受持久 null 根。
+EventHistory 收敛仓库/工作副本外观，用户无需分别维护 Parent、DTO baseline 或实例-ID 绑定。
 旧 GraphRepository/GraphSession 等早期外观没有下游兼容负担，统一由 EventHistory 外观替代；
 不增加旧 publication.rbf 格式兼容、迁移或双发布机制。施工交接和示例迁移由 DB-063 维护。
 
@@ -458,7 +466,7 @@ source 目录与升级后 World 可达集合，不能假定两者始终一一对
 应保留 source membership 与 stored Schema 来源，只维护一份归一化 DTO 比较基线；下一次 Capture
 决定当前版本 DTO 图中从 World 得到的可达闭包，并由差集产生 Removes，不通过重新 Capture 已恢复对象猜测基线。
 Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保留原 ID，让下一 Capture 产生
-实际引用差异。新加载会话从完整 source live max+1 开始分配，只承诺会话内单调；uint 耗尽仅阻止
+实际引用差异。新加载工作副本从完整 source live max+1 开始分配，只承诺工作副本内单调；uint 耗尽仅阻止
 新增 ID，不阻止加载或已有对象保存。固定 Parent 的低层 Prepare 不就地接受新地址，需 Append 后重新 Load；
 普通连续 State 保存使用受控 EventHistorySession.CommitDomainState，发布成功后直接安装原候选并保留领域实例；Event 提交不推进 State 基线。
 List 适配器先分配空列表，待全部实例登记后逐元素 Hydrate 并按序 Add，保留共享和循环；

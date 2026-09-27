@@ -13,6 +13,7 @@
 - **Open / Deferred**：原讨论尚未全部裁决或等待触发；不意味着其中没有已采用、已实现的部分。
 - **Chosen**：在文档所述范围内选择了方案；不自动代表完整产品已实现、长期 API 已冻结或所有附带建议已批准。
 - **Proposed**：推荐的下一分片，等待采纳；不是已选持久格式或实施授权。
+- **Draft**：尚待进一步修订的草稿；保留分析材料，不作为当前已选方案或施工输入。
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
@@ -23,9 +24,18 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 目标已纳入 / 独立分片，未实施 | 持久权威归上游 EventJournal，先上游交付再 DG 更新 pin/严格接入；仅创建/解析固定点，非外部可序列化地址 |
+| [DB-083 Repository / Checkpoint 用户故事](0083-repository-checkpoint-api-user-stories.md) | 目标语义已选定，未实施 | 非泛型工作副本、Event-first、跨类型 State、nearest PreviousEvent、同打开地址；DB-076–082 已据此校准，tag 单列 DB-084 |
+| [DB-082 单图准备材料范围的 ImmutableLeaf 复用](0082-prepared-immutable-leaf-reuse-slice.md) | Proposed / 已校准的条件实验，未实施 | 第 6 片；单 State 准备材料的叶表，身份/成功交付/额外依赖门保持；实测决定启用，硬依赖080，081非必需 |
+| [DB-081 热 State 提交恢复材料](0081-hot-commit-restoration-material-slice.md) | Proposed / 已校准，未实施 | 第 5 片；有完整冷热证明的 State 提交 DTO 进入同槽，Event 不动槽；新 revision 不继承已消失的历史 Upgrade 依赖，缺热证明可冷恢复 |
+| [DB-080 State 准备材料复用](0080-prepared-checkpoint-reuse-slice.md) | Proposed / 已校准，未实施 | 第 4 片；Fork/Checkout 单份精确 State 驻留，Head 逐请求导航，完整 Schema 证书命中复核；无 Event 材料或领域实例共享 |
+| [DB-079 共用恢复准备与物化核心](0079-shared-graph-restoration-core-slice.md) | Proposed / 已校准，未实施 | 第 3 片；按用途准备/物化，Checkpoint 至多两张独立图、Checkout/Fork 至多一张 State；ReadPair 共享证明保持，无跨操作驻留 |
+| [DB-078 公共 API 与可编辑检查点 fork](0078-editable-checkpoint-fork-slice.md) | 已按选定语义校准，未实施 | A 非泛型/Event-first/跨类型 State，B nearest Checkpoint/查询，C 每 branch 占用/named Fork；分别验收，有 State 则恢复、无 State 则准备空保存工作区，再发布精确 Head |
+| [DB-077 Repository 固定模型环境](0077-repository-model-environment-slice.md) | Proposed / 已校准，未实施 | 第 1 片；只做 Open 固定模型与 durable current 恒等；阶段性旧名称保留，公共迁移集中至078-A；[旧评审](0077-0078-api-dialectical-review.md)为历史证据 |
+| [DB-076 领域对象图的高效 fork 技术路径](0076-efficient-graph-fork-technical-path.md) | Proposed / 已校准，未实施 | DB-083 到分片的总导航；077→078-A/B/C→079→080→081，082仅硬依赖080；先正确产品，后单 State 材料及叶实例优化 |
 | [DB-075 ImmutableLeaf 完整证明与 Family 重构](0075-immutable-leaf-proof-and-family-refactor.md) | Implemented / 已验收 | 共同候选规则与生成的最终结构核对已实施：同轮其他生成器补状态经核对拒绝，Family 非泛型合格叶可达 true；[施工工单](0075-immutable-leaf-implementation-work-order.md)含约束、阶段记录与验证证据；DB-073 前置完成 |
-| [DB-074 高效 fork 暂缓方向](0074-efficient-fork-deferred-directions.md) | Deferred | 汇总 DeepImmutable、泛型、string、Transient、deep clone、公开 fork API、opened repo session、性能与内存管理的后续触发条件 |
-| [DB-073 Repository 作用域的 ImmutableLeaf WeakReference 缓存](0073-repository-scoped-weak-reference-cache.md) | Chosen / Not implemented | 以 opened repository 为 scope，用 `(ObjectId, head, exact binding)` 缓存 ImmutableLeaf hydrated 实例；跨 repo 拒绝，Dispose 清空 |
+| [DB-074 高效 fork 暂缓方向](0074-efficient-fork-deferred-directions.md) | Draft / 尚待进一步修订 | 保留方向材料；待 DB-076 技术路径采纳后重新整理，不代表当前排期或已裁定边界 |
+| [DB-073 Repository 作用域的 ImmutableLeaf 实例缓存](0073-repository-scoped-weak-reference-cache.md) | Draft / 尚待进一步修订，未实施 | 保留上轮缓存分析；先审阅 DB-076 高效 fork 路线，再重定本片问题与范围，不作为当前施工输入 |
 | [DB-072 Generator 侧 ImmutableLeaf 分类与生成侧见证](0072-generator-immutable-leaf-classification-slice.md) | Implemented | 公共 bool 通道与二进制路径分类（历史记录）；其他生成器误判与 Family 全 false 已由 DB-075 修复，能力现状以 DB-075/PROJECT-STATE 为准 |
 | [DB-071 程序集与命名空间组织](0071-assembly-namespace-organization-review.md) | Implemented | 保留七项目依赖图，落实 Serialization/Storage/Persistence 与根/Schema/Runtime 分组；[工单](0071-assembly-namespace-implementation-work-order.md) 的签名、产品测试、真实包、旧包续写及隔离下游证据见[验收记录](0071-assembly-namespace-validation.md) |
 | [DB-070 读取放大阈值的默认选择](0070-read-amplification-default.md) | Implemented / 已验收 | EventHistory 默认 `{5,5}`；稳态摊销依据、`3/5/11` 调优示例与交互函数图；测试基准独立保持 `{3,5}`，源码回归与 README 原文真包验收通过 |

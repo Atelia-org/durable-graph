@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-23；DB-075 已实施并验收（ImmutableLeaf 证明与 Family 重构闭合）；下一步推进 DB-073 repository-scoped WeakReference 缓存。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-27；DB-075 已实施；DB-083 目标语义已选定，DB-076–082 已校准，DB-084 单列上游不可变 tag 与 DG 接入，均未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,18 +19,35 @@
 
 ## 当前焦点
 
-[DB-075 ImmutableLeaf 完整证明与 Family 路径重构](../docs/design-branches/0075-immutable-leaf-proof-and-family-refactor.md)
-（**Implemented / 2026-09-23 已验收**）已完成：Generator 侧共同候选规则与生成的最终结构核对
-（`__DurableCheckImmutableLeafShape`：基类核对、完整声明实例字段集、逐字段 MetadataName/受信 Type/IsInitOnly），
-二进制与 Family 两条路径共用同一合同。同轮其他生成器补入实例状态经核对拒绝（返回 false，不升级为错误）；
-Family 中的非泛型合格叶可达 true。验证：solution Rebuild 0 警告 0 错误、DurableGraph.Tests 1617/1617、
-[真包消费者探针](../experiments/PackageConsumerProbe/ImmutableLeafConsumer/README.md)双 marker 通过；
-六项施工约束、阶段记录与发现见[施工工单](../docs/design-branches/0075-immutable-leaf-implementation-work-order.md)。
+[DB-083：从用户故事推导 Repository 与 Checkpoint API](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md)
+是当前目标入口（**语义已选定 / 未实施，非执行工单**）。用户明确的应用是 DramaBoard 与 LLM tool-loop；
+三个独立应用故事及存储语义复核已形成：统一 `Repository`、非泛型 `BranchCheckout` 与分支入口，Event/State 自由提交，
+按固定历史地址读取非泛型 EventCheckpoint/StateCheckpoint，PreviousX 直接提供领域根及来源地址。
+建议 Checkpoint 图之间可变隔离、getter 稳定；事件轻量查询与单 Event 读取不附带物化 State；工作副本不自动 replay。
+用户已明确 LLM 完整运行状态保存在 State，Event 只记录消息或操作；不靠历史 replay 重建运行状态。
+非泛型入口服务通用工具，领域代码自行检查根类型，恢复仍需模型能力；不新增 typed wrapper。Fork 先恢复准备再发布 ref。
+用户已确认 Event-first、跨类型 State 替换、PreviousEvent 为最近严格祖先 Event；首片地址限同次打开，不提供可序列化外部地址。
+CreateBranchFromEvent 记录首个 Event；State=null 仅表示尚无 State，Checkout/Fork 不自动初始化。
+跨类型替换按实际根模型与完整旧基线保存，已有 child 升根保持身份。公共验收合同集中在 DB-078。
+项目没有兼容包袱；本轮只做设计和示意代码，不改产品、不授予施工或发布权限。
 
-下一步进入 [DB-073 Repository 作用域 WeakReference 缓存](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md)：
-ImmutableLeaf 前置已闭合；参与测试与实际接入的模型程序集须在 DB-073 首次使用 capability 前重编译
-（旧 DB-072 已编译消费者内嵌常量 true，只升级 runtime 不修复）。
-[DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 集中记录暂缓方向。
+[DB-076 高效 fork 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md)及
+[DB-077–082 六片](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航)
+已按 DB-083 校准：077 仅固定模型/current 恒等；078-A/B/C 分别交付非泛型公共基础与自由历史、Checkpoint/查询、多分支 Fork，分别验收。
+079 共用按用途恢复核心；080 仅驻留精确 State 准备材料，Head 逐请求导航；081 仅热 State 入槽、Event 不动槽；082 仅 State immutable 叶实验。
+无 State 请求绕过材料槽与叶表，保留其他分支缓存；新 State 准备证书不继承已消失的旧根/Upgrade 依赖，缺热证明允许冷恢复。
+下一可实施停点是 DB-077，随后独立验收 078-A/B/C；不把文档定稿当作整组自动施工授权。
+[DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 已列为目标：上游 `atelia-storage/src/EventJournal` 先独立交付，
+DG 再按新包/revision pin 接入及核对严格 Open/持久确认顺序；不阻塞 078，不在 DG 自建 tag 持久权威。
+当前产品仍是 `EventHistoryRepository` / `EventHistorySession` / `Resume`、每操作模型配置快照、
+全 repo 单活动工作副本及严格 E/S 交替；新门面、命名和自由提交均未实施。
+[DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /
+[DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 继续 **Draft / 尚待进一步修订**，不作为并行工单。
+
+[DB-075](../docs/design-branches/0075-immutable-leaf-proof-and-family-refactor.md) 已完成共同候选规则与生成的最终结构核对，
+两条路径均可交付合格叶的 true；验证见[施工工单](../docs/design-branches/0075-immutable-leaf-implementation-work-order.md)
+及[真包消费者](../experiments/PackageConsumerProbe/ImmutableLeafConsumer/README.md)。后续使用该 capability 的模型程序集须采用修复后的生成结果，
+旧 DB-072 已编译消费者内嵌常量 true，只升级 runtime 不修复。
 能力现状（经 DB-075 修订）：`StateModelBinding.IsImmutableLeaf` 通道保持公共可选构造参数、手写默认 false；
 候选资格由同编译非泛型闭包决定——全部实例字段显式声明 readonly 且进入 durable 管线，允许 19 种内建、
 同编译 enum/Nullable/递归 inline 与显式 readonly 字段的 record；record 全部隐式 backing、物化为隐式实例字段的主构造捕获、
@@ -188,7 +205,7 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   先分配 ID/登记再排队；Seal 用增长队列捕获可达对象，子对象不加入根列表。未知实际派生类型明确拒绝。
   Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
-  现有多根 Capture 是内部能力/机制见证；每份产品图仍选一个非空 durable 根。EventHistory 会话允许同 exact 类型 State 根替换及已登记的异构 Event 根。
+  现有多根 Capture 是内部能力/机制见证；每份产品图仍选一个非空 durable 根。EventHistory 工作副本允许同 exact 类型 State 根替换及已登记的异构 Event 根。
 - CaptureSession.Prepare 自动使用 Current，完整预检 exact Schema/DTO/稳定 binding 后编码；全部 live Base 提前生成，
   existing class/array/List/Dictionary 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
   重复准备与失败不安装或放弃候选、不烧号；临时 guard 拒绝会话重入。capture-only 登记仍有效，缺 binding 仅 Prepare 拒绝。
@@ -217,13 +234,13 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   WorldWorkspace.Stage(nextState) 发布后才安装原候选/新根；StageSnapshot 使用已提交 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State 的升级重写义务。
   快照 map Base 只列候选，保留实际 local Base/Delta 与 exact Parent external heads；后继 State 仍相对前 State；快照不为闭包外 State 成员编码 Removes。
-- EventHistoryRepository 独占 repository.lock，拥有 schemas.rbf/state/ 与 journal/；最多一个活动 EventHistorySession。
-  CreateBranch(initialState) 先发布 S0 才交付会话，并保留传入的领域实例；CommitDomainEvent/CommitDomainState 严格交替。
+- EventHistoryRepository 独占 repository.lock，拥有 schemas.rbf/state/ 与 journal/；当前最多一个活动 `EventHistorySession` 工作副本。
+  CreateBranch(initialState) 先发布 S0 才交付工作副本，并保留传入的领域实例；CommitDomainEvent/CommitDomainState 严格交替。
   State 可以替换同 exact 类型根，成功后安装原冻结候选；Event 只借用前 State 基线，不清除 State 的升级重写义务。
   Journal 链为 S0→E1→S1，E1/S1 的 Revision Parent 均为 S0；E map Base 只含自身闭包。
   GraphFrame 只在签发它的当前 Repository 实例有效；ReadEvent/ReadState/ReadPair 独立读图，浏览不会隐式 Resume。
-  CreateBranch(name, frame) 可从历史 E/S 分叉；MoveBranch 使用 expected head，二者均须先关闭活动会话。
-  Resume 在 E head 恢复 preceding State 与 PendingEvent，不重放业务处理器；调用方完成业务处理后提交 S。
+  CreateBranch(name, frame) 可从历史 E/S 分叉；MoveBranch 使用 expected head，二者均须先关闭活动工作副本。
+  `Resume` 在 E head 恢复 preceding State 与 PendingEvent，不重放业务处理器；调用方完成业务处理后提交 S。
   两图仅通过同一 RevisionReadSession 复用 stored DTO/string，current Normalize 与可变 Allocate/Hydrate 各自进行；
   State 导入的 DTO/string/实例-ID 表保持一致，不因 string 复用制造新 ID 或额外 Base。热提交由用户建立的别名仍由用户管理。
   提交按 Schema/State → Journal EventFrame → branch ref 的持久屏障顺序发布；首次分支最后绑定名字，不暴露空 head。
