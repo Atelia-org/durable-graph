@@ -31,7 +31,7 @@ internal sealed class RevisionReadSession {
     internal StateModelSnapshot Models { get; }
     internal GraphReadStatistics Statistics { get; }
 
-    // Independent editable restores may share stored DTOs, but an application allocator
+    // Independent restores may share stored DTOs, but an application allocator
     // must not return a mutable singleton already allocated anywhere in this operation.
     internal void RequireUniqueMutableInstance(object instance) {
         if (!_mutableInstances.Add(instance)) {

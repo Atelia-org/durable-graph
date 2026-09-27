@@ -15,35 +15,33 @@ internal static class GraphReader {
         return Read<T>(new RevisionReadSession(store, schemas, models), revisionAddress, rootId, requireExactRootType);
     }
 
-    /// <summary>Reuses stored decoding while retaining an independently allocated editable import.</summary>
+    /// <summary>Restores an independent graph and imports its complete source for editing.</summary>
     internal static MaterializedGraph<T> Read<T>(RevisionReadSession session,
         FrameAddress revisionAddress, ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentNullException.ThrowIfNull(session);
-        ReadSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
-        NormalizedRevision normalized = selection.Normalized;
-        Dictionary<ObjectId, object> instances = [];
-        Dictionary<object, ObjectId> bindings = new(ReferenceEqualityComparer.Instance);
-        // All allocations precede all hydration, preserving forward/shared/cyclic references.
-        foreach (ObjectId id in selection.Reachable) {
-            NormalizedObject row = normalized.Objects[id];
-            object allocated = Allocate(row, bindings, session.Statistics);
-            if (row.Current.Kind != ObjectStateKind.String) { session.RequireUniqueMutableInstance(allocated); }
-            instances.Add(id, allocated);
-        }
-        ObjectReadTable table = new(instances);
-        foreach ((ObjectId id, object instance) in instances) {
-            Hydrate(normalized.Objects[id], instance, table, session.Statistics);
-        }
-        // Keep full source string identity for a later editable import, including strings
-        // made unreachable by Upgrade. Empty IDs share one instance: import the smallest ID
-        // without rewriting any baseline DTO slots. Capture then observes necessary changes.
-        foreach (NormalizedObject row in normalized.Objects.Values.OrderBy(static row => row.Current.Id)) {
-            if (row.Current.Kind == ObjectStateKind.String) {
-                bindings.TryAdd(row.Current.StringContent, row.Current.Id);
-            }
-        }
-        ulong nextId = (ulong)normalized.Objects.Keys.Max().Value + 1;
-        return new((T)instances[rootId], rootId, selection.RootModel, normalized, nextId, bindings);
+        PreparedGraphSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
+        var (instances, _) = Materialize(session, selection);
+        return DeliverEditable<T>(selection, instances);
+    }
+
+    /// <summary>Restores just one root without constructing an editable identity import.</summary>
+    internal static T ReadRoot<T>(RevisionReadSession session, FrameAddress revisionAddress,
+        ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
+        ArgumentNullException.ThrowIfNull(session);
+        PreparedGraphSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
+        var (instances, _) = Materialize(session, selection);
+        return (T)instances[rootId];
+    }
+
+    /// <summary>Restores two independent graphs with one operation's mutable allocation guard.</summary>
+    internal static (IDurableObject First, IDurableObject Second) ReadIndependent(RevisionReadSession session,
+        FrameAddress firstRevisionAddress, ObjectId firstRootId,
+        FrameAddress secondRevisionAddress, ObjectId secondRootId) {
+        ArgumentNullException.ThrowIfNull(session);
+        PreparedGraphSelection first = Prepare<IDurableObject>(session, firstRevisionAddress, firstRootId);
+        PreparedGraphSelection second = Prepare<IDurableObject>(session, secondRevisionAddress, secondRootId);
+        var (firstInstances, secondInstances) = Materialize(session, first, second);
+        return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
     }
 
     /// <summary>
@@ -58,48 +56,84 @@ internal static class GraphReader {
         StateModelSnapshot models, GraphReadStatistics? statistics = null)
         where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
         RevisionReadSession session = new(store, schemas, models, statistics);
-        statistics = session.Statistics;
-        ReadSelection first = Prepare<TFirst>(session, firstRevisionAddress, firstRootId);
-        ReadSelection second = Prepare<TSecond>(session, secondRevisionAddress, secondRootId);
+        PreparedGraphSelection first = Prepare<TFirst>(session, firstRevisionAddress, firstRootId);
+        PreparedGraphSelection second = Prepare<TSecond>(session, secondRevisionAddress, secondRootId);
         HashSet<ObjectId> shared = FindSharedClosure(first, second);
-        Dictionary<ObjectId, object> firstInstances = [];
-        Dictionary<ObjectId, object> secondInstances = [];
-        // A callback that returns a singleton must not accidentally merge two versions or IDs.
-        // Only the proven shared rows below, and canonical Empty, may cross this guard.
-        Dictionary<object, ObjectId> allocations = new(ReferenceEqualityComparer.Instance);
-        foreach (ObjectId id in first.Reachable) {
-            firstInstances.Add(id, Allocate(first.Normalized.Objects[id], allocations, statistics));
-        }
-        foreach (ObjectId id in second.Reachable) {
-            if (shared.Contains(id)) {
-                secondInstances.Add(id, firstInstances[id]);
-                if (statistics is not null) { statistics.SharedObjects++; }
-            } else {
-                object allocated = Allocate(second.Normalized.Objects[id], allocations, statistics);
-                secondInstances.Add(id, allocated);
-                // Empty may also share across different heads; report actual same-ID reuse.
-                if (statistics is not null && firstInstances.TryGetValue(id, out object? firstInstance) &&
-                    ReferenceEquals(firstInstance, allocated)) {
-                    statistics.SharedObjects++;
-                }
-            }
-        }
-        ObjectReadTable firstTable = new(firstInstances);
-        ObjectReadTable secondTable = new(secondInstances);
-        // Both complete instance tables exist before any callback sees reference targets.
-        // Every edge of a shared object stays in the shared set, so either table is valid.
-        foreach ((ObjectId id, object instance) in firstInstances) {
-            Hydrate(first.Normalized.Objects[id], instance, firstTable, statistics);
-        }
-        foreach ((ObjectId id, object instance) in secondInstances) {
-            if (!shared.Contains(id)) {
-                Hydrate(second.Normalized.Objects[id], instance, secondTable, statistics);
-            }
-        }
-        return ((TFirst)firstInstances[firstRootId], (TSecond)secondInstances[secondRootId]);
+        var (firstInstances, secondInstances) = Materialize(session, first, second, shared);
+        return ((TFirst)firstInstances[firstRootId], (TSecond)secondInstances![secondRootId]);
     }
 
-    private static ReadSelection Prepare<T>(RevisionReadSession session, FrameAddress revisionAddress,
+    // A null shared set means independent graphs. Only ReadPair supplies a proven set;
+    // even an empty proven set retains Pair's existing cross-graph string identity guard.
+    private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) Materialize(
+        RevisionReadSession session, PreparedGraphSelection first, PreparedGraphSelection? second = null,
+        HashSet<ObjectId>? shared = null) {
+        Dictionary<object, ObjectId> allocations = new(ReferenceEqualityComparer.Instance);
+        Dictionary<ObjectId, object> firstInstances = AllocateGraph(session, first, allocations);
+        Dictionary<ObjectId, object>? secondInstances = second is null ? null : AllocateGraph(session, second,
+            shared is null ? new(ReferenceEqualityComparer.Instance) : allocations, firstInstances, shared);
+        ObjectReadTable firstTable = new(firstInstances);
+        ObjectReadTable? secondTable = secondInstances is null ? null : new(secondInstances);
+        // Every instance table is complete before any hydration callback runs. A shared
+        // row's reference closure is also shared, so its first graph's table is sufficient.
+        HydrateGraph(session, first, firstInstances, firstTable);
+        if (second is not null) { HydrateGraph(session, second, secondInstances!, secondTable!, shared); }
+        return (firstInstances, secondInstances);
+    }
+
+    private static Dictionary<ObjectId, object> AllocateGraph(RevisionReadSession session,
+        PreparedGraphSelection selection, Dictionary<object, ObjectId> allocations,
+        Dictionary<ObjectId, object>? firstInstances = null, HashSet<ObjectId>? shared = null) {
+        Dictionary<ObjectId, object> instances = [];
+        foreach (ObjectId id in selection.Reachable) {
+            if (shared is not null && shared.Contains(id)) {
+                instances.Add(id, firstInstances![id]);
+                session.Statistics.SharedObjects++;
+                continue;
+            }
+            NormalizedObject row = selection.Normalized.Objects[id];
+            object allocated = Allocate(row, allocations, session.Statistics);
+            if (row.Current.Kind != ObjectStateKind.String) { session.RequireUniqueMutableInstance(allocated); }
+            instances.Add(id, allocated);
+            // Canonical Empty can also share across heads without a closure proof.
+            // As before, Pair reports this actual same-ID reuse; independent reads do not.
+            if (shared is not null && firstInstances!.TryGetValue(id, out object? firstInstance) &&
+                ReferenceEquals(firstInstance, allocated)) {
+                session.Statistics.SharedObjects++;
+            }
+        }
+        return instances;
+    }
+
+    private static void HydrateGraph(RevisionReadSession session, PreparedGraphSelection selection,
+        Dictionary<ObjectId, object> instances, ObjectReadTable table, HashSet<ObjectId>? shared = null) {
+        foreach ((ObjectId id, object instance) in instances) {
+            if (shared is null || !shared.Contains(id)) {
+                Hydrate(selection.Normalized.Objects[id], instance, table, session.Statistics);
+            }
+        }
+    }
+
+    // Only editable delivery retains a reverse identity map and complete source ID cursor.
+    // All strings are imported in source-ID order, including those cut off by Upgrade;
+    // canonical Empty therefore receives the smallest full-source ID, not the first reachable ID.
+    private static MaterializedGraph<T> DeliverEditable<T>(PreparedGraphSelection selection,
+        Dictionary<ObjectId, object> instances) where T : class, IDurableObject {
+        NormalizedRevision normalized = selection.Normalized;
+        Dictionary<object, ObjectId> bindings = new(ReferenceEqualityComparer.Instance);
+        foreach ((ObjectId id, object instance) in instances) {
+            if (normalized.Objects[id].Current.Kind != ObjectStateKind.String) { bindings.Add(instance, id); }
+        }
+        foreach (NormalizedObject row in normalized.Objects.Values.OrderBy(static row => row.Current.Id)) {
+            if (row.Current.Kind == ObjectStateKind.String) {
+                bindings.TryAdd(row.Current.StringContent, row.Current.Id);
+            }
+        }
+        ulong nextId = (ulong)normalized.Objects.Keys.Max().Value + 1;
+        return new((T)instances[selection.RootId], selection.RootId, selection.RootModel, normalized, nextId, bindings);
+    }
+
+    private static PreparedGraphSelection Prepare<T>(RevisionReadSession session, FrameAddress revisionAddress,
         ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
         DecodedRevision decoded = session.Read(revisionAddress);
@@ -117,14 +151,18 @@ internal static class GraphReader {
             NormalizedObject row = normalized.Objects[visitor.Ids[index]];
             row.Model.VisitReferences(row.Current, visitor);
         }
-        return new(decoded, normalized, rootModel, visitor.Ids);
+        return new(normalized, rootId, rootModel, session.Models, visitor.Ids);
     }
 
-    private static HashSet<ObjectId> FindSharedClosure(ReadSelection first, ReadSelection second) {
+    private static HashSet<ObjectId> FindSharedClosure(PreparedGraphSelection first, PreparedGraphSelection second) {
         HashSet<ObjectId> secondReachable = new(second.Reachable);
         HashSet<ObjectId> candidates = [];
         foreach (ObjectId id in first.Reachable) {
-            if (secondReachable.Contains(id) && first.Decoded.ObjectHeads[id] == second.Decoded.ObjectHeads[id] &&
+            // RevisionDecoder checks Storage.Head against this exact view's head map.
+            // Missing provenance never supplies a sharing proof, even on both sides.
+            if (secondReachable.Contains(id) &&
+                first.Normalized.Objects[id].Storage is { } firstStorage &&
+                second.Normalized.Objects[id].Storage is { } secondStorage && firstStorage.Head == secondStorage.Head &&
                 HasSameCurrentState(first.Normalized.Objects[id], second.Normalized.Objects[id])) {
                 candidates.Add(id);
             }
@@ -195,9 +233,6 @@ internal static class GraphReader {
         if (statistics is not null) { statistics.HydratedObjects++; }
         row.Model.Hydrate(instance, row.Current, table);
     }
-
-    private sealed record ReadSelection(DecodedRevision Decoded, NormalizedRevision Normalized,
-        StateModelBinding RootModel, IReadOnlyList<ObjectId> Reachable);
 
     private sealed class ReferenceVisitor(Action<ObjectId> visit) : IStateReferenceVisitor {
         public void VisitString(ObjectId objectId) => visit(objectId);

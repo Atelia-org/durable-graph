@@ -472,6 +472,12 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 4. SG 生成 Hydrate，填充持久字段并连接对象引用，利用先分配的完整映射保留共享和循环。
 5. 完成框架的持久数据/引用校验后交付 World，不能暴露解码、升级或引用连接的半成品。
 
+单图读取、Checkpoint、Checkout/Fork 与 ReadPair 共用上述准备和两阶段物化机制；用途决定选图与共享资格，
+不另建 Fork 专属恢复算法。Checkpoint 的独立两图与 ReadPair 均先完成全部准备、实例分配和引用表验证，再开始 Hydrate；
+只有 ReadPair 的可信闭包规划允许 mutable 复用，普通 allocator 返回同一实例不能获得豁免。
+只读交付不导入保存身份；可编辑恢复保留完整 source 基线及独立 CaptureSession。
+内部准备材料不自行授予跨操作复用资格；边界与证据见 [DB-079](design-branches/0079-shared-graph-restoration-core-implementation.md)。
+
 分配领域实例时不执行实例构造器、基类实例构造器或实例字段初始化表达式；因此 `_cache = new()`
 等 Transient 初始化也不会执行。交付后的 Transient 重建由用户代码负责，属于宿主阶段。MVP 不提供自动 Transient hook，
 也不承诺撤销用户重建期间的副作用或把其失败变成库的加载失败；用户负责在业务使用前完成初始化。

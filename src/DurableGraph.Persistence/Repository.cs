@@ -356,9 +356,15 @@ public sealed class Repository : IDisposable {
             GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
             CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
             var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
-            IDurableObject root = GraphReader.Read<IDurableObject>(session, address.RevisionAddress, address.RootId).Root;
-            IDurableObject? previous = previousAddress is null ? null
-                : GraphReader.Read<IDurableObject>(session, previousAddress.RevisionAddress, previousAddress.RootId).Root;
+            IDurableObject root;
+            IDurableObject? previous;
+            if (previousAddress is null) {
+                root = GraphReader.ReadRoot<IDurableObject>(session, address.RevisionAddress, address.RootId);
+                previous = null;
+            } else {
+                (root, previous) = GraphReader.ReadIndependent(session, address.RevisionAddress, address.RootId,
+                    previousAddress.RevisionAddress, previousAddress.RootId);
+            }
             return address.Kind == GraphFrameKind.Event
                 ? new EventCheckpoint(address, root, previous, previousAddress)
                 : new StateCheckpoint(address, root, previous, previousAddress);
@@ -370,8 +376,8 @@ public sealed class Repository : IDisposable {
         CheckFrame(frame, kind);
         _busy = true;
         try {
-            return GraphReader.Read<IDurableObject>(_resources.States, _resources.Schemas, frame.RevisionAddress,
-                frame.RootId, _models).Root;
+            var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
+            return GraphReader.ReadRoot<IDurableObject>(session, frame.RevisionAddress, frame.RootId);
         } finally { _busy = false; }
     }
 

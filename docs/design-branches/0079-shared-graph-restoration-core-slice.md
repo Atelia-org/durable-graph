@@ -1,10 +1,10 @@
 # DB-079：共用图恢复核心
 
-> 状态：**Proposed / 已按 DB-083 校准的候选设计，未实施；不是实施授权**。2026-09-27；当前实现事实另见源码。
+> 状态：**已实施并独立验收**。2026-09-28；施工范围与验证见 [实施记录](0079-shared-graph-restoration-core-implementation.md)，当前实现事实另见源码。
 > 产品合同以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；本片只统一内部机制，不扩大读取内容范围。
 > 顺序：第 3 片；依赖 [DB-078](0078-editable-checkpoint-fork-slice.md)，下一片 [DB-080](0080-prepared-checkpoint-reuse-slice.md)。
 > 只重组内部恢复职责，保持 DB-077/078 的公开合同；依据 [DB-076 §5、§7](0076-efficient-graph-fork-technical-path.md)。
-> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` / `Checkout` 已由 [078-A](0078-a-repository-free-history-implementation.md) 交付；每分支占用与 named Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。本片内部优化仍未实施。
+> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` / `Checkout` 已由 [078-A](0078-a-repository-free-history-implementation.md) 交付；每分支占用与 named Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。本片统一机制，不引入跨操作缓存。
 
 ## 1. 问题与独立交付
 

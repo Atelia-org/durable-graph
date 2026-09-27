@@ -3,6 +3,7 @@
 > 状态：**目标语义已选定；A/B/C 已实施并验收；DG tag 接入未实施；不是执行工单**。2026-09-28 校准交付范围；用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag 保持。
 > 本文重新检验 DB-076–082 所依赖的公共使用模型；不是继续按旧 Event/State 交替合同施工的授权。
 > 当前产品事实仍以源码为准。公共基础见 [078-A 记录](0078-a-repository-free-history-implementation.md)；独立 Checkpoint 与固定查询见 [078-B 记录](0078-b-checkpoint-history-query-implementation.md)；多分支工作副本与 Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。
+> 内部恢复机制的统一见 [DB-079 实施记录](0079-shared-graph-restoration-core-implementation.md)；不改变本文选图、隔离、历史或发布语义，也不代表跨操作缓存已交付。
 
 ## 1. 本轮需求账本
 

@@ -29,7 +29,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 | [DB-082 单图准备材料范围的 ImmutableLeaf 复用](0082-prepared-immutable-leaf-reuse-slice.md) | Proposed / 已校准的条件实验，未实施 | 第 6 片；单 State 准备材料的叶表，身份/成功交付/额外依赖门保持；实测决定启用，硬依赖080，081非必需 |
 | [DB-081 热 State 提交恢复材料](0081-hot-commit-restoration-material-slice.md) | Proposed / 已校准，未实施 | 第 5 片；有完整冷热证明的 State 提交 DTO 进入同槽，Event 不动槽；新 revision 不继承已消失的历史 Upgrade 依赖，缺热证明可冷恢复 |
 | [DB-080 State 准备材料复用](0080-prepared-checkpoint-reuse-slice.md) | Proposed / 已校准，未实施 | 第 4 片；Fork/Checkout 单份精确 State 驻留，Head 逐请求导航，完整 Schema 证书命中复核；无 Event 材料或领域实例共享 |
-| [DB-079 共用恢复准备与物化核心](0079-shared-graph-restoration-core-slice.md) | Proposed / 已校准，未实施 | 第 3 片；按用途准备/物化，Checkpoint 至多两张独立图、Checkout/Fork 至多一张 State；ReadPair 共享证明保持，无跨操作驻留 |
+| [DB-079 共用恢复准备与物化核心](0079-shared-graph-restoration-core-slice.md) | 已实施并独立验收 | 第 3 片；[实施记录](0079-shared-graph-restoration-core-implementation.md)；完整单图材料与共用两阶段物化，独立图/Pair 规划分开，只读不导入保存身份，无跨操作驻留 |
 | [DB-078 公共 API 与可编辑检查点 fork](0078-editable-checkpoint-fork-slice.md) | A/B/C 已实施并验收 | [A 记录](0078-a-repository-free-history-implementation.md)、[B 记录](0078-b-checkpoint-history-query-implementation.md)、[C 记录](0078-c-branch-checkout-fork-implementation.md)；非泛型/自由历史、独立 Checkpoint/固定查询、每 branch 占用/named Fork；优化未实施 |
 | [DB-077 Repository 固定模型环境](0077-repository-model-environment-slice.md) | 已实施并验收 | 第 1 片；[实施记录](0077-model-environment-implementation.md)；Open 固定模型与 durable current 恒等；该片当时保留旧名称；公共迁移由078-A承接；[旧评审](0077-0078-api-dialectical-review.md)为历史证据 |
 | [DB-076 领域对象图的高效 fork 技术路径](0076-efficient-graph-fork-technical-path.md) | 已校准，进度见分片记录 | DB-083 到分片的总导航；077→078-A/B/C→079→080→081，082仅硬依赖080；先正确产品，后单 State 材料及叶实例优化 |

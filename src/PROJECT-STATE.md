@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077 与 DB-078-A/B/C 已实施并验收；079–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079 已实施并验收；080–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,19 +19,19 @@
 
 ## 当前焦点
 
-[DB-078-C：每分支工作副本与 named Fork](../docs/design-branches/0078-c-branch-checkout-fork-implementation.md) 已实施并独立验收。
-每 branch 至多一个工作副本，不同 branch 可同时编辑，仓库操作仍串行。Fork 从已提交地址独立恢复最近 State 或空基线，
-保留精确 Head，完整准备后才发布新 ref；源副本可保持存活，未提交字段不参与。Fork 不追加 E/S 图。
-占用集合不取代 owner/存活、exact head/baseline 与最终 CAS；Move 只拒绝活动目标，显式 Dispose 释放自身占用。
-普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查；源码、失败矩阵、真包与独立审查证据统一保留在 C 记录。
+[DB-079：共用图恢复核心](../docs/design-branches/0079-shared-graph-restoration-core-implementation.md) 已实施并独立验收。
+单图、Checkpoint、Checkout/Fork 与 ReadPair 共用完整单图准备材料和两阶段物化；两图先完成准备、全部实例分配与引用表验证，再 Hydrate。
+独立图保留 mutable 隔离；ReadPair 仍须 exact head、完整值比较与引用闭包证明。只读不构造保存身份导入；
+可编辑恢复保留完整 source、head/H、重写义务、全源字符串身份与 ID 游标。本片没有跨操作驻留或性能改善承诺。
 
 [078-A](../docs/design-branches/0078-a-repository-free-history-implementation.md) 的非泛型入口、自由历史与跨类型 State，
-以及 [078-B](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 的独立 Checkpoint/固定查询保持。
-至此 DB-078 三阶段形成无缓存优化也正确的 named Fork 产品停点；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标仍独立待办。
+以及 [078-B](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 的独立 Checkpoint/固定查询、
+[078-C](../docs/design-branches/0078-c-branch-checkout-fork-implementation.md) 的每分支占用/named Fork 保持。
+DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标仍独立待办。
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
 [DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的后续顺序保持：
-下一停点为 079 按用途恢复核心 → 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
+下一停点为 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
 无 State 请求绕过材料槽/叶表，优化关闭仍须正确；这些优化尚未实施。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
 DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
@@ -221,6 +221,8 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   按相邻版本转换完整 leaf DTO，不重复升级祖先。已声明边逐一强类型检查；缺边仅阻止需要该边的 current Load。
   GraphReader 为独立读取与 LoadedWorld/工作区恢复共用管线：先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
   从所选 durable 根迭代求可达闭包，全部可达 class/array/List/Dictionary 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
+  单图准备材料保留完整 normalized 来源、实际根、模型环境与可达顺序，不额外持有 decoded 目录。
+  独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
 - GraphResources 独立拥有 schemas.rbf/state/，严格只读打开不写盘、不修尾，不拥有业务 head。
