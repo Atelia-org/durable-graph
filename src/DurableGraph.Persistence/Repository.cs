@@ -9,7 +9,8 @@ namespace Atelia.DurableGraph;
 
 /// <summary>Owns Schema/State resources and a Journal whose named refs are the sole publication authority.</summary>
 /// <remarks>
-/// Single-threaded, one writer and one active checkout. Close a checkout before creating or moving refs.
+/// Single-threaded, one writer and at most one active checkout per branch. Different branches may have
+/// live checkouts together; all repository operations remain serial. Close a branch's checkout before moving it.
 /// Strict reopening rejects damaged tails; no automatic repair, transparent retry or power-loss guarantee.
 /// Handles belong to one open repository instance. Persisted members of read results are historical snapshots.
 /// Independent ReadState/ReadEvent calls allow application-side Transient initialization without a writer.
@@ -24,7 +25,7 @@ public sealed class Repository : IDisposable {
     private readonly GraphResources _resources;
     private readonly StateModelSnapshot _models;
     private readonly object _identity = new();
-    private object? _activeSession;
+    private readonly HashSet<string> _activeBranches = new(StringComparer.Ordinal);
     private bool _busy;
     private bool _disposed;
     private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
@@ -76,66 +77,126 @@ public sealed class Repository : IDisposable {
 
     /// <summary>Publishes an initial State and returns a checkout retaining the supplied domain instances.</summary>
     /// <remarks>
-    /// Requires a writable repository with no active checkout. The root must be nonnull and registered.
+    /// Requires a writable repository and a new branch name. The root must be nonnull and registered.
+    /// Other branches may have active checkouts. Dispose the returned checkout to release its branch.
     /// Failure can occur after publication but before delivery; inspect the outcome and IsFaulted independently.
     /// Reopen a faulted repository to inspect persisted history. Domain mutations are not rolled back.
     /// </remarks>
     public BranchCheckout CreateBranch(string branchName, IDurableObject initialState,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
-        RequireFreeWriter();
-        ArgumentNullException.ThrowIfNull(initialState);
-        ValidateNewName(branchName);
+        RequireWriter();
         _busy = true;
+        bool acquired = false;
+        bool delivered = false;
         try {
+            ArgumentNullException.ThrowIfNull(initialState);
+            ValidateNewName(branchName);
+            acquired = _activeBranches.Add(branchName);
+            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
             var workspace = WorldWorkspace.CreateSnapshot(_resources.States, _resources.Schemas, initialState, _models);
             var checkout = new BranchCheckout(this, branchName, workspace, null);
             Publish(checkout, null, initialState, parameters ?? DefaultPolicy, initial: true);
-            _activeSession = checkout;
+            delivered = true;
             return checkout;
-        } finally { _busy = false; }
+        } finally {
+            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
+            _busy = false;
+        }
     }
 
     /// <summary>Publishes an initial Event and returns a checkout with no State.</summary>
     /// <remarks>
+    /// Requires a writable repository and a new branch name; other branches may have active checkouts.
     /// The Event is captured without installing a State or a saving baseline. No empty-head branch is created.
     /// Publication may succeed before delivery fails; inspect the outcome and reopen a faulted repository.
     /// </remarks>
     public BranchCheckout CreateBranchFromEvent(string branchName, IDurableObject initialEvent,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
-        RequireFreeWriter();
-        ArgumentNullException.ThrowIfNull(initialEvent);
-        ValidateNewName(branchName);
+        RequireWriter();
         _busy = true;
+        bool acquired = false;
+        bool delivered = false;
         try {
+            ArgumentNullException.ThrowIfNull(initialEvent);
+            ValidateNewName(branchName);
+            acquired = _activeBranches.Add(branchName);
+            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
             var workspace = WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models);
             var checkout = new BranchCheckout(this, branchName, workspace, null);
             Publish(checkout, initialEvent, null, parameters ?? DefaultPolicy, initial: true);
-            _activeSession = checkout;
+            delivered = true;
             return checkout;
-        } finally { _busy = false; }
+        } finally {
+            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
+            _busy = false;
+        }
     }
 
     /// <summary>Restores the nearest State at the exact branch head, without materializing or replaying Events.</summary>
     /// <remarks>
-    /// Requires a writable repository with no active checkout. A valid history with no State yields State=null.
+    /// Requires a writable repository and no active checkout for this branch. Other branches remain available.
+    /// A valid history with no State yields State=null. Dispose explicitly to release the branch's occupancy.
     /// An existing State's missing model or restoration failure propagates; there is no older-State fallback.
     /// Restoration runs decoding, Upgrade and materialization, but no business handler. Constructors and field
     /// initializers do not run; application code rebuilds Transient state and interprets its own event progress.
     /// </remarks>
     public BranchCheckout Checkout(string branchName) {
-        RequireFreeWriter();
+        RequireWriter();
         _busy = true;
+        bool acquired = false;
+        bool delivered = false;
         try {
             CheckpointAddress head = HeadCore(branchName);
-            CheckpointAddress? state = NearestStateCore(head);
-            var workspace = state is null
-                ? WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models)
-                : WorldWorkspace.LoadSnapshot(new RevisionReadSession(_resources.States, _resources.Schemas, _models),
-                    state.RevisionAddress, state.RootId);
-            var checkout = new BranchCheckout(this, branchName, workspace, head);
-            _activeSession = checkout;
+            acquired = _activeBranches.Add(branchName);
+            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
+            BranchCheckout checkout = RestoreCheckout(branchName, head);
+            delivered = true;
             return checkout;
-        } finally { _busy = false; }
+        } finally {
+            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
+            _busy = false;
+        }
+    }
+
+    /// <summary>Creates a durable named branch at source and returns its independently restored checkout.</summary>
+    /// <param name="branchName">A new branch name; the returned checkout occupies only this branch.</param>
+    /// <param name="source">A committed State or Event address issued by this open repository.</param>
+    /// <remarks>
+    /// Requires a writable repository. Source checkouts may remain open; their uncommitted changes are not read.
+    /// Restores only the nearest committed State, or an empty workspace before the first State, while retaining
+    /// the exact source Head. Does not materialize Events, replay handlers, capture graphs or append history frames.
+    /// Mutable instances are independent of other restorations, preserving aliases and cycles within this graph.
+    /// All restoration and checkout preparation precede ref publication; ordinary restoration failures leave no
+    /// new ref. Publication can succeed before delivery fails: inspect GraphCommitException.Outcome and IsFaulted
+    /// independently, then reopen a faulted repository to inspect refs. Application callback effects are not rolled back.
+    /// </remarks>
+    public BranchCheckout Fork(string branchName, CheckpointAddress source) {
+        RequireWriter();
+        _busy = true;
+        bool acquired = false;
+        bool delivered = false;
+        try {
+            CheckFrame(source);
+            ValidateNewName(branchName);
+            acquired = _activeBranches.Add(branchName);
+            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
+            BranchCheckout checkout = RestoreCheckout(branchName, source);
+            MutateRefCore(() => _history.Journal.CreateBranch(branchName, source.Address));
+            delivered = true;
+            return checkout;
+        } finally {
+            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
+            _busy = false;
+        }
+    }
+
+    private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head) {
+        CheckpointAddress? state = NearestStateCore(head);
+        var workspace = state is null
+            ? WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models)
+            : WorldWorkspace.LoadSnapshot(new RevisionReadSession(_resources.States, _resources.Schemas, _models),
+                state.RevisionAddress, state.RootId);
+        return new BranchCheckout(this, branchName, workspace, head);
     }
 
     public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _history.Journal.ListBranches(); }
@@ -339,31 +400,40 @@ public sealed class Repository : IDisposable {
 
     /// <summary>Creates a named branch at any checked historical Event or State, without moving the source branch.</summary>
     /// <remarks>
-    /// Requires a writable repository with no active checkout and an address issued by this open instance.
+    /// Requires a writable repository, a new branch name and an address issued by this open instance.
+    /// Active checkouts on other branches do not prevent this operation.
     /// Creates only a persistent ref: no domain graph is restored and no editing checkout is acquired.
     /// Publication may succeed before delivery fails; inspect GraphCommitException.Outcome and IsFaulted
     /// independently, and reopen a faulted repository to inspect the actual published refs.
     /// </remarks>
     public CheckpointAddress CreateBranch(string branchName, CheckpointAddress selectedFrame) {
-        RequireFreeWriter();
-        CheckFrame(selectedFrame);
-        ValidateNewName(branchName);
-        MutateRef(() => _history.Journal.CreateBranch(branchName, selectedFrame.Address));
-        return selectedFrame;
-    }
-
-    /// <summary>Explicit compare-and-swap movement; requires closing the old editing session first.</summary>
-    public void MoveBranch(string branchName, CheckpointAddress expectedHead, CheckpointAddress target) {
-        RequireFreeWriter();
-        CheckFrame(expectedHead);
-        CheckFrame(target);
-        RefId branch = _history.Journal.OpenBranch(branchName).Unwrap();
-        if (_history.Journal.GetHead(branch) != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
-        MutateRef(() => _history.Journal.MoveRef(branch, expectedHead.Address, target.Address));
-    }
-
-    private void MutateRef<T>(Func<AteliaResult<T>> mutation) where T : notnull {
+        RequireWriter();
         _busy = true;
+        try {
+            CheckFrame(selectedFrame);
+            ValidateNewName(branchName);
+            MutateRefCore(() => _history.Journal.CreateBranch(branchName, selectedFrame.Address));
+            return selectedFrame;
+        } finally { _busy = false; }
+    }
+
+    /// <summary>Explicit compare-and-swap movement; requires closing the target branch's checkout first.</summary>
+    /// <remarks>Other branches' active checkouts do not block movement. Both addresses belong to this open repository.</remarks>
+    public void MoveBranch(string branchName, CheckpointAddress expectedHead, CheckpointAddress target) {
+        RequireWriter();
+        _busy = true;
+        try {
+            CheckFrame(expectedHead);
+            CheckFrame(target);
+            RefId branch = _history.Journal.OpenBranch(branchName).Unwrap();
+            if (_activeBranches.Contains(branchName)) { throw new InvalidOperationException("Close this branch's active checkout before moving it."); }
+            if (_history.Journal.GetHead(branch) != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
+            MutateRefCore(() => _history.Journal.MoveRef(branch, expectedHead.Address, target.Address));
+        } finally { _busy = false; }
+    }
+
+    // The caller owns the complete operation's busy guard, including restoration and delivery.
+    private void MutateRefCore<T>(Func<AteliaResult<T>> mutation) where T : notnull {
         bool attempted = false;
         bool published = false;
         try {
@@ -377,24 +447,26 @@ public sealed class Repository : IDisposable {
         } catch (Exception error) {
             if (attempted) { _resources.MarkFaulted(); }
             throw new GraphCommitException(published ? GraphCommitOutcome.Published : attempted ? GraphCommitOutcome.Unknown : GraphCommitOutcome.NotPublished, null, error);
-        } finally { _busy = false; }
+        }
     }
 
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
         RequireAvailable();
         _resources.RequireWritable();
-        if (!ReferenceEquals(_activeSession, session) || HeadCore(session.BranchName).Address != session.Head.Address) {
-            throw new InvalidOperationException("Session does not own the expected branch head.");
-        }
-        CheckpointAddress? state = NearestStateCore(session.Head);
-        if (session.Workspace.ParentRevisionAddress != state?.RevisionAddress ||
-            (state is null ? session.Workspace.World is not null : session.Workspace.WorldId != state.RootId)) {
-            throw new InvalidOperationException("Checkout State baseline does not match the Journal chain.");
-        }
         _busy = true;
-        try { return Publish(session, domainEvent, nextState, parameters ?? DefaultPolicy, initial: false); }
-        finally { _busy = false; }
+        try {
+            if (!session.IsLiveFor(this) || !_activeBranches.Contains(session.BranchName) ||
+                HeadCore(session.BranchName).Address != session.Head.Address) {
+                throw new InvalidOperationException("Session does not own the expected branch head.");
+            }
+            CheckpointAddress? state = NearestStateCore(session.Head);
+            if (session.Workspace.ParentRevisionAddress != state?.RevisionAddress ||
+                (state is null ? session.Workspace.World is not null : session.Workspace.WorldId != state.RootId)) {
+                throw new InvalidOperationException("Checkout State baseline does not match the Journal chain.");
+            }
+            return Publish(session, domainEvent, nextState, parameters ?? DefaultPolicy, initial: false);
+        } finally { _busy = false; }
     }
 
     private CheckpointAddress Publish(BranchCheckout session, IDurableObject? domainEvent,
@@ -513,14 +585,13 @@ public sealed class Repository : IDisposable {
         }
     }
 
-    internal void Release(object session) {
+    internal void Release(BranchCheckout session) {
         if (_busy) { throw new InvalidOperationException("Cannot dispose a session during a repository operation."); }
-        if (ReferenceEquals(_activeSession, session)) { _activeSession = null; }
+        if (session.IsLiveFor(this)) { _activeBranches.Remove(session.BranchName); }
     }
-    private void RequireFreeWriter() {
+    private void RequireWriter() {
         RequireAvailable();
         _resources.RequireWritable();
-        if (_activeSession is not null) { throw new InvalidOperationException("Close the active session before creating, moving or checking out a branch."); }
     }
     private void RequireAvailable() {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -531,7 +602,7 @@ public sealed class Repository : IDisposable {
         if (_disposed) { return; }
         if (_busy) { throw new InvalidOperationException("Cannot dispose a busy repository."); }
         _disposed = true;
-        _activeSession = null;
+        _activeBranches.Clear();
         try { _resources.Dispose(); } finally { _history.Dispose(); }
     }
 }

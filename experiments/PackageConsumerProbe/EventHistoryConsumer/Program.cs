@@ -114,7 +114,8 @@ internal static class Program {
         SharedReadProbe.Verify(directory + "-shared-read");
         VerifyFreeHistory(directory + "-free-history");
         VerifyCheckpointHistory(directory + "-checkpoint-history");
-        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True:IndependentCheckpoint:True:FixedHistoryQuery:True");
+        VerifyNamedFork(directory + "-named-fork");
+        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True:IndependentCheckpoint:True:FixedHistoryQuery:True:NamedFork:True:PerBranchCheckout:True");
 #endif
     }
 
@@ -268,6 +269,84 @@ internal static class Program {
             rejected = true;
         }
         Require(rejected, "A non-ancestor lower bound was not rejected before the first result.");
+    }
+
+    private static void VerifyNamedFork(string directory) {
+        using (var repository = Repository.CreateNew(directory, Models(), Options)) {
+            Alice alice = new() { Score = 10, Labels = ["source"] };
+            alice.Self = alice;
+            using var source = repository.CreateBranch("main", new World { Alice = alice, Bob = new() { Score = 20 } }, Policy);
+            CheckpointAddress selected = source.CommitEvent(new Observed(alice), Policy);
+            alice.Score = 99; // This uncommitted source edit must not enter either child.
+            using var left = repository.Fork("left", selected);
+            using var right = repository.Fork("right", selected);
+            World a = (World)left.State!;
+            World b = (World)right.State!;
+            Require(left.Head == selected && right.Head == selected && source.Head == selected &&
+                a.Alice.Score == 10 && b.Alice.Score == 10 && alice.Score == 99,
+                "Fork did not preserve the selected Event head and its committed State.");
+            Require(ReferenceEquals(a.Alice.Self, a.Alice) && ReferenceEquals(b.Alice.Self, b.Alice) &&
+                !ReferenceEquals(a, b) && !ReferenceEquals(a.Alice, b.Alice) &&
+                !ReferenceEquals(a.Alice, alice) && !ReferenceEquals(b.Alice, alice) &&
+                !ReferenceEquals(a.Alice.Labels, b.Alice.Labels), "Fork lost cycles or shared mutable graphs.");
+            a.Alice.Labels.Add("left");
+            Require(b.Alice.Labels.Count == 1 && alice.Labels.Count == 1, "Fork shared a mutable container.");
+
+            // The application chooses how each branch handles the recorded occurrence.
+            // A shared Event head does not claim or complete an external effect.
+            left.CommitEvent(new Bob { Score = 1 }, Policy);
+            right.CommitEvent(new Bob { Score = 2 }, Policy);
+            left.CommitEvent(new Bob { Score = 3 }, Policy);
+            right.CommitEvent(new Bob { Score = 4 }, Policy);
+            a.Alice.Score = 11;
+            b.Alice.Score = 21;
+            left.CommitState(Policy);
+            right.CommitState(Policy);
+            a.Alice.Score = 12;
+            b.Alice.Score = 22;
+            left.CommitState(Policy);
+            right.CommitState(Policy);
+            Require(source.Head == selected && alice.Score == 99, "Child commits advanced the source workspace.");
+            left.Dispose();
+            using var reopenedLeft = repository.Checkout("left");
+            Require(((World)reopenedLeft.State!).Alice.Score == 12 && ((World)right.State!).Alice.Score == 22,
+                "Disposing one branch did not permit its checkout beside other live branches.");
+
+            using var eventSource = repository.CreateBranchFromEvent("event-source", new Bob { Score = 50 }, Policy);
+            CheckpointAddress prefix = eventSource.CommitEvent(new Bob { Score = 51 }, Policy);
+            using var first = repository.Fork("event-left", prefix);
+            using var second = repository.Fork("event-right", prefix);
+            Require(first.Head == prefix && second.Head == prefix && first.State is null && second.State is null,
+                "An Event-only fork invented a State or changed its head.");
+            Alice promoted = new() { Score = 60 };
+            promoted.Self = promoted;
+            first.CommitState(new World { Alice = promoted, Bob = new() { Score = 70 } }, Policy);
+            first.CommitState(promoted, Policy); // World -> Alice is an actual cross-type root replacement.
+            promoted.Score = 61;
+            first.CommitState(Policy);
+            second.CommitState(new Bob { Score = 80 }, Policy);
+            second.CommitState(Policy);
+            Require(ReferenceEquals(first.State, promoted) && eventSource.State is null && second.State is Bob { Score: 80 },
+                "Event-only children did not retain independent first-State and replacement baselines.");
+        }
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var source = repository.Checkout("main");
+            using var left = repository.Checkout("left");
+            using var right = repository.Checkout("right");
+            using var first = repository.Checkout("event-left");
+            using var second = repository.Checkout("event-right");
+            Require(source.Head.Kind == GraphFrameKind.Event && ((World)source.State!).Alice.Score == 10 &&
+                ((World)left.State!).Alice.Score == 12 && ((World)right.State!).Alice.Score == 22 &&
+                first.State is Alice { Score: 61 } && second.State is Bob { Score: 80 },
+                "Cold multi-branch checkout lost committed values or actual root types.");
+            GraphFrameKind[] kinds = [GraphFrameKind.State, GraphFrameKind.Event, GraphFrameKind.Event,
+                GraphFrameKind.Event, GraphFrameKind.State, GraphFrameKind.State];
+            Require(repository.ReadFrames("left").Select(frame => frame.Kind).SequenceEqual(kinds) &&
+                repository.ReadFrames("right").Select(frame => frame.Kind).SequenceEqual(kinds),
+                "Serial child E/E/S/S commits did not retain separate logical histories.");
+            Require(((World)left.State!).Alice.Labels.Count == 2 && ((World)right.State!).Alice.Labels.Count == 1,
+                "Cold child graphs lost independently edited containers.");
+        }
     }
 
     private static void CheckEvent(Observed e) {

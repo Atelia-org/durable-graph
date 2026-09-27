@@ -150,7 +150,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void FreeRoleSequencesPreserveSessionExclusivityAndReadRoleChecks() {
+    public void FreeRoleSequencesPreserveBranchExclusivityAndReadRoleChecks() {
         using Repository repository = CreateRepository();
         using (BranchCheckout session = repository.CreateBranch("main", new Node(), NoRebase)) {
             var first = session.Head;
@@ -158,7 +158,9 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(GraphFrameKind.State, nextState.Kind);
             Assert.Throws<ArgumentException>(() => repository.ReadEvent(nextState));
             Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
-            Assert.Throws<InvalidOperationException>(() => repository.CreateBranch("other", first));
+            Assert.Equal(first, repository.CreateBranch("other", first));
+            using BranchCheckout other = repository.Checkout("other");
+            Assert.Equal(first, other.Head);
             Assert.Throws<InvalidOperationException>(() => repository.MoveBranch("main", first, first));
             session.CommitEvent(new Node(), NoRebase);
             CheckpointAddress nextEvent = session.CommitEvent(new Node(), NoRebase);
@@ -320,15 +322,17 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Assert.Equal((byte)6, ((Node)resumed.State!).Value);
     }
 
-    [Fact]
-    public void LoadedUpgradeRewriteIsNotClearedByEventSaveAndLaterStatesUseDelta() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LoadedUpgradeRewriteIsNotClearedByEventSaveAndLaterStatesUseDelta(bool namedFork) {
         FrameAddress original, upgraded, unchanged, changed;
         using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             original = session.StateRevisionAddress!.Value;
         }
         using (Repository repository = Repository.OpenExisting(_root, Models(upgrade: true))) {
-            using var session = repository.Checkout("main");
+            using var session = namedFork ? repository.Fork("child", repository.GetHead("main")) : repository.Checkout("main");
             Assert.Equal((byte)11, ((Node)session.State!).Value);
             Node same = ((Node)session.State!);
             session.CommitEvent(new Node(), NoRebase);
@@ -470,7 +474,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     private static StateModelRegistry Models(Action<Node>? onCapture = null, bool upgrade = false,
-        Action<byte>? onReadValue = null, Action<Node>? onHydrate = null) {
+        Action<byte>? onReadValue = null, Action<Node>? onHydrate = null, Func<Node>? allocate = null,
+        Action? onNormalize = null) {
         DurableSchema current = upgrade ? new(Schema.SchemaId, 2, Schema.Fields.ToArray()) : Schema;
         CapturedStatePreparation<State> preparation = new(current,
             static (in State state) => Base(state),
@@ -484,8 +489,13 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             static (ref BinaryPayloadReader input, in State prior) => Apply(ref input, prior), Visit);
         StateReaderBinding[] readers = upgrade ? [Reader(Schema), Reader(current)] : [Reader(current)];
         StateModelBinding model = new StateModelBinding<Node, State>(preparation, readers,
-            row => upgrade && row.Schema!.Version == 1 ? row.GetState<State>() with { Value = (byte)(row.GetState<State>().Value + 10) } : row.GetState<State>(),
-            static () => new Node(),
+            row => {
+                onNormalize?.Invoke();
+                return upgrade && row.Schema!.Version == 1
+                    ? row.GetState<State>() with { Value = (byte)(row.GetState<State>().Value + 10) }
+                    : row.GetState<State>();
+            },
+            () => allocate is null ? new Node() : allocate(),
             (Node domain, in State state, ObjectReadTable objects) => {
                 domain.Left = objects.ResolveDurable<Node>(state.Left);
                 domain.Right = objects.ResolveDurable<Node>(state.Right);

@@ -175,9 +175,10 @@ restored StateStore XML documentation. The root README itself has a separate ext
 ./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -PackageSource <matching-feed> -Version <version>
 ```
 
-The README witness extracts the actual project, models, program, browsing, Upgrade and policy-override blocks.
+The README witness extracts the actual project, models, program, browsing, Upgrade, policy-override and named-Fork blocks.
 It runs two V1 processes, then the documented V2 edits, checks retained history, executes the explicit
-save-policy example against the resumed world, and builds again in Verify mode.
+save-policy example against the resumed world, forks two children beside the live source, checks their
+independent values after a cold reopen, and builds again in Verify mode.
 Use the matching nine-package feed printed by the recovery runner, or another fresh feed from the same source.
 
 ```powershell
@@ -197,6 +198,10 @@ DB-078-B extends this lane with independent Event/State Checkpoints, stable edit
 Event-first predecessor nullability and fixed event queries across States, commits and branch moves.
 Recovery and RecordClass use EnumerateEvents with explicit oldest-first ordering; the recovery runner
 also checks the new Checkpoint/query XML documentation in the actual restored package.
+DB-078-C adds simultaneous checkouts on distinct branches and named Fork from a committed Event
+while the source remains live. Children independently commit E/E/S/S and survive cold reopen;
+an Event-only fork establishes its first State, replaces World with Alice, and saves without a root
+argument. The recovery runner also verifies Fork's packaged XML documentation.
 
 StateStore and all model/history consumer lanes now use `Repository` and
 `BranchCheckout`. The existing model probes use a deliberate alternating application fixture; the facade also supports Event-first and free E/E/S/S histories. `CreateBranch` publishes S0 and preserves the original instances;

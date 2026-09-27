@@ -44,6 +44,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             CheckpointAddress first = session.Head;
+            using BranchCheckout other = repository.Fork("other", first);
             original = session.StateRevisionAddress!.Value;
             session.CommitEvent(new Node(), NoRebase);
             ((Node)session.State!).Value = 9;
@@ -57,6 +58,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(GraphCommitOutcome.NotPublished, failure.Outcome);
             Assert.Equal(original, session.StateRevisionAddress!.Value);
             Assert.True(repository.IsFaulted);
+            Assert.True(other.IsFaulted);
+            Assert.Throws<InvalidOperationException>(() => other.CommitState(NoRebase));
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using var resumed = reopened.Checkout("main");

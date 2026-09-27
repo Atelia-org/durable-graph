@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-27；DB-077 与 DB-078-A/B 已实施并验收；C 与 079–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-28；DB-077 与 DB-078-A/B/C 已实施并验收；079–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,18 +19,19 @@
 
 ## 当前焦点
 
-[DB-078-B：独立 Checkpoint 与固定历史查询](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 已实施并独立验收。
-ReadCheckpoint eager 至多两张独立图，PreviousX 为最近严格祖先相应角色，缺失时根与地址同时为空；根 getter 稳定。
-EnumerateEvents 固定 end、可选排他下界，默认逆序按需，正序可缓冲地址；不恢复沿途 State，循环体可以 ReadEvent。
-每次推进检查可用性，交付前释放 guard/lease。旧全量 ReadEvents 已删除，ReadFrames 保留全链元数据用途。
-非泛型入口、自由历史、跨类型 State 与地址来源由 [078-A](../docs/design-branches/0078-a-repository-free-history-implementation.md) 交付，Open 模型环境由 DB-077 固定。
+[DB-078-C：每分支工作副本与 named Fork](../docs/design-branches/0078-c-branch-checkout-fork-implementation.md) 已实施并独立验收。
+每 branch 至多一个工作副本，不同 branch 可同时编辑，仓库操作仍串行。Fork 从已提交地址独立恢复最近 State 或空基线，
+保留精确 Head，完整准备后才发布新 ref；源副本可保持存活，未提交字段不参与。Fork 不追加 E/S 图。
+占用集合不取代 owner/存活、exact head/baseline 与最终 CAS；Move 只拒绝活动目标，显式 Dispose 释放自身占用。
+普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查；源码、失败矩阵、真包与独立审查证据统一保留在 C 记录。
 
-下一停点是 [DB-078-C](../docs/design-branches/0078-editable-checkpoint-fork-slice.md#2-078-cfork-api-与恢复行为)：每 branch 占用与 named Fork。
-当前仍每 repo 至多一个活动工作副本，尚无一步 Fork；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的完整目标尚未完成。
+[078-A](../docs/design-branches/0078-a-repository-free-history-implementation.md) 的非泛型入口、自由历史与跨类型 State，
+以及 [078-B](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 的独立 Checkpoint/固定查询保持。
+至此 DB-078 三阶段形成无缓存优化也正确的 named Fork 产品停点；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标仍独立待办。
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
 [DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的后续顺序保持：
-078-C → 079 按用途恢复核心 → 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
+下一停点为 079 按用途恢复核心 → 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
 无 State 请求绕过材料槽/叶表，优化关闭仍须正确；这些优化尚未实施。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
 DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
@@ -198,7 +199,7 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   先分配 ID/登记再排队；Seal 用增长队列捕获可达对象，子对象不加入根列表。未知实际派生类型明确拒绝。
   Accept/Discard 只是内存候选协议。ID 单调分配、失败可烧号；退役实例映射清理不回收数字。
   空串 Capture/读取两端统一 Empty，非空 string 保留引用身份。
-  现有多根 Capture 是内部能力/机制见证；每份产品图仍选一个非空 durable 根。EventHistory 工作副本允许同 exact 类型 State 根替换及已登记的异构 Event 根。
+  现有多根 Capture 是内部能力/机制见证；每份产品图仍选一个非空 durable 根。工作副本允许已登记的跨实际类型 State 根替换及异构 Event 根。
 - CaptureSession.Prepare 自动使用 Current，完整预检 exact Schema/DTO/稳定 binding 后编码；全部 live Base 提前生成，
   existing class/array/List/Dictionary 调用融合 Delta、existing string 为 unchanged。结果只标识内存 Previous/Candidate，不带磁盘地址。
   重复准备与失败不安装或放弃候选、不烧号；临时 guard 拒绝会话重入。capture-only 登记仍有效，缺 binding 仅 Prepare 拒绝。
@@ -229,16 +230,19 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   WorldWorkspace.Stage(nextState) 发布后才安装原候选/新根；StageSnapshot 使用已提交 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State 的升级重写义务。
   快照 map Base 只列候选，保留实际 local Base/Delta 与 exact Parent external heads；后继 State 仍相对前 State；快照不为闭包外 State 成员编码 Removes。
-- Repository 独占 repository.lock，拥有 schemas.rbf/state/ 与 journal/；每仓库最多一个活动 BranchCheckout。
+- Repository 独占 repository.lock，拥有 schemas.rbf/state/ 与 journal/；每分支最多一个活动 BranchCheckout，仓库操作串行。
   CreateBranch(initialState) / CreateBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
   Journal Parent 指向提交前精确 Head；图 Parent 指向其自身或祖先中最近 State，无 State 时为 null。
   Checkout 保持精确 Head，只恢复最近 State 及完整来源；纯 Event 前缀交付 State=null、全新空 CaptureSession。
+  Fork 在完整 guard 内占用新名字、恢复并构造工作副本后才发布 ref，不追加历史图；源副本可保持存活，未提交修改不参与。
+  不同恢复的 mutable 图独立，完整身份与保存来源保持；普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查。
+  ordinal 名称集合只管理编辑占用；显式 Dispose 释放，不强持副本或靠 GC 解锁，未交付只清理本次取得的占位。
   既有 State 损坏或缺模型能力会失败，不回退旧 State 或假装无 State。事件内容由应用显式 ReadEvent。
   State 根按实际模型选择，可跨类型替换，成功后安装原实例；已有 child 升根、旧 root 降为 child 保持 ID，不可达成员退出目录。
   冷 Event-only 历史不导入 Event ID；不同 Revision 的对象数字 ID 可以重合，身份须在具体 Revision 内解释。
   CheckpointAddress 由本次打开签发，相等性为 owner+Journal 位置；跨 repo/重开旧地址拒绝，裸 RevisionAddress 只作诊断。
-  ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 和 Move 须先关闭活动工作副本。
+  ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 不占用编辑名，Move 只拒绝活动目标分支。
   ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
   EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。
   提交按 Schema/State → Journal EventFrame → branch ref 的持久屏障发布，发布前准备安装，发布后不重新 Capture 或运行模型回调。

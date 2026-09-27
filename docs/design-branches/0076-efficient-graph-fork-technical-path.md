@@ -1,7 +1,7 @@
 # DB-076：领域对象图的高效 fork 技术路径
 
 > 状态：**目标路线已校准；实施进度以各分片记录为准**。2026-09-27；旧机制证据基线 `343bfa6`。
-> 后续实施见 [DB-077](0077-model-environment-implementation.md)、[078-A](0078-a-repository-free-history-implementation.md) 与 [078-B](0078-b-checkpoint-history-query-implementation.md)；下文源码调查与历史验证保留设计制定时的含义，当前进度从 PROJECT-STATE 与分片记录查证。
+> 后续实施见 [DB-077](0077-model-environment-implementation.md)、[078-A](0078-a-repository-free-history-implementation.md)、[078-B](0078-b-checkpoint-history-query-implementation.md) 与 [078-C](0078-c-branch-checkout-fork-implementation.md)；下文源码调查与历史验证保留设计制定时的含义，当前进度从 PROJECT-STATE 与分片记录查证。
 > 公共合同以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；本文及 DB-077–082 已按非泛型工作副本、自由 E/S 提交和按用途恢复修订，不是施工授权。
 > 来源：用户要求领域图 fork 功能等效于创建盘上 fork ref 后 Load 成独立内存对象图；先正确且好用，再降低执行开销，内部尽量简单一致。
 > 用户补充：项目尚未投入实用，**没有任何兼容性包袱**。可直接重设计 API、回调合同与内部结构，不保留旧接口双轨。

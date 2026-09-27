@@ -4,7 +4,7 @@
 > 产品合同以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；Fork/Checkout 有最近 State 才恢复该图，无 State 时不进入缓存路径。
 > 顺序：第 4 片；依赖 [DB-079](0079-shared-graph-restoration-core-slice.md)，推荐下一片 [DB-081](0081-hot-commit-restoration-material-slice.md)。
 > 本片将 [DB-076](0076-efficient-graph-fork-technical-path.md) 的材料复用方向收束为单槽实验，不预设 repository 弱引用缓存。
-> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。目标非泛型 BranchCheckout/Checkout 由 DB-078-A 交付，尚未实施；当前符号仍为 `EventHistorySession<TState>`/`Resume<TState>`。
+> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` / `Checkout` 已由 [078-A](0078-a-repository-free-history-implementation.md) 交付；每分支占用与 named Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。本片内部优化仍未实施。
 
 ## 1. 问题与完成标准
 

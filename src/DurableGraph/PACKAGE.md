@@ -77,6 +77,8 @@ using var repository = Repository.CreateNew(repositoryPath, models);
 using var session = repository.CreateBranch(
     "main", world, new ReadAmplificationBaseBudgetParameters(3, 5));
 var initialStateFrame = session.Head; // S0 is already published; world retains its identity.
+using var child = repository.Fork("candidate", initialStateFrame);
+// session stays open; child owns a separately restored mutable State and saving baseline.
 ```
 
 These storage APIs require `Atelia.DurableGraph.Persistence` in addition to the runtime package.
@@ -449,8 +451,16 @@ Dictionary keys. Independent restoration can reuse frozen
 DTOs and strings but allocates separate mutable graphs. Upgrade and validation still
 run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design.md)
 for the internal sharing boundary; there is no public cache configuration or new wire format.
-Close the active checkout before creating a ref at a historical address or moving a branch with an
-expected head. One-step Fork and multiple active branch checkouts are not yet provided.
+`Fork(name, address)` publishes a named durable ref and returns an independent editable checkout,
+restoring only the selected position's nearest State, or no graph for a pure Event prefix. The source
+checkout may remain open; its uncommitted edits are excluded. Fork adds no new history checkpoint.
+Each branch permits one active checkout; different branches may remain open together, but all
+repository operations must be serialized. Explicitly Dispose a checkout before checking out that
+branch again or moving its ref with an expected head. Other active branches do not block those calls.
+The ref-only `CreateBranch(name, address)` does not restore a graph or occupy an editing slot.
+Two children of the same Event do not claim work or guarantee exactly-once external effects;
+application state and external protocols determine processing progress. A failed Fork may already
+have published its ref: inspect publication outcome and IsFaulted, and reopen when required.
 `EnumerateEvents(endInclusive, order, afterExclusive)` returns only Event addresses in a fixed
 logical history, even if a branch later advances or moves. Default `HistoryOrder.NewestFirst`
 supports early stopping without preparing the full chain. `OldestFirst` may buffer addresses;

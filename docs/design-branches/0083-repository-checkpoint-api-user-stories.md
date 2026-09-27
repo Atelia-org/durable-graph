@@ -1,8 +1,8 @@
 # DB-083：从用户故事推导 Repository 与 Checkpoint API
 
-> 状态：**目标语义已选定；A/B 已实施并验收；C 与 tag 尚未实施；不是执行工单**。2026-09-27 纳入用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag。
+> 状态：**目标语义已选定；A/B/C 已实施并验收；DG tag 接入未实施；不是执行工单**。2026-09-28 校准交付范围；用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag 保持。
 > 本文重新检验 DB-076–082 所依赖的公共使用模型；不是继续按旧 Event/State 交替合同施工的授权。
-> 当前产品事实仍以源码为准。公共基础见 [078-A 记录](0078-a-repository-free-history-implementation.md)；独立 Checkpoint 与固定查询见 [078-B 记录](0078-b-checkpoint-history-query-implementation.md)；多分支工作副本与 Fork 仍为后续合同。
+> 当前产品事实仍以源码为准。公共基础见 [078-A 记录](0078-a-repository-free-history-implementation.md)；独立 Checkpoint 与固定查询见 [078-B 记录](0078-b-checkpoint-history-query-implementation.md)；多分支工作副本与 Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。
 
 ## 1. 本轮需求账本
 
@@ -57,7 +57,7 @@ DramaBoard 可继续在自己的 adapter 中执行 E/S 交替；LLM 可以连续
 
 ## 3. API 草图与读取形状
 
-以下为完整目标形状，包含尚未交付的 C 能力；构造器、保存策略等非本轮差异省略。
+以下公共形状由 DB-078-A/B/C 交付；构造器、保存策略等非本轮差异省略，实际验收范围见各片记录。
 公开门面建议使用根命名空间 `Atelia.DurableGraph`，实现可以继续位于现有 Persistence 程序集。
 不新增一个转发门面与旧公开类型并行维护，也不为命名反转程序集依赖。
 

@@ -410,9 +410,17 @@ CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担
 深层模型或回调失败依实际阶段裁决，不承诺所有失败都无物理写入。完整来源、同 ID 的 exact 布局和 Upgrade rewrite 义务继续保持。
 
 Journal ref 是唯一发布前沿，图追加与 head 发布分开。提交仍检查工作副本所有权、精确 head、最近 State 的 exact 基线并执行最终 CAS，
-防重入、fault 和 publication outcome 不因自由历史放宽。当前每仓库至多一个活动工作副本，ref-only CreateBranch 或 Move 前须关闭它；
-ref-only CreateBranch 不恢复领域图，也不占用工作副本。DB-078-C 的每 branch 单工作副本与 named Fork 仍是后续交付，
-不增加多 writer 或并行操作承诺。
+防重入、fault 和 publication outcome 不因自由历史放宽。每 branch 至多一个活动工作副本，不同 branch 可同时编辑，
+仓库操作仍串行。同 branch 重复 Checkout 在恢复前拒绝；Move 只要求目标 branch 没有活动工作副本。
+ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅由 ordinal 分支名集合表达，显式 Dispose 释放；
+丢失工作副本不会由 GC 自动解锁，旧副本重复 Dispose 也不能释放后继占用。
+
+`Fork(name, source)` 从本次打开签发的已提交位置创建新命名分支并交付独立工作副本，源工作副本可保持存活。
+它与 Checkout 共用最近 State 恢复规则，保持精确 source Head，不读取源副本的未提交修改，不物化 Event 或追加 E/S 图。
+完整 guard 内先占位、恢复并构造工作副本，再发布 ref；普通恢复失败不留新 ref，未交付占位只由本次持有者清理。
+发布后失败不删除 ref、不透明重试，仍依据 outcome/fault 重开检查；正常返回后子分支可独立续写。
+图内 alias/cycle、ObjectId 与完整保存来源保持，不同恢复不共享 mutable 实例；调用方主动传入的外部别名仍自行负责。
+实际交付和失败验证见 [DB-078-C 记录](design-branches/0078-c-branch-checkout-fork-implementation.md)。
 
 历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与逻辑 Journal 位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。

@@ -207,11 +207,39 @@ before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence �
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
-可写仓库在**没有活动工作副本**时支持 `CreateBranch("fork", selectedFrame)` 和
-`MoveBranch("main", expectedHead, targetFrame)`；随后用 `Checkout` 从目标分支签出工作副本。
+可写仓库支持 `Fork(name, selectedFrame)`：从已提交位置创建持久分支，并返回独立、可继续保存的工作副本。
+源工作副本可以保持打开；它的未提交字段不进入子分支。关闭上面的浏览仓库后，下面的代码接续示例数据库；
+它的 `main` Head 是已保存的 State，分支名 `left` / `right` 须尚未存在，`models` 沿用打开前注册的固定配置：
+
+```csharp
+using (var branches = Repository.OpenExisting(path, models)) {
+    using var source = branches.Checkout("main");
+    var selected = source.Head;
+    using var left = branches.Fork("left", selected);
+    using var right = branches.Fork("right", selected);
+    var leftWorld = (World)left.State!;
+    var rightWorld = (World)right.State!;
+    leftWorld.Hero.Hp -= 1;
+    rightWorld.Hero.Hp -= 2;
+    left.CommitState();
+    right.CommitState(); // 每个分支独立保存；调用仍按顺序执行。
+}
+using (var reopened = Repository.OpenReadOnlyExisting(path, models)) {
+    var original = (World)reopened.ReadState(reopened.GetHead("main"));
+    var leftSaved = (World)reopened.ReadState(reopened.GetHead("left"));
+    var rightSaved = (World)reopened.ReadState(reopened.GetHead("right"));
+    Console.WriteLine($"Forks: source={original.Hero.Hp}, left={leftSaved.Hero.Hp}, right={rightSaved.Hero.Hp}");
+}
+```
+
+每个 branch 至多一个活动工作副本；不同 branch 可同时保留，所有仓库操作仍须串行。
+显式 Dispose 释放该 branch 后可再次 `Checkout`；`MoveBranch(name, expectedHead, targetFrame)` 只要求目标 branch 没有活动工作副本。
+ref-only `CreateBranch("fork", selectedFrame)` 只建立持久引用，不恢复领域图或占用工作副本。
+Fork 自身只发布新 ref，不新增历史检查点；Event 地址仍只恢复最近 State，纯 Event 前缀则返回 `State == null`。
+消息处理和外部效果去重由应用负责；两个孩子从同一 Event 开始不表示库已经领取或完成该事件。
 handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
 位置统一使用 `CheckpointAddress`；它只用于本次打开，不是可序列化的外部地址。
-当前每个仓库仍至多一个活动工作副本；每分支各一个工作副本、一步 `Fork` 与持久 tag 尚未交付。
+持久 tag 尚未接入 DurableGraph。
 历史可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
 Journal Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
 Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。

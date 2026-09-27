@@ -7,13 +7,15 @@ namespace Atelia.DurableGraph;
 /// <remarks>
 /// Single-threaded. Keep graphs stable during Commit. Dispose does not save or roll back domain changes.
 /// State is absent only while this history has no committed State. Events never install a State or replay
-/// business handlers; the application interprets its own processing progress. This stage permits only one
-/// active checkout per repository.
+/// business handlers; the application interprets its own processing progress. At most one checkout per branch
+/// may be active; different branches may have live checkouts together, with serial repository operations.
+/// Dispose explicitly to release the branch. Losing this object does not automatically release occupancy.
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
     internal WorldWorkspace Workspace { get; }
     private bool _disposed;
+    internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
     internal BranchCheckout(Repository repository, string branchName, WorldWorkspace workspace, CheckpointAddress? head) {
         _repository = repository;
@@ -82,6 +84,8 @@ public sealed class BranchCheckout : IDisposable {
         return _repository.Commit(this, null, nextState, parameters);
     }
 
+    /// <summary>Releases this branch's editing occupancy without saving or removing its durable ref.</summary>
+    /// <remarks>Idempotent. Reentrant disposal during a repository operation is rejected without releasing occupancy.</remarks>
     public void Dispose() {
         if (_disposed) { return; }
         _repository.Release(this);

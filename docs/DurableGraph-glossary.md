@@ -38,12 +38,12 @@ Checkout 不切换 Repository 的全局“当前分支”。Commit 后工作副�
 | <a id="checkpoint-view"></a>**检查点读取视图（Checkpoint）** | 非泛型 EventCheckpoint / StateCheckpoint，直接提供本项与最近严格祖先异种角色的领域根及地址；PreviousX 缺失时两者均空，不递归构造视图。首版 eager 至多两图，各根 getter 稳定；修改不自动保存，两图可变隔离。 | [Checkpoint](../src/DurableGraph.Persistence/Checkpoint.cs)、[078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)；当前项根始终非空。 |
 | <a id="checkpoint-address"></a>**检查点地址（CheckpointAddress）** | 定位 Journal 逻辑历史位置的 opaque 地址；不是裸 StateRevision 地址。限同次打开，以 owner 和逻辑位置判等；重开从持久 branch ref 取得新地址，null 与外实例地址拒绝，无外部序列化入口。 | 当前 sealed class [CheckpointAddress](../src/DurableGraph.Persistence/CheckpointAddress.cs)，只由库签发；公开 Kind、RootId 与诊断用 RevisionAddress 不构成来源认证。 |
 | <a id="immutable-tag"></a>**不可变标签（tag，目标）** | 仓库内持久名字绑定固定历史位置；创建后不移动、覆盖或删除，按名解析签发本次打开的新地址。与可移动 branch 分名空间，不占工作副本。 | [DB-084](design-branches/0084-eventjournal-immutable-tags-slice.md)，持久权威归上游 EventJournal；上游本地包已交付，当前 DG pin 与公开 API 尚未接入。 |
-| <a id="fork"></a>**分叉（Fork，目标一步操作）** | 从已提交检查点创建新命名分支并交付工作副本，Head 保持精确选点；有 State 则独立恢复，无 State 则 State=null；准备完成后发布 ref。源工作副本未提交的修改不参与；发布后失败仍须检查实际结果。 | 当前可分步 `CreateBranch(name, address)` + `Checkout(name)`，失败边界不同；[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的一步 `Fork(name, address)` 属 DB-078-C，未实施。 |
+| <a id="fork"></a>**分叉（Fork）** | 从已提交检查点创建新命名分支并交付工作副本，Head 保持精确选点；有 State 则独立恢复，无 State 则 State=null；准备完成后发布 ref。源工作副本未提交的修改不参与；发布后失败仍须检查实际结果。 | `Fork(name, address)`；与分步 `CreateBranch(name, address)` + `Checkout(name)` 的成功结果等效，但普通恢复失败不先留下新 ref；见 [DB-078-C](design-branches/0078-c-branch-checkout-fork-implementation.md)。 |
 | <a id="commit"></a>**提交（Commit）** | 捕获并持久发布到工作副本绑定的分支，成功后推进 head；State 提交另安装保存基线。不是单纯 Append 或 CaptureSession.Accept。 | `CommitEvent` / `CommitState` 各自独立提交；无参 State 提交要求已有 State，显式非空根可建立首 State 或跨类型替换，均非隐式事件处理器。 |
 | <a id="revision"></a>**状态修订（Revision）** | 内容固定的一次存储层修订，包含对象版本记录及存活目录信息；可承载领域 State 图或 Event 图。不是持续编辑的工作副本。 | 当前 [StateRevision](#state-revision)；尚未追加的实例也可表示待写计划，不能据类型名推定已经发布。 |
 
-签出数量与线程安全是不同问题：**当前实现每仓库至多一个活动工作副本**；DB-077 与 DB-078-A/B 保留此限制，
-DB-078-C 拟允许不同分支各有一个，同分支第二次签出拒绝。仓库操作仍串行；“多个工作副本”不表示多线程或多 writer。
+签出数量与线程安全是不同问题：**每分支至多一个活动工作副本**，不同分支可各有一个，同分支第二次签出拒绝。
+显式 Dispose 释放占用，不由 GC 自动解锁。仓库操作仍串行；“多个工作副本”不表示多线程或多 writer。
 `CreateBranch(name, initialState)` 创建初始 S0，`CreateBranchFromEvent(name, initialEvent)` 创建初始 E0，均交付工作副本；
 `CreateBranch(name, address)` 仅创建 ref；它们都不应简称成签出。
 
@@ -216,7 +216,7 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
-| <a id="graph-repository"></a>**仓库**／`Repository` | 拥有匹配的 Schema/State/Journal 资源和命名分支；可写打开独占 repository.lock，当前每仓库最多一个活动工作副本；拟议的每分支单工作副本见上文。Journal ref 是唯一发布前沿，Schema 仍为单调注册表、尚非联合版本视图；只读打开不写入或修尾。 | [Repository](../src/DurableGraph.Persistence/Repository.cs)、[HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs) |
+| <a id="graph-repository"></a>**仓库**／`Repository` | 拥有匹配的 Schema/State/Journal 资源和命名分支；可写打开独占 repository.lock，每分支最多一个活动工作副本，操作串行。Journal ref 是唯一发布前沿，Schema 仍为单调注册表、尚非联合版本视图；只读打开不写入或修尾。 | [Repository](../src/DurableGraph.Persistence/Repository.cs)、[HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs) |
 | **图资源**／`GraphResources` | 匹配 Schema/State 文件的内部所有者；严格只读/可写打开、释放和故障状态，不选择业务 head、不运行模型回调。 | [GraphResources](../src/DurableGraph.Persistence/GraphResources.cs) |
 | **独立图读取**／`GraphReader` | 显式 Revision + RootId 的 exact 解码、升级与两阶段恢复；可请求实际 durable 根的基类。独立读取产生可控导入的 MaterializedGraph；ReadPair 的只读共享路径仅返回领域根，不导入可编辑基线。 | [GraphReader](../src/DurableGraph.Persistence/GraphReader.cs) |
 | <a id="revision-read-session"></a>**操作内解码会话**／`RevisionReadSession` | 封闭一次操作的 State/Schema 资源与模型配置快照，按 `(ObjectId, 实际 head)` 缓存 owned stored DTO/string 及 exact reader。缓存只省重复 body 解码，不缓存每视图验证、Normalize/Upgrade 结果或工作区基线；不是持久分支或公共分支工作副本，也不是 Frame cache。 | [RevisionReadSession](../src/DurableGraph.Persistence/RevisionReadSession.cs)、[RevisionDecoder](../src/DurableGraph.Persistence/RevisionDecoder.cs) |
@@ -226,7 +226,7 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 | <a id="publication-head"></a>**发布 head／Journal ref** | 命名分支 ref 指向权威 Journal 帧，该帧引用 RevisionAddress + RootId。Schema/State 先确认，再追加 Journal 帧，最后发布 ref；严格重开不从坏尾猜测旧 head。首个 E 或 S 完成后才绑定分支名字，不交付空 head 分支。 | [HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs)、[Repository](../src/DurableGraph.Persistence/Repository.cs) |
 | <a id="graph-frame"></a>**图定位句柄（旧称 graph frame handle）** | 旧公开 `GraphFrame` 已由 CheckpointAddress 取代；仍含角色、RootId 与诊断用 RevisionAddress，但不能通过裸地址伪造来源；不是原始 RBF 帧、DTO 或可跨重开的持久书签。 | [CheckpointAddress](../src/DurableGraph.Persistence/CheckpointAddress.cs)、[检查点地址](#checkpoint-address) |
 | **EventHistory、EventFrame / StateFrame** | 独立事件快照图与状态图构成自由 E/S 逻辑历史；两种角色共用 EventJournal 的 EventFrame，用 kind 与 payload 引用图，不是新增两种底层 RBF 帧。每条记录的图 Parent 为其严格祖先中最近 State，无 State 时为 null。 | [GraphEnvelopeCodec](../src/DurableGraph.Persistence/GraphEnvelopeCodec.cs)、[DB-078-A](design-branches/0078-a-repository-free-history-implementation.md) |
-| **分支与工作副本的操作边界** | Branch 是持久命名 ref，工作副本是内存编辑宿主。当前实现先关闭全仓库活动工作副本，才可从历史 E/S 创建 ref 或 Move，随后 Checkout；ref-only 创建不物化领域图。DB-078-C 拟允许源工作副本存活时 Fork 到新分支，仅 Move 的目标分支须无活动工作副本。 | [Repository](../src/DurableGraph.Persistence/Repository.cs) |
+| **分支与工作副本的操作边界** | Branch 是持久命名 ref，工作副本是内存编辑宿主。源工作副本存活时可 Fork 到新分支；Move 只要求目标分支无活动工作副本。ref-only 创建不物化领域图，也不取得编辑占用。 | [Repository](../src/DurableGraph.Persistence/Repository.cs) |
 | **实验性双图读取**／`ReadPair` | 同一次调用按输入顺序完整还原两个只读快照；第二边失败不交付 pair，不撤销用户回调副作用。可复用 exact DTO/string 与安全引用闭包，但不承诺跨图实例复用或分离，ReferenceEquals 不能承担业务身份/版本判断或控制分支。只读约束也禁止可观察的 Transient 写入；每个视图的 owner/context/cache 放在图外，需原位初始化时使用独立读取。Checkout 采用独立可变图恢复路径。 | [Repository](../src/DurableGraph.Persistence/Repository.cs)、[GraphReader](../src/DurableGraph.Persistence/GraphReader.cs) |
 | **对象状态相等证明**／`ProvesSameState` | 共享候选比较两份完整当前状态，不准备 Base/Delta。SG 经可选 StateEquality 委托接入既有 StateEquals，容器比较完整 shape/count/comparer 与有序槽；缺 proof 返回 false，真实错误传播。true 只证明持久状态，身份/head 与引用闭包仍由 GraphReader 判断；字典重排可保守返回 false，不改其无序映射语义。 | [比较能力](../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)、[DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md) |
 | <a id="commit-outcome"></a>**提交结果**／`GraphCommitOutcome` | NotPublished、Unknown、Published 描述持久发布结果，不描述领域修改是否撤销；Unknown 或发布后安装失败须使工作副本停止续写，dispose/reopen 裁决。NotPublished 也需检查资源是否 faulted。 | [GraphCommitException](../src/DurableGraph.Persistence/GraphCommitException.cs) |

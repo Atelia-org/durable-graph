@@ -116,3 +116,18 @@ probe commits between MoveNext calls and moves the branch after creating a query
 selected end. Exclusive State/same-position bounds and rejection of a non-ancestor bound before
 the first result run against real packages. This complements the product tests for early stopping,
 fault/disposal and capability boundaries; it introduces no new schema or benchmark assertion.
+
+DB-078-C adds `database-named-fork`, using the same forced Family models. A live source checkout
+publishes an Event, then receives an uncommitted edit. Two named children fork that exact Event
+address and independently restore its preceding committed State, including mutable containers and
+cycles. Each child commits E/E/S/S in interleaved serial calls while the source remains open.
+Disposing one child permits Checkout of that branch alongside the other active branches. A cold
+reopen checks source/child values, logical histories, and independently edited containers.
+
+A second live source starts with E/E. Its two children begin with no State, then establish independent
+State baselines. One replaces a World root with its Alice child, changes that child, and commits
+without a root argument. The other retains a Bob root. Cold checkouts verify the actual distinct
+root types and values. This uses real cross-type replacement, not same-type root substitution.
+The application chooses message processing; a common Event head neither claims work nor guarantees
+exactly-once external effects. Product tests retain responsibility for publication faults, occupancy
+failures, capability restrictions, and checking that Fork itself appends no history frame.

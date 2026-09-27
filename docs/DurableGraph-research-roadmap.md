@@ -24,9 +24,9 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md) | A 公共基础与 B 独立 Checkpoint/固定查询的实际状态见 PROJECT-STATE；余项是 C 多分支与一步 Fork，tag 独立 |
+| [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询与多分支 Fork 的实际状态见 PROJECT-STATE；余项是独立 tag 接入及后续有证据的恢复优化 |
 | [DB-084 EventJournal 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) | 目标已纳入、工程独立：上游已交付本地包 `0.1.2-dev.20260927.1`；DG 待更新 pin 并验收创建/解析、严格 Open/持久确认；DG 接入依赖 078-A，不依赖优化片。首片外部序列化地址不提供 |
-| [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | 后续顺序为 078-C 多分支/Fork → 079 共用恢复 → 080 单 State 准备槽 → 081 热 State 准入；082 叶实例实验只硬依赖080。078 全部阶段完成才形成 named Fork 产品停点；C 与优化片尚未实施 |
+| [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | named Fork 产品停点见 [078-C 记录](design-branches/0078-c-branch-checkout-fork-implementation.md)；后续顺序为 079 共用恢复 → 080 单 State 准备槽 → 081 热 State 准入；082 叶实例实验只硬依赖 080。优化片尚未实施，关闭优化仍须正确 |
 | [DB-077 固定模型环境](design-branches/0077-repository-model-environment-slice.md) | 已实施，验收见[记录](design-branches/0077-model-environment-implementation.md)；固定 Open 模型与 durable current 恒等；公共基础迁移由 [078-A](design-branches/0078-a-repository-free-history-implementation.md) 承接。[旧专项评审](design-branches/0077-0078-api-dialectical-review.md)保留历史，不作为新公开合同 |
 | [DB-073 实例缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) / [DB-074 方向清单](design-branches/0074-efficient-fork-deferred-directions.md) | Draft：均尚待进一步修订；不作为 DB-077–082 的并行工单或前置，缓存/更深优化取舍待分片实测后再处理 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |
@@ -54,7 +54,7 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 EventHistory 的正常同实例 State 提交与严格重开从 PROJECT-STATE/DB-063 查证；不再列为未完成能力。
-当前公开宿主仍限定单活动 `BranchCheckout`、每图单个非空 durable 根；A 已迁移非泛型入口、自由历史与跨类型根。B/C 尚未实施；发布故障范围仍为正常关闭/进程中止和明确的 I/O 异常。
+公开宿主的每分支单工作副本、自由历史、独立 Checkpoint 和 named Fork 从 PROJECT-STATE 查证；每份持久图仍有单个非空 durable 根。发布故障范围仍为正常关闭/进程中止和明确的 I/O 异常，更强保证另行排期。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；
@@ -172,7 +172,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)、[DB-069](design-branches/0069-incremental-save-baseline.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
 | 双图读取的后继优化 | 操作内 DTO/string 缓存、保守引用闭包和完整状态比较的现状从 PROJECT-STATE/DB-064/066 进入。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
-| 并发、分支与跨 Repository | 命名 branch/fork/Move 与串行单活动写工作副本从 PROJECT-STATE 查证；DB-078 拟允许不同 branch 各一个工作副本，但尚未实施，且不改变串行仓库操作。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
+| 并发、分支与跨 Repository | 每 branch 单工作副本与 named Fork 从 PROJECT-STATE 查证，仓库操作仍串行。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的 current Normalize | Family 路径可以保留 state-only exact reader，但 editable Load 仍需要 source 对象族的 current/migration CLR 模型。应用需要删除这层模型而继续加载旧 Revision 时，再设计独立 Normalize/退休协议；不能借 World 删除引用跳过 source 行 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |

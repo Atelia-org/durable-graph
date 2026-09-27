@@ -9,7 +9,7 @@ using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 /// <summary>DB-078-A's independent histories and root-type transitions.</summary>
-public sealed class DB078HistoryTests : IDisposable {
+public sealed partial class DB078HistoryTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-db078-history-{Guid.NewGuid():N}");
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
     private static readonly DurableSchema AlphaSchema = new("DB078Alpha", 1,

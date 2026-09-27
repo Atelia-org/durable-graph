@@ -84,6 +84,18 @@ try {
         "Console.WriteLine(""ReadmePolicyOverride:Hp=96:Threshold=11:Budget=5"");`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $configured, $utf8)
     Invoke-DotNet (@("run", "--project", $project, "--no-restore") + $properties + @("--", $database))
+
+    # Keep the source checkout alive while executing the README's exact named-Fork example.
+    $fork = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
+        "string path = args[0];`nvar models = new StateModelRegistry();`n" +
+        "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
+        (Get-Example "csharp" 'using (var branches = Repository.OpenExisting(path, models))')
+    [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $fork, $utf8)
+    $actual = (& dotnet run --project $project --no-restore @properties -- $database | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $actual -notmatch 'Forks: source=96, left=95, right=94') {
+        throw "README named-Fork example failed: '$actual'."
+    }
+    Write-Host "ReadmeNamedFork:Source=96:Left=95:Right=94:ColdReopen"
     Invoke-DotNet (@("clean", $project, "-v:q") + $properties)
     Invoke-DotNet (@("build", $project, "--no-restore", "-p:DurableGraphSchemaHistoryMode=Verify", "-v:q") + $properties)
     Write-Host "README QuickStart package probe passed. Artifacts: $workRoot"
