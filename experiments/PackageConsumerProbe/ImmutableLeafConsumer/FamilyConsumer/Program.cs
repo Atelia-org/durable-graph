@@ -17,13 +17,13 @@ internal static class Program {
         string directory = Path.GetFullPath(args.Single());
         Require(ReadImmutableLeafFlag(ResolveLeafBinding()), "The Family leaf binding must report IsImmutableLeaf=true.");
         Leaf leaf = new(42);
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
-            using EventHistorySession<Leaf> session = repository.CreateBranch("main", leaf, Policy);
-            Require(session.State.Value == 42, "CreateBranch lost the seed value.");
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+            using BranchCheckout session = repository.CreateBranch("main", leaf, Policy);
+            Require(((Leaf)session.State!).Value == 42, "CreateBranch lost the seed value.");
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
-            Require(session.State.Value == 42, "The reopened world lost the leaf's persisted value.");
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            Require(((Leaf)session.State!).Value == 42, "The reopened world lost the leaf's persisted value.");
         }
         Console.WriteLine("ImmutableLeafFamily:Flag:True:Roundtrip:True");
     }

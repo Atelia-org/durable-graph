@@ -17,7 +17,8 @@ public enum GraphCommitOutcome {
 /// <see cref="Outcome"/> describes publication, not repository health or rollback of domain mutations.
 /// Even <see cref="GraphCommitOutcome.NotPublished"/> can accompany a faulted repository.
 /// Unknown or Published outcomes must not be transparently retried. Dispose and reopen a faulted
-/// repository, then Resume the branch and inspect its newly restored PendingEvent before processing.
+/// repository, then Checkout the persisted branch and inspect history with the application's saved
+/// processing progress. Checkout restores only the latest State, if one exists; it never replays Events.
 /// Failures before an append attempt can instead propagate their original exception; absence of this
 /// wrapper does not imply that domain mutations were rolled back or that the repository is healthy.
 /// </remarks>

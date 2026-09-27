@@ -33,16 +33,16 @@ internal static class Program {
         Require(!DomainCatalog.LegacyClrAbsent, "V1 must contain its original inline CLR type.");
         FrameAddress historical, noChange;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
             World world = World.Create();
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
-            worldId = session.StateId;
+            using BranchCheckout session = repository.CreateBranch("main", world, Policy);
+            worldId = session.StateId!.Value;
             world.Node.Value++;
-            session.CommitDomainEvent(session.State, Policy);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, world), "Commit replaced the domain graph.");
+            session.CommitEvent(((World)session.State!), Policy);
+            historical = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(((World)session.State!), world), "Commit replaced the domain graph.");
         }
         Inspect(directory, (store, schemas) => {
             ObjectId nodeId = CheckHistorical(store, schemas, historical, worldId);
@@ -50,11 +50,11 @@ internal static class Program {
             Require(store.Read(noChange).LocalObjects.Count == 0, "Unchanged graph wrote objects.");
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            CheckGraph(session.State, 11);
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((World)session.State!), 11);
+            session.CommitEvent(((World)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
         }
         Inspect(directory, (store, _) => Require(store.Read(noChange).LocalObjects.Count == 0, "Cold recapture wrote objects."));
         Console.WriteLine("CrossAssemblySeed:True:IndependentCatalogs:True:SharedCycle:True:ChildOnlyDelta:True:ColdNoChange:True");
@@ -67,17 +67,17 @@ internal static class Program {
         Inspect(directory, (store, schemas) => nodeId = CheckHistorical(store, schemas, historical, worldId));
         Require(DomainCatalog.UpgradeCalls == 0, "Exact reading ran business upgrades.");
         FrameAddress rewritten, noChange, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            CheckGraph(session.State, 1011);
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((World)session.State!), 1011);
             Require(DomainCatalog.UpgradeCalls == 1, "Expected exactly one explicit Node upgrade.");
-            session.CommitDomainEvent(session.State, Policy);
-            rewritten = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
-            session.State.Node.Value++;
-            session.CommitDomainEvent(session.State, Policy);
-            changed = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            rewritten = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
+            ((World)session.State!).Node.Value++;
+            session.CommitEvent(((World)session.State!), Policy);
+            changed = session.CommitState(Policy).RevisionAddress;
         }
         Inspect(directory, (store, schemas) => {
             CheckSingleWrite(store, rewritten, nodeId, ObjectVersionKind.Base);
@@ -85,9 +85,9 @@ internal static class Program {
             CheckSingleWrite(store, changed, nodeId, ObjectVersionKind.Delta);
             CheckHistorical(store, schemas, historical, worldId);
         });
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            CheckGraph(session.State, 1012);
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((World)session.State!), 1012);
             Require(DomainCatalog.UpgradeCalls == 1, "Reopening current state repeated upgrade.");
         }
         Console.WriteLine("CrossAssemblyUpgrade:True:DeletedInlineClr:True:HistoricalExact:True:TargetOnlyBase:True:NoChangeThenDelta:True:ColdReopen:True");

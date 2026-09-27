@@ -16,7 +16,7 @@
 DB-078-A 才统一公开入口并落实用户已选的 Event-first、自由 E/S 顺序及跨类型 State 替换，
 DB-078-C 再把占用范围放宽为不同分支各一个工作副本。这里保留的交替/exact 根检查只属于本阶段停点，不再是待产品裁定的目标限制。
 
-实施前 [Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 的 Open 不接收模型；
+实施前 [Repository](../../src/DurableGraph.Persistence/Repository.cs) 的 Open 不接收模型；
 CreateBranch、`Resume`、ReadState/Event/Pair 各自取得 snapshot。
 [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 已有成功闭合缓存，
 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 已有接收 snapshot 的加载入口；

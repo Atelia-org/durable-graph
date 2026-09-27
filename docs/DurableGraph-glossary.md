@@ -1,8 +1,8 @@
 # DurableGraph 项目术语表
 
-> 用语校准：2026-09-27；当前产品已实施 DB-075。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的公共语义已选定；以下目标/候选词义仍不作为已实施合同。
+> 用语校准：2026-09-27；公共基础已迁移至 DB-078-A，具体交付与验证范围见 [实施记录](design-branches/0078-a-repository-free-history-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
 > 本文是项目首选术语的维护入口；定义概念、区分歧义并映射代码，不代替各分片合同。
-> **命名已选定、API 尚未迁移**：分支工作副本采用非泛型 `BranchCheckout`，签出操作采用 `Checkout`；当前源码仍为 `EventHistorySession<TState>` / `Resume<TState>`，固定环境由 DB-077 交付，公共迁移集中至 DB-078-A。
+> 公共入口为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`；签出操作为 `Checkout`。旧名只作历史映射，固定模型环境由本次 Open 持有。
 > 当前能力查 [PROJECT-STATE](../src/PROJECT-STATE.md)，长期约束查[目标设计](DurableGraph-target-design-v0.md)，未完成工作查[路线图](DurableGraph-research-roadmap.md)。
 
 ## 使用与维护
@@ -23,40 +23,40 @@
 ## 先区分这几个公共概念
 
 **仓库持有分支；签出分支得到工作副本；修改领域状态并显式提交到它绑定的分支。**
-当前实现要求 E/S 交替；用户已要求解除这项库级限制，候选新合同见 DB-083。
+历史允许 Event-first、连续 Event 和连续 State；事件处理顺序由应用决定。
 Checkout 不切换 Repository 的全局“当前分支”。Commit 后工作副本继续存活；Dispose 释放编辑占用，不自动保存、撤销领域修改或删除分支。
 
 | 首选词 | 含义与边界 | 代码与设计状态 |
 |---|---|---|
-| **仓库（Repository）** | 持久资源与命名分支的宿主。讨论寿命时写“本次打开的仓库实例”，同一路径重开是新实例。 | 当前 `EventHistoryRepository`；DB-083 推荐根命名空间 `Atelia.DurableGraph.Repository`，尚未迁移。 |
+| **仓库（Repository）** | 持久资源与命名分支的宿主。讨论寿命时写“本次打开的仓库实例”，同一路径重开是新实例。 | 当前 [Atelia.DurableGraph.Repository](../src/DurableGraph.Persistence/Repository.cs)。 |
 | <a id="branch"></a>**分支（Branch）** | 指向已发布历史位置的持久命名引用（ref）；不等于加载的 CLR 对象图，也不因关闭工作副本而消失。 | 当前已有 CreateBranch / MoveBranch；[发布 head](#publication-head)。 |
-| <a id="branch-checkout"></a>**分支工作副本（Branch checkout）**，上下文明确时简称**工作副本** | 绑定一个分支的可选 State、已提交 State 保存基线、身份分配状态与当前 head 的组合；不能简化为根对象本身。 | 目标非泛型 `BranchCheckout`，State 为 `IDurableObject?`，null 仅表示尚无 State；允许实际根跨类型替换。当前 [EventHistorySession](../src/DurableGraph.Persistence/EventHistorySession.cs) 的 PendingEvent 不进入新合同。 |
-| <a id="checkout-operation"></a>**签出（Checkout）** | 从已有分支当前 head 恢复并取得一个工作副本，不新建分支，也不自动执行事件处理器。 | 候选非泛型 `Checkout(branchName)`，恢复仍须固定模型环境；当前为 `Resume<TState>(branchName, models)`。 |
-| <a id="state-event"></a>**领域状态 / 领域事件（State / Event）** | 逻辑历史中的两种角色，不由 CLR 类型名决定。State 记录领域状态；Event 记录领域事件。当前历史强制 S0→E1→S1，DB-083 目标允许 Event-first、连续 E 或 S，应用自己规定处理顺序；每份持久图仍选非空根。 | 当前 `GraphFrameKind` 与 `CommitDomainEvent` / `CommitDomainState`。 |
-| <a id="pending-event"></a>**待完成事件（PendingEvent，当前交替协议用语）** | 已记录、等待后继 State 提交的 Event；不是尚未提交的事件。DB-083 不再把它作为通用仓库概念，业务可自行保留。恢复它不等于重放处理器，也不保证外部副作用 exactly-once。 | 当前 `EventHistorySession.PendingEvent`；State head 时为 null。 |
-| <a id="checkpoint"></a>**已提交检查点（committed checkpoint）** | 可用来恢复或分叉的已发布 State/Event 历史位置。其角色与图内容由该位置确定；不因分支继续推进而改变。读取视图与可保存工作副本分别定义，不能从 Event 位置自动推断业务已完成。 | 在本次仓库实例中用 [GraphFrame](#graph-frame) 指代；仅 RevisionAddress 不足以表达其完整含义。 |
+| <a id="branch-checkout"></a>**分支工作副本（Branch checkout）**，上下文明确时简称**工作副本** | 绑定一个分支的可选 State、已提交 State 保存基线、身份分配状态与当前 head 的组合；不能简化为根对象本身。 | 非泛型 [BranchCheckout](../src/DurableGraph.Persistence/BranchCheckout.cs)，State 为 `IDurableObject?`，null 仅表示尚无 State；允许实际根跨类型替换，无 PendingEvent。 |
+| <a id="checkout-operation"></a>**签出（Checkout）** | 从已有分支当前 head 恢复并取得一个工作副本，不新建分支，也不自动执行事件处理器。 | `Checkout(branchName)` 保持精确 Head，只恢复最近 State；纯 Event 历史不物化 Event，交付 State=null；已有 State 恢复失败直接传播。 |
+| <a id="state-event"></a>**领域状态 / 领域事件（State / Event）** | 逻辑历史中的两种角色，不由 CLR 类型名决定。允许 Event-first、连续 E 或 S，同一 CLR 类型也可承担两种角色；应用自己规定处理顺序，每份持久图仍选非空根。 | 当前 `GraphFrameKind` 与 `CommitEvent` / `CommitState`。 |
+| <a id="pending-event"></a>**待完成事件（PendingEvent，历史交替协议用语）** | 旧协议中已记录、等待后继 State 提交的 Event；不是尚未提交的事件。当前仓库不判定业务处理进度，应用可自行使用此概念；不保证外部副作用 exactly-once。 | 旧 `EventHistorySession.PendingEvent` 已移除；当前 Checkout 不恢复 Event。 |
+| <a id="checkpoint"></a>**已提交检查点（committed checkpoint）** | 可用来恢复或分叉的已发布 State/Event 历史位置。其角色与图内容由该位置确定；不因分支继续推进而改变。读取视图与可保存工作副本分别定义，不能从 Event 位置自动推断业务已完成。 | 在本次仓库实例中用 [CheckpointAddress](#checkpoint-address) 指代；仅 RevisionAddress 不足以表达其完整含义。 |
 | <a id="checkpoint-view"></a>**检查点读取视图（Checkpoint，目标）** | 非泛型 EventCheckpoint / StateCheckpoint，直接提供本项与最近严格祖先异种角色的领域根及地址；PreviousX 缺失时两者均空，不递归构造视图。读出图可用于内存计算，修改不自动保存；两图可变隔离。 | [DB-083 §3](design-branches/0083-repository-checkpoint-api-user-stories.md#3-api-草图与读取形状)，尚未实施；当前项根始终非空。 |
-| <a id="checkpoint-address"></a>**检查点地址（CheckpointAddress，目标）** | 定位 Journal 逻辑历史位置的 opaque 地址；不是裸 StateRevision 地址。首片限同次打开，以 owner 和逻辑位置判等；重开重新解析 ref/tag，不提供外部序列化地址。 | DB-083；当前 GraphFrame 的公开 RevisionAddress 不能直接替代。 |
+| <a id="checkpoint-address"></a>**检查点地址（CheckpointAddress）** | 定位 Journal 逻辑历史位置的 opaque 地址；不是裸 StateRevision 地址。限同次打开，以 owner 和逻辑位置判等；重开从持久 branch ref 取得新地址，null 与外实例地址拒绝，无外部序列化入口。 | 当前 sealed class [CheckpointAddress](../src/DurableGraph.Persistence/CheckpointAddress.cs)，只由库签发；公开 Kind、RootId 与诊断用 RevisionAddress 不构成来源认证。 |
 | <a id="immutable-tag"></a>**不可变标签（tag，目标）** | 仓库内持久名字绑定固定历史位置；创建后不移动、覆盖或删除，按名解析签发本次打开的新地址。与可移动 branch 分名空间，不占工作副本。 | [DB-084](design-branches/0084-eventjournal-immutable-tags-slice.md)，持久权威归上游 EventJournal；上游本地包已交付，当前 DG pin 与公开 API 尚未接入。 |
-| <a id="fork"></a>**分叉（Fork）** | 从已提交检查点创建新命名分支并交付工作副本，Head 保持精确选点；有 State 则独立恢复，无 State 则 State=null；准备完成后发布 ref。源工作副本未提交的修改不参与；发布后失败仍须检查实际结果。 | 当前可分步 CreateBranch(name, frame) + Resume，失败边界不同；[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 目标非泛型 `Fork(name, address)`，DB-078-C 已校准、未实施。 |
-| <a id="commit"></a>**提交（Commit）** | 捕获并持久发布到工作副本绑定的分支，成功后推进 head；State 提交另安装保存基线。不是单纯 Append 或 CaptureSession.Accept。 | 当前 `CommitDomainEvent` / `CommitDomainState` 严格交替；DB-083 候选 `CommitEvent` / `CommitState` 各自独立提交，仍非隐式事件处理器。 |
+| <a id="fork"></a>**分叉（Fork，目标一步操作）** | 从已提交检查点创建新命名分支并交付工作副本，Head 保持精确选点；有 State 则独立恢复，无 State 则 State=null；准备完成后发布 ref。源工作副本未提交的修改不参与；发布后失败仍须检查实际结果。 | 当前可分步 `CreateBranch(name, address)` + `Checkout(name)`，失败边界不同；[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的一步 `Fork(name, address)` 属 DB-078-C，未实施。 |
+| <a id="commit"></a>**提交（Commit）** | 捕获并持久发布到工作副本绑定的分支，成功后推进 head；State 提交另安装保存基线。不是单纯 Append 或 CaptureSession.Accept。 | `CommitEvent` / `CommitState` 各自独立提交；无参 State 提交要求已有 State，显式非空根可建立首 State 或跨类型替换，均非隐式事件处理器。 |
 | <a id="revision"></a>**状态修订（Revision）** | 内容固定的一次存储层修订，包含对象版本记录及存活目录信息；可承载领域 State 图或 Event 图。不是持续编辑的工作副本。 | 当前 [StateRevision](#state-revision)；尚未追加的实例也可表示待写计划，不能据类型名推定已经发布。 |
 
 签出数量与线程安全是不同问题：**当前实现每仓库至多一个活动工作副本**；DB-077 与 DB-078-A/B 保留此限制，
 DB-078-C 拟允许不同分支各有一个，同分支第二次签出拒绝。仓库操作仍串行；“多个工作副本”不表示多线程或多 writer。
-目标 `CreateBranch(name, initialState)` 创建初始 S0，`CreateBranchFromEvent(name, initialEvent)` 创建初始 E0，均交付工作副本；
+`CreateBranch(name, initialState)` 创建初始 S0，`CreateBranchFromEvent(name, initialEvent)` 创建初始 E0，均交付工作副本；
 `CreateBranch(name, address)` 仅创建 ref；它们都不应简称成签出。
 
 ### 命名选择与迁移边界
 
 采用 `BranchCheckout` 是为了同时表达“绑定分支”和“加载后持续编辑”的寿命，避免占用下游业务常用的 Session。
 `Revision` 留给固定修订；`Workspace` / `WorldWorkspace` 留给内部 State 保存工作区；`WorkingTree` 不作为对象图的首选称谓。
-产品符号已按 DB-083 纳入 DB-078-A 候选迁移范围，尚未实施；无兼容包袱，不保留无需求的旧名兼容重载。
+公共基础已按 DB-078-A 迁移，不保留旧名、泛型工作副本或泛型历史读取兼容重载；后续能力仍按阶段交付。
 
 | 上下文 | 使用方式 |
 |---|---|
-| DB-076–082 的拟议公开 API | 使用 `BranchCheckout` / `Checkout`，同时标明未实施。 |
-| 当前 README 可运行示例、源码证据、既有测试名 | 保留 `EventHistorySession` / `Resume`，说明它们对应工作副本 / 签出。 |
+| DB-076–082 的拟议公开 API | 使用 `BranchCheckout` / `Checkout`，按具体分片区分当前能力与未实施目标。 |
+| 当前 README 可运行示例、源码证据 | 使用 `Repository` / `BranchCheckout` / `Checkout` / `CheckpointAddress`；历史记录和见证名称可保留旧名。 |
 | 内部 `CaptureSession` / `RevisionReadSession` | 仍称捕获会话 / 操作内解码会话；不因公共命名调整而改名。 |
 | Coding Agent 主会话、LLM tool-loop session、兄弟项目类型 | 按其自身语义保留 Session / 会话，不套用分支工作副本。 |
 
@@ -83,7 +83,7 @@ DB-078-C 拟允许不同分支各有一个，同分支第二次签出拒绝。�
 
 ```mermaid
 flowchart TD
-    R["GraphFrame：角色、Revision 地址与 RootId"] --> D["stored DTO 全目录：解码并验证"]
+    R["CheckpointAddress：角色、Revision 地址与 RootId"] --> D["stored DTO 全目录：解码并验证"]
     D --> N["current DTO 全目录：Upgrade 后再验证"]
     N --> C["根可达闭包"]
     C --> A["建立全部实例表，再 Hydrate"]
@@ -98,8 +98,9 @@ flowchart TD
     I -. "保留领域实例继续编辑" .-> W
 ```
 
-分支工作副本（当前代码 `EventHistorySession`）受控完成发布与安装；低层 Append 自身仍不发布。
-Journal 的 S0→E1→S1 与 Revision Parent 不同：E1、S1 均以 S0 为比较来源。
+分支工作副本 `BranchCheckout` 受控完成发布与安装；低层 Append 自身仍不发布。
+Journal Parent 是提交前精确 Head；Revision Parent 是该 Head 或其祖先中最近 State，无 State 时为 null。
+例如 S0→E1→E2→S1 的后三项均以 S0 为图保存来源，Event-first 的 E0→E1→S0 则全部无图 Parent。
 内容层 `CaptureSession.Prepare` 只消费已经 Seal 的候选。各阶段推进什么状态见下列词条。
 
 ## Schema、类型与生成代码
@@ -141,7 +142,7 @@ Journal 的 S0→E1→S1 与 Revision Parent 不同：E1、S1 均以 S0 为比�
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
-| <a id="domain-graph"></a>**领域对象图与单根（domain graph / root）** | 用户领域实例及其持久引用关系，例如 `World → A ↔ B`。每个 State/Event 选一个非空 durable 根；工作副本的 State 要求 exact 类型，历史读取可请求根的基类。World 是根的历史角色名，不要求类型名为 World。 | [EventHistorySession](../src/DurableGraph.Persistence/EventHistorySession.cs)、[IDurableObject](../src/DurableGraph/IDurableObject.cs) |
+| <a id="domain-graph"></a>**领域对象图与单根（domain graph / root）** | 用户领域实例及其持久引用关系，例如 `World → A ↔ B`。每个持久 State/Event 选一个非空 durable 根；模型按实际 CLR 类型选择，工作副本可跨类型替根，公共读取返回实际根。World 是根的历史角色名，不要求类型名为 World。 | [BranchCheckout](../src/DurableGraph.Persistence/BranchCheckout.cs)、[IDurableObject](../src/DurableGraph/IDurableObject.cs) |
 | **领域引用对象资格**／`IDurableObject` | 普通 class 与 record class 直接或经自建领域祖先实现的无成员接口，替代已移除的 DurableBase。它不提供 codec，不进入 Schema，不开放接口持久槽或 boxed struct；实际对象仍需已登记的 exact binding。各领域祖先均须参与 Schema/history。 | [IDurableObject](../src/DurableGraph/IDurableObject.cs)、[DB-068](design-branches/0068-record-class-model-slice.md) |
 | <a id="object-identity"></a>**CLR 引用身份与对象 ID（reference identity / ObjectId）** | 引用身份区分 CLR 实例；`ObjectId(uint Value)` 是无隐式数值转换的语义包装，在指定 Revision 视图内解释，引用槽中的 0 表示 null，实际对象行 ID 必须非零。Capture 用引用相等关联实例与 ID。值相同的不同非空 string 不合并；空串统一 `string.Empty` 是明确例外。ID 不是 CLR 地址或全仓库永久唯一号。 | [ObjectId](../src/DurableGraph/ObjectId.cs)、[CaptureContext](../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[CaptureSession](../src/DurableGraph/Runtime/Capture/CaptureSession.cs) |
 | <a id="object-state-record"></a>**对象状态记录**／`ObjectStateRecord` | 不可变单对象内存记录：`ID + exact ObjectLayout + frozen 内容`；内容为用户 DTO、string、FrozenArrayState、FrozenListState 或 FrozenDictionaryState。同一代码类型承载捕获、解码与归一化结果；仅有该行不证明它是已接受候选。 | [ObjectStateRecord](../src/DurableGraph/Runtime/Capture/ObjectStateRecord.cs) |
@@ -202,7 +203,7 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 | <a id="bdh"></a>**对象写入成本 B／D 与重建成本 H** | B 是本轮 Base payload 精确大小，包括表示 ID 的实际宽度；D 是本轮 Delta payload 上界，未定 prior 文件距离造成 0–4 bytes 超额；H 是已有重建链实际 payload 字节之和。均排除 ObjectId、目录、共享 Frame、Schema/表示登记日志；H 不是总冷读 I/O。 | [ObjectVersionPayloadSize](../src/DurableGraph.Storage/ObjectVersionPayloadSize.cs)、[ObjectVersionChain](../src/DurableGraph.Storage/ObjectVersionChain.cs) |
 | <a id="base-budget"></a>**读放大动机与可选 Base 预算** | 未变对象考察 H/B、变化对象考察 (H+D)/B，严格超过整数倍率阈值才有可选 Base 动机。预算取全部 post-live 对象 B 总和的整数百分比；强制 Base 不占可选预算，首个候选允许超预算，因此不是总写入硬上限。 | [ReadAmplificationBaseBudgetPolicy](../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs) |
 | <a id="content-preparation-planning"></a>**内容准备与修订规划（content preparation / revision planning）** | `CaptureSession.Prepare` 消费已经 Seal 的候选，产生可复用内容及比较结果，不进行 Capture 或生成 StateRevision。修订规划另核对 Parent、应用表示策略并构建 StateRevision；规划结果不是已追加的 Frame。 | [CaptureSession.Prepare](../src/DurableGraph/Runtime/Capture/CaptureSession.cs)、[ObjectRevisionPlanner](../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) |
-| <a id="prepare-append-commit"></a>**图保存准备、追加与提交发布（Prepare / Append / Commit）** | 工作区编排 Capture/Seal、内容准备和修订规划，可持久注册 Schema。AppendDurably 只确认 State 文件屏障；EventHistory 继续追加 Journal 帧并更新 branch ref。State 发布后安装原候选，Event 发布后释放候选、不推进 State 基线。 | [WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs)、[StateRevisionStore](../src/DurableGraph.Storage/StateRevisionStore.cs)、[EventHistoryRepository](../src/DurableGraph.Persistence/EventHistoryRepository.cs) |
+| <a id="prepare-append-commit"></a>**图保存准备、追加与提交发布（Prepare / Append / Commit）** | 工作区编排 Capture/Seal、内容准备和修订规划，可持久注册 Schema。AppendDurably 只确认 State 文件屏障；Repository 继续追加 Journal 帧并更新 branch ref。State 发布后安装原候选，Event 发布后释放候选、不推进 State 基线。 | [WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs)、[StateRevisionStore](../src/DurableGraph.Storage/StateRevisionStore.cs)、[Repository](../src/DurableGraph.Persistence/Repository.cs) |
 
 规划输入是**完整 post-live 集合**，策略 `Writes` 只列实际选写对象：未变对象可能不写，也可能因读放大而写 Base。
 推进 State 时，逻辑移除来自 Parent 完整成员集合减去候选成员集合；目录 Delta 显式编码 Remove，目录 Base 按缺席表达移除。
@@ -215,18 +216,18 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
-| <a id="graph-repository"></a>**事件历史仓库**／`EventHistoryRepository` | 拥有匹配的 Schema/State/Journal 资源和命名分支；可写打开独占 repository.lock，当前每仓库最多一个活动工作副本；拟议的每分支单工作副本见上文。Journal ref 是唯一发布前沿，Schema 仍为单调注册表、尚非联合版本视图；只读打开不写入或修尾。 | [EventHistoryRepository](../src/DurableGraph.Persistence/EventHistoryRepository.cs)、[HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs) |
+| <a id="graph-repository"></a>**仓库**／`Repository` | 拥有匹配的 Schema/State/Journal 资源和命名分支；可写打开独占 repository.lock，当前每仓库最多一个活动工作副本；拟议的每分支单工作副本见上文。Journal ref 是唯一发布前沿，Schema 仍为单调注册表、尚非联合版本视图；只读打开不写入或修尾。 | [Repository](../src/DurableGraph.Persistence/Repository.cs)、[HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs) |
 | **图资源**／`GraphResources` | 匹配 Schema/State 文件的内部所有者；严格只读/可写打开、释放和故障状态，不选择业务 head、不运行模型回调。 | [GraphResources](../src/DurableGraph.Persistence/GraphResources.cs) |
 | **独立图读取**／`GraphReader` | 显式 Revision + RootId 的 exact 解码、升级与两阶段恢复；可请求实际 durable 根的基类。独立读取产生可控导入的 MaterializedGraph；ReadPair 的只读共享路径仅返回领域根，不导入可编辑基线。 | [GraphReader](../src/DurableGraph.Persistence/GraphReader.cs) |
 | <a id="revision-read-session"></a>**操作内解码会话**／`RevisionReadSession` | 封闭一次操作的 State/Schema 资源与模型配置快照，按 `(ObjectId, 实际 head)` 缓存 owned stored DTO/string 及 exact reader。缓存只省重复 body 解码，不缓存每视图验证、Normalize/Upgrade 结果或工作区基线；不是持久分支或公共分支工作副本，也不是 Frame cache。 | [RevisionReadSession](../src/DurableGraph.Persistence/RevisionReadSession.cs)、[RevisionDecoder](../src/DurableGraph.Persistence/RevisionDecoder.cs) |
 | <a id="shared-reference-closure"></a>**安全引用闭包共享（shared reference closure）** | 只读双图在同 ID/head、current binding/完整布局一致、未触发布局重写且完整 current 状态具有相等 proof 的候选中，沿反向引用排除所有依赖非候选的对象；string 直接复用同 key 的解码实例。剩余闭包共享 Allocate/Hydrate，可整体保留稳定环；同 owner head、不同 child head 会使 owner 分裂。缺 proof 保守不共享，业务 record 相等不替代该证明；不是跨图身份保证。 | [GraphReader](../src/DurableGraph.Persistence/GraphReader.cs)、[DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md) |
-| **State 工作区与独立快照**／`WorldWorkspace` | 拥有一份 State 的冻结 DTO、根、实例-ID 绑定和串行 cursor。推进候选可替换同类型根，发布后安装；独立快照借用 State 基线，完成后释放候选，不安装到 State。 | [WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs)、[PreparedWorldSave](../src/DurableGraph.Persistence/PreparedWorldSave.cs) |
-| <a id="graph-session"></a>**分支工作副本的当前实现**／`EventHistorySession<TState>` | 对应候选非泛型 `BranchCheckout`；当前实现仍泛型，拥有分支当前 head、State 工作区及可选 PendingEvent。CreateBranch 先发布 S0 再交付；E/S 严格交替，State 提交保留实例并可替换同类型根。Resume 不重放业务处理器；Dispose 不自动保存。 | [EventHistorySession](../src/DurableGraph.Persistence/EventHistorySession.cs)、[WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs) |
-| <a id="publication-head"></a>**发布 head／Journal ref** | 命名分支 ref 指向权威 Journal 帧，该帧引用 RevisionAddress + RootId。Schema/State 先确认，再追加 Journal 帧，最后发布 ref；严格重开不从坏尾猜测旧 head。初始 S0 完成后才绑定分支名字。 | [HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs)、[EventHistoryRepository](../src/DurableGraph.Persistence/EventHistoryRepository.cs) |
-| <a id="graph-frame"></a>**图定位句柄（graph frame handle）**／`GraphFrame` | 当前 Repository 签发的 Event/State 定位，含 Kind、RootId 与诊断用 RevisionAddress。跨 Repository 实例的 handle 拒绝，不能通过裸地址伪造来源；不是原始 RBF 帧、DTO 或可跨重开的持久书签。 | [GraphFrame](../src/DurableGraph.Persistence/GraphFrame.cs) |
-| **EventHistory、EventFrame / StateFrame** | 独立事件快照图与状态图构成 S0→E1→S1 逻辑历史；两种角色共用 EventJournal 的 EventFrame，用 kind 与 payload 引用图，不是新增两种底层 RBF 帧。E1/S1 的 Revision Parent 均为 S0。 | [GraphEnvelopeCodec](../src/DurableGraph.Persistence/GraphEnvelopeCodec.cs)、[DB-063](design-branches/0063-event-history-journal-slice.md) |
-| **分支与工作副本的操作边界** | Branch 是持久命名 ref，工作副本是内存编辑宿主。当前实现先关闭全仓库活动工作副本，才可从历史 E/S 创建分支或 Move，随后 Resume。DB-078 拟允许源工作副本存活时 Fork 到新分支，仅 Move 的目标分支须无活动工作副本。 | [EventHistoryRepository](../src/DurableGraph.Persistence/EventHistoryRepository.cs) |
-| **实验性双图读取**／`ReadPair` | 同一次调用按输入顺序完整还原两个只读快照；第二边失败不交付 pair，不撤销用户回调副作用。可复用 exact DTO/string 与安全引用闭包，但不承诺跨图实例复用或分离，ReferenceEquals 不能承担业务身份/版本判断或控制分支。只读约束也禁止可观察的 Transient 写入；每个视图的 owner/context/cache 放在图外，需原位初始化时使用独立读取。冷 Resume 仅复用解码，各自分配可变图。 | [EventHistoryRepository](../src/DurableGraph.Persistence/EventHistoryRepository.cs)、[GraphReader](../src/DurableGraph.Persistence/GraphReader.cs) |
+| **State 工作区与独立快照**／`WorldWorkspace` | 拥有可选 State 的冻结 DTO、根、实例-ID 绑定和串行 cursor。推进候选按实际模型捕获，可跨类型替根，发布后安装同一候选；独立快照借用最近 State 基线，无 State 则准备完整 Base，完成后释放候选，不接受 Event 身份或安装为 State。 | [WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs)、[PreparedWorldSave](../src/DurableGraph.Persistence/PreparedWorldSave.cs) |
+| <a id="graph-session"></a>**分支工作副本的当前实现**／`BranchCheckout` | 非泛型，拥有分支精确 Head 与可选 State 工作区。首建先发布非空 E 或 S 再交付；State 提交安装原实例并允许跨类型替根，Event 不推进 State。Checkout 只恢复最近 State，无 PendingEvent；Dispose 不自动保存。 | [BranchCheckout](../src/DurableGraph.Persistence/BranchCheckout.cs)、[WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs) |
+| <a id="publication-head"></a>**发布 head／Journal ref** | 命名分支 ref 指向权威 Journal 帧，该帧引用 RevisionAddress + RootId。Schema/State 先确认，再追加 Journal 帧，最后发布 ref；严格重开不从坏尾猜测旧 head。首个 E 或 S 完成后才绑定分支名字，不交付空 head 分支。 | [HistoryJournal](../src/DurableGraph.Persistence/HistoryJournal.cs)、[Repository](../src/DurableGraph.Persistence/Repository.cs) |
+| <a id="graph-frame"></a>**图定位句柄（旧称 graph frame handle）** | 旧公开 `GraphFrame` 已由 CheckpointAddress 取代；仍含角色、RootId 与诊断用 RevisionAddress，但不能通过裸地址伪造来源；不是原始 RBF 帧、DTO 或可跨重开的持久书签。 | [CheckpointAddress](../src/DurableGraph.Persistence/CheckpointAddress.cs)、[检查点地址](#checkpoint-address) |
+| **EventHistory、EventFrame / StateFrame** | 独立事件快照图与状态图构成自由 E/S 逻辑历史；两种角色共用 EventJournal 的 EventFrame，用 kind 与 payload 引用图，不是新增两种底层 RBF 帧。每条记录的图 Parent 为其严格祖先中最近 State，无 State 时为 null。 | [GraphEnvelopeCodec](../src/DurableGraph.Persistence/GraphEnvelopeCodec.cs)、[DB-078-A](design-branches/0078-a-repository-free-history-implementation.md) |
+| **分支与工作副本的操作边界** | Branch 是持久命名 ref，工作副本是内存编辑宿主。当前实现先关闭全仓库活动工作副本，才可从历史 E/S 创建 ref 或 Move，随后 Checkout；ref-only 创建不物化领域图。DB-078-C 拟允许源工作副本存活时 Fork 到新分支，仅 Move 的目标分支须无活动工作副本。 | [Repository](../src/DurableGraph.Persistence/Repository.cs) |
+| **实验性双图读取**／`ReadPair` | 同一次调用按输入顺序完整还原两个只读快照；第二边失败不交付 pair，不撤销用户回调副作用。可复用 exact DTO/string 与安全引用闭包，但不承诺跨图实例复用或分离，ReferenceEquals 不能承担业务身份/版本判断或控制分支。只读约束也禁止可观察的 Transient 写入；每个视图的 owner/context/cache 放在图外，需原位初始化时使用独立读取。Checkout 采用独立可变图恢复路径。 | [Repository](../src/DurableGraph.Persistence/Repository.cs)、[GraphReader](../src/DurableGraph.Persistence/GraphReader.cs) |
 | **对象状态相等证明**／`ProvesSameState` | 共享候选比较两份完整当前状态，不准备 Base/Delta。SG 经可选 StateEquality 委托接入既有 StateEquals，容器比较完整 shape/count/comparer 与有序槽；缺 proof 返回 false，真实错误传播。true 只证明持久状态，身份/head 与引用闭包仍由 GraphReader 判断；字典重排可保守返回 false，不改其无序映射语义。 | [比较能力](../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)、[DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md) |
 | <a id="commit-outcome"></a>**提交结果**／`GraphCommitOutcome` | NotPublished、Unknown、Published 描述持久发布结果，不描述领域修改是否撤销；Unknown 或发布后安装失败须使工作副本停止续写，dispose/reopen 裁决。NotPublished 也需检查资源是否 faulted。 | [GraphCommitException](../src/DurableGraph.Persistence/GraphCommitException.cs) |
 | <a id="migration-shell"></a>**迁移壳** | 已退出业务模型、仍承载历史 reader/Upgrade 的声明角色，不是新 attribute 或独立框架类型；不可达壳仍完成 source 验证，支持旧 Revision 的程序仍须保留对应能力。 | [真实包见证](../experiments/PackageConsumerProbe/HistoryCapabilityConsumer/Legacy.V2.cs)、[能力合同](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同) |
@@ -237,14 +238,15 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 
 | 遇到的用语 | 当前应区分或采用的表达 | 依据 |
 |---|---|---|
-| `GraphRepository` / `GraphSession` / `PublicationLog` | DB-063 已删除的早期单 head 外观/发布器；当前使用 EventHistoryRepository、EventHistorySession 与 Journal ref，不提供旧仓库兼容。LoadedWorld 只保留为内部机制桥接。 | [事件历史仓库](#graph-repository)、[工作副本](#graph-session) |
+| `GraphRepository` / `GraphSession` / `PublicationLog` | DB-063 已删除的早期单 head 外观/发布器；当前使用 Repository、BranchCheckout 与 Journal ref，不提供旧仓库兼容。LoadedWorld 只保留为内部机制桥接。 | [仓库](#graph-repository)、[工作副本](#graph-session) |
+| `EventHistoryRepository` / `EventHistorySession<TState>` / `Resume<TState>` / `GraphFrame` | DB-078-A 公共迁移前的名称，分别对应 Repository / 非泛型 BranchCheckout / Checkout / CheckpointAddress；同时取消交替、固定根类型与 PendingEvent 合同，不能仅按改名解释旧行为。 | [DB-078-A 实施记录](design-branches/0078-a-repository-free-history-implementation.md) |
 | `VersionedSchema`、Schema descriptor | 描述版本化类型定义时落到[完整精确 Schema](#exact-schema)；索引键另称 SchemaKey。这是概念到实现的对应，不声称曾存在一次正式类重命名。 | [DurableSchema](../src/DurableGraph/Schema/DurableSchema.cs) |
 | `Snapshot` / 快照 | 合法概念须加限定：模型配置快照、冻结 DTO 快照、只读历史图；不等于分支工作副本或 CLR 深不可变实例。`.dgsnapshot` 是已拒绝的旧构建历史格式；`__DurableSnapshotVn` / InMemoryStateStore snapshot 路径是已删除的历史符号，不能借此否定当前 `StateModelSnapshot`。 | [模型执行环境](#model-environment)、[Schema 历史材料](#schema-history)、[版本化 DTO](#state-dto) |
 | `SchemaOnly`、`GenerateBinaryBody` | DB-035 Wave 1 已删除的增量开发开关。裸 `[DurableType]` 现在是唯一生成模式，产生 exact Schema/history、版本化 DTO/body；class 还生成 State model，struct 使用静态值桥接；不支持的形状直接诊断。 | [唯一生成入口](../src/DurableGraph.Generator/DurableSchemaGenerator.cs) |
 | `Current`、当前状态、DTO 列表 | 分别写“当前模型版本 DTO”“工作副本已提交的 State 基线”“本次候选 DTO”或“当前领域值”；对象列表注明 stored/current/candidate。`PreparedCapturedObject.Current` 是本次候选行。 | [current 视图](#current-view)、[捕获会话](#capture-session)、[PreparedCapturedGraph](../src/DurableGraph/Runtime/Capture/PreparedCapturedGraph.cs) |
 | Base Revision、`StateRevision.CreateObjectHeadMapBase/CreateObjectHeadMapDelta` | 这两个工厂选择[目录 Base/Delta](#head-map)，不保证本地对象都是相同表示。`BaseSchema` 另属继承关系。 | [StateRevision](../src/DurableGraph.Storage/StateRevision.cs) |
 | `CapturedObject`、`PreparedBase.Payload`、早期 `EstimatedBaseWriteBytes` | 前两项已在 DB-035 Wave 3 分别迁移为阶段中性的 `ObjectStateRecord` 与 raw `PreparedBaseBody.Body`；带类型头的 Base body 只以 StateStore 内部品牌流转。策略输入使用 `BasePayloadBytes`、`DeltaPayloadBytesUpperBound`、`ReconstructionPayloadBytes`，明确 B 是精确值、D 是上界、H 是已有重建链 payload。 | [对象状态记录](#object-state-record)、[已准备内容](#prepared-content)、[ObjectSaveEstimate](../src/DurableGraph.Persistence/ObjectSaveEstimate.cs) |
-| head、Parent、prior、previous | head 指明“对象 head”或“分支发布 head”；Parent 指明 Revision Parent 或 Journal Parent。Journal 为 S0→E1→S1，而 E1/S1 的 Revision Parent 均为 S0；对象 prior 是 Revision Parent 为此 ID 指定的对象 head。内存 Previous 不能自动当作已认证 Parent。`revisionAddress` 指定 Revision 地址，不证明该地址已发布。 | [Parent/prior](#parent-prior)、[提交发布](#prepare-append-commit) |
+| head、Parent、prior、previous | head 指明“对象 head”或“分支发布 head”；Parent 指明 Revision Parent 或 Journal Parent。Journal Parent 为提交前精确 Head，图 Parent 为其自身或祖先中最近 State，无 State 时为空；对象 prior 是 Revision Parent 为此 ID 指定的对象 head。内存 Previous 不能自动当作已认证 Parent。`revisionAddress` 指定 Revision 地址，不证明该地址已发布。 | [Parent/prior](#parent-prior)、[提交发布](#prepare-append-commit) |
 | intern、GC、Save、反序列化 | intern 在此为引用身份登记；GC 区分成员 Remove、CLR 回收、ID 数字回收与物理回收。Save/反序列化可作整体口语，讨论实现时展开为 Capture/Prepare/Append 或 Decode/Upgrade/Allocate/Hydrate。 | [对象身份](#object-identity)、[成员移除](#local-external-remove)、[实例恢复](#allocate-hydrate) |
 | `DurableObject`、`DurableId`、`[Durable]`、`[DurableMember]`、`RebuildTransient` | 早期工作名列表中的提案，不能直接声明为当前 API 的旧名。当前代码使用 IDurableObject、ObjectId、DurableType/DurableField 等各自角色；MVP 的 Transient 重建由用户完成，无库内自动 hook。 | [早期工作名提案](archive/2026-09-06/DurableGraph-target-design-v0.md#23-工作名与术语建议)、[恢复目标与宿主边界](DurableGraph-target-design-v0.md#恢复transient-与宿主边界) |
 

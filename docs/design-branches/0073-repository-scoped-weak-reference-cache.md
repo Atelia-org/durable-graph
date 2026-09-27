@@ -77,7 +77,7 @@ DB-075 修复了资格和最终类型证明，**没有改变 binding 的寿命**
 
 ### 2.3 已有 owner 足够；弱实例不等于有界元数据
 
-[EventHistoryRepository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 已用 `_identity`、
+[EventHistoryRepository](../../src/DurableGraph.Persistence/Repository.cs) 已用 `_identity`、
 `GraphFrame.Owner` 与 `CheckFrame` 拒绝跨 repo frame，并统一管理资源、重入和 Dispose。
 无需新增 `RepositoryScope`、第二个 Identity，或把独立的 `RevisionReadSession` 改造成 repo handle。
 

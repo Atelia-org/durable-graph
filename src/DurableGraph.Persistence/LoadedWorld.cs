@@ -15,8 +15,12 @@ internal static class LoadedWorld {
         TWorld world,
         StateModelRegistry models,
         ReadAmplificationBaseBudgetParameters parameters) where TWorld : class, IDurableObject {
-        WorldWorkspace<TWorld> workspace = WorldWorkspace<TWorld>.Create(store, schemas, world, models);
-        using PreparedWorldSave<TWorld> pending = workspace.Stage(parameters);
+        ArgumentNullException.ThrowIfNull(world);
+        if (world.GetType() != typeof(TWorld)) {
+            throw new ArgumentException("World must have its requested exact domain type.", nameof(world));
+        }
+        WorldWorkspace workspace = WorldWorkspace.Create(store, schemas, world, models);
+        using PreparedWorldSave pending = workspace.Stage(parameters);
         return new(pending.RootId, pending.Revision);
     }
 
@@ -30,7 +34,14 @@ internal static class LoadedWorld {
         FrameAddress revisionAddress,
         ObjectId worldId,
         StateModelRegistry models) where TWorld : class, IDurableObject {
-        return new(WorldWorkspace<TWorld>.Load(store, schemas, revisionAddress, worldId, models));
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(schemas);
+        ArgumentNullException.ThrowIfNull(models);
+        ArgumentOutOfRangeException.ThrowIfZero(worldId.Value, nameof(worldId));
+        RevisionReadSession reads = new(store, schemas, models.Snapshot(schemas));
+        MaterializedGraph<TWorld> loaded = GraphReader.Read<TWorld>(reads, revisionAddress, worldId,
+            requireExactRootType: true);
+        return new(WorldWorkspace.FromLoaded(reads, loaded));
     }
 }
 
@@ -40,11 +51,11 @@ internal static class LoadedWorld {
 /// then loads the returned address to obtain a new baseline. This is not Commit or publication.
 /// </remarks>
 internal sealed class LoadedWorld<TWorld> where TWorld : class, IDurableObject {
-    private readonly WorldWorkspace<TWorld> _workspace;
+    private readonly WorldWorkspace _workspace;
 
-    internal LoadedWorld(WorldWorkspace<TWorld> workspace) => _workspace = workspace;
+    internal LoadedWorld(WorldWorkspace workspace) => _workspace = workspace;
 
-    public TWorld World => _workspace.World;
+    public TWorld World => (TWorld)_workspace.World!;
     public ObjectId WorldId => _workspace.WorldId;
     public FrameAddress ParentRevisionAddress => _workspace.ParentRevisionAddress!.Value;
 
@@ -53,7 +64,7 @@ internal sealed class LoadedWorld<TWorld> where TWorld : class, IDurableObject {
     /// never appends State, publishes, or accepts a new Parent. Failed captures can consume IDs.
     /// </summary>
     public PreparedWorldRevision Prepare(ReadAmplificationBaseBudgetParameters parameters) {
-        using PreparedWorldSave<TWorld> pending = _workspace.Stage(parameters);
+        using PreparedWorldSave pending = _workspace.Stage(parameters);
         return new(WorldId, pending.Revision);
     }
 }

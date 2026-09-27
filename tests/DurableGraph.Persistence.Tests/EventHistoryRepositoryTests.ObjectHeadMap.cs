@@ -9,17 +9,17 @@ public sealed partial class EventHistoryRepositoryTests {
         Node world = LargeWorld();
         FrameAddress first, shrunk, hot, cold;
         ObjectId rootId;
-        using (EventHistoryRepository repository = CreateRepository()) {
+        using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", world, NoRebase);
-            first = session.StateRevisionAddress;
-            rootId = session.StateId;
-            session.CommitDomainEvent(new Node { Value = 6 }, NoRebase);
+            first = session.StateRevisionAddress!.Value;
+            rootId = session.StateId!.Value;
+            session.CommitEvent(new Node { Value = 6 }, NoRebase);
             world.Left = null;
             world.Value = 2;
-            shrunk = session.CommitDomainState(NoRebase).RevisionAddress;
-            Assert.Same(world, session.State);
-            Assert.Equal(shrunk, session.StateRevisionAddress);
-            Assert.Null(session.PendingEvent);
+            shrunk = session.CommitState(NoRebase).RevisionAddress;
+            Assert.Same(world, ((Node)session.State!));
+            Assert.Equal(shrunk, session.StateRevisionAddress!.Value);
+            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
             world.Right!.Value = 9;
             hot = Save(session).RevisionAddress;
         }
@@ -39,20 +39,20 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(ObjectHeadMapKind.Delta, states.Read(hot).ObjectHeadMapKind);
             Assert.Equal(shrunk, states.Read(hot).ParentRevisionAddress);
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
-            using var session = repository.Resume<Node>("main");
-            Assert.Equal(rootId, session.StateId);
-            Assert.Null(session.State.Left);
-            Assert.Equal((byte)2, session.State.Value);
-            Assert.Equal((byte)9, session.State.Right!.Value);
-            Assert.Same(session.State.Text, session.State.Right.Text);
-            session.State.Value = 3;
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using var session = repository.Checkout("main");
+            Assert.Equal(rootId, session.StateId!.Value);
+            Assert.Null(((Node)session.State!).Left);
+            Assert.Equal((byte)2, ((Node)session.State!).Value);
+            Assert.Equal((byte)9, ((Node)session.State!).Right!.Value);
+            Assert.Same(((Node)session.State!).Text, ((Node)session.State!).Right!.Text);
+            ((Node)session.State!).Value = 3;
             cold = Save(session).RevisionAddress;
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenReadOnlyExisting(_root, Models())) {
-            GraphFrame head = repository.GetHead("main");
+        using (Repository repository = Repository.OpenReadOnlyExisting(_root, Models())) {
+            CheckpointAddress head = repository.GetHead("main");
             Assert.Equal(cold, head.RevisionAddress);
-            Node restored = repository.ReadState<Node>(head);
+            Node restored = ((Node)repository.ReadState(head));
             Assert.Equal((byte)3, restored.Value);
             Assert.Equal((byte)9, restored.Right!.Value);
             Assert.Null(restored.Left);
@@ -66,22 +66,22 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData((int)CommitCheckpoint.BeforeInstall, GraphCommitOutcome.Published)]
     public void MapBaseRootReplacementKeepsPublicationAndInstallationFailureBoundaries(int point, GraphCommitOutcome outcome) {
         FrameAddress first, candidate;
-        using (EventHistoryRepository repository = CreateRepository()) {
+        using (Repository repository = CreateRepository()) {
             Node original = LargeWorld();
             using var session = repository.CreateBranch("main", original, NoRebase);
-            first = session.StateRevisionAddress;
-            session.CommitDomainEvent(new Node { Value = 6 }, NoRebase);
+            first = session.StateRevisionAddress!.Value;
+            session.CommitEvent(new Node { Value = 6 }, NoRebase);
             Node replacement = new() { Value = 7, Right = original.Right, Text = original.Text };
             repository.Checkpoint = checkpoint => {
-                Assert.Same(original, session.State);
+                Assert.Same(original, ((Node)session.State!));
                 if (checkpoint == (CommitCheckpoint)point) { throw new IOException("interrupted map Base publication"); }
             };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitDomainState(replacement, NoRebase));
+            GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(replacement, NoRebase));
             Assert.Equal(outcome, error.Outcome);
             candidate = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
             Assert.True(repository.IsFaulted);
-            Assert.Same(original, session.State);
-            Assert.Equal(first, session.StateRevisionAddress);
+            Assert.Same(original, ((Node)session.State!));
+            Assert.Equal(first, session.StateRevisionAddress!.Value);
         }
         using (SegmentStore segments = OpenState()) {
             using StateRevisionStore states = new(segments);
@@ -90,17 +90,17 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(3, states.ReadLiveObjectHeadMap(candidate).Count);
             Assert.Equal(1003, states.ReadLiveObjectHeadMap(first).Count);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
-        using var recovered = reopened.Resume<Node>("main");
+        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using var recovered = reopened.Checkout("main");
         if (outcome == GraphCommitOutcome.Published) {
-            Assert.Equal(candidate, recovered.StateRevisionAddress);
-            Assert.Equal((byte)7, recovered.State.Value);
-            Assert.Null(recovered.State.Left);
-            Assert.Null(recovered.PendingEvent);
+            Assert.Equal(candidate, recovered.StateRevisionAddress!.Value);
+            Assert.Equal((byte)7, ((Node)recovered.State!).Value);
+            Assert.Null(((Node)recovered.State!).Left);
+            Assert.Equal(GraphFrameKind.State, recovered.Head.Kind);
         } else {
-            Assert.Equal(first, recovered.StateRevisionAddress);
-            Assert.NotNull(recovered.State.Left);
-            Assert.Equal((byte)6, recovered.GetPendingEvent<Node>().Value);
+            Assert.Equal(first, recovered.StateRevisionAddress!.Value);
+            Assert.NotNull(((Node)recovered.State!).Left);
+            Assert.Equal((byte)6, ((Node)reopened.ReadEvent(recovered.Head)).Value);
         }
     }
 

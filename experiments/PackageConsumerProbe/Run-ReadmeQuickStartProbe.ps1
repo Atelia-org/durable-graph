@@ -64,22 +64,22 @@ try {
     Write-Host "ReadmeQuickStart:Hp=97:UpgradeDay=1:HistoryPreserved"
 
     # Compile the browsing snippet unchanged, with only its surrounding program context supplied.
-    $browse = "using Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
+    $browse = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        (Get-Example "csharp" 'using var history = EventHistoryRepository.OpenReadOnlyExisting(path, models);') +
+        (Get-Example "csharp" 'using var history = Repository.OpenReadOnlyExisting(path, models);') +
         "`nif (events.Count != 3 || pair.First is not World || pair.Second is not DamageEvent) { throw new InvalidOperationException(); }`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $browse, $utf8)
     Invoke-DotNet (@("run", "--project", $project, "--no-restore") + $properties + @("--", $database))
 
     # Execute the exact policy-override snippet against the same freshly packaged API.
-    $configured = "using Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
+    $configured = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        "using var repository = EventHistoryRepository.OpenExisting(path, models);`n" +
-        "using var session = repository.Resume<World>(""main"");`nWorld world = session.State;`n" +
+        "using var repository = Repository.OpenExisting(path, models);`n" +
+        "using var session = repository.Checkout(""main"");`nWorld world = (World)session.State!;`n" +
         (Get-Example "csharp" 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
-        "`nif (world.Hero.Hp != 96 || session.PendingEvent is not null) { throw new InvalidOperationException(); }`n" +
+        "`nif (world.Hero.Hp != 96 || !ReferenceEquals(world, session.State)) { throw new InvalidOperationException(); }`n" +
         "Console.WriteLine(""ReadmePolicyOverride:Hp=96:Threshold=11:Budget=5"");`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $configured, $utf8)
     Invoke-DotNet (@("run", "--project", $project, "--no-restore") + $properties + @("--", $database))

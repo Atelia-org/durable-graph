@@ -201,7 +201,7 @@ DB-062/063 的已选保存拓扑仍可复用磁盘中真实未变的 ObjectVersi
 [RevisionDecoder](../../src/DurableGraph.Persistence/RevisionDecoder.cs)、
 [GraphReader](../../src/DurableGraph.Persistence/GraphReader.cs)；
 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 与
-[EventHistoryRepository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 接通仅阶段 A 的冷 Resume。
+[EventHistoryRepository](../../src/DurableGraph.Persistence/Repository.cs) 接通仅阶段 A 的冷 Resume。
 缓存按完整 head 的重建结果复用；不同 head 的链即使共享 Base 前缀，仍分别重建。
 
 | 证据 | 结果与边界 |

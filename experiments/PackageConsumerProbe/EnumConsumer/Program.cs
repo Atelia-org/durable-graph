@@ -54,16 +54,16 @@ internal static class Program {
         World world = World.Seed();
         FrameAddress first, historical, unchanged;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
-            first = session.StateRevisionAddress;
-            worldId = session.StateId;
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+            using BranchCheckout session = repository.CreateBranch("main", world, Policy);
+            first = session.StateRevisionAddress!.Value;
+            worldId = session.StateId!.Value;
             world.Modes[0] = (Mode)101;
-            session.CommitDomainEvent(session.State, Policy);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State), "Commit replaced the working domain instance.");
+            session.CommitEvent(((World)session.State!), Policy);
+            historical = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)), "Commit replaced the working domain instance.");
         }
         Inspect(directory, (store, schemas) => {
             var ids = CheckHistorical(store, schemas, historical, worldId);
@@ -74,16 +74,16 @@ internal static class Program {
                 "An edited domain value changed the earlier frozen state.");
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            CheckGraph(session.State, 101, 0);
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((World)session.State!), 101, 0);
         }
         CheckSavedContentIsolation(directory + "-frozen");
     }
 
     private static void CheckSavedContentIsolation(string directory) {
         World world = World.Seed();
-        using var repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+        using var repository = Repository.CreateNew(directory, Models(), Options);
         using var first = repository.CreateBranch("main", world, Policy);
         world.Mode = default;
         world.Optional = null;
@@ -93,13 +93,13 @@ internal static class Program {
         world.Box.Value = null;
         world.Cell = default;
         first.Dispose();
-        using EventHistorySession<World> loaded = repository.Resume<World>("main");
-        CheckGraph(loaded.State, 100, 0);
-        loaded.State.Modes[0] = (Mode)555;
-        loaded.CommitDomainEvent(loaded.State, Policy);
-        GraphFrame changed = loaded.CommitDomainState(Policy);
-        loaded.State.Modes.Clear();
-        World restored = repository.ReadState<World>(changed);
+        using BranchCheckout loaded = repository.Checkout("main");
+        CheckGraph(((World)loaded.State!), 100, 0);
+        ((World)loaded.State!).Modes[0] = (Mode)555;
+        loaded.CommitEvent(((World)loaded.State!), Policy);
+        CheckpointAddress changed = loaded.CommitState(Policy);
+        ((World)loaded.State!).Modes.Clear();
+        World restored = ((World)repository.ReadState(changed));
         CheckGraph(restored, 555, 0);
     }
 #else
@@ -113,9 +113,9 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId));
         Require(Upgrades.Calls.Count == 0 && Upgrades.OwnerCalls == 0, "Exact decoding invoked business conversion.");
         FrameAddress upgraded, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             var modes = world.Modes;
             CheckGraph(world, 1101, 1000);
             Require(Upgrades.OwnerCalls == 2 && Upgrades.Calls.Count == 39 &&
@@ -125,14 +125,14 @@ internal static class Program {
                 Upgrades.Calls.Count(id => id == ids.Grid) == 1 &&
                 Upgrades.Calls.Count(id => id == ids.Box) == 1,
                 "Enum conversion must run once per present value and shared owner; absent values do not call business code.");
-            session.CommitDomainEvent(session.State, Policy);
-            upgraded = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            upgraded = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
             world.Modes[0] = (Mode)1102;
-            session.CommitDomainEvent(session.State, Policy);
-            changed = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State) && ReferenceEquals(modes, world.Modes), "Commit replaced working instances.");
+            session.CommitEvent(((World)session.State!), Policy);
+            changed = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)) && ReferenceEquals(modes, world.Modes), "Commit replaced working instances.");
         }
         Inspect(directory, (store, schemas) => {
             StateRevision rewrite = store.Read(upgraded);
@@ -143,9 +143,9 @@ internal static class Program {
             RequireListDelta(store.Read(changed), ids.List);
             CheckHistorical(store, schemas, historical, worldId);
         });
-        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main");
-        CheckGraph(finalSession.State, 1102, 1000);
+        using Repository finalRepository = Repository.OpenExisting(directory, Models(), Options);
+        using BranchCheckout finalSession = finalRepository.Checkout("main");
+        CheckGraph(((World)finalSession.State!), 1102, 1000);
         Require(Upgrades.Calls.Count == 39 && Upgrades.OwnerCalls == 2, "Current Base/Delta reopen re-ran Upgrade.");
     }
 #endif

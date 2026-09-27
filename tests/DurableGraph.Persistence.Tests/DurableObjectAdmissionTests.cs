@@ -53,17 +53,17 @@ public sealed partial class EventHistoryRepositoryTests {
 
     [Fact]
     public void ErasedEventBoundaryRejectsBoxedAndUnregisteredMarkersBeforePublication() {
-        using EventHistoryRepository repository = CreateRepository();
-        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), TestSavePolicies.Baseline);
-        GraphFrame initial = session.Head;
+        using Repository repository = CreateRepository();
+        using BranchCheckout session = repository.CreateBranch("main", new Node(), TestSavePolicies.Baseline);
+        CheckpointAddress initial = session.Head;
         IDurableObject boxed = new BoxedMarker();
-        Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(boxed, TestSavePolicies.Baseline));
-        Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(new UnregisteredMarker(), TestSavePolicies.Baseline));
+        Assert.Throws<ArgumentException>(() => session.CommitEvent(boxed, TestSavePolicies.Baseline));
+        Assert.Throws<ArgumentException>(() => session.CommitEvent(new UnregisteredMarker(), TestSavePolicies.Baseline));
         Assert.Same(initial, session.Head);
-        Assert.Null(session.PendingEvent);
+        Assert.Equal(GraphFrameKind.State, session.Head.Kind);
         Assert.False(session.IsFaulted);
-        session.CommitDomainEvent(new Node { Value = 7 }, TestSavePolicies.Baseline);
-        Assert.Equal((byte)7, session.GetPendingEvent<Node>().Value);
+        session.CommitEvent(new Node { Value = 7 }, TestSavePolicies.Baseline);
+        Assert.Equal((byte)7, ((Node)repository.ReadEvent(session.Head)).Value);
     }
 
     private struct BoxedMarker : IDurableObject { }

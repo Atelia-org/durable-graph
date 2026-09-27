@@ -47,11 +47,12 @@ var models = new StateModelRegistry();
 AppCatalog.Register(models);
 MiddleCatalog.Register(models);
 BaseCatalog.Register(models);
-using var repository = EventHistoryRepository.OpenExisting(directory, models);
-using var session = repository.Resume<Leaf>("main");
-session.State.Ancestor++;
-session.CommitDomainEvent(session.State);
-session.CommitDomainState(new ReadAmplificationBaseBudgetParameters(8, 10));
+using var repository = Repository.OpenExisting(directory, models);
+using var session = repository.Checkout("main");
+var leaf = (Leaf)session.State!;
+leaf.Ancestor++;
+session.CommitEvent(leaf);
+session.CommitState(new ReadAmplificationBaseBudgetParameters(8, 10));
 ```
 
 Each library calls its own internal `Generated.DurableDefinitions`; `RegisterReaders` provides

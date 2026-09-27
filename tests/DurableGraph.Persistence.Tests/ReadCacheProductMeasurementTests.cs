@@ -19,24 +19,24 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                 Node world = new() { Value = 1, Text = new string('x', 32), Links = [] };
                 for (byte i = 0; i < 16; i++) world.Links.Add(new() { Value = i, Text = world.Text });
                 world.Next = world.Alias = world.Links[0];
-                using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(path, models, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
-                    using EventHistorySession<Node> session = repository.CreateBranch("main", world, NoRebase);
+                using (Repository repository = Repository.CreateNew(path, models, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+                    using BranchCheckout session = repository.CreateBranch("main", world, NoRebase);
                     for (int step = 0; step < 3; step++) {
-                        session.CommitDomainEvent(new Node { Value = 7 }, NoRebase);
+                        session.CommitEvent(new Node { Value = 7 }, NoRebase);
                         world.Links[step].Value++;
-                        session.CommitDomainState(NoRebase);
+                        session.CommitState(NoRebase);
                     }
-                    session.CommitDomainEvent(new Node { Value = 9, Links = world.Links }, NoRebase);
+                    session.CommitEvent(new Node { Value = 9, Links = world.Links }, NoRebase);
                 }
                 ulong expected = Checksum(world);
-                var open = Measure(() => EventHistoryRepository.OpenReadOnlyExisting(path, models));
-                using (EventHistoryRepository repository = open.Value) {
-                    GraphFrame pending = repository.GetHead("main");
-                    GraphFrame state = repository.GetPreviousState(pending);
-                    var first = Measure(() => repository.ReadState<Node>(state));
-                    var warm = Measure(() => repository.ReadState<Node>(state));
-                    var pair = Measure(() => repository.ReadPair<Node, Node>(state, pending));
-                    var pairWarm = Measure(() => repository.ReadPair<Node, Node>(state, pending));
+                var open = Measure(() => Repository.OpenReadOnlyExisting(path, models));
+                using (Repository repository = open.Value) {
+                    CheckpointAddress pending = repository.GetHead("main");
+                    CheckpointAddress state = Assert.IsType<CheckpointAddress>(repository.GetPreviousState(pending));
+                    var first = Measure(() => ((Node)repository.ReadState(state)));
+                    var warm = Measure(() => ((Node)repository.ReadState(state)));
+                    var pair = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
+                    var pairWarm = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
                     Assert.Equal(expected, Checksum(first.Value));
                     Assert.Equal(expected, Checksum(warm.Value));
                     Assert.Equal(expected, Checksum(pair.Value.First));
@@ -44,20 +44,22 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     Assert.Equal((byte)9, pair.Value.Second.Value);
                     Assert.Equal(16, pair.Value.Second.Links!.Count);
                     if (sample >= 0) Write(new { Kind = "product-read", Sample = sample, DurableNodes = 17,
-                        CompletedStateChanges = 3, PendingEvent = true, OpenReadOnly = open.Cost,
+                        CompletedStateChanges = 3, HeadIsEvent = true, OpenReadOnly = open.Cost,
                         FirstReadAfterOpen = first.Cost, RepeatedRead = warm.Cost,
                         ReadPairAfterReads = pair.Cost, RepeatedReadPair = pairWarm.Cost, Checksum = expected });
                 }
 
-                var writableOpen = Measure(() => EventHistoryRepository.OpenExisting(path, models));
-                using (EventHistoryRepository repository = writableOpen.Value) {
-                    var resume = Measure(() => repository.Resume<Node>("main"));
-                    using EventHistorySession<Node> session = resume.Value;
-                    Assert.Equal(expected, Checksum(session.State));
-                    Assert.NotSame(session.State.Links, session.GetPendingEvent<Node>().Links);
-                    Assert.NotSame(session.State.Links![0], session.GetPendingEvent<Node>().Links![0]);
-                    session.State.Links[0].Value++;
-                    ulong nextExpected = Checksum(session.State);
+                var writableOpen = Measure(() => Repository.OpenExisting(path, models));
+                using (Repository repository = writableOpen.Value) {
+                    var resume = Measure(() => repository.Checkout("main"));
+                    using BranchCheckout session = resume.Value;
+                    Node editableState = Assert.IsType<Node>(session.State);
+                    Assert.NotNull(editableState.Links);
+                    Assert.Equal(expected, Checksum(editableState));
+                    Assert.NotSame(editableState.Links, ((Node)repository.ReadEvent(session.Head)).Links);
+                    Assert.NotSame(editableState.Links![0], ((Node)repository.ReadEvent(session.Head)).Links![0]);
+                    editableState.Links[0].Value++;
+                    ulong nextExpected = Checksum(editableState);
 
                     Stamp afterPrepare = default, beforeAppend = default, afterAppend = default;
                     repository.Checkpoint = checkpoint => {
@@ -66,11 +68,11 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                         else if (checkpoint == CommitCheckpoint.AfterStateDurable) afterAppend = Stamp.Now();
                     };
                     Stamp start = Stamp.Now();
-                    GraphFrame committed = session.CommitDomainState(NoRebase);
+                    CheckpointAddress committed = session.CommitState(NoRebase);
                     Stamp end = Stamp.Now();
                     repository.Checkpoint = null;
                     Assert.True(afterPrepare.Timestamp > 0 && beforeAppend.Timestamp > 0 && afterAppend.Timestamp > 0);
-                    Assert.Equal(nextExpected, Checksum(repository.ReadState<Node>(committed)));
+                    Assert.Equal(nextExpected, Checksum(((Node)repository.ReadState(committed))));
                     if (sample >= 0) Write(new { Kind = "product-write", Sample = sample,
                         OpenWritable = writableOpen.Cost, ResumeAfterOpen = resume.Cost,
                         PrepareIncludingEntryPreflight = Between(start, afterPrepare),

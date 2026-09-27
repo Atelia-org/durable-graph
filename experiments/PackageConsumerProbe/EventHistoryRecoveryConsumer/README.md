@@ -18,15 +18,15 @@ The runner creates isolated packages/history/build/database directories beneath
 `experiments/PackageConsumerProbe/obj/`, publishes four generated Schema histories and builds
 again in Verify mode.
 
-It also inspects the real StateStore nupkg and restored package directory: DLL/XML must be adjacent,
-the XML must match the package, and the facade's Commit, Resume, initial CreateBranch, status and
+It also inspects the real Persistence nupkg and restored package directory: DLL/XML must be adjacent,
+the XML must match the package, and the facade's Commit, Checkout, initial CreateBranch, status and
 history-enumeration members must contain their summaries and remarks.
 It invokes the built consumer in separate processes:
 
 | Command | Behavior |
 |---|---|
-| `init-record <directory>` | Creates S0 at Hp 10, records E1, leaves it Pending, then exits. |
-| `recover <directory>` | Resumes the existing branch, rebuilds Transient lookup, applies only an existing PendingEvent, commits S, and exits. It never creates new work. |
+| `init-record <directory>` | Creates S0 at Hp 10, records E1, leaves application work unfinished, then exits. |
+| `recover <directory>` | Checks out the existing branch, rebuilds Transient lookup, explicitly reads the application-selected Event and applies it, commits S, and exits. It never creates new work. |
 | `hot <directory>` | Creates a fresh repository and completes E1/S1 without reopening. |
 | `next <directory>` | Accepts a separate second command, records E2, and completes S2. |
 | `verify <directory>` | Opens read-only and reads old E1 with only DamageEvent/ActorSnapshot registered. |
@@ -53,7 +53,7 @@ Open skips State metadata validation.
 [PendingRecovery.cs](PendingRecovery.cs) is the same ordinary application control function linked
 into internal fault regression tests. Restore does not run domain constructors or initializers;
 the example explicitly rebuilds Transient lookup before applying an event. A second recovery when
-PendingEvent is null performs no business application and appends nothing. The runner compares
+the application protocol reports no unfinished work performs no business application and appends nothing. The runner compares
 persisted bytes, and verifies read-only browsing changes neither bytes nor file timestamps.
 
 On any exception the example logs the exception and, when available, GraphCommitException.Outcome
@@ -62,9 +62,13 @@ retry automatically, repair files, or synthesize a replacement Event. An Open fa
 repository health to report. This conservative policy does not imply every pre-write failure
 faults a repository or rolls back domain mutations.
 
+This application imposes its own strict S/E alternation: every Event is followed by the State
+that incorporates it before another command can be recorded. Only within that application protocol
+is an Event head its processing cursor. `PendingRecovery` explicitly calls `ReadEvent`; Repository
+and BranchCheckout do not expose or infer PendingEvent. General E/E/S/S histories must record an
+application sequence/cursor in State and choose the unprocessed Event range themselves.
 Recovery assumes an existing branch and serialized host control without concurrent branch moves.
-If a reopened head is S, no PendingEvent remains; this alone cannot prove that an external request
-completed, because an E publication failure may also leave S. External request identity and
-exactly-once external side effects are not supplied by this example. The business handler here
-only mutates domain memory. Internal checkpoint tests, rather than this public-package program,
-provide deterministic failure injection evidence.
+A State head cannot prove that an external request completed: publication may have failed before
+its Event existed. External request identity and exactly-once external side effects are not supplied
+by this example. The handler only mutates domain memory. Internal checkpoint tests, rather than
+this public-package program, provide deterministic failure injection evidence.

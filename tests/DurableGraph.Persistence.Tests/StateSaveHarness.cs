@@ -9,25 +9,25 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 /// <summary>
 /// Test-only adapter for codec/history mechanism fixtures that describe successive State saves.
 /// First save publishes S0; later saves publish a trivial Event then the next State through
-/// the real EventHistory facade. Production callers explicitly model their own E/S boundary.
+/// the real Repository. The marker is a fixture convention; product history permits E/E and S/S.
 /// </summary>
 internal sealed class StateSaveHarness : IDisposable {
-    private readonly EventHistoryRepository _repository;
-    private GraphFrame? _stateHead;
-    private StateSaveHarness(EventHistoryRepository repository, bool hasHead) {
+    private readonly Repository _repository;
+    private CheckpointAddress? _stateHead;
+    private StateSaveHarness(Repository repository, bool hasHead) {
         _repository = repository;
         if (hasHead) {
-            GraphFrame head = repository.GetHead("main");
+            CheckpointAddress head = repository.GetHead("main");
             _stateHead = head.Kind == GraphFrameKind.State ? head : repository.GetPreviousState(head);
         }
     }
     internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
         models.Register(MarkerModel);
-        return new(EventHistoryRepository.CreateNew(path, models, options), false);
+        return new(Repository.CreateNew(path, models, options), false);
     }
     internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
         models.Register(MarkerModel);
-        return new(EventHistoryRepository.OpenExisting(path, models, options), true);
+        return new(Repository.OpenExisting(path, models, options), true);
     }
     internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
     internal ObjectId? WorldId => _stateHead?.RootId;
@@ -37,16 +37,16 @@ internal sealed class StateSaveHarness : IDisposable {
         return new(this, world, null);
     }
     internal StateSaveSession<T> Load<T>() where T : class, IDurableObject {
-        EventHistorySession<T> session = _repository.Resume<T>("main");
-        return new(this, session.State, session);
+        BranchCheckout session = _repository.Checkout("main");
+        return new(this, ((T)session.State!), session);
     }
-    internal EventHistorySession<T> Initialize<T>(T world,
+    internal BranchCheckout Initialize<T>(T world,
         ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject {
-        EventHistorySession<T> session = _repository.CreateBranch("main", world, parameters);
+        BranchCheckout session = _repository.CreateBranch("main", world, parameters);
         _stateHead = session.Head;
         return session;
     }
-    internal void Installed(GraphFrame frame) => _stateHead = frame;
+    internal void Installed(CheckpointAddress frame) => _stateHead = frame;
     internal static IDurableObject NewMarker() => new Marker();
     public void Dispose() => _repository.Dispose();
 
@@ -64,23 +64,23 @@ internal sealed class StateSaveHarness : IDisposable {
 }
 
 internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial,
-    EventHistorySession<T>? session) : IDisposable where T : class, IDurableObject {
+    BranchCheckout? session) : IDisposable where T : class, IDurableObject {
     internal bool IsFaulted => repository.IsFaulted;
-    internal T World => session is null ? initial : session.State;
+    internal T World => session is null ? initial : ((T)session.State!);
     internal ObjectId? WorldId => session?.StateId;
     internal FrameAddress? ParentRevisionAddress => session?.StateRevisionAddress;
     internal FrameAddress Commit(ReadAmplificationBaseBudgetParameters parameters) {
         if (session is null) {
             session = repository.Initialize(initial, parameters);
-            return session.StateRevisionAddress;
+            return session.StateRevisionAddress!.Value;
         }
-        if (session.PendingEvent is null) {
+        if (session.Head.Kind == GraphFrameKind.State) {
             Action<CommitCheckpoint>? checkpoint = repository.Checkpoint;
             repository.Checkpoint = null;
-            try { session.CommitDomainEvent(StateSaveHarness.NewMarker(), parameters); }
+            try { session.CommitEvent(StateSaveHarness.NewMarker(), parameters); }
             finally { repository.Checkpoint = checkpoint; }
         }
-        GraphFrame frame = session.CommitDomainState(parameters);
+        CheckpointAddress frame = session.CommitState(parameters);
         repository.Installed(frame);
         return frame.RevisionAddress;
     }

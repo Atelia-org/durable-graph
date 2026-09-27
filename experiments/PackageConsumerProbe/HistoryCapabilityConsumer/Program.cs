@@ -51,15 +51,15 @@ internal static class Program {
     private static void Seed(string directory) {
         FrameAddress historical;
         ObjectId worldId;
-        using (var repository = EventHistoryRepository.CreateNew(directory, Models(), Options))
+        using (var repository = Repository.CreateNew(directory, Models(), Options))
         using (var session = repository.CreateBranch("main", new World(7, new Legacy(11)), Policy)) {
-            worldId = session.StateId;
-            session.CommitDomainEvent(session.State.SnapshotEvent(), Policy);
-            session.State.Legacy.Change(12);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
+            worldId = session.StateId!.Value;
+            session.CommitEvent(((World)session.State!).SnapshotEvent(), Policy);
+            ((World)session.State!).Legacy.Change(12);
+            historical = session.CommitState(Policy).RevisionAddress;
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
-            Require(repository.ReadState<World>(repository.GetHead("main")).Legacy.HasSelfCycle,
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            Require(((World)repository.ReadState(repository.GetHead("main"))).Legacy.HasSelfCycle,
                 "V1 self-cycle was not restored.");
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
@@ -72,8 +72,8 @@ internal static class Program {
     }
 #elif READERS_ONLY
     private static void ReadWithoutUpgrade(string directory) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
-        GraphFrame historical = repository.GetHead("main");
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        CheckpointAddress historical = repository.GetHead("main");
         using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
         SchemaStore schemas = new(file, readOnly: true);
@@ -84,14 +84,14 @@ internal static class Program {
             decoded.GetRequired(legacyId).GetState<Legacy.__DurableState.V1>().Segment0Field1 == 12 &&
             decoded.GetRequired(legacyId).GetState<Legacy.__DurableState.V1>().Segment0Field3 == 638_625_600_000_000_000,
             "Exact readers must reconstruct historical Base/Delta without compiled Upgrade methods.");
-        ExpectInvalidData(() => repository.ReadState<World>(historical), "Missing single-object upgrade");
+        ExpectInvalidData(() => repository.ReadState(historical), "Missing single-object upgrade");
     }
 #elif HISTORY_V2
     private static void Migrate(string directory) {
         FrameAddress historical, migrated;
         ObjectId worldId, legacyId;
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
-            GraphFrame head = repository.GetHead("main");
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            CheckpointAddress head = repository.GetHead("main");
             historical = head.RevisionAddress;
             worldId = head.RootId;
             using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
@@ -101,23 +101,23 @@ internal static class Program {
             Require(decoded.Objects.Count == 2 && World.UpgradeCalls == 0 && Legacy.UpgradeCalls == 0,
                 "Exact reading must not normalize either object.");
             Legacy.ProduceInvalidReference = true;
-            ExpectInvalidData(() => repository.ReadState<World>(head));
+            ExpectInvalidData(() => repository.ReadState(head));
             Require(World.UpgradeCalls == 1 && Legacy.UpgradeCalls == 1,
                 "Even a newly orphaned shell must upgrade and reject its invalid current reference.");
         }
         Legacy.ProduceInvalidReference = false;
         World.UpgradeCalls = Legacy.UpgradeCalls = 0;
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options))
-        using (var session = repository.Resume<World>("main")) {
-            Require(session.State.Score == 107 && World.UpgradeCalls == 1 && Legacy.UpgradeCalls == 1 &&
+        using (var repository = Repository.OpenExisting(directory, Models(), Options))
+        using (var session = repository.Checkout("main")) {
+            Require(((World)session.State!).Score == 107 && World.UpgradeCalls == 1 && Legacy.UpgradeCalls == 1 &&
                 Legacy.LastHistoricalValue == 12, "Full source directory was not upgraded from its exact stored values.");
             Require(typeof(Legacy).IsAbstract, "Migration shell must be abstract.");
             bool allocationRejected = false;
             try { Legacy.__DurableState.Allocate(); }
             catch (InvalidOperationException) { allocationRejected = true; }
             Require(allocationRejected, "Successful Resume must not allocate the abstract orphan shell.");
-            session.CommitDomainEvent(session.State.SnapshotEvent(), Policy);
-            migrated = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!).SnapshotEvent(), Policy);
+            migrated = session.CommitState(Policy).RevisionAddress;
         }
         using var fileAfter = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segmentsAfter = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
@@ -134,10 +134,10 @@ internal static class Program {
     }
 #else
     private static void ReadAfterDeletingShell(string directory) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
-        GraphFrame[] frames = repository.ReadFrames("main").ToArray();
-        GraphFrame historical = frames[2];
-        GraphFrame migrated = frames[^1];
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
+        CheckpointAddress historical = frames[2];
+        CheckpointAddress migrated = frames[^1];
         Require(historical.RootId == migrated.RootId, "Migration changed World identity.");
         Require(typeof(World).Assembly.GetType("HistoryCapabilityPackageConsumerProbe.Legacy") is null,
             "Third consumer must contain no Legacy CLR shell.");
@@ -147,13 +147,13 @@ internal static class Program {
         using StateRevisionStore store = new(segments);
         Require(schemas.GetRequired("package.history-legacy", 1).Version == 1,
             "Legacy metadata must exist independently of its absent executable reader.");
-        World loaded = repository.ReadState<World>(migrated);
+        World loaded = ((World)repository.ReadState(migrated));
         Require(loaded.Score == 107 && World.UpgradeCalls == 0 &&
             RevisionDecoder.Read(store, schemas, migrated.RevisionAddress, Readers()).Objects.Count == 1,
             "Migrated Revision should load with only the surviving World model.");
         ExpectInvalidData(() => RevisionDecoder.Read(store, schemas, historical.RevisionAddress, Readers()),
             "No declaration factory is registered for package.history-legacy");
-        ExpectInvalidData(() => repository.ReadState<World>(historical),
+        ExpectInvalidData(() => repository.ReadState(historical),
             "No declaration factory is registered for package.history-legacy");
     }
 #endif

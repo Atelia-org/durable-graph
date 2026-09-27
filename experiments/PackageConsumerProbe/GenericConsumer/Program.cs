@@ -53,14 +53,14 @@ internal static class Program {
         FrameAddress initial;
         FrameAddress historical;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
-            initial = session.StateRevisionAddress;
-            worldId = session.StateId;
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+            using BranchCheckout session = repository.CreateBranch("main", world, Policy);
+            initial = session.StateRevisionAddress!.Value;
+            worldId = session.StateId!.Value;
             world.First.Set(12);
-            session.CommitDomainEvent(session.State, Policy);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State) && world.First.TransientValue == 77,
+            session.CommitEvent(((World)session.State!), Policy);
+            historical = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)) && world.First.TransientValue == 77,
                 "Commit must keep the existing domain instances and transient state.");
         }
         Inspect(directory, (store, schemas) => {
@@ -75,10 +75,10 @@ internal static class Program {
                 "The generic object lacks the persisted Base/Delta chain.");
         });
         WriteAddress(directory, "historical", historical, worldId);
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main");
-        CheckCurrent(restored.State, 12, 31);
-        Require(restored.State.Legacy.Left.Value == 41 && restored.State.Legacy.Right.Value == 51,
+        using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
+        using BranchCheckout restored = reopened.Checkout("main");
+        CheckCurrent(((World)restored.State!), 12, 31);
+        Require(((World)restored.State!).Legacy.Left.Value == 41 && ((World)restored.State!).Legacy.Right.Value == 51,
             "Generic readonly inline values were not restored.");
     }
 #elif OMIT_CLOSED_UPGRADE
@@ -102,23 +102,23 @@ internal static class Program {
         FrameAddress unchanged;
         FrameAddress changed;
         ObjectId changedId = default;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             Box<int> first = world.First;
             CheckCurrent(world, 12, 1031);
             Require(world.First.Stamp == 100 && world.Second.Stamp == 100 && world.PointBox.Stamp == 200 &&
                 world.Legacy.Left.Value == 1041 && world.Legacy.Right.Value == 1051,
                 "Generic pass-through, closed business, or explicit nested owner conversion did not run.");
             Require(UpgradeTrace.Calls.Count == 4, "Each stored durable object must take one adjacent Upgrade.");
-            session.CommitDomainEvent(session.State, Policy);
-            upgraded = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            upgraded = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
             world.First.Set(13);
-            session.CommitDomainEvent(session.State, Policy);
-            changed = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State) && ReferenceEquals(first, session.State.First) &&
+            session.CommitEvent(((World)session.State!), Policy);
+            changed = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)) && ReferenceEquals(first, ((World)session.State!).First) &&
                 UpgradeTrace.Calls.Count == 4, "Commit must install its DTO baseline without replacing or re-upgrading instances.");
         }
         Inspect(directory, (store, schemas) => {
@@ -151,20 +151,20 @@ internal static class Program {
         FrameAddress upgraded;
         FrameAddress unchanged;
         FrameAddress changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             CheckCurrent(world, 13, 1031);
             Require(world.Summary == 2092 && world.First.LastStamp == 300 && UpgradeTrace.Calls.Count == 4,
                 "The current V2 head must execute only its remaining adjacent edge.");
-            session.CommitDomainEvent(session.State, Policy);
-            upgraded = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            upgraded = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
             world.First.Set(14);
-            session.CommitDomainEvent(session.State, Policy);
-            changed = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State), "A third-version commit replaced the domain World.");
+            session.CommitEvent(((World)session.State!), Policy);
+            changed = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)), "A third-version commit replaced the domain World.");
         }
         Inspect(directory, (store, schemas) => {
             var old = CheckHistoricalDto(store, schemas, historical, worldId);
@@ -177,10 +177,10 @@ internal static class Program {
                 "Deleting an inline value with no reference slots must not invent object removals.");
         });
         UpgradeTrace.Calls.Clear();
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-        using EventHistorySession<World> current = reopened.Resume<World>("main");
-        CheckCurrent(current.State, 14, 1031);
-        Require(current.State.Summary == 2092 && UpgradeTrace.Calls.Count == 0 && reopened.GetHead("main").RevisionAddress == changed,
+        using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
+        using BranchCheckout current = reopened.Checkout("main");
+        CheckCurrent(((World)current.State!), 14, 1031);
+        Require(((World)current.State!).Summary == 2092 && UpgradeTrace.Calls.Count == 0 && reopened.GetHead("main").RevisionAddress == changed,
             "The published current head must reopen without invoking Upgrade.");
     }
 #endif
@@ -250,9 +250,9 @@ internal static class Program {
     }
 
     private static World ReadHistorical(string directory, FrameAddress address) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
-        GraphFrame frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
-        return repository.ReadState<World>(frame);
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        CheckpointAddress frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
+        return ((World)repository.ReadState(frame));
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {

@@ -166,7 +166,7 @@ Run `./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1`, optionally wi
 `-PackageSource <feed> -Version <version>`.
 
 For application onboarding, start with the [snapshot/recovery consumer](EventHistoryRecoveryConsumer/README.md):
-default policy calls, private readonly snapshot contents, event-only reading, and the same PendingEvent
+default policy calls, private readonly snapshot contents, event-only reading, and the same application-selected Event
 control function exercised by the internal failure regressions. Its runner also checks the packaged and
 restored StateStore XML documentation. The root README itself has a separate extraction-and-run witness:
 
@@ -187,20 +187,20 @@ Use the matching nine-package feed printed by the recovery runner, or another fr
 
 The [EventHistory consumer](EventHistoryConsumer/README.md) is DB-063's two-process, two-generation
 public facade witness. It publishes S0/Event/State/pending Event, independently browses an Event
-with no World/Bob model registrations, reads a pair of selected graphs, resumes the pending Event,
+with no World/Bob model registrations, reads a pair of selected graphs, checks out State and explicitly reads the Event,
 upgrades the old State, and continues through required Base, NoChange and ordinary Delta saves.
 Root replacement is checked separately. Readonly browsing preserves every file's bytes and mtime.
 DB-077 fixes the model registry at each Open; Event-only and complete catalogs use separate opens.
 The consumer forces Family definitions (`DurableGraphGenerateDefinitions=true`) and registers the
 generated Family definitions explicitly before opening, so package acceptance covers that path too.
 
-StateStore and all model/history consumer lanes now use `EventHistoryRepository` and
-`EventHistorySession<T>`. `CreateBranch` publishes S0 and preserves the original instances;
+StateStore and all model/history consumer lanes now use `Repository` and
+`BranchCheckout`. The existing model probes use a deliberate alternating application fixture; the facade also supports Event-first and free E/E/S/S histories. `CreateBranch` publishes S0 and preserves the original instances;
 subsequent model-regression steps explicitly publish an Event snapshot followed by State.
 Those regression Events may use the World itself as the snapshot root; the focused EventHistory
 lane instead uses `Observed(Alice)` to verify independent event membership and capabilities.
 They intentionally mutate caller-created aliases after capture to test frozen persistence; these are
-mechanism tests, not examples of keeping a hot PendingEvent's reachable CLR contents read-only.
+mechanism tests, not examples of keeping a hot Event's reachable CLR contents read-only.
 Journal refs provide the sole publication point; no `publication.rbf` is created.
 
 The StateStore runner retains the inherited Character's exact DTO/Base/Delta golden checks,
@@ -272,7 +272,7 @@ readonly fields and defaults transient state without running value constructors.
 
 V2 changes the inner value's numeric layout and explicitly advances the outer value, base owner
 and derived World Schemas. The owner Upgrade constructs nested historical DTOs through target-typed
-constructors. EventHistorySession rewrites upgraded objects as Base, then compares unchanged while retaining
+constructors. BranchCheckout rewrites upgraded objects as Base, then compares unchanged while retaining
 the same domain instances. A separate rebuild advances only the nominal child's version: owner and
 inline Schema versions remain unchanged, and the next save writes only a required child Base.
 
@@ -391,7 +391,7 @@ Run `./experiments/PackageConsumerProbe/Run-ImmutableLeafProbe.ps1` for the
 [immutable leaf consumer](ImmutableLeafConsumer/README.md). Its two package builds verify the DB-075
 structural proof through real package delivery. A plain consumer forces Family definitions and requires
 its non-generic readonly leaf binding to resolve with internal `IsImmutableLeaf=true` (reflection only)
-before round-tripping the leaf value through `EventHistoryRepository`; a second consumer compiles the
+before round-tripping the leaf value through `Repository`; a second consumer compiles the
 identical model with a local sibling source generator wired as an analyzer in the same compiler pass,
 and the same model must then resolve with `IsImmutableLeaf=false` because the sibling's added mutable
 state is visible to the structural proof but not to durable classification. Pass

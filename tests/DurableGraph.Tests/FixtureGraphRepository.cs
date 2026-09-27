@@ -9,21 +9,21 @@ namespace Atelia.DurableGraph.Tests;
 
 // Test-only adapter for existing generated model/history witnesses. Each old Save operation
 // maps to initial S0 or explicit marker E + S. It preserves the graph assertions without
-// retaining a product compatibility facade. Public API acceptance uses EventHistory directly.
+// retaining a product compatibility facade. Public API acceptance uses Repository directly.
 public sealed class FixtureGraphRepository : IDisposable {
-    private readonly EventHistoryRepository _repository;
+    private readonly Repository _repository;
     private FrameAddress? _stateAddress;
-    private FixtureGraphRepository(EventHistoryRepository repository, bool existing) {
+    private FixtureGraphRepository(Repository repository, bool existing) {
         _repository = repository;
         if (existing) { _stateAddress = repository.GetHead("main").RevisionAddress; }
     }
     public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
         FixtureMarker.Register(models);
-        return new(EventHistoryRepository.CreateNew(path, models, options), false);
+        return new(Repository.CreateNew(path, models, options), false);
     }
     public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
         FixtureMarker.Register(models);
-        return new(EventHistoryRepository.OpenExisting(path, models, options), true);
+        return new(Repository.OpenExisting(path, models, options), true);
     }
     public FrameAddress? HeadRevisionAddress => _stateAddress;
     public bool IsFaulted => _repository.IsFaulted;
@@ -31,9 +31,9 @@ public sealed class FixtureGraphRepository : IDisposable {
         return new(this, state);
     }
     public FixtureGraphSession<T> Load<T>() where T : class, IDurableObject {
-        return new(this, _repository.Resume<T>("main"));
+        return new(this, _repository.Checkout("main"));
     }
-    internal EventHistorySession<T> Initialize<T>(T state,
+    internal BranchCheckout Initialize<T>(T state,
         ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject =>
         _repository.CreateBranch("main", state, parameters);
     internal void Accept(FrameAddress address) => _stateAddress = address;
@@ -43,24 +43,24 @@ public sealed class FixtureGraphRepository : IDisposable {
 public sealed class FixtureGraphSession<T> : IDisposable where T : class, IDurableObject {
     private readonly FixtureGraphRepository _repository;
     private readonly T _initial;
-    private EventHistorySession<T>? _session;
+    private BranchCheckout? _session;
     internal FixtureGraphSession(FixtureGraphRepository repository, T initial) {
         _repository = repository; _initial = initial;
     }
-    internal FixtureGraphSession(FixtureGraphRepository repository, EventHistorySession<T> session) {
-        _repository = repository; _initial = session.State; _session = session;
+    internal FixtureGraphSession(FixtureGraphRepository repository, BranchCheckout session) {
+        _repository = repository; _initial = ((T)session.State!); _session = session;
     }
-    public T World => _session is null ? _initial : _session.State;
+    public T World => _session is null ? _initial : ((T)_session.State!);
     public ObjectId? WorldId => _session?.StateId;
     public FrameAddress? ParentRevisionAddress => _session?.StateRevisionAddress;
     public FrameAddress Commit(ReadAmplificationBaseBudgetParameters parameters) {
         if (_session is null) {
             _session = _repository.Initialize(_initial, parameters);
         } else {
-            if (_session.PendingEvent is null) { _session.CommitDomainEvent(new FixtureMarker(), parameters); }
-            _session.CommitDomainState(parameters);
+            if (_session.Head.Kind == GraphFrameKind.State) { _session.CommitEvent(new FixtureMarker(), parameters); }
+            _session.CommitState(parameters);
         }
-        FrameAddress address = _session.StateRevisionAddress;
+        FrameAddress address = _session.StateRevisionAddress!.Value;
         _repository.Accept(address);
         return address;
     }

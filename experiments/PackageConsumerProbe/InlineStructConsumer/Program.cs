@@ -65,14 +65,14 @@ internal static class Program {
         FrameAddress initial;
         FrameAddress historical;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
-            initial = session.StateRevisionAddress;
-            worldId = session.StateId;
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+            using BranchCheckout session = repository.CreateBranch("main", world, Policy);
+            initial = session.StateRevisionAddress!.Value;
+            worldId = session.StateId!.Value;
             world.ChangeLeft(12);
-            session.CommitDomainEvent(session.State, Policy);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, world) && ReferenceEquals(world.Links.Left.Node, node) &&
+            session.CommitEvent(((World)session.State!), Policy);
+            historical = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(((World)session.State!), world) && ReferenceEquals(world.Links.Left.Node, node) &&
                 world.TransientValue == 77 && world.Links.Left.TransientValue == 99,
                 "Consecutive Commit must retain domain instances and transient values.");
         }
@@ -88,27 +88,27 @@ internal static class Program {
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
         WriteAddress(directory, "historical", historical, worldId);
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main");
-        CheckLinks(restored.State, 12, 31);
+        using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
+        using BranchCheckout restored = reopened.Checkout("main");
+        CheckLinks(((World)restored.State!), 12, 31);
     }
 #elif HISTORY_V2 && CHILD_V2
     private static void Migrate(string directory) {
         var (historical, worldId) = ReadAddress(directory, "historical");
         FrameAddress upgraded;
         FrameAddress unchanged;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             Node node = world.Links.Left.Node;
             Require(World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Each stored object must be upgraded exactly once.");
             CheckLinks(world, 1012, 131);
             Require(world.Score == World.InitialScore + 100 && world.Links.Right.Value == 1021, "Owner upgrade did not rebuild nested V2 DTOs.");
-            session.CommitDomainEvent(session.State, Policy);
-            upgraded = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State) && ReferenceEquals(node, session.State.Links.Left.Node) &&
+            session.CommitEvent(((World)session.State!), Policy);
+            upgraded = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)) && ReferenceEquals(node, ((World)session.State!).Links.Left.Node) &&
                 World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Install must retain domain instances and avoid re-upgrading.");
         }
         Inspect(directory, (store, schemas) => {
@@ -127,17 +127,17 @@ internal static class Program {
         var (_, worldId) = ReadAddress(directory, "historical");
         FrameAddress upgraded;
         FrameAddress unchanged;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             CheckLinks(world, 1012, 231);
             Require(World.UpgradeCalls == 0 && Node.UpgradeCalls == 1,
                 "A nominal child version change must not require owner or inline layout upgrades.");
-            session.CommitDomainEvent(session.State, Policy);
-            upgraded = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State), "Child migration replaced the World domain object.");
+            session.CommitEvent(((World)session.State!), Policy);
+            upgraded = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)), "Child migration replaced the World domain object.");
         }
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(upgraded);
@@ -163,14 +163,14 @@ internal static class Program {
         });
         World.UpgradeCalls = Node.UpgradeCalls = 0;
         FrameAddress removed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             Require(world.Summary == 2033L && world.Score == World.InitialScore + 1100 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
                 "The current V2 head must use just the remaining V2 -> V3 owner upgrade.");
-            session.CommitDomainEvent(session.State, Policy);
-            removed = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State), "Removing inline state replaced the domain World.");
+            session.CommitEvent(((World)session.State!), Policy);
+            removed = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)), "Removing inline state replaced the domain World.");
         }
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(removed);
@@ -181,9 +181,9 @@ internal static class Program {
             Require(RevisionDecoder.Read(store, schemas, removed, Readers()).Objects.Count == 1, "New membership retains the old inline-referenced graph.");
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-        using EventHistorySession<World> current = reopened.Resume<World>("main");
-        Require(current.State.Summary == 2033L && current.State.Score == World.InitialScore + 1100 &&
+        using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
+        using BranchCheckout current = reopened.Checkout("main");
+        Require(((World)current.State!).Summary == 2033L && ((World)current.State!).Score == World.InitialScore + 1100 &&
             reopened.GetHead("main").RevisionAddress == removed, "Published V3 head cannot be reopened after deleting inline CLR declarations.");
     }
 #endif
@@ -216,9 +216,9 @@ internal static class Program {
     }
 
     private static World ReadHistorical(string directory, FrameAddress address) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
-        GraphFrame frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
-        return repository.ReadState<World>(frame);
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        CheckpointAddress frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
+        return ((World)repository.ReadState(frame));
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {

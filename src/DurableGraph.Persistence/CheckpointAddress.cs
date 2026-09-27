@@ -1,13 +1,8 @@
+using Atelia.DurableGraph.Persistence;
 using Atelia.EventJournal;
 using StateFrameAddress = Atelia.DurableGraph.Storage.FrameAddress;
 
-namespace Atelia.DurableGraph.Persistence;
-
-/// <summary>The role of a graph in an EventHistory logical chain.</summary>
-public enum GraphFrameKind : uint {
-    Event = 1,
-    State = 2,
-}
+namespace Atelia.DurableGraph;
 
 /// <summary>A graph location issued by, and valid only within, one opened repository.</summary>
 /// <remarks>
@@ -15,8 +10,8 @@ public enum GraphFrameKind : uint {
 /// another instance are rejected, including after reopening the same directory. Neither this handle
 /// nor its diagnostic revision address is a persistent bookmark that can be resolved after reopening.
 /// </remarks>
-public sealed class GraphFrame {
-    internal GraphFrame(object owner, HistoryGraphRecord record) {
+public sealed class CheckpointAddress : IEquatable<CheckpointAddress> {
+    internal CheckpointAddress(object owner, HistoryGraphRecord record) {
         Owner = owner;
         Address = record.Address;
         Parent = record.Parent;
@@ -34,11 +29,11 @@ public sealed class GraphFrame {
     public StateFrameAddress RevisionAddress { get; }
     /// <summary>The root's object identity interpreted within this graph's StateRevision.</summary>
     public ObjectId RootId { get; }
+    /// <summary>Compares the issuing open repository and committed Journal position.</summary>
+    public bool Equals(CheckpointAddress? other) => other is not null && ReferenceEquals(Owner, other.Owner) && Address == other.Address;
+    public override bool Equals(object? obj) => obj is CheckpointAddress other && Equals(other);
+    public override int GetHashCode() => HashCode.Combine(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Owner), Address);
+    public static bool operator ==(CheckpointAddress? left, CheckpointAddress? right) =>
+        ReferenceEquals(left, right) || left is not null && left.Equals(right);
+    public static bool operator !=(CheckpointAddress? left, CheckpointAddress? right) => !(left == right);
 }
-
-internal sealed record HistoryGraphRecord(
-    EventAddress Address,
-    EventAddress? Parent,
-    GraphFrameKind Kind,
-    StateFrameAddress RevisionAddress,
-    ObjectId RootId);

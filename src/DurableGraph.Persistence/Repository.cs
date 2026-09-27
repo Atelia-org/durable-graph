@@ -1,24 +1,25 @@
+using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.EventJournal;
 using Atelia.RbfSegmentStore;
 using FrameAddress = Atelia.DurableGraph.Storage.FrameAddress;
 
-namespace Atelia.DurableGraph.Persistence;
+namespace Atelia.DurableGraph;
 
 /// <summary>Owns Schema/State resources and a Journal whose named refs are the sole publication authority.</summary>
 /// <remarks>
-/// Single-threaded, one writer and one active editing session. Close a session before moving or forking refs.
+/// Single-threaded, one writer and one active checkout. Close a checkout before creating or moving refs.
 /// Strict reopening rejects damaged tails; no automatic repair, transparent retry or power-loss guarantee.
 /// Handles belong to one open repository instance. Persisted members of read results are historical snapshots.
 /// Independent ReadState/ReadEvent calls allow application-side Transient initialization without a writer.
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
-/// Keep per-view owner/context/cache outside paired graphs. Use Resume to continue editing and committing.
+/// Keep per-view owner/context/cache outside paired graphs. Use Checkout to continue editing and committing.
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Successful binding/comparer closures may be reused across operations; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
 /// </remarks>
-public sealed class EventHistoryRepository : IDisposable {
+public sealed class Repository : IDisposable {
     private readonly HistoryJournal _history;
     private readonly GraphResources _resources;
     private readonly StateModelSnapshot _models;
@@ -29,7 +30,7 @@ public sealed class EventHistoryRepository : IDisposable {
     private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
 
-    private EventHistoryRepository(HistoryJournal history, GraphResources resources, StateModelSnapshot models) {
+    private Repository(HistoryJournal history, GraphResources resources, StateModelSnapshot models) {
         _history = history;
         _resources = resources;
         _models = models;
@@ -48,17 +49,17 @@ public sealed class EventHistoryRepository : IDisposable {
     /// <summary>Creates a repository with one frozen model environment for its entire open lifetime.</summary>
     /// <remarks>Models are captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static EventHistoryRepository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, true, false);
+    public static Repository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, true, false);
     /// <summary>Opens existing history with one frozen model environment; physical validation does not require all current models.</summary>
     /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static EventHistoryRepository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, false);
+    public static Repository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, false);
     /// <summary>Opens existing history without writing, using one frozen model environment for all reads.</summary>
     /// <remarks>An empty or partial registry supports inspection; successful closures are shared within this open repository.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static EventHistoryRepository OpenReadOnlyExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, true);
+    public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, true);
 
-    private static EventHistoryRepository Open(string path, StateModelRegistry models, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
+    private static Repository Open(string path, StateModelRegistry models, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
         ArgumentNullException.ThrowIfNull(models);
         HistoryJournal? history = null;
         GraphResources? resources = null;
@@ -73,68 +74,72 @@ public sealed class EventHistoryRepository : IDisposable {
         }
     }
 
-    /// <summary>Publishes S0 and returns a session retaining the supplied domain instances.</summary>
-    /// <typeparam name="TState">The exact domain type of the initial State root.</typeparam>
-    /// <param name="branchName">A new, nonempty branch name.</param>
-    /// <param name="initialState">The nonnull initial State root; its instances are retained rather than cloned.</param>
-    /// <param name="parameters">Policy for this initial save only; null uses the library default. It does not set later Commit defaults.</param>
-    /// <returns>An active session whose S0 is already published, with no PendingEvent.</returns>
+    /// <summary>Publishes an initial State and returns a checkout retaining the supplied domain instances.</summary>
     /// <remarks>
-    /// Requires a writable repository with no active session. This creates a saved initial State, not
-    /// an empty branch. Keep the graph stable during capture. Failure can occur after publication
-    /// but before a session is delivered; do not blindly retry branch creation. Check IsFaulted
-    /// independently of GraphCommitException.Outcome and reopen a faulted repository to inspect
-    /// persisted history. Pre-append failures can propagate their original exception, and domain
-    /// mutations are never automatically rolled back.
+    /// Requires a writable repository with no active checkout. The root must be nonnull and registered.
+    /// Failure can occur after publication but before delivery; inspect the outcome and IsFaulted independently.
+    /// Reopen a faulted repository to inspect persisted history. Domain mutations are not rolled back.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">A session is already active, the branch already exists, or the repository cannot perform the operation.</exception>
-    /// <exception cref="GraphCommitException">An append/publication attempt failed; the branch may already have been published.</exception>
-    public EventHistorySession<TState> CreateBranch<TState>(string branchName, TState initialState,
-        ReadAmplificationBaseBudgetParameters? parameters = null) where TState : class, IDurableObject {
+    public BranchCheckout CreateBranch(string branchName, IDurableObject initialState,
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
         RequireFreeWriter();
+        ArgumentNullException.ThrowIfNull(initialState);
         ValidateNewName(branchName);
         _busy = true;
         try {
-            var workspace = WorldWorkspace<TState>.CreateSnapshot(_resources.States, _resources.Schemas, initialState, _models);
-            var session = new EventHistorySession<TState>(this, branchName, workspace, null, null);
-            Publish(session, null, initialState, parameters ?? DefaultPolicy, initial: true);
-            _activeSession = session;
-            return session;
+            var workspace = WorldWorkspace.CreateSnapshot(_resources.States, _resources.Schemas, initialState, _models);
+            var checkout = new BranchCheckout(this, branchName, workspace, null);
+            Publish(checkout, null, initialState, parameters ?? DefaultPolicy, initial: true);
+            _activeSession = checkout;
+            return checkout;
         } finally { _busy = false; }
     }
 
-    /// <summary>Restores the chosen branch without replaying business handlers. An E head restores its preceding S too.</summary>
-    /// <typeparam name="TState">The exact current domain type of the State root.</typeparam>
-    /// <param name="branchName">The existing branch to resume at its persisted head.</param>
-    /// <returns>An editable State session with PendingEvent populated only when the persisted head is an Event.</returns>
+    /// <summary>Publishes an initial Event and returns a checkout with no State.</summary>
     /// <remarks>
-    /// Requires a writable repository with no active session. At an Event head, State is restored from
-    /// the preceding State revision and PendingEvent from the Event revision, with independently
-    /// allocated mutable graphs. Resume runs decoding/Upgrade/materialization but no business handler;
-    /// application code must rebuild Transient state (constructors and field initializers are not run
-    /// during domain restoration). Process only the newly restored PendingEvent, if present. A State
-    /// head has no pending work to replay, but does not by itself identify a completed external request.
-    /// If Open or Resume fails, stop and report the failure; this API does not fall back to an older head.
+    /// The Event is captured without installing a State or a saving baseline. No empty-head branch is created.
+    /// Publication may succeed before delivery fails; inspect the outcome and reopen a faulted repository.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">A session is already active or the repository cannot perform the operation.</exception>
-    public EventHistorySession<TState> Resume<TState>(string branchName) where TState : class, IDurableObject {
+    public BranchCheckout CreateBranchFromEvent(string branchName, IDurableObject initialEvent,
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
+        RequireFreeWriter();
+        ArgumentNullException.ThrowIfNull(initialEvent);
+        ValidateNewName(branchName);
+        _busy = true;
+        try {
+            var workspace = WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models);
+            var checkout = new BranchCheckout(this, branchName, workspace, null);
+            Publish(checkout, initialEvent, null, parameters ?? DefaultPolicy, initial: true);
+            _activeSession = checkout;
+            return checkout;
+        } finally { _busy = false; }
+    }
+
+    /// <summary>Restores the nearest State at the exact branch head, without materializing or replaying Events.</summary>
+    /// <remarks>
+    /// Requires a writable repository with no active checkout. A valid history with no State yields State=null.
+    /// An existing State's missing model or restoration failure propagates; there is no older-State fallback.
+    /// Restoration runs decoding, Upgrade and materialization, but no business handler. Constructors and field
+    /// initializers do not run; application code rebuilds Transient state and interprets its own event progress.
+    /// </remarks>
+    public BranchCheckout Checkout(string branchName) {
         RequireFreeWriter();
         _busy = true;
         try {
-            GraphFrame head = HeadCore(branchName);
-            GraphFrame state = head.Kind == GraphFrameKind.State ? head : PreviousStateCore(head);
-            RevisionReadSession reads = new(_resources.States, _resources.Schemas, _models);
-            var workspace = WorldWorkspace<TState>.LoadSnapshot(reads, state.RevisionAddress, state.RootId);
-            IDurableObject? pending = head.Kind == GraphFrameKind.Event
-                ? GraphReader.Read<IDurableObject>(reads, head.RevisionAddress, head.RootId).Root : null;
-            var session = new EventHistorySession<TState>(this, branchName, workspace, head, pending);
-            _activeSession = session;
-            return session;
+            CheckpointAddress head = HeadCore(branchName);
+            CheckpointAddress? state = NearestStateCore(head);
+            var workspace = state is null
+                ? WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models)
+                : WorldWorkspace.LoadSnapshot(new RevisionReadSession(_resources.States, _resources.Schemas, _models),
+                    state.RevisionAddress, state.RootId);
+            var checkout = new BranchCheckout(this, branchName, workspace, head);
+            _activeSession = checkout;
+            return checkout;
         } finally { _busy = false; }
     }
 
     public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _history.Journal.ListBranches(); }
-    public GraphFrame GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
+    public CheckpointAddress GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
     /// <summary>Fully materializes the selected logical chain from oldest to newest, including State and Event handles.</summary>
     /// <param name="branchName">The branch whose head is obtained once for this operation.</param>
@@ -146,9 +151,9 @@ public sealed class EventHistoryRepository : IDisposable {
     /// Opening the repository separately validates physical Journal records and referenced revisions,
     /// including orphans; that validation cost is distinct from this logical-chain enumeration.
     /// </remarks>
-    public IReadOnlyList<GraphFrame> ReadFrames(string branchName) {
+    public IReadOnlyList<CheckpointAddress> ReadFrames(string branchName) {
         RequireAvailable();
-        GraphFrame head = HeadCore(branchName);
+        CheckpointAddress head = HeadCore(branchName);
         return _history.Journal.ReadChronologicalChain(head.Address, checkedRead: true).Unwrap()
             .Select(address => Issue(_history.Read(address))).ToArray();
     }
@@ -162,38 +167,39 @@ public sealed class EventHistoryRepository : IDisposable {
     /// complete chain read and materialization; this API supplies no pagination benefit. Repository
     /// opening has separate full physical-history validation, including orphan records.
     /// </remarks>
-    public IReadOnlyList<GraphFrame> ReadEvents(string branchName) => ReadFrames(branchName).Where(frame => frame.Kind == GraphFrameKind.Event).ToArray();
-    public GraphFrame GetPreviousState(GraphFrame eventFrame) {
+    public IReadOnlyList<CheckpointAddress> ReadEvents(string branchName) => ReadFrames(branchName).Where(frame => frame.Kind == GraphFrameKind.Event).ToArray();
+    /// <summary>Finds the nearest strict ancestor State of an Event, or null in an Event-only prefix.</summary>
+    public CheckpointAddress? GetPreviousState(CheckpointAddress eventFrame) {
         RequireAvailable();
         CheckFrame(eventFrame, GraphFrameKind.Event);
         return PreviousStateCore(eventFrame);
     }
 
-    /// <summary>Independently restores an Event snapshot with a caller-specified root type check.</summary>
+    /// <summary>Independently restores the actual domain root of an Event snapshot.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
     /// Transient state after delivery, without opening a writer; persisted members remain a historical
     /// snapshot. Constructors and field initializers do not run. This does not install a saving baseline:
-    /// use Resume to continue editing and committing. Strings and application-owned global objects do
+    /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public TEvent ReadEvent<TEvent>(GraphFrame frame) where TEvent : class, IDurableObject => Read<TEvent>(frame, GraphFrameKind.Event);
-    /// <summary>Independently restores a State snapshot with a caller-specified root type check.</summary>
+    public IDurableObject ReadEvent(CheckpointAddress frame) => Read(frame, GraphFrameKind.Event);
+    /// <summary>Independently restores the actual domain root of a State snapshot.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
     /// Transient state after delivery, without opening a writer; persisted members remain a historical
     /// snapshot. Constructors and field initializers do not run. This does not install a saving baseline:
-    /// use Resume to continue editing and committing. Strings and application-owned global objects do
+    /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public TState ReadState<TState>(GraphFrame frame) where TState : class, IDurableObject => Read<TState>(frame, GraphFrameKind.State);
+    public IDurableObject ReadState(CheckpointAddress frame) => Read(frame, GraphFrameKind.State);
 
-    private T Read<T>(GraphFrame frame, GraphFrameKind kind) where T : class, IDurableObject {
+    private IDurableObject Read(CheckpointAddress frame, GraphFrameKind kind) {
         RequireAvailable();
         CheckFrame(frame, kind);
         _busy = true;
         try {
-            return GraphReader.Read<T>(_resources.States, _resources.Schemas, frame.RevisionAddress,
+            return GraphReader.Read<IDurableObject>(_resources.States, _resources.Schemas, frame.RevisionAddress,
                 frame.RootId, _models).Root;
         } finally { _busy = false; }
     }
@@ -206,45 +212,38 @@ public sealed class EventHistoryRepository : IDisposable {
     /// This includes observable Transient mutation on any reachable object. Keep per-view owner,
     /// context, indexes and caches outside the graphs, since a node may belong to both views.
     /// Use independent ReadState/ReadEvent calls for per-view Transient initialization without a writer;
-    /// use Resume to continue editing and committing. Sharing comparison does not prepare object
+    /// use Checkout to continue editing and committing. Sharing comparison does not prepare object
     /// Base/Delta payloads; ordinary read validation can still encode canonical Dictionary keys.
     /// Application callback side effects are not rolled back.
     /// </remarks>
-    public (IDurableObject First, IDurableObject Second) ReadPair(GraphFrame first, GraphFrame second) => ReadPair<IDurableObject, IDurableObject>(first, second);
-
-    /// <summary>Experimental pair of read-only snapshots with caller-specified root type checks.</summary>
-    /// <remarks>
-    /// First and Second follow input order, independently of each frame's State/Event kind.
-    /// Both reads must succeed before delivery. Shared instances are possible, with no cross-graph
-    /// instance identity guarantee: callers must treat both graphs as read-only, including observable
-    /// Transient mutation on any reachable object. Keep per-view owner, context, indexes and caches
-    /// outside the graphs. Use independent ReadState/ReadEvent calls for per-view Transient initialization
-    /// without a writer; use Resume to continue editing and committing. Sharing comparison does not
-    /// prepare object Base/Delta payloads; ordinary read validation can still encode canonical Dictionary
-    /// keys. Application callback side effects are not rolled back.
-    /// </remarks>
-    public (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(GraphFrame first, GraphFrame second) where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
+    public (IDurableObject First, IDurableObject Second) ReadPair(CheckpointAddress first, CheckpointAddress second) {
         RequireAvailable();
         CheckFrame(first);
         CheckFrame(second);
         _busy = true;
         try {
-            return GraphReader.ReadPair<TFirst, TSecond>(_resources.States, _resources.Schemas,
+            return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,
                 first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, _models);
         } finally { _busy = false; }
     }
 
     /// <summary>Creates a named branch at any checked historical Event or State, without moving the source branch.</summary>
-    public GraphFrame CreateBranch(string branchName, GraphFrame selectedFrame) {
+    /// <remarks>
+    /// Requires a writable repository with no active checkout and an address issued by this open instance.
+    /// Creates only a persistent ref: no domain graph is restored and no editing checkout is acquired.
+    /// Publication may succeed before delivery fails; inspect GraphCommitException.Outcome and IsFaulted
+    /// independently, and reopen a faulted repository to inspect the actual published refs.
+    /// </remarks>
+    public CheckpointAddress CreateBranch(string branchName, CheckpointAddress selectedFrame) {
         RequireFreeWriter();
-        ValidateNewName(branchName);
         CheckFrame(selectedFrame);
+        ValidateNewName(branchName);
         MutateRef(() => _history.Journal.CreateBranch(branchName, selectedFrame.Address));
         return selectedFrame;
     }
 
     /// <summary>Explicit compare-and-swap movement; requires closing the old editing session first.</summary>
-    public void MoveBranch(string branchName, GraphFrame expectedHead, GraphFrame target) {
+    public void MoveBranch(string branchName, CheckpointAddress expectedHead, CheckpointAddress target) {
         RequireFreeWriter();
         CheckFrame(expectedHead);
         CheckFrame(target);
@@ -271,30 +270,31 @@ public sealed class EventHistoryRepository : IDisposable {
         } finally { _busy = false; }
     }
 
-    internal GraphFrame Commit<TState>(EventHistorySession<TState> session, IDurableObject? domainEvent,
-        TState? nextState, ReadAmplificationBaseBudgetParameters? parameters) where TState : class, IDurableObject {
+    internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
+        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
         RequireAvailable();
         _resources.RequireWritable();
         if (!ReferenceEquals(_activeSession, session) || HeadCore(session.BranchName).Address != session.Head.Address) {
             throw new InvalidOperationException("Session does not own the expected branch head.");
         }
-        bool isEvent = domainEvent is not null;
-        if (isEvent != (session.Head.Kind == GraphFrameKind.State)) { throw new InvalidOperationException("Commits must alternate Event and State."); }
-        GraphFrame state = isEvent ? session.Head : PreviousStateCore(session.Head);
-        if (session.Workspace.ParentRevisionAddress != state.RevisionAddress) { throw new InvalidOperationException("Session State baseline does not match the Journal chain."); }
+        CheckpointAddress? state = NearestStateCore(session.Head);
+        if (session.Workspace.ParentRevisionAddress != state?.RevisionAddress ||
+            (state is null ? session.Workspace.World is not null : session.Workspace.WorldId != state.RootId)) {
+            throw new InvalidOperationException("Checkout State baseline does not match the Journal chain.");
+        }
         _busy = true;
         try { return Publish(session, domainEvent, nextState, parameters ?? DefaultPolicy, initial: false); }
         finally { _busy = false; }
     }
 
-    private GraphFrame Publish<TState>(EventHistorySession<TState> session, IDurableObject? domainEvent,
-        TState? nextState, ReadAmplificationBaseBudgetParameters parameters, bool initial) where TState : class, IDurableObject {
+    private CheckpointAddress Publish(BranchCheckout session, IDurableObject? domainEvent,
+        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters parameters, bool initial) {
         FrameAddress? address = null;
         bool writeAttempted = false;
         bool refAttempted = false;
         bool published = false;
         try {
-            using PreparedWorldSave<TState> pending = domainEvent is null
+            using PreparedWorldSave pending = domainEvent is null
                 ? session.Workspace.Stage(nextState!, parameters) : session.Workspace.StageSnapshot(domainEvent, parameters);
             Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
             Checkpoint?.Invoke(CommitCheckpoint.BeforeStateAppend);
@@ -306,7 +306,7 @@ public sealed class EventHistoryRepository : IDisposable {
             Checkpoint?.Invoke(CommitCheckpoint.BeforeJournalAppend);
             EventAddress journalAddress = _history.Append(kind, address.Value, pending.RootId, initial ? null : session.Head.Address);
             Checkpoint?.Invoke(CommitCheckpoint.AfterJournalDurable);
-            GraphFrame frame = Issue(_history.Read(journalAddress));
+            CheckpointAddress frame = Issue(_history.Read(journalAddress));
             RefId branch = initial ? default : _history.Journal.OpenBranch(session.BranchName).Unwrap();
             Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
             refAttempted = true;
@@ -321,7 +321,6 @@ public sealed class EventHistoryRepository : IDisposable {
             Checkpoint?.Invoke(CommitCheckpoint.BeforeInstall);
             if (domainEvent is null) { pending.Install(); }
             session.Head = frame;
-            session.PendingEvent = domainEvent;
             return frame;
         } catch (Exception error) {
             if (writeAttempted || refAttempted || _resources.Schemas.IsFaulted) { _resources.MarkFaulted(); }
@@ -330,19 +329,23 @@ public sealed class EventHistoryRepository : IDisposable {
         }
     }
 
-    private GraphFrame HeadCore(string branchName) {
+    private CheckpointAddress HeadCore(string branchName) {
         RefId branch = _history.Journal.OpenBranch(branchName).Unwrap();
         EventAddress head = _history.Journal.GetHead(branch) ?? throw new InvalidDataException("EventHistory branches cannot have empty heads.");
         return Issue(_history.Read(head));
     }
-    private GraphFrame PreviousStateCore(GraphFrame frame) {
-        if (frame.Parent is not { } parent) { throw new InvalidDataException("Event must have a preceding State."); }
-        GraphFrame state = Issue(_history.Read(parent));
-        if (state.Kind != GraphFrameKind.State) { throw new InvalidDataException("Event Parent is not State."); }
-        return state;
+    private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) =>
+        frame.Parent is { } parent ? NearestStateCore(Issue(_history.Read(parent))) : null;
+
+    private CheckpointAddress? NearestStateCore(CheckpointAddress frame) {
+        while (frame.Kind != GraphFrameKind.State) {
+            if (frame.Parent is not { } parent) { return null; }
+            frame = Issue(_history.Read(parent));
+        }
+        return frame;
     }
-    private GraphFrame Issue(HistoryGraphRecord record) => new(_identity, record);
-    private void CheckFrame(GraphFrame frame, GraphFrameKind? kind = null) {
+    private CheckpointAddress Issue(HistoryGraphRecord record) => new(_identity, record);
+    private void CheckFrame(CheckpointAddress frame, GraphFrameKind? kind = null) {
         ArgumentNullException.ThrowIfNull(frame);
         if (!ReferenceEquals(frame.Owner, _identity)) { throw new ArgumentException("Frame was issued by another repository instance.", nameof(frame)); }
         if (kind is not null && frame.Kind != kind) { throw new ArgumentException("Frame has the wrong Event/State role.", nameof(frame)); }
@@ -357,24 +360,26 @@ public sealed class EventHistoryRepository : IDisposable {
     }
 
     private void ValidateHistory() {
-        var records = _history.ReadAllFrames().ToDictionary(record => record.Address);
-        foreach (HistoryGraphRecord record in records.Values) {
-            FrameAddress? expectedParent = null;
+        IReadOnlyList<HistoryGraphRecord> physicalRecords = _history.ReadAllFrames();
+        var records = physicalRecords.ToDictionary(record => record.Address);
+        // Physical scanning is oldest-first, and HistoryJournal rejects parents at or after their child.
+        // This derived index carries only navigation; Journal Parent remains the persisted authority.
+        var nearestStates = new Dictionary<EventAddress, HistoryGraphRecord?>();
+        foreach (HistoryGraphRecord record in physicalRecords) {
+            HistoryGraphRecord? baseline = null;
             if (record.Parent is { } parentAddress) {
-                if (!records.TryGetValue(parentAddress, out HistoryGraphRecord? parent) || parent.Kind == record.Kind) {
-                    throw new InvalidDataException("Journal must alternate State and Event along its exact Parent chain.");
+                if (!records.ContainsKey(parentAddress) || !nearestStates.TryGetValue(parentAddress, out baseline)) {
+                    throw new InvalidDataException("Journal Parent is missing from the preceding physical history.");
                 }
-                if (record.Kind == GraphFrameKind.Event) { expectedParent = parent.RevisionAddress; }
-                else {
-                    if (parent.Parent is not { } previousAddress || !records.TryGetValue(previousAddress, out HistoryGraphRecord? previous) || previous.Kind != GraphFrameKind.State) {
-                        throw new InvalidDataException("A succeeding State requires Event's preceding State.");
-                    }
-                    expectedParent = previous.RevisionAddress;
-                }
-            } else if (record.Kind != GraphFrameKind.State) { throw new InvalidDataException("A Journal chain must begin with State."); }
-            ValidateGraph(record, expectedParent);
+            }
+            ValidateGraph(record, baseline?.RevisionAddress);
+            nearestStates.Add(record.Address, record.Kind == GraphFrameKind.State ? record : baseline);
         }
-        foreach (string branch in _history.Journal.ListBranches()) { _ = HeadCore(branch); }
+        foreach (string branch in _history.Journal.ListBranches()) {
+            if (!records.ContainsKey(HeadCore(branch).Address)) {
+                throw new InvalidDataException("Branch head is absent from physical Journal history.");
+            }
+        }
     }
 
     private void ValidateGraph(HistoryGraphRecord record, FrameAddress? expectedParent) {
@@ -398,7 +403,7 @@ public sealed class EventHistoryRepository : IDisposable {
     private void RequireFreeWriter() {
         RequireAvailable();
         _resources.RequireWritable();
-        if (_activeSession is not null) { throw new InvalidOperationException("Close the active session before creating, moving or resuming a branch."); }
+        if (_activeSession is not null) { throw new InvalidOperationException("Close the active session before creating, moving or checking out a branch."); }
     }
     private void RequireAvailable() {
         ObjectDisposedException.ThrowIf(_disposed, this);

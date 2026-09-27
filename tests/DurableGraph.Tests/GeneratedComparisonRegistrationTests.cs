@@ -55,8 +55,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         host.GetMethod("Save")!.CreateDelegate<Action<string, IDurableObject, StateModelRegistry, ReadAmplificationBaseBudgetParameters>>()(
             directory.Path, world, models, TestSavePolicies.Baseline);
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory.Path, models)) {
-            GraphFrame frame = Assert.Single(repository.ReadFrames("main"));
+        using (var repository = Repository.OpenReadOnlyExisting(directory.Path, models)) {
+            CheckpointAddress frame = Assert.Single(repository.ReadFrames("main"));
             (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame);
             // White-box optimization witness: public consumers must not depend on this identity.
             Assert.Same(first, second);
@@ -106,7 +106,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return world;
             }
             public static void Save(string path, IDurableObject world, StateModelRegistry models, ReadAmplificationBaseBudgetParameters parameters) {
-                using var repository = EventHistoryRepository.CreateNew(path, models);
+                using var repository = Repository.CreateNew(path, models);
                 using var session = repository.CreateBranch("main", (World{{(family ? "<string>" : "")}})world, parameters);
             }
             public static void Set(IDurableObject instance, int mutation) {

@@ -167,29 +167,29 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     public void ConfigurationAddedAfterOpenCannotEnterItsFrozenEnvironmentUntilReopen() {
         StateModelRegistry models = Models<string>();
         World<string> world = new();
-        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root, models);
+        using Repository repository = Repository.CreateNew(_root, models);
         FrameAddress seed;
-        using (EventHistorySession<World<string>> session = repository.CreateBranch("main", world, NoRebase)) {
-            seed = session.StateRevisionAddress;
-            session.CommitDomainEvent(new World<string>(), NoRebase);
+        using (BranchCheckout session = repository.CreateBranch("main", world, NoRebase)) {
+            seed = session.StateRevisionAddress!.Value;
+            session.CommitEvent(new World<string>(), NoRebase);
             models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
             world.First = new(new StringProxy(StringComparer.Ordinal));
-            Assert.Throws<InvalidDataException>(() => session.CommitDomainState(NoRebase));
-            Assert.Equal(seed, session.StateRevisionAddress);
+            Assert.Throws<InvalidDataException>(() => session.CommitState(NoRebase));
+            Assert.Equal(seed, session.StateRevisionAddress!.Value);
             Assert.False(repository.IsFaulted);
         }
-        using (EventHistorySession<World<string>> session = repository.Resume<World<string>>("main")) {
-            session.State.First = new(new StringProxy(StringComparer.Ordinal));
-            Assert.Throws<InvalidDataException>(() => session.CommitDomainState(NoRebase));
-            Assert.Equal(seed, session.StateRevisionAddress);
+        using (BranchCheckout session = repository.Checkout("main")) {
+            ((World<string>)session.State!).First = new(new StringProxy(StringComparer.Ordinal));
+            Assert.Throws<InvalidDataException>(() => session.CommitState(NoRebase));
+            Assert.Equal(seed, session.StateRevisionAddress!.Value);
         }
         repository.Dispose();
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, models);
-        using (EventHistorySession<World<string>> session = reopened.Resume<World<string>>("main")) {
-            session.State.First = new(new StringProxy(StringComparer.Ordinal));
-            session.CommitDomainState(NoRebase);
-            Assert.NotEqual(seed, session.StateRevisionAddress);
-            Assert.Null(session.PendingEvent);
+        using Repository reopened = Repository.OpenExisting(_root, models);
+        using (BranchCheckout session = reopened.Checkout("main")) {
+            ((World<string>)session.State!).First = new(new StringProxy(StringComparer.Ordinal));
+            session.CommitState(NoRebase);
+            Assert.NotEqual(seed, session.StateRevisionAddress!.Value);
+            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
         }
     }
 

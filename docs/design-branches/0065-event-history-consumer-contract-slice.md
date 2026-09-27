@@ -23,16 +23,16 @@
 | 001-D 跨重开定位 | 成立，现有 GraphFrame 是一次打开内的受检 handle，无持久 locator→handle 入口 | 保留候选，具体书签/引用需求出现再设计；本片只说明现有边界 |
 | 001-E 最近 N 条 | 成立，ReadEvents 先全链物化再筛选；尚无长历史测量 | 采纳顺序/物化/成本文档；局部浏览 API 与测量另行触发 |
 
-本片实施时 [Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 的 DefaultPolicy 为 `(3, 5)`；
+本片实施时 [Repository](../../src/DurableGraph.Persistence/Repository.cs) 的 DefaultPolicy 为 `(3, 5)`；
 后继默认值选择见 [DB-070](0070-read-amplification-default.md)。
 每次 CreateBranch/Commit 独立使用该次参数或默认值；CreateBranch 的覆盖值不会变成后续 Commit 的会话默认值。
 默认数值是当前实现选择，不是业务语义或永久格式保证。
 
-[Publish](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 先 Stage，再 State/Journal 屏障与 ref 发布，
+[Publish](../../src/DurableGraph.Persistence/Repository.cs) 先 Stage，再 State/Journal 屏障与 ref 发布，
 最后 Install、更新 Head/PendingEvent 并返回。写入前失败可以直接抛原异常；发生追加尝试后才按发布阶段包装
 [GraphCommitException](../../src/DurableGraph.Persistence/GraphCommitException.cs)。NotPublished 也可能已经使仓库 faulted。
 
-[ReadFrames/ReadEvents](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 返回所选 branch head 的逻辑祖先链，
+[ReadFrames/ReadEvents](../../src/DurableGraph.Persistence/Repository.cs) 返回所选 branch head 的逻辑祖先链，
 从旧到新，以数组完整物化；不把物理 orphan 或其他分支独有记录混入该链。它们不恢复领域对象。
 打开仓库仍检查物理 Journal、引用 Revision/根等完整性，包括 orphan；枚举、冷打开与领域图恢复是不同成本。
 

@@ -26,14 +26,14 @@ internal static class Program {
         // The catch is inside using: report health, then leave and dispose this attempt.
         try {
             using var repository = mode is "init-record" or "hot"
-                ? EventHistoryRepository.CreateNew(directory, Models())
-                : mode == "verify" ? EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true))
-                : EventHistoryRepository.OpenExisting(directory, Models());
+                ? Repository.CreateNew(directory, Models())
+                : mode == "verify" ? Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true))
+                : Repository.OpenExisting(directory, Models());
             try {
                 if (mode == "verify") {
                     // This catalog intentionally excludes World and Character.
                     var events = repository.ReadEvents("main");
-                    DamageEvent first = repository.ReadEvent<DamageEvent>(events.First());
+                    DamageEvent first = ((DamageEvent)repository.ReadEvent(events.First()));
                     CheckSnapshot(first, 10);
                     Require(events.Count() is 1 or 2, "Unexpected event count.");
                     Console.WriteLine("Verified:EventOnly:Hp=10:Observations=ready,armed");
@@ -41,27 +41,27 @@ internal static class Program {
                 }
                 using var session = mode is "init-record" or "hot"
                     ? repository.CreateBranch("main", new World())
-                    : repository.Resume<World>("main");
+                    : repository.Checkout("main");
                 if (mode is "init-record" or "hot" or "next") {
-                    Require(session.PendingEvent is null, "Complete existing PendingEvent before submitting new work.");
+                    Require(session.Head.Kind == GraphFrameKind.State, "The application protocol requires completing its previous Event before accepting new work.");
                     int expectedHp = mode == "next" ? 7 : 10;
-                    Require(session.State.Actor.Hp == expectedHp, "Unexpected initial State.");
-                    var pending = new DamageEvent(session.State.Actor, 3);
-                    session.CommitDomainEvent(pending);
+                    Require(((World)session.State!).Actor.Hp == expectedHp, "Unexpected initial State.");
+                    var pending = new DamageEvent(((World)session.State!).Actor, 3);
+                    session.CommitEvent(pending);
                     // A readonly array field alone does not freeze array elements. The snapshot
                     // owns its array and never exposes it. Strings can safely be shared.
-                    EditObservations(session.State.Actor);
+                    EditObservations(((World)session.State!).Actor);
                     CheckSnapshot(pending, expectedHp);
                     if (mode == "init-record") {
                         Console.WriteLine("Recorded:Pending:StateHp=10:EventHp=10");
                         return 0;
                     }
                 }
-                bool completed = PendingRecovery.Complete(session, world => world.RebuildTransient(), Apply);
-                int hp = session.State.Actor.Hp;
+                bool completed = PendingRecovery.Complete<World>(repository, session, world => world.RebuildTransient(), Apply);
+                int hp = ((World)session.State!).Actor.Hp;
                 Require(hp == (mode == "next" ? 4 : 7), "Recovery used a stale State or replayed an already completed event.");
-                Require(session.State.Actor.Observations.SequenceEqual(new[] { "changed", "later" }), "State observations differ between hot and cold processing.");
-                Console.WriteLine($"Completed={completed}:StateHp={hp}:Pending={session.PendingEvent is not null}");
+                Require(((World)session.State!).Actor.Observations.SequenceEqual(new[] { "changed", "later" }), "State observations differ between hot and cold processing.");
+                Console.WriteLine($"Completed={completed}:StateHp={hp}:Pending={session.Head.Kind == GraphFrameKind.Event}");
                 return 0;
             }
             catch (Exception error) {

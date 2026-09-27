@@ -54,25 +54,25 @@ public sealed partial class Character : NamedObject {
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
-        using (var repository = EventHistoryRepository.CreateNew(repositoryPath, models, options)) {
+        using (var repository = Repository.CreateNew(repositoryPath, models, options)) {
             string shared = new('A', 1);
             Character source = new(shared, 7);
             using var session = repository.CreateBranch("main", source, policy);
-            firstRevision = session.StateRevisionAddress;
-            characterId = session.StateId;
-            session.CommitDomainEvent(new Character(shared, 7), policy);
+            firstRevision = session.StateRevisionAddress!.Value;
+            characterId = session.StateId!.Value;
+            session.CommitEvent(new Character(shared, 7), policy);
             source._score = 8;
-            secondRevision = session.CommitDomainState(policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, source), "Commit replaced application-held instances.");
+            secondRevision = session.CommitState(policy).RevisionAddress;
+            Require(ReferenceEquals(((Character)session.State!), source), "Commit replaced application-held instances.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(repositoryPath, models, options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(repositoryPath, models, options)) {
             var frames = repository.ReadFrames("main").ToArray();
-            Character original = repository.ReadState<Character>(frames[0]);
+            Character original = ((Character)repository.ReadState(frames[0]));
             Require(original._score == 7 && original.Name == "A" &&
                 original._createdAtTicks == 638_625_600_000_000_000 &&
                 ReferenceEquals(original.Name, original._alias), "Historical State lost values or sharing.");
-            var pair = repository.ReadPair<Character, Character>(frames[1], frames[2]);
-            Require(pair.First._score == 7 && pair.Second._score == 8, "Event/State pair lost selected values.");
+            var pair = repository.ReadPair(frames[1], frames[2]);
+            Require(((Character)pair.First)._score == 7 && ((Character)pair.Second)._score == 8, "Event/State pair lost selected values.");
         }
         // Inspect exact payload and registration behavior after closing the facade's writer.
         using (var schemaFile = RbfFile.OpenExisting(schemaPath)) {

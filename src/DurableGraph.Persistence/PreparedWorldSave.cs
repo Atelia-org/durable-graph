@@ -4,16 +4,16 @@ using Atelia.DurableGraph.Storage;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>One private, single-use save candidate retained until publication is resolved.</summary>
-internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : class, IDurableObject {
-    private WorldWorkspace<TWorld>? _owner;
+internal sealed class PreparedWorldSave : IDisposable {
+    private WorldWorkspace? _owner;
     private readonly CaptureContext _context;
     private readonly CapturedGraph _candidate;
     private readonly NormalizedRevision? _next;
-    private readonly TWorld? _nextState;
+    private readonly IDurableObject? _nextState;
     private NormalizedRevision? _installation;
 
-    internal PreparedWorldSave(WorldWorkspace<TWorld> owner, CaptureContext context,
-        CapturedGraph candidate, ObjectId rootId, StateRevision revision, NormalizedRevision? next, TWorld? nextState) {
+    internal PreparedWorldSave(WorldWorkspace owner, CaptureContext context,
+        CapturedGraph candidate, ObjectId rootId, StateRevision revision, NormalizedRevision? next, IDurableObject? nextState) {
         _owner = owner;
         _context = context;
         _candidate = candidate;
@@ -44,7 +44,7 @@ internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : cla
 
     /// <summary>Called only after confirmed publication; no field capture, callbacks or allocation.</summary>
     internal void Install() {
-        WorldWorkspace<TWorld> owner = RequireOwner();
+        WorldWorkspace owner = RequireOwner();
         NormalizedRevision installation = _installation
             ?? throw new InvalidOperationException("Prepare the installation before publishing and installing it.");
         owner.Install(this, _candidate, installation, _nextState!);
@@ -58,6 +58,6 @@ internal sealed class PreparedWorldSave<TWorld> : IDisposable where TWorld : cla
         }
     }
 
-    private WorldWorkspace<TWorld> RequireOwner() => _owner
+    private WorldWorkspace RequireOwner() => _owner
         ?? throw new InvalidOperationException("The save candidate has already been resolved.");
 }

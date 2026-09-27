@@ -189,7 +189,7 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 - [Ancestry](../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[CrossAssembly](../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、
   [Records](../../src/DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、[GenericProjection](../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、
   [GeneratedState](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)。祖先终点须统一，不能只改诊断入口。
-- [EventHistoryRepository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs)、[EventHistorySession](../../src/DurableGraph.Persistence/EventHistorySession.cs)、
+- [EventHistoryRepository](../../src/DurableGraph.Persistence/Repository.cs)、[EventHistorySession](../../src/DurableGraph.Persistence/BranchCheckout.cs)、
   [GraphReader](../../src/DurableGraph.Persistence/GraphReader.cs)、[WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs)。
 - [RecordStructGeneratorTests](../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs)、
   [RecordStateProjectionTests](../../tests/DurableGraph.Tests/RecordStateProjectionTests.cs)、

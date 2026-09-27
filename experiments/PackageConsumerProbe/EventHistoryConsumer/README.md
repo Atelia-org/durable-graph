@@ -13,7 +13,7 @@ wiring. The runner packs nine dependencies, publishes V1 Schema history, runs th
 completion, then compiles and runs V2 with the same immutable history and repository. Both builds
 also run the packaged history Verify target.
 DB-077 model configuration is supplied once at each repository Open. This project forces Family
-definitions and registers `Family_*.Definition` before Open; subsequent CreateBranch, Resume and
+definitions and registers `Family_*.Definition` before Open; subsequent CreateBranch, Checkout and
 Read operations compile without registry arguments against the real packages.
 
 V1 writes `S0 -> E1 -> S1 -> E2`, leaving E2 pending. World contains Alice and Bob; Observed events
@@ -21,7 +21,7 @@ contain Alice twice, Alice has a self-cycle and shared string labels. E1 records
 and E2 score 4. Hot saves preserve the caller's World and transient cache.
 
 This fixture deliberately mutates Alice through a shared hot alias after recording an Event, to
-prove that persisted DTOs remain frozen. That also changes the original hot PendingEvent object;
+prove that persisted DTOs remain frozen. That also changes the original hot Event object;
 it is not the recommended read-only Event modeling pattern. For application usage, see the
 [snapshot/recovery consumer](../EventHistoryRecoveryConsumer/README.md), which isolates the observed content.
 
@@ -33,7 +33,7 @@ with the complete catalog performs ReadPair, which
 returns E2 and S1 with their correct values and graph-local aliases. File content and modification
 times remain unchanged by readonly operations; the API does not promise cross-view instance sharing.
 
-Cold Resume(E2) returns preceding State and pending Event independently, without mutable Alice
+Cold Checkout restores preceding State; explicit ReadEvent restores E2 independently, without mutable Alice
 aliases between them. Completing State forces World/Alice Base, then subsequent E/S steps verify
 NoChange and ordinary Delta. Another pair validates old E2 after later State changes, and a final
 State commit replaces the root while retaining its child instances.
@@ -57,7 +57,7 @@ another direct field on the same owner. Every selected graph must retain its own
 values and graph-local aliases. The non-generic ReadPair overload is exercised with State/Event,
 Event/State, Event/Event and State/State inputs, checking actual root types and positional values.
 It also reads the same selection twice and checks that readonly
-operations leave file content and modification times unchanged. After cold Resume, mutating both
+operations leave file content and modification times unchanged. After cold Checkout, mutating both
 stable/changed State nodes and containers must leave the pending Event unchanged.
 
 `database-shared-read/shared-read-metrics.txt` records actual retained reference-instance counts,
@@ -95,5 +95,12 @@ nodes retain uninitialized `OwnerWorld` fields while both external view queries 
 If an application must initialize Transient fields on the nodes themselves, use separate
 `ReadState`/`ReadEvent` calls. The probe also does this under `OpenReadOnlyExisting`, sets the two
 independent actors' `OwnerWorld` fields, and verifies that each retains its correct world context.
-No writer or Resume is required for that historical browsing. Persistent members remain snapshots;
-these reads do not install a saving baseline. Use Resume when continuing edits and commits.
+No writer or Checkout is required for that historical browsing. Persistent members remain snapshots;
+these reads do not install a saving baseline. Use Checkout when continuing edits and commits.
+
+DB-078-A adds a forced-Family package witness for non-generic helpers, an Event-only cold checkout
+with an empty model registry, first State after E/E, consecutive States, cross-type child promotion
+with retained identity, no-argument saving after replacement, and cold reads of the actual root type.
+The same Bob CLR type is used in both Event and State roles. Low-level revision diagnostics verify
+first-State null parent, nearest-State graph parents and NoChange after replacement. The historical
+alternating fixture explicitly reads Events; it no longer relies on an implicit PendingEvent contract.

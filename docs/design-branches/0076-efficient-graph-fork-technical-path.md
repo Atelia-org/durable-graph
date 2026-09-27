@@ -1,14 +1,14 @@
 # DB-076：领域对象图的高效 fork 技术路径
 
-> 状态：**目标路线已校准；首片 DB-077 已实施，其余未实施**。2026-09-27；旧机制证据基线 `343bfa6`。
-> DB-077 的后续实施与验收见[实施记录](0077-model-environment-implementation.md)；下文源码调查与历史验证保留设计制定时的含义，当前进度从 PROJECT-STATE 与分片记录查证。
+> 状态：**目标路线已校准；DB-077 与 078-A 已验收，其余未实施**。2026-09-27；旧机制证据基线 `343bfa6`。
+> 后续实施见 [DB-077](0077-model-environment-implementation.md) 与 [078-A](0078-a-repository-free-history-implementation.md)；下文源码调查与历史验证保留设计制定时的含义，当前进度从 PROJECT-STATE 与分片记录查证。
 > 公共合同以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；本文及 DB-077–082 已按非泛型工作副本、自由 E/S 提交和按用途恢复修订，不是施工授权。
 > 来源：用户要求领域图 fork 功能等效于创建盘上 fork ref 后 Load 成独立内存对象图；先正确且好用，再降低执行开销，内部尽量简单一致。
 > 用户补充：项目尚未投入实用，**没有任何兼容性包袱**。可直接重设计 API、回调合同与内部结构，不保留旧接口双轨。
 > 本文推荐技术路径，不冻结具体公开签名，也不是实施授权。[DB-073](0073-repository-scoped-weak-reference-cache.md) 和 [DB-074](0074-efficient-fork-deferred-directions.md) 保持待进一步修订的草稿，暂不按其旧缓存方案施工。
 > DB-077–082 的顺序、硬依赖与共同验收见 [§10](#10-分片施工导航)；DB-078 分为 A/B/C 三个可分别实施验收的阶段，不将一份文档等同于一个主会话的工作量。
 > [旧专项评审](0077-0078-api-dialectical-review.md) 保留当时推理与证据；current 恒等快路、每 branch 单工作副本继续采用，旧泛型/交替/PendingEvent 及迁移顺序已由本次校准替代。
-> 术语遵循[项目术语表](../DurableGraph-glossary.md#branch-checkout)：拟议公开 API 使用 `BranchCheckout` / `Checkout`；当前源码 `EventHistorySession` / `Resume` 仅在事实说明中保留。
+> 术语遵循[项目术语表](../DurableGraph-glossary.md#branch-checkout)：拟议公开 API 使用 `BranchCheckout` / `Checkout`；旧源码 `EventHistorySession` / `Resume` 仅在历史事实说明中保留。
 
 ## 1. 收敛后的最小模型
 
@@ -89,8 +89,8 @@ Transient 按恢复合同分别重建，不默认复制源图运行时缓存；�
 内部用一份 ordinal 活动分支名集合，不持有工作副本对象；登记在 `_busy` 内并在可能发布前完成分配，
 未交付失败只清理本次取得的标记，Dispose 幂等释放。完整生命周期见 [DB-078](0078-editable-checkpoint-fork-slice.md)。
 该集合只是使用规则，不是第二个 head 权威，也不是持久租约。
-当前源码 [EventHistorySession](../../src/DurableGraph.Persistence/EventHistorySession.cs) 的 owner/head/workspace/disposed 状态继续使用；
-[Commit](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 的提交前 exact head、State baseline、合法角色、
+当前源码 [EventHistorySession](../../src/DurableGraph.Persistence/BranchCheckout.cs) 的 owner/head/workspace/disposed 状态继续使用；
+[Commit](../../src/DurableGraph.Persistence/Repository.cs) 的提交前 exact head、State baseline、合法角色、
 资源与防重入检查以及最终 CAS 保留；**交替约束必须移除**，最近 State 与冷开校验按自由历史重写。
 每次 Journal Parent 取当前精确 Head，首次创建才为空；图保存 Parent 取最近已提交 State，没有 State 时为空。
 因此 Event-only 前缀与首 State 的图 Parent 都为空，而首 State 的 Journal Parent 仍可为前一个 Event；完整规则见 DB-078-A。
@@ -286,7 +286,7 @@ fork 成本 = ref 发布 + 读取/解码 + Normalize/验证 + 分配/填充 + �
 相对初稿，去掉 exact-cache 必经阶段，不新增三种公共句柄；仅增加活动分支名集合来限制编辑占用，
 模型环境寿命、current 数据与保存来源各有一个维护位置。没有以兼容双轨补偿旧语义。
 
-主要事实入口：[Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs)、
+主要事实入口：[Repository](../../src/DurableGraph.Persistence/Repository.cs)、
 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs)、[GraphReader](../../src/DurableGraph.Persistence/GraphReader.cs)、
 [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs)、
 [CaptureSession](../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)。

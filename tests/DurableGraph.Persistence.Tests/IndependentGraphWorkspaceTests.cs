@@ -36,7 +36,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Bob bob = new() { Value = 3 };
         World world = new() { Value = 1, Left = changed, Right = bob, Text = text };
         StateModelRegistry models = Models();
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, models);
         FrameAddress s0 = Commit(workspace);
         ObjectId worldId = workspace.WorldId;
         ObjectId changedId = FindId(s0, 2, models);
@@ -47,7 +47,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Event root = new() { Value = 100, Left = changed, Right = stable, Text = text };
         FrameAddress e1;
         ObjectId eventId;
-        using (PreparedWorldSave<World> save = workspace.StageSnapshot(root, NoRebase)) {
+        using (PreparedWorldSave save = workspace.StageSnapshot(root, NoRebase)) {
             Assert.True(save.IsIndependentSnapshot);
             eventId = save.RootId;
             Assert.Equal(s0, save.Revision.ParentRevisionAddress);
@@ -106,12 +106,12 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Node child = new() { Value = 2 };
         World original = new() { Value = 1, Left = child };
         StateModelRegistry models = Models();
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, original, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, original, models);
         FrameAddress first = Commit(workspace);
         ObjectId oldRootId = workspace.WorldId;
         ObjectId childId = FindId(first, 2, models);
         World replacement = new() { Value = 10, Left = child };
-        using (PreparedWorldSave<World> abandoned = workspace.Stage(replacement, NoRebase)) {
+        using (PreparedWorldSave abandoned = workspace.Stage(replacement, NoRebase)) {
             Assert.NotEqual(oldRootId, abandoned.RootId);
             Assert.Same(original, workspace.World);
             FrameAddress unpublished = _store.AppendDurably(abandoned.Revision);
@@ -123,7 +123,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Same(original, workspace.World);
         Assert.Equal(oldRootId, workspace.WorldId);
         FrameAddress published;
-        using (PreparedWorldSave<World> save = workspace.Stage(replacement, NoRebase)) {
+        using (PreparedWorldSave save = workspace.Stage(replacement, NoRebase)) {
             Assert.False(save.IsIndependentSnapshot);
             Assert.Equal(first, save.Revision.ParentRevisionAddress);
             Assert.Contains(oldRootId.Value, save.Revision.RemovedObjectIds);
@@ -137,9 +137,9 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => save.Install());
         }
         Assert.Same(replacement, workspace.World);
-        Assert.Same(child, workspace.World.Left);
+        Assert.Same(child, ((World)workspace.World!).Left);
         Assert.Equal((byte)10, Decode(published, models).GetRequired(workspace.WorldId).GetState<State>().Value);
-        using PreparedWorldSave<World> later = workspace.Stage(NoRebase);
+        using PreparedWorldSave later = workspace.Stage(NoRebase);
         ObjectVersionRecord delta = Assert.Single(later.Revision.LocalObjects);
         Assert.Equal(workspace.WorldId.Value, delta.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -155,12 +155,25 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             reenter?.Invoke();
             if (fail) throw new InvalidDataException("test capture failure");
         });
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
-        Assert.Throws<InvalidOperationException>(() => workspace.StageSnapshot(new Event(), NoRebase));
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, models);
+        using (PreparedWorldSave firstEvent = workspace.StageSnapshot(new Event { Left = world.Left }, NoRebase)) {
+            Assert.True(firstEvent.IsIndependentSnapshot);
+            Assert.Null(firstEvent.Revision.ParentRevisionAddress);
+            Assert.Equal(ObjectHeadMapKind.Base, firstEvent.Revision.ObjectHeadMapKind);
+            Assert.NotEmpty(firstEvent.Revision.LocalObjects);
+            Assert.All(firstEvent.Revision.LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            Assert.Empty(firstEvent.Revision.ExternalObjectHeads);
+            Assert.Throws<InvalidOperationException>(firstEvent.Install);
+            Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
+            Assert.Throws<InvalidOperationException>(() => workspace.StageSnapshot(new Event(), NoRebase));
+        }
+        Assert.Same(world, workspace.World);
+        Assert.Null(workspace.ParentRevisionAddress);
+        Assert.Equal(new ObjectId(0), workspace.WorldId);
         FrameAddress s0 = Commit(workspace);
         ObjectId oldRootId = workspace.WorldId;
         Event root = new() { Left = world.Left };
-        using (PreparedWorldSave<World> pending = workspace.StageSnapshot(root, NoRebase)) {
+        using (PreparedWorldSave pending = workspace.StageSnapshot(root, NoRebase)) {
             Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
             Assert.Throws<InvalidOperationException>(() => workspace.Stage(new World(), NoRebase));
             Assert.Throws<InvalidOperationException>(() => workspace.StageSnapshot(root, NoRebase));
@@ -173,14 +186,14 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => workspace.Stage(new World(), NoRebase));
         fail = false;
         reenter = () => Assert.Throws<InvalidOperationException>(() => workspace.StageSnapshot(root, NoRebase));
-        using (PreparedWorldSave<World> save = workspace.StageSnapshot(root, NoRebase)) {
+        using (PreparedWorldSave save = workspace.StageSnapshot(root, NoRebase)) {
             Assert.Equal(s0, save.Revision.ParentRevisionAddress);
         }
         reenter = null;
         Assert.Same(world, workspace.World);
         Assert.Equal(s0, workspace.ParentRevisionAddress);
         Assert.Equal(oldRootId, workspace.WorldId);
-        using PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase);
+        using PreparedWorldSave unchanged = workspace.Stage(NoRebase);
         Assert.Empty(unchanged.Revision.LocalObjects);
         Assert.Empty(unchanged.Revision.RemovedObjectIds);
     }
@@ -189,21 +202,21 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
     public void SnapshotOnlyInstancesDoNotEnterStateBindingsAndFailureCanConsumeIds() {
         StateModelRegistry models = Models();
         World world = new() { Value = 1 };
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, models);
         Commit(workspace);
         Node eventOnly = new() { Value = 2 };
         Event root = new() { Left = eventOnly };
         uint lastSnapshotId;
-        using (PreparedWorldSave<World> save = workspace.StageSnapshot(root, NoRebase)) {
+        using (PreparedWorldSave save = workspace.StageSnapshot(root, NoRebase)) {
             lastSnapshotId = save.Revision.LocalObjectIds.Max();
             _store.AppendDurably(save.Revision);
         }
-        using (PreparedWorldSave<World> abandoned = workspace.StageSnapshot(root, NoRebase)) {
+        using (PreparedWorldSave abandoned = workspace.StageSnapshot(root, NoRebase)) {
             Assert.True(abandoned.RootId.Value > lastSnapshotId);
             lastSnapshotId = abandoned.Revision.LocalObjectIds.Max();
         }
         world.Left = eventOnly;
-        using PreparedWorldSave<World> state = workspace.Stage(NoRebase);
+        using PreparedWorldSave state = workspace.Stage(NoRebase);
         ObjectVersionRecord inserted = Assert.Single(state.Revision.LocalObjects, row => row.Kind == ObjectVersionKind.Base);
         Assert.True(inserted.ObjectId > lastSnapshotId);
     }
@@ -213,13 +226,13 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Node child = new() { Value = 2 };
         World world = new() { Value = 1, Left = child };
         StateModelRegistry models = Models();
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, models);
         FrameAddress s0 = Commit(workspace);
         ObjectId childId = FindId(s0, 2, models);
         child.Value = 3;
         FrameAddress s1 = Commit(workspace);
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(_store.Read(s1).LocalObjects).Kind);
-        using PreparedWorldSave<World> snapshot = workspace.StageSnapshot(new Event { Left = child }, new(1, 100));
+        using PreparedWorldSave snapshot = workspace.StageSnapshot(new Event { Left = child }, new(1, 100));
         ObjectVersionRecord rebased = Assert.Single(snapshot.Revision.LocalObjects, row => row.ObjectId == childId.Value);
         Assert.Equal(ObjectVersionKind.Base, rebased.Kind);
         Assert.DoesNotContain(childId.Value, snapshot.Revision.ExternalObjectHeads.Keys);
@@ -232,19 +245,19 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
     public void SavingUpgradedSnapshotDoesNotClearTheStateRewriteObligation() {
         World initial = new() { Value = 1, Left = new Node { Value = 2 } };
         StateModelRegistry oldModels = Models();
-        WorldWorkspace<World> old = WorldWorkspace<World>.Create(_store, _schemas, initial, oldModels);
+        WorldWorkspace old = WorldWorkspace.Create(_store, _schemas, initial, oldModels);
         FrameAddress s0 = Commit(old);
         ObjectId childId = FindId(s0, 2, oldModels);
         StateModelRegistry models = Models(upgradeNode: true);
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, s0, old.WorldId, models);
-        Assert.Equal((byte)12, workspace.World.Left!.Value);
-        using (PreparedWorldSave<World> snapshot = workspace.StageSnapshot(new Event { Left = workspace.World.Left }, NoRebase)) {
+        WorldWorkspace workspace = WorldWorkspace.Load(_store, _schemas, s0, old.WorldId, models);
+        Assert.Equal((byte)12, ((World)workspace.World!).Left!.Value);
+        using (PreparedWorldSave snapshot = workspace.StageSnapshot(new Event { Left = ((World)workspace.World!).Left }, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(snapshot.Revision.LocalObjects, row => row.ObjectId == childId.Value).Kind);
             _store.AppendDurably(snapshot.Revision);
         }
         Assert.Equal(s0, workspace.ParentRevisionAddress);
         FrameAddress s1;
-        using (PreparedWorldSave<World> state = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave state = workspace.Stage(NoRebase)) {
             Assert.Equal(s0, state.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(state.Revision.LocalObjects).Kind);
             Assert.Equal(childId.Value, Assert.Single(state.Revision.LocalObjects).ObjectId);
@@ -252,7 +265,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             state.PrepareInstall(s1);
             state.Install();
         }
-        using PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase);
+        using PreparedWorldSave unchanged = workspace.Stage(NoRebase);
         Assert.Equal(s1, unchanged.Revision.ParentRevisionAddress);
         Assert.Empty(unchanged.Revision.LocalObjects);
     }
@@ -361,8 +374,8 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             (mask & 16) != 0 ? input.ReadUInt64() : prior.Sequence);
     }
 
-    private FrameAddress Commit(WorldWorkspace<World> workspace) {
-        using PreparedWorldSave<World> save = workspace.Stage(NoRebase);
+    private FrameAddress Commit(WorldWorkspace workspace) {
+        using PreparedWorldSave save = workspace.Stage(NoRebase);
         FrameAddress address = _store.AppendDurably(save.Revision);
         save.PrepareInstall(address);
         // This fixture explicitly simulates the outside publisher confirming publication.

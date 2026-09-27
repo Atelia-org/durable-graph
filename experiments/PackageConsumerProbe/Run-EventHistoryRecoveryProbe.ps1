@@ -37,24 +37,24 @@ function Test-PackageDocumentation {
     if ($packedXml -cne [IO.File]::ReadAllText($restoredXml)) { throw "Restored XML differs from the actual package." }
     [xml] $documentation = $packedXml
     $expected = @{
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.CreateNew(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.OpenExisting(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.OpenReadOnlyExisting(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.CreateBranch``1(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.Resume``1(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadFrames(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadEvents(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadState``1(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadEvent``1(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadPair(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadPair``2(' = 1
-        'P:Atelia.DurableGraph.Persistence.EventHistoryRepository.IsFaulted' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistorySession`1.CommitDomainEvent(' = 1
-        'M:Atelia.DurableGraph.Persistence.EventHistorySession`1.CommitDomainState(' = 2
-        'P:Atelia.DurableGraph.Persistence.EventHistorySession`1.PendingEvent' = 1
-        'P:Atelia.DurableGraph.Persistence.EventHistorySession`1.IsFaulted' = 1
+        'M:Atelia.DurableGraph.Repository.CreateNew(' = 1
+        'M:Atelia.DurableGraph.Repository.OpenExisting(' = 1
+        'M:Atelia.DurableGraph.Repository.OpenReadOnlyExisting(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateBranch(' = 2
+        'M:Atelia.DurableGraph.Repository.CreateBranchFromEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.Checkout(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadFrames(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadEvents(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadState(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadPair(' = 1
+        'P:Atelia.DurableGraph.Repository.IsFaulted' = 1
+        'M:Atelia.DurableGraph.BranchCheckout.CommitEvent(' = 1
+        'M:Atelia.DurableGraph.BranchCheckout.CommitState(' = 2
+        'P:Atelia.DurableGraph.BranchCheckout.State' = 1
+        'P:Atelia.DurableGraph.BranchCheckout.IsFaulted' = 1
         'T:Atelia.DurableGraph.Persistence.GraphCommitException' = 1
-        'T:Atelia.DurableGraph.Persistence.GraphFrame' = 1
+        'T:Atelia.DurableGraph.CheckpointAddress' = 1
     }
     foreach ($prefix in $expected.Keys) {
         $members = @($documentation.doc.members.member | Where-Object {
@@ -66,9 +66,9 @@ function Test-PackageDocumentation {
             if ([string]::IsNullOrWhiteSpace([string]$member.summary) -or [string]::IsNullOrWhiteSpace($member.remarks.InnerText ?? [string]$member.remarks)) {
                 throw "Missing summary/remarks for $($member.name)."
             }
-            if ($member.name.StartsWith('M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadPair', [StringComparison]::Ordinal)) {
+            if ($member.name.StartsWith('M:Atelia.DurableGraph.Repository.ReadPair', [StringComparison]::Ordinal)) {
                 $remarks = ($member.remarks.InnerText ?? [string]$member.remarks) -replace '\s+', ' '
-                foreach ($required in @('Transient mutation', 'outside the graphs', 'without a writer', 'Resume')) {
+                foreach ($required in @('Transient mutation', 'outside the graphs', 'without a writer', 'Checkout')) {
                     if (-not $remarks.Contains($required, [StringComparison]::Ordinal)) {
                         throw "Missing ReadPair Transient contract '$required': $($member.name)."
                     }

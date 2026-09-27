@@ -383,40 +383,48 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
 缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)。
 
-公共使用模型见 [DB-083 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md)：统一 Repository、非泛型 BranchCheckout/Checkpoint、自由 E/S 提交；下文的交替/PendingEvent 属当前实现。
-[DB-076–082](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 已按目标校准；DB-077 的固定模型环境与 current 恒等已实施，其余分片尚未实施。
-用户已选定 Event-first 与跨类型 State 替换：工作副本 State 可空仅表示尚无 State，持久 E/S 根仍必须非空；
-无 State 不自动执行 Event，首 State 建立基线，后续实际根类型限制归应用。PreviousX 取最近严格祖先的相应种类，缺失时根/地址成对为空。
-首片 CheckpointAddress 只属于本次打开；[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 由上游 EventJournal 独立交付后接入，
-DG 不另立持久权威，也不把 tag 名当作跨仓库外部地址。下面保留旧实现事实，不能据它恢复 S0 必需或同型根的目标限制。
+公共使用模型见 [DB-083 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md)。
+当前公共基础为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`，
+具体交付范围见 [DB-078-A 实施记录](design-branches/0078-a-repository-free-history-implementation.md)。
+模型环境由每次 Open 固定，durable exact-current Normalize 保持值与身份恒等；实际根按每次 CLR 类型和持久 Schema 选择。
+工作副本同时拥有精确 Journal Head、可选 State 根及其冻结当前 DTO 比较基线、领域实例到 ObjectId 的绑定与分配状态；
+普通调用方不分别设置这些材料。仅受控加载和成功 State 提交推进其对应关系，Capture/Prepare/Accept 自身不等于持久 Commit。
 
-当前实现的上层 API 采用由 EventHistoryRepository 创建/恢复的 `EventHistorySession`，对外提供
-创建分支/`Resume`、访问 State 根及交错提交 Event/State。它是当前术语中的分支工作副本，同时拥有所选持久 Revision Parent、对应的冻结当前版本 DTO 比较基线、
-领域实例到 ObjectId 的绑定及分配状态；普通调用方不分别传入或设置这几份状态。
-仅由受控加载和成功提交流程建立、推进其对应关系，不为此另造独立的认证或 receipt 框架。
-Capture/Prepare/Accept 是工作副本内部组件；其单独可调用不意味着完成持久 Commit。
+历史允许 Event-first 与任意连续 E/S。同一 CLR 类型可承担两种角色，E/S 不要求共同领域基类；每个持久图仍必须选择非空 durable 根。
+`CreateBranch(name, initialState)` 和 `CreateBranchFromEvent(name, initialEvent)` 各自完成首个 S 或 E 的发布后才交付工作副本，
+不暴露空 head。Event-first 的 State 为 null；无参 CommitState 在捕获前拒绝，显式非空根建立首 State。
+`Checkout(name)` 保持所选精确 Head，只恢复该位置自身或祖先中最近的 State；有效纯 Event 历史可用空模型目录签出为空 State，
+既不物化 Event，也不导入其对象身份。已有 State 的损坏、缺模型或 Upgrade 失败必须传播，不回退旧 State 或伪装成无 State。
+库没有 PendingEvent，不自动 replay，也不判定业务处理进度或外部效果是否完成。
 
-提交以这次冻结候选完成追加、规定的持久化屏障和 head 发布后，再推进基线与身份绑定；
-不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离工作副本所选 Journal head；当前实现以仓库内
-单活动工作副本和受控修改保证。DB-077 已固定每次 Open 的模型环境并保证 durable exact-current Normalize 恒等；DB-078-A 迁移统一 Repository/非泛型 BranchCheckout 并放开交替，
-DB-078-B 交付 Checkpoint/事件查询，DB-078-C 再允许不同 branch 各一个工作副本与 named Fork；同 branch 的第二次签出仍拒绝。
-这些分片都不增加多 writer 或并行仓库操作承诺。branch 的持久引用与内存工作副本是不同概念。
+设 P 为提交前精确 Head，B 为 P 自身或其祖先中最近已提交 State。新记录的 Journal Parent=P，图 Revision Parent=B.Revision；
+首建没有 P，首 State 之前没有 B。于是 S0→E1→E2→S1→S2 中 E1/E2/S1 的图 Parent 均为 S0，S2 的图 Parent 为 S1；
+E0→E1→S0 中三个图均无 Parent。Event 只保存自身可达闭包，成功后释放候选，始终不 Accept Event 的 DTO 或 live 身份，
+也不推进 State 基线。无 State 的 Event 每次准备完整 Base；热捕获可消耗 ID 游标，纯 Event 历史冷签出则使用全新空 CaptureSession，
+不同 Revision 的数字 ID 重合不构成跨图身份承诺。冷开仍验证全部物理记录、orphan、引用和图 Parent，不能仅验证 ref 可达链。
 
-当前实现的无历史新分支必须提交非空 S0 后才交付工作副本并公开名字；目标允许首个非空 E 或 S，均不暴露空 head。
-当前实现中，移动分支或从历史帧分叉须先关闭活动工作副本，再 `Resume` 目标；从 E 恢复时同时恢复 preceding State 与 PendingEvent，
-不重放业务处理器。当前 State 仅可替换同 exact 类型非空根；目标允许异型替换，仍不接受持久 null 根。
-EventHistory 收敛仓库/工作副本外观，用户无需分别维护 Parent、DTO baseline 或实例-ID 绑定。
-旧 GraphRepository/GraphSession 等早期外观没有下游兼容负担，统一由 EventHistory 外观替代；
-不增加旧 publication.rbf 格式兼容、迁移或双发布机制。施工交接和示例迁移由 DB-063 维护。
+CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担；它继续使用原工作区及身份映射。
+已有 child 升根保留 ID，旧根若仍可达则成为普通子对象，仅不再可达的成员 Remove；新实例才取得新 ID。
+根、root ID、完整保存基线和 live 身份绑定均以同一冻结候选准备，规定的追加、持久化屏障和 head 发布完成后才安装，
+不在发布后重新 Capture 或选择模型。预先可知的 null/未注册直接根在捕获和追加前拒绝；
+深层模型或回调失败依实际阶段裁决，不承诺所有失败都无物理写入。完整来源、同 ID 的 exact 布局和 Upgrade rewrite 义务继续保持。
 
-Journal 的逻辑顺序为 S0→E1→S1→E2→S2；E1 与 S1 的 Revision Parent 均为 S0，后续同理。
-事件只保存自身可达闭包，发布后不安装为 State 比较基线；State 发布后才推进对应工作区。
-Journal ref 是外观的唯一发布前沿，图追加与 head 发布分开，由同一外观统一编排。
-历史读写使用当前 Repository 签发的 GraphFrame，不以裸地址证明来源。独立浏览不恢复另一份业务图；
-实验性 ReadPair 保持输入顺序、两边完整成功才交付，按只读快照使用且不承诺跨图实例共享。
-共享候选以完整当前持久状态比较作证明，不依赖对象 Base/Delta preparation；缺少比较能力时保守不共享，
-比较与验证错误仍传播。Dictionary 读取所需的 canonical key 验证不因此省略。
-冷 Resume 独立恢复可变 State/Event；热调用中用户创建的别名仍由用户管理。
+Journal ref 是唯一发布前沿，图追加与 head 发布分开。提交仍检查工作副本所有权、精确 head、最近 State 的 exact 基线并执行最终 CAS，
+防重入、fault 和 publication outcome 不因自由历史放宽。当前每仓库至多一个活动工作副本，ref-only CreateBranch 或 Move 前须关闭它；
+ref-only CreateBranch 不恢复领域图，也不占用工作副本。DB-078-B 的独立 Checkpoint/按需事件查询与 DB-078-C 的每 branch 单工作副本、
+named Fork 仍是后续交付，不增加多 writer 或并行操作承诺。后续 Checkpoint 的 PreviousX 选最近严格祖先相应角色，缺失时根/地址成对为空。
+
+历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与逻辑 Journal 位置判等；
+null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
+[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 的持久权威已由上游 EventJournal 本地包提供，DG 接入仍属独立后续分片，
+不另立持久权威，也不把 tag 名当作跨仓库外部地址。旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
+旧 publication.rbf 也不引入迁移或双发布机制。
+
+ReadState/ReadEvent 按角色校验地址并独立恢复实际领域根；实验性 ReadPair 保持输入顺序、两边完整成功才交付，
+按只读快照使用且不承诺跨图实例共享。共享候选以完整当前持久状态比较作证明，不依赖对象 Base/Delta preparation；
+缺少比较能力时保守不共享，比较与验证错误仍传播，Dictionary 的 canonical key 校验不省略。
+Checkout 使用独立可变 State 恢复路径；热调用中用户创建的别名仍由用户管理。
+当前 ReadFrames/ReadEvents 读取全逻辑链并返回地址，切片结果不节省该成本；按需事件枚举由 DB-078-B 迁移交付。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
@@ -454,7 +462,7 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 
 ReadPair 的只读约束包含会影响观察结果的 Transient 写入；视图专属 owner、查询上下文和缓存须置于
 各自的图外 view/index，不写入可能共享的节点。需要原位重建 Transient 的历史浏览可分别调用
-ReadState/ReadEvent，取得独立领域图并初始化；无需 writer，但持久字段仍是历史快照，续写须使用 Resume。
+ReadState/ReadEvent，取得独立领域图并初始化；无需 writer，但持久字段仍是历史快照，续写须使用 Checkout。
 不承诺对 string 或应用自有全局对象进行通用深拷贝。使用示例与验收见 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md)。
 
 字典由框架分配并填入原实例，应用只提供需要的当前 comparer，不接管共享引用或事后替换字典。
@@ -468,7 +476,7 @@ source 目录与升级后 World 可达集合，不能假定两者始终一一对
 Empty 多 ID 的反向绑定确定选择最小 source ID，但基线引用槽保留原 ID，让下一 Capture 产生
 实际引用差异。新加载工作副本从完整 source live max+1 开始分配，只承诺工作副本内单调；uint 耗尽仅阻止
 新增 ID，不阻止加载或已有对象保存。固定 Parent 的低层 Prepare 不就地接受新地址，需 Append 后重新 Load；
-普通连续 State 保存使用受控 EventHistorySession.CommitDomainState，发布成功后直接安装原候选并保留领域实例；Event 提交不推进 State 基线。
+普通连续 State 保存使用受控 BranchCheckout.CommitState，发布成功后直接安装原候选并保留领域实例；Event 提交不推进 State 基线。
 List 适配器先分配空列表，待全部实例登记后逐元素 Hydrate 并按序 Add，保留共享和循环；
 这类内建构造不改变用户领域类不执行构造器的恢复合同。
 

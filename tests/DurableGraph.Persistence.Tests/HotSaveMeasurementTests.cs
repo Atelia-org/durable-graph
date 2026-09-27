@@ -54,14 +54,14 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
                 ObjectId rootId;
                 uint arrayId = 0;
                 using (StateRevisionStore store = new(segments, cacheBudget)) {
-                    WorldWorkspace<Root> workspace = WorldWorkspace<Root>.Create(store, schemas, world, models);
-                    using (PreparedWorldSave<Root> initial = workspace.Stage(NoRebase)) {
+                    WorldWorkspace workspace = WorldWorkspace.Create(store, schemas, world, models);
+                    using (PreparedWorldSave initial = workspace.Stage(NoRebase)) {
                         Assert.All(initial.Revision.LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
                         Install(store, initial);
                     }
                     for (int step = 0; step < history; step++) {
                         Mutate(world, step);
-                        using PreparedWorldSave<Root> pending = workspace.Stage(NoRebase);
+                        using PreparedWorldSave pending = workspace.Stage(NoRebase);
                         ObjectVersionRecord delta = Assert.Single(pending.Revision.LocalObjects);
                         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
                         arrayId = delta.ObjectId;
@@ -72,7 +72,7 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
                         Dictionary<string, long> traversalBefore = Statistics(store, "TraversalStatistics");
                         Dictionary<string, long> cacheBefore = Statistics(store, "ReadCacheStatistics");
                         Stamp start = Stamp.Now();
-                        using PreparedWorldSave<Root> pending = workspace.Stage(NoRebase);
+                        using PreparedWorldSave pending = workspace.Stage(NoRebase);
                         Stamp staged = Stamp.Now();
                         FrameAddress address = store.Append(pending.Revision);
                         Stamp appended = Stamp.Now();
@@ -95,7 +95,7 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
                         });
                     }
                     // Do not cold-read between commits: that would prewarm maps and old chains.
-                    using (PreparedWorldSave<Root> unchanged = workspace.Stage(NoRebase)) {
+                    using (PreparedWorldSave unchanged = workspace.Stage(NoRebase)) {
                         Assert.Empty(unchanged.Revision.LocalObjects);
                     }
                     final = workspace.ParentRevisionAddress!.Value;
@@ -133,7 +133,7 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
 
     private static void Mutate(Root world, int step) => world.Values[(step * 31) % ArrayLength] += step + 1;
 
-    private static void Install(StateRevisionStore store, PreparedWorldSave<Root> pending) {
+    private static void Install(StateRevisionStore store, PreparedWorldSave pending) {
         FrameAddress address = store.Append(pending.Revision);
         pending.PrepareInstall(address);
         pending.Install();

@@ -19,8 +19,8 @@ public static class FixtureLoadedWorld {
         TWorld world,
         StateModelRegistry models,
         ReadAmplificationBaseBudgetParameters parameters) where TWorld : class, IDurableObject {
-        WorldWorkspace<TWorld> workspace = WorldWorkspace<TWorld>.Create(store, schemas, world, models);
-        using PreparedWorldSave<TWorld> pending = workspace.Stage(parameters);
+        WorldWorkspace workspace = WorldWorkspace.Create(store, schemas, world, models);
+        using PreparedWorldSave pending = workspace.Stage(parameters);
         return new(pending.RootId, pending.Revision);
     }
 
@@ -34,7 +34,7 @@ public static class FixtureLoadedWorld {
         FrameAddress revisionAddress,
         ObjectId worldId,
         StateModelRegistry models) where TWorld : class, IDurableObject {
-        return new(WorldWorkspace<TWorld>.Load(store, schemas, revisionAddress, worldId, models));
+        return new(WorldWorkspace.Load(store, schemas, revisionAddress, worldId, models));
     }
 }
 
@@ -44,11 +44,11 @@ public static class FixtureLoadedWorld {
 /// then loads the returned address to obtain a new baseline. This is not Commit or publication.
 /// </remarks>
 public sealed class FixtureLoadedWorld<TWorld> where TWorld : class, IDurableObject {
-    private readonly WorldWorkspace<TWorld> _workspace;
+    private readonly WorldWorkspace _workspace;
 
-    internal FixtureLoadedWorld(WorldWorkspace<TWorld> workspace) => _workspace = workspace;
+    internal FixtureLoadedWorld(WorldWorkspace workspace) => _workspace = workspace;
 
-    public TWorld World => _workspace.World;
+    public TWorld World => (TWorld)_workspace.World!;
     public ObjectId WorldId => _workspace.WorldId;
     public FrameAddress ParentRevisionAddress => _workspace.ParentRevisionAddress!.Value;
 
@@ -57,7 +57,7 @@ public sealed class FixtureLoadedWorld<TWorld> where TWorld : class, IDurableObj
     /// never appends State, publishes, or accepts a new Parent. Failed captures can consume IDs.
     /// </summary>
     public FixturePreparedWorldRevision Prepare(ReadAmplificationBaseBudgetParameters parameters) {
-        using PreparedWorldSave<TWorld> pending = _workspace.Stage(parameters);
+        using PreparedWorldSave pending = _workspace.Stage(parameters);
         return new(WorldId, pending.Revision);
     }
 }

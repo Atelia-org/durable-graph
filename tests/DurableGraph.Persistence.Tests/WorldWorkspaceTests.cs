@@ -34,11 +34,11 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
     public void ThreeInstallsRetainWorldAndInstallFrozenCandidateRatherThanLaterMutation() {
         World world = new() { Value = 1, Text = new string('x', 1) };
         StateModelRegistry models = Registry(Model());
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, models);
         Assert.Null(workspace.ParentRevisionAddress);
         Assert.Equal(new ObjectId(0), workspace.WorldId);
         FrameAddress first;
-        using (PreparedWorldSave<World> pending = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave pending = workspace.Stage(NoRebase)) {
             Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
             Assert.Throws<InvalidOperationException>(pending.Install);
             world.Value = 2;
@@ -49,7 +49,7 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         Assert.Equal(first, workspace.ParentRevisionAddress);
         Assert.Equal((byte)1, Read(first, workspace.WorldId, models).Value);
         Assert.Equal(InitialSequence, Read(first, workspace.WorldId, models).Sequence);
-        using (PreparedWorldSave<World> second = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave second = workspace.Stage(NoRebase)) {
             Assert.Equal(first, second.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(second.Revision.LocalObjects).Kind);
             FrameAddress address = Install(second);
@@ -57,13 +57,13 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         }
         world.Value = 3;
         world.Sequence = InitialSequence - 1;
-        using (PreparedWorldSave<World> third = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave third = workspace.Stage(NoRebase)) {
             FrameAddress address = Install(third);
             Assert.Equal((byte)3, Read(address, workspace.WorldId, models).Value);
             Assert.Equal(InitialSequence - 1, Read(address, workspace.WorldId, models).Sequence);
         }
         Assert.Same(world, workspace.World);
-        using PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase);
+        using PreparedWorldSave unchanged = workspace.Stage(NoRebase);
         Assert.Empty(unchanged.Revision.LocalObjects);
     }
 
@@ -71,21 +71,21 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
     public void RemovedInstanceReentryUsesFreshIdAndUnpublishedCandidateBurnsIds() {
         string original = new('x', 1);
         World world = new() { Text = original };
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, Registry(Model()));
-        using (PreparedWorldSave<World> first = workspace.Stage(NoRebase)) Install(first);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, Registry(Model()));
+        using (PreparedWorldSave first = workspace.Stage(NoRebase)) Install(first);
         uint oldId = _store.ReadLiveObjectHeadMap(workspace.ParentRevisionAddress!.Value).Keys.Max();
         world.Text = null;
-        using (PreparedWorldSave<World> remove = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave remove = workspace.Stage(NoRebase)) {
             FrameAddress saved = Install(remove);
             Assert.DoesNotContain(oldId, _store.ReadLiveObjectHeadMap(saved).Keys);
         }
         world.Text = original;
         uint burned;
-        using (PreparedWorldSave<World> abandoned = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave abandoned = workspace.Stage(NoRebase)) {
             burned = abandoned.Revision.LocalObjectIds.Max();
             Assert.True(burned > oldId);
         }
-        using PreparedWorldSave<World> readded = workspace.Stage(NoRebase);
+        using PreparedWorldSave readded = workspace.Stage(NoRebase);
         uint newId = readded.Revision.LocalObjectIds.Max();
         Assert.True(newId > burned);
         Assert.Equal(ObjectVersionKind.Base, readded.Revision.LocalObjects.Single(row => row.ObjectId == newId).Kind);
@@ -98,15 +98,15 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         bool fail = false;
         World world = new() { Value = 1 };
         StateModelRegistry models = Registry(Model(beforePrepare: () => { if (fail) throw new InvalidOperationException("body failed"); }));
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, models);
         FrameAddress first;
-        using (PreparedWorldSave<World> pending = workspace.Stage(NoRebase)) first = Install(pending);
+        using (PreparedWorldSave pending = workspace.Stage(NoRebase)) first = Install(pending);
         world.Text = new string('y', 1);
         fail = true;
         Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
         Assert.Equal(first, workspace.ParentRevisionAddress);
         fail = false;
-        using PreparedWorldSave<World> retry = workspace.Stage(NoRebase);
+        using PreparedWorldSave retry = workspace.Stage(NoRebase);
         Assert.Equal(first, retry.Revision.ParentRevisionAddress);
         Assert.Contains(3u, retry.Revision.LocalObjectIds); // ID 2 was consumed by the failed candidate.
         Install(retry);
@@ -116,27 +116,27 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
     public void UpgradeRewriteAndCompleteSourceMembershipSurviveDiscardThenClearOnInstall() {
         FrameAddress old = Seed(Old, new(5, 100, 0), Text(100, "orphan after upgrade"));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) }));
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, new ObjectId(1), models);
-        World instance = workspace.World;
-        using (PreparedWorldSave<World> abandoned = workspace.Stage(NoRebase)) {
+        WorldWorkspace workspace = WorldWorkspace.Load(_store, _schemas, old, new ObjectId(1), models);
+        World instance = (World)workspace.World!;
+        using (PreparedWorldSave abandoned = workspace.Stage(NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(abandoned.Revision.LocalObjects).Kind);
             FrameAddress orphanAppend = _store.Append(abandoned.Revision);
             Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(orphanAppend).Keys);
             abandoned.PrepareInstall(orphanAppend);
         }
         Assert.Equal(old, workspace.ParentRevisionAddress);
-        using (PreparedWorldSave<World> retry = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave retry = workspace.Stage(NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Revision.LocalObjects).Kind);
             FrameAddress installed = Install(retry);
             Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(installed).Keys);
         }
-        using (PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave unchanged = workspace.Stage(NoRebase)) {
             Assert.Empty(unchanged.Revision.LocalObjects);
             Assert.Empty(unchanged.Revision.RemovedObjectIds);
         }
         instance.Value = 6;
         instance.Text = new string('z', 1);
-        using PreparedWorldSave<World> changed = workspace.Stage(NoRebase);
+        using PreparedWorldSave changed = workspace.Stage(NoRebase);
         Assert.Equal(ObjectVersionKind.Delta, changed.Revision.LocalObjects.Single(row => row.ObjectId == 1).Kind);
         Assert.Contains(101u, changed.Revision.LocalObjectIds);
         Assert.Same(instance, workspace.World);
@@ -146,26 +146,26 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
     [Fact]
     public void EmptyAliasesCollapseOnlyAtSuccessfulInstallAndThenRemainStable() {
         FrameAddress old = Seed(Current, new(5, 9, 0), Text(3, ""), Text(9, ""));
-        WorldWorkspace<World> workspace = WorldWorkspace<World>.Load(_store, _schemas, old, new ObjectId(1), Registry(Model()));
-        using (PreparedWorldSave<World> first = workspace.Stage(NoRebase)) {
+        WorldWorkspace workspace = WorldWorkspace.Load(_store, _schemas, old, new ObjectId(1), Registry(Model()));
+        using (PreparedWorldSave first = workspace.Stage(NoRebase)) {
             Assert.Equal(new uint[] { 9 }, first.Revision.RemovedObjectIds);
             Install(first);
         }
-        using PreparedWorldSave<World> second = workspace.Stage(NoRebase);
+        using PreparedWorldSave second = workspace.Stage(NoRebase);
         Assert.Empty(second.Revision.LocalObjects);
         Assert.Empty(second.Revision.RemovedObjectIds);
-        Assert.Same(string.Empty, workspace.World.Text);
+        Assert.Same(string.Empty, ((World)workspace.World!).Text);
     }
 
     [Fact]
     public void RecursivePreparationFailsWithoutLeavingWorkspaceOccupied() {
         bool recurse = true;
-        WorldWorkspace<World>? workspace = null;
+        WorldWorkspace? workspace = null;
         StateModelRegistry models = Registry(Model(beforePrepare: () => { if (recurse) workspace!.Stage(NoRebase); }));
-        workspace = WorldWorkspace<World>.Create(_store, _schemas, new World(), models);
+        workspace = WorldWorkspace.Create(_store, _schemas, new World(), models);
         Assert.Throws<InvalidOperationException>(() => workspace.Stage(NoRebase));
         recurse = false;
-        using PreparedWorldSave<World> retry = workspace.Stage(NoRebase);
+        using PreparedWorldSave retry = workspace.Stage(NoRebase);
         Assert.True(retry.RootId.Value > 1);
         Install(retry);
     }
@@ -194,16 +194,16 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         child.Next = child;
         Node root = new() { Next = child };
         StateModelRegistry models = Registry(model);
-        WorldWorkspace<Node> workspace = WorldWorkspace<Node>.Create(_store, _schemas, root, models);
+        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, root, models);
         FrameAddress first;
-        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave pending = workspace.Stage(NoRebase)) {
             first = _store.Append(pending.Revision);
             pending.PrepareInstall(first);
             pending.Install();
         }
         child.Value = 8;
         FrameAddress changed;
-        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave pending = workspace.Stage(NoRebase)) {
             ObjectVersionRecord write = Assert.Single(pending.Revision.LocalObjects);
             Assert.Equal(2u, write.ObjectId);
             // This fixture's Delta repeats the complete two-field body; the compact v4 Base
@@ -218,14 +218,14 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         Assert.Same(child, child.Next);
         Assert.Equal(0, restores); // Neither initial nor subsequent installation rematerializes any object.
         root.Next = null;
-        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave pending = workspace.Stage(NoRebase)) {
             FrameAddress removed = _store.Append(pending.Revision);
             Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(removed).Keys);
             pending.PrepareInstall(removed);
             pending.Install();
         }
         root.Next = child;
-        using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
+        using (PreparedWorldSave pending = workspace.Stage(NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, pending.Revision.LocalObjects.Single(row => row.ObjectId == 3).Kind);
             pending.PrepareInstall(_store.Append(pending.Revision));
             pending.Install();
@@ -255,7 +255,7 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         return new(bytes.WrittenSpan);
     }
 
-    private FrameAddress Install(PreparedWorldSave<World> pending) {
+    private FrameAddress Install(PreparedWorldSave pending) {
         FrameAddress address = _store.Append(pending.Revision);
         pending.PrepareInstall(address);
         pending.Install(); // Internal mechanism witness; publication is the outer Repository's responsibility.

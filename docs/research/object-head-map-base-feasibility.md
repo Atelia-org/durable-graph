@@ -20,7 +20,7 @@
 | [StateRevision](../../src/DurableGraph.Storage/StateRevision.cs) | CreateObjectHeadMapBase 接受非空 Parent、本地对象记录和 external heads；Map Base 不限制本地对象必须是内容 Base。 |
 | [wire writer](../../src/DurableGraph.Storage/StateRevisionWireWriter.cs) / [目录恢复](../../src/DurableGraph.Storage/LiveObjectHeadMapMaterializer.cs) | 两种格式都已实现；Base 的存活目录是本地 ID 与 external heads 的并集，Delta 才继承父目录并应用 Removes。 |
 | [NormalizedRevision.WithAddress](../../src/DurableGraph.Persistence/NormalizedRevision.cs) / [PreparedWorldSave](../../src/DurableGraph.Persistence/PreparedWorldSave.cs) | 安装依据完整候选与本地写入更新 head/H，没有要求普通 State 使用 Map Delta。State 是否安装由候选角色决定，不由目录 kind 决定。 |
-| [EventHistoryRepository.ValidateGraph](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) | 校验精确 Revision Parent、根成员和对象链，没有把 State 角色绑定到 Map Delta；新产品测试覆盖收缩后的正常重开与发布前后失败。 |
+| [EventHistoryRepository.ValidateGraph](../../src/DurableGraph.Persistence/Repository.cs) | 校验精确 Revision Parent、根成员和对象链，没有把 State 角色绑定到 Map Delta；新产品测试覆盖收缩后的正常重开与发布前后失败。 |
 
 不能把“选择 Map Base”实现为把普通 State 改走整个 independentSnapshot 生命周期；后者不会安装 State 基线。
 应只复用目录构造方式，普通 State 仍完成 PrepareInstall/Install，Event 仍保持独立快照规则。

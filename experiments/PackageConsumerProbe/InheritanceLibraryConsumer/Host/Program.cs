@@ -38,26 +38,26 @@ internal static class Program {
         Require(!BaseCatalog.LegacyClrAbsent, "V1 must contain its original base and hidden inline CLR types.");
         FrameAddress ancestorChange, leafChange, historical, noChange;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
             Leaf world = new(10, true), child = new(11, false);
             world.Link = child;
             child.Link = world;
             world.Alias = child;
             world.Peers = [world, child, child];
-            using EventHistorySession<Leaf> session = repository.CreateBranch("main", world, Policy);
-            worldId = session.StateId;
+            using BranchCheckout session = repository.CreateBranch("main", world, Policy);
+            worldId = session.StateId!.Value;
             world.Ancestor++;
-            session.CommitDomainEvent(session.State, Policy);
-            ancestorChange = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            ancestorChange = session.CommitState(Policy).RevisionAddress;
             world.LeafValue++;
-            session.CommitDomainEvent(session.State, Policy);
-            leafChange = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            leafChange = session.CommitState(Policy).RevisionAddress;
             child.Ancestor++;
-            session.CommitDomainEvent(session.State, Policy);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, world), "Commit replaced the domain graph.");
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            historical = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(((Leaf)session.State!), world), "Commit replaced the domain graph.");
             CheckGraph(world, false, 41, 50);
         }
         Inspect(directory, (store, schemas) => {
@@ -70,11 +70,11 @@ internal static class Program {
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
         Require(BaseCatalog.ConstructorCalls == 2 && MiddleCatalog.ConstructorCalls == 2 && AppCatalog.ConstructorCalls == 2,
             "Expected only the two manually constructed leaf instances.");
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
-            CheckGraph(session.State, false, 41, 50);
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((Leaf)session.State!), false, 41, 50);
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
         }
         Require(BaseCatalog.ConstructorCalls == 2 && MiddleCatalog.ConstructorCalls == 2 && AppCatalog.ConstructorCalls == 2,
             "Hydrate ran domain constructors or initializers.");
@@ -91,18 +91,18 @@ internal static class Program {
         Require(AppCatalog.UpgradeCalls == 0 && BaseCatalog.UpgradeCalls == 0 && MiddleCatalog.UpgradeCalls == 0,
             "Stored exact reading ran business upgrades.");
         FrameAddress rewritten, noChange, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
-            CheckGraph(session.State, true, 41, 50);
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((Leaf)session.State!), true, 41, 50);
             CheckUpgradeCounters();
-            session.CommitDomainEvent(session.State, Policy);
-            rewritten = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
-            session.State.Ancestor++;
-            ((Leaf)session.State.Link!).LeafValue++;
-            session.CommitDomainEvent(session.State, Policy);
-            changed = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            rewritten = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
+            ((Leaf)session.State!).Ancestor++;
+            ((Leaf)((Leaf)session.State!).Link!).LeafValue++;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            changed = session.CommitState(Policy).RevisionAddress;
         }
         Inspect(directory, (store, schemas) => {
             CheckWrites(store, rewritten, ObjectVersionKind.Base, worldId, childId);
@@ -110,12 +110,12 @@ internal static class Program {
             CheckWrites(store, changed, ObjectVersionKind.Delta, worldId, childId);
             CheckHistorical(store, schemas, historical, worldId);
         });
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
-            CheckGraph(session.State, true, 42, 51);
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((Leaf)session.State!), true, 42, 51);
             CheckUpgradeCounters();
-            session.CommitDomainEvent(session.State, Policy);
-            noChange = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((Leaf)session.State!), Policy);
+            noChange = session.CommitState(Policy).RevisionAddress;
         }
         Require(BaseCatalog.ConstructorCalls == 0 && MiddleCatalog.ConstructorCalls == 0 && AppCatalog.ConstructorCalls == 0,
             "Loading ran a base or leaf domain constructor.");

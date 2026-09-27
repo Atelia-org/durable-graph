@@ -1,12 +1,12 @@
 # DB-078：分支工作副本与可编辑检查点 fork
 <a id="db-078多会话与可编辑检查点-fork"></a>
 
-> 状态：**Proposed / 2026-09-27 按 DB-083 已选产品语义校准的实施设计，未实施，非施工授权**。原源码核对基线 `343bfa6`。
+> 状态：**A 已实施并验收；B/C 尚未实施**。2026-09-27 按 DB-083 已选产品语义施工。原源码核对基线 `343bfa6`。
 > 目标以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；本文拆成 A/B/C 三个独立可验收阶段，不承诺一个主会话完成全文。
 > 顺序：第 2 片；依赖 [DB-077](0077-repository-model-environment-slice.md)，下一片 [DB-079](0079-shared-graph-restoration-core-slice.md)。
-> 本文提供推荐施工合同，尚未实施；需求与约束来源见 [DB-076](0076-efficient-graph-fork-technical-path.md)。
+> A 的分工与验收见[实施记录](0078-a-repository-free-history-implementation.md)；B/C 保留后续合同。需求与约束来源见 [DB-076](0076-efficient-graph-fork-technical-path.md)。
 > 每 branch 单工作副本及故障边界的原裁决见 [历史专项评审](0077-0078-api-dialectical-review.md)；本次公开 API 与阶段范围以本文和 DB-083 为准，不开放同 branch 竞争提交或新增专用 head 冲突异常。
-> 术语遵循[项目术语表](../DurableGraph-glossary.md#branch-checkout)：本片拟议 `BranchCheckout` / `Checkout`，当前源码旧名仅在事实说明中保留。
+> 术语遵循[项目术语表](../DurableGraph-glossary.md#branch-checkout)：A 已采用 `BranchCheckout` / `Checkout`；旧名仅在实施前事实说明中保留。
 
 ## 1. 交付范围与阶段停点
 
@@ -14,9 +14,9 @@
 三阶段全部完成才覆盖 DB-083 的分支/Checkpoint 核心产品；独立 tag 分片另行交付，后续所有优化关闭也必须正确。
 仅串行调用；用一个活动分支名集合落实每 branch 单工作副本，不增加多线程支持、跨进程 writer、强持工作副本对象的表、branch epoch 或锁租约。
 
-当前源码的 [Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 已有 ref-only CreateBranch、`Resume`、
+A 实施前源码的 [Repository](../../src/DurableGraph.Persistence/Repository.cs) 已有 ref-only CreateBranch、`Resume`、
 exact head/State baseline 检查及 CAS；但 Commit、PreviousStateCore 和 ValidateHistory 都依赖交替，
-[WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 还依赖 exact 泛型根，不能把本片估成改名和删除一个 if。
+[WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 当时还依赖 exact 泛型根；这是本片同时修改保存工作区的原因。
 
 | 阶段 | 独立可运行停点 | 尚未交付 |
 |---|---|---|
@@ -54,11 +54,11 @@ CheckpointAddress CommitState(IDurableObject nextState);
 ```
 
 `CheckpointAddress` 是本次打开实例签发的 opaque 历史位置，不是 StateRevision 地址的别名；
-外 repo/重开旧地址拒绝，重开从持久 ref 取得新地址。具体 class/struct 表示在实施 A 时选择，
+外 repo/重开旧地址拒绝，重开从持久 ref 取得新地址。A 已选择不可变 sealed class，
 不能靠裸坐标恰好合法认证来源。地址由库签发，没有公共裸坐标构造/反序列化入口；默认值、未签发值、
 外 repo 或重开旧地址在访问持久记录前拒绝，不把裸坐标存在当作来源证明。
 同一打开 owner 与同一逻辑 Journal 坐标的地址相等；重复 GetHead/读取签发不要求 ReferenceEquals，
-若选择 struct 则 default 无效，若选择 class 则 null 无效。地址只表示已提交历史位置，不承诺跨打开相等。
+null（包括该引用类型的 default）无效。地址只表示已提交历史位置，不承诺跨打开相等。
 本阶段不提供可序列化外部地址或 tag；不可变 tag 已纳入目标，按 DB-083 的独立上游分片安排，不阻塞 A/B/C。
 GetHead、提交返回、工作副本 Head、ref-only、Move、单图/Pair 读取与元数据历史入口必须同时迁移，
 不混用新地址和旧 GraphFrame；不保留无当前需求的 typed 读取便利重载、泛型工作副本或旧名称兼容壳。
@@ -266,7 +266,8 @@ G1/G2 由同一核心实现者顺序完成；subagent 可并行承担测试/消�
 原 [EventHistoryRepositoryTests](../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)
 中的全 repo 排他断言须改为每 branch 排他，保留合法角色/无写入检查；历史 fork/Move、升级重写、
 [共享恢复测试](../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) 均是回归基础。
-旧 PendingEvent 测试中仍有用的可变隔离见证迁往 B 的独立 Checkpoint；不为通过旧测试保留已删除的产品状态机。
+A 已将旧 PendingEvent 测试中的可变隔离见证改为 Checkout 加显式 Event 读取；B 另验证独立 Checkpoint 的双图合同。
+不为通过旧测试保留已删除的产品状态机。
 
 ## 6. 交付与停点
 

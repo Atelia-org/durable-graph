@@ -35,19 +35,19 @@ internal static class Replay {
         ObjectId worldId;
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
-        EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, models, StoreOptions);
-        EventHistorySession<World<T>>? session = null;
+        Repository repository = Repository.CreateNew(directory, models, StoreOptions);
+        BranchCheckout? session = null;
         double setupMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long setupAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         using (repository) {
             try {
                 Save("Initial");
-                worldId = session!.StateId;
+                worldId = session!.StateId!.Value;
                 foreach (Edit edit in script.Take(operationLimit ?? script.Length)) {
                     if (applyEdit is null) { workload.Apply(world, edit); }
                     else { applyEdit(world, edit); }
                     Save($"{edit.Round}:{edit.Kind}");
-                    if (!ReferenceEquals(world, session!.State) || !ReferenceEquals(world.Items, session!.State.Alias)) {
+                    if (!ReferenceEquals(world, session!.State) || !ReferenceEquals(world.Items, ((World<T>)session!.State!).Alias)) {
                         throw new InvalidOperationException("Commit replaced a domain instance.");
                     }
                 }
@@ -63,10 +63,10 @@ internal static class Replay {
                     session = repository.CreateBranch("main", world, parameters);
                 } else {
                     // The marker carries no World reference; E and S overhead are both timed.
-                    session.CommitDomainEvent(new ReplayEvent(), parameters);
-                    session.CommitDomainState(parameters);
+                    session.CommitEvent(new ReplayEvent(), parameters);
+                    session.CommitState(parameters);
                 }
-                FrameAddress address = session.StateRevisionAddress;
+                FrameAddress address = session.StateRevisionAddress!.Value;
                 double elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
                 long bytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
                 saved.Add(new(address, fingerprint, elapsed, bytes, edit));
@@ -120,11 +120,11 @@ internal static class Replay {
 
         allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         started = Stopwatch.GetTimestamp();
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), StoreOptions);
-        using EventHistorySession<World<T>> restored = reopened.Resume<World<T>>("main");
+        using Repository reopened = Repository.OpenExisting(directory, Models(), StoreOptions);
+        using BranchCheckout restored = reopened.Checkout("main");
         double coldMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long coldAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        if (workload.Fingerprint(restored.State) != saved[^1].Fingerprint) { throw new InvalidOperationException("Cold latest graph differs."); }
+        if (workload.Fingerprint(((World<T>)restored.State!)) != saved[^1].Fingerprint) { throw new InvalidOperationException("Cold latest graph differs."); }
         return new(workload.Name, count, repeat, algorithm.ToString(), directory, setupMs, setupAllocated, coldMs, coldAllocated,
             DirectorySize(Path.Combine(directory, "state")), new FileInfo(Path.Combine(directory, "schemas.rbf")).Length,
             DirectorySize(Path.Combine(directory, "journal")), steps.ToArray());

@@ -96,7 +96,7 @@ repository-assigned ObjectIds to address edits. Reference cases intentionally co
 their deletions use deterministic positions rather than pretending references have unique keys.
 
 Each workload/scale/repetition/algorithm gets a fresh independent repository and domain graph.
-One EventHistorySession performs its complete trace; no reopen happens between measured edit steps.
+One BranchCheckout performs its complete trace; no reopen happens between measured edit steps.
 All first binding/JIT/publication warmups are separate. Algorithm order rotates between workloads,
 scales and repetitions. Edits and fingerprints are outside timing; the complete synchronous Commit
 includes a minimal independent marker Event followed by State, both captures, graph writes,

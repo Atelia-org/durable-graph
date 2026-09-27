@@ -25,23 +25,23 @@ internal static class Program {
             "The package must remove the old framework base rather than retaining a compatibility shell.");
         string mode = args[0], directory = Path.GetFullPath(args[1]);
         if (mode == "events") {
-            using (var eventRepository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
-                var first = eventRepository.ReadEvent<IDurableObject>(eventRepository.ReadEvents("main").First());
+            using (var eventRepository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+                var first = ((IDurableObject)eventRepository.ReadEvent(eventRepository.ReadEvents("main").First()));
                 Require(first is Damage<string> { Actor: "hero", Amount: 3 }, "Event-only catalog lost the exact record or its inherited field.");
             }
-            using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
+            using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
             var events = repository.ReadEvents("main");
-            var pair = repository.ReadPair(events.First(), repository.GetPreviousState(events.First()));
+            var pair = repository.ReadPair(events.First(), repository.GetPreviousState(events.First())!);
             Require(pair.First is Damage<string> { Actor: "hero", Amount: 3 } && pair.Second is World { Hp: 10 },
                 "Non-generic ReadPair must preserve the requested Event/State order and each root's actual type and content.");
             Console.WriteLine("RecordClass:EventOnly:True");
             return;
         }
         if (mode == "seed") {
-            using var repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+            using var repository = Repository.CreateNew(directory, Models(), Options);
             using var session = repository.CreateBranch("main", new World());
-            session.CommitDomainEvent(new Damage<string>("hero", 3));
-            Require(session.PendingEvent is Damage<string> && session.State.Hp == 10, "E1 must leave the State baseline unchanged.");
+            session.CommitEvent(new Damage<string>("hero", 3));
+            Require(repository.ReadEvent(session.Head) is Damage<string> && ((World)session.State!).Hp == 10, "E1 must leave the State baseline unchanged.");
             Console.WriteLine("RecordClass:Seed:S0:E1:Pending:True");
             return;
         }
@@ -50,41 +50,41 @@ internal static class Program {
             return;
         }
         if (mode == "final") {
-            using var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-            using var session = repository.Resume<World>("main");
-            Require(session.PendingEvent is null && session.State.Hp == 7 &&
-                session.State.First.Counter == session.State.Second.Counter + 1 && FactCatalog.UpgradeCalls == 0,
+            using var repository = Repository.OpenExisting(directory, Models(), Options);
+            using var session = repository.Checkout("main");
+            Require(session.Head.Kind == GraphFrameKind.State && ((World)session.State!).Hp == 7 &&
+                ((World)session.State!).First.Counter == ((World)session.State!).Second.Counter + 1 && FactCatalog.UpgradeCalls == 0,
                 "Current data lost its Delta or required Upgrade again in a fresh process.");
             Console.WriteLine("RecordClass:FinalProcess:NoUpgrade:True");
             return;
         }
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using var session = repository.Resume<World>("main");
-            CheckIdentity(session.State);
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Checkout("main");
+            CheckIdentity(((World)session.State!));
             if (mode == "recover") {
-                Require(session.PendingEvent is Damage<string> { Amount: 3 }, "Expected pending E1 from the earlier process.");
-                Damage<string> damage = (Damage<string>)session.PendingEvent!;
-                session.State.Hp -= checked((int)damage.Amount);
-                session.State.Last = damage;
-                session.CommitDomainState();
-                Require(session.PendingEvent is null && session.State.Hp == 7, "S1 did not install.");
+                Require(repository.ReadEvent(session.Head) is Damage<string> { Amount: 3 }, "Expected pending E1 from the earlier process.");
+                Damage<string> damage = (Damage<string>)repository.ReadEvent(session.Head)!;
+                ((World)session.State!).Hp -= checked((int)damage.Amount);
+                ((World)session.State!).Last = damage;
+                session.CommitState();
+                Require(session.Head.Kind == GraphFrameKind.State && ((World)session.State!).Hp == 7, "S1 did not install.");
                 Console.WriteLine("RecordClass:Resume:S1:Pending:False");
             } else if (mode == "check") {
-                Require(session.PendingEvent is null && session.State.Hp == 7, "Completed E1 was replayed or State was lost.");
+                Require(session.Head.Kind == GraphFrameKind.State && ((World)session.State!).Hp == 7, "Completed E1 was replayed or State was lost.");
                 Console.WriteLine("RecordClass:Reopen:NoReplay:True");
             } else if (mode == "with") {
 #if HISTORY_V1
                 throw new InvalidOperationException("The ordinary-class stage has no with syntax.");
 #else
-                var old = session.State.First;
+                var old = ((World)session.State!).First;
                 var next = old with { };
                 Require(next == old && !ReferenceEquals(next, old), "with must retain language equality but create a distinct instance.");
                 Require(ReferenceEquals(next.Actor, old.Actor), "This with copy is shallow.");
-                session.State.First = next;
+                ((World)session.State!).First = next;
                 // Keep the old instance reachable to prove its identity was not inherited by the copy.
-                session.State.Alias = old;
-                session.CommitDomainEvent(new Damage<string>("hero", 0));
-                session.CommitDomainState();
+                ((World)session.State!).Alias = old;
+                session.CommitEvent(new Damage<string>("hero", 0));
+                session.CommitState();
                 Console.WriteLine("RecordClass:With:DistinctEqualIdentity:True");
 #endif
             } else throw new ArgumentException("Unknown mode.");
@@ -108,17 +108,17 @@ internal static class Program {
         throw new InvalidOperationException("The schema-upgrade stage requires V3 sources (Damage schema v2).");
 #else
         FrameAddress rewritten, changed;
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using var session = repository.Resume<World>("main");
-            CheckIdentity(session.State);
-            Require(session.PendingEvent is null && session.State.Hp == 7 && FactCatalog.UpgradeCalls == 4,
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Checkout("main");
+            CheckIdentity(((World)session.State!));
+            Require(session.Head.Kind == GraphFrameKind.State && ((World)session.State!).Hp == 7 && FactCatalog.UpgradeCalls == 4,
                 "Each of the four retained Damage instances must upgrade once; aliases must not duplicate work.");
-            Require(!ReferenceEquals(session.State.First, session.State.Alias), "with copy inherited the source identity.");
-            session.CommitDomainEvent(session.State.Last!);
-            rewritten = session.CommitDomainState(DeltaPolicy).RevisionAddress;
-            session.State.First.Counter++;
-            session.CommitDomainEvent(session.State.Last!);
-            changed = session.CommitDomainState(DeltaPolicy).RevisionAddress;
+            Require(!ReferenceEquals(((World)session.State!).First, ((World)session.State!).Alias), "with copy inherited the source identity.");
+            session.CommitEvent(((World)session.State!).Last!);
+            rewritten = session.CommitState(DeltaPolicy).RevisionAddress;
+            ((World)session.State!).First.Counter++;
+            session.CommitEvent(((World)session.State!).Last!);
+            changed = session.CommitState(DeltaPolicy).RevisionAddress;
         }
         using (var segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
             using var states = new StateRevisionStore(segments);
@@ -127,9 +127,9 @@ internal static class Program {
             var deltas = states.Read(changed).LocalObjects;
             Require(deltas.Count == 1 && deltas[0].Kind == ObjectVersionKind.Delta, "A same-instance mutable record change must use the existing Delta path.");
         }
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using var session = repository.Resume<World>("main");
-            Require(session.PendingEvent is null && session.State.First.Counter == session.State.Second.Counter + 1 &&
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Checkout("main");
+            Require(session.Head.Kind == GraphFrameKind.State && ((World)session.State!).First.Counter == ((World)session.State!).Second.Counter + 1 &&
                 FactCatalog.UpgradeCalls == 4, "Cold current-state reopen repeated Upgrade or lost the Delta.");
         }
         Console.WriteLine("RecordClass:Upgrade:BaseThenDelta:ColdReopen:True");

@@ -39,7 +39,7 @@ content. It makes no assumption about sharing domain instances across the two ma
 The runner builds three complete application generations in fresh intermediate directories:
 
 1. Ordinary classes with explicit readonly fields and `IDurableObject` publish the V1 history,
-   save S0, then E1 and exit with an outstanding PendingEvent. Two equal-content objects and an
+   save S0, then E1 and exit with an Event awaiting application processing. Two equal-content objects and an
    alias are already present in S0.
 2. The entire generic hierarchy changes to records **without changing Schema versions**.
    Exact history filenames and bytes stay unchanged. A separate process resumes E1, observes

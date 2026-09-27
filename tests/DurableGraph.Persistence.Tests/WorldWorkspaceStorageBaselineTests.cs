@@ -8,7 +8,7 @@ public sealed partial class WorldWorkspaceTests {
     [Fact]
     public void HotInstallsMaintainExactHeadsAndPayloadWithoutReadingOldChains() {
         World world = new() { Text = new string('x', 16) };
-        var workspace = WorldWorkspace<World>.Create(_store, _schemas, world, Registry(Model()));
+        var workspace = WorldWorkspace.Create(_store, _schemas, world, Registry(Model()));
         using (var first = StageWithoutReadingChains(workspace, NoRebase)) { Install(first); }
         NormalizedRevision initial = AssertStoredBaseline(workspace);
         ObjectId textId = initial.Objects.Keys.Single(id => id != workspace.WorldId);
@@ -53,7 +53,7 @@ public sealed partial class WorldWorkspaceTests {
     [Fact]
     public void SnapshotOptionalBaseDoesNotResetTheCommittedStatePayload() {
         World world = new();
-        var workspace = WorldWorkspace<World>.Create(_store, _schemas, world, Registry(Model()));
+        var workspace = WorldWorkspace.Create(_store, _schemas, world, Registry(Model()));
         using (var first = StageWithoutReadingChains(workspace, NoRebase)) { Install(first); }
         long basePayload = StorageOf(workspace, workspace.WorldId).ReconstructionPayloadBytes;
         world.Value++;
@@ -87,7 +87,7 @@ public sealed partial class WorldWorkspaceTests {
     public void DiscardAfterPreparingUpgradeInstallationPreservesSourceStorageAndRetry() {
         FrameAddress old = Seed(Old, new(5, 100, 0), Text(100, "removed by upgrade"));
         var models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) }));
-        var workspace = WorldWorkspace<World>.Load(_store, _schemas, old, new ObjectId(1), models);
+        var workspace = WorldWorkspace.Load(_store, _schemas, old, new ObjectId(1), models);
         NormalizedRevision source = AssertStoredBaseline(workspace);
         ObjectStorageInfo before = StorageOf(workspace, workspace.WorldId);
         Assert.Contains(new ObjectId(100), source.Objects.Keys);
@@ -110,7 +110,7 @@ public sealed partial class WorldWorkspaceTests {
         Assert.Single(installed.Objects);
         Assert.False(installed.Objects[workspace.WorldId].RequiresRewrite);
         Assert.NotEqual(before.Head, StorageOf(workspace, workspace.WorldId).Head);
-        workspace.World.Value++;
+        ((World)workspace.World!).Value++;
         using (var delta = StageWithoutReadingChains(workspace, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(delta.Revision.LocalObjects).Kind);
             Install(delta);
@@ -122,7 +122,7 @@ public sealed partial class WorldWorkspaceTests {
     public void CachedDecodedRowsCarryStorageIntoAnEditableLoad() {
         World world = new() { Text = new string('y', 8) };
         var models = Registry(Model());
-        var workspace = WorldWorkspace<World>.Create(_store, _schemas, world, models);
+        var workspace = WorldWorkspace.Create(_store, _schemas, world, models);
         using (var initial = StageWithoutReadingChains(workspace, NoRebase)) { Install(initial); }
         world.Value++;
         using (var delta = StageWithoutReadingChains(workspace, NoRebase)) { Install(delta); }
@@ -131,7 +131,7 @@ public sealed partial class WorldWorkspaceTests {
         DecodedRevision decoded = reads.Read(parent);
         Assert.Equal(decoded.Objects.Count, decoded.ObjectStorage.Count);
         var counts = ObjectChainCounts();
-        var loaded = WorldWorkspace<World>.LoadSnapshot(reads, parent, workspace.WorldId);
+        var loaded = WorldWorkspace.LoadSnapshot(reads, parent, workspace.WorldId);
         Assert.Equal(counts, ObjectChainCounts());
         Assert.Equal(decoded.Objects.Count, reads.Statistics.CacheHits);
         Assert.NotSame(world, loaded.World);
@@ -139,7 +139,7 @@ public sealed partial class WorldWorkspaceTests {
         foreach (var (id, info) in decoded.ObjectStorage) {
             Assert.Equal(info, baseline.Objects[id].Storage);
         }
-        loaded.World.Value++;
+        ((World)loaded.World!).Value++;
         using (var next = StageWithoutReadingChains(loaded, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(next.Revision.LocalObjects).Kind);
             Install(next);
@@ -184,22 +184,22 @@ public sealed partial class WorldWorkspaceTests {
             _store, _schemas, WithWrongRemovedHead(), [], NoRebase));
     }
 
-    private PreparedWorldSave<World> StageWithoutReadingChains(WorldWorkspace<World> workspace,
+    private PreparedWorldSave StageWithoutReadingChains(WorldWorkspace workspace,
         ReadAmplificationBaseBudgetParameters parameters) {
         var before = ObjectChainCounts();
-        PreparedWorldSave<World> pending = workspace.Stage(parameters);
+        PreparedWorldSave pending = workspace.Stage(parameters);
         Assert.Equal(before, ObjectChainCounts());
         return pending;
     }
 
-    private static NormalizedRevision Baseline(WorldWorkspace<World> workspace) =>
-        Assert.IsType<NormalizedRevision>(typeof(WorldWorkspace<World>)
+    private static NormalizedRevision Baseline(WorldWorkspace workspace) =>
+        Assert.IsType<NormalizedRevision>(typeof(WorldWorkspace)
             .GetField("_baseline", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(workspace));
 
-    private static ObjectStorageInfo StorageOf(WorldWorkspace<World> workspace, ObjectId id) =>
+    private static ObjectStorageInfo StorageOf(WorldWorkspace workspace, ObjectId id) =>
         Assert.IsType<ObjectStorageInfo>(Baseline(workspace).Objects[id].Storage);
 
-    private NormalizedRevision AssertStoredBaseline(WorldWorkspace<World> workspace) {
+    private NormalizedRevision AssertStoredBaseline(WorldWorkspace workspace) {
         NormalizedRevision baseline = Baseline(workspace);
         Assert.Same(_store, baseline.SourceStore);
         Assert.Same(_schemas, baseline.SourceSchemas);

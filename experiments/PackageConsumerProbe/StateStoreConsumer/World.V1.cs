@@ -23,15 +23,15 @@ public sealed partial class World : IDurableObject {
         __DurableState.RegisterModel(models);
         FrameAddress revision;
         ObjectId worldId;
-        using (var repository = EventHistoryRepository.CreateNew(directory, models, options))
+        using (var repository = Repository.CreateNew(directory, models, options))
         using (var session = repository.CreateBranch("main", new World(7, "A"), policy)) {
-            worldId = session.StateId;
-            session.CommitDomainEvent(new World(session.State._score, "A"), policy);
-            session.State._score = 8;
-            session.CommitDomainState(policy);
-            session.CommitDomainEvent(new World(session.State._score, "A"), policy);
-            session.State._score = 9;
-            revision = session.CommitDomainState(policy).RevisionAddress;
+            worldId = session.StateId!.Value;
+            session.CommitEvent(new World(((World)session.State!)._score, "A"), policy);
+            ((World)session.State!)._score = 8;
+            session.CommitState(policy);
+            session.CommitEvent(new World(((World)session.State!)._score, "A"), policy);
+            ((World)session.State!)._score = 9;
+            revision = session.CommitState(policy).RevisionAddress;
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
         using StateRevisionStore store = new(segments);

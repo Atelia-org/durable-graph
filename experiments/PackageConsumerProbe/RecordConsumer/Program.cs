@@ -72,30 +72,30 @@ internal static class Program {
         FrameAddress first, patch, historical, transient;
         ObjectId worldId;
         ResolverCalls.Clear();
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
-            first = session.StateRevisionAddress;
-            worldId = session.StateId;
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+            using BranchCheckout session = repository.CreateBranch("main", world, Policy);
+            first = session.StateRevisionAddress!.Value;
+            worldId = session.StateId!.Value;
             var lookup = MakeKey(100, 0, -1);
             Require(world.Rows.ContainsKey(lookup), "Default IEquatable must ignore the persistent Timestamp field.");
             Set(world.Rows, lookup, 201);
-            session.CommitDomainEvent(session.State, Policy);
-            patch = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            patch = session.CommitState(Policy).RevisionAddress;
             Key actual = world.Rows.Keys.Single(key => key.Part.Number == 100);
             Value value = world.Rows[actual];
             Require(world.Rows.Remove(actual), "Missing key before replacing its stored Timestamp.");
             actual = actual with { Timestamp = 90000 };
             world.Rows.Add(actual, value);
-            session.CommitDomainEvent(session.State, Policy);
-            historical = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            historical = session.CommitState(Policy).RevisionAddress;
             Require(world.Rows.Remove(actual), "Missing key before changing only Transient state.");
             actual = actual with { Scratch = 999 };
             world.Rows.Add(actual, value);
-            session.CommitDomainEvent(session.State, Policy);
-            transient = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            transient = session.CommitState(Policy).RevisionAddress;
             Require(ResolverCalls.Count == 1 && ResolverCalls[0] == typeof(Dictionary<Key, Value>),
                 "Application resolver must be cached by closed Dictionary; typed registration and Default must not invoke it.");
-            Require(ReferenceEquals(world, session.State) && ReferenceEquals(world.Rows, world.Alias), "Commit replaced domain instances.");
+            Require(ReferenceEquals(world, ((World)session.State!)) && ReferenceEquals(world.Rows, world.Alias), "Commit replaced domain instances.");
         }
         Inspect(directory, (store, schemas) => {
             var ids = CheckHistorical(store, schemas, historical, worldId, 201, 90000);
@@ -106,11 +106,11 @@ internal static class Program {
         });
         WriteAddress(directory, historical, worldId);
         FrameAddress restoredUnchanged;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            CheckGraph(session.State, 201, 400, 0);
-            session.CommitDomainEvent(session.State, Policy);
-            restoredUnchanged = session.CommitDomainState(Policy).RevisionAddress;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            CheckGraph(((World)session.State!), 201, 400, 0);
+            session.CommitEvent(((World)session.State!), Policy);
+            restoredUnchanged = session.CommitState(Policy).RevisionAddress;
         }
         Inspect(directory, (store, _) => Require(store.Read(restoredUnchanged).LocalObjects.Count == 0,
             "Load and recapture changed CurrentDefault/Application modes or frozen key content."));
@@ -128,24 +128,24 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 201, 90000));
         Require(Upgrades.Calls.Count == 0 && ResolverCalls.Count == 0, "Stored-exact reading invoked current behavior.");
         FrameAddress rewritten, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main");
-            World world = session.State;
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout session = repository.Checkout("main");
+            World world = ((World)session.State!);
             CheckGraph(world, 1201, 1400, 1000);
             Require(Upgrades.Calls.Count == 192 && Upgrades.Calls.All(call => call.Count == 32) &&
                 new[] { ids.Rows, ids.Application }.All(id => new[] { "key", "part", "value" }.All(side =>
                     Upgrades.Calls.Count(call => call.Id == id && call.Side == side) == 32)),
                 "Generic nested key/value upgrades must run once per entry and shared Dictionary owner.");
             Require(ResolverCalls.Count == 1, "CurrentDefault, typed Application or shared incoming edges caused extra resolver calls.");
-            session.CommitDomainEvent(session.State, Policy);
-            rewritten = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(session.State, Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            rewritten = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(((World)session.State!), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
             Set(world.Rows, MakeKey(1100, 0, -123), 1202);
             Set(world.Application, MakeKey(1100, 0, -123), 1401);
-            session.CommitDomainEvent(session.State, Policy);
-            changed = session.CommitDomainState(Policy).RevisionAddress;
-            Require(ReferenceEquals(world, session.State), "Commit replaced the working World.");
+            session.CommitEvent(((World)session.State!), Policy);
+            changed = session.CommitState(Policy).RevisionAddress;
+            Require(ReferenceEquals(world, ((World)session.State!)), "Commit replaced the working World.");
         }
         Inspect(directory, (store, schemas) => {
             var rows = store.Read(rewritten).LocalObjects;
@@ -159,9 +159,9 @@ internal static class Program {
                 "CurrentDefault and Application must both resume ordinary value Delta.");
             CheckHistorical(store, schemas, historical, worldId, 201, 90000);
         });
-        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Models(), Options);
-        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main");
-        CheckGraph(finalSession.State, 1202, 1401, 1000);
+        using Repository finalRepository = Repository.OpenExisting(directory, Models(), Options);
+        using BranchCheckout finalSession = finalRepository.Checkout("main");
+        CheckGraph(((World)finalSession.State!), 1202, 1401, 1000);
         Require(Upgrades.Calls.Count == 192 && ResolverCalls.Count == 2, "Cold reopen repeated Upgrade or resolved beyond one closed Application type.");
     }
 

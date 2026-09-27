@@ -35,31 +35,31 @@ public sealed partial class World : IDurableObject {
         __DurableState.RegisterModel(models);
         __DurableState.RegisterModel(models);
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
-        using (var repository = EventHistoryRepository.OpenExisting(directory, models, options))
-        using (var session = repository.Resume<World>("main")) {
-            oldRevision = session.StateRevisionAddress;
-            worldId = session.StateId;
-            Require(_upgradeCalls == 1 && session.State._score == 109 && session.State._name == "A" &&
-                session.State._generation == 73 && session.State._createdAtTicks == 638_625_600_000_000_000 &&
-                session.State._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
-            World original = session.State;
+        using (var repository = Repository.OpenExisting(directory, models, options))
+        using (var session = repository.Checkout("main")) {
+            oldRevision = session.StateRevisionAddress!.Value;
+            worldId = session.StateId!.Value;
+            Require(_upgradeCalls == 1 && ((World)session.State!)._score == 109 && ((World)session.State!)._name == "A" &&
+                ((World)session.State!)._generation == 73 && ((World)session.State!)._createdAtTicks == 638_625_600_000_000_000 &&
+                ((World)session.State!)._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
+            World original = ((World)session.State!);
             World marker = new(0, "Event");
-            session.CommitDomainEvent(marker, policy);
-            upgradedRevision = session.CommitDomainState(policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, original) && _upgradeCalls == 1, "Saving rebuilt or re-upgraded State.");
-            session.CommitDomainEvent(marker, policy);
-            unchangedRevision = session.CommitDomainState(policy).RevisionAddress;
-            session.CommitDomainEvent(marker, policy);
+            session.CommitEvent(marker, policy);
+            upgradedRevision = session.CommitState(policy).RevisionAddress;
+            Require(ReferenceEquals(((World)session.State!), original) && _upgradeCalls == 1, "Saving rebuilt or re-upgraded State.");
+            session.CommitEvent(marker, policy);
+            unchangedRevision = session.CommitState(policy).RevisionAddress;
+            session.CommitEvent(marker, policy);
             original._score = 110;
-            finalRevision = session.CommitDomainState(policy).RevisionAddress;
+            finalRevision = session.CommitState(policy).RevisionAddress;
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, models, options)) {
-            World final = repository.ReadState<World>(repository.GetHead("main"));
+        using (var repository = Repository.OpenReadOnlyExisting(directory, models, options)) {
+            World final = ((World)repository.ReadState(repository.GetHead("main")));
             Require(final._score == 110 && final._generation == 73 && final._name == "A" &&
                 final._createdAtTicks == 638_625_600_000_000_000 && final._cache == 0 &&
                 _constructorCalls == 1 && _upgradeCalls == 1, "Cold reopening failed to restore current Base plus Delta.");
             var historical = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == oldRevision);
-            Require(repository.ReadState<World>(historical)._score == 109 && _upgradeCalls == 2,
+            Require(((World)repository.ReadState(historical))._score == 109 && _upgradeCalls == 2,
                 "Original historical revision was not preserved.");
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);

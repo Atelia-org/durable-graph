@@ -28,92 +28,160 @@ internal static class Program {
         Alice alice = new() { Score = 1, Labels = ["shared", "shared"] };
         alice.Self = alice;
         World world = new() { Alice = alice, Bob = new() { Score = 99 } };
-        using (var repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+        using (var repository = Repository.CreateNew(directory, Models(), Options)) {
             using var session = repository.CreateBranch("main", world, Policy);
-            Require(ReferenceEquals(session.State, world), "S0 replaced the live State.");
+            Require(ReferenceEquals(((World)session.State!), world), "S0 replaced the live State.");
             alice.Score = 2;
-            session.CommitDomainEvent(new Observed(alice), Policy);
+            session.CommitEvent(new Observed(alice), Policy);
             alice.Score = 3;
-            session.CommitDomainState(Policy);
+            session.CommitState(Policy);
             alice.Score = 4;
-            session.CommitDomainEvent(new Observed(alice), Policy);
-            Require(ReferenceEquals(session.State, world) && world.Cache == 42, "Hot commit replaced domain instances.");
+            session.CommitEvent(new Observed(alice), Policy);
+            Require(ReferenceEquals(((World)session.State!), world) && world.Cache == 42, "Hot commit replaced domain instances.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
-            GraphFrame[] frames = repository.ReadFrames("main").ToArray();
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+            CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
             Require(frames.Length == 4, "Expected S0 E1 S1 E2.");
-            Observed e = repository.ReadEvent<Observed>(frames[1]);
+            Observed e = ((Observed)repository.ReadEvent(frames[1]));
             Require(e.Target.Score == 2 && ReferenceEquals(e.Target, e.Alias), "E1 lost its recorded value or sharing.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
-            Require(repository.ReadState<World>(repository.ReadFrames("main")[2]).Alice.Score == 3, "S1 lost its recorded value.");
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            Require(((World)repository.ReadState(repository.ReadFrames("main")[2])).Alice.Score == 3, "S1 lost its recorded value.");
         }
         Require(!File.Exists(Path.Combine(directory, "publication.rbf")), "Legacy publisher was created.");
         SharedReadProbe.Seed(directory + "-shared-read");
-        Console.WriteLine("EventHistorySeed:True:Siblings:True:PendingEvent:True:IndependentEvent:True:SharedReadSeed:True");
+        Console.WriteLine("EventHistorySeed:True:Siblings:True:EventHead:True:IndependentEvent:True:SharedReadSeed:True");
 #else
         var before = SnapshotFiles(directory);
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
-            GraphFrame pending = repository.GetHead("main");
-            Observed e = repository.ReadEvent<Observed>(pending);
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+            CheckpointAddress pending = repository.GetHead("main");
+            Observed e = ((Observed)repository.ReadEvent(pending));
             Require(World.UpgradeCalls == 0 && e.Target.Score == 1004, "Event-only read needed World capabilities.");
             CheckEvent(e);
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
-            GraphFrame pending = repository.GetHead("main");
-            var pair = repository.ReadPair<Observed, World>(pending, repository.GetPreviousState(pending));
-            Require(pair.First.Target.Score == 1004 && pair.Second.Alice.Score == 1003 && pair.Second.Generation == 2,
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            CheckpointAddress pending = repository.GetHead("main");
+            var pair = repository.ReadPair(pending, repository.GetPreviousState(pending)!);
+            Require(((Observed)pair.First).Target.Score == 1004 && ((World)pair.Second).Alice.Score == 1003 && ((World)pair.Second).Generation == 2,
                 "Pair did not retain each selected Revision's values.");
-            CheckEvent(pair.First);
+            CheckEvent(((Observed)pair.First));
         }
         Require(before.SequenceEqual(SnapshotFiles(directory)), "Readonly browsing changed repository files.");
         Alice.UpgradeCalls = World.UpgradeCalls = 0;
         FrameAddress rewritten, unchanged, delta, replacement;
         ObjectId originalRoot;
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
-            using var session = repository.Resume<World>("main");
-            Observed pending = (Observed)session.PendingEvent!;
-            Require(session.State.Alice.Score == 1003 && pending.Target.Score == 1004 && World.UpgradeCalls == 1 && Alice.UpgradeCalls == 2,
-                "Resume(E) must load the preceding State and pending Event independently.");
-            Require(!ReferenceEquals(session.State.Alice, pending.Target), "Writable Resume introduced a mutable cross-view alias.");
-            originalRoot = session.StateId;
-            World state = session.State;
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Checkout("main");
+            Observed pending = (Observed)repository.ReadEvent(session.Head)!;
+            Require(((World)session.State!).Alice.Score == 1003 && pending.Target.Score == 1004 && World.UpgradeCalls == 1 && Alice.UpgradeCalls == 2,
+                "Checkout and explicit ReadEvent must restore independently.");
+            Require(!ReferenceEquals(((World)session.State!).Alice, pending.Target), "Checkout plus explicit ReadEvent introduced a mutable cross-view alias.");
+            originalRoot = session.StateId!.Value;
+            World state = ((World)session.State!);
             Require(state.Alice.CreatedAtTicks == 638_931_456_000_000_000, "State Upgrade changed stable creation timestamp.");
             state.Alice.Score = 1005;
-            rewritten = session.CommitDomainState(Policy).RevisionAddress;
-            Require(session.PendingEvent is null && ReferenceEquals(session.State, state), "State publication did not install original candidate.");
-            session.CommitDomainEvent(new Observed(state.Alice), Policy);
-            unchanged = session.CommitDomainState(Policy).RevisionAddress;
+            rewritten = session.CommitState(Policy).RevisionAddress;
+            Require(session.Head.Kind == GraphFrameKind.State && ReferenceEquals(((World)session.State!), state), "State publication did not install original candidate.");
+            session.CommitEvent(new Observed(state.Alice), Policy);
+            unchanged = session.CommitState(Policy).RevisionAddress;
             state.Alice.Score = 1006;
-            session.CommitDomainEvent(new Observed(state.Alice), Policy);
-            delta = session.CommitDomainState(Policy).RevisionAddress;
-            session.CommitDomainEvent(new Observed(state.Alice), Policy);
+            session.CommitEvent(new Observed(state.Alice), Policy);
+            delta = session.CommitState(Policy).RevisionAddress;
+            session.CommitEvent(new Observed(state.Alice), Policy);
             World next = new() { Alice = state.Alice, Bob = state.Bob, Generation = 2 };
-            replacement = session.CommitDomainState(next, Policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, next) && session.StateId != originalRoot, "Replacement root was not installed.");
+            replacement = session.CommitState(next, Policy).RevisionAddress;
+            Require(ReferenceEquals(((World)session.State!), next) && session.StateId!.Value != originalRoot, "Replacement root was not installed.");
         }
         using (var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf")))
         using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
             using StateRevisionStore store = new(segments);
             StateRevision rewrite = store.Read(rewritten);
             Require(rewrite.LocalObjects.Count == 2 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
-                "Upgraded World and Alice require Base even after pending Event restoration.");
+                "Upgraded World and Alice require Base even after explicit Event reading.");
             Require(store.Read(unchanged).LocalObjects.Count == 0, "Installed upgraded State was not NoChange.");
             StateRevision edited = store.Read(delta);
             Require(edited.LocalObjects.Count == 1 && edited.LocalObjects[0].Kind == ObjectVersionKind.Delta, "Ordinary subsequent edit must use Delta.");
             Require(store.Read(replacement).RemovedObjectIds.Contains(originalRoot.Value), "Root replacement did not remove the old World.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
-            GraphFrame[] frames = repository.ReadFrames("main").ToArray();
-            var pair = repository.ReadPair<Observed, World>(frames[3], repository.GetHead("main"));
-            Require(pair.First.Target.Score == 1004 && pair.Second.Alice.Score == 1006, "Historical pending Event changed after later State commits.");
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
+            var pair = repository.ReadPair(frames[3], repository.GetHead("main"));
+            Require(((Observed)pair.First).Target.Score == 1004 && ((World)pair.Second).Alice.Score == 1006, "Historical Event changed after later State commits.");
         }
         // Record observable closure size and physical bytes, not a claim about physical read I/O.
         long bytes = Directory.EnumerateFiles(directory, "*.rbf", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length);
         File.WriteAllText(Path.Combine(directory, "metrics.txt"), $"TotalRbfBytes={bytes}\nForcedBaseObjectWrites=2\nNoChangeObjectWrites=0\nDeltaObjectWrites=1\n");
         SharedReadProbe.Verify(directory + "-shared-read");
-        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:PendingResume:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True");
+        VerifyFreeHistory(directory + "-free-history");
+        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True");
 #endif
+    }
+
+    // These helpers have no knowledge of World, Alice, Bob, or a shared business base.
+    private static BranchCheckout Begin(Repository repository, string name, IDurableObject fact) =>
+        repository.CreateBranchFromEvent(name, fact, Policy);
+    private static CheckpointAddress Record(BranchCheckout checkout, IDurableObject fact) => checkout.CommitEvent(fact, Policy);
+    private static CheckpointAddress Save(BranchCheckout checkout, IDurableObject state) => checkout.CommitState(state, Policy);
+
+    private static void VerifyFreeHistory(string directory) {
+        using (var repository = Repository.CreateNew(directory, Models(), Options)) {
+            using var checkout = Begin(repository, "free", new Bob { Score = 11 });
+            Record(checkout, new Bob { Score = 12 });
+            Require(checkout.State is null && checkout.StateId is null && checkout.StateRevisionAddress is null,
+                "E/E history invented a State.");
+        }
+        // An Event-only checkout restores no Event graph and needs no application model capability.
+        using (var repository = Repository.OpenExisting(directory, new StateModelRegistry(), Options)) {
+            using var checkout = repository.Checkout("free");
+            Require(checkout.State is null && repository.GetPreviousState(checkout.Head) is null,
+                "Cold Event-only checkout did not preserve absence of State.");
+        }
+        ObjectId aliceId;
+        FrameAddress firstState, replacement, unchanged, laterEvent;
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var checkout = repository.Checkout("free");
+            Alice alice = new() { Score = 30 };
+            alice.Self = alice;
+            World world = new() { Alice = alice, Bob = new Bob { Score = 40 } };
+            firstState = Save(checkout, world).RevisionAddress;
+            // The unrelated Alice domain type is already a reachable child, then becomes the root.
+            replacement = Save(checkout, alice).RevisionAddress;
+            aliceId = checkout.StateId!.Value;
+            Require(ReferenceEquals(checkout.State, alice) && checkout.StateId == aliceId,
+                "Cross-type promotion replaced the live child or its identity.");
+            unchanged = checkout.CommitState(Policy).RevisionAddress;
+            laterEvent = Record(checkout, new Bob { Score = 50 }).RevisionAddress;
+            Require(ReferenceEquals(checkout.State, alice), "Event advanced the editable State.");
+        }
+        using (var segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
+            using StateRevisionStore store = new(segments);
+            var firstHeads = store.ReadLiveObjectHeadMap(firstState);
+            var replacementHeads = store.ReadLiveObjectHeadMap(replacement);
+            Require(firstHeads.TryGetValue(aliceId.Value, out var originalHead) && replacementHeads[aliceId.Value] == originalHead,
+                "Promoted child did not retain its original identity and unchanged object head.");
+            Require(store.Read(firstState).ParentRevisionAddress is null, "First State inherited an Event baseline.");
+            Require(store.Read(replacement).ParentRevisionAddress == firstState &&
+                store.Read(unchanged).ParentRevisionAddress == replacement && store.Read(unchanged).LocalObjects.Count == 0 &&
+                store.Read(laterEvent).ParentRevisionAddress == unchanged, "Free history lost nearest-State graph parents.");
+        }
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var checkout = repository.Checkout("free");
+            Require(checkout.State is Alice { Score: 30 } && checkout.StateId == aliceId,
+                "Cold checkout lost the actual replacement root type or identity.");
+            var frames = repository.ReadFrames("free");
+            Require(frames.Select(frame => frame.Kind).SequenceEqual(new[] { GraphFrameKind.Event, GraphFrameKind.Event,
+                GraphFrameKind.State, GraphFrameKind.State, GraphFrameKind.State, GraphFrameKind.Event }),
+                "Journal did not preserve free Event/State order.");
+            Require(repository.ReadEvent(frames[0]) is Bob { Score: 11 } && repository.ReadEvent(frames[1]) is Bob { Score: 12 },
+                "Event-first values changed.");
+            // The same Bob CLR type also serves as a State, with role chosen solely by the API.
+            Save(checkout, new Bob { Score = 60 });
+            checkout.CommitState(Policy);
+        }
+        using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using var checkout = repository.Checkout("free");
+            Require(checkout.State is Bob { Score: 60 }, "Same CLR Event/State role or cold replacement failed.");
+        }
     }
 
     private static void CheckEvent(Observed e) {

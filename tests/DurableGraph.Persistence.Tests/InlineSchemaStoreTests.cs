@@ -197,7 +197,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     [Fact]
     public void PublishedBasePointingAtInlineSchemaRefusesRepositoryOpen() {
         string repositoryPath = NextPath();
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(repositoryPath, new StateModelRegistry())) { }
+        using (Repository repository = Repository.CreateNew(repositoryPath, new StateModelRegistry())) { }
         using (IRbfFile schemasFile = RbfFile.OpenExisting(Path.Combine(repositoryPath, "schemas.rbf"))) {
             new SchemaStore(schemasFile).Register(new("A", 1, SchemaKind.InlineValue));
         }
@@ -215,7 +215,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         }
         Dictionary<string, byte[]> before = Directory.GetFiles(repositoryPath, "*", SearchOption.AllDirectories)
             .ToDictionary(static path => path, File.ReadAllBytes);
-        Assert.Throws<InvalidDataException>(() => EventHistoryRepository.OpenExisting(repositoryPath, new StateModelRegistry()));
+        Assert.Throws<InvalidDataException>(() => Repository.OpenExisting(repositoryPath, new StateModelRegistry()));
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
     }
 

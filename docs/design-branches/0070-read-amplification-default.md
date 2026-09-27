@@ -95,7 +95,7 @@ DB-069 后热保存不再逐链读取，但全量 Base 准备仍在，因此少�
 
 ## 5. 实施与验证证据
 
-- 默认入口：[EventHistoryRepository.DefaultPolicy](../../src/DurableGraph.Persistence/EventHistoryRepository.cs)；
+- 默认入口：[EventHistoryRepository.DefaultPolicy](../../src/DurableGraph.Persistence/Repository.cs)；
   参数含义及默认调用合同写入[包内 XML 文档](../../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetParameters.cs)。
 - 测试共享 [TestSavePolicies.Baseline](../../tests/Shared/TestSavePolicies.cs) 保持 `{3,5}`；
   [默认/覆盖集成轨迹](../../tests/DurableGraph.Persistence.Tests/EventHistorySavePolicyTests.cs) 继续动态读取默认权威，

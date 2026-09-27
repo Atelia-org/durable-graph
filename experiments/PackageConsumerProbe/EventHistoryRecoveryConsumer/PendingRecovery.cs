@@ -3,15 +3,19 @@ using Atelia.DurableGraph.Persistence;
 
 namespace EventHistoryRecovery;
 
-// Application example, shared with the fault tests. Call after a fresh Resume when recovering.
-// Exceptions end this attempt: the caller disposes the session/repository and decides when to reopen.
+// Application protocol: this consumer always records exactly one Event followed by its State.
+// Only under that protocol does an Event head mean unfinished in-memory work. Free E/E/S/S
+// histories need their own durable processing cursor. No head kind proves external side effects.
+// Recover with fresh resources; exceptions end the attempt, never trigger a transparent retry.
 internal static class PendingRecovery {
-    public static bool Complete<TState>(EventHistorySession<TState> session,
+    public static bool Complete<TState>(Repository repository, BranchCheckout session,
         Action<TState> rebuildTransient, Action<TState, IDurableObject> apply) where TState : class, IDurableObject {
-        rebuildTransient(session.State);
-        if (session.PendingEvent is not { } pending) { return false; }
-        apply(session.State, pending);
-        session.CommitDomainState();
+        TState state = (TState)(session.State ?? throw new InvalidOperationException("This application requires an initial State."));
+        rebuildTransient(state);
+        if (session.Head.Kind != GraphFrameKind.Event) { return false; }
+        IDurableObject pending = repository.ReadEvent(session.Head);
+        apply(state, pending);
+        session.CommitState();
         return true;
     }
 }

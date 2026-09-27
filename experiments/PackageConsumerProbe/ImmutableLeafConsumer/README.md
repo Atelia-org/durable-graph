@@ -20,7 +20,7 @@ sets `DurableGraphGenerateDefinitions=true`. It resolves the leaf's current bind
 generated `DurableDefinitions` registration catalog and requires the internal `IsImmutableLeaf`
 capability flag to be `true`. The flag is read through reflection only; the probe adds no public
 query API and uses no friend access. The consumer then round-trips the leaf value:
-`EventHistoryRepository.CreateNew` publishes the branch, and a fresh `OpenExisting` plus `Resume`
+`Repository.CreateNew` publishes the branch, and a fresh `OpenExisting` plus `Resume`
 restores the persisted `Value` without running constructors.
 
 The **sibling consumer** compiles the identical model together with a local sibling source

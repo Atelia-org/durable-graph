@@ -34,36 +34,36 @@ public sealed partial class GraphWorld : IDurableObject {
         GraphWorld world = new(character);
         GraphItem item = character.Item;
         int constructed = GraphConstruction.Count;
-        using (var repository = EventHistoryRepository.CreateNew(directory, models, options))
+        using (var repository = Repository.CreateNew(directory, models, options))
         using (var session = repository.CreateBranch("main", world, policy)) {
-            worldId = session.StateId;
-            initialRevision = session.StateRevisionAddress;
-            session.CommitDomainEvent(repository.ReadState<GraphWorld>(session.Head)._primary!, policy);
+            worldId = session.StateId!.Value;
+            initialRevision = session.StateRevisionAddress!.Value;
+            session.CommitEvent(((GraphWorld)repository.ReadState(session.Head))._primary!, policy);
             character.Score = 8;
-            childRevision = session.CommitDomainState(policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, world) && ReferenceEquals(world._primary, character) &&
+            childRevision = session.CommitState(policy).RevisionAddress;
+            Require(ReferenceEquals(((GraphWorld)session.State!), world) && ReferenceEquals(world._primary, character) &&
                 ReferenceEquals(character.Item, item) && ReferenceEquals(item.Owner, character) &&
                 item.Cache == 17 && GraphConstruction.Count == constructed,
                 "Continuous commits must preserve application instances, cycles and transient fields.");
         }
-        using (var repository = EventHistoryRepository.OpenExisting(directory, models, options))
-        using (var session = repository.Resume<GraphWorld>("main")) {
-            Require(session.StateRevisionAddress == childRevision, "Resume selected an older State.");
-            AssertGraph(session.State, 8, constructed);
-            GraphWorld original = session.State;
-            session.CommitDomainEvent(repository.ReadState<GraphWorld>(session.Head)._primary!, policy);
+        using (var repository = Repository.OpenExisting(directory, models, options))
+        using (var session = repository.Checkout("main")) {
+            Require(session.StateRevisionAddress!.Value == childRevision, "Resume selected an older State.");
+            AssertGraph(((GraphWorld)session.State!), 8, constructed);
+            GraphWorld original = ((GraphWorld)session.State!);
+            session.CommitEvent(((GraphWorld)repository.ReadState(session.Head))._primary!, policy);
             original.Disconnect();
-            removedRevision = session.CommitDomainState(policy).RevisionAddress;
-            Require(ReferenceEquals(session.State, original), "Resumed commit replaced the application root.");
+            removedRevision = session.CommitState(policy).RevisionAddress;
+            Require(ReferenceEquals(((GraphWorld)session.State!), original), "Resumed commit replaced the application root.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, models, options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, models, options)) {
             var frames = repository.ReadFrames("main").ToArray();
-            GraphWorld removed = repository.ReadState<GraphWorld>(frames[^1]);
+            GraphWorld removed = ((GraphWorld)repository.ReadState(frames[^1]));
             Require(removed._primary is null && removed._alias is null, "Removed graph was not restored.");
-            AssertGraph(repository.ReadState<GraphWorld>(frames[0]), 7, constructed);
-            AssertGraph(repository.ReadState<GraphWorld>(frames[2]), 8, constructed);
-            var pair = repository.ReadPair<GraphCharacter, GraphWorld>(frames[1], frames[2]);
-            Require(pair.First.Score == 7 && ((GraphCharacter)pair.Second._primary!).Score == 8,
+            AssertGraph(((GraphWorld)repository.ReadState(frames[0])), 7, constructed);
+            AssertGraph(((GraphWorld)repository.ReadState(frames[2])), 8, constructed);
+            var pair = repository.ReadPair(frames[1], frames[2]);
+            Require(((GraphCharacter)pair.First).Score == 7 && ((GraphCharacter)((GraphWorld)pair.Second)._primary!).Score == 8,
                 "Pair must restore each selected version.");
         }
         using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));

@@ -1,8 +1,8 @@
 # DB-083：从用户故事推导 Repository 与 Checkpoint API
 
-> 状态：**目标语义已选定 / 分片设计已交叉校准，未实施；不是执行工单**。2026-09-27 纳入用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag。
+> 状态：**目标语义已选定；公共基础 A 已实施并验收，B/C 与 tag 尚未实施；不是执行工单**。2026-09-27 纳入用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag。
 > 本文重新检验 DB-076–082 所依赖的公共使用模型；不是继续按旧 Event/State 交替合同施工的授权。
-> 当前产品事实仍以源码为准。这里的 `Repository`、`BranchCheckout`、`Checkpoint` 和示意调用均为候选设计。
+> 当前产品事实仍以源码为准。`Repository`、`BranchCheckout` 与地址/自由历史的实现范围见 [078-A 记录](0078-a-repository-free-history-implementation.md)；`Checkpoint`、事件枚举与 Fork 仍为后续合同。
 
 ## 1. 本轮需求账本
 
@@ -57,7 +57,7 @@ DramaBoard 可继续在自己的 adapter 中执行 E/S 交替；LLM 可以连续
 
 ## 3. API 草图与读取形状
 
-以下为推荐形状，不是可编译的现有 API；构造器、保存策略等非本轮差异省略。
+以下为完整目标形状，包含尚未交付的 B/C 能力；构造器、保存策略等非本轮差异省略。
 公开门面建议使用根命名空间 `Atelia.DurableGraph`，实现可以继续位于现有 Persistence 程序集。
 不新增一个转发门面与旧公开类型并行维护，也不为命名反转程序集依赖。
 
@@ -156,7 +156,7 @@ ReadCheckpoint 交付的是**可用于内存计算的独立历史恢复结果**�
 
 ### 3.3 地址、ref 与打开寿命
 
-`CheckpointAddress` 是**目标仓库历史位置类型，尚未实施**，不是公开 `GraphFrame.RevisionAddress` 的另一种拼写；后者只定位底层图修订，
+`CheckpointAddress` 已由 A 选为库签发的不可变 class；它不是旧 `GraphFrame.RevisionAddress` 的另一种拼写，诊断修订地址只定位底层图修订，
 不包含完整 Journal 历史角色与来源。示意代码中的地址来自仓库的 GetHead、成功提交和历史查询。
 
 首个垂直分片选定同一打开实例签发的 opaque 地址，重开后从持久 ref 重新解析；跨仓库、重开旧句柄与无效/default 输入拒绝。
@@ -283,7 +283,7 @@ ShowBranch(candidateBranch, candidate.Head); // 无领域根类型参数或反�
 
 已有 [HistoryJournal](../../src/DurableGraph.Persistence/HistoryJournal.cs) 用 OpaqueEventKind 区分 E/S，
 每条记录的小 envelope 定位对应图；不要求仅为两种公开 Checkpoint 派生类就新增两种 RBF 物理格式。
-当前 [ReadEvents](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 已不物化 State 领域图，但先取得完整历史句柄再筛选。
+A 保留的全量 [ReadEvents](../../src/DurableGraph.Persistence/Repository.cs) 已不物化 State 领域图，但先取得完整历史句柄再筛选。
 实际 storage pin 以 [StorageDependency.props](../../eng/StorageDependency.props) 为准；本轮查的是该 commit 的头部读取、Parent、refs 与 forward-plan 源码。
 
 放开交替后仍区分 Journal Parent 与图保存 Parent。统一规则：提交前 Head 为 P（首次创建时无），
@@ -320,7 +320,7 @@ Event 始终丢弃捕获候选、不 Accept live 身份、不安装保存基线�
 这项底层能力可以保留；需要重做的是提交检查、最近 State 查找、重开验证及单个 PendingEvent 的公共含义。
 
 非泛型工作副本也不是把现有类型直接替换为 `WorldWorkspace<IDurableObject>`：
-当前 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 按 `typeof(TWorld)` 做 exact 根检查并持有根模型；
+A 实施前的 WorldWorkspace 按 `typeof(TWorld)` 做 exact 根检查并持有根模型；该限制已在[当前工作区](../../src/DurableGraph.Persistence/WorldWorkspace.cs)移除。
 新的工作副本应按实际根模型保存/恢复，同时保持完整保存来源。现有
 [替换根测试](../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)中的
 `RootReplacementInstallsOriginalCandidateOnlyAfterPublication` 是原实例安装与后继保存的回归依据，不能因公共类型擦除而丢失。
@@ -389,4 +389,4 @@ DB-079 统一按用途准备/物化；DB-080 仅驻留最近 State 的一份材�
 DB-081 只将具备冷热等价证据的 State 提交产物放入同槽，Event 不动槽；DB-082 仅在该 State 材料范围实验 immutable 叶复用。
 优化不影响本稿可观察语义，也不强迫工作副本装载事件。Event-first、异型 State 和同打开地址由 078-A 交付，
 nearest PreviousEvent 由 078-B 交付；tag 的上游交付及 DG 接入单独跟踪。
-剩余内部取舍是地址的 CLR 表示、恢复证书的可证明覆盖范围和缓存实测收益；均有明确合同/回退或停点，不再作为未定产品语义。
+地址 CLR 表示已由 A 选定；剩余内部取舍是恢复证书的可证明覆盖范围和缓存实测收益；均有明确合同/回退或停点，不再作为未定产品语义。

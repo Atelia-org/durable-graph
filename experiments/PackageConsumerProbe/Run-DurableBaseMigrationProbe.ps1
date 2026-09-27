@@ -156,6 +156,12 @@ try {
             foreach ($method in @('CreateNew', 'OpenExisting', 'OpenReadOnlyExisting')) {
                 $generationProgram = $generationProgram.Replace("EventHistoryRepository.$method(directory, options)", "EventHistoryRepository.$method(directory, models, options)")
             }
+            # DB-078-A changes only the current package lane; the embedded legacy source stays frozen.
+            $generationProgram = $generationProgram.Replace('EventHistoryRepository', 'Repository').Replace('.Resume<World>(', '.Checkout(')
+            $generationProgram = $generationProgram.Replace('CommitDomainEvent', 'CommitEvent').Replace('CommitDomainState', 'CommitState')
+            $generationProgram = $generationProgram.Replace('session.PendingEvent is null', 'session.Head.Kind == GraphFrameKind.State')
+            $generationProgram = $generationProgram.Replace('session.PendingEvent', 'repository.ReadEvent(session.Head)').Replace('session.State', '((World)session.State!)')
+            $generationProgram = $generationProgram.Replace('repository.ReadState<World>(', '(World)repository.ReadState(').Replace('repository.ReadEvent<World>(', '(World)repository.ReadEvent(')
         }
         [IO.File]::WriteAllText($project, $generationProject, $utf8)
         $marker = if ($isLegacy) { "DurableBase" } else { "IDurableObject" }
