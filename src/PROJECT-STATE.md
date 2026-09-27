@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079 已实施并验收；080–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079/080 已实施并验收；081–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,10 +19,13 @@
 
 ## 当前焦点
 
-[DB-079：共用图恢复核心](../docs/design-branches/0079-shared-graph-restoration-core-implementation.md) 已实施并独立验收。
-单图、Checkpoint、Checkout/Fork 与 ReadPair 共用完整单图准备材料和两阶段物化；两图先完成准备、全部实例分配与引用表验证，再 Hydrate。
-独立图保留 mutable 隔离；ReadPair 仍须 exact head、完整值比较与引用闭包证明。只读不构造保存身份导入；
-可编辑恢复保留完整 source、head/H、重写义务、全源字符串身份与 ID 游标。本片没有跨操作驻留或性能改善承诺。
+[DB-080：最近 State 准备材料复用](../docs/design-branches/0080-prepared-checkpoint-reuse-implementation.md) 已实施并独立验收。
+Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽；每次命中复核完整 live Schema 证书，仍独立物化和导入保存身份。
+证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
+默认启用的依据是实测高命中路径准备计数和分配下降；没有完整 Fork 普遍加速或总堆有界的承诺，具体证据只保留在实施记录。
+
+[DB-079 共用核心](../docs/design-branches/0079-shared-graph-restoration-core-implementation.md)继续承担单图、Checkpoint 与 ReadPair 的完整准备/两阶段物化；
+只读入口不使用 State 驻留槽或导入保存身份。完整 source、head/H、rewrite、字符串身份及 ID 游标保持，mutable 独立性不变。
 
 [078-A](../docs/design-branches/0078-a-repository-free-history-implementation.md) 的非泛型入口、自由历史与跨类型 State，
 以及 [078-B](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 的独立 Checkpoint/固定查询、
@@ -31,8 +34,9 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
 [DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的后续顺序保持：
-下一停点为 080 单 State 准备槽 → 081 热 State 准入；082 immutable 叶实验仅硬依赖 080。
-无 State 请求绕过材料槽/叶表，优化关闭仍须正确；这些优化尚未实施。
+下一停点为 [081 热 State 准入](../docs/design-branches/0081-hot-commit-restoration-material-slice.md)：先证明新 State 的冷恢复依赖与完整来源，
+不能以 Capture 成功或旧历史 Upgrade 证书代替。082 immutable 叶实验仅硬依赖 080，仍须单独测量与验收。
+无 State 请求绕过材料槽/未来叶表，优化关闭仍须正确；081/082 尚未实施。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
 DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /
@@ -222,6 +226,8 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   GraphReader 为独立读取与 LoadedWorld/工作区恢复共用管线：先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
   从所选 durable 根迭代求可达闭包，全部可达 class/array/List/Dictionary 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
   单图准备材料保留完整 normalized 来源、实际根、模型环境与可达顺序，不额外持有 decoded 目录。
+  Repository Checkout/Fork 可驻留一份成功 State 材料及完整依赖证书；重复选择同 State 省去冷准备，mutable 分配与身份导入仍独立。
+  预闭合 factory/binding/Upgrade 证据按实际依赖传递、命中复核 live Schema；槽不替代逐请求 Head 导航或保存来源校验。
   独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。

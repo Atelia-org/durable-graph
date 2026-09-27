@@ -3,6 +3,7 @@
 > 状态：**Proposed / 已按 DB-083 校准的条件实验，未实施；不是实施授权**。2026-09-27；当前实现事实另见源码。
 > 产品合同以 [DB-083](0083-repository-checkpoint-api-user-stories.md) 为准；Fork/Checkout 有最近 State 才恢复该图，不交付 PendingEvent。
 > 顺序：第 5 片；依赖 [DB-080](0080-prepared-checkpoint-reuse-slice.md) 的材料/证书与驻留接缝，下一片 [DB-082](0082-prepared-immutable-leaf-reuse-slice.md)。
+> DB-080 的实际证书链、单槽边界与测量限制见[实施记录](0080-prepared-checkpoint-reuse-implementation.md)；本片仍须单独证明新 State 的冷恢复等价，不能直接复用旧历史证书。
 > 本片只尝试复用成功 State 提交的 owned DTO，不覆盖 Event 恢复材料或未提交 live graph fork。总体语义见 [DB-076](0076-efficient-graph-fork-technical-path.md)。
 > 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` / `Checkout` 已由 [078-A](0078-a-repository-free-history-implementation.md) 交付；每分支占用与 named Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。本片内部优化仍未实施。
 

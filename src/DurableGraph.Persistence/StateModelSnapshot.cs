@@ -20,6 +20,8 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     private readonly Dictionary<Type, StateValueBinding> _currentValues = [];
     private readonly Dictionary<SchemaKey, StateValueBinding> _storedValues = [];
     private readonly Dictionary<DurableFieldInfo, StateValueBinding> _storedNullableValues = [];
+    // A closure may use standard resolution services for dependencies outside its own layout.
+    private readonly Dictionary<object, ExactSchemaRequirementSet> _closureRequirements = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<(string Kind, object Key)> _closing = [];
     private readonly HashSet<Type> _validatedDomainTypes = [];
     private readonly Dictionary<Type, bool> _managedValueTypes = [];
@@ -118,6 +120,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     public override bool TryGetCurrentModel(Type domainType, out StateModelBinding? model) {
         RequireClosed(domainType);
         if (_types.TryGetValue(domainType, out model)) {
+            CheckClosureRequirements(model);
             if (_definitions.ContainsKey(model.CurrentSchema.SchemaId)) { BindSchema(model.CurrentSchema); }
             else { CheckRegistered(model.CurrentSchema); }
             return true;
@@ -129,6 +132,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         var active = ("model", (object)domainType);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             model = definition.CurrentModelFactory(domainType, this);
             if (model.DomainType != domainType || model.CurrentSchema.Type != GetTypeExpr(domainType) ||
                 model.CurrentSchema.Kind != definition.Kind || model.CurrentSchema.Version != definition.CurrentVersion) {
@@ -144,7 +148,13 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
                     throw new InvalidDataException("The model did not reuse its snapshot's exact reader binding.");
                 }
             }
-            foreach (StateReaderBinding reader in model.Readers) { _readers.TryAdd(new(reader.Schema.Type, reader.Schema.Version), reader); }
+            ExactSchemaRequirementSet requirements = collection.Complete();
+            _closureRequirements.Add(model, requirements);
+            foreach (StateReaderBinding reader in model.Readers) {
+                if (_readers.TryAdd(new(reader.Schema.Type, reader.Schema.Version), reader)) {
+                    _closureRequirements.TryAdd(reader, requirements);
+                }
+            }
             _models.Add(model.CurrentSchema.Type, model);
             _types.Add(domainType, model);
             return true;
@@ -157,6 +167,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         SchemaKey key = new(schema.Type, schema.Version);
         if (_readers.TryGetValue(key, out StateReaderBinding? prior)) {
             if (!prior.Schema.Equals(schema)) { throw new InvalidDataException("A reader key was reused with a different complete Schema."); }
+            CheckClosureRequirements(prior);
             if (_definitions.ContainsKey(schema.SchemaId)) { BindSchema(schema); }
             else { CheckRegistered(schema); }
             return prior;
@@ -166,9 +177,11 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         var active = ("reader", (object)key);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             BindSchema(schema);
             StateReaderBinding result = factory(schema, this);
             if (!schema.Equals(result.Schema)) { throw new InvalidDataException("A historical reader factory returned another exact Schema."); }
+            RememberClosureRequirements(result, collection);
             _readers.Add(key, result);
             return result;
         } finally { _closing.Remove(active); }
@@ -177,6 +190,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     public override StateValueBinding ResolveCurrentValue(Type domainType) {
         RequireClosed(domainType);
         if (_currentValues.TryGetValue(domainType, out StateValueBinding? prior)) {
+            CheckClosureRequirements(prior);
             if (prior.Slot.ValueSchema is { } inline) { CheckRegistered(inline); }
             return prior;
         }
@@ -185,11 +199,13 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
             return builtin;
         }
         if (Nullable.GetUnderlyingType(domainType) is { } underlying) {
+            using var collection = BeginSchemaRequirementCollection();
             StateValueBinding child = ResolveCurrentValue(underlying);
             StateValueBinding result = new(DurableFieldInfo.Nullable(1, child.Slot),
                 typeof(NullableState<>).MakeGenericType(child.StateType),
                 typeof(NullableStateOps<,>).MakeGenericType(child.StateType, child.StateOpsType),
                 domainType, typeof(NullableValueProjection<,,>).MakeGenericType(underlying, child.StateType, child.ProjectionType!));
+            RememberClosureRequirements(result, collection);
             _currentValues.Add(domainType, result);
             return result;
         }
@@ -207,12 +223,14 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         var active = ("current value", (object)domainType);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             StateValueBinding result = factory(domainType, this);
             if (result.DomainType != domainType || result.ProjectionType is null || result.Slot.InlineSchema is not { } schema ||
                 schema.Type != nominal || schema.Version != definition.CurrentVersion) {
                 throw new InvalidDataException("The current value factory returned the wrong exact projection.");
             }
             BindSchema(schema);
+            RememberClosureRequirements(result, collection);
             _currentValues.Add(domainType, result);
             return result;
         } finally { _closing.Remove(active); }
@@ -223,10 +241,15 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         if (slot.TypeTag == TypeTag.Nullable) {
             DurableFieldInfo nullableKey = WithFieldId(slot, 1);
             if (slot.ValueSchema is { } dependency) { CheckRegistered(dependency); }
-            if (_storedNullableValues.TryGetValue(nullableKey, out StateValueBinding? cached)) { return cached.WithFieldId(slot.FieldId); }
+            if (_storedNullableValues.TryGetValue(nullableKey, out StateValueBinding? cached)) {
+                CheckClosureRequirements(cached);
+                return cached.WithFieldId(slot.FieldId);
+            }
+            using var collection = BeginSchemaRequirementCollection();
             StateValueBinding child = ResolveStoredValue(slot.NullableLayout!.ElementSlot);
             StateValueBinding result = new(nullableKey, typeof(NullableState<>).MakeGenericType(child.StateType),
                 typeof(NullableStateOps<,>).MakeGenericType(child.StateType, child.StateOpsType));
+            RememberClosureRequirements(result, collection);
             _storedNullableValues.Add(nullableKey, result);
             return result.WithFieldId(slot.FieldId);
         }
@@ -234,6 +257,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         SchemaKey key = new(schema.Type, schema.Version);
         if (_storedValues.TryGetValue(key, out StateValueBinding? prior)) {
             if (!schema.Equals(prior.Slot.InlineSchema)) { throw new InvalidDataException("An inline value key was reused with a different exact Schema."); }
+            CheckClosureRequirements(prior);
             CheckRegistered(schema);
             return prior.WithFieldId(slot.FieldId);
         }
@@ -242,10 +266,13 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         var active = ("stored value", (object)key);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             BindSchema(schema);
             StateValueBinding result = factory(schema, this);
             if (!schema.Equals(result.Slot.InlineSchema)) { throw new InvalidDataException("An inline body factory returned another exact Schema."); }
-            _storedValues.Add(key, result.WithFieldId(1));
+            StateValueBinding canonical = result.WithFieldId(1);
+            RememberClosureRequirements(canonical, collection);
+            _storedValues.Add(key, canonical);
             return result.WithFieldId(slot.FieldId);
         } finally { _closing.Remove(active); }
     }
@@ -336,6 +363,21 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
 
     private void Begin((string Kind, object Key) active) {
         if (!_closing.Add(active)) { throw new InvalidDataException($"Recursive exact {active.Kind} binding is unsupported."); }
+    }
+
+    private void CheckClosureRequirements(object binding) {
+        if (_closureRequirements.TryGetValue(binding, out ExactSchemaRequirementSet? requirements)) { requirements.Validate(this); }
+    }
+
+    private void RememberClosureRequirements(object binding, SchemaRequirementCollection collection) {
+        ExactSchemaRequirementSet requirements = collection.Complete();
+        if (_closureRequirements.TryGetValue(binding, out ExactSchemaRequirementSet? prior)) {
+            ExactSchemaRequirementSet.Builder merged = new();
+            merged.Add(prior);
+            merged.Add(requirements);
+            requirements = merged.Build();
+        }
+        _closureRequirements[binding] = requirements;
     }
 
     private void RequireClosed(Type type) {

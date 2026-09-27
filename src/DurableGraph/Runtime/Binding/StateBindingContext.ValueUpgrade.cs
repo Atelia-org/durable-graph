@@ -45,10 +45,12 @@ public abstract partial class StateBindingContext {
         ValuePlanKey key = new(ruleSet, source, target);
         if (_valueUpgradePlans.TryGetValue(key, out ValueUpgradePlan? cached)) {
             if (depth + cached.Height - 1 > MaximumValueUpgradeDepth) { throw new InvalidDataException("Value upgrade dependency binding exceeded its depth bound."); }
+            cached.Requirements.Validate(this);
             return cached;
         }
         if (!_bindingValueUpgrades.Add(key)) { throw new InvalidDataException("Value upgrade dependencies contain a recursive binding cycle."); }
         try {
+            using var collection = BeginSchemaRequirementCollection();
             StateValueUpgradeRuleSet rules = GetValueUpgradeRuleSet(ruleSet);
             if (rules.RuleSet != ruleSet) { throw new InvalidDataException("The catalog returned a different value upgrade rule set."); }
             StateValueUpgradeProvider[] candidates = rules.Providers.Where(provider => MatchesValueProvider(provider, source, target)).ToArray();
@@ -84,6 +86,11 @@ public abstract partial class StateBindingContext {
             }
             plan.Source = source;
             plan.Target = target;
+            ExactSchemaRequirementSet.Builder requirements = new();
+            plan.CollectRequirements(requirements, "value upgrade", []);
+            requirements.Build().Validate(this);
+            requirements.Add(collection.Complete());
+            plan.Requirements = requirements.Build();
             _valueUpgradePlans.Add(key, plan);
             return plan;
         } finally { _bindingValueUpgrades.Remove(key); }
@@ -185,6 +192,7 @@ public abstract partial class StateBindingContext {
     }
 
     private abstract class ValueUpgradePlan(UpgradeDependencies dependencies) {
+        internal ExactSchemaRequirementSet Requirements { get; set; } = ExactSchemaRequirementSet.Create();
         internal int Height { get; } = dependencies.Height + 1;
         protected UpgradeDependencies Dependencies { get; } = dependencies;
         internal DurableFieldInfo Source { get; set; }
@@ -196,6 +204,7 @@ public abstract partial class StateBindingContext {
         internal void CollectRequirements(ExactSchemaRequirementSet.Builder requirements, string path,
             HashSet<ValueUpgradePlan> visited) {
             if (!visited.Add(this)) { return; }
+            requirements.Add(Requirements);
             if (Source.ValueSchema is { } source) { requirements.Add(source, $"{path}.source"); }
             if (Target.ValueSchema is { } target) { requirements.Add(target, $"{path}.target"); }
             Dependencies.CollectRequirements(requirements, path, visited);

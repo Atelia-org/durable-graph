@@ -12,6 +12,7 @@ internal sealed partial class StateModelSnapshot {
         if (IsListType(domainType)) { return TryGetCurrentListBinding(domainType, out binding); }
         if (!domainType.IsArray) { return base.TryGetCurrentObjectBinding(domainType, out binding); }
         if (_currentArrays.TryGetValue(domainType, out ArrayObjectBinding? prior)) {
+            CheckClosureRequirements(prior);
             CheckArrayLayout(prior.ArrayLayout);
             binding = prior;
             return true;
@@ -19,6 +20,7 @@ internal sealed partial class StateModelSnapshot {
         var active = ("array", (object)domainType);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             // A reference element binds only its slot. In particular, a struct containing an
             // array of itself does not recursively close that referenced array's body here.
             StateValueBinding element = ResolveCurrentValue(domainType.GetElementType()!);
@@ -30,6 +32,7 @@ internal sealed partial class StateModelSnapshot {
                 throw new InvalidDataException("An array factory returned another current type or exact layout.");
             }
             CheckArrayLayout(layout);
+            RememberClosureRequirements(result, collection);
             _currentArrays.Add(domainType, result);
             binding = result;
             return true;
@@ -43,12 +46,14 @@ internal sealed partial class StateModelSnapshot {
         if (layout.Kind != ObjectStateKind.Array) { return base.ResolveObjectReader(layout); }
         ArrayLayout array = layout.Array!;
         if (_arrayReaders.TryGetValue(array, out ObjectReaderBinding? prior)) {
+            CheckClosureRequirements(prior);
             CheckArrayLayout(array);
             return prior;
         }
         var active = ("array reader", (object)array);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             // Historical readers resolve retained element state operations only. A deleted
             // historical domain struct need not be present as a current CLR declaration.
             CheckArrayLayout(array);
@@ -58,6 +63,7 @@ internal sealed partial class StateModelSnapshot {
                 throw new InvalidDataException("An array reader factory returned another exact layout.");
             }
             CheckArrayLayout(array);
+            RememberClosureRequirements(result, collection);
             _arrayReaders.Add(array, result);
             return result;
         } finally { _closing.Remove(active); }

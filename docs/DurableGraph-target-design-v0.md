@@ -478,6 +478,11 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 只读交付不导入保存身份；可编辑恢复保留完整 source 基线及独立 CaptureSession。
 内部准备材料不自行授予跨操作复用资格；边界与证据见 [DB-079](design-branches/0079-shared-graph-restoration-core-implementation.md)。
 
+Checkout/Fork 的最近 State 材料复用以精确 State/revision/root、同 Store 寿命、固定模型环境与完整 live Schema 证书为条件；
+工厂与 Upgrade 计划的预闭合依赖也须传递，不能只核对 source/current 两端。每次请求独立确定 Head，无 State 时完全绕过材料槽。
+完整冷恢复与工作副本构造成功后才具备入槽资格，Fork 所有候选构造先于 ref 发布，成功后仅安装引用；失败不替换，fault/Dispose 释放。
+领域 mutable 实例和保存身份每次独立，工作副本保留完整保存来源；单槽不是字节或总堆上限。见 [DB-080 记录](design-branches/0080-prepared-checkpoint-reuse-implementation.md)。
+
 分配领域实例时不执行实例构造器、基类实例构造器或实例字段初始化表达式；因此 `_cache = new()`
 等 Transient 初始化也不会执行。交付后的 Transient 重建由用户代码负责，属于宿主阶段。MVP 不提供自动 Transient hook，
 也不承诺撤销用户重建期间的副作用或把其失败变成库的加载失败；用户负责在业务使用前完成初始化。

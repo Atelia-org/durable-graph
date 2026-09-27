@@ -28,8 +28,12 @@ public sealed class Repository : IDisposable {
     private readonly HashSet<string> _activeBranches = new(StringComparer.Ordinal);
     private bool _busy;
     private bool _disposed;
+    private PreparedStateRestoration? _preparedState;
     private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
+    internal bool PreparedStateReuseEnabled { get; set; } = true;
+    internal GraphReadStatistics? RestorationStatistics { get; set; }
+    internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
     private Repository(HistoryJournal history, GraphResources resources, StateModelSnapshot models) {
         _history = history;
@@ -100,7 +104,7 @@ public sealed class Repository : IDisposable {
             return checkout;
         } finally {
             if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            _busy = false;
+            EndOperation();
         }
     }
 
@@ -128,7 +132,7 @@ public sealed class Repository : IDisposable {
             return checkout;
         } finally {
             if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            _busy = false;
+            EndOperation();
         }
     }
 
@@ -149,12 +153,13 @@ public sealed class Repository : IDisposable {
             CheckpointAddress head = HeadCore(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, head);
+            BranchCheckout checkout = RestoreCheckout(branchName, head, out PreparedStateRestoration? candidate);
+            if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
             return checkout;
         } finally {
             if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            _busy = false;
+            EndOperation();
         }
     }
 
@@ -180,23 +185,51 @@ public sealed class Repository : IDisposable {
             ValidateNewName(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, source);
+            BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate);
             MutateRefCore(() => _history.Journal.CreateBranch(branchName, source.Address));
+            if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
             return checkout;
         } finally {
             if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            _busy = false;
+            EndOperation();
         }
     }
 
-    private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head) {
+    private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head,
+        out PreparedStateRestoration? candidate) {
+        candidate = null;
         CheckpointAddress? state = NearestStateCore(head);
-        var workspace = state is null
-            ? WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models)
-            : WorldWorkspace.LoadSnapshot(new RevisionReadSession(_resources.States, _resources.Schemas, _models),
-                state.RevisionAddress, state.RootId);
-        return new BranchCheckout(this, branchName, workspace, head);
+        // Event-only histories must not even inspect another branch's resident certificate.
+        if (state is null) {
+            return new BranchCheckout(this, branchName,
+                WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models), head);
+        }
+        CheckFrame(state, GraphFrameKind.State);
+        RevisionReadSession reads = new(_resources.States, _resources.Schemas, _models, RestorationStatistics);
+        if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
+            reads.Statistics.PreparedStateHits++;
+            prepared.Validate(reads, state);
+            var loaded = GraphReader.RestorePreparedState(reads, prepared.Selection);
+            return new BranchCheckout(this, branchName, WorldWorkspace.FromLoaded(reads, loaded), head);
+        }
+
+        reads.Statistics.PreparedStateMisses++;
+        using var requirements = _models.BeginSchemaRequirementCollection();
+        PreparedGraphSelection selection = GraphReader.PrepareState(reads, state.RevisionAddress, state.RootId);
+        // Include every source/current row, even when Upgrade cuts its last incoming edge.
+        // Plans and standard checks performed throughout this lexical scope contribute too.
+        foreach ((ObjectId id, NormalizedObject row) in selection.Normalized.Objects) {
+            _models.CheckObjectLayout(row.SourceLayout, $"prepared State source object {id.Value}");
+            _models.CheckObjectLayout(row.Current.Layout, $"prepared State current object {id.Value}");
+        }
+        var materialized = GraphReader.RestorePreparedState(reads, selection);
+        var workspace = WorldWorkspace.FromLoaded(reads, materialized);
+        var checkout = new BranchCheckout(this, branchName, workspace, head);
+        var certificate = requirements.Complete();
+        // Candidate construction precedes Fork publication; success only installs a reference.
+        if (PreparedStateReuseEnabled) { candidate = new(state, selection, certificate); }
+        return checkout;
     }
 
     public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _history.Journal.ListBranches(); }
@@ -273,7 +306,7 @@ public sealed class Repository : IDisposable {
                 next = buffered is not null
                     ? bufferedIndex >= 0 ? buffered[bufferedIndex--] : null
                     : ReadNextEventCore(endInclusive, afterExclusive, ref cursor);
-            } finally { _busy = false; }
+            } finally { EndOperation(); }
             // HistoryJournal.Read has already disposed its frame/lease. No repository guard
             // survives the yield, including when the caller stops before completing the range.
             if (next is null) { yield break; }
@@ -368,7 +401,7 @@ public sealed class Repository : IDisposable {
             return address.Kind == GraphFrameKind.Event
                 ? new EventCheckpoint(address, root, previous, previousAddress)
                 : new StateCheckpoint(address, root, previous, previousAddress);
-        } finally { _busy = false; }
+        } finally { EndOperation(); }
     }
 
     private IDurableObject Read(CheckpointAddress frame, GraphFrameKind kind) {
@@ -378,7 +411,7 @@ public sealed class Repository : IDisposable {
         try {
             var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
             return GraphReader.ReadRoot<IDurableObject>(session, frame.RevisionAddress, frame.RootId);
-        } finally { _busy = false; }
+        } finally { EndOperation(); }
     }
 
     /// <summary>Experimental read-only pair without requiring the current root types in advance.</summary>
@@ -401,7 +434,7 @@ public sealed class Repository : IDisposable {
         try {
             return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,
                 first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, _models);
-        } finally { _busy = false; }
+        } finally { EndOperation(); }
     }
 
     /// <summary>Creates a named branch at any checked historical Event or State, without moving the source branch.</summary>
@@ -420,7 +453,7 @@ public sealed class Repository : IDisposable {
             ValidateNewName(branchName);
             MutateRefCore(() => _history.Journal.CreateBranch(branchName, selectedFrame.Address));
             return selectedFrame;
-        } finally { _busy = false; }
+        } finally { EndOperation(); }
     }
 
     /// <summary>Explicit compare-and-swap movement; requires closing the target branch's checkout first.</summary>
@@ -435,7 +468,7 @@ public sealed class Repository : IDisposable {
             if (_activeBranches.Contains(branchName)) { throw new InvalidOperationException("Close this branch's active checkout before moving it."); }
             if (_history.Journal.GetHead(branch) != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
             MutateRefCore(() => _history.Journal.MoveRef(branch, expectedHead.Address, target.Address));
-        } finally { _busy = false; }
+        } finally { EndOperation(); }
     }
 
     // The caller owns the complete operation's busy guard, including restoration and delivery.
@@ -472,7 +505,7 @@ public sealed class Repository : IDisposable {
                 throw new InvalidOperationException("Checkout State baseline does not match the Journal chain.");
             }
             return Publish(session, domainEvent, nextState, parameters ?? DefaultPolicy, initial: false);
-        } finally { _busy = false; }
+        } finally { EndOperation(); }
     }
 
     private CheckpointAddress Publish(BranchCheckout session, IDurableObject? domainEvent,
@@ -595,12 +628,17 @@ public sealed class Repository : IDisposable {
         if (_busy) { throw new InvalidOperationException("Cannot dispose a session during a repository operation."); }
         if (session.IsLiveFor(this)) { _activeBranches.Remove(session.BranchName); }
     }
+    private void EndOperation() {
+        _busy = false;
+        if (_resources.IsFaulted) { _preparedState = null; }
+    }
     private void RequireWriter() {
         RequireAvailable();
         _resources.RequireWritable();
     }
     private void RequireAvailable() {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_resources.IsFaulted) { _preparedState = null; }
         _resources.RequireAvailable();
         if (_busy) { throw new InvalidOperationException("Repository operations cannot be reentered."); }
     }
@@ -608,6 +646,7 @@ public sealed class Repository : IDisposable {
         if (_disposed) { return; }
         if (_busy) { throw new InvalidOperationException("Cannot dispose a busy repository."); }
         _disposed = true;
+        _preparedState = null;
         _activeBranches.Clear();
         try { _resources.Dispose(); } finally { _history.Dispose(); }
     }

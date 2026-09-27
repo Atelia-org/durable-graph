@@ -166,13 +166,15 @@ public abstract partial class StateBindingContext : IStateModelResolver {
         ExactSchemaRequirementSet.Create((schema, "schema root")).Validate(this);
     }
 
-    /// <summary>A plan-local certificate of every authoritative exact layout it depends on.</summary>
-    private sealed class ExactSchemaRequirementSet {
+    /// <summary>An immutable certificate of every authoritative exact layout an operation or plan depends on.</summary>
+    internal sealed class ExactSchemaRequirementSet {
         private readonly Requirement[] _requirements;
 
         private ExactSchemaRequirementSet(Requirement[] requirements) {
             _requirements = requirements;
         }
+
+        internal int Count => _requirements.Length;
 
         internal static ExactSchemaRequirementSet Create(params (DurableSchema Schema, string Path)[] roots) {
             Builder builder = new();
@@ -191,6 +193,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
                         new SchemaConflictException(registered!, expected));
                 }
             }
+            context._schemaRequirementCollection?.Add(this);
         }
 
         internal sealed class Builder {
@@ -198,6 +201,10 @@ public abstract partial class StateBindingContext : IStateModelResolver {
             private readonly List<Entry> _ordered = [];
 
             internal void Add(DurableSchema schema, string path) => Visit(schema, path, 1);
+
+            internal void Add(ExactSchemaRequirementSet requirements) {
+                foreach (Requirement requirement in requirements._requirements) { Add(requirement.Schema, requirement.Path); }
+            }
 
             internal ExactSchemaRequirementSet Build() => new(_ordered
                 .Select(static entry => new Requirement(entry.Schema, entry.Path)).ToArray());

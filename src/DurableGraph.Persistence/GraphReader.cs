@@ -24,6 +24,16 @@ internal static class GraphReader {
         return DeliverEditable<T>(selection, instances);
     }
 
+    // Repository's certified State path uses the same preparation/materialization core.
+    internal static PreparedGraphSelection PrepareState(RevisionReadSession session,
+        FrameAddress revisionAddress, ObjectId rootId) => Prepare<IDurableObject>(session, revisionAddress, rootId);
+
+    internal static MaterializedGraph<IDurableObject> RestorePreparedState(RevisionReadSession session,
+        PreparedGraphSelection selection) {
+        var (instances, _) = Materialize(session, selection);
+        return DeliverEditable<IDurableObject>(selection, instances);
+    }
+
     /// <summary>Restores just one root without constructing an editable identity import.</summary>
     internal static T ReadRoot<T>(RevisionReadSession session, FrameAddress revisionAddress,
         ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
@@ -136,10 +146,11 @@ internal static class GraphReader {
     private static PreparedGraphSelection Prepare<T>(RevisionReadSession session, FrameAddress revisionAddress,
         ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
+        session.Statistics.PreparedGraphs++;
         DecodedRevision decoded = session.Read(revisionAddress);
-        // Current values and business Upgrade callbacks remain independent for each view,
-        // even when every stored DTO came from the operation's exact-version cache.
-        NormalizedRevision normalized = NormalizedRevision.Create(decoded, session.Models);
+        // A fresh preparation normalizes each selected graph even when its stored DTOs
+        // hit the operation's exact-version cache. Certified State hits bypass this method.
+        NormalizedRevision normalized = NormalizedRevision.Create(decoded, session.Models, session.Statistics);
         if (!normalized.Objects.TryGetValue(rootId, out NormalizedObject? root) ||
             root.Model is not StateModelBinding rootModel || rootModel.DomainType.IsAbstract ||
             (requireExactRootType ? rootModel.DomainType != typeof(T) : !typeof(T).IsAssignableFrom(rootModel.DomainType))) {
@@ -149,6 +160,7 @@ internal static class GraphReader {
         visitor.Add(rootId);
         for (int index = 0; index < visitor.Ids.Count; index++) {
             NormalizedObject row = normalized.Objects[visitor.Ids[index]];
+            session.Statistics.ReachabilityVisits++;
             row.Model.VisitReferences(row.Current, visitor);
         }
         return new(normalized, rootId, rootModel, session.Models, visitor.Ids);

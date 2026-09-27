@@ -78,10 +78,12 @@ internal sealed class NormalizedRevision {
         }
     }
 
-    internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models) {
+    internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models,
+        GraphReadStatistics? statistics = null) {
         Dictionary<ObjectId, NormalizedObject> normalized = [];
         foreach (ObjectStateRecord row in source.Objects) {
             ObjectBinding model = ResolveModel(models, row.Layout);
+            if (statistics is not null) { statistics.NormalizedObjects++; }
             ObjectStateRecord current = model.Normalize(row);
             if (current.Id != row.Id || current.Kind != row.Kind ||
                 !model.CurrentLayout.Equals(current.Layout)) {
@@ -95,11 +97,13 @@ internal sealed class NormalizedRevision {
         Dictionary<ObjectId, ObjectStateRecord> directory = normalized.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
         StateReferenceValidator validator = new(directory);
         foreach (NormalizedObject row in normalized.Values) {
-            row.Model?.VisitReferences(row.Current, validator);
+            if (statistics is not null) { statistics.CurrentReferenceValidationVisits++; }
+            row.Model.VisitReferences(row.Current, validator);
         }
         // Validate all source members even if an Upgrade removed their last incoming edge.
         foreach (NormalizedObject row in normalized.Values) {
             if (row.Model is DictionaryObjectBinding dictionary) {
+                if (statistics is not null) { statistics.DictionaryValidationCalls++; }
                 dictionary.ValidateLookupKeys(row.Current, id => directory.TryGetValue(id, out ObjectStateRecord? target)
                     ? target : throw new InvalidDataException($"Dictionary key object {id.Value} is not live."));
             }

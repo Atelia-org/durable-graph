@@ -6,7 +6,7 @@
 > 推荐顺序：第 6 片；硬前置是 [DB-080](0080-prepared-checkpoint-reuse-slice.md) 已交付可用材料驻留，
 > [DB-081](0081-hot-commit-restoration-material-slice.md) 不是正确性前置，但先完成它可一起测量热 fork。
 > 消费已实施 DB-075 的 capability；不把 [DB-073](0073-repository-scoped-weak-reference-cache.md) 的旧 weak cache 正文当施工依据。
-> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。目标工作副本为非泛型 `BranchCheckout`；当前源码仍为 `EventHistorySession<TState>`/`Resume<TState>`。
+> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` 与 named Fork 已由 [078-C](0078-c-branch-checkout-fork-implementation.md) 交付；材料与证书接缝见 [080 记录](0080-prepared-checkpoint-reuse-implementation.md)，本片叶实例复用尚未实施。
 
 ## 1. 要回答的问题
 

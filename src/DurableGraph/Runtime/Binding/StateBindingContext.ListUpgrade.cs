@@ -31,6 +31,7 @@ public abstract partial class StateBindingContext {
     }
 
     private ListUpgradePlan PrepareListUpgrade(ListLayout source, ListLayout target) {
+        using var collection = BeginSchemaRequirementCollection();
         ExactSchemaRequirementSet.Builder requirements = new();
         if (source.ElementSlot.ValueSchema is { } priorSchema) {
             BindSchema(priorSchema);
@@ -55,6 +56,8 @@ public abstract partial class StateBindingContext {
         }
         MethodInfo factory = typeof(StateBindingContext).GetMethod(nameof(CreateListUpgradeTyped), BindingFlags.NonPublic | BindingFlags.Static)!
             .MakeGenericMethod(priorType, nextType);
+        requirements.Build().Validate(this);
+        requirements.Add(collection.Complete());
         return factory.CreateDelegate<Func<ValueUpgradePlan?, ExactSchemaRequirementSet, ListUpgradePlan>>()(value, requirements.Build());
     }
 

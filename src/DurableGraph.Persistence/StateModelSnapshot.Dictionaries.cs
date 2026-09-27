@@ -23,6 +23,7 @@ internal sealed partial class StateModelSnapshot {
 
     private bool TryGetCurrentDictionaryBinding(Type domainType, out ObjectBinding? binding) {
         if (_currentDictionaries.TryGetValue(domainType, out DictionaryObjectBinding? prior)) {
+            CheckClosureRequirements(prior);
             CheckDictionaryLayout(prior.DictionaryLayout);
             binding = prior;
             return true;
@@ -30,6 +31,7 @@ internal sealed partial class StateModelSnapshot {
         var active = ("Dictionary", (object)domainType);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             Type[] arguments = domainType.GetGenericArguments();
             // Reference operands close only their declared slots, allowing recursive maps.
             StateValueBinding key = ResolveCurrentValue(arguments[0]);
@@ -42,6 +44,7 @@ internal sealed partial class StateModelSnapshot {
                 throw new InvalidDataException("A Dictionary factory returned another current type or exact layout.");
             }
             CheckDictionaryLayout(layout);
+            RememberClosureRequirements(result, collection);
             _currentDictionaries.Add(domainType, result);
             binding = result;
             return true;
@@ -51,12 +54,14 @@ internal sealed partial class StateModelSnapshot {
     private ObjectReaderBinding ResolveDictionaryReader(ObjectLayout layout) {
         DictionaryLayout dictionary = layout.Dictionary!;
         if (_dictionaryReaders.TryGetValue(dictionary, out ObjectReaderBinding? prior)) {
+            CheckClosureRequirements(prior);
             CheckDictionaryLayout(dictionary);
             return prior;
         }
         var active = ("Dictionary reader", (object)dictionary);
         Begin(active);
         try {
+            using var collection = BeginSchemaRequirementCollection();
             // Historical state operations need no old domain key or value CLR declaration.
             CheckDictionaryLayout(dictionary);
             StateValueBinding key = ResolveStoredValue(dictionary.KeySlot);
@@ -66,6 +71,7 @@ internal sealed partial class StateModelSnapshot {
                 throw new InvalidDataException("A Dictionary reader factory returned another exact layout.");
             }
             CheckDictionaryLayout(dictionary);
+            RememberClosureRequirements(result, collection);
             _dictionaryReaders.Add(dictionary, result);
             return result;
         } finally { _closing.Remove(active); }

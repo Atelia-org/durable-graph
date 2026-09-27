@@ -30,6 +30,7 @@ public abstract partial class StateBindingContext {
     }
 
     private UpgradePlan PrepareUpgradePlan(DurableSchema source, DurableSchema current) {
+        using var collection = BeginSchemaRequirementCollection();
         BindSchema(source);
         BindSchema(current);
         Type currentStateType = ResolveReader(current).StateType;
@@ -39,6 +40,8 @@ public abstract partial class StateBindingContext {
         requirements.Add(current, $"{requirementRoot}.current");
         if (source.Version == current.Version) {
             if (!source.Equals(current)) { throw new InvalidDataException("Equal Schema keys have different complete layouts."); }
+            requirements.Build().Validate(this);
+            requirements.Add(collection.Complete());
             return new([], requirements.Build(), currentStateType);
         }
         List<UpgradeStep> steps = [];
@@ -77,9 +80,12 @@ public abstract partial class StateBindingContext {
             string stepPath = $"{requirementRoot}.step[{stepIndex}] v{prior.Version}->v{next.Version}";
             requirements.Add(prior, $"{stepPath}.source");
             requirements.Add(next, $"{stepPath}.target");
+            dependencies.CollectRequirements(requirements, stepPath, []);
             steps.Add(CreateUpgradeStep(prior, next, priorState, nextState, provider, method, dependencies));
             prior = next;
         }
+        requirements.Build().Validate(this);
+        requirements.Add(collection.Complete());
         return new(steps.ToArray(), requirements.Build(), currentStateType);
     }
 

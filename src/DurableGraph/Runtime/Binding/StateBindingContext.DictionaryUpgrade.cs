@@ -38,6 +38,7 @@ public abstract partial class StateBindingContext {
     }
 
     private DictionaryUpgradePlan PrepareDictionaryUpgrade(DictionaryLayout source, DictionaryLayout target) {
+        using var collection = BeginSchemaRequirementCollection();
         ExactSchemaRequirementSet.Builder requirements = new();
         AddSlotRequirements(source.KeySlot, "dictionary upgrade.source.key");
         AddSlotRequirements(source.ValueSlot, "dictionary upgrade.source.value");
@@ -53,6 +54,8 @@ public abstract partial class StateBindingContext {
 
         MethodInfo factory = typeof(StateBindingContext).GetMethod(nameof(CreateDictionaryUpgradeTyped), BindingFlags.NonPublic | BindingFlags.Static)!
             .MakeGenericMethod(priorKeyType, nextKeyType, priorValueType, nextValueType);
+        requirements.Build().Validate(this);
+        requirements.Add(collection.Complete());
         return factory.CreateDelegate<Func<ValueUpgradePlan?, ValueUpgradePlan?, ExactSchemaRequirementSet, DictionaryUpgradePlan>>()(key, value, requirements.Build());
 
         void AddSlotRequirements(DurableFieldInfo slot, string path) {

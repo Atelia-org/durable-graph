@@ -1,11 +1,11 @@
 # DB-080：最近 State 单图准备材料复用
 
-> 状态：**Proposed / 已按 DB-083 校准的候选设计，未实施；不是实施授权**。2026-09-27；当前实现事实另见源码。
+> 状态：**已实施并独立验收，单槽默认启用**。2026-09-28；实际边界、证据与默认启用结论见 [实施记录](0080-prepared-checkpoint-reuse-implementation.md)。
 > 产品合同以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；Fork/Checkout 有最近 State 才恢复该图，无 State 时不进入缓存路径。
 > 顺序：第 4 片；依赖 [DB-079](0079-shared-graph-restoration-core-slice.md)，推荐下一片 [DB-081](0081-hot-commit-restoration-material-slice.md)。
-> 前置机制与验收见 [DB-079 实施记录](0079-shared-graph-restoration-core-implementation.md)；内部 `PreparedGraphSelection` 目前只用于操作内准备，本片仍需建立跨操作依赖证书与入槽资格。
+> 前置机制与验收见 [DB-079 实施记录](0079-shared-graph-restoration-core-implementation.md)；本片在内部 `PreparedGraphSelection` 外补充跨操作证书与成功入槽资格。
 > 本片将 [DB-076](0076-efficient-graph-fork-technical-path.md) 的材料复用方向收束为单槽实验，不预设 repository 弱引用缓存。
-> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` / `Checkout` 已由 [078-A](0078-a-repository-free-history-implementation.md) 交付；每分支占用与 named Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。本片内部优化仍未实施。
+> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` / `Checkout` 已由 [078-A](0078-a-repository-free-history-implementation.md) 交付；每分支占用与 named Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。
 
 ## 1. 问题与完成标准
 
@@ -57,6 +57,8 @@ Checkout 在交付门换槽；Fork 的候选槽内容在 ref 发布前备好，�
    如首次物化还产生额外标准依赖检查，入槽前也将其纳入，不以“工厂已闭合”为由漏记。
 3. [UpgradePlan](../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) 的缓存命中也记录已有完整 requirements；
    包括中间 owner 版本、base/inline/Nullable、数组/List/Dictionary 以及声明的 value-upgrade 工具依赖。
+   模型、reader、value 与容器 binding 的工厂闭合，也保留其经标准 Resolve/Validate 取得的完整证据；闭合缓存命中重新复核并传递，
+   不能只在 State 第一次准备时观察工厂是否执行。计划闭合还须纳入这些 binding 的证据。
 4. 证书去重时保留冲突检测和诊断路径；复核仍使用同一个 live SchemaStore。不要增加 Schema epoch、全局失效通知、
    AsyncLocal 状态或面向插件的通用依赖追踪器；单线程内部作用域足够。
 
