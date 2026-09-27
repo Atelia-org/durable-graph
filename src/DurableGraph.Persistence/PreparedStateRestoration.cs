@@ -4,12 +4,18 @@ using Atelia.DurableGraph.Storage;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>One successfully restored State's owned preparation and live Schema certificate.</summary>
-/// <remarks>Only the repository slot retains this certificate; editable baselines retain normalized source alone.</remarks>
+/// <remarks>
+/// Only the repository slot retains the certificate and optional owned read-only leaf table;
+/// editable baselines retain normalized source alone. Collected distinguishes no eligible leaves
+/// from a slot prepared before the leaf experiment was enabled, without allocating an empty table.
+/// </remarks>
 internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoint,
-    PreparedGraphSelection Selection, StateBindingContext.ExactSchemaRequirementSet Requirements) {
+    PreparedGraphSelection Selection, StateBindingContext.ExactSchemaRequirementSet Requirements,
+    IReadOnlyDictionary<ObjectId, object>? ImmutableLeaves = null, bool ImmutableLeavesCollected = false) {
     internal FrameAddress RevisionAddress => Selection.Normalized.RevisionAddress;
     internal ObjectId RootId => Selection.RootId;
     internal int SchemaRequirementCount => Requirements.Count;
+    internal int ImmutableLeafCount => ImmutableLeaves?.Count ?? 0;
 
     internal bool Matches(CheckpointAddress state) => StateCheckpoint == state &&
         RevisionAddress == state.RevisionAddress && RootId == state.RootId;

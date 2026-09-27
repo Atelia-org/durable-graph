@@ -8,7 +8,8 @@ namespace Atelia.DurableGraph.Persistence;
 /// The caller keeps both stores stable. A cache hit proves only the exact ObjectVersion's
 /// body was read, not that its references are valid in another Revision. Current state,
 /// Upgrade results and editable baselines are not cached. Domain instances are retained
-/// only by an operation-local allocation uniqueness guard, never reused as graph output.
+/// only by an operation-local allocation uniqueness guard. Repository-owned immutable leaf
+/// reuse is supplied explicitly to GraphReader and participates in this same guard.
 /// </remarks>
 internal sealed class RevisionReadSession {
     private readonly Dictionary<(ObjectId Id, FrameAddress Head),
@@ -24,15 +25,18 @@ internal sealed class RevisionReadSession {
         Schemas = schemas;
         Models = models;
         Statistics = statistics ?? new();
+        MeasureMaterialization = statistics is not null;
     }
 
     internal StateRevisionStore Store { get; }
     internal SchemaStore Schemas { get; }
     internal StateModelSnapshot Models { get; }
     internal GraphReadStatistics Statistics { get; }
+    internal bool MeasureMaterialization { get; }
 
-    // Independent restores may share stored DTOs, but an application allocator
-    // must not return a mutable singleton already allocated anywhere in this operation.
+    // Independent restores may share stored DTOs. Trusted reused immutable leaves also
+    // enter this guard before allocation: an allocator cannot return one under another ID.
+    // Pair's explicit shared closure skips re-registration of the same shared row.
     internal void RequireUniqueMutableInstance(object instance) {
         if (!_mutableInstances.Add(instance)) {
             throw new InvalidDataException("Independent graphs must allocate distinct mutable instances.");

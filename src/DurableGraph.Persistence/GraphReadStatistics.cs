@@ -16,4 +16,8 @@ internal sealed class GraphReadStatistics {
     internal int ReachabilityVisits { get; set; }
     internal int CurrentReferenceValidationVisits { get; set; }
     internal int DictionaryValidationCalls { get; set; }
+    internal int ReusedImmutableLeaves { get; set; }
+    // Stopwatch ticks for allocation/table construction/hydration, excluding editable import.
+    // Recorded only when the caller explicitly supplies a statistics instance.
+    internal long MaterializationElapsedTicks { get; set; }
 }

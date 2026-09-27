@@ -1,6 +1,8 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 namespace Atelia.DurableGraph.Persistence;
 
@@ -28,9 +30,22 @@ internal static class GraphReader {
     internal static PreparedGraphSelection PrepareState(RevisionReadSession session,
         FrameAddress revisionAddress, ObjectId rootId) => Prepare<IDurableObject>(session, revisionAddress, rootId);
 
+    // reusedLeaves is trusted only after validation of the installed entry owning this exact
+    // selection. It never accepts caller-owned live graphs or a different selection's table.
     internal static MaterializedGraph<IDurableObject> RestorePreparedState(RevisionReadSession session,
-        PreparedGraphSelection selection) {
-        var (instances, _) = Materialize(session, selection);
+        PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
+        bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
+        immutableLeaves = null;
+        var (instances, _) = Materialize(session, selection, reusedLeaves: reusedLeaves);
+        if (collectImmutableLeaves) {
+            Dictionary<ObjectId, object>? leaves = null;
+            foreach (ObjectId id in selection.Reachable) {
+                if (selection.Normalized.Objects[id].Model is StateModelBinding { IsImmutableLeaf: true }) {
+                    (leaves ??= []).Add(id, instances[id]);
+                }
+            }
+            if (leaves is not null) { immutableLeaves = new ReadOnlyDictionary<ObjectId, object>(leaves); }
+        }
         return DeliverEditable<IDurableObject>(selection, instances);
     }
 
@@ -77,25 +92,53 @@ internal static class GraphReader {
     // even an empty proven set retains Pair's existing cross-graph string identity guard.
     private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) Materialize(
         RevisionReadSession session, PreparedGraphSelection first, PreparedGraphSelection? second = null,
-        HashSet<ObjectId>? shared = null) {
+        HashSet<ObjectId>? shared = null, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
+        long started = session.MeasureMaterialization ? Stopwatch.GetTimestamp() : 0;
+        try {
+            return MaterializeCore(session, first, second, shared, reusedLeaves);
+        } finally {
+            if (session.MeasureMaterialization) {
+                session.Statistics.MaterializationElapsedTicks += Stopwatch.GetTimestamp() - started;
+            }
+        }
+    }
+
+    private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) MaterializeCore(
+        RevisionReadSession session, PreparedGraphSelection first, PreparedGraphSelection? second,
+        HashSet<ObjectId>? shared, IReadOnlyDictionary<ObjectId, object>? reusedLeaves) {
         Dictionary<object, ObjectId> allocations = new(ReferenceEqualityComparer.Instance);
-        Dictionary<ObjectId, object> firstInstances = AllocateGraph(session, first, allocations);
+        Dictionary<ObjectId, object> firstInstances = AllocateGraph(session, first, allocations, reusedLeaves: reusedLeaves);
         Dictionary<ObjectId, object>? secondInstances = second is null ? null : AllocateGraph(session, second,
             shared is null ? new(ReferenceEqualityComparer.Instance) : allocations, firstInstances, shared);
         ObjectReadTable firstTable = new(firstInstances);
         ObjectReadTable? secondTable = secondInstances is null ? null : new(secondInstances);
         // Every instance table is complete before any hydration callback runs. A shared
         // row's reference closure is also shared, so its first graph's table is sufficient.
-        HydrateGraph(session, first, firstInstances, firstTable);
+        HydrateGraph(session, first, firstInstances, firstTable, reusedLeaves: reusedLeaves);
         if (second is not null) { HydrateGraph(session, second, secondInstances!, secondTable!, shared); }
         return (firstInstances, secondInstances);
     }
 
     private static Dictionary<ObjectId, object> AllocateGraph(RevisionReadSession session,
         PreparedGraphSelection selection, Dictionary<object, ObjectId> allocations,
-        Dictionary<ObjectId, object>? firstInstances = null, HashSet<ObjectId>? shared = null) {
+        Dictionary<ObjectId, object>? firstInstances = null, HashSet<ObjectId>? shared = null,
+        IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         Dictionary<ObjectId, object> instances = [];
+        // Register the entire trusted leaf mapping before ANY allocator can return one
+        // of its instances under another ID, even if that ID precedes the leaf in traversal.
+        if (reusedLeaves is not null) {
+            foreach ((ObjectId id, object instance) in reusedLeaves) {
+                if (selection.Normalized.Objects[id].Model is not StateModelBinding { IsImmutableLeaf: true } model ||
+                    instance.GetType() != model.DomainType || !allocations.TryAdd(instance, id)) {
+                    throw new InvalidDataException("Prepared immutable leaves must preserve exact types and distinct object identities.");
+                }
+                session.RequireUniqueMutableInstance(instance);
+                instances.Add(id, instance);
+                session.Statistics.ReusedImmutableLeaves++;
+            }
+        }
         foreach (ObjectId id in selection.Reachable) {
+            if (reusedLeaves is not null && reusedLeaves.ContainsKey(id)) { continue; }
             if (shared is not null && shared.Contains(id)) {
                 instances.Add(id, firstInstances![id]);
                 session.Statistics.SharedObjects++;
@@ -116,9 +159,10 @@ internal static class GraphReader {
     }
 
     private static void HydrateGraph(RevisionReadSession session, PreparedGraphSelection selection,
-        Dictionary<ObjectId, object> instances, ObjectReadTable table, HashSet<ObjectId>? shared = null) {
+        Dictionary<ObjectId, object> instances, ObjectReadTable table, HashSet<ObjectId>? shared = null,
+        IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         foreach ((ObjectId id, object instance) in instances) {
-            if (shared is null || !shared.Contains(id)) {
+            if ((shared is null || !shared.Contains(id)) && (reusedLeaves is null || !reusedLeaves.ContainsKey(id))) {
                 Hydrate(selection.Normalized.Objects[id], instance, table, session.Statistics);
             }
         }

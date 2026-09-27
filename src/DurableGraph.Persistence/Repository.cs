@@ -32,6 +32,7 @@ public sealed class Repository : IDisposable {
     private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
     internal bool PreparedStateReuseEnabled { get; set; } = true;
+    internal bool ImmutableLeafReuseEnabled { get; set; }
     internal GraphReadStatistics? RestorationStatistics { get; set; }
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
@@ -209,8 +210,20 @@ public sealed class Repository : IDisposable {
         RevisionReadSession reads = new(_resources.States, _resources.Schemas, _models, RestorationStatistics);
         if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
             reads.Statistics.PreparedStateHits++;
+            if (ImmutableLeafReuseEnabled && !prepared.ImmutableLeavesCollected) {
+                // Enabling the experiment after this entry was prepared needs a fresh
+                // complete materialization certificate, including callbacks now omitted by reuse.
+                using var leafRequirements = _models.BeginSchemaRequirementCollection();
+                prepared.Validate(reads, state);
+                var restored = GraphReader.RestorePreparedState(reads, prepared.Selection,
+                    out var leaves, collectImmutableLeaves: true);
+                var restoredCheckout = new BranchCheckout(this, branchName, WorldWorkspace.FromLoaded(reads, restored), head);
+                candidate = new(state, prepared.Selection, leafRequirements.Complete(), leaves, ImmutableLeavesCollected: true);
+                return restoredCheckout;
+            }
             prepared.Validate(reads, state);
-            var loaded = GraphReader.RestorePreparedState(reads, prepared.Selection);
+            var loaded = GraphReader.RestorePreparedState(reads, prepared.Selection, out _,
+                reusedLeaves: ImmutableLeafReuseEnabled ? prepared.ImmutableLeaves : null);
             return new BranchCheckout(this, branchName, WorldWorkspace.FromLoaded(reads, loaded), head);
         }
 
@@ -223,12 +236,14 @@ public sealed class Repository : IDisposable {
             _models.CheckObjectLayout(row.SourceLayout, $"prepared State source object {id.Value}");
             _models.CheckObjectLayout(row.Current.Layout, $"prepared State current object {id.Value}");
         }
-        var materialized = GraphReader.RestorePreparedState(reads, selection);
+        bool collectLeaves = PreparedStateReuseEnabled && ImmutableLeafReuseEnabled;
+        var materialized = GraphReader.RestorePreparedState(reads, selection, out var immutableLeaves,
+            collectImmutableLeaves: collectLeaves);
         var workspace = WorldWorkspace.FromLoaded(reads, materialized);
         var checkout = new BranchCheckout(this, branchName, workspace, head);
         var certificate = requirements.Complete();
         // Candidate construction precedes Fork publication; success only installs a reference.
-        if (PreparedStateReuseEnabled) { candidate = new(state, selection, certificate); }
+        if (PreparedStateReuseEnabled) { candidate = new(state, selection, certificate, immutableLeaves, collectLeaves); }
         return checkout;
     }
 

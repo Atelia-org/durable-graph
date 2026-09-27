@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079/080 已实施并验收；081 资格实验否定、热准入未接线，082 未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079/080 已实施并验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,6 +18,11 @@
 [归档恢复索引](../experiments/ARCHIVE.md)，不要把旧项目整体恢复为续工上下文。
 
 ## 当前焦点
+
+[DB-082 不可变叶复用](../docs/design-branches/0082-prepared-immutable-leaf-reuse-implementation.md) 已实现内部候选，默认保持关闭。
+候选在同一 DB-080 State 材料内复用完整成功恢复的合格叶，保持 mutable 隔离、身份预登记及交付/证书边界。
+A/B 显示 Family 物化改善，但完整 Fork 未见稳定收益；不以减少 Allocate/Hydrate 次数替代总成本判据。
+重跑方法、逐批数据、正确性与真实包证据集中在实施记录。下一产品候选为 DB-084 的 DG tag 接入；恢复优化等待真实业务瓶颈。
 
 [DB-081 热提交资格实验](../docs/design-branches/0081-hot-commit-restoration-material-experiment.md) 按原分片停点保留否定结论。
 现有 reader body 可执行 Capture/factory 未触及、随数据变化的标准依赖检查；没有充分的无读回资格证明，热提交不接入槽。
@@ -38,9 +43,9 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
 [DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的当前续工入口：
-下一候选为 [082 immutable 叶实验](../docs/design-branches/0082-prepared-immutable-leaf-reuse-slice.md)，仅硬依赖 080，须单独测量与验收。
+082 已完成候选实验，默认不启用；仅在真实叶模型/并存图内存压力或物化占比提供新证据时重跑，不自动扩展缓存体系。
 081 不再作为必经工单；一般新 State 的 reader 完整证明需要先解决，不能以 Capture 或旧历史证书代替。
-无 State 请求绕过材料槽/未来叶表，优化关闭仍须正确；热提交准入与叶实例复用均尚未实施。
+无 State 请求绕过材料槽/实验叶表，优化关闭仍须正确；热提交准入未实施，叶实例复用只在内部实验开关下可用。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
 DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /

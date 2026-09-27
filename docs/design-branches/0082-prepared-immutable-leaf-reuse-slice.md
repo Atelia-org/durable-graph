@@ -1,12 +1,12 @@
 <a id="db-082准备图范围的-immutableleaf-实例复用实验"></a>
 # DB-082：单图准备材料范围的 ImmutableLeaf 实例复用实验
 
-> 状态：**Proposed / 按 DB-083 校准的条件实验，未实施**。2026-09-27；此前源码事实基线 `343bfa6`。
+> 状态：**候选已实现；A/B 未证明稳定总成本收益，默认不启用**。2026-09-28；实现、验收及启用判据裁决见 [实施记录](0082-prepared-immutable-leaf-reuse-implementation.md)。以下保留实验合同，不表示默认产品已共享叶实例。
 > 目标合同：[DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md)。本片只优化非泛型 Fork/Checkout 已存在的最近 State 恢复，不恢复 Event，不改变 Event-first、自由 E/S、精确 Head 或默认 Checkpoint 的独立图语义。
 > 推荐顺序：第 6 片；硬前置是 [DB-080](0080-prepared-checkpoint-reuse-slice.md) 已交付可用材料驻留，
 > [DB-081](0081-hot-commit-restoration-material-slice.md) 不是正确性前置；其[资格实验](0081-hot-commit-restoration-material-experiment.md)已暂停热接线，本片可直接从 DB-080 成功冷物化继续。
 > 消费已实施 DB-075 的 capability；不把 [DB-073](0073-repository-scoped-weak-reference-cache.md) 的旧 weak cache 正文当施工依据。
-> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` 与 named Fork 已由 [078-C](0078-c-branch-checkout-fork-implementation.md) 交付；材料与证书接缝见 [080 记录](0080-prepared-checkpoint-reuse-implementation.md)，本片叶实例复用尚未实施。
+> 术语：采用[术语表](../DurableGraph-glossary.md#restoration-preparation)；恢复准备（Prepare）与保存侧内容准备区分。非泛型 `BranchCheckout` 与 named Fork 已由 [078-C](0078-c-branch-checkout-fork-implementation.md) 交付；材料与证书接缝见 [080 记录](0080-prepared-checkpoint-reuse-implementation.md)，本片候选仅由内部实验开关启用。
 
 ## 1. 要回答的问题
 

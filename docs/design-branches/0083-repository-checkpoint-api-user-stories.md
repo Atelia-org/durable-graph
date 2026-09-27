@@ -4,6 +4,7 @@
 > 本文重新检验 DB-076–082 所依赖的公共使用模型；不是继续按旧 Event/State 交替合同施工的授权。
 > 当前产品事实仍以源码为准。公共基础见 [078-A 记录](0078-a-repository-free-history-implementation.md)；独立 Checkpoint 与固定查询见 [078-B 记录](0078-b-checkpoint-history-query-implementation.md)；多分支工作副本与 Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。
 > 内部恢复机制的统一见 [DB-079 实施记录](0079-shared-graph-restoration-core-implementation.md)，Checkout/Fork 单 State 材料复用见 [DB-080 实施记录](0080-prepared-checkpoint-reuse-implementation.md)；均不改变本文选图、隔离、历史或发布语义，不包含热提交准入或领域实例共享。
+> [DB-082 叶复用实验](0082-prepared-immutable-leaf-reuse-implementation.md) 已实现内部候选，未获得稳定总成本收益而保持默认关闭；不增加公开 options，也不改变本稿默认读取行为。
 
 ## 1. 本轮需求账本
 

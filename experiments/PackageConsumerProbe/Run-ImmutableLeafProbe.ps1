@@ -51,7 +51,7 @@ try {
     if (-not (Test-Path -LiteralPath $siblingAnalyzer -PathType Leaf)) { throw "The sibling analyzer DLL was not produced at '$siblingAnalyzer'." }
 
     foreach ($consumer in @(
-        @{ Name = "Family"; Project = $familyProject; Marker = "ImmutableLeafFamily:Flag:True:Roundtrip:True"; Extra = @(); NeedsDatabase = $true },
+        @{ Name = "Family"; Project = $familyProject; Marker = "ImmutableLeafFamily:Flag:True:Roundtrip:True:ForkSharing:True:MutableIsolation:True:ColdSave:True"; Extra = @(); NeedsDatabase = $true },
         @{ Name = "Sibling"; Project = $siblingProject; Marker = "ImmutableLeafSibling:Flag:False:True"; Extra = @("-p:SiblingAnalyzer=$siblingAnalyzer"); NeedsDatabase = $false }
     )) {
         $history = Join-Path $workRoot "$($consumer.Name)-history"
