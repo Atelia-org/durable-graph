@@ -38,7 +38,10 @@ Journal 的命名 branch ref 是唯一发布点；恢复读取已保存的结果
 ```
 
 示例通过命令行传入 `DurableGraphPackageVersion`；正式接入时可将实际版本固定在项目属性或统一包版本文件中。
-`Atelia.DurableGraph` 包同时携带 Runtime、Source Generator 和 history 构建集成；Persistence 包提供持久化会话。
+`Atelia.DurableGraph` 包同时携带 Runtime、Source Generator 和 history 构建集成；Persistence 包提供持久化工作副本外观。
+本文说明文字遵循[项目术语表](docs/DurableGraph-glossary.md)，称其为“分支工作副本”；当前代码符号仍是 `EventHistorySession<TState>`，
+签出操作仍是 `Resume<TState>`。已选定的 `BranchCheckout<TState>` / `Checkout<TState>` 公共改名尚待实施，
+所以以下可运行代码保留当前符号。
 声明模型的每个项目都应**直接引用 Runtime 包**。无需手工添加 Analyzer、AdditionalFiles 或 Import，
 也不要仅以 Runtime 项目的 ProjectReference 代替完整包接入。
 
@@ -138,9 +141,9 @@ dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPa
 dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -- $data
 ```
 
-第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个 session 的 `State`；
-成功提交 State 保留领域实例及比较基线。若进程在 Event 发布后中止，Resume 交付前一个 State 和 PendingEvent。
-Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(nextState)` 也支持替换同 exact 类型根，发布后才切换 `session.State`。
+第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个工作副本的 `State`；
+成功提交 State 保留领域实例及比较基线。若进程在 Event 发布后中止，`Resume` 交付前一个 State 和 PendingEvent。
+Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(nextState)` 也支持替换同 exact 类型根，发布后才切换工作副本的 `State`。
 这段程序每次运行会完成一条已有或新建的事件；处理失败后的恢复应采用下文的[仅完成 PendingEvent 入口](#事件快照与失败恢复)，
 不要把再次运行“创建新事件”的程序当作透明重试。
 
@@ -185,8 +188,8 @@ var pair = history.ReadPair(before, lastEvent, models);
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 可写 Resume 只复用不可变 DTO/string，Event/State 的可变对象分别恢复。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
-可写仓库在**没有活动 session**时支持 `CreateBranch("fork", selectedFrame)` 和
-`MoveBranch("main", expectedHead, targetFrame)`；随后从目标分支 Resume。
+可写仓库在**没有活动工作副本**时支持 `CreateBranch("fork", selectedFrame)` 和
+`MoveBranch("main", expectedHead, targetFrame)`；随后用 `Resume` 从目标分支签出当前实现中的工作副本。
 handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
 历史链是 `S0 → E1 → S1`，E1 与 S1 的 Revision Parent 都是 S0，Event 不成为 State 的增量比较基线。
 
@@ -212,7 +215,7 @@ handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发�
 当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
 
 在 CreateBranch、CommitDomainEvent 或 CommitDomainState 的 `parameters` 参数传入配置即可。
-例如，对上面已无 PendingEvent 的 session，再完成一次偏向存储的事件/状态保存：
+例如，对上面已无 PendingEvent 的工作副本，再完成一次偏向存储的事件/状态保存：
 
 ```csharp
 var savePolicy = new ReadAmplificationBaseBudgetParameters(
@@ -239,7 +242,7 @@ session.CommitDomainState(parameters: savePolicy);
 `E1.TargetSnapshot.Hp == 10`、`S1` 中角色 HP 为 7，热处理、冷 Resume 和独立浏览都保持事件观察值。
 它区分“提交新事件”和“仅完成已有 PendingEvent”两个入口，并与故障测试共用恢复判断。
 
-失败后先结束当前尝试，关闭 session/repository，再 OpenExisting、Resume 并重新取得 State/PendingEvent：
+失败后先结束当前尝试，关闭工作副本/Repository，再 OpenExisting、`Resume` 并重新取得 State/PendingEvent：
 
 - 有 PendingEvent：重建新 State 的 Transient，再从这份 State 处理该事件并保存结果。
 - 没有 PendingEvent：恢复入口交付当前 State，不创建新事件或再次应用旧事件。S 可能已发布，只是调用方没收到成功返回。
@@ -332,13 +335,14 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 宿主在 CreateBranch/Resume 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
 跨库接法见 [跨库继承示例](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
 
-当前外层 API 是**一个 Repository、一个活动 EventHistorySession、单 writer**；每份 Event/State 图选一个非空 durable 根。
+当前外层 API 是**一个 Repository、一个活动 `EventHistorySession` 工作副本、单 writer**；每份 Event/State 图选一个非空 durable 根。
+这正是当前实现限制。[DB-083](docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 正重新推导统一 Repository、Checkpoint 读取与自由 E/S 提交；旧 DB-077/078 方案须据此校准，新能力均未实施。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
 没有自动坏尾修复或完整 OS crash/power-loss 保证。文件布局为 schemas.rbf、state/、journal/ 和 repository.lock。
-旧仓库/会话 API 与 publication.rbf 发布器已移除；原型没有旧格式迁移路径。
+旧仓库/工作副本 API 与 publication.rbf 发布器已移除；原型没有旧格式迁移路径。
 
 保存失败时不要一律重试：`GraphCommitException.Outcome` 区分 NotPublished / Unknown / Published，
-同时检查 Repository/Session 的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
+同时检查仓库与工作副本（当前 `EventHistorySession`）的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
 按持久 head 判断结果。错误与现有领域修改不会自动回滚。通常无需直接操作 SchemaStore、Storage 或发布日志。
 
 ## 从源码打包
