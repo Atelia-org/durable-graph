@@ -24,8 +24,8 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 上游本地包已交付，DG 未接入 | 上游 `0.1.2-dev.20260927.1` 已实现；DG 待 078-A 后更新 pin/严格接入；仅创建/解析固定点，非外部可序列化地址 |
-| [DB-083 Repository / Checkpoint 用户故事](0083-repository-checkpoint-api-user-stories.md) | A/B/C 已验收；DG tag 未实施 | 非泛型工作副本、Event-first、跨类型 State、nearest PreviousEvent、固定历史查询、每分支工作副本/named Fork、同打开地址；tag 单列 DB-084 |
+| [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 上游公开包与 DG 接入已实施 | [接入与验收](0084-durablegraph-tags-implementation.md)；逐包公开 pin、创建/解析固定点、严格打开与真实发布 outcome；非外部可序列化地址 |
+| [DB-083 Repository / Checkpoint 用户故事](0083-repository-checkpoint-api-user-stories.md) | A/B/C 与 DG tag 已实施 | 非泛型工作副本、Event-first、跨类型 State、nearest PreviousEvent、固定历史查询、每分支工作副本/named Fork、同打开地址；跨重开 tag 单列 DB-084 |
 | [DB-082 单图准备材料范围的 ImmutableLeaf 复用](0082-prepared-immutable-leaf-reuse-slice.md) | 候选已实现，默认关闭 | [实现与成本裁决](0082-prepared-immutable-leaf-reuse-implementation.md)；同 State 的只读叶表、身份/交付/依赖门经回归，A/B 未证明稳定完整 Fork 收益；内部开关保留重跑，不扩展公共 options |
 | [DB-081 热 State 提交恢复材料](0081-hot-commit-restoration-material-slice.md) | 资格实验否定，热准入未接线 | [反例、停点与重启条件](0081-hot-commit-restoration-material-experiment.md)；现有 reader body 依赖未获完整证明，不把 Capture/factory/旧证书当资格；DB-080 冷路径保持 |
 | [DB-080 State 准备材料复用](0080-prepared-checkpoint-reuse-slice.md) | 已实施并独立验收 | 第 4 片；[实施与测量记录](0080-prepared-checkpoint-reuse-implementation.md)；Fork/Checkout 单份精确 State 驻留，完整 Schema 证书含预闭合依赖；默认启用，mutable 独立，Event-only 绕槽，热提交未接入 |

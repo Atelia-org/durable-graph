@@ -1,8 +1,17 @@
 <Project>
   <PropertyGroup>
+    <!-- An explicit legacy unified override still selects all five dev packages.
+         More specific package overrides take precedence. Capture before supplying defaults. -->
+    <_StorageUnifiedVersionOverride Condition="'$(StoragePackageVersion)' != ''">$(StoragePackageVersion)</_StorageUnifiedVersionOverride>
     <StoragePackageVersion Condition="'$(StoragePackageVersion)' == ''">0.1.1-preview.2</StoragePackageVersion>
-    <!-- Replace with the final atelia-storage commit before fixed-source acceptance. -->
+    <!-- Public provenance for Primitives, Data and Rbf. Dev overrides must supply their own evidence. -->
     <StorageSourceRevision>976aa345f923da09e2a5cf1dc25ba592b3818b63</StorageSourceRevision>
+    <StorageRbfSegmentStorePackageVersion Condition="'$(StorageRbfSegmentStorePackageVersion)' == '' and '$(_StorageUnifiedVersionOverride)' == ''">0.1.2-preview.1</StorageRbfSegmentStorePackageVersion>
+    <StorageRbfSegmentStorePackageVersion Condition="'$(StorageRbfSegmentStorePackageVersion)' == ''">$(_StorageUnifiedVersionOverride)</StorageRbfSegmentStorePackageVersion>
+    <StorageRbfSegmentStoreSourceRevision>883f995847f9bc9b92801f4f5f1f0997f54ff7d7</StorageRbfSegmentStoreSourceRevision>
+    <StorageEventJournalPackageVersion Condition="'$(StorageEventJournalPackageVersion)' == '' and '$(_StorageUnifiedVersionOverride)' == ''">0.1.2-preview.1</StorageEventJournalPackageVersion>
+    <StorageEventJournalPackageVersion Condition="'$(StorageEventJournalPackageVersion)' == ''">$(_StorageUnifiedVersionOverride)</StorageEventJournalPackageVersion>
+    <StorageEventJournalSourceRevision>883f995847f9bc9b92801f4f5f1f0997f54ff7d7</StorageEventJournalSourceRevision>
     <StorageRepositoryUrl>https://github.com/Atelia-org/atelia-storage.git</StorageRepositoryUrl>
     <UseStorageSources Condition="'$(UseStorageSources)' == ''">false</UseStorageSources>
   </PropertyGroup>

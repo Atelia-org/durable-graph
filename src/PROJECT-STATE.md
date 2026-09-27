@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077、DB-078-A/B/C 与 DB-079/080 已实施并验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-28；DB-077、DB-078-A/B/C、DB-079/080 与 DB-084 DG tag 已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,10 +19,15 @@
 
 ## 当前焦点
 
+[DB-084 DG tag 接入](../docs/design-branches/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
+不可变绑定由上游 EventJournal 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
+普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，严格重开按名字检查，不自动重试或修尾。
+准确公开包、故障与真实包证据集中于接入记录。下一步由下游固定书签/历史浏览/分叉续写的真实反馈选择产品增量。
+
 [DB-082 不可变叶复用](../docs/design-branches/0082-prepared-immutable-leaf-reuse-implementation.md) 已实现内部候选，默认保持关闭。
 候选在同一 DB-080 State 材料内复用完整成功恢复的合格叶，保持 mutable 隔离、身份预登记及交付/证书边界。
 A/B 显示 Family 物化改善，但完整 Fork 未见稳定收益；不以减少 Allocate/Hydrate 次数替代总成本判据。
-重跑方法、逐批数据、正确性与真实包证据集中在实施记录。下一产品候选为 DB-084 的 DG tag 接入；恢复优化等待真实业务瓶颈。
+重跑方法、逐批数据、正确性与真实包证据集中在实施记录。恢复优化等待真实业务瓶颈。
 
 [DB-081 热提交资格实验](../docs/design-branches/0081-hot-commit-restoration-material-experiment.md) 按原分片停点保留否定结论。
 现有 reader body 可执行 Capture/factory 未触及、随数据变化的标准依赖检查；没有充分的无读回资格证明，热提交不接入槽。
@@ -39,15 +44,15 @@ Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽�
 [078-A](../docs/design-branches/0078-a-repository-free-history-implementation.md) 的非泛型入口、自由历史与跨类型 State，
 以及 [078-B](../docs/design-branches/0078-b-checkpoint-history-query-implementation.md) 的独立 Checkpoint/固定查询、
 [078-C](../docs/design-branches/0078-c-branch-checkout-fork-implementation.md) 的每分支占用/named Fork 保持。
-DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标仍独立待办。
+DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标由 DB-084 接入。
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
 [DB-076–082 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 的当前续工入口：
 082 已完成候选实验，默认不启用；仅在真实叶模型/并存图内存压力或物化占比提供新证据时重跑，不自动扩展缓存体系。
 081 不再作为必经工单；一般新 State 的 reader 完整证明需要先解决，不能以 Capture 或旧历史证书代替。
 无 State 请求绕过材料槽/实验叶表，优化关闭仍须正确；热提交准入未实施，叶实例复用只在内部实验开关下可用。
-[DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 的上游本地包已交付，
-DG 公开接入仍独立待办，依赖 A 后按准确 package/revision 验收；不在 DG 自建持久权威。默认公开 Storage pin 保持。
+[DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 已按准确公开 package/revision 接入；
+EventJournal/RbfSegmentStore 升至 0.1.2-preview.1，三个基础包仍 0.1.1-preview.2，逐包 pin 与覆盖规则见依赖指南。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 继续 **Draft / 尚待进一步修订**，不作为并行工单。
 
@@ -259,6 +264,8 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   State 根按实际模型选择，可跨类型替换，成功后安装原实例；已有 child 升根、旧 root 降为 child 保持 ID，不可达成员退出目录。
   冷 Event-only 历史不导入 Event ID；不同 Revision 的对象数字 ID 可以重合，身份须在具体 Revision 内解释。
   CheckpointAddress 由本次打开签发，相等性为 owner+Journal 位置；跨 repo/重开旧地址拒绝，裸 RevisionAddress 只作诊断。
+  CreateTag/ResolveTag 使用上游独立于 branch 的不可变名称空间；同名一律拒绝，重开按名字签发新句柄，不要求领域模型。
+  tag 不追加图、不改工作副本/准备槽；发布异常即使 NotPublished 也可能 fault，重开 ResolveTag 检查实际结果。
   ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 不占用编辑名，Move 只拒绝活动目标分支。
   ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
   EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。

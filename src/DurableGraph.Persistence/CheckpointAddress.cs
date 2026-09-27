@@ -9,6 +9,8 @@ namespace Atelia.DurableGraph;
 /// Pass this handle to history operations on the repository instance that issued it. Handles from
 /// another instance are rejected, including after reopening the same directory. Neither this handle
 /// nor its diagnostic revision address is a persistent bookmark that can be resolved after reopening.
+/// To retain a location across opens, CreateTag on its issuing repository, persist the tag name,
+/// and ResolveTag on the reopened repository to obtain a handle valid there.
 /// </remarks>
 public sealed class CheckpointAddress : IEquatable<CheckpointAddress> {
     internal CheckpointAddress(object owner, HistoryGraphRecord record) {

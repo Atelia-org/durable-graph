@@ -7,7 +7,7 @@ using FrameAddress = Atelia.DurableGraph.Storage.FrameAddress;
 
 namespace Atelia.DurableGraph;
 
-/// <summary>Owns Schema/State resources and a Journal whose named refs are the sole publication authority.</summary>
+/// <summary>Owns Schema/State resources and a Journal whose branches and immutable tags are the publication authority.</summary>
 /// <remarks>
 /// Single-threaded, one writer and at most one active checkout per branch. Different branches may have
 /// live checkouts together; all repository operations remain serial. Close a branch's checkout before moving it.
@@ -469,6 +469,73 @@ public sealed class Repository : IDisposable {
             MutateRefCore(() => _history.Journal.CreateBranch(branchName, selectedFrame.Address));
             return selectedFrame;
         } finally { EndOperation(); }
+    }
+
+    /// <summary>Durably binds an immutable tag name to a State or Event checkpoint.</summary>
+    /// <remarks>
+    /// Requires a writable repository and an address issued by this open instance. Tags use
+    /// a separate ordinal namespace from branches; an existing tag name is always rejected,
+    /// even for the same target. Branch movement and later commits never move the tag.
+    /// No domain graph is materialized and no branch head or checkout baseline changes.
+    /// Validation failures preserve their original error. Publication failures report an
+    /// explicit GraphCommitException outcome; inspect IsFaulted independently. Dispose and
+    /// reopen a faulted repository, then ResolveTag to inspect the actual binding. Do not
+    /// blindly retry a creation whose publication may already have succeeded.
+    /// </remarks>
+    public void CreateTag(string name, CheckpointAddress address) {
+        RequireWriter();
+        _busy = true;
+        try {
+            CheckFrame(address);
+            CreateTagCore(name, address.Address);
+        } finally { EndOperation(); }
+    }
+
+    /// <summary>Resolves an immutable tag to a checkpoint owned by this open repository.</summary>
+    /// <remarks>
+    /// Available on read-only repositories and with an empty model registry; no domain objects
+    /// are materialized. Persist the name, then resolve again after reopening: addresses from
+    /// an earlier open remain invalid. Names are scoped to the selected repository, not global
+    /// identifiers. A missing tag reports TagNotFound; corrupt metadata or targets remain errors.
+    /// </remarks>
+    public CheckpointAddress ResolveTag(string name) {
+        RequireAvailable();
+        _busy = true;
+        try {
+            EventAddress address = _history.Journal.ResolveTag(name).Unwrap();
+            return Issue(_history.Read(address));
+        } finally { EndOperation(); }
+    }
+
+    private void CreateTagCore(string name, EventAddress address) {
+        try { Checkpoint?.Invoke(CommitCheckpoint.BeforePublication); }
+        catch (Exception error) {
+            throw new GraphCommitException(GraphCommitOutcome.NotPublished, null, error);
+        }
+
+        AteliaResult<bool> result;
+        try { result = _history.Journal.CreateTag(name, address); }
+        catch (TagPublicationException error) {
+            // Even NotAttempted faults the upstream journal (for example target confirmation).
+            _resources.MarkFaulted();
+            GraphCommitOutcome outcome = error.Outcome switch {
+                TagPublicationOutcome.NotAttempted => GraphCommitOutcome.NotPublished,
+                TagPublicationOutcome.Confirmed => GraphCommitOutcome.Published,
+                _ => GraphCommitOutcome.Unknown
+            };
+            throw new GraphCommitException(outcome, null, error);
+        } catch (Exception error) {
+            _resources.MarkFaulted();
+            throw new GraphCommitException(GraphCommitOutcome.Unknown, null, error);
+        }
+        // Ordinary Result failures, including RBF pre-I/O rejection, do not fault the
+        // upstream journal. Unwrap outside the publication-exception handling above.
+        result.Unwrap();
+        try { Checkpoint?.Invoke(CommitCheckpoint.AfterPublication); }
+        catch (Exception error) {
+            _resources.MarkFaulted();
+            throw new GraphCommitException(GraphCommitOutcome.Published, null, error);
+        }
     }
 
     /// <summary>Explicit compare-and-swap movement; requires closing the target branch's checkout first.</summary>

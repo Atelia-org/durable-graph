@@ -1,6 +1,6 @@
 # DB-084：EventJournal 不可变 tag 与 DurableGraph 接入分片
 
-> 状态：**上游已实施并交付本地开发包，DurableGraph 接入未实施**。2026-09-27。
+> 状态：**上游已公开发布，DurableGraph 接入已实施**。2026-09-28；准确依赖、实现和验收见 [DG 接入记录](0084-durablegraph-tags-implementation.md)。下文保留上游前置设计及历史交付事实。
 > 用户已选择不可变 tag 支持跨重开定位，并明确持久化实现归属兄弟仓库 `atelia-storage/src/EventJournal`。
 > 本文记录 DurableGraph 的消费要求、上游交付前置与接入验收，不授权修改上游代码，不将候选方法名当作现有 API。
 
@@ -12,7 +12,7 @@
 [DB-083](0083-repository-checkpoint-api-user-stories.md) 的 `CheckpointAddress` 仍只在签发它的同一次 Repository 打开中有效。
 首片不提供可序列化的外部检查点地址；tag 名可以由调用者保留，但必须在指定 Repository 内解析，不是全局仓库身份或通用地址 token。
 
-最小消费形状如下；它们只在本片接入后提供，不是 DB-078 首片的前置 API：
+已接入的最小消费形状如下；它们不是 DB-078 首片的前置 API：
 
 ```csharp
 repo.CreateTag("before-experiment", selectedAddress);
@@ -29,6 +29,10 @@ tag 可定位 State，也可定位首个 State 之前的 Event；解析成功不
 其恢复失败不留 ref 的合同仍按 078-C，不能把两步示例误当成同一失败语义。
 
 ## 2. 已核实的上游与消费事实
+
+2026-09-28 接入使用 nuget.org 的 EventJournal/RbfSegmentStore `0.1.2-preview.1`，其余三个基础包保持 `0.1.1-preview.2`。
+逐包来源以 [StorageDependency.props](../../eng/StorageDependency.props) 为准，不再假定五包版本及 revision 相同。
+当前 DG 已提供两个公开 tag 方法；后续各日期段落是历史核对，不代表当前 API 缺失。
 
 2026-09-27 后续交付核对：上游本地 feed `atelia-storage/artifacts/tag-feed` 已提供
 `0.1.2-dev.20260927.1`，manifest 与五个包的 nuspec 对应源码
@@ -62,7 +66,7 @@ DG 当前 `HistoryJournal.ConfirmDurable` 已将 ref-op log 放在 events/ref ob
 
 | 项目 | 本片合同 |
 |---|---|
-| 操作 | 创建命名绑定、按名字解析。上游候选为 `CreateTag(name, EventAddress)` / `ResolveTag(name)`；实际结果类型与命名遵循其独立接口设计。 |
+| 操作 | 上游实际为 `AteliaResult<bool> CreateTag(name, EventAddress)` / `AteliaResult<EventAddress> ResolveTag(name)`；DG 接缝见下文。 |
 | 名称 | tag 使用独立的 ordinal 名称空间；允许 branch 与 tag 同名，靠显式 API 区分。复用现有 branch 名称的字符/长度约束，不引入层级目录或通用 ref-kind 框架。 |
 | 重复名 | 同名创建一律拒绝，包括目标相同的情况；不把 Create 隐式改成 upsert 或幂等 ensure。 |
 | 目标 | 非空、当前 journal 中 checked-readable 的已存在事件帧。DG 还验证该帧是本 Repository 的合法检查点及地址属于当前打开实例。 |
@@ -82,17 +86,17 @@ tag 名以当前打开的仓库为范围。仓库副本各自解析本地 tag；
 ## 4. 持久权威与失败边界
 
 上游最小机制是一条不可变 `name → EventAddress` 持久记录与可由记录重建的内存索引。
-采用扩展现有 ref-op-log 还是独立 tag log、具体 frame codec 和错误类型，由上游实施前的独立设计确定；
-必须证明一个创建具有明确的发布点，不能因布局选择引入第二套 tag 权威或给 tag 配置可移动 ref object。
-这些是工程方案核对，已定的不可变、名字冲突和失败行为不因此重新待决。
+上游已选择扩展既有 ref-op-log，使用独立 tag binding frame 与 TagPublicationException；具体格式仍归上游。
+创建具有明确的确认阶段，不引入第二套 tag 权威或可移动 ref object。原先的日志布局选择已由上游实施收敛。
 
 创建至少经过名称/重复/目标校验、记录准备、追加与耐久确认、内存可见结果安装。发布前完成可预见的校验与分配；
 新索引安装不得调用领域代码。成功返回意味着绑定已按上游的耐久合同完成，重开仍能解析同一目标。
 若 replay 遇到重复名字，即使目标相同也应拒绝损坏记录，不能采用 last-wins 把不可变 tag 变成可覆盖引用。
 
 普通校验失败不追加 tag。进入写入后发生异常，绑定可能已经持久化：调用者停止使用受影响 driver，关闭重开后按名字解析实际结果，
-不能自动覆盖、删除或盲目重新 Create。上游须明确如何表达“不曾尝试发布 / 可能发布 / 已确认发布”及故障后的资源可用性；
-不假装当前 EventJournal 已提供 DG 的 `GraphCommitOutcome`。DG 接入时将实际证据映射到自己的 publication/fault 合同，未知结果保持 Unknown。
+不能自动覆盖、删除或盲目重新 Create。上游以 NotAttempted / Unknown / Confirmed 表达发布证据，typed 发布异常一律 fault；
+DG 分别映射到 `GraphCommitOutcome.NotPublished / Unknown / Published`，未知结果保持 Unknown。
+普通 Result 拒绝不 fault；发布证据和资源健康必须独立判断，即使 NotPublished 也可能要求关闭重开。
 若重开因坏尾而失败，正常打开报告损坏；只有显式离线救援可以修尾，不能为查询创建结果而自动改盘。
 
 现有 DG `HistoryJournal.ConfirmDurable()` 对 events、ref objects、ref-op-log 有明确的确认顺序。

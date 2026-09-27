@@ -44,6 +44,8 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.Repository.CreateBranchFromEvent(' = 1
         'M:Atelia.DurableGraph.Repository.Checkout(' = 1
         'M:Atelia.DurableGraph.Repository.Fork(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateTag(' = 1
+        'M:Atelia.DurableGraph.Repository.ResolveTag(' = 1
         'M:Atelia.DurableGraph.Repository.ReadFrames(' = 1
         'M:Atelia.DurableGraph.Repository.EnumerateEvents(' = 1
         'M:Atelia.DurableGraph.Repository.ReadCheckpoint(' = 1

@@ -424,8 +424,10 @@ ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅�
 
 历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与逻辑 Journal 位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
-[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 的持久权威已由上游 EventJournal 本地包提供，DG 接入仍属独立后续分片，
-不另立持久权威，也不把 tag 名当作跨仓库外部地址。旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
+[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 的持久权威归上游 EventJournal，DG 只创建和解析绑定。
+tag 与 branch 名称空间独立、同名一律拒绝；可定位 Event-first 历史，重开解析签发当前打开的地址，不物化图或修改分支。
+不另立持久权威，也不把 tag 名当作跨仓库外部地址；发布 outcome 与资源 fault 分开解释，故障后严格重开并按名字检查。
+旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
 旧 publication.rbf 也不引入迁移或双发布机制。
 
 ReadState/ReadEvent 按角色校验地址并独立恢复实际领域根；实验性 ReadPair 保持输入顺序、两边完整成功才交付，

@@ -1,6 +1,6 @@
 # DB-083：从用户故事推导 Repository 与 Checkpoint API
 
-> 状态：**目标语义已选定；A/B/C 已实施并验收；DG tag 接入未实施；不是执行工单**。2026-09-28 校准交付范围；用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag 保持。
+> 状态：**目标语义已选定；A/B/C 与 DG tag 已实施；不是执行工单**。2026-09-28 校准交付范围；tag 验收见 [DB-084 接入记录](0084-durablegraph-tags-implementation.md)。用户确认的 Event-first、跨类型 State、nearest PreviousEvent 与上游不可变 tag 保持。
 > 本文重新检验 DB-076–082 所依赖的公共使用模型；不是继续按旧 Event/State 交替合同施工的授权。
 > 当前产品事实仍以源码为准。公共基础见 [078-A 记录](0078-a-repository-free-history-implementation.md)；独立 Checkpoint 与固定查询见 [078-B 记录](0078-b-checkpoint-history-query-implementation.md)；多分支工作副本与 Fork 见 [078-C 记录](0078-c-branch-checkout-fork-implementation.md)。
 > 内部恢复机制的统一见 [DB-079 实施记录](0079-shared-graph-restoration-core-implementation.md)，Checkout/Fork 单 State 材料复用见 [DB-080 实施记录](0080-prepared-checkpoint-reuse-implementation.md)；均不改变本文选图、隔离、历史或发布语义，不包含热提交准入或领域实例共享。
@@ -59,7 +59,7 @@ DramaBoard 可继续在自己的 adapter 中执行 E/S 交替；LLM 可以连续
 
 ## 3. API 草图与读取形状
 
-以下公共形状由 DB-078-A/B/C 交付；构造器、保存策略等非本轮差异省略，实际验收范围见各片记录。
+以下公共形状由 DB-078-A/B/C 与 DB-084 交付；构造器、保存策略等非本轮差异省略，实际验收范围见各片记录。
 公开门面建议使用根命名空间 `Atelia.DurableGraph`，实现可以继续位于现有 Persistence 程序集。
 不新增一个转发门面与旧公开类型并行维护，也不为命名反转程序集依赖。
 
@@ -74,6 +74,8 @@ repo.CreateBranchFromEvent(name, initialEvent); // IDurableObject root; publishe
 repo.Checkout(name);                         // BranchCheckout; no new durable ref
 repo.Fork(newName, checkpointAddress);       // BranchCheckout; new ref + restore State if present
 repo.GetHead(name);                          // CheckpointAddress
+repo.CreateTag(tagName, checkpointAddress);  // immutable binding; no graph materialization
+repo.ResolveTag(tagName);                    // CheckpointAddress owned by this open repository
 
 checkout.State;                              // IDurableObject?; null only before the first State
 checkout.Head;                               // CheckpointAddress, may identify E or S
@@ -167,8 +169,9 @@ ReadCheckpoint 交付的是**可用于内存计算的独立历史恢复结果**�
 须另定仓库身份、复制仓库和地址验证合同，不能靠“同坐标恰好是合法帧”认证来源。
 
 不可变 tag 已纳入目标，持久机制由兄弟仓库 `atelia-storage/src/EventJournal` 拥有，
-独立交付顺序与接入验收见 [DB-084](0084-eventjournal-immutable-tags-slice.md)。当前 pin **没有独立 tag API**，不能当作现成功能调用。
-目标只需创建与按名解析固定点；重开解析得到本次打开的新地址，不移动分支或恢复领域图。
+独立交付合同见 [DB-084](0084-eventjournal-immutable-tags-slice.md)，公开包接入与验收见[实施记录](0084-durablegraph-tags-implementation.md)。
+`CreateTag` 与 `ResolveTag` 创建及按名解析固定点；重开解析得到本次打开的新地址，不移动分支或恢复领域图。
+tag 与 branch 名称空间独立；同名 tag 一律拒绝，普通校验失败不 fault，发布异常沿 GraphCommitException 的 outcome/fault 合同处理。
 tag 不阻塞 DB-078-A/B/C，也不授权在 DurableGraph 建第二套 tag 日志。可序列化外部地址留到有单独身份合同后再设计。
 
 ### 3.4 非泛型工作副本：角色、模型与替换根

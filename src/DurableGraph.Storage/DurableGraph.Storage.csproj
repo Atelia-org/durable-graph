@@ -19,7 +19,7 @@
     <PackageReference Include="Atelia.Data" Version="$(StoragePackageVersion)" />
     <PackageReference Include="Atelia.Primitives" Version="$(StoragePackageVersion)" />
     <PackageReference Include="Atelia.Rbf" Version="$(StoragePackageVersion)" />
-    <PackageReference Include="Atelia.RbfSegmentStore" Version="$(StoragePackageVersion)" />
+    <PackageReference Include="Atelia.RbfSegmentStore" Version="$(StorageRbfSegmentStorePackageVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
     <ProjectReference Include="$(StorageSourceRoot)/src/Data/Data.csproj" />

@@ -239,7 +239,12 @@ Fork 自身只发布新 ref，不新增历史检查点；Event 地址仍只恢�
 消息处理和外部效果去重由应用负责；两个孩子从同一 Event 开始不表示库已经领取或完成该事件。
 handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
 位置统一使用 `CheckpointAddress`；它只用于本次打开，不是可序列化的外部地址。
-持久 tag 尚未接入 DurableGraph。
+跨重开保存位置可使用不可变 tag：`repo.CreateTag("before-experiment", selectedFrame)`；
+关闭重开后用 `reopened.ResolveTag("before-experiment")` 取得当前打开的地址，再 ReadCheckpoint 或 Fork。
+tag 可指向 State 或尚无 State 的 Event；分支提交或移动不改变它，同名 tag 创建一律拒绝。
+tag 与 branch 名称空间独立，名称使用 1–128 个 ASCII 字符，匹配 `[a-z0-9][a-z0-9._-]*`，不能以 `.` 或 `.lock` 结尾。
+只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析均不推进分支或物化领域图。
+真实包和跨进程示例见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)。
 历史可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
 Journal Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
 Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。
@@ -389,17 +394,17 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 宿主在 CreateNew/OpenExisting/OpenReadOnlyExisting 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
 跨库接法见 [跨库继承示例](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
 
-当前外层 API 是**一个 Repository、一个活动 `BranchCheckout` 工作副本、单 writer**；每份已保存的 Event/State 图选一个非空 durable 根。
+当前外层 API 是**一个 Repository、每个分支至多一个活动 `BranchCheckout` 工作副本、单 writer**；每份已保存的 Event/State 图选一个非空 durable 根。
 State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CLR 类型也可承担任一角色。
 [DB-078-A](docs/design-branches/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史) 已交付自由 E/S 历史和跨类型 State 替换。
-[DB-083](docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的便利 Checkpoint、按需事件枚举、多分支同时签出、一步 Fork 与 tag 仍待后续分片。
+[DB-083](docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、named Fork 与不可变 tag 已接入。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
 没有自动坏尾修复或完整 OS crash/power-loss 保证。文件布局为 schemas.rbf、state/、journal/ 和 repository.lock。
 旧仓库/工作副本 API 与 publication.rbf 发布器已移除；原型没有旧格式迁移路径。
 
 保存失败时不要一律重试：`GraphCommitException.Outcome` 区分 NotPublished / Unknown / Published，
 同时检查仓库与工作副本的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
-按持久 head 判断结果。错误与现有领域修改不会自动回滚。通常无需直接操作 SchemaStore、Storage 或发布日志。
+按持久 head 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。通常无需直接操作 SchemaStore、Storage 或发布日志。
 
 ## 从源码打包
 
@@ -410,13 +415,14 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 仅组织迁移不需要提高业务 Schema 版本，保留 accepted history；不提供旧 DLL 的直接二进制兼容。
 
 底层五库存储依赖来自独立的 [atelia-storage](https://github.com/Atelia-org/atelia-storage)，
-默认使用 [StorageDependency.props](eng/StorageDependency.props) 固定的 NuGet 版本 S。
+默认使用 [StorageDependency.props](eng/StorageDependency.props) 逐包固定的 NuGet 版本与来源；
+基础三包、RbfSegmentStore 和 EventJournal 可以采用不同发布版本。
 正常 `dotnet build/test` 直接从 nuget.org restore，不需要先运行 Prepare 或检出存储源码。
 独立包 probes 的 Prepare 仅下载公开五个 nupkg 并返回 feed，不 clone 或重新打包存储库。
 源码联调、唯一版本的本地开发包与显式 NuGet 配置见 [存储依赖指南](docs/storage-dependency.md)。
 
-从 DurableGraph 根目录执行以下命令，生成含五个 S 包和四个 DG 包的完整 feed。
-`$version` 只控制 DG 的版本 G，必须与 S 不同；每批 DG 产物使用新版本，避免缓存复用同版本旧代码：
+从 DurableGraph 根目录执行以下命令，生成含五个所选存储包和四个 DG 包的完整 feed。
+`$version` 只控制 DG 的版本 G，必须与各存储版本不同；每批 DG 产物使用新版本，避免缓存复用同版本旧代码：
 
 ```powershell
 $ErrorActionPreference = "Stop"
@@ -430,6 +436,8 @@ Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirecto
 [真实包实验](experiments/PackageConsumerProbe/README.md)，例如 `Run-InheritanceLibraryProbe.ps1`。
 源码模式用于 build/test；`dotnet pack -p:UseStorageSources=true` 会被拒绝。联调实验包先由上游 Pack
 生成新的存储版本，再用指南中的自定义 NuGet.Config 和 `StoragePackageVersion` 按包模式打 DG。
+显式 `StoragePackageVersion` 统一覆盖五包；个别包可用 `StorageRbfSegmentStorePackageVersion` /
+`StorageEventJournalPackageVersion` 覆盖，优先于统一版本。
 不能给五库重复套用 DG 的 G，也不能覆盖公开版本或通过清空缓存切换包内容。
 
 ## 接下来查什么

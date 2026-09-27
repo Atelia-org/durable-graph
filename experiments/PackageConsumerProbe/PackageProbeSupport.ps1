@@ -27,7 +27,9 @@ function Prepare-DurableGraphProbeFeed {
         throw 'Prepare the probe in a fresh feed; existing package versions are never overwritten.'
     }
     $storage = & (Join-Path $RepositoryRoot 'eng/Prepare-Storage.ps1')
-    if ($storage.Version -ceq $Version) { throw 'Use distinct storage (S) and DurableGraph (G) versions for package probes.' }
+    if (@($storage.Packages | Where-Object { $_.version -ceq $Version }).Count -ne 0) {
+        throw 'Use a DurableGraph (G) version distinct from every selected storage package version.'
+    }
     [void](New-Item -ItemType Directory -Force -Path $OutputDirectory)
     foreach ($package in $storage.Packages) {
         Copy-Item -LiteralPath (Join-Path $storage.PackageSource $package.File) -Destination $OutputDirectory
@@ -39,9 +41,11 @@ function Prepare-DurableGraphProbeFeed {
         'src/DurableGraph.Persistence/DurableGraph.Persistence.csproj'
     )) {
         # The five storage projects are never repacked with this downstream G.
-        & dotnet pack (Join-Path $RepositoryRoot $project) --configuration Release --output $OutputDirectory "-p:PackageVersion=$Version" "-p:StoragePackageVersion=$($storage.Version)" -p:UseStorageSources=false
+        & dotnet pack (Join-Path $RepositoryRoot $project) --configuration Release --output $OutputDirectory "-p:PackageVersion=$Version" `
+            "-p:StoragePackageVersion=$($storage.Version)" "-p:StorageRbfSegmentStorePackageVersion=$($storage.RbfSegmentStoreVersion)" `
+            "-p:StorageEventJournalPackageVersion=$($storage.EventJournalVersion)" -p:UseStorageSources=false
         if ($LASTEXITCODE -ne 0) { throw "Packing $project failed with exit code $LASTEXITCODE." }
     }
-    if (@(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne 9) { throw 'Expected five storage packages at S and four DurableGraph packages at G.' }
-    Write-Host "Probe feed: storage S=$($storage.Version), DurableGraph G=$Version; $OutputDirectory"
+    if (@(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne 9) { throw 'Expected five selected storage packages and four DurableGraph packages at G.' }
+    Write-Host "Probe feed: storage base=$($storage.Version), segments=$($storage.RbfSegmentStoreVersion), journal=$($storage.EventJournalVersion); DurableGraph G=$Version; $OutputDirectory"
 }

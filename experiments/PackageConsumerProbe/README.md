@@ -4,16 +4,21 @@
 > history/build integration, or package wiring. Root-solution tests do not exercise this
 > delivery boundary. Product progress lives in [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md).
 
-Storage dependencies now have their own version S, pinned in
+Storage dependencies have per-package versions, pinned in
 [StorageDependency.props](../../eng/StorageDependency.props). The current self-contained runners share
 [PackageProbeSupport.ps1](PackageProbeSupport.ps1): its Prepare helper downloads the five pinned public nupkg files
 from nuget.org and returns their feed; it does not clone or rebuild storage sources. The runner then packs
-only the four DG packages at its independent version G. `S != G` is required.
+only the four DG packages at its independent version G, which must differ from every selected storage version.
 Normal repository build/test restores directly from nuget.org without Prepare. Source development and unique
 local dev packages with an explicit NuGet.Config are described in [the dependency guide](../../docs/storage-dependency.md).
 An explicit `-PackageSource <feed> -Version <G>` still consumes the supplied complete feed without repacking it.
 The public consumer projects keep their minimal DG PackageReferences; storage arrives transitively.
 Isolated restore uses a task config for the supplied complete feed rather than the repository's normal public sources.
+
+The [immutable tag consumer](TagConsumer/README.md) runs with `./Run-TagProbe.ps1`.
+Four separate processes cover Event-first and State tags, empty-model metadata resolution,
+ref-only Checkout and named Fork continuation, and immutable positions after branch movement.
+It consumes the mixed public storage pin through the same nine-package feed.
 
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual

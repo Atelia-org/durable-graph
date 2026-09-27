@@ -119,7 +119,7 @@ internal sealed class HistoryJournal : IDisposable {
         string refObjectsPrefix = Path.Combine(_path, "refs", "objects") + Path.DirectorySeparatorChar;
         string refOpLog = Path.Combine(_path, "refs", "ref-op-log.rbf");
         // Validate everything before the first confirmation. Reconfirm graph references before
-        // ref objects, and BindName's ref-op publication frontier last. Physical orphan files
+        // ref objects, and the branch-name/tag ref-op publication frontier last. Physical orphan files
         // also participate; directory enumeration order must never choose barrier ordering.
         foreach (string filePath in files.OrderBy(path => path == refOpLog ? 3 :
             path.StartsWith(eventsPrefix, StringComparison.Ordinal) ? 0 :

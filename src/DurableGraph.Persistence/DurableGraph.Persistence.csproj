@@ -14,7 +14,7 @@
     <ProjectReference Include="..\DurableGraph.Storage\DurableGraph.Storage.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
-    <PackageReference Include="Atelia.EventJournal" Version="$(StoragePackageVersion)" />
+    <PackageReference Include="Atelia.EventJournal" Version="$(StorageEventJournalPackageVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
     <ProjectReference Include="$(StorageSourceRoot)/src/EventJournal/EventJournal.csproj" />
