@@ -134,7 +134,7 @@ public sealed class LoadedWorldTests : IDisposable {
         loaded.World.Text = new string('n', 1);
         PreparedWorldRevision first = loaded.Prepare(NoRebase);
         Assert.Equal(new uint[] { 1, 101 }, first.Revision.LocalObjectIds);
-        Assert.Equal(new uint[] { 100 }, first.Revision.RemovedObjectIds);
+        Assert.Equal(new uint[] { 1, 101 }, _store.ReadLiveObjectHeadMap(_store.Append(first.Revision)).Keys);
         PreparedWorldRevision second = loaded.Prepare(NoRebase);
         Assert.Equal(new uint[] { 1, 102 }, second.Revision.LocalObjectIds); // Discard burns IDs.
         Assert.Equal(address, second.Revision.ParentRevisionAddress);

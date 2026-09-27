@@ -225,8 +225,8 @@ public sealed class ListRepositoryTests : IDisposable {
         using SegmentStore segments = OpenState();
         using StateRevisionStore store = new(segments);
         StateRevision revision = store.Read(changed);
-        Assert.Equal(4, revision.RemovedObjectIds.Count);
         IReadOnlyDictionary<uint, FrameAddress> priorHeads = store.ReadLiveObjectHeadMap(seed);
+        Assert.Equal(4, priorHeads.Keys.Except(store.ReadLiveObjectHeadMap(changed).Keys).Count());
         // The policy may also choose Base for the small changed World body.
         // New membership, rather than representation kind, identifies the replacement.
         ObjectVersionRecord replacement = Assert.Single(revision.LocalObjects, row => !priorHeads.ContainsKey(row.ObjectId));

@@ -8,7 +8,7 @@ using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
-public sealed class ObjectRevisionPlannerTests : IDisposable {
+public sealed partial class ObjectRevisionPlannerTests : IDisposable {
     private readonly string _temporaryRoot = Path.GetFullPath(Path.GetTempPath());
     private readonly List<string> _paths = [];
 
@@ -91,7 +91,9 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         PreparedObjectRevision result = Plan(store, parent, []);
         Assert.Empty(result.Estimates);
         Assert.Empty(result.RepresentationPlan.Writes);
-        Assert.Equal(new uint[] { 1, 2 }, result.Revision.RemovedObjectIds);
+        Assert.Equal(ObjectHeadMapKind.Base, result.Revision.ObjectHeadMapKind);
+        Assert.Empty(result.Revision.RemovedObjectIds);
+        Assert.Equal(parent, result.Revision.ParentRevisionAddress);
         FrameAddress removed = store.Append(result.Revision);
         Assert.Empty(store.ReadLiveObjectHeadMap(removed));
         Assert.Equal(2, store.ReadLiveObjectHeadMap(parent).Count);

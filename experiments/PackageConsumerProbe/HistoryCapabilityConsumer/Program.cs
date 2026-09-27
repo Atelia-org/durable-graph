@@ -124,7 +124,7 @@ internal static class Program {
         SchemaStore schemas = new(fileAfter, readOnly: true);
         using StateRevisionStore store = new(segmentsAfter);
         StateRevision changed = store.Read(migrated);
-        Require(changed.RemovedObjectIds.SequenceEqual(new[] { legacyId.Value }) &&
+        Require(!store.ReadLiveObjectHeadMap(migrated).ContainsKey(legacyId.Value) &&
             changed.LocalObjects.Count == 1 && changed.LocalObjects[0].ObjectId == worldId.Value &&
             changed.LocalObjects[0].Kind == ObjectVersionKind.Base,
             "Migration must force World Base and remove Legacy despite the intervening Event save.");

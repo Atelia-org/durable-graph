@@ -76,8 +76,8 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         uint oldId = _store.ReadLiveObjectHeadMap(workspace.ParentRevisionAddress!.Value).Keys.Max();
         world.Text = null;
         using (PreparedWorldSave<World> remove = workspace.Stage(NoRebase)) {
-            Assert.Contains(oldId, remove.Revision.RemovedObjectIds);
-            Install(remove);
+            FrameAddress saved = Install(remove);
+            Assert.DoesNotContain(oldId, _store.ReadLiveObjectHeadMap(saved).Keys);
         }
         world.Text = original;
         uint burned;
@@ -120,15 +120,15 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         World instance = workspace.World;
         using (PreparedWorldSave<World> abandoned = workspace.Stage(NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(abandoned.Revision.LocalObjects).Kind);
-            Assert.Contains(100u, abandoned.Revision.RemovedObjectIds);
             FrameAddress orphanAppend = _store.Append(abandoned.Revision);
+            Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(orphanAppend).Keys);
             abandoned.PrepareInstall(orphanAppend);
         }
         Assert.Equal(old, workspace.ParentRevisionAddress);
         using (PreparedWorldSave<World> retry = workspace.Stage(NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Revision.LocalObjects).Kind);
-            Assert.Contains(100u, retry.Revision.RemovedObjectIds);
-            Install(retry);
+            FrameAddress installed = Install(retry);
+            Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(installed).Keys);
         }
         using (PreparedWorldSave<World> unchanged = workspace.Stage(NoRebase)) {
             Assert.Empty(unchanged.Revision.LocalObjects);
@@ -219,8 +219,9 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         Assert.Equal(0, restores); // Neither initial nor subsequent installation rematerializes any object.
         root.Next = null;
         using (PreparedWorldSave<Node> pending = workspace.Stage(NoRebase)) {
-            Assert.Equal(new uint[] { 2 }, pending.Revision.RemovedObjectIds);
-            pending.PrepareInstall(_store.Append(pending.Revision));
+            FrameAddress removed = _store.Append(pending.Revision);
+            Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(removed).Keys);
+            pending.PrepareInstall(removed);
             pending.Install();
         }
         root.Next = child;

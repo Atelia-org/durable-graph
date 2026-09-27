@@ -140,7 +140,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Assert.Empty(store.Read(unchanged).LocalObjects);
         Assert.Empty(store.Read(unchanged).RemovedObjectIds);
         uint oldId = Assert.Single(store.ReadLiveObjectHeadMap(first).Keys, id => id != rootId.Value);
-        Assert.Equal(new[] { oldId }, store.Read(removed).RemovedObjectIds);
+        Assert.Equal(new[] { rootId.Value }, store.ReadLiveObjectHeadMap(removed).Keys);
         ObjectVersionRecord fresh = Assert.Single(store.Read(restored).LocalObjects, row => row.ObjectId != rootId.Value);
         Assert.True(fresh.ObjectId > oldId);
         Assert.Equal(ObjectVersionKind.Base, fresh.Kind);

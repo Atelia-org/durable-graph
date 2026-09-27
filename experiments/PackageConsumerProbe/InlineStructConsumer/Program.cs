@@ -175,7 +175,8 @@ internal static class Program {
         Inspect(directory, (store, schemas) => {
             StateRevision revision = store.Read(removed);
             Require(revision.LocalObjects.Count == 1 && revision.LocalObjects[0].ObjectId == worldId.Value &&
-                revision.LocalObjects[0].Kind == ObjectVersionKind.Base && revision.RemovedObjectIds.Count == 3,
+                revision.LocalObjects[0].Kind == ObjectVersionKind.Base &&
+                store.ReadLiveObjectHeadMap(removed).Keys.SequenceEqual(new[] { worldId.Value }),
                 "Removing nested reference slots must rewrite World and remove Node plus both strings.");
             Require(RevisionDecoder.Read(store, schemas, removed, Readers()).Objects.Count == 1, "New membership retains the old inline-referenced graph.");
             CheckHistoricalDto(store, schemas, historical, worldId);

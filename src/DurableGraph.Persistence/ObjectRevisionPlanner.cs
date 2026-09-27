@@ -87,20 +87,49 @@ internal static class ObjectRevisionPlanner {
                 : ObjectVersionRecord.CreateDelta(row.ObjectId.Value, row.PriorAddress!.Value, row.DeltaBody!.Body));
         }
 
+        uint[] removedIds = parentRevisionAddress is not null && !independentSnapshot
+            ? parentHeads.Keys.Where(id => !byId.ContainsKey(id)).Select(static id => id.Value).ToArray()
+            : [];
+        HashSet<uint>? localIds = independentSnapshot || removedIds.Length != 0
+            ? records.Select(static record => record.ObjectId).ToHashSet() : null;
         StateRevision revision;
-        if (independentSnapshot) {
+        if (independentSnapshot || (removedIds.Length != 0 &&
+            IsObjectHeadMapBaseSmaller(rows, localIds!, parentHeads, removedIds))) {
             // Membership is the candidate closure, while each actual policy-selected write
             // remains local (including an optional Base for an unchanged object).
-            HashSet<uint> localIds = records.Select(static record => record.ObjectId).ToHashSet();
             revision = StateRevision.CreateObjectHeadMapBase(parentRevisionAddress, records,
-                rows.Where(row => !localIds.Contains(row.ObjectId.Value))
+                rows.Where(row => !localIds!.Contains(row.ObjectId.Value))
                     .Select(row => new KeyValuePair<uint, FrameAddress>(row.ObjectId.Value, parentHeads[row.ObjectId])));
         } else {
             revision = parentRevisionAddress is { } exactParent
-                ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, parentHeads.Keys.Where(id => !byId.ContainsKey(id)).Select(static id => id.Value))
+                ? StateRevision.CreateObjectHeadMapDelta(exactParent, records, removedIds)
                 : StateRevision.CreateObjectHeadMapBase(null, records, []);
         }
         return new(revision, estimates, plan);
+    }
+
+    private static bool IsObjectHeadMapBaseSmaller(PreparedObject[] rows, HashSet<uint> localIds,
+        IReadOnlyDictionary<ObjectId, FrameAddress> parentHeads, uint[] removedIds) {
+        // The Parent and local records are identical in both representations. Compare
+        // only the v3 directory suffix, including its count and each ObjectId.
+        long deltaBytes = VarUIntBytes((ulong)removedIds.Length);
+        foreach (uint id in removedIds) { deltaBytes += VarUIntBytes(id); }
+        long baseUpperBytes = VarUIntBytes((ulong)(rows.Length - localIds.Count));
+        foreach (PreparedObject row in rows) {
+            if (localIds.Contains(row.ObjectId.Value)) { continue; }
+            // Rollover chooses the file scope later. UInt32 backward file distance
+            // costs at most five bytes; the old ticket is already known exactly.
+            baseUpperBytes += VarUIntBytes(row.ObjectId.Value) + 5
+                + VarUIntBytes(parentHeads[row.ObjectId].FrameTicket.Serialize());
+            if (baseUpperBytes >= deltaBytes) { return false; }
+        }
+        return baseUpperBytes < deltaBytes; // Ties retain Delta, including no external heads.
+    }
+
+    private static int VarUIntBytes(ulong value) {
+        int bytes = 1;
+        while (value >= 0x80) { value >>= 7; bytes++; }
+        return bytes;
     }
 
     private static long GetReconstructionPayloadBytes(NormalizedRevision source, PreparedObject row) {

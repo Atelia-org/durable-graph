@@ -143,7 +143,8 @@ Base 记录的 `body` 已含类型头；Delta 记录的 `body` 没有该头。�
 | <a id="prepare-append-commit"></a>**图保存准备、追加与提交发布（Prepare / Append / Commit）** | 工作区编排 Capture/Seal、内容准备和修订规划，可持久注册 Schema。AppendDurably 只确认 State 文件屏障；EventHistory 继续追加 Journal 帧并更新 branch ref。State 发布后安装原候选，Event 发布后释放候选、不推进 State 基线。 | [WorldWorkspace](../src/DurableGraph.Persistence/WorldWorkspace.cs)、[StateRevisionStore](../src/DurableGraph.Storage/StateRevisionStore.cs)、[EventHistoryRepository](../src/DurableGraph.Persistence/EventHistoryRepository.cs) |
 
 规划输入是**完整 post-live 集合**，策略 `Writes` 只列实际选写对象：未变对象可能不写，也可能因读放大而写 Base。
-推进 State 时，Remove 来自 Parent 完整成员集合减去候选成员集合；独立快照使用 map Base，仅列候选的 local records 与 exact Parent external heads；[ObjectRevisionPlanner](../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)
+推进 State 时，逻辑移除来自 Parent 完整成员集合减去候选成员集合；目录 Delta 显式编码 Remove，目录 Base 按缺席表达移除。
+普通 State 仅在目录 Base 的保守字节上界严格更小时选 Base；独立快照始终使用 map Base，仅列候选的 local records 与 exact Parent external heads；[ObjectRevisionPlanner](../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)
 负责生成这份存储计划，Storage 消费明确结果，不自行从领域图推导可达性。
 
 ## Repository 与工作会话

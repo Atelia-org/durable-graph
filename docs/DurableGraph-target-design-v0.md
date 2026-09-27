@@ -275,6 +275,8 @@ Persistence 组合 Runtime、Storage 与 EventJournal；Runtime 和 Storage 共�
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 使用多历史 Segment 地址与 BackwardFileDistance；rollover 是 soft threshold，
   不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
+- 普通 State 在对象内容决策之后选择目录表示：仅当目录 Base 的字节上界严格小于 Delta 的 Remove 列表时切换，
+  否则保留 Delta。保留精确 Parent、本地对象记录与旧 head；不增加公开参数或新的 wire 格式，见[实现与验收](research/object-head-map-base-feasibility.md)。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
 - 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing Revision 的

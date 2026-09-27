@@ -83,7 +83,6 @@ public sealed partial class GraphWorld : IDurableObject {
             "A child-only edit must extend only the child content chain against S0.");
         StateRevision removedRevisionData = store.Read(removedRevision);
         Require(removedRevisionData.LocalObjects.Single().ObjectId == worldId.Value &&
-            removedRevisionData.RemovedObjectIds.Order().SequenceEqual(initial.LocalObjectIds.Where(id => id != worldId.Value).Order()) &&
             store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId.Value }),
             "Disconnecting the final World paths must remove the cyclic island and its string.");
         Console.WriteLine("EventHistoryContinuousCommit:True");

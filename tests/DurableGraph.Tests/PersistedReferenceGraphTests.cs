@@ -68,7 +68,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Detach(loaded);
             FixturePreparedWorldRevision removal = fixture.Prepare(loaded);
             Assert.Equal(changed, removal.Revision.ParentRevisionAddress);
-            Assert.Equal(allIds.Where(id => id != worldId.Value).Order(), removal.Revision.RemovedObjectIds);
+            Assert.Equal(ObjectHeadMapKind.Base, removal.Revision.ObjectHeadMapKind);
+            Assert.Empty(removal.Revision.ExternalObjectHeads);
             ObjectVersionRecord worldChange = Assert.Single(removal.Revision.LocalObjects);
             Assert.Equal(worldId.Value, worldChange.ObjectId);
             detached = store.Append(removal.Revision);

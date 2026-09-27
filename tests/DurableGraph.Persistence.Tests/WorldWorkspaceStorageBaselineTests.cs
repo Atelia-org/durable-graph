@@ -44,8 +44,8 @@ public sealed partial class WorldWorkspaceTests {
         }
         world.Text = null;
         using (var removed = StageWithoutReadingChains(workspace, NoRebase)) {
-            Assert.Equal(new[] { textId.Value }, removed.Revision.RemovedObjectIds);
-            Install(removed);
+            FrameAddress saved = Install(removed);
+            Assert.DoesNotContain(textId.Value, _store.ReadLiveObjectHeadMap(saved).Keys);
         }
         Assert.DoesNotContain(textId, AssertStoredBaseline(workspace).Objects.Keys);
     }
@@ -103,8 +103,8 @@ public sealed partial class WorldWorkspaceTests {
         using (var retry = StageWithoutReadingChains(workspace, NoRebase)) {
             Assert.Equal(old, retry.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Revision.LocalObjects).Kind);
-            Assert.Equal(new uint[] { 100 }, retry.Revision.RemovedObjectIds);
-            Install(retry);
+            FrameAddress saved = Install(retry);
+            Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(saved).Keys);
         }
         NormalizedRevision installed = AssertStoredBaseline(workspace);
         Assert.Single(installed.Objects);
@@ -156,7 +156,7 @@ public sealed partial class WorldWorkspaceTests {
         Assert.True(valid.Objects[new ObjectId(1)].Current.GetState<State>().TextId.IsNull);
         // Empty contents would remove every source row. Provenance must still be checked.
         var removed = LoadedRevisionPlanner.Prepare(_store, _schemas, valid, [], NoRebase);
-        Assert.Equal(new uint[] { 1, 100 }, removed.Revision.RemovedObjectIds);
+        Assert.Empty(_store.ReadLiveObjectHeadMap(_store.Append(removed.Revision)));
 
         NormalizedRevision synthetic = NormalizedRevision.Create(new(parent, decoded.Objects, decoded.Strings), models);
         Assert.Throws<InvalidDataException>(() => LoadedRevisionPlanner.Prepare(_store, _schemas, synthetic, [], NoRebase));

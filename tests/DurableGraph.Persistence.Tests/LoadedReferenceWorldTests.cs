@@ -52,7 +52,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         Assert.Equal(0, targetAllocations);
         PreparedWorldRevision prepared = loaded.Prepare(NoRebase);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(prepared.Revision.LocalObjects).Kind);
-        Assert.Equal(new uint[] { 2 }, prepared.Revision.RemovedObjectIds);
+        Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(_store.Append(prepared.Revision)).Keys);
     }
 
     [Fact]

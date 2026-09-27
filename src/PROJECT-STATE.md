@@ -61,6 +61,8 @@ P5 公开包下载、签名与 Source Link、私有缓存下的完整构建/Stor
 已验证的 head/H 随 DTO 基线增量推进，受控热保存免除旧对象链重复读取；精确 payload、Event/State 与失败边界保持。
 独立审阅、前后测量、源码回归与真实包验证已通过。
 下一步按真实长轨迹反馈评估 map 回溯与全量 Base 准备，重访条件见路线图，测量证据仅保留在本片。
+普通 State 已加入[目录 Base 选择](../docs/research/object-head-map-base-feasibility.md)：仅当完整目录尾部的保守字节上界
+严格小于 Remove 列表时切换；保留精确 Parent、对象内容决策与基线安装，Event 仍用独立目录 Base。
 
 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md) 已贯通：
 IDurableObject 完全替代并移除 DurableBase，普通 class/record 共用资格和用户自建继承链；
@@ -272,7 +274,7 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   但该方法不追加 State/发布/Accept，也不证明 DTO 内容与 Parent 一致；合法迁移由受控 LoadedRevisionPlanner 路径产生 BaseOnlyUpdate。
 - ObjectRevisionPlanner 只读 exact Parent，校验完整 post-live rows 的新旧分类/prior；独立入口对 NoChange/Delta Update
   读取链 H，受控 Loaded 入口复用同 Store/SchemaStore 的已验证来源及精确 H，仍核对全部 source head，含待删除行。
-  BaseOnlyUpdate 不读取旧内容链。输出 map Base（无 Parent）或 map Delta（有 Parent）及 Removes。
+  BaseOnlyUpdate 不读取旧内容链。无 Parent 输出 map Base；普通有 Parent 的保存按目录成本选择 Base/Delta，后者显式编码 Removes。
   typed producer 负责内容/Schema/基线对应；planner 不调用 Append/Accept，结果可作为显式 Parent 的分支追加。
   冷解码与 ReadSession 缓存同时携带 head/H；PrepareInstall 在实际地址确定后按本次 payload 完成私有下一基线，
   发布后才安装。Event/Discard 不推进 State，synthetic DTO 视图没有热保存来源资格，详见 DB-069。
