@@ -26,22 +26,22 @@ internal static class Program {
         // The catch is inside using: report health, then leave and dispose this attempt.
         try {
             using var repository = mode is "init-record" or "hot"
-                ? EventHistoryRepository.CreateNew(directory)
-                : mode == "verify" ? EventHistoryRepository.OpenReadOnlyExisting(directory)
-                : EventHistoryRepository.OpenExisting(directory);
+                ? EventHistoryRepository.CreateNew(directory, Models())
+                : mode == "verify" ? EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true))
+                : EventHistoryRepository.OpenExisting(directory, Models());
             try {
                 if (mode == "verify") {
                     // This catalog intentionally excludes World and Character.
                     var events = repository.ReadEvents("main");
-                    DamageEvent first = repository.ReadEvent<DamageEvent>(events.First(), Models(eventOnly: true));
+                    DamageEvent first = repository.ReadEvent<DamageEvent>(events.First());
                     CheckSnapshot(first, 10);
                     Require(events.Count() is 1 or 2, "Unexpected event count.");
                     Console.WriteLine("Verified:EventOnly:Hp=10:Observations=ready,armed");
                     return 0;
                 }
                 using var session = mode is "init-record" or "hot"
-                    ? repository.CreateBranch("main", new World(), Models())
-                    : repository.Resume<World>("main", Models());
+                    ? repository.CreateBranch("main", new World())
+                    : repository.Resume<World>("main");
                 if (mode is "init-record" or "hot" or "next") {
                     Require(session.PendingEvent is null, "Complete existing PendingEvent before submitting new work.");
                     int expectedHp = mode == "next" ? 7 : 10;

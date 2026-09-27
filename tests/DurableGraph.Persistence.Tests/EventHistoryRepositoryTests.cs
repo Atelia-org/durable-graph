@@ -27,7 +27,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         FrameAddress first, eventAddress, second, third;
         ObjectId rootId;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", world, Models(), NoRebase);
+            using EventHistorySession<Node> session = repository.CreateBranch("main", world, NoRebase);
             first = session.StateRevisionAddress;
             rootId = session.StateId;
             Assert.Same(world, session.State);
@@ -57,8 +57,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(second, store.Read(third).ParentRevisionAddress);
             Assert.Equal(second, Assert.Single(store.Read(third).LocalObjects).PriorAddress);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
-        using EventHistorySession<Node> loaded = reopened.Resume<Node>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
+        using EventHistorySession<Node> loaded = reopened.Resume<Node>("main");
         Assert.Equal(rootId, loaded.StateId);
         Assert.Equal((byte)4, loaded.State.Left!.Value);
         Assert.Equal(InitialSequence, loaded.State.Sequence);
@@ -73,12 +73,12 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Node child = new() { Value = 2 };
         Node world = new() { Left = child, Right = child };
         using (EventHistoryRepository repository = CreateRepository()) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", world, Models(), NoRebase);
+            using EventHistorySession<Node> session = repository.CreateBranch("main", world, NoRebase);
             session.CommitDomainEvent(new Node { Left = child, Right = child, Value = 7 }, NoRebase);
             Assert.Equal((byte)7, session.GetPendingEvent<Node>().Value);
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using EventHistorySession<Node> session = repository.Resume<Node>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
+            using EventHistorySession<Node> session = repository.Resume<Node>("main");
             Node pending = session.GetPendingEvent<Node>();
             Assert.Same(pending.Left, pending.Right);
             Assert.NotSame(pending.Left, session.State.Left);
@@ -87,22 +87,22 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             session.CommitDomainState(NoRebase);
             Assert.Throws<InvalidOperationException>(() => session.GetPendingEvent<Node>());
         }
-        using EventHistoryRepository read = EventHistoryRepository.OpenReadOnlyExisting(_root);
+        using EventHistoryRepository read = EventHistoryRepository.OpenReadOnlyExisting(_root, Models());
         var eventFrame = Assert.Single(read.ReadEvents("main"));
         var stateFrame = read.GetHead("main");
-        var pair = read.ReadPair<Node, Node>(eventFrame, stateFrame, Models());
+        var pair = read.ReadPair<Node, Node>(eventFrame, stateFrame);
         Assert.Equal((byte)2, pair.First.Left!.Value);
         Assert.Equal((byte)9, pair.Second.Left!.Value);
         Assert.Same(pair.First.Left, pair.First.Right);
         Assert.Same(pair.Second.Left, pair.Second.Right);
-        Assert.Equal((byte)2, read.ReadState<Node>(read.GetPreviousState(eventFrame), Models()).Left!.Value);
+        Assert.Equal((byte)2, read.ReadState<Node>(read.GetPreviousState(eventFrame)).Left!.Value);
     }
 
     [Fact]
     public void RootReplacementInstallsOriginalCandidateOnlyAfterPublication() {
         Node initial = new() { Value = 1 }, replacement = new() { Value = 2 };
         using EventHistoryRepository repository = CreateRepository();
-        using EventHistorySession<Node> session = repository.CreateBranch("main", initial, Models(), NoRebase);
+        using EventHistorySession<Node> session = repository.CreateBranch("main", initial, NoRebase);
         ObjectId originalId = session.StateId;
         session.CommitDomainEvent(new Node(), NoRebase);
         repository.Checkpoint = checkpoint => {
@@ -113,10 +113,10 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         repository.Checkpoint = null;
         Assert.Same(replacement, session.State);
         Assert.NotEqual(originalId, session.StateId);
-        Assert.Equal((byte)2, repository.ReadState<Node>(published, Models()).Value);
+        Assert.Equal((byte)2, repository.ReadState<Node>(published).Value);
         session.CommitDomainEvent(new Node(), NoRebase);
         var next = session.CommitDomainState(NoRebase);
-        Assert.Equal((byte)3, repository.ReadState<Node>(next, Models()).Value);
+        Assert.Equal((byte)3, repository.ReadState<Node>(next).Value);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         FrameAddress first, unchanged, removed, restored;
         ObjectId rootId;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", world, Models(), NoRebase);
+            using EventHistorySession<Node> session = repository.CreateBranch("main", world, NoRebase);
             first = session.StateRevisionAddress; rootId = session.StateId;
             unchanged = Save(session).RevisionAddress;
             world.Left = world.Right = null;
@@ -150,17 +150,17 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     [Fact]
     public void RoleChecksAndSessionExclusivityRejectMisuseBeforeWrites() {
         using EventHistoryRepository repository = CreateRepository();
-        using (EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), Models(), NoRebase)) {
+        using (EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), NoRebase)) {
             var first = session.Head;
             Assert.Throws<InvalidOperationException>(() => session.CommitDomainState(NoRebase));
-            Assert.Throws<InvalidOperationException>(() => repository.Resume<Node>("main", Models()));
+            Assert.Throws<InvalidOperationException>(() => repository.Resume<Node>("main"));
             Assert.Throws<InvalidOperationException>(() => repository.CreateBranch("other", first));
             Assert.Throws<InvalidOperationException>(() => repository.MoveBranch("main", first, first));
             session.CommitDomainEvent(new Node(), NoRebase);
             Assert.Throws<InvalidOperationException>(() => session.CommitDomainEvent(new Node(), NoRebase));
             session.CommitDomainState(NoRebase);
         }
-        using EventHistorySession<Node> resumed = repository.Resume<Node>("main", Models());
+        using EventHistorySession<Node> resumed = repository.Resume<Node>("main");
         Assert.Null(resumed.PendingEvent);
     }
 
@@ -169,7 +169,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using EventHistoryRepository repository = CreateRepository();
         GraphFrame initial, e, completed;
         EventHistorySession<Node> closed;
-        using (EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, Models(), NoRebase)) {
+        using (EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase)) {
             closed = session; initial = session.Head;
             e = session.CommitDomainEvent(new Node { Value = 8 }, NoRebase);
             session.State.Value = 2;
@@ -178,13 +178,13 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(() => closed.CommitDomainEvent(new Node(), NoRebase));
         repository.CreateBranch("from-state", initial);
         repository.CreateBranch("from-event", e);
-        using (EventHistorySession<Node> fork = repository.Resume<Node>("from-event", Models())) {
+        using (EventHistorySession<Node> fork = repository.Resume<Node>("from-event")) {
             Assert.Equal((byte)1, fork.State.Value);
             Assert.Equal((byte)8, fork.GetPendingEvent<Node>().Value);
             fork.State.Value = 3;
             fork.CommitDomainState(NoRebase);
         }
-        using (EventHistorySession<Node> fork = repository.Resume<Node>("from-state", Models())) {
+        using (EventHistorySession<Node> fork = repository.Resume<Node>("from-state")) {
             Assert.Null(fork.PendingEvent);
             Assert.Equal((byte)1, fork.State.Value);
             Save(fork);
@@ -192,7 +192,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Assert.Equal(completed.RevisionAddress, repository.GetHead("main").RevisionAddress);
         Assert.ThrowsAny<Exception>(() => repository.MoveBranch("main", initial, e));
         repository.MoveBranch("main", completed, e);
-        using EventHistorySession<Node> moved = repository.Resume<Node>("main", Models());
+        using EventHistorySession<Node> moved = repository.Resume<Node>("main");
         Assert.Equal((byte)1, moved.State.Value);
         Assert.Equal((byte)8, moved.GetPendingEvent<Node>().Value);
     }
@@ -201,19 +201,19 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     public void ForeignAndStaleOpenHandlesAreRejectedAndReadonlyOperationsDoNotWrite() {
         GraphFrame oldHandle;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), Models(), NoRebase);
+            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), NoRebase);
             oldHandle = session.Head;
             Save(session);
         }
         var before = SnapshotFiles();
-        using (EventHistoryRepository reader = EventHistoryRepository.OpenReadOnlyExisting(_root)) {
+        using (EventHistoryRepository reader = EventHistoryRepository.OpenReadOnlyExisting(_root, Models())) {
             var head = reader.GetHead("main");
-            Assert.ThrowsAny<Exception>(() => reader.ReadState<Node>(oldHandle, Models()));
-            Assert.ThrowsAny<Exception>(() => reader.ReadPair(head, oldHandle, Models()));
-            Assert.ThrowsAny<Exception>(() => reader.Resume<Node>("main", Models()));
+            Assert.ThrowsAny<Exception>(() => reader.ReadState<Node>(oldHandle));
+            Assert.ThrowsAny<Exception>(() => reader.ReadPair(head, oldHandle));
+            Assert.ThrowsAny<Exception>(() => reader.Resume<Node>("main"));
             Assert.ThrowsAny<Exception>(() => reader.CreateBranch("fork", head));
-            reader.ReadState<Node>(head, Models());
-            var pair = reader.ReadPair(head, head, Models());
+            reader.ReadState<Node>(head);
+            var pair = reader.ReadPair(head, head);
             Assert.IsType<Node>(pair.First);
             Assert.IsType<Node>(pair.Second);
         }
@@ -228,8 +228,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             if (fail && node.Value == 2) throw new InvalidDataException("capture failed on child");
             if (reenter) active!.CommitDomainState(NoRebase);
         });
-        using EventHistoryRepository repository = CreateRepository();
-        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Left = new Node { Value = 2 } }, models, NoRebase);
+        using EventHistoryRepository repository = CreateRepository(models);
+        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Left = new Node { Value = 2 } }, NoRebase);
         active = session;
         FrameAddress first = session.StateRevisionAddress;
         session.CommitDomainEvent(new Node(), NoRebase);
@@ -252,7 +252,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     public void KnownPrepublicationFailureDoesNotInstallCandidateAndColdResumeSeesPendingEvent(int point) {
         FrameAddress first;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, Models(), NoRebase);
+            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             first = session.StateRevisionAddress;
             session.CommitDomainEvent(new Node { Value = 7 }, NoRebase);
             session.State.Value = 2;
@@ -262,8 +262,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(first, session.StateRevisionAddress);
             Assert.NotNull(session.PendingEvent);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
-        using EventHistorySession<Node> recovered = reopened.Resume<Node>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
+        using EventHistorySession<Node> recovered = reopened.Resume<Node>("main");
         Assert.Equal(first, recovered.StateRevisionAddress);
         Assert.Equal((byte)1, recovered.State.Value);
         Assert.Equal((byte)7, recovered.GetPendingEvent<Node>().Value);
@@ -275,7 +275,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     public void PublishedStateFailureFaultsWriterAndReopenMustNotReplayPendingEvent(int point) {
         FrameAddress published;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, Models(), NoRebase);
+            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             session.CommitDomainEvent(new Node(), NoRebase);
             session.State.Value = 9;
             repository.Checkpoint = checkpoint => { if (checkpoint == (CommitCheckpoint)point) throw new IOException("lost completion"); };
@@ -285,8 +285,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.True(repository.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => session.CommitDomainState(NoRebase));
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
-        using EventHistorySession<Node> recovered = reopened.Resume<Node>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
+        using EventHistorySession<Node> recovered = reopened.Resume<Node>("main");
         Assert.Equal(published, recovered.StateRevisionAddress);
         Assert.Equal((byte)9, recovered.State.Value);
         Assert.Null(recovered.PendingEvent);
@@ -298,19 +298,19 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             repository.Checkpoint = checkpoint => {
                 if (checkpoint == CommitCheckpoint.BeforePublication) throw new IOException("not bound");
             };
-            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), Models(), NoRebase));
+            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
             repository.Checkpoint = checkpoint => {
                 if (checkpoint == CommitCheckpoint.AfterPublication) throw new IOException("bound but not returned");
             };
-            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node { Value = 6 }, Models(), NoRebase));
+            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node { Value = 6 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
         }
-        using EventHistoryRepository read = EventHistoryRepository.OpenExisting(_root);
-        using EventHistorySession<Node> resumed = read.Resume<Node>("main", Models());
+        using EventHistoryRepository read = EventHistoryRepository.OpenExisting(_root, Models());
+        using EventHistorySession<Node> resumed = read.Resume<Node>("main");
         Assert.Equal((byte)6, resumed.State.Value);
     }
 
@@ -318,11 +318,11 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     public void LoadedUpgradeRewriteIsNotClearedByEventSaveAndLaterStatesUseDelta() {
         FrameAddress original, upgraded, unchanged, changed;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", new Node { Value = 1 }, Models(), NoRebase);
+            using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             original = session.StateRevisionAddress;
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using var session = repository.Resume<Node>("main", Models(upgrade: true));
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models(upgrade: true))) {
+            using var session = repository.Resume<Node>("main");
             Assert.Equal((byte)11, session.State.Value);
             Node same = session.State;
             session.CommitDomainEvent(new Node(), NoRebase);
@@ -349,7 +349,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         FrameAddress initial;
         ObjectId rootId;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", new Node(), Models(), NoRebase);
+            using var session = repository.CreateBranch("main", new Node(), NoRebase);
             initial = session.StateRevisionAddress;
             rootId = session.StateId;
         }
@@ -371,9 +371,9 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             history.Journal.AdvanceRef(branch, prior, record).Unwrap();
         }
         var before = SnapshotFiles();
-        Assert.Throws<InvalidDataException>(() => EventHistoryRepository.OpenReadOnlyExisting(_root));
+        Assert.Throws<InvalidDataException>(() => EventHistoryRepository.OpenReadOnlyExisting(_root, Models()));
         AssertFiles(before);
-        Assert.Throws<InvalidDataException>(() => EventHistoryRepository.OpenExisting(_root));
+        Assert.Throws<InvalidDataException>(() => EventHistoryRepository.OpenExisting(_root, Models()));
         AssertFiles(before);
     }
 
@@ -404,30 +404,34 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             static (in State state, IStateReferenceVisitor visitor) => {
                 visitor.VisitDurable(state.Left, Schema.SchemaId); visitor.VisitDurable(state.Right, Schema.SchemaId);
             }));
-        using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", new WholeWorld { Alice = alice, Bob = bob }, all, NoRebase);
+        using (EventHistoryRepository repository = CreateRepository(all)) {
+            using var session = repository.CreateBranch("main", new WholeWorld { Alice = alice, Bob = bob }, NoRebase);
             session.CommitDomainEvent(new Node { Left = alice, Right = alice, Value = 8 }, NoRebase);
         }
         var before = SnapshotFiles();
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenReadOnlyExisting(_root)) {
+        // No registration for World exists in this fixed read environment.
+        int bobReads = 0, bobHydrates = 0;
+        StateModelRegistry eventOnly = Models(onReadValue: value => { if (value == 3) bobReads++; },
+            onHydrate: node => { if (node.Value == 3) bobHydrates++; });
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenReadOnlyExisting(_root, eventOnly)) {
             var e = Assert.Single(repository.ReadEvents("main"));
-            // No registration for World exists in this read catalog at all.
-            int bobReads = 0, bobHydrates = 0;
-            StateModelRegistry eventOnly = Models(onReadValue: value => { if (value == 3) bobReads++; },
-                onHydrate: node => { if (node.Value == 3) bobHydrates++; });
-            Node read = repository.ReadEvent<Node>(e, eventOnly);
+            Node read = repository.ReadEvent<Node>(e);
             Assert.Equal(0, bobReads);
             Assert.Equal(0, bobHydrates);
             Assert.Equal((byte)2, read.Left!.Value);
             Assert.Same(read.Left, read.Right);
-            Assert.Equal((byte)8, repository.ReadEvent<IDurableObject>(e, all) is Node n ? n.Value : 0);
+            Assert.Equal((byte)8, repository.ReadEvent<IDurableObject>(e) is Node n ? n.Value : 0);
             bool delivered = false;
             Assert.ThrowsAny<Exception>(() => {
-                _ = repository.ReadPair<Node, WholeWorld>(e, repository.GetPreviousState(e), Models());
+                _ = repository.ReadPair<Node, WholeWorld>(e, repository.GetPreviousState(e));
                 delivered = true;
             });
             Assert.False(delivered);
-            Assert.Throws<ArgumentException>(() => repository.ReadState<Node>(e, Models()));
+            Assert.Throws<ArgumentException>(() => repository.ReadState<Node>(e));
+        }
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenReadOnlyExisting(_root, all)) {
+            var e = Assert.Single(repository.ReadEvents("main"));
+            Assert.Equal((byte)8, Assert.IsType<Node>(repository.ReadEvent<IDurableObject>(e)).Value);
         }
         AssertFiles(before);
     }
@@ -532,8 +536,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             (mask & 8) != 0 ? input.ReadByte() : prior.Value,
             (mask & 16) != 0 ? input.ReadUInt64() : prior.Sequence);
     }
-    private EventHistoryRepository CreateRepository() => EventHistoryRepository.CreateNew(_root,
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private EventHistoryRepository CreateRepository(StateModelRegistry? models = null) => EventHistoryRepository.CreateNew(_root, models ?? Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
     private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
 
     public void Dispose() {

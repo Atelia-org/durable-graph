@@ -20,16 +20,15 @@ public sealed class SharedEventHistoryTests : IDisposable {
         Node domainEvent = new() { Next = child, Alias = child, Text = text, Links = links, Value = 7 };
         FrameAddress initial, eventRevision, saved;
         ObjectId stateId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root,
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", world, SharedReadModel.Models(), NoRebase);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root, SharedReadModel.Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+            using EventHistorySession<Node> session = repository.CreateBranch("main", world, NoRebase);
             initial = session.StateRevisionAddress;
             stateId = session.StateId;
             eventRevision = session.CommitDomainEvent(domainEvent, NoRebase).RevisionAddress;
         }
 
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using EventHistorySession<Node> resumed = repository.Resume<Node>("main", SharedReadModel.Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, SharedReadModel.Models())) {
+            using EventHistorySession<Node> resumed = repository.Resume<Node>("main");
             Node pending = resumed.GetPendingEvent<Node>();
             Assert.Equal(stateId, resumed.StateId);
             Assert.NotSame(resumed.State, pending);
@@ -71,9 +70,9 @@ public sealed class SharedEventHistoryTests : IDisposable {
             }
         }
 
-        using EventHistoryRepository reader = EventHistoryRepository.OpenReadOnlyExisting(_root);
-        Node coldState = reader.ReadState<Node>(reader.GetHead("main"), SharedReadModel.Models());
-        Node coldEvent = reader.ReadEvent<Node>(Assert.Single(reader.ReadEvents("main")), SharedReadModel.Models());
+        using EventHistoryRepository reader = EventHistoryRepository.OpenReadOnlyExisting(_root, SharedReadModel.Models());
+        Node coldState = reader.ReadState<Node>(reader.GetHead("main"));
+        Node coldEvent = reader.ReadEvent<Node>(Assert.Single(reader.ReadEvents("main")));
         Assert.Equal(editState ? (byte)9 : (byte)2, coldState.Next!.Value);
         Assert.Equal(editState ? 0 : 2, coldState.Links!.Count);
         Assert.Equal((byte)2, coldEvent.Next!.Value);
@@ -83,26 +82,27 @@ public sealed class SharedEventHistoryTests : IDisposable {
 
     [Fact]
     public void PairedResumeRejectsASingletonAllocatorBeforeItCanHydrateTheSecondMutableGraph() {
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root,
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
-            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, SharedReadModel.Models(), NoRebase);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root, SharedReadModel.Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+            using EventHistorySession<Node> session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             session.CommitDomainEvent(new Node { Value = 7 }, NoRebase);
         }
 
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
         Node singleton = new();
         List<byte> hydratedValues = [];
         StateModelRegistry broken = SharedReadModel.Models(allocate: () => singleton,
             hydrate: node => hydratedValues.Add(node.Value));
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, broken);
         EventHistorySession<Node>? delivered = null;
 
-        Assert.Throws<InvalidDataException>(() => delivered = reopened.Resume<Node>("main", broken));
+        Assert.Throws<InvalidDataException>(() => delivered = reopened.Resume<Node>("main"));
 
         Assert.Null(delivered);
         Assert.Equal(new byte[] { 1 }, hydratedValues);
         Assert.Equal((byte)1, singleton.Value);
         Assert.False(reopened.IsFaulted);
-        using EventHistorySession<Node> retry = reopened.Resume<Node>("main", SharedReadModel.Models());
+        reopened.Dispose();
+        using EventHistoryRepository healthy = EventHistoryRepository.OpenExisting(_root, SharedReadModel.Models());
+        using EventHistorySession<Node> retry = healthy.Resume<Node>("main");
         Assert.Equal((byte)1, retry.State.Value);
         Assert.Equal((byte)7, retry.GetPendingEvent<Node>().Value);
     }

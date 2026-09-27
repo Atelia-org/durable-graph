@@ -151,6 +151,11 @@ try {
         if (-not $isLegacy) {
             $generationProject = $generationProject.Replace("Atelia.DurableGraph.StateStore", "Atelia.DurableGraph.Persistence")
             $generationProgram = $generationProgram.Replace("Atelia.DurableGraph.StateStore.Storage", "Atelia.DurableGraph.Storage").Replace("Atelia.DurableGraph.StateStore", "Atelia.DurableGraph.Persistence")
+            # DB-077 moves the registry to Open only in the current package lane.
+            $generationProgram = $generationProgram.Replace(', models)', ')')
+            foreach ($method in @('CreateNew', 'OpenExisting', 'OpenReadOnlyExisting')) {
+                $generationProgram = $generationProgram.Replace("EventHistoryRepository.$method(directory, options)", "EventHistoryRepository.$method(directory, models, options)")
+            }
         }
         [IO.File]::WriteAllText($project, $generationProject, $utf8)
         $marker = if ($isLegacy) { "DurableBase" } else { "IDurableObject" }

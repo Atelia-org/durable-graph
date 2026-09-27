@@ -23,8 +23,8 @@ public sealed partial class World : IDurableObject {
         __DurableState.RegisterModel(models);
         FrameAddress revision;
         ObjectId worldId;
-        using (var repository = EventHistoryRepository.CreateNew(directory, options))
-        using (var session = repository.CreateBranch("main", new World(7, "A"), models, policy)) {
+        using (var repository = EventHistoryRepository.CreateNew(directory, models, options))
+        using (var session = repository.CreateBranch("main", new World(7, "A"), policy)) {
             worldId = session.StateId;
             session.CommitDomainEvent(new World(session.State._score, "A"), policy);
             session.State._score = 8;

@@ -27,6 +27,9 @@ Use mandatory `-LegacyPackageSource/-LegacyVersion/-PackageSource/-Version`; `-S
 with the same `-WorkRoot` freezes legacy evidence before changing product sources. The separate
 [API inventory](OrganizationApiInventory/README.md) compares compiled type/member shapes under the approved mapping.
 This complements the older DurableBase migration witness; its old lane still uses its original packages and marker.
+The organization migration keeps the pre-DB-077 facade calls in `Program.Legacy.cs`; its current lane
+uses repository-open model configuration. The Storage extraction witness intentionally retains its
+frozen older DG API in both lanes because only the Storage packages differ there.
 
 The [cross-assembly consumer](CrossAssemblyConsumer/README.md) runs through `Run-CrossAssemblyProbe.ps1`:
 independent DomainLibrary and AppModel packages expose public registration catalogs, and a pure Host saves
@@ -187,6 +190,9 @@ public facade witness. It publishes S0/Event/State/pending Event, independently 
 with no World/Bob model registrations, reads a pair of selected graphs, resumes the pending Event,
 upgrades the old State, and continues through required Base, NoChange and ordinary Delta saves.
 Root replacement is checked separately. Readonly browsing preserves every file's bytes and mtime.
+DB-077 fixes the model registry at each Open; Event-only and complete catalogs use separate opens.
+The consumer forces Family definitions (`DurableGraphGenerateDefinitions=true`) and registers the
+generated Family definitions explicitly before opening, so package acceptance covers that path too.
 
 StateStore and all model/history consumer lanes now use `EventHistoryRepository` and
 `EventHistorySession<T>`. `CreateBranch` publishes S0 and preserves the original instances;
@@ -292,7 +298,7 @@ ignored `obj` run directory.
 
 The [generic consumer](GenericConsumer/README.md) exercises the DB-038 product path through real
 runtime and StateStore packages. It builds successive application versions in separate processes,
-registers `Generated.DurableDefinitions`, and lets operation snapshots close the encountered
+registers `Generated.DurableDefinitions` before Open, and lets the repository's model snapshot close the encountered
 `Box<int>`, `Box<Point>`, and inline `Pair<LegacyPoint>` bindings. Historical state DTOs live in
 generated Family hosts, independently of current domain CLR declarations.
 

@@ -7,7 +7,13 @@ public delegate void StateHydrator<TDomain, TState>(TDomain domain, in TState st
     where TDomain : class, IDurableObject where TState : unmanaged;
 
 /// <summary>Code capabilities for one model family, independent of storage and publication.</summary>
-/// <remarks>Use stable generated bindings. Callbacks must not publish partial objects or mutate input DTOs.</remarks>
+/// <remarks>
+/// Providers must have stable semantics within their model environment: explicit inputs determine
+/// results, and callback counts must not determine domain state. Historical conversion must not
+/// mutate input DTOs; capture must produce canonical current DTOs with complete values and identities.
+/// Allocation and hydration must not publish partial objects, mutate shared DTOs or previously
+/// delivered graphs. Successful binding closures may be reused.
+/// </remarks>
 public abstract class StateModelBinding : ObjectBinding {
     private readonly StateReaderBinding[] _readers;
     private readonly Func<DurableSchema, StateReaderBinding>? _sourceReaderResolver;
@@ -86,6 +92,13 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     private readonly StateReferenceVisitor<TState> _visitReferences;
     private readonly bool _supportsBaseProjection;
 
+    /// <summary>Defines canonical current capture and restoration, and conversion from historical DTOs.</summary>
+    /// <remarks>
+    /// <paramref name="normalize"/> converts an accepted historical record to its canonical current DTO without modifying the
+    /// input. Exact current-layout records bypass this delegate: the runtime preserves their exact
+    /// DTO value and ObjectId and attaches this model's preparation. Business initialization and
+    /// side effects belong after materialization, not in this historical conversion callback.
+    /// </remarks>
     public StateModelBinding(
         CapturedStatePreparation<TState> preparation,
         IEnumerable<StateReaderBinding> readers,
@@ -121,7 +134,8 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
 
     internal override ObjectStateRecord Normalize(ObjectStateRecord source) {
         RequireSource(source);
-        return new ObjectStateRecord(source.Id, CurrentSchema, _normalize(source), _preparation);
+        TState state = CurrentLayout.Equals(source.Layout) ? source.GetState<TState>() : _normalize(source);
+        return new ObjectStateRecord(source.Id, CurrentSchema, state, _preparation);
     }
 
     internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) {

@@ -14,10 +14,14 @@ namespace Atelia.DurableGraph.Persistence;
 /// Independent ReadState/ReadEvent calls allow application-side Transient initialization without a writer.
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
 /// Keep per-view owner/context/cache outside paired graphs. Use Resume to continue editing and committing.
+/// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
+/// Successful binding/comparer closures may be reused across operations; callbacks and equality/hash policies
+/// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
 /// </remarks>
 public sealed class EventHistoryRepository : IDisposable {
     private readonly HistoryJournal _history;
     private readonly GraphResources _resources;
+    private readonly StateModelSnapshot _models;
     private readonly object _identity = new();
     private object? _activeSession;
     private bool _busy;
@@ -25,9 +29,10 @@ public sealed class EventHistoryRepository : IDisposable {
     private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
     internal Action<CommitCheckpoint>? Checkpoint { get; set; }
 
-    private EventHistoryRepository(HistoryJournal history, GraphResources resources) {
+    private EventHistoryRepository(HistoryJournal history, GraphResources resources, StateModelSnapshot models) {
         _history = history;
         _resources = resources;
+        _models = models;
         ValidateHistory();
         if (!resources.IsReadOnly) { history.ConfirmDurable(); }
     }
@@ -40,18 +45,28 @@ public sealed class EventHistoryRepository : IDisposable {
     /// history through a newly opened repository rather than reuse old domain objects or frame handles.
     /// </remarks>
     public bool IsFaulted => _resources.IsFaulted;
-    public static EventHistoryRepository CreateNew(string path, RbfSegmentStoreOptions? options = null) => Open(path, options, true, false);
-    public static EventHistoryRepository OpenExisting(string path, RbfSegmentStoreOptions? options = null) => Open(path, options, false, false);
-    public static EventHistoryRepository OpenReadOnlyExisting(string path, RbfSegmentStoreOptions? options = null) => Open(path, options, false, true);
+    /// <summary>Creates a repository with one frozen model environment for its entire open lifetime.</summary>
+    /// <remarks>Models are captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens.</remarks>
+    /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
+    public static EventHistoryRepository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, true, false);
+    /// <summary>Opens existing history with one frozen model environment; physical validation does not require all current models.</summary>
+    /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities.</remarks>
+    /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
+    public static EventHistoryRepository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, false);
+    /// <summary>Opens existing history without writing, using one frozen model environment for all reads.</summary>
+    /// <remarks>An empty or partial registry supports inspection; successful closures are shared within this open repository.</remarks>
+    /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
+    public static EventHistoryRepository OpenReadOnlyExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, true);
 
-    private static EventHistoryRepository Open(string path, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
+    private static EventHistoryRepository Open(string path, StateModelRegistry models, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
+        ArgumentNullException.ThrowIfNull(models);
         HistoryJournal? history = null;
         GraphResources? resources = null;
         try {
             history = create ? HistoryJournal.Create(path) : HistoryJournal.Open(path, readOnly);
             resources = create ? GraphResources.CreateInExistingDirectory(path, options) : readOnly
                 ? GraphResources.OpenReadOnlyExisting(path, options) : GraphResources.OpenExisting(path, options);
-            return new(history, resources);
+            return new(history, resources, models.Snapshot(resources.Schemas));
         } catch {
             try { resources?.Dispose(); } finally { history?.Dispose(); }
             throw;
@@ -62,7 +77,6 @@ public sealed class EventHistoryRepository : IDisposable {
     /// <typeparam name="TState">The exact domain type of the initial State root.</typeparam>
     /// <param name="branchName">A new, nonempty branch name.</param>
     /// <param name="initialState">The nonnull initial State root; its instances are retained rather than cloned.</param>
-    /// <param name="models">The model and history capabilities to freeze for the session.</param>
     /// <param name="parameters">Policy for this initial save only; null uses the library default. It does not set later Commit defaults.</param>
     /// <returns>An active session whose S0 is already published, with no PendingEvent.</returns>
     /// <remarks>
@@ -76,12 +90,12 @@ public sealed class EventHistoryRepository : IDisposable {
     /// <exception cref="InvalidOperationException">A session is already active, the branch already exists, or the repository cannot perform the operation.</exception>
     /// <exception cref="GraphCommitException">An append/publication attempt failed; the branch may already have been published.</exception>
     public EventHistorySession<TState> CreateBranch<TState>(string branchName, TState initialState,
-        StateModelRegistry models, ReadAmplificationBaseBudgetParameters? parameters = null) where TState : class, IDurableObject {
+        ReadAmplificationBaseBudgetParameters? parameters = null) where TState : class, IDurableObject {
         RequireFreeWriter();
         ValidateNewName(branchName);
         _busy = true;
         try {
-            var workspace = WorldWorkspace<TState>.Create(_resources.States, _resources.Schemas, initialState, models);
+            var workspace = WorldWorkspace<TState>.CreateSnapshot(_resources.States, _resources.Schemas, initialState, _models);
             var session = new EventHistorySession<TState>(this, branchName, workspace, null, null);
             Publish(session, null, initialState, parameters ?? DefaultPolicy, initial: true);
             _activeSession = session;
@@ -92,7 +106,6 @@ public sealed class EventHistoryRepository : IDisposable {
     /// <summary>Restores the chosen branch without replaying business handlers. An E head restores its preceding S too.</summary>
     /// <typeparam name="TState">The exact current domain type of the State root.</typeparam>
     /// <param name="branchName">The existing branch to resume at its persisted head.</param>
-    /// <param name="models">The model, historical reader and Upgrade capabilities to freeze for this session.</param>
     /// <returns>An editable State session with PendingEvent populated only when the persisted head is an Event.</returns>
     /// <remarks>
     /// Requires a writable repository with no active session. At an Event head, State is restored from
@@ -103,17 +116,14 @@ public sealed class EventHistoryRepository : IDisposable {
     /// head has no pending work to replay, but does not by itself identify a completed external request.
     /// If Open or Resume fails, stop and report the failure; this API does not fall back to an older head.
     /// </remarks>
-    /// <exception cref="ArgumentNullException">models is null.</exception>
     /// <exception cref="InvalidOperationException">A session is already active or the repository cannot perform the operation.</exception>
-    public EventHistorySession<TState> Resume<TState>(string branchName, StateModelRegistry models) where TState : class, IDurableObject {
+    public EventHistorySession<TState> Resume<TState>(string branchName) where TState : class, IDurableObject {
         RequireFreeWriter();
-        ArgumentNullException.ThrowIfNull(models);
         _busy = true;
         try {
             GraphFrame head = HeadCore(branchName);
             GraphFrame state = head.Kind == GraphFrameKind.State ? head : PreviousStateCore(head);
-            StateModelSnapshot snapshot = models.Snapshot(_resources.Schemas);
-            RevisionReadSession reads = new(_resources.States, _resources.Schemas, snapshot);
+            RevisionReadSession reads = new(_resources.States, _resources.Schemas, _models);
             var workspace = WorldWorkspace<TState>.LoadSnapshot(reads, state.RevisionAddress, state.RootId);
             IDurableObject? pending = head.Kind == GraphFrameKind.Event
                 ? GraphReader.Read<IDurableObject>(reads, head.RevisionAddress, head.RootId).Root : null;
@@ -167,7 +177,7 @@ public sealed class EventHistoryRepository : IDisposable {
     /// use Resume to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public TEvent ReadEvent<TEvent>(GraphFrame frame, StateModelRegistry models) where TEvent : class, IDurableObject => Read<TEvent>(frame, models, GraphFrameKind.Event);
+    public TEvent ReadEvent<TEvent>(GraphFrame frame) where TEvent : class, IDurableObject => Read<TEvent>(frame, GraphFrameKind.Event);
     /// <summary>Independently restores a State snapshot with a caller-specified root type check.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
@@ -176,16 +186,15 @@ public sealed class EventHistoryRepository : IDisposable {
     /// use Resume to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public TState ReadState<TState>(GraphFrame frame, StateModelRegistry models) where TState : class, IDurableObject => Read<TState>(frame, models, GraphFrameKind.State);
+    public TState ReadState<TState>(GraphFrame frame) where TState : class, IDurableObject => Read<TState>(frame, GraphFrameKind.State);
 
-    private T Read<T>(GraphFrame frame, StateModelRegistry models, GraphFrameKind kind) where T : class, IDurableObject {
+    private T Read<T>(GraphFrame frame, GraphFrameKind kind) where T : class, IDurableObject {
         RequireAvailable();
         CheckFrame(frame, kind);
-        ArgumentNullException.ThrowIfNull(models);
         _busy = true;
         try {
             return GraphReader.Read<T>(_resources.States, _resources.Schemas, frame.RevisionAddress,
-                frame.RootId, models.Snapshot(_resources.Schemas)).Root;
+                frame.RootId, _models).Root;
         } finally { _busy = false; }
     }
 
@@ -201,8 +210,7 @@ public sealed class EventHistoryRepository : IDisposable {
     /// Base/Delta payloads; ordinary read validation can still encode canonical Dictionary keys.
     /// Application callback side effects are not rolled back.
     /// </remarks>
-    public (IDurableObject First, IDurableObject Second) ReadPair(GraphFrame first, GraphFrame second,
-        StateModelRegistry models) => ReadPair<IDurableObject, IDurableObject>(first, second, models);
+    public (IDurableObject First, IDurableObject Second) ReadPair(GraphFrame first, GraphFrame second) => ReadPair<IDurableObject, IDurableObject>(first, second);
 
     /// <summary>Experimental pair of read-only snapshots with caller-specified root type checks.</summary>
     /// <remarks>
@@ -215,16 +223,14 @@ public sealed class EventHistoryRepository : IDisposable {
     /// prepare object Base/Delta payloads; ordinary read validation can still encode canonical Dictionary
     /// keys. Application callback side effects are not rolled back.
     /// </remarks>
-    public (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(GraphFrame first, GraphFrame second,
-        StateModelRegistry models) where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
+    public (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(GraphFrame first, GraphFrame second) where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
         RequireAvailable();
         CheckFrame(first);
         CheckFrame(second);
-        ArgumentNullException.ThrowIfNull(models);
         _busy = true;
         try {
             return GraphReader.ReadPair<TFirst, TSecond>(_resources.States, _resources.Schemas,
-                first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, models.Snapshot(_resources.Schemas));
+                first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, _models);
         } finally { _busy = false; }
     }
 

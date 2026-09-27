@@ -122,17 +122,17 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             public static StateModelRegistry Models() { var m=new StateModelRegistry();DurableDefinitions.Register(m);return m; }
             public static FrameAddress Seed(string path) {
-                using var repo=FixtureGraphRepository.CreateNew(path);
-                using var session=repo.Create(new Leaf(17){Amount=18,Padding=long.MaxValue},Models());
+                using var repo=FixtureGraphRepository.CreateNew(path, Models());
+                using var session=repo.Create(new Leaf(17){Amount=18,Padding=long.MaxValue});
                 return session.Commit(new(1000000,1));
             }
             public static FrameAddress[] LoadAndSave(string path) {
                 FrameAddress first,second,third;
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<Leaf>(Models())) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, Models()))using(var session=repo.Load<Leaf>()) {
                     if(session.World.Number!=17 || session.World.Amount!=18 || session.World.Padding!=long.MaxValue)throw new Exception("old class layout");
                     first=session.Commit(new(1000000,1));session.World.Amount=23;second=session.Commit(new(1000000,1));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<Leaf>(Models())) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, Models()))using(var session=repo.Load<Leaf>()) {
                     if(session.World.Number!=17 || session.World.Amount!=23)throw new Exception("record Delta layout");
                     third=session.Commit(new(1000000,1));
                 }
@@ -160,16 +160,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             public static StateModelRegistry Models(){var m=new StateModelRegistry();DurableDefinitions.Register(m);return m;}
             public static FrameAddress Seed(string path) {
-                using var repo=FixtureGraphRepository.CreateNew(path);using var session=repo.Create(new R(17),Models());
+                using var repo=FixtureGraphRepository.CreateNew(path, Models());using var session=repo.Create(new R(17));
                 return session.Commit(new(1000000,1));
             }
             public static FrameAddress[] LoadAndSave(string path) {
                 FrameAddress first,second,third;
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<R>(Models())) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, Models()))using(var session=repo.Load<R>()) {
                     if(session.World.Amount!=17 || session.World.Extra!=long.MaxValue || R.Upgrades!=1)throw new Exception("record upgrade");
                     first=session.Commit(new(1000000,1));session.World.Extra=3;second=session.Commit(new(1000000,1));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<R>(Models())) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, Models()))using(var session=repo.Load<R>()) {
                     if(session.World.Amount!=17 || session.World.Extra!=3 || R.Upgrades!=1)throw new Exception("upgraded Delta");
                     third=session.Commit(new(1000000,1));
                 }

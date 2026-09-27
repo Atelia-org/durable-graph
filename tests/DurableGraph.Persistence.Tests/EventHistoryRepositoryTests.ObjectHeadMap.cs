@@ -10,7 +10,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first, shrunk, hot, cold;
         ObjectId rootId;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", world, Models(), NoRebase);
+            using var session = repository.CreateBranch("main", world, NoRebase);
             first = session.StateRevisionAddress;
             rootId = session.StateId;
             session.CommitDomainEvent(new Node { Value = 6 }, NoRebase);
@@ -39,8 +39,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(ObjectHeadMapKind.Delta, states.Read(hot).ObjectHeadMapKind);
             Assert.Equal(shrunk, states.Read(hot).ParentRevisionAddress);
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using var session = repository.Resume<Node>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
+            using var session = repository.Resume<Node>("main");
             Assert.Equal(rootId, session.StateId);
             Assert.Null(session.State.Left);
             Assert.Equal((byte)2, session.State.Value);
@@ -49,10 +49,10 @@ public sealed partial class EventHistoryRepositoryTests {
             session.State.Value = 3;
             cold = Save(session).RevisionAddress;
         }
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenReadOnlyExisting(_root)) {
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenReadOnlyExisting(_root, Models())) {
             GraphFrame head = repository.GetHead("main");
             Assert.Equal(cold, head.RevisionAddress);
-            Node restored = repository.ReadState<Node>(head, Models());
+            Node restored = repository.ReadState<Node>(head);
             Assert.Equal((byte)3, restored.Value);
             Assert.Equal((byte)9, restored.Right!.Value);
             Assert.Null(restored.Left);
@@ -68,7 +68,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first, candidate;
         using (EventHistoryRepository repository = CreateRepository()) {
             Node original = LargeWorld();
-            using var session = repository.CreateBranch("main", original, Models(), NoRebase);
+            using var session = repository.CreateBranch("main", original, NoRebase);
             first = session.StateRevisionAddress;
             session.CommitDomainEvent(new Node { Value = 6 }, NoRebase);
             Node replacement = new() { Value = 7, Right = original.Right, Text = original.Text };
@@ -90,8 +90,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(3, states.ReadLiveObjectHeadMap(candidate).Count);
             Assert.Equal(1003, states.ReadLiveObjectHeadMap(first).Count);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
-        using var recovered = reopened.Resume<Node>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
+        using var recovered = reopened.Resume<Node>("main");
         if (outcome == GraphCommitOutcome.Published) {
             Assert.Equal(candidate, recovered.StateRevisionAddress);
             Assert.Equal((byte)7, recovered.State.Value);

@@ -71,11 +71,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static bool Run(string path) {
                     var m=new StateModelRegistry();DurableDefinitions.Register(m);
-                    using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(new Guard(17),m)) {
+                    using(var repo=FixtureGraphRepository.CreateNew(path, m))using(var session=repo.Create(new Guard(17))) {
                         session.Commit(new(1000000,1));
                     }
                     Guard.ForbidConstruction=true;
-                    using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<Guard>(m)) {
+                    using(var repo=FixtureGraphRepository.OpenExisting(path, m))using(var session=repo.Load<Guard>()) {
                         if(!session.World.Check() || Guard.Constructors!=1 || Guard.Initializers!=1 ||
                             Guard.Getters!=0 || Guard.Inits!=1 || Guard.Copies!=0)return false;
                         if(session.World.Value!=1029)return false;
@@ -162,7 +162,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] Run(string path) {
                 var result=new List<FrameAddress>();var m=Models();var w=Seed();
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(w,m)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, m))using(var session=repo.Create(w)) {
                     result.Add(session.Commit(new(1000000,1)));
                     var beforeScratch=w.Scratch with {};w.Scratch.Scratch=10;
                     Require(beforeScratch!=w.Scratch,"Transient participates in compiler equality");
@@ -172,7 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     result.Add(session.Commit(new(1000000,1)));
                     w.Copy=w.First with {};result.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(m)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, m))using(var session=repo.Load<World>()) {
                     Require(!ReferenceEquals(session.World,w),"fresh cold world");Check(session.World);
                     result.Add(session.Commit(new(1000000,1)));
                 }

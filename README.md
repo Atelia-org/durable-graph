@@ -101,11 +101,11 @@ var models = new StateModelRegistry();
 Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 
 using var repository = Directory.Exists(path)
-    ? EventHistoryRepository.OpenExisting(path)
-    : EventHistoryRepository.CreateNew(path);
+    ? EventHistoryRepository.OpenExisting(path, models)
+    : EventHistoryRepository.CreateNew(path, models);
 using var session = repository.ListBranches().Contains("main")
-    ? repository.Resume<World>("main", models)
-    : repository.CreateBranch("main", NewWorld(), models); // 已保存初始 S0。
+    ? repository.Resume<World>("main")
+    : repository.CreateBranch("main", NewWorld()); // 已保存初始 S0。
 
 World world = session.State;
 world.RebuildTransient(); // Load 不调用构造器/字段初始化器，也不自动执行此方法。
@@ -150,21 +150,27 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitDomainState(next
 省略策略参数即可使用默认 `(5, 5)`：对象级读取放大动机阈值为 5，可选 Base 软预算为 5%。
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
 
+`CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的配置，后续操作共用这一模型环境。
+修改 registry builder 只影响之后打开的仓库；同一仓库不能逐操作切换模型目录。普通模型与 Family 按需闭合，成功结果可复用。
+历史 Normalize/Upgrade 必须由固定输入与环境决定结果且不修改输入；Capture 必须提供 canonical current DTO。
+exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 的结果必须稳定，
+不能让调用次数决定业务结果；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化放在恢复交付之后。
+
 ### 3. 独立浏览与分支
 
 关闭 writer 后，可以只加载某个 Event；不需要先构造 World，也不必注册完全不在该 Event 图中的模型。
 每次操作仍需要所选图的完整 reader/Upgrade 能力。
 
 ```csharp
-using var history = EventHistoryRepository.OpenReadOnlyExisting(path);
+using var history = EventHistoryRepository.OpenReadOnlyExisting(path, models);
 var events = history.ReadEvents("main");
 foreach (var eventFrame in events) {
-    var damage = history.ReadEvent<DamageEvent>(eventFrame, models);
+    var damage = history.ReadEvent<DamageEvent>(eventFrame);
     Console.WriteLine(damage.Amount);
 }
 var lastEvent = events.Last(); // 此示例已经保存过事件。
 var before = history.GetPreviousState(lastEvent);
-var pair = history.ReadPair(before, lastEvent, models);
+var pair = history.ReadPair(before, lastEvent);
 ```
 
 `ReadFrames` / `ReadEvents` 按本次取得的 branch head 返回**从旧到新的完整逻辑链**，排除未连入该链的 orphan 和其他分支独有记录。
@@ -332,7 +338,7 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 ## 多模型库与运行约束
 
 每个模型库保有自己的 history，并以公开 facade 包住该库 internal 的 `Generated.DurableDefinitions.Register`。
-宿主在 CreateBranch/Resume 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
+宿主在 CreateNew/OpenExisting/OpenReadOnlyExisting 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
 跨库接法见 [跨库继承示例](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
 
 当前外层 API 是**一个 Repository、一个活动 `EventHistorySession` 工作副本、单 writer**；每份 Event/State 图选一个非空 durable 根。

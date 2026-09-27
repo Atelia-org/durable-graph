@@ -35,7 +35,7 @@ internal static class Replay {
         ObjectId worldId;
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
-        EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, StoreOptions);
+        EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, models, StoreOptions);
         EventHistorySession<World<T>>? session = null;
         double setupMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long setupAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
@@ -60,7 +60,7 @@ internal static class Replay {
                 long start = Stopwatch.GetTimestamp();
                 ReadAmplificationBaseBudgetParameters parameters = new(settings.ReadAmplification, settings.BaseBudgetPercent);
                 if (session is null) {
-                    session = repository.CreateBranch("main", world, models, parameters);
+                    session = repository.CreateBranch("main", world, parameters);
                 } else {
                     // The marker carries no World reference; E and S overhead are both timed.
                     session.CommitDomainEvent(new ReplayEvent(), parameters);
@@ -120,8 +120,8 @@ internal static class Replay {
 
         allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         started = Stopwatch.GetTimestamp();
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, StoreOptions);
-        using EventHistorySession<World<T>> restored = reopened.Resume<World<T>>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), StoreOptions);
+        using EventHistorySession<World<T>> restored = reopened.Resume<World<T>>("main");
         double coldMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long coldAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         if (workload.Fingerprint(restored.State) != saved[^1].Fingerprint) { throw new InvalidOperationException("Cold latest graph differs."); }

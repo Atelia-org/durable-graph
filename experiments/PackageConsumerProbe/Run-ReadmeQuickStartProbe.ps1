@@ -67,7 +67,7 @@ try {
     $browse = "using Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        (Get-Example "csharp" 'using var history = EventHistoryRepository.OpenReadOnlyExisting(path);') +
+        (Get-Example "csharp" 'using var history = EventHistoryRepository.OpenReadOnlyExisting(path, models);') +
         "`nif (events.Count != 3 || pair.First is not World || pair.Second is not DamageEvent) { throw new InvalidOperationException(); }`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $browse, $utf8)
     Invoke-DotNet (@("run", "--project", $project, "--no-restore") + $properties + @("--", $database))
@@ -76,8 +76,8 @@ try {
     $configured = "using Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        "using var repository = EventHistoryRepository.OpenExisting(path);`n" +
-        "using var session = repository.Resume<World>(""main"", models);`nWorld world = session.State;`n" +
+        "using var repository = EventHistoryRepository.OpenExisting(path, models);`n" +
+        "using var session = repository.Resume<World>(""main"");`nWorld world = session.State;`n" +
         (Get-Example "csharp" 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
         "`nif (world.Hero.Hp != 96 || session.PendingEvent is not null) { throw new InvalidOperationException(); }`n" +
         "Console.WriteLine(""ReadmePolicyOverride:Hp=96:Threshold=11:Budget=5"");`n"

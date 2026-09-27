@@ -1,7 +1,10 @@
 [CmdletBinding()]
-param()
+param([string] $PackageSource, [string] $Version)
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($PackageSource) -ne [string]::IsNullOrWhiteSpace($Version)) {
+    throw "Supply both -PackageSource and -Version, or neither for a self-contained run."
+}
 
 . (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
 
@@ -9,12 +12,12 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 $consumerProject = Join-Path $PSScriptRoot "StateStoreConsumer/StateStoreConsumer.csproj"
 $runId = "state-store-run-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $workRoot = Join-Path $PSScriptRoot "obj/$runId"
-$feed = Join-Path $workRoot "feed"
+$feed = $PackageSource
 $packageCache = Join-Path $workRoot "packages"
 $history = Join-Path $workRoot "history"
 $intermediate = (Join-Path $workRoot "consumer-obj") + [IO.Path]::DirectorySeparatorChar
 $output = (Join-Path $workRoot "consumer-bin") + [IO.Path]::DirectorySeparatorChar
-$packageVersion = "0.0.0-state-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
+$packageVersion = $Version
 $consumerText = Get-Content -LiteralPath $consumerProject -Raw
 foreach ($forbidden in @("<Import", "<ProjectReference", "<Analyzer", "<AdditionalFiles")) {
     if ($consumerText.Contains($forbidden, [StringComparison]::Ordinal)) {
@@ -22,13 +25,18 @@ foreach ($forbidden in @("<Import", "<ProjectReference", "<Analyzer", "<Addition
     }
 }
 
-New-Item -ItemType Directory -Path $feed, $packageCache | Out-Null
+New-Item -ItemType Directory -Path $packageCache | Out-Null
 Push-Location $repositoryRoot
 try {
-    # The local feed contains the complete product dependency closure. Upstream files are unchanged.
-    Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
-    $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File)
-    if ($packages.Count -ne 9) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+    if ([string]::IsNullOrWhiteSpace($PackageSource)) {
+        $feed = Join-Path $workRoot "feed"
+        $packageVersion = "0.0.0-state-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
+        New-Item -ItemType Directory -Path $feed | Out-Null
+        # The local feed contains the complete product dependency closure. Upstream files are unchanged.
+        Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
+        $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File)
+        if ($packages.Count -ne 9) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+    }
 
     $consumerProperties = @(
         "-p:DurableGraphPackageVersion=$packageVersion",

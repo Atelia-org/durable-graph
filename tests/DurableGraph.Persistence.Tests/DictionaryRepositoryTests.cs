@@ -26,7 +26,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         List<(FrameAddress Address, Dictionary<string, int> Expected)> revisions = [];
         FrameAddress reordered;
         using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models());
+            using StateSaveSession<World> session = repository.Create(world);
             revisions.Add((session.Commit(NoRebase), new(values)));
             KeyValuePair<string, int>[] reverse = values.Reverse().ToArray();
             values.Clear();
@@ -72,8 +72,8 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             }
         }
         FrameAddress unchanged;
-        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
-            using StateSaveSession<World> session = repository.Load<World>(Models());
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root, Models())) {
+            using StateSaveSession<World> session = repository.Load<World>();
             Assert.Equal(values.OrderBy(pair => pair.Key), session.World.Values!.OrderBy(pair => pair.Key));
             Assert.Same(session.World.Values, session.World.Alias);
             unchanged = session.Commit(NoRebase);
@@ -95,13 +95,13 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         world.Links = child.Links = links;
         FrameAddress childOnly, removed;
         using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models());
+            using StateSaveSession<World> session = repository.Create(world);
             session.Commit(NoRebase);
             child.Value = 4;
             childOnly = session.Commit(NoRebase);
         }
-        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
-            using StateSaveSession<World> session = repository.Load<World>(Models());
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root, Models())) {
+            using StateSaveSession<World> session = repository.Load<World>();
             World loaded = session.World;
             Assert.False(loaded.Values!.ContainsKey("a"));
             Assert.Equal(2, loaded.Alias!["b"]);
@@ -125,11 +125,11 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         Assert.NotSame(first, second);
         World world = new() { KeyAlias = first, Values = new(ReferenceEqualityComparer.Instance) { [first] = 1, [second] = 2 } };
         using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models());
+            using StateSaveSession<World> session = repository.Create(world);
             session.Commit(NoRebase);
         }
-        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
-        using StateSaveSession<World> loaded = cold.Load<World>(Models());
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root, Models());
+        using StateSaveSession<World> loaded = cold.Load<World>();
         Dictionary<string, int> map = loaded.World.Values!;
         Assert.Equal(2, map.Count);
         Assert.Equal(1, map[loaded.World.KeyAlias!]);
@@ -144,7 +144,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         Dictionary<string, int> original = new() { ["a"] = 1 };
         World world = new() { Values = original };
         using StateSaveHarness repository = CreateRepository();
-        using StateSaveSession<World> session = repository.Create(world, Models());
+        using StateSaveSession<World> session = repository.Create(world);
         FrameAddress prior = session.Commit(NoRebase);
         CountingComparer comparer = new();
         world.Values = new(comparer) { ["b"] = 2 };
@@ -287,7 +287,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     }
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
-    private StateSaveHarness CreateRepository() => StateSaveHarness.CreateNew(_root, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
     private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);

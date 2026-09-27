@@ -2,24 +2,26 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
+using Atelia.DurableGraph.Persistence;
 using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
-    [Fact]
-    public void GeneratedStateModelUpgradesAdjacentDtosOnceAndKeepsCurrentFastPathAndInput() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GeneratedStateModelUpgradesAdjacentDtosOnceAndKeepsCurrentFastPathAndInput(bool forceFamily) {
         using AncestryHistoryDirectory files = new();
         SchemaHistoryTool publisher = new();
         foreach (int version in new[] { 1, 2 }) {
-            GeneratorTestRun previous = version == 1
-                ? RunGenerator(StateModelHistorySource(version))
-                : RunGenerator(StateModelHistorySource(version), files.ReadAdditionalTexts());
+            GeneratorTestRun previous = RunGenerator(StateModelHistorySource(version),
+                version == 1 ? [] : files.ReadAdditionalTexts(), null, forceFamily ? "true" : null);
             AssertSchemaOnlyCompiles(previous);
             publisher.Publish(files.WriteManifest(previous), files.History);
         }
         Dictionary<string, string> before = files.ReadContents();
-        GeneratorTestRun run = RunGenerator(StateModelHistorySource(3) + """
+        string source = StateModelHistorySource(3) + """
             public partial class Item {
                 private static void UpgradeStateV1ToV2(in __DurableState.V1 prior, out __DurableState.V2 next) {
                     if (prior.Segment0Field1 < 0) throw new System.InvalidOperationException("user upgrade failure");
@@ -30,19 +32,31 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
             }
             public static class Host {
-                public static StateModelBinding Model() => Item.__DurableState.Model;
+                public static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
+                    var models = new Atelia.DurableGraph.Persistence.StateModelRegistry();
+                    models.Register(Item.__DurableState.Model);
+                    return models;
+                }
                 public static object State(int version, int value) => version switch {
                     1 => new Item.__DurableState.V1(value),
                     2 => new Item.__DurableState.V2(value, 9),
                     _ => new Item.__DurableState.V3(value, 4, false),
                 };
             }
-            """, files.ReadAdditionalTexts());
+            """;
+        if (forceFamily) {
+            source = source.Replace("models.Register(Item.__DurableState.Model);",
+                "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);")
+                .Replace("Item.__DurableState", "global::Atelia.DurableGraph.Generated.Family_73746174652E6D6F64656C")
+                .Replace("__DurableState", "global::Atelia.DurableGraph.Generated.Family_73746174652E6D6F64656C");
+        }
+        GeneratorTestRun run = RunGenerator(source, files.ReadAdditionalTexts(), null, forceFamily ? "true" : null);
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
-        StateModelBinding model = host.GetMethod("Model")!.CreateDelegate<Func<StateModelBinding>>()();
+        StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
+        StateModelBinding model = models.Snapshot().ResolveCurrentModel(host.Assembly.GetType("StateModels.Item")!);
         var state = host.GetMethod("State")!.CreateDelegate<Func<int, int, object>>();
-        ObjectStateRecord old = new(new(23), model.Readers[0].Schema, state(1, 5));
+        ObjectStateRecord old = new(new(23), new DurableSchema("state.model", 1, new DurableFieldInfo(1, TypeTag.Int32)), state(1, 5));
         ObjectStateRecord normalized = model.Normalize(old);
         Assert.Equal(new ObjectId(23), normalized.Id);
         Assert.Equal(3, normalized.Schema!.Version);
@@ -56,6 +70,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(42, StateModelField(current, "Segment0Field1"));
         Assert.Equal(false, StateModelField(current, "Segment0Field3"));
         Assert.Same(normalized.Preparation, current.Preparation);
+        Assert.Throws<InvalidOperationException>(() => model.Normalize(new(new(23), model.CurrentSchema, state(1, 42))));
+        Assert.Throws<InvalidDataException>(() => model.Normalize(new(new(23), new DurableSchema("state.model", 3, []), state(3, 42))));
         Assert.Throws<InvalidOperationException>(() => model.Normalize(new(new(23), old.Schema!, state(1, -1))));
         Assert.Throws<InvalidDataException>(() => model.Normalize(new(new(23), new DurableSchema("state.model", 4, []), state(3, 1))));
         Assert.Throws<InvalidDataException>(() => model.Normalize(new(new(23), new DurableSchema("state.model", 1, []), state(1, 1))));

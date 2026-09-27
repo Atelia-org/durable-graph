@@ -197,7 +197,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] SaveAndLoad(string path) {
                 var result=new List<FrameAddress>();var models=Models();var world=Seed();var map=world.Primary;
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(world,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, models))using(var session=repo.Create(world)) {
                     result.Add(session.Commit(new(1000000,1)));
                     world.Direct=world.Direct with {Scratch=55};
                     result.Add(session.Commit(new(1000000,1)));
@@ -207,13 +207,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                     result.Add(session.Commit(new(1000000,1)));
                     Require(ReferenceEquals(world,session.World) && ReferenceEquals(map,world.Primary),"working identities");
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     Check(session.World);result.Add(session.Commit(new(1000000,1)));
                     var key=session.World.Primary.Keys.Single(k=>k.Part==1);
                     session.World.Primary[key]=session.World.Primary[key] with {Part=2227};
                     result.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     Check(session.World);Require(session.World.Primary.Single(p=>p.Key.Part==1).Value.Part==2227,"value patch after cold");
                     result.Add(session.Commit(new(1000000,1)));
                 }

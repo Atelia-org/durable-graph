@@ -180,13 +180,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 world.List.AddRange(new decimal?[]{null,1.0m});world.Map.Add(id,world.List);
                 world.Durations.Add(delay,world.Part);world.Nested.Add(new[]{new Dictionary<decimal,Guid[]>{{1.0m,world.Vector}}});
                 world.Wrapped=new(){First=1.0m,Second=world.Part};
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(world,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, models))using(var session=repo.Create(world)) {
                     session.Commit(new(1000000,1));
                     world.Value=1.00m;world.Optional=1.00m;world.Part=world.Part with {Amount=1.00m};
                     world.Plane[0,0]=1.00m;world.List[1]=1.00m;world.Wrapped.First=1.00m;
                     session.Commit(new(1000000,1));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     var w=session.World;
                     if(w.Id!=id || Flags(w.Value)!=0x20000 || Flags(w.Optional!.Value)!=0x20000 || Flags(w.Part.Amount)!=0x20000 ||
                         Flags(w.Plane[0,0])!=0x20000 || Flags(w.List[1]!.Value)!=0x20000 || Flags(w.Wrapped.First!.Value)!=0x20000) return false;

@@ -28,8 +28,8 @@ internal static class Program {
         Alice alice = new() { Score = 1, Labels = ["shared", "shared"] };
         alice.Self = alice;
         World world = new() { Alice = alice, Bob = new() { Score = 99 } };
-        using (var repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using var session = repository.CreateBranch("main", world, Models(), Policy);
+        using (var repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using var session = repository.CreateBranch("main", world, Policy);
             Require(ReferenceEquals(session.State, world), "S0 replaced the live State.");
             alice.Score = 2;
             session.CommitDomainEvent(new Observed(alice), Policy);
@@ -39,24 +39,29 @@ internal static class Program {
             session.CommitDomainEvent(new Observed(alice), Policy);
             Require(ReferenceEquals(session.State, world) && world.Cache == 42, "Hot commit replaced domain instances.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
             GraphFrame[] frames = repository.ReadFrames("main").ToArray();
             Require(frames.Length == 4, "Expected S0 E1 S1 E2.");
-            Observed e = repository.ReadEvent<Observed>(frames[1], Models(eventOnly: true));
+            Observed e = repository.ReadEvent<Observed>(frames[1]);
             Require(e.Target.Score == 2 && ReferenceEquals(e.Target, e.Alias), "E1 lost its recorded value or sharing.");
-            Require(repository.ReadState<World>(frames[2], Models()).Alice.Score == 3, "S1 lost its recorded value.");
+        }
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            Require(repository.ReadState<World>(repository.ReadFrames("main")[2]).Alice.Score == 3, "S1 lost its recorded value.");
         }
         Require(!File.Exists(Path.Combine(directory, "publication.rbf")), "Legacy publisher was created.");
         SharedReadProbe.Seed(directory + "-shared-read");
         Console.WriteLine("EventHistorySeed:True:Siblings:True:PendingEvent:True:IndependentEvent:True:SharedReadSeed:True");
 #else
         var before = SnapshotFiles(directory);
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
             GraphFrame pending = repository.GetHead("main");
-            Observed e = repository.ReadEvent<Observed>(pending, Models(eventOnly: true));
+            Observed e = repository.ReadEvent<Observed>(pending);
             Require(World.UpgradeCalls == 0 && e.Target.Score == 1004, "Event-only read needed World capabilities.");
             CheckEvent(e);
-            var pair = repository.ReadPair<Observed, World>(pending, repository.GetPreviousState(pending), Models());
+        }
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            GraphFrame pending = repository.GetHead("main");
+            var pair = repository.ReadPair<Observed, World>(pending, repository.GetPreviousState(pending));
             Require(pair.First.Target.Score == 1004 && pair.Second.Alice.Score == 1003 && pair.Second.Generation == 2,
                 "Pair did not retain each selected Revision's values.");
             CheckEvent(pair.First);
@@ -65,8 +70,8 @@ internal static class Program {
         Alice.UpgradeCalls = World.UpgradeCalls = 0;
         FrameAddress rewritten, unchanged, delta, replacement;
         ObjectId originalRoot;
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using var session = repository.Resume<World>("main", Models());
+        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Resume<World>("main");
             Observed pending = (Observed)session.PendingEvent!;
             Require(session.State.Alice.Score == 1003 && pending.Target.Score == 1004 && World.UpgradeCalls == 1 && Alice.UpgradeCalls == 2,
                 "Resume(E) must load the preceding State and pending Event independently.");
@@ -98,9 +103,9 @@ internal static class Program {
             Require(edited.LocalObjects.Count == 1 && edited.LocalObjects[0].Kind == ObjectVersionKind.Delta, "Ordinary subsequent edit must use Delta.");
             Require(store.Read(replacement).RemovedObjectIds.Contains(originalRoot.Value), "Root replacement did not remove the old World.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
             GraphFrame[] frames = repository.ReadFrames("main").ToArray();
-            var pair = repository.ReadPair<Observed, World>(frames[3], repository.GetHead("main"), Models());
+            var pair = repository.ReadPair<Observed, World>(frames[3], repository.GetHead("main"));
             Require(pair.First.Target.Score == 1004 && pair.Second.Alice.Score == 1006, "Historical pending Event changed after later State commits.");
         }
         // Record observable closure size and physical bytes, not a claim about physical read I/O.

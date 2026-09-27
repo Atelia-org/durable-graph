@@ -45,8 +45,8 @@ internal static class SharedReadProbe {
             InlineOwner = new() { Value = new SharedLinks { Target = changing } },
             OptionalOwner = new() { Value = new SharedLinks { Target = changing } },
         };
-        using var repository = EventHistoryRepository.CreateNew(directory, Options);
-        using var session = repository.CreateBranch("main", root, Models(), Policy);
+        using var repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+        using var session = repository.CreateBranch("main", root, Policy);
         session.CommitDomainEvent(new SharedEvent { View = root }, Policy);
         changing.Value = 20;
         session.CommitDomainState(Policy);
@@ -57,20 +57,19 @@ internal static class SharedReadProbe {
     internal static void Verify(string directory) {
         string[] before = SnapshotFiles(directory);
         List<string> metrics = [];
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
             GraphFrame[] frames = repository.ReadFrames("main").ToArray();
             Require(frames.Length == 4, "Shared-read fixture must contain S0 E1 S1 E2.");
             CheckActualHeads(directory, frames);
-            StateModelRegistry models = Models();
 
             var independent = Measure(() => (
-                repository.ReadState<SharedRoot>(frames[0], models),
-                repository.ReadEvent<SharedEvent>(frames[1], models)), out var independentObservation);
+                repository.ReadState<SharedRoot>(frames[0]),
+                repository.ReadEvent<SharedEvent>(frames[1])), out var independentObservation);
             CheckRoot(independent.First, 10);
             CheckRoot(independent.Second.View, 10);
             AddMetrics(metrics, "IndependentS0E1", independentObservation);
 
-            var reused = Measure(() => repository.ReadPair<SharedRoot, SharedEvent>(frames[0], frames[1], models),
+            var reused = Measure(() => repository.ReadPair<SharedRoot, SharedEvent>(frames[0], frames[1]),
                 out var reusedObservation);
             CheckRoot(reused.First, 10);
             CheckRoot(reused.Second.View, 10);
@@ -80,8 +79,8 @@ internal static class SharedReadProbe {
             metrics.Add($"PairS0E1.StringShared={ReferenceEquals(reused.First.EqualOne, reused.Second.View.EqualOne)}");
 
             var independentChanged = Measure(() => (
-                repository.ReadState<SharedRoot>(frames[0], models),
-                repository.ReadState<SharedRoot>(frames[2], models)), out var independentChangedObservation);
+                repository.ReadState<SharedRoot>(frames[0]),
+                repository.ReadState<SharedRoot>(frames[2])), out var independentChangedObservation);
             CheckRoot(independentChanged.First, 10);
             CheckRoot(independentChanged.Second, 20);
             AddMetrics(metrics, "IndependentS0S1", independentChangedObservation);
@@ -92,7 +91,7 @@ internal static class SharedReadProbe {
                 independentChanged.Second.Stable.OwnerWorld.Changing.Value == 20,
                 "Independent Transient initialization leaked between historical views.");
 
-            var changed = Measure(() => repository.ReadPair<SharedRoot, SharedRoot>(frames[0], frames[2], models),
+            var changed = Measure(() => repository.ReadPair<SharedRoot, SharedRoot>(frames[0], frames[2]),
                 out var changedObservation);
             CheckRoot(changed.First, 10);
             CheckRoot(changed.Second, 20);
@@ -104,22 +103,22 @@ internal static class SharedReadProbe {
             metrics.Add($"PairS0S1.StableListShared={ReferenceEquals(changed.First.StableList, changed.Second.StableList)}");
             metrics.Add($"PairS0S1.StableDictionaryShared={ReferenceEquals(changed.First.StableMap, changed.Second.StableMap)}");
 
-            var identical = repository.ReadPair<SharedRoot, SharedRoot>(frames[0], frames[0], models);
+            var identical = repository.ReadPair<SharedRoot, SharedRoot>(frames[0], frames[0]);
             CheckRoot(identical.First, 10);
             CheckRoot(identical.Second, 10);
 
             // No type arguments or State/Event ordering assumption at the call site.
             int[] values = [10, 10, 20, 30];
             foreach (var (first, second) in new[] { (0, 1), (1, 0), (1, 3), (0, 2) }) {
-                var pair = repository.ReadPair(frames[first], frames[second], models);
+                var pair = repository.ReadPair(frames[first], frames[second]);
                 CheckSelection(frames[first], pair.First, values[first]);
                 CheckSelection(frames[second], pair.Second, values[second]);
             }
         }
         Require(before.SequenceEqual(SnapshotFiles(directory)), "Readonly shared-read operations changed repository files.");
 
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using var session = repository.Resume<SharedRoot>("main", Models());
+        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Resume<SharedRoot>("main");
             SharedEvent pending = session.GetPendingEvent<SharedEvent>();
             CheckRoot(session.State, 20);
             CheckRoot(pending.View, 30);

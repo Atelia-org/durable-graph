@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-27；DB-075 已实施；DB-083 目标语义已选定，DB-076–082 已校准，DB-084 单列上游不可变 tag 与 DG 接入，均未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-27；DB-077 已实施并验收；DB-083 目标语义已选定，DB-078–082 尚未实施；DB-084 上游已交付本地开发包，DG tag 接入未实施；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,6 +19,12 @@
 
 ## 当前焦点
 
+[DB-077 固定模型环境](../docs/design-branches/0077-model-environment-implementation.md) 已完成：
+Open 固定模型配置、durable current 恒等、活动消费者迁移均经源码回归与真实包验证；新 Storage 本地包兼容验证通过，默认公开 pin 保持。
+下一实施停点是 [DB-078-A](../docs/design-branches/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史)：
+非泛型 Repository/BranchCheckout、同打开地址、Event-first/自由历史及跨类型 State，须按其完整纵向合同独立验收。
+本批分工、验证证据与后续依赖顺序集中在 DB-077 实施记录；DB-078–082 尚未交付。
+
 [DB-083：从用户故事推导 Repository 与 Checkpoint API](../docs/design-branches/0083-repository-checkpoint-api-user-stories.md)
 是当前目标入口（**语义已选定 / 未实施，非执行工单**）。用户明确的应用是 DramaBoard 与 LLM tool-loop；
 三个独立应用故事及存储语义复核已形成：统一 `Repository`、非泛型 `BranchCheckout` 与分支入口，Event/State 自由提交，
@@ -29,17 +35,17 @@
 用户已确认 Event-first、跨类型 State 替换、PreviousEvent 为最近严格祖先 Event；首片地址限同次打开，不提供可序列化外部地址。
 CreateBranchFromEvent 记录首个 Event；State=null 仅表示尚无 State，Checkout/Fork 不自动初始化。
 跨类型替换按实际根模型与完整旧基线保存，已有 child 升根保持身份。公共验收合同集中在 DB-078。
-项目没有兼容包袱；本轮只做设计和示意代码，不改产品、不授予施工或发布权限。
+项目没有兼容包袱；目标合同与当前实现仍须区分，本批施工范围见上述 DB-077 记录。
 
 [DB-076 高效 fork 路线](../docs/design-branches/0076-efficient-graph-fork-technical-path.md)及
 [DB-077–082 六片](../docs/design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航)
 已按 DB-083 校准：077 仅固定模型/current 恒等；078-A/B/C 分别交付非泛型公共基础与自由历史、Checkpoint/查询、多分支 Fork，分别验收。
 079 共用按用途恢复核心；080 仅驻留精确 State 准备材料，Head 逐请求导航；081 仅热 State 入槽、Event 不动槽；082 仅 State immutable 叶实验。
 无 State 请求绕过材料槽与叶表，保留其他分支缓存；新 State 准备证书不继承已消失的旧根/Upgrade 依赖，缺热证明允许冷恢复。
-下一可实施停点是 DB-077，随后独立验收 078-A/B/C；不把文档定稿当作整组自动施工授权。
-[DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 已列为目标：上游 `atelia-storage/src/EventJournal` 先独立交付，
-DG 再按新包/revision pin 接入及核对严格 Open/持久确认顺序；不阻塞 078，不在 DG 自建 tag 持久权威。
-当前产品仍是 `EventHistoryRepository` / `EventHistorySession` / `Resume`、每操作模型配置快照、
+下一停点是 DB-078-A，随后独立验收 B/C；以实际前置验收结果分派后续任务。
+[DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 上游已发布本地包 `0.1.2-dev.20260927.1`，
+本批核对来源与包模式兼容；DG tag 公开接入仍待 078-A 后按新包/revision pin 验收，不在 DG 自建持久权威。
+当前产品仍是 `EventHistoryRepository` / `EventHistorySession` / `Resume`；模型配置已改为每次 Open 固定，
 全 repo 单活动工作副本及严格 E/S 交替；新门面、命名和自由提交均未实施。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 继续 **Draft / 尚待进一步修订**，不作为并行工单。
@@ -220,8 +226,10 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   无 roots/领域实例/Upgrade，不是 CaptureSession.Current，不能直接作为已加载的可编辑基线。
   RevisionReadSession 封闭同资源和冻结目录的一次操作，以 `(ObjectId, head)` 缓存 owned 行/reader；
   每视图仍物化实际 head map 并完整验证引用/Dictionary lookup，不缓存 Normalize、业务 Upgrade 或工作区。
-- StateModelRegistry 显式登记稳定 SG Model，在操作开始快照 family、exact CLR Type 与 reader 三份索引；
-  同 exact CLR Type 的其他模型原子拒绝。传统非泛型入口的可选普通静态 UpgradeStateVnToVnPlus1
+- StateModelRegistry 显式登记稳定 SG Model，Repository 在 Open 时固定 family、exact CLR Type 与 reader 索引；
+  创建/恢复/读取共用同一模型环境；独立低层入口仍可自行取得 snapshot。
+  同 exact CLR Type 的其他模型原子拒绝。durable exact-current Normalize 保留值/ID 并附加 current preparation，
+  不调用历史转换委托；模型缓存仍复核实时 Schema 权威。传统非泛型入口的可选普通静态 UpgradeStateVnToVnPlus1
   按相邻版本转换完整 leaf DTO，不重复升级祖先。已声明边逐一强类型检查；缺边仅阻止需要该边的 current Load。
   GraphReader 为独立读取与 LoadedWorld/工作区恢复共用管线：先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
   从所选 durable 根迭代求可达闭包，全部可达 class/array/List/Dictionary 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。

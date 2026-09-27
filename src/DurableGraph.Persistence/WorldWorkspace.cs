@@ -36,7 +36,15 @@ internal sealed class WorldWorkspace<TWorld> where TWorld : class, IDurableObjec
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(models);
-        StateModelSnapshot snapshot = models.Snapshot(schemas);
+        return CreateSnapshot(store, schemas, world, models.Snapshot(schemas));
+    }
+
+    internal static WorldWorkspace<TWorld> CreateSnapshot(StateRevisionStore store, SchemaStore schemas,
+        TWorld world, StateModelSnapshot snapshot) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(schemas);
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(snapshot);
         if (world.GetType() != typeof(TWorld) || !snapshot.TryGetCurrentModel(typeof(TWorld), out StateModelBinding? model)) {
             throw new ArgumentException("World must have its requested exact domain type registered.", nameof(world));
         }

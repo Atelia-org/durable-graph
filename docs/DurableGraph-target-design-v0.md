@@ -384,7 +384,7 @@ raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读
 缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)。
 
 公共使用模型见 [DB-083 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md)：统一 Repository、非泛型 BranchCheckout/Checkpoint、自由 E/S 提交；下文的交替/PendingEvent 属当前实现。
-[DB-076–082](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 已按目标校准为候选分片，均未实施。
+[DB-076–082](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) 已按目标校准；DB-077 的固定模型环境与 current 恒等已实施，其余分片尚未实施。
 用户已选定 Event-first 与跨类型 State 替换：工作副本 State 可空仅表示尚无 State，持久 E/S 根仍必须非空；
 无 State 不自动执行 Event，首 State 建立基线，后续实际根类型限制归应用。PreviousX 取最近严格祖先的相应种类，缺失时根/地址成对为空。
 首片 CheckpointAddress 只属于本次打开；[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 由上游 EventJournal 独立交付后接入，
@@ -398,7 +398,7 @@ Capture/Prepare/Accept 是工作副本内部组件；其单独可调用不意味
 
 提交以这次冻结候选完成追加、规定的持久化屏障和 head 发布后，再推进基线与身份绑定；
 不重新 Capture 冒充已提交结果。发布还须保证 branch head 未偏离工作副本所选 Journal head；当前实现以仓库内
-单活动工作副本和受控修改保证。候选路线中 DB-077 仅固定模型环境；DB-078-A 迁移统一 Repository/非泛型 BranchCheckout 并放开交替，
+单活动工作副本和受控修改保证。DB-077 已固定每次 Open 的模型环境并保证 durable exact-current Normalize 恒等；DB-078-A 迁移统一 Repository/非泛型 BranchCheckout 并放开交替，
 DB-078-B 交付 Checkpoint/事件查询，DB-078-C 再允许不同 branch 各一个工作副本与 named Fork；同 branch 的第二次签出仍拒绝。
 这些分片都不增加多 writer 或并行仓库操作承诺。branch 的持久引用与内存工作副本是不同概念。
 

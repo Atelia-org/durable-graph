@@ -1,6 +1,6 @@
 # DB-084：EventJournal 不可变 tag 与 DurableGraph 接入分片
 
-> 状态：**目标合同已选定，未实施；上游实施前仍须核对格式与接口设计**。2026-09-27。
+> 状态：**上游已实施并交付本地开发包，DurableGraph 接入未实施**。2026-09-27。
 > 用户已选择不可变 tag 支持跨重开定位，并明确持久化实现归属兄弟仓库 `atelia-storage/src/EventJournal`。
 > 本文记录 DurableGraph 的消费要求、上游交付前置与接入验收，不授权修改上游代码，不将候选方法名当作现有 API。
 
@@ -29,6 +29,17 @@ tag 可定位 State，也可定位首个 State 之前的 Event；解析成功不
 其恢复失败不留 ref 的合同仍按 078-C，不能把两步示例误当成同一失败语义。
 
 ## 2. 已核实的上游与消费事实
+
+2026-09-27 后续交付核对：上游本地 feed `atelia-storage/artifacts/tag-feed` 已提供
+`0.1.2-dev.20260927.1`，manifest 与五个包的 nuspec 对应源码
+`deb55672106c8a8966e4b04a75bedf0b1523be7f`，包 SHA256 均与 manifest 一致。
+`EventJournal.CreateTag` / `ResolveTag` 已实现；tag binding 写入既有 ref-op log，目标 Event 文件先确认、tag 记录后确认。
+发布异常使用 `TagPublicationException` 和 `NotAttempted / Unknown / Confirmed`，需要 DG 接入时根据真实阶段映射 outcome/fault。
+DG 当前 `HistoryJournal.ConfirmDurable` 已将 ref-op log 放在 events/ref objects 之后；公开 tag 接缝仍待 DB-078-A 后实施。
+交付证据见[上游交付记录](../../../atelia-storage/docs/EventJournal/immutable-tags-delivery.md)。
+本地包兼容验证随 [DB-077 实施批次](0077-model-environment-implementation.md) 记录，不能据此声称 DG 已提供 tag API。
+
+以下保留设计制定时的旧 pin 事实；上游格式与接口的候选措辞是当时的前置要求，现应以上述精确交付版本核对实现。
 
 2026-09-27 核对时，[StorageDependency.props](../../eng/StorageDependency.props) 固定包版本 `0.1.1-preview.2`、
 源码 revision `976aa345f923da09e2a5cf1dc25ba592b3818b63`；兄弟仓当时 HEAD 恰为同一 revision，工作树干净。

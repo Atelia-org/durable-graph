@@ -36,9 +36,9 @@ internal static class Program {
         Require(!LibraryBCatalog.LegacyClrAbsent, "V1 must contain its original inline CLR type.");
         FrameAddress historical, noChange;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
             World world = new();
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             worldId = session.StateId;
             world.Value++;
             session.CommitDomainEvent(session.State, Policy);
@@ -53,8 +53,8 @@ internal static class Program {
             Require(store.Read(noChange).LocalObjects.Count == 0, "Unchanged graph wrote objects.");
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             CheckGraph(session.State, 11, 20);
             session.CommitDomainEvent(session.State, Policy);
             noChange = session.CommitDomainState(Policy).RevisionAddress;
@@ -70,8 +70,8 @@ internal static class Program {
         Inspect(directory, (store, schemas) => CheckHistorical(store, schemas, historical, worldId));
         Require(AppCatalog.UpgradeCalls == 0, "Exact reading ran business upgrades.");
         FrameAddress rewritten, noChange, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             CheckGraph(session.State, 1011, 1020);
             Require(AppCatalog.UpgradeCalls == 1, "Expected exactly one explicit World upgrade.");
             session.CommitDomainEvent(session.State, Policy);
@@ -88,8 +88,8 @@ internal static class Program {
             CheckSingleWrite(store, changed, worldId, ObjectVersionKind.Delta);
             CheckHistorical(store, schemas, historical, worldId);
         });
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             CheckGraph(session.State, 1012, 1020);
             Require(AppCatalog.UpgradeCalls == 1, "Reopening current state repeated upgrade.");
         }

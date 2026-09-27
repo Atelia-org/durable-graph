@@ -85,7 +85,8 @@ function Build-Lane([string] $Lane) {
         (Get-FileHash -LiteralPath (Join-Path $WorkRoot 'legacy/Model.cs')).Hash) {
         throw 'Business model bytes changed between the old and new package lanes.'
     }
-    $program = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'OrganizationMigrationConsumer/Program.cs'))
+    $programName = if ($legacy) { 'Program.Legacy.cs' } else { 'Program.cs' }
+    $program = [IO.File]::ReadAllText((Join-Path $PSScriptRoot "OrganizationMigrationConsumer/$programName"))
     [IO.File]::WriteAllText((Join-Path $root 'Program.cs'), $program.Replace('__PERSISTENCE__', $persistence).Replace('__STORAGE__', $storage).Replace('__SERIALIZATION__', $serialization).Replace('__LEGACY__', $legacy.ToString().ToLowerInvariant()), $utf8)
     if (!$legacy) {
         Copy-Item -Path (Join-Path $WorkRoot 'legacy/history/*.dgschema') -Destination $history

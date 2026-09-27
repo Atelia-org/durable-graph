@@ -172,9 +172,9 @@ internal static class GraphReader {
         ICapturedStatePreparation? firstPreparation = first.Current.Preparation;
         ICapturedStatePreparation? secondPreparation = second.Current.Preparation;
         if (firstPreparation is null || !ReferenceEquals(firstPreparation, secondPreparation)) { return false; }
-        // RequiresRewrite describes layouts only. A hand-written Normalize can change values
-        // without changing that flag. Missing comparison is not proof of equality; an actual
-        // comparison error propagates. Sharing must not depend on object body preparation.
+        // Keep the explicit complete-value proof for read-only sharing. Exact-current durable
+        // normalization is identity, but removing this comparison requires a separate proof.
+        // Missing comparison is not equality; errors propagate without preparing object bodies.
         return firstPreparation.ProvesSameState(first.Current, second.Current);
     }
 

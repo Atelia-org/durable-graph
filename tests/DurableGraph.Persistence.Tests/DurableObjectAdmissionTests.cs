@@ -54,7 +54,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [Fact]
     public void ErasedEventBoundaryRejectsBoxedAndUnregisteredMarkersBeforePublication() {
         using EventHistoryRepository repository = CreateRepository();
-        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), Models(), TestSavePolicies.Baseline);
+        using EventHistorySession<Node> session = repository.CreateBranch("main", new Node(), TestSavePolicies.Baseline);
         GraphFrame initial = session.Head;
         IDurableObject boxed = new BoxedMarker();
         Assert.Throws<ArgumentException>(() => session.CommitDomainEvent(boxed, TestSavePolicies.Baseline));

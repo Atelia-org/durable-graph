@@ -3,7 +3,16 @@ using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Explicit application-local current models and their exact historical readers.</summary>
-/// <remarks>This code capability directory is not the authority for persisted Schema definitions.</remarks>
+/// <remarks>
+/// This builder is not the authority for persisted Schema definitions. A repository copies its configuration
+/// once when opened; later registrations affect future opens, not existing repositories. Low-level readers
+/// may instead take independent snapshots. Closure factories/readers/traversal must be semantically stable;
+/// successful closures may be reused, and callback counts must not determine application results.
+/// Capture produces canonical current DTOs and preserves complete values and identities. Historical
+/// Normalize/Upgrade is deterministic for its explicit inputs and environment and does not mutate inputs.
+/// Mutable restoration allocates fresh exact instances and hydrates only the supplied target, without
+/// mutating shared DTOs or previously delivered graphs or exposing a partially restored graph.
+/// </remarks>
 public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<TypeExpr, StateModelBinding> _models = [];
     private readonly Dictionary<Type, StateModelBinding> _types = [];
@@ -21,7 +30,7 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     /// <summary>Selects the current comparer for Application-mode instances of one closed Dictionary type.</summary>
     /// <remarks>
     /// Standard modes and CurrentDefault ignore this selection. Configuration is copied into future snapshots;
-    /// existing sessions keep their selection. All Application instances of this type share the comparer.
+    /// existing repositories and independent snapshots keep their selection. All Application instances of this type share the comparer.
     /// The comparer must be stable and use only restored inline values, strings or reference identities,
     /// not the contents of referenced objects that may still await hydration.
     /// </remarks>
@@ -43,6 +52,7 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     /// Missing, null or invalid results fail; they never fall back to Default. Successful results are shared
     /// and cached per snapshot and closed type. Exact DTO reading and normalization do not invoke this callback.
     /// Snapshot freezing retains delegate/comparer references, not copies of their mutable external state.
+    /// Resolution policy and equality/hash behavior must remain stable for the environment lifetime.
     /// </remarks>
     public void UseDictionaryComparerResolver(Func<Type, object?> resolver) {
         ArgumentNullException.ThrowIfNull(resolver);
@@ -52,15 +62,15 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         _dictionaryComparerResolver = resolver;
     }
 
-    /// <summary>Selects how future operation snapshots prepare List Delta bodies.</summary>
-    /// <remarks>Adaptive is the default. Existing sessions keep their writer selection. Algorithms share one persisted format and reader.</remarks>
+    /// <summary>Selects how future model snapshots prepare List Delta bodies.</summary>
+    /// <remarks>Adaptive is the default. Existing repositories and independent snapshots keep their writer selection. Algorithms share one persisted format and reader.</remarks>
     public void UseListDeltaAlgorithm(ListDeltaAlgorithm algorithm) {
         if (!Enum.IsDefined(algorithm)) { throw new ArgumentOutOfRangeException(nameof(algorithm)); }
         _listDeltaAlgorithm = algorithm;
     }
 
     /// <summary>Selects explicit value rules owned by Lists whose element layout changes.</summary>
-    /// <remarks>This choice is independent of array element rules and is frozen per operation.</remarks>
+    /// <remarks>This choice is independent of array element rules and is frozen per model snapshot.</remarks>
     public void UseListElementUpgrades(Type ruleSet) {
         ArgumentNullException.ThrowIfNull(ruleSet);
         if (!_valueUpgradeRules.ContainsKey(ruleSet)) {
@@ -73,7 +83,7 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     }
 
     /// <summary>Selects explicit value rules for Dictionary keys whose exact layout changes.</summary>
-    /// <remarks>Key and value selections are independent and frozen per operation.</remarks>
+    /// <remarks>Key and value selections are independent and frozen per model snapshot.</remarks>
     public void UseDictionaryKeyUpgrades(Type ruleSet) =>
         SelectDictionaryUpgrades(ref _dictionaryKeyUpgradeRuleSet, ruleSet, "key");
 

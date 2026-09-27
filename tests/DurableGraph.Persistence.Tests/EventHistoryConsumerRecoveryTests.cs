@@ -12,7 +12,7 @@ public sealed partial class EventHistoryRepositoryTests {
     public void ConsumerRecoveryUsesFreshPendingOrSkipsAlreadyPublishedState(int point, bool published) {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", oldState, Models());
+            using var session = repository.CreateBranch("main", oldState);
             session.CommitDomainEvent(oldEvent);
             repository.Checkpoint = checkpoint => {
                 if (checkpoint == (CommitCheckpoint)point) throw new IOException("State commit interrupted");
@@ -25,8 +25,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
 
         var beforeRecovery = SnapshotFiles();
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using var session = repository.Resume<Node>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
+            using var session = repository.Resume<Node>("main");
             Assert.NotSame(oldState, session.State);
             Assert.Equal(published ? (byte)7 : (byte)10, session.State.Value);
             if (published) Assert.Null(session.PendingEvent);
@@ -59,8 +59,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         // Sample only while closed: an open writer owns repository.lock exclusively.
         if (published) AssertFiles(beforeRecovery); // No replacement Event, extra State or physical append.
-        using EventHistoryRepository verification = EventHistoryRepository.OpenExisting(_root);
-        using var verified = verification.Resume<Node>("main", Models());
+        using EventHistoryRepository verification = EventHistoryRepository.OpenExisting(_root, Models());
+        using var verified = verification.Resume<Node>("main");
         Assert.Equal((byte)7, verified.State.Value);
         Assert.Null(verified.PendingEvent);
         // Writable browsing may persist a derived Journal forward-plan cache; keep it outside
@@ -76,12 +76,12 @@ public sealed partial class EventHistoryRepositoryTests {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         InvalidOperationException original = new("Application or preparation failure");
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", oldState, Models());
+            using var session = repository.CreateBranch("main", oldState);
             session.CommitDomainEvent(oldEvent);
         }
         var beforeAttempt = SnapshotFiles();
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using var session = repository.Resume<Node>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
+            using var session = repository.Resume<Node>("main");
             oldState = session.State;
             oldEvent = session.GetPendingEvent<Node>();
             if (failDuringPrepare) repository.Checkpoint = checkpoint => {
@@ -100,8 +100,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         AssertFiles(beforeAttempt);
 
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            using var session = repository.Resume<Node>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models())) {
+            using var session = repository.Resume<Node>("main");
             Assert.NotSame(oldState, session.State);
             Assert.NotSame(oldEvent, session.PendingEvent);
             Assert.Equal((byte)10, session.State.Value);
@@ -118,8 +118,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Single(repository.ReadEvents("main"));
             Assert.Equal(3, repository.ReadFrames("main").Count());
         }
-        using EventHistoryRepository verification = EventHistoryRepository.OpenExisting(_root);
-        using var verified = verification.Resume<Node>("main", Models());
+        using EventHistoryRepository verification = EventHistoryRepository.OpenExisting(_root, Models());
+        using var verified = verification.Resume<Node>("main");
         Assert.Equal((byte)7, verified.State.Value);
         Assert.Null(verified.PendingEvent);
     }

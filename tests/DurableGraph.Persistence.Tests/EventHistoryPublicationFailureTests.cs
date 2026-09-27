@@ -23,16 +23,16 @@ public sealed partial class EventHistoryRepositoryTests {
             // CreateBranch still performs Create, Ref Init, and BindName in its normal order.
             field.SetValue(journal, new RefOpFaultFile(original, phase, refObjects));
             GraphCommitException failure = Assert.Throws<GraphCommitException>(() =>
-                repository.CreateBranch("main", new Node { Value = 7 }, Models(), NoRebase));
+                repository.CreateBranch("main", new Node { Value = 7 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Unknown, failure.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.NotNull(failure.CandidateRevisionAddress);
             Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
         Assert.Equal(visible, reopened.ListBranches().Contains("main"));
         if (visible) {
-            using var session = reopened.Resume<Node>("main", Models());
+            using var session = reopened.Resume<Node>("main");
             Assert.Equal((byte)7, session.State.Value);
             Assert.Null(session.PendingEvent);
         }
@@ -42,7 +42,7 @@ public sealed partial class EventHistoryRepositoryTests {
     public void RefCasMismatchAfterJournalAppendDoesNotPublishOrInstallStateCandidate() {
         FrameAddress original;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", new Node { Value = 1 }, Models(), NoRebase);
+            using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             GraphFrame first = session.Head;
             original = session.StateRevisionAddress;
             session.CommitDomainEvent(new Node(), NoRebase);
@@ -58,8 +58,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(original, session.StateRevisionAddress);
             Assert.True(repository.IsFaulted);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
-        using var resumed = reopened.Resume<Node>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
+        using var resumed = reopened.Resume<Node>("main");
         Assert.Equal(original, resumed.StateRevisionAddress);
         Assert.Equal((byte)1, resumed.State.Value);
         Assert.Null(resumed.PendingEvent);
@@ -73,16 +73,16 @@ public sealed partial class EventHistoryRepositoryTests {
     public void InvalidBranchNameIsRejectedBeforeCaptureOrWrites(string name) {
         using (EventHistoryRepository empty = CreateRepository()) { }
         var before = SnapshotFiles();
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root)) {
-            int captures = 0;
-            Assert.ThrowsAny<Exception>(() => repository.CreateBranch(name, new Node(), Models(_ => captures++), NoRebase));
+        int captures = 0;
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(_root, Models(_ => captures++))) {
+            Assert.ThrowsAny<Exception>(() => repository.CreateBranch(name, new Node(), NoRebase));
             Assert.Equal(0, captures);
             Assert.False(repository.IsFaulted);
             Assert.Empty(repository.ListBranches());
         }
         AssertFiles(before);
-        using EventHistoryRepository retry = EventHistoryRepository.OpenExisting(_root);
-        using var valid = retry.CreateBranch("main", new Node(), Models(), NoRebase);
+        using EventHistoryRepository retry = EventHistoryRepository.OpenExisting(_root, Models());
+        using var valid = retry.CreateBranch("main", new Node(), NoRebase);
     }
 
     [Theory]
@@ -91,7 +91,7 @@ public sealed partial class EventHistoryRepositoryTests {
     public void PublishedEventFailureReopensAsPendingWithoutAdvancingStateBaseline(int point) {
         FrameAddress state;
         using (EventHistoryRepository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", new Node { Value = 1 }, Models(), NoRebase);
+            using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             state = session.StateRevisionAddress;
             repository.Checkpoint = checkpoint => {
                 if (checkpoint == (CommitCheckpoint)point) throw new IOException("Event published but completion interrupted");
@@ -101,8 +101,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(state, session.StateRevisionAddress);
             Assert.True(repository.IsFaulted);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root);
-        using var resumed = reopened.Resume<Node>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Models());
+        using var resumed = reopened.Resume<Node>("main");
         Assert.Equal(state, resumed.StateRevisionAddress);
         Assert.Equal((byte)1, resumed.State.Value);
         Assert.Equal((byte)8, resumed.GetPendingEvent<Node>().Value);

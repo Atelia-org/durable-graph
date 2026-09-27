@@ -76,8 +76,8 @@ internal static class Program {
         FrameAddress first, patch, historical, transient;
         ObjectId worldId;
         ResolverCalls.Clear();
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             first = session.StateRevisionAddress;
             worldId = session.StateId;
             var lookup = MakeKey(100, 0, -1);
@@ -110,8 +110,8 @@ internal static class Program {
         });
         WriteAddress(directory, historical, worldId);
         FrameAddress restoredUnchanged;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             CheckGraph(session.State, 201, 400, 0);
             session.CommitDomainEvent(session.State, Policy);
             restoredUnchanged = session.CommitDomainState(Policy).RevisionAddress;
@@ -124,8 +124,8 @@ internal static class Program {
         var world = new CollisionWorld();
         world.Rows.Add(new() { Tenant = 7, Number = 1, Timestamp = 100 }, 11);
         world.Rows.Add(new() { Tenant = 7, Number = 2, Timestamp = 200 }, 22);
-        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options);
-        using EventHistorySession<CollisionWorld> session = repository.CreateBranch("main", world, Models(), Policy);
+        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+        using EventHistorySession<CollisionWorld> session = repository.CreateBranch("main", world, Policy);
         FrameAddress address = session.StateRevisionAddress;
         WriteAddress(directory, address, session.StateId);
     }
@@ -141,8 +141,8 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 201, 90000));
         Require(Upgrades.Calls.Count == 0 && ResolverCalls.Count == 0, "Stored-exact reading invoked current behavior.");
         FrameAddress rewritten, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             CheckGraph(world, 1201, 1400, 1000);
             Require(Upgrades.Calls.Count == 192 && Upgrades.Calls.All(call => call.Count == 32) &&
@@ -172,8 +172,8 @@ internal static class Program {
                 "CurrentDefault and Application must both resume ordinary value Delta.");
             CheckHistorical(store, schemas, historical, worldId, 201, 90000);
         });
-        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main", Models());
+        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main");
         CheckGraph(finalSession.State, 1202, 1401, 1000);
         Require(Upgrades.Calls.Count == 192 && ResolverCalls.Count == 2, "Cold reopen repeated Upgrade or resolved beyond one closed Application type.");
     }
@@ -195,9 +195,9 @@ internal static class Program {
         Require(CollisionKey.Comparisons == 0 && Upgrades.Calls.Count == upgrades && ResolverCalls.Count == resolutions,
             "Exact reading interpreted current comparison behavior.");
         bool rejected = false;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
             try {
-                using EventHistorySession<CollisionWorld> session = repository.Resume<CollisionWorld>("main", Models());
+                using EventHistorySession<CollisionWorld> session = repository.Resume<CollisionWorld>("main");
             }
             catch (InvalidDataException error) when (error.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
                 error.Message.Contains("collision", StringComparison.OrdinalIgnoreCase)) {

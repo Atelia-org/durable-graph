@@ -47,8 +47,8 @@ internal static class Program {
         World world = World.Seed();
         FrameAddress first, scale, historical, unchanged;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             first = session.StateRevisionAddress;
             worldId = session.StateId;
             world.Amount = 1.00m;
@@ -80,8 +80,8 @@ internal static class Program {
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
         FrameAddress recaptured;
-        using (EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using (EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> restored = reopened.Resume<World>("main");
             CheckGraph(restored.State, 0, 2);
             restored.CommitDomainEvent(restored.State, Policy);
             recaptured = restored.CommitDomainState(Policy).RevisionAddress;
@@ -100,8 +100,8 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 2, 2));
         Require(Upgrades.OwnerCalls == 0 && Upgrades.ValueCalls.Count == 0, "Exact reading ran business upgrades.");
         FrameAddress rewritten, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             CheckGraph(world, 1000, 2);
             Require(Upgrades.OwnerCalls == 1 && Upgrades.ValueCalls.Count == 33 &&
@@ -129,8 +129,8 @@ internal static class Program {
                 "Scalar edits must resume ordinary owner and List Delta after upgraded Base.");
             CheckHistorical(store, schemas, historical, worldId, 2, 2);
         });
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckGraph(restored.State, 1000, 3);
         Require(Upgrades.OwnerCalls == 1 && Upgrades.ValueCalls.Count == 33, "Cold reopen repeated business upgrade.");
     }

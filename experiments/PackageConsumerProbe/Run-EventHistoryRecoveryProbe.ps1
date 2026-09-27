@@ -37,6 +37,9 @@ function Test-PackageDocumentation {
     if ($packedXml -cne [IO.File]::ReadAllText($restoredXml)) { throw "Restored XML differs from the actual package." }
     [xml] $documentation = $packedXml
     $expected = @{
+        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.CreateNew(' = 1
+        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.OpenExisting(' = 1
+        'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.OpenReadOnlyExisting(' = 1
         'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.CreateBranch``1(' = 1
         'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.Resume``1(' = 1
         'M:Atelia.DurableGraph.Persistence.EventHistoryRepository.ReadFrames(' = 1

@@ -131,7 +131,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun forgotOwner = RunCrossAssemblyGenerator(CrossInlineHistoryApp(1, currentLibrary: true),
             [image2.Reference], history: ownerHistory.ReadAdditionalTexts());
         Assert.Contains(forgotOwner.GeneratorDiagnostics, d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
-        using var repository = FixtureGraphRepository.OpenExisting(directory.Path);
+        using var repository = FixtureGraphRepository.OpenExisting(directory.Path, new StateModelRegistry());
         Assert.Equal(original, repository.HeadRevisionAddress);
         Assert.Single(ownerHistory.ReadContents());
     }
@@ -197,15 +197,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var point=new Point{X=10000,Padding=new Guid("7a04a8b3-9ac2-4afd-ac86-7ab1b19e7b3f")};
                 var world=new World{Position=point,Optional=empty?null:point,Padding=point.Padding};
                 if(!empty)for(int i=0;i<16;i++)world.Items.Add(point);
-                using var repo=FixtureGraphRepository.CreateNew(path);using var session=repo.Create(world,Models());
+                using var repo=FixtureGraphRepository.CreateNew(path, Models());using var session=repo.Create(world);
                 return session.Commit(new(1000000,1));
             }
         {{{{(version==2 ? """
             public static int CallbackCount()=>Upgrades.OwnerCalls+Upgrades.ValueCalls;
             public static bool MissingRulesFails(string path) {
                 Upgrades.OwnerCalls=Upgrades.ValueCalls=Upgrades.ListValueCalls=0;
-                using var repo=FixtureGraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
-                try {using var session=repo.Load<World>(Models());return false;}
+                using var repo=FixtureGraphRepository.OpenExisting(path, Models());var head=repo.HeadRevisionAddress;
+                try {using var session=repo.Load<World>();return false;}
                 catch(InvalidDataException) {return repo.HeadRevisionAddress==head && CallbackCount()==0;}
             }
             public static bool MissingRegistrationFails(string path,bool keepCurrent) {
@@ -216,15 +216,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                     models.Register(new StateDefinitionBinding(original.DefinitionId,original.Kind,original.Arity,
                         original.DomainTypeDefinition,original.Templates,currentValueFactory:original.CurrentValueFactory));
                 }
-                using var repo=FixtureGraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
-                try {using var session=repo.Load<World>(models);return false;}
+                using var repo=FixtureGraphRepository.OpenExisting(path, models);var head=repo.HeadRevisionAddress;
+                try {using var session=repo.Load<World>();return false;}
                 catch(InvalidDataException) {return repo.HeadRevisionAddress==head && CallbackCount()==0;}
             }
             public static string? MissingListRuleFailure(string path) {
                 Upgrades.OwnerCalls=Upgrades.ValueCalls=Upgrades.ListValueCalls=0;
                 var models=new StateModelRegistry();Catalog.Register(models);InlineHistoryValues.Catalog.Register(models);
-                using var repo=FixtureGraphRepository.OpenExisting(path);var head=repo.HeadRevisionAddress;
-                try {using var session=repo.Load<World>(models);return "Load unexpectedly accepted the missing List rule selection.";}
+                using var repo=FixtureGraphRepository.OpenExisting(path, models);var head=repo.HeadRevisionAddress;
+                try {using var session=repo.Load<World>();return "Load unexpectedly accepted the missing List rule selection.";}
                 catch(InvalidDataException error) {
                     if(!error.Message.Contains("explicitly selected list element upgrade rule set",StringComparison.Ordinal))return "Unexpected failure: "+error;
                     if(repo.HeadRevisionAddress!=head)return "The failed Load changed the published head.";
@@ -234,14 +234,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] UpgradeAndSave(string path,bool empty) {
                 Upgrades.OwnerCalls=Upgrades.ValueCalls=Upgrades.ListValueCalls=0;var models=Models();var addresses=new List<FrameAddress>();
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     var w=session.World;
                     if(w.Position.X!=11000 || w.Optional.HasValue==empty || (w.Optional.HasValue && w.Optional.Value.X!=11000) || w.Items.Count!=(empty?0:16) || w.Items.Any(x=>x.X!=11000))throw new InvalidOperationException("explicit upgraded values");
                     if(Upgrades.OwnerCalls!=1 || Upgrades.ValueCalls!=(empty?1:18) || Upgrades.ListValueCalls!=(empty?0:16))throw new InvalidOperationException("upgrade callbacks");
                     addresses.Add(session.Commit(new(1000000,1)));addresses.Add(session.Commit(new(1000000,1)));
                     w.Position.X++;addresses.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     if(session.World.Position.X!=11001 || Upgrades.OwnerCalls!=1 || Upgrades.ValueCalls!=(empty?1:18))throw new InvalidOperationException("cold delta or repeated upgrade");
                     addresses.Add(session.Commit(new(1000000,1)));
                 }

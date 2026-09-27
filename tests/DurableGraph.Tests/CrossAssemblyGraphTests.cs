@@ -195,16 +195,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] Exercise(string path,bool reverse) {
                 var addresses=new List<FrameAddress>();var models=Models(reverse);var world=Seed();
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(world,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, models))using(var session=repo.Create(world)) {
                     void Save()=>addresses.Add(session.Commit(new(1000000,1)));
                     Save();Save();world.Child.Value++;Save();world.Dropped=null;Save();
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     var w=session.World;Check(w,12345);addresses.Add(session.Commit(new(1000000,1)));
                     w.ArrayInline.Values[0].X++;w.Matrix[0,0].X++;w.Cube[0,0,0].X++;w.Quad[0,0,0,0].X++;
                     var p=w.Points[0]!.Value;p.X++;w.Points[0]=p;addresses.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     Check(session.World,12346);addresses.Add(session.Commit(new(1000000,1)));
                 }
                 return addresses.ToArray();

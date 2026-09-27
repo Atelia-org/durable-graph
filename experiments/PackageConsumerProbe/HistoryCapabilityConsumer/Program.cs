@@ -51,15 +51,15 @@ internal static class Program {
     private static void Seed(string directory) {
         FrameAddress historical;
         ObjectId worldId;
-        using (var repository = EventHistoryRepository.CreateNew(directory, Options))
-        using (var session = repository.CreateBranch("main", new World(7, new Legacy(11)), Models(), Policy)) {
+        using (var repository = EventHistoryRepository.CreateNew(directory, Models(), Options))
+        using (var session = repository.CreateBranch("main", new World(7, new Legacy(11)), Policy)) {
             worldId = session.StateId;
             session.CommitDomainEvent(session.State.SnapshotEvent(), Policy);
             session.State.Legacy.Change(12);
             historical = session.CommitDomainState(Policy).RevisionAddress;
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
-            Require(repository.ReadState<World>(repository.GetHead("main"), Models()).Legacy.HasSelfCycle,
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
+            Require(repository.ReadState<World>(repository.GetHead("main")).Legacy.HasSelfCycle,
                 "V1 self-cycle was not restored.");
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
@@ -72,7 +72,7 @@ internal static class Program {
     }
 #elif READERS_ONLY
     private static void ReadWithoutUpgrade(string directory) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options);
+        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
         GraphFrame historical = repository.GetHead("main");
         using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
@@ -84,13 +84,13 @@ internal static class Program {
             decoded.GetRequired(legacyId).GetState<Legacy.__DurableState.V1>().Segment0Field1 == 12 &&
             decoded.GetRequired(legacyId).GetState<Legacy.__DurableState.V1>().Segment0Field3 == 638_625_600_000_000_000,
             "Exact readers must reconstruct historical Base/Delta without compiled Upgrade methods.");
-        ExpectInvalidData(() => repository.ReadState<World>(historical, Models()), "Missing single-object upgrade");
+        ExpectInvalidData(() => repository.ReadState<World>(historical), "Missing single-object upgrade");
     }
 #elif HISTORY_V2
     private static void Migrate(string directory) {
         FrameAddress historical, migrated;
         ObjectId worldId, legacyId;
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options)) {
             GraphFrame head = repository.GetHead("main");
             historical = head.RevisionAddress;
             worldId = head.RootId;
@@ -101,14 +101,14 @@ internal static class Program {
             Require(decoded.Objects.Count == 2 && World.UpgradeCalls == 0 && Legacy.UpgradeCalls == 0,
                 "Exact reading must not normalize either object.");
             Legacy.ProduceInvalidReference = true;
-            ExpectInvalidData(() => repository.ReadState<World>(head, Models()));
+            ExpectInvalidData(() => repository.ReadState<World>(head));
             Require(World.UpgradeCalls == 1 && Legacy.UpgradeCalls == 1,
                 "Even a newly orphaned shell must upgrade and reject its invalid current reference.");
         }
         Legacy.ProduceInvalidReference = false;
         World.UpgradeCalls = Legacy.UpgradeCalls = 0;
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Options))
-        using (var session = repository.Resume<World>("main", Models())) {
+        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options))
+        using (var session = repository.Resume<World>("main")) {
             Require(session.State.Score == 107 && World.UpgradeCalls == 1 && Legacy.UpgradeCalls == 1 &&
                 Legacy.LastHistoricalValue == 12, "Full source directory was not upgraded from its exact stored values.");
             Require(typeof(Legacy).IsAbstract, "Migration shell must be abstract.");
@@ -134,7 +134,7 @@ internal static class Program {
     }
 #else
     private static void ReadAfterDeletingShell(string directory) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options);
+        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
         GraphFrame[] frames = repository.ReadFrames("main").ToArray();
         GraphFrame historical = frames[2];
         GraphFrame migrated = frames[^1];
@@ -147,13 +147,13 @@ internal static class Program {
         using StateRevisionStore store = new(segments);
         Require(schemas.GetRequired("package.history-legacy", 1).Version == 1,
             "Legacy metadata must exist independently of its absent executable reader.");
-        World loaded = repository.ReadState<World>(migrated, Models());
+        World loaded = repository.ReadState<World>(migrated);
         Require(loaded.Score == 107 && World.UpgradeCalls == 0 &&
             RevisionDecoder.Read(store, schemas, migrated.RevisionAddress, Readers()).Objects.Count == 1,
             "Migrated Revision should load with only the surviving World model.");
         ExpectInvalidData(() => RevisionDecoder.Read(store, schemas, historical.RevisionAddress, Readers()),
             "No declaration factory is registered for package.history-legacy");
-        ExpectInvalidData(() => repository.ReadState<World>(historical, Models()),
+        ExpectInvalidData(() => repository.ReadState<World>(historical),
             "No declaration factory is registered for package.history-legacy");
     }
 #endif

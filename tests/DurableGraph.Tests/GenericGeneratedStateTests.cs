@@ -118,13 +118,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static bool Probe(string path) {
                     var models=new StateModelRegistry(); DurableDefinitions.Register(models);
                     World original=new(1);
-                    using (var repository=FixtureGraphRepository.CreateNew(path)) {
-                        using var session=repository.Create(original,models);
+                    using (var repository=FixtureGraphRepository.CreateNew(path, models)) {
+                        using var session=repository.Create(original);
                         session.Commit(new(100,100)); original.Change(); session.Commit(new(100,100));
                         if (!ReferenceEquals(original,session.World) || !original.Check(8,9)) return false;
                     }
-                    using (var repository=FixtureGraphRepository.OpenExisting(path)) {
-                        using var session=repository.Load<World>(models);
+                    using (var repository=FixtureGraphRepository.OpenExisting(path, models)) {
+                        using var session=repository.Load<World>();
                         if (ReferenceEquals(original,session.World) || !session.World.Check(8,9) || World.Constructors!=1) return false;
                         session.Commit(new(100,100));
                     }

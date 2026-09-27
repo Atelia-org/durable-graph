@@ -30,13 +30,12 @@ public sealed partial class EventHistoryRepositoryTests {
         ReadAmplificationBaseBudgetParameters currentDefault) {
         string path = Path.Combine(_root, name);
         List<FrameAddress> addresses = [];
-        using (var repository = EventHistoryRepository.CreateNew(path,
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (var repository = EventHistoryRepository.CreateNew(path, Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
             Node state = new();
             using var session = includeOverrides
-                ? repository.CreateBranch("main", state, Models(), NoRebase)
-                : omitPolicy ? repository.CreateBranch("main", state, Models())
-                : repository.CreateBranch("main", state, Models(), currentDefault);
+                ? repository.CreateBranch("main", state, NoRebase)
+                : omitPolicy ? repository.CreateBranch("main", state)
+                : repository.CreateBranch("main", state, currentDefault);
             addresses.Add(session.StateRevisionAddress);
             // Long enough to exercise both Base and Delta for the proposed 3x/5x/10x
             // defaults; a materially different policy may need a different workload.
@@ -54,8 +53,8 @@ public sealed partial class EventHistoryRepositoryTests {
                 addresses.Add(saved.RevisionAddress);
             }
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(path)) {
-            Assert.Equal((byte)30, repository.ReadState<Node>(repository.GetHead("main"), Models()).Value);
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(path, Models())) {
+            Assert.Equal((byte)30, repository.ReadState<Node>(repository.GetHead("main")).Value);
         }
         using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(path, "state"));
         using StateRevisionStore store = new(segments);

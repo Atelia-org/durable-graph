@@ -25,19 +25,21 @@ internal static class Program {
             "The package must remove the old framework base rather than retaining a compatibility shell.");
         string mode = args[0], directory = Path.GetFullPath(args[1]);
         if (mode == "events") {
-            using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options);
+            using (var eventRepository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+                var first = eventRepository.ReadEvent<IDurableObject>(eventRepository.ReadEvents("main").First());
+                Require(first is Damage<string> { Actor: "hero", Amount: 3 }, "Event-only catalog lost the exact record or its inherited field.");
+            }
+            using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
             var events = repository.ReadEvents("main");
-            var first = repository.ReadEvent<IDurableObject>(events.First(), Models(eventOnly: true));
-            Require(first is Damage<string> { Actor: "hero", Amount: 3 }, "Event-only catalog lost the exact record or its inherited field.");
-            var pair = repository.ReadPair(events.First(), repository.GetPreviousState(events.First()), Models());
+            var pair = repository.ReadPair(events.First(), repository.GetPreviousState(events.First()));
             Require(pair.First is Damage<string> { Actor: "hero", Amount: 3 } && pair.Second is World { Hp: 10 },
                 "Non-generic ReadPair must preserve the requested Event/State order and each root's actual type and content.");
             Console.WriteLine("RecordClass:EventOnly:True");
             return;
         }
         if (mode == "seed") {
-            using var repository = EventHistoryRepository.CreateNew(directory, Options);
-            using var session = repository.CreateBranch("main", new World(), Models());
+            using var repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+            using var session = repository.CreateBranch("main", new World());
             session.CommitDomainEvent(new Damage<string>("hero", 3));
             Require(session.PendingEvent is Damage<string> && session.State.Hp == 10, "E1 must leave the State baseline unchanged.");
             Console.WriteLine("RecordClass:Seed:S0:E1:Pending:True");
@@ -48,16 +50,16 @@ internal static class Program {
             return;
         }
         if (mode == "final") {
-            using var repository = EventHistoryRepository.OpenExisting(directory, Options);
-            using var session = repository.Resume<World>("main", Models());
+            using var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+            using var session = repository.Resume<World>("main");
             Require(session.PendingEvent is null && session.State.Hp == 7 &&
                 session.State.First.Counter == session.State.Second.Counter + 1 && FactCatalog.UpgradeCalls == 0,
                 "Current data lost its Delta or required Upgrade again in a fresh process.");
             Console.WriteLine("RecordClass:FinalProcess:NoUpgrade:True");
             return;
         }
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using var session = repository.Resume<World>("main", Models());
+        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Resume<World>("main");
             CheckIdentity(session.State);
             if (mode == "recover") {
                 Require(session.PendingEvent is Damage<string> { Amount: 3 }, "Expected pending E1 from the earlier process.");
@@ -106,8 +108,8 @@ internal static class Program {
         throw new InvalidOperationException("The schema-upgrade stage requires V3 sources (Damage schema v2).");
 #else
         FrameAddress rewritten, changed;
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using var session = repository.Resume<World>("main", Models());
+        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Resume<World>("main");
             CheckIdentity(session.State);
             Require(session.PendingEvent is null && session.State.Hp == 7 && FactCatalog.UpgradeCalls == 4,
                 "Each of the four retained Damage instances must upgrade once; aliases must not duplicate work.");
@@ -125,8 +127,8 @@ internal static class Program {
             var deltas = states.Read(changed).LocalObjects;
             Require(deltas.Count == 1 && deltas[0].Kind == ObjectVersionKind.Delta, "A same-instance mutable record change must use the existing Delta path.");
         }
-        using (var repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using var session = repository.Resume<World>("main", Models());
+        using (var repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using var session = repository.Resume<World>("main");
             Require(session.PendingEvent is null && session.State.First.Counter == session.State.Second.Counter + 1 &&
                 FactCatalog.UpgradeCalls == 4, "Cold current-state reopen repeated Upgrade or lost the Delta.");
         }

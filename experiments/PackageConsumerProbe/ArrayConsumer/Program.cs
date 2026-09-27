@@ -49,8 +49,8 @@ internal static class Program {
         FrameAddress first, historical;
         ObjectId worldId;
         Dictionary<RepresentationId, ObjectLayout> representations = [];
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             first = session.StateRevisionAddress;
             worldId = session.StateId;
             world.Points[0].Value = 101;
@@ -73,8 +73,8 @@ internal static class Program {
         });
         CheckReorderedRegistration(directory, representations);
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckGraph(restored.State, 101);
     }
 #else
@@ -91,8 +91,8 @@ internal static class Program {
         });
         Require(Upgrades.Calls.Count == 0, "Stored-exact decoding invoked business Upgrade.");
         FrameAddress upgraded, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             Point[] points = world.Points;
             CheckGraph(world, 1101);
@@ -127,8 +127,8 @@ internal static class Program {
             CheckHistorical(store, schemas, historical, worldId);
         });
         CheckReorderedRegistration(directory, representations);
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckGraph(restored.State, 1102);
         Require(Upgrades.Calls.Count == 32 && reopened.GetHead("main").RevisionAddress == changed,
             "Current Base/Delta cold reopen should not re-run element Upgrade.");

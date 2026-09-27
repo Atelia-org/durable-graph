@@ -32,7 +32,7 @@ public sealed partial record Damage<T>(T Actor, [field: DurableField(1)] int Amo
 creating or classifying a second field. Each declaration segment can use FieldId 1 independently.
 Libraries expose small handwritten registration facades over their generated catalogs; the Host
 registers these explicitly, along with its own World catalog. Event-only reads intentionally omit World.
-Each browsing process then uses the complete catalog for non-generic `ReadPair(E1, S0)`, pattern
+Each browsing process then opens a separate repository with the complete catalog for non-generic `ReadPair(E1, S0)`, pattern
 matching the returned `IDurableObject` values as Damage and World and checking each root's historical
 content. It makes no assumption about sharing domain instances across the two materialized graphs.
 

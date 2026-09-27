@@ -38,13 +38,13 @@ internal static class Program {
         Require(!BaseCatalog.LegacyClrAbsent, "V1 must contain its original base and hidden inline CLR types.");
         FrameAddress ancestorChange, leafChange, historical, noChange;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
             Leaf world = new(10, true), child = new(11, false);
             world.Link = child;
             child.Link = world;
             world.Alias = child;
             world.Peers = [world, child, child];
-            using EventHistorySession<Leaf> session = repository.CreateBranch("main", world, Models(), Policy);
+            using EventHistorySession<Leaf> session = repository.CreateBranch("main", world, Policy);
             worldId = session.StateId;
             world.Ancestor++;
             session.CommitDomainEvent(session.State, Policy);
@@ -70,8 +70,8 @@ internal static class Program {
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
         Require(BaseCatalog.ConstructorCalls == 2 && MiddleCatalog.ConstructorCalls == 2 && AppCatalog.ConstructorCalls == 2,
             "Expected only the two manually constructed leaf instances.");
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
             CheckGraph(session.State, false, 41, 50);
             session.CommitDomainEvent(session.State, Policy);
             noChange = session.CommitDomainState(Policy).RevisionAddress;
@@ -91,8 +91,8 @@ internal static class Program {
         Require(AppCatalog.UpgradeCalls == 0 && BaseCatalog.UpgradeCalls == 0 && MiddleCatalog.UpgradeCalls == 0,
             "Stored exact reading ran business upgrades.");
         FrameAddress rewritten, noChange, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
             CheckGraph(session.State, true, 41, 50);
             CheckUpgradeCounters();
             session.CommitDomainEvent(session.State, Policy);
@@ -110,8 +110,8 @@ internal static class Program {
             CheckWrites(store, changed, ObjectVersionKind.Delta, worldId, childId);
             CheckHistorical(store, schemas, historical, worldId);
         });
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<Leaf> session = repository.Resume<Leaf>("main");
             CheckGraph(session.State, true, 42, 51);
             CheckUpgradeCounters();
             session.CommitDomainEvent(session.State, Policy);

@@ -26,9 +26,9 @@ public sealed class ListRepositoryTests : IDisposable {
         FrameAddress seed, adaptive, myers, local, position;
         ObjectId listId;
         byte[] registered;
-        using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, models);
-            // Creating the initial State freezes this session writer selection.
+        using (StateSaveHarness repository = CreateRepository(models)) {
+            using StateSaveSession<World> session = repository.Create(world);
+            // Opening the repository freezes its writer selection.
             seed = session.Commit(NoRebase);
             models.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
             values.InsertRange(0, Enumerable.Range(7, 33));
@@ -49,8 +49,8 @@ public sealed class ListRepositoryTests : IDisposable {
         }
 
         models.UseListDeltaAlgorithm(ListDeltaAlgorithm.BoundedMyers);
-        using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root)) {
-            using StateSaveSession<World> session = reopened.Load<World>(models);
+        using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root, models)) {
+            using StateSaveSession<World> session = reopened.Load<World>();
             Assert.Equal(7, session.World.Values![0]);
             session.World.Values.Insert(500, 8);
             myers = session.Commit(NoRebase);
@@ -58,16 +58,16 @@ public sealed class ListRepositoryTests : IDisposable {
         Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
 
         models.UseListDeltaAlgorithm(ListDeltaAlgorithm.LocalResync);
-        using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root)) {
-            using StateSaveSession<World> session = reopened.Load<World>(models);
+        using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root, models)) {
+            using StateSaveSession<World> session = reopened.Load<World>();
             session.World.Values!.Insert(750, 9);
             local = session.Commit(NoRebase);
         }
         Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
 
         models.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
-        using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root)) {
-            using StateSaveSession<World> session = reopened.Load<World>(models);
+        using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root, models)) {
+            using StateSaveSession<World> session = reopened.Load<World>();
             session.World.Values![1] = 42; // A sparse replacement is cheap for Position too.
             position = session.Commit(NoRebase);
             Assert.Same(session.World.Values, session.World.Alias);
@@ -116,8 +116,8 @@ public sealed class ListRepositoryTests : IDisposable {
         world.Alias = world.Values;
         world.Links = child.Links = [world, child];
         FrameAddress seed, resize, childOnly, unchanged;
-        using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models(algorithm));
+        using (StateSaveHarness repository = CreateRepository(Models(algorithm))) {
+            using StateSaveSession<World> session = repository.Create(world);
             seed = session.Commit(NoRebase);
             world.Values.Add(777);
             world.Values[1] = 42;
@@ -138,8 +138,8 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.NotEqual(listChange.ObjectId, childChange.ObjectId);
             Assert.Empty(store.Read(unchanged).LocalObjects);
         }
-        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
-        using StateSaveSession<World> loaded = cold.Load<World>(Models());
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root, Models());
+        using StateSaveSession<World> loaded = cold.Load<World>();
         Assert.Equal(101, loaded.World.Values!.Count);
         Assert.Equal(42, loaded.World.Values[1]);
         Assert.Equal(777, loaded.World.Values[^1]);
@@ -157,7 +157,7 @@ public sealed class ListRepositoryTests : IDisposable {
         World world = new() { Values = values, Alias = values };
         FrameAddress seed, frozen, retry, failedCandidate;
         using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models());
+            using StateSaveSession<World> session = repository.Create(world);
             seed = session.Commit(NoRebase);
             values.Add(55);
             repository.Checkpoint = checkpoint => {
@@ -179,8 +179,8 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.Equal(999, values[0]);
             Assert.Throws<InvalidOperationException>(() => session.Commit(NoRebase));
         }
-        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root)) {
-            using StateSaveSession<World> session = repository.Load<World>(Models());
+        using (StateSaveHarness repository = StateSaveHarness.OpenExisting(_root, Models())) {
+            using StateSaveSession<World> session = repository.Load<World>();
             Assert.Equal(frozen, session.ParentRevisionAddress);
             session.World.Values![0] = 999;
             session.World.Values.Add(66);
@@ -200,8 +200,8 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.Equal(10000, old.Elements[0]);
             Assert.Equal(55, old.Elements[^1]);
         }
-        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
-        using StateSaveSession<World> loaded = cold.Load<World>(Models());
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root, Models());
+        using StateSaveSession<World> loaded = cold.Load<World>();
         Assert.Equal(102, loaded.World.Values!.Count);
         Assert.Equal(999, loaded.World.Values[0]);
         Assert.Equal(66, loaded.World.Values[^1]);
@@ -216,7 +216,7 @@ public sealed class ListRepositoryTests : IDisposable {
         World world = new() { Values = values, Links = [child] };
         FrameAddress seed, changed;
         using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models());
+            using StateSaveSession<World> session = repository.Create(world);
             seed = session.Commit(NoRebase);
             world.Values = [.. values];
             world.Links = null;
@@ -246,7 +246,7 @@ public sealed class ListRepositoryTests : IDisposable {
         World world = new() { Values = Enumerable.Range(10000, 80).ToList() };
         int[] expected;
         using (StateSaveHarness repository = CreateRepository()) {
-            using StateSaveSession<World> session = repository.Create(world, Models());
+            using StateSaveSession<World> session = repository.Create(world);
             session.Commit(NoRebase);
             world.Values.AddRange([0, 0, 77]);
             session.Commit(NoRebase);
@@ -260,8 +260,8 @@ public sealed class ListRepositoryTests : IDisposable {
             session.Commit(NoRebase);
             expected = world.Values.ToArray();
         }
-        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root);
-        using StateSaveSession<World> loaded = cold.Load<World>(Models());
+        using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root, Models());
+        using StateSaveSession<World> loaded = cold.Load<World>();
         Assert.Equal(expected, loaded.World.Values);
     }
 
@@ -324,7 +324,7 @@ public sealed class ListRepositoryTests : IDisposable {
             (mask & 4) != 0 ? new(reader.ReadUInt32()) : prior.Links,
             (mask & 8) != 0 ? reader.ReadByte() : prior.Value);
     }
-    private StateSaveHarness CreateRepository() => StateSaveHarness.CreateNew(_root, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
     private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
     public void Dispose() {
         if (Directory.Exists(_root)) { Directory.Delete(_root, recursive: true); }

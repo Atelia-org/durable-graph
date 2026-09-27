@@ -23,7 +23,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress first, unchanged, appended, childOnly, replaced, removed;
         object originalWorld, originalNumbers;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path, Method<Func<StateModelRegistry>>("Models")())) {
             using IDisposable session = (IDisposable)create(repository);
             originalWorld = world(session);
             originalNumbers = numbers(originalWorld);
@@ -64,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(states.ReadLiveObjectHeadMap(first).Count - 2, states.ReadLiveObjectHeadMap(removed).Count);
         }
         FrameAddress resumed;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path, Method<Func<StateModelRegistry>>("Models")())) {
             using IDisposable session = (IDisposable)load(repository);
             check(world(session), 4);
             Assert.NotSame(originalWorld, world(session));
@@ -162,9 +162,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
         }
         public static class Host {
-            static StateModelRegistry Models() { StateModelRegistry m=new(); Atelia.DurableGraph.Generated.DurableDefinitions.Register(m); return m; }
-            public static object Create(FixtureGraphRepository r)=>r.Create(new World(),Models());
-            public static object Load(FixtureGraphRepository r)=>r.Load<World>(Models());
+            public static StateModelRegistry Models() { StateModelRegistry m=new(); Atelia.DurableGraph.Generated.DurableDefinitions.Register(m); return m; }
+            public static object Create(FixtureGraphRepository r)=>r.Create(new World());
+            public static object Load(FixtureGraphRepository r)=>r.Load<World>();
             public static object World(object s)=>((FixtureGraphSession<World>)s).World;
             public static object Numbers(object w)=>((World)w).Numbers;
             public static FrameAddress Commit(object s)=>((FixtureGraphSession<World>)s).Commit(new(1000000,1));

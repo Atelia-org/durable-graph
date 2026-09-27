@@ -22,14 +22,14 @@ Require(typeof(StateModelRegistry).Assembly.GetName().Name == (legacy ? "Atelia.
 var budget = new ReadAmplificationBaseBudgetParameters(int.MaxValue, 1);
 if (mode == "seed") {
     Require(legacy, "Seed requires the genuine legacy package.");
-    using (var repository = EventHistoryRepository.CreateNew(directory, models, options)) {
-        using (var session = repository.CreateBranch("complete", Make(100))) {
+    using (var repository = EventHistoryRepository.CreateNew(directory, options)) {
+        using (var session = repository.CreateBranch("complete", Make(100), models)) {
             session.CommitDomainEvent(Make(3));
             session.State.Value = 103;
             session.CommitDomainState(budget);
         }
         repository.CreateBranch("pending", repository.ReadFrames("complete").Last());
-        using var pending = repository.Resume<World>("pending");
+        using var pending = repository.Resume<World>("pending", models);
         pending.CommitDomainEvent(Make(7));
     }
     Check(false);
@@ -40,8 +40,8 @@ if (mode == "seed") {
 } else if (mode == "continue") {
     Require(!legacy, "Continuation requires migrated packages.");
     FrameAddress changed, unchanged;
-    using (var repository = EventHistoryRepository.OpenExisting(directory, models, options)) {
-        using var session = repository.Resume<World>("pending");
+    using (var repository = EventHistoryRepository.OpenExisting(directory, options)) {
+        using var session = repository.Resume<World>("pending", models);
         Validate(session.State, 103);
         Require(session.PendingEvent is World { Value: 7 }, "Old pending event missing.");
         Validate((World)session.PendingEvent!, 7);
@@ -62,18 +62,18 @@ if (mode == "seed") {
 Console.WriteLine($"OrganizationMigration:{mode}:Passed");
 
 void Check(bool continued) {
-    using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, models, options);
+    using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, options);
     var complete = repository.ReadFrames("complete");
     var pending = repository.ReadFrames("pending");
     Require(complete.Count == 3 && pending.Count == (continued ? 7 : 4), "Unexpected branch frame count.");
-    Validate(repository.ReadState<World>(complete[0]), 100);
-    Validate(repository.ReadEvent<World>(complete[1]), 3);
-    Validate(repository.ReadState<World>(complete[2]), 103);
-    Validate(repository.ReadEvent<World>(pending[3]), 7);
+    Validate(repository.ReadState<World>(complete[0], models), 100);
+    Validate(repository.ReadEvent<World>(complete[1], models), 3);
+    Validate(repository.ReadState<World>(complete[2], models), 103);
+    Validate(repository.ReadEvent<World>(pending[3], models), 7);
     if (continued) {
-        Validate(repository.ReadState<World>(pending[4]), 110);
-        Validate(repository.ReadEvent<World>(pending[5]), 0);
-        Validate(repository.ReadState<World>(pending[6]), 110);
+        Validate(repository.ReadState<World>(pending[4], models), 110);
+        Validate(repository.ReadEvent<World>(pending[5], models), 0);
+        Validate(repository.ReadState<World>(pending[6], models), 110);
     }
     using var segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
     using var states = new StateRevisionStore(segments);

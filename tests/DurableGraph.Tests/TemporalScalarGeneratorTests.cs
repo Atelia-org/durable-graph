@@ -201,13 +201,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 world.List.AddRange(new DateTimeOffset?[]{null,stamp});world.Map.Add(date,world.List);
                 world.Times.Add(time,world.Part);world.Nested.Add(new[]{new Dictionary<DateTimeOffset,DateOnly[]>{{stamp,world.Vector}}});
                 world.Wrapped=new(){First=stamp,Second=world.Part};
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(world,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, models))using(var session=repo.Create(world)) {
                     session.Commit(new(1000000,1));
                     world.Value=changed;world.Optional=changed;world.Part=world.Part with {Timestamp=changed};
                     world.Plane[0,0]=changed;world.List[1]=changed;world.Wrapped.First=changed;
                     session.Commit(new(1000000,1));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     var w=session.World;
                     if(w.Date!=date || !w.Value.EqualsExact(changed) || !w.Optional!.Value.EqualsExact(changed) ||
                         !w.Part.Timestamp.EqualsExact(changed) || !w.Plane[0,0].EqualsExact(changed) ||

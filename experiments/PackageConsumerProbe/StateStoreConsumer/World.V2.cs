@@ -35,8 +35,8 @@ public sealed partial class World : IDurableObject {
         __DurableState.RegisterModel(models);
         __DurableState.RegisterModel(models);
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
-        using (var repository = EventHistoryRepository.OpenExisting(directory, options))
-        using (var session = repository.Resume<World>("main", models)) {
+        using (var repository = EventHistoryRepository.OpenExisting(directory, models, options))
+        using (var session = repository.Resume<World>("main")) {
             oldRevision = session.StateRevisionAddress;
             worldId = session.StateId;
             Require(_upgradeCalls == 1 && session.State._score == 109 && session.State._name == "A" &&
@@ -53,13 +53,13 @@ public sealed partial class World : IDurableObject {
             original._score = 110;
             finalRevision = session.CommitDomainState(policy).RevisionAddress;
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, options)) {
-            World final = repository.ReadState<World>(repository.GetHead("main"), models);
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, models, options)) {
+            World final = repository.ReadState<World>(repository.GetHead("main"));
             Require(final._score == 110 && final._generation == 73 && final._name == "A" &&
                 final._createdAtTicks == 638_625_600_000_000_000 && final._cache == 0 &&
                 _constructorCalls == 1 && _upgradeCalls == 1, "Cold reopening failed to restore current Base plus Delta.");
             var historical = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == oldRevision);
-            Require(repository.ReadState<World>(historical, models)._score == 109 && _upgradeCalls == 2,
+            Require(repository.ReadState<World>(historical)._score == 109 && _upgradeCalls == 2,
                 "Original historical revision was not preserved.");
         }
         using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);

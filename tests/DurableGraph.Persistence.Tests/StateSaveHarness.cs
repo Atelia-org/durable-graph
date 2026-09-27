@@ -21,26 +21,28 @@ internal sealed class StateSaveHarness : IDisposable {
             _stateHead = head.Kind == GraphFrameKind.State ? head : repository.GetPreviousState(head);
         }
     }
-    internal static StateSaveHarness CreateNew(string path, RbfSegmentStoreOptions? options = null) =>
-        new(EventHistoryRepository.CreateNew(path, options), false);
-    internal static StateSaveHarness OpenExisting(string path, RbfSegmentStoreOptions? options = null) =>
-        new(EventHistoryRepository.OpenExisting(path, options), true);
+    internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+        models.Register(MarkerModel);
+        return new(EventHistoryRepository.CreateNew(path, models, options), false);
+    }
+    internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+        models.Register(MarkerModel);
+        return new(EventHistoryRepository.OpenExisting(path, models, options), true);
+    }
     internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
     internal ObjectId? WorldId => _stateHead?.RootId;
     internal bool IsFaulted => _repository.IsFaulted;
     internal Action<CommitCheckpoint>? Checkpoint { get => _repository.Checkpoint; set => _repository.Checkpoint = value; }
-    internal StateSaveSession<T> Create<T>(T world, StateModelRegistry models) where T : class, IDurableObject {
-        models.Register(MarkerModel);
-        return new(this, world, models, null);
+    internal StateSaveSession<T> Create<T>(T world) where T : class, IDurableObject {
+        return new(this, world, null);
     }
-    internal StateSaveSession<T> Load<T>(StateModelRegistry models) where T : class, IDurableObject {
-        models.Register(MarkerModel);
-        EventHistorySession<T> session = _repository.Resume<T>("main", models);
-        return new(this, session.State, models, session);
+    internal StateSaveSession<T> Load<T>() where T : class, IDurableObject {
+        EventHistorySession<T> session = _repository.Resume<T>("main");
+        return new(this, session.State, session);
     }
-    internal EventHistorySession<T> Initialize<T>(T world, StateModelRegistry models,
+    internal EventHistorySession<T> Initialize<T>(T world,
         ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject {
-        EventHistorySession<T> session = _repository.CreateBranch("main", world, models, parameters);
+        EventHistorySession<T> session = _repository.CreateBranch("main", world, parameters);
         _stateHead = session.Head;
         return session;
     }
@@ -62,14 +64,14 @@ internal sealed class StateSaveHarness : IDisposable {
 }
 
 internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial,
-    StateModelRegistry models, EventHistorySession<T>? session) : IDisposable where T : class, IDurableObject {
+    EventHistorySession<T>? session) : IDisposable where T : class, IDurableObject {
     internal bool IsFaulted => repository.IsFaulted;
     internal T World => session is null ? initial : session.State;
     internal ObjectId? WorldId => session?.StateId;
     internal FrameAddress? ParentRevisionAddress => session?.StateRevisionAddress;
     internal FrameAddress Commit(ReadAmplificationBaseBudgetParameters parameters) {
         if (session is null) {
-            session = repository.Initialize(initial, models, parameters);
+            session = repository.Initialize(initial, parameters);
             return session.StateRevisionAddress;
         }
         if (session.PendingEvent is null) {

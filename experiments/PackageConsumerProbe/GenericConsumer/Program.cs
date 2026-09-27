@@ -53,8 +53,8 @@ internal static class Program {
         FrameAddress initial;
         FrameAddress historical;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             initial = session.StateRevisionAddress;
             worldId = session.StateId;
             world.First.Set(12);
@@ -75,8 +75,8 @@ internal static class Program {
                 "The generic object lacks the persisted Base/Delta chain.");
         });
         WriteAddress(directory, "historical", historical, worldId);
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckCurrent(restored.State, 12, 31);
         Require(restored.State.Legacy.Left.Value == 41 && restored.State.Legacy.Right.Value == 51,
             "Generic readonly inline values were not restored.");
@@ -102,8 +102,8 @@ internal static class Program {
         FrameAddress unchanged;
         FrameAddress changed;
         ObjectId changedId = default;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             Box<int> first = world.First;
             CheckCurrent(world, 12, 1031);
@@ -151,8 +151,8 @@ internal static class Program {
         FrameAddress upgraded;
         FrameAddress unchanged;
         FrameAddress changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             CheckCurrent(world, 13, 1031);
             Require(world.Summary == 2092 && world.First.LastStamp == 300 && UpgradeTrace.Calls.Count == 4,
@@ -177,8 +177,8 @@ internal static class Program {
                 "Deleting an inline value with no reference slots must not invent object removals.");
         });
         UpgradeTrace.Calls.Clear();
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> current = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> current = reopened.Resume<World>("main");
         CheckCurrent(current.State, 14, 1031);
         Require(current.State.Summary == 2092 && UpgradeTrace.Calls.Count == 0 && reopened.GetHead("main").RevisionAddress == changed,
             "The published current head must reopen without invoking Upgrade.");
@@ -250,9 +250,9 @@ internal static class Program {
     }
 
     private static World ReadHistorical(string directory, FrameAddress address) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options);
+        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
         GraphFrame frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
-        return repository.ReadState<World>(frame, Models());
+        return repository.ReadState<World>(frame);
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {

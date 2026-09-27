@@ -216,7 +216,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] SaveAndLoad(string path) {
                 var addresses=new List<FrameAddress>();var models=Models();var w=Seed();
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(w,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, models))using(var session=repo.Create(w)) {
                     void Save()=>addresses.Add(session.Commit(new(1000000,1)));
                     Save();Save();
                     w.Timestamp=B;w.Inline.Timestamp=B;Save();w.Optional=B;Save();w.Record=w.Record with {Timestamp=B};Save();
@@ -227,11 +227,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                     w.Timestamps[A]=w.Timestamps[B];Require(w.Timestamps.Single(p=>p.Key==A).Key.EqualsExact(B),"indexer preserves original key");Save();
                     var key=w.Composite.Keys.Single(k=>k.Number==1);var v=w.Composite[key];w.Composite.Remove(key);w.Composite.Add(key with {Timestamp=B},v);Save();
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     Check(session.World);addresses.Add(session.Commit(new(1000000,1)));
                     session.World.List[1]=B;addresses.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     Exact(session.World.List[1],B,"delta after cold load");addresses.Add(session.Commit(new(1000000,1)));
                 }
                 return addresses.ToArray();

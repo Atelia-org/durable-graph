@@ -109,7 +109,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         GeneratorTestRun forgotLeaf = RunCrossAssemblyGenerator(InheritanceHistoryApp(1), [baseImage2.Reference, middleImage2.Reference], leafHistory.ReadAdditionalTexts());
         Assert.Contains(forgotLeaf.GeneratorDiagnostics, diagnostic => diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
-        using var repository = FixtureGraphRepository.OpenExisting(directory.Path);
+        using var repository = FixtureGraphRepository.OpenExisting(directory.Path, new StateModelRegistry());
         Assert.Equal(original, repository.HeadRevisionAddress);
         Assert.Single(leafHistory.ReadContents());
     }
@@ -194,26 +194,26 @@ public sealed partial class DurableSchemaGeneratorTests {
                 InheritanceHistoryMiddle.Catalog.Register(models);Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);return models;
             }
             public static FrameAddress Seed(string path) {
-                using var repo=FixtureGraphRepository.CreateNew(path);using var session=repo.Create(new Leaf(10000),Models(false));return session.Commit(new(1000000,1));
+                using var repo=FixtureGraphRepository.CreateNew(path, Models(false));using var session=repo.Create(new Leaf(10000));return session.Commit(new(1000000,1));
             }
             public static int Callbacks()=>Trace.BaseUpgrades+Trace.MiddleUpgrades+Trace.LeafUpgrades;
             public static bool LoadFails(string path,bool missingBase) {
                 Trace.BaseUpgrades=Trace.MiddleUpgrades=Trace.LeafUpgrades=0;
-                using var repo=FixtureGraphRepository.OpenExisting(path);var prior=repo.HeadRevisionAddress;
-                try {using var session=repo.Load<Leaf>(Models(missingBase));return false;}
+                using var repo=FixtureGraphRepository.OpenExisting(path, Models(missingBase));var prior=repo.HeadRevisionAddress;
+                try {using var session=repo.Load<Leaf>();return false;}
                 catch(InvalidDataException) { return repo.HeadRevisionAddress==prior && Callbacks()==0; }
             }
             public static FrameAddress[] UpgradeAndSave(string path) {
                 Trace.BaseUpgrades=Trace.MiddleUpgrades=Trace.LeafUpgrades=Trace.Constructors=Trace.Initializers=0;
                 var addresses=new List<FrameAddress>();var models=Models(false);
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<Leaf>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<Leaf>()) {
                     var leaf=session.World;
                     if(leaf.Number!=11000 || leaf.MiddleValue!=777 || leaf.LeafValue!=98 || !leaf.Hydrated || !ReferenceEquals(leaf,leaf.Self))throw new InvalidOperationException("leaf complete DTO upgrade");
                     if(Trace.BaseUpgrades!=0 || Trace.MiddleUpgrades!=0 || Trace.LeafUpgrades!=1 || Trace.Constructors!=0 || Trace.Initializers!=0)throw new InvalidOperationException("unexpected base rules, constructor or initialization");
                     addresses.Add(session.Commit(new(1000000,1)));addresses.Add(session.Commit(new(1000000,1)));
                     leaf.LeafValue++;addresses.Add(session.Commit(new(1000000,1)));
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<Leaf>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<Leaf>()) {
                     if(session.World.Number!=11000 || session.World.LeafValue!=99 || Callbacks()!=1 || Trace.LeafUpgrades!=1)throw new InvalidOperationException("cold Delta or repeated upgrade");
                     addresses.Add(session.Commit(new(1000000,1)));
                 }

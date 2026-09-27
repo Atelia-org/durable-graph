@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 
 namespace Atelia.DurableGraph.Runtime;
 
-/// <summary>Resolves current models inside one frozen operation catalog.</summary>
+/// <summary>Resolves current models inside one frozen model catalog.</summary>
 public interface IStateModelResolver {
     bool TryGetCurrentModel(Type domainType, out StateModelBinding? model);
     bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {

@@ -61,7 +61,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             Assert.Equal(ObjectLayout.ForDurable(WorldSchema), schemas.GetRepresentation(representation));
             Assert.Equal(schemaTail, schemaFile.TailOffset);
         }
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, Options);
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(_root, new StateModelRegistry(), Options);
         Assert.Equal(rewritten, reopened.GetHead("main").RevisionAddress);
         Assert.Equal(new ObjectId(1), reopened.GetHead("main").RootId);
     }
@@ -84,7 +84,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         Publish(null, published);
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => {
-            using EventHistoryRepository rejected = EventHistoryRepository.OpenExisting(_root, Options);
+            using EventHistoryRepository rejected = EventHistoryRepository.OpenExisting(_root, new StateModelRegistry(), Options);
         });
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
@@ -122,7 +122,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => {
-            using EventHistoryRepository rejected = EventHistoryRepository.OpenExisting(_root, Options);
+            using EventHistoryRepository rejected = EventHistoryRepository.OpenExisting(_root, new StateModelRegistry(), Options);
         });
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
@@ -195,7 +195,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
     }
 
     private void CreateEmptyRepository() {
-        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root, Options);
+        using EventHistoryRepository repository = EventHistoryRepository.CreateNew(_root, new StateModelRegistry(), Options);
     }
 
     private IRbfFile OpenSchemas() => RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));

@@ -92,7 +92,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
             _store, _schemas, address, new(1), address, new(1), models)));
 
         Assert.Null(delivered);
-        Assert.Equal(4, normalizations);
+        Assert.Equal(0, normalizations);
         Assert.Equal(1, comparisons);
         Assert.Equal(0, preparations);
         Assert.Equal(0, allocations);
@@ -179,33 +179,27 @@ public sealed class SharedGraphReaderTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SameLayoutNormalizationMustCompareCompleteCurrentValuesAndReferences(bool changeReference) {
+    public void CurrentNormalizationPreservesCompleteValuesAndReferencesWithoutHistoricalCallback(bool changeReference) {
         FrameAddress address = Seed((1, new(2, 2, 0, 10)), (2, new(3, 0, 0, 20)), (3, new(0, 0, 0, 30)));
-        int childNormalizations = 0;
+        int normalizations = 0;
         StateModelSnapshot models = SharedReadModel.Models(normalize: row => {
+            normalizations++;
             State state = row.GetState<State>();
-            if (row.Id.Value == 2 && ++childNormalizations == 2) {
-                return changeReference ? state with { Next = default } : state with { Value = 21 };
-            }
-            return state;
+            return changeReference ? state with { Next = default } : state with { Value = 21 };
         }).Snapshot(_schemas);
         GraphReadStatistics stats = new();
 
         var pair = GraphReader.ReadPair<Node, Node>(_store, _schemas, address, new(1), address, new(1), models, stats);
 
-        Assert.Equal(2, childNormalizations);
-        Assert.NotSame(pair.First, pair.Second);
-        Assert.NotSame(pair.First.Next, pair.Second.Next);
+        Assert.Equal(0, normalizations);
+        Assert.Same(pair.First, pair.Second);
+        Assert.Same(pair.First.Next, pair.Second.Next);
         Assert.Equal((byte)20, pair.First.Next!.Value);
-        if (changeReference) {
-            Assert.NotNull(pair.First.Next.Next);
-            Assert.Null(pair.Second.Next!.Next);
-            Assert.Equal(0, stats.SharedObjects);
-        } else {
-            Assert.Equal((byte)21, pair.Second.Next!.Value);
-            Assert.Same(pair.First.Next.Next, pair.Second.Next.Next);
-            Assert.Equal(1, stats.SharedObjects);
-        }
+        Assert.Same(pair.First.Next, pair.First.Alias);
+        Assert.NotNull(pair.First.Next.Next);
+        Assert.Equal((byte)30, pair.First.Next.Next.Value);
+        Assert.Same(pair.First.Next.Next, pair.Second.Next!.Next);
+        Assert.Equal(3, stats.SharedObjects);
         Assert.Equal(3, stats.DecodedObjects);
         Assert.Equal(3, stats.CacheHits);
     }

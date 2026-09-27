@@ -65,8 +65,8 @@ internal static class Program {
         FrameAddress initial;
         FrameAddress historical;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             initial = session.StateRevisionAddress;
             worldId = session.StateId;
             world.ChangeLeft(12);
@@ -88,8 +88,8 @@ internal static class Program {
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
         WriteAddress(directory, "historical", historical, worldId);
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckLinks(restored.State, 12, 31);
     }
 #elif HISTORY_V2 && CHILD_V2
@@ -97,8 +97,8 @@ internal static class Program {
         var (historical, worldId) = ReadAddress(directory, "historical");
         FrameAddress upgraded;
         FrameAddress unchanged;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             Node node = world.Links.Left.Node;
             Require(World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Each stored object must be upgraded exactly once.");
@@ -127,8 +127,8 @@ internal static class Program {
         var (_, worldId) = ReadAddress(directory, "historical");
         FrameAddress upgraded;
         FrameAddress unchanged;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             CheckLinks(world, 1012, 231);
             Require(World.UpgradeCalls == 0 && Node.UpgradeCalls == 1,
@@ -163,8 +163,8 @@ internal static class Program {
         });
         World.UpgradeCalls = Node.UpgradeCalls = 0;
         FrameAddress removed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             Require(world.Summary == 2033L && world.Score == World.InitialScore + 1100 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
                 "The current V2 head must use just the remaining V2 -> V3 owner upgrade.");
@@ -181,8 +181,8 @@ internal static class Program {
             Require(RevisionDecoder.Read(store, schemas, removed, Readers()).Objects.Count == 1, "New membership retains the old inline-referenced graph.");
             CheckHistoricalDto(store, schemas, historical, worldId);
         });
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> current = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> current = reopened.Resume<World>("main");
         Require(current.State.Summary == 2033L && current.State.Score == World.InitialScore + 1100 &&
             reopened.GetHead("main").RevisionAddress == removed, "Published V3 head cannot be reopened after deleting inline CLR declarations.");
     }
@@ -216,9 +216,9 @@ internal static class Program {
     }
 
     private static World ReadHistorical(string directory, FrameAddress address) {
-        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Options);
+        using var repository = EventHistoryRepository.OpenReadOnlyExisting(directory, Models(), Options);
         GraphFrame frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
-        return repository.ReadState<World>(frame, Models());
+        return repository.ReadState<World>(frame);
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {

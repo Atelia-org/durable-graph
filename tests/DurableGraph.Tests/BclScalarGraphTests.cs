@@ -156,7 +156,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static FrameAddress[] SaveAndLoad(string path) {
                 var addresses=new List<FrameAddress>();var models=Models();var w=Seed();
-                using(var repo=FixtureGraphRepository.CreateNew(path))using(var session=repo.Create(w,models)) {
+                using(var repo=FixtureGraphRepository.CreateNew(path, models))using(var session=repo.Create(w)) {
                     void Save()=>addresses.Add(session.Commit(new(1000000,1)));
                     Save();Save();
                     w.Amount=1.00m;Save();w.Optional=1.00m;Save();w.Record=w.Record with {Amount=1.00m};Save();
@@ -166,7 +166,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     decimal value=w.Decimals[1.0m];w.Decimals.Remove(1.0m);w.Decimals.Add(1.00m,value);Save();
                     w.Decimals[1.00m]=10.00m;Save();
                 }
-                using(var repo=FixtureGraphRepository.OpenExisting(path))using(var session=repo.Load<World>(models)) {
+                using(var repo=FixtureGraphRepository.OpenExisting(path, models))using(var session=repo.Load<World>()) {
                     Check(session.World);addresses.Add(session.Commit(new(1000000,1)));
                 }
                 return addresses.ToArray();

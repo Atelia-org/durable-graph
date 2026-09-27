@@ -114,15 +114,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var models = new StateModelRegistry(); DurableDefinitions.Register(models);
                     string text = new string(new[] {'s','a','m','e'});
                     var world = new World(text);
-                    using (var repository = FixtureGraphRepository.CreateNew(path)) {
-                        using var session = repository.Create(world,models);
+                    using (var repository = FixtureGraphRepository.CreateNew(path, models)) {
+                        using var session = repository.Create(world);
                         session.Commit(new(100,100));
                         world.Number = world.Number with { Part = 23 };
                         session.Commit(new(100,100));
                     }
                     if (Key<int>.Getters != 0 || Key<string>.Getters != 0) return false;
-                    using (var repository = FixtureGraphRepository.OpenExisting(path)) {
-                        using var session = repository.Load<World>(models);
+                    using (var repository = FixtureGraphRepository.OpenExisting(path, models)) {
+                        using var session = repository.Load<World>();
                         var restored = session.World;
                         if (restored.Number.Part != 23 || !ReferenceEquals(restored.Text.Part,restored.Alias) ||
                             ReferenceEquals(restored.Alias,text) || restored.Text.Scratch != 0 || restored.Number.Scratch != 0) return false;

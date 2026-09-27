@@ -421,8 +421,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 public static IDurableObject Create() => new World();
                 public static void Save(string path, IDurableObject world, StateModelRegistry models, ReadAmplificationBaseBudgetParameters parameters) {
-                    using var repository = EventHistoryRepository.CreateNew(path);
-                    using var session = repository.CreateBranch("main", (World)world, models, parameters);
+                    using var repository = EventHistoryRepository.CreateNew(path, models);
+                    using var session = repository.CreateBranch("main", (World)world, parameters);
                 }
             }
             """);
@@ -433,9 +433,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         host.GetMethod("Save")!.CreateDelegate<Action<string, IDurableObject, StateModelRegistry, ReadAmplificationBaseBudgetParameters>>()(
             directory.Path, world, models, TestSavePolicies.Baseline);
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory.Path)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(directory.Path, models)) {
             GraphFrame frame = Assert.Single(repository.ReadFrames("main"));
-            (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame, models);
+            (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame);
             Assert.Same(first, second);
         }
     }

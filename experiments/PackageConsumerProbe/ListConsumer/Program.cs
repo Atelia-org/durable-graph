@@ -51,8 +51,8 @@ internal static class Program {
         List<(FrameAddress Address, int[] Values)> edits = [];
         ObjectId worldId;
         Dictionary<RepresentationId, ObjectLayout> representations = [];
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             first = session.StateRevisionAddress;
             worldId = session.StateId;
             world.Points[0] = new() { Value = 101 };
@@ -102,25 +102,25 @@ internal static class Program {
         CheckReorderedRegistration(directory, representations);
         CheckSavedContentIsolation(directory + "-frozen");
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckGraph(restored.State, 101);
     }
 
     private static void CheckSavedContentIsolation(string directory) {
         World world = World.Seed();
-        using var repository = EventHistoryRepository.CreateNew(directory, Options);
-        using var first = repository.CreateBranch("main", world, Models(), Policy);
+        using var repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+        using var first = repository.CreateBranch("main", world, Policy);
         world.Points.Clear();
         first.Dispose();
-        using EventHistorySession<World> loaded = repository.Resume<World>("main", Models());
+        using EventHistorySession<World> loaded = repository.Resume<World>("main");
         Require(loaded.State.Points.Count == 32 && loaded.State.Points[0].Value == 100, "Saved Base aliases mutable List state.");
         loaded.State.Points[0] = new() { Value = 555 };
         loaded.State.Points.Add(new() { Value = 777 });
         loaded.CommitDomainEvent(loaded.State, Policy);
         GraphFrame changed = loaded.CommitDomainState(Policy);
         loaded.State.Points.Clear();
-        World restored = repository.ReadState<World>(changed, Models());
+        World restored = repository.ReadState<World>(changed);
         Require(restored.Points.Count == 33 && restored.Points[0].Value == 555 && restored.Points[^1].Value == 777,
             "Saved Delta aliases a later-cleared domain List.");
     }
@@ -140,8 +140,8 @@ internal static class Program {
         });
         Require(Upgrades.Calls.Count == 0, "Stored-exact decoding invoked business Upgrade.");
         FrameAddress upgraded, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             var points = world.Points;
             CheckGraph(world, 1101);
@@ -176,8 +176,8 @@ internal static class Program {
             CheckHistorical(store, schemas, historical, worldId);
         });
         CheckReorderedRegistration(directory, representations);
-        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> restored = reopened.Resume<World>("main", Models());
+        using EventHistoryRepository reopened = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> restored = reopened.Resume<World>("main");
         CheckGraph(restored.State, 1102);
         Require(Upgrades.Calls.Count == 32 && reopened.GetHead("main").RevisionAddress == changed,
             "Current Base/Delta cold reopen should not re-run element Upgrade.");

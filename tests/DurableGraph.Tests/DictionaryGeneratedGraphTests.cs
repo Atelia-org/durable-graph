@@ -55,8 +55,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var world = new KeyWorld<TKey>();
                     world.Values.Add(first, "a"); world.Values.Add(second, "b");
                     var original = world.Values;
-                    using (var repo = FixtureGraphRepository.CreateNew(path)) {
-                        using var session = repo.Create(world, models);
+                    using (var repo = FixtureGraphRepository.CreateNew(path, models)) {
+                        using var session = repo.Create(world);
                         session.Commit(new(1000000, 1));
                         world.Values.Clear();
                         world.Values.Add(second, "b"); world.Values.Add(first, "c");
@@ -65,8 +65,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                         session.Commit(new(1000000, 1));
                         if (!ReferenceEquals(original, session.World.Values)) return false;
                     }
-                    using (var repo = FixtureGraphRepository.OpenExisting(path)) {
-                        using var session = repo.Load<KeyWorld<TKey>>(models);
+                    using (var repo = FixtureGraphRepository.OpenExisting(path, models)) {
+                        using var session = repo.Load<KeyWorld<TKey>>();
                         if (session.World.Values.Count != 2 || session.World.Values[first] != "c" || session.World.Values[second] != "d") return false;
                         session.Commit(new(1000000, 1));
                         return true;
@@ -127,8 +127,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                     world.Nested.Add("grid", new[] { new List<Point?[,]> { new Point?[,] { { new Point { X = 7, Link = node }, null } } } });
                     world.Views = new[] { new List<Dictionary<string, Point?>> { world.Points } };
                     world.Box.Value = new() { ["n"] = 9 };
-                    using (var repo = FixtureGraphRepository.CreateNew(path)) {
-                        using var session = repo.Create(world, models);
+                    using (var repo = FixtureGraphRepository.CreateNew(path, models)) {
+                        using var session = repo.Create(world);
                         session.Commit(new(1000000, 1));
                         world.Points[key] = new Point { X = 2, Link = node };
                         world.Points.Add("absent", null);
@@ -136,8 +136,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                         world.Points.Remove("absent"); world.Box.Value["n"] = 12;
                         session.Commit(new(1000000, 1));
                     }
-                    using (var repo = FixtureGraphRepository.OpenExisting(path)) {
-                        using var session = repo.Load<World>(models); var w = session.World;
+                    using (var repo = FixtureGraphRepository.OpenExisting(path, models)) {
+                        using var session = repo.Load<World>(); var w = session.World;
                         if (!ReferenceEquals(w.Points, w.Alias) || !ReferenceEquals(w.Points, w.Views[0][0])) return false;
                         if (!ReferenceEquals(w.Key, w.Points.Keys.Single()) || w.Points["KEY"]!.Value.X != 2) return false;
                         if (!ReferenceEquals(w.Node, w.Points["KEY"]!.Value.Link) || !ReferenceEquals(w, w.Identities[w.Node!])) return false;

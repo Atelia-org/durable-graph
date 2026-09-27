@@ -54,8 +54,8 @@ internal static class Program {
         World world = World.Seed();
         FrameAddress first, patched, churned, edited, reordered, historical, unchanged;
         ObjectId worldId;
-        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Options)) {
-            using EventHistorySession<World> session = repository.CreateBranch("main", world, Models(), Policy);
+        using (EventHistoryRepository repository = EventHistoryRepository.CreateNew(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.CreateBranch("main", world, Policy);
             first = session.StateRevisionAddress;
             worldId = session.StateId;
             Set(world.Points, world.FirstKey, 101);
@@ -97,8 +97,8 @@ internal static class Program {
             CheckHistorical(store, schemas, edited, worldId, 101, 606, 107, true);
         });
         File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             CheckGraph(session.State, 101, 606, 707, true, 0);
         }
         CheckSavedContentIsolation(directory + "-frozen");
@@ -106,20 +106,20 @@ internal static class Program {
 
     private static void CheckSavedContentIsolation(string directory) {
         World world = World.Seed();
-        using var repository = EventHistoryRepository.CreateNew(directory, Options);
-        using var first = repository.CreateBranch("main", world, Models(), Policy);
+        using var repository = EventHistoryRepository.CreateNew(directory, Models(), Options);
+        using var first = repository.CreateBranch("main", world, Policy);
         world.Points.Clear();
         world.Modes.Clear();
         world.IgnoreCase.Clear();
         world.Identity.Clear();
         first.Dispose();
-        using EventHistorySession<World> loaded = repository.Resume<World>("main", Models());
+        using EventHistorySession<World> loaded = repository.Resume<World>("main");
         CheckGraph(loaded.State, 100, 106, 107, false, 0);
         Set(loaded.State.Points, loaded.State.FirstKey, 555);
         loaded.CommitDomainEvent(loaded.State, Policy);
         GraphFrame changed = loaded.CommitDomainState(Policy);
         loaded.State.Points.Clear();
-        World restored = repository.ReadState<World>(changed, Models());
+        World restored = repository.ReadState<World>(changed);
         CheckGraph(restored, 555, 106, 107, false, 0);
     }
 #else
@@ -134,8 +134,8 @@ internal static class Program {
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 101, 606, 707, true));
         Require(Upgrades.Calls.Count == 0, "Stored-exact decoding invoked a key/value business conversion.");
         FrameAddress upgraded, unchanged, changed;
-        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Options)) {
-            using EventHistorySession<World> session = repository.Resume<World>("main", Models());
+        using (EventHistoryRepository repository = EventHistoryRepository.OpenExisting(directory, Models(), Options)) {
+            using EventHistorySession<World> session = repository.Resume<World>("main");
             World world = session.State;
             var points = world.Points;
             CheckGraph(world, 1101, 1606, 1707, true, 1000);
@@ -163,8 +163,8 @@ internal static class Program {
             RequireDictionaryDelta(store.Read(changed), ids.Points, onlyObject: true);
             CheckHistorical(store, schemas, historical, worldId, 101, 606, 707, true);
         });
-        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Options);
-        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main", Models());
+        using EventHistoryRepository finalRepository = EventHistoryRepository.OpenExisting(directory, Models(), Options);
+        using EventHistorySession<World> finalSession = finalRepository.Resume<World>("main");
         CheckGraph(finalSession.State, 1102, 1606, 1707, true, 1000);
         Require(Upgrades.Calls.Count == 96, "Current Base/Delta reopen repeated historical conversion.");
     }

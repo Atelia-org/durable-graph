@@ -17,23 +17,25 @@ public sealed class FixtureGraphRepository : IDisposable {
         _repository = repository;
         if (existing) { _stateAddress = repository.GetHead("main").RevisionAddress; }
     }
-    public static FixtureGraphRepository CreateNew(string path, RbfSegmentStoreOptions? options = null) =>
-        new(EventHistoryRepository.CreateNew(path, options), false);
-    public static FixtureGraphRepository OpenExisting(string path, RbfSegmentStoreOptions? options = null) =>
-        new(EventHistoryRepository.OpenExisting(path, options), true);
+    public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+        FixtureMarker.Register(models);
+        return new(EventHistoryRepository.CreateNew(path, models, options), false);
+    }
+    public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+        FixtureMarker.Register(models);
+        return new(EventHistoryRepository.OpenExisting(path, models, options), true);
+    }
     public FrameAddress? HeadRevisionAddress => _stateAddress;
     public bool IsFaulted => _repository.IsFaulted;
-    public FixtureGraphSession<T> Create<T>(T state, StateModelRegistry models) where T : class, IDurableObject {
-        FixtureMarker.Register(models);
-        return new(this, state, models);
+    public FixtureGraphSession<T> Create<T>(T state) where T : class, IDurableObject {
+        return new(this, state);
     }
-    public FixtureGraphSession<T> Load<T>(StateModelRegistry models) where T : class, IDurableObject {
-        FixtureMarker.Register(models);
-        return new(this, _repository.Resume<T>("main", models));
+    public FixtureGraphSession<T> Load<T>() where T : class, IDurableObject {
+        return new(this, _repository.Resume<T>("main"));
     }
-    internal EventHistorySession<T> Initialize<T>(T state, StateModelRegistry models,
+    internal EventHistorySession<T> Initialize<T>(T state,
         ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject =>
-        _repository.CreateBranch("main", state, models, parameters);
+        _repository.CreateBranch("main", state, parameters);
     internal void Accept(FrameAddress address) => _stateAddress = address;
     public void Dispose() => _repository.Dispose();
 }
@@ -41,10 +43,9 @@ public sealed class FixtureGraphRepository : IDisposable {
 public sealed class FixtureGraphSession<T> : IDisposable where T : class, IDurableObject {
     private readonly FixtureGraphRepository _repository;
     private readonly T _initial;
-    private readonly StateModelRegistry? _models;
     private EventHistorySession<T>? _session;
-    internal FixtureGraphSession(FixtureGraphRepository repository, T initial, StateModelRegistry models) {
-        _repository = repository; _initial = initial; _models = models;
+    internal FixtureGraphSession(FixtureGraphRepository repository, T initial) {
+        _repository = repository; _initial = initial;
     }
     internal FixtureGraphSession(FixtureGraphRepository repository, EventHistorySession<T> session) {
         _repository = repository; _initial = session.State; _session = session;
@@ -54,7 +55,7 @@ public sealed class FixtureGraphSession<T> : IDisposable where T : class, IDurab
     public FrameAddress? ParentRevisionAddress => _session?.StateRevisionAddress;
     public FrameAddress Commit(ReadAmplificationBaseBudgetParameters parameters) {
         if (_session is null) {
-            _session = _repository.Initialize(_initial, _models!, parameters);
+            _session = _repository.Initialize(_initial, parameters);
         } else {
             if (_session.PendingEvent is null) { _session.CommitDomainEvent(new FixtureMarker(), parameters); }
             _session.CommitDomainState(parameters);

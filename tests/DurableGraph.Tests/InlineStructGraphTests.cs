@@ -15,7 +15,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress first, unchanged, nested, childOnly, removed;
         ObjectId worldId;
         object originalWorld, originalChild;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path, fixture.Models())) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             originalWorld = fixture.World(session);
             originalChild = fixture.Child(originalWorld)!;
@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         FrameAddress reopenedNoChange;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path, fixture.Models())) {
             using IDisposable loaded = (IDisposable)fixture.LoadSession(repository);
             object world = fixture.World(loaded);
             Assert.NotSame(originalWorld, world);
@@ -86,7 +86,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
         FrameAddress first, retry;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path, fixture.Models())) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             first = fixture.Commit(session);
             object world = fixture.World(session);
@@ -181,6 +181,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private sealed class InlineGraphFixture(Type host) {
         private T Method<T>(string name) where T : Delegate => host.GetMethod(name)!.CreateDelegate<T>();
+        public StateModelRegistry Models() => Method<Func<StateModelRegistry>>("Models")();
         public object CreateSession(FixtureGraphRepository repository) => Method<Func<FixtureGraphRepository, object>>("CreateSession")(repository);
         public object LoadSession(FixtureGraphRepository repository) => Method<Func<FixtureGraphRepository, object>>("LoadSession")(repository);
         public object NewWorld() => Method<Func<object>>("NewWorld")();
@@ -290,15 +291,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public sealed class UnknownChild : Child { public UnknownChild(World owner) : base(owner, 99) { } }
         public static class Host {
-            private static StateModelRegistry Models() {
+            public static StateModelRegistry Models() {
                 StateModelRegistry models = new();
                 global::InlineGraph.World.__DurableState.RegisterModel(models);
                 global::InlineGraph.Child.__DurableState.RegisterModel(models);
                 return models;
             }
             public static object NewWorld() => new World(7);
-            public static object CreateSession(FixtureGraphRepository repository) => repository.Create(new World(7), Models());
-            public static object LoadSession(FixtureGraphRepository repository) => repository.Load<World>(Models());
+            public static object CreateSession(FixtureGraphRepository repository) => repository.Create(new World(7));
+            public static object LoadSession(FixtureGraphRepository repository) => repository.Load<World>();
             public static object World(object session) => ((FixtureGraphSession<World>)session).World;
             public static object? Child(object world) => ((World)world).Value.Inner.Child;
             public static ObjectId WorldId(object session) => ((FixtureGraphSession<World>)session).WorldId!.Value;

@@ -54,10 +54,10 @@ public sealed partial class Character : NamedObject {
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
-        using (var repository = EventHistoryRepository.CreateNew(repositoryPath, options)) {
+        using (var repository = EventHistoryRepository.CreateNew(repositoryPath, models, options)) {
             string shared = new('A', 1);
             Character source = new(shared, 7);
-            using var session = repository.CreateBranch("main", source, models, policy);
+            using var session = repository.CreateBranch("main", source, policy);
             firstRevision = session.StateRevisionAddress;
             characterId = session.StateId;
             session.CommitDomainEvent(new Character(shared, 7), policy);
@@ -65,13 +65,13 @@ public sealed partial class Character : NamedObject {
             secondRevision = session.CommitDomainState(policy).RevisionAddress;
             Require(ReferenceEquals(session.State, source), "Commit replaced application-held instances.");
         }
-        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(repositoryPath, options)) {
+        using (var repository = EventHistoryRepository.OpenReadOnlyExisting(repositoryPath, models, options)) {
             var frames = repository.ReadFrames("main").ToArray();
-            Character original = repository.ReadState<Character>(frames[0], models);
+            Character original = repository.ReadState<Character>(frames[0]);
             Require(original._score == 7 && original.Name == "A" &&
                 original._createdAtTicks == 638_625_600_000_000_000 &&
                 ReferenceEquals(original.Name, original._alias), "Historical State lost values or sharing.");
-            var pair = repository.ReadPair<Character, Character>(frames[1], frames[2], models);
+            var pair = repository.ReadPair<Character, Character>(frames[1], frames[2]);
             Require(pair.First._score == 7 && pair.Second._score == 8, "Event/State pair lost selected values.");
         }
         // Inspect exact payload and registration behavior after closing the facade's writer.

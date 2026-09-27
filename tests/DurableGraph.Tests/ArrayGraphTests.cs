@@ -14,7 +14,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress first, unchanged, vectorChange, compositeChange, replaced, removed;
         ObjectId worldId;
         object originalWorld, originalVector;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path, fixture.Models())) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             originalWorld = fixture.World(session);
             originalVector = fixture.Vector(originalWorld);
@@ -76,7 +76,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         FrameAddress reopened;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path, fixture.Models())) {
             using IDisposable session = (IDisposable)fixture.LoadSession(repository);
             object world = fixture.World(session);
             Assert.NotSame(originalWorld, world);
@@ -99,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress first, sparse, dense;
         ObjectId worldId;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path, fixture.Models())) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             object world = fixture.World(session);
             object array = fixture.Vector(world);
@@ -176,7 +176,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ArrayGraphFixture fixture = CompileArrayGraph();
         using RawBaseDirectory directory = new();
         FrameAddress first, recovered;
-        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path)) {
+        using (FixtureGraphRepository repository = FixtureGraphRepository.CreateNew(directory.Path, fixture.Models())) {
             using IDisposable session = (IDisposable)fixture.CreateSession(repository);
             object world = fixture.World(session);
             first = fixture.Commit(session);
@@ -205,6 +205,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private sealed class ArrayGraphFixture(Type host) {
         private T Method<T>(string name) where T : Delegate => host.GetMethod(name)!.CreateDelegate<T>();
         public object NewWorld() => Method<Func<object>>("NewWorld")();
+        public StateModelRegistry Models() => Method<Func<StateModelRegistry>>("Models")();
         public object CreateSession(FixtureGraphRepository repository) => Method<Func<FixtureGraphRepository, object>>("CreateSession")(repository);
         public object LoadSession(FixtureGraphRepository repository) => Method<Func<FixtureGraphRepository, object>>("LoadSession")(repository);
         public object World(object session) => Method<Func<object, object>>("World")(session);
@@ -334,8 +335,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return models;
             }
             public static object NewWorld() => new World();
-            public static object CreateSession(FixtureGraphRepository repository) => repository.Create(new World(),Models());
-            public static object LoadSession(FixtureGraphRepository repository) => repository.Load<World>(Models());
+            public static object CreateSession(FixtureGraphRepository repository) => repository.Create(new World());
+            public static object LoadSession(FixtureGraphRepository repository) => repository.Load<World>();
             public static object World(object session) => ((FixtureGraphSession<World>)session).World;
             public static object Vector(object world) => ((World)world).Numbers;
             public static ObjectId WorldId(object session) => ((FixtureGraphSession<World>)session).WorldId!.Value;

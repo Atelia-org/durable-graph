@@ -1,9 +1,9 @@
 # DB-077：Repository 固定模型环境
 
-> 状态：**Proposed / 2026-09-27 按 DB-083 校准的候选设计，未实施，非施工授权**。原源码核对基线 `343bfa6`。
+> 状态：**已实施并验收 / 2026-09-27**。实际分工与验证见[实施记录](0077-model-environment-implementation.md)；原设计源码基线 `343bfa6`。
 > 目标以 [DB-083 用户故事与 Checkpoint API](0083-repository-checkpoint-api-user-stories.md) 为准；本片仅交付固定模型环境与 current 快路，公开 API 统一和自由历史由 DB-078 分阶段交付。
 > 顺序：DB-076 路线的第 1 片；完成后进入 [DB-078](0078-editable-checkpoint-fork-slice.md)。
-> 来源：用户要求按单个主会话配合 subagent 的粒度拆分；无兼容性包袱。本文细化推荐合同，不代表已经批准施工。
+> 来源：用户要求按单个主会话配合 subagent 的粒度拆分；无兼容性包袱。本文记录本片合同；本轮施工由用户另行明确授权。
 > current 恒等快路的反例与原裁决见 [历史专项评审](0077-0078-api-dialectical-review.md)；本片保留该局部机制，公开迁移范围以本次校准为准，历史转换仍承担稳定性合同。
 > 术语遵循[项目术语表](../DurableGraph-glossary.md#branch-checkout)。本片阶段性保留源码的 `EventHistoryRepository` / `EventHistorySession<TState>` / `Resume<TState>`，DB-078-A 一次迁移为最终非泛型入口；不先制造一个过渡的 `BranchCheckout<TState>`。
 
@@ -16,8 +16,8 @@
 DB-078-A 才统一公开入口并落实用户已选的 Event-first、自由 E/S 顺序及跨类型 State 替换，
 DB-078-C 再把占用范围放宽为不同分支各一个工作副本。这里保留的交替/exact 根检查只属于本阶段停点，不再是待产品裁定的目标限制。
 
-当前 [Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 的 Open 不接收模型；
-当前源码的 CreateBranch、`Resume`、ReadState/Event/Pair 各自取得 snapshot。
+实施前 [Repository](../../src/DurableGraph.Persistence/EventHistoryRepository.cs) 的 Open 不接收模型；
+CreateBranch、`Resume`、ReadState/Event/Pair 各自取得 snapshot。
 [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 已有成功闭合缓存，
 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 已有接收 snapshot 的加载入口；
 因此先调整所有权与参数传递，无须另造公共 ModelContext。
@@ -127,7 +127,7 @@ Schema 依赖须体现在 exact layouts、声明的 Upgrade 依赖，或经过�
 同 repo 切换坏 allocator/好 registry 的测试改为固定环境的故障测试或另开 repo；
 真实包的精简/完整目录切换改为分别打开，不能为旧测试保留逐操作覆盖参数。
 低层测试若仍在测试独立 snapshot，则保持其自身范围，不误改为 repo 寿命测试。
-`SharedGraphReaderTests.SameLayoutNormalizationMustCompareCompleteCurrentValuesAndReferences` 当前以调用计数
+实施前 `SharedGraphReaderTests.SameLayoutNormalizationMustCompareCompleteCurrentValuesAndReferences` 以调用计数
 改写同一 current DTO 的值/引用；其产品保证角色随新合同退休，替换为上述 current 不执行历史委托的见证。
 保留不同 head、真实历史 Upgrade 和 changed-child 的合法闭包隔离测试；不要为了旧动态行为保留 current 回调。
 这不授权提前删除 ReadPair 的完整值比较、RequiresRewrite 排除或引用闭包，相关算法简化仍属后续独立证明。
