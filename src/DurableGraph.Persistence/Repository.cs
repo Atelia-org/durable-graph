@@ -68,8 +68,11 @@ public sealed class Repository : IDisposable {
             resources = create ? GraphResources.CreateNew(path, rotationThresholdBytes) : readOnly
                 ? GraphResources.OpenReadOnlyExisting(path) : GraphResources.OpenExisting(path, rotationThresholdBytes);
             return new(resources, models.Snapshot(resources.Schemas));
-        } catch {
-            resources?.Dispose();
+        } catch (Exception primary) {
+            try { resources?.Dispose(); }
+            catch (Exception cleanup) {
+                throw new AggregateException("Repository opening and resource cleanup failed.", primary, cleanup);
+            }
             throw;
         }
     }

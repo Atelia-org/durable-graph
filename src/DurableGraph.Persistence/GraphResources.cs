@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using Atelia.VersionStore;
@@ -78,8 +79,8 @@ public sealed class GraphResources : IDisposable {
             }
             RefBytesSnapshot snapshot = versions.ReadRef(1).Unwrap();
             return new(data, versions, snapshot);
-        } catch {
-            try { versions?.Dispose(); } finally { data?.Dispose(); }
+        } catch (Exception primary) {
+            CloseResources(primary, null, versions, data);
             throw;
         }
     }
@@ -184,7 +185,30 @@ public sealed class GraphResources : IDisposable {
     public void Dispose() {
         if (_disposed) { return; }
         _disposed = true;
-        States.Dispose();
-        try { _versions.Dispose(); } finally { Data.Dispose(); }
+        CloseResources(null, States, _versions, Data);
+    }
+
+    // Keep failure evidence while attempting every owned resource. Backing owners aggregate their
+    // own close failures; retain those aggregates instead of flattening or replacing their errors.
+    private static void CloseResources(Exception? primary, StateRevisionStore? states,
+        PublicationStore? versions, DataStore? data) {
+        Exception? stateError = null;
+        Exception? versionError = null;
+        Exception? dataError = null;
+        try { states?.Dispose(); } catch (Exception error) { stateError = error; }
+        try { versions?.Dispose(); } catch (Exception error) { versionError = error; }
+        try { data?.Dispose(); } catch (Exception error) { dataError = error; }
+
+        Exception? first = primary ?? stateError ?? versionError ?? dataError;
+        if (first is null) { return; }
+        int count = (primary is null ? 0 : 1) + (stateError is null ? 0 : 1)
+            + (versionError is null ? 0 : 1) + (dataError is null ? 0 : 1);
+        if (count == 1) { ExceptionDispatchInfo.Capture(first).Throw(); }
+        var errors = new List<Exception>(count);
+        if (primary is not null) { errors.Add(primary); }
+        if (stateError is not null) { errors.Add(stateError); }
+        if (versionError is not null) { errors.Add(versionError); }
+        if (dataError is not null) { errors.Add(dataError); }
+        throw new AggregateException("Repository failure and resource cleanup errors.", errors);
     }
 }
