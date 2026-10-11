@@ -19,6 +19,12 @@
 
 ## 当前焦点
 
+[DB-086 新存储栈重构方案](../docs/design-branches/0086-new-storage-refactoring-plan.md) 已完成三角色、三轮
+[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)，按最终代码简单性选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
+用户已取消全库重开确认/启动审计、旧数据保留与迁移；完整帧稳定、必要读取校验、两种 Parent、outcome/fault 与 mutable 隔离保持。
+产品仍使用旧 pin，尚未实施；下述能力/严格打开事实仍描述旧实现。下一步从方案 R0/R1 的真生成图纵切开始，不重建 strict preflight 或兼容壳。
+上游依据为 WSL `974fd47`，四项 API 复核与 XML 补强已完成；原始机制证据只查[DB-085](../docs/design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)。
+
 [DB-084 DG tag 接入](../docs/design-branches/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
 不可变绑定由上游 EventJournal 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
 普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，严格重开按名字检查，不自动重试或修尾。

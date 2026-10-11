@@ -28,8 +28,9 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 ### 程序集与命名空间边界
 
-[DB-071](design-branches/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖图：
-Persistence 组合 Runtime、Storage 与 EventJournal；Runtime 和 Storage 共用 Serialization。
+[DB-071](design-branches/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖边界：
+Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共用 Serialization。
+新底座方向按[DB-086](design-branches/0086-new-storage-refactoring-plan.md)采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
 主 DurableGraph 程序集的根 namespace 保留领域/登记契约，Schema 放布局描述，Runtime 放执行绑定与状态操作。
 这些 namespace 不增加程序集边界，不要求 Schema 与 Runtime 在同程序集内形成单向依赖。
 组织迁移要求依赖闭包重编译，保留类型访问级别、Generated/Family/DTO、模型 ID/版本与持久格式；不引入旧包兼容壳。
@@ -367,7 +368,7 @@ Artifact 面向 HistoryLog、LLM 消息、附件与历史输入输出等内容�
 Artifact 引用不把完整内容并入 State 对象可达闭包，恢复时不允许模糊 latest fallback。
 地址采用内容 hash、append 地址或其他组合，属于待裁决机制。
 
-真实事件/快照消费者已选择由 EventJournal 引用独立 StateRevision 的
+真实事件/快照消费者已选择具备自由 E/S 业务历史、branch 与不可变 tag 的
 [EventHistory 路线](design-branches/0063-event-history-journal-slice.md)。
 它可以覆盖上述部分历史内容职责，先屏蔽独立 ArtifactStore 的建设；四类逻辑职责不要求四个独立存储实现。
 这不是对附件分块/外部大对象能力的完成声明，也不改变尚待实现的联合 Schema 视图边界。
@@ -378,8 +379,12 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 
 ### 单一发布权威与明确故障结果
 
-正常持久帧遵循 [append-only 与离线救援纪律](../AGENTS.md#persistent-data-discipline)：正常打开和失败处理不截断修尾；
-专门离线救援先关闭相关资源并丢弃缓存，结束后新开 Store。该约束不改变下述逻辑 ref 发布和分支协议。
+正常已完成持久帧遵循[append-only 与离线救援纪律](../AGENTS.md#persistent-data-discipline)，内容与地址不被DG改写。
+已选新存储方向消费底座正常尾恢复，包括VS惰性打开；只读不写不修，不在live Store下手工救援。
+超出底座正常恢复的离线救援先关闭资源并丢弃缓存，再以fresh owner恢复使用。
+日常打开不提供全库健康或全历史重新确认；只加载必要根/Schema目录，对本次访问内容保持正确性检查。
+完整 SchemaSnapshot 与一个带业务TailMeta的Revision图帧共用FS，VS一个仓库根发布Schema/branch目录；
+两种Parent、全局Schema单调性与业务outcome仍保留。具体方案见[DB-086](design-branches/0086-new-storage-refactoring-plan.md)，产品实现状态只查工作集。
 raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
 缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)。
 
@@ -397,11 +402,12 @@ raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读
 既不物化 Event，也不导入其对象身份。已有 State 的损坏、缺模型或 Upgrade 失败必须传播，不回退旧 State 或伪装成无 State。
 库没有 PendingEvent，不自动 replay，也不判定业务处理进度或外部效果是否完成。
 
-设 P 为提交前精确 Head，B 为 P 自身或其祖先中最近已提交 State。新记录的 Journal Parent=P，图 Revision Parent=B.Revision；
+设 P 为提交前精确 Head，B 为 P 自身或其祖先中最近已提交 State。新记录的业务 Parent=P，图 Revision Parent=B.Revision；
 首建没有 P，首 State 之前没有 B。于是 S0→E1→E2→S1→S2 中 E1/E2/S1 的图 Parent 均为 S0，S2 的图 Parent 为 S1；
 E0→E1→S0 中三个图均无 Parent。Event 只保存自身可达闭包，成功后释放候选，始终不 Accept Event 的 DTO 或 live 身份，
 也不推进 State 基线。无 State 的 Event 每次准备完整 Base；热捕获可消耗 ID 游标，纯 Event 历史冷签出则使用全新空 CaptureSession，
-不同 Revision 的数字 ID 重合不构成跨图身份承诺。冷开仍验证全部物理记录、orphan、引用和图 Parent，不能仅验证 ref 可达链。
+不同 Revision 的数字 ID 重合不构成跨图身份承诺。所选图准备前验证业务Parent与最近State/Revision.Parent对应；
+不为证明全部orphan健康而启动全库检查，底座必要资格错误仍传播。
 
 CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担；它继续使用原工作区及身份映射。
 已有 child 升根保留 ID，旧根若仍可达则成为普通子对象，仅不再可达的成员 Remove；新实例才取得新 ID。
@@ -409,7 +415,8 @@ CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担
 不在发布后重新 Capture 或选择模型。预先可知的 null/未注册直接根在捕获和追加前拒绝；
 深层模型或回调失败依实际阶段裁决，不承诺所有失败都无物理写入。完整来源、同 ID 的 exact 布局和 Upgrade rewrite 义务继续保持。
 
-Journal ref 是唯一发布前沿，图追加与 head 发布分开。提交仍检查工作副本所有权、精确 head、最近 State 的 exact 基线并执行最终 CAS，
+VS仓库根是唯一当前发布前沿，图追加与head发布分开，业务祖先由图帧自己的Parent决定。
+提交在串行driver内检查工作副本所有权、expected branch head、最近State的exact基线后发布，不要求上游提供CAS平台，
 防重入、fault 和 publication outcome 不因自由历史放宽。每 branch 至多一个活动工作副本，不同 branch 可同时编辑，
 仓库操作仍串行。同 branch 重复 Checkout 在恢复前拒绝；Move 只要求目标 branch 没有活动工作副本。
 ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅由 ordinal 分支名集合表达，显式 Dispose 释放；
@@ -424,9 +431,9 @@ ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅�
 
 历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与逻辑 Journal 位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
-[不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) 的持久权威归上游 EventJournal，DG 只创建和解析绑定。
+不可变tag的持久权威归上游发布底座，DG只创建和解析绑定；新方向由VersionStore承担，旧实现证据保留在[DB-084](design-branches/0084-eventjournal-immutable-tags-slice.md)。
 tag 与 branch 名称空间独立、同名一律拒绝；可定位 Event-first 历史，重开解析签发当前打开的地址，不物化图或修改分支。
-不另立持久权威，也不把 tag 名当作跨仓库外部地址；发布 outcome 与资源 fault 分开解释，故障后严格重开并按名字检查。
+不另立持久权威，也不把tag名当作跨仓库外部地址；发布outcome与资源fault分开解释，故障后fresh重开并按名字检查。
 旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
 旧 publication.rbf 也不引入迁移或双发布机制。
 
@@ -443,7 +450,7 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 无下界的默认 NewestFirst 按需回溯，OldestFirst 可先缓冲所需事件地址；不物化沿途 State。
 每次 MoveNext 检查可用性，交付前释放操作 guard 与底层 lease，循环体可 ReadEvent 或进行其他串行操作。
 后续提交/Move 不改变所选历史。ReadFrames 保持全逻辑链元数据读取，切片结果不节省其成本；旧 ReadEvents 已移除。
-实现与验证见 [DB-078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)，Open 的全物理校验成本另计。
+既有实现与验证见[DB-078-B记录](design-branches/0078-b-checkpoint-history-query-implementation.md)；新方向取消启动全物理审计，合帧导航的整帧CRC读取成本见DB-086。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，

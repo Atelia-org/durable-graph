@@ -149,6 +149,21 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 改变 grammar 才需要新的 codec 解释；保持精确状态语义、准确 NoChange 与有界搜索回退。
 
+### 3.3 RBF3 / FrameStore / VersionStore 迁移
+
+[DB-086](design-branches/0086-new-storage-refactoring-plan.md) 已形成实施指导方案并完成
+[三轮简化评审](design-branches/0086-new-storage-simplification-review.md)；产品仍使用旧 pin，未实施。
+下一步按方案 R0/R1 从最终产品source的真生成图纵切开始；后续依赖/验收队列只维护在该方案，不再沿用DB-085的T0–T7。
+
+用户已选择只验收新建库，不保留旧storage数据或迁移器；取消全库重开确认、启动图审计和strict preflight。
+新打开消费上游恢复合同；必要内容/图因果/owner寿命仍检查。原反馈第3项控制数据确认撤出上游待办。
+单根发布、完整SchemaSnapshot、Revision/业务meta合帧与直接Bare的取舍和容量/I/O代价集中于DB-086。
+[DB-085](design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)只保留准确历史基线和机制证据；上游XML建议已在`974fd47`提交。
+共享物理分配不自动启动下面的Schema自举/分支版本视图，也不替代最终真实包资格。
+
+只有真实目录容量/登记写放大、合帧导航成本或大branch目录需求出现时，才重访增量目录、metadata读取或每branch ref。
+不为这些将来可能性预留runtime双模式、持久时钟或通用backend。
+
 ## 4. 明确延后及重访条件
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
@@ -160,7 +175,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
 | SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
-| Schema/表示日志自动修复与分段 | 遇到真实坏尾恢复或容量需求时；无额外确认水位不能自动区分未完成尾部和已确认末帧损坏，当前严格拒绝。重访时先冻结故障模型，不绕过完整注册一致性 |
+| Schema/表示目录增量或分段 | DB-086选择完整SchemaSnapshot，真实目录接近单帧上限或登记写放大成为瓶颈时重访；正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-063 已闭合交错提交、expected head、数据/Journal/ref 屏障及严格重开；遇到真实可用性要求时再设计坏尾自动修复、OS crash/power loss 与目录持久性，不能默默回退旧 head |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |

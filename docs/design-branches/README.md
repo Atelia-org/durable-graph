@@ -24,6 +24,8 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | 三角色三轮简化评审完成；未实施 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；R0/R1起步 |
+| [DB-085 新 RBF3 / Binary / FrameStore / VersionStore 迁移](0085-rbf3-framestore-versionstore-migration-feasibility.md) | 可行性调研及四项 API 复核完成；历史前置范围由DB-086取代 | [初次验证](0085-storage-migration-probe-evidence.md)与[上游 API 复核](0085-upstream-api-refinement-review.md)；不再要求严格打开/全库确认等价或旧数据迁移 |
 | [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 上游公开包与 DG 接入已实施 | [接入与验收](0084-durablegraph-tags-implementation.md)；逐包公开 pin、创建/解析固定点、严格打开与真实发布 outcome；非外部可序列化地址 |
 | [DB-083 Repository / Checkpoint 用户故事](0083-repository-checkpoint-api-user-stories.md) | A/B/C 与 DG tag 已实施 | 非泛型工作副本、Event-first、跨类型 State、nearest PreviousEvent、固定历史查询、每分支工作副本/named Fork、同打开地址；跨重开 tag 单列 DB-084 |
 | [DB-082 单图准备材料范围的 ImmutableLeaf 复用](0082-prepared-immutable-leaf-reuse-slice.md) | 候选已实现，默认关闭 | [实现与成本裁决](0082-prepared-immutable-leaf-reuse-implementation.md)；同 State 的只读叶表、身份/交付/依赖门经回归，A/B 未证明稳定完整 Fork 收益；内部开关保留重跑，不扩展公共 options |
