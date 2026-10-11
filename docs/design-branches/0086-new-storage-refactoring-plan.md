@@ -41,8 +41,8 @@ Schema 登记：准备完整候选目录 → append SchemaSnapshot → 发布新
 | C1 | 根 README、[包消费者](../../experiments/PackageConsumerProbe/README.md)为本地可检查的调用方；List/Enum/Generic 等 consumer 直接组合 SchemaStore/StateRevisionStore/RevisionDecoder | 保留独立 exact 解码见证，调整具体资源获得方式；高层行为保持，低层签名修改并重编译，不建立兼容壳 |
 | F1 | 当前 Repository 单 writer、串行、每 branch 一个活动 checkout；新 FS/VS 当前源码 | 保留必要 guard；不增加 CAS 平台、多 writer、OS crash/power loss 或 exactly-once 保证 |
 
-DG 基线为 `c900edd5b3a921b7bf46df2ac0482dc39597e606`；当前产品仍是旧包模式，pin 见
-[StorageDependency.props](../../eng/StorageDependency.props)。本方案的上游依据为 WSL
+DG 旧栈调研基线为 `c900edd5b3a921b7bf46df2ac0482dc39597e606`；当时的旧包 pin 以该 revision 为准。
+当前来源见 [StorageDependency.props](../../eng/StorageDependency.props)。本方案的上游依据为 WSL
 `/repos/Atelia-org/atelia-storage`，`974fd47abb73792f9d350af87ab91a53848952eb`。
 旧包行为由 DG 源码、测试和准确 pin 解释；新源码能力由上述新栈 revision 解释，不混作一个来源。
 DB-085、本方案和路线图不是相互独立的需求证据。没有找到当前 checkout 中可执行的 DramaBoard 源码，不声称已验证它。

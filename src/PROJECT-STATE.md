@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-10-11；DB-077、DB-078-A/B/C、DB-079/080 与 DB-084 DG tag 已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-10-12；DB-086 新存储栈与既有 DB-077、DB-078-A/B/C、DB-079/080、DB-084 能力已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,11 +19,12 @@
 
 ## 当前焦点
 
-[DB-086 新存储栈重构方案](../docs/design-branches/0086-new-storage-refactoring-plan.md) 已完成三角色、三轮
-[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)，按最终代码简单性选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
+[DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
+按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
 用户已取消全库重开确认/启动审计、旧数据保留与迁移；完整帧稳定、必要读取校验、两种 Parent、outcome/fault 与 mutable 隔离保持。
-新栈产品代码与测试 fixture 已完成接线；源码整库构建和 2793 项回归通过，包消费验收正在收束。实际合同与验收只维护在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)，没有旧格式兼容模式。
-上游依据为 WSL `974fd47`，四项 API 复核与 XML 补强已完成；原始机制证据只查[DB-085](../docs/design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)。
+实际合同与验收只维护在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)，没有旧格式兼容模式；模型程序集须重编译，新格式库内历史升级保持。
+准确上游依据与未公开候选入口见[依赖指南](../docs/storage-dependency.md)；原始机制证据只查[DB-085](../docs/design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)。
+下一增量由下游新库接入/真实轨迹反馈选择；容量、Schema 登记写放大和合帧导航成本的重访条件集中于[路线图](../docs/DurableGraph-research-roadmap.md#33-rbf3--framestore--versionstore-迁移)。
 
 [DB-084 DG tag 接入](../docs/design-branches/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
 不可变绑定现由上游 VersionStore 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
@@ -115,7 +116,7 @@ positional/backing storage、泛型、跨库继承及历史升级复用现有对
 第二轮 [ReadPair 反馈](../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md) 已完成于
 [DB-066](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md)：共享判断改用可选完整状态比较，
 缺 proof 保守不共享，真实错误传播。普通/Family SG 自动登记，数组/List/Dictionary 复用静态槽比较；
-Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Transient 放在图外，独立读取允许各自初始化，续写使用 Checkout。
+Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址检查保持；不要求 primitive 输入最短。ReadPair 的视图专属 Transient 放在图外，独立读取允许各自初始化，续写使用 Checkout。
 完整测试、独立审阅和真实包验收已通过，证据集中在分片记录。
 下游已按公开入口接入真实模型，可继续玩法扩展并收集具体摩擦；
 跨重开书签、局部事件浏览与类型适配扩展按路线图的需求触发，不自动扩展本轮范围。
@@ -256,7 +257,7 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
 - Repository 拥有 GraphResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
   CreateBranch(initialState) / CreateBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
-  业务 Parent 指向提交前精确 Head；Revision Parent 指向其自身或祖先中最近 State，无 State 时为 null。
+  业务 Parent 指向提交前精确 Head；Revision Parent 指向该业务 Parent 自身或祖先中最近 State，无 State 时为 null。
   Checkout 保持精确 Head，只恢复最近 State 及完整来源；纯 Event 前缀交付 State=null、全新空 CaptureSession。
   Fork 在完整 guard 内占用新名字、恢复并构造工作副本后才发布 ref，不追加历史图；源副本可保持存活，未提交修改不参与。
   不同恢复的 mutable 图独立，完整身份与保存来源保持；普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查。

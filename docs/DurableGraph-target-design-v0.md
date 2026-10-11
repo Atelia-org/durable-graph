@@ -274,8 +274,8 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   当前参数与调优指导见[根 README](../README.md#调整保存策略)，分析依据见 [DB-070](design-branches/0070-read-amplification-default.md)。
 - 策略消费完整 post-live 对象集合的估算，产生稀疏表示计划。真实 Revision Parent、对象变化分类、
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
-- Storage 使用多历史 Segment 地址与 BackwardFileDistance；rollover 是 soft threshold，
-  不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
+- Storage 直接使用 FrameStore 的 opaque FrameAddress；DG links 固定编码为 12B，不解释文件位置或距离。
+  物理分配与轮转由底座承担，不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
 - 普通 State 在对象内容决策之后选择目录表示：仅当目录 Base 的精确字节成本严格小于 Delta 的 Remove 列表时切换，
   否则保留 Delta。保留精确 Parent、本地对象记录与旧 head；不增加公开参数或新的 wire 格式，见[实现与验收](research/object-head-map-base-feasibility.md)。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
@@ -285,11 +285,12 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   新 Base 截断对象内容重建链；这不等于截断 membership 读取、历史查询或允许删除旧文件。
 - B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body 及 Base 的类型引用；
   排除 ObjectId key、共享 membership/Frame/对齐。H 与原 Frame 实编码累计一致，是成本代理而非总物理 I/O。
-  冷恢复完整验证后，可随同 Store 生命周期的已提交 DTO 基线保留对象 head/H；热保存按本次实际文件范围与 payload 增量推进。
+  冷恢复完整验证后，可随同 Store 生命周期的已提交 DTO 基线保留对象 head/H；热保存按实际对象记录增量推进。
   元数据仅在确认发布后随 State 基线安装，Event 快照不推进 State；独立 raw 输入仍须验证历史链。
   具体边界与证据见 [DB-069](design-branches/0069-incremental-save-baseline.md)。
 
-地址方向来源：[DB-014](design-branches/0014-multi-segment-backward-file-distance.md)；
+当前地址方向见 [DB-086](design-branches/0086-new-storage-refactoring-plan.md)；
+[DB-014](design-branches/0014-multi-segment-backward-file-distance.md) 保留已被替换的物理距离方案；
 内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice.md)、
 [DB-028](design-branches/0028-persisted-object-delta-chain-slice.md)。
 
