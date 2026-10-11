@@ -3,8 +3,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -30,10 +29,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverseRegistration);
         StateModelRegistry models = host.GetMethod("Models")!
             .CreateDelegate<Func<bool, StateModelRegistry>>()(reverseRegistration);
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], models.Snapshot(schemas));
         ObjectStateRecord world = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.World");
         ObjectStateRecord special = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Special");
@@ -128,6 +126,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using CrossOrdinary;
         using CrossValues;
         namespace CrossApp;

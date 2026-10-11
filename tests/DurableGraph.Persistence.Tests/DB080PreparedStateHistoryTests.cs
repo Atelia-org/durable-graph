@@ -4,7 +4,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using State = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.State;
 
@@ -37,8 +37,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         VerifyPreclosedDependency(false, factory);
 
     private void VerifyPreclosedDependency(bool evict, string? extraFactory) {
-        using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()))) {
             using BranchCheckout state = seed.CreateBranch("main", new HistoricalRoot { Value = 17 }, NoRebase);
             using BranchCheckout events = seed.CreateBranchFromEvent("events", new HistoricalRoot { Value = 29 }, NoRebase);
         }
@@ -164,8 +163,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     }
 
     private void SeedCompleteHistoricalSource() {
-        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
         using BranchCheckout branch = repository.CreateBranch("main", new Node(), NoRebase);
         GraphResources resources = Resources(repository);
         RepresentationId representation = resources.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(SharedReadModel.Schema)])[0];
@@ -175,13 +173,11 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(string.Empty)).Body);
         // Persist a legitimate complete graph with two historical Empty identities and
         // a high reachable ID which becomes unreachable only after normalization.
-        FrameAddress revision = resources.States.AppendDurably(StateRevision.CreateObjectHeadMapBase(branch.StateRevisionAddress,
-            [Durable(1, new State(100, 100, 9, 7)), Empty(3), Empty(9), Durable(100, new State(0, 0, 0, 8))], []));
-        HistoryJournal history = Field<HistoryJournal>(repository, "_history");
-        var reference = history.Journal.OpenBranch("main").Unwrap();
-        var prior = history.Journal.GetHead(reference);
-        var head = history.Append(GraphFrameKind.State, revision, new(1), prior);
-        history.Journal.AdvanceRef(reference, prior, head).Unwrap();
+        FrameAddress prior = branch.Head.RevisionAddress;
+        FrameAddress revision = resources.States.Append(StateRevision.CreateObjectHeadMapBase(branch.StateRevisionAddress,
+            [Durable(1, new State(100, 100, 9, 7)), Empty(3), Empty(9), Durable(100, new State(0, 0, 0, 8))], []),
+            GraphMetadataCodec.Encode(GraphFrameKind.State, prior, new(1)));
+        resources.PublishBranch("main", revision, out _);
     }
 
     private static StateModelRegistry HistoryModels(bool current, HistoryCounters counts, string? extraFactory = null) {
@@ -233,8 +229,8 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
 
     private static StateModelRegistry ProvenanceModels() {
         DurableSchema schema = new(SharedReadModel.Schema.SchemaId, 2, SharedReadModel.Schema.Fields.ToArray());
-        State Read(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()),
-            new(reader.ReadUInt32()), reader.ReadByte(), new(reader.ReadUInt32()));
+        State Read(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()),
+            new(reader.ReadVarUInt32()), reader.ReadByte(), new(reader.ReadVarUInt32()));
         void Visit(in State state, IStateReferenceVisitor visitor) {
             visitor.VisitDurable(state.Next, schema.SchemaId);
             visitor.VisitDurable(state.Alias, schema.SchemaId);
@@ -242,10 +238,10 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             visitor.VisitObject(state.Links, SharedReadModel.LinksType);
         }
         StateReaderBinding old = new StateReaderBinding<State>(SharedReadModel.Schema, Read,
-            (ref BinaryPayloadReader reader, in State prior) => Read(ref reader), Visit);
+            (ref BareValueReader reader, in State prior) => Read(ref reader), Visit);
         StateReaderBinding current = new StateReaderBinding<State>(schema, Read,
-            static (ref BinaryPayloadReader reader, in State prior) => prior with {
-                Text = new(reader.ReadUInt32()), Value = reader.ReadByte(),
+            static (ref BareValueReader reader, in State prior) => prior with {
+                Text = new(reader.ReadVarUInt32()), Value = reader.ReadByte(),
             }, Visit);
         StateModelRegistry registry = new();
         registry.Register(new StateModelBinding<Node, State>(new(schema, SharedReadModel.Base,
@@ -255,8 +251,8 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
                 Assert.Equal(prior.Alias, next.Alias);
                 Assert.Equal(prior.Links, next.Links);
                 ArrayBufferWriter<byte> bytes = new();
-                BinaryPayloadWriter writer = new(bytes);
-                writer.WriteUInt32(next.Text.Value);
+                BareValueWriter writer = new(bytes);
+                writer.WriteVarUInt32(next.Text.Value);
                 writer.WriteByte(next.Value);
                 return new(true, bytes.WrittenSpan);
             }), [old, current], static row => row.GetState<State>() with { Next = default, Alias = default },
@@ -289,12 +285,12 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         sourceReaderResolver: context.ResolveReader);
 
     private static StateReaderBinding Reader<T>(DurableSchema schema, Func<int, T> create) where T : unmanaged => new StateReaderBinding<T>(schema,
-        (ref BinaryPayloadReader reader) => create(reader.ReadInt32()),
-        (ref BinaryPayloadReader reader, in T prior) => create(reader.ReadInt32()), static (in T _, IStateReferenceVisitor _) => { });
+        (ref BareValueReader reader) => create(reader.ReadVarInt32()),
+        (ref BareValueReader reader, in T prior) => create(reader.ReadVarInt32()), static (in T _, IStateReferenceVisitor _) => { });
     private static PreparedBaseBody Body(int value) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteInt32(value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarInt32(value);
         return new(bytes.WrittenSpan);
     }
     private static void FirstUpgrade(in OldState prior, out MiddleState next, UpgradeContext _) => next = new(new(prior.Value));

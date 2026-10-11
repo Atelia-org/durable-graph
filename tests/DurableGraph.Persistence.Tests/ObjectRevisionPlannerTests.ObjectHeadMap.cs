@@ -2,8 +2,8 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -42,7 +42,7 @@ public sealed partial class ObjectRevisionPlannerTests {
         Assert.Equal(new[] { first, parent, baseAt },
             store.ReadObjectVersionChain(baseAt, 1).Records.Select(row => row.ContainingRevisionAddress));
         Assert.Equal(1000, store.ReadLiveObjectHeadMap(parent).Count);
-        if (rollover) { Assert.True(baseAt.FileNumber > parent.FileNumber); }
+        Assert.NotEqual(baseAt, parent);
 
         PreparedObjectRevision next = Plan(store, baseAt, [
             PreparedObject.Compared(new(1), baseAt, Base(100), new(true, [6])),
@@ -58,7 +58,7 @@ public sealed partial class ObjectRevisionPlannerTests {
     [InlineData(-1, ObjectHeadMapKind.Delta)]
     [InlineData(0, ObjectHeadMapKind.Delta)]
     [InlineData(1, ObjectHeadMapKind.Base)]
-    public void Selection_requires_strict_saving_against_worst_case_file_distance(int extraRemoved, ObjectHeadMapKind expected) {
+    public void Selection_requires_strict_saving_against_fixed_address_width(int extraRemoved, ObjectHeadMapKind expected) {
         using SegmentStore segments = NewStore();
         using StateRevisionStore store = new(segments);
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapBase(null,
@@ -66,11 +66,10 @@ public sealed partial class ObjectRevisionPlannerTests {
         // All IDs and counts fit one byte. Measure the Base suffix with the actual
         // primitive writer, independently of the planner's varint size calculation.
         ArrayBufferWriter<byte> upper = new();
-        BinaryPayloadWriter writer = new(upper);
-        writer.WriteUInt32(1); // One external head.
-        writer.WriteUInt32(1); // Its ObjectId.
-        writer.WriteUInt32(uint.MaxValue); // Maximum encoded backward file distance.
-        writer.WriteUInt64(parent.FrameTicket.Serialize());
+        BareValueWriter writer = new(upper);
+        writer.WriteVarUInt32(1); // One external head.
+        writer.WriteVarUInt32(1); // Its ObjectId.
+        WriteAddress(writer, parent);
         int removedCount = upper.WrittenCount - 1 + extraRemoved;
         var rows = new List<PreparedObject> { PreparedObject.Unchanged(new(1), parent, new([1])) };
         rows.AddRange(Enumerable.Range(2, 99 - removedCount)
@@ -116,8 +115,7 @@ public sealed partial class ObjectRevisionPlannerTests {
     }
 
     private static int PayloadLength(SegmentStore segments, FrameAddress address) {
-        using RbfSegmentReaderLease reader = segments.OpenReader(address.FileNumber);
-        using RbfPooledFrame frame = reader.File.ReadPooledFrame(address.FrameTicket).Unwrap();
-        return frame.PayloadAndMeta.Length;
+        using FrameRead frame = segments.ReadFrame(address).Unwrap();
+        return frame.Payload.Length;
     }
 }

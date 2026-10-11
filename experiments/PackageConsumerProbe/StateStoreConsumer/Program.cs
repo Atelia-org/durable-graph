@@ -3,9 +3,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace StateStorePackageConsumerProbe;
 
@@ -46,11 +44,9 @@ public sealed partial class Character : NamedObject {
 
     internal static void Exercise(string directory) {
         string repositoryPath = Path.Combine(directory, "character");
-        string schemaPath = Path.Combine(repositoryPath, "schemas.rbf");
-        string statePath = Path.Combine(repositoryPath, "state");
         FrameAddress firstRevision, secondRevision;
         ObjectId characterId, stringId;
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+        const long options = 1024 * 1024;
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
@@ -75,24 +71,23 @@ public sealed partial class Character : NamedObject {
             Require(((Character)pair.First)._score == 7 && ((Character)pair.Second)._score == 8, "Event/State pair lost selected values.");
         }
         // Inspect exact payload and registration behavior after closing the facade's writer.
-        using (var schemaFile = RbfFile.OpenExisting(schemaPath)) {
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources resources = GraphResources.OpenExisting(repositoryPath)) {
+            SchemaStore schemas = resources.Schemas;
             Require(schemas.Count == 2 && schemas.GetRequired(Schema.SchemaId, 1).BaseSchema!.Equals(NamedObject.Schema),
                 "Ancestor closure registration failed.");
-            long registeredLength = new FileInfo(schemaPath).Length;
+            long registeredLength = ProbeArtifacts.DataLength(repositoryPath);
             schemas.RegisterBatch([Schema]);
-            Require(new FileInfo(schemaPath).Length == registeredLength, "Idempotent registration appended bytes.");
+            Require(ProbeArtifacts.DataLength(repositoryPath) == registeredLength, "Idempotent registration appended bytes.");
             bool rejected = false;
             try { schemas.RegisterBatch([new DurableSchema("package.unpublished", 1, []), new DurableSchema(Schema.SchemaId, 1, [])]); }
             catch (SchemaConflictException) { rejected = true; }
-            Require(rejected && schemas.Count == 2 && new FileInfo(schemaPath).Length == registeredLength,
+            Require(rejected && schemas.Count == 2 && ProbeArtifacts.DataLength(repositoryPath) == registeredLength,
                 "Schema conflict must reject the complete batch before append.");
         }
 
-        using var coldSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
-        SchemaStore coldSchemas = new(coldSchemaFile, readOnly: true);
-        using SegmentStore coldSegments = SegmentStore.OpenReadOnlyExisting(statePath, options);
-        using StateRevisionStore cold = new(coldSegments);
+        using GraphResources coldResources = GraphResources.OpenReadOnlyExisting(repositoryPath);
+        SchemaStore coldSchemas = coldResources.Schemas;
+        StateRevisionStore cold = coldResources.States;
         StateRevision first = cold.Read(firstRevision);
         stringId = new ObjectId(first.LocalObjectIds.Single(id => id != characterId.Value));
         Require(first.ParentRevisionAddress is null && first.LocalObjects.Count == 2 &&

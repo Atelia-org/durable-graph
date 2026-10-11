@@ -1,7 +1,6 @@
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -29,10 +28,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverse);
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], models.Snapshot(schemas));
         var leaf = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Leaf");
         var other = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Other");
@@ -132,6 +130,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using InheritanceBases;
         using InheritanceMiddle;
         namespace InheritanceApp;

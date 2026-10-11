@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077、DB-078-A/B/C、DB-079/080 与 DB-084 DG tag 已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-10-11；DB-077、DB-078-A/B/C、DB-079/080 与 DB-084 DG tag 已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -22,12 +22,12 @@
 [DB-086 新存储栈重构方案](../docs/design-branches/0086-new-storage-refactoring-plan.md) 已完成三角色、三轮
 [简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)，按最终代码简单性选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
 用户已取消全库重开确认/启动审计、旧数据保留与迁移；完整帧稳定、必要读取校验、两种 Parent、outcome/fault 与 mutable 隔离保持。
-产品仍使用旧 pin，尚未实施；下述能力/严格打开事实仍描述旧实现。下一步从方案 R0/R1 的真生成图纵切开始，不重建 strict preflight 或兼容壳。
+新栈产品代码与测试 fixture 已完成接线；源码整库构建和 2793 项回归通过，包消费验收正在收束。实际合同与验收只维护在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)，没有旧格式兼容模式。
 上游依据为 WSL `974fd47`，四项 API 复核与 XML 补强已完成；原始机制证据只查[DB-085](../docs/design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)。
 
 [DB-084 DG tag 接入](../docs/design-branches/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
-不可变绑定由上游 EventJournal 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
-普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，严格重开按名字检查，不自动重试或修尾。
+不可变绑定现由上游 VersionStore 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
+普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，重开按名字检查实际结果，不自动重试。物理尾恢复由底座承担。
 准确公开包、故障与真实包证据集中于接入记录。下一步由下游固定书签/历史浏览/分叉续写的真实反馈选择产品增量。
 
 [DB-082 不可变叶复用](../docs/design-branches/0082-prepared-immutable-leaf-reuse-implementation.md) 已实现内部候选，默认保持关闭。
@@ -58,7 +58,7 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 081 不再作为必经工单；一般新 State 的 reader 完整证明需要先解决，不能以 Capture 或旧历史证书代替。
 无 State 请求绕过材料槽/实验叶表，优化关闭仍须正确；热提交准入未实施，叶实例复用只在内部实验开关下可用。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice.md) 已按准确公开 package/revision 接入；
-EventJournal/RbfSegmentStore 升至 0.1.2-preview.1，三个基础包仍 0.1.1-preview.2，逐包 pin 与覆盖规则见依赖指南。
+旧栈接入证据保留历史含义；当前 Binary/FS/VS 六包 pin 和源码入口见[依赖指南](../docs/storage-dependency.md)。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache.md) /
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions.md) 继续 **Draft / 尚待进一步修订**，不作为并行工单。
 
@@ -71,15 +71,10 @@ EventJournal/RbfSegmentStore 升至 0.1.2-preview.1，三个基础包仍 0.1.1-p
 同编译 enum/Nullable/递归 inline 与显式 readonly 字段的 record；record 全部隐式 backing、物化为隐式实例字段的主构造捕获、
 闭合泛型、外部成员与 string/引用/Transient 仍 false；最终结构在每次 binding 创建时核对，失败仅失去资格。
 
-存储依赖已改为独立 `atelia-storage` 的版本包与显式源码联调。
-版本/来源 pin 统一记录在 [StorageDependency.props](../eng/StorageDependency.props)。
-本地固定来源准备、包/源码引用图、934 项存储/持久化测试、EventHistory/recovery 包 probes
-及冻结旧存档的冷读→续写→再冷读已通过；完整 2668 项测试通过于此前本地 `0.1.1-dev.20260913.2` 候选。
-P5 公开包下载、签名与 Source Link、私有缓存下的完整构建/Storage 202 项、EventHistory/recovery probes 和旧数据冷进程验证已通过。
-版本与源码 commit 以 pin 为唯一权威；五个存储包已发布到 nuget.org，DG 自身四包仍由本仓按需生成。
-日常 build/test 直接从 nuget.org restore；Prepare 仅为独立 probes 下载公开 nupkg，不再 clone 或重打存储包。
-普通构建、显式源码联调及本地开发包的独立 NuGet 配置统一见[存储依赖指南](../docs/storage-dependency.md)；
-本片只改交付接线，不改变下述存储格式、恢复和产品能力。
+存储依赖采用独立 atelia-storage 的六包候选或显式源码联调，准确版本/来源以
+[StorageDependency.props](../eng/StorageDependency.props)为准。当前候选未公开发布，日常源码施工须显式指定 source mode；
+包模式使用完整本地 feed 和独立配置，不回退旧包，不推定 sibling HEAD 行为。
+源码只用于 build/test，pack 必须消费准确存储包并使用独立 DG 版本；流程集中于[依赖指南](../docs/storage-dependency.md)。
 
 [DB-071：程序集与命名空间组织](../docs/design-branches/0071-assembly-namespace-organization-review.md) 已实施：
 七项目依赖保持；底层包为 Serialization/Storage，上层为 Persistence，主程序集内分根/Schema/Runtime。
@@ -96,7 +91,7 @@ P5 公开包下载、签名与 Source Link、私有缓存下的完整构建/Stor
 已验证的 head/H 随 DTO 基线增量推进，受控热保存免除旧对象链重复读取；精确 payload、Event/State 与失败边界保持。
 独立审阅、前后测量、源码回归与真实包验证已通过。
 下一步按真实长轨迹反馈评估 map 回溯与全量 Base 准备，重访条件见路线图，测量证据仅保留在本片。
-普通 State 已加入[目录 Base 选择](../docs/research/object-head-map-base-feasibility.md)：仅当完整目录尾部的保守字节上界
+普通 State 已加入[目录 Base 选择](../docs/research/object-head-map-base-feasibility.md)：仅当完整目录尾部的精确字节成本
 严格小于 Remove 列表时切换；保留精确 Parent、对象内容决策与基线安装，Event 仍用独立目录 Base。
 
 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md) 已贯通：
@@ -132,9 +127,9 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 统一闭合目录与 Base v4 ID 头；完整 stored/current 引用验证、两阶段恢复；非泛型 Repository、Event-first/自由 E/S、跨类型 State、分支/Move/Checkout 与严格只读浏览；操作内 exact 解码缓存、显式 ReadPair 引用闭包共享、可写恢复隔离；升级 Base/Remove、已提交基线 head/H 增量维护 | 联合 Store 视图、更强恢复保证与有测量依据的读取优化另行排期 |
-| [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | AppendDurably 原 lease 屏障；local Base/Delta records、wire v3、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base 精确/Delta 上界计量；真实 Segment/RBF 冷重开；有界 owned frame/map LRU、双数组只读地址字典与 local-record 二分 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；缓存预算约束估算驻留量，不约束总堆或操作峰值 |
-| [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 字节原语、string 内容 codec、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot、早期元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 统一闭合目录与 Base v4 ID 头；完整 stored/current 引用验证、两阶段恢复；非泛型 Repository、Event-first/自由 E/S、跨类型 State、分支/Move/Checkout 与只读浏览；操作内 exact 解码缓存、显式 ReadPair 引用闭包共享、可写恢复隔离；升级 Base/Remove、已提交基线 head/H 增量维护 | 联合 Store 视图、更强恢复保证与有测量依据的读取优化另行排期 |
+| [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 借入共享 FrameStore，Append 候选并由 VS 发布确认；local Base/Delta records、wire v4、opaque 12B links、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base/Delta 精确计量；有界 owned frame/map LRU、双数组只读地址字典与 local-record 二分 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；缓存预算约束估算驻留量，不约束总堆或操作峰值 |
+| [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：
 
@@ -145,9 +140,9 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
 - Guid/decimal/TimeSpan 为内建值叶子，tag 19/20/21；DTO 直接存 CLR 值，无独立 Schema/对象行。
   Guid 固定 16-byte big-endian，decimal 公开四字固定 16-byte little-endian，TimeSpan 复用有符号 Ticks varint。
   decimal 的 scale/符号零保留；普通/Family/Runtime 共用静态完整表示比较。Dictionary 默认 ScalarDefault，
-  数值相等但表示不同的真实 key 替换产生 Remove+Add。既有 SCB1 v2、Base/Storage/容器格式保持。
+  数值相等但表示不同的真实 key 替换产生 Remove+Add。SCB1 v2 目录语法保持；新存储 links 与 char 编码按 DB-086，不读取旧存档。
 - DateOnly/TimeOnly/DateTimeOffset 为内建叶子，tag 22/23/24；公开 DayNumber、日内 Ticks、clock Ticks + 整分钟 offset
-  使用 canonical varint，不读取本地时区或 CLR 私有布局。DateTimeOffset 普通/Family/Runtime 均用 EqualsExact；
+  写入使用最短 varint，读取接受 Bare 的有界合法冗余，不读取本地时区或 CLR 私有布局。DateTimeOffset 普通/Family/Runtime 均用 EqualsExact；
   Dictionary 默认仍按瞬间查找，真实换 offset key 为 Remove+Add，indexer 等价 key 不替换原 key。
   新 history v9，旧 v1–v8 保留原能力门槛/文件；DateTime 继续拒绝。详见 DB-058。
 - enum 显式标记 DurableType，支持同编译顶层 public/internal 声明及八种整数底层类型，不要求 partial。
@@ -251,17 +246,17 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
-- GraphResources 独立拥有 schemas.rbf/state/，严格只读打开不写盘、不修尾，不拥有业务 head。
+- GraphResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 VersionStore，保管唯一最新仓库根；只读不写盘、不修尾。
   GraphReader.ReadPair 各自 Decode/Normalize/验证后，在同 ID/head、current model/完整布局、未重写且有完整状态相等 proof 的候选中，
   沿反向引用剔除依赖非候选者；剩余只读闭包共享 Allocate/Hydrate，稳定环可整体复用，changed-child 会使 owner 分裂。
   string 直接复用同 key 的解码实例；不同 ID 的等值非空串不 intern。只读结果不导入可编辑基线。
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   WorldWorkspace.Stage(nextState) 发布后才安装原候选/新根；StageSnapshot 使用已提交 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State 的升级重写义务。
   快照 map Base 只列候选，保留实际 local Base/Delta 与 exact Parent external heads；后继 State 仍相对前 State；快照不为闭包外 State 成员编码 Removes。
-- Repository 独占 repository.lock，拥有 schemas.rbf/state/ 与 journal/；每分支最多一个活动 BranchCheckout，仓库操作串行。
+- Repository 拥有 GraphResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
   CreateBranch(initialState) / CreateBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
-  Journal Parent 指向提交前精确 Head；图 Parent 指向其自身或祖先中最近 State，无 State 时为 null。
+  业务 Parent 指向提交前精确 Head；Revision Parent 指向其自身或祖先中最近 State，无 State 时为 null。
   Checkout 保持精确 Head，只恢复最近 State 及完整来源；纯 Event 前缀交付 State=null、全新空 CaptureSession。
   Fork 在完整 guard 内占用新名字、恢复并构造工作副本后才发布 ref，不追加历史图；源副本可保持存活，未提交修改不参与。
   不同恢复的 mutable 图独立，完整身份与保存来源保持；普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查。
@@ -269,15 +264,15 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   既有 State 损坏或缺模型能力会失败，不回退旧 State 或假装无 State。事件内容由应用显式 ReadEvent。
   State 根按实际模型选择，可跨类型替换，成功后安装原实例；已有 child 升根、旧 root 降为 child 保持 ID，不可达成员退出目录。
   冷 Event-only 历史不导入 Event ID；不同 Revision 的对象数字 ID 可以重合，身份须在具体 Revision 内解释。
-  CheckpointAddress 由本次打开签发，相等性为 owner+Journal 位置；跨 repo/重开旧地址拒绝，裸 RevisionAddress 只作诊断。
+  CheckpointAddress 由本次打开签发，相等性为 owner+图帧位置；跨 repo/重开旧地址拒绝，裸 RevisionAddress 只作诊断。
   CreateTag/ResolveTag 使用上游独立于 branch 的不可变名称空间；同名一律拒绝，重开按名字签发新句柄，不要求领域模型。
   tag 不追加图、不改工作副本/准备槽；发布异常即使 NotPublished 也可能 fault，重开 ResolveTag 检查实际结果。
   ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 不占用编辑名，Move 只拒绝活动目标分支。
   ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
   EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。
-  提交按 Schema/State → Journal EventFrame → branch ref 的持久屏障发布，发布前准备安装，发布后不重新 Capture 或运行模型回调。
+  Schema 登记独立发布完整目录；图保存 append 一个 Revision/业务 meta 帧，由 VS 根发布执行 data-first 确认，发布后不重新 Capture 或运行模型回调。
   GraphCommitException 区分 NotPublished / Unknown / Published；NotPublished 也须检查 IsFaulted，故障后 dispose/reopen，无透明重试或领域修改回滚。
-  严格重开校验全部物理 Journal（含 orphan）、逻辑 Parent 与最近 State 图 Parent、引用 Revision/类型头及根成员；只读不创建、flush 或修尾。
+  重开只读必要根与所选 Schema；准备所选图时检查两种 Parent、完整内容和图语义。不启动全库/orphan 图审计；只读不创建、flush 或修尾。
   恢复保证仍限正常关闭、进程中止和明确 I/O 故障；无 OS crash/power loss、目录元数据或完整后缀外部删除检测保证。
 - 迁移壳可保留旧族 reader/Upgrade，退出 current World 可达闭包后不分配；仍完整验证 source 行。
   传统生成路径不为完全删除的族生成 reader；Family 路径可按 retained history 生成 state-only exact reader，
@@ -295,13 +290,13 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   List 匹配另用静态 StateEquals 试探，仅实际变化的配对调用子 PrepareDelta；浮点按位、decimal 按完整 GetBits、DateTimeOffset 按 EqualsExact、ObjectId 按值、inline 逐持久字段比较，忽略 padding。
   策略 D 还须计入对象 envelope，不能直接以裸 body 大小代替。
   PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
-  B 为完整 Base payload 精确值，D 仅对未定文件距离按 5 字节上界计量（超额 0..4）；H 仍是原记录实编码。
+  B/D 均为新对象记录的精确值，prior 固定12B；H 是实际读取记录的消费字节，合法冗余表示也按实际长度计入。
   ApplyDeltaBodyVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
-- SchemaStore 借用独占的专用 IRbfFile，`schemas.rbf` 只接受 SCB1 v2 的统一闭合目录批次，拒绝 v1 与旧 SGB1/RPB1。
+- SchemaStore 借用 GraphResources 的共享 data 与根发布入口，仅读取根选中的一个 SCB1 v2 完整闭合目录快照，不扫描或收养 orphan。
   class Schema 记录本身就是对象表示；inline Schema、数组、List 与 Dictionary 共用从 2 起连续单调的 UInt32 编号，0 无效、1 固定 string。
   inline 编号只作为元数据依赖，不能用于对象 Base。编号不回收、不跨仓库解释；shape/对象实例不属于表示身份。
   SchemaKey 为派生查询/冲突索引，不单独编码；Count 只统计用户 Schema，含 inline。完整闭包检查不能因已有 ID 而跳过。
-  全部输入、完整 base/inline 闭包、名义 kind/arity、ID/单帧容量预检后，一次追加/flush，最后安装全部索引并交付 ID；幂等登记不追加。
+  全部输入、完整 base/inline 闭包、名义 kind/arity、ID/单帧容量预检后，一次快照追加/VS 根发布，最后安装全部索引并交付 ID；幂等登记不追加。
   exact base/inline 使用先前节点 ID，按依赖顺序恢复；字段 tag15 引用仍携带 closed Named/Array/List/Dictionary TargetType，
   不绑定目标版本或形成 exact 注册依赖，nominal 自环/互环允许。Schema DAG depth≤256，数组外壳不额外占深度。
   List 使用目录 kind=4、nominal 构造码=8；数组/List 的 exact inline 元素外壳不增加 Schema DAG 深度。
@@ -309,8 +304,8 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
   字段 tag 1–16 不变，history-only 参数 tag=17，Nullable tag=18/nominal 构造码=9；
   Nullable 内部 inline 依赖仍用先前目录 ID，不新增独立 Nullable 目录行。ValueSchema 统一暴露包装内依赖，exact DAG 深度不多算包装层。
   nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
-  严格重放全部帧/CRC；坏尾、tombstone、未知格式拒绝且不自动截断。写入不确定后 faulted，须重开；
-  可写非空重开先 flush 再交付，readonly 不确认新屏障。尚无 Schema 分段、联合版本目录或自动修复。
+  只校验根所选完整快照的 CRC/角色/语义；底座 normal recovery 与 lazy control open 不变。写入不确定后 faulted，须重开；
+  不重新 flush 全库。目录受单帧容量约束，无 Schema 增量链、分段或回退 reader。
 - Persistence 内部 BaseObjectBodyCodec 为 raw Base body 加 v4 类型头：格式版本 + canonical RepresentationId，返回 `EncodedBaseObjectBody`。
   统一经 SchemaStore 取得完整 ObjectLayout；string 固定 ID 可无目录解析。仅支持 v4，每个解码结果都有 RepresentationId，旧格式明确拒绝。
   State 类型头不再编码 SchemaKey/TypeExpr/数组元素描述，描述语法集中在目录一侧；当前 DTO/SG/body/history/Upgrade 合同不变。
@@ -330,10 +325,10 @@ Dictionary 读取的 canonical key 验证保持。ReadPair 的视图专属 Trans
 - Storage 的 ObjectHeadMap 与对象内容的 Base/Delta 独立组合。ReadObjectVersionChain 逐条核对
   prior 等于该记录 exact Parent Revision 选定的对象 head，要求 direct local record；Base 截断内容链，H 随之重置。
   Append 只预检直接 edge；完整 map 的 external heads 仍是浅声明，不认证全局实体历史。
-  ReadObjectBaseBody 仍只接受 Base head，不回退 parent 补内容；wire v3 拒绝 v1/v2。
+  ReadObjectBaseBody 仍只接受 Base head，不回退 parent 补内容；wire v4 拒绝旧版本。
   H 含 kind/prior/length/body，不含 ObjectId/membership/共享 Frame；不是总冷读 I/O。
   普通 Store 默认以 8 MiB 统一预算复用 owned Revision/完整 map，0 禁用驻留；Append 不 seed 读缓存。
-  冷链 H 来自 wire 读回；已提交基线可按实际文件范围精确增量计量，独立 chain/map 遍历统计用于保存成本归因。
+  冷链 H 来自 wire 读回；已提交基线按固定地址编码精确增量计量，独立 chain/map 遍历统计用于保存成本归因。
   Store.Dispose 释放缓存但不关闭借用底层，已交付值仍可读；使用纪律与验收见 [DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md)。
 - 数组对象支持 SZ/rank 2–4 与完整已有槽闭包：标量、string/class ID、inline/generic struct、递归数组。
   FrozenArrayState 拥有 shape 与元素 buffer；当前投影用静态 ref 循环，historical reader 不要求旧领域 struct CLR 类型。

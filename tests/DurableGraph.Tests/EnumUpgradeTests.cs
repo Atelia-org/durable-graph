@@ -1,9 +1,9 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
-using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -94,9 +94,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         registry.UseArrayElementUpgrades(rules);
         registry.UseListElementUpgrades(rules);
         using RawBaseDirectory files = new();
-        Directory.CreateDirectory(files.Path);
-        using var file = RbfFile.CreateNew(Path.Combine(files.Path, "schemas.rbf"));
-        SchemaStore schemas = new(file);
+        using GraphResources segments = GraphResources.CreateNew(files.Path);
+        SchemaStore schemas = segments.Schemas;
         StateBindingContext snapshot = registry.Snapshot(schemas);
         Type domain = assembly.GetType("CurrentMode")!;
         Type collection = array ? domain.MakeArrayType() : typeof(List<>).MakeGenericType(domain);

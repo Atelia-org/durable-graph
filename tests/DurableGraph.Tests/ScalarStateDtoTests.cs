@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
@@ -8,9 +9,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     // Independently specified wire bytes: signed integer bounds use ZigZag,
     // char preserves an isolated UTF-16 surrogate, and floats preserve their bits.
     private const string ScalarLowGolden =
-        "01FF80FFFF03FFFF03FFFFFFFF0FFFFFFFFF0FFFFFFFFFFFFFFFFFFF01FFFFFFFFFFFFFFFFFF0180B0030080000000800000000000000080";
+        "01FF80FFFF03FFFF03FFFFFFFF0FFFFFFFFF0FFFFFFFFFFFFFFFFFFF01FFFFFFFFFFFFFFFFFF0100D80080000000800000000000000080";
     private const string ScalarHighGolden =
-        "00007FFEFF0300FEFFFFFF0F00FEFFFFFFFFFFFFFFFF0100FFBF03357E4523C17FBC9A78563412F87F";
+        "00007FFEFF0300FEFFFFFF0F00FEFFFFFFFFFFFFFFFF0100FFDF357E4523C17FBC9A78563412F87F";
 
     [Fact]
     public void ScalarDtoCapturesAllKindsAndMatchesIndependentBoundaryAndFloatingBitGoldens() {
@@ -26,7 +27,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<int>([1, 5, 6, 7, 8, 2, 9, 3, 10, 11, 12, 13, 14],
             schema.Fields.Select(field => (int)field.TypeTag));
         string generated = GeneratedSource(run, "DurableStates.g.cs");
-        foreach (string method in new[] { "Boolean", "Byte", "SByte", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Char", "Half", "Single", "Double" }) {
+        foreach (string method in new[] { "Boolean", "Byte", "SByte", "VarInt16", "VarUInt16", "VarInt32", "VarUInt32", "VarInt64", "VarUInt64", "CharLE", "HalfLE", "SingleLE", "DoubleLE" }) {
             Assert.Contains("writer.Write" + method + "(", generated);
             Assert.Contains("reader.Read" + method + "()", generated);
         }
@@ -49,7 +50,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static byte[] Capture() {
                     var value = Leaf.__DurableState.Capture(new Leaf());
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Leaf.__DurableState.WriteBaseBody(ref writer, in value);
                     return buffer.WrittenSpan.ToArray();
                 }
@@ -204,9 +205,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var original = Item.__DurableState.Capture(domain);
                 domain.Mutate();
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Item.__DurableState.WriteBaseBody(ref writer, in original);
-                var reader = new BinaryPayloadReader(buffer.WrittenSpan);
+                var reader = new BareValueReader(buffer.WrittenSpan);
                 var value = Item.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 if (value.Segment0Field1 != original.Segment0Field1 || value.Segment0Field2 != original.Segment0Field2 ||
@@ -242,7 +243,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             public static byte[] RoundTripV1(byte[] bytes) {
-                var reader = new BinaryPayloadReader(bytes);
+                var reader = new BareValueReader(bytes);
                 var historical = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 if (historical.Segment1Field1 != 128u || historical.Segment0Field10 != '\uD800' ||
@@ -252,7 +253,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     throw new Exception("Historical scalar layout changed.");
                 }
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in historical);
                 return buffer.WrittenSpan.ToArray();
             }

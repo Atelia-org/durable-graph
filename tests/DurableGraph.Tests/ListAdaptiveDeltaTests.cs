@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -228,7 +229,7 @@ public sealed class ListAdaptiveDeltaTests {
 
     private static FrozenListState<TState> Apply<TState, TOps>(FrozenListState<TState> prior, PreparedDeltaBody delta,
         ListLayout layout) where TState : unmanaged where TOps : IStateOps<TState> {
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         FrozenListState<TState> result = ListStateBody<TState, TOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
         return result;
@@ -238,14 +239,14 @@ public sealed class ListAdaptiveDeltaTests {
         internal static int EqualCalls, BaseCalls, DeltaCalls;
         internal static void Reset() => EqualCalls = BaseCalls = DeltaCalls = 0;
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) { EqualCalls++; return left == right; }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int value, DurableFieldInfo slot) {
+        public static void WriteBase(ref BareValueWriter writer, in int value, DurableFieldInfo slot) {
             BaseCalls++; Int32StateOps.WriteBase(ref writer, in value, slot);
         }
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) {
             DeltaCalls++; return Int32StateOps.PrepareDelta(in prior, in current, slot);
         }
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in int value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 
@@ -253,27 +254,27 @@ public sealed class ListAdaptiveDeltaTests {
     // Its two widths provide an exact competing-plan tie without changing production search or encoding.
     private readonly struct FixedWidthOps : IStateOps<int> {
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int value, DurableFieldInfo slot) => Write(ref writer, value, 35);
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Read(ref reader, 35);
+        public static void WriteBase(ref BareValueWriter writer, in int value, DurableFieldInfo slot) => Write(ref writer, value, 35);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Read(ref reader, 35);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) {
             if (prior == current) { return new(false, []); }
             byte[] bytes = new byte[33];
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes, current);
             return new(true, bytes);
         }
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) {
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) {
             int result = Read(ref reader, 33);
             if (result == prior) { throw new InvalidDataException("A child patch must change its prior value."); }
             return result;
         }
         public static void VisitReferences(in int value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
 
-        private static void Write(ref BinaryPayloadWriter writer, int value, int width) {
+        private static void Write(ref BareValueWriter writer, int value, int width) {
             for (int index = 0; index < 4; index++) { writer.WriteByte((byte)((uint)value >> (index * 8))); }
             for (int index = 4; index < width; index++) { writer.WriteByte(0); }
         }
 
-        private static int Read(ref BinaryPayloadReader reader, int width) {
+        private static int Read(ref BareValueReader reader, int width) {
             uint value = 0;
             for (int index = 0; index < 4; index++) { value |= (uint)reader.ReadByte() << (index * 8); }
             for (int index = 4; index < width; index++) {

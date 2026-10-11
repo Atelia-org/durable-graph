@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Runtime;
@@ -29,7 +30,7 @@ public sealed class StringReadTable {
                 throw new InvalidDataException("String object IDs must be nonzero and unique.");
             }
 
-            BinaryPayloadReader reader = new(body.Span);
+            BareValueReader reader = new(body.Span);
             string value = reader.ReadString();
             reader.EnsureFullyConsumed();
             AddDecoded(strings, nonemptyInstances, id, value);

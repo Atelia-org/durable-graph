@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -48,7 +49,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     CurrentBase.__DurableState.RegisterReaders(readers);
                 }
                 public static byte[] Historical() {
-                    var reader = new BinaryPayloadReader(new byte[] { 0x21, 0x03 });
+                    var reader = new BareValueReader(new byte[] { 0x21, 0x03 });
                     var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
                     return Leaf.__DurableState.PrepareBaseBody(in state).Body.ToArray();
@@ -106,10 +107,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         string generated = GeneratedSource(run, "DurableStates.g.cs");
         Assert.Contains("StateReaderBinding<V1> ReaderV1 = new(V1.Schema, ReadBaseBodyV1, ApplyDeltaBodyV1, VisitReferences);", generated);
-        Assert.Contains("writer.WriteInt32(value.Segment0Field1);", generated);
-        Assert.Contains("writer.WriteUInt32(value.Segment0Field2.Value);", generated);
-        Assert.Contains("reader.ReadInt32();", generated);
-        Assert.Contains("new global::Atelia.DurableGraph.ObjectId(reader.ReadUInt32())", generated);
+        Assert.Contains("writer.WriteVarInt32(value.Segment0Field1);", generated);
+        Assert.Contains("writer.WriteVarUInt32(value.Segment0Field2.Value);", generated);
+        Assert.Contains("reader.ReadVarInt32();", generated);
+        Assert.Contains("new global::Atelia.DurableGraph.ObjectId(reader.ReadVarUInt32())", generated);
         Assert.Contains("table.ResolveString(state.Segment0Field2);", generated);
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<", "Storage" }) {
             Assert.DoesNotContain(forbidden, generated);

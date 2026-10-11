@@ -1,5 +1,6 @@
 using System.Collections;
-using Atelia.Data;
+using Atelia.FrameStore;
+using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -135,5 +136,4 @@ public sealed class StateRevisionTests {
             null, [ObjectVersionRecord.CreateDelta(1, Parent, [])], []));
     }
 
-    private static FrameAddress Address(uint fileNumber, long offset) => new(fileNumber, SizedPtr.Create(offset, 32));
 }

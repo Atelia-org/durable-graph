@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -207,10 +208,10 @@ internal static class Whitebox {
     private readonly struct CountingOps : IStateOps<int> {
         internal static int Calls;
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) { Calls++; return left == right; }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher encoded payload.");
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher encoded payload.");
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher prepared payload.");
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static void VisitReferences(in int state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new InvalidOperationException();
     }
 }

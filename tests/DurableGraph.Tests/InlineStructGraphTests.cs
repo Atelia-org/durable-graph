@@ -2,8 +2,7 @@ using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -36,10 +35,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(originalWorld, 8, -1, false);
         }
 
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state")))
-        using (var schemaFile = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            using StateRevisionStore store = new(segments);
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        {
+            using StateRevisionStore store = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             StateRevision initial = store.Read(first);
             Assert.Equal(4, initial.LocalObjects.Count); // World, Child, two distinct equal strings; no value rows.
             Assert.All(initial.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
@@ -73,8 +72,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             reopenedNoChange = fixture.Commit(loaded);
             Assert.Same(world, fixture.World(loaded));
         }
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"))) {
-            using StateRevisionStore store = new(segments);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+            using StateRevisionStore store = new(segments.Data);
             Assert.Equal(removed, store.Read(reopenedNoChange).ParentRevisionAddress);
             Assert.Empty(store.Read(reopenedNoChange).LocalObjects);
             Assert.Empty(store.Read(reopenedNoChange).RemovedObjectIds);
@@ -100,8 +99,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(child, fixture.Child(world));
             fixture.Check(world, 7, 11, false);
         }
-        using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"));
-        using StateRevisionStore store = new(segments);
+        using GraphResources segments = GraphResources.OpenExisting(directory.Path);
+        using StateRevisionStore store = new(segments.Data);
         Assert.Equal(first, store.Read(retry).ParentRevisionAddress);
         Assert.Empty(store.Read(retry).LocalObjects);
         Assert.Empty(store.Read(retry).RemovedObjectIds);
@@ -111,15 +110,12 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void InlineStructPreparedCandidateDoesNotFollowLaterDomainSlotOrReferencedObjectMutations() {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
         FrameAddress first;
         ObjectId worldId;
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path))
-        using (var schemaFile = RbfFile.CreateNew(schemaPath)) {
-            using StateRevisionStore store = new(segments);
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path))
+        {
+            using StateRevisionStore store = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             object world = fixture.NewWorld();
             FixturePreparedWorldRevision frozen = fixture.PrepareNew(store, schemas, world);
             worldId = frozen.WorldId;
@@ -128,10 +124,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Detach(world);
             first = store.Append(frozen.Revision);
         }
-        using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path))
-        using (var schemaFile = RbfFile.OpenExisting(schemaPath)) {
-            using StateRevisionStore store = new(segments);
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        {
+            using StateRevisionStore store = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             fixture.Check(fixture.LoadOld(store, schemas, first, worldId), 7, 11, true);
             Assert.Equal(4, store.ReadLiveObjectHeadMap(first).Count);
         }
@@ -143,12 +139,9 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void InlineStructStoredDeepReferenceValidationRejectsMissingOrWrongKindTarget(bool wrongKind) {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
-        using var schemaFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "schemas.rbf"));
-        using StateRevisionStore store = new(segments);
-        SchemaStore schemas = new(schemaFile);
+        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using StateRevisionStore store = new(segments.Data);
+        SchemaStore schemas = segments.Schemas;
         FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.NewWorld());
         ObjectVersionRecord owner = Assert.Single(initial.Revision.LocalObjects,
             record => record.ObjectId == initial.WorldId.Value);
@@ -211,6 +204,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace InlineGraph;
 
         [DurableType("inline.graph.leaf", 1)]

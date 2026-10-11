@@ -5,14 +5,14 @@ using System.Runtime.CompilerServices;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class WorldWorkspaceTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-workspace-{Guid.NewGuid():N}");
-    private readonly IRbfFile _file;
+    private readonly GraphResources _file;
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
@@ -24,9 +24,9 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
 
     public WorldWorkspaceTests() {
         Directory.CreateDirectory(_root);
-        _file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_file);
-        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _file.Schemas;
+        _segments = _file.Data;
         _store = new(_segments);
     }
 
@@ -137,7 +137,7 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         instance.Value = 6;
         instance.Text = new string('z', 1);
         using PreparedWorldSave changed = workspace.Stage(NoRebase);
-        Assert.Equal(ObjectVersionKind.Delta, changed.Revision.LocalObjects.Single(row => row.ObjectId == 1).Kind);
+        Assert.Equal(ObjectVersionKind.Base, changed.Revision.LocalObjects.Single(row => row.ObjectId == 1).Kind);
         Assert.Contains(101u, changed.Revision.LocalObjectIds);
         Assert.Same(instance, workspace.World);
         Install(changed);
@@ -179,8 +179,8 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
             static (in NodeState state) => NodeBase(state),
             static (in NodeState prior, in NodeState next) => new(prior != next, NodeBase(next).Body));
         StateReaderBinding<NodeState> reader = new(schema,
-            static (ref BinaryPayloadReader bytes) => new(bytes.ReadUInt32(), bytes.ReadByte()),
-            static (ref BinaryPayloadReader bytes, in NodeState prior) => new(bytes.ReadUInt32(), bytes.ReadByte()),
+            static (ref BareValueReader bytes) => new(bytes.ReadVarUInt32(), bytes.ReadByte()),
+            static (ref BareValueReader bytes, in NodeState prior) => new(bytes.ReadVarUInt32(), bytes.ReadByte()),
             VisitNode);
         StateModelBinding<Node, NodeState> model = new(preparation, [reader],
             static row => row.GetState<NodeState>(),
@@ -249,8 +249,8 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
     private static void VisitNode(in NodeState state, IStateReferenceVisitor visitor) => visitor.VisitDurable(state.NextId, "Node");
     private static PreparedBaseBody NodeBase(NodeState state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.NextId.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.NextId.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
@@ -290,8 +290,8 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
             (in State state) => { beforePrepare?.Invoke(); return Base(state); },
             static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding<State> Reader(DurableSchema schema) => new(schema,
-            (ref BinaryPayloadReader reader) => { onRead?.Invoke(); return Read(ref reader); },
-            static (ref BinaryPayloadReader reader, in State prior) => Apply(ref reader, prior), Validate);
+            (ref BareValueReader reader) => { onRead?.Invoke(); return Read(ref reader); },
+            static (ref BareValueReader reader, in State prior) => Apply(ref reader, prior), Validate);
         StateReaderBinding[] readers = currentSchema.Equals(oldSchema)
             ? [Reader(currentSchema)] : [Reader(oldSchema), Reader(currentSchema)];
         return new StateModelBinding<TWorld, State>(preparation, readers,
@@ -330,37 +330,34 @@ public sealed partial class WorldWorkspaceTests : IDisposable {
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(state.Value);
-        writer.WriteUInt32(state.TextId.Value);
-        writer.WriteUInt32(state.AliasId.Value);
-        writer.WriteUInt64(state.Sequence);
+        writer.WriteVarUInt32(state.TextId.Value);
+        writer.WriteVarUInt32(state.AliasId.Value);
+        writer.WriteVarUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt64());
+    private static State Read(ref BareValueReader reader) => new(reader.ReadByte(), reader.ReadVarUInt32(), reader.ReadVarUInt32(), reader.ReadVarUInt64());
     private static PreparedDeltaBody Delta(State prior, State next) {
         byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0) | (prior.Sequence != next.Sequence ? 8 : 0));
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(mask);
         if ((mask & 1) != 0) writer.WriteByte(next.Value);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId.Value);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId.Value);
-        if ((mask & 8) != 0) writer.WriteUInt64(next.Sequence);
+        if ((mask & 2) != 0) writer.WriteVarUInt32(next.TextId.Value);
+        if ((mask & 4) != 0) writer.WriteVarUInt32(next.AliasId.Value);
+        if ((mask & 8) != 0) writer.WriteVarUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
-    private static State Apply(ref BinaryPayloadReader reader, State prior) {
+    private static State Apply(ref BareValueReader reader, State prior) {
         byte mask = reader.ReadByte();
         if (mask == 0 || mask > 15) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
-            (mask & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId,
-            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId,
-            (mask & 8) != 0 ? reader.ReadUInt64() : prior.Sequence);
+            (mask & 2) != 0 ? new ObjectId(reader.ReadVarUInt32()) : prior.TextId,
+            (mask & 4) != 0 ? new ObjectId(reader.ReadVarUInt32()) : prior.AliasId,
+            (mask & 8) != 0 ? reader.ReadVarUInt64() : prior.Sequence);
     }
-    private long Tail() {
-        using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();
-        return writer.File.TailOffset;
-    }
+    private long Tail() => DataBytes(_segments);
     public void Dispose() {
         _store.Dispose();
         _file.Dispose();

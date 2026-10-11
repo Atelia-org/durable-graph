@@ -2,7 +2,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -27,10 +27,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = assembly.GetType("Host")!.GetMethod("LoadAndSave")!
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         Assert.Equal(1, assembly.GetType("R")!.GetField("Upgrades")!.GetValue(null));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using StateRevisionStore states = new(segments.Data);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(states.Read(addresses[0]).LocalObjects).Kind);
-        Assert.Equal(ObjectVersionKind.Delta, Assert.Single(states.Read(addresses[1]).LocalObjects).Kind);
+        // Fixed 12B prior links make a complete Base cheaper for this small updated record.
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(states.Read(addresses[1]).LocalObjects).Kind);
         Assert.Empty(states.Read(addresses[2]).LocalObjects);
     }
 
@@ -62,11 +63,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] saved = currentHost.GetMethod("LoadAndSave")!
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using StateRevisionStore states = new(segments.Data);
         Assert.Empty(states.Read(saved[0]).LocalObjects); // Same layout needs neither Upgrade nor a replacement Base.
         ObjectVersionRecord changed = Assert.Single(states.Read(saved[1]).LocalObjects);
-        Assert.Equal(ObjectVersionKind.Delta, changed.Kind);
+        // Preserve exact record/class semantics; the new address cost makes this write a Base.
+        Assert.Equal(ObjectVersionKind.Base, changed.Kind);
         Assert.Equal(Assert.Single(states.Read(original).LocalObjects).ObjectId, changed.ObjectId);
         Assert.Empty(states.Read(saved[2]).LocalObjects);
         DurableSchema before = EnumHistoryRegistry(priorAssembly).Snapshot().ResolveCurrentModel(priorAssembly.GetType("Leaf")!).CurrentSchema;
@@ -102,6 +104,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         """ + (record ? """
         [DurableType("Base",1)] public abstract partial record Base([field:DurableField(1)] int Number) : IDurableObject;
         [DurableType("Leaf",1)] public sealed partial record Leaf(int Number) : Base(Number) {
@@ -133,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     first=session.Commit(new(1000000,1));session.World.Amount=23;second=session.Commit(new(1000000,1));
                 }
                 using(var repo=FixtureGraphRepository.OpenExisting(path, Models()))using(var session=repo.Load<Leaf>()) {
-                    if(session.World.Number!=17 || session.World.Amount!=23)throw new Exception("record Delta layout");
+                    if(session.World.Number!=17 || session.World.Amount!=23)throw new Exception("record persisted layout");
                     third=session.Commit(new(1000000,1));
                 }
                 return new[]{first,second,third};
@@ -149,6 +152,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using F=Atelia.DurableGraph.Generated.Family_52;
         [DurableType("R",{{version}})] public sealed partial record R([field:DurableField(1)] {{(version == 1 ? "int" : "long")}} Amount) : IDurableObject {
             public static int Upgrades;
@@ -170,7 +174,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     first=session.Commit(new(1000000,1));session.World.Extra=3;second=session.Commit(new(1000000,1));
                 }
                 using(var repo=FixtureGraphRepository.OpenExisting(path, Models()))using(var session=repo.Load<R>()) {
-                    if(session.World.Amount!=17 || session.World.Extra!=3 || R.Upgrades!=1)throw new Exception("upgraded Delta");
+                    if(session.World.Amount!=17 || session.World.Extra!=3 || R.Upgrades!=1)throw new Exception("upgraded persisted record");
                     third=session.Commit(new(1000000,1));
                 }
                 return new[]{first,second,third};

@@ -3,9 +3,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -21,27 +19,24 @@ public sealed partial class DurableSchemaGeneratorTests {
         PreparedCapturedGraph input = session.Prepare(candidate);
 
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
-        using (SegmentStore created = SegmentStore.CreateNew(directory.Path)) { }
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(directory.Path))
-        using (var schemaFile = RbfFile.CreateNew(schemaPath)) {
-            SchemaStore schemas = new(schemaFile);
-            using StateRevisionStore store = new(segments);
-            var stateTail = ReadActiveTail(segments);
-            long emptySchemaTail = schemaFile.TailOffset;
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path))
+        {
+            SchemaStore schemas = segments.Schemas;
+            using StateRevisionStore store = new(segments.Data);
+            var stateTail = CountRevisionFrames(segments);
+            long emptySchemaTail = CountDataFrames(segments);
             var plan = CapturedRevisionPlanner.PrepareRevision(store, schemas, null, input, new(100, 100));
             Assert.Equal(3, schemas.Count); // Owner, Tag and Tag's exact ancestor.
-            Assert.True(schemaFile.TailOffset > emptySchemaTail);
-            Assert.Throws<InvalidOperationException>(() => store.Append(plan.Revision));
-            Assert.Equal(stateTail, ReadActiveTail(segments));
+            Assert.True(CountDataFrames(segments) > emptySchemaTail);
+            store.Dispose(); // Schema publication has succeeded; the State facade now rejects append definitely.
+            Assert.Throws<ObjectDisposedException>(() => store.Append(plan.Revision));
+            Assert.Equal(stateTail, CountRevisionFrames(segments));
             Assert.Null(session.Current);
             Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
             session.Discard(candidate);
         }
-        using var reopenedFile = RbfFile.OpenReadOnlyExisting(schemaPath);
-        SchemaStore reopened = new(reopenedFile, readOnly: true);
+        using GraphResources reopenedResources = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore reopened = reopenedResources.Schemas;
         Assert.Equal(3, reopened.Count);
         foreach (var row in input.Objects.Where(item => item.Current.Kind == ObjectStateKind.Durable)) {
             DurableSchema expected = row.Current.Schema!;
@@ -65,24 +60,21 @@ public sealed partial class DurableSchemaGeneratorTests {
         DurableSchema tag = input.Objects.Single(item => item.Current.Id == candidate.RootIds[3]).Current.Schema!;
 
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        using var schemaFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile);
+        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        SchemaStore schemas = segments.Schemas;
         schemas.RegisterBatch([new DurableSchema(tag.SchemaId, tag.Version, [], tag.BaseSchema)]);
-        long schemaTail = schemaFile.TailOffset;
+        long schemaTail = CountDataFrames(segments);
         int registered = schemas.Count;
-        using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
-        using StateRevisionStore store = new(segments);
-        var before = ReadActiveTail(segments);
+        using StateRevisionStore store = new(segments.Data);
+        var before = CountRevisionFrames(segments);
 
         Assert.Throws<SchemaConflictException>(() => {
             var plan = CapturedRevisionPlanner.PrepareRevision(store, schemas, null, input, new(100, 100));
             store.Append(plan.Revision);
             session.Accept(candidate);
         });
-        Assert.Equal(before, ReadActiveTail(segments));
-        Assert.Equal(schemaTail, schemaFile.TailOffset);
+        Assert.Equal(before, CountRevisionFrames(segments));
+        Assert.Equal(schemaTail, CountDataFrames(segments));
         Assert.Equal(registered, schemas.Count);
         Assert.Null(session.Current);
         Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
@@ -109,12 +101,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId ownerId = first.RootIds[0];
 
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        using var schemaFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile);
-        using SegmentStore segments = SegmentStore.CreateNew(directory.Path);
-        using StateRevisionStore store = new(segments);
+        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore store = new(segments.Data);
         var firstPlan = CapturedRevisionPlanner.PrepareRevision(store, schemas, null, initial, new(100, 100));
         FrameAddress parent = store.Append(firstPlan.Revision);
         session.Accept(first);
@@ -149,8 +138,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                     [ObjectVersionRecord.CreateBase(ownerId.Value, differentType.Body)], []));
                 break;
         }
-        long schemaTail = schemaFile.TailOffset;
-        var stateTail = ReadActiveTail(segments);
+        long schemaTail = CountDataFrames(segments);
+        var stateTail = CountRevisionFrames(segments);
         Exception error = Assert.ThrowsAny<Exception>(() => {
             var plan = CapturedRevisionPlanner.PrepareRevision(store, schemas, selectedParent, input, new(1, 100));
             store.Append(plan.Revision);
@@ -158,8 +147,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         });
         if (mismatch is "kind" or "schema") Assert.IsType<InvalidDataException>(error);
         else Assert.IsType<ArgumentException>(error);
-        Assert.Equal(stateTail, ReadActiveTail(segments));
-        Assert.Equal(schemaTail, schemaFile.TailOffset);
+        Assert.Equal(stateTail, CountRevisionFrames(segments));
+        Assert.Equal(schemaTail, CountDataFrames(segments));
         Assert.Same(first, session.Current);
         Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
         Assert.Same(candidate, session.Prepare(candidate).Candidate);
@@ -168,13 +157,18 @@ public sealed partial class DurableSchemaGeneratorTests {
         // no redundant registration, and still does not install the candidate.
         var retry = CapturedRevisionPlanner.PrepareRevision(store, schemas, parent, session.Prepare(candidate), new(100, 100));
         Assert.Empty(retry.Revision.LocalObjects);
-        Assert.Equal(schemaTail, schemaFile.TailOffset);
+        Assert.Equal(schemaTail, CountDataFrames(segments));
         Assert.Same(first, session.Current);
         session.Discard(candidate);
     }
 
-    private static (uint Segment, long Tail) ReadActiveTail(SegmentStore segments) {
-        using var lease = segments.OpenReader(segments.ActiveSegmentNumber);
-        return (lease.SegmentNumber, lease.File.TailOffset);
+    private static long CountRevisionFrames(GraphResources resources) {
+        long revisionFrames = 0;
+        resources.Data.Inventory(info => {
+            if (info.Tag == StateRevisionStore.FrameTag) { revisionFrames++; }
+        }).Unwrap();
+        return revisionFrames;
     }
+
+    private static long CountDataFrames(GraphResources resources) => resources.Data.Inventory(_ => { }).Unwrap();
 }

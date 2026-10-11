@@ -6,7 +6,7 @@ Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-TemporalScalarProbe.ps1
 ```
 
-Or reuse an nine-package feed built from the same sources:
+Or reuse a ten-package feed built from the same sources:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-TemporalScalarProbe.ps1 -PackageSource <feed> -Version <version>

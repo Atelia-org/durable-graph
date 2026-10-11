@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -180,7 +181,7 @@ internal static class FallbackChecks {
         PreparedDeltaBody delta = ListStateBody<int, Int32StateOps>.PrepareDelta(prior, current, Layout, planFactory: factory);
         bool changed = !oldValues.SequenceEqual(newValues);
         Require(delta.HasChanges == changed && planCalls == (changed ? 1 : 0), $"Incorrect HasChanges or plan invocation: {context}.");
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         FrozenListState<int> applied = ListStateBody<int, Int32StateOps>.ApplyDelta(ref reader, prior, Layout);
         reader.EnsureFullyConsumed();
         Require(applied.Elements.SequenceEqual(newValues) && prior.Elements.SequenceEqual(oldValues) && current.Elements.SequenceEqual(newValues),
@@ -199,10 +200,10 @@ internal static class FallbackChecks {
     private readonly struct CountingOps : IStateOps<int> {
         internal static int Calls;
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) { Calls++; return left == right; }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher encoded payload.");
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher decoded payload.");
+        public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher encoded payload.");
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher decoded payload.");
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher prepared payload.");
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher applied payload.");
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher applied payload.");
         public static void VisitReferences(in int state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new InvalidOperationException("Matcher visited references.");
     }
 }

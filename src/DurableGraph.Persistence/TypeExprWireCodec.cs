@@ -1,17 +1,17 @@
 using Atelia.DurableGraph.Schema;
-using Atelia.DurableGraph.Serialization;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Canonical closed nominal type expressions, without exact Schema versions.</summary>
 internal static class TypeExprWireCodec {
-    internal static void Write(ref BinaryPayloadWriter writer, TypeExpr type) {
+    internal static void Write(ref BareValueWriter writer, TypeExpr type) {
         ArgumentNullException.ThrowIfNull(type);
         if (!type.IsClosed) { throw new ArgumentException("Persisted type expressions must be closed.", nameof(type)); }
         WriteNode(ref writer, type);
     }
 
-    private static void WriteNode(ref BinaryPayloadWriter writer, TypeExpr type) {
+    private static void WriteNode(ref BareValueWriter writer, TypeExpr type) {
         writer.WriteByte((byte)type.Kind);
         if (type.Kind == TypeExprKind.Builtin) {
             writer.WriteByte((byte)type.BuiltinTag);
@@ -27,16 +27,16 @@ internal static class TypeExprWireCodec {
             return;
         }
         writer.WriteString(type.DefinitionId!);
-        writer.WriteUInt32((uint)type.Arguments.Length);
+        writer.WriteVarUInt32((uint)type.Arguments.Length);
         foreach (TypeExpr argument in type.Arguments) { WriteNode(ref writer, argument); }
     }
 
-    internal static TypeExpr Read(ref BinaryPayloadReader reader) {
+    internal static TypeExpr Read(ref BareValueReader reader) {
         int remainingNodes = TypeExpr.MaximumNodeCount;
         return ReadNode(ref reader, 1, ref remainingNodes);
     }
 
-    private static TypeExpr ReadNode(ref BinaryPayloadReader reader, int depth, ref int remainingNodes) {
+    private static TypeExpr ReadNode(ref BareValueReader reader, int depth, ref int remainingNodes) {
         if (depth > TypeExpr.MaximumDepth || --remainingNodes < 0) {
             throw new InvalidDataException("The type expression exceeds its depth or node limit.");
         }
@@ -66,7 +66,7 @@ internal static class TypeExprWireCodec {
         }
         string definitionId = reader.ReadString();
         if (string.IsNullOrWhiteSpace(definitionId)) { throw new InvalidDataException("A named type requires a nonblank definition identity."); }
-        uint arity = reader.ReadUInt32();
+        uint arity = reader.ReadVarUInt32();
         if (arity > TypeExpr.MaximumArity || arity > (uint)remainingNodes || arity > (uint)reader.RemainingCount / 2) {
             throw new InvalidDataException("Invalid type expression arity.");
         }

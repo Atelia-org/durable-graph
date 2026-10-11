@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Xunit.Abstractions;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
@@ -19,7 +19,7 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                 Node world = new() { Value = 1, Text = new string('x', 32), Links = [] };
                 for (byte i = 0; i < 16; i++) world.Links.Add(new() { Value = i, Text = world.Text });
                 world.Next = world.Alias = world.Links[0];
-                using (Repository repository = Repository.CreateNew(path, models, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+                using (Repository repository = Repository.CreateNew(path, models)) {
                     using BranchCheckout session = repository.CreateBranch("main", world, NoRebase);
                     for (int step = 0; step < 3; step++) {
                         session.CommitEvent(new Node { Value = 7 }, NoRebase);
@@ -65,7 +65,7 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     repository.Checkpoint = checkpoint => {
                         if (checkpoint == CommitCheckpoint.AfterPrepare) afterPrepare = Stamp.Now();
                         else if (checkpoint == CommitCheckpoint.BeforeStateAppend) beforeAppend = Stamp.Now();
-                        else if (checkpoint == CommitCheckpoint.AfterStateDurable) afterAppend = Stamp.Now();
+                        else if (checkpoint == CommitCheckpoint.AfterStateAppend) afterAppend = Stamp.Now();
                     };
                     Stamp start = Stamp.Now();
                     CheckpointAddress committed = session.CommitState(NoRebase);
@@ -76,7 +76,7 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     if (sample >= 0) Write(new { Kind = "product-write", Sample = sample,
                         OpenWritable = writableOpen.Cost, ResumeAfterOpen = resume.Cost,
                         PrepareIncludingEntryPreflight = Between(start, afterPrepare),
-                        StateAppendDurably = Between(beforeAppend, afterAppend),
+                        StateAppend = Between(beforeAppend, afterAppend),
                         CompleteStateCommit = Between(start, end), Checksum = nextExpected });
                 }
             } finally {

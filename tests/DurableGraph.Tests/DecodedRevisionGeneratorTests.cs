@@ -4,9 +4,7 @@ using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -56,16 +54,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
+        const long rotationThreshold = 128;
         FrameAddress first, second, third, newBase, missingString, wrongKind, malformed;
-        using (var schemaFile = RbfFile.CreateNew(schemaPath))
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+            SchemaStore schemas = segments.Schemas;
             schemas.RegisterBatch([oldSchema, currentSchema, otherSchema]);
-            using StateRevisionStore store = new(segments);
+            using StateRevisionStore store = new(segments.Data);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                 Durable(schemas, 1, oldSchema, original),
                 Durable(schemas, 2, currentSchema, [7, 8, 12]),
@@ -87,19 +81,19 @@ public sealed partial class DurableSchemaGeneratorTests {
             // ID 99 is last: all earlier objects have decoded before this trailing-byte error.
             malformed = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
                 [Durable(schemas, 99, otherSchema, [11, 18, 13, 0])], []));
+            segments.Data.ConfirmDurable();
         }
-        Assert.NotEqual(first.FileNumber, third.FileNumber);
+        Assert.NotEqual(first, third);
         Array.Clear(original);
         firstDelta = null!;
         secondDelta = null!;
         Dictionary<string, byte[]> diskBefore = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
-            .Append(schemaPath).ToDictionary(path => path, File.ReadAllBytes);
+            .ToDictionary(path => path, File.ReadAllBytes);
 
         DecodedRevision[] retained;
-        using (var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath))
-        using (SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options)) {
-            SchemaStore schemas = new(reopenedSchemaFile, readOnly: true);
-            using StateRevisionStore store = new(reopened);
+        using (GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+            SchemaStore schemas = reopened.Schemas;
+            using StateRevisionStore store = new(reopened.Data);
             StateReaderRegistry readers = register(true);
             retained = new[] { first, second, third, newBase }
                 .Select(address => RevisionDecoder.Read(store, schemas, address, readers)).ToArray();
@@ -117,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Null(delivered);
                 check(retained[2], 2);
             }
-            // The Schema log includes Other, but intentionally omit that code capability.
+            // The accepted SchemaSnapshot includes Other, but intentionally omit that code capability.
             // Missing ID 99's reader cannot fall back to the same-shaped historical Leaf DTO.
             StateReaderRegistry missingReader = register(false);
             DecodedRevision? partial = null;
@@ -129,7 +123,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         // Decoded DTOs and the identity table own their content beyond file/store lifetimes.
         for (int stage = 0; stage < retained.Length; stage++) check(retained[stage], stage);
         foreach ((string path, byte[] contents) in diskBefore) Assert.Equal(contents, File.ReadAllBytes(path));
-        Assert.Equal(diskBefore.Count - 1, Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories).Count());
+        Assert.Equal(diskBefore.Count, Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories).Count());
     }
 
     private static readonly string DecodedRevisionCurrentSource = FusedDeltaPreamble + """

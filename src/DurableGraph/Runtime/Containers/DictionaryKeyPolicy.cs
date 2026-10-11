@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
@@ -106,16 +107,16 @@ internal static class DictionaryKeyPolicy {
 
     internal static object ReadScalar(ReadOnlySpan<byte> encoded, DurableFieldInfo slot) {
         if (!TryScalarTag(slot, out TypeTag tag)) { throw new InvalidDataException("Unsupported scalar key representation."); }
-        BinaryPayloadReader reader = new(encoded);
+        BareValueReader reader = new(encoded);
         object result = tag switch {
             TypeTag.Boolean => reader.ReadBoolean(), TypeTag.Byte => reader.ReadByte(), TypeTag.SByte => reader.ReadSByte(),
-            TypeTag.Int16 => reader.ReadInt16(), TypeTag.UInt16 => reader.ReadUInt16(), TypeTag.Int32 => reader.ReadInt32(),
-            TypeTag.UInt32 => reader.ReadUInt32(), TypeTag.Int64 => reader.ReadInt64(), TypeTag.UInt64 => reader.ReadUInt64(),
-            TypeTag.Char => reader.ReadChar(), TypeTag.Half => reader.ReadHalf(), TypeTag.Single => reader.ReadSingle(),
-            TypeTag.Double => reader.ReadDouble(), TypeTag.Guid => reader.ReadGuid(),
-            TypeTag.Decimal => reader.ReadDecimal(), TypeTag.TimeSpan => reader.ReadTimeSpan(),
-            TypeTag.DateOnly => reader.ReadDateOnly(), TypeTag.TimeOnly => reader.ReadTimeOnly(),
-            TypeTag.DateTimeOffset => reader.ReadDateTimeOffset(),
+            TypeTag.Int16 => reader.ReadVarInt16(), TypeTag.UInt16 => reader.ReadVarUInt16(), TypeTag.Int32 => reader.ReadVarInt32(),
+            TypeTag.UInt32 => reader.ReadVarUInt32(), TypeTag.Int64 => reader.ReadVarInt64(), TypeTag.UInt64 => reader.ReadVarUInt64(),
+            TypeTag.Char => reader.ReadCharLE(), TypeTag.Half => reader.ReadHalfLE(), TypeTag.Single => reader.ReadSingleLE(),
+            TypeTag.Double => reader.ReadDoubleLE(), TypeTag.Guid => BclValueCodec.ReadGuid(ref reader),
+            TypeTag.Decimal => BclValueCodec.ReadDecimal(ref reader), TypeTag.TimeSpan => BclValueCodec.ReadTimeSpan(ref reader),
+            TypeTag.DateOnly => BclValueCodec.ReadDateOnly(ref reader), TypeTag.TimeOnly => BclValueCodec.ReadTimeOnly(ref reader),
+            TypeTag.DateTimeOffset => BclValueCodec.ReadDateTimeOffset(ref reader),
             _ => throw new InvalidDataException("Unsupported scalar key."),
         };
         reader.EnsureFullyConsumed();
@@ -123,8 +124,8 @@ internal static class DictionaryKeyPolicy {
     }
 
     internal static ObjectId ReadReference(ReadOnlySpan<byte> encoded) {
-        BinaryPayloadReader reader = new(encoded);
-        ObjectId id = new(reader.ReadUInt32());
+        BareValueReader reader = new(encoded);
+        ObjectId id = new(reader.ReadVarUInt32());
         reader.EnsureFullyConsumed();
         if (id.IsNull) { throw new InvalidDataException("Dictionary keys cannot be null."); }
         return id;

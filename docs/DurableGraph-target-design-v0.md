@@ -276,7 +276,7 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 使用多历史 Segment 地址与 BackwardFileDistance；rollover 是 soft threshold，
   不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
-- 普通 State 在对象内容决策之后选择目录表示：仅当目录 Base 的字节上界严格小于 Delta 的 Remove 列表时切换，
+- 普通 State 在对象内容决策之后选择目录表示：仅当目录 Base 的精确字节成本严格小于 Delta 的 Remove 列表时切换，
   否则保留 Delta。保留精确 Parent、本地对象记录与旧 head；不增加公开参数或新的 wire 格式，见[实现与验收](research/object-head-map-base-feasibility.md)。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
@@ -392,7 +392,7 @@ raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读
 当前公共基础为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`，
 具体交付范围见 [DB-078-A 实施记录](design-branches/0078-a-repository-free-history-implementation.md)。
 模型环境由每次 Open 固定，durable exact-current Normalize 保持值与身份恒等；实际根按每次 CLR 类型和持久 Schema 选择。
-工作副本同时拥有精确 Journal Head、可选 State 根及其冻结当前 DTO 比较基线、领域实例到 ObjectId 的绑定与分配状态；
+工作副本同时拥有精确业务 Head、可选 State 根及其冻结当前 DTO 比较基线、领域实例到 ObjectId 的绑定与分配状态；
 普通调用方不分别设置这些材料。仅受控加载和成功 State 提交推进其对应关系，Capture/Prepare/Accept 自身不等于持久 Commit。
 
 历史允许 Event-first 与任意连续 E/S。同一 CLR 类型可承担两种角色，E/S 不要求共同领域基类；每个持久图仍必须选择非空 durable 根。
@@ -429,7 +429,7 @@ ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅�
 图内 alias/cycle、ObjectId 与完整保存来源保持，不同恢复不共享 mutable 实例；调用方主动传入的外部别名仍自行负责。
 实际交付和失败验证见 [DB-078-C 记录](design-branches/0078-c-branch-checkout-fork-implementation.md)。
 
-历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与逻辑 Journal 位置判等；
+历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与图帧位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
 不可变tag的持久权威归上游发布底座，DG只创建和解析绑定；新方向由VersionStore承担，旧实现证据保留在[DB-084](design-branches/0084-eventjournal-immutable-tags-slice.md)。
 tag 与 branch 名称空间独立、同名一律拒绝；可定位 Event-first 历史，重开解析签发当前打开的地址，不物化图或修改分支。

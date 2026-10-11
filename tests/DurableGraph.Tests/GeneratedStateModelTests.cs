@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -100,7 +101,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static object State(int version) => version == 1
                     ? (object)new Item.__DurableState.V1(8) : new Item.__DurableState.V2(8, 2);
                 public static int ReadOld() {
-                    var reader = new Atelia.DurableGraph.Serialization.BinaryPayloadReader(new byte[] { 16 });
+                    var reader = new Atelia.Binary.BareValueReader(new byte[] { 16 });
                     return Item.__DurableState.ReadBaseBodyV1(ref reader).Segment0Field1;
                 }
             }
@@ -295,7 +296,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static StateModelBinding Model() => Item.__DurableState.Model;
                 public static object Old() {
-                    var reader = new Atelia.DurableGraph.Serialization.BinaryPayloadReader(new byte[] { 16 });
+                    var reader = new Atelia.Binary.BareValueReader(new byte[] { 16 });
                     return Item.__DurableState.ReadBaseBodyV1(ref reader);
                 }
             }

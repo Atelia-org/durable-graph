@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -41,14 +42,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var changed = source with { Number = 4 };
                     var current = Rec.__DurableProjection.Capture(in changed,context,slot);
                     var delta = States.BodyV1.PrepareDelta(in first,in current,schema);
-                    var deltaReader = new BinaryPayloadReader(delta.Body);
+                    var deltaReader = new BareValueReader(delta.Body);
                     var applied = States.BodyV1.Apply(ref deltaReader,in first,schema);
                     deltaReader.EnsureFullyConsumed();
                     if (!delta.HasChanges || !States.BodyV1.StateEquals(in applied,in current,schema)) return false;
                     if (!delta.Body.SequenceEqual(new byte[] {1,8})) return false;
                     var prepared = States.BodyV1.PrepareBase(in first,schema);
                     if (!prepared.Body.SequenceEqual(new byte[] {6,18})) return false;
-                    var reader = new BinaryPayloadReader(prepared.Body);
+                    var reader = new BareValueReader(prepared.Body);
                     var decoded = States.BodyV1.Read(ref reader,schema);
                     reader.EnsureFullyConsumed();
                     Rec restored = default;

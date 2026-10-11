@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -47,7 +48,7 @@ internal static class ProductDiagnostics {
             EqualityCalls++;
             return TOps.StateEquals(in left, in right, slot);
         }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in TState value, DurableFieldInfo slot) {
+        public static void WriteBase(ref BareValueWriter writer, in TState value, DurableFieldInfo slot) {
             BaseCalls++;
             TOps.WriteBase(ref writer, in value, slot);
         }
@@ -55,8 +56,8 @@ internal static class ProductDiagnostics {
             DeltaCalls++;
             return TOps.PrepareDelta(in prior, in current, slot);
         }
-        public static TState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => TOps.ReadBase(ref reader, slot);
-        public static TState ApplyDelta(ref BinaryPayloadReader reader, in TState prior, DurableFieldInfo slot) =>
+        public static TState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => TOps.ReadBase(ref reader, slot);
+        public static TState ApplyDelta(ref BareValueReader reader, in TState prior, DurableFieldInfo slot) =>
             TOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in TState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) =>
             TOps.VisitReferences(in state, visitor, slot);

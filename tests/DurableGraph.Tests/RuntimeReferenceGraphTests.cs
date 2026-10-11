@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -171,8 +172,8 @@ public sealed class RuntimeReferenceGraphTests {
             visitor.VisitDurable(state.Alias, aliasNominal ?? schemaId);
         }
         StateReaderBinding<NodeState> reader = new(schema,
-            static (ref BinaryPayloadReader body) => throw new NotSupportedException(),
-            static (ref BinaryPayloadReader body, in NodeState prior) => throw new NotSupportedException(), Visit);
+            static (ref BareValueReader body) => throw new NotSupportedException(),
+            static (ref BareValueReader body, in NodeState prior) => throw new NotSupportedException(), Visit);
         return new StateModelBinding<Node, NodeState>(preparation, [reader],
             static row => row.GetState<NodeState>(), static () => new Node(),
             static (Node node, in NodeState state, ObjectReadTable objects) => {

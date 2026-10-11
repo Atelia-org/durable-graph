@@ -100,7 +100,7 @@ One BranchCheckout performs its complete trace; no reopen happens between measur
 All first binding/JIT/publication warmups are separate. Algorithm order rotates between workloads,
 scales and repetitions. Edits and fingerprints are outside timing; the complete synchronous Commit
 includes a minimal independent marker Event followed by State, both captures, graph writes,
-and both Journal ref publication barriers. The marker has no World/List reference. The initial
+and both VS root publication barriers. The marker has no World/List reference. The initial
 step measures CreateBranch (S0); repository creation is Setup. Per-step payload counters and
 isolated Diff samples remain State-only. Report Measurement.Version is 2: whole-save timings
 and repository bytes are not directly comparable with the earlier publication.rbf reports.
@@ -133,9 +133,10 @@ Reports:
 - `summary.md`: concise comparison. Correctness is the only automatic gate; no performance winner
   or maximum cold-read latency is required.
 
-Object payload bytes exclude ObjectId, membership and shared frame overhead. State, Schema and
-Journal directory sizes (`JournalFileBytes`) are separately reported in each RunResult. State
-file totals include marker Event revisions; State per-step payload counts exclude them. Historical
+Object payload bytes exclude ObjectId, membership and shared frame overhead. Under DB-086,
+`DataFileBytes` sums shared data (Schema snapshots and Event/State graph frames), while
+`ControlFileBytes` sums VS control files. State per-step payload counts exclude marker Events.
+Measurement version 3 is not whole-save-comparable with the prior separate-file reports. Historical
 RESULTS/WHITEBOX reports retain their original measurement boundary. Candidate Delta sizes include
 NoChange bodies as preparation observations. Undo and child-only edits must leave List slot state
 unchanged and cannot produce a List Delta; the policy may still choose an ordinary Base rewrite

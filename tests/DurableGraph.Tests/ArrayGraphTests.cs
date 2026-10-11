@@ -1,8 +1,7 @@
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -35,10 +34,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(originalWorld, 2, true, true);
         }
 
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state")))
-        using (IRbfFile schemaFile = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            using StateRevisionStore states = new(segments);
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        {
+            using StateRevisionStore states = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             StateRevision initial = states.Read(first);
             Assert.All(initial.LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             Assert.Empty(states.Read(unchanged).LocalObjects);
@@ -85,8 +84,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             reopened = fixture.Commit(session);
             Assert.Same(world, fixture.World(session));
         }
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"))) {
-            using StateRevisionStore states = new(segments);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+            using StateRevisionStore states = new(segments.Data);
             Assert.Equal(removed, states.Read(reopened).ParentRevisionAddress);
             Assert.Empty(states.Read(reopened).LocalObjects);
             Assert.Empty(states.Read(reopened).RemovedObjectIds);
@@ -112,10 +111,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(array, fixture.Vector(world));
         }
 
-        using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"));
-        using IRbfFile schemaFile = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(schemaFile);
+        using GraphResources segments = GraphResources.OpenExisting(directory.Path);
+        using StateRevisionStore states = new(segments.Data);
+        SchemaStore schemas = segments.Schemas;
         ObjectVersionRecord delta = Assert.Single(states.Read(sparse).LocalObjects);
         ObjectVersionRecord replacementBase = Assert.Single(states.Read(dense).LocalObjects);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -143,15 +141,12 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedArrayPreparedStateOwnsElementsAndNestedInlineCopies() {
         ArrayGraphFixture fixture = CompileArrayGraph();
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
         FrameAddress first;
         ObjectId worldId;
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path))
-        using (IRbfFile schemaFile = RbfFile.CreateNew(schemaPath)) {
-            using StateRevisionStore states = new(segments);
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path))
+        {
+            using StateRevisionStore states = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             object world = fixture.NewWorld();
             FixturePreparedWorldRevision prepared = fixture.PrepareNew(states, schemas, world);
             worldId = prepared.WorldId;
@@ -161,10 +156,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Detach(world);
             first = states.Append(prepared.Revision);
         }
-        using (SegmentStore segments = SegmentStore.OpenExisting(directory.Path))
-        using (IRbfFile schemaFile = RbfFile.OpenExisting(schemaPath)) {
-            using StateRevisionStore states = new(segments);
-            SchemaStore schemas = new(schemaFile);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        {
+            using StateRevisionStore states = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             fixture.Check(fixture.LoadOld(states, schemas, first, worldId), 0, false, false);
         }
     }
@@ -188,8 +183,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             recovered = fixture.Commit(session);
             fixture.Check(world, 0, false, false);
         }
-        using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"));
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenExisting(directory.Path);
+        using StateRevisionStore states = new(segments.Data);
         StateRevision revision = states.Read(recovered);
         Assert.Equal(first, revision.ParentRevisionAddress);
         Assert.Empty(revision.LocalObjects);
@@ -234,6 +229,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace ArrayGraph;
 
         [DurableType("array.graph.point", 1)]

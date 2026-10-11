@@ -4,8 +4,8 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -36,7 +36,7 @@ public sealed class ListRepositoryTests : IDisposable {
             adaptive = session.Commit(NoRebase);
             Assert.Same(values, session.World.Values);
         }
-        registered = File.ReadAllBytes(Path.Combine(_root, "schemas.rbf"));
+        registered = ReadSelectedSchemaPayload(_root);
         using (SegmentStore segments = OpenState()) {
             using StateRevisionStore store = new(segments);
             ObjectVersionRecord delta = Assert.Single(store.Read(adaptive).LocalObjects);
@@ -55,7 +55,7 @@ public sealed class ListRepositoryTests : IDisposable {
             session.World.Values.Insert(500, 8);
             myers = session.Commit(NoRebase);
         }
-        Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
+        Assert.Equal(registered, ReadSelectedSchemaPayload(_root));
 
         models.UseListDeltaAlgorithm(ListDeltaAlgorithm.LocalResync);
         using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root, models)) {
@@ -63,7 +63,7 @@ public sealed class ListRepositoryTests : IDisposable {
             session.World.Values!.Insert(750, 9);
             local = session.Commit(NoRebase);
         }
-        Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
+        Assert.Equal(registered, ReadSelectedSchemaPayload(_root));
 
         models.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
         using (StateSaveHarness reopened = StateSaveHarness.OpenExisting(_root, models)) {
@@ -72,8 +72,9 @@ public sealed class ListRepositoryTests : IDisposable {
             position = session.Commit(NoRebase);
             Assert.Same(session.World.Values, session.World.Alias);
         }
-        Assert.Equal(registered, File.ReadAllBytes(Path.Combine(_root, "schemas.rbf")));
-        using (SegmentStore segments = OpenState()) {
+        Assert.Equal(registered, ReadSelectedSchemaPayload(_root));
+        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+            var segments = file.Data;
             using StateRevisionStore store = new(segments);
             Assert.Equal(seed, store.Read(adaptive).ParentRevisionAddress);
             Assert.Equal(adaptive, store.Read(myers).ParentRevisionAddress);
@@ -84,8 +85,8 @@ public sealed class ListRepositoryTests : IDisposable {
                 Assert.Equal(listId.Value, change.ObjectId);
                 Assert.Equal(ObjectVersionKind.Delta, change.Kind);
             }
-            using IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));
-            SchemaStore schemas = new(file, readOnly: true);
+
+            SchemaStore schemas = file.Schemas;
             // Decode historical versions with an unrelated writer choice. All deltas
             // share one reader and inherit the same Base representation.
             StateModelSnapshot readers = Models().Snapshot(schemas);
@@ -186,14 +187,15 @@ public sealed class ListRepositoryTests : IDisposable {
             session.World.Values.Add(66);
             retry = session.Commit(NoRebase);
         }
-        using (SegmentStore segments = OpenState()) {
+        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+            var segments = file.Data;
             using StateRevisionStore store = new(segments);
             Assert.Equal(seed, store.Read(frozen).ParentRevisionAddress);
             Assert.Equal(frozen, store.Read(failedCandidate).ParentRevisionAddress);
             Assert.Equal(frozen, store.Read(retry).ParentRevisionAddress);
             Assert.NotEqual(failedCandidate, retry);
-            using IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));
-            SchemaStore schemas = new(file, readOnly: true);
+
+            SchemaStore schemas = file.Schemas;
             DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, frozen, Models().Snapshot(schemas));
             FrozenListState<int> old = Assert.Single(decoded.Objects, row => row.Kind == ObjectStateKind.List).GetListState<int>();
             Assert.Equal(101, old.Count);
@@ -222,7 +224,8 @@ public sealed class ListRepositoryTests : IDisposable {
             world.Links = null;
             changed = session.Commit(NoRebase);
         }
-        using SegmentStore segments = OpenState();
+        using GraphResources file = GraphResources.OpenExisting(_root);
+        var segments = file.Data;
         using StateRevisionStore store = new(segments);
         StateRevision revision = store.Read(changed);
         IReadOnlyDictionary<uint, FrameAddress> priorHeads = store.ReadLiveObjectHeadMap(seed);
@@ -231,8 +234,8 @@ public sealed class ListRepositoryTests : IDisposable {
         // New membership, rather than representation kind, identifies the replacement.
         ObjectVersionRecord replacement = Assert.Single(revision.LocalObjects, row => !priorHeads.ContainsKey(row.ObjectId));
         Assert.Equal(ObjectVersionKind.Base, replacement.Kind);
-        using IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));
-        SchemaStore schemas = new(file, readOnly: true);
+
+        SchemaStore schemas = file.Schemas;
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, changed, Models().Snapshot(schemas));
         ObjectStateRecord replacementState = decoded.GetRequired(new(replacement.ObjectId));
         Assert.Equal(ObjectStateKind.List, replacementState.Kind);
@@ -293,14 +296,14 @@ public sealed class ListRepositoryTests : IDisposable {
         visitor.VisitObject(state.Alias, NumbersType);
         visitor.VisitObject(state.Links, LinksType);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()),
-        new(reader.ReadUInt32()), reader.ReadByte());
+    private static State Read(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()),
+        new(reader.ReadVarUInt32()), reader.ReadByte());
     private static PreparedBaseBody Base(in State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Values.Value);
-        writer.WriteUInt32(state.Alias.Value);
-        writer.WriteUInt32(state.Links.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Values.Value);
+        writer.WriteVarUInt32(state.Alias.Value);
+        writer.WriteVarUInt32(state.Links.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
@@ -308,24 +311,24 @@ public sealed class ListRepositoryTests : IDisposable {
         byte mask = (byte)((prior.Values != next.Values ? 1 : 0) | (prior.Alias != next.Alias ? 2 : 0) |
             (prior.Links != next.Links ? 4 : 0) | (prior.Value != next.Value ? 8 : 0));
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(mask);
-        if ((mask & 1) != 0) { writer.WriteUInt32(next.Values.Value); }
-        if ((mask & 2) != 0) { writer.WriteUInt32(next.Alias.Value); }
-        if ((mask & 4) != 0) { writer.WriteUInt32(next.Links.Value); }
+        if ((mask & 1) != 0) { writer.WriteVarUInt32(next.Values.Value); }
+        if ((mask & 2) != 0) { writer.WriteVarUInt32(next.Alias.Value); }
+        if ((mask & 4) != 0) { writer.WriteVarUInt32(next.Links.Value); }
         if ((mask & 8) != 0) { writer.WriteByte(next.Value); }
         return new(mask != 0, bytes.WrittenSpan);
     }
-    private static State Apply(ref BinaryPayloadReader reader, in State prior) {
+    private static State Apply(ref BareValueReader reader, in State prior) {
         byte mask = reader.ReadByte();
         if (mask is 0 or > 15) { throw new InvalidDataException("Invalid test state Delta."); }
-        return new((mask & 1) != 0 ? new(reader.ReadUInt32()) : prior.Values,
-            (mask & 2) != 0 ? new(reader.ReadUInt32()) : prior.Alias,
-            (mask & 4) != 0 ? new(reader.ReadUInt32()) : prior.Links,
+        return new((mask & 1) != 0 ? new(reader.ReadVarUInt32()) : prior.Values,
+            (mask & 2) != 0 ? new(reader.ReadVarUInt32()) : prior.Alias,
+            (mask & 4) != 0 ? new(reader.ReadVarUInt32()) : prior.Links,
             (mask & 8) != 0 ? reader.ReadByte() : prior.Value);
     }
-    private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
-    private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
+    private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
+    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
     public void Dispose() {
         if (Directory.Exists(_root)) { Directory.Delete(_root, recursive: true); }
     }

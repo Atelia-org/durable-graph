@@ -4,14 +4,14 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class GraphReaderTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-reader-{Guid.NewGuid():N}");
-    private readonly IRbfFile _file;
+    private readonly GraphResources _file;
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
@@ -21,9 +21,9 @@ public sealed class GraphReaderTests : IDisposable {
 
     public GraphReaderTests() {
         Directory.CreateDirectory(_root);
-        _file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_file);
-        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _file.Schemas;
+        _segments = _file.Data;
         _store = new(_segments);
     }
 
@@ -34,7 +34,7 @@ public sealed class GraphReaderTests : IDisposable {
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()), Model<SecondNode>(SecondSchema, () => new()));
         StateModelSnapshot models = registry.Snapshot(_schemas);
         long stateTail = Tail();
-        long schemaTail = _file.TailOffset;
+        long schemaTail = DataBytes(_file.Data);
 
         // Requested roots can be a durable base; restoration still uses the actual model.
         (Node First, Node Second) pair = GraphReader.ReadPair<Node, Node>(
@@ -50,7 +50,7 @@ public sealed class GraphReaderTests : IDisposable {
         Assert.Same(pair.Second, pair.Second.Next!.Next);
         // No assertion about identity between the two graphs: it is deliberately not promised.
         Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, _file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_file.Data));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class GraphReaderTests : IDisposable {
             })).Snapshot(_schemas);
         (Node First, Node Second)? delivered = null;
         long stateTail = Tail();
-        long schemaTail = _file.TailOffset;
+        long schemaTail = DataBytes(_file.Data);
 
         Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair<Node, Node>(
             _store, _schemas, first, new(1), second, new(1), models));
@@ -85,7 +85,7 @@ public sealed class GraphReaderTests : IDisposable {
         Assert.Null(delivered);
         Assert.Equal(["first", "second"], callbacks);
         Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, _file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_file.Data));
     }
 
     [Fact]
@@ -138,8 +138,8 @@ public sealed class GraphReaderTests : IDisposable {
             static (in State state) => Base(state),
             static (in State prior, in State next) => new(prior != next, Base(next).Body));
         StateReaderBinding reader = new StateReaderBinding<State>(schema,
-            static (ref BinaryPayloadReader reader) => new(reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadByte()),
-            static (ref BinaryPayloadReader reader, in State prior) => new(reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadByte()), Visit);
+            static (ref BareValueReader reader) => new(reader.ReadVarUInt32(), reader.ReadVarUInt32(), reader.ReadByte()),
+            static (ref BareValueReader reader, in State prior) => new(reader.ReadVarUInt32(), reader.ReadVarUInt32(), reader.ReadByte()), Visit);
         return new StateModelBinding<T, State>(preparation, [reader], row => row.GetState<State>(), allocate,
             (T domain, in State state, ObjectReadTable objects) => {
                 onHydrate?.Invoke();
@@ -165,17 +165,14 @@ public sealed class GraphReaderTests : IDisposable {
 
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Next.Value);
-        writer.WriteUInt32(state.Alias.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Next.Value);
+        writer.WriteVarUInt32(state.Alias.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
 
-    private long Tail() {
-        using RbfSegmentWriterLease lease = _segments.OpenActiveWriter();
-        return lease.File.TailOffset;
-    }
+    private long Tail() => DataBytes(_segments);
 
     public void Dispose() {
         _store.Dispose();

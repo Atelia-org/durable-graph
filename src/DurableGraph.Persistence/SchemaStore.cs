@@ -1,57 +1,38 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
-using Atelia.Rbf;
+using Atelia.FrameStore;
+using Atelia.VersionStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Persists closed Schema and container nodes in one append-only representation catalog.</summary>
 /// <remarks>
-/// The caller owns the file and its exclusive writer lifetime. Do not append to or
-/// truncate it outside this store, or share it with another live SchemaStore.
-/// Each registration is one frame and returns after DurableFlush, independently of
-/// State publication. An append or flush failure faults this instance until reopen.
-/// Writable reopen confirms recovered nonempty content with a DurableFlush before
-/// returning. Read-only recovery validates observable bytes without confirming a
-/// new durability barrier, and cannot be used to register schemas for State saves.
-/// Recovery validates every physical frame and never truncates or skips bad bytes,
-/// including an incomplete tail. Tombstones are not legal registration records.
-/// This MVP registry is repository-wide and monotonic; future joint Commit/Ref
-/// views may version its visibility without changing exact definition semantics.
+/// Borrows the repository's shared FrameStore and publication owner. A registration
+/// appends a complete catalog snapshot, publishes its address in the repository root,
+/// then installs the prepared catalog. Graph publication is a separate operation.
+/// Only the root-selected snapshot is authoritative; unreferenced complete frames
+/// are neither replayed nor adopted. An output failure requires a fresh owner.
 /// </remarks>
 public sealed class SchemaStore {
-    private readonly IRbfFile _file;
-    private readonly bool _readOnly;
+    private readonly GraphResources _owner;
     private Dictionary<RepresentationId, SchemaCatalogEntry> _nodes = new();
     private Dictionary<SchemaKey, DurableSchema> _schemas = new();
     private Dictionary<ObjectLayout, RepresentationId> _representationIds = new() { [ObjectLayout.String] = RepresentationId.String };
     private ulong _nextRepresentationId = 2;
     private bool _busy;
-    private long _acceptedTail;
 
-    public SchemaStore(IRbfFile file, bool readOnly = false) {
-        ArgumentNullException.ThrowIfNull(file);
-        _file = file;
-        _readOnly = readOnly;
-        var frames = file.ScanForward(showTombstone: true).GetEnumerator();
-        bool hadFrames = false;
-        while (frames.MoveNext()) {
-            hadFrames = true;
-            using RbfPooledFrame frame = file.ReadPooledFrame(frames.Current.Ticket).Unwrap();
-            if (frame.IsTombstone || frame.TailMetaLength != 0 || frame.Tag != SchemaCatalogWireCodec.RbfTag) {
-                throw new InvalidDataException("Unexpected frame in the dedicated SchemaStore file.");
-            }
-            // The decoder validates the complete batch before it can affect visibility.
-            SchemaCatalogEntry[] entries = SchemaCatalogWireCodec.Read(frame.PayloadAndMeta, _nodes);
-            foreach (SchemaCatalogEntry entry in entries) { Install(entry, _nodes, _schemas, _representationIds); }
-            _nextRepresentationId += (uint)entries.Length;
+    internal SchemaStore(GraphResources owner, FrameAddress? snapshotAddress) {
+        ArgumentNullException.ThrowIfNull(owner);
+        _owner = owner;
+        owner.EnsureBackingUsable();
+        if (snapshotAddress is not { } address) { return; }
+        using FrameRead frame = owner.Data.ReadFrame(address).Unwrap();
+        if (frame.IsTombstone || frame.TailMetaLength != 0 || frame.Tag != SchemaCatalogWireCodec.RbfTag) {
+            throw new InvalidDataException("The repository Schema root must select a complete SchemaSnapshot frame.");
         }
-        if (frames.TerminationError is { } error) {
-            throw new InvalidDataException($"SchemaStore framing is invalid; no automatic tail recovery is performed. {error.Message}");
-        }
-        // Merely reading bytes left in the OS cache after an uncertain outcome
-        // is not a new durable barrier, including catalogs containing only containers.
-        if (!readOnly && hadFrames) { file.DurableFlush(); }
-        _acceptedTail = file.TailOffset;
+        SchemaCatalogEntry[] entries = SchemaCatalogWireCodec.Read(frame.Payload);
+        foreach (SchemaCatalogEntry entry in entries) { Install(entry, _nodes, _schemas, _representationIds); }
+        _nextRepresentationId += (uint)entries.Length;
     }
 
     /// <summary>The number of user Schemas (class and inline), excluding containers and built-ins.</summary>
@@ -71,14 +52,14 @@ public sealed class SchemaStore {
 
     public void RegisterBatch(IEnumerable<DurableSchema> schemas) {
         RequireAvailable();
-        if (_readOnly) { throw new InvalidOperationException("This SchemaStore is read-only."); }
+        _owner.RequireWritable();
         ArgumentNullException.ThrowIfNull(schemas);
         _busy = true;
         try { CommitRegistration(Prepare(schemas, [])); }
         finally { _busy = false; }
     }
 
-    /// <summary>Registers complete layouts and returns IDs in input order after one durable barrier.</summary>
+    /// <summary>Registers complete layouts and returns IDs in input order after publishing the complete SchemaSnapshot.</summary>
     /// <remarks>
     /// A class Schema node is already its object representation; no second registration is required.
     /// Base and inline dependencies are validated even for existing IDs. All inputs and the
@@ -86,7 +67,7 @@ public sealed class SchemaStore {
     /// </remarks>
     public RepresentationId[] RegisterRepresentations(IReadOnlyList<ObjectLayout> layouts) {
         RequireAvailable();
-        if (_readOnly) { throw new InvalidOperationException("This SchemaStore is read-only."); }
+        _owner.RequireWritable();
         ArgumentNullException.ThrowIfNull(layouts);
         _busy = true;
         try {
@@ -148,7 +129,7 @@ public sealed class SchemaStore {
         var nodes = new Dictionary<RepresentationId, SchemaCatalogEntry>(_nodes);
         var schemas = new Dictionary<SchemaKey, DurableSchema>(_schemas);
         var ids = new Dictionary<ObjectLayout, RepresentationId>(_representationIds);
-        var additions = new List<SchemaCatalogEntry>();
+        bool changed = false;
         var heights = new Dictionary<DurableSchema, int>(ReferenceEqualityComparer.Instance);
         ulong next = _nextRepresentationId;
         foreach (DurableSchema schema in roots) {
@@ -173,7 +154,8 @@ public sealed class SchemaStore {
         }
         // The shared codec validates nominal kind/arity and all integer dependencies
         // before there is any observable append or ID allocation in this instance.
-        byte[]? payload = additions.Count == 0 ? null : SchemaCatalogWireCodec.Write(additions, _nodes);
+        byte[]? payload = !changed ? null : SchemaCatalogWireCodec.Write(
+            nodes.Values.OrderBy(static entry => entry.Id.Value).ToArray());
         return new(nodes, schemas, ids, next, payload);
 
         RepresentationId Allocate() {
@@ -183,7 +165,7 @@ public sealed class SchemaStore {
 
         void Add(SchemaCatalogEntry entry) {
             Install(entry, nodes, schemas, ids);
-            additions.Add(entry);
+            changed = true;
         }
 
         int AddClosure(DurableSchema schema, int depth) {
@@ -221,15 +203,27 @@ public sealed class SchemaStore {
     }
 
     private void CommitRegistration(Registration prepared) {
-        RequireUnchangedTail();
+        _owner.EnsureBackingUsable();
         if (prepared.Payload is not { } payload) { return; }
-        try {
-            _file.Append(SchemaCatalogWireCodec.RbfTag, payload).Unwrap();
-            _file.DurableFlush();
-            _acceptedTail = _file.TailOffset;
+        FrameAddress address;
+        try { address = _owner.Data.Append(SchemaCatalogWireCodec.RbfTag, payload).Unwrap(); }
+        catch {
+            if (_owner.IsFaulted) { IsFaulted = true; _owner.MarkFaulted(); }
+            throw;
         }
-        catch { IsFaulted = true; throw; }
-        // All dictionaries were allocated and populated before the single write.
+        // Ordinary root-capacity rejection can leave a complete unselected snapshot.
+        // It does not accept this catalog or invalidate an otherwise usable backing owner.
+        GraphResources.RootUpdate root = _owner.PrepareSchemaRoot(address);
+        PublicationOutcome outcome = PublicationOutcome.NotAttempted;
+        try { _owner.PublishRoot(root, out outcome); }
+        catch {
+            if (_owner.IsFaulted || outcome != PublicationOutcome.NotAttempted) {
+                IsFaulted = true;
+                _owner.MarkFaulted();
+            }
+            throw;
+        }
+        // Prepared dictionaries become visible only after the selected root is confirmed.
         _nodes = prepared.Nodes;
         _schemas = prepared.Schemas;
         _representationIds = prepared.RepresentationIds;
@@ -241,15 +235,8 @@ public sealed class SchemaStore {
         Dictionary<ObjectLayout, RepresentationId> RepresentationIds, ulong NextId, byte[]? Payload);
 
     private void RequireAvailable() {
-        if (IsFaulted) { throw new InvalidOperationException("Schema registration outcome is uncertain; reopen the SchemaStore before further use."); }
+        _owner.EnsureBackingUsable();
+        if (IsFaulted) { throw new InvalidOperationException("Schema registration outcome is uncertain; reopen before further use."); }
         if (_busy) { throw new InvalidOperationException("SchemaStore operations cannot be reentered."); }
-        RequireUnchangedTail();
-    }
-
-    private void RequireUnchangedTail() {
-        if (_file.TailOffset != _acceptedTail) {
-            IsFaulted = true;
-            throw new InvalidOperationException("The SchemaStore file was changed outside its owning store; reopen before further use.");
-        }
     }
 }

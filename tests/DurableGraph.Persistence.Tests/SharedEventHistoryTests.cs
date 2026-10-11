@@ -1,6 +1,6 @@
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -20,7 +20,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
         Node domainEvent = new() { Next = child, Alias = child, Text = text, Links = links, Value = 7 };
         FrameAddress initial, eventRevision, saved;
         ObjectId stateId;
-        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
             using BranchCheckout session = repository.CreateBranch("main", world, NoRebase);
             initial = session.StateRevisionAddress!.Value;
             stateId = session.StateId!.Value;
@@ -56,7 +56,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
             Assert.Equal(GraphFrameKind.State, resumed.Head.Kind);
         }
 
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(_root, "state"))) {
+        using (SegmentStore segments = SegmentStore.Open(Path.Combine(_root, "data"))) {
             using StateRevisionStore store = new(segments);
             StateRevision next = store.Read(saved);
             Assert.Equal(initial, next.ParentRevisionAddress);
@@ -85,7 +85,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
 
     [Fact]
     public void CheckoutRejectsASingletonAllocatorBeforeHydratingItsMutableGraph() {
-        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
             using BranchCheckout session = repository.CreateBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
             session.CommitEvent(new Node { Value = 7 }, NoRebase);
         }

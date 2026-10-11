@@ -162,16 +162,15 @@ public sealed partial class DurableSchemaGenerator {
         if (layout.Shape.Kind == 2) output.Append(" : ").Append(RuntimeName).Append("IStateOps<").Append(dto).Append('>');
         AppendGenericConstraints(output, layout, true);
         output.AppendLine(" {");
-        output.Append("        public static void Write(ref ").Append(PayloadNamespace).Append("BinaryPayloadWriter writer, in ").Append(dto)
+        output.Append("        public static void Write(ref ").Append(BinaryNamespace).Append("BareValueWriter writer, in ").Append(dto)
             .Append(" value, ").Append(SchemaName).AppendLine("DurableSchema schema) {");
         foreach (GenericField field in layout.Fields) {
             if (UsesGenericOps(field)) output.Append("            ").Append(GenericFieldOps(field)).Append(".WriteBase(ref writer, in value.")
                 .Append(field.Name).Append(", ").Append(field.Slot()).AppendLine(");");
-            else output.Append("            writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(GenericFieldTag(field))))
-                .Append('(').Append(BinarySlotWireValue(GenericFieldTag(field), "value." + field.Name)).AppendLine(");");
+            else output.Append("            ").Append(BinarySlotWrite(GenericFieldTag(field), "value." + field.Name)).AppendLine(";");
         }
         output.AppendLine("        }");
-        output.Append("        public static ").Append(dto).Append(" Read(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, ")
+        output.Append("        public static ").Append(dto).Append(" Read(ref ").Append(BinaryNamespace).Append("BareValueReader reader, ")
             .Append(SchemaName).AppendLine("DurableSchema schema) {");
         foreach (GenericField field in layout.Fields) output.Append("            var ").Append(field.Argument).Append(" = ")
             .Append(UsesGenericOps(field) ? GenericFieldOps(field) + ".ReadBase(ref reader, " + field.Slot() + ")" : GenericFieldRead(field)).AppendLine(";");
@@ -180,7 +179,7 @@ public sealed partial class DurableSchemaGenerator {
         output.Append("        public static ").Append(PayloadNamespace).Append("PreparedBaseBody PrepareBase(in ").Append(dto).Append(" value, ")
             .Append(SchemaName).AppendLine("DurableSchema schema) {");
         output.AppendLine("            var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
-        output.Append("            var writer = new ").Append(PayloadNamespace).AppendLine("BinaryPayloadWriter(buffer);");
+        output.Append("            var writer = new ").Append(BinaryNamespace).AppendLine("BareValueWriter(buffer);");
         output.AppendLine("            Write(ref writer, in value, schema);");
         output.Append("            return new ").Append(PayloadNamespace).AppendLine("PreparedBaseBody(buffer.WrittenSpan);");
         output.AppendLine("        }");
@@ -200,13 +199,13 @@ public sealed partial class DurableSchemaGenerator {
         if (layout.Shape.Kind == 2) {
             output.Append("        public static bool StateEquals(in ").Append(dto).Append(" left, in ").Append(dto)
                 .Append(" right, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => StateEquals(in left, in right, slot.InlineSchema!);");
-            output.Append("        public static void WriteBase(ref ").Append(PayloadNamespace).Append("BinaryPayloadWriter writer, in ").Append(dto)
+            output.Append("        public static void WriteBase(ref ").Append(BinaryNamespace).Append("BareValueWriter writer, in ").Append(dto)
                 .Append(" value, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => Write(ref writer, in value, slot.InlineSchema!);");
-            output.Append("        public static ").Append(dto).Append(" ReadBase(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, ")
+            output.Append("        public static ").Append(dto).Append(" ReadBase(ref ").Append(BinaryNamespace).Append("BareValueReader reader, ")
                 .Append(SchemaName).AppendLine("DurableFieldInfo slot) => Read(ref reader, slot.InlineSchema!);");
             output.Append("        public static ").Append(PayloadNamespace).Append("PreparedDeltaBody PrepareDelta(in ").Append(dto).Append(" prior, in ").Append(dto)
                 .Append(" current, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => PrepareDelta(in prior, in current, slot.InlineSchema!);");
-            output.Append("        public static ").Append(dto).Append(" ApplyDelta(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, in ").Append(dto)
+            output.Append("        public static ").Append(dto).Append(" ApplyDelta(ref ").Append(BinaryNamespace).Append("BareValueReader reader, in ").Append(dto)
                 .Append(" prior, ").Append(SchemaName).AppendLine("DurableFieldInfo slot) => Apply(ref reader, in prior, slot.InlineSchema!, true);");
             output.Append("        public static void VisitReferences(in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor, ")
                 .Append(SchemaName).AppendLine("DurableFieldInfo slot) => Visit(in state, visitor, slot.InlineSchema!);");
@@ -241,14 +240,13 @@ public sealed partial class DurableSchemaGenerator {
                 .Append(") mask").Append(index / 8).Append(" |= ").Append(1 << (index % 8)).AppendLine(";");
         }
         output.AppendLine("            var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
-        output.Append("            var writer = new ").Append(PayloadNamespace).AppendLine("BinaryPayloadWriter(buffer);");
+        output.Append("            var writer = new ").Append(BinaryNamespace).AppendLine("BareValueWriter(buffer);");
         for (int index = 0; index < masks; index++) output.Append("            writer.WriteByte(mask").Append(index).AppendLine(");");
         for (int index = 0; index < layout.Fields.Count; index++) {
             GenericField field = layout.Fields[index];
             output.Append("            if ((mask").Append(index / 8).Append(" & ").Append(1 << (index % 8)).Append(") != 0) ");
-            if (UsesGenericOps(field)) output.Append("writer.WriteSpan(delta").Append(index).AppendLine(".Body);");
-            else output.Append("writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(GenericFieldTag(field))))
-                .Append('(').Append(BinarySlotWireValue(GenericFieldTag(field), "current." + field.Name)).AppendLine(");");
+            if (UsesGenericOps(field)) output.Append("writer.WriteRawBytes(delta").Append(index).AppendLine(".Body);");
+            else output.Append(BinarySlotWrite(GenericFieldTag(field), "current." + field.Name)).AppendLine(";");
         }
         output.Append("            return new ").Append(PayloadNamespace).Append("PreparedDeltaBody(")
             .Append(masks == 0 ? "false" : string.Join(" || ", Enumerable.Range(0, masks).Select(i => "mask" + Number(i) + " != 0")))
@@ -257,7 +255,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendGenericApply(StringBuilder output, GenericLayout layout) {
-        output.Append("        public static ").Append(layout.Dto).Append(" Apply(ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, in ")
+        output.Append("        public static ").Append(layout.Dto).Append(" Apply(ref ").Append(BinaryNamespace).Append("BareValueReader reader, in ")
             .Append(layout.Dto).Append(" prior, ").Append(SchemaName).AppendLine("DurableSchema schema, bool requireChanges = false) {");
         int masks = (layout.Fields.Count + 7) / 8;
         for (int index = 0; index < masks; index++) output.Append("            byte mask").Append(index).AppendLine(" = reader.ReadByte();");

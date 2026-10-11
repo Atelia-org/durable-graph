@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
@@ -57,7 +58,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 public static byte[] Replay(byte[] delta) {
                     var prior = new Node.__DurableState.V1(new(128), new(4), default);
-                    var reader = new BinaryPayloadReader(delta);
+                    var reader = new BareValueReader(delta);
                     var current = Node.__DurableState.ApplyDeltaBodyV1(ref reader, in prior);
                     return Node.__DurableState.PrepareBaseBody(in current).Body.ToArray();
                 }
@@ -80,7 +81,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(["durable:128:node", "string:4", "durable:0:node"], visitor.Entries);
         string generated = GeneratedSource(run, "DurableStates.g.cs");
         AssertGeneratedBodiesRemainStaticallyBound(generated);
-        Assert.Contains("writer.WriteUInt32(current.Segment0Field3.Value)", generated);
+        Assert.Contains("writer.WriteVarUInt32(current.Segment0Field3.Value)", generated);
         Assert.DoesNotContain("Node.__DurableState.Model", generated);
     }
 

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Diagnostics;
 using System.Reflection;
 using Atelia.DurableGraph;
@@ -6,9 +7,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.ListDeltaReplayProbe;
 
@@ -20,10 +19,10 @@ internal sealed record DiffResult(int BaseBodyBytes, int DeltaBodyBytes, bool Ha
     ProductDiffDiagnostics Diagnostics);
 internal sealed record RunResult(string Workload, int Count, int Repeat, string Algorithm, string Directory,
     double SetupMs, long SetupAllocatedBytes, double ReopenAndLoadMs, long ReopenAndLoadAllocatedBytes,
-    long StateFileBytes, long SchemaFileBytes, long JournalFileBytes, StepResult[] Steps);
+    long DataFileBytes, long ControlFileBytes, StepResult[] Steps);
 
 internal static class Replay {
-    private static readonly RbfSegmentStoreOptions StoreOptions = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long StoreOptions = 1024 * 1024;
     private sealed record Saved(FrameAddress Address, string Fingerprint, double Ms, long Allocated, string Edit);
     private delegate DiffResult DiffRunner(ObjectStateRecord prior, ObjectStateRecord current, ListDeltaAlgorithm algorithm, int repeats);
 
@@ -76,10 +75,9 @@ internal static class Replay {
         // Validation uses fresh file handles after the writer closes. No original algorithm is
         // supplied to readers; historical materialization is deliberately outside Commit timing.
         List<StepResult> steps = [];
-        using (IRbfFile schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf")))
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), StoreOptions)) {
-            SchemaStore schemas = new(schemaFile, readOnly: true);
-            using StateRevisionStore states = new(segments);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(directory)) {
+            SchemaStore schemas = resources.Schemas;
+            StateRevisionStore states = resources.States;
             StateModelSnapshot snapshot = models.Snapshot(schemas);
             if (!snapshot.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? binding)) {
                 throw new InvalidOperationException("No current List binding.");
@@ -126,8 +124,8 @@ internal static class Replay {
         long coldAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         if (workload.Fingerprint(((World<T>)restored.State!)) != saved[^1].Fingerprint) { throw new InvalidOperationException("Cold latest graph differs."); }
         return new(workload.Name, count, repeat, algorithm.ToString(), directory, setupMs, setupAllocated, coldMs, coldAllocated,
-            DirectorySize(Path.Combine(directory, "state")), new FileInfo(Path.Combine(directory, "schemas.rbf")).Length,
-            DirectorySize(Path.Combine(directory, "journal")), steps.ToArray());
+            DirectorySize(Path.Combine(directory, "data")),
+            DirectorySize(Path.Combine(directory, "versions")), steps.ToArray());
     }
 
     private static DiffResult Measure<TState, TOps>(ObjectStateRecord priorRecord, ObjectStateRecord currentRecord,
@@ -150,7 +148,7 @@ internal static class Replay {
             allocations[index] = GC.GetAllocatedBytesForCurrentThread() - allocated;
         }
         ProductDiffDiagnostics diagnostics = ProductDiagnostics.Observe<TState, TOps>(prior, current, layout, algorithm, delta!);
-        BinaryPayloadReader reader = new(delta!.Body);
+        BareValueReader reader = new(delta!.Body);
         FrozenListState<TState> applied = ListStateBody<TState, TOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
         bool equal = prior.Count == current.Count;

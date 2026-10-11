@@ -4,8 +4,8 @@ using System.Reflection;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -137,10 +137,9 @@ public sealed class CrossAssemblyNominalBindingTests {
         string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"durable-graph-nominal-reader-{Guid.NewGuid():N}"));
         Directory.CreateDirectory(root);
         try {
-            using IRbfFile file = RbfFile.CreateNew(Path.Combine(root, "schemas.rbf"));
-            using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(root, "state"),
-                new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
-            SchemaStore schemas = new(file);
+            using GraphResources file = GraphResources.CreateNew(Path.Combine(root, "schemas.rbf"));
+            var segments = file.Data;
+            SchemaStore schemas = file.Schemas;
             using StateRevisionStore store = new(segments);
             DurableSchema owner = OwnerSchema(RemoteType, 2);
             DurableSchema remote = new(RemoteType, 1, new DurableFieldInfo(1, TypeTag.Byte));
@@ -157,17 +156,17 @@ public sealed class CrossAssemblyNominalBindingTests {
                 historicalReaderFactory: (schema, context) => {
                     Assert.Equal(typeof(ObjectId), context.BindSchema(schema).GetValue(Parameter).StateType);
                     return new StateReaderBinding<Owner2<ObjectId>>(schema,
-                        (ref BinaryPayloadReader payload) => { ownerReads++; return new(new ObjectId(payload.ReadUInt32())); },
-                        static (ref BinaryPayloadReader payload, in Owner2<ObjectId> prior) => throw new InvalidOperationException(),
+                        (ref BareValueReader payload) => { ownerReads++; return new(new ObjectId(payload.ReadVarUInt32())); },
+                        static (ref BareValueReader payload, in Owner2<ObjectId> prior) => throw new InvalidOperationException(),
                         static (in Owner2<ObjectId> state, IStateReferenceVisitor visitor) => visitor.VisitObject(state.Value, RemoteType));
                 }));
             DurableSchema availableTarget = omitOldTargetReader
                 ? new(RemoteType, 2, new DurableFieldInfo(1, TypeTag.Byte)) : remote;
             readers.Register(new StateReaderBinding<byte>(availableTarget,
-                (ref BinaryPayloadReader payload) => { targetReads++; return payload.ReadByte(); },
-                static (ref BinaryPayloadReader payload, in byte prior) => throw new InvalidOperationException(),
+                (ref BareValueReader payload) => { targetReads++; return payload.ReadByte(); },
+                static (ref BareValueReader payload, in byte prior) => throw new InvalidOperationException(),
                 static (in byte state, IStateReferenceVisitor visitor) => { }));
-            long schemaTail = file.TailOffset;
+            long schemaTail = DataBytes(file.Data);
             if (omitOldTargetReader) {
                 Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(store, schemas, revision, readers));
                 Assert.Equal(0, targetReads);
@@ -178,7 +177,7 @@ public sealed class CrossAssemblyNominalBindingTests {
                 Assert.Equal(1, targetReads);
             }
             Assert.Equal(1, ownerReads); // Nominal evidence works in both cases; exact target capability is independent.
-            Assert.Equal(schemaTail, file.TailOffset);
+            Assert.Equal(schemaTail, DataBytes(file.Data));
         } finally {
             string resolved = Path.GetFullPath(root);
             if (!string.Equals(Path.GetDirectoryName(resolved), Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), StringComparison.OrdinalIgnoreCase) ||
@@ -214,8 +213,8 @@ public sealed class CrossAssemblyNominalBindingTests {
     }
 
     private static StateReaderBinding Reader<T>(DurableSchema schema) where T : unmanaged => new StateReaderBinding<T>(schema,
-        static (ref BinaryPayloadReader reader) => throw new InvalidOperationException("Body reads are outside nominal binding."),
-        static (ref BinaryPayloadReader reader, in T prior) => throw new InvalidOperationException("Body reads are outside nominal binding."),
+        static (ref BareValueReader reader) => throw new InvalidOperationException("Body reads are outside nominal binding."),
+        static (ref BareValueReader reader, in T prior) => throw new InvalidOperationException("Body reads are outside nominal binding."),
         static (in T state, IStateReferenceVisitor visitor) => { });
 
     private static StateModelBinding RemoteModel<TDomain>(TypeExpr nominal) where TDomain : class, IDurableObject {

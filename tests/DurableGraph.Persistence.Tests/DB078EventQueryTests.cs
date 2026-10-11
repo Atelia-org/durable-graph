@@ -1,4 +1,4 @@
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -72,8 +72,7 @@ public sealed class DB078EventQueryTests : IDisposable {
             stale = branch.Head;
         }
         using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }));
-        using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models(),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models());
         using BranchCheckout other = foreign.CreateBranchFromEvent("main", new Node(), NoRebase);
         CheckpointAddress valid = reopened.GetHead("main");
         foreach (CheckpointAddress bad in new[] { stale, other.Head }) {
@@ -154,7 +153,7 @@ public sealed class DB078EventQueryTests : IDisposable {
         if (iteratorState == 3) { Assert.False(iterator.MoveNext()); }
         if (fault) {
             repository.Checkpoint = point => {
-                if (point == CommitCheckpoint.AfterStateDurable) { throw new IOException("Injected publication failure."); }
+                if (point == CommitCheckpoint.AfterStateAppend) { throw new IOException("Injected publication failure."); }
             };
             Assert.Throws<GraphCommitException>(() => branch.CommitEvent(new Node(), NoRebase));
             Assert.True(repository.IsFaulted);
@@ -169,7 +168,6 @@ public sealed class DB078EventQueryTests : IDisposable {
         }
     }
 
-    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models(),
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db078-query-");
 }

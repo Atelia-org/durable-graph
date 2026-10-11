@@ -2,7 +2,7 @@ param([switch]$NoBuild)
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'PublicationCrashProbe.csproj'
 if (-not $NoBuild) {
-    dotnet build $project --verbosity quiet
+    dotnet build $project --verbosity quiet -m:1 -nr:false
     if ($LASTEXITCODE -ne 0) { throw 'Publication crash probe build failed.' }
 }
 $assembly = Join-Path $PSScriptRoot 'bin/Debug/net10.0/Atelia.PublicationCrashProbe.dll'
@@ -12,9 +12,9 @@ $runRoot = Join-Path $PSScriptRoot ('obj/run-' + [DateTime]::UtcNow.ToString('yy
 $scenarios = @(
     @{ Checkpoint = 'empty'; Expected = '0'; Name = 'empty' },
     @{ Checkpoint = 'before-publication'; Expected = '1'; Name = 'before-publication' },
-    @{ Checkpoint = 'after-append'; Expected = '2'; Name = 'after-append' },
-    @{ Checkpoint = 'after-flush'; Expected = '2'; Name = 'after-flush' },
-    @{ Checkpoint = 'after-flush'; Expected = 'invalid'; Name = 'torn-publication' }
+    @{ Checkpoint = 'after-data-append'; Expected = '1'; Name = 'after-data-append' },
+    @{ Checkpoint = 'after-publication'; Expected = '2'; Name = 'after-publication' },
+    @{ Checkpoint = 'after-publication'; Expected = '2'; Name = 'incomplete-publication-tail' }
 )
 foreach ($scenario in $scenarios) {
     $directory = Join-Path $runRoot $scenario.Name
@@ -39,11 +39,13 @@ foreach ($scenario in $scenarios) {
         if (-not $child.HasExited) { $child.Kill($true); $child.WaitForExit() }
         $child.Dispose()
     }
-    if ($scenario.Name -eq 'torn-publication') {
-        $publicationPath = Join-Path $directory 'publication.rbf'
-        $bytes = [IO.File]::ReadAllBytes($publicationPath)
-        [byte[]]$torn = $bytes[0..($bytes.Length - 5)]
-        [IO.File]::WriteAllBytes($publicationPath, $torn)
+    if ($scenario.Name -eq 'incomplete-publication-tail') {
+        # Inject an incomplete tail after the complete root publication while all owners
+        # are closed. Writable VS ReadRef is expected to recover it and retain head 2.
+        $publicationPath = Join-Path $directory 'versions/refs/00000001.rbf'
+        $stream = [IO.File]::Open($publicationPath, [IO.FileMode]::Append, [IO.FileAccess]::Write)
+        try { $stream.Write([byte[]]@(0x10, 0x20)); $stream.Flush($true) }
+        finally { $stream.Dispose() }
     }
     dotnet $assembly verify $directory $scenario.Expected
     if ($LASTEXITCODE -ne 0) { throw "Recovery witness failed: $($scenario.Name)" }

@@ -1,19 +1,19 @@
+using Atelia.Binary;
 using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using PointStates = Atelia.DurableGraph.Generated.Family_506F696E74;
 using WorldStates = Atelia.DurableGraph.Generated.Family_576F726C64;
 using BoxStates = Atelia.DurableGraph.Generated.Family_426F78;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 
 namespace BclScalarPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {
@@ -78,7 +78,7 @@ internal static class Program {
             CheckKeyReplacement(row.Body);
             Require(store.Read(unchanged).LocalObjects.Count == 0, "Unchanged exact scalar representation wrote objects.");
         });
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{ProbeArtifacts.Format(historical)}:{worldId.Value}");
         FrameAddress recaptured;
         using (Repository reopened = Repository.OpenExisting(directory, Models(), Options)) {
             using BranchCheckout restored = reopened.Checkout("main");
@@ -94,8 +94,8 @@ internal static class Program {
         Require(typeof(World).Assembly.GetType("BclScalarPackageConsumerProbe.LegacyPoint") is null,
             "The historical inline CLR declaration must be absent.");
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
-        FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
-        ObjectId worldId = new(uint.Parse(parts[2]));
+        FrameAddress historical = ProbeArtifacts.Parse(parts[0]);
+        ObjectId worldId = new(uint.Parse(parts[1]));
         (ObjectId Points, ObjectId Keys) ids = default;
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId, 2, 2));
         Require(Upgrades.OwnerCalls == 0 && Upgrades.ValueCalls.Count == 0, "Exact reading ran business upgrades.");
@@ -187,10 +187,10 @@ internal static class Program {
     }
 
     private static void CheckKeyReplacement(ReadOnlySpan<byte> body) {
-        BinaryPayloadReader reader = new(body);
-        Require(reader.ReadUInt32() == 1 && SameBits(reader.ReadDecimal(), 1.0m), "Expected one old-scale key Remove.");
-        Require(reader.ReadUInt32() == 0, "Key representation replacement must not use PatchValue.");
-        Require(reader.ReadUInt32() == 1 && SameBits(reader.ReadDecimal(), 1.00m) && reader.ReadGuid() == World.SampleId,
+        BareValueReader reader = new(body);
+        Require(reader.ReadVarUInt32() == 1 && SameBits(BclValueCodec.ReadDecimal(ref reader), 1.0m), "Expected one old-scale key Remove.");
+        Require(reader.ReadVarUInt32() == 0, "Key representation replacement must not use PatchValue.");
+        Require(reader.ReadVarUInt32() == 1 && SameBits(BclValueCodec.ReadDecimal(ref reader), 1.00m) && BclValueCodec.ReadGuid(ref reader) == World.SampleId,
             "Expected one new-scale key Add with its unchanged value.");
         reader.EnsureFullyConsumed();
     }
@@ -198,10 +198,8 @@ internal static class Program {
     private static decimal One(int scale) => scale switch { 1 => 1.0m, 2 => 1.00m, 3 => 1.000m, _ => throw new ArgumentOutOfRangeException(nameof(scale)) };
     private static bool SameBits(decimal left, decimal right) => decimal.GetBits(left).AsSpan().SequenceEqual(decimal.GetBits(right));
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
     private static void Require(bool condition, string message) {
         if (!condition) throw new InvalidOperationException(message);

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -26,7 +27,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         // a surrogate char, and a multi-byte string reference ID (not inline string content).
         string goldenHex = emptyLayout ? "" : string.Concat(new[] {
             "01", "FF", "80", "FFFF03", "FFFF03", "FFFFFFFF0F", "FFFFFFFF0F",
-            "FFFFFFFFFFFFFFFFFF01", "FFFFFFFFFFFFFFFFFF01", "80B003", "357E",
+            "FFFFFFFFFFFFFFFFFF01", "FFFFFFFFFFFFFFFFFF01", "00D8", "357E",
             "4523C17F", "BC9A78563412F87F", "8001",
         });
         byte[] input = Convert.FromHexString(goldenHex);
@@ -131,7 +132,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string PreparedBaseHostMethod(string type, int version) => $$"""
         public static PreparedBaseBody PrepareBase{{version}}(byte[] body) {
-            var reader = new BinaryPayloadReader(body);
+            var reader = new BareValueReader(body);
             var dto = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref reader);
             reader.EnsureFullyConsumed();
             return {{type}}.__DurableState.PrepareBaseBody(in dto);

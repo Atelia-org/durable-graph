@@ -2,8 +2,8 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -20,18 +20,18 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         DurableSchema current = new("Leaf", 2, [new(1, TypeTag.UInt16)], ancestor);
         string path = NextPath();
         RepresentationId oldId;
-        using (IRbfFile file = RbfFile.CreateNew(path)) {
-            SchemaStore schemas = new(file);
+        using (GraphResources file = GraphResources.CreateNew(path)) {
+            SchemaStore schemas = file.Schemas;
             oldId = schemas.RegisterRepresentations([ObjectLayout.ForDurable(old), ObjectLayout.ForDurable(current)])[0];
         }
         ObjectVersionChain chain = Chain(BaseObjectBodyCodec.Encode(oldId, new([21])), [1, 25], [1, 26]);
         Assert.Equal(new byte[] { 1, 25 }, chain.Records[1].Record.Body.ToArray());
         Assert.Equal(new byte[] { 1, 26 }, chain.Records[2].Record.Body.ToArray());
-        using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
-        SchemaStore restored = new(reopened, readOnly: true);
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        SchemaStore restored = reopened.Schemas;
         int calls = 0;
-        byte Read(ref BinaryPayloadReader reader) { calls++; return reader.ReadByte(); }
-        byte Apply(ref BinaryPayloadReader reader, in byte prior) {
+        byte Read(ref BareValueReader reader) { calls++; return reader.ReadByte(); }
+        byte Apply(ref BareValueReader reader, in byte prior) {
             calls++;
             Assert.Equal(1, reader.ReadByte()); // One changed slot, followed by its replacement value.
             return reader.ReadByte();
@@ -57,13 +57,13 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
             2 => new("Leaf", 1, [new(1, TypeTag.Int32)], new("Ancestor", 1, new DurableFieldInfo(1, TypeTag.SByte))),
             _ => new("Leaf", 1, [new(1, TypeTag.Int32)], new("Ancestor", 2, new DurableFieldInfo(1, TypeTag.Byte))),
         };
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        SchemaStore schemas = file.Schemas;
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(stored)])[0];
         ObjectVersionChain chain = Chain(BaseObjectBodyCodec.Encode(id, new([])), Array.Empty<byte>());
         int calls = 0;
-        int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
-        int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
+        int Read(ref BareValueReader reader) { calls++; return 0; }
+        int Apply(ref BareValueReader reader, in int prior) { calls++; return prior; }
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(chain, schemas, wrong, Read, Apply));
         Assert.Equal(0, calls);
     }
@@ -71,14 +71,14 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [Fact]
     public void MissingRepresentationWrongKindAndOpaqueRawBaseNeverInvokeCallbacks() {
         DurableSchema schema = new("A", 1);
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        SchemaStore schemas = file.Schemas;
         ObjectVersionChain missing = Chain(BaseObjectBodyCodec.Encode(new(2), new([7])));
         ObjectVersionChain text = Chain(BaseObjectBodyCodec.EncodeString(new([0])));
         ObjectVersionChain opaque = Chain(new([7]));
         int calls = 0;
-        int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
-        int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
+        int Read(ref BareValueReader reader) { calls++; return 0; }
+        int Apply(ref BareValueReader reader, in int prior) { calls++; return prior; }
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(missing, schemas, schema, Read, Apply));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(text, schemas, schema, Read, Apply));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(opaque, schemas, schema, Read, Apply));
@@ -93,26 +93,26 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData("04", typeof(EndOfStreamException))]
     [InlineData("0480", typeof(EndOfStreamException))]
     public void MalformedOrUnknownRepresentationFailsBeforeBodyCallbacks(string hex, Type errorType) {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        SchemaStore schemas = file.Schemas;
         ObjectVersionChain chain = Chain(new(Convert.FromHexString(hex)));
         int calls = 0;
-        int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
-        int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
+        int Read(ref BareValueReader reader) { calls++; return 0; }
+        int Apply(ref BareValueReader reader, in int prior) { calls++; return prior; }
         Assert.Throws(errorType, () => TypedObjectVersionReader.ReadDurable<int>(chain, schemas, new("A", 1), Read, Apply));
         Assert.Equal(0, calls);
     }
 
     [Fact]
     public void InlineSchemaNodeCannotBeUsedAsAnObjectBaseBeforeCallbacks() {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        SchemaStore schemas = file.Schemas;
         schemas.Register(new DurableSchema("Point", 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int32)));
         ObjectVersionChain chain = Chain(new(Convert.FromHexString("040200")));
         int calls = 0;
-        int Read(ref BinaryPayloadReader reader) { calls++; return 0; }
-        int Apply(ref BinaryPayloadReader reader, in int prior) { calls++; return prior; }
+        int Read(ref BareValueReader reader) { calls++; return 0; }
+        int Apply(ref BareValueReader reader, in int prior) { calls++; return prior; }
         Assert.Throws<InvalidDataException>(() => schemas.GetRepresentation(new(2)));
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<int>(
             chain, schemas, new("World", 1), Read, Apply));
@@ -125,22 +125,22 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData("0202020341000121")]
     [InlineData("0302020341000121")]
     public void RetiredBaseHeadersFailBeforeBodyCallbacks(string hex) {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        SchemaStore schemas = file.Schemas;
         DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
         schemas.Register(schema);
-        long tail = file.TailOffset;
+        long tail = DataBytes(file.Data);
         ObjectVersionChain chain = Chain(new(Convert.FromHexString(hex)), [1, 42]);
         int calls = 0;
-        byte Read(ref BinaryPayloadReader reader) { calls++; return reader.ReadByte(); }
-        byte Apply(ref BinaryPayloadReader reader, in byte prior) {
+        byte Read(ref BareValueReader reader) { calls++; return reader.ReadByte(); }
+        byte Apply(ref BareValueReader reader, in byte prior) {
             calls++;
             Assert.Equal(1, reader.ReadByte());
             return reader.ReadByte();
         }
         Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<byte>(chain, schemas, schema, Read, Apply));
         Assert.Equal(0, calls);
-        Assert.Equal(tail, file.TailOffset);
+        Assert.Equal(tail, DataBytes(file.Data));
         // Rejected data must not silently allocate the next persistent ID.
         Assert.Equal(new RepresentationId(2), schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0]);
     }
@@ -150,15 +150,15 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData(false)]
     public void EveryBodyMustBeFullyConsumed(bool trailingBase) {
         DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        SchemaStore schemas = file.Schemas;
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
         ObjectVersionChain chain = Chain(
             BaseObjectBodyCodec.Encode(id, new(trailingBase ? new byte[] { 1, 2 } : new byte[] { 1 })),
             trailingBase ? new byte[] { 1, 3 } : new byte[] { 1, 3, 4 });
         int deltaCalls = 0;
-        byte Read(ref BinaryPayloadReader reader) => reader.ReadByte();
-        byte Apply(ref BinaryPayloadReader reader, in byte prior) {
+        byte Read(ref BareValueReader reader) => reader.ReadByte();
+        byte Apply(ref BareValueReader reader, in byte prior) {
             deltaCalls++;
             Assert.Equal(1, reader.ReadByte());
             return reader.ReadByte();
@@ -182,7 +182,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     }
 
     private ObjectVersionChain Chain(EncodedBaseObjectBody encodedBaseBody, params byte[][] deltas) {
-        using SegmentStore segments = SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using SegmentStore segments = SegmentStore.Create(NextPath());
         using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1, encodedBaseBody.Body)], []));
         foreach (byte[] delta in deltas) {

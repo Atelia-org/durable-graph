@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Reflection;
 using Atelia.DurableGraph.Serialization;
 
@@ -15,8 +16,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         // Independent canonical scalar fragments, including surrogate char, signed bounds,
         // NaN payloads and a multi-byte string ObjectId. No generated encoder builds these inputs.
-        string[] low = ["00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "0000", "00000000", "0000000000000000", "00"];
-        string[] high = ["01", "FF", "80", "FFFF03", "FFFF03", "FFFFFFFF0F", "FFFFFFFF0F", "FFFFFFFFFFFFFFFFFF01", "FFFFFFFFFFFFFFFFFF01", "80B003", "357E", "4523C17F", "BC9A78563412F87F", "8001"];
+        string[] low = ["00", "00", "00", "00", "00", "00", "00", "00", "00", "0000", "0000", "00000000", "0000000000000000", "00"];
+        string[] high = ["01", "FF", "80", "FFFF03", "FFFF03", "FFFFFFFF0F", "FFFFFFFF0F", "FFFFFFFFFFFFFFFFFF01", "FFFFFFFFFFFFFFFFFF01", "00D8", "357E", "4523C17F", "BC9A78563412F87F", "8001"];
         byte[] prior = Convert.FromHexString(string.Concat(low));
         byte[] priorCopy = prior.ToArray();
         PreparedDeltaBody unchanged = prepare(prior, prior);
@@ -134,11 +135,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             "0200", // Redundant uint update.
             "0400", // Redundant int update.
             "0102", // Invalid bool.
-            "028000", // Noncanonical uint.
+            "028000", // Redundant semantic uint update in a redundant codeword.
             "028080808010", // UInt32 overflow.
-            "048200", // Noncanonical signed value.
             "0701800100", // Late redundant value after two valid updates.
-            "070180018200", // Late noncanonical signed value.
             "0000", // No-op plus trailing data.
             "070180010200", // Valid changed body plus trailing data.
         }) {
@@ -146,6 +145,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         Assert.Equal<byte>([0, 0, 0], prior);
         Assert.Equal(current, apply(prior, valid));
+        Assert.Equal(new byte[] { 0, 0, 2 }, apply(prior, Convert.FromHexString("048200")));
+        Assert.Equal(current, apply(prior, Convert.FromHexString("070180018200")));
         Assert.True(host.GetMethod("LateFailureKeepsDto")!.CreateDelegate<Func<bool>>()());
     }
 
@@ -156,13 +157,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         "public static class Host {\n" + FusedDeltaHostMethods("Item", 1) +
         (types.SequenceEqual(new[] { "bool", "uint", "int" }) ? """
             public static bool LateFailureKeepsDto() {
-                var reader = new BinaryPayloadReader(new byte[] { 0, 0, 0 });
+                var reader = new BareValueReader(new byte[] { 0, 0, 0 });
                 var prior = Item.__DurableState.ReadBaseBodyV1(ref reader);
-                var bad = new BinaryPayloadReader(new byte[] { 7, 1, 128, 1, 0 });
+                var bad = new BareValueReader(new byte[] { 7, 1, 128, 1, 0 });
                 try { Item.__DurableState.ApplyDeltaBodyV1(ref bad, in prior); return false; }
                 catch (System.IO.InvalidDataException) { }
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Item.__DurableState.WriteBaseBody(ref writer, in prior);
                 return buffer.WrittenSpan.SequenceEqual(new byte[] { 0, 0, 0 });
             }
@@ -181,23 +182,23 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static string FusedDeltaHostMethods(string type, int version) => $$"""
         public static PreparedDeltaBody Prepare{{version}}(byte[] oldBytes, byte[] newBytes) {
-            var oldReader = new BinaryPayloadReader(oldBytes);
+            var oldReader = new BareValueReader(oldBytes);
             var prior = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref oldReader);
             oldReader.EnsureFullyConsumed();
-            var newReader = new BinaryPayloadReader(newBytes);
+            var newReader = new BareValueReader(newBytes);
             var current = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref newReader);
             newReader.EnsureFullyConsumed();
             return {{type}}.__DurableState.PrepareDeltaBody(in prior, in current);
         }
         public static byte[] Apply{{version}}(byte[] oldBytes, byte[] delta) {
-            var oldReader = new BinaryPayloadReader(oldBytes);
+            var oldReader = new BareValueReader(oldBytes);
             var prior = {{type}}.__DurableState.ReadBaseBodyV{{version}}(ref oldReader);
             oldReader.EnsureFullyConsumed();
-            var deltaReader = new BinaryPayloadReader(delta);
+            var deltaReader = new BareValueReader(delta);
             var restored = {{type}}.__DurableState.ApplyDeltaBodyV{{version}}(ref deltaReader, in prior);
             deltaReader.EnsureFullyConsumed();
             var buffer = new ArrayBufferWriter<byte>();
-            var writer = new BinaryPayloadWriter(buffer);
+            var writer = new BareValueWriter(buffer);
             {{type}}.__DurableState.WriteBaseBody(ref writer, in restored);
             return buffer.WrittenSpan.ToArray();
         }

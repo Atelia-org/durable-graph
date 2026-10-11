@@ -1,4 +1,5 @@
-using Atelia.Data;
+using Atelia.FrameStore;
+using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -8,7 +9,7 @@ public sealed class ObjectVersionRecordTests {
     [InlineData(true)]
     public void Record_copies_input_and_exposes_only_readonly_content(bool delta) {
         byte[] input = [1, 2, 3, 4];
-        FrameAddress prior = new(1, SizedPtr.Create(32, 32));
+        FrameAddress prior = Address(1, 32);
         ObjectVersionRecord record = delta
             ? ObjectVersionRecord.CreateDelta(7, prior, input.AsSpan(1, 2))
             : ObjectVersionRecord.CreateBase(7, input.AsSpan(1, 2));
@@ -27,7 +28,7 @@ public sealed class ObjectVersionRecordTests {
 
     [Fact]
     public void Empty_body_and_maximum_id_are_valid_but_zero_id_is_not() {
-        FrameAddress prior = new(1, SizedPtr.Create(32, 32));
+        FrameAddress prior = Address(1, 32);
         foreach (ObjectVersionRecord record in new[] {
             ObjectVersionRecord.CreateBase(uint.MaxValue, []),
             ObjectVersionRecord.CreateDelta(uint.MaxValue, prior, []),
@@ -42,6 +43,5 @@ public sealed class ObjectVersionRecordTests {
     [Fact]
     public void Delta_requires_a_nonempty_prior_address() {
         Assert.Throws<ArgumentOutOfRangeException>(() => ObjectVersionRecord.CreateDelta(1, default, []));
-        Assert.Throws<ArgumentOutOfRangeException>(() => ObjectVersionRecord.CreateDelta(1, new FrameAddress(1, default), []));
     }
 }

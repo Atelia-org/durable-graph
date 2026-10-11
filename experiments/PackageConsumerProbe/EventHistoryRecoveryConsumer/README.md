@@ -10,7 +10,7 @@ Run from the repository root:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1
-# Or reuse an existing matching nine-package feed:
+# Or reuse an existing matching ten-package feed:
 ./experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1 -PackageSource <feed> -Version <version>
 ```
 

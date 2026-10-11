@@ -5,7 +5,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -93,8 +93,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
     [Fact]
     public void SuccessorRevisionWithUnchangedLeafHeadBuildsItsOwnLeafTable() {
-        using Repository repository = Repository.CreateNew(_root, Models(current: true, new()),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository repository = Repository.CreateNew(_root, Models(current: true, new()));
         repository.ImmutableLeafReuseEnabled = true;
         Leaf live = new(41);
         using BranchCheckout seed = repository.CreateBranch("main", new Root { Value = 17, Leaf = live }, NoRebase);
@@ -189,8 +188,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     }
 
     private void Seed() {
-        using Repository repository = Repository.CreateNew(_root, Models(current: false, new()),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository repository = Repository.CreateNew(_root, Models(current: false, new()));
         using BranchCheckout branch = repository.CreateBranch("main", new Root { Value = 17, Leaf = new(41) }, NoRebase);
     }
 
@@ -199,7 +197,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         registry.Register(new StateModelBinding<Root, RootState>(new(OwnerSchema, OwnerBody,
             static (in RootState prior, in RootState next) => new(prior != next, OwnerBody(next).Body)),
             [new StateReaderBinding<RootState>(OwnerSchema, ReadOwner,
-                static (ref BinaryPayloadReader reader, in RootState _) => ReadOwner(ref reader), VisitOwner)],
+                static (ref BareValueReader reader, in RootState _) => ReadOwner(ref reader), VisitOwner)],
             static row => row.GetState<RootState>(), static () => new(),
             static (Root root, in RootState state, ObjectReadTable objects) => {
                 root.Value = state.Value;
@@ -230,26 +228,26 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
                     sourceReaderResolver: context.ResolveReader, isImmutableLeaf: true);
             }, historicalReaderFactory: static (schema, context) => {
                 if (schema.Version == 2) { context.ResolveStoredValue(schema.Fields[0]); }
-                return new StateReaderBinding<int>(schema, static (ref BinaryPayloadReader reader) => reader.ReadInt32(),
-                    static (ref BinaryPayloadReader reader, in int _) => reader.ReadInt32(),
+                return new StateReaderBinding<int>(schema, static (ref BareValueReader reader) => reader.ReadVarInt32(),
+                    static (ref BareValueReader reader, in int _) => reader.ReadVarInt32(),
                     static (in int _, IStateReferenceVisitor _) => { });
             }, upgrades: current ? [new(LeafId, 1, Method(nameof(Keep))), new(LeafId, 2, Method(nameof(Keep)))] : []));
         return registry;
     }
 
-    private static RootState ReadOwner(ref BinaryPayloadReader reader) => new(reader.ReadInt32(), new(reader.ReadUInt32()));
+    private static RootState ReadOwner(ref BareValueReader reader) => new(reader.ReadVarInt32(), new(reader.ReadVarUInt32()));
     private static void VisitOwner(in RootState state, IStateReferenceVisitor visitor) => visitor.VisitDurable(state.Leaf, LeafId);
     private static PreparedBaseBody OwnerBody(in RootState state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteInt32(state.Value);
-        writer.WriteUInt32(state.Leaf.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarInt32(state.Value);
+        writer.WriteVarUInt32(state.Leaf.Value);
         return new(bytes.WrittenSpan);
     }
     private static PreparedBaseBody LeafBody(in int state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteInt32(state);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarInt32(state);
         return new(bytes.WrittenSpan);
     }
     private static void Keep(in int prior, out int next, UpgradeContext _) => next = prior;

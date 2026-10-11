@@ -1,7 +1,7 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -67,18 +67,18 @@ public sealed class TemporalScalarCatalogTests {
     }
 
     private static void AssertCatalog(SchemaCatalogEntry row, byte[] golden) {
-        Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], CatalogTestData.Empty));
-        SchemaCatalogEntry decoded = Assert.Single(SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty));
+        Assert.Equal(golden, SchemaCatalogWireCodec.Write([row]));
+        SchemaCatalogEntry decoded = Assert.Single(SchemaCatalogWireCodec.Read(golden));
         Assert.Equal(row.Id, decoded.Id);
         Assert.Equal(row.Layout, decoded.Layout);
     }
 
     private static void AssertNominal(TypeExpr type, byte[] golden) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TypeExprWireCodec.Write(ref writer, type);
         Assert.Equal(golden, buffer.WrittenSpan.ToArray());
-        BinaryPayloadReader reader = new(golden);
+        BareValueReader reader = new(golden);
         Assert.Equal(type, TypeExprWireCodec.Read(ref reader));
         reader.EnsureFullyConsumed();
     }

@@ -1,4 +1,5 @@
-using Atelia.Data;
+using Atelia.FrameStore;
+using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -176,7 +177,7 @@ public sealed class LiveObjectHeadMapMaterializerTests {
     }
 
     [Fact]
-    public void Acyclic_future_parent_fails_closed() {
+    public void Address_numeric_order_does_not_constrain_an_acyclic_parent() {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
@@ -184,32 +185,11 @@ public sealed class LiveObjectHeadMapMaterializerTests {
             [f2] = StateRevision.CreateObjectHeadMapBase(null, Records(1), []),
         };
 
-        Assert.Throws<InvalidDataException>(() =>
-            LiveObjectHeadMapMaterializer.Materialize(
-                f1,
-                revisions.GetValueOrDefault!));
+        AssertHeads(LiveObjectHeadMapMaterializer.Materialize(f1, revisions.GetValueOrDefault!), (1, f2));
     }
 
     [Fact]
-    public void Future_external_head_fails_closed() {
-        FrameAddress checkpoint = Address(1, 32);
-        StateRevision revision = StateRevision.CreateObjectHeadMapBase(
-            null,
-            localObjects: Records(),
-            externalObjectHeads: [
-                new KeyValuePair<uint, FrameAddress>(1, Address(1, 96)),
-            ]);
-
-        Assert.Throws<InvalidDataException>(() =>
-            LiveObjectHeadMapMaterializer.Materialize(
-                checkpoint,
-                address => address == checkpoint
-                    ? revision
-                    : throw new KeyNotFoundException()));
-    }
-
-    [Fact]
-    public void Parent_cycle_fails_closed_at_a_non_earlier_edge() {
+    public void Parent_cycle_fails_closed_without_numeric_ordering() {
         FrameAddress f1 = Address(1, 32);
         FrameAddress f2 = Address(1, 96);
         Dictionary<FrameAddress, StateRevision> revisions = new() {
@@ -234,6 +214,4 @@ public sealed class LiveObjectHeadMapMaterializerTests {
     private static ObjectVersionRecord[] Records(params uint[] ids) =>
         ids.Select(id => ObjectVersionRecord.CreateBase(id, [(byte)id])).ToArray();
 
-    private static FrameAddress Address(uint fileNumber, long offset) =>
-        new(fileNumber, SizedPtr.Create(offset, 32));
 }

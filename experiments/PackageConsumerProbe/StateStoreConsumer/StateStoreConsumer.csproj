@@ -16,4 +16,7 @@
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../ProbeArtifacts.cs" Link="ProbeArtifacts.cs" />
+  </ItemGroup>
 </Project>

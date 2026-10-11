@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -145,12 +146,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             private static byte[] Content(string value) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 writer.WriteString(value);
                 return buffer.WrittenSpan.ToArray();
             }
             private static Leaf.__DurableState.V1 Read(byte[] bytes) {
-                var reader = new BinaryPayloadReader(bytes);
+                var reader = new BareValueReader(bytes);
                 var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 return state;
@@ -170,7 +171,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 byte[][] owners = graph.Objects.Where(entry => entry.Kind == ObjectStateKind.Durable).Select(entry => {
                     var state = entry.GetState<Leaf.__DurableState.V1>();
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }).ToArray();
@@ -190,10 +191,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static bool Validate(uint inherited, uint own, uint number) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
-                writer.WriteUInt32(inherited);
-                writer.WriteUInt32(number);
-                writer.WriteUInt32(own);
+                var writer = new BareValueWriter(buffer);
+                writer.WriteVarUInt32(inherited);
+                writer.WriteVarUInt32(number);
+                writer.WriteVarUInt32(own);
                 var state = Read(buffer.WrittenSpan.ToArray()); // Pure Read succeeds before resolution, even for invalid IDs.
                 if (state.Segment0Field1.Value != inherited || state.Segment1Field1 != number || state.Segment1Field2.Value != own)
                     throw new Exception("Body read must remain ID-only.");
@@ -215,7 +216,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class ValidationHost {
             private static StringReadTable Table(uint omit) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 writer.WriteString("x");
                 var records = new System.Collections.Generic.List<(ObjectId, ReadOnlyMemory<byte>)>();
                 foreach (uint id in new uint[] { 2, 3 }) {
@@ -224,7 +225,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return StringReadTable.Decode(records);
             }
             public static bool ValidateOld(byte[] bytes, uint omit) {
-                var reader = new BinaryPayloadReader(bytes);
+                var reader = new BareValueReader(bytes);
                 var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 try { Leaf.__DurableState.ValidateStringReferences(in state, Table(omit)); return true; }
@@ -233,9 +234,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static bool ValidateCurrent() {
                 var state = Leaf.__DurableState.Capture(new Leaf());
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
-                var reader = new BinaryPayloadReader(buffer.WrittenSpan);
+                var reader = new BareValueReader(buffer.WrittenSpan);
                 state = Leaf.__DurableState.ReadBaseBodyV2(ref reader);
                 reader.EnsureFullyConsumed();
                 var table = StringReadTable.Decode(Array.Empty<(ObjectId, ReadOnlyMemory<byte>)>());

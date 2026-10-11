@@ -32,12 +32,12 @@ internal static class ReadAmplificationBaseBudgetPolicy {
 
             graphBaseBytes = checked(graphBaseBytes + estimate.BasePayloadBytes);
             long prospectiveReconstructionPayloadBytes = estimate.ChangeKind == ObjectSaveChangeKind.Update
-                ? checked(estimate.ReconstructionPayloadBytes!.Value + estimate.DeltaPayloadBytesUpperBound!.Value)
+                ? checked(estimate.ReconstructionPayloadBytes!.Value + estimate.DeltaPayloadBytes!.Value)
                 : estimate.ReconstructionPayloadBytes.GetValueOrDefault();
 
             if (estimate.ChangeKind is ObjectSaveChangeKind.Insert or ObjectSaveChangeKind.BaseOnlyUpdate ||
                 (estimate.ChangeKind == ObjectSaveChangeKind.Update &&
-                    estimate.BasePayloadBytes <= estimate.DeltaPayloadBytesUpperBound!.Value)) {
+                    estimate.BasePayloadBytes <= estimate.DeltaPayloadBytes!.Value)) {
                 writes.Add(new(estimate.ObjectId, ObjectRepresentationMode.Base));
                 continue;
             }
@@ -93,7 +93,7 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         }
 
         if (estimate.BasePayloadBytes < 0 ||
-            estimate.DeltaPayloadBytesUpperBound < 0 ||
+            estimate.DeltaPayloadBytes < 0 ||
             estimate.ReconstructionPayloadBytes < 0) {
             throw new ArgumentOutOfRangeException(parameterName, "Payload byte measurements must be nonnegative.");
         }
@@ -102,13 +102,13 @@ internal static class ReadAmplificationBaseBudgetPolicy {
         switch (estimate.ChangeKind) {
             case ObjectSaveChangeKind.Insert:
             case ObjectSaveChangeKind.BaseOnlyUpdate:
-                validShape = estimate.DeltaPayloadBytesUpperBound is null && estimate.ReconstructionPayloadBytes is null;
+                validShape = estimate.DeltaPayloadBytes is null && estimate.ReconstructionPayloadBytes is null;
                 break;
             case ObjectSaveChangeKind.Update:
-                validShape = estimate.DeltaPayloadBytesUpperBound is not null && estimate.ReconstructionPayloadBytes is not null;
+                validShape = estimate.DeltaPayloadBytes is not null && estimate.ReconstructionPayloadBytes is not null;
                 break;
             case ObjectSaveChangeKind.NoChange:
-                validShape = estimate.DeltaPayloadBytesUpperBound is null && estimate.ReconstructionPayloadBytes is not null;
+                validShape = estimate.DeltaPayloadBytes is null && estimate.ReconstructionPayloadBytes is not null;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(parameterName, estimate.ChangeKind, "Unknown object change kind.");

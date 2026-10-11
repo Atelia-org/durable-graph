@@ -1,17 +1,17 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
-using Atelia.EventJournal;
-using Atelia.RbfSegmentStore;
-using FrameAddress = Atelia.DurableGraph.Storage.FrameAddress;
+using Atelia.VersionStore;
+
 
 namespace Atelia.DurableGraph;
 
-/// <summary>Owns Schema/State resources and a Journal whose branches and immutable tags are the publication authority.</summary>
+/// <summary>Owns shared data and the VersionStore root publishing branches and immutable tags.</summary>
 /// <remarks>
 /// Single-threaded, one writer and at most one active checkout per branch. Different branches may have
 /// live checkouts together; all repository operations remain serial. Close a branch's checkout before moving it.
-/// Strict reopening rejects damaged tails; no automatic repair, transparent retry or power-loss guarantee.
+/// Backing stores recover incomplete tails during normal writable opens; there is no transparent publication retry.
 /// Handles belong to one open repository instance. Persisted members of read results are historical snapshots.
 /// Independent ReadState/ReadEvent calls allow application-side Transient initialization without a writer.
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
@@ -21,7 +21,6 @@ namespace Atelia.DurableGraph;
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
 /// </remarks>
 public sealed class Repository : IDisposable {
-    private readonly HistoryJournal _history;
     private readonly GraphResources _resources;
     private readonly StateModelSnapshot _models;
     private readonly object _identity = new();
@@ -36,12 +35,9 @@ public sealed class Repository : IDisposable {
     internal GraphReadStatistics? RestorationStatistics { get; set; }
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
-    private Repository(HistoryJournal history, GraphResources resources, StateModelSnapshot models) {
-        _history = history;
+    private Repository(GraphResources resources, StateModelSnapshot models) {
         _resources = resources;
         _models = models;
-        ValidateHistory();
-        if (!resources.IsReadOnly) { history.ConfirmDurable(); }
     }
 
     public bool IsReadOnly => _resources.IsReadOnly;
@@ -55,27 +51,25 @@ public sealed class Repository : IDisposable {
     /// <summary>Creates a repository with one frozen model environment for its entire open lifetime.</summary>
     /// <remarks>Models are captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static Repository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, true, false);
-    /// <summary>Opens existing history with one frozen model environment; physical validation does not require all current models.</summary>
+    public static Repository CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) => Open(path, models, rotationThresholdBytes, true, false);
+    /// <summary>Opens the required repository root and Schema snapshot with one frozen model environment.</summary>
     /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static Repository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, false);
+    public static Repository OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) => Open(path, models, rotationThresholdBytes, false, false);
     /// <summary>Opens existing history without writing, using one frozen model environment for all reads.</summary>
     /// <remarks>An empty or partial registry supports inspection; successful closures are shared within this open repository.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, true);
+    public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models) => Open(path, models, 64L * 1024 * 1024 * 1024, false, true);
 
-    private static Repository Open(string path, StateModelRegistry models, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
+    private static Repository Open(string path, StateModelRegistry models, long rotationThresholdBytes, bool create, bool readOnly) {
         ArgumentNullException.ThrowIfNull(models);
-        HistoryJournal? history = null;
         GraphResources? resources = null;
         try {
-            history = create ? HistoryJournal.Create(path) : HistoryJournal.Open(path, readOnly);
-            resources = create ? GraphResources.CreateInExistingDirectory(path, options) : readOnly
-                ? GraphResources.OpenReadOnlyExisting(path, options) : GraphResources.OpenExisting(path, options);
-            return new(history, resources, models.Snapshot(resources.Schemas));
+            resources = create ? GraphResources.CreateNew(path, rotationThresholdBytes) : readOnly
+                ? GraphResources.OpenReadOnlyExisting(path) : GraphResources.OpenExisting(path, rotationThresholdBytes);
+            return new(resources, models.Snapshot(resources.Schemas));
         } catch {
-            try { resources?.Dispose(); } finally { history?.Dispose(); }
+            resources?.Dispose();
             throw;
         }
     }
@@ -187,7 +181,7 @@ public sealed class Repository : IDisposable {
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
             BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate);
-            MutateRefCore(() => _history.Journal.CreateBranch(branchName, source.Address));
+            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, source.Address, out outcome));
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
             return checkout;
@@ -200,6 +194,7 @@ public sealed class Repository : IDisposable {
     private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head,
         out PreparedStateRestoration? candidate) {
         candidate = null;
+        ValidateSelectedGraphParent(head);
         CheckpointAddress? state = NearestStateCore(head);
         // Event-only histories must not even inspect another branch's resident certificate.
         if (state is null) {
@@ -207,6 +202,7 @@ public sealed class Repository : IDisposable {
                 WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models), head);
         }
         CheckFrame(state, GraphFrameKind.State);
+        ValidateSelectedGraphParent(state);
         RevisionReadSession reads = new(_resources.States, _resources.Schemas, _models, RestorationStatistics);
         if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
             reads.Statistics.PreparedStateHits++;
@@ -247,7 +243,7 @@ public sealed class Repository : IDisposable {
         return checkout;
     }
 
-    public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _history.Journal.ListBranches(); }
+    public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _resources.ListBranches(); }
     public CheckpointAddress GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
     /// <summary>Fully materializes the selected logical chain from oldest to newest, including State and Event handles.</summary>
@@ -257,14 +253,22 @@ public sealed class Repository : IDisposable {
     /// Reads the complete ancestor chain of the selected head; excludes physical orphan appends and
     /// records unique to other branches. No domain objects are restored. Taking the last few results
     /// does not avoid full-chain reading or allocation: this is not a paginated or lazy API.
-    /// Opening the repository separately validates physical Journal records and referenced revisions,
-    /// including orphans; that validation cost is distinct from this logical-chain enumeration.
+    /// Each traversed graph frame is CRC checked; unopened history is not audited.
     /// </remarks>
     public IReadOnlyList<CheckpointAddress> ReadFrames(string branchName) {
         RequireAvailable();
         CheckpointAddress head = HeadCore(branchName);
-        return _history.Journal.ReadChronologicalChain(head.Address, checkedRead: true).Unwrap()
-            .Select(address => Issue(_history.Read(address))).ToArray();
+        var frames = new List<CheckpointAddress>();
+        var visited = new HashSet<FrameAddress>();
+        CheckpointAddress? cursor = head;
+        while (cursor is not null) {
+            if (!visited.Add(cursor.Address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
+            frames.Add(cursor);
+            cursor = cursor.Parent is { } parent ? Issue(_resources.ReadHistory(parent)) : null;
+        }
+        frames.Reverse();
+        return frames;
+
     }
 
     /// <summary>Enumerates Event addresses in the fixed logical history ending at endInclusive.</summary>
@@ -277,7 +281,7 @@ public sealed class Repository : IDisposable {
     /// the logical ancestor chain before the first result; an unrelated position is rejected. That
     /// validation can scan the complete range. OldestFirst buffers the selected Event addresses before
     /// delivery. Neither direction materializes domain objects, and NewestFirst without a lower bound
-    /// does not prepare the complete chain. Opening has separate full physical-history validation costs.
+    /// does not prepare the complete chain. Each visited graph frame incurs a full-frame CRC read.
     /// Each advance requires an available repository, but no busy guard or backing lease remains held
     /// between results. Call ReadEvent or perform other serial operations inside the loop. This query
     /// describes recorded Events, not pending work or application progress.
@@ -295,10 +299,11 @@ public sealed class Repository : IDisposable {
 
     private IEnumerable<CheckpointAddress> EnumerateEventsCore(CheckpointAddress endInclusive,
         HistoryOrder order, CheckpointAddress? afterExclusive) {
-        EventAddress? cursor = endInclusive.Address;
+        FrameAddress? cursor = endInclusive.Address;
         List<CheckpointAddress>? buffered = null;
         int bufferedIndex = -1;
         bool prepared = false;
+        var visited = new HashSet<FrameAddress>();
         while (true) {
             CheckpointAddress? next;
             _busy = true;
@@ -307,9 +312,11 @@ public sealed class Repository : IDisposable {
                     if (order == HistoryOrder.OldestFirst) { buffered = []; }
                     if (afterExclusive is not null || buffered is not null) {
                         CheckpointAddress? probe = endInclusive;
+                        var probeVisited = new HashSet<FrameAddress>();
                         while (probe is not null && probe != afterExclusive) {
+                            if (!probeVisited.Add(probe.Address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
                             if (probe.Kind == GraphFrameKind.Event) { buffered?.Add(probe); }
-                            probe = probe.Parent is { } parent ? Issue(_history.Read(parent)) : null;
+                            probe = probe.Parent is { } parent ? Issue(_resources.ReadHistory(parent)) : null;
                         }
                         if (afterExclusive is not null && probe is null) {
                             throw new ArgumentException("The lower bound is not an ancestor of the selected end.", nameof(afterExclusive));
@@ -320,9 +327,9 @@ public sealed class Repository : IDisposable {
                 }
                 next = buffered is not null
                     ? bufferedIndex >= 0 ? buffered[bufferedIndex--] : null
-                    : ReadNextEventCore(endInclusive, afterExclusive, ref cursor);
+                    : ReadNextEventCore(endInclusive, afterExclusive, ref cursor, visited);
             } finally { EndOperation(); }
-            // HistoryJournal.Read has already disposed its frame/lease. No repository guard
+            // GraphResources.ReadHistory has already disposed its frame/lease. No repository guard
             // survives the yield, including when the caller stops before completing the range.
             if (next is null) { yield break; }
             yield return next;
@@ -330,9 +337,10 @@ public sealed class Repository : IDisposable {
     }
 
     private CheckpointAddress? ReadNextEventCore(CheckpointAddress endInclusive,
-        CheckpointAddress? afterExclusive, ref EventAddress? cursor) {
+        CheckpointAddress? afterExclusive, ref FrameAddress? cursor, HashSet<FrameAddress> visited) {
         while (cursor is { } address && address != afterExclusive?.Address) {
-            CheckpointAddress frame = address == endInclusive.Address ? endInclusive : Issue(_history.Read(address));
+            if (!visited.Add(address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
+            CheckpointAddress frame = address == endInclusive.Address ? endInclusive : Issue(_resources.ReadHistory(address));
             cursor = frame.Parent;
             if (frame.Kind == GraphFrameKind.Event) { return frame; }
         }
@@ -401,8 +409,10 @@ public sealed class Repository : IDisposable {
         CheckFrame(address);
         _busy = true;
         try {
+            ValidateSelectedGraphParent(address);
             GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
             CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
+            if (previousAddress is not null) { ValidateSelectedGraphParent(previousAddress); }
             var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
             IDurableObject root;
             IDurableObject? previous;
@@ -424,6 +434,7 @@ public sealed class Repository : IDisposable {
         CheckFrame(frame, kind);
         _busy = true;
         try {
+            ValidateSelectedGraphParent(frame);
             var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
             return GraphReader.ReadRoot<IDurableObject>(session, frame.RevisionAddress, frame.RootId);
         } finally { EndOperation(); }
@@ -447,6 +458,8 @@ public sealed class Repository : IDisposable {
         CheckFrame(second);
         _busy = true;
         try {
+            ValidateSelectedGraphParent(first);
+            ValidateSelectedGraphParent(second);
             return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,
                 first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, _models);
         } finally { EndOperation(); }
@@ -466,7 +479,7 @@ public sealed class Repository : IDisposable {
         try {
             CheckFrame(selectedFrame);
             ValidateNewName(branchName);
-            MutateRefCore(() => _history.Journal.CreateBranch(branchName, selectedFrame.Address));
+            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, selectedFrame.Address, out outcome));
             return selectedFrame;
         } finally { EndOperation(); }
     }
@@ -475,7 +488,8 @@ public sealed class Repository : IDisposable {
     /// <remarks>
     /// Requires a writable repository and an address issued by this open instance. Tags use
     /// a separate ordinal namespace from branches; an existing tag name is always rejected,
-    /// even for the same target. Branch movement and later commits never move the tag.
+    /// even for the same target. Names contain 1..1024 UTF-16 code units and use ordinal comparison.
+    /// Branch movement and later commits never move the tag.
     /// No domain graph is materialized and no branch head or checkout baseline changes.
     /// Validation failures preserve their original error. Publication failures report an
     /// explicit GraphCommitException outcome; inspect IsFaulted independently. Dispose and
@@ -502,34 +516,26 @@ public sealed class Repository : IDisposable {
         RequireAvailable();
         _busy = true;
         try {
-            EventAddress address = _history.Journal.ResolveTag(name).Unwrap();
-            return Issue(_history.Read(address));
+            var payload = _resources.Versions.ResolveTag(name).Unwrap();
+            if (!FrameAddress.TryRead(payload.Bytes, out FrameAddress address)) {
+                throw new InvalidDataException("Invalid graph address in tag payload.");
+            }
+            return Issue(_resources.ReadHistory(address));
         } finally { EndOperation(); }
     }
 
-    private void CreateTagCore(string name, EventAddress address) {
+    private void CreateTagCore(string name, FrameAddress address) {
+        byte[] payload = new byte[FrameAddress.EncodedSize];
+        if (!address.TryWrite(payload)) { throw new InvalidDataException("Invalid graph tag address."); }
+        PublicationOutcome outcome = PublicationOutcome.NotAttempted;
         try { Checkpoint?.Invoke(CommitCheckpoint.BeforePublication); }
-        catch (Exception error) {
-            throw new GraphCommitException(GraphCommitOutcome.NotPublished, null, error);
-        }
-
+        catch (Exception error) { throw new GraphCommitException(GraphCommitOutcome.NotPublished, null, error); }
         AteliaResult<bool> result;
-        try { result = _history.Journal.CreateTag(name, address); }
-        catch (TagPublicationException error) {
-            // Even NotAttempted faults the upstream journal (for example target confirmation).
+        try { result = _resources.Versions.CreateTag(name, payload, out outcome); }
+        catch (Exception error) {
             _resources.MarkFaulted();
-            GraphCommitOutcome outcome = error.Outcome switch {
-                TagPublicationOutcome.NotAttempted => GraphCommitOutcome.NotPublished,
-                TagPublicationOutcome.Confirmed => GraphCommitOutcome.Published,
-                _ => GraphCommitOutcome.Unknown
-            };
-            throw new GraphCommitException(outcome, null, error);
-        } catch (Exception error) {
-            _resources.MarkFaulted();
-            throw new GraphCommitException(GraphCommitOutcome.Unknown, null, error);
+            throw new GraphCommitException(MapOutcome(outcome), null, error);
         }
-        // Ordinary Result failures, including RBF pre-I/O rejection, do not fault the
-        // upstream journal. Unwrap outside the publication-exception handling above.
         result.Unwrap();
         try { Checkpoint?.Invoke(CommitCheckpoint.AfterPublication); }
         catch (Exception error) {
@@ -546,30 +552,32 @@ public sealed class Repository : IDisposable {
         try {
             CheckFrame(expectedHead);
             CheckFrame(target);
-            RefId branch = _history.Journal.OpenBranch(branchName).Unwrap();
+            FrameAddress head = _resources.GetHead(branchName);
             if (_activeBranches.Contains(branchName)) { throw new InvalidOperationException("Close this branch's active checkout before moving it."); }
-            if (_history.Journal.GetHead(branch) != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
-            MutateRefCore(() => _history.Journal.MoveRef(branch, expectedHead.Address, target.Address));
+            if (head != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
+            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, target.Address, out outcome));
         } finally { EndOperation(); }
     }
 
     // The caller owns the complete operation's busy guard, including restoration and delivery.
-    private void MutateRefCore<T>(Func<AteliaResult<T>> mutation) where T : notnull {
-        bool attempted = false;
-        bool published = false;
+    private delegate void RootMutation(out PublicationOutcome outcome);
+    private void MutateRefCore(RootMutation mutation) {
+        PublicationOutcome outcome = PublicationOutcome.NotAttempted;
         try {
             Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
-            attempted = true;
-            var result = mutation();
-            if (result.IsFailure && result.Error is EventJournalError { ErrorName: "RefCasMismatch" }) { attempted = false; }
-            result.Unwrap();
-            published = true;
+            mutation(out outcome);
             Checkpoint?.Invoke(CommitCheckpoint.AfterPublication);
         } catch (Exception error) {
-            if (attempted) { _resources.MarkFaulted(); }
-            throw new GraphCommitException(published ? GraphCommitOutcome.Published : attempted ? GraphCommitOutcome.Unknown : GraphCommitOutcome.NotPublished, null, error);
+            if (outcome != PublicationOutcome.NotAttempted) { _resources.MarkFaulted(); }
+            throw new GraphCommitException(MapOutcome(outcome), null, error);
         }
     }
+
+    private static GraphCommitOutcome MapOutcome(PublicationOutcome outcome) => outcome switch {
+        PublicationOutcome.Confirmed => GraphCommitOutcome.Published,
+        PublicationOutcome.Unknown => GraphCommitOutcome.Unknown,
+        _ => GraphCommitOutcome.NotPublished,
+    };
 
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
@@ -584,7 +592,7 @@ public sealed class Repository : IDisposable {
             CheckpointAddress? state = NearestStateCore(session.Head);
             if (session.Workspace.ParentRevisionAddress != state?.RevisionAddress ||
                 (state is null ? session.Workspace.World is not null : session.Workspace.WorldId != state.RootId)) {
-                throw new InvalidOperationException("Checkout State baseline does not match the Journal chain.");
+                throw new InvalidOperationException("Checkout State baseline does not match the business chain.");
             }
             return Publish(session, domainEvent, nextState, parameters ?? DefaultPolicy, initial: false);
         } finally { EndOperation(); }
@@ -594,63 +602,74 @@ public sealed class Repository : IDisposable {
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters parameters, bool initial) {
         FrameAddress? address = null;
         bool writeAttempted = false;
-        bool refAttempted = false;
-        bool published = false;
+        bool faultOnFailure = false;
+        PublicationOutcome outcome = PublicationOutcome.NotAttempted;
         try {
             using PreparedWorldSave pending = domainEvent is null
                 ? session.Workspace.Stage(nextState!, parameters) : session.Workspace.StageSnapshot(domainEvent, parameters);
             Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
+            GraphFrameKind kind = domainEvent is null ? GraphFrameKind.State : GraphFrameKind.Event;
+            FrameAddress? parent = initial ? null : session.Head.Address;
+            if (parent is { } existing) { _resources.ReadHistory(existing); }
+            byte[] metadata = GraphMetadataCodec.Encode(kind, parent, pending.RootId);
             Checkpoint?.Invoke(CommitCheckpoint.BeforeStateAppend);
             writeAttempted = true;
-            address = _resources.States.AppendDurably(pending.Revision);
-            Checkpoint?.Invoke(CommitCheckpoint.AfterStateDurable);
-            if (domainEvent is null) { pending.PrepareInstall(address.Value); }
-            GraphFrameKind kind = domainEvent is null ? GraphFrameKind.State : GraphFrameKind.Event;
-            Checkpoint?.Invoke(CommitCheckpoint.BeforeJournalAppend);
-            EventAddress journalAddress = _history.Append(kind, address.Value, pending.RootId, initial ? null : session.Head.Address);
-            Checkpoint?.Invoke(CommitCheckpoint.AfterJournalDurable);
-            CheckpointAddress frame = Issue(_history.Read(journalAddress));
-            RefId branch = initial ? default : _history.Journal.OpenBranch(session.BranchName).Unwrap();
-            Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
-            refAttempted = true;
-            if (initial) { _history.Journal.CreateBranch(session.BranchName, journalAddress).Unwrap(); }
-            else {
-                var result = _history.Journal.AdvanceRef(branch, session.Head.Address, journalAddress);
-                if (result.IsFailure && result.Error is EventJournalError { ErrorName: "RefCasMismatch" }) { refAttempted = false; }
-                result.Unwrap();
+            faultOnFailure = true;
+            try { address = _resources.States.Append(pending.Revision, metadata); }
+            catch {
+                // Capacity/semantic rejections before backing output are ordinary failures.
+                faultOnFailure = _resources.IsFaulted;
+                throw;
             }
-            published = true;
+            Checkpoint?.Invoke(CommitCheckpoint.AfterStateAppend);
+            if (domainEvent is null) { pending.PrepareInstall(address.Value); }
+            CheckpointAddress frame = Issue(new(address.Value, parent, kind, pending.RootId));
+            // Stage can publish Schema; derive this branch update from the owner's current root.
+            if (!initial && _resources.GetHead(session.BranchName) != session.Head.Address) {
+                throw new InvalidOperationException("Branch head no longer matches the checkout.");
+            }
+            faultOnFailure = false;
+            GraphResources.RootUpdate update = _resources.PrepareBranchRoot(session.BranchName, address.Value);
+            faultOnFailure = true;
+            Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
+            faultOnFailure = false;
+            _resources.PublishRoot(update, out outcome);
+            faultOnFailure = true;
             Checkpoint?.Invoke(CommitCheckpoint.AfterPublication);
             Checkpoint?.Invoke(CommitCheckpoint.BeforeInstall);
             if (domainEvent is null) { pending.Install(); }
             session.Head = frame;
             return frame;
         } catch (Exception error) {
-            if (writeAttempted || refAttempted || _resources.Schemas.IsFaulted) { _resources.MarkFaulted(); }
-            if (!writeAttempted && !refAttempted && address is null) { throw; }
-            throw new GraphCommitException(published ? GraphCommitOutcome.Published : refAttempted ? GraphCommitOutcome.Unknown : GraphCommitOutcome.NotPublished, address, error);
+            if (faultOnFailure || outcome != PublicationOutcome.NotAttempted || _resources.Schemas.IsFaulted) { _resources.MarkFaulted(); }
+            // A Schema registration can fail independently, before business publication begins.
+            if (!writeAttempted && address is null) { throw; }
+            throw new GraphCommitException(MapOutcome(outcome), address, error);
         }
     }
 
     private CheckpointAddress HeadCore(string branchName) {
-        RefId branch = _history.Journal.OpenBranch(branchName).Unwrap();
-        EventAddress head = _history.Journal.GetHead(branch) ?? throw new InvalidDataException("EventHistory branches cannot have empty heads.");
-        return Issue(_history.Read(head));
+        return Issue(_resources.ReadHistory(_resources.GetHead(branchName)));
     }
+
     private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, GraphFrameKind.State);
 
     private CheckpointAddress? PreviousCore(CheckpointAddress frame, GraphFrameKind kind) {
+        var visited = new HashSet<FrameAddress> { frame.Address };
         while (frame.Parent is { } parent) {
-            frame = Issue(_history.Read(parent));
+            if (!visited.Add(parent)) { throw new InvalidDataException("Graph business history contains a cycle."); }
+            frame = Issue(_resources.ReadHistory(parent));
             if (frame.Kind == kind) { return frame; }
         }
         return null;
     }
 
     private CheckpointAddress? NearestStateCore(CheckpointAddress frame) {
+        var visited = new HashSet<FrameAddress> { frame.Address };
         while (frame.Kind != GraphFrameKind.State) {
             if (frame.Parent is not { } parent) { return null; }
-            frame = Issue(_history.Read(parent));
+            if (!visited.Add(parent)) { throw new InvalidDataException("Graph business history contains a cycle."); }
+            frame = Issue(_resources.ReadHistory(parent));
         }
         return frame;
     }
@@ -661,48 +680,16 @@ public sealed class Repository : IDisposable {
         if (kind is not null && frame.Kind != kind) { throw new ArgumentException("Frame has the wrong Event/State role.", nameof(frame)); }
     }
     private void ValidateNewName(string name) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        var result = _history.Journal.OpenBranch(name);
-        if (result.IsSuccess) { throw new InvalidOperationException("Branch name already exists."); }
-        if (result.Error is not EventJournalError { ErrorName: "BranchNotFound" }) {
-            throw new ArgumentException(result.Error!.Message, nameof(name));
-        }
+        RepositoryRootCodec.ValidateBranchName(name);
+        if (_resources.HasBranch(name)) { throw new InvalidOperationException("Branch name already exists."); }
     }
 
-    private void ValidateHistory() {
-        IReadOnlyList<HistoryGraphRecord> physicalRecords = _history.ReadAllFrames();
-        var records = physicalRecords.ToDictionary(record => record.Address);
-        // Physical scanning is oldest-first, and HistoryJournal rejects parents at or after their child.
-        // This derived index carries only navigation; Journal Parent remains the persisted authority.
-        var nearestStates = new Dictionary<EventAddress, HistoryGraphRecord?>();
-        foreach (HistoryGraphRecord record in physicalRecords) {
-            HistoryGraphRecord? baseline = null;
-            if (record.Parent is { } parentAddress) {
-                if (!records.ContainsKey(parentAddress) || !nearestStates.TryGetValue(parentAddress, out baseline)) {
-                    throw new InvalidDataException("Journal Parent is missing from the preceding physical history.");
-                }
-            }
-            ValidateGraph(record, baseline?.RevisionAddress);
-            nearestStates.Add(record.Address, record.Kind == GraphFrameKind.State ? record : baseline);
-        }
-        foreach (string branch in _history.Journal.ListBranches()) {
-            if (!records.ContainsKey(HeadCore(branch).Address)) {
-                throw new InvalidDataException("Branch head is absent from physical Journal history.");
-            }
-        }
-    }
-
-    private void ValidateGraph(HistoryGraphRecord record, FrameAddress? expectedParent) {
-        StateRevision revision = _resources.States.Read(record.RevisionAddress);
-        if (revision.ParentRevisionAddress != expectedParent) { throw new InvalidDataException("Journal and StateRevision Parent disagree."); }
-        var objects = _resources.States.ReadLiveObjectHeadMap(record.RevisionAddress);
-        if (!objects.ContainsKey(record.RootId.Value)) { throw new InvalidDataException("Graph root is absent from Revision membership."); }
-        foreach (uint id in objects.Keys) {
-            ObjectVersionChain chain = _resources.States.ReadObjectVersionChain(record.RevisionAddress, id);
-            DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, _resources.Schemas);
-            if (body.Kind == ObjectStateKind.Durable && body.Layout.Schema!.Kind != SchemaKind.ReferenceObject) { throw new InvalidDataException("Object Base cannot select an inline Schema."); }
-            if (body.Kind == ObjectStateKind.String && chain.Records.Count != 1) { throw new InvalidDataException("String cannot have a Delta chain."); }
-            if (id == record.RootId.Value && body.Kind != ObjectStateKind.Durable) { throw new InvalidDataException("Graph root must be durable."); }
+    // Typed graph preparation, rather than open or metadata navigation, checks this relation.
+    private void ValidateSelectedGraphParent(CheckpointAddress frame) {
+        FrameAddress? expectedParent = PreviousCore(frame, GraphFrameKind.State)?.RevisionAddress;
+        StateRevision revision = _resources.States.Read(frame.RevisionAddress);
+        if (revision.ParentRevisionAddress != expectedParent) {
+            throw new InvalidDataException("Graph business history and StateRevision Parent disagree.");
         }
     }
 
@@ -730,6 +717,6 @@ public sealed class Repository : IDisposable {
         _disposed = true;
         _preparedState = null;
         _activeBranches.Clear();
-        try { _resources.Dispose(); } finally { _history.Dispose(); }
+        _resources.Dispose();
     }
 }

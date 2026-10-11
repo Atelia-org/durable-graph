@@ -4,7 +4,7 @@ using System.Text.Json;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Xunit.Abstractions;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -57,8 +57,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
     private void Run(bool family, bool containers, string scenario, int sample, bool enabled, StreamWriter? file) {
         string path = Path.Combine(Path.GetTempPath(), FixturePrefix + Guid.NewGuid().ToString("N"));
         try {
-            using Repository repository = Repository.CreateNew(path, Models(family),
-                new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+            using Repository repository = Repository.CreateNew(path, Models(family));
             repository.PreparedStateReuseEnabled = enabled;
             CheckpointAddress[] requests = Seed(repository, containers, scenario);
             GraphReadStatistics statistics = new();
@@ -188,18 +187,18 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
             context.CaptureObject(source.Links, LinksType), source.Value), Visit);
 
     private static StateReaderBinding<State> Reader(DurableSchema schema) => new(schema, Read,
-        static (ref BinaryPayloadReader reader, in State _) => Read(ref reader), Visit);
-    private static State Read(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()), reader.ReadInt32());
+        static (ref BareValueReader reader, in State _) => Read(ref reader), Visit);
+    private static State Read(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()), reader.ReadVarInt32());
     private static void Visit(in State state, IStateReferenceVisitor visitor) {
         visitor.VisitDurable(state.Next, Schema.SchemaId);
         visitor.VisitObject(state.Links, LinksType);
     }
     private static PreparedBaseBody Base(in State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Next.Value);
-        writer.WriteUInt32(state.Links.Value);
-        writer.WriteInt32(state.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Next.Value);
+        writer.WriteVarUInt32(state.Links.Value);
+        writer.WriteVarInt32(state.Value);
         return new(bytes.WrittenSpan);
     }
     private sealed class Node : IDurableObject {

@@ -3,18 +3,17 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using BoxStates = Atelia.DurableGraph.Generated.Family_47656E65726963426F78;
 using WorldStates = Atelia.DurableGraph.Generated.Family_47656E65726963576F726C64;
 using PointStates = Atelia.DurableGraph.Generated.Family_47656E65726963506F696E74;
 using WorldV1 = Atelia.DurableGraph.Generated.Family_47656E65726963576F726C64.V1<Atelia.DurableGraph.Generated.Family_47656E6572696350616972.V1<Atelia.DurableGraph.Generated.Family_47656E657269634C6567616379506F696E74.V1>>;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 
 namespace GenericPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {
@@ -256,19 +255,17 @@ internal static class Program {
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
 
     private static void WriteAddress(string directory, string name, FrameAddress revision, ObjectId worldId) =>
-        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{ProbeArtifacts.Format(revision)}:{worldId.Value}");
 
     private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
         Require(parts.Length == 3, "Malformed probe address handoff.");
-        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), new ObjectId(uint.Parse(parts[2])));
+        return (ProbeArtifacts.Parse(parts[0]), new ObjectId(uint.Parse(parts[1])));
     }
 
     private static void Require(bool condition, string message) {

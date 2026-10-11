@@ -30,8 +30,8 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
         Assert.Equal(new byte[] { 0xFF, 0x80 }, decodedText.Body.ToArray());
 
         DurableSchema schema = new("A", 128, new DurableFieldInfo(1, TypeTag.Int32));
-        using IRbfFile file = RbfFile.CreateNew(_path);
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(_path);
+        SchemaStore schemas = file.Schemas;
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
         Assert.Equal(new RepresentationId(2), id);
         EncodedBaseObjectBody durable = BaseObjectBodyCodec.Encode(id, new([0xFF, 0]));
@@ -47,8 +47,8 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
     [Fact]
     public void EmptyBodyIsValidAtTheHeaderBoundaryAndDecodeOwnsItsBody() {
         Assert.Empty(BaseObjectBodyCodec.Decode(new byte[] { 4, 1 }).Body.ToArray());
-        using IRbfFile file = RbfFile.CreateNew(_path);
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(_path);
+        SchemaStore schemas = file.Schemas;
         DurableSchema schema = new("A", 1);
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
         byte[] wire = [4, 2, 7, 8];
@@ -63,8 +63,7 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
     [InlineData(new byte[] { 0, 1 })]
     [InlineData(new byte[] { 5, 1 })]
     [InlineData(new byte[] { 4, 0 })]
-    [InlineData(new byte[] { 4, 0x81, 0 })] // Noncanonical ID.
-    public void UnknownAndNoncanonicalHeadersAreRejected(byte[] wire) {
+    public void UnknownHeadersAreRejected(byte[] wire) {
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(wire));
     }
 
@@ -77,11 +76,16 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
     }
 
     [Fact]
+    public void BoundedRedundantRepresentationIdRemainsReadable() {
+        Assert.Equal(RepresentationId.String, BaseObjectBodyCodec.Decode(new byte[] { 4, 0x81, 0 }).RepresentationId);
+    }
+
+    [Fact]
     public void NullInputsAreRejected() {
         Assert.Throws<ArgumentNullException>(() => BaseObjectBodyCodec.EncodeString(null!));
         Assert.Throws<ArgumentNullException>(() => BaseObjectBodyCodec.Encode(RepresentationId.String, null!));
         Assert.Throws<ArgumentOutOfRangeException>(() => BaseObjectBodyCodec.Encode(default, new([])));
     }
 
-    public void Dispose() => File.Delete(_path);
+    public void Dispose() => DeleteTestPath(_path);
 }

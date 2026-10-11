@@ -2,9 +2,8 @@ using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+
 #if HISTORY_V3
 using WorldStates = Atelia.DurableGraph.Generated.Family_7061636B6167652E696E6C696E652D776F726C64;
 #endif
@@ -12,7 +11,7 @@ using WorldStates = Atelia.DurableGraph.Generated.Family_7061636B6167652E696E6C6
 namespace InlineStructPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {
@@ -222,19 +221,17 @@ internal static class Program {
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
 
     private static void WriteAddress(string directory, string name, FrameAddress revision, ObjectId worldId) =>
-        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{revision.FileNumber}:{revision.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, name + ".txt"), $"{ProbeArtifacts.Format(revision)}:{worldId.Value}");
 
     private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
         Require(parts.Length == 3, "Malformed probe address handoff.");
-        return (new FrameAddress(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), new ObjectId(uint.Parse(parts[2])));
+        return (ProbeArtifacts.Parse(parts[0]), new ObjectId(uint.Parse(parts[1])));
     }
 
     private static void Require(bool condition, string message) {

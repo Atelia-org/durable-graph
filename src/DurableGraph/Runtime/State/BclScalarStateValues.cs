@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
@@ -6,11 +7,11 @@ namespace Atelia.DurableGraph.Runtime;
 /// <summary>Static Guid operations for its complete built-in state representation.</summary>
 public readonly struct GuidStateOps : IStateOps<Guid> {
     public static bool StateEquals(in Guid left, in Guid right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in Guid state, DurableFieldInfo slot) => writer.WriteGuid(state);
-    public static Guid ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadGuid();
+    public static void WriteBase(ref BareValueWriter writer, in Guid state, DurableFieldInfo slot) => BclValueCodec.WriteGuid(ref writer, state);
+    public static Guid ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => BclValueCodec.ReadGuid(ref reader);
     public static PreparedDeltaBody PrepareDelta(in Guid prior, in Guid current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<Guid, GuidStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static Guid ApplyDelta(ref BinaryPayloadReader reader, in Guid prior, DurableFieldInfo slot) {
+    public static Guid ApplyDelta(ref BareValueReader reader, in Guid prior, DurableFieldInfo slot) {
         Guid current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -21,11 +22,11 @@ public readonly struct GuidStateOps : IStateOps<Guid> {
 /// <summary>Static Decimal operations for its complete built-in state representation.</summary>
 public readonly struct DecimalStateOps : IStateOps<decimal> {
     public static bool StateEquals(in decimal left, in decimal right, DurableFieldInfo slot) => ScalarStateEquality.DecimalEquals(in left, in right);
-    public static void WriteBase(ref BinaryPayloadWriter writer, in decimal state, DurableFieldInfo slot) => writer.WriteDecimal(state);
-    public static decimal ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadDecimal();
+    public static void WriteBase(ref BareValueWriter writer, in decimal state, DurableFieldInfo slot) => BclValueCodec.WriteDecimal(ref writer, state);
+    public static decimal ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => BclValueCodec.ReadDecimal(ref reader);
     public static PreparedDeltaBody PrepareDelta(in decimal prior, in decimal current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<decimal, DecimalStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static decimal ApplyDelta(ref BinaryPayloadReader reader, in decimal prior, DurableFieldInfo slot) {
+    public static decimal ApplyDelta(ref BareValueReader reader, in decimal prior, DurableFieldInfo slot) {
         decimal current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -36,11 +37,11 @@ public readonly struct DecimalStateOps : IStateOps<decimal> {
 /// <summary>Static TimeSpan operations for its complete built-in state representation.</summary>
 public readonly struct TimeSpanStateOps : IStateOps<TimeSpan> {
     public static bool StateEquals(in TimeSpan left, in TimeSpan right, DurableFieldInfo slot) => left.Ticks == right.Ticks;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in TimeSpan state, DurableFieldInfo slot) => writer.WriteTimeSpan(state);
-    public static TimeSpan ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadTimeSpan();
+    public static void WriteBase(ref BareValueWriter writer, in TimeSpan state, DurableFieldInfo slot) => BclValueCodec.WriteTimeSpan(ref writer, state);
+    public static TimeSpan ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => BclValueCodec.ReadTimeSpan(ref reader);
     public static PreparedDeltaBody PrepareDelta(in TimeSpan prior, in TimeSpan current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<TimeSpan, TimeSpanStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static TimeSpan ApplyDelta(ref BinaryPayloadReader reader, in TimeSpan prior, DurableFieldInfo slot) {
+    public static TimeSpan ApplyDelta(ref BareValueReader reader, in TimeSpan prior, DurableFieldInfo slot) {
         TimeSpan current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;

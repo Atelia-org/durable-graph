@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -13,13 +14,13 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void TraditionalNestedComparisonMatchesDeltaWithoutPreparingPayloads() {
         string source = InlineBodySource.Replace("public static bool RefHydration()", """
             public static bool Equal(byte[] a,byte[] b) {
-                var readerA=new BinaryPayloadReader(a); var readerB=new BinaryPayloadReader(b);
+                var readerA=new BareValueReader(a); var readerB=new BareValueReader(b);
                 var left=Item.__DurableState.ReadBaseBodyV1(ref readerA);
                 var right=Item.__DurableState.ReadBaseBodyV1(ref readerB);
                 return Item.__DurableState.StateEquals(in left,in right);
             }
             public static long Allocations(byte[] bytes) {
-                var reader=new BinaryPayloadReader(bytes);
+                var reader=new BareValueReader(bytes);
                 var state=Item.__DurableState.ReadBaseBodyV1(ref reader);
                 for(int i=0;i<1000;i++) if(!Item.__DurableState.StateEquals(in state,in state)) throw new Exception();
                 long start=GC.GetAllocatedBytesForCurrentThread();
@@ -87,7 +88,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     if(!PairState.BodyV1<float,SingleStateOps>.StateEquals(in left,in right,slot) ||
                         PairState.BodyV1<float,SingleStateOps>.PrepareDelta(in left,in right,slot).HasChanges) return false;
                     var encoded=PairState.BodyV1<float,SingleStateOps>.PrepareBase(in left,schema);
-                    var reader=new BinaryPayloadReader(encoded.Body);
+                    var reader=new BareValueReader(encoded.Body);
                     var restored=PairState.BodyV1<float,SingleStateOps>.ReadBase(ref reader,slot);
                     if(!PairState.BodyV1<float,SingleStateOps>.StateEquals(in left,in restored,slot)) return false;
                     Unsafe.AsRef(in right.Segment0Field2)=BitConverter.UInt32BitsToSingle(0x7FC00002);

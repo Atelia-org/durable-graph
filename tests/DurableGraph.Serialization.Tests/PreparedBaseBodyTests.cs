@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Serialization.Tests;
@@ -35,7 +36,7 @@ public sealed class PreparedBaseBodyTests {
         _ = StringPayloadCodec.PrepareBase("later preparation");
 
         Assert.Equal(Convert.FromHexString(expectedHex), prepared.Body.ToArray());
-        BinaryPayloadReader reader = new(prepared.Body);
+        BareValueReader reader = new(prepared.Body);
         string restored = reader.ReadString();
         reader.EnsureFullyConsumed();
         Assert.Equal(value, restored);

@@ -4,7 +4,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -19,8 +19,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
 
     [Fact]
     public void CurrentStateDropsHistoricalOnlyCertificateWhileEventsPreserveRewriteAndDoNotRepopulateSlot() {
-        using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()))) {
             using BranchCheckout initial = seed.CreateBranch("main", new Root { Value = 17 }, NoRebase);
         }
         Counters counts = new();
@@ -115,8 +114,8 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
                     sourceReaderResolver: context.ResolveReader);
             }, historicalReaderFactory: static (schema, context) => {
                 if (schema.Version == 2) { context.ResolveStoredValue(schema.Fields[0]); }
-                return new StateReaderBinding<int>(schema, static (ref BinaryPayloadReader reader) => reader.ReadInt32(),
-                    static (ref BinaryPayloadReader reader, in int _) => reader.ReadInt32(),
+                return new StateReaderBinding<int>(schema, static (ref BareValueReader reader) => reader.ReadVarInt32(),
+                    static (ref BareValueReader reader, in int _) => reader.ReadVarInt32(),
                     static (in int _, IStateReferenceVisitor _) => { });
             }, upgrades: current ? [new(Owner, 1, Method(nameof(Keep))), new(Owner, 2, Method(nameof(Keep)))] : []));
         return registry;
@@ -124,8 +123,8 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
 
     private static PreparedBaseBody Body(in int value) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteInt32(value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarInt32(value);
         return new(bytes.WrittenSpan);
     }
     private static void Keep(in int prior, out int next, UpgradeContext _) => next = prior;

@@ -1,10 +1,10 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -17,10 +17,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         StateModelSnapshot snapshot = models.Snapshot(schemas);
         DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
         ObjectStateRecord decimals = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
@@ -37,23 +36,23 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectVersionRecord replacement = Assert.Single(states.Read(addresses[11]).LocalObjects,
             row => row.ObjectId == decimals.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, replacement.Kind);
-        BinaryPayloadReader reader = new(replacement.Body);
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(decimal.GetBits(1.0m), decimal.GetBits(reader.ReadDecimal()));
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(decimal.GetBits(1.00m), decimal.GetBits(reader.ReadDecimal()));
-        Assert.Equal(decimal.GetBits(10.0m), decimal.GetBits(reader.ReadDecimal()));
+        BareValueReader reader = new(replacement.Body);
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(decimal.GetBits(1.0m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(decimal.GetBits(1.00m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
+        Assert.Equal(decimal.GetBits(10.0m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
         reader.EnsureFullyConsumed();
         ObjectVersionRecord patch = Assert.Single(states.Read(addresses[12]).LocalObjects,
             row => row.ObjectId == decimals.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, patch.Kind);
         reader = new(patch.Body);
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(decimal.GetBits(1.00m), decimal.GetBits(reader.ReadDecimal()));
-        Assert.Equal(decimal.GetBits(10.00m), decimal.GetBits(reader.ReadDecimal()));
-        Assert.Equal(0U, reader.ReadUInt32());
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(decimal.GetBits(1.00m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
+        Assert.Equal(decimal.GetBits(10.00m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
+        Assert.Equal(0U, reader.ReadVarUInt32());
         reader.EnsureFullyConsumed();
         // Earlier frozen states are unchanged after all same-instance mutations and subsequent reads.
         FrozenDictionaryState<decimal, decimal> old = decimals.GetDictionaryState<decimal, decimal>();
@@ -78,6 +77,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace BclScalarGraph;
         [DurableType("bcl.Value",1)] public readonly partial record struct Value<T>(
             [field:DurableField(1)] Guid Id,

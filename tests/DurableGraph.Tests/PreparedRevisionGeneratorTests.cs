@@ -3,9 +3,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -27,14 +25,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint ownerId = 0, tagId = 0, originalStringId = 0, equalStringId = 0, emptyId = 0;
         long initialH = 0, accumulatedH = 0;
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
-        using (var schemaFile = RbfFile.CreateNew(schemaPath))
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
-            SchemaStore schemas = new(schemaFile);
-            using StateRevisionStore store = new(segments);
+        const long rotationThreshold = 128;
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+            SchemaStore schemas = segments.Schemas;
+            using StateRevisionStore store = new(segments.Data);
             for (int stage = 0; stage < revisions.Length; stage++) {
                 CapturedGraph? accepted = session.Current;
                 CapturedGraph graph = capture(stage);
@@ -173,15 +167,15 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if (stage < revisions.Length - 1) session.Accept(graph); // Explicit fixture baseline choice only.
                 else session.Discard(graph);
             }
+            segments.Data.ConfirmDurable();
         }
         Assert.Equal(72, initialH); // 68 raw + 2 v4 representation-header + 2 ObjectVersion bytes.
         Assert.True(accumulatedH > initialH);
-        Assert.Equal(revisions.Length, revisions.Select(address => address.FileNumber).Distinct().Count());
+        Assert.Equal(revisions.Length, revisions.Distinct().Count());
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
 
-        using var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
-        SchemaStore coldSchemas = new(reopenedSchemaFile, readOnly: true);
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        using StateRevisionStore cold = new(reopened);
+        SchemaStore coldSchemas = reopened.Schemas;
+        using StateRevisionStore cold = new(reopened.Data);
         for (int stage = 0; stage < revisions.Length; stage++) {
             var heads = cold.ReadLiveObjectHeadMap(revisions[stage]);
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revisions[stage], ownerId);
@@ -222,6 +216,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using Atelia.DurableGraph.Serialization;
         namespace PreparedRevisionWitness;
         [DurableType("prepared-revision.owner", 1)]

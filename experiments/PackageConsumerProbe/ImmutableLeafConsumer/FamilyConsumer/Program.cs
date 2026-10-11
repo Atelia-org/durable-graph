@@ -4,13 +4,12 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace ImmutableLeafProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {

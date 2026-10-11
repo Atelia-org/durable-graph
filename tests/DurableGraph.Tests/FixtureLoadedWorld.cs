@@ -1,6 +1,7 @@
 // Test-only fixed-parent graph bridge for generated model/history mechanism witnesses.
 // This is not the supported consumer facade or EventHistory publication acceptance.
 using Atelia.DurableGraph.Storage;
+using Atelia.FrameStore;
 
 using Atelia.DurableGraph.Persistence;
 

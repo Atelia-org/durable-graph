@@ -8,7 +8,7 @@
 
 The project uses only the two public PackageReferences. Packaged generator/build
 assets publish and verify two schema histories, with distinct State and Event
-root types. The runner restores the complete nine-package feed into a private
+root types. The runner restores the complete ten-package feed into a private
 cache. Storage component versions come from dependency metadata and the shared
 feed helper; the runner does not force all storage packages to one version.
 

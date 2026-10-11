@@ -1,5 +1,5 @@
 using System.Reflection;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using State = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.State;
 
@@ -84,9 +84,9 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.NotEqual(lower, upper);
             Assert.Equal((byte)1, Assert.IsType<Node>(repository.ReadState(lower)).Value);
             Assert.Equal((byte)2, Assert.IsType<Node>(repository.ReadState(upper)).Value);
-            AssertOrdinaryFailure("TagAlreadyExists", () => repository.CreateTag("same", lower));
-            AssertOrdinaryFailure("TagAlreadyExists", () => repository.CreateTag("same", upper));
-            AssertOrdinaryFailure("TagNameInvalid", () => repository.ResolveTag("SAME"));
+            AssertOrdinaryFailure("DuplicateTagName", () => repository.CreateTag("same", lower));
+            AssertOrdinaryFailure("DuplicateTagName", () => repository.CreateTag("same", upper));
+            AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("SAME"));
             Assert.False(repository.IsFaulted);
             Assert.Equal(lower, repository.ResolveTag("same"));
             Assert.Equal(upper, repository.ResolveTag("same-other"));
@@ -112,7 +112,7 @@ public sealed class RepositoryTagTests : IDisposable {
     }
 
     [Fact]
-    public void CreatingTagWithEmptyRegistryChangesOnlyExistingTagMetadataLog() {
+    public void CreatingTagWithEmptyRegistryChangesOnlyTagBucket() {
         using (Repository seed = Create()) {
             using BranchCheckout main = seed.CreateBranch("main", new Node { Value = 1 }, NoRebase);
         }
@@ -124,19 +124,11 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.Equal(head, metadata.GetHead("main"));
             Assert.Null(metadata.PreparedStateEntry);
         }
-        string tagLog = Path.Combine(_root, "journal", "refs", "ref-op-log.rbf");
-        Assert.Contains(tagLog, before.Keys);
-        Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
-        foreach (var pair in before) {
-            byte[] after = File.ReadAllBytes(pair.Key);
-            if (string.Equals(pair.Key, tagLog, StringComparison.OrdinalIgnoreCase)) {
-                Assert.True(after.Length > pair.Value.Length);
-            } else {
-                Assert.Equal(pair.Value, after);
-            }
-        }
-        // Chronological traversal has a separate writable forward-plan disk cache.
-        // Keep it outside the tag-only write window, and inspect history read-only.
+        string tagsRoot = Path.Combine(_root, "versions", "tags") + Path.DirectorySeparatorChar;
+        var after = SnapshotFiles();
+        Assert.Contains(after.Keys, path => path.StartsWith(tagsRoot, StringComparison.Ordinal));
+        foreach (var pair in before) { Assert.Equal(pair.Value, after[pair.Key]); }
+        Assert.All(after.Keys.Except(before.Keys), path => Assert.StartsWith(tagsRoot, path, StringComparison.Ordinal));
         using Repository verify = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
         Assert.Single(verify.ReadFrames("main"));
     }
@@ -150,8 +142,7 @@ public sealed class RepositoryTagTests : IDisposable {
             seed.CreateTag("saved", old);
         }
         var before = SnapshotFiles();
-        using Repository foreign = Repository.CreateNew(_root + "-foreign", SharedReadModel.Models(),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository foreign = Repository.CreateNew(_root + "-foreign", SharedReadModel.Models());
         using BranchCheckout foreignBranch = foreign.CreateBranch("main", new Node { Value = 2 }, NoRebase);
         using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
             CheckpointAddress current = repository.ResolveTag("saved");
@@ -262,21 +253,24 @@ public sealed class RepositoryTagTests : IDisposable {
 
     [Fact]
     public void InvalidTagNamesRejectWithoutWritingWhileLengthBoundariesPersist() {
-        string longest = new('a', 128);
+        string longest = new('a', Atelia.VersionStore.VersionStore.MaxTagNameCodeUnits);
         using (Repository seed = Create()) {
             using BranchCheckout main = seed.CreateBranch("main", new Node(), NoRebase);
             seed.CreateTag("a", main.Head);
             seed.CreateTag(longest, main.Head);
+            seed.CreateTag("Uppercase", main.Head);
+            seed.CreateTag("trailing.lock", main.Head);
+            seed.CreateTag("标签/正文", main.Head);
         }
         var before = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
             CheckpointAddress address = repository.GetHead("main");
             Assert.Equal(address, repository.ResolveTag("a"));
             Assert.Equal(address, repository.ResolveTag(longest));
-            string?[] invalidNames = [null, "", "Uppercase", "trailing.lock", "trailing.", new string('a', 129)];
+            string?[] invalidNames = [null, "", new string('a', Atelia.VersionStore.VersionStore.MaxTagNameCodeUnits + 1)];
             foreach (string? name in invalidNames) {
-                AssertOrdinaryFailure("TagNameInvalid", () => repository.CreateTag(name!, address));
-                AssertOrdinaryFailure("TagNameInvalid", () => repository.ResolveTag(name!));
+                AssertOrdinaryFailure("InvalidTagName", () => repository.CreateTag(name!, address));
+                AssertOrdinaryFailure("InvalidTagName", () => repository.ResolveTag(name!));
                 Assert.False(repository.IsFaulted);
             }
         }
@@ -285,7 +279,7 @@ public sealed class RepositoryTagTests : IDisposable {
 
     private static void AssertOrdinaryFailure(string errorName, Action action) {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(action);
-        Assert.Contains($"[EventJournal.{errorName}]", error.Message);
+        Assert.Contains($"[VersionStore.{errorName}]", error.Message);
     }
 
     private static void AssertNoGraphWork(GraphReadStatistics statistics) {
@@ -301,8 +295,7 @@ public sealed class RepositoryTagTests : IDisposable {
 
     private static NormalizedRevision Baseline(WorldWorkspace workspace) => (NormalizedRevision)typeof(WorldWorkspace)
         .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(workspace)!;
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(),
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
     private Dictionary<string, byte[]> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);
     private void AssertFiles(Dictionary<string, byte[]> before) {

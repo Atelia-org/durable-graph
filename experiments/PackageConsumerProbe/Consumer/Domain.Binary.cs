@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -52,7 +53,7 @@ public sealed partial class Character : BinaryBase {
         ExerciseGeneratedModel(source);
         source._total = 999;
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         __DurableState.WriteBaseBody(ref writer, in captured);
         if (!buffer.WrittenSpan.SequenceEqual(new byte[] { 0x01, 0x21, 0x54 })) {
             throw new InvalidOperationException("Unexpected base-first binary body.");
@@ -70,7 +71,7 @@ public sealed partial class Character : BinaryBase {
             throw new InvalidOperationException("Packaged Base preparation lost canonical bytes or frozen content.");
         }
 
-        BinaryPayloadReader reader = new(buffer.WrittenSpan);
+        BareValueReader reader = new(buffer.WrittenSpan);
         var restored = __DurableState.ReadBaseBodyV1(ref reader);
         reader.EnsureFullyConsumed();
         bool valid = restored.Segment0Field1 && restored.Segment0Field7 == -17 &&
@@ -133,14 +134,14 @@ public sealed partial class ScalarValues : IDurableObject {
         var captured = __DurableState.Capture(source);
         source._half = (Half)1;
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         __DurableState.WriteBaseBody(ref writer, in captured);
-        const string golden = "FF80018001808001FFFFFFFFFFFFFFFFFF0180B00300804523C17FBC9A78563412F8FF";
+        const string golden = "FF80018001808001FFFFFFFFFFFFFFFFFF0100D800804523C17FBC9A78563412F8FF";
         if (Convert.ToHexString(buffer.WrittenSpan) != golden) {
             throw new InvalidOperationException("Unexpected scalar DTO bytes.");
         }
 
-        BinaryPayloadReader reader = new(buffer.WrittenSpan);
+        BareValueReader reader = new(buffer.WrittenSpan);
         var restored = __DurableState.ReadBaseBodyV1(ref reader);
         reader.EnsureFullyConsumed();
         if (restored.Segment0Field1 != byte.MaxValue || restored.Segment0Field2 != sbyte.MinValue ||

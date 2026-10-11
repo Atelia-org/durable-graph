@@ -1,8 +1,7 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -48,10 +47,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverseRegistration);
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], registry.Snapshot(schemas));
         ObjectStateRecord root = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.World");
         ObjectStateRecord node = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.Node");
@@ -99,6 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableField(3)] public int Padding2=30000;
             [DurableField(4)] public int Padding3=40000;
             [DurableField(5)] public Node Next;
+            [DurableField(6)] public double StablePayload=123.5;
         }
         [DurableType("inline.Payload",1)] public partial struct Payload {
             [DurableField(1)] public Point Position;
@@ -119,6 +118,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using InlineValues;
         namespace InlineApp;
         [DurableType("inline.Local",1)] public partial struct Local { [DurableField(1)] public int Value; }
@@ -169,7 +169,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Require(w.Pair.Value.Value==67890 && w.Pair.Origin.X==12345 && w.Wrapper.Pair.Value.Value==67890 && w.Wrapper.Fixed.X==12345,"fixed and open generic composition");
                 Require(ReferenceEquals(w.Payload.Text,w.Alias),"shared string through value");
                 var node=w.Payload.Link;
-                Require(node.Value==10001 && ReferenceEquals(node,node.Next) && ReferenceEquals(node,w.Map[new(new(9),7)]),"cycle and composite key");
+                Require(node.Value==10001 && node.StablePayload==123.5 && ReferenceEquals(node,node.Next) && ReferenceEquals(node,w.Map[new(new(9),7)]),"cycle, unchanged payload and composite key");
                 Require(ReferenceEquals(node,w.Payload.Nodes[0]) && ReferenceEquals(node,w.Payload.Nodes[1]),"shared external value container");
             }
             public static FrameAddress[] Exercise(string path,bool reverse) {

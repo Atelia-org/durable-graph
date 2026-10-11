@@ -4,37 +4,36 @@
 > history/build integration, or package wiring. Root-solution tests do not exercise this
 > delivery boundary. Product progress lives in [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md).
 
-Storage dependencies have per-package versions, pinned in
-[StorageDependency.props](../../eng/StorageDependency.props). The current self-contained runners share
-[PackageProbeSupport.ps1](PackageProbeSupport.ps1): its Prepare helper downloads the five pinned public nupkg files
-from nuget.org and returns their feed; it does not clone or rebuild storage sources. The runner then packs
-only the four DG packages at its independent version G, which must differ from every selected storage version.
-Normal repository build/test restores directly from nuget.org without Prepare. Source development and unique
-local dev packages with an explicit NuGet.Config are described in [the dependency guide](../../docs/storage-dependency.md).
-An explicit `-PackageSource <feed> -Version <G>` still consumes the supplied complete feed without repacking it.
-The public consumer projects keep their minimal DG PackageReferences; storage arrives transitively.
-Isolated restore uses a task config for the supplied complete feed rather than the repository's normal public sources.
+Storage dependencies are the six pinned Binary/FrameStore/VersionStore closure packages in
+[StorageDependency.props](../../eng/StorageDependency.props). The shared
+[PackageProbeSupport.ps1](PackageProbeSupport.ps1) packs four DG packages at an independent version G.
+For a source candidate that is not published, set `DG_STORAGE_PACKAGE_SOURCE` to the verified
+upstream Pack feed; the helper passes that source explicitly to Prepare. It uses a fresh feed,
+isolated NuGet configuration and exact package-mode dependencies; it never builds storage sources.
+The downstream source-mode build remains a separate gate.
+
+```powershell
+$env:DG_STORAGE_PACKAGE_SOURCE = '/repos/Atelia-org/atelia-storage/artifacts/db086-feed'
+./experiments/PackageConsumerProbe/Run-TagProbe.ps1
+```
+
+An explicit `-PackageSource <complete-feed> -Version <G>` consumes an existing feed without
+repacking. Complete feeds contain six storage and four DG packages. Consumer PackageReferences
+remain minimal; storage arrives transitively. See [the dependency guide](../../docs/storage-dependency.md).
 
 The [immutable tag consumer](TagConsumer/README.md) runs with `./Run-TagProbe.ps1`.
 Four separate processes cover Event-first and State tags, empty-model metadata resolution,
 ref-only Checkout and named Fork continuation, and immutable positions after branch movement.
-It consumes the mixed public storage pin through the same nine-package feed.
+It consumes the same exact storage pin through the ten-package feed.
 
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.
 
-[Organization migration](Run-OrganizationMigrationProbe.ps1) compares two distinct real runtime and generator
-package versions through isolated legacy/current lanes. It preserves identical model/history bytes, opens old
-E/S frames, resumes a pending event, continues Delta/NoChange, and cold-opens in another process. It checks
-every old complete frame at its original byte address and verifies read-only browsing leaves files unchanged.
-Use mandatory `-LegacyPackageSource/-LegacyVersion/-PackageSource/-Version`; `-Stage Seed` then `-Stage Complete`
-with the same `-WorkRoot` freezes legacy evidence before changing product sources. The separate
-[API inventory](OrganizationApiInventory/README.md) compares compiled type/member shapes under the approved mapping.
-This complements the older DurableBase migration witness; its old lane still uses its original packages and marker.
-The organization migration keeps the pre-DB-077 facade calls in `Program.Legacy.cs`; its current lane
-uses repository-open model configuration. The Storage extraction witness intentionally retains its
-frozen older DG API in both lanes because only the Storage packages differ there.
+DB-086 accepts only newly created stores. The old StorageExtraction, OrganizationMigration,
+API-inventory and DurableBase persisted-store migration lanes have exited the active tree;
+[the archive index](../ARCHIVE.md) records their source recovery point. Model history and V1→V2
+upgrades within the new format remain active in the consumers below.
 
 The [cross-assembly consumer](CrossAssemblyConsumer/README.md) runs through `Run-CrossAssemblyProbe.ps1`:
 independent DomainLibrary and AppModel packages expose public registration catalogs, and a pure Host saves
@@ -184,7 +183,7 @@ The README witness extracts the actual project, models, program, browsing, Upgra
 It runs two V1 processes, then the documented V2 edits, checks retained history, executes the explicit
 save-policy example against the resumed world, forks two children beside the live source, checks their
 independent values after a cold reopen, and builds again in Verify mode.
-Use the matching nine-package feed printed by the recovery runner, or another fresh feed from the same source.
+Use the matching ten-package feed printed by the recovery runner, or another fresh feed from the same source.
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1
@@ -215,7 +214,7 @@ Those regression Events may use the World itself as the snapshot root; the focus
 lane instead uses `Observed(Alice)` to verify independent event membership and capabilities.
 They intentionally mutate caller-created aliases after capture to test frozen persistence; these are
 mechanism tests, not examples of keeping a hot Event's reachable CLR contents read-only.
-Journal refs provide the sole publication point; no `publication.rbf` is created.
+A reserved VersionStore root publishes Schema and branch pointers; tags use VS tags. Schema snapshots and merged graph frames share FrameStore data.
 
 The StateStore runner retains the inherited Character's exact DTO/Base/Delta golden checks,
 Schema registration idempotence/conflict checks, and shared strings. Its V1/V2 World lane retains
@@ -225,7 +224,7 @@ shared derived targets, cycles, child-only Delta, unreachable-cycle removal, con
 identity and historical snapshots. Raw `RevisionDecoder` and Storage reads remain diagnostic
 assertions; consumers no longer own the save pipeline or call internal preparation APIs.
 
-The local feed contains **nine** packages, including the unmodified sibling EventJournal substrate.
+The local feed contains **ten** packages: six upstream storage packages and four DG packages.
 Each consumer references `Atelia.DurableGraph` for generator/build assets and
 `Atelia.DurableGraph.Persistence` for the facade, without manual analyzer/import/project wiring.
 Most runners accept `-PackageSource <feed> -Version <version>` to reuse a matching feed. Accepted
@@ -249,7 +248,7 @@ Run `./experiments/PackageConsumerProbe/Run-TemporalScalarProbe.ps1` for the
 composition, exact offset changes at the same instant, Dictionary key Remove/Add, deleted inline
 CLR history and explicit owner/shared List value upgrades. Upgraded objects rewrite Base, then
 resume NoChange and ordinary Delta with no repeated business calls after cold reopen. New history
-uses v9 while accepted filenames, hashes and bytes remain unchanged. A matching nine-package
+uses v9 while accepted filenames, hashes and bytes remain unchanged. A matching ten-package
 feed can be reused with `-PackageSource <feed> -Version <version>`.
 
 ## Historical capability retention
@@ -268,7 +267,7 @@ Existing history hashes must remain unchanged. The witness freezes no automatic 
 
 An application that still promises to load older Revisions must retain their reader and normalization
 capabilities. Removing a family from a newer Revision does not make its older versions independently
-recoverable from metadata. `-PackageSource <feed> -Version <version>` can reuse an existing nine-package
+recoverable from metadata. `-PackageSource <feed> -Version <version>` can reuse an existing ten-package
 feed; the default invocation packs its own isolated dependency closure.
 
 
@@ -300,7 +299,7 @@ The script requires all stage markers and history counts `5 -> 10 -> 11 -> 13`, 
 modification of previously published `.dgschema` files, and checks that new history uses text format v9.
 The unchanged score uses a five-byte integer value so the nested leaf change remains a real Delta
 candidate after Base v4 shortened the type header; the ordinary B/D policy is unchanged.
-It packs the same nine-package dependency closure by default; `-PackageSource <feed> -Version <version>`
+It packs the same ten-package dependency closure by default; `-PackageSource <feed> -Version <version>`
 reuses an existing feed. Generated artifacts and probe-owned address sidecars remain under the unique
 ignored `obj` run directory.
 
@@ -347,7 +346,7 @@ old inline domain struct while retaining its generated history DTO and value pro
 checks multi-step loading from V1, forced Base, unchanged resave, ordinary Delta, and cold reopening.
 It preserves accepted history hashes across builds; it does not change any persistent format.
 
-The runner packs an isolated nine-package feed by default; use `-PackageSource <feed> -Version <version>`
+The runner packs an isolated ten-package feed by default; use `-PackageSource <feed> -Version <version>`
 to reuse a matching feed. Exact stage markers and boundaries live in the consumer README;
 construction and acceptance evidence are recorded in
 [DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).
@@ -367,7 +366,7 @@ still decodes its exact old element DTO. The runner publishes and verifies immut
 The array consumer also covers DB-045's repository-local representation IDs: new Base v4 headers
 contain only the ID, reopening preserves its layout, and array element Upgrade changes the array's
 representation while the referencing owner's representation remains stable. The descriptor and its
-exact Schema dependencies live in `schemas.rbf`; generated DTO and body contracts are unchanged.
+exact Schema dependencies live in the selected complete SchemaSnapshot. Generated body signatures use upstream Bare reader/writer types.
 
 ## BCL List content and list-owned upgrades
 
@@ -385,7 +384,7 @@ The next build removes the old inline domain CLR declaration while retaining its
 history. Explicit list-owned value Upgrade runs once for the shared list, forces Base and then
 resumes ordinary Delta. Representation IDs remain persistent, with a new ID only for the upgraded
 list layout. The runner requires stage markers, immutable history hashes and new history v9;
-it accepts `-PackageSource <feed> -Version <version>` to reuse the existing nine-package feed.
+it accepts `-PackageSource <feed> -Version <version>` to reuse the existing ten-package feed.
 The consumer uses DB-049's List range codec 2 and DB-051's default Adaptive writer. Algorithm comparisons
 and same-history measurements live in [ListDeltaReplayProbe](../ListDeltaReplayProbe/README.md); this lane verifies package delivery.
 
@@ -397,7 +396,7 @@ a shared List, vector and rank-four array, retaining reference sharing and cycle
 The second build deletes the old struct CLR declaration while retaining exact history, explicitly lifts
 the child conversion, rewrites upgraded owners as Base and resumes Delta. Clearing nullable values
 removes the unreachable cyclic island. History v9 hashes and counts are checked in packaged Publish
-and Verify modes; the runner also accepts an existing matching nine-package feed.
+and Verify modes; the runner also accepts an existing matching ten-package feed.
 
 ## Immutable leaf proof capability
 
@@ -409,4 +408,4 @@ before round-tripping the leaf value through `Repository`; a second consumer com
 identical model with a local sibling source generator wired as an analyzer in the same compiler pass,
 and the same model must then resolve with `IsImmutableLeaf=false` because the sibling's added mutable
 state is visible to the structural proof but not to durable classification. Pass
-`-PackageSource <feed> -Version <version>` to reuse a matching nine-package feed.
+`-PackageSource <feed> -Version <version>` to reuse a matching ten-package feed.

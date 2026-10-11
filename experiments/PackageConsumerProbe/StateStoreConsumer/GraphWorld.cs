@@ -1,9 +1,7 @@
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace StateStorePackageConsumerProbe;
 
@@ -21,7 +19,7 @@ public sealed partial class GraphWorld : IDurableObject {
     private void Disconnect() { _primary = null; _alias = null; }
 
     internal static void Exercise(string directory) {
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+        const long options = 1024 * 1024;
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
@@ -66,10 +64,9 @@ public sealed partial class GraphWorld : IDurableObject {
             Require(((GraphCharacter)pair.First).Score == 7 && ((GraphCharacter)((GraphWorld)pair.Second)._primary!).Score == 8,
                 "Pair must restore each selected version.");
         }
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
-        using StateRevisionStore store = new(segments);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        SchemaStore schemas = resources.Schemas;
+        StateRevisionStore store = resources.States;
         StateRevision initial = store.Read(initialRevision);
         Require(initial.ParentRevisionAddress is null && initial.LocalObjects.Count == 4 &&
             initial.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base) && schemas.Count == 4,

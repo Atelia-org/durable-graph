@@ -1,7 +1,7 @@
-using System.Buffers;
-using Atelia.Data;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using Atelia.Rbf;
+using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
+using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -11,7 +11,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
     [Fact]
     public void Append_and_Read_round_trip_one_exact_Revision_Frame() {
         string storePath = NewStorePath();
-        using SegmentStore segments = SegmentStore.CreateNew(storePath);
+        using Frames segments = Frames.Create(storePath);
         using StateRevisionStore store = new(segments);
         StateRevision expected = StateRevision.CreateObjectHeadMapBase(
             null,
@@ -21,7 +21,6 @@ public sealed class StateRevisionStoreTests : IDisposable {
         FrameAddress address = store.Append(expected);
         StateRevision actual = store.Read(address);
 
-        Assert.Equal(1u, address.FileNumber);
         AssertRevisionEqual(expected, actual);
         AssertHeads(
             store.ReadLiveObjectHeadMap(address),
@@ -38,7 +37,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         FrameAddress f3;
         FrameAddress f4;
         FrameAddress f5;
-        using (SegmentStore segments = SegmentStore.CreateNew(storePath)) {
+        using (Frames segments = Frames.Create(storePath)) {
             using StateRevisionStore store = new(segments);
             f1 = store.Append(StateRevision.CreateObjectHeadMapBase(
                 null,
@@ -68,10 +67,11 @@ public sealed class StateRevisionStoreTests : IDisposable {
                 f4,
                 localObjects: Records(1),
                 removedObjectIds: []));
+            segments.ConfirmDurable();
             AssertHeads(store.ReadLiveObjectHeadMap(f5), (1, f5), (3, f2));
         }
 
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(
+        using Frames reopened = Frames.OpenReadOnly(
             storePath);
         using StateRevisionStore coldStore = new(reopened);
 
@@ -83,18 +83,15 @@ public sealed class StateRevisionStoreTests : IDisposable {
     }
 
     [Fact]
-    public void Tail_triggered_rollover_preserves_cross_Segment_parent_and_Base_heads() {
+    public void Rotation_preserves_opaque_parent_and_external_heads() {
         string storePath = NewStorePath();
-        RbfSegmentStoreOptions options = new() {
-            NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            SegmentSizeThresholdBytes = 8,
-        };
+        long threshold = RotationThreshold;
         FrameAddress f1;
         FrameAddress f2;
         FrameAddress f3;
-        using (SegmentStore segments = SegmentStore.CreateNew(
+        using (Frames segments = Frames.Create(
             storePath,
-            options)) {
+            threshold)) {
             using StateRevisionStore store = new(segments);
             f1 = store.Append(StateRevision.CreateObjectHeadMapBase(
                 null,
@@ -111,16 +108,12 @@ public sealed class StateRevisionStoreTests : IDisposable {
                     new KeyValuePair<uint, FrameAddress>(3, f2),
                 ]));
 
-            Assert.Equal(1u, f1.FileNumber);
-            Assert.Equal(2u, f2.FileNumber);
-            Assert.Equal(3u, f3.FileNumber);
             AssertHeads(store.ReadLiveObjectHeadMap(f2), (1, f2), (3, f2));
             AssertHeads(store.ReadLiveObjectHeadMap(f3), (1, f3), (3, f2));
+            segments.ConfirmDurable();
         }
 
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(
-            storePath,
-            options);
+        using Frames reopened = Frames.OpenReadOnly(storePath);
         using StateRevisionStore coldStore = new(reopened);
         StateRevision decodedDelta = coldStore.Read(f2);
         StateRevision decodedCheckpoint = coldStore.Read(f3);
@@ -138,16 +131,13 @@ public sealed class StateRevisionStoreTests : IDisposable {
     public void Exact_revision_reads_old_updated_inherited_deleted_and_reused_bodies_after_reopen(
         bool forceRollover) {
         string storePath = NewStorePath();
-        RbfSegmentStoreOptions options = new() {
-            NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            SegmentSizeThresholdBytes = forceRollover ? 8 : 64 * 1024 * 1024,
-        };
+        long threshold = forceRollover ? RotationThreshold : 64 * 1024 * 1024;
         FrameAddress original;
         FrameAddress updated;
         FrameAddress removed;
         FrameAddress checkpoint;
         FrameAddress reused;
-        using (SegmentStore segments = SegmentStore.CreateNew(storePath, options)) {
+        using (Frames segments = Frames.Create(storePath, threshold)) {
             using StateRevisionStore store = new(segments);
             original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
                 ObjectVersionRecord.CreateBase(1, [10, 11]),
@@ -164,11 +154,11 @@ public sealed class StateRevisionStoreTests : IDisposable {
                 ObjectVersionRecord.CreateBase(2, [90]),
             ], []));
 
-            Assert.Equal(forceRollover ? 5u : 1u, reused.FileNumber);
             Verify(store);
+            segments.ConfirmDurable();
         }
 
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(storePath, options);
+        using Frames reopened = Frames.OpenReadOnly(storePath);
         using StateRevisionStore coldStore = new(reopened);
         Verify(coldStore);
 
@@ -191,7 +181,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
     [Fact]
     public void Object_read_rejects_external_locator_without_local_record_even_when_it_inherits_the_id() {
         string storePath = NewStorePath();
-        using SegmentStore segments = SegmentStore.CreateNew(storePath);
+        using Frames segments = Frames.Create(storePath);
         using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(
             null, [ObjectVersionRecord.CreateBase(1, [42])], []));
@@ -215,7 +205,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
         source.AsSpan().Fill(99);
         byte[] retainedBody;
         StateRevision retainedRevision;
-        using (SegmentStore segments = SegmentStore.CreateNew(storePath)) {
+        using (Frames segments = Frames.Create(storePath)) {
             using StateRevisionStore store = new(segments);
             FrameAddress address = store.Append(revision);
             retainedBody = store.ReadObjectBaseBody(address, 7);
@@ -241,7 +231,7 @@ public sealed class StateRevisionStoreTests : IDisposable {
     [Fact]
     public void Object_read_distinguishes_empty_body_from_missing_and_rejects_invalid_inputs() {
         string storePath = NewStorePath();
-        using SegmentStore segments = SegmentStore.CreateNew(storePath);
+        using Frames segments = Frames.Create(storePath);
         using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
             ObjectVersionRecord.CreateBase(uint.MaxValue, []),
@@ -251,162 +241,50 @@ public sealed class StateRevisionStoreTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => store.ReadObjectBaseBody(address, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => store.ReadObjectBaseBody(address, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => store.ReadObjectBaseBody(default, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            store.ReadObjectBaseBody(new FrameAddress(1, default), 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            store.ReadObjectBaseBody(new FrameAddress(0, address.FrameTicket), 1));
     }
 
     [Fact]
-    public void Read_rejects_a_valid_Rbf_Frame_with_the_wrong_tag() {
-        string storePath = NewStorePath();
-        using SegmentStore segments = SegmentStore.CreateNew(storePath);
-        SizedPtr ticket;
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            ticket = writer.File.Append(0x01020304, [1, 2, 3, 4]).Unwrap();
-        }
-
-        using StateRevisionStore store = new(segments);
-        FrameAddress address = new(1, ticket);
-
-        Assert.Throws<InvalidDataException>(() => store.Read(address));
-    }
-
-    [Fact]
-    public void Read_rejects_a_StateRevision_Frame_with_TailMeta() {
-        string storePath = NewStorePath();
-        using SegmentStore segments = SegmentStore.CreateNew(storePath);
-        SizedPtr ticket;
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            ArrayBufferWriter<byte> payload = new();
-            StateRevisionWireWriter.Write(
-                payload,
-                StateRevision.CreateObjectHeadMapBase(null, Records(1), []),
-                new FileScope(writer.SegmentNumber));
-            ticket = writer.File.Append(
-                StateRevisionWireFormat.RbfTag,
-                payload.WrittenSpan,
-                tailMeta: [1, 2, 3, 4]).Unwrap();
-        }
-
-        using StateRevisionStore store = new(segments);
-
-        Assert.Throws<InvalidDataException>(() =>
-            store.Read(new FrameAddress(1, ticket)));
-    }
-
-    [Fact]
-    public void Append_encoding_failure_does_not_append_a_partial_Frame_and_releases_lease() {
-        string storePath = NewStorePath();
-        using SegmentStore segments = SegmentStore.CreateNew(storePath);
-        using StateRevisionStore store = new(segments);
-        StateRevision invalidForCurrentOrigin = StateRevision.CreateObjectHeadMapBase(
-            new FrameAddress(2, SizedPtr.Create(4, 4)),
-            [],
-            []);
-        long tailBefore;
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            tailBefore = writer.File.TailOffset;
-        }
-
-        Assert.Throws<InvalidDataException>(() =>
-            store.Append(invalidForCurrentOrigin));
-
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            Assert.Equal(tailBefore, writer.File.TailOffset);
-        }
-
-        FrameAddress appended = store.Append(
-            StateRevision.CreateObjectHeadMapBase(null, Records(1), []));
-        Assert.Equal(1u, appended.FileNumber);
-    }
-
-    [Fact]
-    public void Encoding_failure_after_rollover_leaves_a_reusable_header_only_Segment() {
-        string storePath = NewStorePath();
-        RbfSegmentStoreOptions options = new() {
-            NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            SegmentSizeThresholdBytes = 8,
-        };
-        using SegmentStore segments = SegmentStore.CreateNew(storePath, options);
-        using StateRevisionStore store = new(segments);
-        FrameAddress first = store.Append(
-            StateRevision.CreateObjectHeadMapBase(null, Records(1), []));
-        StateRevision invalidForNextOrigin = StateRevision.CreateObjectHeadMapBase(
-            new FrameAddress(3, SizedPtr.Create(4, 4)),
-            [],
-            []);
-
-        Assert.Equal(1u, first.FileNumber);
-        Assert.Throws<InvalidDataException>(() =>
-            store.Append(invalidForNextOrigin));
-
-        uint segmentAfterFailure;
-        long tailAfterFailure;
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            segmentAfterFailure = writer.SegmentNumber;
-            tailAfterFailure = writer.File.TailOffset;
-        }
-
-        FrameAddress appended = store.Append(
-            StateRevision.CreateObjectHeadMapBase(null, Records(2), []));
-        Assert.Equal(2u, segmentAfterFailure);
-        Assert.Equal(segmentAfterFailure, appended.FileNumber);
-        Assert.Equal(tailAfterFailure, appended.FrameTicket.Offset);
+    public void Read_rejects_wrong_role_but_ignores_opaque_business_metadata() {
+        using Frames frames = Frames.Create(NewStorePath());
+        using StateRevisionStore store = new(frames);
+        FrameAddress wrong = frames.Append(0x01020304, [1, 2, 3, 4]).Unwrap();
+        Assert.Throws<InvalidDataException>(() => store.Read(wrong));
+        FrameAddress graph = store.Append(StateRevision.CreateObjectHeadMapBase(null, Records(1), []), [1, 2, 3, 4]);
+        Assert.Equal(new byte[] { 1 }, store.ReadObjectBaseBody(graph, 1));
+        Assert.Equal(3L, store.ReadObjectVersionChain(graph, 1).ReconstructionPayloadBytes);
+        using var read = frames.ReadFrame(graph).Unwrap();
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, read.TailMeta.ToArray());
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Encoding_failure_after_buffering_body_aborts_frame_and_reuses_writer(
-        bool forceRollover) {
-        string storePath = NewStorePath();
-        RbfSegmentStoreOptions options = new() {
-            NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            SegmentSizeThresholdBytes = forceRollover ? 8 : 64 * 1024 * 1024,
-        };
-        using SegmentStore segments = SegmentStore.CreateNew(storePath, options);
-        using StateRevisionStore store = new(segments);
-        long headerOnlyTail;
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            headerOnlyTail = writer.File.TailOffset;
-        }
-
+    public void Missing_parent_or_external_head_is_rejected_before_any_frame_output(bool external) {
+        using Frames frames = Frames.Create(NewStorePath(), RotationThreshold);
+        using StateRevisionStore store = new(frames);
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, Records(1), []));
-        long expectedTail = headerOnlyTail;
-        if (!forceRollover) {
-            using RbfSegmentWriterLease writer = segments.OpenActiveWriter();
-            expectedTail = writer.File.TailOffset;
-        }
-
-        uint expectedSegment = forceRollover ? 2u : 1u;
-        byte[] body = new byte[100 * 1024];
-        for (int index = 0; index < body.Length; index++) {
-            body[index] = (byte)index;
-        }
-
-        // External addresses follow all local bodies on wire, so this failure
-        // happens after the nonempty body has been buffered into the Frame builder.
-        StateRevision invalid = StateRevision.CreateObjectHeadMapBase(null, [
-            ObjectVersionRecord.CreateBase(2, body),
-        ], [
-            new KeyValuePair<uint, FrameAddress>(3,
-                new FrameAddress(expectedSegment + 1, SizedPtr.Create(4, 4))),
-        ]);
-        Assert.Throws<InvalidDataException>(() => store.Append(invalid));
-
-        using (RbfSegmentWriterLease writer = segments.OpenActiveWriter()) {
-            Assert.Equal(expectedSegment, writer.SegmentNumber);
-            Assert.Equal(expectedTail, writer.File.TailOffset);
-        }
-
-        FrameAddress recovered = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
-            ObjectVersionRecord.CreateBase(2, body),
-        ], []));
-        Assert.Equal(expectedSegment, recovered.FileNumber);
-        Assert.Equal(expectedTail, recovered.FrameTicket.Offset);
-        Assert.Equal(body, store.ReadObjectBaseBody(recovered, 2));
+        long count = FrameCount(frames);
+        FrameAddress absent = Address(99, 4096);
+        StateRevision invalid = external
+            ? StateRevision.CreateObjectHeadMapBase(first, Records(2), [new(3, absent)])
+            : StateRevision.CreateObjectHeadMapBase(absent, Records(2), []);
+        Assert.Throws<FileNotFoundException>(() => store.Append(invalid));
+        Assert.Equal(count, FrameCount(frames));
+        FrameAddress next = store.Append(StateRevision.CreateObjectHeadMapBase(first, Records(2), []));
+        Assert.Equal(new byte[] { 2 }, store.ReadObjectBaseBody(next, 2));
         Assert.Equal(new byte[] { 1 }, store.ReadObjectBaseBody(first, 1));
+    }
+
+    [Fact]
+    public void Oversize_tail_metadata_is_rejected_before_output_and_owner_stays_usable() {
+        using Frames frames = Frames.Create(NewStorePath());
+        using StateRevisionStore store = new(frames);
+        StateRevision revision = StateRevision.CreateObjectHeadMapBase(null, Records(1), []);
+        long count = FrameCount(frames);
+        Assert.Throws<InvalidDataException>(() => store.Append(revision, new byte[RbfFile.MaxTailMetaLength + 1]));
+        Assert.Equal(count, FrameCount(frames));
+        FrameAddress address = store.Append(revision, [10]);
+        Assert.Equal(new byte[] { 1 }, store.ReadObjectBaseBody(address, 1));
     }
 
     public void Dispose() {

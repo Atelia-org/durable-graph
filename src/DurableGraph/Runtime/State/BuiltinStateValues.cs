@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
@@ -149,7 +150,7 @@ internal static class ScalarDelta {
         where TState : unmanaged where TOps : IStateOps<TState> {
         if (equal) { return new(false, []); }
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TOps.WriteBase(ref writer, in current, slot);
         return new(true, buffer.WrittenSpan);
     }
@@ -162,11 +163,11 @@ internal static class ScalarDelta {
 /// <summary>Static Boolean operations used by an unresolved generic value slot.</summary>
 public readonly struct BooleanStateOps : IStateOps<bool> {
     public static bool StateEquals(in bool left, in bool right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in bool state, DurableFieldInfo slot) => writer.WriteBoolean(state);
-    public static bool ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadBoolean();
+    public static void WriteBase(ref BareValueWriter writer, in bool state, DurableFieldInfo slot) => writer.WriteBoolean(state);
+    public static bool ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadBoolean();
     public static PreparedDeltaBody PrepareDelta(in bool prior, in bool current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<bool, BooleanStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static bool ApplyDelta(ref BinaryPayloadReader reader, in bool prior, DurableFieldInfo slot) {
+    public static bool ApplyDelta(ref BareValueReader reader, in bool prior, DurableFieldInfo slot) {
         bool current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -177,11 +178,11 @@ public readonly struct BooleanStateOps : IStateOps<bool> {
 /// <summary>Static Byte operations used by an unresolved generic value slot.</summary>
 public readonly struct ByteStateOps : IStateOps<byte> {
     public static bool StateEquals(in byte left, in byte right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in byte state, DurableFieldInfo slot) => writer.WriteByte(state);
-    public static byte ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadByte();
+    public static void WriteBase(ref BareValueWriter writer, in byte state, DurableFieldInfo slot) => writer.WriteByte(state);
+    public static byte ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadByte();
     public static PreparedDeltaBody PrepareDelta(in byte prior, in byte current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<byte, ByteStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static byte ApplyDelta(ref BinaryPayloadReader reader, in byte prior, DurableFieldInfo slot) {
+    public static byte ApplyDelta(ref BareValueReader reader, in byte prior, DurableFieldInfo slot) {
         byte current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -192,11 +193,11 @@ public readonly struct ByteStateOps : IStateOps<byte> {
 /// <summary>Static SByte operations used by an unresolved generic value slot.</summary>
 public readonly struct SByteStateOps : IStateOps<sbyte> {
     public static bool StateEquals(in sbyte left, in sbyte right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in sbyte state, DurableFieldInfo slot) => writer.WriteSByte(state);
-    public static sbyte ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadSByte();
+    public static void WriteBase(ref BareValueWriter writer, in sbyte state, DurableFieldInfo slot) => writer.WriteSByte(state);
+    public static sbyte ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadSByte();
     public static PreparedDeltaBody PrepareDelta(in sbyte prior, in sbyte current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<sbyte, SByteStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static sbyte ApplyDelta(ref BinaryPayloadReader reader, in sbyte prior, DurableFieldInfo slot) {
+    public static sbyte ApplyDelta(ref BareValueReader reader, in sbyte prior, DurableFieldInfo slot) {
         sbyte current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -207,11 +208,11 @@ public readonly struct SByteStateOps : IStateOps<sbyte> {
 /// <summary>Static Int16 operations used by an unresolved generic value slot.</summary>
 public readonly struct Int16StateOps : IStateOps<short> {
     public static bool StateEquals(in short left, in short right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in short state, DurableFieldInfo slot) => writer.WriteInt16(state);
-    public static short ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadInt16();
+    public static void WriteBase(ref BareValueWriter writer, in short state, DurableFieldInfo slot) => writer.WriteVarInt16(state);
+    public static short ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadVarInt16();
     public static PreparedDeltaBody PrepareDelta(in short prior, in short current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<short, Int16StateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static short ApplyDelta(ref BinaryPayloadReader reader, in short prior, DurableFieldInfo slot) {
+    public static short ApplyDelta(ref BareValueReader reader, in short prior, DurableFieldInfo slot) {
         short current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -222,11 +223,11 @@ public readonly struct Int16StateOps : IStateOps<short> {
 /// <summary>Static UInt16 operations used by an unresolved generic value slot.</summary>
 public readonly struct UInt16StateOps : IStateOps<ushort> {
     public static bool StateEquals(in ushort left, in ushort right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in ushort state, DurableFieldInfo slot) => writer.WriteUInt16(state);
-    public static ushort ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadUInt16();
+    public static void WriteBase(ref BareValueWriter writer, in ushort state, DurableFieldInfo slot) => writer.WriteVarUInt16(state);
+    public static ushort ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadVarUInt16();
     public static PreparedDeltaBody PrepareDelta(in ushort prior, in ushort current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<ushort, UInt16StateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static ushort ApplyDelta(ref BinaryPayloadReader reader, in ushort prior, DurableFieldInfo slot) {
+    public static ushort ApplyDelta(ref BareValueReader reader, in ushort prior, DurableFieldInfo slot) {
         ushort current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -237,11 +238,11 @@ public readonly struct UInt16StateOps : IStateOps<ushort> {
 /// <summary>Static Int32 operations used by an unresolved generic value slot.</summary>
 public readonly struct Int32StateOps : IStateOps<int> {
     public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => writer.WriteInt32(state);
-    public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadInt32();
+    public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => writer.WriteVarInt32(state);
+    public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadVarInt32();
     public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<int, Int32StateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) {
+    public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) {
         int current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -252,11 +253,11 @@ public readonly struct Int32StateOps : IStateOps<int> {
 /// <summary>Static UInt32 operations used by an unresolved generic value slot.</summary>
 public readonly struct UInt32StateOps : IStateOps<uint> {
     public static bool StateEquals(in uint left, in uint right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in uint state, DurableFieldInfo slot) => writer.WriteUInt32(state);
-    public static uint ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadUInt32();
+    public static void WriteBase(ref BareValueWriter writer, in uint state, DurableFieldInfo slot) => writer.WriteVarUInt32(state);
+    public static uint ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadVarUInt32();
     public static PreparedDeltaBody PrepareDelta(in uint prior, in uint current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<uint, UInt32StateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static uint ApplyDelta(ref BinaryPayloadReader reader, in uint prior, DurableFieldInfo slot) {
+    public static uint ApplyDelta(ref BareValueReader reader, in uint prior, DurableFieldInfo slot) {
         uint current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -267,11 +268,11 @@ public readonly struct UInt32StateOps : IStateOps<uint> {
 /// <summary>Static Int64 operations used by an unresolved generic value slot.</summary>
 public readonly struct Int64StateOps : IStateOps<long> {
     public static bool StateEquals(in long left, in long right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in long state, DurableFieldInfo slot) => writer.WriteInt64(state);
-    public static long ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadInt64();
+    public static void WriteBase(ref BareValueWriter writer, in long state, DurableFieldInfo slot) => writer.WriteVarInt64(state);
+    public static long ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadVarInt64();
     public static PreparedDeltaBody PrepareDelta(in long prior, in long current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<long, Int64StateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static long ApplyDelta(ref BinaryPayloadReader reader, in long prior, DurableFieldInfo slot) {
+    public static long ApplyDelta(ref BareValueReader reader, in long prior, DurableFieldInfo slot) {
         long current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -282,11 +283,11 @@ public readonly struct Int64StateOps : IStateOps<long> {
 /// <summary>Static UInt64 operations used by an unresolved generic value slot.</summary>
 public readonly struct UInt64StateOps : IStateOps<ulong> {
     public static bool StateEquals(in ulong left, in ulong right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in ulong state, DurableFieldInfo slot) => writer.WriteUInt64(state);
-    public static ulong ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadUInt64();
+    public static void WriteBase(ref BareValueWriter writer, in ulong state, DurableFieldInfo slot) => writer.WriteVarUInt64(state);
+    public static ulong ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadVarUInt64();
     public static PreparedDeltaBody PrepareDelta(in ulong prior, in ulong current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<ulong, UInt64StateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static ulong ApplyDelta(ref BinaryPayloadReader reader, in ulong prior, DurableFieldInfo slot) {
+    public static ulong ApplyDelta(ref BareValueReader reader, in ulong prior, DurableFieldInfo slot) {
         ulong current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -297,11 +298,11 @@ public readonly struct UInt64StateOps : IStateOps<ulong> {
 /// <summary>Static Char operations used by an unresolved generic value slot.</summary>
 public readonly struct CharStateOps : IStateOps<char> {
     public static bool StateEquals(in char left, in char right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in char state, DurableFieldInfo slot) => writer.WriteChar(state);
-    public static char ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadChar();
+    public static void WriteBase(ref BareValueWriter writer, in char state, DurableFieldInfo slot) => writer.WriteCharLE(state);
+    public static char ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadCharLE();
     public static PreparedDeltaBody PrepareDelta(in char prior, in char current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<char, CharStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static char ApplyDelta(ref BinaryPayloadReader reader, in char prior, DurableFieldInfo slot) {
+    public static char ApplyDelta(ref BareValueReader reader, in char prior, DurableFieldInfo slot) {
         char current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -312,11 +313,11 @@ public readonly struct CharStateOps : IStateOps<char> {
 /// <summary>Static Half operations used by an unresolved generic value slot.</summary>
 public readonly struct HalfStateOps : IStateOps<Half> {
     public static bool StateEquals(in Half left, in Half right, DurableFieldInfo slot) => BitConverter.HalfToUInt16Bits(left) == BitConverter.HalfToUInt16Bits(right);
-    public static void WriteBase(ref BinaryPayloadWriter writer, in Half state, DurableFieldInfo slot) => writer.WriteHalf(state);
-    public static Half ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadHalf();
+    public static void WriteBase(ref BareValueWriter writer, in Half state, DurableFieldInfo slot) => writer.WriteHalfLE(state);
+    public static Half ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadHalfLE();
     public static PreparedDeltaBody PrepareDelta(in Half prior, in Half current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<Half, HalfStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static Half ApplyDelta(ref BinaryPayloadReader reader, in Half prior, DurableFieldInfo slot) {
+    public static Half ApplyDelta(ref BareValueReader reader, in Half prior, DurableFieldInfo slot) {
         Half current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -327,11 +328,11 @@ public readonly struct HalfStateOps : IStateOps<Half> {
 /// <summary>Static Single operations used by an unresolved generic value slot.</summary>
 public readonly struct SingleStateOps : IStateOps<float> {
     public static bool StateEquals(in float left, in float right, DurableFieldInfo slot) => BitConverter.SingleToInt32Bits(left) == BitConverter.SingleToInt32Bits(right);
-    public static void WriteBase(ref BinaryPayloadWriter writer, in float state, DurableFieldInfo slot) => writer.WriteSingle(state);
-    public static float ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadSingle();
+    public static void WriteBase(ref BareValueWriter writer, in float state, DurableFieldInfo slot) => writer.WriteSingleLE(state);
+    public static float ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadSingleLE();
     public static PreparedDeltaBody PrepareDelta(in float prior, in float current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<float, SingleStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static float ApplyDelta(ref BinaryPayloadReader reader, in float prior, DurableFieldInfo slot) {
+    public static float ApplyDelta(ref BareValueReader reader, in float prior, DurableFieldInfo slot) {
         float current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -342,11 +343,11 @@ public readonly struct SingleStateOps : IStateOps<float> {
 /// <summary>Static Double operations used by an unresolved generic value slot.</summary>
 public readonly struct DoubleStateOps : IStateOps<double> {
     public static bool StateEquals(in double left, in double right, DurableFieldInfo slot) => BitConverter.DoubleToInt64Bits(left) == BitConverter.DoubleToInt64Bits(right);
-    public static void WriteBase(ref BinaryPayloadWriter writer, in double state, DurableFieldInfo slot) => writer.WriteDouble(state);
-    public static double ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => reader.ReadDouble();
+    public static void WriteBase(ref BareValueWriter writer, in double state, DurableFieldInfo slot) => writer.WriteDoubleLE(state);
+    public static double ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => reader.ReadDoubleLE();
     public static PreparedDeltaBody PrepareDelta(in double prior, in double current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<double, DoubleStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static double ApplyDelta(ref BinaryPayloadReader reader, in double prior, DurableFieldInfo slot) {
+    public static double ApplyDelta(ref BareValueReader reader, in double prior, DurableFieldInfo slot) {
         double current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -357,11 +358,11 @@ public readonly struct DoubleStateOps : IStateOps<double> {
 /// <summary>Object ID slots retain their string semantics.</summary>
 public readonly struct StringIdStateOps : IStateOps<ObjectId> {
     public static bool StateEquals(in ObjectId left, in ObjectId right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteUInt32(state.Value);
-    public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadUInt32());
+    public static void WriteBase(ref BareValueWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteVarUInt32(state.Value);
+    public static ObjectId ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarUInt32());
     public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) =>
         ScalarDelta.Prepare<ObjectId, StringIdStateOps>(in current, slot, StateEquals(in prior, in current, slot));
-    public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) {
+    public static ObjectId ApplyDelta(ref BareValueReader reader, in ObjectId prior, DurableFieldInfo slot) {
         ObjectId current = ReadBase(ref reader, slot);
         ScalarDelta.RequireChange(StateEquals(in prior, in current, slot));
         return current;
@@ -372,11 +373,11 @@ public readonly struct StringIdStateOps : IStateOps<ObjectId> {
 /// <summary>Object ID slots retain their constructed nominal semantics.</summary>
 public readonly struct DurableIdStateOps : IStateOps<ObjectId> {
     public static bool StateEquals(in ObjectId left, in ObjectId right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteUInt32(state.Value);
-    public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadUInt32());
+    public static void WriteBase(ref BareValueWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteVarUInt32(state.Value);
+    public static ObjectId ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarUInt32());
     public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) =>
         StringIdStateOps.PrepareDelta(in prior, in current, slot);
-    public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) =>
+    public static ObjectId ApplyDelta(ref BareValueReader reader, in ObjectId prior, DurableFieldInfo slot) =>
         StringIdStateOps.ApplyDelta(ref reader, in prior, slot);
     public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitDurable(state, slot.TargetType!);
 }
@@ -384,9 +385,9 @@ public readonly struct DurableIdStateOps : IStateOps<ObjectId> {
 /// <summary>Static ID operations paired with a complete nominal reference constraint.</summary>
 public readonly struct ObjectIdStateOps : IStateOps<ObjectId> {
     public static bool StateEquals(in ObjectId left, in ObjectId right, DurableFieldInfo slot) => left == right;
-    public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteUInt32(state.Value);
-    public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadUInt32());
+    public static void WriteBase(ref BareValueWriter writer, in ObjectId state, DurableFieldInfo slot) => writer.WriteVarUInt32(state.Value);
+    public static ObjectId ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarUInt32());
     public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) => StringIdStateOps.PrepareDelta(in prior, in current, slot);
-    public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) => StringIdStateOps.ApplyDelta(ref reader, in prior, slot);
+    public static ObjectId ApplyDelta(ref BareValueReader reader, in ObjectId prior, DurableFieldInfo slot) => StringIdStateOps.ApplyDelta(ref reader, in prior, slot);
     public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitObject(state, slot.TargetType!);
 }

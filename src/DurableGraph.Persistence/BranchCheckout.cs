@@ -1,3 +1,4 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
 

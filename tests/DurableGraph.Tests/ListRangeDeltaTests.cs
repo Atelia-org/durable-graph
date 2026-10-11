@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -81,7 +82,7 @@ public sealed class ListRangeDeltaTests {
     }
 
     private static int[] Apply(FrozenListState<int> prior, ReadOnlySpan<byte> bytes) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         FrozenListState<int> state = ListStateBody<int, Int32StateOps>.ApplyDelta(ref reader, prior, Layout);
         reader.EnsureFullyConsumed();
         return state.Elements.ToArray();
@@ -89,10 +90,10 @@ public sealed class ListRangeDeltaTests {
 
     private readonly struct BrokenOps : IStateOps<int> {
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int value, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in value, slot);
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
+        public static void WriteBase(ref BareValueWriter writer, in int value, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in value, slot);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => new(false, []);
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in int value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }

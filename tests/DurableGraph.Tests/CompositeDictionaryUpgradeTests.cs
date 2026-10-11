@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -199,13 +200,13 @@ public sealed class CompositeDictionaryUpgradeTests {
     }
     private static ObjectStateRecord ReadHistorical(DictionaryComparerKind kind, DictionaryEntryState<Key1, Value1>[] entries) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         writer.WriteByte((byte)kind);
-        writer.WriteUInt32((uint)entries.Length);
+        writer.WriteVarUInt32((uint)entries.Length);
         foreach (DictionaryEntryState<Key1, Value1> entry in entries) {
-            writer.WriteInt32(entry.Key.Code);
-            writer.WriteInt32(entry.Key.Stamp);
-            writer.WriteInt32(entry.Value.Number);
+            writer.WriteVarInt32(entry.Key.Code);
+            writer.WriteVarInt32(entry.Key.Stamp);
+            writer.WriteVarInt32(entry.Value.Number);
         }
         DictionaryStateReader reader = DictionaryStateReader.Create(CompositeLayout(1), StoredKey(1), StoredValue(1));
         ObjectStateRecord result = reader.Read(new(71), new Bodies(buffer.WrittenSpan.ToArray()));
@@ -310,42 +311,42 @@ public sealed class CompositeDictionaryUpgradeTests {
     }
     private sealed class Key1Ops : IStateOps<Key1> {
         public static bool StateEquals(in Key1 left, in Key1 right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Key1 state, DurableFieldInfo slot) { writer.WriteInt32(state.Code); writer.WriteInt32(state.Stamp); }
-        public static Key1 ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt32(), reader.ReadInt32());
+        public static void WriteBase(ref BareValueWriter writer, in Key1 state, DurableFieldInfo slot) { writer.WriteVarInt32(state.Code); writer.WriteVarInt32(state.Stamp); }
+        public static Key1 ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt32(), reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in Key1 prior, in Key1 current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static Key1 ApplyDelta(ref BinaryPayloadReader reader, in Key1 prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static Key1 ApplyDelta(ref BareValueReader reader, in Key1 prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in Key1 state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private sealed class Key2Ops : IStateOps<Key2> {
         public static bool StateEquals(in Key2 left, in Key2 right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Key2 state, DurableFieldInfo slot) { writer.WriteInt64(state.Code); writer.WriteInt32(state.Stamp); }
-        public static Key2 ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt64(), reader.ReadInt32());
+        public static void WriteBase(ref BareValueWriter writer, in Key2 state, DurableFieldInfo slot) { writer.WriteVarInt64(state.Code); writer.WriteVarInt32(state.Stamp); }
+        public static Key2 ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt64(), reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in Key2 prior, in Key2 current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static Key2 ApplyDelta(ref BinaryPayloadReader reader, in Key2 prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static Key2 ApplyDelta(ref BareValueReader reader, in Key2 prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in Key2 state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private sealed class Value1Ops : IStateOps<Value1> {
         public static bool StateEquals(in Value1 left, in Value1 right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Value1 state, DurableFieldInfo slot) => writer.WriteInt32(state.Number);
-        public static Value1 ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt32());
+        public static void WriteBase(ref BareValueWriter writer, in Value1 state, DurableFieldInfo slot) => writer.WriteVarInt32(state.Number);
+        public static Value1 ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in Value1 prior, in Value1 current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static Value1 ApplyDelta(ref BinaryPayloadReader reader, in Value1 prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static Value1 ApplyDelta(ref BareValueReader reader, in Value1 prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in Value1 state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private sealed class Value2Ops : IStateOps<Value2> {
         public static bool StateEquals(in Value2 left, in Value2 right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Value2 state, DurableFieldInfo slot) => writer.WriteInt64(state.Number);
-        public static Value2 ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt64());
+        public static void WriteBase(ref BareValueWriter writer, in Value2 state, DurableFieldInfo slot) => writer.WriteVarInt64(state.Number);
+        public static Value2 ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt64());
         public static PreparedDeltaBody PrepareDelta(in Value2 prior, in Value2 current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static Value2 ApplyDelta(ref BinaryPayloadReader reader, in Value2 prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static Value2 ApplyDelta(ref BareValueReader reader, in Value2 prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in Value2 state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private sealed class NumericOps : IStateOps<NumericState> {
         public static bool StateEquals(in NumericState left, in NumericState right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in NumericState state, DurableFieldInfo slot) => writer.WriteInt32(state.Value);
-        public static NumericState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt32());
+        public static void WriteBase(ref BareValueWriter writer, in NumericState state, DurableFieldInfo slot) => writer.WriteVarInt32(state.Value);
+        public static NumericState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in NumericState prior, in NumericState current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static NumericState ApplyDelta(ref BinaryPayloadReader reader, in NumericState prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static NumericState ApplyDelta(ref BareValueReader reader, in NumericState prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in NumericState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }

@@ -1,18 +1,21 @@
 # Publication process-stop witness
 
-DB-036 G0 substrate experiment. Run `./Run-Probe.ps1`; use `-NoBuild` only after
-building this project. It is intentionally outside the product solution.
+DB-086 public FrameStore/VersionStore substrate experiment. Run `./Run-Probe.ps1`;
+use `-NoBuild` only after building this project. It is outside the product solution.
+Use the same source/package dependency configuration as the root build.
 
-The controller starts a separate .NET writer and kills it after a checkpoint
-without running its disposal code. A fresh process checks the entire State and
-publication files, including frame CRCs and scanner termination. Checkpoints cover
-an empty repository, State flushed before publication, publication appended before
-flush, and publication flushed. The State writer rolls over to a new segment before
-the second publication and flushes the exact append lease. A separate injected
-truncated publication tail must fail to open; it must never select an earlier head.
+The controller starts a separate .NET writer and kills it at an explicit checkpoint
+without running disposal. A fresh writable process opens FS, opens VS and reads only
+the selected root and its required data frame. Checkpoints cover an empty root,
+second data appended before confirmation, data confirmed before publication, and
+VS publication confirmed. A tiny rotation threshold exercises multiple data files.
+An injected incomplete control-file tail is recovered on VS's lazy ReadRef; the
+previous complete head remains selected. This intentionally replaces the superseded
+strict-tail rejection and whole-store reflush witness.
 
-The two-byte ordinal payload is only a substrate witness, not a product wire format.
-After-append observation proves process-local OS visibility on the tested platform;
-it does not establish a durability barrier. This experiment covers process kill and
-normal operating-system behavior, not OS crash, power loss, storage-device failure,
-or durable directory metadata. Artifacts remain beneath ignored `obj/run-*`.
+The byte ordinal and opaque address are a substrate witness, not DG's wire format.
+The public VS API combines append and confirmation; this probe does not claim to
+inject its internal failure windows. Product failure tests cover those boundaries.
+Process kill and ordinary OS visibility do not establish behavior under OS crash,
+power loss, storage-device failure or durable directory metadata. Artifacts remain
+beneath ignored `obj/run-*`.

@@ -3,8 +3,8 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -21,9 +21,9 @@ public sealed class RevisionDecoderTests : IDisposable {
     public void DecodesFullMembershipTypedDeltaAndOneStringInstancePerIdWithoutWriting() {
         DecodedRevision decoded;
         FrameAddress latest;
-        using (IRbfFile file = RbfFile.CreateNew(NextPath()))
-        using (SegmentStore segments = NewSegments()) {
-            SchemaStore schemas = new(file);
+        using (GraphResources file = GraphResources.CreateNew(NextPath())) {
+            var segments = file.Data;
+            SchemaStore schemas = file.Schemas;
             schemas.Register(NodeSchema);
             using StateRevisionStore store = new(segments);
             FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
@@ -31,10 +31,10 @@ public sealed class RevisionDecoderTests : IDisposable {
             latest = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
                 [ObjectVersionRecord.CreateDelta(1, original, new byte[] { 1, 9 })], []));
             StateReaderRegistry readers = NodeReaders();
-            long schemaTail = file.TailOffset;
+            long schemaTail = DataBytes(file.Data);
             long stateTail = Tail(segments);
             decoded = RevisionDecoder.Read(store, schemas, latest, readers);
-            Assert.Equal(schemaTail, file.TailOffset);
+            Assert.Equal(schemaTail, DataBytes(file.Data));
             Assert.Equal(stateTail, Tail(segments));
             Assert.Equal(new NodeState(4, 3), RevisionDecoder.Read(store, schemas, original, readers).GetRequired(new ObjectId(1)).GetState<NodeState>());
         }
@@ -60,9 +60,9 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     [Fact]
     public void EmptyMembershipIsARealRevisionAndInvalidAddressDoesNotMeanEmpty() {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
+        SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [], []));
         DecodedRevision result = RevisionDecoder.Read(store, schemas, address, new());
@@ -75,9 +75,9 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void TargetRevisionReferenceValidationRejectsRemovedOrWrongKindString(bool wrongKind) {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
+        SchemaStore schemas = file.Schemas;
         schemas.RegisterBatch([NodeSchema, ByteSchema]);
         using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Node(schemas, 1, 4, 2), Text(2, "value")], []));
@@ -87,12 +87,12 @@ public sealed class RevisionDecoderTests : IDisposable {
         FrameAddress invalid = store.Append(StateRevision.CreateObjectHeadMapDelta(original,
             wrongKind ? [Durable(schemas, 2, ByteSchema, [7])] : [], wrongKind ? [] : [2]));
         long stateTail = Tail(segments);
-        long schemaTail = file.TailOffset;
+        long schemaTail = DataBytes(file.Data);
         DecodedRevision? result = null;
         Assert.Throws<InvalidDataException>(() => result = RevisionDecoder.Read(store, schemas, invalid, readers));
         Assert.Null(result);
         Assert.Equal(stateTail, Tail(segments));
-        Assert.Equal(schemaTail, file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(file.Data));
         Assert.Equal("value", previous.Strings.ResolveString(new ObjectId(2)));
         Assert.Equal("value", RevisionDecoder.Read(store, schemas, original, readers).Strings.ResolveString(new ObjectId(2)));
     }
@@ -102,9 +102,9 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(1)]
     [InlineData(2)]
     public void UnknownDefinitionReaderOrFutureVersionDoesNotFallBack(int missing) {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
+        SchemaStore schemas = file.Schemas;
         DurableSchema stored = missing == 2 ? new("Number", 2, new DurableFieldInfo(1, TypeTag.Byte)) : ByteSchema;
         if (missing != 0) { schemas.Register(stored); }
         using StateRevisionStore store = new(segments);
@@ -124,13 +124,13 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void FullSchemaMismatchIncludesAncestorAndPrecedesThisObjectsBody(bool ancestorMismatch) {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
         DurableSchema stored = new("Leaf", 1, [new(1, TypeTag.Byte)], new("Ancestor", 1));
         DurableSchema wrong = ancestorMismatch
             ? new("Leaf", 1, [new(1, TypeTag.Byte)], new("Ancestor", 2))
             : new("Leaf", 1, [new(1, TypeTag.SByte)], new("Ancestor", 1));
-        SchemaStore schemas = new(file);
+        SchemaStore schemas = file.Schemas;
         schemas.Register(stored);
         using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Durable(schemas, 1, stored, [7])], []));
@@ -143,10 +143,10 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     [Fact]
     public void LateUnknownReaderDoesNotPublishPartialRowsOrUseCallbackRegistration() {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
         DurableSchema second = new("Other", 1, new DurableFieldInfo(1, TypeTag.Byte));
-        SchemaStore schemas = new(file);
+        SchemaStore schemas = file.Schemas;
         schemas.RegisterBatch([ByteSchema, second]);
         using StateRevisionStore store = new(segments);
         FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
@@ -169,9 +169,9 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(2)]
     [InlineData(3)]
     public void RejectsLateMalformedBodiesAndStringDelta(int malformed) {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
+        SchemaStore schemas = file.Schemas;
         schemas.Register(NodeSchema);
         using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null,
@@ -194,9 +194,9 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     [Fact]
     public void DeclaredHeadMustContainLocalObjectAndCannotFallbackToParent() {
-        using IRbfFile file = RbfFile.CreateNew(NextPath());
-        using SegmentStore segments = NewSegments();
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NextPath());
+        var segments = file.Data;
+        SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [Text(1, "text")], []));
         FrameAddress unchanged = store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], []));
@@ -211,12 +211,12 @@ public sealed class RevisionDecoderTests : IDisposable {
     private static StateReaderRegistry NodeReaders() {
         StateReaderRegistry readers = new();
         readers.Register(new StateReaderBinding<NodeState>(NodeSchema,
-            static (ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32()),
-            static (ref BinaryPayloadReader reader, in NodeState prior) => {
+            static (ref BareValueReader reader) => new(reader.ReadByte(), reader.ReadVarUInt32()),
+            static (ref BareValueReader reader, in NodeState prior) => {
                 byte bitmap = reader.ReadByte();
                 if (bitmap == 0 || bitmap > 3) { throw new InvalidDataException("Invalid test DTO Delta bitmap."); }
                 byte value = (bitmap & 1) != 0 ? reader.ReadByte() : prior.Value;
-                ObjectId textId = (bitmap & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId;
+                ObjectId textId = (bitmap & 2) != 0 ? new ObjectId(reader.ReadVarUInt32()) : prior.TextId;
                 return new(value, textId);
             },
             static (in NodeState state, IStateReferenceVisitor visitor) => { visitor.VisitString(state.TextId); }));
@@ -224,8 +224,8 @@ public sealed class RevisionDecoderTests : IDisposable {
     }
 
     private static StateReaderBinding<byte> ByteBinding(DurableSchema schema, Action? onRead = null) => new(schema,
-        (ref BinaryPayloadReader reader) => { onRead?.Invoke(); return reader.ReadByte(); },
-        static (ref BinaryPayloadReader reader, in byte prior) => reader.ReadByte(),
+        (ref BareValueReader reader) => { onRead?.Invoke(); return reader.ReadByte(); },
+        static (ref BareValueReader reader, in byte prior) => reader.ReadByte(),
         static (in byte state, IStateReferenceVisitor visitor) => { });
 
     private static ObjectVersionRecord Node(SchemaStore schemas, uint id, byte value, byte textId) => Durable(schemas, id, NodeSchema, [value, textId]);
@@ -234,12 +234,8 @@ public sealed class RevisionDecoderTests : IDisposable {
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 
-    private SegmentStore NewSegments() => SegmentStore.CreateNew(NextPath(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
     private string NextPath() => Path.Combine(_root, (++_nextFile).ToString(System.Globalization.CultureInfo.InvariantCulture));
-    private static long Tail(SegmentStore segments) {
-        using RbfSegmentWriterLease writer = segments.OpenActiveWriter();
-        return writer.File.TailOffset;
-    }
+    private static long Tail(SegmentStore segments) => DataBytes(segments);
 
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);

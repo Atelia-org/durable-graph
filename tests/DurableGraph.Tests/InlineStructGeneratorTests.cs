@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using System.Text;
@@ -53,7 +54,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     world.Value.X = 27;
                     var current = World.__DurableState.Capture(world);
                     var delta = World.__DurableState.PrepareDeltaBody(in prior, in current);
-                    var reader = new BinaryPayloadReader(delta.Body);
+                    var reader = new BareValueReader(delta.Body);
                     var restored = World.__DurableState.ApplyDeltaBodyV1(ref reader, in prior);
                     reader.EnsureFullyConsumed();
                     var unchanged = World.__DurableState.PrepareDeltaBody(in current, in restored);

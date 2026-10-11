@@ -1,14 +1,12 @@
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace HistoryCapabilityPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {
@@ -62,8 +60,8 @@ internal static class Program {
             Require(((World)repository.ReadState(repository.GetHead("main"))).Legacy.HasSelfCycle,
                 "V1 self-cycle was not restored.");
         }
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore store = new(segments);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        StateRevisionStore store = resources.States;
         StateRevision changed = store.Read(historical);
         ObjectVersionRecord delta = changed.LocalObjects.Single();
         Require(delta.ObjectId != worldId.Value && delta.Kind == ObjectVersionKind.Delta &&
@@ -74,10 +72,9 @@ internal static class Program {
     private static void ReadWithoutUpgrade(string directory) {
         using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
         CheckpointAddress historical = repository.GetHead("main");
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        SchemaStore schemas = new(file, readOnly: true);
-        using StateRevisionStore store = new(segments);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        SchemaStore schemas = resources.Schemas;
+        StateRevisionStore store = resources.States;
         DecodedRevision decoded = RevisionDecoder.Read(store, schemas, historical.RevisionAddress, Readers());
         ObjectId legacyId = decoded.Objects.Single(row => row.Id != historical.RootId).Id;
         Require(decoded.Objects.Count == 2 &&
@@ -94,9 +91,7 @@ internal static class Program {
             CheckpointAddress head = repository.GetHead("main");
             historical = head.RevisionAddress;
             worldId = head.RootId;
-            using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-            using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-            DecodedRevision decoded = RevisionDecoder.Read(new(segments), new(file, readOnly: true), historical, Readers());
+            using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);DecodedRevision decoded = RevisionDecoder.Read(resources.States, resources.Schemas, historical, Readers());
             legacyId = decoded.Objects.Single(row => row.Id != worldId).Id;
             Require(decoded.Objects.Count == 2 && World.UpgradeCalls == 0 && Legacy.UpgradeCalls == 0,
                 "Exact reading must not normalize either object.");
@@ -119,10 +114,9 @@ internal static class Program {
             session.CommitEvent(((World)session.State!).SnapshotEvent(), Policy);
             migrated = session.CommitState(Policy).RevisionAddress;
         }
-        using var fileAfter = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segmentsAfter = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        SchemaStore schemas = new(fileAfter, readOnly: true);
-        using StateRevisionStore store = new(segmentsAfter);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        SchemaStore schemas = resources.Schemas;
+        StateRevisionStore store = resources.States;
         StateRevision changed = store.Read(migrated);
         Require(!store.ReadLiveObjectHeadMap(migrated).ContainsKey(legacyId.Value) &&
             changed.LocalObjects.Count == 1 && changed.LocalObjects[0].ObjectId == worldId.Value &&
@@ -141,10 +135,9 @@ internal static class Program {
         Require(historical.RootId == migrated.RootId, "Migration changed World identity.");
         Require(typeof(World).Assembly.GetType("HistoryCapabilityPackageConsumerProbe.Legacy") is null,
             "Third consumer must contain no Legacy CLR shell.");
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        SchemaStore schemas = new(file, readOnly: true);
-        using StateRevisionStore store = new(segments);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        SchemaStore schemas = resources.Schemas;
+        StateRevisionStore store = resources.States;
         Require(schemas.GetRequired("package.history-legacy", 1).Version == 1,
             "Legacy metadata must exist independently of its absent executable reader.");
         World loaded = ((World)repository.ReadState(migrated));

@@ -14,10 +14,14 @@
     <ProjectReference Include="..\DurableGraph.Storage\DurableGraph.Storage.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
-    <PackageReference Include="Atelia.EventJournal" Version="$(StorageEventJournalPackageVersion)" />
+    <PackageReference Include="Atelia.Binary" Version="$(StoragePackageVersion)" />
+    <PackageReference Include="Atelia.FrameStore" Version="$(StoragePackageVersion)" />
+    <PackageReference Include="Atelia.VersionStore" Version="$(StoragePackageVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
-    <ProjectReference Include="$(StorageSourceRoot)/src/EventJournal/EventJournal.csproj" />
+    <ProjectReference Include="$(StorageSourceRoot)/src/Binary/Binary.csproj" />
+    <ProjectReference Include="$(StorageSourceRoot)/src/FrameStore/FrameStore.csproj" />
+    <ProjectReference Include="$(StorageSourceRoot)/src/VersionStore/VersionStore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

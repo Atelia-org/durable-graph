@@ -1,14 +1,13 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
-using Atelia.Rbf;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -37,13 +36,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         using RawBaseDirectory schemaDirectory = new();
         Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
+        const long rotationThreshold = 128;
         FrameAddress first, second, third, repeated, missingString, wrongKind, malformed;
-        using (var schemaFile = RbfFile.CreateNew(schemaPath))
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
-            SchemaStore schemas = new(schemaFile);
-            using StateRevisionStore store = new(segments);
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+            SchemaStore schemas = segments.Schemas;
+            using StateRevisionStore store = new(segments.Data);
             schemas.RegisterBatch([schema]);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.Strings.Where(item => item.Id.Value != aliasId).Select(item => ObjectVersionRecord.CreateBase(item.Id.Value, BaseObjectBodyCodec.EncodeString(new(item.Body)).Body))
@@ -64,17 +61,17 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [ObjectVersionRecord.CreateBase(nameId, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], new(expected[2])).Body)], []));
             malformed = store.Append(StateRevision.CreateObjectHeadMapDelta(third,
                 [ObjectVersionRecord.CreateDelta(ownerId, third, new byte[] { 8, 8, 0 })], []));
+            segments.Data.ConfirmDurable();
         }
-        Assert.NotEqual(first.FileNumber, second.FileNumber);
-        Assert.NotEqual(second.FileNumber, third.FileNumber);
+        Assert.NotEqual(first, second);
+        Assert.NotEqual(second, third);
         Array.Clear(input.Base);
         foreach (var item in input.Strings) Array.Clear(item.Body);
         input = default; // Drop prepared bodies as well; only query IDs, static reader selection and independent expectations survive.
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
 
-        using var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
-        SchemaStore coldSchemas = new(reopenedSchemaFile, readOnly: true);
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        using StateRevisionStore cold = new(reopened);
+        SchemaStore coldSchemas = reopened.Schemas;
+        using StateRevisionStore cold = new(reopened.Data);
         byte[] Load(FrameAddress revision, SchemaStore? registry = null, DurableSchema? expectedSchema = null) {
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revision, ownerId);
             Dictionary<uint, byte[]> strings = [];
@@ -103,32 +100,30 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         // The Base ID selects one persistent exact representation for the whole chain.
         // Neither missing registration nor a mismatched reader may enter a body callback.
-        using (var emptyFile = RbfFile.CreateNew(Path.Combine(schemaDirectory.Path, "missing.rbf"))) {
-            SchemaStore missing = new(emptyFile);
+        using (GraphResources missingResources = GraphResources.CreateNew(Path.Combine(schemaDirectory.Path, "missing"))) {
+            SchemaStore missing = missingResources.Schemas;
             int calls = (int)host.GetField("DecodeCalls")!.GetValue(null)!;
             Assert.Throws<InvalidDataException>(() => Load(third, missing));
             Assert.Equal(calls, (int)host.GetField("DecodeCalls")!.GetValue(null)!);
         }
         // An independent repository can hold the same logical keys with a different
         // ancestor definition. Its own registered Base must not authorize this reader.
-        string alternatePath = Path.Combine(schemaDirectory.Path, "different-definition.rbf");
         string alternateStatePath = Path.Combine(schemaDirectory.Path, "different-definition-state");
         DurableSchema ancestor = schema.BaseSchema!;
         var differentAncestor = new DurableSchema(ancestor.SchemaId, ancestor.Version, []);
         FrameAddress alternateRevision;
-        using (var alternateFile = RbfFile.CreateNew(alternatePath))
-        using (SegmentStore alternateSegments = SegmentStore.CreateNew(alternateStatePath)) {
-            SchemaStore alternate = new(alternateFile);
+        using (GraphResources alternateSegments = GraphResources.CreateNew(alternateStatePath)) {
+            SchemaStore alternate = alternateSegments.Schemas;
             DurableSchema differentSchema = new(schema.SchemaId, schema.Version, schema.Fields.ToArray(), differentAncestor);
             RepresentationId alternateId = alternate.RegisterRepresentations([ObjectLayout.ForDurable(differentSchema)])[0];
-            using StateRevisionStore alternateStates = new(alternateSegments);
+            using StateRevisionStore alternateStates = new(alternateSegments.Data);
             alternateRevision = alternateStates.Append(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.Encode(alternateId, new(expected[0])).Body)], []));
+            alternateSegments.Data.ConfirmDurable();
         }
-        using (var alternateFile = RbfFile.OpenReadOnlyExisting(alternatePath))
-        using (SegmentStore alternateSegments = SegmentStore.OpenReadOnlyExisting(alternateStatePath)) {
-            SchemaStore alternate = new(alternateFile, readOnly: true);
-            using StateRevisionStore alternateStates = new(alternateSegments);
+        using (GraphResources alternateSegments = GraphResources.OpenReadOnlyExisting(alternateStatePath)) {
+            SchemaStore alternate = alternateSegments.Schemas;
+            using StateRevisionStore alternateStates = new(alternateSegments.Data);
             ObjectVersionChain alternateChain = alternateStates.ReadObjectVersionChain(alternateRevision, ownerId);
             int calls = (int)host.GetField("DecodeCalls")!.GetValue(null)!;
             Assert.Throws<InvalidDataException>(() => decode(alternateChain, alternate, schema, []));
@@ -167,7 +162,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
             """ + FusedDeltaHostMethods("Leaf", 1) + FusedDeltaHostMethods("Leaf", 2) + """
             public static int DecodeCalls;
-            private static Leaf.__DurableState.V1 ReadOld(ref BinaryPayloadReader reader) {
+            private static Leaf.__DurableState.V1 ReadOld(ref BareValueReader reader) {
                 DecodeCalls++;
                 return Leaf.__DurableState.ReadBaseBodyV1(ref reader);
             }
@@ -197,29 +192,25 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([2, 1], delta1.Body.ToArray());
         Assert.Equal<byte>([1, 4], delta2.Body.ToArray());
         using RawBaseDirectory directory = new();
-        using RawBaseDirectory schemaDirectory = new();
-        Directory.CreateDirectory(schemaDirectory.Path);
-        string schemaPath = Path.Combine(schemaDirectory.Path, "schemas.rbf");
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat, SegmentSizeThresholdBytes = 8 };
+        const long rotationThreshold = 128;
         FrameAddress first, second, third;
-        using (var schemaFile = RbfFile.CreateNew(schemaPath))
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
-            SchemaStore schemas = new(schemaFile);
-            using StateRevisionStore store = new(segments);
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+            SchemaStore schemas = segments.Schemas;
+            using StateRevisionStore store = new(segments.Data);
             schemas.RegisterBatch([oldSchema, newSchema]);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [ObjectVersionRecord.CreateBase(1,
                 BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(oldSchema)])[0], new(baseBytes)).Body)], []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [ObjectVersionRecord.CreateDelta(1, first, delta1.Body)], []));
             third = store.Append(StateRevision.CreateObjectHeadMapDelta(second, [ObjectVersionRecord.CreateDelta(1, second, delta2.Body)], []));
+            segments.Data.ConfirmDurable();
         }
         Array.Clear(baseBytes);
         delta1 = null!;
         delta2 = null!;
-        Assert.NotEqual(first.FileNumber, third.FileNumber);
-        using var reopenedSchemaFile = RbfFile.OpenReadOnlyExisting(schemaPath);
-        SchemaStore coldSchemas = new(reopenedSchemaFile, readOnly: true);
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        using StateRevisionStore cold = new(reopened);
+        Assert.NotEqual(first, third);
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore coldSchemas = reopened.Schemas;
+        using StateRevisionStore cold = new(reopened.Data);
         byte[] Load(FrameAddress revision) {
             ObjectVersionChain chain = cold.ReadObjectVersionChain(revision, 1);
             return decode(chain, coldSchemas, oldSchema);
@@ -236,11 +227,11 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static byte[] ExpectedCapturedBody(uint name, uint alias, uint empty, int score) {
         var buffer = new ArrayBufferWriter<byte>();
-        var writer = new BinaryPayloadWriter(buffer);
-        writer.WriteUInt32(name);
-        writer.WriteUInt32(alias);
-        writer.WriteUInt32(empty);
-        writer.WriteInt32(score);
+        var writer = new BareValueWriter(buffer);
+        writer.WriteVarUInt32(name);
+        writer.WriteVarUInt32(alias);
+        writer.WriteVarUInt32(empty);
+        writer.WriteVarInt32(score);
         return buffer.WrittenSpan.ToArray();
     }
 
@@ -249,6 +240,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private delegate byte[] PersistedDecode(ObjectVersionChain chain, SchemaStore schemas, DurableSchema expected, Dictionary<uint, byte[]> strings);
 
     private const string PersistedDeltaCaptureSource = """
+        using Atelia.Binary;
         using System;
         using System.Buffers;
         using System.Collections.Generic;
@@ -259,6 +251,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using Atelia.DurableGraph.Serialization;
         namespace PersistedCapture;
         [DurableType("persisted.capture.base", 1)]
@@ -279,7 +272,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static int DecodeCalls;
             private static byte[] Write(in Leaf.__DurableState.V1 state) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
@@ -312,7 +305,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var delta2 = Leaf.__DurableState.PrepareDeltaBody(in middle, in current);
                 var strings = third.Objects.Where(item => item.Kind == ObjectStateKind.String).Select(item => {
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     writer.WriteString(item.StringContent);
                     return (item.Id, buffer.WrittenSpan.ToArray());
                 }).ToArray();
@@ -320,7 +313,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 return (first.RootIds[0], prior.Segment0Field1, middle.Segment1Field1, prior.Segment1Field9,
                     Leaf.__DurableState.V1.Schema, strings, Write(in prior), delta1, delta2);
             }
-            private static Leaf.__DurableState.V1 ReadBase(ref BinaryPayloadReader reader) {
+            private static Leaf.__DurableState.V1 ReadBase(ref BareValueReader reader) {
                 DecodeCalls++;
                 return Leaf.__DurableState.ReadBaseBodyV1(ref reader);
             }

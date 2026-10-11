@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Collections.Immutable;
@@ -73,9 +74,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                         {{(defect == "constructor" ? "private" : "public")}} V1(int valueSegment0Field1) { Segment0Field1=valueSegment0Field1; }
                     }
                     public readonly struct BodyV1 {
-                        public static void Write({{(defect == "write" ? "in" : "ref")}} Serialization.BinaryPayloadWriter writer,in V1 value,DurableSchema schema) { }
-                        public static V1 Read({{(defect == "read" ? "in" : "ref")}} Serialization.BinaryPayloadReader reader,DurableSchema schema)=>default;
-                        public static V1 Apply(ref Serialization.BinaryPayloadReader reader,in V1 prior,DurableSchema schema,bool requireChanges={{(defect == "apply-default" ? "true" : "false")}})=>default;
+                        public static void Write({{(defect == "write" ? "in" : "ref")}} global::Atelia.Binary.BareValueWriter writer,in V1 value,DurableSchema schema) { }
+                        public static V1 Read({{(defect == "read" ? "in" : "ref")}} global::Atelia.Binary.BareValueReader reader,DurableSchema schema)=>default;
+                        public static V1 Apply(ref global::Atelia.Binary.BareValueReader reader,in V1 prior,DurableSchema schema,bool requireChanges={{(defect == "apply-default" ? "true" : "false")}})=>default;
                         public static void Visit(in V1 value,IStateReferenceVisitor visitor,DurableSchema schema) { }
                         public static Serialization.PreparedBaseBody PrepareBase(in V1 value,DurableSchema schema)=>default;
                         public static Serialization.PreparedDeltaBody PrepareDelta(in V1 prior,{{(defect == "delta" ? "" : "in")}} V1 current,DurableSchema schema)=>default;
@@ -229,9 +230,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                     public readonly {{(defect == "body-ref-struct" ? "ref" : "")}} struct BodyV1<TState,TOps>
                         where TState:unmanaged{{stateConstraint}}
                         where TOps:struct,IStateOps<TState>{{(defect == "ops-constraint" ? ",global::System.IDisposable" : "")}} {
-                        public static void Write(ref Serialization.BinaryPayloadWriter writer,in V1<TState> value,DurableSchema schema) { }
-                        public static V1<TState> Read(ref Serialization.BinaryPayloadReader reader,DurableSchema schema)=>default;
-                        public static V1<TState> Apply(ref Serialization.BinaryPayloadReader reader,in V1<TState> prior,DurableSchema schema,bool requireChanges=false)=>default;
+                        public static void Write(ref global::Atelia.Binary.BareValueWriter writer,in V1<TState> value,DurableSchema schema) { }
+                        public static V1<TState> Read(ref global::Atelia.Binary.BareValueReader reader,DurableSchema schema)=>default;
+                        public static V1<TState> Apply(ref global::Atelia.Binary.BareValueReader reader,in V1<TState> prior,DurableSchema schema,bool requireChanges=false)=>default;
                         public static void Visit(in V1<TState> value,IStateReferenceVisitor visitor,DurableSchema schema) { }
                         public static Serialization.PreparedBaseBody PrepareBase(in V1<TState> value,DurableSchema schema)=>default;
                         public static Serialization.PreparedDeltaBody PrepareDelta(in V1<TState> prior,in V1<TState> current,DurableSchema schema)=>default;

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
@@ -44,7 +45,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             public static byte[] Write(bool flag, int number, long wide, int last) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 var state = Leaf.__DurableState.Capture(new Leaf(flag, number, wide, last));
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
@@ -52,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static long[] Read(byte[] bytes, bool requireEnd) {
                 var domain = new Leaf(false, 101, 102, 103);
                 var value = Leaf.__DurableState.Capture(domain);
-                var reader = new BinaryPayloadReader(bytes);
+                var reader = new BareValueReader(bytes);
                 int error = 0;
                 try {
                     value = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
@@ -70,14 +71,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static byte[] WriteBaseOfDerived() {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 var state = Base.__DurableState.Capture(new Leaf(true, -1, 999, 888));
                 Base.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
             public static byte[] FailedWrite() {
                 var buffer = new FailAfterFirstAdvance();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 var state = Leaf.__DurableState.Capture(new Leaf(true, int.MinValue, 999, 888));
                 try { Leaf.__DurableState.WriteBaseBody(ref writer, in state); }
                 catch (IOException) { return buffer.Buffer.WrittenSpan.ToArray(); }
@@ -123,8 +124,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("global::BinaryBodies.Base.__DurableState.Capture(value)", generated);
         Assert.Contains("global::BinaryBodies.Empty.__DurableState.Capture(value)", generated);
         Assert.Contains("writer.WriteBoolean(value.Segment0Field2)", generated);
-        Assert.Contains("writer.WriteInt32(value.Segment0Field9)", generated);
-        Assert.Contains("writer.WriteInt64(value.Segment1Field2)", generated);
+        Assert.Contains("writer.WriteVarInt32(value.Segment0Field9)", generated);
+        Assert.Contains("writer.WriteVarInt64(value.Segment1Field2)", generated);
         Assert.DoesNotContain("value._cache", generated);
         Assert.DoesNotContain("Serializer", generated);
     }
@@ -165,7 +166,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static int[] Read() {
-                    var reader = new BinaryPayloadReader(new byte[] { 1, 2 });
+                    var reader = new BareValueReader(new byte[] { 1, 2 });
                     var domain = new Item();
                     var value = Item.__DurableState.Capture(domain);
                     try { value = Item.__DurableState.ReadBaseBodyV1(ref reader); }
@@ -267,7 +268,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static class Host {
                 public static byte[] Write() {
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     var state = Versioned.__DurableState.Capture(new Versioned());
                     Versioned.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();

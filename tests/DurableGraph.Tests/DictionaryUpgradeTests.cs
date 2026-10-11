@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -397,18 +398,18 @@ public sealed class DictionaryUpgradeTests {
     }
     private sealed class Key3Ops : IStateOps<Key3> {
         public static bool StateEquals(in Key3 left, in Key3 right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Key3 state, DurableFieldInfo slot) => writer.WriteInt64(state.Value);
-        public static Key3 ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt64());
+        public static void WriteBase(ref BareValueWriter writer, in Key3 state, DurableFieldInfo slot) => writer.WriteVarInt64(state.Value);
+        public static Key3 ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt64());
         public static PreparedDeltaBody PrepareDelta(in Key3 prior, in Key3 current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static Key3 ApplyDelta(ref BinaryPayloadReader reader, in Key3 prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static Key3 ApplyDelta(ref BareValueReader reader, in Key3 prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in Key3 state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private sealed class NoOps<T> : IStateOps<T> where T : unmanaged {
         public static bool StateEquals(in T left, in T right, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static void WriteBase(ref BinaryPayloadWriter writer, in T state, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static T ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static void WriteBase(ref BareValueWriter writer, in T state, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static T ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new NotSupportedException();
         public static PreparedDeltaBody PrepareDelta(in T prior, in T current, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static T ApplyDelta(ref BinaryPayloadReader reader, in T prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static T ApplyDelta(ref BareValueReader reader, in T prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in T state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new NotSupportedException();
     }
 }

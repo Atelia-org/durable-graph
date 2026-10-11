@@ -95,8 +95,8 @@ public sealed partial class DurableSchemaGenerator {
                 .Append("), typeof(").Append(layout.Body).AppendLine("));");
         } else {
             output.Append("        return new ").Append(RuntimeName).Append("StateReaderBinding<").Append(layout.Dto).AppendLine(">(schema,");
-            output.Append("            (ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader) => ").Append(layout.Body).AppendLine(".Read(ref reader, schema),");
-            output.Append("            (ref ").Append(PayloadNamespace).Append("BinaryPayloadReader reader, in ").Append(layout.Dto).Append(" prior) => ")
+            output.Append("            (ref ").Append(BinaryNamespace).Append("BareValueReader reader) => ").Append(layout.Body).AppendLine(".Read(ref reader, schema),");
+            output.Append("            (ref ").Append(BinaryNamespace).Append("BareValueReader reader, in ").Append(layout.Dto).Append(" prior) => ")
                 .Append(layout.Body).AppendLine(".Apply(ref reader, in prior, schema),");
             output.Append("            (in ").Append(layout.Dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor) => ")
                 .Append(layout.Body).AppendLine(".Visit(in state, visitor, schema));");

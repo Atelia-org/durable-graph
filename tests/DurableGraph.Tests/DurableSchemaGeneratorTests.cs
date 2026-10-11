@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Reflection;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
@@ -366,7 +367,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         source.Contains("FixturePreparedWorldRevision", StringComparison.Ordinal);
 
     private static string WithFixtureBridgeImport(string source) => NeedsFixtureBridge(source)
-        ? "using Atelia.DurableGraph.Tests;\n" + source : source;
+        ? "global using Atelia.Binary;\nglobal using Atelia.DurableGraph.Tests;\n" + source : "global using Atelia.Binary;\n" + source;
 
     private static IEnumerable<MetadataReference> FixtureBridgeReferences(string source) =>
         NeedsFixtureBridge(source)
@@ -389,7 +390,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             syntaxTrees: [syntaxTree],
             references: PlatformReferences().Concat(FixtureBridgeReferences(source)).Append(
                 MetadataReference.CreateFromFile(typeof(IDurableObject).Assembly.Location)).Append(
-                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Serialization.BinaryPayloadReader).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.Binary.BareValueReader).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.FrameStore.FrameAddress).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(AteliaResult<>).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Serialization.PreparedBaseBody).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Persistence.SchemaStore).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Storage.ObjectVersionChain).Assembly.Location)),
             options: new CSharpCompilationOptions(

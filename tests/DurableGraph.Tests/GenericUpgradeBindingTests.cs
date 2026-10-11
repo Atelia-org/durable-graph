@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -300,8 +301,8 @@ public sealed class GenericUpgradeBindingTests {
                 .Select(parameter => binding.GetValue(parameter.Expression, parameter.InlineVersion).StateType).ToArray());
         }
         private static StateReaderBinding Reader<T>(DurableSchema schema) where T : unmanaged => new StateReaderBinding<T>(schema,
-            static (ref BinaryPayloadReader reader) => default,
-            static (ref BinaryPayloadReader reader, in T prior) => prior,
+            static (ref BareValueReader reader) => default,
+            static (ref BareValueReader reader, in T prior) => prior,
             static (in T state, IStateReferenceVisitor visitor) => { });
         private sealed class NoOperations;
     }

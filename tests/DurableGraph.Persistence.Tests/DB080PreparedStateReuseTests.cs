@@ -2,8 +2,8 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -382,19 +382,11 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             original = main.Head.RevisionAddress;
             rootId = main.Head.RootId;
         }
-        FrameAddress invalid;
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(_root, "state"))) {
-            using StateRevisionStore states = new(segments);
-            uint childId = Assert.Single(states.Read(original).LocalObjects, row => row.ObjectId != rootId.Value).ObjectId;
-            // Root's exact object head is inherited unchanged, but this revision removes its child.
-            invalid = states.AppendDurably(StateRevision.CreateObjectHeadMapDelta(original, [], [childId]));
-        }
-        using (HistoryJournal history = HistoryJournal.Open(_root, readOnly: false)) {
-            history.ConfirmDurable();
-            var branch = history.Journal.OpenBranch("main").Unwrap();
-            var parent = history.Journal.GetHead(branch);
-            var record = history.Append(GraphFrameKind.State, invalid, rootId, parent);
-            history.Journal.CreateBranch("invalid", record).Unwrap();
+        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+            uint childId = Assert.Single(resources.States.Read(original).LocalObjects, row => row.ObjectId != rootId.Value).ObjectId;
+            FrameAddress invalid = resources.States.Append(StateRevision.CreateObjectHeadMapDelta(original, [], [childId]),
+                GraphMetadataCodec.Encode(GraphFrameKind.State, original, rootId));
+            resources.PublishBranch("invalid", invalid, out _);
         }
         // Physical history/root checks permit opening; typed graph validation must still reject.
         using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models());
@@ -487,15 +479,14 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         CapturedStatePreparation<byte> preparation = new(schema, Base,
             static (in byte previous, in byte current) => new(previous != current, Base(current).Body));
         return new StateModelBinding<Other, byte>(preparation,
-            [new StateReaderBinding<byte>(schema, static (ref BinaryPayloadReader input) => input.ReadByte(),
-                static (ref BinaryPayloadReader input, in byte _) => input.ReadByte(), Visit)],
+            [new StateReaderBinding<byte>(schema, static (ref BareValueReader input) => input.ReadByte(),
+                static (ref BareValueReader input, in byte _) => input.ReadByte(), Visit)],
             static row => row.GetState<byte>(), static () => new Other(),
             static (Other target, in byte state, ObjectReadTable _) => target.Value = state,
             static (target, _) => target.Value, Visit);
     }
 
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(),
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
 
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db080-reuse-");
 }

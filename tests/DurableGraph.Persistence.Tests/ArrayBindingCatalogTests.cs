@@ -60,8 +60,8 @@ public sealed class ArrayBindingCatalogTests {
         string directory = Path.Combine(Path.GetTempPath(), "durable-array-catalog-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try {
-            using IRbfFile file = RbfFile.CreateNew(Path.Combine(directory, "schemas.rbf"));
-            SchemaStore schemas = new(file);
+            using GraphResources file = GraphResources.CreateNew(Path.Combine(directory, "schemas.rbf"));
+            SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             registry.Register(new StateDefinitionBinding("RetiredPoint", SchemaKind.InlineValue, 0, null,
                 [new("RetiredPoint", 1, SchemaKind.InlineValue, 0, [new(1, TypeExpr.Builtin(TypeTag.Int32))])],
@@ -137,8 +137,8 @@ public sealed class ArrayBindingCatalogTests {
     public void LegacyExactReadersSupplyNominalMetadataWithoutDefinitionTemplates() {
         DurableSchema schema = new("LegacyNode", 1);
         StateReaderBinding<int> legacy = new(schema,
-            static (ref BinaryPayloadReader reader) => throw new InvalidOperationException("Body must not be closed or executed."),
-            static (ref BinaryPayloadReader reader, in int prior) => throw new InvalidOperationException("Body must not be executed."),
+            static (ref BareValueReader reader) => throw new InvalidOperationException("Body must not be closed or executed."),
+            static (ref BareValueReader reader, in int prior) => throw new InvalidOperationException("Body must not be executed."),
             static (in int state, IStateReferenceVisitor visitor) => { });
         StateModelSnapshot snapshot = new([], [], new() { [new(schema.Type, schema.Version)] = legacy });
         ObjectLayout layout = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1, schema.Type)));

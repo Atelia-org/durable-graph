@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -27,8 +28,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (string forbidden in new[] { "ValueSlotCodec", "PrimitiveSlotCodecs", "DynamicInvoke", "System.Reflection", "Dictionary<" }) {
             Assert.DoesNotContain(forbidden, generated);
         }
-        Assert.Contains("writer.WriteUInt32(value.Segment0Field1.Value)", generated);
-        Assert.Contains("reader.ReadUInt32()", generated);
+        Assert.Contains("writer.WriteVarUInt32(value.Segment0Field1.Value)", generated);
+        Assert.Contains("reader.ReadVarUInt32()", generated);
     }
 
     [Fact]
@@ -106,7 +107,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     if (graph.Objects.Count != 1) throw new Exception("Null string must not create a record.");
                     var state = graph.Objects.Single().GetState<Leaf.__DurableState.V1>();
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }
@@ -269,19 +270,19 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var leaf = Find(f.Graph, 1).GetState<Leaf.__DurableState.V1>();
                 var item = Find(f.Graph, 2).GetState<Item.__DurableState.V1>();
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in leaf);
                 Item.__DurableState.WriteBaseBody(ref writer, in item);
                 return buffer.WrittenSpan.ToArray();
             }
             public static byte[] ReadAndWriteIds() {
-                var reader = new BinaryPayloadReader(new byte[] { 255, 255, 255, 255, 15, 0, 1, 128, 1, 1, 0, 0 });
+                var reader = new BareValueReader(new byte[] { 255, 255, 255, 255, 15, 0, 1, 128, 1, 1, 0, 0 });
                 var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 Check(state.Segment0Field1.Value == uint.MaxValue && state.Segment0Field2.Value == 0 && state.Segment1Field1 == -1 &&
                     state.Segment1Field3.Value == 128 && state.Segment1Field4.Value == 1, "ID-only read layout.");
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
@@ -370,7 +371,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 var graph = capture.Seal();
                 var state = graph.Objects.Single(entry => entry.Id == id).GetState<Leaf.__DurableState.V1>();
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
@@ -395,7 +396,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             public static byte[] RoundTripV1(byte[] bytes) {
-                var reader = new BinaryPayloadReader(bytes);
+                var reader = new BareValueReader(bytes);
                 var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 if (state.Segment0Field1.Value != 2u || state.Segment1Field1.Value != 2u || state.Segment1Field2.Value != 3u ||
@@ -407,7 +408,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 // Only current schema closure controls Capture's context requirement.
                 var current = Leaf.__DurableState.Capture(new Leaf());
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }

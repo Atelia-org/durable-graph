@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -17,7 +18,7 @@ public sealed class CompositeDictionaryBodyTests {
         FrozenDictionaryState<KeyState, int> current = State(mode, new(new(2, 200), 21), new(new(1, 101), 10));
         var body = DictionaryStateBody<KeyState, int, KeyOps, Int32StateOps>.PrepareBase(prior, Layout);
         Assert.Equal((byte)mode, body.Body[0]);
-        BinaryPayloadReader reader = new(body.Body);
+        BareValueReader reader = new(body.Body);
         var decoded = DictionaryStateBody<KeyState, int, KeyOps, Int32StateOps>.ReadBase(ref reader, Layout);
         reader.EnsureFullyConsumed();
         Assert.Equal(prior.Entries.ToArray(), decoded.Entries.ToArray());
@@ -49,7 +50,7 @@ public sealed class CompositeDictionaryBodyTests {
         FrozenDictionaryState<float, int> state = new(DictionaryComparerKind.Application,
             new DictionaryEntryState<float, int>[] { new(0f, 1), new(BitConverter.Int32BitsToSingle(unchecked((int)0x80000000)), 2) });
         var body = DictionaryStateBody<float, int, SingleStateOps, Int32StateOps>.PrepareBase(state, layout);
-        BinaryPayloadReader reader = new(body.Body);
+        BareValueReader reader = new(body.Body);
         var decoded = DictionaryStateBody<float, int, SingleStateOps, Int32StateOps>.ReadBase(ref reader, layout);
         reader.EnsureFullyConsumed();
         Assert.Equal(0, BitConverter.SingleToInt32Bits(decoded[0].Key));
@@ -203,13 +204,13 @@ public sealed class CompositeDictionaryBodyTests {
         return DictionaryObjectBinding.Create(typeof(Dictionary<DomainKey, int>), Layout, key, value, getApplicationComparer: comparer);
     }
     private static FrozenDictionaryState<EmptyState, EmptyState> ReadEmpty(byte[] bytes, DictionaryLayout layout) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         var state = DictionaryStateBody<EmptyState, EmptyState, EmptyOps, EmptyOps>.ReadBase(ref reader, layout);
         reader.EnsureFullyConsumed();
         return state;
     }
     private static FrozenDictionaryState<EmptyState, EmptyState> ApplyEmpty(byte[] bytes, FrozenDictionaryState<EmptyState, EmptyState> prior, DictionaryLayout layout) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         var state = DictionaryStateBody<EmptyState, EmptyState, EmptyOps, EmptyOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
         return state;
@@ -244,29 +245,29 @@ public sealed class CompositeDictionaryBodyTests {
     }
     private readonly struct KeyOps : IStateOps<KeyState> {
         public static bool StateEquals(in KeyState left, in KeyState right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in KeyState value, DurableFieldInfo slot) { writer.WriteInt32(value.Tenant); writer.WriteInt32(value.Timestamp); }
-        public static KeyState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt32(), reader.ReadInt32());
+        public static void WriteBase(ref BareValueWriter writer, in KeyState value, DurableFieldInfo slot) { writer.WriteVarInt32(value.Tenant); writer.WriteVarInt32(value.Timestamp); }
+        public static KeyState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt32(), reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in KeyState prior, in KeyState current, DurableFieldInfo slot) => throw new InvalidOperationException("Dictionary keys do not have nested patches.");
-        public static KeyState ApplyDelta(ref BinaryPayloadReader reader, in KeyState prior, DurableFieldInfo slot) => throw new InvalidOperationException("Dictionary keys do not have nested patches.");
+        public static KeyState ApplyDelta(ref BareValueReader reader, in KeyState prior, DurableFieldInfo slot) => throw new InvalidOperationException("Dictionary keys do not have nested patches.");
         public static void VisitReferences(in KeyState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private readonly record struct ReferenceKeyState(ObjectId Reference, int Tenant);
     private readonly struct ReferenceKeyOps : IStateOps<ReferenceKeyState> {
         public static bool StateEquals(in ReferenceKeyState left, in ReferenceKeyState right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in ReferenceKeyState state, DurableFieldInfo slot) { writer.WriteUInt32(state.Reference.Value); writer.WriteInt32(state.Tenant); }
-        public static ReferenceKeyState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(new(reader.ReadUInt32()), reader.ReadInt32());
+        public static void WriteBase(ref BareValueWriter writer, in ReferenceKeyState state, DurableFieldInfo slot) { writer.WriteVarUInt32(state.Reference.Value); writer.WriteVarInt32(state.Tenant); }
+        public static ReferenceKeyState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(new(reader.ReadVarUInt32()), reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in ReferenceKeyState prior, in ReferenceKeyState current, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static ReferenceKeyState ApplyDelta(ref BinaryPayloadReader reader, in ReferenceKeyState prior, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static ReferenceKeyState ApplyDelta(ref BareValueReader reader, in ReferenceKeyState prior, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static void VisitReferences(in ReferenceKeyState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => visitor.VisitString(state.Reference);
     }
     private readonly struct EmptyState { }
     private readonly struct EmptyOps : IStateOps<EmptyState> {
         internal static int Reads;
         public static bool StateEquals(in EmptyState left, in EmptyState right, DurableFieldInfo slot) => true;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in EmptyState value, DurableFieldInfo slot) { }
-        public static EmptyState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) { Reads++; return default; }
+        public static void WriteBase(ref BareValueWriter writer, in EmptyState value, DurableFieldInfo slot) { }
+        public static EmptyState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) { Reads++; return default; }
         public static PreparedDeltaBody PrepareDelta(in EmptyState prior, in EmptyState current, DurableFieldInfo slot) => new(false, []);
-        public static EmptyState ApplyDelta(ref BinaryPayloadReader reader, in EmptyState prior, DurableFieldInfo slot) => throw new InvalidDataException("Empty states cannot change.");
+        public static EmptyState ApplyDelta(ref BareValueReader reader, in EmptyState prior, DurableFieldInfo slot) => throw new InvalidDataException("Empty states cannot change.");
         public static void VisitReferences(in EmptyState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }

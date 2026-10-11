@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 
@@ -10,7 +11,7 @@ public sealed class ArrayElementCodecTests {
         int[] source = [-1, 0, 1, 64];
         Assert.Equal([0x01, 0x00, 0x02, 0x80, 0x01], Encode(codec, source));
         int[] target = [9, 9, 9, 9];
-        BinaryPayloadReader reader = new([0x01, 0x00, 0x02, 0x80, 0x01]);
+        BareValueReader reader = new([0x01, 0x00, 0x02, 0x80, 0x01]);
         codec.ReadElements(ref reader, target);
         Assert.Equal(source, target);
         reader.EnsureFullyConsumed();
@@ -29,7 +30,7 @@ public sealed class ArrayElementCodecTests {
         Assert.Equal([0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c], Encode(codec, source));
 
         int[,] target = (int[,])Array.CreateInstance(typeof(int), [2, 3], [10, -4]);
-        BinaryPayloadReader reader = new([0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c]);
+        BareValueReader reader = new([0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c]);
         codec.ReadElements(ref reader, target);
         Assert.Equal(1, target[10, -4]);
         Assert.Equal(2, target[10, -3]);
@@ -51,7 +52,7 @@ public sealed class ArrayElementCodecTests {
 
         int[,] target = (int[,])Array.CreateInstance(
             typeof(int), [1, 2], [int.MinValue, int.MaxValue - 1]);
-        BinaryPayloadReader reader = new([0x01, 0x80, 0x01]);
+        BareValueReader reader = new([0x01, 0x80, 0x01]);
         codec.ReadElements(ref reader, target);
         Assert.Equal(-1, target[int.MinValue, int.MaxValue - 1]);
         Assert.Equal(64, target[int.MinValue, int.MaxValue]);
@@ -61,8 +62,8 @@ public sealed class ArrayElementCodecTests {
     [Fact]
     public void Empty_vectors_and_either_empty_dimension_do_not_invoke_element_bodies() {
         ValueSlotCodec<int> slot = new(
-            static (ref BinaryPayloadReader reader, ref int value) => throw new InvalidOperationException(),
-            static (ref BinaryPayloadWriter writer, ref int value) => throw new InvalidOperationException());
+            static (ref BareValueReader reader, ref int value) => throw new InvalidOperationException(),
+            static (ref BareValueWriter writer, ref int value) => throw new InvalidOperationException());
         AssertEmpty(slot.BindVector(), Array.Empty<int>());
         AssertEmpty(slot.BindArray2(), Array.CreateInstance(typeof(int), [0, 3], [-2, 7]));
         AssertEmpty(slot.BindArray2(), Array.CreateInstance(typeof(int), [3, 0], [-2, 7]));
@@ -72,8 +73,8 @@ public sealed class ArrayElementCodecTests {
     public void Bindings_with_the_same_value_type_retain_their_own_bodies() {
         ValueSlotCodec<int> ordinary = PrimitiveSlotCodecs.Get<int>();
         ValueSlotCodec<int> biased = new(
-            static (ref BinaryPayloadReader reader, ref int value) => value = reader.ReadInt32() - 10,
-            static (ref BinaryPayloadWriter writer, ref int value) => writer.WriteInt32(value + 10));
+            static (ref BareValueReader reader, ref int value) => value = reader.ReadVarInt32() - 10,
+            static (ref BareValueWriter writer, ref int value) => writer.WriteVarInt32(value + 10));
         ArrayElementCodec ordinaryVector = ordinary.BindVector();
         ArrayElementCodec biasedVector = biased.BindVector();
         ArrayElementCodec ordinaryMatrix = ordinary.BindArray2();
@@ -86,7 +87,7 @@ public sealed class ArrayElementCodecTests {
 
         int[] vector = new int[2];
         int[,] matrix = new int[1, 2];
-        BinaryPayloadReader reader = new([0x16, 0x18, 0x16, 0x18]);
+        BareValueReader reader = new([0x16, 0x18, 0x16, 0x18]);
         biasedVector.ReadElements(ref reader, vector);
         biasedMatrix.ReadElements(ref reader, matrix);
         Assert.Equal([1, 2], vector);
@@ -99,8 +100,8 @@ public sealed class ArrayElementCodecTests {
     public void Writer_bodies_receive_actual_vector_and_matrix_slots_by_ref() {
         ValueSlotCodec<int> slot = new(
             PrimitiveSlotCodecs.Get<int>().Read,
-            static (ref BinaryPayloadWriter writer, ref int value) => {
-                writer.WriteInt32(value);
+            static (ref BareValueWriter writer, ref int value) => {
+                writer.WriteVarInt32(value);
                 value++;
             });
         int[] vector = [7];
@@ -135,7 +136,7 @@ public sealed class ArrayElementCodecTests {
     [Fact]
     public void Truncated_vector_read_keeps_preceding_values_and_leaves_failing_slot_unchanged() {
         int[] target = [99, 98, 97];
-        BinaryPayloadReader reader = new([0x02, 0x80]);
+        BareValueReader reader = new([0x02, 0x80]);
         Exception? exception = null;
         try {
             PrimitiveSlotCodecs.Get<int>().BindVector().ReadElements(ref reader, target);
@@ -152,7 +153,7 @@ public sealed class ArrayElementCodecTests {
     [Fact]
     public void Invalid_boolean_matrix_read_keeps_already_filled_slots() {
         bool[,] target = { { true, false }, { true, true } };
-        BinaryPayloadReader reader = new([0x00, 0x01, 0x02, 0x00]);
+        BareValueReader reader = new([0x00, 0x01, 0x02, 0x00]);
         Exception? exception = null;
         try {
             PrimitiveSlotCodecs.Get<bool>().BindArray2().ReadElements(ref reader, target);
@@ -171,7 +172,7 @@ public sealed class ArrayElementCodecTests {
     [Fact]
     public void Read_stops_at_target_element_count_and_outer_caller_checks_trailing_bytes() {
         int[] target = new int[1];
-        BinaryPayloadReader reader = new([0x02, 0x04]);
+        BareValueReader reader = new([0x02, 0x04]);
         PrimitiveSlotCodecs.Get<int>().BindVector().ReadElements(ref reader, target);
         Assert.Equal([1], target);
         Assert.Equal(1, reader.ConsumedCount);
@@ -183,7 +184,7 @@ public sealed class ArrayElementCodecTests {
         }
 
         Assert.IsType<InvalidDataException>(exception);
-        Assert.Equal(2, reader.ReadInt32());
+        Assert.Equal(2, reader.ReadVarInt32());
         reader.EnsureFullyConsumed();
     }
 
@@ -191,15 +192,15 @@ public sealed class ArrayElementCodecTests {
     public void Throwing_writer_body_does_not_roll_back_previous_output() {
         ValueSlotCodec<int> slot = new(
             PrimitiveSlotCodecs.Get<int>().Read,
-            static (ref BinaryPayloadWriter writer, ref int value) => {
+            static (ref BareValueWriter writer, ref int value) => {
                 if (value == 2) {
                     throw new InvalidOperationException("Element body failed.");
                 }
 
-                writer.WriteInt32(value);
+                writer.WriteVarInt32(value);
             });
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         Exception? exception = null;
         try {
             slot.BindVector().WriteElements(ref writer, new[] { 1, 2, 3 });
@@ -213,21 +214,21 @@ public sealed class ArrayElementCodecTests {
 
     private static byte[] Encode(ArrayElementCodec codec, Array values) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         codec.WriteElements(ref writer, values);
         return buffer.WrittenSpan.ToArray();
     }
 
     private static void AssertEmpty(ArrayElementCodec codec, Array values) {
         Assert.Empty(Encode(codec, values));
-        BinaryPayloadReader reader = new([0xab]);
+        BareValueReader reader = new([0xab]);
         codec.ReadElements(ref reader, values);
         Assert.Equal(0, reader.ConsumedCount);
     }
 
     private static void AssertRejectedBeforeIo<TException>(ArrayElementCodec codec, Array values)
         where TException : Exception {
-        BinaryPayloadReader reader = new([0xab, 0x01]);
+        BareValueReader reader = new([0xab, 0x01]);
         Assert.Equal(0xab, reader.ReadByte());
         Exception? readException = null;
         try {
@@ -239,7 +240,7 @@ public sealed class ArrayElementCodecTests {
         Assert.IsType<TException>(readException);
         Assert.Equal(1, reader.ConsumedCount);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         writer.WriteByte(0xab);
         Exception? writeException = null;
         try {

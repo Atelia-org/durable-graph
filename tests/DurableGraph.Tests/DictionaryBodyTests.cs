@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -22,6 +23,21 @@ public sealed class DictionaryBodyTests {
         Assert.Equal(new[] { new DictionaryEntryState<int, int>(1, 11), new(3, 30) }, applied.Entries.ToArray());
         Assert.Equal(new[] { new DictionaryEntryState<int, int>(1, 10), new(2, 20) }, prior.Entries.ToArray());
         Assert.False(DictionaryStateBody<int, int, Int32StateOps, Int32StateOps>.PrepareDelta(current, applied, Layout).HasChanges);
+    }
+
+    [Fact]
+    public void Redundant_key_codewords_are_reencoded_for_delta_addressing_and_duplicate_checks() {
+        // Comparer 0, redundant count 1, redundant ZigZag key 1, value 10.
+        FrozenDictionaryState<int, int> prior = Read([0, 0x81, 0, 0x82, 0, 20]);
+        Assert.Equal(State(new DictionaryEntryState<int, int>(1, 10)).Entries.ToArray(), prior.Entries.ToArray());
+        Assert.Equal(new byte[] { 0, 1, 2, 20 },
+            DictionaryStateBody<int, int, Int32StateOps, Int32StateOps>.PrepareBase(prior, Layout).Body.ToArray());
+
+        // A redundant key addresses the same persisted semantic key for a value patch.
+        FrozenDictionaryState<int, int> changed = Apply([0, 1, 0x82, 0, 22, 0], prior);
+        Assert.Equal(State(new DictionaryEntryState<int, int>(1, 11)).Entries.ToArray(), changed.Entries.ToArray());
+        Assert.Equal(State(new DictionaryEntryState<int, int>(1, 10)).Entries.ToArray(), prior.Entries.ToArray());
+        Assert.Throws<InvalidDataException>(() => Read([0, 2, 2, 20, 0x82, 0, 22]));
     }
 
     [Fact]
@@ -81,7 +97,6 @@ public sealed class DictionaryBodyTests {
     [InlineData(new byte[] { 2, 2, 2, 0, 0 })] // Repeated Remove.
     [InlineData(new byte[] { 3, 2, 4, 6, 0, 0 })] // Removal count exceeds prior.
     [InlineData(new byte[] { 0, 0, 0, 0 })] // Trailing byte.
-    [InlineData(new byte[] { 128, 0, 0, 0 })] // Noncanonical count.
     [InlineData(new byte[] { 0, 0, 255, 255, 255, 255, 15 })] // Excessive result allocation.
     public void InvalidDeltaRejectsWithoutMutatingPrior(byte[] bytes) {
         FrozenDictionaryState<int, int> prior = State(new(1, 10), new(2, 20));
@@ -156,14 +171,14 @@ public sealed class DictionaryBodyTests {
     }
 
     private static FrozenDictionaryState<int, int> Apply(byte[] bytes, FrozenDictionaryState<int, int> prior) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         var result = DictionaryStateBody<int, int, Int32StateOps, Int32StateOps>.ApplyDelta(ref reader, prior, Layout);
         reader.EnsureFullyConsumed();
         return result;
     }
 
     private static FrozenDictionaryState<int, int> Read(byte[] bytes) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         var result = DictionaryStateBody<int, int, Int32StateOps, Int32StateOps>.ReadBase(ref reader, Layout);
         reader.EnsureFullyConsumed();
         return result;
@@ -177,26 +192,26 @@ public sealed class DictionaryBodyTests {
     private readonly struct CountingOps : IStateOps<int> {
         internal static int Calls;
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => throw new InvalidOperationException("Writer must use fused PrepareDelta.");
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int value, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in value, slot);
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
+        public static void WriteBase(ref BareValueWriter writer, in int value, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in value, slot);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) {
             Calls++;
             return Int32StateOps.PrepareDelta(in prior, in current, slot);
         }
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in int value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 
     private readonly struct CountingKeyOps : IStateOps<int> {
         internal static int Writes;
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int value, DurableFieldInfo slot) {
+        public static void WriteBase(ref BareValueWriter writer, in int value, DurableFieldInfo slot) {
             Writes++;
             Int32StateOps.WriteBase(ref writer, in value, slot);
         }
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => Int32StateOps.PrepareDelta(in prior, in current, slot);
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in int value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }

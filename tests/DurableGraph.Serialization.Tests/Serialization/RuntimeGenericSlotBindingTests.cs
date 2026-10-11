@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using System.Reflection;
 using Atelia.DurableGraph.Serialization;
@@ -21,7 +22,7 @@ public sealed class RuntimeGenericSlotBindingTests {
             Item = new Cell<int> { Tag = 2, Item = 17, Sentinel = 20 },
         };
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         codec.Write(ref writer, ref source);
         Assert.Equal(new byte[] { 1, 2, 34 }, buffer.WrittenSpan.ToArray());
         Assert.Equal(17, source.Item.Item);
@@ -30,10 +31,10 @@ public sealed class RuntimeGenericSlotBindingTests {
 
         Cell<Cell<int>> local = EmptyCell(31, 32);
         Holder holder = new() { Value = EmptyCell(41, 42) };
-        BinaryPayloadReader localReader = new(buffer.WrittenSpan);
+        BareValueReader localReader = new(buffer.WrittenSpan);
         codec.Read(ref localReader, ref local);
         localReader.EnsureFullyConsumed();
-        BinaryPayloadReader fieldReader = new(buffer.WrittenSpan);
+        BareValueReader fieldReader = new(buffer.WrittenSpan);
         codec.Read(ref fieldReader, ref holder.Value);
         fieldReader.EnsureFullyConsumed();
         AssertCell(local, 17, 31, 32);
@@ -47,7 +48,7 @@ public sealed class RuntimeGenericSlotBindingTests {
         typedVector[1] = EmptyCell(61, 62);
         byte[] twoBodies = [1, 2, 34, 1, 2, 57]; // 17, -29, ZigZag encoded.
         ArrayElementCodec vectorBody = outer.BindVector();
-        BinaryPayloadReader vectorReader = new(twoBodies);
+        BareValueReader vectorReader = new(twoBodies);
         vectorBody.ReadElements(ref vectorReader, vector);
         vectorReader.EnsureFullyConsumed();
         AssertCell(typedVector[0], 17, 51, 52);
@@ -59,7 +60,7 @@ public sealed class RuntimeGenericSlotBindingTests {
         typedMatrix[-3, 7] = EmptyCell(71, 72);
         typedMatrix[-3, 8] = EmptyCell(81, 82);
         ArrayElementCodec matrixBody = outer.BindArray2();
-        BinaryPayloadReader matrixReader = new(twoBodies);
+        BareValueReader matrixReader = new(twoBodies);
         matrixBody.ReadElements(ref matrixReader, matrix);
         matrixReader.EnsureFullyConsumed();
         AssertCell(typedMatrix[-3, 7], 17, 71, 72);
@@ -74,7 +75,7 @@ public sealed class RuntimeGenericSlotBindingTests {
         ArrayElementCodec body = slot.BindVector();
         Array target = Array.CreateInstance(slot.ValueType, 1);
         byte[] bytes = [9, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12, 0xf8, 0xff];
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         body.ReadElements(ref reader, target);
         reader.EnsureFullyConsumed();
         Cell<double>[] values = (Cell<double>[])target;
@@ -88,7 +89,7 @@ public sealed class RuntimeGenericSlotBindingTests {
         ValueSlotCodec outer = BindCell(BindCell(PrimitiveSlotCodecs.Get(typeof(int))));
         Cell<Cell<int>>[] target = [EmptyCell(1, 2), EmptyCell(3, 4)];
         target[1].Item.Item = 99;
-        BinaryPayloadReader reader = new([1, 2, 34, 5, 6, 0x80]);
+        BareValueReader reader = new([1, 2, 34, 5, 6, 0x80]);
         try {
             outer.BindVector().ReadElements(ref reader, target);
             Assert.Fail("The second element has a truncated Int32.");
@@ -114,11 +115,11 @@ public sealed class RuntimeGenericSlotBindingTests {
     private static ValueSlotCodec CreateCell<T>(ValueSlotCodec member) where T : struct {
         ValueSlotCodec<T> item = (ValueSlotCodec<T>)member;
         return new ValueSlotCodec<Cell<T>>(
-            (ref BinaryPayloadReader reader, ref Cell<T> value) => {
+            (ref BareValueReader reader, ref Cell<T> value) => {
                 value.Tag = reader.ReadByte();
                 item.Read(ref reader, ref value.Item);
             },
-            (ref BinaryPayloadWriter writer, ref Cell<T> value) => {
+            (ref BareValueWriter writer, ref Cell<T> value) => {
                 writer.WriteByte(value.Tag);
                 item.Write(ref writer, ref value.Item);
             });
@@ -126,7 +127,7 @@ public sealed class RuntimeGenericSlotBindingTests {
 
     private static byte[] WriteElements(ArrayElementCodec body, Array values) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         body.WriteElements(ref writer, values);
         return buffer.WrittenSpan.ToArray();
     }

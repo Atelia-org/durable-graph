@@ -1,3 +1,4 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 
@@ -12,7 +13,7 @@ internal sealed class PreparedObject {
         PreparedDeltaBody? deltaBody, ObjectSaveChangeKind changeKind) {
         ArgumentOutOfRangeException.ThrowIfZero(objectId.Value, nameof(objectId));
         ArgumentNullException.ThrowIfNull(encodedBaseBody);
-        if (priorAddress is { } prior && (prior.FileNumber == 0 || prior.FrameTicket.Length == 0)) {
+        if (priorAddress is { } prior && prior == default) {
             throw new ArgumentOutOfRangeException(nameof(priorAddress), "The prior must be a valid Frame address.");
         }
         ObjectId = objectId;

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -192,10 +193,10 @@ public sealed class ListDeltaObservationTests {
             Comparisons.Add((left, right));
             return left == right;
         }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static void VisitReferences(in int state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new InvalidOperationException();
     }
 }

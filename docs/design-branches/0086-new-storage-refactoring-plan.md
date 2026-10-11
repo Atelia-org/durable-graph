@@ -1,8 +1,8 @@
 # DB-086：新存储栈重构方案
 
-> 日期：2026-10-11。状态：**三角色、三轮简化评审完成；推荐实施方案，产品尚未实施**。
+> 日期：2026-10-11。状态：**三角色、三轮简化评审完成；已选方案，实施与验收见[施工记录](0086-new-storage-implementation.md)**。
 > 目标：以 Binary / FrameStore / VersionStore 替换旧 SegmentStore / EventJournal，使最终产品只保留一套存储与发布实现。
-> 本文授权范围是方案与文档修订，不是产品施工、发包或存档操作。
+> 本文记录方案合同；后续产品施工已获用户授权。公开发包和旧存档操作不在本片范围。
 > 入口：[PROJECT-STATE](../../src/PROJECT-STATE.md)；前置事实：[DB-085](0085-rbf3-framestore-versionstore-migration-feasibility.md)及[上游 API 复核](0085-upstream-api-refinement-review.md)。
 
 ## 1. 最终模型与衡量标准

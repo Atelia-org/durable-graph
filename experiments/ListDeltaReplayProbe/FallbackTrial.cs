@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -144,7 +145,7 @@ internal static class FallbackTrial {
             Array.Sort(matchTimes); Array.Sort(matchAllocations);
             matcherMs = Statistics.Median(matchTimes); matcherAllocated = matchAllocations[samples / 2];
         }
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         FrozenListState<TState> applied = ListStateBody<TState, TOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
         Require(delta.HasChanges == !priorBytes.AsSpan().SequenceEqual(currentBytes) &&
@@ -166,10 +167,10 @@ internal static class FallbackTrial {
     private readonly struct CountedOps<TState, TOps> : IStateOps<TState> where TState : unmanaged where TOps : IStateOps<TState> {
         internal static int Calls;
         public static bool StateEquals(in TState left, in TState right, DurableFieldInfo slot) { Calls++; return TOps.StateEquals(in left, in right, slot); }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in TState value, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static TState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static void WriteBase(ref BareValueWriter writer, in TState value, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static TState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static PreparedDeltaBody PrepareDelta(in TState prior, in TState current, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static TState ApplyDelta(ref BinaryPayloadReader reader, in TState prior, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static TState ApplyDelta(ref BareValueReader reader, in TState prior, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static void VisitReferences(in TState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new InvalidOperationException();
     }
 

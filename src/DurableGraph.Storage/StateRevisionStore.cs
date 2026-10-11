@@ -1,40 +1,45 @@
-using Atelia.Data;
+using Atelia.Binary;
+using Atelia.FrameStore;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using BackingFrameStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Storage;
 
 /// <summary>
-/// Appends and reads State Revision Frames through an existing RBF Segment Store.
+/// Appends and reads State Revision Frames through a borrowed FrameStore.
 /// </summary>
 /// <remarks>
-/// The caller owns the lifetime and publication authority of the supplied Segment
-/// Store. This type appends candidate data and never chooses or publishes a head.
+/// The caller owns the lifetime and publication authority of the supplied FrameStore.
+/// This type appends candidate data and never chooses or publishes a head.
 /// Existing complete frames must remain unchanged while this facade is open. Serialize
 /// operations and do not overlap them with an externally held backing writer lease.
-/// Dispose this facade before closing its borrowed backing store. Tail truncation is
-/// an offline rescue operation: close all old Stores and caches, rescue, then open anew.
+/// Dispose this facade before closing its borrowed backing store. Recovery performed by
+/// the backing owner precedes this facade. Additional rescue requires
+/// closing all old Stores and caches, then opening fresh resources.
 /// </remarks>
 public sealed class StateRevisionStore : IDisposable {
+    /// <summary>Frame role for a Revision payload, with or without caller-owned TailMeta.</summary>
+    public const uint FrameTag = StateRevisionWireFormat.RbfTag;
     /// <summary>Default estimated resident read-cache budget per Store: 8 MiB.</summary>
     public const long DefaultReadCacheBudgetBytes = 8 * 1024 * 1024;
-    private readonly IRbfSegmentStore _segmentStore;
+    private readonly BackingFrameStore _frames;
     private StateRevisionReadCache? _readCache;
     private bool _disposed;
     private long _revisionHits, _revisionMisses, _revisionDecodes;
     private long _mapHits, _mapMisses, _mapMaterializations;
     private long _objectChainReads, _objectChainEntries, _mapReplayFrames;
 
-    /// <summary>Creates a facade over an existing append-only Segment Store.</summary>
-    /// <param name="segmentStore">Borrowed storage, which must outlive this facade.</param>
+    /// <summary>Creates a facade over an existing append-only FrameStore.</summary>
+    /// <param name="frames">Borrowed storage, which must outlive this facade.</param>
     /// <param name="readCacheBudgetBytes">
     /// Estimated resident budget shared by decoded frames and complete head maps.
     /// Zero disables residency; negative budgets are rejected. This is not a process heap or peak allocation limit.
     /// </param>
-    public StateRevisionStore(IRbfSegmentStore segmentStore, long readCacheBudgetBytes = DefaultReadCacheBudgetBytes) {
-        ArgumentNullException.ThrowIfNull(segmentStore);
+    public StateRevisionStore(BackingFrameStore frames, long readCacheBudgetBytes = DefaultReadCacheBudgetBytes) {
+        ArgumentNullException.ThrowIfNull(frames);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
-        _segmentStore = segmentStore;
+        frames.EnsureUsable();
+        _frames = frames;
         if (readCacheBudgetBytes != 0) { _readCache = new(readCacheBudgetBytes); }
     }
 
@@ -47,67 +52,41 @@ public sealed class StateRevisionStore : IDisposable {
     internal StateRevisionTraversalStatistics TraversalStatistics => new(
         _objectChainReads, _objectChainEntries, _mapReplayFrames);
 
-    public FrameAddress Append(StateRevision revision) => AppendCore(revision, durable: false);
-
-    /// <summary>Appends and flushes the containing file before releasing its writer lease.</summary>
-    /// <remarks>
-    /// This confirms a State data barrier, not head publication. On an I/O failure the caller
-    /// must reopen its owning repository before writing again. The original Append remains
-    /// available for callers that explicitly coordinate their own barriers.
-    /// </remarks>
-    public FrameAddress AppendDurably(StateRevision revision) => AppendCore(revision, durable: true);
-
-    private FrameAddress AppendCore(StateRevision revision, bool durable) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+    /// <summary>Appends candidate Revision data and optional caller-owned TailMeta; does not publish or confirm it.</summary>
+    public FrameAddress Append(StateRevision revision, ReadOnlySpan<byte> tailMeta = default) {
+        EnsureUsable();
         ArgumentNullException.ThrowIfNull(revision);
+        long payloadBytes = StateRevisionWireWriter.Measure(revision);
+        if (tailMeta.Length > RbfFile.MaxTailMetaLength ||
+            payloadBytes + tailMeta.Length > RbfFile.MaxPayloadAndMetaLength) {
+            throw new InvalidDataException("The State Revision exceeds the backing store's frame capacity.");
+        }
+        ValidateCompletedReferences(revision);
 
-        ValidateDirectPriors(revision);
-
-        using RbfSegmentWriterLease writer = _segmentStore.OpenActiveWriter();
-        using RbfFrameBuilder builder = writer.File.BeginAppend();
-        StateRevisionWireWriter.Write(
-            builder.PayloadAndMeta,
-            revision,
-            new FileScope(writer.SegmentNumber));
-        SizedPtr ticket = builder.EndAppend(
-            StateRevisionWireFormat.RbfTag).Unwrap();
-        if (durable) { writer.File.DurableFlush(); }
-        // Do not seed the read cache from unencoded input. A saving baseline can account
-        // for local payloads using this actual file scope; raw cache admission still reads wire.
-        return new FrameAddress(writer.SegmentNumber, ticket);
+        using FrameBuilder builder = _frames.BeginAppend();
+        StateRevisionWireWriter.Write(builder.PayloadAndMeta, revision);
+        BareValueWriter writer = new(builder.PayloadAndMeta);
+        writer.WriteRawBytes(tailMeta);
+        // Admission reads wire: unencoded inputs must not bypass actual byte accounting.
+        return builder.EndAppend(FrameTag, tailMeta.Length).Unwrap();
     }
 
     public StateRevision Read(FrameAddress address) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        EnsureUsable();
         FrameAddressValidator.ValidateRequired(address, nameof(address));
         if (_readCache is { } cache && cache.TryGetRevision(address, out StateRevision cached)) {
             _revisionHits++;
             return cached;
         }
         _revisionMisses++;
-        using RbfSegmentReaderLease reader = _segmentStore.OpenReader(
-            address.FileNumber);
-        using RbfPooledFrame frame = reader.File.ReadPooledFrame(
-            address.FrameTicket).Unwrap();
+        using FrameRead frame = _frames.ReadFrame(address).Unwrap();
         if (frame.IsTombstone) {
-            throw new InvalidDataException(
-                $"State Revision Frame {address} is a tombstone.");
+            throw new InvalidDataException($"State Revision Frame {address} is a tombstone.");
         }
-
-        if (frame.Tag != StateRevisionWireFormat.RbfTag) {
-            throw new InvalidDataException(
-                $"Frame {address} has tag 0x{frame.Tag:X8}; expected State Revision " +
-                $"tag 0x{StateRevisionWireFormat.RbfTag:X8}.");
+        if (frame.Tag != FrameTag) {
+            throw new InvalidDataException($"Frame has tag 0x{frame.Tag:X8}; expected State Revision tag 0x{FrameTag:X8}.");
         }
-
-        if (frame.TailMetaLength != 0) {
-            throw new InvalidDataException(
-                $"State Revision Frame {address} has unexpected TailMeta.");
-        }
-
-        StateRevision revision = StateRevisionWireReader.Read(
-            frame.PayloadAndMeta,
-            new FileScope(address.FileNumber));
+        StateRevision revision = StateRevisionWireReader.Read(frame.Payload);
         _revisionDecodes++;
         _readCache?.AdmitRevision(address, revision);
         return revision;
@@ -127,7 +106,7 @@ public sealed class StateRevisionStore : IDisposable {
     /// </remarks>
     public IReadOnlyDictionary<uint, FrameAddress> ReadLiveObjectHeadMap(
         FrameAddress revisionAddress) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        EnsureUsable();
         FrameAddressValidator.ValidateRequired(revisionAddress, nameof(revisionAddress));
         if (_readCache is { } cache && cache.TryGetHeads(revisionAddress, out var cached)) {
             _mapHits++;
@@ -157,7 +136,7 @@ public sealed class StateRevisionStore : IDisposable {
     /// not validate types, other external heads, or graph references.
     /// </remarks>
     public byte[] ReadObjectBaseBody(FrameAddress revisionAddress, uint objectId) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        EnsureUsable();
         FrameAddress head = ResolveObjectHead(revisionAddress, objectId);
         ObjectVersionRecord record = FindLocalRecord(Read(head), head, objectId);
         if (record.Kind != ObjectVersionKind.Base) {
@@ -181,7 +160,7 @@ public sealed class StateRevisionStore : IDisposable {
     public ObjectVersionChain ReadObjectVersionChain(
         FrameAddress revisionAddress,
         uint objectId) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        EnsureUsable();
         ValidateObjectHeadArguments(revisionAddress, objectId);
         _objectChainReads++;
         FrameAddress head = ResolveObjectHead(revisionAddress, objectId);
@@ -189,7 +168,11 @@ public sealed class StateRevisionStore : IDisposable {
         StateRevision revision = Read(address);
         ObjectVersionRecord record = FindLocalRecord(revision, address, objectId);
         List<ObjectVersionChainEntry> records = [];
+        HashSet<FrameAddress> visited = [];
         while (true) {
+            if (!visited.Add(address)) {
+                throw new InvalidDataException("The ObjectVersion prior chain contains a cycle.");
+            }
             records.Add(new ObjectVersionChainEntry(address, record));
             _objectChainEntries++;
             if (record.Kind == ObjectVersionKind.Base) {
@@ -202,8 +185,6 @@ public sealed class StateRevisionStore : IDisposable {
             FrameAddress prior = record.PriorAddress
                 ?? throw new InvalidDataException(
                     $"Delta ObjectId {objectId} at {address} has no prior address.");
-            FrameAddressValidator.EnsureStrictlyEarlier(address, parent);
-            FrameAddressValidator.EnsureStrictlyEarlier(address, prior);
             RequireParentHead(ReadLiveObjectHeadMap(parent), objectId, prior);
             revision = Read(prior);
             record = FindLocalRecord(revision, prior, objectId);
@@ -214,7 +195,12 @@ public sealed class StateRevisionStore : IDisposable {
         return new ObjectVersionChain(objectId, head, records);
     }
 
-    private void ValidateDirectPriors(StateRevision revision) {
+    private void ValidateCompletedReferences(StateRevision revision) {
+        // Addresses are opaque. Read the current owner's completed frame, rather than
+        // asserting a numeric file/offset order or accepting an early Builder address.
+        if (revision.ParentRevisionAddress is { } parentAddress) { _ = Read(parentAddress); }
+        foreach (FrameAddress externalHead in revision.ExternalObjectHeads.Values) { _ = Read(externalHead); }
+
         IReadOnlyDictionary<uint, FrameAddress>? parentHeads = null;
         foreach (ObjectVersionRecord record in revision.LocalObjects) {
             if (record.Kind != ObjectVersionKind.Delta) {
@@ -281,6 +267,11 @@ public sealed class StateRevisionStore : IDisposable {
 
         throw new InvalidDataException(
             $"Frame {address} has no local ObjectVersion record for ObjectId {objectId}.");
+    }
+
+    private void EnsureUsable() {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _frames.EnsureUsable();
     }
 
     /// <summary>Ends this facade and releases its entire cache; does not close borrowed storage.</summary>

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -161,19 +162,19 @@ public sealed class StateReaderBindingTests {
         public ObjectId Text;
     }
 
-    private static State ReadBase(ref BinaryPayloadReader reader) => new() {
+    private static State ReadBase(ref BareValueReader reader) => new() {
         Value = reader.ReadByte(),
-        Text = new ObjectId(reader.ReadUInt32()),
+        Text = new ObjectId(reader.ReadVarUInt32()),
     };
 
-    private static State ApplyDelta(ref BinaryPayloadReader reader, in State prior) {
+    private static State ApplyDelta(ref BareValueReader reader, in State prior) {
         State result = prior;
         byte bitmap = reader.ReadByte();
         if ((bitmap & 1) != 0) {
             result.Value = reader.ReadByte();
         }
         if ((bitmap & 2) != 0) {
-            result.Text = new ObjectId(reader.ReadUInt32());
+            result.Text = new ObjectId(reader.ReadVarUInt32());
         }
         return result;
     }

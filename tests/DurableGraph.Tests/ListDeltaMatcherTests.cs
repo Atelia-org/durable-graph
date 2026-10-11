@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -212,18 +213,18 @@ public sealed class ListDeltaMatcherTests {
     private readonly struct CountingOps : IStateOps<int> {
         public static int Calls;
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) { Calls++; return left == right; }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static void VisitReferences(in int state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new InvalidOperationException();
     }
     private readonly struct IdentityOps : IStateOps<ObjectId> {
         public static bool StateEquals(in ObjectId left, in ObjectId right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in ObjectId state, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static ObjectId ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static void WriteBase(ref BareValueWriter writer, in ObjectId state, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static ObjectId ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static PreparedDeltaBody PrepareDelta(in ObjectId prior, in ObjectId current, DurableFieldInfo slot) => throw new InvalidOperationException();
-        public static ObjectId ApplyDelta(ref BinaryPayloadReader reader, in ObjectId prior, DurableFieldInfo slot) => throw new InvalidOperationException();
+        public static ObjectId ApplyDelta(ref BareValueReader reader, in ObjectId prior, DurableFieldInfo slot) => throw new InvalidOperationException();
         public static void VisitReferences(in ObjectId state, IStateReferenceVisitor visitor, DurableFieldInfo slot) => throw new InvalidOperationException();
     }
 }

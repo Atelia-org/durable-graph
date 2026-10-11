@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -46,7 +47,7 @@ public static class TypedObjectVersionReader {
         if (body.Kind != ObjectStateKind.String) {
             throw new InvalidDataException("A string reader requires a string Base type header.");
         }
-        BinaryPayloadReader reader = new(body.Body);
+        BareValueReader reader = new(body.Body);
         string value = reader.ReadString();
         reader.EnsureFullyConsumed();
         return value;

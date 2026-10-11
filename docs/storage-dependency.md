@@ -1,77 +1,71 @@
 # atelia-storage 依赖工作流
 
-五个存储包来自 [atelia-storage](https://github.com/Atelia-org/atelia-storage)。
-[eng/StorageDependency.props](../eng/StorageDependency.props) 是本仓选择各包版本、来源 commit 和仓地址的唯一位置。
-存储包可选择性发布，不要求五包同版本；它们与 DurableGraph 自身的包版本 G 独立。
-日常构建通过 PackageReference 从 nuget.org 自动 restore，不需要 Prepare 或存储源码检出。
+[eng/StorageDependency.props](../eng/StorageDependency.props) 是存储版本、准确来源 commit 和仓地址的唯一位置。
+RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia.Rbf`、`Atelia.Binary`、
+`Atelia.FrameStore`、`Atelia.VersionStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
+活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
-| 包 | 版本属性 | 来源属性 |
-|---|---|---|
-| Primitives、Data、Rbf | `StoragePackageVersion` | `StorageSourceRevision` |
-| RbfSegmentStore | `StorageRbfSegmentStorePackageVersion` | `StorageRbfSegmentStoreSourceRevision` |
-| EventJournal | `StorageEventJournalPackageVersion` | `StorageEventJournalSourceRevision` |
-
-具体公开版本与完整 commit 以 props 为准；一个包的 source revision 不能代表整个五包集合。
-
-## 日常构建
-
-在仓根执行：
-
-```powershell
-dotnet build DurableGraph.slnx -c Release -t:Rebuild
-dotnet test DurableGraph.slnx -c Release --no-build
-```
-
-升级时同时更新该包的版本与对应完整来源属性，再验证实际公开包的 restore、来源和消费行为。
-包或源码构建通过不能替代公开下载验证；本次发布状态见 [PROJECT-STATE](../src/PROJECT-STATE.md)。
-
-## 独立包 probes 的 feed
-
-普通 build/test 不调用 `eng/Prepare-Storage.ps1`。独立包 probes 需要完整 feed 时，由
-[PackageProbeSupport.ps1](../experiments/PackageConsumerProbe/PackageProbeSupport.ps1) 调用这个入口：
-它从 nuget.org 下载 pin 指定的五个公开 nupkg，返回 feed 信息供 probe 使用，不 clone 源码、不重新构建存储包。
-默认下载目录为忽略的 `.artifacts/storage-feed/base-<B>-segments-<S>-journal-<J>`；
-各版本组合独立保留，已有旧 feed 不覆盖。这只是 probe 的输入目录，日常 restore 仍直接使用 nuget.org。
-完成凭据 `manifest.published.json` 使用 schema 3，每个 package 记录自己的 version、sourceRevision、下载 URL 和 SHA256；
-复用时逐包核对 nuspec、仓地址、签名条目存在性及记录的字节 hash。签名条目检查不等于完整信任链验证。
-helper 返回的 `Version` / `Revision` 只代表基础三包；`Packages` 是五包来源明细，另返回两个独立包版本。
-
-probe 将下载的五个存储包与本仓现打的四个 G 包组成自己的完整 feed，G 须不同于每个存储版本。
-各 runner 的 `-Version` 只表示 G；显式提供 `-PackageSource <feed> -Version <G>` 时消费已有完整 feed，不改写它。
-实际命令见[包实验导航](../experiments/PackageConsumerProbe/README.md)与[根 README 的打包段](../README.md#从源码打包)。
+当前 pin 为 `0.1.3-dev.20261011.g974fd47`，来源为
+`974fd47abb73792f9d350af87ab91a53848952eb`。**这是未公开发布的本地候选**，不能假定 nuget.org 已有该版本。
+当前源码联调采用下面的显式 source mode；包验收使用准确来源的完整本地 feed 和任务 NuGet.Config。
+默认仍为 package mode，不探测兄弟仓、不回退旧包、不在仓库配置中保存本机路径。
 
 ## 显式源码联调
 
-```powershell
-$storage = 'E:/repos/Atelia-org/atelia-storage'
-dotnet restore DurableGraph.slnx -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
-dotnet build DurableGraph.slnx -c Release --no-restore -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
-dotnet test DurableGraph.slnx -c Release --no-build -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
-```
-
-`StorageSourceRoot` 必须是完整新仓的绝对路径；路径无效时清晰失败，不回退到包，也不会因为发现兄弟仓而自动切换。
-切回包模式先执行 `dotnet restore DurableGraph.slnx -p:UseStorageSources=false`，再普通 build/test。
-两种模式分别检查 restore assets 与实际程序集来源，不能把另一模式的旧 assets 当作验证。
-`dotnet pack -p:UseStorageSources=true` 会在生成包前拒绝执行。
-
-## 使用本地开发包
-
-需要联调实验包时，先在存储仓按 `eng/Pack.ps1` 规则，从明确的干净 commit 生成唯一 S_dev：
+在 DurableGraph 仓根执行；Windows 可将 `$storage` 换成 `E:/repos/Atelia-org/atelia-storage`：
 
 ```powershell
-$storage = 'E:/repos/Atelia-org/atelia-storage'
-$storageDevVersion = "0.1.1-dev.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).g$([Guid]::NewGuid().ToString('N').Substring(0,8))"
-& "$storage/eng/Pack.ps1" -Version $storageDevVersion -OutputDirectory "$storage/artifacts/dev-feed"
+$storage = '/repos/Atelia-org/atelia-storage'
+dotnet restore DurableGraph.slnx --disable-parallel -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
+dotnet build DurableGraph.slnx -c Release --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
+dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
 ```
 
-在本消费仓忽略的 `.artifacts/storage-dev/NuGet.Config` 保存以下配置，并按实际位置替换绝对 feed 路径。
-五个精确包名只映射到开发 feed，其余依赖映射到 nuget.org；保留根配置用于正常公开包消费。
+`StorageSourceRoot` 必须是绝对路径，包含 Binary/FrameStore/VersionStore 三个项目，且 Git HEAD 等于 pin 的完整来源。
+同一 HEAD 上的源码编辑可用于联调；它们不构成可发布包的来源凭据。无效路径、缺项目或不符 revision 都清晰失败，不回退到包。
+`UseStorageSources=true` 仅用于 build/test；`dotnet pack -p:UseStorageSources=true` 在生成包前拒绝执行。
+
+切换到 package mode 必须重新 restore；不要以 source mode 的旧 assets 或 DLL 当作包消费证据。
+Generator 仍是 `netstandard2.0` Roslyn 组件，它生成对 Bare reader/writer 的直接调用；Runtime 通过 Serialization 取得 Binary 依赖。
+Storage 依赖 FrameStore，Persistence 依赖 VersionStore；必要的 Data/Primitives/Rbf 位于同一个新栈闭包。
+
+## 准备准确来源的六包
+
+在干净、已提交且 HEAD 与 pin 一致的存储仓，使用其已有入口：
+
+```powershell
+$storage = '/repos/Atelia-org/atelia-storage'
+$storageVersion = '0.1.3-dev.20261011.g974fd47'
+$storageFeed = Join-Path $storage 'artifacts/db086-feed'
+& "$storage/eng/Pack.ps1" -Version $storageVersion -OutputDirectory $storageFeed
+```
+
+Pack 使用存储仓固定 SDK，产出六个 nupkg、六个 snupkg 和 `manifest.<S>.json`，记录准确来源与字节 SHA256。
+相同版本只允许复用已核验的完整产物；不同内容使用新版本，不覆盖公开包或已有候选，不清空全局缓存。
+上述候选已经在该来源上生成；它是本地验收输入，未进行远程发布。换 feed 路径不会改变包内容或来源。
+
+[eng/Prepare-Storage.ps1](../eng/Prepare-Storage.ps1) 可以只读验证这个完整 feed：
+
+```powershell
+$selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
+```
+
+它核对 pin、上游 manifest、六个 nuspec 的身份/仓地址/commit 和六个字节 hash，再返回
+`PackageSource`、`Version`、`Revision`、`Packages`；不 clone、构建、重新打包或修改源 feed。
+没有 `-StoragePackageSource` 时，它从 nuget.org 下载六个 pin 包，完成后写入 `manifest.published.json`。
+当前候选尚未公开时下载会明确失败，并提示源码联调或本地 feed 入口。
+公开下载仍核对签名条目存在性；该检查不等于完整签名信任链验证。
+
+## 用任务 NuGet.Config 消费候选包
+
+在本仓忽略目录 `.artifacts/storage-dev/NuGet.Config` 创建如下配置，按实际位置修改绝对 feed 路径。
+六个精确包名仅映射到该开发 feed，其余依赖映射到 nuget.org；不修改根配置或用户配置。
 
 ```xml
 <configuration>
   <packageSources>
     <clear />
-    <add key="storage-dev" value="E:/repos/Atelia-org/atelia-storage/artifacts/dev-feed" />
+    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/db086-feed" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
   <packageSourceMapping>
@@ -80,8 +74,9 @@ $storageDevVersion = "0.1.1-dev.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))
       <package pattern="Atelia.Primitives" />
       <package pattern="Atelia.Data" />
       <package pattern="Atelia.Rbf" />
-      <package pattern="Atelia.RbfSegmentStore" />
-      <package pattern="Atelia.EventJournal" />
+      <package pattern="Atelia.Binary" />
+      <package pattern="Atelia.FrameStore" />
+      <package pattern="Atelia.VersionStore" />
     </packageSource>
     <packageSource key="nuget.org">
       <package pattern="*" />
@@ -90,46 +85,46 @@ $storageDevVersion = "0.1.1-dev.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))
 </configuration>
 ```
 
-在同一 PowerShell 会话、消费仓根目录中运行：
-
-显式传入 `StoragePackageVersion` 仍统一覆盖五包版本，支持已有同版本开发 feed。
-只升级个别开发包时，可分别传 `StorageRbfSegmentStorePackageVersion` / `StorageEventJournalPackageVersion`；
-具体包 override 优先于统一 override。公开来源属性不随开发版本自动变化，开发包必须另保留其 manifest 来源证据。
+在 DurableGraph 仓根运行：
 
 ```powershell
-dotnet restore DurableGraph.slnx --configfile .artifacts/storage-dev/NuGet.Config -p:UseStorageSources=false "-p:StoragePackageVersion=$storageDevVersion"
-dotnet build DurableGraph.slnx -c Release --no-restore -p:UseStorageSources=false "-p:StoragePackageVersion=$storageDevVersion"
-dotnet test DurableGraph.slnx -c Release --no-build --no-restore -p:UseStorageSources=false "-p:StoragePackageVersion=$storageDevVersion"
+dotnet restore DurableGraph.slnx --disable-parallel --configfile .artifacts/storage-dev/NuGet.Config -p:UseStorageSources=false
+dotnet build DurableGraph.slnx -c Release --no-restore -m:1 -nr:false -p:UseStorageSources=false
+dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
 ```
 
-需要产出 DG 实验包时，同样保持 `UseStorageSources=false`，先按上述配置完成 restore，再以 `--no-restore`、
-`StoragePackageVersion=S_dev` 和独立的 `PackageVersion=G` 打包。不能给五库存储依赖套用 G。
-不同内容始终使用新版本，不覆盖公开版本或已有开发包，不清空用户全局缓存。
-结束实验后用根配置重新 `dotnet restore DurableGraph.slnx`，再普通 build/test，恢复 props 中的公开版本。
+覆盖 `StoragePackageVersion` 会统一选择六包；不再有旧 SegmentStore/Journal 的独立覆盖属性。
+开发版本必须保存对应 Pack manifest；覆盖版本不会自动改变源码身份。
+包 restore 要使用完整任务配置：仅传 `RestoreSources` 不能绕过继承的 package source mapping。
+严谨包验收另指定任务独立的 `RestorePackagesPath`，核对 restore assets、nuspec 和实际加载程序集；源码测试不能替代这一步。
 
-## Agent 查阅与验证边界
+## DurableGraph 包与独立 probes
 
-先按 pin 中该包对应的来源属性定位上游 commit：EventJournal 看 `StorageEventJournalSourceRevision`，
-RbfSegmentStore 看 `StorageRbfSegmentStoreSourceRevision`，基础三包看 `StorageSourceRevision`。
-阅读准确版本的 `README.md`、`src/EventJournal/README.md`、`src/RbfSegmentStore/README.md` 和 `docs/Rbf/`，
-不要用兄弟仓当前 HEAD 或另一个包的 commit 解释固定包。
-README/XML 文档和 Source Link 帮助查阅，但不会自动把指南加入 Agent 上下文。
+四个 DG 包是 Runtime、Persistence、Storage、Serialization；包模式下分别 pack，G 必须与 S 不同。
+在上述 package restore 后使用 `--no-restore -p:UseStorageSources=false -p:PackageVersion=<G>`，
+不要把 G 套到六个存储依赖，不要借 source ProjectReference 生成正式依赖闭包。
 
-包交付变化先运行 [EventHistory](../experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1) 与
-[recovery](../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) 包回归，
-用独立缓存核对 nuspec、restore assets 和实际加载 DLL；源码测试不替代包消费证据。
-probe 的任务 NuGet 配置只使用显式完整 feed，不更改用户配置。
+[PackageProbeSupport.ps1](../experiments/PackageConsumerProbe/PackageProbeSupport.ps1) 可验证并复制六个存储包，
+再生成四个 DG 包，构成完整的十包 feed。当前候选显式传入源 feed：
 
-开发包排障以那次上游 Pack 的 manifest.sourceRevision 为源码身份；日常公开版本仍以本仓 pin 为准。
+```powershell
+$ErrorActionPreference = 'Stop'
+$version = "0.0.0-local.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
+$feed = Join-Path (Get-Location) ".artifacts/nuget/$version"
+. ./experiments/PackageConsumerProbe/PackageProbeSupport.ps1
+Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirectory $feed -Version $version -StoragePackageSource $storageFeed
+```
 
-## 历史例外
+runner 也可从任务环境变量 `DG_STORAGE_PACKAGE_SOURCE` 读取路径后显式传给 Prepare；路径不进入持久 pin。
+已有完整十包 feed 的 runner 使用 `-PackageSource <feed> -Version <G>`，不改写输入。
+活动验收只使用新建库，保留在新格式库内的模型 V1→V2 升级、branch/tag 与冷进程重开行为。
+旧存储提取、旧组织/API 包兼容 lanes 不再作为当前回归；历史证据仍可在对应 Git revision 中复现。
+相关命令见[包实验导航](../experiments/PackageConsumerProbe/README.md)和[根 README](../README.md#从源码打包)。
 
-- `Run-StorageExtractionProbe.ps1` / `StorageExtractionConsumer` 是冻结旧 DG、只更换五个同版本存储包的历史迁移见证，
-  其显式 `StorageVersion` 保持原来的统一版本语义，不用于验收当前选择性发布的混合 pin。
-- `Run-OrganizationMigrationProbe.ps1` 的旧 lane 针对 DB-071 的 StateStore → Persistence 命名迁移，
-  `Run-DurableBaseMigrationProbe.ps1` 针对旧接口迁移。它们继续使用调用者提供的旧包。
-- `docs/research/read-cache-probe/Run-Probe.ps1` 依赖旧 `DurableGraph.StateStore.Storage/Serialization` 源码形状，
-  属于历史实验；复现应取对应历史 revision，不恢复旧源码或把它当活动回归。
-- 历史设计中的旧 `../atelia` 路径保留当时含义。当前生产项目与公开包下载入口不再依赖那些路径。
+## 查阅边界
 
-原有 append-only、严格打开、显式离线救援、lease 和资源生命周期规则保持，见 [AGENTS.md](../AGENTS.md)。
+以 `StorageSourceRevision` 对应的准确源码、README/XML 与本次候选 manifest 为依据，不以无关兄弟仓 HEAD 解释 pin。
+先读上游 `src/Binary/README.md`、`src/FrameStore/README.md`、`src/VersionStore/README.md` 与 RBF3 文档。
+裸地址/帧 CRC、共享数据确认与根/tag 发布由新底座提供；DG 保留必要内容、因果、publication/fault 和缓存寿命检查。
+正常 backing-store 尾恢复、只读与显式离线救援的边界见 [AGENTS.md](../AGENTS.md#persistent-data-discipline)；
+不重新建立全库重开确认、启动审计或严格 writable 预检。

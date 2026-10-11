@@ -8,7 +8,7 @@ DB-055 package delivery and historical behavior witness:
 
 The runner builds two separate executables using ordinary Runtime/StateStore PackageReferences,
 an isolated package feed/cache and the packaged Publish/Verify history workflow. Pass both
-`-PackageSource` and `-Version` to reuse an existing matching nine-package feed. Artifacts remain
+`-PackageSource` and `-Version` to reuse an existing matching ten-package feed. Artifacts remain
 under the unique ignored `obj/composite-dictionary-*` directory. No private product APIs or
 ProjectReferences substitute for public delivery.
 

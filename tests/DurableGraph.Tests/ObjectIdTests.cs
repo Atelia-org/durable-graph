@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -35,7 +36,7 @@ public sealed class ObjectIdTests {
             byte[] expected = Encode<uint, UInt32StateOps>(number, numeric);
             Assert.Equal(expected, Encode<ObjectId, StringIdStateOps>(id, text));
             Assert.Equal(expected, Encode<ObjectId, DurableIdStateOps>(id, reference));
-            BinaryPayloadReader reader = new(expected);
+            BareValueReader reader = new(expected);
             Assert.Equal(id, StringIdStateOps.ReadBase(ref reader, text));
             reader.EnsureFullyConsumed();
         }
@@ -45,7 +46,7 @@ public sealed class ObjectIdTests {
     private static byte[] Encode<T, TOps>(T value, DurableFieldInfo slot)
         where T : unmanaged where TOps : IStateOps<T> {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TOps.WriteBase(ref writer, in value, slot);
         return buffer.WrittenSpan.ToArray();
     }

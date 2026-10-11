@@ -35,7 +35,7 @@ try {
         # The local feed contains the complete product dependency closure. Upstream files are unchanged.
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
         $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File)
-        if ($packages.Count -ne 9) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+        if ($packages.Count -ne 10) { throw "Expected 9 dependency packages, found $($packages.Count)." }
     }
 
     $consumerProperties = @(

@@ -3,13 +3,12 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using ModeStates = Atelia.DurableGraph.Generated.Family_4D6F6465;
 using CellStates = Atelia.DurableGraph.Generated.Family_43656C6C;
 using BoxStates = Atelia.DurableGraph.Generated.Family_426F78;
 using WorldStates = Atelia.DurableGraph.Generated.Family_576F726C64;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 #if HISTORY_V1
 using Mode = EnumPackageConsumerProbe.LegacyMode;
 #else
@@ -19,7 +18,7 @@ using Mode = EnumPackageConsumerProbe.CurrentMode;
 namespace EnumPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {
@@ -73,7 +72,7 @@ internal static class Program {
             Require(initial.GetRequired(ids.List).GetListState<ModeStates.V1>()[0].Segment0Field1 == 100,
                 "An edited domain value changed the earlier frozen state.");
         });
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{ProbeArtifacts.Format(historical)}:{worldId.Value}");
         using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
             using BranchCheckout session = repository.Checkout("main");
             CheckGraph(((World)session.State!), 101, 0);
@@ -107,8 +106,8 @@ internal static class Program {
         Require(typeof(World).Assembly.GetType("EnumPackageConsumerProbe.LegacyMode") is null,
             "The historical domain enum must be absent from the current assembly.");
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
-        FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
-        ObjectId worldId = new(uint.Parse(parts[2]));
+        FrameAddress historical = ProbeArtifacts.Parse(parts[0]);
+        ObjectId worldId = new(uint.Parse(parts[1]));
         (ObjectId List, ObjectId Vector, ObjectId Grid, ObjectId Box) ids = default;
         Inspect(directory, (store, schemas) => ids = CheckHistorical(store, schemas, historical, worldId));
         Require(Upgrades.Calls.Count == 0 && Upgrades.OwnerCalls == 0, "Exact decoding invoked business conversion.");
@@ -194,10 +193,8 @@ internal static class Program {
             revision.LocalObjects[0].Kind == ObjectVersionKind.Delta, "One enum edit must produce one List Delta.");
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
 
     private static void Require(bool condition, string message) {

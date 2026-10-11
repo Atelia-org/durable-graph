@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 
@@ -97,12 +98,12 @@ public sealed class ValueSlotCodecTests {
         Assert.Equal(typeof(T[]), runtimeCodec.BindVector().ArrayType);
         Assert.Equal(typeof(T[,]), runtimeCodec.BindArray2().ArrayType);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         codec.Write(ref writer, ref value);
         Assert.Equal(golden, buffer.WrittenSpan.ToArray());
 
         // Decode independent golden bytes through the runtime lookup path.
-        BinaryPayloadReader reader = new(golden);
+        BareValueReader reader = new(golden);
         T restored = default;
         runtimeCodec.Read(ref reader, ref restored);
         reader.EnsureFullyConsumed();

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -66,10 +67,10 @@ internal static class ReferenceCaptureExercise {
                 "Exact root schema.");
 
             ArrayBufferWriter<byte> bytes = new();
-            BinaryPayloadWriter writer = new(bytes);
+            BareValueWriter writer = new(bytes);
             CaptureHero.__DurableState.WriteBaseBody(ref writer, in heroState);
             Require(Convert.ToHexString(bytes.WrittenSpan) == "03030E", "Static reference ID golden.");
-            BinaryPayloadReader reader = new(bytes.WrittenSpan);
+            BareValueReader reader = new(bytes.WrittenSpan);
             var decoded = CaptureHero.__DurableState.ReadBaseBodyV1(ref reader);
             reader.EnsureFullyConsumed();
             Require(decoded.Segment0Field1.Value == 3 && decoded.Segment1Field1.Value == 3 && decoded.Segment1Field2 == 7,

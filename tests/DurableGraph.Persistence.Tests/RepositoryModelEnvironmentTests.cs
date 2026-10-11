@@ -3,7 +3,7 @@ using System.Reflection;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -143,12 +143,12 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
     }
 
     [Fact]
-    public void FailedOpenReleasesPreviouslyAcquiredJournalResources() {
+    public void FailedRootOpenReleasesPreviouslyAcquiredBackingResources() {
         using (Repository repository = Create(Models())) {
             using var session = repository.CreateBranch("main", Root(7));
         }
-        string schema = Path.Combine(_root, "schemas.rbf");
-        string saved = Path.Combine(_root, "schemas.saved");
+        string schema = Assert.Single(Directory.GetFiles(Path.Combine(_root, "versions", "refs"), "*.rbf", SearchOption.AllDirectories));
+        string saved = Path.Combine(_root, "root.saved");
         File.Move(schema, saved);
         try {
             Assert.ThrowsAny<Exception>(() => Repository.OpenExisting(_root, Models()));
@@ -160,8 +160,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         Assert.Equal(7, ((RootModel)resumed.State!).Values!["key"]);
     }
 
-    private Repository Create(StateModelRegistry models) => Repository.CreateNew(_root, models,
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private Repository Create(StateModelRegistry models) => Repository.CreateNew(_root, models);
     private static RootModel Root(int value) => new() { Values = new(new StringProxy()) { ["key"] = value } };
     private static DurableSchema Schema(string id) => new(id, 1, DurableFieldInfo.Reference(1, MapType));
     private static StateModelRegistry Models(bool family = false, Counts? counts = null) {
@@ -193,13 +192,13 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             static (T target, in ObjectId state, ObjectReadTable objects) => target.Values = objects.ResolveObject<Dictionary<string, int>>(state),
             static (source, context) => context.CaptureObject(source.Values, MapType), Visit);
     private static StateReaderBinding<ObjectId> Reader(DurableSchema schema) => new(schema,
-        static (ref BinaryPayloadReader reader) => new(reader.ReadUInt32()),
-        static (ref BinaryPayloadReader reader, in ObjectId prior) => new(reader.ReadUInt32()), Visit);
+        static (ref BareValueReader reader) => new(reader.ReadVarUInt32()),
+        static (ref BareValueReader reader, in ObjectId prior) => new(reader.ReadVarUInt32()), Visit);
     private static void Visit(in ObjectId state, IStateReferenceVisitor visitor) => visitor.VisitObject(state, MapType);
     private static PreparedBaseBody WriteBase(in ObjectId state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Value);
         return new(bytes.WrittenSpan);
     }
     private interface IRootModel : IDurableObject { Dictionary<string, int>? Values { get; set; } }

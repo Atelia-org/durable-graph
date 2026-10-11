@@ -2,7 +2,7 @@
 
 > 日期：2026-10-11。状态：**Feasible with prerequisites / 推荐继续机制实验，未批准实施或持久格式**。
 > 本轮只调查、验证隔离见证和维护文档；未替换产品引用、源码或存档。
-> 产品入口：[PROJECT-STATE](../../src/PROJECT-STATE.md)；未决事项入口：[路线图](../DurableGraph-research-roadmap.md#33-rbf3--framestore--versionstore-迁移)。
+> 产品入口：[PROJECT-STATE](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/PROJECT-STATE.md)；未决事项入口：[路线图](../DurableGraph-research-roadmap.md#33-rbf3--framestore--versionstore-迁移)。
 > 后续上游四项 API 改进及 WSL 新源码复核见[续接记录](0085-upstream-api-refinement-review.md)；本文保留首次 `e989ba6` 基线的含义。
 > 后续用户决定与实施方案见[DB-086](0086-new-storage-refactoring-plan.md)：取消全库重开确认/启动审计，采用上游正常恢复，只验收新库；本文的旧前置门及T0–T7不再作为当前施工队列。
 
@@ -54,19 +54,19 @@
 
 | 接缝 | 当前事实 | 新任务的实际范围 |
 |---|---|---|
-| 工程接线 | [Storage.csproj](../../src/DurableGraph.Storage/DurableGraph.Storage.csproj) 引 Data/Primitives/Rbf/RbfSegmentStore；[Persistence.csproj](../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj) 引 EventJournal；[源码模式 gate](../../Directory.Build.targets) 检查旧 EventJournal 项目 | 改显式 source-mode gate、项目图、tests 和 probe 的依赖图；收束旧包闭包 |
-| State | [StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs) 借用 `IRbfSegmentStore`，在 writer lease 内按实际 segment 编码，EndAppend/flush，reader lease 读 pooled frame | 新 borrowed FrameStore、opaque 地址、wire、parent/prior 验证、owned 缓存及 H/D 计量 |
-| Schema | [SchemaStore](../../src/DurableGraph.Persistence/SchemaStore.cs) 借专用 `schemas.rbf`，重放全部 SCB1 批次，检查 `_acceptedTail`，单批 append/flush 后装索引 | 共享帧分类、Schema 自身的重放顺序/逻辑 frontier、登记屏障和 fault |
-| 资源 | [GraphResources](../../src/DurableGraph.Persistence/GraphResources.cs) 拥有 schema file 与 State segments，严格开和全物理校验 | 单 data owner 的寿命、只读/写开资格、审计和 dispose 顺序 |
-| Journal | [HistoryJournal](../../src/DurableGraph.Persistence/HistoryJournal.cs) 既管理逻辑记录，也穿透 events/refs/ref-op-log 路径、EventFrameHeader 和 raw RBF 确认 | DG commit 帧与 VS 根发布拆开；重建严格打开和全历史检查 |
-| Repository | [Repository](../../src/DurableGraph.Persistence/Repository.cs) 依赖命名 branch、CAS move/advance、逻辑 ancestry、tag/outcome | 保留产品操作，替换其底层导航/发布；重做失败注入入口 |
-| Serialization | [BinaryPayloadWriter](../../src/DurableGraph.Serialization/BinaryPayloadWriter.cs) / [Reader](../../src/DurableGraph.Serialization/BinaryPayloadReader.cs) 是 public ref struct，进入 Runtime 静态签名及 SG 生成结果 | 首片保留 DG facade，只下沉可等价原语和窄校验 |
+| 工程接线 | [Storage.csproj](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/DurableGraph.Storage.csproj) 引 Data/Primitives/Rbf/RbfSegmentStore；[Persistence.csproj](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/DurableGraph.Persistence.csproj) 引 EventJournal；[源码模式 gate](../../Directory.Build.targets) 检查旧 EventJournal 项目 | 改显式 source-mode gate、项目图、tests 和 probe 的依赖图；收束旧包闭包 |
+| State | [StateRevisionStore](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/StateRevisionStore.cs) 借用 `IRbfSegmentStore`，在 writer lease 内按实际 segment 编码，EndAppend/flush，reader lease 读 pooled frame | 新 borrowed FrameStore、opaque 地址、wire、parent/prior 验证、owned 缓存及 H/D 计量 |
+| Schema | [SchemaStore](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/SchemaStore.cs) 借专用 `schemas.rbf`，重放全部 SCB1 批次，检查 `_acceptedTail`，单批 append/flush 后装索引 | 共享帧分类、Schema 自身的重放顺序/逻辑 frontier、登记屏障和 fault |
+| 资源 | [GraphResources](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/GraphResources.cs) 拥有 schema file 与 State segments，严格开和全物理校验 | 单 data owner 的寿命、只读/写开资格、审计和 dispose 顺序 |
+| Journal | [HistoryJournal](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/HistoryJournal.cs) 既管理逻辑记录，也穿透 events/refs/ref-op-log 路径、EventFrameHeader 和 raw RBF 确认 | DG commit 帧与 VS 根发布拆开；重建严格打开和全历史检查 |
+| Repository | [Repository](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/Repository.cs) 依赖命名 branch、CAS move/advance、逻辑 ancestry、tag/outcome | 保留产品操作，替换其底层导航/发布；重做失败注入入口 |
+| Serialization | [BinaryPayloadWriter](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Serialization/BinaryPayloadWriter.cs) / [Reader](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Serialization/BinaryPayloadReader.cs) 是 public ref struct，进入 Runtime 静态签名及 SG 生成结果 | 首片保留 DG facade，只下沉可等价原语和窄校验 |
 
 文本匹配规模只用于定位工作量，不是工时估算：src 直接含旧 SegmentStore/Journal/Rbf 的文件分别为 5/5/6；
 地址涉及 34 个源文件，DG reader/writer 名称涉及 29 个。tests 中旧 SegmentStore/Rbf 涉及 77/65 个文件，
 experiments 中对应 31/28 个。集合有重叠，不能相加。核心接缝集中，fixtures、动态编译和真实包消费者的迁移面更大。
 
-CLI 当前 [Program.cs](../../src/DurableGraph.Cli/Program.cs) 仅 `return 0;`；离线救援是纪律与测试素材，
+CLI 当前 [Program.cs](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Cli/Program.cs) 仅 `return 0;`；离线救援是纪律与测试素材，
 不是现成 CLI 产品功能。不得给后续计划虚构已有迁移/救援入口。
 
 ## 3. 新上游能够直接提供什么
@@ -90,8 +90,8 @@ FrameStore 已组合这些能力，DG 不必再次拥有物理 escaping 或 fram
 | nullable string | DG raw-header+1、0=null；不能用另有 control byte 的上游 controlled codec 代替 |
 
 证据：`U:src/Binary/BareValueReader.cs:83-105`、`U:tests/Binary.Tests/VarIntTests.cs:80-134`、
-`U:tests/Binary.Tests/StringTests.cs:23-57`；DG [CanonicalVarInt](../../src/DurableGraph.Serialization/CanonicalVarInt.cs)、
-[StringPayloadCodec](../../src/DurableGraph.Serialization/StringPayloadCodec.cs)。
+`U:tests/Binary.Tests/StringTests.cs:23-57`；DG [CanonicalVarInt](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Serialization/CanonicalVarInt.cs)、
+[StringPayloadCodec](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Serialization/StringPayloadCodec.cs)。
 canonical 校验还支撑 Dictionary 的 canonical-key 语义，不能用“输出字节一样”替代读取等价。
 保留 facade 可避免改 SG 已生成消费者的签名；消除字符串重复实现是独立后续问题，不是接入前提。
 
@@ -199,13 +199,13 @@ schema-log，扫描全部正式用户帧后只按逻辑合同重放；文件枚�
 
 ### 5.2 地址、链终止与成本计量
 
-旧 [FrameAddressWireCodec](../../src/DurableGraph.Storage/FrameAddressWireCodec.cs) 编 backward file distance + Serialized SizedPtr，
-[FileScope](../../src/DurableGraph.Storage/FileScope.cs) 与 writer segment 强耦合。
+旧 [FrameAddressWireCodec](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/FrameAddressWireCodec.cs) 编 backward file distance + Serialized SizedPtr，
+[FileScope](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/FileScope.cs) 与 writer segment 强耦合。
 新地址只公开 equality 与固定12B/变长 codec；固定编码用 Packed ticket，变长编码用 Serialize ticket，不能互换。
 建议新 State wire 明确使用 opaque absolute 地址并升级版本，不拆12B去重建旧内部字段。
 
-旧 [EnsureStrictlyEarlier](../../src/DurableGraph.Storage/FrameAddressValidator.cs) 还是防环基础；
-[LiveObjectHeadMapMaterializer](../../src/DurableGraph.Storage/LiveObjectHeadMapMaterializer.cs) 没有 visited set。
+旧 [EnsureStrictlyEarlier](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/FrameAddressValidator.cs) 还是防环基础；
+[LiveObjectHeadMapMaterializer](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/LiveObjectHeadMapMaterializer.cs) 没有 visited set。
 新交错 Builder 可以较大 FileId 先完成、较小 FileId 后完成：`U:tests/FrameStore.Tests/Public/PublicLifecycleTests.cs:41-71`。
 因此不能保留数值文件序当业务顺序，也不能仅删除该校验。
 
@@ -213,14 +213,14 @@ schema-log，扫描全部正式用户帧后只按逻辑合同重放；文件枚�
 visited 防环只证明终止，单独使用还不等价于“parent/prior 在写入前已存在且符合 exact 对应”。
 State parent、external heads、object prior 和 commit parent 都要审查；坏环/悬空/错误角色不能回退旧数据。
 
-同步改 [ObjectVersionPayloadSize](../../src/DurableGraph.Storage/ObjectVersionPayloadSize.cs)、
-[NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs) 及 wire reader 的 H/D 计算。
+同步改 [ObjectVersionPayloadSize](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Storage/ObjectVersionPayloadSize.cs)、
+[NormalizedRevision](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/NormalizedRevision.cs) 及 wire reader 的 H/D 计算。
 H 必须仍是实际 object-record 编码成本；若采用变长地址，实际 consumed 不能用最短 Measure 值替代。
 不要把 RBF3 overhead 或旧 Offset/Length 下界散布到 DG envelope。
 
 ### 5.3 全库检查和重开确认是两件事
 
-旧 [HistoryJournal.ConfirmDurable](../../src/DurableGraph.Persistence/HistoryJournal.cs) 在图依赖校验/确认后，
+旧 [HistoryJournal.ConfirmDurable](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/src/DurableGraph.Persistence/HistoryJournal.cs) 在图依赖校验/确认后，
 确认全部 Journal events、ref objects、最后名称/tag 发布 frontier，含物理 orphan。
 新 VS RO Audit 检查全部正式 ref/tag，却不解码应用 bytes/data；新 VS Open 不 flush，亦无公开全库 ConfirmDurable。
 本次 PublishRef/CreateTag 只确认 data 和当前目标控制文件。
@@ -272,12 +272,12 @@ subagent 的完成报告不替代验收。每包交付源码/符号、实际验�
 
 ### 可直接复用的回归路标
 
-- [StateRevisionStoreTests](../../tests/DurableGraph.Storage.Tests/StateRevisionStoreTests.cs)、[ObjectVersionChainStoreTests](../../tests/DurableGraph.Storage.Tests/ObjectVersionChainStoreTests.cs)：atomic append、exact prior、链和 H。
-- [StateRevisionReadCacheTests](../../tests/DurableGraph.Storage.Tests/StateRevisionReadCacheTests.cs)：owned 缓存、失败不 seed、borrowed lifetime、救援后 fresh cache。
-- [SchemaStoreTests](../../tests/DurableGraph.Persistence.Tests/SchemaStoreTests.cs)、[SchemaCatalogReplayTests](../../tests/DurableGraph.Persistence.Tests/SchemaCatalogReplayTests.cs)：批次/ID/闭包、严格重放与 fault。
-- [HistoryJournalTests](../../tests/DurableGraph.Persistence.Tests/HistoryJournalTests.cs)：orphan、严格坏尾、重开屏障；旧物理路径断言需要改写。
-- [EventHistoryRepositoryTests](../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)：`HistoricalForkAndMoveSelectLogicalParentRatherThanLatestPhysicalState`、E/S 自由排列、发布后才安装。
-- [DB078FailureTests](../../tests/DurableGraph.Persistence.Tests/DB078FailureTests.cs)、[RepositoryTagFailureTests](../../tests/DurableGraph.Persistence.Tests/RepositoryTagFailureTests.cs)：三态 outcome/fault、tag 异常与严格冷重开；旧 reflection 注入 `_refOpLog` 不能原样照搬。
+- [StateRevisionStoreTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Storage.Tests/StateRevisionStoreTests.cs)、[ObjectVersionChainStoreTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Storage.Tests/ObjectVersionChainStoreTests.cs)：atomic append、exact prior、链和 H。
+- [StateRevisionReadCacheTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Storage.Tests/StateRevisionReadCacheTests.cs)：owned 缓存、失败不 seed、borrowed lifetime、救援后 fresh cache。
+- [SchemaStoreTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Persistence.Tests/SchemaStoreTests.cs)、[SchemaCatalogReplayTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Persistence.Tests/SchemaCatalogReplayTests.cs)：批次/ID/闭包、严格重放与 fault。
+- [HistoryJournalTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Persistence.Tests/HistoryJournalTests.cs)：orphan、严格坏尾、重开屏障；旧物理路径断言需要改写。
+- [EventHistoryRepositoryTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)：`HistoricalForkAndMoveSelectLogicalParentRatherThanLatestPhysicalState`、E/S 自由排列、发布后才安装。
+- [DB078FailureTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Persistence.Tests/DB078FailureTests.cs)、[RepositoryTagFailureTests](https://github.com/Atelia-org/durable-graph/blob/c900edd5b3a921b7bf46df2ac0482dc39597e606/tests/DurableGraph.Persistence.Tests/RepositoryTagFailureTests.cs)：三态 outcome/fault、tag 异常与严格冷重开；旧 reflection 注入 `_refOpLog` 不能原样照搬。
 - [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)：EventHistory/recovery、跨库生成消费者；ProjectReference 验证不能替代包消费。
 
 ## 7. 本轮已证明与尚未证明

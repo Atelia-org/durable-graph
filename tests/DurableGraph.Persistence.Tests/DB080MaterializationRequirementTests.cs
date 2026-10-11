@@ -1,7 +1,7 @@
 using System.Reflection;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -29,8 +29,7 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
         models.Register(new StateDefinitionBinding(dependencyId, SchemaKind.InlineValue, 0, null,
             [new(dependencyId, 1, SchemaKind.InlineValue, 0,
                 [new(1, TypeExpr.Builtin(TypeTag.Int32))])]));
-        using Repository repository = Repository.CreateNew(_path, models,
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository repository = Repository.CreateNew(_path, models);
         context = (StateModelSnapshot)typeof(Repository)
             .GetField("_models", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
         GraphResources resources = (GraphResources)typeof(Repository)

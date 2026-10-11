@@ -1,10 +1,10 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -38,10 +38,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         StateModelSnapshot snapshot = models.Snapshot(schemas);
         DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
         ObjectStateRecord timestamps = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
@@ -56,36 +55,36 @@ public sealed partial class DurableSchemaGeneratorTests {
         DateTimeOffset after = before.ToOffset(TimeSpan.Zero), value = before.AddDays(100);
         ObjectVersionRecord replacement = Assert.Single(states.Read(addresses[11]).LocalObjects, row => row.ObjectId == timestamps.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, replacement.Kind);
-        BinaryPayloadReader reader = new(replacement.Body);
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.True(before.EqualsExact(reader.ReadDateTimeOffset()));
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.True(after.EqualsExact(reader.ReadDateTimeOffset()));
-        Assert.True(value.EqualsExact(reader.ReadDateTimeOffset()));
+        BareValueReader reader = new(replacement.Body);
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.True(before.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.True(after.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
+        Assert.True(value.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
         reader.EnsureFullyConsumed();
         ObjectVersionRecord patch = Assert.Single(states.Read(addresses[12]).LocalObjects, row => row.ObjectId == timestamps.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, patch.Kind);
         reader = new(patch.Body);
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.True(after.EqualsExact(reader.ReadDateTimeOffset()));
-        Assert.True(value.ToOffset(TimeSpan.Zero).EqualsExact(reader.ReadDateTimeOffset()));
-        Assert.Equal(0U, reader.ReadUInt32());
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.True(after.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
+        Assert.True(value.ToOffset(TimeSpan.Zero).EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
+        Assert.Equal(0U, reader.ReadVarUInt32());
         reader.EnsureFullyConsumed();
         ObjectStateRecord composite = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.InlineValue);
         ObjectVersionRecord keyPatch = Assert.Single(states.Read(addresses[14]).LocalObjects, row => row.ObjectId == composite.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, keyPatch.Kind);
         reader = new(keyPatch.Body);
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(1, reader.ReadInt32());
-        Assert.True(before.EqualsExact(reader.ReadDateTimeOffset()));
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(1, reader.ReadInt32());
-        Assert.True(after.EqualsExact(reader.ReadDateTimeOffset()));
-        Assert.Equal(10, reader.ReadInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(1, reader.ReadVarInt32());
+        Assert.True(before.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(1, reader.ReadVarInt32());
+        Assert.True(after.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
+        Assert.Equal(10, reader.ReadVarInt32());
         reader.EnsureFullyConsumed();
         Assert.All(states.Read(addresses[16]).LocalObjects, row => Assert.Equal(ObjectVersionKind.Delta, row.Kind));
         Assert.NotEmpty(states.Read(addresses[16]).LocalObjects);
@@ -112,6 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace TemporalScalarGraph;
         [DurableType("temporal.Value",1)] public readonly partial record struct Value<T>(
             [field:DurableField(1)] DateOnly Date,

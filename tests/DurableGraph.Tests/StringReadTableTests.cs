@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -32,7 +33,7 @@ public sealed class StringReadTableTests {
 
     private static void AssertCanonicalIndependentBody(string value, string hex) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteString(value);
         Assert.Equal(hex, Convert.ToHexString(bytes.WrittenSpan));
 
@@ -97,16 +98,10 @@ public sealed class StringReadTableTests {
     }
 
     [Theory]
-    [InlineData("8000")] // Overlong varint header.
-    [InlineData("01")] // Empty content must use UTF-16.
-    [InlineData("024100")] // ASCII must use shorter UTF-8.
-    [InlineData("05C3A9")] // Equal lengths must use UTF-16.
     [InlineData("05C080")] // Invalid UTF-8.
-    [InlineData("0741")] // Truncated UTF-8 payload.
-    [InlineData("0200")] // Truncated UTF-16 payload.
     [InlineData("FEFFFFFF0F")] // Length exceeds the supported Int32 range.
     [InlineData("0041")] // A valid empty body followed by unrelated bytes.
-    public void StringReadTableRejectsMalformedNoncanonicalTruncatedAndTrailingBodies(string hex) {
+    public void StringReadTableRejectsMalformedAndTrailingBodies(string hex) {
         Assert.Throws<InvalidDataException>(() =>
             StringReadTable.Decode([(new ObjectId(1u), Convert.FromHexString(hex))]));
     }
@@ -114,6 +109,8 @@ public sealed class StringReadTableTests {
     [Theory]
     [InlineData("")]
     [InlineData("80")]
+    [InlineData("0741")]
+    [InlineData("0200")]
     public void StringReadTablePreservesReaderFailureForMissingOrTruncatedHeader(string hex) {
         Assert.Throws<EndOfStreamException>(() =>
             StringReadTable.Decode([(new ObjectId(1u), Convert.FromHexString(hex))]));

@@ -1,14 +1,12 @@
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace EventHistoryPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static StateModelRegistry Models(bool eventOnly = false) {
@@ -92,9 +90,8 @@ internal static class Program {
             replacement = session.CommitState(next, Policy).RevisionAddress;
             Require(ReferenceEquals(((World)session.State!), next) && session.StateId!.Value != originalRoot, "Replacement root was not installed.");
         }
-        using (var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf")))
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
-            using StateRevisionStore store = new(segments);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(directory)) {
+            StateRevisionStore store = resources.States;
             StateRevision rewrite = store.Read(rewritten);
             Require(rewrite.LocalObjects.Count == 2 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
                 "Upgraded World and Alice require Base even after explicit Event reading.");
@@ -162,8 +159,8 @@ internal static class Program {
             laterEvent = Record(checkout, new Bob { Score = 50 }).RevisionAddress;
             Require(ReferenceEquals(checkout.State, alice), "Event advanced the editable State.");
         }
-        using (var segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
-            using StateRevisionStore store = new(segments);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(directory)) {
+            StateRevisionStore store = resources.States;
             var firstHeads = store.ReadLiveObjectHeadMap(firstState);
             var replacementHeads = store.ReadLiveObjectHeadMap(replacement);
             Require(firstHeads.TryGetValue(aliceId.Value, out var originalHead) && replacementHeads[aliceId.Value] == originalHead,
@@ -180,7 +177,7 @@ internal static class Program {
             var frames = repository.ReadFrames("free");
             Require(frames.Select(frame => frame.Kind).SequenceEqual(new[] { GraphFrameKind.Event, GraphFrameKind.Event,
                 GraphFrameKind.State, GraphFrameKind.State, GraphFrameKind.State, GraphFrameKind.Event }),
-                "Journal did not preserve free Event/State order.");
+                "Business history did not preserve free Event/State order.");
             Require(repository.ReadEvent(frames[0]) is Bob { Score: 11 } && repository.ReadEvent(frames[1]) is Bob { Score: 12 },
                 "Event-first values changed.");
             // The same Bob CLR type also serves as a State, with role chosen solely by the API.

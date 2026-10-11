@@ -1,3 +1,5 @@
+using Atelia.FrameStore;
+
 namespace Atelia.DurableGraph.Storage;
 
 /// <summary>
@@ -12,26 +14,19 @@ internal static class LiveObjectHeadMapMaterializer {
         FrameAddressValidator.ValidateRequired(head, nameof(head));
 
         Stack<(FrameAddress Address, StateRevision Revision)> pendingDeltas = [];
+        HashSet<FrameAddress> visited = [];
         FrameAddress address = head;
         FrameAddress baseAddress;
         StateRevision baseRevision;
 
         while (true) {
+            if (!visited.Add(address)) {
+                throw new InvalidDataException("The ObjectHeadMap Parent chain contains a cycle.");
+            }
             StateRevision revision = readRevision(address)
                 ?? throw new InvalidDataException(
                     $"State Revision reader returned null for {address}.");
-            if (revision.ParentRevisionAddress is { } parent) {
-                FrameAddressValidator.EnsureStrictlyEarlier(address, parent);
-            }
-
             if (revision.ObjectHeadMapKind == ObjectHeadMapKind.Base) {
-                foreach (FrameAddress externalHead in
-                    revision.ExternalObjectHeads.Values) {
-                    FrameAddressValidator.EnsureStrictlyEarlier(
-                        address,
-                        externalHead);
-                }
-
                 baseAddress = address;
                 baseRevision = revision;
                 break;

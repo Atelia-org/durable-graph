@@ -6,7 +6,7 @@ Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-BclScalarProbe.ps1
 ```
 
-Use `-PackageSource <feed> -Version <version>` to reuse a matching nine-package feed.
+Use `-PackageSource <feed> -Version <version>` to reuse a matching ten-package feed.
 The default runner packs the complete local dependency closure. The consumer references only
 the Runtime and StateStore packages; it has no ProjectReference, manual analyzer, import or
 AdditionalFiles wiring. Each application generation runs in its own process against one database.

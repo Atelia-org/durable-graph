@@ -4,7 +4,7 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -52,10 +52,10 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Assert.Equal(900, session.World.First!["key-070"]);
             final = session.Commit(NoRebase);
         }
-        using SegmentStore segments = OpenState();
-        using IRbfFile file = OpenSchemas();
+        using GraphResources file = OpenSchemas();
+        var segments = file.Data;
         using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file, readOnly: true);
+        SchemaStore schemas = file.Schemas;
         StateModelSnapshot readers = Models<string>().Snapshot(schemas);
         foreach (FrameAddress address in new[] { seed, unchanged, changed, final }) {
             ObjectStateRecord map = Assert.Single(RevisionDecoder.ReadSnapshot(states, schemas, address, readers).Objects,
@@ -88,10 +88,10 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Assert.Equal(7777, Assert.Single(session.World.First.Keys, key => key.Id == 7).Timestamp);
             unchanged = session.Commit(NoRebase);
         }
-        using SegmentStore segments = OpenState();
-        using IRbfFile file = OpenSchemas();
+        using GraphResources file = OpenSchemas();
+        var segments = file.Data;
         using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file, readOnly: true);
+        SchemaStore schemas = file.Schemas;
         foreach (FrameAddress address in new[] { seed, replaced, unchanged }) {
             ObjectStateRecord map = Assert.Single(RevisionDecoder.ReadSnapshot(states, schemas, address, Models<Key>().Snapshot(schemas)).Objects,
                 row => row.Kind == ObjectStateKind.Dictionary);
@@ -247,10 +247,10 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
-        using SegmentStore segments = OpenState();
-        using IRbfFile file = OpenSchemas();
+        using GraphResources file = OpenSchemas();
+        var segments = file.Data;
         using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file, readOnly: true);
+        SchemaStore schemas = file.Schemas;
         StateModelRegistry noRecipe = Models<string>();
         DecodedRevision exact = RevisionDecoder.ReadSnapshot(states, schemas, seed, noRecipe.Snapshot(schemas));
         Assert.Equal(2, exact.Objects.Count);
@@ -273,10 +273,10 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
-        using SegmentStore segments = OpenState();
-        using IRbfFile file = OpenSchemas();
+        using GraphResources file = OpenSchemas();
+        var segments = file.Data;
         using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file, readOnly: true);
+        SchemaStore schemas = file.Schemas;
         DecodedRevision exact = RevisionDecoder.ReadSnapshot(states, schemas, seed, Models<string>().Snapshot(schemas));
         Assert.Equal(2, Assert.Single(exact.Objects, row => row.Kind == ObjectStateKind.Dictionary).GetDictionaryState<ObjectId, int>().Count);
         NormalizedRevision.Create(exact, models.Snapshot(schemas));
@@ -355,10 +355,10 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
-        using SegmentStore segments = OpenState();
-        using IRbfFile file = OpenSchemas();
+        using GraphResources file = OpenSchemas();
+        var segments = file.Data;
         using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file, readOnly: true);
+        SchemaStore schemas = file.Schemas;
         DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, seed, Models<string>().Snapshot(schemas));
         ObjectStateRecord root = initial.GetRequired(worldId);
         ObjectId keyId = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.String).Id;
@@ -408,12 +408,12 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
                 context.CaptureObject(value.Containers, containers)), Visit));
         return models;
     }
-    private static RootState ReadRoot(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()), new(reader.ReadUInt32()));
-    private static RootState ApplyRoot(ref BinaryPayloadReader reader, in RootState prior) => ReadRoot(ref reader);
+    private static RootState ReadRoot(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()));
+    private static RootState ApplyRoot(ref BareValueReader reader, in RootState prior) => ReadRoot(ref reader);
     private static PreparedBaseBody RootBase(in RootState state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.First.Value); writer.WriteUInt32(state.Second.Value); writer.WriteUInt32(state.Containers.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.First.Value); writer.WriteVarUInt32(state.Second.Value); writer.WriteVarUInt32(state.Containers.Value);
         return new(bytes.WrittenSpan);
     }
     private static PreparedDeltaBody RootDelta(in RootState prior, in RootState current) => new(prior != current, RootBase(in current).Body);
@@ -441,17 +441,17 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     }
     private readonly struct KeyOps : IStateOps<KeyState> {
         public static bool StateEquals(in KeyState left, in KeyState right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in KeyState state, DurableFieldInfo slot) {
-            writer.WriteInt32(state.Id); writer.WriteInt32(state.Timestamp);
+        public static void WriteBase(ref BareValueWriter writer, in KeyState state, DurableFieldInfo slot) {
+            writer.WriteVarInt32(state.Id); writer.WriteVarInt32(state.Timestamp);
         }
-        public static KeyState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => new(reader.ReadInt32(), reader.ReadInt32());
+        public static KeyState ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => new(reader.ReadVarInt32(), reader.ReadVarInt32());
         public static PreparedDeltaBody PrepareDelta(in KeyState prior, in KeyState current, DurableFieldInfo slot) {
             ArrayBufferWriter<byte> bytes = new();
-            BinaryPayloadWriter writer = new(bytes);
+            BareValueWriter writer = new(bytes);
             WriteBase(ref writer, in current, slot);
             return new(prior != current, bytes.WrittenSpan);
         }
-        public static KeyState ApplyDelta(ref BinaryPayloadReader reader, in KeyState prior, DurableFieldInfo slot) => ReadBase(ref reader, slot);
+        public static KeyState ApplyDelta(ref BareValueReader reader, in KeyState prior, DurableFieldInfo slot) => ReadBase(ref reader, slot);
         public static void VisitReferences(in KeyState state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
     private sealed class StringProxy(StringComparer inner) : IEqualityComparer<string> {
@@ -471,8 +471,8 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         public int GetHashCode(Key value) => HashCode.Combine(value.Id, value.Transient);
     }
     private sealed class ResolverFailure : Exception;
-    private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
-    private IRbfFile OpenSchemas() => RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"));
+    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
+    private GraphResources OpenSchemas() => GraphResources.OpenExisting(_root);
     public void Dispose() {
         string path = Path.GetFullPath(_root);
         if (Path.GetDirectoryName(path) != Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())) ||

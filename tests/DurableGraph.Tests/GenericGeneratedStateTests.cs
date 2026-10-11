@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -32,11 +33,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var prior = new BoxStates.V1<PairStates.V1<int>>(new(1,2));
                     var current = new BoxStates.V1<PairStates.V1<int>>(new(1,9));
                     var prepared = BoxStates.BodyV1<PairStates.V1<int>,PairStates.BodyV1<int,Int32StateOps>>.PrepareDelta(in prior,in current,schema);
-                    var reader = new BinaryPayloadReader(prepared.Body);
+                    var reader = new BareValueReader(prepared.Body);
                     var restored = BoxStates.BodyV1<PairStates.V1<int>,PairStates.BodyV1<int,Int32StateOps>>.Apply(ref reader,in prior,schema);
                     reader.EnsureFullyConsumed();
                     bool rejected = false;
-                    reader = new BinaryPayloadReader(new byte[]{1,0});
+                    reader = new BareValueReader(new byte[]{1,0});
                     try { BoxStates.BodyV1<PairStates.V1<int>,PairStates.BodyV1<int,Int32StateOps>>.Apply(ref reader,in prior,schema); }
                     catch (System.IO.InvalidDataException) { rejected = true; }
                     return prepared.HasChanges && prepared.Body.SequenceEqual(new byte[]{1,2,18}) &&

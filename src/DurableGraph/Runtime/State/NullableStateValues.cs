@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
@@ -36,7 +37,7 @@ public readonly struct NullableStateOps<TState, TOps> : IStateOps<NullableState<
         return TOps.StateEquals(in a, in b, child);
     }
 
-    public static void WriteBase(ref BinaryPayloadWriter writer, in NullableState<TState> state, DurableFieldInfo slot) {
+    public static void WriteBase(ref BareValueWriter writer, in NullableState<TState> state, DurableFieldInfo slot) {
         DurableFieldInfo child = NullableStateSlot.Child(slot);
         writer.WriteByte(state.HasValue ? (byte)1 : (byte)0);
         if (state.HasValue) {
@@ -45,7 +46,7 @@ public readonly struct NullableStateOps<TState, TOps> : IStateOps<NullableState<
         }
     }
 
-    public static NullableState<TState> ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) {
+    public static NullableState<TState> ReadBase(ref BareValueReader reader, DurableFieldInfo slot) {
         DurableFieldInfo child = NullableStateSlot.Child(slot);
         return reader.ReadByte() switch {
             0 => default,
@@ -66,14 +67,14 @@ public readonly struct NullableStateOps<TState, TOps> : IStateOps<NullableState<
             if (!patch.HasChanges) { return new(false, []); }
         }
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         writer.WriteByte(prior.HasValue ? (byte)2 : (byte)1);
         if (patch is null) { TOps.WriteBase(ref writer, in value, child); }
-        else { writer.WriteSpan(patch.Body); }
+        else { writer.WriteRawBytes(patch.Body); }
         return new(true, buffer.WrittenSpan);
     }
 
-    public static NullableState<TState> ApplyDelta(ref BinaryPayloadReader reader, in NullableState<TState> prior, DurableFieldInfo slot) {
+    public static NullableState<TState> ApplyDelta(ref BareValueReader reader, in NullableState<TState> prior, DurableFieldInfo slot) {
         DurableFieldInfo child = NullableStateSlot.Child(slot);
         byte operation = reader.ReadByte();
         if (operation == 0 && prior.HasValue) { return default; }

@@ -69,8 +69,8 @@ public sealed class GenericBindingCatalogTests : IDisposable {
     [Fact]
     public void CacheHitsRecheckAnAuthoritativeSchemaRegisteredAfterInitialClosure() {
         Directory.CreateDirectory(_directory);
-        using IRbfFile file = RbfFile.CreateNew(Path.Combine(_directory, "schemas.rbf"));
-        SchemaStore store = new(file);
+        using GraphResources file = GraphResources.CreateNew(Path.Combine(_directory, "schemas.rbf"));
+        SchemaStore store = file.Schemas;
         StateModelRegistry registry = BasicRegistry();
         StateModelSnapshot snapshot = registry.Snapshot(store);
         DurableSchema first = Point(1);
@@ -237,8 +237,8 @@ public sealed class GenericBindingCatalogTests : IDisposable {
 
     // These catalog tests execute closure and validation only; body delegates remain unused.
     private static StateReaderBinding<int> Reader(DurableSchema schema) => new(schema,
-        static (ref BinaryPayloadReader reader) => reader.ReadInt32(),
-        static (ref BinaryPayloadReader reader, in int prior) => reader.ReadInt32(),
+        static (ref BareValueReader reader) => reader.ReadVarInt32(),
+        static (ref BareValueReader reader, in int prior) => reader.ReadVarInt32(),
         static (in int state, IStateReferenceVisitor visitor) => { });
 
     private static StateModelBinding<T, int> Model<T>(DurableSchema schema, StateReaderBinding reader) where T : class, IDurableObject, new() => new(

@@ -1,7 +1,6 @@
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
-using Atelia.Rbf;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -16,8 +15,8 @@ public sealed class GenericSchemaPersistenceTests {
         Assert.Equal(schema, SchemaCatalogTestData.Read(golden)[new(type, 128)]);
         string path = Path.Combine(Path.GetTempPath(), $"generic-envelope-{Guid.NewGuid():N}.rbf");
         try {
-            using IRbfFile file = RbfFile.CreateNew(path);
-            SchemaStore schemas = new(file);
+            using GraphResources file = GraphResources.CreateNew(path);
+            SchemaStore schemas = file.Schemas;
             RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
             var encoded = BaseObjectBodyCodec.Encode(id, new([0xAB]));
             Assert.Equal(Convert.FromHexString("0402AB"), encoded.Body.ToArray());
@@ -28,7 +27,7 @@ public sealed class GenericSchemaPersistenceTests {
             Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(
                 Convert.FromHexString("0302020342020102020350008001AB"), schemas));
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Fact]
@@ -50,7 +49,7 @@ public sealed class GenericSchemaPersistenceTests {
     [InlineData("02010341010100010102")]
     [InlineData("030102034100010100010102")]
     public void OldSchemaBatchPayloadsCannotMasqueradeAsCatalogBatches(string hex) {
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), SchemaCatalogTestData.Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex)));
     }
 
     [Fact]
@@ -63,19 +62,19 @@ public sealed class GenericSchemaPersistenceTests {
             DurableSchema pointBox1 = new(pointBoxType, 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point1));
             DurableSchema pointBoxMissedBump = new(pointBoxType, 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point2));
             DurableSchema intBox = new(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32)), 1, new DurableFieldInfo(1, TypeTag.Int32));
-            using (IRbfFile file = RbfFile.CreateNew(path)) {
-                var store = new SchemaStore(file);
+            using (GraphResources file = GraphResources.CreateNew(path)) {
+                var store = file.Schemas;
                 store.RegisterBatch([pointBox1, intBox]);
-                long tail = file.TailOffset;
+                long tail = DataBytes(file.Data);
                 Assert.Throws<SchemaConflictException>(() => store.Register(pointBoxMissedBump));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 Assert.Equal(3, store.Count);
                 Assert.False(store.TryGet(new("Point", 2), out _));
                 Assert.True(store.TryGet(new(pointBoxType, 1), out var found));
                 Assert.Same(pointBox1, found);
             }
-            using (IRbfFile file = RbfFile.OpenExisting(path)) {
-                var store = new SchemaStore(file);
+            using (GraphResources file = GraphResources.OpenExisting(path)) {
+                var store = file.Schemas;
                 Assert.Equal(pointBox1, store.GetRequired(pointBoxType, 1));
                 Assert.Equal(intBox, store.GetRequired(intBox.Type, 1));
                 Assert.Same(store.GetRequired("Point", 1), store.GetRequired(pointBoxType, 1).Fields[0].InlineSchema);
@@ -83,26 +82,26 @@ public sealed class GenericSchemaPersistenceTests {
                 Assert.Equal(5, store.Count);
             }
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Fact]
     public void DeclarationArityAndKindCannotChangeAcrossClosedFamiliesOrNominalOperands() {
         string path = Path.Combine(Path.GetTempPath(), $"durable-generic-arity-{Guid.NewGuid():N}.rbf");
         try {
-            using IRbfFile file = RbfFile.CreateNew(path);
-            var store = new SchemaStore(file);
+            using GraphResources file = GraphResources.CreateNew(path);
+            var store = file.Schemas;
             store.Register(new DurableSchema(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32)), 1));
-            long tail = file.TailOffset;
+            long tail = DataBytes(file.Data);
             Assert.Throws<ArgumentException>(() => store.Register(new DurableSchema("Box", 2)));
             Assert.Throws<ArgumentException>(() => store.Register(new DurableSchema(
                 TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.String)), 2, SchemaKind.InlineValue)));
             Assert.Throws<ArgumentException>(() => store.Register(new DurableSchema("Owner", 1,
                 DurableFieldInfo.Reference(1, TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32), TypeExpr.Builtin(TypeTag.Int64))))));
-            Assert.Equal(tail, file.TailOffset);
+            Assert.Equal(tail, DataBytes(file.Data));
             Assert.Equal(1, store.Count);
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Theory]
@@ -115,32 +114,25 @@ public sealed class GenericSchemaPersistenceTests {
         DurableSchema second = registerReferenceFirst ? point : owner;
         string path = Path.Combine(Path.GetTempPath(), $"durable-generic-reference-kind-{Guid.NewGuid():N}.rbf");
         try {
-            using (IRbfFile file = RbfFile.CreateNew(path)) {
-                var store = new SchemaStore(file);
-                long tail = file.TailOffset;
+            using (GraphResources file = GraphResources.CreateNew(path)) {
+                var store = file.Schemas;
+                long tail = DataBytes(file.Data);
                 Assert.Throws<ArgumentException>(() => store.RegisterBatch([first, second]));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 store.Register(first);
                 Assert.Equal(1, store.Count);
             }
-            using (IRbfFile file = RbfFile.OpenExisting(path)) {
-                var store = new SchemaStore(file);
-                long tail = file.TailOffset;
+            using (GraphResources file = GraphResources.OpenExisting(path)) {
+                var store = file.Schemas;
+                long tail = DataBytes(file.Data);
                 Assert.Throws<ArgumentException>(() => store.Register(second));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 Assert.Equal(1, store.Count);
             }
-            var registered = SchemaCatalogTestData.Registered(first);
-            // Build each row independently, then patch its ID to the next persisted ID.
-            byte[] secondRow = SchemaCatalogTestData.Write([second]);
-            secondRow[2] = 3;
-            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(secondRow, registered));
-            byte[] ownerRow = SchemaCatalogTestData.Write([owner])[2..];
-            byte[] pointRow = SchemaCatalogTestData.Write([point])[2..];
-            pointRow[0] = 3;
-            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read([2, 2, .. ownerRow, .. pointRow], SchemaCatalogTestData.Empty));
+            byte[] invalid = CatalogTestData.Encode(CatalogTestData.Schemas([first, second]));
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(invalid));
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Fact]
@@ -160,9 +152,13 @@ public sealed class GenericSchemaPersistenceTests {
     [InlineData("010F")]
     [InlineData("0200")]
     [InlineData("02034121")]
-    [InlineData("0203418000")]
-    public void UnknownOpenMalformedAndNoncanonicalTypeExpressionsAreRejected(string hex) {
+    public void UnknownOpenAndMalformedTypeExpressionsAreRejected(string hex) {
         Assert.ThrowsAny<Exception>(() => ReadType(Convert.FromHexString(hex)));
+    }
+
+    [Fact]
+    public void TypeExpressionAcceptsBoundedRedundantArityAndPreservesNominalIdentity() {
+        Assert.Equal(TypeExpr.Named("A"), ReadType(Convert.FromHexString("0203418000")));
     }
 
     [Fact]
@@ -182,7 +178,7 @@ public sealed class GenericSchemaPersistenceTests {
         Assert.Throws<InvalidDataException>(() => ReadType(huge.ToArray()));
         // A separate canonical nested type gives every short prefix a definite failure.
         var buffer = new ArrayBufferWriter<byte>();
-        var writer = new BinaryPayloadWriter(buffer);
+        var writer = new BareValueWriter(buffer);
         TypeExprWireCodec.Write(ref writer, TypeExpr.Named("Box", TypeExpr.Named("Point", TypeExpr.Builtin(TypeTag.Int32))));
         byte[] valid = buffer.WrittenSpan.ToArray();
         for (int length = 0; length < valid.Length; length++) {
@@ -193,14 +189,14 @@ public sealed class GenericSchemaPersistenceTests {
     }
 
     private static TypeExpr ReadType(byte[] bytes) {
-        var reader = new BinaryPayloadReader(bytes);
+        var reader = new BareValueReader(bytes);
         TypeExpr result = TypeExprWireCodec.Read(ref reader);
         reader.EnsureFullyConsumed();
         return result;
     }
 
     private static void WriteType(TypeExpr type) {
-        var writer = new BinaryPayloadWriter(new ArrayBufferWriter<byte>());
+        var writer = new BareValueWriter(new ArrayBufferWriter<byte>());
         TypeExprWireCodec.Write(ref writer, type);
     }
 }

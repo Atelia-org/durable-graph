@@ -6,6 +6,13 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
+    <PackageReference Include="Atelia.Binary" Version="$(StoragePackageVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
+    <ProjectReference Include="$(StorageSourceRoot)/src/Binary/Binary.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Atelia.DurableGraph.Serialization.Tests</_Parameter1>

@@ -119,7 +119,7 @@ try {
         New-Item -ItemType Directory -Path $PackageSource | Out-Null
         $Version = "0.0.0-event-recovery-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
-        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 9) { throw "Expected nine packages." }
+        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 10) { throw "Expected ten packages." }
     }
     $properties = @(
         "-p:DurableGraphPackageVersion=$Version",

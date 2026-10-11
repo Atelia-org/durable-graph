@@ -1,9 +1,10 @@
+using Atelia.DurableGraph.Persistence;
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -31,16 +32,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         using RawBaseDirectory directory = new();
-        RbfSegmentStoreOptions options = new() {
-            NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            SegmentSizeThresholdBytes = 8,
-        };
+        const long rotationThreshold = 128;
         FrameAddress first;
         FrameAddress second;
         FrameAddress missingString;
         FrameAddress wrongKind;
-        using (SegmentStore segments = SegmentStore.CreateNew(directory.Path, options)) {
-            using StateRevisionStore store = new(segments);
+        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+            using StateRevisionStore store = new(segments.Data);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.First.Reverse().Select(record => ObjectVersionRecord.CreateBase(record.Id, record.Body)), []));
             second = store.Append(StateRevision.CreateObjectHeadMapDelta(first,
@@ -57,16 +55,17 @@ public sealed partial class DurableSchemaGeneratorTests {
             nonString[0] = checked((byte)secondOwner);
             wrongKind = store.Append(StateRevision.CreateObjectHeadMapDelta(second,
                 [ObjectVersionRecord.CreateBase(firstOwner, nonString)], []));
+            segments.Data.ConfirmDurable();
         }
-        Assert.NotEqual(first.FileNumber, second.FileNumber);
+        Assert.NotEqual(first, second);
 
         // Clear every supplied body before cold reopening. The decoder obtains content only by
         // ReadObjectBaseBody; neither CaptureSession nor any source object is an input to loading.
         foreach (var record in input.First.Concat(input.Second)) {
             Array.Clear(record.Body);
         }
-        using SegmentStore reopened = SegmentStore.OpenReadOnlyExisting(directory.Path, options);
-        using StateRevisionStore cold = new(reopened);
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using StateRevisionStore cold = new(reopened.Data);
         Dictionary<uint, byte[]> ReadBodies(FrameAddress revision) => cold.ReadLiveObjectHeadMap(revision)
             .Keys.Reverse().ToDictionary(id => id, id => cold.ReadObjectBaseBody(revision, id));
 
@@ -129,6 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private const string RawBaseStorageSource = """
+        using Atelia.Binary;
         using System;
         using System.Buffers;
         using System.Collections.Generic;
@@ -187,7 +187,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             private static (uint Id, bool IsString, DurableSchema? Schema, byte[] Body)[] Encode(CapturedGraph graph) {
                 return graph.Objects.Select(entry => {
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     bool isString = entry.Kind == ObjectStateKind.String;
                     if (isString) {
                         writer.WriteString(entry.StringContent);
@@ -220,7 +220,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     .Select(entry => (new ObjectId(entry.Id), (ReadOnlyMemory<byte>)bodies[entry.Id])));
                 var owners = new Dictionary<uint, Owner.__DurableState.V1>();
                 foreach (var entry in metadata.Where(entry => !entry.IsString)) {
-                    var reader = new BinaryPayloadReader(bodies[entry.Id]);
+                    var reader = new BareValueReader(bodies[entry.Id]);
                     var state = Owner.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
                     Owner.__DurableState.ValidateStringReferences(in state, strings);

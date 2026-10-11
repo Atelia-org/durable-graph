@@ -7,7 +7,7 @@ DB-056 package delivery and retained-history witness:
 ```
 
 The runner builds two executables with ordinary Runtime/StateStore PackageReferences and the packaged
-Publish/Verify workflow. Supply both `-PackageSource` and `-Version` to reuse a matching nine-package
+Publish/Verify workflow. Supply both `-PackageSource` and `-Version` to reuse a matching ten-package
 feed; otherwise it packs an isolated feed. Artifacts remain in the ignored `obj/record-*` directory.
 No ProjectReference, manual analyzer, import or hand-built historical DTO substitutes for delivery.
 

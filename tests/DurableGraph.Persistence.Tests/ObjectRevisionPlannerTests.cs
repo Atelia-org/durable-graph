@@ -3,8 +3,8 @@ using System.Collections;
 using Atelia.Data;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -47,7 +47,7 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
         Assert.Empty(result.Revision.RemovedObjectIds);
         Assert.All(result.Estimates, x => {
             Assert.Equal(ObjectSaveChangeKind.NoChange, x.ChangeKind);
-            Assert.Null(x.DeltaPayloadBytesUpperBound);
+            Assert.Null(x.DeltaPayloadBytes);
             Assert.NotNull(x.ReconstructionPayloadBytes);
         });
         FrameAddress saved = store.Append(result.Revision);
@@ -133,7 +133,7 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
     }
 
     [Fact]
-    public void Conservative_D_can_select_required_Base_when_actual_D_is_smaller() {
+    public void Delta_cost_is_exact_with_fixed_opaque_address_width() {
         using SegmentStore segments = NewStore();
         using StateRevisionStore store = new(segments);
         FrameAddress original = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
@@ -144,8 +144,8 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
             [PreparedObject.Compared(new ObjectId(1), original, Base(actual - 1), new(true, [2]))], int.MaxValue, 1);
         ObjectSaveEstimate estimate = Assert.Single(result.Estimates);
         Assert.True(actual < estimate.BasePayloadBytes);
-        Assert.True(estimate.BasePayloadBytes <= estimate.DeltaPayloadBytesUpperBound);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(result.Revision.LocalObjects).Kind);
+        Assert.Equal(actual, estimate.DeltaPayloadBytes);
+        Assert.Equal(ObjectVersionKind.Delta, Assert.Single(result.Revision.LocalObjects).Kind);
     }
 
     [Fact]
@@ -155,17 +155,17 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
         FrameAddress first = store.Append(StateRevision.CreateObjectHeadMapBase(null, [B(1, [1])], []));
         FrameAddress parent = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [B(1, [2])], []));
         FrameAddress other = store.Append(StateRevision.CreateObjectHeadMapDelta(first, [B(1, [3])], []));
-        FrameAddress wrongTicket = new(parent.FileNumber, SizedPtr.Create(parent.FrameTicket.Offset, parent.FrameTicket.Length + 4));
-        uint active = segments.ActiveSegmentNumber;
+        FrameAddress wrongTicket = DifferentTicket(parent);
+        long active = DataBytes(segments);
         foreach (FrameAddress wrong in new[] { first, other, wrongTicket }) {
             Assert.Throws<ArgumentException>(() => Plan(store, parent, [PreparedObject.BaseOnlyUpdate(new ObjectId(1), wrong, new([4]))]));
-            Assert.Equal(active, segments.ActiveSegmentNumber);
+            Assert.Equal(active, DataBytes(segments));
         }
         PreparedObjectRevision good = Plan(store, parent, [PreparedObject.BaseOnlyUpdate(new ObjectId(1), parent, new([4]))]);
-        Assert.Equal(active, segments.ActiveSegmentNumber);
+        Assert.Equal(active, DataBytes(segments));
         FrameAddress appended = store.Append(good.Revision);
-        Assert.Equal(active + 1, appended.FileNumber);
-        Assert.Equal(first.FrameTicket.Offset, appended.FrameTicket.Offset);
+        Assert.NotEqual(parent, appended);
+        Assert.True(DataBytes(segments) > active);
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
         ObjectSaveEstimate estimate = Assert.Single(result.Estimates);
         Assert.Equal(ObjectSaveChangeKind.BaseOnlyUpdate, estimate.ChangeKind);
         Assert.Null(estimate.ReconstructionPayloadBytes);
-        Assert.Null(estimate.DeltaPayloadBytesUpperBound);
+        Assert.Null(estimate.DeltaPayloadBytes);
         FrameAddress saved = store.Append(result.Revision);
         Assert.Equal(3L, store.ReadObjectVersionChain(saved, 1).ReconstructionPayloadBytes);
         Assert.Equal(new byte[] { 3 }, store.ReadObjectBaseBody(saved, 1));
@@ -228,7 +228,7 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
 
     [Fact]
     public void Factories_reject_invalid_ids_addresses_and_missing_contents_without_mutable_shape_flags() {
-        FrameAddress valid = new(1, SizedPtr.Create(8, 4));
+        FrameAddress valid = TestAddress();
         Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.New(new ObjectId(0), new([])));
         Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.Unchanged(new ObjectId(1), default, new([])));
         Assert.Throws<ArgumentOutOfRangeException>(() => PreparedObject.Compared(new ObjectId(1), default, new([]), new(true, [])));
@@ -240,26 +240,9 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
         Assert.DoesNotContain(typeof(PreparedObject).GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic), p => p.SetMethod is not null);
     }
 
-    private static FrameAddress AppendWrongPrior(SegmentStore segments, FrameAddress parent, FrameAddress wrongPrior) {
-        using RbfSegmentWriterLease lease = segments.OpenActiveWriter();
-        ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteByte(3); // v3
-        writer.WriteByte((byte)ObjectHeadMapKind.Delta);
-        writer.WriteByte(1); // Parent present
-        writer.WriteUInt32(lease.SegmentNumber - parent.FileNumber);
-        writer.WriteUInt64(parent.FrameTicket.Serialize());
-        writer.WriteUInt32(1);
-        writer.WriteUInt32(1);
-        writer.WriteByte((byte)ObjectVersionKind.Delta);
-        writer.WriteUInt32(lease.SegmentNumber - wrongPrior.FileNumber);
-        writer.WriteUInt64(wrongPrior.FrameTicket.Serialize());
-        writer.WriteUInt32(1); // Body length
-        writer.WriteByte(3);
-        writer.WriteUInt32(0); // Removes
-        SizedPtr ticket = lease.File.Append(0x52534744, buffer.WrittenSpan).Unwrap();
-        return new(lease.SegmentNumber, ticket);
-    }
+    private static FrameAddress AppendWrongPrior(SegmentStore segments, FrameAddress parent, FrameAddress wrongPrior) =>
+        AppendUnchecked(segments, StateRevision.CreateObjectHeadMapDelta(parent,
+            [ObjectVersionRecord.CreateDelta(1, wrongPrior, [3])], []));
 
     private static PreparedObjectRevision Plan(StateRevisionStore store, FrameAddress? parent,
         IEnumerable<PreparedObject> rows, int limit = 10, int percent = 25) =>
@@ -268,18 +251,12 @@ public sealed partial class ObjectRevisionPlannerTests : IDisposable {
     private static EncodedBaseObjectBody Base(int length) => new(new byte[length]);
     private static ObjectVersionRecord B(uint id, byte[] body) => ObjectVersionRecord.CreateBase(id, body);
     private static ObjectVersionRecord D(uint id, FrameAddress prior, byte[] body) => ObjectVersionRecord.CreateDelta(id, prior, body);
-    private static long Tail(SegmentStore segments) {
-        using RbfSegmentWriterLease writer = segments.OpenActiveWriter();
-        return writer.File.TailOffset;
-    }
+    private static long Tail(SegmentStore segments) => DataBytes(segments);
 
     private SegmentStore NewStore(bool rollover = false) {
         string path = Path.GetFullPath(Path.Combine(_temporaryRoot, $"durable-graph-revision-planner-{Guid.NewGuid():N}"));
         _paths.Add(path);
-        return SegmentStore.CreateNew(path, new() {
-            NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            SegmentSizeThresholdBytes = rollover ? 8 : 64 * 1024 * 1024,
-        });
+        return SegmentStore.Create(path, rollover ? 128 : 64L * 1024 * 1024);
     }
 
     public void Dispose() {

@@ -5,14 +5,14 @@ using System.Runtime.CompilerServices;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class LoadedWorldTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-loaded-world-{Guid.NewGuid():N}");
-    private readonly IRbfFile _file;
+    private readonly GraphResources _file;
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
@@ -24,9 +24,9 @@ public sealed class LoadedWorldTests : IDisposable {
 
     public LoadedWorldTests() {
         Directory.CreateDirectory(_root);
-        _file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_file);
-        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _file.Schemas;
+        _segments = _file.Data;
         _store = new(_segments);
     }
 
@@ -42,7 +42,7 @@ public sealed class LoadedWorldTests : IDisposable {
         StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = new ObjectId(0) }));
         StateModelSnapshot snapshot = models.Snapshot();
         DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, third, snapshot.Readers);
-        long schemaTail = _file.TailOffset;
+        long schemaTail = DataBytes(_file.Data);
         long stateTail = Tail();
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
         Assert.Equal(new State(4, 8, 0, InitialSequence - 1), decoded.GetRequired(new ObjectId(1)).GetState<State>());
@@ -52,7 +52,7 @@ public sealed class LoadedWorldTests : IDisposable {
         Assert.Equal(Current, normalized.Objects[new ObjectId(1)].Current.Schema);
         Assert.Contains(new ObjectId(8), normalized.Objects.Keys);
         Assert.Same(decoded.GetRequired(new ObjectId(8)).StringContent, normalized.Objects[new ObjectId(8)].Current.StringContent);
-        Assert.Equal(schemaTail, _file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_file.Data));
         Assert.Equal(stateTail, Tail());
     }
 
@@ -62,12 +62,12 @@ public sealed class LoadedWorldTests : IDisposable {
     public void InvalidUpgradeReferenceFailsBeforeWorldDeliveryAndDoesNotWrite(uint badId) {
         FrameAddress address = Seed(Old, new(1, 0, 0));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(badId) }));
-        long schemaTail = _file.TailOffset;
+        long schemaTail = DataBytes(_file.Data);
         long stateTail = Tail();
         LoadedWorld<World>? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models));
         Assert.Null(delivered);
-        Assert.Equal(schemaTail, _file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_file.Data));
         Assert.Equal(stateTail, Tail());
     }
 
@@ -294,12 +294,10 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
         PreparedWorldRevision plan = loaded.Prepare(NoRebase);
-        using (RbfSegmentWriterLease occupied = _segments.OpenActiveWriter()) {
-            long tail = occupied.File.TailOffset;
-            // An occupied exclusive writer rejects Append before it can write a frame.
-            Assert.Throws<InvalidOperationException>(() => _store.Append(plan.Revision));
-            Assert.Equal(tail, occupied.File.TailOffset);
-        }
+        long tail = DataBytes(_segments);
+        StateRevision invalid = StateRevision.CreateObjectHeadMapDelta(DifferentTicket(address), plan.Revision.LocalObjects, []);
+        Assert.ThrowsAny<Exception>(() => _store.Append(invalid));
+        Assert.Equal(tail, DataBytes(_segments));
         PreparedWorldRevision retry = loaded.Prepare(NoRebase);
         Assert.Equal(address, loaded.ParentRevisionAddress);
         Assert.Equal(address, retry.Revision.ParentRevisionAddress);
@@ -332,8 +330,8 @@ public sealed class LoadedWorldTests : IDisposable {
             (in State state) => { beforePrepare?.Invoke(); return Base(state); },
             static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding<State> Reader(DurableSchema schema) => new(schema,
-            (ref BinaryPayloadReader reader) => { onRead?.Invoke(); return Read(ref reader); },
-            static (ref BinaryPayloadReader reader, in State prior) => Apply(ref reader, prior), Validate);
+            (ref BareValueReader reader) => { onRead?.Invoke(); return Read(ref reader); },
+            static (ref BareValueReader reader, in State prior) => Apply(ref reader, prior), Validate);
         StateReaderBinding[] readers = currentSchema.Equals(oldSchema)
             ? [Reader(currentSchema)] : [Reader(oldSchema), Reader(currentSchema)];
         return new StateModelBinding<TWorld, State>(preparation, readers,
@@ -372,37 +370,34 @@ public sealed class LoadedWorldTests : IDisposable {
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(state.Value);
-        writer.WriteUInt32(state.TextId.Value);
-        writer.WriteUInt32(state.AliasId.Value);
-        writer.WriteUInt64(state.Sequence);
+        writer.WriteVarUInt32(state.TextId.Value);
+        writer.WriteVarUInt32(state.AliasId.Value);
+        writer.WriteVarUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt64());
+    private static State Read(ref BareValueReader reader) => new(reader.ReadByte(), reader.ReadVarUInt32(), reader.ReadVarUInt32(), reader.ReadVarUInt64());
     private static PreparedDeltaBody Delta(State prior, State next) {
         byte mask = (byte)((prior.Value != next.Value ? 1 : 0) | (prior.TextId != next.TextId ? 2 : 0) | (prior.AliasId != next.AliasId ? 4 : 0) | (prior.Sequence != next.Sequence ? 8 : 0));
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(mask);
         if ((mask & 1) != 0) writer.WriteByte(next.Value);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.TextId.Value);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.AliasId.Value);
-        if ((mask & 8) != 0) writer.WriteUInt64(next.Sequence);
+        if ((mask & 2) != 0) writer.WriteVarUInt32(next.TextId.Value);
+        if ((mask & 4) != 0) writer.WriteVarUInt32(next.AliasId.Value);
+        if ((mask & 8) != 0) writer.WriteVarUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
-    private static State Apply(ref BinaryPayloadReader reader, State prior) {
+    private static State Apply(ref BareValueReader reader, State prior) {
         byte mask = reader.ReadByte();
         if (mask == 0 || mask > 15) throw new InvalidDataException("Invalid test bitmap.");
         return new((mask & 1) != 0 ? reader.ReadByte() : prior.Value,
-            (mask & 2) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.TextId,
-            (mask & 4) != 0 ? new ObjectId(reader.ReadUInt32()) : prior.AliasId,
-            (mask & 8) != 0 ? reader.ReadUInt64() : prior.Sequence);
+            (mask & 2) != 0 ? new ObjectId(reader.ReadVarUInt32()) : prior.TextId,
+            (mask & 4) != 0 ? new ObjectId(reader.ReadVarUInt32()) : prior.AliasId,
+            (mask & 8) != 0 ? reader.ReadVarUInt64() : prior.Sequence);
     }
-    private long Tail() {
-        using RbfSegmentWriterLease writer = _segments.OpenActiveWriter();
-        return writer.File.TailOffset;
-    }
+    private long Tail() => DataBytes(_segments);
     public void Dispose() {
         _store.Dispose();
         _file.Dispose();

@@ -1,41 +1,62 @@
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
+using Atelia.Binary;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Storage;
 
 /// <summary>
-/// Encodes the provisional v3 StateRevision's object-version records and
+/// Encodes the provisional v4 StateRevision's object-version records and
 /// ObjectHeadMap membership representation.
 /// </summary>
 internal static class StateRevisionWireWriter {
+    internal static long Measure(StateRevision revision) {
+        ArgumentNullException.ThrowIfNull(revision);
+        ValidateCollectionCounts(revision);
+        long bytes = 3 + (revision.ParentRevisionAddress.HasValue ? FrameAddress.EncodedSize : 0)
+            + BareValueEncoding.MeasureVarUInt32((uint)revision.LocalObjects.Count);
+        foreach (ObjectVersionRecord record in revision.LocalObjects) {
+            bytes = checked(bytes + BareValueEncoding.MeasureVarUInt32(record.ObjectId)
+                + (record.PriorAddress is { } prior
+                    ? ObjectVersionPayloadSize.GetDeltaPayloadBytes(record.Body.Length, prior)
+                    : ObjectVersionPayloadSize.GetBasePayloadBytes(record.Body.Length)));
+        }
+        if (revision.ObjectHeadMapKind == ObjectHeadMapKind.Base) {
+            bytes = checked(bytes + BareValueEncoding.MeasureVarUInt32((uint)revision.ExternalObjectHeads.Count));
+            foreach (uint objectId in revision.ExternalObjectHeads.Keys) {
+                bytes = checked(bytes + BareValueEncoding.MeasureVarUInt32(objectId) + FrameAddress.EncodedSize);
+            }
+        } else {
+            bytes = checked(bytes + BareValueEncoding.MeasureVarUInt32((uint)revision.RemovedObjectIds.Count));
+            foreach (uint objectId in revision.RemovedObjectIds) {
+                bytes = checked(bytes + BareValueEncoding.MeasureVarUInt32(objectId));
+            }
+        }
+        return bytes;
+    }
+
     internal static void Write(
         IBufferWriter<byte> destination,
-        StateRevision revision,
-        FileScope scope) {
+        StateRevision revision) {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(revision);
-        scope.ValidateRequired(nameof(scope));
         ValidateCollectionCounts(revision);
 
-        BinaryPayloadWriter writer = new(destination);
+        BareValueWriter writer = new(destination);
         writer.WriteByte(StateRevisionWireFormat.Version);
         writer.WriteByte((byte)revision.ObjectHeadMapKind);
         if (revision.ParentRevisionAddress is { } parent) {
             writer.WriteByte(1);
-            FrameAddressWireCodec.Write(
-                ref writer,
-                scope,
-                parent);
+            FrameAddressWireCodec.Write(ref writer, parent);
         } else {
             writer.WriteByte(0);
         }
 
         WriteCount(ref writer, revision.LocalObjects.Count);
         foreach (ObjectVersionRecord record in revision.LocalObjects) {
-            writer.WriteUInt32(record.ObjectId);
+            writer.WriteVarUInt32(record.ObjectId);
             writer.WriteByte((byte)record.Kind);
             if (record.PriorAddress is { } prior) {
-                FrameAddressWireCodec.Write(ref writer, scope, prior);
+                FrameAddressWireCodec.Write(ref writer, prior);
             }
             writer.WriteBytes(record.Body);
         }
@@ -44,11 +65,8 @@ internal static class StateRevisionWireWriter {
                 WriteCount(ref writer, revision.ExternalObjectHeads.Count);
                 foreach ((uint objectId, FrameAddress address) in
                     revision.ExternalObjectHeads) {
-                    writer.WriteUInt32(objectId);
-                    FrameAddressWireCodec.Write(
-                        ref writer,
-                        scope,
-                        address);
+                    writer.WriteVarUInt32(objectId);
+                    FrameAddressWireCodec.Write(ref writer, address);
                 }
 
                 break;
@@ -62,17 +80,17 @@ internal static class StateRevisionWireWriter {
     }
 
     private static void WriteObjectIds(
-        ref BinaryPayloadWriter writer,
+        ref BareValueWriter writer,
         IReadOnlyCollection<uint> objectIds) {
         WriteCount(ref writer, objectIds.Count);
         foreach (uint objectId in objectIds) {
-            writer.WriteUInt32(objectId);
+            writer.WriteVarUInt32(objectId);
         }
     }
 
-    private static void WriteCount(ref BinaryPayloadWriter writer, int count) {
+    private static void WriteCount(ref BareValueWriter writer, int count) {
         ValidateCount(count, "collection");
-        writer.WriteCount(count);
+        writer.WriteVarUInt32((uint)count);
     }
 
     private static void ValidateCollectionCounts(StateRevision revision) {

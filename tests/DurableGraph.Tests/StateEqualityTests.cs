@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -41,7 +42,7 @@ public sealed class StateEqualityTests {
                 bool equal = TOps.StateEquals(in left, in right, slot);
                 Assert.Equal(leftBytes.SequenceEqual(rightBytes), equal);
                 Assert.Equal(!TOps.PrepareDelta(in left, in right, slot).HasChanges, equal);
-                BinaryPayloadReader reader = new(rightBytes);
+                BareValueReader reader = new(rightBytes);
                 T restored = TOps.ReadBase(ref reader, slot);
                 reader.EnsureFullyConsumed();
                 Assert.True(TOps.StateEquals(in right, in restored, slot));
@@ -64,7 +65,7 @@ public sealed class StateEqualityTests {
 
     private static byte[] Encode<T, TOps>(in T value, DurableFieldInfo slot) where T : unmanaged where TOps : IStateOps<T> {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TOps.WriteBase(ref writer, in value, slot);
         return buffer.WrittenSpan.ToArray();
     }

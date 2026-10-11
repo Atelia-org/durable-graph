@@ -1,7 +1,6 @@
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
-using Atelia.Rbf;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -17,8 +16,8 @@ public sealed class DictionaryCatalogTests {
             byte other = (byte)(tag % 14 + 1);
             SchemaCatalogEntry row = SchemaCatalogEntry.ForDictionary(new(2), new(new(1, (TypeTag)tag), new(2, (TypeTag)other)));
             byte[] golden = [2, 1, 2, 5, 1, tag, other];
-            Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], CatalogTestData.Empty));
-            DictionaryLayout read = Assert.Single(SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty)).Dictionary!;
+            Assert.Equal(golden, SchemaCatalogWireCodec.Write([row]));
+            DictionaryLayout read = Assert.Single(SchemaCatalogWireCodec.Read(golden)).Dictionary!;
             Assert.Equal(row.Dictionary, read);
             Assert.Equal(1, read.KeySlot.FieldId);
             Assert.Equal(2, read.ValueSlot.FieldId);
@@ -35,8 +34,8 @@ public sealed class DictionaryCatalogTests {
         SchemaCatalogEntry row = SchemaCatalogEntry.ForDictionary(new(2), new(
             DurableFieldInfo.Reference(1, nested), DurableFieldInfo.Nullable(2, new(1, TypeTag.Int32))));
         byte[] golden = Convert.FromHexString("02010205010F0A010408040A0102010A1202");
-        Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], CatalogTestData.Empty));
-        Assert.Equal(row.Layout, Assert.Single(SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty)).Layout);
+        Assert.Equal(golden, SchemaCatalogWireCodec.Write([row]));
+        Assert.Equal(row.Layout, Assert.Single(SchemaCatalogWireCodec.Read(golden)).Layout);
     }
 
     [Fact]
@@ -45,20 +44,20 @@ public sealed class DictionaryCatalogTests {
         SchemaCatalogEntry[] rows = [SchemaCatalogEntry.ForSchema(new(2), key), SchemaCatalogEntry.ForSchema(new(3), value),
             SchemaCatalogEntry.ForDictionary(new(4), new(InlineSlot(1, key), InlineSlot(2, value)))];
         byte[] golden = Convert.FromHexString("0203020202034B000100010107030202035600010001010304050110021003");
-        Assert.Equal(golden, SchemaCatalogWireCodec.Write(rows, CatalogTestData.Empty));
-        SchemaCatalogEntry[] read = SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty);
+        Assert.Equal(golden, SchemaCatalogWireCodec.Write(rows));
+        SchemaCatalogEntry[] read = SchemaCatalogWireCodec.Read(golden);
         Assert.Same(read[0].Schema, read[2].Dictionary!.KeySlot.InlineSchema);
         Assert.Same(read[1].Schema, read[2].Dictionary!.ValueSlot.InlineSchema);
         rows = [SchemaCatalogEntry.ForSchema(new(2), key),
             SchemaCatalogEntry.ForDictionary(new(3), new(InlineSlot(1, key), InlineSlot(2, key)))];
         byte[] sharedGolden = Convert.FromHexString("0202020202034B00010001010703050110021002");
-        Assert.Equal(sharedGolden, SchemaCatalogWireCodec.Write(rows, CatalogTestData.Empty));
-        read = SchemaCatalogWireCodec.Read(sharedGolden, CatalogTestData.Empty);
+        Assert.Equal(sharedGolden, SchemaCatalogWireCodec.Write(rows));
+        read = SchemaCatalogWireCodec.Read(sharedGolden);
         Assert.Same(read[0].Schema, read[1].Dictionary!.KeySlot.InlineSchema);
         Assert.Same(read[0].Schema, read[1].Dictionary!.ValueSlot.InlineSchema);
         for (int length = 0; length < golden.Length; length++) {
             byte[] prefix = golden[..length];
-            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix, CatalogTestData.Empty));
+            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix));
             Assert.True(error is InvalidDataException or EndOfStreamException, $"Prefix {length}: {error}");
         }
     }
@@ -66,7 +65,6 @@ public sealed class DictionaryCatalogTests {
     [Theory]
     [InlineData("02010205000202")] // Codec zero.
     [InlineData("02010205020202")] // Unknown codec.
-    [InlineData("0201020581000202")] // Noncanonical codec.
     [InlineData("02010205010002")] // Unknown key slot.
     [InlineData("02010205010200")] // Unknown value slot.
     [InlineData("02010205011102")] // Open key slot.
@@ -81,7 +79,7 @@ public sealed class DictionaryCatalogTests {
     [InlineData("020202050102030305010203")] // Duplicate layout under another ID.
     [InlineData("02010206010202")] // Unknown row kind.
     public void InvalidDictionaryRowsFailClosed(string hex) {
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), CatalogTestData.Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex)));
     }
 
     [Fact]
@@ -109,29 +107,29 @@ public sealed class DictionaryCatalogTests {
         ObjectLayout layout = Dictionary(key, value);
         RepresentationId id;
         try {
-            using (IRbfFile file = RbfFile.CreateNew(path)) {
-                SchemaStore schemas = new(file);
+            using (GraphResources file = GraphResources.CreateNew(path)) {
+                SchemaStore schemas = file.Schemas;
                 RepresentationId[] ids = schemas.RegisterRepresentations([layout, layout]);
                 Assert.Equal(new uint[] { 4, 4 }, ids.Select(item => item.Value));
                 id = ids[0];
                 Assert.Equal(2, schemas.Count);
-                long tail = file.TailOffset;
+                long tail = DataBytes(file.Data);
                 Assert.Equal(ids, schemas.RegisterRepresentations([layout, layout]));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 ObjectLayout bad = keyConflict ? Dictionary(Inline("K", TypeTag.Byte), value) : Dictionary(key, Inline("V", TypeTag.Byte));
                 ObjectLayout fresh = ObjectLayout.ForDictionary(new(new(1, TypeTag.Boolean), new(2, TypeTag.Int64)));
                 Assert.Throws<SchemaConflictException>(() => schemas.RegisterRepresentations([fresh, bad]));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 Assert.False(schemas.IsFaulted);
                 Assert.Equal(5U, schemas.RegisterRepresentations([fresh])[0].Value);
             }
-            using IRbfFile fileRead = RbfFile.OpenExisting(path);
-            SchemaStore cold = new(fileRead, readOnly: true);
+            using GraphResources fileRead = GraphResources.OpenExisting(path);
+            SchemaStore cold = fileRead.Schemas;
             Assert.Equal(layout, cold.GetRepresentation(id));
             Assert.Same(cold.GetRequired("K", 1), cold.GetRepresentation(id).Dictionary!.KeySlot.InlineSchema);
             Assert.Same(cold.GetRequired("V", 1), cold.GetRepresentation(id).Dictionary!.ValueSlot.InlineSchema);
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Theory]
@@ -142,14 +140,13 @@ public sealed class DictionaryCatalogTests {
         DurableFieldInfo reference = DurableFieldInfo.Reference(keyReference ? 1 : 2, inline.Type);
         DictionaryLayout dictionary = new(keyReference ? reference : new(1, TypeTag.Int32),
             keyReference ? new(2, TypeTag.Int32) : reference);
-        var inlineFirst = CatalogTestData.Index([SchemaCatalogEntry.ForSchema(new(2), inline)]);
-        SchemaCatalogEntry row = SchemaCatalogEntry.ForDictionary(new(3), dictionary);
-        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write([row], inlineFirst));
-        byte[] invalid = Convert.FromHexString(keyReference ? "02010305010F0203500002" : "0201030501020F02035000");
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(invalid, inlineFirst));
-        var dictionaryFirst = CatalogTestData.Index([SchemaCatalogEntry.ForDictionary(new(2), dictionary)]);
-        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write([SchemaCatalogEntry.ForSchema(new(3), inline)], dictionaryFirst));
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString("02010302020350000100010102"), dictionaryFirst));
+        foreach (bool inlineFirst in new[] { false, true }) {
+            SchemaCatalogEntry[] rows = inlineFirst
+                ? [SchemaCatalogEntry.ForSchema(new(2), inline), SchemaCatalogEntry.ForDictionary(new(3), dictionary)]
+                : [SchemaCatalogEntry.ForDictionary(new(2), dictionary), SchemaCatalogEntry.ForSchema(new(3), inline)];
+            Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write(rows));
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(rows)));
+        }
     }
 
     [Theory]
@@ -165,20 +162,23 @@ public sealed class DictionaryCatalogTests {
         TypeExpr invalid = keyOperand ? TypeExpr.Dictionary(wrongArity, scalar) : TypeExpr.Dictionary(scalar, wrongArity);
         SchemaCatalogEntry[] rows = [SchemaCatalogEntry.ForSchema(new(2), point),
             SchemaCatalogEntry.ForDictionary(new(3), new(new(1, TypeTag.Int32), DurableFieldInfo.Reference(2, TypeExpr.List(invalid))))];
-        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write(rows, CatalogTestData.Empty));
+        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write(rows));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void BothExactDependenciesRejectClassAndContainerNodes(bool keyDependency) {
-        byte[] row = Convert.FromHexString(keyDependency ? "0201030501100202" : "0201030501021002");
-        var classIndex = CatalogTestData.Index([SchemaCatalogEntry.ForSchema(new(2), new("C", 1))]);
-        var listIndex = CatalogTestData.Index([SchemaCatalogEntry.ForList(new(2), new(new(1, TypeTag.Int32)))]);
-        var dictionaryIndex = CatalogTestData.Index([SchemaCatalogEntry.ForDictionary(new(2), new(new(1, TypeTag.Int32), new(2, TypeTag.Int32)))]);
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(row, classIndex));
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(row, listIndex));
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(row, dictionaryIndex));
+        byte[] row = Convert.FromHexString(keyDependency ? "030501100202" : "030501021002");
+        SchemaCatalogEntry[] prefixes = [
+            SchemaCatalogEntry.ForSchema(new(2), new("C", 1)),
+            SchemaCatalogEntry.ForList(new(2), new(new(1, TypeTag.Int32))),
+            SchemaCatalogEntry.ForDictionary(new(2), new(new(1, TypeTag.Int32), new(2, TypeTag.Int32)))];
+        foreach (SchemaCatalogEntry prefix in prefixes) {
+            byte[] prefixBytes = CatalogTestData.Encode([prefix]);
+            byte[] snapshot = [2, 2, .. prefixBytes.AsSpan(2), .. row];
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(snapshot));
+        }
     }
 
     [Fact]
@@ -188,13 +188,20 @@ public sealed class DictionaryCatalogTests {
             chain[i] = new($"I{i:D3}", 1, SchemaKind.InlineValue,
                 i == 0 ? new(1, TypeTag.Int32) : InlineSlot(1, chain[i - 1]));
         }
-        var registered = CatalogTestData.Index(SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(chain), CatalogTestData.Empty));
         SchemaCatalogEntry row = SchemaCatalogEntry.ForDictionary(new(258), new(InlineSlot(1, chain[^1]), InlineSlot(2, chain[^1])));
-        byte[] golden = Convert.FromHexString("020182020501108102108102");
-        Assert.Equal(golden, SchemaCatalogWireCodec.Write([row], registered));
-        DictionaryLayout read = Assert.Single(SchemaCatalogWireCodec.Read(golden, registered)).Dictionary!;
-        Assert.Same(registered[new(257)].Schema, read.KeySlot.InlineSchema);
+        byte[] bytes = SchemaCatalogWireCodec.Write([.. CatalogTestData.Schemas(chain), row]);
+        Assert.Equal(Convert.FromHexString("82020501108102108102"), bytes[^10..]);
+        SchemaCatalogEntry[] decoded = SchemaCatalogWireCodec.Read(bytes);
+        DictionaryLayout read = decoded[^1].Dictionary!;
+        Assert.Equal(257, decoded.Length);
+        Assert.Same(decoded[^2].Schema, read.KeySlot.InlineSchema);
         Assert.Same(read.KeySlot.InlineSchema, read.ValueSlot.InlineSchema);
+    }
+
+    [Fact]
+    public void DictionaryCodecAcceptsBoundedRedundancyAndWriterUsesShortestEncoding() {
+        SchemaCatalogEntry row = Assert.Single(SchemaCatalogWireCodec.Read(Convert.FromHexString("0201020581000202")));
+        Assert.Equal(Convert.FromHexString("02010205010202"), SchemaCatalogWireCodec.Write([row]));
     }
 
     private static DurableSchema Inline(string id, TypeTag tag) => new(id, 1, SchemaKind.InlineValue, new DurableFieldInfo(1, tag));
@@ -204,12 +211,12 @@ public sealed class DictionaryCatalogTests {
         : [10, .. ExpandedDictionaryType(depth - 1), .. ExpandedDictionaryType(depth - 1)];
     private static byte[] WriteType(TypeExpr type) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         TypeExprWireCodec.Write(ref writer, type);
         return bytes.WrittenSpan.ToArray();
     }
     private static TypeExpr ReadType(byte[] bytes) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TypeExpr type = TypeExprWireCodec.Read(ref reader);
         reader.EnsureFullyConsumed();
         return type;

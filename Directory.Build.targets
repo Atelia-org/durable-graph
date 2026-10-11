@@ -6,10 +6,28 @@
            Text="UseStorageSources=true requires an absolute StorageSourceRoot pointing to atelia-storage." />
     <Error Condition="'$(UseStorageSources)' == 'true' and '$(StorageSourceRoot)' != '' and !$([System.IO.Path]::IsPathFullyQualified('$(StorageSourceRoot)'))"
            Text="StorageSourceRoot must be an absolute atelia-storage directory path." />
-    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/EventJournal/EventJournal.csproj')"
-           Text="StorageSourceRoot does not contain src/EventJournal/EventJournal.csproj. Source mode never falls back to packages." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/Binary/Binary.csproj')"
+           Text="StorageSourceRoot does not contain src/Binary/Binary.csproj. Source mode never falls back to packages." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/FrameStore/FrameStore.csproj')"
+           Text="StorageSourceRoot does not contain src/FrameStore/FrameStore.csproj. Source mode never falls back to packages." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/VersionStore/VersionStore.csproj')"
+           Text="StorageSourceRoot does not contain src/VersionStore/VersionStore.csproj. Source mode never falls back to packages." />
+    <Exec Condition="'$(UseStorageSources)' == 'true'"
+          Command="git -C &quot;$(StorageSourceRoot)&quot; rev-parse HEAD"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_StorageSourceHead" />
+      <Output TaskParameter="ExitCode" PropertyName="_StorageSourceGitExitCode" />
+    </Exec>
+    <Error Condition="'$(UseStorageSources)' == 'true' and '$(_StorageSourceGitExitCode)' != '0'"
+           Text="Cannot establish atelia-storage source revision at StorageSourceRoot." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and '@(_StorageSourceHead)' != '$(StorageSourceRevision)'"
+           Text="StorageSourceRoot HEAD must equal pinned StorageSourceRevision $(StorageSourceRevision); observed @(_StorageSourceHead)." />
   </Target>
   <Target Name="RejectStorageSourcePackaging" BeforeTargets="GenerateNuspec;Pack" Condition="'$(UseStorageSources)' == 'true'">
     <Error Text="Packing DurableGraph with UseStorageSources=true is unsupported. Pack atelia-storage with a unique version first, select StoragePackageVersion, then pack DurableGraph with UseStorageSources=false." />
+  </Target>
+  <Target Name="ValidateDurableGraphPackageVersion" BeforeTargets="GenerateNuspec;Pack">
+    <Error Condition="'$(PackageVersion)' == '$(StoragePackageVersion)'"
+           Text="DurableGraph PackageVersion must differ from StoragePackageVersion. The downstream package version does not version its storage dependencies." />
   </Target>
 </Project>

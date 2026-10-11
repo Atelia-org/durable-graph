@@ -64,7 +64,7 @@ try {
         New-Item -ItemType Directory -Path $PackageSource | Out-Null
         $Version = "0.0.0-cross-assembly-e2e.$runStamp"
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
-        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 9) { throw "Expected nine runtime dependency packages." }
+        if (@(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File).Count -ne 10) { throw "Expected ten runtime dependency packages." }
     }
     $common = @("-p:DurableGraphPackageVersion=$Version")
     $domainProperties = $common + @(

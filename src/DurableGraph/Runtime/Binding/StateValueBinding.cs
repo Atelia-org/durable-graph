@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
@@ -13,10 +14,10 @@ public interface IValueProjection<TDomain, TState> where TState : unmanaged {
 public interface IStateOps<TState> where TState : unmanaged {
     /// <summary>Compares persistent values in the same exact slot, without encoding or allocating.</summary>
     static abstract bool StateEquals(in TState left, in TState right, DurableFieldInfo slot);
-    static abstract void WriteBase(ref BinaryPayloadWriter writer, in TState state, DurableFieldInfo slot);
-    static abstract TState ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot);
+    static abstract void WriteBase(ref BareValueWriter writer, in TState state, DurableFieldInfo slot);
+    static abstract TState ReadBase(ref BareValueReader reader, DurableFieldInfo slot);
     static abstract PreparedDeltaBody PrepareDelta(in TState prior, in TState current, DurableFieldInfo slot);
-    static abstract TState ApplyDelta(ref BinaryPayloadReader reader, in TState prior, DurableFieldInfo slot);
+    static abstract TState ApplyDelta(ref BareValueReader reader, in TState prior, DurableFieldInfo slot);
     static abstract void VisitReferences(in TState state, IStateReferenceVisitor visitor, DurableFieldInfo slot);
 }
 

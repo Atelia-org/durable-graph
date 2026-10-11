@@ -1,6 +1,6 @@
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -109,7 +109,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
             [PreparedObject.Unchanged(new(1), first, new([2]))], new(10, 25), independentSnapshot: true));
     }
 
-    private SegmentStore NewStore() => SegmentStore.CreateNew(_path, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private SegmentStore NewStore() => SegmentStore.Create(_path);
 
     public void Dispose() {
         string resolved = Path.GetFullPath(_path);

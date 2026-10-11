@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -155,7 +156,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     return new[] { initial, session.Prepare(second.Seal()) };
                 }
                 public static byte[] Historical() {
-                    var reader = new BinaryPayloadReader(new byte[] { 0x21 });
+                    var reader = new BareValueReader(new byte[] { 0x21 });
                     var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
                     return Item.__DurableState.PrepareBaseBody(in state).Body.ToArray();

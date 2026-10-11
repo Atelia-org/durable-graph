@@ -1,3 +1,4 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Storage;
 
@@ -36,7 +37,7 @@ internal sealed class PreparedWorldSave : IDisposable {
         if (_installation is not null) {
             throw new InvalidOperationException("This save already has its installation prepared.");
         }
-        if (address.FileNumber == 0 || address.FrameTicket.Length == 0) {
+        if (address == default) {
             throw new ArgumentException("Installation requires the appended Revision address.", nameof(address));
         }
         _installation = _next!.WithAddress(address, Revision);

@@ -152,8 +152,8 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 ### 3.3 RBF3 / FrameStore / VersionStore 迁移
 
 [DB-086](design-branches/0086-new-storage-refactoring-plan.md) 已形成实施指导方案并完成
-[三轮简化评审](design-branches/0086-new-storage-simplification-review.md)；产品仍使用旧 pin，未实施。
-下一步按方案 R0/R1 从最终产品source的真生成图纵切开始；后续依赖/验收队列只维护在该方案，不再沿用DB-085的T0–T7。
+[三轮简化评审](design-branches/0086-new-storage-simplification-review.md)；产品已切换新栈，源码整库回归通过。
+实际包资格与剩余验收只查[实施记录](design-branches/0086-new-storage-implementation.md)，不再沿用DB-085的T0–T7或已完成的R0–R4施工队列。
 
 用户已选择只验收新建库，不保留旧storage数据或迁移器；取消全库重开确认、启动图审计和strict preflight。
 新打开消费上游恢复合同；必要内容/图因果/owner寿命仍检查。原反馈第3项控制数据确认撤出上游待办。

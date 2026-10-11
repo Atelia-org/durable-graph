@@ -2,8 +2,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -17,10 +16,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("Run")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         StateModelSnapshot snapshot = models.Snapshot(schemas);
         DecodedRevision first = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
         DecodedRevision final = RevisionDecoder.ReadSnapshot(states, schemas, addresses[3], snapshot);
@@ -33,7 +31,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectVersionRecord changed = Assert.Single(states.Read(addresses[2]).LocalObjects);
         ObjectId ignoredId = Assert.Single(first.Objects, row => row.Schema?.Type == TypeExpr.Named("Ignored")).Id;
         Assert.Equal(ignoredId.Value, changed.ObjectId);
-        Assert.Equal(ObjectVersionKind.Delta, changed.Kind); // Business equality ignored a persisted timestamp.
+        Assert.Equal(ObjectVersionKind.Base, changed.Kind); // The small changed body costs less than a 12B-prior Delta.
         Assert.Contains(states.Read(addresses[3]).LocalObjects,
             row => row.Kind == ObjectVersionKind.Base && !oldFacts.Any(old => old.Id.Value == row.ObjectId));
         Assert.Empty(states.Read(addresses[4]).LocalObjects); // Cold materialization recaptures the same complete state.
@@ -103,6 +101,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace RecordClasses;
         [DurableType("Fact",1)] public abstract partial record Fact([field:DurableField(1)] string Actor) : IDurableObject;
         [DurableType("Damage",1)] public sealed partial record Damage(string Actor,[field:DurableField(1)] int Amount) : Fact(Actor);

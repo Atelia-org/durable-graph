@@ -1,9 +1,7 @@
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace StateStorePackageConsumerProbe;
 
@@ -17,7 +15,7 @@ public sealed partial class World : IDurableObject {
     public World(int score, string name) { _score = score; _name = name; _createdAtTicks = 638_625_600_000_000_000; }
 
     internal static void Seed(string directory) {
-        RbfSegmentStoreOptions options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+        const long options = 1024 * 1024;
         ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
         StateModelRegistry models = new();
         __DurableState.RegisterModel(models);
@@ -33,8 +31,8 @@ public sealed partial class World : IDurableObject {
             ((World)session.State!)._score = 9;
             revision = session.CommitState(policy).RevisionAddress;
         }
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), options);
-        using StateRevisionStore store = new(segments);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        StateRevisionStore store = resources.States;
         Require(store.ReadObjectVersionChain(revision, worldId.Value).Records.Count == 3,
             "The V1 process did not persist its Base plus two Delta records.");
     }

@@ -1,3 +1,5 @@
+using Atelia.FrameStore;
+
 namespace Atelia.DurableGraph.Storage;
 
 /// <summary>

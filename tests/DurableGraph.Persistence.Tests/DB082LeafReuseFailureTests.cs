@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -161,12 +161,11 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Leaf deliveredLeaf = Assert.IsType<Owner>(warm.State).First!;
         CheckpointAddress newer = main.CommitState(Graph(9));
         int hydrates = control.LeafHydrates;
+        if (phase == "unknown") {
+            InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("Unknown after actual root append"));
+        }
         repository.Checkpoint = point => {
-            if (phase == "unknown" && point == CommitCheckpoint.BeforePublication) {
-                // The actual publisher throws after Repository crosses its attempted
-                // frontier. No candidate is delivered even though outcome is Unknown.
-                Field<HistoryJournal>(repository, "_history").Journal.Dispose();
-            } else if (point == (phase == "before" ? CommitCheckpoint.BeforePublication : CommitCheckpoint.AfterPublication)) {
+            if (phase != "unknown" && point == (phase == "before" ? CommitCheckpoint.BeforePublication : CommitCheckpoint.AfterPublication)) {
                 throw new IOException("Publication interruption");
             }
         };
@@ -268,7 +267,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     private static bool IsAlive(WeakReference<Leaf> weak) => weak.TryGetTarget(out _);
 
     private Repository Create(Controls control) {
-        Repository repository = Repository.CreateNew(_path, Models(control), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        Repository repository = Repository.CreateNew(_path, Models(control));
         repository.ImmutableLeafReuseEnabled = true;
         return repository;
     }
@@ -299,7 +298,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
             [ByteReader(TailSchema)], static row => row.GetState<byte>(), static () => new(),
             (Tail _, in byte state, ObjectReadTable _) => { if (control.FailTail) { throw control.Failure; } },
             static (_, _) => 0, static (in byte _, IStateReferenceVisitor _) => { }));
-        static OwnerState Read(ref BinaryPayloadReader input) => new(new(input.ReadUInt32()), new(input.ReadUInt32()), new(input.ReadUInt32()));
+        static OwnerState Read(ref BareValueReader input) => new(new(input.ReadVarUInt32()), new(input.ReadVarUInt32()), new(input.ReadVarUInt32()));
         static void Visit(in OwnerState state, IStateReferenceVisitor visitor) {
             visitor.VisitDurable(state.First, LeafSchema.Type);
             visitor.VisitDurable(state.Second, LeafSchema.Type);
@@ -307,7 +306,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         }
         registry.Register(new StateModelBinding<Owner, OwnerState>(new(OwnerSchema, OwnerBody,
             static (in OwnerState prior, in OwnerState next) => new(prior != next, OwnerBody(next).Body)),
-            [new StateReaderBinding<OwnerState>(OwnerSchema, Read, static (ref BinaryPayloadReader input, in OwnerState _) => Read(ref input), Visit)],
+            [new StateReaderBinding<OwnerState>(OwnerSchema, Read, static (ref BareValueReader input, in OwnerState _) => Read(ref input), Visit)],
             static row => row.GetState<OwnerState>(), static () => new(),
             static (Owner target, in OwnerState state, ObjectReadTable objects) => {
                 target.First = objects.ResolveDurable<Leaf>(state.First);
@@ -318,13 +317,13 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         return registry;
     }
     private static StateReaderBinding ByteReader(DurableSchema schema) => new StateReaderBinding<byte>(schema,
-        static (ref BinaryPayloadReader input) => input.ReadByte(), static (ref BinaryPayloadReader input, in byte _) => input.ReadByte(),
+        static (ref BareValueReader input) => input.ReadByte(), static (ref BareValueReader input, in byte _) => input.ReadByte(),
         static (in byte _, IStateReferenceVisitor _) => { });
     private static PreparedBaseBody ByteBody(in byte value) => new(new byte[] { value });
     private static PreparedBaseBody OwnerBody(in OwnerState state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.First.Value); writer.WriteUInt32(state.Second.Value); writer.WriteUInt32(state.Tail.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.First.Value); writer.WriteVarUInt32(state.Second.Value); writer.WriteVarUInt32(state.Tail.Value);
         return new(bytes.WrittenSpan);
     }
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;

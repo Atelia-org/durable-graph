@@ -2,7 +2,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -21,13 +21,13 @@ internal sealed class StateSaveHarness : IDisposable {
             _stateHead = head.Kind == GraphFrameKind.State ? head : repository.GetPreviousState(head);
         }
     }
-    internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+    internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.CreateNew(path, models, options), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
     }
-    internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+    internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.OpenExisting(path, models, options), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
     }
     internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
     internal ObjectId? WorldId => _stateHead?.RootId;
@@ -55,8 +55,8 @@ internal sealed class StateSaveHarness : IDisposable {
     private static readonly StateModelBinding MarkerModel = new StateModelBinding<Marker, byte>(
         new(MarkerSchema, static (in byte state) => new PreparedBaseBody([]),
             static (in byte prior, in byte next) => new PreparedDeltaBody(false, [])),
-        [new StateReaderBinding<byte>(MarkerSchema, static (ref BinaryPayloadReader input) => 0,
-            static (ref BinaryPayloadReader input, in byte prior) => prior, Visit)],
+        [new StateReaderBinding<byte>(MarkerSchema, static (ref BareValueReader input) => 0,
+            static (ref BareValueReader input, in byte prior) => prior, Visit)],
         static row => row.GetState<byte>(), static () => new Marker(),
         static (Marker domain, in byte state, ObjectReadTable objects) => { },
         static (domain, context) => 0, Visit);

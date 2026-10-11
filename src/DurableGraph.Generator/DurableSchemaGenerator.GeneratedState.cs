@@ -10,6 +10,7 @@ namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
     private const string GeneratedStateTypeName = "__DurableState";
+    private const string BinaryNamespace = "global::Atelia.Binary.";
     private const string PayloadNamespace = "global::Atelia.DurableGraph.Serialization.";
 
     private static readonly DiagnosticDescriptor InvalidGeneratedState = new(
@@ -142,10 +143,31 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool IsBinaryReference(int typeTagValue) => typeTagValue == 4 || typeTagValue == 15;
 
+    private static string BareMethodSuffix(int typeTagValue) {
+        string name = GetTypeTagName(GetBinarySlotTypeTag(typeTagValue));
+        switch (name) {
+            case "UInt16": case "UInt32": case "UInt64": case "Int16": case "Int32": case "Int64":
+                return "Var" + name;
+            case "Char": case "Half": case "Single": case "Double":
+                return name + "LE";
+            default:
+                return name;
+        }
+    }
+
+    private static bool IsComposedScalar(int typeTagValue) => typeTagValue >= 19 && typeTagValue <= 24;
+
     private static string BinarySlotRead(int typeTagValue) {
-        string read = "reader.Read" + GetTypeTagName(GetBinarySlotTypeTag(typeTagValue)) + "()";
+        string read = IsComposedScalar(typeTagValue)
+            ? PayloadNamespace + "BclValueCodec.Read" + BareMethodSuffix(typeTagValue) + "(ref reader)"
+            : "reader.Read" + BareMethodSuffix(typeTagValue) + "()";
         return IsBinaryReference(typeTagValue) ? "new " + RootName + "ObjectId(" + read + ")" : read;
     }
+
+    private static string BinarySlotWrite(int typeTagValue, string expression) =>
+        IsComposedScalar(typeTagValue)
+            ? PayloadNamespace + "BclValueCodec.Write" + BareMethodSuffix(typeTagValue) + "(ref writer, " + expression + ")"
+            : "writer.Write" + BareMethodSuffix(typeTagValue) + "(" + BinarySlotWireValue(typeTagValue, expression) + ")";
 
     private static string BinarySlotWireValue(int typeTagValue, string expression) =>
         IsBinaryReference(typeTagValue) ? expression + ".Value" : expression;
@@ -337,15 +359,14 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendBinaryDtoWrite(StringBuilder source, BinaryVersionModel version, string indent) {
-        source.Append(indent).Append("internal static void WriteBaseBody(ref ").Append(PayloadNamespace)
-            .Append("BinaryPayloadWriter writer, in ").Append(version.Name).AppendLine(" value) {");
+        source.Append(indent).Append("internal static void WriteBaseBody(ref ").Append(BinaryNamespace)
+            .Append("BareValueWriter writer, in ").Append(version.Name).AppendLine(" value) {");
         foreach (BinaryFieldModel field in version.Fields) {
             if (field.InlineSchema.HasValue) {
                 source.Append(indent).Append("    ").Append(InlineHelperName(field.InlineSchema.Value))
                     .Append(".WriteBaseBody(ref writer, in value.").Append(field.Name).AppendLine(");");
             } else {
-                source.Append(indent).Append("    writer.Write").Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue)))
-                    .Append('(').Append(BinarySlotWireValue(field.TypeTagValue, "value." + field.Name)).AppendLine(");");
+                source.Append(indent).Append("    ").Append(BinarySlotWrite(field.TypeTagValue, "value." + field.Name)).AppendLine(";");
             }
         }
 
@@ -357,8 +378,8 @@ public sealed partial class DurableSchemaGenerator {
             .Append("PreparedBaseBody PrepareBaseBody(in ").Append(version.Name).AppendLine(" current) {");
         // TODO(DB-029): Measure temporary buffers and owned-copy costs after MVP before adding pooling.
         source.Append(indent).AppendLine("    var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
-        source.Append(indent).Append("    var writer = new ").Append(PayloadNamespace)
-            .AppendLine("BinaryPayloadWriter(buffer);");
+        source.Append(indent).Append("    var writer = new ").Append(BinaryNamespace)
+            .AppendLine("BareValueWriter(buffer);");
         source.Append(indent).AppendLine("    WriteBaseBody(ref writer, in current);");
         source.Append(indent).Append("    return new ").Append(PayloadNamespace)
             .AppendLine("PreparedBaseBody(buffer.WrittenSpan);");
@@ -367,7 +388,7 @@ public sealed partial class DurableSchemaGenerator {
 
     private static void AppendBinaryDtoRead(StringBuilder source, BinaryVersionModel version, string indent) {
         source.Append(indent).Append("internal static ").Append(version.Name).Append(" ReadBaseBody").Append(version.Name)
-            .Append("(ref ").Append(PayloadNamespace).AppendLine("BinaryPayloadReader reader) {");
+            .Append("(ref ").Append(BinaryNamespace).AppendLine("BareValueReader reader) {");
         foreach (BinaryFieldModel field in version.Fields) {
             source.Append(indent).Append("    var ").Append(field.ParameterName).Append(" = ");
             if (field.InlineSchema.HasValue) source.Append(InlineHelperName(field.InlineSchema.Value))
@@ -427,8 +448,8 @@ public sealed partial class DurableSchemaGenerator {
         }
 
         source.Append(indent).AppendLine("    var buffer = new global::System.Buffers.ArrayBufferWriter<byte>();");
-        source.Append(indent).Append("    var writer = new ").Append(PayloadNamespace)
-            .AppendLine("BinaryPayloadWriter(buffer);");
+        source.Append(indent).Append("    var writer = new ").Append(BinaryNamespace)
+            .AppendLine("BareValueWriter(buffer);");
         for (int maskIndex = 0; maskIndex < maskCount; maskIndex++) {
             string maskName = "mask" + maskIndex.ToString(CultureInfo.InvariantCulture);
             source.Append(indent).Append("    hasChanges |= ").Append(maskName).AppendLine(" != 0;");
@@ -441,11 +462,9 @@ public sealed partial class DurableSchemaGenerator {
             AppendBinaryDeltaBitTest(source, index);
             source.AppendLine(") {");
             if (field.InlineSchema.HasValue) {
-                source.Append(indent).Append("        writer.WriteSpan(delta").Append(index).AppendLine(".Body);");
+                source.Append(indent).Append("        writer.WriteRawBytes(delta").Append(index).AppendLine(".Body);");
             } else {
-                source.Append(indent).Append("        writer.Write")
-                    .Append(GetTypeTagName(GetBinarySlotTypeTag(field.TypeTagValue)))
-                    .Append('(').Append(BinarySlotWireValue(field.TypeTagValue, "current." + field.Name)).AppendLine(");");
+                source.Append(indent).Append("        ").Append(BinarySlotWrite(field.TypeTagValue, "current." + field.Name)).AppendLine(";");
             }
             source.Append(indent).AppendLine("    }");
         }
@@ -458,13 +477,13 @@ public sealed partial class DurableSchemaGenerator {
     private static void AppendBinaryApplyDelta(StringBuilder source, BinaryVersionModel version, string indent, bool inlineHelper = false) {
         if (inlineHelper) {
             source.Append(indent).Append("internal static ").Append(version.Name).Append(" ApplyDeltaBody")
-                .Append(version.Name).Append("(ref ").Append(PayloadNamespace)
-                .Append("BinaryPayloadReader reader, in ").Append(version.Name).AppendLine(" prior) =>");
+                .Append(version.Name).Append("(ref ").Append(BinaryNamespace)
+                .Append("BareValueReader reader, in ").Append(version.Name).AppendLine(" prior) =>");
             source.Append(indent).Append("    ApplyDeltaBody").Append(version.Name).AppendLine("(ref reader, in prior, false);");
         }
         source.Append(indent).Append("internal static ").Append(version.Name).Append(" ApplyDeltaBody")
-            .Append(version.Name).Append("(ref ").Append(PayloadNamespace)
-            .Append("BinaryPayloadReader reader, in ").Append(version.Name)
+            .Append(version.Name).Append("(ref ").Append(BinaryNamespace)
+            .Append("BareValueReader reader, in ").Append(version.Name)
             .AppendLine(inlineHelper ? " prior, bool requireChanges) {" : " prior) {");
         int maskCount = version.Fields.Count / 8 + (version.Fields.Count % 8 == 0 ? 0 : 1);
         for (int maskIndex = 0; maskIndex < maskCount; maskIndex++) {

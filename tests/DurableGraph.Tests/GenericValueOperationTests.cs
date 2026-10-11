@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -61,7 +62,7 @@ public sealed class GenericValueOperationTests {
         PreparedDeltaBody delta = TOps.PrepareDelta(in prior, in current, slot);
         Assert.True(delta.HasChanges);
         Assert.False(TOps.StateEquals(in prior, in current, slot));
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         T restored = TOps.ApplyDelta(ref reader, in prior, slot);
         reader.EnsureFullyConsumed();
         Assert.Equal(Encode<T, TOps>(in current, slot), Encode<T, TOps>(in restored, slot));
@@ -69,7 +70,7 @@ public sealed class GenericValueOperationTests {
         Assert.True(TOps.StateEquals(in restored, in current, slot));
         byte[] same = Encode<T, TOps>(in prior, slot);
         Assert.Throws<InvalidDataException>(() => {
-            BinaryPayloadReader redundant = new(same);
+            BareValueReader redundant = new(same);
             TOps.ApplyDelta(ref redundant, in prior, slot);
         });
     }
@@ -77,7 +78,7 @@ public sealed class GenericValueOperationTests {
     private static byte[] Encode<T, TOps>(in T state, DurableFieldInfo slot)
         where T : unmanaged where TOps : IStateOps<T> {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TOps.WriteBase(ref writer, in state, slot);
         return buffer.WrittenSpan.ToArray();
     }

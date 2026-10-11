@@ -4,8 +4,7 @@ using System.Text;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -32,10 +31,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = scope.Load(app1).GetType("InlineHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-            using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-            using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-            SchemaStore schemas = new(schemaFile, readOnly: true);
-            exact = Assert.Single(RevisionDecoder.ReadSnapshot(new(segments), schemas, original,
+            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            SchemaStore schemas = segments.Schemas;
+            exact = Assert.Single(RevisionDecoder.ReadSnapshot(segments.States, schemas, original,
                 models.Snapshot(schemas)).Objects, x => x.Schema?.SchemaId == "ExtWorld").Schema!;
         }
 
@@ -56,10 +54,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Null(current.Load(library2).GetType("InlineHistoryValues.LegacyPoint"));
         Type currentHost = current.Load(app2).GetType("InlineHistoryApp.Host")!;
         var currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state")))
-        using (var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            SchemaStore schemas = new(schemaFile, readOnly: true);
-            var decoded = RevisionDecoder.ReadSnapshot(new(segments), schemas, original, currentModels.Snapshot(schemas));
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path))
+        {
+            SchemaStore schemas = segments.Schemas;
+            var decoded = RevisionDecoder.ReadSnapshot(segments.States, schemas, original, currentModels.Snapshot(schemas));
             var world = Assert.Single(decoded.Objects, x => x.Schema?.SchemaId == "ExtWorld");
             Assert.Equal(exact, world.Schema);
             Assert.Equal(1, world.Schema!.Fields[0].InlineSchema!.Version);
@@ -67,8 +65,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"))) {
-            using StateRevisionStore states = new(segments);
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+            using StateRevisionStore states = new(segments.Data);
             Assert.Equal(2, states.Read(addresses[0]).LocalObjects.Count);
             Assert.All(states.Read(addresses[0]).LocalObjects, x => Assert.Equal(ObjectVersionKind.Base, x.Kind));
             foreach (int index in new[] { 1, 3 }) { Assert.Empty(states.Read(addresses[index]).LocalObjects); }
@@ -174,6 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using P=Atelia.DurableGraph.Generated.Family_45787456616C7565;
         using W=Atelia.DurableGraph.Generated.Family_457874576F726C64;
         using Point=InlineHistoryValues.{{{{(version==1 && !currentLibrary ? "LegacyPoint" : "Point")}}}};

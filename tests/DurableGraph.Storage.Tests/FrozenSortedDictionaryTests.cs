@@ -1,5 +1,5 @@
 using System.Collections;
-using Atelia.Data;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -105,5 +105,5 @@ public sealed class FrozenSortedDictionaryTests {
         Assert.Throws<ArgumentException>(() => new FrozenSortedDictionary<uint, FrameAddress>(descending));
     }
 
-    private static FrameAddress Address(long offset) => new(1, SizedPtr.Create(offset, 32));
+    private static FrameAddress Address(long offset) => StorageTestFrames.Address(1, offset);
 }

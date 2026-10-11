@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -128,10 +129,10 @@ public sealed class ObjectStateComparisonTests {
 
     private readonly struct ComparisonOnlyOps : IStateOps<int> {
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException("Comparison encoded a slot.");
+        public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => throw new InvalidOperationException("Comparison encoded a slot.");
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) => throw new InvalidOperationException("Comparison prepared a slot Delta.");
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => throw new NotSupportedException();
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => throw new NotSupportedException();
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => throw new NotSupportedException();
         public static void VisitReferences(in int state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }

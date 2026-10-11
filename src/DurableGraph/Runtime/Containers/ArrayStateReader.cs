@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
@@ -27,7 +28,7 @@ internal sealed class ArrayStateReader<TState, TOps> : ArrayStateReader
     internal override ObjectStateRecord Read(ObjectId id, IStateBodySource source) {
         ArgumentNullException.ThrowIfNull(source);
         if (id.IsNull || source.Count <= 0) { throw new InvalidDataException("An array requires a nonzero ID and a Base body."); }
-        BinaryPayloadReader reader = new(source.GetBody(0));
+        BareValueReader reader = new(source.GetBody(0));
         FrozenArrayState<TState> state = ArrayStateBody<TState, TOps>.ReadBase(ref reader, Layout.Array!);
         reader.EnsureFullyConsumed();
         for (int index = 1; index < source.Count; index++) {
@@ -48,16 +49,16 @@ internal static class ArrayStateBody<TState, TOps> where TState : unmanaged wher
     internal static PreparedBaseBody PrepareBase(FrozenArrayState<TState> state, ArrayLayout layout) {
         RequireShape(state.Shape, layout);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        foreach (int length in state.Shape.Lengths) { writer.WriteUInt32((uint)length); }
+        BareValueWriter writer = new(buffer);
+        foreach (int length in state.Shape.Lengths) { writer.WriteVarUInt32((uint)length); }
         foreach (ref readonly TState element in state.Elements) { TOps.WriteBase(ref writer, in element, layout.ElementSlot); }
         return new(buffer.WrittenSpan);
     }
 
-    internal static FrozenArrayState<TState> ReadBase(ref BinaryPayloadReader reader, ArrayLayout layout) {
+    internal static FrozenArrayState<TState> ReadBase(ref BareValueReader reader, ArrayLayout layout) {
         int[] lengths = new int[layout.Rank];
         for (int dimension = 0; dimension < lengths.Length; dimension++) {
-            uint length = reader.ReadUInt32();
+            uint length = reader.ReadVarUInt32();
             if (length > Array.MaxLength) { throw new InvalidDataException("Array dimension exceeds the supported CLR length."); }
             lengths[dimension] = (int)length;
         }
@@ -76,25 +77,25 @@ internal static class ArrayStateBody<TState, TOps> where TState : unmanaged wher
         RequireShape(current.Shape, layout);
         if (!prior.Shape.Equals(current.Shape)) { throw new InvalidOperationException("An array Delta cannot change shape."); }
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         bool changed = false;
         for (int index = 0; index < current.Shape.Count; index++) {
             PreparedDeltaBody delta = TOps.PrepareDelta(in prior.OwnedElements[index], in current.OwnedElements[index], layout.ElementSlot);
             if (!delta.HasChanges) { continue; }
             changed = true;
-            writer.WriteUInt32((uint)index + 1);
-            writer.WriteSpan(delta.Body);
+            writer.WriteVarUInt32((uint)index + 1);
+            writer.WriteRawBytes(delta.Body);
         }
-        writer.WriteUInt32(0);
+        writer.WriteVarUInt32(0);
         return new(changed, buffer.WrittenSpan);
     }
 
-    internal static FrozenArrayState<TState> ApplyDelta(ref BinaryPayloadReader reader, FrozenArrayState<TState> prior, ArrayLayout layout) {
+    internal static FrozenArrayState<TState> ApplyDelta(ref BareValueReader reader, FrozenArrayState<TState> prior, ArrayLayout layout) {
         RequireShape(prior.Shape, layout);
         TState[] elements = (TState[])prior.OwnedElements.Clone();
         uint previous = 0;
         while (true) {
-            uint encoded = reader.ReadUInt32();
+            uint encoded = reader.ReadVarUInt32();
             if (encoded == 0) { break; }
             if (encoded <= previous || encoded > elements.Length) {
                 throw new InvalidDataException("Array Delta indexes must be strictly increasing and within the array.");

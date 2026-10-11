@@ -2,7 +2,7 @@ using System.Collections;
 using System.Reflection;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -265,7 +265,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static Repository DB082Create(string path, DB082Fixture fixture, bool reuse) {
-        Repository repository = Repository.CreateNew(path, fixture.Models, new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        Repository repository = Repository.CreateNew(path, fixture.Models, 64L * 1024 * 1024 * 1024);
         repository.PreparedStateReuseEnabled = true;
         repository.ImmutableLeafReuseEnabled = reuse;
         return repository;

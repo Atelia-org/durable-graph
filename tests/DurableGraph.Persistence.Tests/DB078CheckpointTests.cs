@@ -1,4 +1,4 @@
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -223,7 +223,6 @@ public sealed class DB078CheckpointTests : IDisposable {
 
     private static Node Root(Checkpoint checkpoint) => Assert.IsType<Node>(checkpoint is EventCheckpoint e ? e.Event : ((StateCheckpoint)checkpoint).State);
     private static Node Previous(Checkpoint checkpoint) => Assert.IsType<Node>(checkpoint is EventCheckpoint e ? e.PreviousState : ((StateCheckpoint)checkpoint).PreviousEvent);
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(),
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db078-checkpoint-");
 }

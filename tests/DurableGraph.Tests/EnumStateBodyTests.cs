@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -59,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.True(TOps.StateEquals(states[i], decoded, slot));
             // Enum has no references, even when every bit is set.
             TOps.VisitReferences(in decoded, null!, slot);
-            BinaryPayloadReader nested = new(bytes.Concat(new byte[] { 91 }).ToArray());
+            BareValueReader nested = new(bytes.Concat(new byte[] { 91 }).ToArray());
             _ = TOps.ReadBase(ref nested, slot);
             Assert.Equal(91, nested.ReadByte());
             nested.EnsureFullyConsumed();
@@ -99,14 +100,14 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static byte[] EncodeEnumState<TState, TOps>(TState state, DurableFieldInfo slot)
         where TState : unmanaged where TOps : IStateOps<TState> {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TOps.WriteBase(ref writer, in state, slot);
         return buffer.WrittenSpan.ToArray();
     }
 
     private static TState DecodeEnumState<TState, TOps>(byte[] bytes, DurableFieldInfo slot)
         where TState : unmanaged where TOps : IStateOps<TState> {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TState result = TOps.ReadBase(ref reader, slot);
         reader.EnsureFullyConsumed();
         return result;
@@ -114,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static TState ApplyEnumDelta<TState, TOps>(byte[] bytes, TState prior, DurableFieldInfo slot)
         where TState : unmanaged where TOps : IStateOps<TState> {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TState result = TOps.ApplyDelta(ref reader, in prior, slot);
         reader.EnsureFullyConsumed();
         return result;

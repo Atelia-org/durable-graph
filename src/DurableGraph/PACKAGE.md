@@ -346,7 +346,7 @@ For a scalar-only layout:
 var state = Character.__DurableState.Capture(character);
 var prepared = Character.__DurableState.PrepareBaseBody(in state);
 
-var reader = new BinaryPayloadReader(prepared.Body);
+var reader = new Atelia.Binary.BareValueReader(prepared.Body);
 var restoredState = Character.__DurableState.ReadBaseBodyV1(ref reader);
 reader.EnsureFullyConsumed();
 ```

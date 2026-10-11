@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Reflection;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -187,8 +188,8 @@ public sealed class DB080SchemaRequirementTests {
         public override StateDefinitionBinding GetDefinition(string definitionId) => Definitions[definitionId];
         public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
         private static StateReaderBinding Reader<T>(DurableSchema schema) where T : unmanaged => new StateReaderBinding<T>(schema,
-            static (ref BinaryPayloadReader reader) => default,
-            static (ref BinaryPayloadReader reader, in T prior) => prior,
+            static (ref BareValueReader reader) => default,
+            static (ref BareValueReader reader, in T prior) => prior,
             static (in T state, IStateReferenceVisitor visitor) => { });
         private sealed class NoOperations;
     }

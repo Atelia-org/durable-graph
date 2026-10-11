@@ -1,6 +1,5 @@
 using Atelia.DurableGraph.Schema;
-using Atelia.DurableGraph.Serialization;
-using Atelia.Rbf;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -19,9 +18,9 @@ public sealed class RepresentationHeaderTests : IDisposable {
         byte[] golden = Convert.FromHexString(hex);
         Assert.Equal(golden, BaseObjectBodyCodec.Encode(new(id), new([0xAB])).Body.ToArray());
         // Independently specified bytes keep integer-width boundaries visible.
-        BinaryPayloadReader reader = new(golden);
+        BareValueReader reader = new(golden);
         Assert.Equal(4, reader.ReadByte());
-        Assert.Equal(id, reader.ReadUInt32());
+        Assert.Equal(id, reader.ReadVarUInt32());
         Assert.Equal(0xAB, reader.ReadByte());
         reader.EnsureFullyConsumed();
     }
@@ -31,14 +30,14 @@ public sealed class RepresentationHeaderTests : IDisposable {
         string path = NewPath();
         ObjectLayout[] layouts = Enumerable.Range(2, 16383)
             .Select(value => ObjectLayout.ForDurable(new DurableSchema($"Type{value}", 1))).ToArray();
-        using (IRbfFile file = RbfFile.CreateNew(path)) {
-            SchemaStore schemas = new(file);
+        using (GraphResources file = GraphResources.CreateNew(path)) {
+            SchemaStore schemas = file.Schemas;
             RepresentationId[] ids = schemas.RegisterRepresentations(layouts);
             Assert.Equal(new RepresentationId(2), ids[0]);
             Assert.Equal(new RepresentationId(16384), ids[^1]);
         }
-        using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
-        SchemaStore restored = new(reopened, readOnly: true);
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        SchemaStore restored = reopened.Schemas;
         foreach ((uint id, string hex) in new (uint, string)[] {
             (127, "047FAB"), (128, "048001AB"), (16383, "04FF7FAB"), (16384, "04808001AB")
         }) {
@@ -58,17 +57,17 @@ public sealed class RepresentationHeaderTests : IDisposable {
         ObjectLayout arrayLayout = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array,
             new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point)));
         string path = NewPath();
-        using (IRbfFile file = RbfFile.CreateNew(path)) {
-            SchemaStore schemas = new(file);
+        using (GraphResources file = GraphResources.CreateNew(path)) {
+            SchemaStore schemas = file.Schemas;
             RepresentationId[] ids = schemas.RegisterRepresentations([classLayout, arrayLayout]);
             // Point's inline Schema occupies node 3 before its array owner receives node 4.
             Assert.Equal(new[] { new RepresentationId(2), new RepresentationId(4) }, ids);
             Assert.Equal(Convert.FromHexString("0402AB"), BaseObjectBodyCodec.Encode(ids[0], new([0xAB])).Body.ToArray());
             Assert.Equal(Convert.FromHexString("0404AB"), BaseObjectBodyCodec.Encode(ids[1], new([0xAB])).Body.ToArray());
         }
-        using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
-        SchemaStore restored = new(reopened, readOnly: true);
-        long tail = reopened.TailOffset;
+        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        SchemaStore restored = reopened.Schemas;
+        long tail = DataBytes(reopened.Data);
         var durable = BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB"), restored);
         var array = BaseObjectBodyCodec.Decode(Convert.FromHexString("0404AB"), restored);
         Assert.Equal(classLayout, durable.Layout);
@@ -78,7 +77,7 @@ public sealed class RepresentationHeaderTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => restored.GetRepresentation(new(3)));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0403AB"), restored));
         Assert.Same(restored.GetRequired("Point", 2), array.Layout.Array!.ElementSlot.InlineSchema);
-        Assert.Equal(tail, reopened.TailOffset);
+        Assert.Equal(tail, DataBytes(reopened.Data));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB")));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString("0404AB")));
     }
@@ -102,8 +101,8 @@ public sealed class RepresentationHeaderTests : IDisposable {
     [InlineData("03020203410001AB")]
     [InlineData("0303010402AB")]
     public void RetiredBaseFormatsFailClosedEvenWhenSchemasAreAvailable(string hex) {
-        using IRbfFile file = RbfFile.CreateNew(NewPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NewPath());
+        SchemaStore schemas = file.Schemas;
         schemas.RegisterRepresentations([ObjectLayout.ForDurable(new DurableSchema("A", 1))]);
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), schemas));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));
@@ -113,16 +112,22 @@ public sealed class RepresentationHeaderTests : IDisposable {
     [InlineData("0400")]
     [InlineData("0402")]
     [InlineData("047F")]
-    [InlineData("048100")]
     [InlineData("04FFFFFFFF1F")]
     [InlineData("04808080808000")]
     [InlineData("00")]
     [InlineData("05")]
     public void InvalidOrUnknownIdAndVersionFailClosed(string hex) {
-        using IRbfFile file = RbfFile.CreateNew(NewPath());
-        SchemaStore schemas = new(file);
+        using GraphResources file = GraphResources.CreateNew(NewPath());
+        SchemaStore schemas = file.Schemas;
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), schemas));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));
+    }
+
+    [Fact]
+    public void HeaderAcceptsBoundedRedundantRepresentationId() {
+        var decoded = BaseObjectBodyCodec.Decode(Convert.FromHexString("048100AB"));
+        Assert.Equal(RepresentationId.String, decoded.RepresentationId);
+        Assert.Equal(new byte[] { 0xAB }, decoded.Body.ToArray());
     }
 
     [Theory]
@@ -152,6 +157,6 @@ public sealed class RepresentationHeaderTests : IDisposable {
     }
 
     public void Dispose() {
-        foreach (string path in _paths) { File.Delete(path); }
+        foreach (string path in _paths) { DeleteTestPath(path); }
     }
 }

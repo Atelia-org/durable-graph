@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
@@ -27,7 +28,7 @@ internal sealed class ListStateReader<TState, TOps> : ListStateReader
     internal override ObjectStateRecord Read(ObjectId id, IStateBodySource source) {
         ArgumentNullException.ThrowIfNull(source);
         if (id.IsNull || source.Count <= 0) { throw new InvalidDataException("A List requires a nonzero ID and a Base body."); }
-        BinaryPayloadReader reader = new(source.GetBody(0));
+        BareValueReader reader = new(source.GetBody(0));
         FrozenListState<TState> state = ListStateBody<TState, TOps>.ReadBase(ref reader, Layout.List!);
         reader.EnsureFullyConsumed();
         for (int index = 1; index < source.Count; index++) {
@@ -55,13 +56,13 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
 
     internal static PreparedBaseBody PrepareBase(FrozenListState<TState> state, ListLayout layout) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt32((uint)state.Count);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32((uint)state.Count);
         foreach (ref readonly TState element in state.Elements) { TOps.WriteBase(ref writer, in element, layout.ElementSlot); }
         return new(buffer.WrittenSpan);
     }
 
-    internal static FrozenListState<TState> ReadBase(ref BinaryPayloadReader reader, ListLayout layout) {
+    internal static FrozenListState<TState> ReadBase(ref BareValueReader reader, ListLayout layout) {
         int count = ReadCount(ref reader);
         RequireTailFits(count, ref reader, layout);
         TState[] elements = new TState[count];
@@ -94,8 +95,8 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         // NoChange is a property of the two sequences, not of the matcher or its search budget.
         if (!changed) {
             ArrayBufferWriter<byte> buffer = new();
-            BinaryPayloadWriter writer = new(buffer);
-            writer.WriteUInt32((uint)current.Count);
+            BareValueWriter writer = new(buffer);
+            writer.WriteVarUInt32((uint)current.Count);
             if (current.Count > 0) { WriteSourceRange(ref writer, Copy, 0, current.Count); }
             observation = new(ListDeltaCompetitionOutcome.NoChange, buffer.WrittenCount, 0, 0);
             return new(false, buffer.WrittenSpan);
@@ -125,13 +126,13 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         if (exclusiveByteLimit.HasValue) { ArgumentOutOfRangeException.ThrowIfNegative(exclusiveByteLimit.Value); }
         result = null;
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt32((uint)current.Count);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32((uint)current.Count);
         if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
         foreach (ListDeltaRange range in ranges) {
             if (range.OldStart < 0) {
                 writer.WriteByte(New);
-                writer.WriteUInt32((uint)range.Count);
+                writer.WriteVarUInt32((uint)range.Count);
                 if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
                 for (int index = 0; index < range.Count; index++) {
                     TOps.WriteBase(ref writer, in current.OwnedElements[range.NewStart + index], layout.ElementSlot);
@@ -149,17 +150,17 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
                     if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
                     rangeStarted = true;
                 }
-                writer.WriteUInt32((uint)index + 1);
+                writer.WriteVarUInt32((uint)index + 1);
                 if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
                 PreparedDeltaBody delta = TOps.PrepareDelta(in oldValue, in newValue, layout.ElementSlot);
                 if (!delta.HasChanges) {
                     throw new InvalidOperationException("List element StateEquals and PrepareDelta disagree about a changed value.");
                 }
-                writer.WriteSpan(delta.Body);
+                writer.WriteRawBytes(delta.Body);
                 if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
             }
             if (rangeStarted) {
-                writer.WriteUInt32(0);
+                writer.WriteVarUInt32(0);
             } else {
                 WriteSourceRange(ref writer, Copy, range.OldStart, range.Count);
             }
@@ -175,7 +176,7 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         return exclusiveByteLimit.HasValue && writtenBytes >= exclusiveByteLimit.Value;
     }
 
-    internal static FrozenListState<TState> ApplyDelta(ref BinaryPayloadReader reader, FrozenListState<TState> prior, ListLayout layout) {
+    internal static FrozenListState<TState> ApplyDelta(ref BareValueReader reader, FrozenListState<TState> prior, ListLayout layout) {
         int count = ReadCount(ref reader);
         TState[]? elements = null;
         int output = 0;
@@ -195,7 +196,7 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
             if (operation is not (Copy or CopyAndPatch)) {
                 throw new InvalidDataException("Unknown List Delta operation.");
             }
-            uint source = reader.ReadUInt32();
+            uint source = reader.ReadVarUInt32();
             int rangeLength = ReadRangeLength(ref reader, count - output);
             if (source > (uint)prior.Count || rangeLength > prior.Count - (int)source) {
                 throw new InvalidDataException("List Delta source range is outside the prior state.");
@@ -205,7 +206,7 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
             if (operation == CopyAndPatch) {
                 uint previous = 0;
                 while (true) {
-                    uint encoded = reader.ReadUInt32();
+                    uint encoded = reader.ReadVarUInt32();
                     if (encoded == 0) {
                         if (previous == 0) { throw new InvalidDataException("A List CopyAndPatch operation must change an element."); }
                         break;
@@ -224,31 +225,31 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         return new(elements ?? [], takeOwnership: true);
     }
 
-    private static int ReadRangeLength(ref BinaryPayloadReader reader, int remaining) {
-        uint length = reader.ReadUInt32();
+    private static int ReadRangeLength(ref BareValueReader reader, int remaining) {
+        uint length = reader.ReadVarUInt32();
         if (length == 0 || length > remaining) {
             throw new InvalidDataException("List Delta range length must be positive and fit the remaining output.");
         }
         return (int)length;
     }
 
-    private static void WriteSourceRange(ref BinaryPayloadWriter writer, byte operation, int start, int count) {
+    private static void WriteSourceRange(ref BareValueWriter writer, byte operation, int start, int count) {
         writer.WriteByte(operation);
-        writer.WriteUInt32((uint)start);
-        writer.WriteUInt32((uint)count);
+        writer.WriteVarUInt32((uint)start);
+        writer.WriteVarUInt32((uint)count);
     }
 
     internal static void VisitReferences(FrozenListState<TState> state, IStateReferenceVisitor visitor, ListLayout layout) {
         foreach (ref readonly TState element in state.Elements) { TOps.VisitReferences(in element, visitor, layout.ElementSlot); }
     }
 
-    private static int ReadCount(ref BinaryPayloadReader reader) {
-        uint count = reader.ReadUInt32();
+    private static int ReadCount(ref BareValueReader reader) {
+        uint count = reader.ReadVarUInt32();
         if (count > Array.MaxLength) { throw new InvalidDataException("List count exceeds the supported CLR buffer length."); }
         return (int)count;
     }
 
-    private static void RequireTailFits(int count, ref BinaryPayloadReader reader, ListLayout layout) {
+    private static void RequireTailFits(int count, ref BareValueReader reader, ListLayout layout) {
         int minimum = StateBodySize.MinimumBaseBytes(layout.ElementSlot);
         if (minimum > 0 && count > reader.RemainingCount / minimum) {
             throw new InvalidDataException("List elements cannot fit in the remaining payload.");

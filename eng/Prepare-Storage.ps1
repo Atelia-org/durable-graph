@@ -1,37 +1,35 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Published')]
 param(
-    [string] $OutputDirectory
+    [Parameter(ParameterSetName = 'Published')][string] $OutputDirectory,
+    [Parameter(Mandatory, ParameterSetName = 'Local')][string] $StoragePackageSource
 )
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pin = [xml](Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'StorageDependency.props'))
-function Read-PublishedPin([string] $Name, [string] $Pattern) {
-    # Read the explicit public defaults, not the MSBuild expressions implementing dev overrides.
+function Read-StoragePin([string] $Name, [string] $Pattern) {
+    # Read the explicit defaults, not the MSBuild expressions implementing dev overrides.
     $values = @($pin.SelectNodes("/Project/PropertyGroup/$Name") | ForEach-Object { $_.InnerText.Trim() } | Where-Object { $_ -match $Pattern })
-    if ($values.Count -ne 1) { throw "Expected one explicit published value for $Name in StorageDependency.props." }
+    if ($values.Count -ne 1) { throw "Expected one explicit value for $Name in StorageDependency.props." }
     return $values[0]
 }
 $versionPattern = '^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$'
 $revisionPattern = '^[0-9a-fA-F]{40}$'
-$version = Read-PublishedPin 'StoragePackageVersion' $versionPattern
-$revision = Read-PublishedPin 'StorageSourceRevision' $revisionPattern
-$segmentVersion = Read-PublishedPin 'StorageRbfSegmentStorePackageVersion' $versionPattern
-$segmentRevision = Read-PublishedPin 'StorageRbfSegmentStoreSourceRevision' $revisionPattern
-$journalVersion = Read-PublishedPin 'StorageEventJournalPackageVersion' $versionPattern
-$journalRevision = Read-PublishedPin 'StorageEventJournalSourceRevision' $revisionPattern
+$version = Read-StoragePin 'StoragePackageVersion' $versionPattern
+$revision = Read-StoragePin 'StorageSourceRevision' $revisionPattern
 $pinRepositoryUrl = $pin.SelectSingleNode('/Project/PropertyGroup/StorageRepositoryUrl').InnerText.Trim()
 if (!$OutputDirectory) {
     # A new public pin gets a new feed; existing same-version package bytes are never overwritten.
-    $OutputDirectory = Join-Path $repositoryRoot ".artifacts/storage-feed/base-$version-segments-$segmentVersion-journal-$journalVersion"
+    $OutputDirectory = Join-Path $repositoryRoot ".artifacts/storage-feed/$version"
 }
 $OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 $packagePins = @(
     [pscustomobject]@{ Id = 'Atelia.Primitives'; Version = $version; Revision = $revision },
     [pscustomobject]@{ Id = 'Atelia.Data'; Version = $version; Revision = $revision },
     [pscustomobject]@{ Id = 'Atelia.Rbf'; Version = $version; Revision = $revision },
-    [pscustomobject]@{ Id = 'Atelia.RbfSegmentStore'; Version = $segmentVersion; Revision = $segmentRevision },
-    [pscustomobject]@{ Id = 'Atelia.EventJournal'; Version = $journalVersion; Revision = $journalRevision }
+    [pscustomobject]@{ Id = 'Atelia.Binary'; Version = $version; Revision = $revision },
+    [pscustomobject]@{ Id = 'Atelia.FrameStore'; Version = $version; Revision = $revision },
+    [pscustomobject]@{ Id = 'Atelia.VersionStore'; Version = $version; Revision = $revision }
 )
 $manifestPath = Join-Path $OutputDirectory 'manifest.published.json'
 $expectedRepository = $pinRepositoryUrl.TrimEnd('/') -replace '\.git$', ''
@@ -42,13 +40,13 @@ function Get-PackageUrl($Package) {
     return "https://api.nuget.org/v3-flatcontainer/$lowerId/$lowerVersion/$lowerId.$lowerVersion.nupkg"
 }
 
-function Assert-PublishedPackage([string] $Path, $Package) {
+function Assert-StoragePackage([string] $Path, $Package, [bool] $RequireSignature) {
     $archive = [IO.Compression.ZipFile]::OpenRead($Path)
     try {
         $entries = @($archive.Entries | Where-Object { $_.FullName.EndsWith('.nuspec', [StringComparison]::OrdinalIgnoreCase) })
         if ($entries.Count -ne 1) { throw "Expected one nuspec in $Path" }
         # Presence is checked here. This is not full signature trust-chain verification.
-        if (!$archive.GetEntry('.signature.p7s')) { throw "Expected a signed nuget.org package: $Path" }
+        if ($RequireSignature -and !$archive.GetEntry('.signature.p7s')) { throw "Expected a signed nuget.org package: $Path" }
         $settings = [Xml.XmlReaderSettings]::new()
         $settings.DtdProcessing = [Xml.DtdProcessing]::Prohibit
         $settings.XmlResolver = $null
@@ -83,7 +81,7 @@ function Read-VerifiedManifest {
     }
     $manifestRepository = ([string]$manifest.repositoryUrl).TrimEnd('/') -replace '\.git$', ''
     if ($manifestRepository -ine $expectedRepository) { throw "Storage manifest names a different repository: $manifestPath" }
-    if (@($manifest.packages).Count -ne $packagePins.Count) { throw 'Expected exactly five published storage packages in the manifest.' }
+    if (@($manifest.packages).Count -ne $packagePins.Count) { throw 'Expected exactly six published storage packages in the manifest.' }
     foreach ($package in $packagePins) {
         $recorded = @($manifest.packages | Where-Object { $_.id -ceq $package.Id })
         if ($recorded.Count -ne 1 -or $recorded[0].file -cne "$($package.Id).$($package.Version).nupkg" -or
@@ -91,24 +89,52 @@ function Read-VerifiedManifest {
             $recorded[0].url -cne (Get-PackageUrl $package)) { throw "Unexpected storage manifest entry for $($package.Id)." }
         $path = Join-Path $OutputDirectory $recorded[0].file
         if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing storage package: $path" }
-        Assert-PublishedPackage $path $package
+        Assert-StoragePackage $path $package $true
         if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $recorded[0].sha256) { throw "Storage package bytes changed: $path" }
     }
     return $manifest
 }
 
 function New-FeedResult($Manifest) {
-    # Version/Revision are retained for callers needing the base trio; Packages is the complete provenance.
+    # Version/Revision describe the complete six-package set; Packages carries verified bytes.
     return [pscustomobject]@{
         PackageSource = $OutputDirectory; Version = $version; Revision = $revision
-        RbfSegmentStoreVersion = $segmentVersion; EventJournalVersion = $journalVersion
         Packages = $Manifest.packages
     }
 }
 
+if ($PSCmdlet.ParameterSetName -eq 'Local') {
+    $OutputDirectory = (Resolve-Path -LiteralPath $StoragePackageSource).Path
+    $sourceManifestPath = Join-Path $OutputDirectory "manifest.$version.json"
+    if (!(Test-Path -LiteralPath $sourceManifestPath -PathType Leaf)) {
+        throw "Expected the upstream Pack manifest for pinned ${version}: $sourceManifestPath"
+    }
+    $sourceManifest = Get-Content -Raw -LiteralPath $sourceManifestPath | ConvertFrom-Json
+    $sourceRepository = ([string]$sourceManifest.repositoryUrl).TrimEnd('/') -replace '\.git$', ''
+    if ($sourceManifest.schemaVersion -ne 1 -or $sourceManifest.version -cne $version -or
+        $sourceManifest.sourceRevision -ine $revision -or $sourceRepository -ine $expectedRepository -or
+        @($sourceManifest.packages).Count -ne $packagePins.Count) {
+        throw "Local storage manifest does not identify the pinned six-package set: $sourceManifestPath"
+    }
+    $packages = foreach ($package in $packagePins) {
+        $recorded = @($sourceManifest.packages | Where-Object { $_.id -ceq $package.Id })
+        $file = "$($package.Id).$version.nupkg"
+        if ($recorded.Count -ne 1 -or $recorded[0].file -cne $file) {
+            throw "Unexpected local storage manifest entry for $($package.Id)."
+        }
+        $path = Join-Path $OutputDirectory $file
+        Assert-StoragePackage $path $package $false
+        $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($hash -ine $recorded[0].sha256) { throw "Local storage package bytes changed: $path" }
+        [pscustomobject]@{ id = $package.Id; version = $version; sourceRevision = $revision; file = $file; sha256 = $hash }
+    }
+    Write-Host "Verified local storage packages $version from $revision in $OutputDirectory"
+    return New-FeedResult ([pscustomobject]@{ packages = @($packages) })
+}
+
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     $manifest = Read-VerifiedManifest
-    Write-Host "Published storage packages ready: base=$version, segments=$segmentVersion, journal=$journalVersion in $OutputDirectory"
+    Write-Host "Published storage packages ready: $version in $OutputDirectory"
     return New-FeedResult $manifest
 }
 
@@ -128,8 +154,11 @@ try {
         $path = Join-Path $downloadDirectory $file
         $url = Get-PackageUrl $package
         Write-Host "Downloading $($package.Id)/$($package.Version) from nuget.org"
-        Invoke-WebRequest -Uri $url -OutFile $path
-        Assert-PublishedPackage $path $package
+        try { Invoke-WebRequest -Uri $url -OutFile $path }
+        catch {
+            throw "Cannot download pinned $($package.Id)/$version from nuget.org. The DB-086 dev candidate has not been publicly published. Use -StoragePackageSource with a verified upstream Pack feed, or build/test with UseStorageSources=true and StorageSourceRoot. See docs/storage-dependency.md. Download error: $($_.Exception.Message)"
+        }
+        Assert-StoragePackage $path $package $true
         [pscustomobject]@{
             id = $package.Id; version = $package.Version; sourceRevision = $package.Revision
             file = $file; url = $url; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -143,7 +172,7 @@ try {
     }
     $temporaryManifest = Join-Path $downloadDirectory 'manifest.published.json'
     [IO.File]::WriteAllText($temporaryManifest, ($manifest | ConvertTo-Json -Depth 5) + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-    # Only publish the feed after all five downloads and checks succeed. Move never
+    # Only publish the feed after all six downloads and checks succeed. Move never
     # overwrites an existing file; the manifest is the final completion marker.
     [void][IO.Directory]::CreateDirectory($OutputDirectory)
     foreach ($package in $packages) {
@@ -157,5 +186,5 @@ finally {
     [IO.Directory]::Delete($downloadDirectory, $false)
 }
 $manifest = Read-VerifiedManifest
-Write-Host "Published storage packages prepared: base=$version, segments=$segmentVersion, journal=$journalVersion in $OutputDirectory"
+Write-Host "Published storage packages prepared: $version in $OutputDirectory"
 New-FeedResult $manifest

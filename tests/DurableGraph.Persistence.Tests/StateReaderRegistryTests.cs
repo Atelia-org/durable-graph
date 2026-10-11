@@ -22,7 +22,7 @@ public sealed class StateReaderRegistryTests {
 
     private static StateReaderBinding<byte> Binding(DurableSchema schema) => new(
         schema,
-        static (ref BinaryPayloadReader reader) => reader.ReadByte(),
-        static (ref BinaryPayloadReader reader, in byte prior) => reader.ReadByte(),
+        static (ref BareValueReader reader) => reader.ReadByte(),
+        static (ref BareValueReader reader, in byte prior) => reader.ReadByte(),
         static (in byte state, IStateReferenceVisitor visitor) => { });
 }

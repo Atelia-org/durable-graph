@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Serialization;
 
@@ -35,7 +36,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertPrepareDeltaDoesNotPrecompare(generated);
         Assert.DoesNotContain("typeof(", generated.Split("namespace Atelia.DurableGraph.Generated {")[1]);
         Assert.Contains(".PrepareDeltaBody(in prior.Segment0Field1", generated);
-        Assert.Contains("writer.WriteSpan(delta0.Body)", generated);
+        Assert.Contains("writer.WriteRawBytes(delta0.Body)", generated);
     }
 
     [Fact]
@@ -59,7 +60,6 @@ public sealed partial class DurableSchemaGeneratorTests {
             "01010100", // Redundant leaf bool.
             "01010200", // Redundant leaf uint.
             "01010400000000", // Redundant exact floating bits.
-            "0101028200", // Noncanonical uint.
             "01010102", // Invalid bool.
             "0000", // Extra body after unchanged owner.
             "0301070102000000800100", // Valid Delta with tail.
@@ -104,7 +104,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         """ + FusedDeltaHostMethods("Item", 1) + """
             public static bool RefHydration() {
                 Leaf.ConstructorCalls = 0;
-                var reader = new BinaryPayloadReader(Convert.FromHexString("01020000008001"));
+                var reader = new BareValueReader(Convert.FromHexString("01020000008001"));
                 var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
                 var objects = new ObjectReadTable(StringReadTable.Decode(Array.Empty<(ObjectId, ReadOnlyMemory<byte>)>()),

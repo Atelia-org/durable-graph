@@ -4,8 +4,8 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using State = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.State;
 
@@ -14,16 +14,16 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 /// <summary>White-box optimization witnesses; public ReadPair does not guarantee cross-graph identity.</summary>
 public sealed class SharedGraphReaderTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-shared-reader-{Guid.NewGuid():N}");
-    private readonly IRbfFile _schemaFile;
+    private readonly GraphResources _schemaFile;
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
 
     public SharedGraphReaderTests() {
         Directory.CreateDirectory(_root);
-        _schemaFile = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_schemaFile);
-        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _schemaFile = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _schemaFile.Schemas;
+        _segments = _schemaFile.Data;
         _store = new(_segments);
     }
 
@@ -230,7 +230,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
         FrameAddress second = Reuse(first, 1, 2);
         StateModelSnapshot models = SharedReadModel.Models(currentVersion: 2,
             normalize: row => row.GetState<State>() with { Next = default, Alias = default }).Snapshot(_schemas);
-        long stateTail = Tail(), schemaTail = _schemaFile.TailOffset;
+        long stateTail = Tail(), schemaTail = DataBytes(_schemaFile.Data);
         (Node First, Node Second)? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair<Node, Node>(
@@ -238,7 +238,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
 
         Assert.Null(delivered);
         Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, _schemaFile.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_schemaFile.Data));
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
             hydratedValues.Add(node.Value);
             if (node.Value == 20) throw new InvalidDataException("Second view hydration failed.");
         }).Snapshot(_schemas);
-        long stateTail = Tail(), schemaTail = _schemaFile.TailOffset;
+        long stateTail = Tail(), schemaTail = DataBytes(_schemaFile.Data);
         (Node First, Node Second)? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair<Node, Node>(
@@ -259,7 +259,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
         Assert.Null(delivered);
         Assert.Equal(new byte[] { 10, 20 }, hydratedValues);
         Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, _schemaFile.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_schemaFile.Data));
     }
 
     [Theory]
@@ -337,10 +337,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
     private static ObjectVersionRecord String(uint id, string value) => ObjectVersionRecord.CreateBase(id,
         BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
 
-    private long Tail() {
-        using RbfSegmentWriterLease lease = _segments.OpenActiveWriter();
-        return lease.File.TailOffset;
-    }
+    private long Tail() => DataBytes(_segments);
 
     public void Dispose() {
         _store.Dispose();
@@ -380,7 +377,7 @@ internal static class SharedReadModel {
             prepareDelta ?? (static (in State prior, in State next) => new(prior != next, Base(next).Body)),
             includeEquality ? equality ?? (static (in State left, in State right) => left == right) : null);
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema, Read,
-            static (ref BinaryPayloadReader input, in State prior) => Read(ref input), Visit);
+            static (ref BareValueReader input, in State prior) => Read(ref input), Visit);
         StateModelBinding<Node, State> model = new(preparation,
             currentVersion == 1 ? [Reader(Schema)] : [Reader(Schema), Reader(current)],
             normalize ?? (static row => row.GetState<State>()), allocate ?? (static () => new()),
@@ -406,17 +403,17 @@ internal static class SharedReadModel {
         visitor.VisitObject(state.Links, LinksType);
     }
 
-    private static State Read(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()),
-        new(reader.ReadUInt32()), reader.ReadByte(), new(reader.ReadUInt32()));
+    private static State Read(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()),
+        new(reader.ReadVarUInt32()), reader.ReadByte(), new(reader.ReadVarUInt32()));
 
     internal static PreparedBaseBody Base(in State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Next.Value);
-        writer.WriteUInt32(state.Alias.Value);
-        writer.WriteUInt32(state.Text.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Next.Value);
+        writer.WriteVarUInt32(state.Alias.Value);
+        writer.WriteVarUInt32(state.Text.Value);
         writer.WriteByte(state.Value);
-        writer.WriteUInt32(state.Links.Value);
+        writer.WriteVarUInt32(state.Links.Value);
         return new(bytes.WrittenSpan);
     }
 

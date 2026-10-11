@@ -1,6 +1,6 @@
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
+using Atelia.Binary;
 using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.Persistence;
@@ -11,46 +11,44 @@ internal static class SchemaCatalogWireCodec {
     internal const byte Version = 2;
     internal const int MaximumDepth = 256;
 
-    internal static byte[] Write(IReadOnlyList<SchemaCatalogEntry> entries,
-        IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry> registered) {
+    internal static byte[] Write(IReadOnlyList<SchemaCatalogEntry> entries) {
         ArgumentNullException.ThrowIfNull(entries);
-        ArgumentNullException.ThrowIfNull(registered);
-        if (entries.Count == 0) { throw new ArgumentException("A catalog batch must not be empty.", nameof(entries)); }
+        if (entries.Count == 0) { throw new ArgumentException("A catalog snapshot must not be empty.", nameof(entries)); }
         try {
-            var state = new ValidationState(registered);
+            var state = new ValidationState();
             var buffer = new LimitedBufferWriter();
-            var writer = new BinaryPayloadWriter(buffer);
+            var writer = new BareValueWriter(buffer);
             writer.WriteByte(Version);
-            writer.WriteUInt32((uint)entries.Count);
+            writer.WriteVarUInt32((uint)entries.Count);
             foreach (SchemaCatalogEntry entry in entries) {
                 ArgumentNullException.ThrowIfNull(entry);
-                writer.WriteUInt32(entry.Id.Value);
+                writer.WriteVarUInt32(entry.Id.Value);
                 if (entry.Schema is { } schema) {
                     writer.WriteByte((byte)schema.Kind);
                     TypeExprWireCodec.Write(ref writer, schema.Type);
-                    writer.WriteUInt32((uint)schema.Version);
-                    writer.WriteUInt32(schema.BaseSchema is { } ancestor
+                    writer.WriteVarUInt32((uint)schema.Version);
+                    writer.WriteVarUInt32(schema.BaseSchema is { } ancestor
                         ? state.RequireSchema(ancestor, SchemaKind.ReferenceObject).Value : 0);
-                    writer.WriteUInt32((uint)schema.Fields.Length);
+                    writer.WriteVarUInt32((uint)schema.Fields.Length);
                     foreach (DurableFieldInfo field in schema.Fields) {
-                        writer.WriteUInt32((uint)field.FieldId);
+                        writer.WriteVarUInt32((uint)field.FieldId);
                         WriteSlot(ref writer, field, state);
                     }
                 }
                 else if (entry.Array is { } array) {
                     writer.WriteByte(3);
-                    writer.WriteUInt32(array.CodecVersion);
+                    writer.WriteVarUInt32(array.CodecVersion);
                     writer.WriteByte((byte)array.Constructor);
                     WriteSlot(ref writer, array.ElementSlot, state);
                 }
                 else if (entry.List is { } list) {
                     writer.WriteByte(4);
-                    writer.WriteUInt32(list.CodecVersion);
+                    writer.WriteVarUInt32(list.CodecVersion);
                     WriteSlot(ref writer, list.ElementSlot, state);
                 }
                 else {
                     writer.WriteByte(5);
-                    writer.WriteUInt32(entry.Dictionary!.CodecVersion);
+                    writer.WriteVarUInt32(entry.Dictionary!.CodecVersion);
                     WriteSlot(ref writer, entry.Dictionary.KeySlot, state);
                     WriteSlot(ref writer, entry.Dictionary.ValueSlot, state);
                 }
@@ -61,38 +59,36 @@ internal static class SchemaCatalogWireCodec {
         catch (InvalidDataException error) { throw new ArgumentException(error.Message, nameof(entries), error); }
     }
 
-    internal static SchemaCatalogEntry[] Read(ReadOnlySpan<byte> payload,
-        IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry> registered) {
-        ArgumentNullException.ThrowIfNull(registered);
-        var reader = new BinaryPayloadReader(payload);
+    internal static SchemaCatalogEntry[] Read(ReadOnlySpan<byte> payload) {
+        var reader = new BareValueReader(payload);
         if (reader.ReadByte() != Version) { throw new InvalidDataException("Unknown Schema catalog version."); }
-        uint count = reader.ReadUInt32();
+        uint count = reader.ReadVarUInt32();
         // The shortest row is a List: ID, kind, codec version, slot.
         if (count == 0 || count > (uint)reader.RemainingCount / 4) {
             throw new InvalidDataException("Invalid Schema catalog row count.");
         }
-        var state = new ValidationState(registered);
+        var state = new ValidationState();
         var result = new SchemaCatalogEntry[(int)count];
         for (int i = 0; i < result.Length; i++) {
-            var id = new RepresentationId(reader.ReadUInt32());
+            var id = new RepresentationId(reader.ReadVarUInt32());
             byte kind = reader.ReadByte();
             SchemaCatalogEntry entry;
             try {
                 if (kind is 1 or 2) {
                     TypeExpr type = TypeExprWireCodec.Read(ref reader);
-                    uint version = reader.ReadUInt32();
+                    uint version = reader.ReadVarUInt32();
                     if (type.Kind != TypeExprKind.Named || version == 0 || version > int.MaxValue) {
                         throw new InvalidDataException("A Schema requires a closed named type and a positive Int32 version.");
                     }
-                    uint baseId = reader.ReadUInt32();
+                    uint baseId = reader.ReadVarUInt32();
                     if (kind == 2 && baseId != 0) { throw new InvalidDataException("An inline Schema cannot have a base."); }
                     DurableSchema? ancestor = baseId == 0 ? null : state.ResolveSchema(new(baseId), SchemaKind.ReferenceObject);
-                    uint fieldCount = reader.ReadUInt32();
+                    uint fieldCount = reader.ReadVarUInt32();
                     if (fieldCount > (uint)reader.RemainingCount / 2) { throw new InvalidDataException("Invalid Schema field count."); }
                     var fields = new DurableFieldInfo[(int)fieldCount];
                     uint previousField = 0;
                     for (int j = 0; j < fields.Length; j++) {
-                        uint fieldId = reader.ReadUInt32();
+                        uint fieldId = reader.ReadVarUInt32();
                         if (fieldId <= previousField || fieldId > int.MaxValue) {
                             throw new InvalidDataException("Schema field IDs must be positive, strictly increasing Int32 values.");
                         }
@@ -102,7 +98,7 @@ internal static class SchemaCatalogWireCodec {
                     entry = SchemaCatalogEntry.ForSchema(id, new(type, (int)version, fields, ancestor, (SchemaKind)kind));
                 }
                 else if (kind == 3) {
-                    uint codecVersion = reader.ReadUInt32();
+                    uint codecVersion = reader.ReadVarUInt32();
                     byte constructor = reader.ReadByte();
                     if (codecVersion != 1 || constructor is < 4 or > 7) {
                         throw new InvalidDataException("Unsupported array codec version or constructor.");
@@ -110,12 +106,12 @@ internal static class SchemaCatalogWireCodec {
                     entry = SchemaCatalogEntry.ForArray(id, new((TypeExprKind)constructor, ReadSlot(ref reader, 1, state), codecVersion));
                 }
                 else if (kind == 4) {
-                    uint codecVersion = reader.ReadUInt32();
+                    uint codecVersion = reader.ReadVarUInt32();
                     if (codecVersion != 2) { throw new InvalidDataException("Unsupported List codec version."); }
                     entry = SchemaCatalogEntry.ForList(id, new(ReadSlot(ref reader, 1, state), codecVersion));
                 }
                 else if (kind == 5) {
-                    uint codecVersion = reader.ReadUInt32();
+                    uint codecVersion = reader.ReadVarUInt32();
                     if (codecVersion != 1) { throw new InvalidDataException("Unsupported Dictionary codec version."); }
                     DurableFieldInfo keySlot = ReadSlot(ref reader, 1, state);
                     DurableFieldInfo valueSlot = ReadSlot(ref reader, 2, state);
@@ -133,16 +129,16 @@ internal static class SchemaCatalogWireCodec {
 
     internal static SchemaKey Key(DurableSchema schema) => new(schema.Type, schema.Version);
 
-    private static void WriteSlot(ref BinaryPayloadWriter writer, DurableFieldInfo field, ValidationState state) {
+    private static void WriteSlot(ref BareValueWriter writer, DurableFieldInfo field, ValidationState state) {
         writer.WriteByte((byte)field.TypeTag);
         if (field.TypeTag == TypeTag.Nullable) { WriteSlot(ref writer, field.NullableLayout!.ElementSlot, state); }
         else if (field.TypeTag == TypeTag.ObjectReference) { TypeExprWireCodec.Write(ref writer, field.TargetType!); }
         else if (field.TypeTag == TypeTag.InlineValue) {
-            writer.WriteUInt32(state.RequireSchema(field.InlineSchema!, SchemaKind.InlineValue).Value);
+            writer.WriteVarUInt32(state.RequireSchema(field.InlineSchema!, SchemaKind.InlineValue).Value);
         }
     }
 
-    private static DurableFieldInfo ReadSlot(ref BinaryPayloadReader reader, int fieldId, ValidationState state, bool nullableChild = false) {
+    private static DurableFieldInfo ReadSlot(ref BareValueReader reader, int fieldId, ValidationState state, bool nullableChild = false) {
         byte tag = reader.ReadByte();
         if (tag == 18) {
             if (nullableChild) { throw new InvalidDataException("A Nullable child cannot itself be Nullable."); }
@@ -152,7 +148,7 @@ internal static class SchemaCatalogWireCodec {
         if (tag == 15) { return DurableFieldInfo.Reference(fieldId, TypeExprWireCodec.Read(ref reader)); }
         if (tag == 16) {
             return new(fieldId, TypeTag.InlineValue,
-                inlineSchema: state.ResolveSchema(new(reader.ReadUInt32()), SchemaKind.InlineValue));
+                inlineSchema: state.ResolveSchema(new(reader.ReadVarUInt32()), SchemaKind.InlineValue));
         }
         throw new InvalidDataException($"Unknown field slot tag {tag}.");
     }
@@ -167,13 +163,6 @@ internal static class SchemaCatalogWireCodec {
         private readonly Dictionary<string, SchemaKind> _kinds = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _arities = new(StringComparer.Ordinal);
         private ulong _next = 2;
-
-        internal ValidationState(IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry> registered) {
-            foreach ((RepresentationId id, SchemaCatalogEntry entry) in registered.OrderBy(static pair => pair.Key.Value)) {
-                if (id != entry.Id) { throw new InvalidDataException("Catalog index does not match its node ID."); }
-                Add(entry);
-            }
-        }
 
         internal DurableSchema ResolveSchema(RepresentationId id, SchemaKind kind) {
             if (!_nodes.TryGetValue(id, out SchemaCatalogEntry? entry) || entry.Schema is not { } schema || schema.Kind != kind) {
@@ -268,11 +257,13 @@ internal static class SchemaCatalogWireCodec {
     private sealed class LimitedBufferWriter : IBufferWriter<byte> {
         private readonly ArrayBufferWriter<byte> _buffer = new();
         public void Advance(int count) { Check(count); _buffer.Advance(count); }
-        public Memory<byte> GetMemory(int sizeHint = 0) { Check(Math.Max(sizeHint, 1)); return _buffer.GetMemory(sizeHint); }
-        public Span<byte> GetSpan(int sizeHint = 0) { Check(Math.Max(sizeHint, 1)); return _buffer.GetSpan(sizeHint); }
+        // A writer can request a maximum-width span and advance only its actual encoding.
+        // Enforce the payload limit on Advance, not on that temporary capacity hint.
+        public Memory<byte> GetMemory(int sizeHint = 0) => _buffer.GetMemory(sizeHint);
+        public Span<byte> GetSpan(int sizeHint = 0) => _buffer.GetSpan(sizeHint);
         private void Check(int size) {
             if (size < 0 || size > RbfFile.MaxPayloadAndMetaLength - _buffer.WrittenCount) {
-                throw new ArgumentException("Schema catalog batch exceeds the maximum RBF payload length.");
+                throw new ArgumentException("Schema catalog snapshot exceeds the maximum FrameStore payload length.");
             }
         }
         internal byte[] ToArray() => _buffer.WrittenSpan.ToArray();

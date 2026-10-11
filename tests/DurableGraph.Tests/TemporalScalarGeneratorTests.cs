@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Serialization;
@@ -15,8 +16,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string generated = GeneratedSource(run, family ? "DurableGenericStates.g.cs" : "DurableStates.g.cs");
         if (!family) Assert.DoesNotContain(run.GeneratedSources, item => item.HintName == "DurableGenericStates.g.cs");
         foreach (string type in new[] { "DateOnly", "TimeOnly", "DateTimeOffset" }) {
-            Assert.Contains("writer.Write" + type + "(", generated);
-            Assert.Contains("reader.Read" + type + "()", generated);
+            Assert.Contains("BclValueCodec.Write" + type + "(ref writer, ", generated);
+            Assert.Contains("BclValueCodec.Read" + type + "(ref reader)", generated);
         }
         Assert.Contains(".EqualsExact(", generated);
         Assert.DoesNotContain("ValueSlotCodec", generated);
@@ -141,19 +142,19 @@ public sealed partial class DurableSchemaGeneratorTests {
             private static readonly DurableSchema Schema = new("Item",1,
                 new DurableFieldInfo(1,TypeTag.DateOnly),new DurableFieldInfo(2,TypeTag.TimeOnly),new DurableFieldInfo(3,TypeTag.DateTimeOffset));
             public static PreparedDeltaBody Prepare1(byte[] oldBytes,byte[] newBytes) {
-                var oldReader=new BinaryPayloadReader(oldBytes);var newReader=new BinaryPayloadReader(newBytes);
+                var oldReader=new BareValueReader(oldBytes);var newReader=new BareValueReader(newBytes);
                 var prior=Body.Read(ref oldReader,Schema);var current=Body.Read(ref newReader,Schema);
                 oldReader.EnsureFullyConsumed();newReader.EnsureFullyConsumed();
                 return Body.PrepareDelta(in prior,in current,Schema);
             }
             public static byte[] Apply1(byte[] oldBytes,byte[] delta) {
-                var oldReader=new BinaryPayloadReader(oldBytes);var reader=new BinaryPayloadReader(delta);
+                var oldReader=new BareValueReader(oldBytes);var reader=new BareValueReader(delta);
                 var prior=Body.Read(ref oldReader,Schema);var current=Body.Apply(ref reader,in prior,Schema);
                 oldReader.EnsureFullyConsumed();reader.EnsureFullyConsumed();
                 return Body.PrepareBase(in current,Schema).Body.ToArray();
             }
             public static bool Equal(byte[] left,byte[] right) {
-                var l=new BinaryPayloadReader(left);var r=new BinaryPayloadReader(right);
+                var l=new BareValueReader(left);var r=new BareValueReader(right);
                 var first=Body.Read(ref l,Schema);var second=Body.Read(ref r,Schema);
                 return Body.StateEquals(in first,in second,Schema);
             }

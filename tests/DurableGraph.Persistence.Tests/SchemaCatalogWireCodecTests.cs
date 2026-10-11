@@ -38,7 +38,6 @@ public sealed class SchemaCatalogWireCodecTests {
     [InlineData("0201020102034100010001808080800801")] // Field exceeds Int32.
     [InlineData("0201020102034100000000")] // Schema version zero.
     [InlineData("020102010203410080808080080000")] // Schema version exceeds Int32.
-    [InlineData("020102010203410001800000")] // Noncanonical base ID zero.
     [InlineData("020102010203410001000000")] // Trailing bytes.
     [InlineData("0201020102034100010300")] // Future base.
     [InlineData("0201020102034100010200")] // Self base.
@@ -48,48 +47,53 @@ public sealed class SchemaCatalogWireCodecTests {
     [InlineData("0201020002034100010000")] // Unknown row kind.
     [InlineData("0201030102034100010000")] // Initial ID gap.
     [InlineData("0201020102034100010000030102034200010000")] // Uncounted row.
-    public void MalformedCanonicalDefinitionsAreRejected(string hex) {
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), SchemaCatalogTestData.Empty));
+    public void MalformedDefinitionsAreRejected(string hex) {
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex)));
+    }
+
+    [Fact]
+    public void BoundedRedundantBaseIdIsAcceptedAndWriterUsesShortestEncoding() {
+        byte[] redundant = Convert.FromHexString("020102010203410001800000");
+        DurableSchema schema = Assert.Single(SchemaCatalogWireCodec.Read(redundant)).Schema!;
+        Assert.Equal(new DurableSchema("A", 1), schema);
+        Assert.Equal(Convert.FromHexString("0201020102034100010000"), SchemaCatalogTestData.Write([schema]));
     }
 
     [Fact]
     public void EveryTruncatedPrefixIsRejected() {
         byte[] valid = Convert.FromHexString("02010201020341000100010102");
-        Assert.Single(SchemaCatalogWireCodec.Read(valid, SchemaCatalogTestData.Empty));
+        Assert.Single(SchemaCatalogWireCodec.Read(valid));
         for (int length = 0; length < valid.Length; length++) {
             byte[] prefix = valid[..length];
-            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix, SchemaCatalogTestData.Empty));
+            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix));
             Assert.True(error is InvalidDataException or EndOfStreamException, $"Prefix {length}: {error}");
         }
     }
 
     [Fact]
-    public void ExistingExactAncestorResolvesAndRepeatedKeyCannotAliasAnotherId() {
+    public void ExactAncestorResolvesAndRepeatedKeyCannotAliasAnotherId() {
         DurableSchema ancestor = new("Base", 3, new DurableFieldInfo(1, TypeTag.Int64));
-        var registered = SchemaCatalogTestData.Registered(ancestor);
         DurableSchema derived = new("Leaf", 1, [], ancestor);
-        var result = SchemaCatalogTestData.Read(SchemaCatalogTestData.Write([derived], registered), registered);
-        Assert.Same(ancestor, result[new("Leaf", 1)].BaseSchema);
-        // ID 3 has the same key as existing ID 2, but a different body.
-        byte[] conflict = Convert.FromHexString("0201030102094261736500030000");
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(conflict, registered));
-        byte[] identicalAlias = Convert.FromHexString("02010301020942617365000300010103");
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(identicalAlias, registered));
-        Assert.Single(registered);
+        var result = SchemaCatalogTestData.Read(SchemaCatalogTestData.Write([ancestor, derived]));
+        Assert.Same(result[new("Base", 3)], result[new("Leaf", 1)].BaseSchema);
+        foreach (DurableSchema alias in new[] { ancestor, new DurableSchema("Base", 3) }) {
+            byte[] bytes = CatalogTestData.Encode(CatalogTestData.Schemas([ancestor, alias]));
+            Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(bytes));
+        }
+        DurableSchema mismatched = new("Base", 3, new DurableFieldInfo(1, TypeTag.String));
+        Assert.Throws<ArgumentException>(() => SchemaCatalogTestData.Write([mismatched, derived]));
     }
 
     [Fact]
-    public void MaximumDepthIncludesPreviouslyRegisteredDependencies() {
+    public void MaximumDepthIncludesAllEarlierDependenciesInSnapshot() {
         DurableSchema[] valid = Chain(256);
-        var registered = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(valid), SchemaCatalogTestData.Empty)
-            .ToDictionary(entry => entry.Id);
-        Assert.Equal(256, registered.Count);
-        // ID 258, Type256 v1, base ID 257 gives depth 257.
-        byte[] beyondLimit = Convert.FromHexString("0201820201020F547970653235360001810200");
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(beyondLimit, registered));
-        // Two different versions of family A in one exact ancestor lineage are invalid.
+        Assert.Equal(256, SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(valid)).Length);
+        DurableSchema[] tooDeep = Chain(257);
+        Assert.Throws<ArgumentException>(() => SchemaCatalogTestData.Write(tooDeep));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(CatalogTestData.Schemas(tooDeep))));
+        // Two versions of one family in an exact ancestor lineage remain invalid.
         byte[] repeatedIdentity = Convert.FromHexString("0202020102034100010000030102034100020200");
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(repeatedIdentity, SchemaCatalogTestData.Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(repeatedIdentity));
     }
 
     [Fact]

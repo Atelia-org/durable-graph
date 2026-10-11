@@ -3,8 +3,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -33,10 +32,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = oldScope.Load(app1).GetType("CrossHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var oldModels = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-            using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-            using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-            SchemaStore schemas = new(file, readOnly: true);
-            var revision = RevisionDecoder.ReadSnapshot(new(segments), schemas, original, oldModels.Snapshot(schemas));
+            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            SchemaStore schemas = segments.Schemas;
+            var revision = RevisionDecoder.ReadSnapshot(segments.States, schemas, original, oldModels.Snapshot(schemas));
             exactWorld = Assert.Single(revision.Objects, row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
 
@@ -59,10 +57,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(currentHost.GetMethod("MissingListRuleFailsWithoutPublishing")!
             .CreateDelegate<Func<string, bool>>()(directory.Path));
         var models = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state")))
-        using (var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            SchemaStore schemas = new(file, readOnly: true);
-            var decoded = RevisionDecoder.ReadSnapshot(new(segments), schemas, original, models.Snapshot(schemas));
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path))
+        {
+            SchemaStore schemas = segments.Schemas;
+            var decoded = RevisionDecoder.ReadSnapshot(segments.States, schemas, original, models.Snapshot(schemas));
             var world = Assert.Single(decoded.Objects, row => row.Schema?.SchemaId == "CrossWorld");
             Assert.Equal(exactWorld, world.Schema);
             Assert.Equal(1, world.Schema!.Version);
@@ -71,8 +69,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"))) {
-            using StateRevisionStore states = new(segments);
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+            using StateRevisionStore states = new(segments.Data);
             Assert.Equal(2, states.Read(addresses[0]).LocalObjects.Count);
             Assert.All(states.Read(addresses[0]).LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             foreach (int index in new[] { 1, 3 }) {
@@ -101,10 +99,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = oldScope.Load(app1).GetType("CrossHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, true);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-            using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-            using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-            SchemaStore schemas = new(file, readOnly: true);
-            prior = Assert.Single(RevisionDecoder.ReadSnapshot(new(segments), schemas, original, models.Snapshot(schemas)).Objects,
+            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            SchemaStore schemas = segments.Schemas;
+            prior = Assert.Single(RevisionDecoder.ReadSnapshot(segments.States, schemas, original, models.Snapshot(schemas)).Objects,
                 row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
         // Generate valid retained history first, then explicitly omit its historical value
@@ -177,6 +174,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using CrossHistoryRemote;
         using I=Atelia.DurableGraph.Generated.Family_4C6F63616C496E6C696E65;
         using W=Atelia.DurableGraph.Generated.Family_43726F7373576F726C64;

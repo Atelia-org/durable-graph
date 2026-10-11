@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 
@@ -28,11 +29,11 @@ public sealed partial class Character {
         externalCopy[0] = 0xFF;
         // Reuse the prepared bytes directly, including after another Prepare and an external mutation.
         for (int attempt = 0; attempt < 2; attempt++) {
-            BinaryPayloadReader reader = new(delta.Body);
+            BareValueReader reader = new(delta.Body);
             var applied = __DurableState.ApplyDeltaBodyV1(ref reader, in prior);
             reader.EnsureFullyConsumed();
             ArrayBufferWriter<byte> buffer = new();
-            BinaryPayloadWriter writer = new(buffer);
+            BareValueWriter writer = new(buffer);
             __DurableState.WriteBaseBody(ref writer, in applied);
             if (!buffer.WrittenSpan.SequenceEqual(new byte[] { 0x01, 0x23, 0x56 }) ||
                 __DurableState.PrepareDeltaBody(in applied, in current).HasChanges) {
@@ -40,7 +41,7 @@ public sealed partial class Character {
             }
         }
 
-        BinaryPayloadReader noChangeReader = new(unchanged.Body);
+        BareValueReader noChangeReader = new(unchanged.Body);
         var retained = __DurableState.ApplyDeltaBodyV1(ref noChangeReader, in prior);
         noChangeReader.EnsureFullyConsumed();
         if (__DurableState.PrepareDeltaBody(in retained, in prior).HasChanges ||
@@ -51,7 +52,7 @@ public sealed partial class Character {
 
         try {
             // Three slots cannot use bitmap bit 3.
-            BinaryPayloadReader malformed = new(new byte[] { 0x08 });
+            BareValueReader malformed = new(new byte[] { 0x08 });
             _ = __DurableState.ApplyDeltaBodyV1(ref malformed, in prior);
         }
         catch (InvalidDataException) {

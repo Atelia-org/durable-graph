@@ -41,7 +41,7 @@
 - 已吸纳：多 Segment 地址、soft rollover、对象链/存活目录分离、读放大 Base 预算与提交顺序。
   产品入口：[Storage](../src/DurableGraph.Storage/StateRevisionStore.cs)、
   [策略](../src/DurableGraph.Persistence/ReadAmplificationBaseBudgetPolicy.cs)、
-  [Repository](../src/DurableGraph.StateStore/GraphRepository.cs)。
+  [Repository](../src/DurableGraph.Persistence/Repository.cs)。
 - 未迁入：合成 workload/corpus、评估器、共享 Frame 冷读去重计量及 provisional envelope。
   它们是内存模型，不是产品 wire、性能或恢复保证。需要具体测量/策略研究时才恢复。
 - 在归档 worktree 的根执行：`dotnet test experiments/MultiSegmentStateStoreProbe/MultiSegmentStateStoreProbe.slnx`。
@@ -74,3 +74,16 @@ git worktree add --detach ../durable-graph-probe-archive research/probes-archive
 旧文档链接的标题中保留“原路径”；可将该路径接在 `git show <tag>:` 后查看对应文件。
 旧方案的状态与命令只在归档快照中解释，不是新施工授权。运行须具备原 .NET/包源环境；涉及相邻
 `atelia` 的历史命令还须核对其依赖，不承诺归档代码在未来 SDK 下持续可构建。
+
+## DB-086 旧存储迁移 lanes（2026-10-11）
+
+旧数据无需保留，旧栈格式不进入新的运行时验收。以下专属工件退出活动树；
+源码恢复点为 `c900edd5b3a921b7bf46df2ac0482dc39597e606`，按明确历史问题用 Git 读取，
+不随新 API 持续维护：
+
+- `PackageConsumerProbe/StorageExtractionConsumer` 与 `Run-StorageExtractionProbe.ps1`：固定 DG、替换旧五 storage 包、保留原帧。
+- `PackageConsumerProbe/OrganizationMigrationConsumer`、`OrganizationApiInventory` 与 `Run-OrganizationMigrationProbe.ps1`：旧/新 DG 组织迁移和 API 映射。
+- `PackageConsumerProbe/Run-DurableBaseMigrationProbe.ps1`：旧框架基类到 marker 的持久库迁移。
+
+当前新格式的模型升级、容器、跨程序集和冷进程 branch/tag 验收仍由
+[PackageConsumerProbe](PackageConsumerProbe/README.md) 的活动消费者承担。

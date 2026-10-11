@@ -1,9 +1,9 @@
+using Atelia.FrameStore;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Atelia.DurableGraph.Persistence;
-using Atelia.RbfSegmentStore;
 using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Tests;
@@ -73,7 +73,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string path = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
         try {
             using Repository repository = Repository.CreateNew(path, model.Models(),
-                new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+                64L * 1024 * 1024 * 1024);
             repository.PreparedStateReuseEnabled = true;
             repository.ImmutableLeafReuseEnabled = enabled;
             var seed = SeedLeafMeasurement(repository, model, scenario);

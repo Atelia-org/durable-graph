@@ -1,8 +1,7 @@
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -32,10 +31,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = scope.Load(app1).GetType("InheritanceHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, FrameAddress>>()(directory.Path);
             StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
-            using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-            using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-            SchemaStore schemas = new(schemaFile, readOnly: true);
-            exact = Assert.Single(RevisionDecoder.ReadSnapshot(new(segments), schemas, original, models.Snapshot(schemas)).Objects).Schema!;
+            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            SchemaStore schemas = segments.Schemas;
+            exact = Assert.Single(RevisionDecoder.ReadSnapshot(segments.States, schemas, original, models.Snapshot(schemas)).Objects).Schema!;
         }
         GeneratorTestRun bases2 = RunCrossAssemblyGenerator(InheritanceHistoryBases(2), history: baseHistory.ReadAdditionalTexts(), forceDefinitions: "true");
         var baseImage2 = EmitCrossAssemblyReference(bases2);
@@ -57,10 +55,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Null(current.Load(bases2).GetType("InheritanceHistoryBases.LegacyHidden"));
         Type currentHost = current.Load(app2).GetType("InheritanceHistoryApp.Host")!;
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
-        using (SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state")))
-        using (var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            SchemaStore schemas = new(schemaFile, readOnly: true);
-            var stored = Assert.Single(RevisionDecoder.ReadSnapshot(new(segments), schemas, original, currentModels.Snapshot(schemas)).Objects);
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path))
+        {
+            SchemaStore schemas = segments.Schemas;
+            var stored = Assert.Single(RevisionDecoder.ReadSnapshot(segments.States, schemas, original, currentModels.Snapshot(schemas)).Objects);
             Assert.Equal(exact, stored.Schema);
             Assert.Equal(1, stored.Schema!.Version);
             Assert.Equal(1, stored.Schema.BaseSchema!.Version);
@@ -69,8 +67,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(0, currentHost.GetMethod("Callbacks")!.CreateDelegate<Func<int>>()());
         }
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
-        using SegmentStore finalSegments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using StateRevisionStore states = new(finalSegments);
+        using GraphResources finalSegments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using StateRevisionStore states = new(finalSegments.Data);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(states.Read(addresses[0]).LocalObjects).Kind);
         foreach (int index in new[] { 1, 3 }) Assert.Empty(states.Read(addresses[index]).LocalObjects);
         ObjectVersionRecord delta = Assert.Single(states.Read(addresses[2]).LocalObjects);
@@ -179,6 +177,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         using InheritanceHistoryBases;
         using InheritanceHistoryMiddle;
         using L=Atelia.DurableGraph.Generated.Family_484C;

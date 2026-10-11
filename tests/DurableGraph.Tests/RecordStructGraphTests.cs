@@ -1,10 +1,10 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -15,10 +15,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var schemaFile = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         StateModelSnapshot snapshot = models.Snapshot(schemas);
         DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
         ObjectStateRecord primary = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
@@ -71,32 +70,32 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static (ObjectId OldName, ObjectId NewName) ReadRecordKeyReplacement(ReadOnlySpan<byte> body, long before, long after) {
-        BinaryPayloadReader reader = new(body);
-        Assert.Equal(1U, reader.ReadUInt32()); // Remove
-        Assert.Equal(0, reader.ReadInt32());
-        ObjectId oldName = new(reader.ReadUInt32());
-        Assert.Equal(before, reader.ReadInt64());
-        Assert.Equal(0U, reader.ReadUInt32()); // PatchValue
-        Assert.Equal(1U, reader.ReadUInt32()); // Add
-        Assert.Equal(0, reader.ReadInt32());
-        ObjectId newName = new(reader.ReadUInt32());
-        Assert.Equal(after, reader.ReadInt64());
-        Assert.Equal(1000, reader.ReadInt32());
-        Assert.NotEqual(0U, reader.ReadUInt32()); // Value.Owner still names World.
+        BareValueReader reader = new(body);
+        Assert.Equal(1U, reader.ReadVarUInt32()); // Remove
+        Assert.Equal(0, reader.ReadVarInt32());
+        ObjectId oldName = new(reader.ReadVarUInt32());
+        Assert.Equal(before, reader.ReadVarInt64());
+        Assert.Equal(0U, reader.ReadVarUInt32()); // PatchValue
+        Assert.Equal(1U, reader.ReadVarUInt32()); // Add
+        Assert.Equal(0, reader.ReadVarInt32());
+        ObjectId newName = new(reader.ReadVarUInt32());
+        Assert.Equal(after, reader.ReadVarInt64());
+        Assert.Equal(1000, reader.ReadVarInt32());
+        Assert.NotEqual(0U, reader.ReadVarUInt32()); // Value.Owner still names World.
         reader.EnsureFullyConsumed();
         return (oldName, newName);
     }
 
     private static void ReadRecordValuePatch(ReadOnlySpan<byte> body, int amount) {
-        BinaryPayloadReader reader = new(body);
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(1, reader.ReadInt32()); // Key.Part
-        Assert.NotEqual(0U, reader.ReadUInt32()); // Key.Name
-        Assert.Equal(101L, reader.ReadInt64());
-        Assert.Equal(1U, reader.ReadUInt32()); // Value's inline field mask, only Part changes.
-        Assert.Equal(amount, reader.ReadInt32());
-        Assert.Equal(0U, reader.ReadUInt32());
+        BareValueReader reader = new(body);
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(1, reader.ReadVarInt32()); // Key.Part
+        Assert.NotEqual(0U, reader.ReadVarUInt32()); // Key.Name
+        Assert.Equal(101L, reader.ReadVarInt64());
+        Assert.Equal(1U, reader.ReadVarUInt32()); // Value's inline field mask, only Part changes.
+        Assert.Equal(amount, reader.ReadVarInt32());
+        Assert.Equal(0U, reader.ReadVarUInt32());
         reader.EnsureFullyConsumed();
     }
 
@@ -111,6 +110,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace RecordGraph;
         [DurableType("record.Key",1)] public readonly partial record struct Key<T>(
             [field:DurableField(1)] T Part,

@@ -1,6 +1,6 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
-using Atelia.EventJournal;
-using StateFrameAddress = Atelia.DurableGraph.Storage.FrameAddress;
+using StateFrameAddress = Atelia.FrameStore.FrameAddress;
 
 namespace Atelia.DurableGraph;
 
@@ -23,15 +23,15 @@ public sealed class CheckpointAddress : IEquatable<CheckpointAddress> {
     }
 
     internal object Owner { get; }
-    internal EventAddress Address { get; }
-    internal EventAddress? Parent { get; }
+    internal FrameAddress Address { get; }
+    internal FrameAddress? Parent { get; }
     /// <summary>The graph's State/Event role, independently of its domain root's CLR type.</summary>
     public GraphFrameKind Kind { get; }
     /// <summary>The underlying StateRevision address for diagnostics, not a cross-reopen bookmark.</summary>
     public StateFrameAddress RevisionAddress { get; }
     /// <summary>The root's object identity interpreted within this graph's StateRevision.</summary>
     public ObjectId RootId { get; }
-    /// <summary>Compares the issuing open repository and committed Journal position.</summary>
+    /// <summary>Compares the issuing open repository and committed graph position.</summary>
     public bool Equals(CheckpointAddress? other) => other is not null && ReferenceEquals(Owner, other.Owner) && Address == other.Address;
     public override bool Equals(object? obj) => obj is CheckpointAddress other && Equals(other);
     public override int GetHashCode() => HashCode.Combine(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Owner), Address);

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Build;
 using Microsoft.CodeAnalysis;
 
@@ -75,7 +76,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static byte[] Capture() {
                 var state = Leaf.__DurableState.Capture(new Leaf());
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                 return buffer.WrittenSpan.ToArray();
             }
@@ -121,12 +122,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                         throw new Exception("Current DTO schema mismatch.");
                     }
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }
                 public static byte[] RoundTripV1(byte[] bytes) {
-                    var reader = new BinaryPayloadReader(bytes);
+                    var reader = new BareValueReader(bytes);
                     var state = Leaf.__DurableState.ReadBaseBodyV1(ref reader);
                     reader.EnsureFullyConsumed();
                     if (state.Segment0Field1 != -17 || !state.Segment1Field1 || state.Segment2Field1 != 42 ||
@@ -135,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                         throw new Exception("Historical DTO or exact ancestry mismatch.");
                     }
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Leaf.__DurableState.WriteBaseBody(ref writer, in state);
                     return buffer.WrittenSpan.ToArray();
                 }

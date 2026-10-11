@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
@@ -10,8 +11,8 @@ internal interface IStateBodySource {
     ReadOnlySpan<byte> GetBody(int index);
 }
 
-public delegate TState StateBaseReader<TState>(ref BinaryPayloadReader reader) where TState : unmanaged;
-public delegate TState StateDeltaApplier<TState>(ref BinaryPayloadReader reader, in TState prior) where TState : unmanaged;
+public delegate TState StateBaseReader<TState>(ref BareValueReader reader) where TState : unmanaged;
+public delegate TState StateDeltaApplier<TState>(ref BareValueReader reader, in TState prior) where TState : unmanaged;
 
 /// <summary>One exact Schema and its typed body reader, erased only at the object boundary.</summary>
 /// <remarks>Reading does not create a capture candidate or install a session baseline.</remarks>
@@ -82,7 +83,7 @@ internal static class StateBodyDecoder {
         if (count <= 0) {
             throw new InvalidDataException("An object body source requires a Base.");
         }
-        BinaryPayloadReader reader = new(source.GetBody(0));
+        BareValueReader reader = new(source.GetBody(0));
         TState state = readBase(ref reader);
         reader.EnsureFullyConsumed();
         for (int index = 1; index < count; index++) {

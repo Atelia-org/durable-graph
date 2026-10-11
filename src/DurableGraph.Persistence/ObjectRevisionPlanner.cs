@@ -1,3 +1,4 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Storage;
 
 namespace Atelia.DurableGraph.Persistence;
@@ -67,7 +68,7 @@ internal static class ObjectRevisionPlanner {
         for (int index = 0; index < rows.Length; index++) {
             PreparedObject row = rows[index];
             long? deltaBytes = row.ChangeKind == ObjectSaveChangeKind.Update
-                ? ObjectVersionPayloadSize.EstimateDeltaPayloadBytesUpperBound(row.DeltaBody!.Body.Length, row.PriorAddress!.Value)
+                ? ObjectVersionPayloadSize.GetDeltaPayloadBytes(row.DeltaBody!.Body.Length, row.PriorAddress!.Value)
                 : null;
             long? reconstructionBytes = row.ChangeKind is ObjectSaveChangeKind.Update or ObjectSaveChangeKind.NoChange
                 ? source is null
@@ -94,7 +95,7 @@ internal static class ObjectRevisionPlanner {
             ? records.Select(static record => record.ObjectId).ToHashSet() : null;
         StateRevision revision;
         if (independentSnapshot || (removedIds.Length != 0 &&
-            IsObjectHeadMapBaseSmaller(rows, localIds!, parentHeads, removedIds))) {
+            IsObjectHeadMapBaseSmaller(rows, localIds!, removedIds))) {
             // Membership is the candidate closure, while each actual policy-selected write
             // remains local (including an optional Base for an unchanged object).
             revision = StateRevision.CreateObjectHeadMapBase(parentRevisionAddress, records,
@@ -109,21 +110,18 @@ internal static class ObjectRevisionPlanner {
     }
 
     private static bool IsObjectHeadMapBaseSmaller(PreparedObject[] rows, HashSet<uint> localIds,
-        IReadOnlyDictionary<ObjectId, FrameAddress> parentHeads, uint[] removedIds) {
+        uint[] removedIds) {
         // The Parent and local records are identical in both representations. Compare
-        // only the v3 directory suffix, including its count and each ObjectId.
+        // only the directory suffix, including its count and each ObjectId.
         long deltaBytes = VarUIntBytes((ulong)removedIds.Length);
         foreach (uint id in removedIds) { deltaBytes += VarUIntBytes(id); }
-        long baseUpperBytes = VarUIntBytes((ulong)(rows.Length - localIds.Count));
+        long baseBytes = VarUIntBytes((ulong)(rows.Length - localIds.Count));
         foreach (PreparedObject row in rows) {
             if (localIds.Contains(row.ObjectId.Value)) { continue; }
-            // Rollover chooses the file scope later. UInt32 backward file distance
-            // costs at most five bytes; the old ticket is already known exactly.
-            baseUpperBytes += VarUIntBytes(row.ObjectId.Value) + 5
-                + VarUIntBytes(parentHeads[row.ObjectId].FrameTicket.Serialize());
-            if (baseUpperBytes >= deltaBytes) { return false; }
+            baseBytes += VarUIntBytes(row.ObjectId.Value) + FrameAddress.EncodedSize;
+            if (baseBytes >= deltaBytes) { return false; }
         }
-        return baseUpperBytes < deltaBytes; // Ties retain Delta, including no external heads.
+        return baseBytes < deltaBytes; // Ties retain Delta, including no external heads.
     }
 
     private static int VarUIntBytes(ulong value) {

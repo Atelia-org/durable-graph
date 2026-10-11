@@ -1,3 +1,4 @@
+using Atelia.Binary;
 namespace Atelia.DurableGraph.Serialization;
 
 /// <summary>
@@ -6,8 +7,8 @@ namespace Atelia.DurableGraph.Serialization;
 /// </summary>
 internal abstract class ArrayElementCodec {
     internal abstract Type ArrayType { get; }
-    internal abstract void ReadElements(ref BinaryPayloadReader reader, Array target);
-    internal abstract void WriteElements(ref BinaryPayloadWriter writer, Array source);
+    internal abstract void ReadElements(ref BareValueReader reader, Array target);
+    internal abstract void WriteElements(ref BareValueWriter writer, Array source);
 
     protected void ValidateArray(Array array, string parameterName) {
         ArgumentNullException.ThrowIfNull(array, parameterName);
@@ -20,7 +21,7 @@ internal abstract class ArrayElementCodec {
 internal sealed class VectorElementCodec<T>(ValueSlotCodec<T> slot) : ArrayElementCodec where T : struct {
     internal override Type ArrayType => typeof(T[]);
 
-    internal override void ReadElements(ref BinaryPayloadReader reader, Array target) {
+    internal override void ReadElements(ref BareValueReader reader, Array target) {
         ValidateArray(target, nameof(target));
         var values = (T[])target;
         for (int index = 0; index < values.Length; index++) {
@@ -28,7 +29,7 @@ internal sealed class VectorElementCodec<T>(ValueSlotCodec<T> slot) : ArrayEleme
         }
     }
 
-    internal override void WriteElements(ref BinaryPayloadWriter writer, Array source) {
+    internal override void WriteElements(ref BareValueWriter writer, Array source) {
         ValidateArray(source, nameof(source));
         var values = (T[])source;
         for (int index = 0; index < values.Length; index++) {
@@ -40,7 +41,7 @@ internal sealed class VectorElementCodec<T>(ValueSlotCodec<T> slot) : ArrayEleme
 internal sealed class Array2ElementCodec<T>(ValueSlotCodec<T> slot) : ArrayElementCodec where T : struct {
     internal override Type ArrayType => typeof(T[,]);
 
-    internal override void ReadElements(ref BinaryPayloadReader reader, Array target) {
+    internal override void ReadElements(ref BareValueReader reader, Array target) {
         ValidateArray(target, nameof(target));
         var values = (T[,])target;
         int length0 = values.GetLength(0);
@@ -58,7 +59,7 @@ internal sealed class Array2ElementCodec<T>(ValueSlotCodec<T> slot) : ArrayEleme
         }
     }
 
-    internal override void WriteElements(ref BinaryPayloadWriter writer, Array source) {
+    internal override void WriteElements(ref BareValueWriter writer, Array source) {
         ValidateArray(source, nameof(source));
         var values = (T[,])source;
         int length0 = values.GetLength(0);

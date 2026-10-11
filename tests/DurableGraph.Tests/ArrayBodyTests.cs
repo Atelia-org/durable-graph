@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -89,7 +90,7 @@ public sealed class ArrayBodyTests {
         Assert.Equal(5, CountingOps.Preparations);
         Assert.True(delta.HasChanges);
         Assert.Equal(new byte[] { 1, 18, 3, 16, 5, 14, 0 }, delta.Body.ToArray());
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         FrozenArrayState<int> applied = ArrayStateBody<int, CountingOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
         Assert.Equal(new[] { 9, 2, 8, 4, 7 }, applied.Elements.ToArray());
@@ -110,7 +111,6 @@ public sealed class ArrayBodyTests {
     [InlineData(typeof(EndOfStreamException), new byte[] { 1, 18 })] // missing terminator
     [InlineData(typeof(EndOfStreamException), new byte[] { 1 })] // truncated element
     [InlineData(typeof(InvalidDataException), new byte[] { 0, 0 })] // trailing byte
-    [InlineData(typeof(InvalidDataException), new byte[] { 128, 0 })] // noncanonical terminator
     public void MalformedDeltaFailsWithoutChangingPrior(Type exceptionType, byte[] delta) {
         ArrayObjectBinding binding = IntBinding(typeof(int[]));
         ObjectStateRecord prior = binding.Capture(new(1), new[] { 1, 2, 3 }, new CaptureSession().BeginCapture());
@@ -122,7 +122,7 @@ public sealed class ArrayBodyTests {
     }
 
     private static void ApplyIntDelta(byte[] delta, FrozenArrayState<int> prior, ArrayLayout layout) {
-        BinaryPayloadReader reader = new(delta);
+        BareValueReader reader = new(delta);
         _ = ArrayStateBody<int, Int32StateOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
     }
@@ -148,11 +148,11 @@ public sealed class ArrayBodyTests {
         ArrayObjectBinding binding = IntBinding(typeof(int[]));
         ArrayStateReader reader = ArrayStateReader.Create(binding.ArrayLayout, binding.ElementBinding);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt32(100_000_000);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32(100_000_000);
         Assert.Throws<InvalidDataException>(() => reader.Read(new(1), new Bodies(buffer.WrittenSpan.ToArray())));
         buffer.Clear();
-        writer.WriteUInt32(uint.MaxValue);
+        writer.WriteVarUInt32(uint.MaxValue);
         Assert.Throws<InvalidDataException>(() => reader.Read(new(1), new Bodies(buffer.WrittenSpan.ToArray())));
 
         DurableSchema schema = new("array.empty", 1, SchemaKind.InlineValue);
@@ -161,7 +161,7 @@ public sealed class ArrayBodyTests {
         FrozenArrayState<Empty> state = new(new(3), new Empty[3]);
         PreparedBaseBody body = ArrayStateBody<Empty, EmptyOps>.PrepareBase(state, layout);
         Assert.Equal(new byte[] { 3 }, body.Body.ToArray());
-        BinaryPayloadReader input = new(body.Body);
+        BareValueReader input = new(body.Body);
         FrozenArrayState<Empty> decoded = ArrayStateBody<Empty, EmptyOps>.ReadBase(ref input, layout);
         input.EnsureFullyConsumed();
         Assert.Equal(3, decoded.Shape.Count);
@@ -175,7 +175,7 @@ public sealed class ArrayBodyTests {
         FrozenArrayState<float> current = new(new(2), new[] { -0f, nan });
         PreparedDeltaBody delta = ArrayStateBody<float, SingleStateOps>.PrepareDelta(prior, current, layout);
         Assert.True(delta.HasChanges);
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         FrozenArrayState<float> applied = ArrayStateBody<float, SingleStateOps>.ApplyDelta(ref reader, prior, layout);
         Assert.Equal(int.MinValue, BitConverter.SingleToInt32Bits(applied[0]));
         Assert.Equal(BitConverter.SingleToInt32Bits(nan), BitConverter.SingleToInt32Bits(applied[1]));
@@ -195,23 +195,23 @@ public sealed class ArrayBodyTests {
     private readonly struct CountingOps : IStateOps<int> {
         public static bool StateEquals(in int left, in int right, DurableFieldInfo slot) => left == right;
         public static int Preparations;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int state, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in state, slot);
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
+        public static void WriteBase(ref BareValueWriter writer, in int state, DurableFieldInfo slot) => Int32StateOps.WriteBase(ref writer, in state, slot);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) {
             Preparations++;
             return Int32StateOps.PrepareDelta(in prior, in current, slot);
         }
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) => Int32StateOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in int state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 
     private readonly struct Empty { }
     private readonly struct EmptyOps : IStateOps<Empty> {
         public static bool StateEquals(in Empty left, in Empty right, DurableFieldInfo slot) => true;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Empty state, DurableFieldInfo slot) { }
-        public static Empty ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => default;
+        public static void WriteBase(ref BareValueWriter writer, in Empty state, DurableFieldInfo slot) { }
+        public static Empty ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => default;
         public static PreparedDeltaBody PrepareDelta(in Empty prior, in Empty current, DurableFieldInfo slot) => new(false, []);
-        public static Empty ApplyDelta(ref BinaryPayloadReader reader, in Empty prior, DurableFieldInfo slot) => throw new InvalidDataException();
+        public static Empty ApplyDelta(ref BareValueReader reader, in Empty prior, DurableFieldInfo slot) => throw new InvalidDataException();
         public static void VisitReferences(in Empty state, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }

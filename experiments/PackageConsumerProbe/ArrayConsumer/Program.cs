@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -5,16 +6,15 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using PointStates = Atelia.DurableGraph.Generated.Family_506F696E74;
 using WorldStates = Atelia.DurableGraph.Generated.Family_576F726C64;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 
 namespace ArrayPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static void Main(string[] args) {
@@ -72,7 +72,7 @@ internal static class Program {
                 "A same-layout Delta changed its inherited representation ID.");
         });
         CheckReorderedRegistration(directory, representations);
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{ProbeArtifacts.Format(historical)}:{worldId.Value}");
         using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
         using BranchCheckout restored = reopened.Checkout("main");
         CheckGraph(((World)restored.State!), 101);
@@ -80,8 +80,8 @@ internal static class Program {
 #else
     private static void Upgrade(string directory) {
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
-        FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
-        ObjectId worldId = new(uint.Parse(parts[2]));
+        FrameAddress historical = ProbeArtifacts.Parse(parts[0]);
+        ObjectId worldId = new(uint.Parse(parts[1]));
         ObjectId pointsId = default;
         Dictionary<uint, RepresentationId> historicalIds = [];
         Dictionary<RepresentationId, ObjectLayout> representations = [];
@@ -157,10 +157,8 @@ internal static class Program {
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
 
     private static Dictionary<uint, RepresentationId> CheckRepresentations(StateRevisionStore store, SchemaStore schemas,
@@ -170,9 +168,9 @@ internal static class Program {
         foreach (uint id in store.ReadLiveObjectHeadMap(address).Keys) {
             ObjectVersionChain chain = store.ReadObjectVersionChain(address, id);
             ReadOnlySpan<byte> bytes = chain.Records[0].Record.Body;
-            BinaryPayloadReader header = new(bytes);
+            BareValueReader header = new(bytes);
             Require(header.ReadByte() == 4, "New object Bases must use the representation-ID envelope.");
-            RepresentationId representation = new(header.ReadUInt32());
+            RepresentationId representation = new(header.ReadVarUInt32());
             ObjectLayout layout = schemas.GetRepresentation(representation);
             ObjectStateRecord exact = decoded.GetRequired(new ObjectId(id));
             Require(layout.Equals(exact.Layout), "Representation lookup changed the complete persisted layout.");
@@ -194,13 +192,13 @@ internal static class Program {
     private static void CheckReorderedRegistration(string directory, Dictionary<RepresentationId, ObjectLayout> representations) {
         // The read handles and repository have closed. Reopen a fresh writable directory and
         // request the complete set in reverse order; no process-local cache can supply its IDs.
-        using var file = RbfFile.OpenExisting(Path.Combine(directory, "schemas.rbf"));
-        SchemaStore schemas = new(file);
-        long before = file.TailOffset;
+        using GraphResources resources = GraphResources.OpenExisting(directory);
+        SchemaStore schemas = resources.Schemas;
+        long before = ProbeArtifacts.DataLength(directory);
         var requested = representations.OrderByDescending(pair => pair.Key.Value).ToArray();
         RepresentationId[] actual = schemas.RegisterRepresentations(requested.Select(pair => pair.Value).ToArray());
         Require(actual.SequenceEqual(requested.Select(pair => pair.Key)), "Reopening or request order reassigned persisted IDs.");
-        Require(file.TailOffset == before, "Registering existing representations must not append metadata.");
+        Require(ProbeArtifacts.DataLength(directory) == before, "Registering existing representations must not append metadata.");
         // Schema count is intentionally not a proxy: primitive/reference arrays are complete
         // representations without a corresponding user Schema registration.
     }

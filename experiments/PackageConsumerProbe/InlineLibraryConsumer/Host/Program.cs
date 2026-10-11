@@ -2,15 +2,14 @@ using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using InlineLibrary.App;
 using InlineLibrary.A;
 using InlineLibrary.B;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
     private static void Main(string[] args) {
         if (args.Length != 2) throw new ArgumentException("Expected seed|upgrade and database directory.");
@@ -52,7 +51,7 @@ internal static class Program {
             CheckSingleWrite(store, historical, worldId, ObjectVersionKind.Delta);
             Require(store.Read(noChange).LocalObjects.Count == 0, "Unchanged graph wrote objects.");
         });
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{ProbeArtifacts.Format(historical)}:{worldId.Value}");
         using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
             using BranchCheckout session = repository.Checkout("main");
             CheckGraph(((World)session.State!), 11, 20);
@@ -65,8 +64,8 @@ internal static class Program {
     private static void Upgrade(string directory) {
         Require(LibraryBCatalog.LegacyClrAbsent, "V2 must delete the old inline CLR declaration.");
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
-        FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
-        ObjectId worldId = new(uint.Parse(parts[2]));
+        FrameAddress historical = ProbeArtifacts.Parse(parts[0]);
+        ObjectId worldId = new(uint.Parse(parts[1]));
         Inspect(directory, (store, schemas) => CheckHistorical(store, schemas, historical, worldId));
         Require(AppCatalog.UpgradeCalls == 0, "Exact reading ran business upgrades.");
         FrameAddress rewritten, noChange, changed;
@@ -108,10 +107,8 @@ internal static class Program {
     private static void CheckGraph(World world, long value, long optional) => Require(world.IsValid(value, optional),
         "Current transitive private/readonly fields, Nullable or generic values changed.");
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
     private static void Require(bool condition, string message) {
         if (!condition) throw new InvalidOperationException(message);

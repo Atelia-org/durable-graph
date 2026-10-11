@@ -1,6 +1,6 @@
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 

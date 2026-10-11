@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
@@ -31,7 +32,7 @@ internal sealed class DictionaryStateReader<K, V, KOps, VOps> : DictionaryStateR
     internal override ObjectStateRecord Read(ObjectId id, IStateBodySource source) {
         ArgumentNullException.ThrowIfNull(source);
         if (id.IsNull || source.Count <= 0) { throw new InvalidDataException("A Dictionary requires a nonzero ID and a Base body."); }
-        BinaryPayloadReader reader = new(source.GetBody(0));
+        BareValueReader reader = new(source.GetBody(0));
         FrozenDictionaryState<K, V> state = DictionaryStateBody<K, V, KOps, VOps>.ReadBase(ref reader, Layout.Dictionary!);
         reader.EnsureFullyConsumed();
         for (int index = 1; index < source.Count; index++) {
@@ -63,18 +64,18 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         KeyIndex keys = Index(state, layout);
         ValidateLocalKeys(state, layout, keys);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         writer.WriteByte((byte)state.ComparerKind);
-        writer.WriteUInt32((uint)state.Count);
+        writer.WriteVarUInt32((uint)state.Count);
         for (int index = 0; index < state.Count; index++) {
-            writer.WriteSpan(keys.Bytes[index]);
+            writer.WriteRawBytes(keys.Bytes[index]);
             V value = state.Entries[index].Value;
             VOps.WriteBase(ref writer, in value, layout.ValueSlot);
         }
         return new(buffer.WrittenSpan);
     }
 
-    internal static FrozenDictionaryState<K, V> ReadBase(ref BinaryPayloadReader reader, DictionaryLayout layout) {
+    internal static FrozenDictionaryState<K, V> ReadBase(ref BareValueReader reader, DictionaryLayout layout) {
         DictionaryComparerKind kind = (DictionaryComparerKind)reader.ReadByte();
         DictionaryKeyPolicy.RequireStoredPolicy(kind, layout.KeySlot);
         int count = ReadCount(ref reader);
@@ -100,11 +101,11 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         ValidateLocalKeys(current, layout, newKeys);
         // TODO(DB-054): measure key-buffer reuse before adding persistent caches or StateHash.
         ArrayBufferWriter<byte> removals = new(), patches = new(), additions = new();
-        BinaryPayloadWriter removeWriter = new(removals), patchWriter = new(patches), addWriter = new(additions);
+        BareValueWriter removeWriter = new(removals), patchWriter = new(patches), addWriter = new(additions);
         uint removeCount = 0, patchCount = 0, addCount = 0;
         for (int index = 0; index < prior.Count; index++) {
             if (!newKeys.Offsets.ContainsKey(oldKeys.Bytes[index])) {
-                removeWriter.WriteSpan(oldKeys.Bytes[index]);
+                removeWriter.WriteRawBytes(oldKeys.Bytes[index]);
                 removeCount++;
             }
         }
@@ -115,27 +116,27 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
                 V oldValue = prior.Entries[previous].Value;
                 PreparedDeltaBody delta = VOps.PrepareDelta(in oldValue, in value, layout.ValueSlot);
                 if (!delta.HasChanges) { continue; }
-                patchWriter.WriteSpan(key);
-                patchWriter.WriteSpan(delta.Body);
+                patchWriter.WriteRawBytes(key);
+                patchWriter.WriteRawBytes(delta.Body);
                 patchCount++;
             } else {
-                addWriter.WriteSpan(key);
+                addWriter.WriteRawBytes(key);
                 VOps.WriteBase(ref addWriter, in value, layout.ValueSlot);
                 addCount++;
             }
         }
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt32(removeCount);
-        writer.WriteSpan(removals.WrittenSpan);
-        writer.WriteUInt32(patchCount);
-        writer.WriteSpan(patches.WrittenSpan);
-        writer.WriteUInt32(addCount);
-        writer.WriteSpan(additions.WrittenSpan);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32(removeCount);
+        writer.WriteRawBytes(removals.WrittenSpan);
+        writer.WriteVarUInt32(patchCount);
+        writer.WriteRawBytes(patches.WrittenSpan);
+        writer.WriteVarUInt32(addCount);
+        writer.WriteRawBytes(additions.WrittenSpan);
         return new(removeCount != 0 || patchCount != 0 || addCount != 0, buffer.WrittenSpan);
     }
 
-    internal static FrozenDictionaryState<K, V> ApplyDelta(ref BinaryPayloadReader reader, FrozenDictionaryState<K, V> prior,
+    internal static FrozenDictionaryState<K, V> ApplyDelta(ref BareValueReader reader, FrozenDictionaryState<K, V> prior,
         DictionaryLayout layout) {
         KeyIndex oldKeys = Index(prior, layout);
         ValidateLocalKeys(prior, layout, oldKeys);
@@ -257,12 +258,12 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
 
     private static byte[] EncodeKey(in K key, DictionaryLayout layout) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         KOps.WriteBase(ref writer, in key, layout.KeySlot);
         return buffer.WrittenSpan.ToArray();
     }
 
-    private static byte[] ReadKey(ref BinaryPayloadReader reader, DictionaryLayout layout, out K key) {
+    private static byte[] ReadKey(ref BareValueReader reader, DictionaryLayout layout, out K key) {
         key = KOps.ReadBase(ref reader, layout.KeySlot);
         return EncodeKey(in key, layout);
     }
@@ -271,13 +272,13 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         if (!operations.Add(encoded)) { throw new InvalidDataException("Dictionary Delta repeats a persistent key within or across operation groups."); }
     }
 
-    private static int ReadCount(ref BinaryPayloadReader reader) {
-        uint count = reader.ReadUInt32();
+    private static int ReadCount(ref BareValueReader reader) {
+        uint count = reader.ReadVarUInt32();
         if (count > Array.MaxLength) { throw new InvalidDataException("Dictionary count exceeds supported buffer length."); }
         return (int)count;
     }
 
-    private static void RequireTailFits(int count, ref BinaryPayloadReader reader, DictionaryLayout layout, bool values) {
+    private static void RequireTailFits(int count, ref BareValueReader reader, DictionaryLayout layout, bool values) {
         long minimum = StateBodySize.MinimumBaseBytes(layout.KeySlot);
         if (values) { minimum += StateBodySize.MinimumBaseBytes(layout.ValueSlot); }
         if (minimum > 0 && count > reader.RemainingCount / minimum) {

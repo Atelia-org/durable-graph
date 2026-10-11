@@ -7,7 +7,7 @@ Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-ImmutableLeafProbe.ps1
 ```
 
-Pass both `-PackageSource` and `-Version` to reuse an existing matching nine-package feed.
+Pass both `-PackageSource` and `-Version` to reuse an existing matching ten-package feed.
 Artifacts remain under the unique ignored `obj/immutable-leaf-*` run directory.
 
 Both consumers share one original model through a linked source file: a non-generic readonly

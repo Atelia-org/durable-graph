@@ -1,3 +1,4 @@
+using Atelia.FrameStore;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
@@ -48,7 +49,6 @@ internal sealed class NormalizedRevision {
             throw new InvalidOperationException("Only a private save candidate can prepare an installation.");
         }
         Dictionary<ObjectId, NormalizedObject> installed = new(_objects);
-        FileScope scope = new(address.FileNumber);
         foreach (ObjectVersionRecord record in revision.LocalObjects) {
             ObjectId id = new(record.ObjectId);
             NormalizedObject row = installed[id];
@@ -62,7 +62,7 @@ internal sealed class NormalizedRevision {
                     throw new InvalidDataException("An appended Delta must extend the committed object head.");
                 }
                 payloadBytes = checked(prior.ReconstructionPayloadBytes +
-                    ObjectVersionPayloadSize.GetDeltaPayloadBytes(record.Body.Length, prior.Head, scope));
+                    ObjectVersionPayloadSize.GetDeltaPayloadBytes(record.Body.Length, prior.Head));
             }
             installed[id] = row with { Storage = new ObjectStorageInfo(address, payloadBytes) };
         }

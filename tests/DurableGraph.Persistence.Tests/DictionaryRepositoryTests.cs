@@ -5,8 +5,8 @@ using System.Reflection;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -49,10 +49,10 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             Assert.Same(values, session.World.Values);
             Assert.Same(values, session.World.Alias);
         }
-        using (SegmentStore segments = OpenState())
-        using (IRbfFile file = RbfFile.OpenExisting(Path.Combine(_root, "schemas.rbf"))) {
+        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+            var segments = file.Data;
             using StateRevisionStore states = new(segments);
-            SchemaStore schemas = new(file, readOnly: true);
+            SchemaStore schemas = file.Schemas;
             Assert.Empty(states.Read(reordered).LocalObjects);
             Assert.Empty(states.Read(reordered).RemovedObjectIds);
             StateModelSnapshot snapshot = Models().Snapshot(schemas);
@@ -165,19 +165,19 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     public void ExactReadRejectsLookupKeyCollisionEvenInUnreachableDictionary(
         DictionaryComparerKind comparer, string first, string second) {
         Directory.CreateDirectory(_root);
-        using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(_root, "state"));
-        using IRbfFile file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        using SegmentStore segments = SegmentStore.Create(Path.Combine(_root, "data"));
+        using GraphResources file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
         using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file);
+        SchemaStore schemas = file.Schemas;
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32));
         RepresentationId mapRepresentation = schemas.RegisterRepresentations([ObjectLayout.ForDictionary(layout)])[0];
         RepresentationId worldRepresentation = schemas.RegisterRepresentations([ObjectLayout.ForDurable(Schema)])[0];
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte((byte)comparer);
-        writer.WriteUInt32(2);
-        writer.WriteUInt32(3); writer.WriteInt32(10);
-        writer.WriteUInt32(4); writer.WriteInt32(20);
+        writer.WriteVarUInt32(2);
+        writer.WriteVarUInt32(3); writer.WriteVarInt32(10);
+        writer.WriteVarUInt32(4); writer.WriteVarInt32(20);
         State empty = default;
         FrameAddress address = states.Append(StateRevision.CreateObjectHeadMapBase(null,
             [ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.Encode(worldRepresentation, Base(in empty)).Body),
@@ -248,13 +248,13 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         visitor.VisitObject(state.Links, LinksType);
         visitor.VisitString(state.KeyAlias);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()),
-        new(reader.ReadUInt32()), new(reader.ReadUInt32()), reader.ReadByte());
+    private static State Read(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()),
+        new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()), reader.ReadByte());
     private static PreparedBaseBody Base(in State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Values.Value); writer.WriteUInt32(state.Alias.Value);
-        writer.WriteUInt32(state.Links.Value); writer.WriteUInt32(state.KeyAlias.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Values.Value); writer.WriteVarUInt32(state.Alias.Value);
+        writer.WriteVarUInt32(state.Links.Value); writer.WriteVarUInt32(state.KeyAlias.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
@@ -262,22 +262,22 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         byte mask = (byte)((prior.Values != next.Values ? 1 : 0) | (prior.Alias != next.Alias ? 2 : 0) |
             (prior.Links != next.Links ? 4 : 0) | (prior.KeyAlias != next.KeyAlias ? 8 : 0) | (prior.Value != next.Value ? 16 : 0));
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(mask);
-        if ((mask & 1) != 0) { writer.WriteUInt32(next.Values.Value); }
-        if ((mask & 2) != 0) { writer.WriteUInt32(next.Alias.Value); }
-        if ((mask & 4) != 0) { writer.WriteUInt32(next.Links.Value); }
-        if ((mask & 8) != 0) { writer.WriteUInt32(next.KeyAlias.Value); }
+        if ((mask & 1) != 0) { writer.WriteVarUInt32(next.Values.Value); }
+        if ((mask & 2) != 0) { writer.WriteVarUInt32(next.Alias.Value); }
+        if ((mask & 4) != 0) { writer.WriteVarUInt32(next.Links.Value); }
+        if ((mask & 8) != 0) { writer.WriteVarUInt32(next.KeyAlias.Value); }
         if ((mask & 16) != 0) { writer.WriteByte(next.Value); }
         return new(mask != 0, bytes.WrittenSpan);
     }
-    private static State Apply(ref BinaryPayloadReader reader, in State prior) {
+    private static State Apply(ref BareValueReader reader, in State prior) {
         byte mask = reader.ReadByte();
         if (mask is 0 or > 31) { throw new InvalidDataException("Invalid test state Delta."); }
-        return new((mask & 1) != 0 ? new(reader.ReadUInt32()) : prior.Values,
-            (mask & 2) != 0 ? new(reader.ReadUInt32()) : prior.Alias,
-            (mask & 4) != 0 ? new(reader.ReadUInt32()) : prior.Links,
-            (mask & 8) != 0 ? new(reader.ReadUInt32()) : prior.KeyAlias,
+        return new((mask & 1) != 0 ? new(reader.ReadVarUInt32()) : prior.Values,
+            (mask & 2) != 0 ? new(reader.ReadVarUInt32()) : prior.Alias,
+            (mask & 4) != 0 ? new(reader.ReadVarUInt32()) : prior.Links,
+            (mask & 8) != 0 ? new(reader.ReadVarUInt32()) : prior.KeyAlias,
             (mask & 16) != 0 ? reader.ReadByte() : prior.Value);
     }
     private sealed class CountingComparer : IEqualityComparer<string> {
@@ -287,8 +287,8 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     }
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
-    private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
-    private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
+    private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
+    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);
         if (Path.GetDirectoryName(resolved) != Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())) ||

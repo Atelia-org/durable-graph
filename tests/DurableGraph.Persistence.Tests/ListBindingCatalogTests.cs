@@ -106,8 +106,8 @@ public sealed class ListBindingCatalogTests {
     public void HistoricalReaderOnlyNeedsRetainedStateAndRechecksLateAuthorityConflict() {
         string path = Path.Combine(Path.GetTempPath(), $"list-binding-{Guid.NewGuid():N}.rbf");
         try {
-            using IRbfFile file = RbfFile.CreateNew(path);
-            SchemaStore schemas = new(file);
+            using GraphResources file = GraphResources.CreateNew(path);
+            SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             registry.Register(new StateDefinitionBinding("RetiredPoint", SchemaKind.InlineValue, 0, null,
                 [new("RetiredPoint", 1, SchemaKind.InlineValue, 0, [new(1, TypeExpr.Builtin(TypeTag.Int32))])],
@@ -122,7 +122,7 @@ public sealed class ListBindingCatalogTests {
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(layout.Type));
             schemas.Register(new DurableSchema("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64)));
             Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(layout));
-        } finally { File.Delete(path); }
+        } finally { DeleteTestPath(path); }
     }
 
     [Fact]

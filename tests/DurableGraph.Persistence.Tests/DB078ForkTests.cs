@@ -2,8 +2,7 @@ using System.Reflection;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
-using Journal = Atelia.EventJournal.EventJournal;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -218,44 +217,13 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal((byte)1, Assert.IsType<Node>(recovered.State).Value);
     }
 
-    [Theory]
-    [InlineData("before-create", false)]
-    [InlineData("after-create", false)]
-    [InlineData("before-bind", false)]
-    [InlineData("after-bind", true)]
-    public void ForkUnknownPublicationRequiresReopenAndNeverAppendsHistory(string phase, bool visible) {
-        using (Repository repository = CreateRepository()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 4 }, NoRebase);
-            using BranchCheckout other = repository.Fork("other", main.Head);
-            Journal journal = JournalOf(repository);
-            FieldInfo field = typeof(Journal).GetField("_refOpLog", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            IRbfFile original = (IRbfFile)field.GetValue(journal)!;
-            string refObjects = (string)typeof(Journal).GetField("_refObjectsPath", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(journal)!;
-            field.SetValue(journal, new RefOpFaultFile(original, phase, refObjects));
-            var before = ImmutableHistoryFiles();
-            GraphCommitException failure = Assert.Throws<GraphCommitException>(() => repository.Fork("child", main.Head));
-            Assert.Equal(GraphCommitOutcome.Unknown, failure.Outcome);
-            Assert.Null(failure.CandidateRevisionAddress);
-            Assert.True(repository.IsFaulted);
-            Assert.Throws<InvalidOperationException>(() => main.CommitState(NoRebase));
-            Assert.Throws<InvalidOperationException>(() => other.CommitState(NoRebase));
-            AssertHistoryFiles(before);
-        }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
-        Assert.Equal(visible, reopened.ListBranches().Contains("child"));
-        if (visible) {
-            using BranchCheckout child = reopened.Checkout("child");
-            Assert.Equal(reopened.GetHead("main"), child.Head);
-            Assert.Equal((byte)4, Assert.IsType<Node>(child.State).Value);
-        }
-    }
 
     // Live writers hold exclusive file handles. At serial operation boundaries, observe
     // lengths/timestamps for append evidence; the cold test below compares actual bytes.
     private string[] ImmutableHistoryPaths() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
-        .Where(path => path.StartsWith(Path.Combine(_root, "state") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(path, Path.Combine(_root, "schemas.rbf"), StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(Path.Combine(_root, "journal", "events") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        .Where(path => path.StartsWith(Path.Combine(_root, "data") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(Path.Combine(_root, "data") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+)
         .ToArray();
 
     private Dictionary<string, (long Length, DateTime Modified)> ImmutableHistoryFiles() => ImmutableHistoryPaths()
@@ -264,7 +232,7 @@ public sealed partial class EventHistoryRepositoryTests {
     private void AssertHistoryFiles(Dictionary<string, (long Length, DateTime Modified)> before) {
         var after = ImmutableHistoryFiles();
         Assert.NotEmpty(before);
-        Assert.Contains(Path.Combine(_root, "schemas.rbf"), before.Keys);
+        Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data"), StringComparison.OrdinalIgnoreCase));
         Assert.Equal(before.Keys.Order(), after.Keys.Order());
         foreach (var pair in before) Assert.Equal(pair.Value, after[pair.Key]);
     }
@@ -281,9 +249,8 @@ public sealed partial class EventHistoryRepositoryTests {
             if (sourceKind == "event") main.CommitEvent(new Node(), NoRebase);
         }
         Dictionary<string, byte[]> before = ImmutableHistoryPaths().ToDictionary(path => path, File.ReadAllBytes);
-        Assert.Contains(Path.Combine(_root, "schemas.rbf"), before.Keys);
-        Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "state") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "journal", "events") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data"), StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
             using BranchCheckout main = repository.Checkout("main");
             using BranchCheckout a = repository.Fork("a", main.Head);

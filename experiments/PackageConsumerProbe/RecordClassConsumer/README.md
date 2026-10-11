@@ -4,7 +4,7 @@ Run from the repository root:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1
-# Or reuse a matching feed containing all nine Runtime/StateStore packages:
+# Or reuse a matching feed containing all ten Runtime/StateStore packages:
 ./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1 -PackageSource <feed> -Version <version>
 ```
 
@@ -54,11 +54,9 @@ The runner builds three complete application generations in fresh intermediate d
 
 The ordinary World Schema and generic Fact Schema remain v1: the changed Damage layout belongs
 to separate referenced objects. This does not permit skipping a required owner version when an
-inline value or ancestor layout changes. The old framework-base-to-interface migration uses
-the separate [old-package input witness](../Run-DurableBaseMigrationProbe.ps1); this runner starts with the new marker API.
-Pass `-LegacyPackageSource`, `-LegacyVersion`, `-PackageSource` and `-Version` to that script.
-It writes with an actual old DurableBase package, then restores and appends a Delta with the new marker
-package while preserving Schema-history bytes. Both applications and their caches remain isolated.
+inline value or ancestor layout changes. The old persisted-store migration lane is retired under DB-086; model-history upgrade coverage above remains active.
+This runner starts with the current marker API and creates only new-format stores.
+
 
 These facts contain only scalar/string content. C# `with` is ordinarily a **shallow** copy, not
 an immutable graph snapshot. The Counter field is deliberately mutable for the Delta regression;

@@ -6,7 +6,7 @@ public sealed partial class EventHistoryRepositoryTests {
     // Intentionally use omitted policies here and in the linked PendingRecovery source:
     // these tests execute the consumer recovery contract with the public default API.
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterStateDurable, false)]
+    [InlineData((int)CommitCheckpoint.AfterStateAppend, false)]
     [InlineData((int)CommitCheckpoint.AfterPublication, true)]
     [InlineData((int)CommitCheckpoint.BeforeInstall, true)]
     public void ConsumerRecoveryUsesFreshPendingOrSkipsAlreadyPublishedState(int point, bool published) {
@@ -57,14 +57,12 @@ public sealed partial class EventHistoryRepositoryTests {
                 Assert.Equal(head, session.Head.RevisionAddress);
             }
         }
-        // Sample only while closed: an open writer owns repository.lock exclusively.
+        // Sample only while closed: the backing-store owner holds its locks.
         if (published) AssertFiles(beforeRecovery); // No replacement Event, extra State or physical append.
         using Repository verification = Repository.OpenExisting(_root, Models());
         using var verified = verification.Checkout("main");
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
         Assert.Equal(GraphFrameKind.State, verified.Head.Kind);
-        // Writable browsing may persist a derived Journal forward-plan cache; keep it outside
-        // the zero-write observation of Resume + the application's no-Pending recovery branch.
         Assert.Equal(3, verification.ReadFrames("main").Count());
         Assert.Single(verification.EnumerateEvents(verification.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
     }

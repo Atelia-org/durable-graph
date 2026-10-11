@@ -4,7 +4,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -109,8 +109,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     [Fact]
     public void PriorSuccessfulReadOfSameReaderDoesNotProveNewValuesConditionalDependency() {
         Counters counts = new();
-        using Repository repository = Repository.CreateNew(_path, Models(false, DependencyMode.BaseForSeven, counts),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using Repository repository = Repository.CreateNew(_path, Models(false, DependencyMode.BaseForSeven, counts));
         counts.Context = Field<StateModelSnapshot>(repository, "_models");
         using BranchCheckout main = repository.CreateBranch("main", new Root { Value = 1 }, NoRebase);
         using BranchCheckout first = repository.Fork("first", main.Head);
@@ -149,8 +148,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     private Scenario Seed(bool family, bool delta) {
         Counters counts = new();
         Repository repository = Repository.CreateNew(_path, Models(family,
-            delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+            delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts));
         try {
             counts.Context = Field<StateModelSnapshot>(repository, "_models");
             // Explicit preclosure must not be mistaken for executing the reader body.
@@ -191,7 +189,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         StateReaderBinding Reader(StateBindingContext? context) {
             counts.ReaderFactories++;
             return new StateReaderBinding<State>(Owner,
-                (ref BinaryPayloadReader input) => {
+                (ref BareValueReader input) => {
                     counts.BaseReads++;
                     State state = Read(ref input);
                     if (mode == DependencyMode.BaseAlways || mode == DependencyMode.BaseForSeven && state.Value == 7) {
@@ -199,9 +197,9 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
                         (context ?? counts.Context!).BindSchema(Dependency);
                     }
                     return state;
-                }, (ref BinaryPayloadReader input, in State prior) => {
+                }, (ref BareValueReader input, in State prior) => {
                     counts.DeltaReads++;
-                    State state = mode == DependencyMode.BaseForSeven ? Read(ref input) : prior with { Value = input.ReadInt32() };
+                    State state = mode == DependencyMode.BaseForSeven ? Read(ref input) : prior with { Value = input.ReadVarInt32() };
                     if (mode == DependencyMode.DeltaAlways) {
                         counts.DependencyChecks++;
                         (context ?? counts.Context!).BindSchema(Dependency);
@@ -231,21 +229,21 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     }
 
     private static void Visit(in State _, IStateReferenceVisitor __) { }
-    private static State Read(ref BinaryPayloadReader input) => new(input.ReadInt32(), input.ReadInt64(), input.ReadInt64(), input.ReadInt64(), input.ReadInt64());
+    private static State Read(ref BareValueReader input) => new(input.ReadVarInt32(), input.ReadVarInt64(), input.ReadVarInt64(), input.ReadVarInt64(), input.ReadVarInt64());
     private static PreparedBaseBody Base(in State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter output = new(bytes);
-        output.WriteInt32(state.Value);
-        output.WriteInt64(state.A);
-        output.WriteInt64(state.B);
-        output.WriteInt64(state.C);
-        output.WriteInt64(state.D);
+        BareValueWriter output = new(bytes);
+        output.WriteVarInt32(state.Value);
+        output.WriteVarInt64(state.A);
+        output.WriteVarInt64(state.B);
+        output.WriteVarInt64(state.C);
+        output.WriteVarInt64(state.D);
         return new(bytes.WrittenSpan);
     }
     private static byte[] ValueBody(int value) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter output = new(bytes);
-        output.WriteInt32(value);
+        BareValueWriter output = new(bytes);
+        output.WriteVarInt32(value);
         return bytes.WrittenSpan.ToArray();
     }
     private static void RegisterConflict(Repository repository) => Resources(repository).Schemas.Register(new DurableSchema(

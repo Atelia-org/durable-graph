@@ -1,40 +1,21 @@
-using Atelia.Data;
-using Atelia.DurableGraph.Serialization;
+using Atelia.Binary;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Storage;
 
 internal static class FrameAddressWireCodec {
-    internal static void Write(
-        ref BinaryPayloadWriter writer,
-        FileScope scope,
-        FrameAddress address) {
-        scope.ValidateRequired(nameof(scope));
+    internal static void Write(ref BareValueWriter writer, FrameAddress address) {
         FrameAddressValidator.ValidateRequired(address, nameof(address));
-
-        uint backwardFileDistance = scope.ToBackwardFileDistance(
-            address.FileNumber);
-        ulong serializedTicket = address.FrameTicket.Serialize();
-
-        writer.WriteUInt32(backwardFileDistance);
-        writer.WriteUInt64(serializedTicket);
+        Span<byte> bytes = stackalloc byte[FrameAddress.EncodedSize];
+        if (!address.TryWrite(bytes)) { throw new InvalidDataException("The frame address cannot be encoded."); }
+        writer.WriteRawBytes(bytes);
     }
 
-    internal static FrameAddress Read(
-        ref BinaryPayloadReader reader,
-        FileScope scope) {
-        scope.ValidateRequired(nameof(scope));
-
-        BinaryPayloadReader candidate = reader;
-        uint backwardFileDistance = candidate.ReadUInt32();
-        ulong serializedTicket = candidate.ReadUInt64();
-        SizedPtr frameTicket = SizedPtr.Deserialize(serializedTicket);
-        if (frameTicket.Length == 0) {
-            throw new InvalidDataException(
-                "A required FrameAddress must contain a non-empty SizedPtr.");
+    internal static FrameAddress Read(ref BareValueReader reader) {
+        BareValueReader candidate = reader;
+        if (!FrameAddress.TryRead(candidate.ReadRawBytes(FrameAddress.EncodedSize), out FrameAddress address)) {
+            throw new InvalidDataException("The encoded frame address is invalid.");
         }
-        FrameAddress address = new(
-            scope.ToAbsoluteFileNumber(backwardFileDistance),
-            frameTicket);
         reader = candidate;
         return address;
     }

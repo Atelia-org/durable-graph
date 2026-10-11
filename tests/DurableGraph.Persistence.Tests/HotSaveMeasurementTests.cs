@@ -7,9 +7,9 @@ using System.Text.Json;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using Xunit.Abstractions;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -39,10 +39,9 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
             string path = Path.Combine(Path.GetTempPath(), $"durable-hot-save-measure-{Guid.NewGuid():N}");
             Directory.CreateDirectory(path);
             try {
-                using IRbfFile schemaFile = RbfFile.CreateNew(Path.Combine(path, "schemas.rbf"));
-                SchemaStore schemas = new(schemaFile);
-                using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(path, "state"),
-                    new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+                using GraphResources schemaFile = GraphResources.CreateNew(Path.Combine(path, "schemas.rbf"));
+                SchemaStore schemas = schemaFile.Schemas;
+                var segments = schemaFile.Data;
                 StateModelRegistry models = Models();
                 string shared = new('x', 64);
                 Root world = new() {
@@ -176,7 +175,7 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
             static (in State left, in State right) => left == right);
         models.Register(new StateModelBinding<Root, State>(preparation,
             [new StateReaderBinding<State>(Schema, Read,
-                static (ref BinaryPayloadReader reader, in State prior) => Read(ref reader), Visit)],
+                static (ref BareValueReader reader, in State prior) => Read(ref reader), Visit)],
             static row => row.GetState<State>(), static () => new(),
             static (Root root, in State state, ObjectReadTable objects) => {
                 root.Values = objects.ResolveObject<int[]>(state.Values)!;
@@ -190,12 +189,12 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
         visitor.VisitObject(state.Values, ValuesType);
         visitor.VisitDurable(state.Stable, SharedReadModel.Schema.SchemaId);
     }
-    private static State Read(ref BinaryPayloadReader reader) => new(new(reader.ReadUInt32()), new(reader.ReadUInt32()));
+    private static State Read(ref BareValueReader reader) => new(new(reader.ReadVarUInt32()), new(reader.ReadVarUInt32()));
     private static PreparedBaseBody Base(in State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Values.Value);
-        writer.WriteUInt32(state.Stable.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Values.Value);
+        writer.WriteVarUInt32(state.Stable.Value);
         return new(bytes.WrittenSpan);
     }
 }

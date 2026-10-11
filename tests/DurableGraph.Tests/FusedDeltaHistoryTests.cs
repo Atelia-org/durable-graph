@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
@@ -132,18 +133,18 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class Host {
             private static byte[] Write(in Leaf.__DurableState.V1 value) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 Leaf.__DurableState.WriteBaseBody(ref writer, in value);
                 return buffer.WrittenSpan.ToArray();
             }
             private static byte[] Content(string text) {
                 var buffer = new ArrayBufferWriter<byte>();
-                var writer = new BinaryPayloadWriter(buffer);
+                var writer = new BareValueWriter(buffer);
                 writer.WriteString(text);
                 return buffer.WrittenSpan.ToArray();
             }
             private static Leaf.__DurableState.V1 Apply(in Leaf.__DurableState.V1 prior, PreparedDeltaBody delta) {
-                var reader = new BinaryPayloadReader(delta.Body);
+                var reader = new BareValueReader(delta.Body);
                 var result = Leaf.__DurableState.ApplyDeltaBodyV1(ref reader, in prior);
                 reader.EnsureFullyConsumed();
                 return result;

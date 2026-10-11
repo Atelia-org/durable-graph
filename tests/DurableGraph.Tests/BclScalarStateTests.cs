@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -25,7 +26,7 @@ public sealed class BclScalarStateTests {
 
     private static void CheckAbsentList<T, TOps>(TypeTag tag) where T : unmanaged where TOps : IStateOps<T> {
         ListLayout layout = new(DurableFieldInfo.Nullable(1, new(1, tag)));
-        BinaryPayloadReader reader = new(new byte[] { 2, 0, 0 }); // Two absent elements, no scalar child payload.
+        BareValueReader reader = new(new byte[] { 2, 0, 0 }); // Two absent elements, no scalar child payload.
         FrozenListState<NullableState<T>> state = ListStateBody<NullableState<T>, NullableStateOps<T, TOps>>.ReadBase(ref reader, layout);
         reader.EnsureFullyConsumed();
         Assert.Equal(2, state.Count);
@@ -51,7 +52,7 @@ public sealed class BclScalarStateTests {
         PreparedDeltaBody delta = NullableStateOps<decimal, DecimalStateOps>.PrepareDelta(prior, current, slot);
         Assert.True(delta.HasChanges);
         Assert.Equal(2, delta.Body[0]); // Patch a present child, preserving its complete decimal representation.
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         Assert.Equal(decimal.GetBits(current.Value), decimal.GetBits(NullableStateOps<decimal, DecimalStateOps>.ApplyDelta(ref reader, prior, slot).Value));
         reader.EnsureFullyConsumed();
     }
@@ -73,7 +74,7 @@ public sealed class BclScalarStateTests {
         Assert.Throws<InvalidDataException>(() => DictionaryStateBody<decimal, int, DecimalStateOps, Int32StateOps>.PrepareBase(invalid, layout));
         FrozenDictionaryState<decimal, int> application = new(DictionaryComparerKind.Application, entries);
         byte[] bytes = DictionaryStateBody<decimal, int, DecimalStateOps, Int32StateOps>.PrepareBase(application, layout).Body.ToArray();
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         FrozenDictionaryState<decimal, int> restored = DictionaryStateBody<decimal, int, DecimalStateOps, Int32StateOps>.ReadBase(ref reader, layout);
         reader.EnsureFullyConsumed();
         Assert.Equal(decimal.GetBits(1.0m), decimal.GetBits(restored[0].Key));
@@ -84,7 +85,7 @@ public sealed class BclScalarStateTests {
     }
 
     private static void ReadDictionary(byte[] bytes, DictionaryLayout layout) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         DictionaryStateBody<decimal, int, DecimalStateOps, Int32StateOps>.ReadBase(ref reader, layout);
     }
 
@@ -92,14 +93,14 @@ public sealed class BclScalarStateTests {
         where T : unmanaged where TOps : IStateOps<T> {
         DurableFieldInfo slot = new(1, tag);
         ArrayBufferWriter<byte> output = new();
-        BinaryPayloadWriter writer = new(output);
+        BareValueWriter writer = new(output);
         TOps.WriteBase(ref writer, current, slot);
         Assert.Equal(golden, output.WrittenSpan.ToArray());
         Assert.False(TOps.StateEquals(prior, current, slot));
         PreparedDeltaBody delta = TOps.PrepareDelta(prior, current, slot);
         Assert.True(delta.HasChanges);
         Assert.Equal(golden, delta.Body.ToArray());
-        BinaryPayloadReader reader = new(golden.Concat(new byte[] { 91 }).ToArray());
+        BareValueReader reader = new(golden.Concat(new byte[] { 91 }).ToArray());
         T decoded = TOps.ReadBase(ref reader, slot);
         Assert.True(TOps.StateEquals(current, decoded, slot));
         Assert.Equal(91, reader.ReadByte());
@@ -118,7 +119,7 @@ public sealed class BclScalarStateTests {
 
     private static void Apply<T, TOps>(byte[] bytes, T prior, DurableFieldInfo slot)
         where T : unmanaged where TOps : IStateOps<T> {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TOps.ApplyDelta(ref reader, prior, slot);
     }
 }

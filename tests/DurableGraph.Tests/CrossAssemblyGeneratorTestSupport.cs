@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,7 +16,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             [CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions)],
             PlatformReferences().Concat(new[] {
                 typeof(IDurableObject).Assembly,
-                typeof(Serialization.BinaryPayloadReader).Assembly,
+                typeof(global::Atelia.Binary.BareValueReader).Assembly,
+                typeof(Atelia.FrameStore.FrameAddress).Assembly,
+                typeof(AteliaResult<>).Assembly,
+                typeof(Serialization.PreparedBaseBody).Assembly,
                 typeof(Persistence.SchemaStore).Assembly,
                 typeof(Storage.ObjectVersionChain).Assembly,
             }.Select(assembly => MetadataReference.CreateFromFile(assembly.Location)))

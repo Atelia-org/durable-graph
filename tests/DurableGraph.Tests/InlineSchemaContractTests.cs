@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -68,8 +69,8 @@ public sealed class InlineSchemaContractTests {
         new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: inline));
     private static DurableSchema Duplicate(string id, DurableSchema inline) => Value(id, 1,
         new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: inline), new(2, TypeTag.InlineValue, inlineSchema: inline));
-    private static int Read(ref BinaryPayloadReader reader) => reader.ReadInt32();
-    private static int Apply(ref BinaryPayloadReader reader, in int prior) => reader.ReadInt32();
+    private static int Read(ref BareValueReader reader) => reader.ReadVarInt32();
+    private static int Apply(ref BareValueReader reader, in int prior) => reader.ReadVarInt32();
     private static void Visit(in int value, IStateReferenceVisitor visitor) { }
     private static PreparedBaseBody PrepareBase(in int value) => new([]);
     private static PreparedDeltaBody PrepareDelta(in int prior, in int current) => new(false, []);

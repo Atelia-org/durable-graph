@@ -1,8 +1,9 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Atelia.Data;
+using Atelia.FrameStore;
+using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
 using Xunit.Abstractions;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -15,7 +16,7 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
             for (int sample = -1; sample < 3; sample++) {
                 var build = Measure(() => {
                     SortedDictionary<uint, FrameAddress> items = new();
-                    for (uint i = 1; i <= count; i++) items.Add(i * 3, new(1, SizedPtr.Create(i * 64, 32)));
+                    for (uint i = 1; i <= count; i++) items.Add(i * 3, Address(1, i * 64));
                     return items;
                 });
                 var freeze = Measure(() => new FrozenSortedDictionary<uint, FrameAddress>(build.Value));
@@ -43,7 +44,7 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
         try {
             FrameAddress head;
             long maximumFrameCharge;
-            using (SegmentStore segments = SegmentStore.CreateNew(path)) {
+            using (Frames segments = Frames.Create(path)) {
                 using StateRevisionStore writer = new(segments, 0);
                 StateRevision revision = StateRevision.CreateObjectHeadMapBase(null, Records(objectCount, bodyBytes, 0, null), []);
                 head = writer.Append(revision);
@@ -53,6 +54,7 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
                     head = writer.Append(revision);
                     maximumFrameCharge = Math.Max(maximumFrameCharge, StateRevisionReadCache.GetRevisionCharge(revision));
                 }
+                segments.ConfirmDurable();
             }
 
             long smallBudget = fixture == "oversize"
@@ -61,7 +63,7 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
             ulong? expected = null;
             foreach (long budget in new[] { 0L, StateRevisionStore.DefaultReadCacheBudgetBytes, smallBudget }) {
                 for (int sample = -1; sample < 3; sample++) {
-                    using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(path);
+                    using Frames segments = Frames.OpenReadOnly(path);
                     using StateRevisionStore store = new(segments, budget);
                     var first = Measure(() => ReadAll(store, head));
                     var firstStats = store.ReadCacheStatistics;
@@ -101,9 +103,7 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
         ulong hash = 14695981039346656037UL;
         foreach ((uint id, FrameAddress address) in store.ReadLiveObjectHeadMap(head)) {
             hash = Mix(hash, id);
-            hash = Mix(hash, address.FileNumber);
-            hash = Mix(hash, (ulong)address.FrameTicket.Offset);
-            hash = Mix(hash, (ulong)address.FrameTicket.Length);
+            hash = Mix(hash, unchecked((uint)address.GetHashCode()));
             ObjectVersionChain chain = store.ReadObjectVersionChain(head, id);
             hash = Mix(hash, (ulong)chain.ReconstructionPayloadBytes);
             foreach (ObjectVersionChainEntry entry in chain.Records) {
@@ -117,9 +117,9 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
     private static ulong Query(IReadOnlyDictionary<uint, FrameAddress> items, int count) {
         ulong sum = 0;
         for (uint key = 0; key <= count * 3 + 1; key++) {
-            if (items.TryGetValue(key, out FrameAddress value)) sum += key + (ulong)value.FrameTicket.Offset;
+            if (items.TryGetValue(key, out FrameAddress value)) sum += key + unchecked((uint)value.GetHashCode());
         }
-        foreach ((uint key, FrameAddress value) in items) sum += key + (ulong)value.FrameTicket.Length;
+        foreach ((uint key, FrameAddress value) in items) sum += key + unchecked((uint)value.GetHashCode());
         return sum;
     }
 

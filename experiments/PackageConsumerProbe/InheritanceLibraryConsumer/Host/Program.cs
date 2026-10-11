@@ -3,15 +3,14 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using InheritanceLibrary.App;
 using InheritanceLibrary.Base;
 using InheritanceLibrary.Middle;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
     private static void Main(string[] args) {
         if (args.Length != 2) throw new ArgumentException("Expected seed|upgrade and database directory.");
@@ -67,7 +66,7 @@ internal static class Program {
             CheckWrites(store, historical, ObjectVersionKind.Delta, childId);
             Require(store.Read(noChange).LocalObjects.Count == 0, "Unchanged graph wrote objects.");
         });
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{historical.FileNumber}:{historical.FrameTicket.Packed}:{worldId.Value}");
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{ProbeArtifacts.Format(historical)}:{worldId.Value}");
         Require(BaseCatalog.ConstructorCalls == 2 && MiddleCatalog.ConstructorCalls == 2 && AppCatalog.ConstructorCalls == 2,
             "Expected only the two manually constructed leaf instances.");
         using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
@@ -84,8 +83,8 @@ internal static class Program {
     private static void Upgrade(string directory) {
         Require(BaseCatalog.LegacyClrAbsent, "V2 must delete the old base and hidden inline CLR declarations.");
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
-        FrameAddress historical = new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1])));
-        ObjectId worldId = new(uint.Parse(parts[2]));
+        FrameAddress historical = ProbeArtifacts.Parse(parts[0]);
+        ObjectId worldId = new(uint.Parse(parts[1]));
         ObjectId childId = default;
         Inspect(directory, (store, schemas) => childId = CheckHistorical(store, schemas, historical, worldId));
         Require(AppCatalog.UpgradeCalls == 0 && BaseCatalog.UpgradeCalls == 0 && MiddleCatalog.UpgradeCalls == 0,
@@ -154,10 +153,8 @@ internal static class Program {
             "Inherited private readonly values, hidden generic/nullable state or leaf fields changed.");
     }
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
     private static void Require(bool condition, string message) {
         if (!condition) throw new InvalidOperationException(message);

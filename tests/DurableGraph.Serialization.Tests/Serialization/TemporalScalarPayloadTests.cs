@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 
@@ -15,11 +16,11 @@ public sealed class TemporalScalarPayloadTests {
             Assert.Equal(new DateOnly(2024, 2, 29), value);
         }
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteDateOnly(value);
+        BareValueWriter writer = new(buffer);
+        BclValueCodec.WriteDateOnly(ref writer, value);
         Assert.Equal(golden, buffer.WrittenSpan.ToArray());
-        BinaryPayloadReader reader = new(golden);
-        Assert.Equal(value, reader.ReadDateOnly());
+        BareValueReader reader = new(golden);
+        Assert.Equal(value, BclValueCodec.ReadDateOnly(ref reader));
         reader.EnsureFullyConsumed();
     }
 
@@ -31,11 +32,11 @@ public sealed class TemporalScalarPayloadTests {
         TimeOnly value = new(ticks);
         AssertUnmanaged(value);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteTimeOnly(value);
+        BareValueWriter writer = new(buffer);
+        BclValueCodec.WriteTimeOnly(ref writer, value);
         Assert.Equal(golden, buffer.WrittenSpan.ToArray());
-        BinaryPayloadReader reader = new(golden);
-        Assert.Equal(value, reader.ReadTimeOnly());
+        BareValueReader reader = new(golden);
+        Assert.Equal(value, BclValueCodec.ReadTimeOnly(ref reader));
         reader.EnsureFullyConsumed();
     }
 
@@ -50,18 +51,18 @@ public sealed class TemporalScalarPayloadTests {
         DateTimeOffset value = new(ticks, TimeSpan.FromMinutes(minutes));
         AssertUnmanaged(value);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteDateTimeOffset(value);
+        BareValueWriter writer = new(buffer);
+        BclValueCodec.WriteDateTimeOffset(ref writer, value);
         Assert.Equal(golden, buffer.WrittenSpan.ToArray());
-        BinaryPayloadReader reader = new(golden);
-        Assert.True(value.EqualsExact(reader.ReadDateTimeOffset()));
+        BareValueReader reader = new(golden);
+        Assert.True(value.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
         reader.EnsureFullyConsumed();
     }
 
     [Fact]
     public void DateTimeOffset_preserves_legal_clock_and_utc_extrema_at_every_offset() {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         for (int minutes = -840; minutes <= 840; minutes++) {
             TimeSpan offset = TimeSpan.FromMinutes(minutes);
             long minimumClock = Math.Max(0, offset.Ticks);
@@ -69,10 +70,10 @@ public sealed class TemporalScalarPayloadTests {
             foreach (long ticks in new[] { minimumClock, maximumClock }) {
                 DateTimeOffset value = new(ticks, offset);
                 buffer.Clear();
-                writer.WriteDateTimeOffset(value);
+                BclValueCodec.WriteDateTimeOffset(ref writer, value);
                 Assert.InRange(buffer.WrittenCount, 2, 11);
-                BinaryPayloadReader reader = new(buffer.WrittenSpan);
-                DateTimeOffset restored = reader.ReadDateTimeOffset();
+                BareValueReader reader = new(buffer.WrittenSpan);
+                DateTimeOffset restored = BclValueCodec.ReadDateTimeOffset(ref reader);
                 Assert.True(value.EqualsExact(restored));
                 Assert.Equal(ticks, restored.Ticks);
                 Assert.Equal(offset, restored.Offset);
@@ -89,13 +90,13 @@ public sealed class TemporalScalarPayloadTests {
         Assert.NotEqual(first.Day, second.Day);
         Assert.False(first.EqualsExact(second));
         ArrayBufferWriter<byte> firstBuffer = new(), secondBuffer = new();
-        BinaryPayloadWriter firstWriter = new(firstBuffer), secondWriter = new(secondBuffer);
-        firstWriter.WriteDateTimeOffset(first);
-        secondWriter.WriteDateTimeOffset(second);
+        BareValueWriter firstWriter = new(firstBuffer), secondWriter = new(secondBuffer);
+        BclValueCodec.WriteDateTimeOffset(ref firstWriter, first);
+        BclValueCodec.WriteDateTimeOffset(ref secondWriter, second);
         Assert.False(firstBuffer.WrittenSpan.SequenceEqual(secondBuffer.WrittenSpan));
-        BinaryPayloadReader firstReader = new(firstBuffer.WrittenSpan), secondReader = new(secondBuffer.WrittenSpan);
-        Assert.True(first.EqualsExact(firstReader.ReadDateTimeOffset()));
-        Assert.True(second.EqualsExact(secondReader.ReadDateTimeOffset()));
+        BareValueReader firstReader = new(firstBuffer.WrittenSpan), secondReader = new(secondBuffer.WrittenSpan);
+        Assert.True(first.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref firstReader)));
+        Assert.True(second.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref secondReader)));
     }
 
     [Theory]
@@ -103,8 +104,8 @@ public sealed class TemporalScalarPayloadTests {
     [InlineData(uint.MaxValue)]
     public void DateOnly_rejects_calendar_overflow_without_advancing(uint dayNumber) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt32(dayNumber);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32(dayNumber);
         Assert.IsType<InvalidDataException>(ReadFailure(buffer.WrittenSpan.ToArray(), ScalarKind.DateOnly));
     }
 
@@ -114,8 +115,8 @@ public sealed class TemporalScalarPayloadTests {
     [InlineData(ulong.MaxValue)]
     public void TimeOnly_rejects_day_and_integer_overflow_without_advancing(ulong ticks) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt64(ticks);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt64(ticks);
         Assert.IsType<InvalidDataException>(ReadFailure(buffer.WrittenSpan.ToArray(), ScalarKind.TimeOnly));
     }
 
@@ -131,19 +132,21 @@ public sealed class TemporalScalarPayloadTests {
     [InlineData(ulong.MaxValue, 0)]
     public void DateTimeOffset_rejects_offset_clock_and_utc_overflow_without_advancing(ulong clockTicks, int minutes) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteUInt64(clockTicks);
-        writer.WriteInt32(minutes);
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt64(clockTicks);
+        writer.WriteVarInt32(minutes);
         Assert.IsType<InvalidDataException>(ReadFailure(buffer.WrittenSpan.ToArray(), ScalarKind.DateTimeOffset));
     }
 
-    [Theory]
-    [InlineData(new byte[] { 0x80, 0 })]
-    [InlineData(new byte[] { 0x81, 0 })]
-    public void All_temporal_readers_reject_noncanonical_first_varint_without_advancing(byte[] bytes) {
-        foreach (ScalarKind kind in Enum.GetValues<ScalarKind>()) {
-            Assert.IsType<InvalidDataException>(ReadFailure(bytes, kind));
-        }
+    [Fact]
+    public void Temporal_readers_accept_redundant_varints() {
+        BareValueReader date = new([0x81, 0]);
+        BareValueReader time = new([0x81, 0]);
+        BareValueReader stamp = new([0x80, 0, 0x80, 0]);
+        Assert.Equal(DateOnly.FromDayNumber(1), BclValueCodec.ReadDateOnly(ref date));
+        Assert.Equal(new TimeOnly(1), BclValueCodec.ReadTimeOnly(ref time));
+        Assert.True(DateTimeOffset.MinValue.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref stamp)));
+        date.EnsureFullyConsumed(); time.EnsureFullyConsumed(); stamp.EnsureFullyConsumed();
     }
 
     [Fact]
@@ -159,8 +162,6 @@ public sealed class TemporalScalarPayloadTests {
     }
 
     [Theory]
-    [InlineData(new byte[] { 0, 0x80, 0 })]
-    [InlineData(new byte[] { 0, 0x81, 0 })]
     [InlineData(new byte[] { 0, 0xff, 0xff, 0xff, 0xff, 0x10 })]
     [InlineData(new byte[] { 0, 0x80, 0x80, 0x80, 0x80, 0x80 })]
     public void DateTimeOffset_rejects_malformed_offset_without_consuming_valid_clock(byte[] bytes) =>
@@ -186,17 +187,17 @@ public sealed class TemporalScalarPayloadTests {
         TimeOnly time = TimeOnly.MaxValue;
         DateTimeOffset timestamp = new(504000000000, TimeSpan.FromHours(14));
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
-        writer.WriteDateOnly(date);
-        writer.WriteTimeOnly(time);
-        writer.WriteDateTimeOffset(timestamp);
+        BareValueWriter writer = new(buffer);
+        BclValueCodec.WriteDateOnly(ref writer, date);
+        BclValueCodec.WriteTimeOnly(ref writer, time);
+        BclValueCodec.WriteDateTimeOffset(ref writer, timestamp);
         writer.WriteByte(0xab);
-        BinaryPayloadReader reader = new(buffer.WrittenSpan);
-        Assert.Equal(date, reader.ReadDateOnly());
+        BareValueReader reader = new(buffer.WrittenSpan);
+        Assert.Equal(date, BclValueCodec.ReadDateOnly(ref reader));
         Assert.Equal(3, reader.ConsumedCount);
-        Assert.Equal(time, reader.ReadTimeOnly());
+        Assert.Equal(time, BclValueCodec.ReadTimeOnly(ref reader));
         Assert.Equal(9, reader.ConsumedCount);
-        Assert.True(timestamp.EqualsExact(reader.ReadDateTimeOffset()));
+        Assert.True(timestamp.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
         Assert.Equal(17, reader.ConsumedCount);
         Assert.Equal(1, reader.RemainingCount);
         Exception? exception = null;
@@ -217,14 +218,14 @@ public sealed class TemporalScalarPayloadTests {
     private static Exception? ReadFailure(byte[] bytes, ScalarKind kind) {
         // A previous field has already consumed its byte: failure must preserve that exact cursor.
         byte[] payload = [0x42, .. bytes];
-        BinaryPayloadReader reader = new(payload);
+        BareValueReader reader = new(payload);
         Assert.Equal(0x42, reader.ReadByte());
         Exception? exception = null;
         try {
             switch (kind) {
-                case ScalarKind.DateOnly: reader.ReadDateOnly(); break;
-                case ScalarKind.TimeOnly: reader.ReadTimeOnly(); break;
-                case ScalarKind.DateTimeOffset: reader.ReadDateTimeOffset(); break;
+                case ScalarKind.DateOnly: BclValueCodec.ReadDateOnly(ref reader); break;
+                case ScalarKind.TimeOnly: BclValueCodec.ReadTimeOnly(ref reader); break;
+                case ScalarKind.DateTimeOffset: BclValueCodec.ReadDateTimeOffset(ref reader); break;
             }
         } catch (Exception current) {
             exception = current;

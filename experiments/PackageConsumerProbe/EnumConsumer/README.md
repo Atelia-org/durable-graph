@@ -6,7 +6,7 @@ DB-053 delivery witness. Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-EnumProbe.ps1
 ```
 
-The runner creates an isolated nine-package feed and cache, publishes generated history and
+The runner creates an isolated ten-package feed and cache, publishes generated history and
 then verifies it with the packaged build assets. Both consumer references are ordinary
 PackageReference entries. Pass both `-PackageSource` and `-Version` to reuse an existing matching
 feed. Artifacts remain under the unique ignored `obj/enum-*` run directory.

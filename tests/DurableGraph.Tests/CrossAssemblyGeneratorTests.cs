@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Collections.Immutable;
@@ -257,13 +258,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         public static class BodyHost {
             public static void Register(IStateModelRegistration models) => {{(family ? "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models)" : "models.Register(Item.__DurableState.Model)")}};
             public static byte[] Base(byte[] bytes, DurableSchema schema) {
-                var reader=new BinaryPayloadReader(bytes);
+                var reader=new BareValueReader(bytes);
                 var state={{(family ? "Atelia.DurableGraph.Generated.Family_4974656D.BodyV1.Read(ref reader,schema)" : "Item.__DurableState.ReadBaseBodyV1(ref reader)")}};
                 reader.EnsureFullyConsumed();
                 return {{(family ? "Atelia.DurableGraph.Generated.Family_4974656D.BodyV1.PrepareBase(in state,schema)" : "Item.__DurableState.PrepareBaseBody(in state)")}}.Body.ToArray();
             }
             public static PreparedDeltaBody Delta(byte[] prior,byte[] current,DurableSchema schema) {
-                var p=new BinaryPayloadReader(prior);var c=new BinaryPayloadReader(current);
+                var p=new BareValueReader(prior);var c=new BareValueReader(current);
                 var a={{(family ? "Atelia.DurableGraph.Generated.Family_4974656D.BodyV1.Read(ref p,schema)" : "Item.__DurableState.ReadBaseBodyV1(ref p)")}};
                 var b={{(family ? "Atelia.DurableGraph.Generated.Family_4974656D.BodyV1.Read(ref c,schema)" : "Item.__DurableState.ReadBaseBodyV1(ref c)")}};
                 return {{(family ? "Atelia.DurableGraph.Generated.Family_4974656D.BodyV1.PrepareDelta(in a,in b,schema)" : "Item.__DurableState.PrepareDeltaBody(in a,in b)")}};

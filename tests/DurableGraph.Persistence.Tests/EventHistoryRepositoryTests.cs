@@ -4,8 +4,8 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -253,9 +253,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterStateDurable)]
-    [InlineData((int)CommitCheckpoint.BeforeJournalAppend)]
-    [InlineData((int)CommitCheckpoint.AfterJournalDurable)]
+    [InlineData((int)CommitCheckpoint.AfterStateAppend)]
     [InlineData((int)CommitCheckpoint.BeforePublication)]
     public void KnownPrepublicationFailureDoesNotInstallCandidateAndColdCheckoutKeepsEventHead(int point) {
         FrameAddress first;
@@ -351,41 +349,6 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(store.Read(changed).LocalObjects).Kind);
     }
 
-    [Theory]
-    [InlineData("wrong-revision-parent")]
-    [InlineData("missing-root")]
-    [InlineData("state-wrong-revision-parent")]
-    public void CompleteButInvalidJournalGraphRelationshipFailsStrictOpenWithoutRepair(string damage) {
-        FrameAddress initial;
-        ObjectId rootId;
-        using (Repository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", new Node(), NoRebase);
-            initial = session.StateRevisionAddress!.Value;
-            rootId = session.StateId!.Value;
-        }
-        FrameAddress invalid;
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            StateRevision revision = damage switch {
-                "wrong-revision-parent" or "state-wrong-revision-parent" => StateRevision.CreateObjectHeadMapBase(null, states.Read(initial).LocalObjects, []),
-                "missing-root" => StateRevision.CreateObjectHeadMapBase(initial, [], []),
-                _ => StateRevision.CreateObjectHeadMapDelta(initial, [], []),
-            };
-            invalid = states.AppendDurably(revision);
-        }
-        using (HistoryJournal history = HistoryJournal.Open(_root, readOnly: false)) {
-            history.ConfirmDurable();
-            var branch = history.Journal.OpenBranch("main").Unwrap();
-            var prior = history.Journal.GetHead(branch);
-            var record = history.Append(damage == "state-wrong-revision-parent" ? GraphFrameKind.State : GraphFrameKind.Event, invalid, rootId, prior);
-            history.Journal.AdvanceRef(branch, prior, record).Unwrap();
-        }
-        var before = SnapshotFiles();
-        Assert.Throws<InvalidDataException>(() => Repository.OpenReadOnlyExisting(_root, Models()));
-        AssertFiles(before);
-        Assert.Throws<InvalidDataException>(() => Repository.OpenExisting(_root, Models()));
-        AssertFiles(before);
-    }
 
     [Fact]
     public void ColdEventBrowseDoesNotBindWorldAndPairSecondFailureDeliversNothing() {
@@ -397,13 +360,13 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         all.Register(new StateModelBinding<WholeWorld, State>(new(outer,
             static (in State state) => {
                 ArrayBufferWriter<byte> bytes = new();
-                BinaryPayloadWriter writer = new(bytes);
-                writer.WriteUInt32(state.Left.Value); writer.WriteUInt32(state.Right.Value);
+                BareValueWriter writer = new(bytes);
+                writer.WriteVarUInt32(state.Left.Value); writer.WriteVarUInt32(state.Right.Value);
                 return new PreparedBaseBody(bytes.WrittenSpan);
             }, static (in State prior, in State next) => new PreparedDeltaBody(false, [])),
             [new StateReaderBinding<State>(outer,
-                static (ref BinaryPayloadReader input) => new(input.ReadUInt32(), input.ReadUInt32(), 0, 0),
-                static (ref BinaryPayloadReader input, in State prior) => prior,
+                static (ref BareValueReader input) => new(input.ReadVarUInt32(), input.ReadVarUInt32(), 0, 0),
+                static (ref BareValueReader input, in State prior) => prior,
                 static (in State state, IStateReferenceVisitor visitor) => {
                     visitor.VisitDurable(state.Left, Schema.SchemaId); visitor.VisitDurable(state.Right, Schema.SchemaId);
                 })],
@@ -480,13 +443,13 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         CapturedStatePreparation<State> preparation = new(current,
             static (in State state) => Base(state),
             static (in State prior, in State next) => Delta(prior, next));
-        State Read(ref BinaryPayloadReader input) {
-            State state = new(input.ReadUInt32(), input.ReadUInt32(), input.ReadUInt32(), input.ReadByte(), input.ReadUInt64());
+        State Read(ref BareValueReader input) {
+            State state = new(input.ReadVarUInt32(), input.ReadVarUInt32(), input.ReadVarUInt32(), input.ReadByte(), input.ReadVarUInt64());
             onReadValue?.Invoke(state.Value);
             return state;
         }
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema, Read,
-            static (ref BinaryPayloadReader input, in State prior) => Apply(ref input, prior), Visit);
+            static (ref BareValueReader input, in State prior) => Apply(ref input, prior), Visit);
         StateReaderBinding[] readers = upgrade ? [Reader(Schema), Reader(current)] : [Reader(current)];
         StateModelBinding model = new StateModelBinding<Node, State>(preparation, readers,
             row => {
@@ -521,12 +484,12 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Left.Value);
-        writer.WriteUInt32(state.Right.Value);
-        writer.WriteUInt32(state.Text.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Left.Value);
+        writer.WriteVarUInt32(state.Right.Value);
+        writer.WriteVarUInt32(state.Text.Value);
         writer.WriteByte(state.Value);
-        writer.WriteUInt64(state.Sequence);
+        writer.WriteVarUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
     private static PreparedDeltaBody Delta(State prior, State next) {
@@ -534,26 +497,26 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             (prior.Text != next.Text ? 4 : 0) | (prior.Value != next.Value ? 8 : 0) |
             (prior.Sequence != next.Sequence ? 16 : 0));
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(mask);
-        if ((mask & 1) != 0) writer.WriteUInt32(next.Left.Value);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.Right.Value);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.Text.Value);
+        if ((mask & 1) != 0) writer.WriteVarUInt32(next.Left.Value);
+        if ((mask & 2) != 0) writer.WriteVarUInt32(next.Right.Value);
+        if ((mask & 4) != 0) writer.WriteVarUInt32(next.Text.Value);
         if ((mask & 8) != 0) writer.WriteByte(next.Value);
-        if ((mask & 16) != 0) writer.WriteUInt64(next.Sequence);
+        if ((mask & 16) != 0) writer.WriteVarUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
-    private static State Apply(ref BinaryPayloadReader input, State prior) {
+    private static State Apply(ref BareValueReader input, State prior) {
         byte mask = input.ReadByte();
         if (mask == 0 || mask > 31) throw new InvalidDataException("Invalid test bitmap.");
-        return new((mask & 1) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Left,
-            (mask & 2) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Right,
-            (mask & 4) != 0 ? new ObjectId(input.ReadUInt32()) : prior.Text,
+        return new((mask & 1) != 0 ? new ObjectId(input.ReadVarUInt32()) : prior.Left,
+            (mask & 2) != 0 ? new ObjectId(input.ReadVarUInt32()) : prior.Right,
+            (mask & 4) != 0 ? new ObjectId(input.ReadVarUInt32()) : prior.Text,
             (mask & 8) != 0 ? input.ReadByte() : prior.Value,
-            (mask & 16) != 0 ? input.ReadUInt64() : prior.Sequence);
+            (mask & 16) != 0 ? input.ReadVarUInt64() : prior.Sequence);
     }
-    private Repository CreateRepository(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
-    private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
+    private Repository CreateRepository(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models());
+    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
 
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);

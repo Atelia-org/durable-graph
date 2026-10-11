@@ -12,12 +12,12 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
 公开入口是非泛型 `Repository` / `BranchCheckout`：分别提交 Event 快照和 State，可从 Event 开始，也可连续提交同一角色。
-Journal 的命名 branch ref 是唯一发布点；恢复读取已保存的结果，不重新执行历史业务处理器。
+VersionStore 的仓库根发布 Schema 与命名分支；恢复读取已保存的结果，不重新执行历史业务处理器。
 
 ## 最短接入路径
 
 下面的应用接入示例需要 .NET 10 SDK 和包含当前 DurableGraph 包 G 的完整本地 NuGet feed，准备方式见文末
-[从源码打包](#从源码打包)。底层存储包 S 从 nuget.org 下载；这里不假定 DurableGraph 自身的包已公开发布。
+[从源码打包](#从源码打包)。当前底层存储包 S 是准确来源的本地候选；这里不假定存储候选或 DurableGraph 包已公开发布。
 
 创建一个独立控制台项目，例如 `QuickStart/QuickStart.csproj`：
 
@@ -134,7 +134,7 @@ static World NewWorld() {
 ```powershell
 # 在包含 QuickStart/ 的目录运行；数据库路径保持相同，并放在源码版本控制之外。
 $data = Join-Path (Get-Location) "quickstart-world"
-dotnet restore QuickStart/QuickStart.csproj --source $feed -p:DurableGraphPackageVersion=$version
+dotnet restore QuickStart/QuickStart.csproj --source $feed --source https://api.nuget.org/v3/index.json -p:DurableGraphPackageVersion=$version
 dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -- $data
 dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -- $data
 ```
@@ -181,7 +181,7 @@ before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence �
 后续分支推进或移动不改变所选结尾；循环内可以调用 `ReadEvent`。`HistoryOrder.OldestFirst` 先准备范围内的轻量地址，再从旧到新输出。
 可选 `afterExclusive` 排除下界及其更早历史；同点得到空范围，非祖先下界在交付首项前拒绝。这个校验可能需要完整范围的元数据回溯。
 `ReadFrames` 仍返回从旧到新的**完整元数据链**，用于检查所有 E/S 位置；它有全量成本。两种查询都排除其他分支独有记录和未连入所选链的 orphan。
-严格打开仓库仍校验全历史及相关元数据，包括 orphan；不要把只读一个 Event 等同于跳过这些检查。
+打开只加载必要仓库根与 Schema；读取所选图时检查完整内容及两种 Parent 的对应，不执行全历史或 orphan 启动审计。
 需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`。
 
 `ReadCheckpoint` 一次恢复当前图与最近严格祖先中另一角色的图，最多两份，全部成功才返回。
@@ -246,7 +246,7 @@ tag 与 branch 名称空间独立，名称使用 1–128 个 ASCII 字符，匹�
 只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析均不推进分支或物化领域图。
 真实包和跨进程示例见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)。
 历史可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
-Journal Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
+业务 Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
 Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。
 
 ## 调整保存策略
@@ -266,7 +266,7 @@ Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖
 | 偏向存储 | `(11, 5)` | `1.1×` | −12% | `6B` | +100% |
 
 若取 `L=10`，对应约 `1.111×` 写入与 `5.5B` 平均重建；上表用 `11` 表达额外写入约 10% 的典型选择。
-这些比例不包含共享 frame、map、Journal 等开销，也不计有限历史与离散选择的偏差；
+这些比例不包含共享 frame、map、Schema 与发布元数据等开销，也不计有限历史与离散选择的偏差；
 **重建 payload 减少 33.3% 不等于读取快 33.3%**，写入比例也不是整个仓库的磁盘空间保证。
 当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
 
@@ -314,7 +314,7 @@ Head 是 Event 或 State 均不能独自证明某个请求是否完成；应用�
 
 正常本地构建会把当前 Schema 模板发布到模型项目的 `DurableGraphSchemaHistory/*.dgschema`。
 **将这些文件与模型源码一起提交 Git**；它们用于重新生成旧版 DTO/reader，不是可清理的 obj 缓存。
-Repository 内的 `schemas.rbf` 则记录实际保存时的完整布局；两者职责不同。
+Repository 中根选定的 SchemaSnapshot 记录实际保存时的完整布局；两者职责不同。
 
 首次接入建议显式设置 `DurableGraphGenerateDefinitions=true`，固定使用本文的 Family 登记外观。
 生成的代码默认位于项目 `obj` 下，可搜索 `DurableGenericStates.g.cs` 查看 DTO 和登记入口；不要编辑生成文件。
@@ -399,8 +399,8 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 [DB-078-A](docs/design-branches/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史) 已交付自由 E/S 历史和跨类型 State 替换。
 [DB-083](docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、named Fork 与不可变 tag 已接入。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
-没有自动坏尾修复或完整 OS crash/power-loss 保证。文件布局为 schemas.rbf、state/、journal/ 和 repository.lock。
-旧仓库/工作副本 API 与 publication.rbf 发布器已移除；原型没有旧格式迁移路径。
+正常打开由 FrameStore/VersionStore 恢复不完整尾部，只读打开不写不修；不承诺完整 OS crash/power-loss 保证。仓库使用共享 `data/` 与发布 `versions/`，不另建 repository.lock。
+当前运行时只支持新建的新存储格式库；模型程序集需要重编译，模型的 accepted history 与显式 Upgrade 继续保留。
 
 保存失败时不要一律重试：`GraphCommitException.Outcome` 区分 NotPublished / Unknown / Published，
 同时检查仓库与工作副本的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
@@ -414,31 +414,31 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 `Atelia.DurableGraph.Schema`，绑定与状态操作使用 `Atelia.DurableGraph.Runtime`，两者仍在主程序集内。
 仅组织迁移不需要提高业务 Schema 版本，保留 accepted history；不提供旧 DLL 的直接二进制兼容。
 
-底层五库存储依赖来自独立的 [atelia-storage](https://github.com/Atelia-org/atelia-storage)，
-默认使用 [StorageDependency.props](eng/StorageDependency.props) 逐包固定的 NuGet 版本与来源；
-基础三包、RbfSegmentStore 和 EventJournal 可以采用不同发布版本。
-正常 `dotnet build/test` 直接从 nuget.org restore，不需要先运行 Prepare 或检出存储源码。
-独立包 probes 的 Prepare 仅下载公开五个 nupkg 并返回 feed，不 clone 或重新打包存储库。
-源码联调、唯一版本的本地开发包与显式 NuGet 配置见 [存储依赖指南](docs/storage-dependency.md)。
+底层使用独立 [atelia-storage](https://github.com/Atelia-org/atelia-storage) 的六包 RBF3 栈：
+Primitives、Data、Rbf、Binary、FrameStore、VersionStore。
+[StorageDependency.props](eng/StorageDependency.props) 统一固定版本 S 与准确来源；当前 pin 是未公开的本地候选。
+显式 source mode 用于源码 build/test，包交付使用候选完整 feed；不自动发现兄弟仓或回退旧存储包。
+源码入口、上游 Pack 和任务 NuGet.Config 见 [存储依赖指南](docs/storage-dependency.md)。
 
-从 DurableGraph 根目录执行以下命令，生成含五个所选存储包和四个 DG 包的完整 feed。
-`$version` 只控制 DG 的版本 G，必须与各存储版本不同；每批 DG 产物使用新版本，避免缓存复用同版本旧代码：
+先按指南从准确、干净的上游 commit 准备六包并设置 `$storageFeed`，再从 DurableGraph 根执行：
+`$version` 只控制 DG 版本 G，必须与 S 不同；每批不同 DG 内容使用新版本。
 
 ```powershell
 $ErrorActionPreference = "Stop"
 $version = "0.0.0-local.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
 $feed = Join-Path (Get-Location) ".artifacts/nuget/$version"
 . ./experiments/PackageConsumerProbe/PackageProbeSupport.ps1
-Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirectory $feed -Version $version
+Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirectory $feed -Version $version -StoragePackageSource $storageFeed
 ```
 
-将 `$feed` 和 `$version` 用于前面的 restore/run。也可直接运行带独立 feed、两代模型和历史校验的
-[真实包实验](experiments/PackageConsumerProbe/README.md)，例如 `Run-InheritanceLibraryProbe.ps1`。
-源码模式用于 build/test；`dotnet pack -p:UseStorageSources=true` 会被拒绝。联调实验包先由上游 Pack
-生成新的存储版本，再用指南中的自定义 NuGet.Config 和 `StoragePackageVersion` 按包模式打 DG。
-显式 `StoragePackageVersion` 统一覆盖五包；个别包可用 `StorageRbfSegmentStorePackageVersion` /
-`StorageEventJournalPackageVersion` 覆盖，优先于统一版本。
-不能给五库重复套用 DG 的 G，也不能覆盖公开版本或通过清空缓存切换包内容。
+得到含六个存储包和四个 DG 包的完整十包 feed，将 `$feed` 和 `$version` 用于前面的 restore/run。
+[真实包实验](experiments/PackageConsumerProbe/README.md) 使用独立 feed、两代模型和新库历史校验；
+只验收新建存储库，模型 history/reader/Upgrade 仍需保留，旧存储数据无需迁移。
+
+`dotnet pack -p:UseStorageSources=true` 会被拒绝。打 DG 包先按指南用任务配置 package restore，
+再以 `--no-restore -p:UseStorageSources=false -p:PackageVersion=<G>` pack；存储版本由统一 S pin 提供。
+显式 `StoragePackageVersion` 可统一覆盖六包，必须保存该开发包 manifest 来源；没有旧 SegmentStore/Journal 分别覆盖属性。
+不覆盖已有候选，不通过清空用户缓存切换同版本内容，也不把 source build 当作 package 消费证据。
 
 ## 接下来查什么
 

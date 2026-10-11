@@ -1,14 +1,14 @@
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using RecordClassConsumer;
 using RecordClassLibrary.Base;
 using RecordClassLibrary.Facts;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters DeltaPolicy = new(int.MaxValue, 1);
 
     private static StateModelRegistry Models(bool eventOnly = false) {
@@ -120,8 +120,8 @@ internal static class Program {
             session.CommitEvent(((World)session.State!).Last!);
             changed = session.CommitState(DeltaPolicy).RevisionAddress;
         }
-        using (var segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options)) {
-            using var states = new StateRevisionStore(segments);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(directory)) {
+            using var states = resources.States;
             var bases = states.Read(rewritten).LocalObjects;
             Require(bases.Count == 4 && bases.All(row => row.Kind == ObjectVersionKind.Base), "Upgraded Damage records must rewrite Base.");
             var deltas = states.Read(changed).LocalObjects;

@@ -2,15 +2,14 @@ using Atelia.Data;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 using PartStates = Atelia.DurableGraph.Generated.Family_50617274;
 using KeyStates = Atelia.DurableGraph.Generated.Family_4B6579;
 using ValueStates = Atelia.DurableGraph.Generated.Family_56616C7565;
 using WorldStates = Atelia.DurableGraph.Generated.Family_576F726C64;
 using CollisionKeyStates = Atelia.DurableGraph.Generated.Family_436F6C6C6973696F6E4B6579;
 using CollisionWorldStates = Atelia.DurableGraph.Generated.Family_436F6C6C6973696F6E576F726C64;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+
 #if HISTORY_V1
 using Part = CompositeDictionaryPackageConsumerProbe.LegacyPart;
 using Key = CompositeDictionaryPackageConsumerProbe.LegacyKey<CompositeDictionaryPackageConsumerProbe.LegacyPart>;
@@ -24,7 +23,7 @@ using Value = CompositeDictionaryPackageConsumerProbe.CurrentValue;
 namespace CompositeDictionaryPackageConsumerProbe;
 
 internal static class Program {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
     private static readonly List<Type> ResolverCalls = [];
 
@@ -273,18 +272,16 @@ internal static class Program {
         "A bounded key/value edit must write one actual Dictionary Delta.");
 
     private static void WriteAddress(string directory, FrameAddress address, ObjectId id) =>
-        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{address.FileNumber}:{address.FrameTicket.Packed}:{id.Value}");
+        File.WriteAllText(Path.Combine(directory, "historical.txt"), $"{ProbeArtifacts.Format(address)}:{id.Value}");
 
     private static (FrameAddress Address, ObjectId Id) ReadAddress(string directory) {
         string[] parts = File.ReadAllText(Path.Combine(directory, "historical.txt")).Split(':');
-        return (new(uint.Parse(parts[0]), SizedPtr.FromPacked(ulong.Parse(parts[1]))), new(uint.Parse(parts[2])));
+        return (ProbeArtifacts.Parse(parts[0]), new(uint.Parse(parts[1])));
     }
 
     private static void Inspect(string directory, Action<StateRevisionStore, SchemaStore> action) {
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory, "schemas.rbf"));
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore states = new(segments);
-        action(states, new SchemaStore(file, readOnly: true));
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        action(resources.States, resources.Schemas);
     }
 
     private static void Require(bool condition, string message) {

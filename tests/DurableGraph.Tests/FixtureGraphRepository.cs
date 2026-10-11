@@ -1,9 +1,10 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -17,13 +18,13 @@ public sealed class FixtureGraphRepository : IDisposable {
         _repository = repository;
         if (existing) { _stateAddress = repository.GetHead("main").RevisionAddress; }
     }
-    public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+    public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.CreateNew(path, models, options), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
     }
-    public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+    public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.OpenExisting(path, models, options), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
     }
     public FrameAddress? HeadRevisionAddress => _stateAddress;
     public bool IsFaulted => _repository.IsFaulted;
@@ -75,8 +76,8 @@ internal sealed class FixtureMarker : IDurableObject {
             static (in byte value) => new PreparedBaseBody(new byte[] { value }),
             static (in byte prior, in byte next) => new PreparedDeltaBody(prior != next, new byte[] { next })),
         [new StateReaderBinding<byte>(Schema,
-            static (ref BinaryPayloadReader reader) => reader.ReadByte(),
-            static (ref BinaryPayloadReader reader, in byte prior) => reader.ReadByte(), Visit)],
+            static (ref BareValueReader reader) => reader.ReadByte(),
+            static (ref BareValueReader reader, in byte prior) => reader.ReadByte(), Visit)],
         static row => row.GetState<byte>(),
         static () => new FixtureMarker(),
         static (FixtureMarker domain, in byte value, ObjectReadTable objects) => { },

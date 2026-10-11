@@ -7,9 +7,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
-    <PackageReference Include="Atelia.RbfSegmentStore" Version="$(StorageRbfSegmentStorePackageVersion)" />
+    <PackageReference Include="Atelia.VersionStore" Version="$(StoragePackageVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
-    <ProjectReference Include="$(StorageSourceRoot)/src/RbfSegmentStore/RbfSegmentStore.csproj" />
+    <ProjectReference Include="$(StorageSourceRoot)/src/VersionStore/VersionStore.csproj" />
   </ItemGroup>
 </Project>

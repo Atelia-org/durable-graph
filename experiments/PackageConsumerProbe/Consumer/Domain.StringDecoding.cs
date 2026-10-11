@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Buffers;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -71,7 +72,7 @@ internal static class StringDecodingExercise {
         List<BodyRecord> records = [];
         foreach (ObjectStateRecord entry in candidate.Objects) {
             ArrayBufferWriter<byte> buffer = new();
-            BinaryPayloadWriter writer = new(buffer);
+            BareValueWriter writer = new(buffer);
             BodyKind kind;
             if (entry.Kind == ObjectStateKind.String) {
                 kind = BodyKind.String;
@@ -167,7 +168,7 @@ internal static class StringDecodingExercise {
         Dictionary<ObjectId, CaptureHero.__DurableState.V1> heroes = [];
         Dictionary<ObjectId, CaptureItem.__DurableState.V1> items = [];
         foreach (BodyRecord record in bundle.Records) {
-            BinaryPayloadReader reader = new(record.Body);
+            BareValueReader reader = new(record.Body);
             if (record.Kind == BodyKind.Hero) {
                 var state = CaptureHero.__DurableState.ReadBaseBodyV1(ref reader);
                 reader.EnsureFullyConsumed();
@@ -202,7 +203,7 @@ internal static class StringDecodingExercise {
 
     private static byte[] EncodeString(string value) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         writer.WriteString(value);
         return buffer.WrittenSpan.ToArray();
     }

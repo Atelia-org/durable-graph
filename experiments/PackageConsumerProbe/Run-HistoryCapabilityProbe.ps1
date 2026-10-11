@@ -36,7 +36,7 @@ try {
         $Version = "0.0.0-history-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
         $packages = @(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File)
-        if ($packages.Count -ne 9) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+        if ($packages.Count -ne 10) { throw "Expected 9 dependency packages, found $($packages.Count)." }
     }
 
     $properties = @(

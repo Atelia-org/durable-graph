@@ -4,13 +4,12 @@ using System.Security.Cryptography;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace EventHistoryPackageConsumerProbe;
 
 internal static class SharedReadProbe {
-    private static readonly RbfSegmentStoreOptions Options = new() { NewStoreLayout = RbfSegmentStoreLayout.Flat };
+    private const long Options = 1024 * 1024;
     private static readonly ReadAmplificationBaseBudgetParameters Policy = new(int.MaxValue, 1);
 
     private static StateModelRegistry Models() {
@@ -141,8 +140,8 @@ internal static class SharedReadProbe {
     }
 
     private static void CheckActualHeads(string directory, CheckpointAddress[] frames) {
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory, "state"), Options);
-        using StateRevisionStore store = new(segments);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
+        StateRevisionStore store = resources.States;
         var s0 = store.ReadLiveObjectHeadMap(frames[0].RevisionAddress);
         var e1 = store.ReadLiveObjectHeadMap(frames[1].RevisionAddress);
         var s1 = store.ReadLiveObjectHeadMap(frames[2].RevisionAddress);

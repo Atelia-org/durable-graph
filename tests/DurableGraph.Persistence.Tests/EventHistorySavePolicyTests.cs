@@ -1,7 +1,7 @@
 using System.Reflection;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -30,7 +30,7 @@ public sealed partial class EventHistoryRepositoryTests {
         ReadAmplificationBaseBudgetParameters currentDefault) {
         string path = Path.Combine(_root, name);
         List<FrameAddress> addresses = [];
-        using (var repository = Repository.CreateNew(path, Models(), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (var repository = Repository.CreateNew(path, Models())) {
             Node state = new();
             using var session = includeOverrides
                 ? repository.CreateBranch("main", state, NoRebase)
@@ -56,7 +56,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using (var repository = Repository.OpenReadOnlyExisting(path, Models())) {
             Assert.Equal((byte)30, ((Node)repository.ReadState(repository.GetHead("main"))).Value);
         }
-        using SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(path, "state"));
+        using SegmentStore segments = SegmentStore.Open(Path.Combine(path, "data"));
         using StateRevisionStore store = new(segments);
         return addresses.Select(address => store.Read(address).LocalObjects.Select(row => row.Kind).ToArray()).ToArray();
     }

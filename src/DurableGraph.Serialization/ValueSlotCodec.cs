@@ -1,7 +1,8 @@
+using Atelia.Binary;
 namespace Atelia.DurableGraph.Serialization;
 
-internal delegate void ReadSlot<T>(ref BinaryPayloadReader reader, ref T value) where T : struct;
-internal delegate void WriteSlot<T>(ref BinaryPayloadWriter writer, ref T value) where T : struct;
+internal delegate void ReadSlot<T>(ref BareValueReader reader, ref T value) where T : struct;
+internal delegate void WriteSlot<T>(ref BareValueWriter writer, ref T value) where T : struct;
 
 /// <summary>A caller-supplied value body and its typed array bindings.</summary>
 internal abstract class ValueSlotCodec {

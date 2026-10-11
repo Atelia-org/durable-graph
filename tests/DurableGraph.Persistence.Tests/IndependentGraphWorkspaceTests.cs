@@ -4,14 +4,14 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class IndependentGraphWorkspaceTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-independent-workspace-{Guid.NewGuid():N}");
-    private IRbfFile _file;
+    private GraphResources _file;
     private SegmentStore _segments;
     private SchemaStore _schemas;
     private StateRevisionStore _store;
@@ -21,9 +21,9 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
 
     public IndependentGraphWorkspaceTests() {
         Directory.CreateDirectory(_root);
-        _file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_file);
-        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _file.Schemas;
+        _segments = _file.Data;
         _store = new(_segments);
     }
 
@@ -59,7 +59,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(s0, delta.PriorAddress);
             Assert.Throws<InvalidOperationException>(() => save.Install());
-            e1 = _store.AppendDurably(save.Revision);
+            e1 = _store.Append(save.Revision);
             Assert.Throws<InvalidOperationException>(() => save.PrepareInstall(e1));
         }
         Assert.Equal(s0, workspace.ParentRevisionAddress);
@@ -114,7 +114,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         using (PreparedWorldSave abandoned = workspace.Stage(replacement, NoRebase)) {
             Assert.NotEqual(oldRootId, abandoned.RootId);
             Assert.Same(original, workspace.World);
-            FrameAddress unpublished = _store.AppendDurably(abandoned.Revision);
+            FrameAddress unpublished = _store.Append(abandoned.Revision);
             abandoned.PrepareInstall(unpublished);
             // The outside publisher did not publish this appended revision.
             Assert.Same(original, workspace.World);
@@ -129,7 +129,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             Assert.Contains(oldRootId.Value, save.Revision.RemovedObjectIds);
             Assert.DoesNotContain(childId.Value, save.Revision.LocalObjectIds);
             replacement.Value = 11;
-            published = _store.AppendDurably(save.Revision);
+            published = _store.Append(save.Revision);
             save.PrepareInstall(published);
             Assert.Same(original, workspace.World);
             save.Install();
@@ -209,7 +209,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         uint lastSnapshotId;
         using (PreparedWorldSave save = workspace.StageSnapshot(root, NoRebase)) {
             lastSnapshotId = save.Revision.LocalObjectIds.Max();
-            _store.AppendDurably(save.Revision);
+            _store.Append(save.Revision);
         }
         using (PreparedWorldSave abandoned = workspace.StageSnapshot(root, NoRebase)) {
             Assert.True(abandoned.RootId.Value > lastSnapshotId);
@@ -237,7 +237,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Equal(ObjectVersionKind.Base, rebased.Kind);
         Assert.DoesNotContain(childId.Value, snapshot.Revision.ExternalObjectHeads.Keys);
         Assert.Equal(s1, snapshot.Revision.ParentRevisionAddress);
-        FrameAddress address = _store.AppendDurably(snapshot.Revision);
+        FrameAddress address = _store.Append(snapshot.Revision);
         Assert.Equal(address, _store.ReadLiveObjectHeadMap(address)[childId.Value]);
     }
 
@@ -253,7 +253,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Equal((byte)12, ((World)workspace.World!).Left!.Value);
         using (PreparedWorldSave snapshot = workspace.StageSnapshot(new Event { Left = ((World)workspace.World!).Left }, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(snapshot.Revision.LocalObjects, row => row.ObjectId == childId.Value).Kind);
-            _store.AppendDurably(snapshot.Revision);
+            _store.Append(snapshot.Revision);
         }
         Assert.Equal(s0, workspace.ParentRevisionAddress);
         FrameAddress s1;
@@ -261,7 +261,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             Assert.Equal(s0, state.Revision.ParentRevisionAddress);
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(state.Revision.LocalObjects).Kind);
             Assert.Equal(childId.Value, Assert.Single(state.Revision.LocalObjects).ObjectId);
-            s1 = _store.AppendDurably(state.Revision);
+            s1 = _store.Append(state.Revision);
             state.PrepareInstall(s1);
             state.Install();
         }
@@ -305,8 +305,8 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         CapturedStatePreparation<State> preparation = new(current,
             static (in State state) => Base(state), static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema,
-            (ref BinaryPayloadReader input) => { onRead?.Invoke(name); return Read(ref input); },
-            (ref BinaryPayloadReader input, in State prior) => { onRead?.Invoke(name); return Apply(ref input, prior); }, Visit);
+            (ref BareValueReader input) => { onRead?.Invoke(name); return Read(ref input); },
+            (ref BareValueReader input, in State prior) => { onRead?.Invoke(name); return Apply(ref input, prior); }, Visit);
         StateReaderBinding[] readers = upgrade ? [Reader(original), Reader(current)] : [Reader(current)];
         return new StateModelBinding<T, State>(preparation, readers,
             row => {
@@ -338,45 +338,45 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
 
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.Left.Value);
-        writer.WriteUInt32(state.Right.Value);
-        writer.WriteUInt32(state.Text.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.Left.Value);
+        writer.WriteVarUInt32(state.Right.Value);
+        writer.WriteVarUInt32(state.Text.Value);
         writer.WriteByte(state.Value);
-        writer.WriteUInt64(state.Sequence);
+        writer.WriteVarUInt64(state.Sequence);
         return new(bytes.WrittenSpan);
     }
 
-    private static State Read(ref BinaryPayloadReader input) => new(new(input.ReadUInt32()), new(input.ReadUInt32()),
-        new(input.ReadUInt32()), input.ReadByte(), input.ReadUInt64());
+    private static State Read(ref BareValueReader input) => new(new(input.ReadVarUInt32()), new(input.ReadVarUInt32()),
+        new(input.ReadVarUInt32()), input.ReadByte(), input.ReadVarUInt64());
 
     private static PreparedDeltaBody Delta(State prior, State next) {
         byte mask = (byte)((prior.Left != next.Left ? 1 : 0) | (prior.Right != next.Right ? 2 : 0) |
             (prior.Text != next.Text ? 4 : 0) | (prior.Value != next.Value ? 8 : 0) | (prior.Sequence != next.Sequence ? 16 : 0));
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         writer.WriteByte(mask);
-        if ((mask & 1) != 0) writer.WriteUInt32(next.Left.Value);
-        if ((mask & 2) != 0) writer.WriteUInt32(next.Right.Value);
-        if ((mask & 4) != 0) writer.WriteUInt32(next.Text.Value);
+        if ((mask & 1) != 0) writer.WriteVarUInt32(next.Left.Value);
+        if ((mask & 2) != 0) writer.WriteVarUInt32(next.Right.Value);
+        if ((mask & 4) != 0) writer.WriteVarUInt32(next.Text.Value);
         if ((mask & 8) != 0) writer.WriteByte(next.Value);
-        if ((mask & 16) != 0) writer.WriteUInt64(next.Sequence);
+        if ((mask & 16) != 0) writer.WriteVarUInt64(next.Sequence);
         return new(mask != 0, bytes.WrittenSpan);
     }
 
-    private static State Apply(ref BinaryPayloadReader input, State prior) {
+    private static State Apply(ref BareValueReader input, State prior) {
         byte mask = input.ReadByte();
         if (mask == 0 || mask > 31) throw new InvalidDataException("Invalid test bitmap.");
-        return new((mask & 1) != 0 ? new(input.ReadUInt32()) : prior.Left,
-            (mask & 2) != 0 ? new(input.ReadUInt32()) : prior.Right,
-            (mask & 4) != 0 ? new(input.ReadUInt32()) : prior.Text,
+        return new((mask & 1) != 0 ? new(input.ReadVarUInt32()) : prior.Left,
+            (mask & 2) != 0 ? new(input.ReadVarUInt32()) : prior.Right,
+            (mask & 4) != 0 ? new(input.ReadVarUInt32()) : prior.Text,
             (mask & 8) != 0 ? input.ReadByte() : prior.Value,
-            (mask & 16) != 0 ? input.ReadUInt64() : prior.Sequence);
+            (mask & 16) != 0 ? input.ReadVarUInt64() : prior.Sequence);
     }
 
     private FrameAddress Commit(WorldWorkspace workspace) {
         using PreparedWorldSave save = workspace.Stage(NoRebase);
-        FrameAddress address = _store.AppendDurably(save.Revision);
+        FrameAddress address = _store.Append(save.Revision);
         save.PrepareInstall(address);
         // This fixture explicitly simulates the outside publisher confirming publication.
         save.Install();
@@ -393,9 +393,9 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         _store.Dispose();
         _file.Dispose();
         _segments.Dispose();
-        _file = RbfFile.OpenReadOnlyExisting(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_file, readOnly: true);
-        _segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(_root, "state"));
+        _file = GraphResources.OpenReadOnlyExisting(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _file.Schemas;
+        _segments = _file.Data;
         _store = new(_segments);
     }
 

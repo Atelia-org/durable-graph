@@ -88,8 +88,8 @@ public sealed class DictionaryBindingCatalogTests {
     public void RetainedReaderRevalidatesEitherExactSlotAfterLateSchemaRegistration(bool keyConflict) {
         string path = Path.Combine(Path.GetTempPath(), $"dictionary-binding-{Guid.NewGuid():N}.rbf");
         try {
-            using IRbfFile file = RbfFile.CreateNew(path);
-            SchemaStore schemas = new(file);
+            using GraphResources file = GraphResources.CreateNew(path);
+            SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             foreach (string id in new[] { "RetiredKey", "RetiredValue" }) {
                 registry.Register(new StateDefinitionBinding(id, SchemaKind.InlineValue, 0, null,
@@ -108,7 +108,7 @@ public sealed class DictionaryBindingCatalogTests {
             schemas.Register(new DurableSchema(keyConflict ? "RetiredKey" : "RetiredValue", 1,
                 SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64)));
             Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(layout));
-        } finally { File.Delete(path); }
+        } finally { DeleteTestPath(path); }
     }
 
     [Fact]

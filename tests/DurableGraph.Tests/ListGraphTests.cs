@@ -1,8 +1,7 @@
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -44,10 +43,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(originalWorld, world(session));
             Assert.Same(originalNumbers, numbers(originalWorld));
         }
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state")))
-        using (IRbfFile file = RbfFile.OpenExisting(Path.Combine(directory.Path, "schemas.rbf"))) {
-            using StateRevisionStore states = new(segments);
-            SchemaStore schemas = new(file);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        {
+            using StateRevisionStore states = new(segments.Data);
+            SchemaStore schemas = segments.Schemas;
             Assert.Empty(states.Read(unchanged).LocalObjects);
             ObjectVersionRecord resize = Assert.Single(states.Read(appended).LocalObjects);
             Assert.Equal(ObjectVersionKind.Delta, resize.Kind);
@@ -59,7 +58,10 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Single(states.Read(first).LocalObjects, row => row.ObjectId == child.ObjectId).Body, schemas).Kind);
             StateRevision replacement = states.Read(replaced);
             Assert.Single(replacement.RemovedObjectIds);
-            Assert.Single(replacement.LocalObjects, row => row.Kind == ObjectVersionKind.Base);
+            ObjectVersionRecord newList = Assert.Single(replacement.LocalObjects,
+                row => row.Kind == ObjectVersionKind.Base && row.ObjectId != child.ObjectId &&
+                    BaseObjectBodyCodec.Decode(row.Body, schemas).Kind == ObjectStateKind.List);
+            Assert.NotEqual(resize.ObjectId, newList.ObjectId);
             Assert.Equal(2, states.Read(removed).RemovedObjectIds.Count); // List and cyclic Node island.
             Assert.Equal(states.ReadLiveObjectHeadMap(first).Count - 2, states.ReadLiveObjectHeadMap(removed).Count);
         }
@@ -71,8 +73,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotSame(originalNumbers, numbers(world(session)));
             resumed = commit(session);
         }
-        using (SegmentStore segments = SegmentStore.OpenExisting(Path.Combine(directory.Path, "state"))) {
-            using StateRevisionStore states = new(segments);
+        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+            using StateRevisionStore states = new(segments.Data);
             Assert.Empty(states.Read(resumed).LocalObjects);
             Assert.Empty(states.Read(resumed).RemovedObjectIds);
         }
@@ -84,11 +86,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("ListGraph.Host")!;
         using RawBaseDirectory directory = new();
-        Directory.CreateDirectory(directory.Path);
-        using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(directory.Path, "state"));
-        using IRbfFile file = RbfFile.CreateNew(Path.Combine(directory.Path, "schemas.rbf"));
-        using StateRevisionStore states = new(segments);
-        SchemaStore schemas = new(file);
+        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using StateRevisionStore states = new(segments.Data);
+        SchemaStore schemas = segments.Schemas;
         var freeze = (Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>)host.GetMethod("PrepareAndMutate")!.CreateDelegate(
             typeof(Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>));
         FixturePreparedWorldRevision prepared = freeze(states, schemas);
@@ -107,6 +107,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Runtime;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace ListGraph;
         [DurableType("list.graph.point",1)] public partial struct Point {
             [DurableField(1)] public int X;

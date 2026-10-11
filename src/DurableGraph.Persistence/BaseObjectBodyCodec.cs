@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
@@ -6,7 +7,7 @@ namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Encodes the persistent representation ID carried by Base records only.</summary>
 /// <remarks>
-/// Version 4 is the only supported format: a canonical UInt32 representation ID and the raw body.
+/// Version 4 is the only supported format: a Bare UInt32 representation ID and the raw body.
 /// This codec neither validates the raw body nor registers representations. Delta bodies have
 /// no header and inherit the Base's exact interpretation.
 /// </remarks>
@@ -21,22 +22,22 @@ internal static class BaseObjectBodyCodec {
         }
         ArgumentNullException.ThrowIfNull(rawBody);
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         writer.WriteByte(4);
-        writer.WriteUInt32(representationId.Value);
+        writer.WriteVarUInt32(representationId.Value);
         buffer.Write(rawBody.Body);
         // TODO: After MVP, avoid the intermediate buffer/copy when wrapping prepared content.
         return new(buffer.WrittenSpan);
     }
 
     internal static DecodedBaseObjectBody Decode(ReadOnlySpan<byte> encodedBody, SchemaStore? schemas = null) {
-        BinaryPayloadReader reader = new(encodedBody);
+        BareValueReader reader = new(encodedBody);
         byte version = reader.ReadByte();
         if (version != 4) {
             throw new InvalidDataException($"Unsupported Base type header version {version}.");
         }
 
-        RepresentationId representationId = new(reader.ReadUInt32());
+        RepresentationId representationId = new(reader.ReadVarUInt32());
         if (representationId.Value == 0) { throw new InvalidDataException("Representation ID zero is invalid."); }
         ObjectLayout layout;
         if (representationId == RepresentationId.String && schemas is null) {

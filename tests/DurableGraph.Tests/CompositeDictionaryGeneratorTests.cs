@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -5,8 +6,7 @@ using System.Reflection;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -106,10 +106,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using SegmentStore segments = SegmentStore.OpenReadOnlyExisting(Path.Combine(directory.Path, "state"));
-        using var file = RbfFile.OpenReadOnlyExisting(Path.Combine(directory.Path, "schemas.rbf"));
-        SchemaStore schemas = new(file, readOnly: true);
-        using StateRevisionStore states = new(segments);
+        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        SchemaStore schemas = segments.Schemas;
+        using StateRevisionStore states = new(segments.Data);
         StateModelSnapshot snapshot = models.Snapshot(schemas);
         DecodedRevision first = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
         ObjectStateRecord primary = Assert.Single(first.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
@@ -153,17 +152,17 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static (ObjectId OldName, ObjectId NewName) ReadCompositeKeyReplacement(ReadOnlySpan<byte> body, long priorTime, long currentTime) {
-        BinaryPayloadReader reader = new(body);
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(0, reader.ReadInt32());
-        ObjectId oldName = new(reader.ReadUInt32());
-        Assert.Equal(priorTime, reader.ReadInt64());
-        Assert.Equal(0U, reader.ReadUInt32());
-        Assert.Equal(1U, reader.ReadUInt32());
-        Assert.Equal(0, reader.ReadInt32());
-        ObjectId newName = new(reader.ReadUInt32());
-        Assert.Equal(currentTime, reader.ReadInt64());
-        Assert.Equal(1000, reader.ReadInt32());
+        BareValueReader reader = new(body);
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(0, reader.ReadVarInt32());
+        ObjectId oldName = new(reader.ReadVarUInt32());
+        Assert.Equal(priorTime, reader.ReadVarInt64());
+        Assert.Equal(0U, reader.ReadVarUInt32());
+        Assert.Equal(1U, reader.ReadVarUInt32());
+        Assert.Equal(0, reader.ReadVarInt32());
+        ObjectId newName = new(reader.ReadVarUInt32());
+        Assert.Equal(currentTime, reader.ReadVarInt64());
+        Assert.Equal(1000, reader.ReadVarInt32());
         reader.EnsureFullyConsumed();
         return (oldName, newName);
     }
@@ -173,12 +172,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<int, (ObjectId, long, int)> result = [];
         foreach (var entry in row.GetDictionaryState<K, int>().Entries) {
             ArrayBufferWriter<byte> buffer = new();
-            BinaryPayloadWriter writer = new(buffer);
+            BareValueWriter writer = new(buffer);
             K key = entry.Key;
             KOps.WriteBase(ref writer, in key, row.Layout.Dictionary!.KeySlot);
-            BinaryPayloadReader reader = new(buffer.WrittenSpan);
-            int part = reader.ReadInt32();
-            result.Add(part, (new(reader.ReadUInt32()), reader.ReadInt64(), entry.Value));
+            BareValueReader reader = new(buffer.WrittenSpan);
+            int part = reader.ReadVarInt32();
+            result.Add(part, (new(reader.ReadVarUInt32()), reader.ReadVarInt64(), entry.Value));
             reader.EnsureFullyConsumed();
         }
         return result;
@@ -195,6 +194,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Atelia.DurableGraph.Generated;
         using Atelia.DurableGraph.Persistence;
         using Atelia.DurableGraph.Storage;
+        using Atelia.FrameStore;
         namespace CompositeKeys;
         [DurableType("PlainKey",1)] public readonly partial struct PlainKey : IEquatable<PlainKey> {
             [DurableField(1)] private readonly int _number;

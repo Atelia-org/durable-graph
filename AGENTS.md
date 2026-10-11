@@ -19,7 +19,7 @@
 ## Persistent data discipline
 
 - Existing complete State, Schema, and history frames are **append-only**: keep their contents and addresses for the lifetime of an open Store. DG must not truncate, rewrite, replace, remove, or repair completed frames during normal operations or failure handling.
-- The current old-stack implementation still opens strictly. For the selected new-stack refactor, [DB-086](docs/design-branches/0086-new-storage-refactoring-plan.md) adopts FrameStore/VersionStore's normal recovery of incomplete tails, including VS's lazy first-open of control files. Open FS and read the required repository root before constructing DG Stores/caches; do not pre-open every ref/tag to complete a whole-store recovery pass. Do not recreate a strict writable preflight, full-store reconfirmation, or startup audit to preserve the superseded contract. Necessary content, publication, fault, and lifetime checks remain.
+- The [DB-086 implementation](docs/design-branches/0086-new-storage-implementation.md) adopts FrameStore/VersionStore's normal recovery of incomplete tails, including VS's lazy first-open of control files. Open FS and read the required repository root before constructing DG Stores/caches; do not pre-open every ref/tag to complete a whole-store recovery pass. Do not recreate a strict writable preflight, full-store reconfirmation, or startup audit to preserve the superseded contract. Necessary content, publication, fault, and lifetime checks remain.
 - Repairs outside that normal backing-store recovery belong to explicit **offline data rescue**. Close the affected Repository/Stores/file resources and discard all associated caches first; rescue tools operate without those caches. After rescue, reopen fresh resources and Stores. Never resume an old cache after temporarily disabling it for rescue.
 - A borrowed backing store must outlive its Store facade. Serialize operations, do not overlap Store operations with an externally held backing writer lease, and stop using the Store after its owner faults or its backing resources close. Retain existing publication, fault, and reentry checks; append-only is not permission to skip data validation.
 - This rule governs persisted frame data. Publication refs, lock files, and rebuildable derived files continue to follow their own protocols. The read-cache design and implementation status are tracked in [DB-067](docs/design-branches/0067-owned-revision-read-cache-design.md).
@@ -35,8 +35,9 @@
 ## Repository conventions
 
 - Storage dependencies use the version/revision in [eng/StorageDependency.props](eng/StorageDependency.props).
-  Normal build/test restores storage packages directly from nuget.org; Prepare is only a public-package download
-  helper for isolated probes, not a source clone/build step. Start with [docs/storage-dependency.md](docs/storage-dependency.md)
+  The current six-package pin is an unpublished local candidate. Use explicit source mode for source build/test
+  or a complete local feed with a task NuGet.Config for package mode. Prepare validates that feed or downloads
+  published packages for isolated probes; it never clones/builds source. Start with [docs/storage-dependency.md](docs/storage-dependency.md)
   for explicit source development, unique local dev packages with a dedicated NuGet.Config, and package validation.
   Do not infer storage behavior from a sibling checkout at an unrelated HEAD.
   `UseStorageSources=true` is for build/test only; package delivery requires package mode and independent storage/DG versions.

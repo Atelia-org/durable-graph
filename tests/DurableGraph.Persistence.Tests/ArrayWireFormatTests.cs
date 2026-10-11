@@ -1,7 +1,6 @@
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
-using Atelia.Rbf;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -45,27 +44,26 @@ public sealed class ArrayWireFormatTests {
         Assert.Equal(schema, SchemaCatalogTestData.Read(golden)[new("A", 1)]);
         byte[] old = (byte[])golden.Clone();
         old[0] = 3;
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(old, SchemaCatalogTestData.Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(old));
 
         DurableSchema generic = new(TypeExpr.Named("B", slot), 1);
         byte[] nested = SchemaCatalogTestData.Write([generic]);
         Assert.Equal(generic, SchemaCatalogTestData.Read(nested)[new(generic.Type, 1)]);
         nested[0] = 3;
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(nested, SchemaCatalogTestData.Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(nested));
     }
 
     [Fact]
     public void ArrayReferenceChecksNestedAritiesWithoutAssumingElementFamilyKind() {
         DurableSchema point = new("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema owner = new("A", 1, DurableFieldInfo.Reference(1, TypeExpr.VectorArray(point.Type)));
-        var read = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write([owner, point]), SchemaCatalogTestData.Empty)
+        var read = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write([owner, point]))
             .ToDictionary(entry => entry.Id);
         Assert.Equal(point, read[new(3)].Schema);
         DurableSchema invalid = new("B", 1, DurableFieldInfo.Reference(1,
             TypeExpr.MultiDimArray(TypeExpr.Named("P", TypeExpr.Builtin(TypeTag.Int32)), 4)));
-        byte[] invalidRow = SchemaCatalogTestData.Write([invalid]);
-        invalidRow[2] = 4;
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(invalidRow, read));
+        byte[] invalidSnapshot = CatalogTestData.Encode(CatalogTestData.Schemas([owner, point, invalid]));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(invalidSnapshot));
     }
 
     [Theory]
@@ -100,34 +98,36 @@ public sealed class ArrayWireFormatTests {
             DurableSchema point1 = new("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
             DurableSchema point2 = new("P", 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
             ArrayLayout layout = new(TypeExprKind.VectorArray, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point1));
-            var registered = SchemaCatalogTestData.Registered(point1);
-            byte[] golden = Convert.FromHexString("0201030301041002");
-            Assert.Equal(golden, WriteArray(layout, registered));
-            Assert.Same(point1, ReadArray(golden, registered).ElementSlot.InlineSchema);
-            // Even a known ID cannot point at a class where an inline element is required.
-            Assert.Throws<InvalidDataException>(() => ReadArray(golden, SchemaCatalogTestData.Registered(new DurableSchema("R", 1))));
+            SchemaCatalogEntry[] rows = [SchemaCatalogEntry.ForSchema(new(2), point1), SchemaCatalogEntry.ForArray(new(3), layout)];
+            byte[] snapshot = SchemaCatalogWireCodec.Write(rows);
+            Assert.Equal(Convert.FromHexString("030301041002"), snapshot[^6..]);
+            SchemaCatalogEntry[] decodedRows = SchemaCatalogWireCodec.Read(snapshot);
+            Assert.Same(decodedRows[0].Schema, decodedRows[1].Array!.ElementSlot.InlineSchema);
+            // A complete catalog's known class ID cannot be used as an inline element dependency.
+            byte[] classPrefix = SchemaCatalogTestData.Write([new DurableSchema("R", 1)]);
+            byte[] invalid = [2, 2, .. classPrefix.AsSpan(2), .. Convert.FromHexString("030301041002")];
+            Assert.Throws<InvalidDataException>(() => ReadArray(invalid));
             RepresentationId id;
-            using (IRbfFile file = RbfFile.CreateNew(path)) {
-                var schemas = new SchemaStore(file);
+            using (GraphResources file = GraphResources.CreateNew(path)) {
+                var schemas = file.Schemas;
                 schemas.Register(point2);
                 schemas.Register(point1);
                 id = schemas.RegisterRepresentations([ObjectLayout.ForArray(layout)])[0];
                 Assert.Equal(4U, id.Value);
             }
-            using (IRbfFile file = RbfFile.OpenExisting(path)) {
-                var schemas = new SchemaStore(file, readOnly: true);
+            using (GraphResources file = GraphResources.OpenExisting(path)) {
+                var schemas = file.Schemas;
                 var decoded = schemas.GetRepresentation(id);
                 Assert.Equal(layout, decoded.Array);
                 Assert.Same(schemas.GetRequired("P", 1), decoded.Array!.ElementSlot.InlineSchema);
             }
         }
-        finally { if (File.Exists(path)) { File.Delete(path); } }
+        finally { DeleteTestPath(path); }
     }
 
     [Theory]
     [InlineData("02010203000402")] // Unknown codec zero.
     [InlineData("02010203020402")] // Future codec.
-    [InlineData("0201020381000402")] // Noncanonical codec.
     [InlineData("02010203010302")] // Open type is not an array constructor.
     [InlineData("02010203010802")] // Unknown rank.
     [InlineData("02010203010400")] // Invalid element slot.
@@ -149,15 +149,13 @@ public sealed class ArrayWireFormatTests {
                 : new(1, TypeTag.InlineValue, inlineSchema: chain[index - 1]);
             chain[index] = new($"I{index:D3}", 1, SchemaKind.InlineValue, field);
         }
-        var registered = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(chain), SchemaCatalogTestData.Empty)
-            .ToDictionary(entry => entry.Id);
         ArrayLayout layout = new(TypeExprKind.VectorArray, new(1, TypeTag.InlineValue, inlineSchema: chain[^1]));
-        // ID 258 array references inline ID 257, whose Schema DAG has exactly 256 levels.
-        byte[] golden = Convert.FromHexString("02018202030104108102");
-        Assert.Equal(golden, WriteArray(layout, registered));
-        ArrayLayout decoded = ReadArray(golden, registered);
-        Assert.Equal(layout, decoded);
-        Assert.Same(registered[new(257)].Schema, decoded.ElementSlot.InlineSchema);
+        SchemaCatalogEntry array = SchemaCatalogEntry.ForArray(new(258), layout);
+        byte[] snapshot = SchemaCatalogWireCodec.Write([.. CatalogTestData.Schemas(chain), array]);
+        Assert.Equal(Convert.FromHexString("8202030104108102"), snapshot[^8..]);
+        SchemaCatalogEntry[] decoded = SchemaCatalogWireCodec.Read(snapshot);
+        Assert.Equal(layout, decoded[^1].Array);
+        Assert.Same(decoded[^2].Schema, decoded[^1].Array!.ElementSlot.InlineSchema);
     }
 
     [Fact]
@@ -171,26 +169,21 @@ public sealed class ArrayWireFormatTests {
         Assert.Equal(TypeExprKind.VectorArray, ReadArray(golden).Constructor);
     }
 
-    private static ArrayLayout ReadArray(byte[] bytes,
-        IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry>? registered = null) =>
-        Assert.Single(SchemaCatalogWireCodec.Read(bytes, registered ?? SchemaCatalogTestData.Empty)).Array!;
+    private static ArrayLayout ReadArray(byte[] bytes) =>
+        Assert.Single(SchemaCatalogWireCodec.Read(bytes), static row => row.Array is not null).Array!;
 
-    private static byte[] WriteArray(ArrayLayout layout,
-        IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry>? registered = null) {
-        registered ??= SchemaCatalogTestData.Empty;
-        uint id = registered.Count == 0 ? 2 : registered.Keys.Max(key => key.Value) + 1;
-        return SchemaCatalogWireCodec.Write([SchemaCatalogEntry.ForArray(new(id), layout)], registered);
-    }
+    private static byte[] WriteArray(ArrayLayout layout) =>
+        SchemaCatalogWireCodec.Write([SchemaCatalogEntry.ForArray(new(2), layout)]);
 
     private static byte[] WriteType(TypeExpr type) {
         ArrayBufferWriter<byte> buffer = new();
-        BinaryPayloadWriter writer = new(buffer);
+        BareValueWriter writer = new(buffer);
         TypeExprWireCodec.Write(ref writer, type);
         return buffer.WrittenSpan.ToArray();
     }
 
     private static TypeExpr ReadType(byte[] bytes) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TypeExpr result = TypeExprWireCodec.Read(ref reader);
         reader.EnsureFullyConsumed();
         return result;

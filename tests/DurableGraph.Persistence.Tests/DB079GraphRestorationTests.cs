@@ -2,8 +2,8 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using State = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.State;
 
@@ -19,10 +19,9 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [InlineData(true)]
     public void PairCompletesBothAllocationTablesBeforeAnyHydration(bool failLastAllocation) {
         Directory.CreateDirectory(_root);
-        using IRbfFile schemaFile = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile);
-        using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(_root, "state"),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using GraphResources schemaFile = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        SchemaStore schemas = schemaFile.Schemas;
+        var segments = schemaFile.Data;
         using StateRevisionStore store = new(segments);
         FrameAddress first = Seed(store, schemas, (1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
         FrameAddress second = Seed(store, schemas, (1, new(2, 2, 0, 30)), (2, new(1, 1, 0, 40)));
@@ -36,7 +35,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             Assert.Equal(4, allocations);
             hydrations++;
         }).Snapshot(schemas);
-        long stateTail = Tail(segments), schemaTail = schemaFile.TailOffset;
+        long stateTail = Tail(segments), schemaTail = DataBytes(schemaFile.Data);
         (Node First, Node Second)? delivered = null;
 
         if (failLastAllocation) {
@@ -56,7 +55,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         }
         Assert.Equal(4, allocations);
         Assert.Equal(stateTail, Tail(segments));
-        Assert.Equal(schemaTail, schemaFile.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(schemaFile.Data));
     }
 
     [Theory]
@@ -64,10 +63,9 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [InlineData(true)]
     public void EqualExactHeadWithoutEqualityProofDoesNotAuthorizeSingletonReuse(bool registerUnequalProof) {
         Directory.CreateDirectory(_root);
-        using IRbfFile schemaFile = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        SchemaStore schemas = new(schemaFile);
-        using SegmentStore segments = SegmentStore.CreateNew(Path.Combine(_root, "state"),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        using GraphResources schemaFile = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        SchemaStore schemas = schemaFile.Schemas;
+        var segments = schemaFile.Data;
         using StateRevisionStore store = new(segments);
         FrameAddress address = Seed(store, schemas, (1, new(0, 0, 0, 10)));
         Node singleton = new();
@@ -100,7 +98,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         }, hydrate: _ => {
             Assert.Equal(4, allocations);
             hydrations++;
-        }), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        }));
         Node state = Cycle(10, 20), message = Cycle(30, 40);
         using BranchCheckout branch = repository.CreateBranch("main", state, NoRebase);
         CheckpointAddress stateAddress = branch.Head;
@@ -137,8 +135,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Node singleton = new();
         int allocations = 0, hydrations = 0;
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(
-            allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+            allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++));
         using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 10 }, NoRebase);
         CheckpointAddress address = branch.CommitEvent(new Node { Value = 20 }, NoRebase);
         Checkpoint? delivered = null;
@@ -155,8 +152,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
 
     [Fact]
     public void CheckpointPreviousGraphPreparationFailsBeforeEitherGraphAllocates() {
-        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models(),
-            new() { NewStoreLayout = RbfSegmentStoreLayout.Flat })) {
+        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
             using BranchCheckout branch = seed.CreateBranch("main", new Node { Value = 10 }, NoRebase);
             branch.CommitEvent(new Node { Value = 30 }, NoRebase);
         }
@@ -214,10 +210,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             BaseObjectBodyCodec.Encode(representation, SharedReadModel.Base(row.State)).Body)), []));
     }
 
-    private static long Tail(SegmentStore segments) {
-        using RbfSegmentWriterLease lease = segments.OpenActiveWriter();
-        return lease.File.TailOffset;
-    }
+    private static long Tail(SegmentStore segments) => DataBytes(segments);
 
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db079-restoration-");
 }

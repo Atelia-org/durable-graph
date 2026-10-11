@@ -90,25 +90,9 @@ New-Item -ItemType Directory -Path $feed, $packageCache | Out-Null
 Push-Location $repositoryRoot
 
 try {
-    Invoke-DotNet @(
-        "pack", "src/DurableGraph.Serialization/DurableGraph.Serialization.csproj",
-        "--configuration", "Release",
-        "--output", $feed,
-        "-p:PackageVersion=$packageVersion"
-    )
-
-    Invoke-DotNet @(
-        "pack", "src/DurableGraph/DurableGraph.csproj",
-        "--configuration", "Release",
-        "--output", $feed,
-        "-p:PackageVersion=$packageVersion"
-    )
-
+    Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
     $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File -ErrorAction Stop)
-
-    if ($packages.Count -ne 2) {
-        throw "Expected runtime and serialization packages, found $($packages.Count)."
-    }
+    if ($packages.Count -ne 10) { throw "Expected the complete ten-package feed, found $($packages.Count)." }
 
     $package = Get-Item -LiteralPath (Join-Path $feed "Atelia.DurableGraph.$packageVersion.nupkg")
     Add-Type -AssemblyName System.IO.Compression.FileSystem

@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
@@ -29,7 +30,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var captured = Item.__DurableState.Capture(domain);
                     domain.Mutate();
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Item.__DurableState.WriteBaseBody(ref writer, in captured);
                     var current = Item.__DurableState.Capture(domain);
                     Item.__DurableState.WriteBaseBody(ref writer, in current);
@@ -88,7 +89,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             public static class Host {
                 public static byte[] RoundTripVersions() {
-                    var reader = new BinaryPayloadReader(new byte[] { 1, 1, 3, 5, 1 });
+                    var reader = new BareValueReader(new byte[] { 1, 1, 3, 5, 1 });
                     var v1 = Item.__DurableState.ReadBaseBodyV1(ref reader);
                     var v2 = Item.__DurableState.ReadBaseBodyV2(ref reader);
                     var v3 = Item.__DurableState.ReadBaseBodyV3(ref reader);
@@ -98,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                         throw new Exception("Historical DTO fields do not match their exact layout.");
                     }
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Item.__DurableState.WriteBaseBody(ref writer, in v1);
                     Item.__DurableState.WriteBaseBody(ref writer, in v2);
                     Item.__DurableState.WriteBaseBody(ref writer, in v3);
@@ -186,10 +187,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             public sealed partial class Item : IDurableObject { }
             public static class Host {
                 public static int[] RoundTrip() {
-                    var reader = new BinaryPayloadReader(new byte[] { 99 });
+                    var reader = new BareValueReader(new byte[] { 99 });
                     var state = Item.__DurableState.ReadBaseBodyV1(ref reader);
                     var buffer = new ArrayBufferWriter<byte>();
-                    var writer = new BinaryPayloadWriter(buffer);
+                    var writer = new BareValueWriter(buffer);
                     Item.__DurableState.WriteBaseBody(ref writer, in state);
                     var captured = Item.__DurableState.Capture(new Item());
                     Item.__DurableState.WriteBaseBody(ref writer, in captured);

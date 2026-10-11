@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Storage;
 

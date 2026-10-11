@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -24,8 +25,8 @@ public sealed class ImmutableLeafBindingTests {
             static (in int state) => throw new NotSupportedException(),
             static (in int prior, in int next) => throw new NotSupportedException());
         StateReaderBinding<int> reader = new(schema,
-            static (ref BinaryPayloadReader body) => throw new NotSupportedException(),
-            static (ref BinaryPayloadReader body, in int prior) => throw new NotSupportedException(),
+            static (ref BareValueReader body) => throw new NotSupportedException(),
+            static (ref BareValueReader body, in int prior) => throw new NotSupportedException(),
             static (in int state, IStateReferenceVisitor visitor) => { });
         return new(preparation, [reader],
             static _ => throw new InvalidOperationException("Leaf must not normalize."),

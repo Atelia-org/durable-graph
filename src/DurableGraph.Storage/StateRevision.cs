@@ -1,3 +1,5 @@
+using Atelia.FrameStore;
+
 namespace Atelia.DurableGraph.Storage;
 
 /// <summary>
@@ -78,7 +80,7 @@ public sealed class StateRevision {
     /// <summary>IDs derived from the local object records. Each head is its containing Revision Frame.</summary>
     public IReadOnlyList<uint> LocalObjectIds => _localObjectIds;
 
-    /// <summary>Earlier object heads completing an ObjectHeadMap Base; empty for an ObjectHeadMap Delta.</summary>
+    /// <summary>Completed object heads completing an ObjectHeadMap Base; empty for an ObjectHeadMap Delta.</summary>
     public IReadOnlyDictionary<uint, FrameAddress> ExternalObjectHeads => _externalObjectHeads;
 
     /// <summary>IDs removed by a map Delta; a map Base expresses non-live objects by absence.</summary>

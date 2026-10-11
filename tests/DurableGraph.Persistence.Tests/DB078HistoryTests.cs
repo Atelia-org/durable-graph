@@ -3,8 +3,8 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -382,19 +382,19 @@ public sealed partial class DB078HistoryTests : IDisposable {
         where T : class, IDurableObject {
         PreparedBaseBody Base(in Dto state) {
             ArrayBufferWriter<byte> bytes = new();
-            BinaryPayloadWriter writer = new(bytes);
+            BareValueWriter writer = new(bytes);
             writer.WriteByte(state.Value);
-            if (childSchema is not null) writer.WriteUInt32(state.Child.Value);
+            if (childSchema is not null) writer.WriteVarUInt32(state.Child.Value);
             return new(bytes.WrittenSpan);
         }
-        Dto Read(ref BinaryPayloadReader reader) => new(reader.ReadByte(), childSchema is null ? default : new ObjectId(reader.ReadUInt32()));
+        Dto Read(ref BareValueReader reader) => new(reader.ReadByte(), childSchema is null ? default : new ObjectId(reader.ReadVarUInt32()));
         void Visit(in Dto state, IStateReferenceVisitor visitor) {
             if (childSchema is not null) visitor.VisitDurable(state.Child, childSchema);
         }
         CapturedStatePreparation<Dto> preparation = new(schema, Base,
             (in Dto prior, in Dto next) => new(prior != next, Base(next).Body));
         return new StateModelBinding<T, Dto>(preparation,
-            [new StateReaderBinding<Dto>(schema, Read, (ref BinaryPayloadReader reader, in Dto prior) => Read(ref reader), Visit)],
+            [new StateReaderBinding<Dto>(schema, Read, (ref BareValueReader reader, in Dto prior) => Read(ref reader), Visit)],
             row => row.GetState<Dto>(), allocate,
             (T instance, in Dto state, ObjectReadTable objects) => hydrate(instance, state.Value,
                 childSchema is null ? null : objects.ResolveDurable<IDurableObject>(state.Child)),
@@ -404,9 +404,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
             }, Visit);
     }
 
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models(),
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
-    private SegmentStore OpenState() => SegmentStore.OpenExisting(Path.Combine(_root, "state"));
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models());
+    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
     private Dictionary<string, byte[]> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);
     private void AssertFiles(Dictionary<string, byte[]> before) {

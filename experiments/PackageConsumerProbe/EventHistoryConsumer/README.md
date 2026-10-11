@@ -9,7 +9,7 @@ Run from the repository root:
 ```
 
 This DB-063/064 delivery witness has only the two public PackageReferences, no project/analyzer/import
-wiring. The runner packs nine dependencies, publishes V1 Schema history, runs that process to
+wiring. The runner packs ten dependencies, publishes V1 Schema history, runs that process to
 completion, then compiles and runs V2 with the same immutable history and repository. Both builds
 also run the packaged history Verify target.
 DB-077 model configuration is supplied once at each repository Open. This project forces Family

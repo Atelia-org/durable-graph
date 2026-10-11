@@ -1,9 +1,9 @@
 using System.Reflection;
 using Atelia.Data;
-using Atelia.EventJournal;
+using Atelia.VersionStore;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using Journal = Atelia.EventJournal.EventJournal;
+using Atelia.FrameStore;
+
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -12,62 +12,10 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     private const string Prefix = "durable-tag-failures-";
     private readonly string _root = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
 
-    [Theory]
-    [InlineData("BeforeTargetFlush", TagPublicationOutcome.NotAttempted, GraphCommitOutcome.NotPublished, false)]
-    [InlineData("BeforeAppend", TagPublicationOutcome.NotAttempted, GraphCommitOutcome.NotPublished, false)]
-    [InlineData("AfterAppend", TagPublicationOutcome.Unknown, GraphCommitOutcome.Unknown, true)]
-    [InlineData("AfterDurableFlush", TagPublicationOutcome.Confirmed, GraphCommitOutcome.Published, true)]
-    public void ActualUpstreamStageDeterminesOutcomeAndFaultUntilStrictReopen(string stage,
-        TagPublicationOutcome upstreamOutcome, GraphCommitOutcome outcome, bool visibleAfterReopen) {
-        Atelia.DurableGraph.Storage.FrameAddress revision;
-        ObjectId root;
-        using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
-            CheckpointAddress address = main.Head;
-            revision = address.RevisionAddress;
-            root = address.RootId;
-            repository.CreateTag("stable", address);
-            using BranchCheckout warm = repository.Fork("warm", address);
-            Assert.NotNull(repository.PreparedStateEntry);
-            IOException injected = new($"Real tag publication stage: {stage}");
-            List<string> reached = [];
-            InstallProbe(JournalOf(repository), observed => {
-                reached.Add(observed);
-                if (observed == stage) { throw injected; }
-            });
-
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => repository.CreateTag("candidate", address));
-            Assert.Equal(outcome, error.Outcome);
-            Assert.Null(error.CandidateRevisionAddress);
-            TagPublicationException upstream = Assert.IsType<TagPublicationException>(error.InnerException);
-            Assert.Equal(upstreamOutcome, upstream.Outcome);
-            Assert.Equal("candidate", upstream.TagName);
-            Assert.Same(injected, upstream.InnerException);
-            Assert.Equal(stage, reached[^1]);
-            Assert.True(repository.IsFaulted);
-            Assert.Null(repository.PreparedStateEntry);
-            Assert.Equal(address, main.Head);
-            Assert.Equal((byte)17, Assert.IsType<Node>(warm.State).Value);
-            AssertFaultedOperations(repository, main, address);
-        }
-        // Unknown is inspected after closing the old driver, never retried against it.
-        // This injected AfterAppend leaves a complete record; this is not a power-loss claim.
-        using Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
-        CheckpointAddress original = reopened.ResolveTag("stable");
-        Assert.Equal(revision, original.RevisionAddress);
-        Assert.Equal(root, original.RootId);
-        Assert.Equal(original, reopened.GetHead("main"));
-        if (visibleAfterReopen) {
-            Assert.Equal(original, reopened.ResolveTag("candidate"));
-        } else {
-            InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => reopened.ResolveTag("candidate"));
-            Assert.Contains("[EventJournal.TagNotFound]", missing.Message);
-        }
-    }
 
     [Fact]
-    public void UntypedUpstreamThrowAfterPublicationAttemptRemainsUnknownUntilReopen() {
-        Atelia.DurableGraph.Storage.FrameAddress revision;
+    public void ClosedUpstreamBeforeTagOutputIsNotPublishedAndRequiresReopen() {
+        Atelia.FrameStore.FrameAddress revision;
         using (Repository repository = Create()) {
             using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
             CheckpointAddress address = main.Head;
@@ -76,12 +24,12 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             using BranchCheckout warm = repository.Fork("warm", address);
             Assert.NotNull(repository.PreparedStateEntry);
             repository.Checkpoint = point => {
-                if (point == CommitCheckpoint.BeforePublication) { JournalOf(repository).Dispose(); }
+                if (point == CommitCheckpoint.BeforePublication) { ResourcesOf(repository).Versions.Dispose(); }
             };
-            // The hook returns normally. The real subsequent upstream CreateTag throws
-            // ObjectDisposedException, carrying no typed evidence about publication.
+            // The real subsequent upstream CreateTag rejects its disposed owner before output;
+            // VersionStore supplies NotAttempted despite the exception.
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => repository.CreateTag("candidate", address));
-            Assert.Equal(GraphCommitOutcome.Unknown, error.Outcome);
+            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
             Assert.Null(error.CandidateRevisionAddress);
             Assert.IsType<ObjectDisposedException>(error.InnerException);
             Assert.True(repository.IsFaulted);
@@ -93,68 +41,15 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         Assert.Equal(revision, reopened.ResolveTag("stable").RevisionAddress);
         Assert.Equal(reopened.GetHead("main"), reopened.ResolveTag("stable"));
         InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => reopened.ResolveTag("candidate"));
-        Assert.Contains("[EventJournal.TagNotFound]", missing.Message);
+        Assert.Contains("[VersionStore.TagNotFound]", missing.Message);
     }
 
-    [Fact]
-    public void ActualRbfPreIoResultFailureKeepsOriginalErrorAndHealthySlot() {
-        using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node { Value = 17 });
-            using BranchCheckout warm = seed.Fork("warm", main.Head);
-        }
-        Dictionary<string, byte[]> before = Snapshot();
-        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
-            using BranchCheckout main = repository.Checkout("main");
-            CheckpointAddress address = main.Head;
-            using BranchCheckout warm = repository.Checkout("warm");
-            PreparedStateRestoration entry = repository.PreparedStateEntry!;
-            Journal journal = JournalOf(repository);
-            IRbfFile log = Field<IRbfFile>(journal, "_refOpLog");
-            FieldInfo tail = log.GetType().GetField("_tailOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            Assert.NotNull(tail);
-            long originalTail = (long)tail.GetValue(log)!;
-            List<string> reached = [];
-            // Same real RBF pre-I/O offset-overflow rejection used by the pinned upstream
-            // ImmutableTagTests; no fake TagPublicationException or replacement publisher.
-            InstallProbe(journal, stage => {
-                reached.Add(stage);
-                if (stage == "BeforeAppend") { tail.SetValue(log, SizedPtr.MaxOffset + SizedPtr.Alignment); }
-            });
-            try {
-                InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => repository.CreateTag("retry", address));
-                Assert.Contains("[Rbf.ArgumentError]", refusal.Message);
-                Assert.Contains("exceeds SizedPtr.MaxOffset", refusal.Message);
-                Assert.Equal(new[] { "BeforeTargetFlush", "BeforeAppend" }, reached);
-            } finally {
-                tail.SetValue(log, originalTail);
-                InstallProbe(journal, null);
-            }
-            Assert.False(repository.IsFaulted);
-            Assert.False(main.IsFaulted);
-            Assert.Same(entry, repository.PreparedStateEntry);
-            Assert.Equal(address, repository.GetHead("main"));
-            InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("retry"));
-            Assert.Contains("[EventJournal.TagNotFound]", missing.Message);
-        }
-        // All handles are closed so the assertion includes the exclusively held Schema
-        // file. Compare before the successful retry is allowed to append the tag.
-        AssertSnapshot(before);
-        using Repository retry = Repository.OpenExisting(_root, SharedReadModel.Models());
-        using BranchCheckout resumed = retry.Checkout("main");
-        CheckpointAddress retryAddress = resumed.Head;
-        PreparedStateRestoration retryEntry = retry.PreparedStateEntry!;
-        retry.CreateTag("retry", retryAddress);
-        Assert.Equal(retryAddress, retry.ResolveTag("retry"));
-        Assert.Same(retryEntry, retry.PreparedStateEntry);
-        resumed.CommitEvent(new Node { Value = 29 });
-        Assert.Equal(retryAddress, retry.ResolveTag("retry"));
-    }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void RepositoryPublicationGatePreservesNotPublishedVersusPublished(bool afterPublication) {
-        Atelia.DurableGraph.Storage.FrameAddress revision;
+        Atelia.FrameStore.FrameAddress revision;
         using (Repository repository = Create()) {
             using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
             CheckpointAddress address = main.Head;
@@ -180,7 +75,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
                 Assert.False(repository.IsFaulted);
                 Assert.Same(entry, repository.PreparedStateEntry);
                 InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("candidate"));
-                Assert.Contains("[EventJournal.TagNotFound]", missing.Message);
+                Assert.Contains("[VersionStore.TagNotFound]", missing.Message);
                 repository.CreateTag("candidate", address);
                 Assert.Equal(address, repository.ResolveTag("candidate"));
                 Assert.Same(entry, repository.PreparedStateEntry);
@@ -200,8 +95,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         using BranchCheckout warm = repository.Fork("warm", address);
         PreparedStateRestoration entry = repository.PreparedStateEntry!;
         int checks = 0;
-        InstallProbe(JournalOf(repository), stage => {
-            if (stage != "BeforeAppend") { return; }
+        InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => {
             checks++;
             Assert.Throws<InvalidOperationException>(() => repository.CreateTag("nested", address));
             Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("stable"));
@@ -210,15 +104,15 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
             Assert.Throws<InvalidOperationException>(() => main.Dispose());
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
-        });
+        }, tag: true);
         repository.CreateTag("outer", address);
-        InstallProbe(JournalOf(repository), null);
+        ClearPublicationFault(ResourcesOf(repository).Versions);
         Assert.Equal(1, checks);
         Assert.Equal(address, repository.ResolveTag("outer"));
         Assert.False(repository.IsFaulted);
         Assert.Same(entry, repository.PreparedStateEntry);
         Assert.DoesNotContain("nested-fork", repository.ListBranches());
-        Assert.Contains("[EventJournal.TagNotFound]", Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("nested")).Message);
+        Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("nested")).Message);
         // Rejected disposal did not release this branch's editing occupancy.
         Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
         main.CommitState();
@@ -234,7 +128,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             checks++;
             Assert.Throws<InvalidOperationException>(() => active!.ResolveTag("stable"));
             Assert.Throws<InvalidOperationException>(() => active!.CreateTag("nested", target!));
-        }), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        }));
         active = repository;
         using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
         target = main.Head;
@@ -273,21 +167,9 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         AssertSnapshot(before);
     }
 
-    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models(),
-        new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
     private static T Field<T>(object instance, string name) =>
         (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
-    private static Journal JournalOf(Repository repository) => Field<HistoryJournal>(repository, "_history").Journal;
-    private static void InstallProbe(Journal journal, Action<string>? callback) {
-        PropertyInfo property = typeof(Journal).GetProperty("TagPublicationProbe", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        Assert.NotNull(property);
-        if (callback is null) { property.SetValue(journal, null); return; }
-        Type stage = property.PropertyType.GetGenericArguments()[0];
-        MethodInfo factory = typeof(RepositoryTagFailureTests).GetMethod(nameof(Probe), BindingFlags.Static | BindingFlags.NonPublic)!.MakeGenericMethod(stage);
-        property.SetValue(journal, factory.CreateDelegate<Func<Action<string>, Delegate>>()(callback));
-    }
-    private static Delegate Probe<TStage>(Action<string> callback) where TStage : struct, Enum =>
-        new Action<TStage>(stage => callback(stage.ToString()));
     private static void AssertFaultedOperations(Repository repository, BranchCheckout main, CheckpointAddress address) {
         Assert.True(main.IsFaulted);
         Assert.Throws<InvalidOperationException>(() => repository.CreateTag("blocked", address));

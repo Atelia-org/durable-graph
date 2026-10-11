@@ -18,8 +18,10 @@ candidate Deltas validate; no writer selector needed by readers; algorithm order
 warmup/initial binding recorded separately. Under DB-063, an initial step publishes S0, and each
 edit step publishes an independent marker Event followed by State through BranchCheckout.
 Whole-step timing includes both publications; State payload counters and isolated Diff remain
-State-only. Journal directory bytes replace the old publication-file metric. Measurement version 2
-is intentionally not whole-save-comparable with frozen pre-DB-063 reports.
+State-only. DB-086 shares Schema and E/S frames in data and uses VS root publication; measurement
+version 3 reports DataFileBytes and ControlFileBytes, without fake State/Schema disk separation.
+It is not whole-save-comparable with the older separate-store reports. Bare signatures and
+GraphResources diagnostics replace the old cursor and physical-file access.
 
 Output is ignored per-run JSON/CSV/Markdown plus independent repositories. Root product context is
 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md); design/acceptance authority is

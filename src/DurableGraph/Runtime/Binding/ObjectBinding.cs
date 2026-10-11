@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
@@ -60,7 +61,7 @@ internal sealed class StringObjectReader : ObjectReaderBinding {
     public override Type StateType => typeof(string);
     internal override ObjectStateRecord Read(ObjectId objectId, IStateBodySource source) {
         if (objectId.IsNull || source.Count != 1) { throw new InvalidDataException("A string requires a nonzero ID and exactly one Base body."); }
-        BinaryPayloadReader reader = new(source.GetBody(0));
+        BareValueReader reader = new(source.GetBody(0));
         string value = reader.ReadString();
         reader.EnsureFullyConsumed();
         return new(objectId, value);

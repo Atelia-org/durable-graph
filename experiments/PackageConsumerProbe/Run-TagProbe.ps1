@@ -31,8 +31,8 @@ try {
     }
     # The helper and package dependency metadata own storage component versions. They
     # may differ; this consumer never forces one version onto all storage packages.
-    if (@(Get-ChildItem -LiteralPath $PackageSource -Filter '*.nupkg' -File).Count -ne 9) {
-        throw 'Expected the complete nine-package isolated feed.'
+    if (@(Get-ChildItem -LiteralPath $PackageSource -Filter '*.nupkg' -File).Count -ne 10) {
+        throw 'Expected the complete ten-package isolated feed.'
     }
     $properties = @(
         "-p:DurableGraphPackageVersion=$Version",

@@ -1,8 +1,7 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
-using Atelia.DurableGraph.Serialization;
-using Atelia.Rbf;
+using Atelia.Binary;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -64,11 +63,11 @@ public sealed class NullableCatalogTests {
         Assert.Equal(owner, SchemaCatalogTestData.Read(ownerGolden)[new("O", 1)]);
         SchemaCatalogEntry list = SchemaCatalogEntry.ForList(new(2), new(DurableFieldInfo.Nullable(1, new(1, TypeTag.Int32))));
         byte[] listGolden = Convert.FromHexString("02010204021202");
-        Assert.Equal(listGolden, SchemaCatalogWireCodec.Write([list], CatalogTestData.Empty));
-        Assert.Equal(list.Layout, Assert.Single(SchemaCatalogWireCodec.Read(listGolden, CatalogTestData.Empty)).Layout);
+        Assert.Equal(listGolden, SchemaCatalogWireCodec.Write([list]));
+        Assert.Equal(list.Layout, Assert.Single(SchemaCatalogWireCodec.Read(listGolden)).Layout);
         for (int i = 0; i < listGolden.Length; i++) {
             byte[] prefix = listGolden[..i];
-            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix, CatalogTestData.Empty));
+            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix));
             Assert.True(error is InvalidDataException or EndOfStreamException, $"Catalog prefix {i}: {error}");
         }
     }
@@ -79,7 +78,7 @@ public sealed class NullableCatalogTests {
         DurableSchema owner = new("O", 1, Slot(point));
         byte[] golden = Convert.FromHexString("02020202020350000100010102030102034F0001000101121002");
         Assert.Equal(golden, SchemaCatalogTestData.Write([point, owner]));
-        SchemaCatalogEntry[] rows = SchemaCatalogWireCodec.Read(golden, CatalogTestData.Empty);
+        SchemaCatalogEntry[] rows = SchemaCatalogWireCodec.Read(golden);
         Assert.Same(rows[0].Schema, rows[1].Schema!.Fields[0].NullableLayout!.ElementSlot.InlineSchema);
         Assert.Same(rows[0].Schema, rows[1].Schema!.Fields[0].ValueSchema);
 
@@ -88,28 +87,28 @@ public sealed class NullableCatalogTests {
             RepresentationId[] ids;
             ObjectLayout list = ObjectLayout.ForList(new(Slot(point)));
             ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array, Slot(point)));
-            using (IRbfFile file = RbfFile.CreateNew(path)) {
-                SchemaStore store = new(file);
+            using (GraphResources file = GraphResources.CreateNew(path)) {
+                SchemaStore store = file.Schemas;
                 ids = store.RegisterRepresentations([ObjectLayout.ForDurable(owner), list, array]);
                 Assert.Equal(new uint[] { 3, 4, 5 }, ids.Select(id => id.Value));
                 Assert.Equal(2, store.Count);
-                long tail = file.TailOffset;
+                long tail = DataBytes(file.Data);
                 Assert.Equal(ids, store.RegisterRepresentations([ObjectLayout.ForDurable(owner), list, array]));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 DurableSchema bad = new("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte));
                 Assert.Throws<SchemaConflictException>(() => store.RegisterRepresentations([
                     ObjectLayout.ForList(new(new(1, TypeTag.Boolean))), ObjectLayout.ForArray(new(TypeExprKind.VectorArray, Slot(bad)))]));
-                Assert.Equal(tail, file.TailOffset);
+                Assert.Equal(tail, DataBytes(file.Data));
                 Assert.Equal(2, store.Count);
                 Assert.Equal(6U, store.RegisterRepresentations([ObjectLayout.ForList(new(new(1, TypeTag.Boolean)))])[0].Value);
             }
-            using IRbfFile reopened = RbfFile.OpenReadOnlyExisting(path);
-            SchemaStore cold = new(reopened, readOnly: true);
+            using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+            SchemaStore cold = reopened.Schemas;
             Assert.Equal(list, cold.GetRepresentation(ids[1]));
             Assert.Equal(array, cold.GetRepresentation(ids[2]));
             Assert.Same(cold.GetRequired("P", 1), cold.GetRepresentation(ids[1]).List!.ElementSlot.ValueSchema);
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Theory]
@@ -123,7 +122,7 @@ public sealed class NullableCatalogTests {
     [InlineData("0201020402121002")] // Self dependency.
     [InlineData("0201020402121003")] // Forward dependency.
     public void MalformedNullableCatalogSlotsAndRetiredVersionAreRejected(string hex) {
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex), CatalogTestData.Empty));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex)));
     }
 
     [Theory]
@@ -161,8 +160,8 @@ public sealed class NullableCatalogTests {
     public void CachedNullableValuesAndEmptyContainerReadersRecheckLateChildConflict() {
         string path = NewPath();
         try {
-            using IRbfFile file = RbfFile.CreateNew(path);
-            SchemaStore schemas = new(file);
+            using GraphResources file = GraphResources.CreateNew(path);
+            SchemaStore schemas = file.Schemas;
             StateModelSnapshot snapshot = RetainedPoints().Snapshot(schemas);
             DurableFieldInfo slot = Slot(Point(1));
             ObjectLayout list = ObjectLayout.ForList(new(slot));
@@ -175,7 +174,7 @@ public sealed class NullableCatalogTests {
             Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(list));
             Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(array));
         }
-        finally { File.Delete(path); }
+        finally { DeleteTestPath(path); }
     }
 
     [Theory]
@@ -186,8 +185,8 @@ public sealed class NullableCatalogTests {
             TypeExpr.List(TypeExpr.Nullable(TypeExpr.Named("P")))));
         DurableSchema wrongKind = new("P", 1);
         SchemaCatalogEntry[] rows = CatalogTestData.Schemas(ownerFirst ? [owner, wrongKind] : [wrongKind, owner]);
-        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write(rows, CatalogTestData.Empty));
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(rows), CatalogTestData.Empty));
+        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write(rows));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(rows)));
     }
 
     [Fact]
@@ -197,15 +196,15 @@ public sealed class NullableCatalogTests {
             chain[i] = new($"P{i}", 1, SchemaKind.InlineValue,
                 i == 0 ? new(1, TypeTag.Int32) : Slot(chain[i - 1]));
         }
-        SchemaCatalogEntry[] registered = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(chain[..256]), CatalogTestData.Empty);
+        SchemaCatalogEntry[] registered = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(chain[..256]));
         Assert.Equal(256, registered.Length);
         Assert.Throws<ArgumentException>(() => SchemaCatalogTestData.Write(chain));
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(
-            CatalogTestData.Encode(CatalogTestData.Schemas(chain)), CatalogTestData.Empty));
+            CatalogTestData.Encode(CatalogTestData.Schemas(chain))));
         SchemaCatalogEntry list = SchemaCatalogEntry.ForList(new(258), new(Slot(chain[255])));
-        var index = CatalogTestData.Index(registered);
-        Assert.Equal(list.Layout, Assert.Single(SchemaCatalogWireCodec.Read(
-            SchemaCatalogWireCodec.Write([list], index), index)).Layout);
+        SchemaCatalogEntry[] complete = SchemaCatalogWireCodec.Read(SchemaCatalogWireCodec.Write([.. registered, list]));
+        Assert.Equal(list.Layout, complete[^1].Layout);
+        Assert.Same(complete[^2].Schema, complete[^1].List!.ElementSlot.ValueSchema);
 
         TypeExpr type = TypeExpr.Nullable(TypeExpr.Builtin(TypeTag.Int32));
         for (int i = 2; i < TypeExpr.MaximumDepth; i++) { type = TypeExpr.List(type); }
@@ -231,12 +230,12 @@ public sealed class NullableCatalogTests {
     private static string NewPath() => Path.Combine(Path.GetTempPath(), $"nullable-catalog-{Guid.NewGuid():N}.rbf");
     private static byte[] WriteType(TypeExpr type) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
+        BareValueWriter writer = new(bytes);
         TypeExprWireCodec.Write(ref writer, type);
         return bytes.WrittenSpan.ToArray();
     }
     private static TypeExpr ReadType(byte[] bytes) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TypeExpr type = TypeExprWireCodec.Read(ref reader);
         reader.EnsureFullyConsumed();
         return type;

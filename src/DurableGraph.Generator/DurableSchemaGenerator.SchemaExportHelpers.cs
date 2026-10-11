@@ -47,8 +47,8 @@ public sealed partial class DurableSchemaGenerator {
         INamedTypeSymbol bodyDto = dto.Arity == 0 ? dto : dto.Construct(body.TypeParameters.Where((_, index) => index % 2 == 0).Cast<ITypeSymbol>().ToArray());
         if (layout.Shape.Kind == 2 && !body.AllInterfaces.Any(item => Same(item.OriginalDefinition, stateOps) && Same(item.TypeArguments[0], bodyDto))) return false;
         INamedTypeSymbol? schema = compilation.GetTypeByMetadataName("Atelia.DurableGraph.Schema.DurableSchema");
-        INamedTypeSymbol? writer = compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.BinaryPayloadWriter");
-        INamedTypeSymbol? reader = compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.BinaryPayloadReader");
+        INamedTypeSymbol? writer = compilation.GetTypeByMetadataName("Atelia.Binary.BareValueWriter");
+        INamedTypeSymbol? reader = compilation.GetTypeByMetadataName("Atelia.Binary.BareValueReader");
         ITypeSymbol boolean = compilation.GetSpecialType(SpecialType.System_Boolean);
         bool Method(string name, ITypeSymbol? result, params (ITypeSymbol? Type, RefKind Ref)[] parameters) =>
             body.GetMembers(name).OfType<IMethodSymbol>().Any(method => method.IsStatic && method.Arity == 0 &&

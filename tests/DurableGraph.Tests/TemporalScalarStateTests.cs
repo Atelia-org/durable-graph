@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -25,7 +26,7 @@ public sealed class TemporalScalarStateTests {
 
     private static void CheckAbsentList<T, TOps>(TypeTag tag) where T : unmanaged where TOps : IStateOps<T> {
         ListLayout layout = new(DurableFieldInfo.Nullable(1, new(1, tag)));
-        BinaryPayloadReader reader = new(new byte[] { 2, 0, 0 }); // Two absent elements, no scalar child payload.
+        BareValueReader reader = new(new byte[] { 2, 0, 0 }); // Two absent elements, no scalar child payload.
         FrozenListState<NullableState<T>> state = ListStateBody<NullableState<T>, NullableStateOps<T, TOps>>.ReadBase(ref reader, layout);
         reader.EnsureFullyConsumed();
         Assert.Equal(2, state.Count);
@@ -54,7 +55,7 @@ public sealed class TemporalScalarStateTests {
         PreparedDeltaBody delta = NullableStateOps<DateTimeOffset, DateTimeOffsetStateOps>.PrepareDelta(prior, current, slot);
         Assert.True(delta.HasChanges);
         Assert.Equal(2, delta.Body[0]);
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         Assert.True(current.Value.EqualsExact(NullableStateOps<DateTimeOffset, DateTimeOffsetStateOps>.ApplyDelta(ref reader, prior, slot).Value));
         reader.EnsureFullyConsumed();
     }
@@ -67,7 +68,7 @@ public sealed class TemporalScalarStateTests {
         Assert.Throws<InvalidDataException>(() => DictionaryStateBody<DateTimeOffset, int, DateTimeOffsetStateOps, Int32StateOps>.PrepareBase(invalid, layout));
         FrozenDictionaryState<DateTimeOffset, int> application = new(DictionaryComparerKind.Application, entries);
         byte[] bytes = DictionaryStateBody<DateTimeOffset, int, DateTimeOffsetStateOps, Int32StateOps>.PrepareBase(application, layout).Body.ToArray();
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         FrozenDictionaryState<DateTimeOffset, int> restored = DictionaryStateBody<DateTimeOffset, int, DateTimeOffsetStateOps, Int32StateOps>.ReadBase(ref reader, layout);
         reader.EnsureFullyConsumed();
         Assert.True(entries[0].Key.EqualsExact(restored[0].Key));
@@ -78,7 +79,7 @@ public sealed class TemporalScalarStateTests {
     }
 
     private static void ReadDictionary(byte[] bytes, DictionaryLayout layout) {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         DictionaryStateBody<DateTimeOffset, int, DateTimeOffsetStateOps, Int32StateOps>.ReadBase(ref reader, layout);
     }
 
@@ -86,14 +87,14 @@ public sealed class TemporalScalarStateTests {
         where T : unmanaged where TOps : IStateOps<T> {
         DurableFieldInfo slot = new(1, tag);
         ArrayBufferWriter<byte> output = new();
-        BinaryPayloadWriter writer = new(output);
+        BareValueWriter writer = new(output);
         TOps.WriteBase(ref writer, current, slot);
         Assert.Equal(golden, output.WrittenSpan.ToArray());
         Assert.False(TOps.StateEquals(prior, current, slot));
         PreparedDeltaBody delta = TOps.PrepareDelta(prior, current, slot);
         Assert.True(delta.HasChanges);
         Assert.Equal(golden, delta.Body.ToArray());
-        BinaryPayloadReader reader = new(golden.Concat(new byte[] { 91 }).ToArray());
+        BareValueReader reader = new(golden.Concat(new byte[] { 91 }).ToArray());
         T decoded = TOps.ReadBase(ref reader, slot);
         Assert.True(TOps.StateEquals(current, decoded, slot));
         Assert.Equal(91, reader.ReadByte());
@@ -112,7 +113,7 @@ public sealed class TemporalScalarStateTests {
 
     private static void Apply<T, TOps>(byte[] bytes, T prior, DurableFieldInfo slot)
         where T : unmanaged where TOps : IStateOps<T> {
-        BinaryPayloadReader reader = new(bytes);
+        BareValueReader reader = new(bytes);
         TOps.ApplyDelta(ref reader, prior, slot);
     }
 }

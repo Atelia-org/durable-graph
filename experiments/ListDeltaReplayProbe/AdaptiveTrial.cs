@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -112,7 +113,7 @@ internal static class AdaptiveTrial {
             Require(sample.HasChanges == delta.HasChanges && sample.Body.SequenceEqual(delta.Body), "Nondeterministic product bytes.");
         }
         ProductDiffDiagnostics diagnostics = ProductDiagnostics.Observe<TState, TOps>(prior, current, layout, algorithm, delta);
-        BinaryPayloadReader reader = new(delta.Body);
+        BareValueReader reader = new(delta.Body);
         FrozenListState<TState> applied = ListStateBody<TState, TOps>.ApplyDelta(ref reader, prior, layout);
         reader.EnsureFullyConsumed();
         Require(delta.HasChanges == !priorBytes.AsSpan().SequenceEqual(currentBytes) &&

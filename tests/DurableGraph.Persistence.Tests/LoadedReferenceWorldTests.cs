@@ -4,14 +4,14 @@ using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
-using Atelia.RbfSegmentStore;
-using SegmentStore = Atelia.RbfSegmentStore.RbfSegmentStore;
+using Atelia.FrameStore;
+using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class LoadedReferenceWorldTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-reference-world-{Guid.NewGuid():N}");
-    private readonly IRbfFile _file;
+    private readonly GraphResources _file;
     private readonly SegmentStore _segments;
     private readonly SchemaStore _schemas;
     private readonly StateRevisionStore _store;
@@ -19,9 +19,9 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
 
     public LoadedReferenceWorldTests() {
         Directory.CreateDirectory(_root);
-        _file = RbfFile.CreateNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = new(_file);
-        _segments = SegmentStore.CreateNew(Path.Combine(_root, "state"), new() { NewStoreLayout = RbfSegmentStoreLayout.Flat });
+        _file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemas = _file.Schemas;
+        _segments = _file.Data;
         _store = new(_segments);
     }
 
@@ -148,13 +148,13 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             if (++hydrations == 2) throw new InvalidDataException("Late hydrate failure");
         }));
         long stateTail = Tail();
-        long schemaTail = _file.TailOffset;
+        long schemaTail = DataBytes(_file.Data);
         LoadedWorld<World>? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
         Assert.Null(delivered);
         Assert.Equal(2, hydrations);
         Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, _file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_file.Data));
     }
 
     [Fact]
@@ -198,11 +198,11 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
                 captures++;
                 if (child.Value == 2) throw new InvalidDataException("Late child Capture failure");
             }));
-        long schemaTail = _file.TailOffset;
+        long schemaTail = DataBytes(_file.Data);
         long stateTail = Tail();
         Assert.Throws<InvalidDataException>(() => LoadedWorld.PrepareNew(_store, _schemas, world, models, NoRebase));
         Assert.Equal(3, captures);
-        Assert.Equal(schemaTail, _file.TailOffset);
+        Assert.Equal(schemaTail, DataBytes(_file.Data));
         Assert.Equal(stateTail, Tail());
 
         lateChild.Value = 3;
@@ -211,7 +211,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         Assert.Null(repaired.Revision.ParentRevisionAddress);
         Assert.Equal(3, repaired.Revision.LocalObjects.Count);
         Assert.All(repaired.Revision.LocalObjects, static row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-        Assert.Equal(stateTail, Tail());
+        Assert.True(Tail() > stateTail); // Successful preparation accepted Schema into the shared data owner.
         FrameAddress address = _store.Append(repaired.Revision);
         LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, repaired.WorldId, models);
         Assert.Equal((byte)3, Assert.IsType<Node>(loaded.World.Next!.Next).Value);
@@ -265,8 +265,8 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         static void Visit(DurableSchema schema, in State state, IStateReferenceVisitor visitor) =>
             visitor.VisitDurable(state.NextId, schema.Fields[0].TargetSchemaId!);
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema,
-            static (ref BinaryPayloadReader reader) => new(reader.ReadUInt32(), reader.ReadByte()),
-            static (ref BinaryPayloadReader reader, in State prior) => new(reader.ReadUInt32(), reader.ReadByte()),
+            static (ref BareValueReader reader) => new(reader.ReadVarUInt32(), reader.ReadByte()),
+            static (ref BareValueReader reader, in State prior) => new(reader.ReadVarUInt32(), reader.ReadByte()),
             (in State state, IStateReferenceVisitor visitor) => Visit(schema, in state, visitor));
         StateReaderBinding[] readers = old is null || old.Equals(current) ? [Reader(current)] : [Reader(old), Reader(current)];
         return new StateModelBinding<T, State>(preparation, readers,
@@ -298,15 +298,12 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             _schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], Base(state)).Body);
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
-        BinaryPayloadWriter writer = new(bytes);
-        writer.WriteUInt32(state.NextId.Value);
+        BareValueWriter writer = new(bytes);
+        writer.WriteVarUInt32(state.NextId.Value);
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
-    private long Tail() {
-        using RbfSegmentWriterLease lease = _segments.OpenActiveWriter();
-        return lease.File.TailOffset;
-    }
+    private long Tail() => DataBytes(_segments);
     public void Dispose() {
         _store.Dispose();
         _file.Dispose();

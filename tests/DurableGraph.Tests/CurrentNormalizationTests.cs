@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -77,12 +78,12 @@ public sealed class CurrentNormalizationTests {
             static (in Current _) => throw new NotSupportedException("Normalization does not prepare bodies."),
             static (in Current _, in Current _) => throw new NotSupportedException("Normalization does not prepare bodies.")),
         [new StateReaderBinding<Prior>(PriorSchema,
-            static (ref BinaryPayloadReader _) => default,
-            static (ref BinaryPayloadReader _, in Prior prior) => prior,
+            static (ref BareValueReader _) => default,
+            static (ref BareValueReader _, in Prior prior) => prior,
             static (in Prior _, IStateReferenceVisitor _) => { }),
          new StateReaderBinding<Current>(CurrentSchema,
-            static (ref BinaryPayloadReader _) => default,
-            static (ref BinaryPayloadReader _, in Current prior) => prior,
+            static (ref BareValueReader _) => default,
+            static (ref BareValueReader _, in Current prior) => prior,
             static (in Current _, IStateReferenceVisitor _) => { })],
         normalize,
         static () => new(),

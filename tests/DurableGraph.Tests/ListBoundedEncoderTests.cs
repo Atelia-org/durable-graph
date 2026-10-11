@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -33,7 +34,7 @@ public sealed class ListBoundedEncoderTests {
         Assert.True(unbounded.HasChanges);
         Assert.Equal(fixture.Expected, unbounded.Body.ToArray());
         Assert.Equal(fixture.Expected.Length, completeBytes);
-        BinaryPayloadReader reader = new(unbounded.Body);
+        BareValueReader reader = new(unbounded.Body);
         Assert.Equal(fixture.Current, ListStateBody<int, Int32StateOps>.ApplyDelta(ref reader, prior, Layout).Elements.ToArray());
         reader.EnsureFullyConsumed();
 
@@ -65,7 +66,7 @@ public sealed class ListBoundedEncoderTests {
         Assert.NotNull(accepted);
         Assert.Equal(new byte[] { 4, 1, 0, 1, 2, 3 }, accepted.Body.ToArray());
         Assert.Equal(3, EmptyOps.BaseCalls);
-        BinaryPayloadReader reader = new(accepted.Body);
+        BareValueReader reader = new(accepted.Body);
         Assert.Equal(4, ListStateBody<Empty, EmptyOps>.ApplyDelta(ref reader, prior, layout).Count);
         reader.EnsureFullyConsumed();
 
@@ -256,16 +257,16 @@ public sealed class ListBoundedEncoderTests {
             if (right == ThrowOnEquals) { throw new CodecFailureException(); }
             return left == right;
         }
-        public static void WriteBase(ref BinaryPayloadWriter writer, in int value, DurableFieldInfo slot) {
+        public static void WriteBase(ref BareValueWriter writer, in int value, DurableFieldInfo slot) {
             Written.Add(value);
             if (value == ThrowOnBase) { throw new CodecFailureException(); }
             if (BasePayloadBytes > 0) {
-                writer.WriteSpan(new byte[BasePayloadBytes]);
+                writer.WriteRawBytes(new byte[BasePayloadBytes]);
                 return;
             }
             Int32StateOps.WriteBase(ref writer, in value, slot);
         }
-        public static int ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
+        public static int ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => Int32StateOps.ReadBase(ref reader, slot);
         public static PreparedDeltaBody PrepareDelta(in int prior, in int current, DurableFieldInfo slot) {
             Prepared.Add(current);
             if (current == ThrowOnDelta) { throw new CodecFailureException(); }
@@ -273,7 +274,7 @@ public sealed class ListBoundedEncoderTests {
             if (DeltaPayloadBytes > 0) { return new(true, new byte[DeltaPayloadBytes]); }
             return Int32StateOps.PrepareDelta(in prior, in current, slot);
         }
-        public static int ApplyDelta(ref BinaryPayloadReader reader, in int prior, DurableFieldInfo slot) =>
+        public static int ApplyDelta(ref BareValueReader reader, in int prior, DurableFieldInfo slot) =>
             Int32StateOps.ApplyDelta(ref reader, in prior, slot);
         public static void VisitReferences(in int value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
@@ -282,10 +283,10 @@ public sealed class ListBoundedEncoderTests {
     private readonly struct EmptyOps : IStateOps<Empty> {
         public static int BaseCalls;
         public static bool StateEquals(in Empty left, in Empty right, DurableFieldInfo slot) => true;
-        public static void WriteBase(ref BinaryPayloadWriter writer, in Empty value, DurableFieldInfo slot) { BaseCalls++; }
-        public static Empty ReadBase(ref BinaryPayloadReader reader, DurableFieldInfo slot) => default;
+        public static void WriteBase(ref BareValueWriter writer, in Empty value, DurableFieldInfo slot) { BaseCalls++; }
+        public static Empty ReadBase(ref BareValueReader reader, DurableFieldInfo slot) => default;
         public static PreparedDeltaBody PrepareDelta(in Empty prior, in Empty current, DurableFieldInfo slot) => new(false, []);
-        public static Empty ApplyDelta(ref BinaryPayloadReader reader, in Empty prior, DurableFieldInfo slot) => throw new InvalidDataException();
+        public static Empty ApplyDelta(ref BareValueReader reader, in Empty prior, DurableFieldInfo slot) => throw new InvalidDataException();
         public static void VisitReferences(in Empty value, IStateReferenceVisitor visitor, DurableFieldInfo slot) { }
     }
 }
