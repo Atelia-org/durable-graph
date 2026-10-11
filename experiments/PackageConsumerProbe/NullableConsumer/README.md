@@ -6,8 +6,8 @@ DB-052 product delivery witness. Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-NullableProbe.ps1
 ```
 
-The runner packs nine local dependency packages into an isolated feed and cache. The consumer
-references only the public Runtime and StateStore packages; generated code and history arrive
+The runner packs ten local dependency packages into an isolated feed and cache. The consumer
+references only the public DurableGraph and Persistence packages; generated code and history arrive
 through packaged build assets. To reuse an existing matching feed, pass both `-PackageSource`
 and `-Version`. All artifacts stay beneath the runner's unique ignored `obj/nullable-*` directory.
 
@@ -16,6 +16,10 @@ rank-four array of nullable Points. Present Points retain the same Node, whose b
 and self-reference form a cycle. A List element edit creates an actual Delta; unchanged saving
 creates no local object versions. Saved Base and Delta content survives clearing the
 original domain values and collections before reading it back.
+
+The 32-element List keeps its Base larger than a one-element Delta even with the new fixed
+12-byte prior address. The probe retains its physical Delta assertions and uses a fresh new-format
+repository; its accepted V1 model history remains unchanged when compiling V2.
 
 V2 deletes the `LegacyPoint` CLR declaration and introduces `CurrentPoint` with the same durable
 family at V2. World advances to V2 because its inline nullable child changed. An explicit World

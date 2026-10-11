@@ -37,13 +37,13 @@ internal static class Program {
             session.CommitEvent(new Observed(alice), Policy);
             Require(ReferenceEquals(((World)session.State!), world) && world.Cache == 42, "Hot commit replaced domain instances.");
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true))) {
             CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
             Require(frames.Length == 4, "Expected S0 E1 S1 E2.");
             Observed e = ((Observed)repository.ReadEvent(frames[1]));
             Require(e.Target.Score == 2 && ReferenceEquals(e.Target, e.Alias), "E1 lost its recorded value or sharing.");
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models())) {
             Require(((World)repository.ReadState(repository.ReadFrames("main")[2])).Alice.Score == 3, "S1 lost its recorded value.");
         }
         Require(!File.Exists(Path.Combine(directory, "publication.rbf")), "Legacy publisher was created.");
@@ -51,13 +51,13 @@ internal static class Program {
         Console.WriteLine("EventHistorySeed:True:Siblings:True:EventHead:True:IndependentEvent:True:SharedReadSeed:True");
 #else
         var before = SnapshotFiles(directory);
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true))) {
             CheckpointAddress pending = repository.GetHead("main");
             Observed e = ((Observed)repository.ReadEvent(pending));
             Require(World.UpgradeCalls == 0 && e.Target.Score == 1004, "Event-only read needed World capabilities.");
             CheckEvent(e);
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models())) {
             CheckpointAddress pending = repository.GetHead("main");
             var pair = repository.ReadPair(pending, repository.GetPreviousState(pending)!);
             Require(((Observed)pair.First).Target.Score == 1004 && ((World)pair.Second).Alice.Score == 1003 && ((World)pair.Second).Generation == 2,
@@ -66,7 +66,7 @@ internal static class Program {
         }
         Require(before.SequenceEqual(SnapshotFiles(directory)), "Readonly browsing changed repository files.");
         Alice.UpgradeCalls = World.UpgradeCalls = 0;
-        FrameAddress rewritten, unchanged, delta, replacement;
+        FrameAddress rewritten, unchanged, changed, replacement;
         ObjectId originalRoot;
         using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
             using var session = repository.Checkout("main");
@@ -84,7 +84,7 @@ internal static class Program {
             unchanged = session.CommitState(Policy).RevisionAddress;
             state.Alice.Score = 1006;
             session.CommitEvent(new Observed(state.Alice), Policy);
-            delta = session.CommitState(Policy).RevisionAddress;
+            changed = session.CommitState(Policy).RevisionAddress;
             session.CommitEvent(new Observed(state.Alice), Policy);
             World next = new() { Alice = state.Alice, Bob = state.Bob, Generation = 2 };
             replacement = session.CommitState(next, Policy).RevisionAddress;
@@ -95,24 +95,40 @@ internal static class Program {
             StateRevision rewrite = store.Read(rewritten);
             Require(rewrite.LocalObjects.Count == 2 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
                 "Upgraded World and Alice require Base even after explicit Event reading.");
-            Require(store.Read(unchanged).LocalObjects.Count == 0, "Installed upgraded State was not NoChange.");
-            StateRevision edited = store.Read(delta);
-            Require(edited.LocalObjects.Count == 1 && edited.LocalObjects[0].Kind == ObjectVersionKind.Delta, "Ordinary subsequent edit must use Delta.");
+            StateRevision stable = store.Read(unchanged);
+            Require(stable.LocalObjects.Count == 0 && stable.RemovedObjectIds.Count == 0 &&
+                stable.ParentRevisionAddress == rewritten, "Installed upgraded State was not NoChange against its exact State basis.");
+            StateReaderRegistry readers = new();
+            Atelia.DurableGraph.Generated.DurableDefinitions.Register(readers);
+            var root = RevisionDecoder.Read(store, resources.Schemas, rewritten, readers)
+                .GetRequired(originalRoot).GetState<Atelia.DurableGraph.Generated.Family_576F726C64.V2>();
+            ObjectId aliceId = root.Segment0Field1;
+            StateRevision edited = store.Read(changed);
+            var stableHeads = store.ReadLiveObjectHeadMap(unchanged);
+            var changedHeads = store.ReadLiveObjectHeadMap(changed);
+            ObjectVersionChain chain = store.ReadObjectVersionChain(changed, aliceId.Value);
+            Require(edited.LocalObjects.Count == 1 && edited.LocalObjects[0].ObjectId == aliceId.Value &&
+                edited.LocalObjects[0].Kind == ObjectVersionKind.Base && edited.RemovedObjectIds.Count == 0 &&
+                edited.ParentRevisionAddress == unchanged && changedHeads.Count == stableHeads.Count &&
+                changedHeads[aliceId.Value] == changed && stableHeads.All(pair =>
+                    pair.Key == aliceId.Value || changedHeads[pair.Key] == pair.Value) &&
+                chain.Records.Count == 1 && chain.Records[0].ContainingRevisionAddress == changed,
+                "The small Alice edit must use the cheaper Base while changing only Alice and retaining the State basis and all other heads.");
             Require(store.Read(replacement).RemovedObjectIds.Contains(originalRoot.Value), "Root replacement did not remove the old World.");
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models())) {
             CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
             var pair = repository.ReadPair(frames[3], repository.GetHead("main"));
             Require(((Observed)pair.First).Target.Score == 1004 && ((World)pair.Second).Alice.Score == 1006, "Historical Event changed after later State commits.");
         }
         // Record observable closure size and physical bytes, not a claim about physical read I/O.
         long bytes = Directory.EnumerateFiles(directory, "*.rbf", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length);
-        File.WriteAllText(Path.Combine(directory, "metrics.txt"), $"TotalRbfBytes={bytes}\nForcedBaseObjectWrites=2\nNoChangeObjectWrites=0\nDeltaObjectWrites=1\n");
+        File.WriteAllText(Path.Combine(directory, "metrics.txt"), $"TotalRbfBytes={bytes}\nForcedBaseObjectWrites=2\nNoChangeObjectWrites=0\nChangedBaseObjectWrites=1\n");
         SharedReadProbe.Verify(directory + "-shared-read");
         VerifyFreeHistory(directory + "-free-history");
         VerifyCheckpointHistory(directory + "-checkpoint-history");
         VerifyNamedFork(directory + "-named-fork");
-        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenDelta:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True:IndependentCheckpoint:True:FixedHistoryQuery:True:NamedFork:True:PerBranchCheckout:True");
+        Console.WriteLine("EventHistoryUpgrade:True:EventOnlyCatalog:True:ReadPair:True:ExplicitEventRead:True:ForcedBaseThenChange:True:RootReplacement:True:Readonly:True:SharedRead:True:EventFirstFreeHistory:True:IndependentCheckpoint:True:FixedHistoryQuery:True:NamedFork:True:PerBranchCheckout:True");
 #endif
     }
 

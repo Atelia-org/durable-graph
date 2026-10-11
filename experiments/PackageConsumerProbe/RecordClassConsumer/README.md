@@ -57,10 +57,14 @@ to separate referenced objects. This does not permit skipping a required owner v
 inline value or ancestor layout changes. The old persisted-store migration lane is retired under DB-086; model-history upgrade coverage above remains active.
 This runner starts with the current marker API and creates only new-format stores.
 
-
 These facts contain only scalar/string content. C# `with` is ordinarily a **shallow** copy, not
 an immutable graph snapshot. The Counter field is deliberately mutable for the Delta regression;
-application events should be treated as read-only after submission. A record containing a List or
+its existing unchanged Stamp is `long.MaxValue` (10 encoded bytes), making its complete Base
+larger than the Counter Delta plus the new 12-byte prior. The model fields and accepted Schema
+history remain unchanged, and Upgrade preserves the exact Stamp. The fixture checks live identity,
+other heads, exact State basis/prior and the two-record reconstruction chain.
+
+Application events should be treated as read-only after submission. A record containing a List or
 array does not automatically compare its contents or freeze them. For collection-owning event
 snapshots, use the existing [defensive-copy recovery example](../EventHistoryRecoveryConsumer/README.md):
 copy input contents into privately owned storage and expose read-only access. Supply custom business

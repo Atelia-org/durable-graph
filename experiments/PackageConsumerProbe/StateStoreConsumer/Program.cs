@@ -21,7 +21,7 @@ internal static class Program {
         World.Exercise(Path.Combine(artifactDirectory, "restore"));
         Console.WriteLine("HistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True");
         GraphWorld.Exercise(Path.Combine(artifactDirectory, "graph"));
-        Console.WriteLine("InitialGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True");
+        Console.WriteLine("InitialGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyChange:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True");
 #endif
 #endif
     }
@@ -34,13 +34,33 @@ public abstract partial class NamedObject : IDurableObject {
     protected string Name => _name;
 }
 
+#if CHARACTER_HISTORY_V1
 [DurableType("package.persisted-character", 1)]
+#else
+[DurableType("package.persisted-character", 2)]
+#endif
 public sealed partial class Character : NamedObject {
     [DurableField(1)] private int _score;
     [DurableField(2)] private string _alias;
     [DurableField(3)] private readonly ulong _createdAtTicks;
 
-    private Character(string name, int score) : base(name) { _score = score; _alias = name; _createdAtTicks = 638_625_600_000_000_000; }
+#if !CHARACTER_HISTORY_V1
+    // Stable fixed-width content makes a changed score genuinely cheaper as Delta with
+    // the new 12-byte prior address. V1's accepted schema stays unchanged.
+    [DurableField(4)] private readonly Guid _fixtureId;
+    [DurableField(5)] private readonly Guid _fixtureGroup;
+
+    private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) =>
+        next = new(old.Segment0Field1, old.Segment1Field1, old.Segment1Field2,
+            old.Segment1Field3, default, default);
+#endif
+
+    private Character(string name, int score) : base(name) {
+        _score = score; _alias = name; _createdAtTicks = 638_625_600_000_000_000;
+#if !CHARACTER_HISTORY_V1
+        _fixtureId = default; _fixtureGroup = default;
+#endif
+    }
 
     internal static void Exercise(string directory) {
         string repositoryPath = Path.Combine(directory, "character");
@@ -61,7 +81,7 @@ public sealed partial class Character : NamedObject {
             secondRevision = session.CommitState(policy).RevisionAddress;
             Require(ReferenceEquals(((Character)session.State!), source), "Commit replaced application-held instances.");
         }
-        using (var repository = Repository.OpenReadOnlyExisting(repositoryPath, models, options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(repositoryPath, models)) {
             var frames = repository.ReadFrames("main").ToArray();
             Character original = ((Character)repository.ReadState(frames[0]));
             Require(original._score == 7 && original.Name == "A" &&
@@ -73,13 +93,13 @@ public sealed partial class Character : NamedObject {
         // Inspect exact payload and registration behavior after closing the facade's writer.
         using (GraphResources resources = GraphResources.OpenExisting(repositoryPath)) {
             SchemaStore schemas = resources.Schemas;
-            Require(schemas.Count == 2 && schemas.GetRequired(Schema.SchemaId, 1).BaseSchema!.Equals(NamedObject.Schema),
+            Require(schemas.Count == 2 && schemas.GetRequired(Schema.SchemaId, Schema.Version).BaseSchema!.Equals(NamedObject.Schema),
                 "Ancestor closure registration failed.");
             long registeredLength = ProbeArtifacts.DataLength(repositoryPath);
             schemas.RegisterBatch([Schema]);
             Require(ProbeArtifacts.DataLength(repositoryPath) == registeredLength, "Idempotent registration appended bytes.");
             bool rejected = false;
-            try { schemas.RegisterBatch([new DurableSchema("package.unpublished", 1, []), new DurableSchema(Schema.SchemaId, 1, [])]); }
+            try { schemas.RegisterBatch([new DurableSchema("package.unpublished", 1, []), new DurableSchema(Schema.SchemaId, Schema.Version, [])]); }
             catch (SchemaConflictException) { rejected = true; }
             Require(rejected && schemas.Count == 2 && ProbeArtifacts.DataLength(repositoryPath) == registeredLength,
                 "Schema conflict must reject the complete batch before append.");
@@ -95,7 +115,7 @@ public sealed partial class Character : NamedObject {
         StateRevision changed = cold.Read(secondRevision);
         Require(changed.ParentRevisionAddress == firstRevision && changed.LocalObjects.Count == 1 &&
             changed.RemovedObjectIds.Count == 0, "State must compare against S0, not the Event snapshot.");
-        Require(coldSchemas.Count == 2 && coldSchemas.GetRequired(Schema.SchemaId, 1).BaseSchema!.Equals(NamedObject.Schema),
+        Require(coldSchemas.Count == 2 && coldSchemas.GetRequired(Schema.SchemaId, Schema.Version).BaseSchema!.Equals(NamedObject.Schema),
             "Cold Schema recovery lost its exact ancestor.");
         ObjectVersionChain characterChain = cold.ReadObjectVersionChain(secondRevision, characterId.Value);
         Require(characterChain.Records.Count == 2 && characterChain.Records[1].Record.Kind == ObjectVersionKind.Delta &&
@@ -111,8 +131,16 @@ public sealed partial class Character : NamedObject {
             current.Objects.Count == 2 && previous.Objects.Count == 2 &&
             current.Objects.Select(row => row.Id).SequenceEqual(new[] { characterId, stringId }),
             "Revision decoding lost complete ordered live membership or its query address.");
+#if CHARACTER_HISTORY_V1
         var currentState = current.GetRequired(characterId).GetState<__DurableState.V1>();
         var priorState = previous.GetRequired(characterId).GetState<__DurableState.V1>();
+#else
+        var currentState = current.GetRequired(characterId).GetState<__DurableState.V2>();
+        var priorState = previous.GetRequired(characterId).GetState<__DurableState.V2>();
+        Require(currentState.Segment1Field4 == Guid.Empty && currentState.Segment1Field5 == Guid.Empty &&
+            priorState.Segment1Field4 == Guid.Empty && priorState.Segment1Field5 == Guid.Empty,
+            "Stable fixed-width fields did not survive Base/Delta reconstruction.");
+#endif
         Require(currentState.Segment1Field1 == 8 && priorState.Segment1Field1 == 7 &&
             currentState.Segment1Field3 == 638_625_600_000_000_000 && priorState.Segment1Field3 == 638_625_600_000_000_000,
             "Cold static body reconstruction ignored the selected revision.");

@@ -54,7 +54,7 @@ public sealed partial class GraphWorld : IDurableObject {
             removedRevision = session.CommitState(policy).RevisionAddress;
             Require(ReferenceEquals(((GraphWorld)session.State!), original), "Resumed commit replaced the application root.");
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, models, options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, models)) {
             var frames = repository.ReadFrames("main").ToArray();
             GraphWorld removed = ((GraphWorld)repository.ReadState(frames[^1]));
             Require(removed._primary is null && removed._alias is null, "Removed graph was not restored.");
@@ -71,15 +71,30 @@ public sealed partial class GraphWorld : IDurableObject {
         Require(initial.ParentRevisionAddress is null && initial.LocalObjects.Count == 4 &&
             initial.LocalObjects.All(record => record.Kind == ObjectVersionKind.Base) && schemas.Count == 4,
             "Initial graph must preserve all exact Schemas and four Base objects.");
+        StateReaderRegistry readers = new();
+        __DurableState.RegisterReaders(readers);
+        GraphCharacter.__DurableState.RegisterReaders(readers);
+        GraphItem.__DurableState.RegisterReaders(readers);
+        var originalWorld = RevisionDecoder.Read(store, schemas, initialRevision, readers)
+            .GetRequired(worldId).GetState<__DurableState.V1>();
+        ObjectId childId = originalWorld.Segment0Field1;
+        Require(!childId.IsNull && originalWorld.Segment0Field2 == childId,
+            "The original root did not select the same child for both reference slots.");
         StateRevision changed = store.Read(childRevision);
-        ObjectVersionRecord delta = changed.LocalObjects.Single();
-        Require(delta.ObjectId != worldId.Value && delta.Kind == ObjectVersionKind.Delta &&
+        ObjectVersionRecord changedChild = changed.LocalObjects.Single();
+        ObjectVersionChain childChain = store.ReadObjectVersionChain(childRevision, childId.Value);
+        var originalHeads = store.ReadLiveObjectHeadMap(initialRevision);
+        var changedHeads = store.ReadLiveObjectHeadMap(childRevision);
+        Require(changedChild.ObjectId == childId.Value && changedChild.Kind == ObjectVersionKind.Base &&
             changed.RemovedObjectIds.Count == 0 && changed.ParentRevisionAddress == initialRevision &&
-            store.ReadLiveObjectHeadMap(childRevision)[worldId.Value] == initialRevision &&
-            store.ReadObjectVersionChain(childRevision, delta.ObjectId).Records.Count == 2,
-            "A child-only edit must extend only the child content chain against S0.");
+            changedHeads[worldId.Value] == initialRevision && changedHeads[childId.Value] == childRevision &&
+            changedHeads.Count == originalHeads.Count && originalHeads.All(pair =>
+                pair.Key == childId.Value || changedHeads[pair.Key] == pair.Value) &&
+            childChain.Records.Count == 1 && childChain.Records[0].ContainingRevisionAddress == childRevision,
+            "The child-only edit must reset just the child's content chain with Base while retaining S0 ancestry and all other heads.");
         StateRevision removedRevisionData = store.Read(removedRevision);
-        Require(removedRevisionData.LocalObjects.Single().ObjectId == worldId.Value &&
+        Require(removedRevisionData.ParentRevisionAddress == childRevision &&
+            removedRevisionData.LocalObjects.Single().ObjectId == worldId.Value &&
             store.ReadLiveObjectHeadMap(removedRevision).Keys.SequenceEqual(new[] { worldId.Value }),
             "Disconnecting the final World paths must remove the cyclic island and its string.");
         Console.WriteLine("EventHistoryContinuousCommit:True");

@@ -36,7 +36,7 @@ try {
         $Version = "0.0.0-history-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
         $packages = @(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File)
-        if ($packages.Count -ne 10) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+        if ($packages.Count -ne 10) { throw "Expected 10 dependency packages, found $($packages.Count)." }
     }
 
     $properties = @(
@@ -50,7 +50,7 @@ try {
     $oldHistoryHashes = @{}
     $stages = @(
         @{ Number = 1; ReadersOnly = "false"; Count = 2;
-           Expected = "HistorySeed:True:LegacyBaseDelta:True:LegacyCycle:True" },
+           Expected = "HistorySeed:True:LegacyContentChange:True:LegacyCycle:True" },
         @{ Number = 2; ReadersOnly = "true"; Count = 4;
            Expected = "ExactReadersWithoutUpgrade:True:EditableLoadRequiresUpgrade:True" },
         @{ Number = 2; ReadersOnly = "false"; Count = 4;

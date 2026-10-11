@@ -1,5 +1,9 @@
 # Dictionary package consumer
 
+Each run creates a new shared FrameStore/VersionStore repository. The 32-entry container
+keeps enough unchanged content for the sparse edits to remain real Deltas with the fixed 12B
+prior address. The lane retains exact model-schema history and its immutable file/hash checks.
+
 DB-054 delivery witness. Run from the repository root:
 
 ```powershell
@@ -7,7 +11,7 @@ DB-054 delivery witness. Run from the repository root:
 ```
 
 The runner packs nine local dependency packages into an isolated feed/cache. The consumer has
-only ordinary Runtime and StateStore PackageReference entries; generation and history publication
+only ordinary Runtime and Storage PackageReference entries; generation and history publication
 arrive through package assets. Pass both `-PackageSource` and `-Version` to reuse a matching feed.
 Artifacts stay beneath the unique ignored `obj/dictionary-*` directory.
 

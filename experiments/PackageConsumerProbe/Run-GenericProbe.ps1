@@ -36,7 +36,7 @@ try {
         $Version = "0.0.0-generic-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
         $packages = @(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File)
-        if ($packages.Count -ne 10) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+        if ($packages.Count -ne 10) { throw "Expected 10 dependency packages, found $($packages.Count)." }
     }
 
     $properties = @(
@@ -50,11 +50,11 @@ try {
     $oldHistoryHashes = @{}
     $stages = @(
         @{ Number = 1; Count = 5; OmitClosed = $false;
-           Expected = "GenericSeed:True:OwnerDelta:True:ClosedSchemas:True:InlineNoObjectIds:True" },
+           Expected = "GenericSeed:True:OwnerChange:True:ClosedSchemas:True:InlineNoObjectIds:True" },
         @{ Number = 2; Count = 10; OmitClosed = $true;
            Expected = "MissingClosedUpgrade:True:ExactDecodeAvailable:True:NoPointBusinessCallback:True" },
         @{ Number = 2; Count = 10; OmitClosed = $false;
-           Expected = "GenericUpgrade:True:ClosedBusiness:True:ForcedBase:True:NoChangeThenDelta:True:PerObjectContext:True" },
+           Expected = "GenericUpgrade:True:ClosedBusiness:True:ForcedBase:True:NoChangeThenChange:True:PerObjectContext:True" },
         @{ Number = 3; Count = 12; OmitClosed = $false;
            Expected = "GenericThirdVersion:True:DeletedInlineDomain:True:StoredExactHistory:True:AdjacentContexts:True:StableResave:True" }
     )

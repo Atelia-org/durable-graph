@@ -21,13 +21,13 @@ internal static class Program {
         string directory = Path.GetFullPath(args[0]);
 #if HISTORY_V1
         Seed(directory);
-        Console.WriteLine("GenericSeed:True:OwnerDelta:True:ClosedSchemas:True:InlineNoObjectIds:True");
+        Console.WriteLine("GenericSeed:True:OwnerChange:True:ClosedSchemas:True:InlineNoObjectIds:True");
 #elif OMIT_CLOSED_UPGRADE
         MissingClosedUpgrade(directory);
         Console.WriteLine("MissingClosedUpgrade:True:ExactDecodeAvailable:True:NoPointBusinessCallback:True");
 #elif HISTORY_V2
         Migrate(directory);
-        Console.WriteLine("GenericUpgrade:True:ClosedBusiness:True:ForcedBase:True:NoChangeThenDelta:True:PerObjectContext:True");
+        Console.WriteLine("GenericUpgrade:True:ClosedBusiness:True:ForcedBase:True:NoChangeThenChange:True:PerObjectContext:True");
 #else
         DeleteInlineDomain(directory);
         Console.WriteLine("GenericThirdVersion:True:DeletedInlineDomain:True:StoredExactHistory:True:AdjacentContexts:True:StableResave:True");
@@ -67,11 +67,19 @@ internal static class Program {
             Require(first.LocalObjects.Count == 5 && first.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
                 "Only World, three Box instances and string may have object rows.");
             var state = CheckHistoricalDto(store, schemas, historical, worldId);
-            StateRevision delta = store.Read(historical);
-            Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == state.Segment0Field1.Value &&
-                delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "One generic field edit must produce its object's Delta.");
-            Require(store.ReadObjectVersionChain(historical, state.Segment0Field1.Value).Records.Count == 2,
-                "The generic object lacks the persisted Base/Delta chain.");
+            StateRevision changed = store.Read(historical);
+            ObjectId changedId = state.Segment0Field1;
+            var initialHeads = store.ReadLiveObjectHeadMap(initial);
+            var changedHeads = store.ReadLiveObjectHeadMap(historical);
+            ObjectVersionChain chain = store.ReadObjectVersionChain(historical, changedId.Value);
+            Require(changed.LocalObjects.Count == 1 && changed.LocalObjects[0].ObjectId == changedId.Value &&
+                changed.LocalObjects[0].Kind == ObjectVersionKind.Base && changed.RemovedObjectIds.Count == 0 &&
+                changed.ParentRevisionAddress == initial && changedHeads.Count == initialHeads.Count &&
+                changedHeads[changedId.Value] == historical && initialHeads.All(pair =>
+                    pair.Key == changedId.Value || changedHeads[pair.Key] == pair.Value),
+                "One generic field edit must replace only that object's content, retaining all other heads and its State basis.");
+            Require(chain.Records.Count == 1 && chain.Records[0].ContainingRevisionAddress == historical,
+                "The small V1 object should use the cheaper Base and reset its content chain.");
         });
         WriteAddress(directory, "historical", historical, worldId);
         using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
@@ -123,7 +131,7 @@ internal static class Program {
         Inspect(directory, (store, schemas) => {
             var old = CheckHistoricalDto(store, schemas, historical, worldId);
             changedId = old.Segment0Field1;
-            RequireForcedBaseAndStableDelta(store, upgraded, unchanged, changed, changedId);
+            RequireForcedBaseAndStableContinuation(store, upgraded, unchanged, changed, changedId, ObjectVersionKind.Base);
             CheckContexts(schemas, expectedObjectCount: 4, expectedEdgesPerObject: 1);
             Require(UpgradeTrace.Calls.Single(call => call.ObjectId == old.Segment0Field3).Provider == "point-closed",
                 "The explicit closed provider did not take priority over generic pass-through.");
@@ -167,7 +175,7 @@ internal static class Program {
         }
         Inspect(directory, (store, schemas) => {
             var old = CheckHistoricalDto(store, schemas, historical, worldId);
-            RequireForcedBaseAndStableDelta(store, upgraded, unchanged, changed, old.Segment0Field1);
+            RequireForcedBaseAndStableContinuation(store, upgraded, unchanged, changed, old.Segment0Field1, ObjectVersionKind.Delta);
             CheckContexts(schemas, expectedObjectCount: 4, expectedEdgesPerObject: 1);
             UpgradeTrace.Calls.Clear();
             UpgradeTrace.Calls.AddRange(oldestTrace);
@@ -207,7 +215,7 @@ internal static class Program {
             point.Segment0Field4 == 638_625_600_000_000_000 &&
             world.Segment0Field5.Segment0Field1.Segment0Field1 == 41 &&
             world.Segment0Field5.Segment0Field2.Segment0Field1 == 51,
-            "Stored-exact generic DTOs/Base+Delta reconstruction changed across package builds.");
+            "Stored-exact generic DTO reconstruction changed across package builds.");
         DurableSchema intSchema = decoded.GetRequired(world.Segment0Field1).Schema!;
         DurableSchema pointSchema = decoded.GetRequired(world.Segment0Field3).Schema!;
         Require(intSchema.Type == TypeExpr.Named("GenericBox", TypeExpr.Builtin(TypeTag.Int32)) &&
@@ -217,15 +225,32 @@ internal static class Program {
         return world;
     }
 
-    private static void RequireForcedBaseAndStableDelta(StateRevisionStore store, FrameAddress upgraded,
-        FrameAddress unchanged, FrameAddress changed, ObjectId changedId) {
+    private static void RequireForcedBaseAndStableContinuation(StateRevisionStore store, FrameAddress upgraded,
+        FrameAddress unchanged, FrameAddress changed, ObjectId changedId, ObjectVersionKind expectedKind) {
         StateRevision rewrite = store.Read(upgraded);
         Require(rewrite.LocalObjects.Count == 4 && rewrite.LocalObjects.All(row => row.Kind == ObjectVersionKind.Base),
             "All four upgraded durable objects, including layout-equivalent Box<int>, must force Base.");
-        Require(store.Read(unchanged).LocalObjects.Count == 0, "The installed DTO baseline must compare unchanged.");
-        StateRevision delta = store.Read(changed);
-        Require(delta.LocalObjects.Count == 1 && delta.LocalObjects[0].ObjectId == changedId.Value &&
-            delta.LocalObjects[0].Kind == ObjectVersionKind.Delta, "The next same-Schema edit must use ordinary Delta.");
+        StateRevision stable = store.Read(unchanged);
+        Require(stable.LocalObjects.Count == 0 && stable.RemovedObjectIds.Count == 0 &&
+            stable.ParentRevisionAddress == upgraded, "The installed DTO baseline must compare unchanged against its exact State basis.");
+        StateRevision next = store.Read(changed);
+        var stableHeads = store.ReadLiveObjectHeadMap(unchanged);
+        var changedHeads = store.ReadLiveObjectHeadMap(changed);
+        Require(next.LocalObjects.Count == 1 && next.LocalObjects[0].ObjectId == changedId.Value &&
+            next.LocalObjects[0].Kind == expectedKind && next.RemovedObjectIds.Count == 0 &&
+            next.ParentRevisionAddress == unchanged && changedHeads.Count == stableHeads.Count &&
+            changedHeads[changedId.Value] == changed && stableHeads.All(pair =>
+                pair.Key == changedId.Value || changedHeads[pair.Key] == pair.Value),
+            "The next same-Schema edit must change only its real owner and preserve the installed State baseline and other heads.");
+        ObjectVersionChain chain = store.ReadObjectVersionChain(changed, changedId.Value);
+        if (expectedKind == ObjectVersionKind.Base) {
+            Require(chain.Records.Count == 1 && chain.Records[0].ContainingRevisionAddress == changed,
+                "The small V2 object should reset its content chain with the cheaper Base.");
+        } else {
+            Require(chain.Records.Count == 2 && chain.Records[0].ContainingRevisionAddress == upgraded &&
+                chain.Records[1].ContainingRevisionAddress == changed && next.LocalObjects[0].PriorAddress == upgraded,
+                "The larger V3 object should extend the upgraded Base through its exact prior head.");
+        }
     }
 
     private static void CheckContexts(SchemaStore schemas, int expectedObjectCount, int expectedEdgesPerObject) {
@@ -249,7 +274,7 @@ internal static class Program {
     }
 
     private static World ReadHistorical(string directory, FrameAddress address) {
-        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models());
         CheckpointAddress frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
         return ((World)repository.ReadState(frame));
     }
@@ -264,7 +289,7 @@ internal static class Program {
 
     private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
-        Require(parts.Length == 3, "Malformed probe address handoff.");
+        Require(parts.Length == 2, "Malformed probe address handoff.");
         return (ProbeArtifacts.Parse(parts[0]), new ObjectId(uint.Parse(parts[1])));
     }
 

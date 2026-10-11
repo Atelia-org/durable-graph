@@ -1,12 +1,16 @@
 # Composite Dictionary package consumer
 
+Each run creates a new shared FrameStore/VersionStore repository. The 32-entry container
+keeps enough unchanged content for the sparse edits to remain real Deltas with the fixed 12B
+prior address. The lane retains exact model-schema history and its immutable file/hash checks.
+
 DB-055 package delivery and historical behavior witness:
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-CompositeDictionaryProbe.ps1
 ```
 
-The runner builds two separate executables using ordinary Runtime/StateStore PackageReferences,
+The runner builds two separate executables using ordinary Runtime/Storage PackageReferences,
 an isolated package feed/cache and the packaged Publish/Verify history workflow. Pass both
 `-PackageSource` and `-Version` to reuse an existing matching ten-package feed. Artifacts remain
 under the unique ignored `obj/composite-dictionary-*` directory. No private product APIs or

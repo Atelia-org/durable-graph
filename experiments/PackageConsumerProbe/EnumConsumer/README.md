@@ -19,6 +19,10 @@ inline enum and Cell values have no object IDs. One List element edit produces a
 unchanged saving writes no object versions, and saved Base/Delta bytes survive
 clearing or overwriting every corresponding source value before reading them back.
 
+The 32-element List keeps its Base larger than a one-element Delta even with the new fixed
+12-byte prior address. The probe retains its physical Delta assertions and uses a fresh new-format
+repository; its accepted V1 model history remains unchanged when compiling V2.
+
 V2 deletes the old CLR enum declaration and introduces `CurrentMode : long` with the same durable
 identity and version 2. Its current constant table differs deliberately. Stored-exact decoding
 still returns the original integer DTOs before any business callback. Explicit enum conversion

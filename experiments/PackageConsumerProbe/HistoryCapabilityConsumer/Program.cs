@@ -14,7 +14,7 @@ internal static class Program {
         string directory = Path.GetFullPath(args[0]);
 #if HISTORY_V1
         Seed(directory);
-        Console.WriteLine("HistorySeed:True:LegacyBaseDelta:True:LegacyCycle:True");
+        Console.WriteLine("HistorySeed:True:LegacyContentChange:True:LegacyCycle:True");
 #elif READERS_ONLY
         ReadWithoutUpgrade(directory);
         Console.WriteLine("ExactReadersWithoutUpgrade:True:EditableLoadRequiresUpgrade:True");
@@ -47,30 +47,40 @@ internal static class Program {
 
 #if HISTORY_V1
     private static void Seed(string directory) {
-        FrameAddress historical;
+        FrameAddress historical, initial;
         ObjectId worldId;
         using (var repository = Repository.CreateNew(directory, Models(), Options))
         using (var session = repository.CreateBranch("main", new World(7, new Legacy(11)), Policy)) {
             worldId = session.StateId!.Value;
+            initial = session.StateRevisionAddress!.Value;
             session.CommitEvent(((World)session.State!).SnapshotEvent(), Policy);
             ((World)session.State!).Legacy.Change(12);
             historical = session.CommitState(Policy).RevisionAddress;
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models())) {
             Require(((World)repository.ReadState(repository.GetHead("main"))).Legacy.HasSelfCycle,
                 "V1 self-cycle was not restored.");
         }
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
         StateRevisionStore store = resources.States;
+        var initialWorld = RevisionDecoder.Read(store, resources.Schemas, initial, Readers())
+            .GetRequired(worldId).GetState<World.__DurableState.V1>();
+        ObjectId legacyId = initialWorld.Segment0Field2;
         StateRevision changed = store.Read(historical);
-        ObjectVersionRecord delta = changed.LocalObjects.Single();
-        Require(delta.ObjectId != worldId.Value && delta.Kind == ObjectVersionKind.Delta &&
-            store.ReadObjectVersionChain(historical, delta.ObjectId).Records.Count == 2,
-            "Expected child-only Legacy Base/Delta chain.");
+        ObjectVersionRecord row = changed.LocalObjects.Single();
+        var beforeHeads = store.ReadLiveObjectHeadMap(initial);
+        var afterHeads = store.ReadLiveObjectHeadMap(historical);
+        ObjectVersionChain chain = store.ReadObjectVersionChain(historical, legacyId.Value);
+        Require(!legacyId.IsNull && row.ObjectId == legacyId.Value && row.Kind == ObjectVersionKind.Base &&
+            changed.ParentRevisionAddress == initial && changed.RemovedObjectIds.Count == 0 &&
+            afterHeads.Count == beforeHeads.Count && afterHeads[legacyId.Value] == historical &&
+            beforeHeads.All(pair => pair.Key == legacyId.Value || afterHeads[pair.Key] == pair.Value) &&
+            chain.Records.Count == 1 && chain.Records[0].ContainingRevisionAddress == historical,
+            "The small Legacy edit must change only its actual child content with Base, keeping its State basis and all other heads.");
     }
 #elif READERS_ONLY
     private static void ReadWithoutUpgrade(string directory) {
-        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models());
         CheckpointAddress historical = repository.GetHead("main");
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
         SchemaStore schemas = resources.Schemas;
@@ -87,11 +97,12 @@ internal static class Program {
     private static void Migrate(string directory) {
         FrameAddress historical, migrated;
         ObjectId worldId, legacyId;
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models())) {
             CheckpointAddress head = repository.GetHead("main");
             historical = head.RevisionAddress;
             worldId = head.RootId;
-            using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);DecodedRevision decoded = RevisionDecoder.Read(resources.States, resources.Schemas, historical, Readers());
+            using GraphResources historicalResources = GraphResources.OpenReadOnlyExisting(directory);
+            DecodedRevision decoded = RevisionDecoder.Read(historicalResources.States, historicalResources.Schemas, historical, Readers());
             legacyId = decoded.Objects.Single(row => row.Id != worldId).Id;
             Require(decoded.Objects.Count == 2 && World.UpgradeCalls == 0 && Legacy.UpgradeCalls == 0,
                 "Exact reading must not normalize either object.");
@@ -128,7 +139,7 @@ internal static class Program {
     }
 #else
     private static void ReadAfterDeletingShell(string directory) {
-        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models());
         CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
         CheckpointAddress historical = frames[2];
         CheckpointAddress migrated = frames[^1];

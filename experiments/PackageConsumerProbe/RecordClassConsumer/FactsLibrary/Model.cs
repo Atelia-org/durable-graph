@@ -20,7 +20,9 @@ public sealed partial record Damage<T>(T Actor, [field: DurableField(1)] long Am
 #endif
     // Mutable storage is intentional: record syntax does not imply deep immutability.
     [DurableField(2)] public long Counter = 638_625_600_000_000_000;
-    [DurableField(3)] public readonly long Stamp = 638_625_600_000_000_000;
+    // A real unchanged Stamp at the long endpoint occupies 10 varint bytes.
+    // That makes Base larger than Counter's 9-byte change plus the 12-byte prior.
+    [DurableField(3)] public readonly long Stamp = long.MaxValue;
 }
 
 public static class FactCatalog {

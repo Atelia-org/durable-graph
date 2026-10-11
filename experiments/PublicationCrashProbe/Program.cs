@@ -13,7 +13,8 @@ if (args[0] == "child") {
     Directory.CreateDirectory(root);
     using DataStore data = DataStore.Create(dataPath, rotationThresholdBytes: 128);
     using RootStore versions = RootStore.Create(versionsPath, data, reservedRefIdUpperBound: 1);
-    RefId rootRef = versions.CreateRef(1, [], out PublicationOutcome initial).Unwrap().RefId;
+    // VS requires a nonempty application root; ordinal zero represents no selected data.
+    RefId rootRef = versions.CreateRef(1, [0], out PublicationOutcome initial).Unwrap().RefId;
     RequireConfirmed(initial);
     if (args[2] == "empty") { WaitForKill(); }
     FrameAddress first = data.Append(probeTag, DataPayload(1)).Unwrap();
@@ -33,7 +34,9 @@ if (args[0] == "verify") {
     using RootStore versions = RootStore.Open(versionsPath, data);
     // ReadRef performs any lazy control-file tail recovery. Unselected data is not audited.
     RefBytesSnapshot current = versions.ReadRef(1).Unwrap();
-    int head = current.Payload.Length == 0 ? 0 : current.Payload[0];
+    if (current.Payload.Length == 0) { throw new InvalidDataException("Empty publication payload."); }
+    int head = current.Payload[0];
+    if (head == 0 && current.Payload.Length != 1) { throw new InvalidDataException("Invalid empty-root marker."); }
     if (head != 0) {
         if (current.Payload.Length != 1 + FrameAddress.EncodedSize ||
             !FrameAddress.TryRead(current.Payload[1..], out FrameAddress address)) {

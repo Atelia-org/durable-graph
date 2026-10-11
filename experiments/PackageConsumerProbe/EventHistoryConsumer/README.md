@@ -26,8 +26,10 @@ it is not the recommended read-only Event modeling pattern. For application usag
 [snapshot/recovery consumer](../EventHistoryRecoveryConsumer/README.md), which isolates the observed content.
 
 V2 changes Alice's scalar representation and adds World.Generation through explicit adjacent
-upgrades, preserving Alice's stable creation timestamp. That meaningful stable field also makes
-the later one-field edit economically worth writing as Delta. From a fresh readonly open, a catalog containing only Observed and Alice reads E2;
+upgrades, preserving Alice's stable creation timestamp. With the new 12-byte prior address,
+the small later score edit uses the cheaper Base. Its actual Alice ObjectId, exact State basis,
+unchanged other heads and graph membership remain checked. From a fresh readonly open,
+a catalog containing only Observed and Alice reads E2;
 World and Bob are not registered and World's Upgrade remains uncalled. A separate readonly open
 with the complete catalog performs ReadPair, which
 returns E2 and S1 with their correct values and graph-local aliases. File content and modification
@@ -35,11 +37,11 @@ times remain unchanged by readonly operations; the API does not promise cross-vi
 
 Cold Checkout restores preceding State; explicit ReadEvent restores E2 independently, without mutable Alice
 aliases between them. Completing State forces World/Alice Base, then subsequent E/S steps verify
-NoChange and ordinary Delta. Another pair validates old E2 after later State changes, and a final
+NoChange and Alice-only content change (`ForcedBaseThenChange` marker). Another pair validates old E2 after later State changes, and a final
 State commit replaces the root while retaining its child instances.
 
-`metrics.txt` records total RBF bytes and the selected State revisions' actual local Base/Delta
-write counts. These observations are not physical read-I/O measurements or performance thresholds.
+`metrics.txt` records total RBF bytes and the selected State revisions' actual local forced Base/NoChange/changed Base
+write counts (`ChangedBaseObjectWrites=1`). These observations are not physical read-I/O measurements or performance thresholds.
 Fault injection, cross-store durability and branch movement are product-suite responsibilities.
 
 The separate `database-shared-read` repository adds five unchanged schemas in both builds;

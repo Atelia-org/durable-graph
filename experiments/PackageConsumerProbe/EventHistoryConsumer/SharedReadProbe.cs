@@ -56,7 +56,7 @@ internal static class SharedReadProbe {
     internal static void Verify(string directory) {
         string[] before = SnapshotFiles(directory);
         List<string> metrics = [];
-        using (var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, Models())) {
             CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
             Require(frames.Length == 4, "Shared-read fixture must contain S0 E1 S1 E2.");
             CheckActualHeads(directory, frames);

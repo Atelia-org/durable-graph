@@ -33,8 +33,13 @@ public sealed partial class World : IDurableObject {
         }
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
         StateRevisionStore store = resources.States;
-        Require(store.ReadObjectVersionChain(revision, worldId.Value).Records.Count == 3,
-            "The V1 process did not persist its Base plus two Delta records.");
+        StateReaderRegistry readers = new();
+        __DurableState.RegisterReaders(readers);
+        var exact = RevisionDecoder.Read(store, resources.Schemas, revision, readers)
+            .GetRequired(worldId).GetState<__DurableState.V1>();
+        Require(exact.Segment0Field1 == 9 && exact.Segment0Field4 == 638_625_600_000_000_000 &&
+            store.Read(revision).ParentRevisionAddress is not null,
+            "The V1 process did not preserve its exact current values and State ancestry.");
     }
 
     private static void Require(bool condition, string message) {

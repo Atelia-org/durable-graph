@@ -19,7 +19,7 @@ public abstract partial class Legacy : IDurableObject {
         UpgradeCalls++;
         LastHistoricalValue = old.Segment0Field1;
         Program.Require(old.Segment0Field3 == 638_625_600_000_000_000,
-            "The historical Delta changed Legacy's creation timestamp.");
+            "Historical content changed Legacy's creation timestamp.");
         Program.Require(!old.Segment0Field2.IsNull, "The old Legacy self-reference was not decoded.");
         next = new(new ObjectId(ProduceInvalidReference ? uint.MaxValue : 0));
     }

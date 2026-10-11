@@ -6,7 +6,7 @@ namespace HistoryCapabilityPackageConsumerProbe;
 public sealed partial class Legacy : IDurableObject {
     [DurableField(1)] private int _value;
     [DurableField(2)] private Legacy? _next;
-    // A stable payload makes the score-only Delta smaller even after its prior locator.
+    // Persisted business content; its scalar value and history remain unchanged under DB-086.
     [DurableField(3)] private readonly ulong _createdAtTicks;
 
     internal Legacy(int value) { _value = value; _next = this; _createdAtTicks = 638_625_600_000_000_000; }

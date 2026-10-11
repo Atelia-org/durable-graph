@@ -35,7 +35,7 @@ try {
         # The local feed contains the complete product dependency closure. Upstream files are unchanged.
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
         $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File)
-        if ($packages.Count -ne 10) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+        if ($packages.Count -ne 10) { throw "Expected 10 dependency packages, found $($packages.Count)." }
     }
 
     $consumerProperties = @(
@@ -45,9 +45,17 @@ try {
         "-p:BaseOutputPath=$output"
     )
     Invoke-DotNet (@("restore", $consumerProject, "--source", $feed, "--packages", $packageCache) + $consumerProperties)
+    # Publish the original Character V1 unchanged; no V1 database needs an economic Delta.
+    Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:CharacterHistorySeed=true") + $consumerProperties)
+    $acceptedV1 = @{}
+    foreach ($file in @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)) {
+        $acceptedV1[$file.Name] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+    }
+    if ($acceptedV1.Count -ne 2) { throw 'Expected the original NamedObject/Character V1 histories.' }
+    Invoke-DotNet (@("clean", $consumerProject) + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore") + $consumerProperties)
     $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
-    if ($historyFiles.Count -ne 2) { throw "Expected two generated Schema history files, found $($historyFiles.Count)." }
+    if ($historyFiles.Count -ne 3) { throw "Expected NamedObject V1 and Character V1/V2 histories, found $($historyFiles.Count)." }
 
     $consumerAssembly = Join-Path $output "Debug/net10.0/Atelia.StateStoreConsumer.dll"
     $consumerOutput = (& dotnet $consumerAssembly (Join-Path $workRoot "database") | Out-String).Trim()
@@ -60,7 +68,12 @@ try {
     Invoke-DotNet (@("clean", $consumerProject, "-p:RestoreVersion=1") + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=1") + $consumerProperties)
     $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
-    if ($historyFiles.Count -ne 3) { throw "Expected original two plus World V1 history, found $($historyFiles.Count)." }
+    if ($historyFiles.Count -ne 4) { throw "Expected original three plus World V1 history, found $($historyFiles.Count)." }
+    foreach ($file in $historyFiles) {
+        if (!$acceptedV1.ContainsKey($file.Name)) {
+            $acceptedV1[$file.Name] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+        }
+    }
     $upgradeDatabase = Join-Path $workRoot "upgraded-database"
     $seedOutput = (& dotnet $consumerAssembly $upgradeDatabase | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $seedOutput -ne "HistoricalWorldSeeded:True") {
@@ -70,11 +83,15 @@ try {
     Invoke-DotNet (@("clean", $consumerProject, "-p:RestoreVersion=2") + $consumerProperties)
     Invoke-DotNet (@("build", $consumerProject, "--no-restore", "-p:RestoreVersion=2") + $consumerProperties)
     $historyFiles = @(Get-ChildItem -LiteralPath $history -Filter *.dgschema -File)
-    if ($historyFiles.Count -ne 8) { throw "Expected original two plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
+    if ($historyFiles.Count -ne 9) { throw "Expected original three plus World V1/V2 and four graph model histories, found $($historyFiles.Count)." }
+    foreach ($entry in $acceptedV1.GetEnumerator()) {
+        $actualHash = (Get-FileHash -LiteralPath (Join-Path $history $entry.Key) -Algorithm SHA256).Hash
+        if ($actualHash -cne $entry.Value) { throw "Current model compilation rewrote accepted V1 history '$($entry.Key)'." }
+    }
     $restoreOutput = (& dotnet $consumerAssembly $upgradeDatabase | Out-String).Trim().Replace("`r`n", "`n")
     $expectedRestore = $consumerOutput + "`nHistoricalUpgrade:True:ConstructorFree:True:ReadonlyHydrate:True:ForcedBase:True:UnchangedResave:True:NormalDelta:True:ReopenedWorld:True"
     $expectedRestore += "`nEventHistoryContinuousCommit:True"
-    $expectedRestore += "`nInitialGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyDelta:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
+    $expectedRestore += "`nInitialGraph:True:SharedDerived:True:ReadonlyCycles:True:ChildOnlyChange:True:UnreachableCycleRemoved:True:HistoricalGraphPreserved:True"
     if ($LASTEXITCODE -ne 0 -or $restoreOutput -ne $expectedRestore) {
         throw "Packaged upgrade/restore/resave exercise failed; output was '$restoreOutput'."
     }

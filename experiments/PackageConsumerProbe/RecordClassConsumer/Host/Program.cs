@@ -25,11 +25,11 @@ internal static class Program {
             "The package must remove the old framework base rather than retaining a compatibility shell.");
         string mode = args[0], directory = Path.GetFullPath(args[1]);
         if (mode == "events") {
-            using (var eventRepository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true), Options)) {
+            using (var eventRepository = Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true))) {
                 var first = eventRepository.ReadEvent(eventRepository.EnumerateEvents(eventRepository.GetHead("main"), HistoryOrder.OldestFirst).First());
                 Require(first is Damage<string> { Actor: "hero", Amount: 3 }, "Event-only catalog lost the exact record or its inherited field.");
             }
-            using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+            using var repository = Repository.OpenReadOnlyExisting(directory, Models());
             var events = repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray();
             var pair = repository.ReadPair(events.First(), repository.GetPreviousState(events.First())!);
             Require(pair.First is Damage<string> { Actor: "hero", Amount: 3 } && pair.Second is World { Hp: 10 },
@@ -116,16 +116,30 @@ internal static class Program {
             Require(!ReferenceEquals(((World)session.State!).First, ((World)session.State!).Alias), "with copy inherited the source identity.");
             session.CommitEvent(((World)session.State!).Last!);
             rewritten = session.CommitState(DeltaPolicy).RevisionAddress;
-            ((World)session.State!).First.Counter++;
+            Damage<string> original = ((World)session.State!).First;
+            original.Counter++;
             session.CommitEvent(((World)session.State!).Last!);
             changed = session.CommitState(DeltaPolicy).RevisionAddress;
+            Require(ReferenceEquals(((World)session.State!).First, original) && original.Stamp == long.MaxValue,
+                "Mutable-record saving replaced its live identity or changed the stable fixture identifier.");
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(directory)) {
             using var states = resources.States;
             var bases = states.Read(rewritten).LocalObjects;
             Require(bases.Count == 4 && bases.All(row => row.Kind == ObjectVersionKind.Base), "Upgraded Damage records must rewrite Base.");
-            var deltas = states.Read(changed).LocalObjects;
-            Require(deltas.Count == 1 && deltas[0].Kind == ObjectVersionKind.Delta, "A same-instance mutable record change must use the existing Delta path.");
+            StateRevision next = states.Read(changed);
+            var deltas = next.LocalObjects;
+            Require(deltas.Count == 1 && deltas[0].Kind == ObjectVersionKind.Delta &&
+                next.ParentRevisionAddress == rewritten && next.RemovedObjectIds.Count == 0 &&
+                deltas[0].PriorAddress == rewritten, "A same-instance mutable record change must use the real Delta path from its exact upgraded State basis.");
+            var beforeHeads = states.ReadLiveObjectHeadMap(rewritten);
+            var afterHeads = states.ReadLiveObjectHeadMap(changed);
+            ObjectVersionChain chain = states.ReadObjectVersionChain(changed, deltas[0].ObjectId);
+            Require(afterHeads.Count == beforeHeads.Count && afterHeads[deltas[0].ObjectId] == changed &&
+                beforeHeads.All(pair => pair.Key == deltas[0].ObjectId || afterHeads[pair.Key] == pair.Value) &&
+                chain.Records.Count == 2 && chain.Records[0].ContainingRevisionAddress == rewritten &&
+                chain.Records[1].ContainingRevisionAddress == changed,
+                "The mutable record Delta altered another object head or lost its exact reconstruction chain.");
         }
         using (var repository = Repository.OpenExisting(directory, Models(), Options)) {
             using var session = repository.Checkout("main");

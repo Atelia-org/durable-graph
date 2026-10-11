@@ -165,7 +165,8 @@ assertions; product behavior has no dependency on that allocation behavior or pr
 The [record class consumer](RecordClassConsumer/README.md) exercises DB-068 through three real
 package builds: an external generic ordinary-class hierarchy becomes a same-Schema record hierarchy,
 then explicitly upgrades a changed field. It covers pending Event recovery, event-only registration,
-record identity and `with`, retained immutable history, Base rewrite and subsequent Delta.
+record identity and `with`, retained immutable history, Base rewrite and a subsequent actual Delta.
+The existing stable Stamp uses a 10-byte endpoint value so Delta remains economical with a 12-byte prior.
 Run `./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1`, optionally with a matching
 `-PackageSource <feed> -Version <version>`.
 
@@ -193,7 +194,8 @@ Use the matching ten-package feed printed by the recovery runner, or another fre
 The [EventHistory consumer](EventHistoryConsumer/README.md) is DB-063's two-process, two-generation
 public facade witness. It publishes S0/Event/State/pending Event, independently browses an Event
 with no World/Bob model registrations, reads a pair of selected graphs, checks out State and explicitly reads the Event,
-upgrades the old State, and continues through required Base, NoChange and ordinary Delta saves.
+upgrades the old State, and continues through required Base, NoChange and Alice-only content change.
+The small Alice body selects Base with the new address cost; State ancestry, actual identity and other heads remain checked.
 Root replacement is checked separately. Readonly browsing preserves every file's bytes and mtime.
 DB-077 fixes the model registry at each Open; Event-only and complete catalogs use separate opens.
 The consumer forces Family definitions (`DurableGraphGenerateDefinitions=true`) and registers the
@@ -216,11 +218,17 @@ They intentionally mutate caller-created aliases after capture to test frozen pe
 mechanism tests, not examples of keeping a hot Event's reachable CLR contents read-only.
 A reserved VersionStore root publishes Schema and branch pointers; tags use VS tags. Schema snapshots and merged graph frames share FrameStore data.
 
-The StateStore runner retains the inherited Character's exact DTO/Base/Delta golden checks,
+The StateStore runner first publishes unchanged Character V1 history, then uses Character V2
+with stable fixed-width Guid fields to make an actual Delta economical with 12-byte prior addresses.
+Its V1→V2 rule supplies default Guid values and its raw score Delta remains `[2,16]`.
+Accepted history hashes remain unchanged. World V1 exact values and ancestry are retained;
+World V2 adds the same stable content so upgraded Base/NoChange/Delta is a real policy outcome.
+The runner retains the inherited Character's exact DTO/Base/Delta golden checks,
 Schema registration idempotence/conflict checks, and shared strings. Its V1/V2 World lane retains
 real generated history, explicit Upgrade, constructor-free private readonly hydration, required
 Base rewrite followed by NoChange and Delta, and cold historical reading. The graph lane retains
-shared derived targets, cycles, child-only Delta, unreachable-cycle removal, continuous instance
+shared derived targets, cycles, child-only content change (a Base under the new economic policy),
+unchanged root and other heads, exact State ancestry, unreachable-cycle removal, continuous instance
 identity and historical snapshots. Raw `RevisionDecoder` and Storage reads remain diagnostic
 assertions; consumers no longer own the save pipeline or call internal preparation APIs.
 
@@ -258,7 +266,8 @@ feed can be reused with `-PackageSource <feed> -Version <version>`.
 ```
 
 This independent script builds four real package consumers: V1 writes a World and a cyclic Legacy
-object with Base/Delta history; V2 without Upgrade methods proves exact DTO decoding works while
+object with exact V1 content and a child-only Base replacement (`LegacyContentChange`);
+State ancestry, identity and other heads remain checked. V2 without Upgrade methods proves exact DTO decoding works while
 editable Load fails; V2 with explicit upgrades removes the World edge and retains an abstract
 migration shell, validates even the orphan's references, then writes a required World Base and
 Legacy Remove. V3 removes the Legacy CLR class entirely: the migrated Revision loads, the old
@@ -310,16 +319,18 @@ ignored `obj` run directory.
 ```
 
 The [generic consumer](GenericConsumer/README.md) exercises the DB-038 product path through real
-runtime and StateStore packages. It builds successive application versions in separate processes,
+runtime and Persistence packages. It builds successive application versions in separate processes,
 registers `Generated.DurableDefinitions` before Open, and lets the repository's model snapshot close the encountered
 `Box<int>`, `Box<Point>`, and inline `Pair<LegacyPoint>` bindings. Historical state DTOs live in
 generated Family hosts, independently of current domain CLR declarations.
 
-The stages cover actual Base/Delta persistence, stored-exact decoding, generic pass-through and
+The stages cover actual content persistence, stored-exact decoding, generic pass-through and
 closed business upgrades, forced Base after Upgrade, stable resave, and deletion of an old inline
 domain struct. A missing closed conversion leaves exact decoding available while editable loading
 fails before that object's first business callback. The consumer also checks that UpgradeContext
 identifies the actual object and each adjacent owner edge; it does not exercise DB-039 value tools.
+Box V1/V2's small body selects Base with 12-byte prior costs; V3 retains actual Delta and exact prior,
+while all stages preserve single-owner changes, State ancestry, NoChange and other heads.
 
 The runner preserves accepted history hashes and requires v9 for new history. It packs an isolated
 dependency feed by default, or reuses one through `-PackageSource <feed> -Version <version>`.
@@ -343,7 +354,8 @@ The runner builds three application versions plus a V2 missing-rule variant. Tha
 retains exact decoding but rejects the affected owner's editable Load before its first business
 callback, and the runner checks that repository files and hashes remain unchanged. V3 removes an
 old inline domain struct while retaining its generated history DTO and value provider. The fixture
-checks multi-step loading from V1, forced Base, unchanged resave, ordinary Delta, and cold reopening.
+checks multi-step loading from V1, forced Base, unchanged resave, policy-selected content continuation,
+and cold reopening. V1/V2 small Box bodies select Base; V3 retains a real Delta and exact prior.
 It preserves accepted history hashes across builds; it does not change any persistent format.
 
 The runner packs an isolated ten-package feed by default; use `-PackageSource <feed> -Version <version>`

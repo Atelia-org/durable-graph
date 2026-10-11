@@ -36,7 +36,7 @@ try {
         $Version = "0.0.0-value-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $PackageSource -Version $Version
         $packages = @(Get-ChildItem -LiteralPath $PackageSource -Filter *.nupkg -File)
-        if ($packages.Count -ne 10) { throw "Expected 9 dependency packages, found $($packages.Count)." }
+        if ($packages.Count -ne 10) { throw "Expected 10 dependency packages, found $($packages.Count)." }
     }
 
     $properties = @(
@@ -50,11 +50,11 @@ try {
     $oldHistoryHashes = @{}
     $stages = @(
         @{ Number = 1; Count = 5; OmitPoint = $false;
-           Expected = "ValueSeed:True:OwnerDelta:True:NestedInline:True:ExactHistory:True" },
+           Expected = "ValueSeed:True:OwnerChange:True:NestedInline:True:ExactHistory:True" },
         @{ Number = 2; Count = 10; OmitPoint = $true;
            Expected = "MissingValueRule:True:ExactDecodeAvailable:True:NoInvalidOwnerCallback:True" },
         @{ Number = 2; Count = 10; OmitPoint = $false;
-           Expected = "ValueUpgrade:True:OpenOwnerAndPair:True:ReusedLeaf:True:ScopedContexts:True:ForcedBaseThenDelta:True" },
+           Expected = "ValueUpgrade:True:OpenOwnerAndPair:True:ReusedLeaf:True:ScopedContexts:True:ForcedBaseThenChange:True" },
         @{ Number = 3; Count = 12; OmitPoint = $false;
            Expected = "ValueHistory:True:DeletedInlineDomain:True:RetainedValueRule:True:AdjacentContexts:True:StableResave:True" }
     )

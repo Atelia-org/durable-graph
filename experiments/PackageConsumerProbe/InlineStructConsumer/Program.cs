@@ -102,7 +102,7 @@ internal static class Program {
             Node node = world.Links.Left.Node;
             Require(World.UpgradeCalls == 1 && Node.UpgradeCalls == 1, "Each stored object must be upgraded exactly once.");
             CheckLinks(world, 1012, 131);
-            Require(world.Score == World.InitialScore + 100 && world.Links.Right.Value == 1021, "Owner upgrade did not rebuild nested V2 DTOs.");
+            Require(world.Score == World.InitialScore + 100 && world.Links.Right.Value == World.InitialRightValue + 1000L, "Owner upgrade did not rebuild nested V2 DTOs.");
             session.CommitEvent(((World)session.State!), Policy);
             upgraded = session.CommitState(Policy).RevisionAddress;
             session.CommitEvent(((World)session.State!), Policy);
@@ -157,7 +157,7 @@ internal static class Program {
             CheckHistoricalDto(store, schemas, historical, worldId);
             Require(World.UpgradeCalls == 0, "Stored-exact reading must not call Upgrade.");
             World old = ReadHistorical(directory, historical);
-            Require(old.Summary == 2033L && old.Score == World.InitialScore + 1100 && World.UpgradeCalls == 2 && Node.UpgradeCalls == 2,
+            Require(old.Summary == World.InitialRightValue + 2012L && old.Score == World.InitialScore + 1100 && World.UpgradeCalls == 2 && Node.UpgradeCalls == 2,
                 "Old owner must traverse V1 -> V2 -> V3 using retained historical nested DTO constructors.");
         });
         World.UpgradeCalls = Node.UpgradeCalls = 0;
@@ -165,7 +165,7 @@ internal static class Program {
         using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
             using BranchCheckout session = repository.Checkout("main");
             World world = ((World)session.State!);
-            Require(world.Summary == 2033L && world.Score == World.InitialScore + 1100 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
+            Require(world.Summary == World.InitialRightValue + 2012L && world.Score == World.InitialScore + 1100 && World.UpgradeCalls == 1 && Node.UpgradeCalls == 0,
                 "The current V2 head must use just the remaining V2 -> V3 owner upgrade.");
             session.CommitEvent(((World)session.State!), Policy);
             removed = session.CommitState(Policy).RevisionAddress;
@@ -182,7 +182,7 @@ internal static class Program {
         });
         using Repository reopened = Repository.OpenExisting(directory, Models(), Options);
         using BranchCheckout current = reopened.Checkout("main");
-        Require(((World)current.State!).Summary == 2033L && ((World)current.State!).Score == World.InitialScore + 1100 &&
+        Require(((World)current.State!).Summary == World.InitialRightValue + 2012L && ((World)current.State!).Score == World.InitialScore + 1100 &&
             reopened.GetHead("main").RevisionAddress == removed, "Published V3 head cannot be reopened after deleting inline CLR declarations.");
     }
 #endif
@@ -210,12 +210,12 @@ internal static class Program {
 #endif
         Require(decoded.Objects.Count == 4 && decoded.GetRequired(worldId).Schema!.Version == 1 &&
             state.Segment0Field1.Segment0Field1.Segment0Field1 == 12 &&
-            state.Segment0Field1.Segment0Field2.Segment0Field1 == 21 && state.Segment1Field1 == World.InitialScore,
+            state.Segment0Field1.Segment0Field2.Segment0Field1 == World.InitialRightValue && state.Segment1Field1 == World.InitialScore,
             "Historical exact nested DTO/Base+Delta reconstruction changed across consumer builds.");
     }
 
     private static World ReadHistorical(string directory, FrameAddress address) {
-        using var repository = Repository.OpenReadOnlyExisting(directory, Models(), Options);
+        using var repository = Repository.OpenReadOnlyExisting(directory, Models());
         CheckpointAddress frame = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == address);
         return ((World)repository.ReadState(frame));
     }
@@ -230,7 +230,7 @@ internal static class Program {
 
     private static (FrameAddress Revision, ObjectId WorldId) ReadAddress(string directory, string name) {
         string[] parts = File.ReadAllText(Path.Combine(directory, name + ".txt")).Split(':');
-        Require(parts.Length == 3, "Malformed probe address handoff.");
+        Require(parts.Length == 2, "Malformed probe address handoff.");
         return (ProbeArtifacts.Parse(parts[0]), new ObjectId(uint.Parse(parts[1])));
     }
 

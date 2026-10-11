@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants Condition="'$(CharacterHistorySeed)' == 'true'">$(DefineConstants);CHARACTER_HISTORY_V1</DefineConstants>
     <DefineConstants Condition="'$(RestoreVersion)' == '1'">$(DefineConstants);RESTORE_V1</DefineConstants>
     <DefineConstants Condition="'$(RestoreVersion)' == '2'">$(DefineConstants);RESTORE_V2</DefineConstants>
   </PropertyGroup>

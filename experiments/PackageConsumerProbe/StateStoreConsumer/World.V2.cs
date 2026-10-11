@@ -11,6 +11,8 @@ public sealed partial class World : IDurableObject {
     [DurableField(2)] private readonly string _name;
     [DurableField(3)] private readonly int _generation;
     [DurableField(4)] private readonly ulong _createdAtTicks;
+    [DurableField(5)] private readonly Guid _fixtureId;
+    [DurableField(6)] private readonly Guid _fixtureGroup;
     [Transient] private int _cache = 37;
     private static int _constructorCalls;
     private static int _upgradeCalls;
@@ -18,11 +20,12 @@ public sealed partial class World : IDurableObject {
     public World(int score, string name) {
         _constructorCalls++;
         _score = score; _name = name; _generation = -1; _createdAtTicks = 638_625_600_000_000_000;
+        _fixtureId = default; _fixtureGroup = default;
     }
 
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
         _upgradeCalls++;
-        next = new(old.Segment0Field1 + 100, old.Segment0Field2, 73, old.Segment0Field4);
+        next = new(old.Segment0Field1 + 100, old.Segment0Field2, 73, old.Segment0Field4, default, default);
     }
 
     internal static void Exercise(string directory) {
@@ -37,6 +40,8 @@ public sealed partial class World : IDurableObject {
         using (var session = repository.Checkout("main")) {
             oldRevision = session.StateRevisionAddress!.Value;
             worldId = session.StateId!.Value;
+            Require(((World)session.State!)._fixtureId == Guid.Empty && ((World)session.State!)._fixtureGroup == Guid.Empty,
+                "V1 Upgrade did not supply the new stable fields' defaults.");
             Require(_upgradeCalls == 1 && ((World)session.State!)._score == 109 && ((World)session.State!)._name == "A" &&
                 ((World)session.State!)._generation == 73 && ((World)session.State!)._createdAtTicks == 638_625_600_000_000_000 &&
                 ((World)session.State!)._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
@@ -51,7 +56,7 @@ public sealed partial class World : IDurableObject {
             original._score = 110;
             finalRevision = session.CommitState(policy).RevisionAddress;
         }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, models, options)) {
+        using (var repository = Repository.OpenReadOnlyExisting(directory, models)) {
             World final = ((World)repository.ReadState(repository.GetHead("main")));
             Require(final._score == 110 && final._generation == 73 && final._name == "A" &&
                 final._createdAtTicks == 638_625_600_000_000_000 && final._cache == 0 &&
@@ -62,7 +67,13 @@ public sealed partial class World : IDurableObject {
         }
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
         StateRevisionStore store = resources.States;
-        Require(store.ReadObjectVersionChain(oldRevision, worldId.Value).Records.Count == 3, "Old Delta chain missing.");
+        StateReaderRegistry readers = new();
+        __DurableState.RegisterReaders(readers);
+        var old = RevisionDecoder.Read(store, resources.Schemas, oldRevision, readers)
+            .GetRequired(worldId).GetState<__DurableState.V1>();
+        Require(old.Segment0Field1 == 9 && old.Segment0Field4 == 638_625_600_000_000_000 &&
+            store.Read(oldRevision).ParentRevisionAddress is not null,
+            "The old exact V1 content and State ancestry were not preserved.");
         StateRevision upgraded = store.Read(upgradedRevision);
         Require(upgraded.ParentRevisionAddress == oldRevision && upgraded.LocalObjects.Count == 1 &&
             upgraded.LocalObjects[0].Kind == ObjectVersionKind.Base, "Upgrade must force a current Base even after Event save.");
