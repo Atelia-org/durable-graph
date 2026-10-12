@@ -5,7 +5,7 @@ internal sealed class P0PendingSave : IDisposable {
     private enum PendingState { Prepared, Committing, Finished }
     private PendingState _state;
 
-    internal P0PendingSave(P0Repository owner, P0Repository.PublicationBaseline baseline,
+    internal P0PendingSave(GraphResources owner, GraphResources.MetaBootstrapPublicationBaseline baseline,
         string branch, P0GraphKind kind, P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog) {
         Owner = owner;
         Baseline = baseline;
@@ -15,8 +15,8 @@ internal sealed class P0PendingSave : IDisposable {
         Catalog = catalog;
     }
 
-    internal P0Repository Owner { get; }
-    internal P0Repository.PublicationBaseline Baseline { get; }
+    internal GraphResources Owner { get; }
+    internal GraphResources.MetaBootstrapPublicationBaseline Baseline { get; }
     internal string Branch { get; }
     internal P0GraphKind Kind { get; }
     internal P0PreparedGraphWrite Business { get; }
@@ -33,6 +33,6 @@ internal sealed class P0PendingSave : IDisposable {
     public void Dispose() {
         if (_state == PendingState.Finished) { return; }
         if (_state == PendingState.Committing) { throw new InvalidOperationException("An active P0 commit cannot be discarded."); }
-        Owner.Discard(this);
+        Owner.DiscardMetaBootstrap(this);
     }
 }

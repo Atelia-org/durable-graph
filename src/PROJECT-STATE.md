@@ -19,13 +19,13 @@
 
 ## 当前焦点
 
-[DB-087 P1c 第三片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#22-p1c-第三片共同业务-workspace-与候选寿命) 已完成共同业务 workspace 与候选寿命，并通过完整源码回归。问题、范围与运行证据集中 §22，前两片共同规划和 normalized 安装材料保留 §20–21；整个 P1c 未完成，下一片接内部 owner/root。
+[DB-087 P1c 第四片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#23-p1c-第四片内部-split-ownerroot) 已完成内部 split backing／发布所有权整合，并通过完整源码回归；问题、范围与证据集中 §23。前三片共同规划、normalized 安装材料和共同 workspace 保留 §20–22；内部 owner/root 停点已达，整个 P1c 未完成。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型，当前 ABI5／员工 DTO V1。完整 source lookup 在引用检查后／Normalize 前；长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 保留 State 基线与 rewrite。准确 source／selected／target view、操作内 memo 和有限 meta 员工白名单保持。
-两 adapter 已共用业务规划、normalized 候选和实际安装材料；冷来源由 ReadSplit 自行读准确 S 签发，完整成员含 Remove 行，meta／State 安装准备在发布前。本片由 BusinessWorkspace／BusinessSaveCandidate 统一 models、Capture、完整 baseline、根与候选寿命，保留两薄 backend 和 owner；Event 不建立 next baseline，也不安装 State。后继 owner/root 先达到内部新读新写停点，再移 history 与 Pair／缓存；施工顺序和待落实接缝集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1。
+GraphResources 已集中内部 FS/VS、双 refs、发布基线、唯一 pending 和 prepare/commit/fault；P0Repository 留薄外观，root payload 沿用 P0 wire。catalog 工作区仍由各 P0Session 持有并按最新 accepted 准备，Repository 外层未合。共同 BusinessWorkspace／候选、完整来源／实际 heads/H 与发布前安装保持；Event 不建立 next baseline，也不安装 State。下一片先做冻结代码→准确 S 的最小探针与绑定裁决，再移 Repository/history 和 Pair／缓存，施工导航集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1。
 公开 Repository／SCB1／raw map 仍为 DB-086 路径，P1c–d／P2 未切换；P1d 初始化／ProcessCrashOnly／真实包门禁通过后默认切换并删除旧路径，P2 再接显式 private。无旧数据／旧 API 兼容负担，最终产品简单优先，不把未穷举组合追加为 P1b 前置。
-本片起点 `585a24f`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+本片起点 `d8dee17`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
-本片未改变 wire、公开 API、SG 或交付边界，无新 PackageReference／Crash 资格，最后 assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
+本片未改变 root payload／wire、公开 API、SG 或交付边界，无新 PackageReference／Crash 资格，最后 assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。

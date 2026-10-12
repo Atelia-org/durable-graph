@@ -212,7 +212,7 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
 员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
-P1c 前三片已通过源码验收；[第三片](design-branches/0087-meta-bootstrap-refactoring-route.md#22-p1c-第三片共同业务-workspace-与候选寿命) 已合并共同 workspace 与候选寿命，保留两 backend／owner。下一 owner/root 先形成内部新读新写停点，再移 history、Pair／缓存；具体接缝和最小验收集中 DB-087 §6.3／7.1。P1d 门禁后才默认切换，P2 再接 private，不将无具体差异的组合追加为前置。
+P1c 前四片已通过源码验收；[第四片](design-branches/0087-meta-bootstrap-refactoring-route.md#23-p1c-第四片内部-split-ownerroot) 已将 backing／双 refs／唯一 pending／commit/fault 收入 GraphResources，P0Repository 为薄外观，catalog 工作区仍由各 P0Session 持有。内部同一 owner 新读新写的停点已达，公开 Repository 外层未合；下一片先做冻结代码→准确 S 的最小探针并裁决绑定形状，再移 Repository/history、Pair／缓存。具体接缝和最小验收集中 DB-087 §6.3／7.1；P1d 门禁后才默认切换，P2 再接 private，不将无具体差异的组合追加为前置。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
 P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存／操作内复用归 P1c，不由本观察宣称性能量级或本片优化，记录见 DB-087 §12。

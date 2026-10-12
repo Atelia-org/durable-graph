@@ -14,9 +14,12 @@ namespace Atelia.DurableGraph.Persistence;
 /// rewritten by DG. Data-only users can explicitly call Data.ConfirmDurable; Repository publication
 /// uses VersionStore's data-first barrier. Dispose and reopen after an uncertain owned operation.
 /// </remarks>
-public sealed class GraphResources : IDisposable {
+public sealed partial class GraphResources : IDisposable {
     private readonly PublicationStore _versions;
-    private Dictionary<string, FrameAddress> _root;
+    private readonly bool _metaBootstrap;
+    private readonly SchemaStore? _schemas;
+    private readonly StateRevisionStore? _states;
+    private Dictionary<string, FrameAddress> _root = new(StringComparer.Ordinal);
     private RefRevision _rootRevision;
     private bool _faulted;
     private bool _disposed;
@@ -27,23 +30,23 @@ public sealed class GraphResources : IDisposable {
         _root = RepositoryRootCodec.Decode(root.Payload);
         _rootRevision = root.Revision;
         IsReadOnly = versions.IsReadOnly;
-        Schemas = new(this, _root.TryGetValue(RepositoryRootCodec.SchemaKey, out var schema) ? schema : null);
-        States = new(data);
+        _schemas = new(this, _root.TryGetValue(RepositoryRootCodec.SchemaKey, out var schema) ? schema : null);
+        _states = new(data);
     }
 
     public DataStore Data { get; }
-    public SchemaStore Schemas { get; }
-    public StateRevisionStore States { get; }
+    public SchemaStore Schemas { get { RequireLegacyMode(); return _schemas!; } }
+    public StateRevisionStore States { get { RequireLegacyMode(); return _states!; } }
     public bool IsReadOnly { get; }
     public bool IsFaulted {
         get {
-            if (_faulted || Schemas.IsFaulted) { return true; }
+            if (_faulted || _schemas?.IsFaulted == true) { return true; }
             try { Data.EnsureUsable(); _versions.EnsureUsable(); return false; }
             catch (InvalidOperationException) { return true; }
         }
     }
     internal PublicationStore Versions => _versions;
-    internal RefRevision RootRevision => _rootRevision;
+    internal RefRevision RootRevision { get { RequireLegacyMode(); return _rootRevision; } }
 
     public static GraphResources CreateNew(string path, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) =>
         Open(path, rotationThresholdBytes, create: true, readOnly: false);
@@ -86,18 +89,21 @@ public sealed class GraphResources : IDisposable {
     }
 
     internal IReadOnlyList<string> ListBranches() {
+        RequireLegacyMode();
         RequireAvailable();
         return _root.Keys.Where(static key => key.StartsWith(RepositoryRootCodec.BranchPrefix, StringComparison.Ordinal))
             .Select(static key => key[RepositoryRootCodec.BranchPrefix.Length..]).Order(StringComparer.Ordinal).ToArray();
     }
 
     internal bool HasBranch(string name) {
+        RequireLegacyMode();
         RequireAvailable();
         RepositoryRootCodec.ValidateBranchName(name);
         return _root.ContainsKey(RepositoryRootCodec.BranchPrefix + name);
     }
 
     internal FrameAddress GetHead(string name) {
+        RequireLegacyMode();
         RequireAvailable();
         RepositoryRootCodec.ValidateBranchName(name);
         return _root.TryGetValue(RepositoryRootCodec.BranchPrefix + name, out var head)
@@ -107,6 +113,7 @@ public sealed class GraphResources : IDisposable {
     internal sealed record RootUpdate(Dictionary<string, FrameAddress> Roots, byte[] Payload, RefRevision ExpectedRevision);
 
     internal RootUpdate PrepareBranchRoot(string name, FrameAddress head) {
+        RequireLegacyMode();
         RequireWritable();
         RepositoryRootCodec.ValidateBranchName(name);
         return PrepareRoot(new Dictionary<string, FrameAddress>(_root, StringComparer.Ordinal) {
@@ -115,6 +122,7 @@ public sealed class GraphResources : IDisposable {
     }
 
     internal RootUpdate PrepareSchemaRoot(FrameAddress address) {
+        RequireLegacyMode();
         RequireWritable();
         return PrepareRoot(new Dictionary<string, FrameAddress>(_root, StringComparer.Ordinal) {
             [RepositoryRootCodec.SchemaKey] = address
@@ -133,6 +141,7 @@ public sealed class GraphResources : IDisposable {
 
     internal void PublishRoot(RootUpdate candidate, out PublicationOutcome outcome) {
         outcome = PublicationOutcome.NotAttempted;
+        RequireLegacyMode();
         RequireWritable();
         if (candidate.ExpectedRevision != _rootRevision) {
             throw new InvalidOperationException("Repository publication must use the latest root.");
@@ -146,6 +155,7 @@ public sealed class GraphResources : IDisposable {
     }
 
     internal HistoryGraphRecord ReadHistory(FrameAddress address) {
+        RequireLegacyMode();
         RequireAvailable();
         using FrameRead frame = Data.ReadFrame(address).Unwrap();
         if (frame.IsTombstone || frame.Tag != StateRevisionStore.FrameTag) {
@@ -169,7 +179,7 @@ public sealed class GraphResources : IDisposable {
 
     internal void RequireAvailable() {
         EnsureBackingUsable();
-        if (Schemas.IsFaulted) { throw new InvalidOperationException("Schema resources are faulted; dispose and reopen before further operations."); }
+        if (_schemas?.IsFaulted == true) { throw new InvalidOperationException("Schema resources are faulted; dispose and reopen before further operations."); }
     }
     internal void RequireWritable() {
         RequireAvailable();
@@ -179,18 +189,26 @@ public sealed class GraphResources : IDisposable {
         _faulted = true;
         // Data can remain healthy after a DG delivery/install failure. A retained owned facade
         // must still reject both warmed reads and new appends until this owner is reopened.
-        States?.Dispose();
+        _states?.Dispose();
+        _metaBootstrapStore?.Dispose();
     }
 
     public void Dispose() {
         if (_disposed) { return; }
+        if (_preparing) { throw new InvalidOperationException("An active metadata graph preparation cannot be disposed recursively."); }
         _disposed = true;
-        CloseResources(null, States, _versions, Data);
+        _pending?.Finish();
+        _pending = null;
+        CloseResources(null, (IDisposable?)_metaBootstrapStore ?? _states, _versions, Data);
+    }
+
+    private void RequireLegacyMode() {
+        if (_metaBootstrap) { throw new InvalidOperationException("This owner uses metadata graphs; legacy Schema/State operations are unavailable."); }
     }
 
     // Keep failure evidence while attempting every owned resource. Backing owners aggregate their
     // own close failures; retain those aggregates instead of flattening or replacing their errors.
-    private static void CloseResources(Exception? primary, StateRevisionStore? states,
+    private static void CloseResources(Exception? primary, IDisposable? states,
         PublicationStore? versions, DataStore? data) {
         Exception? stateError = null;
         Exception? versionError = null;

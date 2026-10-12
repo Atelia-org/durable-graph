@@ -18,8 +18,9 @@ descriptor 使用其 meta ObjectId；每个动态 Base 的解释仍受其 batch 
 P0 wire 和固定员工闭包允许调整；不提供旧格式兼容、私有分支策略或公开入口切换。
 
 从 [P0Session](P0Session.cs) 看两侧准备与安装；
-[P0GraphStore](P0GraphStore.cs) 保存共同 batch／目录／图并校验来源，
-[P0Repository](P0Repository.cs) 是唯一发布 owner。
+[P0GraphStore](P0GraphStore.cs) 保存共同 batch／目录／图并校验来源。
+第四片已将内部发布状态迁入 [GraphResources.MetaBootstrap](../GraphResources.MetaBootstrap.cs)，
+[P0Repository](P0Repository.cs) 仅作实验外观；内部资源 owner 已通过第四片源码验收。
 [P0CatalogWorkspace](P0CatalogWorkspace.cs) 保留手工 Set 的最终逻辑意图，
 [P0CatalogView](P0CatalogView.cs) 从员工 DTO 调用 Schema 工厂；均不调用 SchemaStore。
 员工模型在本程序集内经真实 Source Generator 编译。
@@ -86,7 +87,8 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 两真实头／length-prefix边界的计量见证及完整源码回归通过；未改wire/SG/交付、无新包资格，assets source，未合workspace/owner或公开切换。
 [P1c 第二片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#21-p1c-第二片normalized-保存材料与发布前安装准备) 已验共享 normalized 保存材料、实际 heads/H 与发布前安装准备；冷读工厂自行加载准确 S 并冻结模型，保完整 source 与 rewrite。typed Commit/Dispose 拒绝重入不释放外层候选；Event 不准备或安装实际 State 存储材料，仍接受 meta。build、定向和完整源码回归通过，无新包／Crash资格。
 已完成 [P1c 第三片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#22-p1c-第三片共同业务-workspace-与候选寿命)：[BusinessWorkspace／BusinessSaveCandidate](../BusinessWorkspace.cs) 合并 models、Capture、完整 baseline、根与候选寿命，保留两薄 backend／owner；Event 不建立 next baseline。真实根替换／cold Delta 和安装材料误接见证及完整源码回归已通过，未新增包或 Crash 资格。
-后继 owner/root 先形成内部新读新写停点，再移 history 与 Pair／缓存，接 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)。
+已完成 [P1c 第四片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#23-p1c-第四片内部-split-ownerroot)：内部 backing、双 refs、发布基线、唯一 pending 和 prepare/commit/fault 收入 GraphResources，内部 owner/root 新读新写停点已达，定向与完整源码回归通过。P0Repository 的工厂外观拥有资源，显式借用外观只释放自身；沿用 P0 root payload／wire。catalog 工作区仍由各 P0Session 持有并按最新 accepted 准备，公开 Repository 外层未合；无新包或 Crash 资格，assets 为 source mode。
+下一片先做冻结代码→准确 S 的最小探针与绑定裁决，再移 Repository/history 和 Pair／缓存，接 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)。
 现有公共路径保持，P1d 门禁后才默认切换／删旧路径，P2 另接 private；无具体反例不扩未穷举组合。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
