@@ -47,6 +47,19 @@ internal sealed class P0Session {
         }
     }
 
+    internal P0Session(P0Repository repository, string branch, P0BusinessWorkspace business,
+        Action ensureEditingAllowed) {
+        if (business.Source is not { } source || !ReferenceEquals(source.SourceOwner, repository.Store)) {
+            throw new InvalidDataException("A restored business workspace must belong to this exact repository Store.");
+        }
+        _repository = repository;
+        _branch = branch;
+        _business = business;
+        P0CatalogView? catalog = repository.SharedSchemaRoot is { } schema
+            ? P0CatalogView.Load(repository.Store, schema) : null;
+        Catalog = new(ensureEditingAllowed, catalog);
+    }
+
     internal P0CatalogWorkspace Catalog { get; }
     internal IDurableObject? State => _business.State;
     internal P0GraphSnapshot? StateSource => _business.Source;

@@ -85,14 +85,22 @@ internal sealed class P0BusinessWorkspace {
 
     internal static P0BusinessWorkspace LoadState(P0GraphStore store, FrameAddress state,
         StateModelRegistry.FrozenConfiguration configuration) {
-        P0GraphSnapshot graph = store.ReadGraph(state);
+        P0GraphMetadata graph = store.ReadMetadata(state);
         if (graph.Kind != P0GraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
         DecodedRevision source = DecodedRevision.ReadSplit(store, state, configuration);
         MaterializedGraph<IDurableObject> restored = GraphReader.Read<IDurableObject>(
             source, graph.RootId, new(source.SourceModels!));
-        restored.Baseline.RequireSplitSource(store, source.SourceModels!);
-        return new(store, BusinessWorkspace.FromLoaded(source.SourceModels!, restored), graph) {
-            BindingEnvironment = source.BindingEnvironment,
+        return FromLoaded(store, source.BindingEnvironment!, restored);
+    }
+
+    internal static P0BusinessWorkspace FromLoaded(P0GraphStore store,
+        DecodedRevision.SplitBindingEnvironment environment, MaterializedGraph<IDurableObject> restored) {
+        P0GraphSnapshot graph = restored.Baseline.RequireSplitSource(store, environment.Models);
+        if (graph.RootId != restored.RootId || !ReferenceEquals(restored.Baseline.SelectedSchemaView, environment.SelectedSchemaView)) {
+            throw new InvalidDataException("Editable State must retain its actual root and reader-issued Schema environment.");
+        }
+        return new(store, BusinessWorkspace.FromLoaded(environment.Models, restored), graph) {
+            BindingEnvironment = environment,
         };
     }
 

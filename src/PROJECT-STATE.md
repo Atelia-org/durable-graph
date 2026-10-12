@@ -19,11 +19,11 @@
 
 ## 当前焦点
 
-[DB-087 P1c 第八片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair) 已接 split ReadPair，构建、定向与完整源码回归通过；问题与证据集中 §27，前七片保留 §20–26。下一片接 DB-080 准备材料，再接物理缓存，具体恢复入口与最小验收集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1，整个 P1c 未完成。
+[DB-087 P1c 第九片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用) 已接 split Checkout／Fork 的 DB-080 单 State 准备槽，构建、定向与完整源码回归通过；问题与证据集中 §28。前八片证据保留 §20–27；下一片迁物理缓存，再到 P1d／P2，具体入口见 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1，整个 P1c 未完成。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型，当前 ABI5／员工 DTO V1。完整 source lookup 在引用检查后／Normalize 前；长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 保留 State 基线与 rewrite。准确 source／selected／target view、操作内 memo 和有限 meta 员工白名单保持。
-内部 GraphResources、共同候选与发布前安装保持。Open 冻结配置，checkout 固定创建／恢复时的执行 S：有 State 取 State.S，无 State 取创建时 latest shared／空库 None；存储 SelectedSchemaView 可推进，hot models／preparation 不换。历史 Fork 按 selected head 恢复，ref-only 不倒退 shared S。split Pair 两侧准确 S，同 reader-issued 环境才求完整状态／引用闭包共享；跨环境独立、两侧共同物化保 mutable allocator guard。string 在原 same-ID/head 候选内以 Ordinal 内容证明，不 intern 不同 ID，不新增 DTO cache 或 State 槽。默认公开工厂不切，不保证任意跨 S closure 的领域值等价。
+内部 GraphResources、共同候选与发布前安装保持。Open 冻结配置，checkout 固定创建／恢复时的执行 S：有 State 取 State.S，无 State 取创建时 latest shared／空库 None；存储 SelectedSchemaView 可推进，hot models／preparation 不换。历史 Fork 按 selected head 恢复，ref-only 不倒退 shared S。split Pair 两侧准确 S，同 reader-issued 环境才求完整状态／引用闭包共享；跨环境独立、两侧共同物化保 mutable allocator guard。string 在原 same-ID/head 候选内以 Ordinal 内容证明，不 intern 不同 ID，不新增 DTO cache。State 槽本片持准确 State 的 reader 环境／Selection／完整标准依赖；命中仍独立物化，Event-only 绕槽，Fork 发布成功后安装。DB-081 热 seed 禁用，DB-082 既有候选随片移接仍默认关闭。默认公开工厂不切，不保证任意跨 S closure 的领域值等价。
 默认公开工厂仍走 DB-086 的 SCB1／raw map 路径；内部 split 工厂返回真实 Repository，并调用已移接的现有 public 方法。P1c–d／P2 未完成；P1d 初始化／ProcessCrashOnly／真实包门禁通过后默认切换并删除旧路径，P2 再接显式 private。无旧数据／旧 API 兼容负担，最终产品简单优先，不把未穷举组合追加为 P1b 前置。
-第八片起点 `13033ca`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+第九片起点 `2be3018`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 本片未改变 wire、公开 API、SG 或交付边界，无新 PackageReference／Crash 资格，最后 assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
 
@@ -49,7 +49,7 @@ A/B 显示 Family 物化改善，但完整 Fork 未见稳定收益；不以减�
 反例与历史证书隔离见证进入回归；未改产品 API、发布或 provider 合同。重启条件与备选只维护在实验记录及路线图。
 
 [DB-080：最近 State 准备材料复用](../docs/design-branches/0080-prepared-checkpoint-reuse-implementation.md) 已实施并独立验收。
-Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽；每次命中复核完整 live Schema 证书，仍独立物化和导入保存身份。
+Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽；默认 DB-086 每次命中复核完整 live Schema 证书。内部 split 的准确 reader 环境／标准依赖接线见本片 §28；两者仍独立物化和导入保存身份。
 证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
 默认启用的依据是实测高命中路径准备计数和分配下降；没有完整 Fork 普遍加速或总堆有界的承诺，具体证据只保留在实施记录。
 

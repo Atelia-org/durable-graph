@@ -202,7 +202,7 @@ public sealed partial class Repository : IDisposable {
     private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head,
         out PreparedStateRestoration? candidate) {
         candidate = null;
-        if (UsesMetaBootstrap) { return NewMetaBootstrapCheckout(branchName, head); }
+        if (UsesMetaBootstrap) { return RestoreMetaBootstrapCheckout(branchName, head, out candidate); }
         ValidateSelectedGraphParent(head);
         CheckpointAddress? state = NearestStateCore(head);
         // Event-only histories must not even inspect another branch's resident certificate.

@@ -162,7 +162,7 @@ internal sealed class NormalizedRevision {
         }
     }
 
-    internal void RequireSplitSource(P0GraphStore store, StateModelSnapshot models) {
+    internal P0GraphSnapshot RequireSplitSource(P0GraphStore store, StateModelSnapshot models) {
         if (_isCandidate || !ReferenceEquals(SplitStore, store) || !ReferenceEquals(SourceModels, models) || SelectedSchemaView is not { } selected) {
             throw new InvalidDataException("The normalized baseline must retain its exact split Store and frozen model environment.");
         }
@@ -179,6 +179,7 @@ internal sealed class NormalizedRevision {
             }
             selected.Require(row.SourceLayout);
         }
+        return actual;
     }
 
     internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models,

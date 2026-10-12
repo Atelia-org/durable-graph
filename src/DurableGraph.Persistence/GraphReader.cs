@@ -47,13 +47,21 @@ internal static class GraphReader {
     internal static PreparedGraphSelection PrepareState(RevisionReadSession session,
         FrameAddress revisionAddress, ObjectId rootId) => Prepare<IDurableObject>(session, revisionAddress, rootId);
 
+    internal static PreparedGraphSelection PrepareState(DecodedRevision decoded, GraphReadContext context,
+        ObjectId rootId) => Prepare<IDurableObject>(decoded, context, rootId);
+
     // reusedLeaves is trusted only after validation of the installed entry owning this exact
     // selection. It never accepts caller-owned live graphs or a different selection's table.
     internal static MaterializedGraph<IDurableObject> RestorePreparedState(RevisionReadSession session,
         PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
+        bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) =>
+        RestorePreparedState(session.Context, selection, out immutableLeaves, collectImmutableLeaves, reusedLeaves);
+
+    internal static MaterializedGraph<IDurableObject> RestorePreparedState(GraphReadContext context,
+        PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
         bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         immutableLeaves = null;
-        var (instances, _) = Materialize(session.Context, selection, reusedLeaves: reusedLeaves);
+        var (instances, _) = Materialize(context, selection, reusedLeaves: reusedLeaves);
         if (collectImmutableLeaves) {
             Dictionary<ObjectId, object>? leaves = null;
             foreach (ObjectId id in selection.Reachable) {
