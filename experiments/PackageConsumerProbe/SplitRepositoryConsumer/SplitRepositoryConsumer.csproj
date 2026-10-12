@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Atelia.DurableGraph.Persistence.Tests</AssemblyName>
+    <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <HistoryVersion Condition="'$(HistoryVersion)' == ''">1</HistoryVersion>
+    <DefineConstants>$(DefineConstants);HISTORY_V$(HistoryVersion)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Widget.V1.cs" Condition="'$(HistoryVersion)' == '1'" />
+    <Compile Include="Widget.V2.cs" Condition="'$(HistoryVersion)' == '2'" />
+    <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" Aliases="persistence" />
+  </ItemGroup>
+</Project>

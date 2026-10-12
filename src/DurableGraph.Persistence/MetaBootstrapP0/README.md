@@ -98,7 +98,9 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 
 [P1d 第二片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#31-p1d-第二片真实-dg-processcrashonly-保存窗口) 已验 [真实 DG ProcessCrashOnly source 宿主](../../../experiments/MetaBootstrapCrashProbe/README.md) 的六个固定保存窗口。外部 Kill 后 fresh 核实际两根／准确 S、完成 orphan 保留与单 List Delta；首 CU End 两旧，全部 End 在 flush 前完整时两新。仅新增 solution 外宿主，生产／solution／test 源码零改；运行证据只在 §31。直接初始化 factory Kill／实际 Repository 返回边界由第三片补验，见下段；前片生产零改仅描述当片历史范围。
 
-[P1d 第三片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#32-p1d-第三片直接初始化-kill-与实际返回-outcome) 已完成 actual factory 成功创建 ref1／ref2 后外部 Kill 与实际 typed Repository 返回／fault 的限定源码验收，构建、定向与完整源码回归通过。只有两个生产文件的局部 internal afterCreateRef callback，wire／public API／默认保持；BeforeInstall 是安装前 hook，不是实际 Install 本体故障。准确 split Repository＋accepted-history Upgrade／tag／Fork／ReadPair／Delta 包消费者仍后置，再默认切换退旧和 P2，运行证据只保留 §32。
+[P1d 第三片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#32-p1d-第三片直接初始化-kill-与实际返回-outcome) 已完成 actual factory 成功创建 ref1／ref2 后外部 Kill 与实际 typed Repository 返回／fault 的限定源码验收，构建、定向与完整源码回归通过。只有两个生产文件的局部 internal afterCreateRef callback，wire／public API／默认保持；BeforeInstall 是安装前 hook，不是实际 Install 本体故障。该片运行证据保留 §32；准确 Repository／history 包的后继验收见第四片，默认接线退旧与 P2 仍后置。
+
+[P1d 第四片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history) 已通过 [内部 friend 的准确包消费者](../../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)：V1 seed／tag→V2 readonly Upgrade→latest shared 与旧 tag Fork→同／跨 S Pair→首次 rewrite Base→fresh List Delta／readonly。生产零改，包内 Generator／Build targets 与 accepted history、准确来源／实际 heads/H 均有证据；包运行与 source solution 回归分开记录于 §33。默认公开工厂仍 DB-086，内部资格不授 public-default 或完整 P1 产品停点。下一片默认前端先保 FS rotation 参数意义，再按调用清零退旧并迁两个 cache 小依赖，最后验非 friend 公开包；具体施工导航见 §33.4，P2 private 后置。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

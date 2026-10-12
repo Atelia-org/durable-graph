@@ -1,7 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图的就地重构路线
 
-> 更新：2026-10-13。状态：**P0／P1a 已完成，P1b 有限停点已达；P1c 前十片已验；P1d 前三片限定验收完成；直接初始化进程／实际 outcome 及完整源码回归通过；默认公开切换与完整 P1 产品门禁／P2 未完成**。
-> 历史证据保留第 10–31 节；本片直接初始化 Kill／实际 Repository 返回与故障边界见[第 32 节](#32-p1d-第三片直接初始化-kill-与实际返回-outcome)。后继为准确包→默认切换退旧，P2 后置。
+> 更新：2026-10-13。状态：**P0／P1a 已完成，P1b 有限停点已达；P1c 前十片已验；P1d 前四片限定验收完成，内部 split Repository／accepted-history 准确包门禁通过；默认公开切换、旧权威退出与完整 P1 产品门禁／P2 未完成**。
+> 历史证据保留第 10–32 节；本片内部 friend PackageReference 的实际 Repository／历史故事与验证见[第 33 节](#33-p1d-第四片准确包与-accepted-history)。后继为默认接线→按调用清零退旧→非 friend 公开包，P2 后置。
 > 公开产品基线仍是 [DB-086](0086-new-storage-implementation.md)。P1 公开切换、P2 private 未实施；内部 API/wire 未冻结。
 > 用户明确无旧数据／旧 API 兼容负担；简单性按最终产品衡量，施工过程允许复杂。裁决与下一片见[第 9 节](#9-本轮裁决与下一片实验)。
 
@@ -339,7 +339,7 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 <a id="63-p1b-首片续工入口"></a>
 ### 6.3 P1d 续工入口
 
-P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前十片已验，证据见 §20–29。P1d 首片初始化／正常恢复见 §30，第二片保存进程窗口见 §31。第三片已接两生产文件的局部 internal afterCreateRef callback，实际 DG factory 两个成功创建后 Kill 与 typed Repository 返回 outcome／故障测试、构建和完整源码回归已通过，见 §32。wire／public API／默认工厂保持；后继准确包消费者，再默认切换退旧和 P2 private。续工仍先核实际 HEAD／工作树。
+P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前十片已验，证据见 §20–29。P1d 初始化／正常恢复、保存进程窗口和直接初始化／实际返回分别见 §30–32；第四片已通过内部 friend 的准确 split Repository＋accepted-history 包门禁，见 §33。本片生产零改，wire／public API／默认工厂保持。后继默认接线、退出旧权威、非 friend 公开包，再接 P2 private；续工仍先核实际 HEAD／工作树。
 
 停点覆盖现有 Schema／TypeExpr 与标量、base/inline/Nullable、generic/enum、Array/List/Dictionary 的描述与代表性 cold／增量，容器值规则和 generic provider history 分别有真实 accepted-history 见证。Application 完整 comparer 配方、rank3/4 SG 冷图、更多嵌套／约束和跨库升版仍是资格限制；没有具体接缝反例时沿用 Runtime/SG 已验算法，P1c 移接既有回归发现差异再补验。有限 P1b 不是公开 Repository/history/cache 或完整产品门禁。
 
@@ -358,11 +358,12 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前十片已验，证据�
 | **P1d 首片：初始化与正常恢复已验，见 §30** | tests-only 联验两正式根、第二次 lower CreateRef 的 pre-rename／Confirmed 未交付、fresh DG Open、失败锁释放和必要底座恢复；不注入 DG.CreateNew 内部窗口，不授 ProcessCrashOnly 资格 |
 | **P1d 第二片：真实 DG ProcessCrashOnly 保存窗口已验，见 §31** | 实际生成 Widget／共享 List 与新增 meta 走真实两 ref CU；外部 Kill 后 fresh 核准确两根／S／完整 orphan，readonly 零写、单 List Delta 的 IDs／prior／实际 H 与再冷读。首 CU End 必须两旧，全部 End 在 flush 前已完整时必须两新；不把 Kill 当已交付内存 outcome |
 | **P1d 第三片：直接初始化 Kill／实际返回 outcome，见 §32** | afterCreateRef 只在两次真实 Unwrap 成功后调用；ref1 后 fresh 拒缺 ref2、ref2 后 fresh 两空根可保存／cold Delta。实际 typed Repository 区分 healthy NotPublished、faulted NotPublished、Unknown 与 Published，拒绝旧 owner／清缓存后 fresh 裁决。宿主矩阵、新增测试定向及完整源码回归通过 |
-| **P1d 后继：准确包后默认切换／退出旧路径** | 新隔离消费者实际走 split Repository＋accepted history／Upgrade／tag／Fork／ReadPair／Delta 的代表故事，不借旧 P1b current 包资格。通过后默认切换并删除 SCB1/raw-map 旧入口；P2 再接已选 private 政策，不扩大全部组合前置 |
+| **P1d 第四片：准确内部 Repository／history 包已验，见 §33** | 隔离 PackageReference 消费者实际完成 V1 seed／tag→V2 readonly Upgrade→latest shared 与旧 tag Fork→同／跨 S Pair→首次 rewrite Base→fresh 单 List Delta／readonly；测试 friend 只授内部接线资格，不代 public-default |
+| **P1d 后继：默认接线→按调用清零退旧→公开包** | 先接公开工厂、Repository／BranchCheckout／GraphResources 唯一路径并保 FS rotation 参数意义，再按调用依赖删除 SCB1／raw-map 旧权威及纯旧格式测试，最后以非 friend 准确包消费者验默认路径；不预设一次完成全部删除，不保永久双 backend |
 
 首片只共用规划算法，不一次合并 workspace。施工期间旧公开 owner 仍只旧读旧写，P0 内部入口只新读／joint publish；没有生产双写或新 reader 配旧 Schema 发布的混合停点。推荐内核形状未冻结方法签名，实现证据支持更小替代时可调整，不为规划建立接口／token。
 
-共同候选／薄返回壳、内部资源 owner 和准确 S reader 环境已通过前片验收；第六片已接真实 Repository／checkout 的持有位置。配置在 Open 固定；checkout 的执行 S 和 mutable memo 在其寿命内固定，State 确认只接受实际候选和新的存储材料。hot 此后首次闭合新类型仍查询创建时的 S，新 checkout 才选择其最近 State.S；这是稳定 models／preparation 原则的执行环境寿命界线，不是一般热冷领域值等价证明。元数据导航、Pair、State 槽与物理缓存均已通过前片限定验收；当前第三片已验直接初始化进程与实际返回边界，限定实证与后继包门禁见 §32。
+共同候选／薄返回壳、内部资源 owner 和准确 S reader 环境已通过前片验收；第六片已接真实 Repository／checkout 的持有位置。配置在 Open 固定；checkout 的执行 S 和 mutable memo 在其寿命内固定，State 确认只接受实际候选和新的存储材料。hot 此后首次闭合新类型仍查询创建时的 S，新 checkout 才选择其最近 State.S；这是稳定 models／preparation 原则的执行环境寿命界线，不是一般热冷领域值等价证明。元数据导航、Pair、State 槽与物理缓存均已通过前片限定验收；前三片初始化／进程与实际返回保原证据；当前第四片的内部 friend 准确包及后继默认接线边界见 §33。
 
 第七片已落实两个具体接缝：一是 [GraphResources split partial](../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs) 从当前 `_baseline.Branches` 复制并预编码 P0R1，ref-only 更新只 PublishRef1；Confirmed 换分支基线／revision，shared ref2 保持。pending／preparing／committing 时拒绝插入，沿用 outcome／fault，不建新发布框架。二是 [NewMetaBootstrapCheckout](../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)／[P0Session](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs) 从已签发的 selected head 派生最近 State，不借目标 branch 当前 head，以真实 ReadSplit 完整恢复并备齐交付材料，再发布新 branch。已验 E/S 链→tag→历史分支／Fork→Move→全部资源关闭后 fresh 读取，元数据导航零 body／typed 回调、ref-only 无新 graph 且 Schema 不倒退、Fork mutable 实例独立且可续写，实际资格与限制见 §26。
 
@@ -413,7 +414,8 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前十片已验，证据�
 | 两正式根初始化与必要底座恢复 | 两 CreateRef 非 CU；缺任一正式根拒绝，不补建／删完成内容。fresh Open 只读取必要 refs1/2，再构造 Store/cache；正常 data tail 与 VS pending／惰性首开恢复保持 | **P1d 首片限定源码验收通过，见 §30**；lower 第二 CreateRef 故障＋fresh DG Open 是联验，不是 DG.CreateNew 内部故障或进程终止证据 |
 | 真实 DG ProcessCrashOnly 保存宿主 | 独立 source host 使用实际 split Repository／生成 Widget／共享 List／新增 Extra，六个固定窗口外部 Kill；fresh 实际根／S／typed／完整帧与单 Delta 续写，首 End 两旧、全 End 两新 | **P1d 第二片有限资格已验，见 §31**；无生产变化，不授直接 factory 初始化、返回 outcome、包或断电资格 |
 | 初始化进程与实际返回 outcome／故障关闭 | afterCreateRef 由内部 Repository 工厂下传，局部调用只发生在两次真实 CreateRef.Unwrap 成功后；新增 typed Repository 测试区分 VS 四窗口、healthy BeforeAppend 和安装前 hook | **第三片限定源码验收通过，见 §32**；BeforeInstall 不是实际 Install 本体故障，不新增静态全局 hook 或恢复协议 |
-| 准确包与默认切换门禁 | 新隔离消费者消费独立准确六包／DG 版本，实际 split Repository 与 accepted-history Upgrade／tag／历史 Fork／ReadPair／Delta；准确视图与同 reader-issued 环境资格保持。完成后另片默认切换并退出旧路径 | **P1d 后继未实施**；现 friend 身份可使用 internal factories，不授 public-default 资格，source host／旧 P1b 包不代本消费者 |
+| 准确内部 Repository／accepted-history 包 | 新隔离 PackageReference 消费者使用独立准确六包／DG 版本，实际 split Repository／历史 Upgrade／tag／Fork／ReadPair／Delta；各侧准确 S，完整共享资格保持 | **P1d 第四片限定验收通过，见 §33**；friend 身份调用内部工厂，不授 public-default、全部类型或故障资格 |
+| 默认接线与旧权威退出 | 公开工厂与三个前端先接既有新路径，随后按调用清零退旧，最后非 friend 公开包；保业务恢复／保存、Schema joint Save、身份／来源／outcome 合同 | **后继未实施**；FS rotation 与 read-cache 预算分别透传，两个 cache 常数并至存留处，不为测试或常数保旧壳；局部签名／format 名未冻结 |
 | shared/private 的公开配置入口 | 政策已定：应用显式选择写入归属，缺策略可以读而写时拒绝，private 是完整 view；配置位置、方法和参数签名尚未确定。不得从 branch 名、地址相等或上次内存推断策略，不以 API 未定重开该政策 | P2；先显式策略/完整 fork，再接新根 all-Base 改形、完整闭包 promotion/必要重编码及两环境冷读验收 |
 
 ### 7.2 端到端与拒绝见证
@@ -464,7 +466,7 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前十片已验，证据�
 
 与前稿相比，明确去掉一套独立表示编号/映射、一种 membership 模式及 Event 强制目录 Base 分支，并取消新 leaf codec/tag 和通用 token/日志平台的要求。新增 OwnedBatch 是为恢复拆帧丢失的 local-record 关联，不是优化附加物。没有把简单性解释为少改旧代码。
 
-P0 的真实 Widget／Schema descriptor／存活 Dictionary 持久自举证据保留 §10；P1a／P1b 与 P1c 前十片保留 §11–29。**第十片 owned 物理缓存已通过限定源码验收**；P1d 首片初始化／正常恢复见 §30，第二片六个真实 DG ProcessCrashOnly 保存窗口已验，见 §31。第三片直接 factory 初始化进程／实际 outcome 与故障边界已通过限定源码验收，见 §32。后继准确包与默认切换退旧。不宣布完整 P1 产品停点，P2 private 仍后置。
+P0 的真实 Widget／Schema descriptor／存活 Dictionary 持久自举证据保留 §10；P1a／P1b 与 P1c 前十片保留 §11–29。P1d 前三片初始化／恢复／ProcessCrashOnly／实际返回保原范围于 §30–32；**第四片内部 friend 的准确 split Repository＋accepted-history 包验收完成**，见 §33。下一片先接默认前端并保 rotation 配置意义，再按调用清零退旧、验非 friend 公开包；不宣布完整 P1 产品停点，P2 private 仍后置。
 
 本轮无需新增产品语义选择。双 ref 保持原任务方向；是否后来改成单 ref、增加原分支重建或固定业务 head 的 Schema-only，只在相应目标出现时裁决。P1a 不代表完整 P1 或 P2 已完成，也不冻结实验 wire。
 
@@ -1312,3 +1314,54 @@ BeforeInstall 只证明实际发布后的**安装前 hook**失败，不是实际
 下一片复用现准确六包 feed、独立 DG 版本、隔离 NuGet.Config／cache／assets、DLL／输入 hash 和 accepted-history 工具，新增一个**实际 split Repository** 的代表消费者。可沿现测试 friend 身份调用 internal factories，先取得内部接线的真实 PackageReference 资格，不声称 public-default 已切换。旧 P1b 第五片 current 容器包仅保原范围，不能替代这份 Repository／历史资格。
 
 最小故事为 V1 Widget／List seed＋tag，V2 真实 accepted-history cold 读取／Upgrade 零写，历史 tag 的有 State Fork 按其 State.S 恢复并执行 V2 Normalize；ReadPair 两侧各取准确 S，只有同 reader-issued 环境及原完整证明才可共享，不因同为 V2 DTO 就合并。首 State rewrite Base、后继 Delta 与 fresh 旧 tag／新分支组成一个有限消费者；不全面重做全部类型、comparer、private 或泛型矩阵。包门禁后另一个有限片完成默认切换与旧路径退出，再进入 P2 private。
+
+
+<a id="33-p1d-第四片准确包与-accepted-history"></a>
+## 33. P1d 第四片：准确包与 accepted history
+
+本片起点 `f4f81ec`，日期 2026-10-13。问题：**内部 split Repository 的共同保存、准确 Schema 视图与真实 accepted-history Upgrade，能否由隔离的 PackageReference 消费者完成 tag／历史 Fork／ReadPair／首次 rewrite 和后继 Delta，而不借源码引用或默认旧路径？** 已通过限定包验收及独立复核。本片新增一个有限消费者和 runner，生产零改；默认公开工厂仍走 DB-086，不据内部 friend 包门禁宣布完整 P1d／P1 产品停点。
+
+### 33.1 最小故事与观察边界
+
+[SplitRepositoryConsumer](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md) 以现有测试 friend 身份调用内部工厂，使用包内 Generator／Build targets；[runner](../../experiments/PackageConsumerProbe/Run-SplitRepositoryProbe.ps1) 将下列五阶段放在不同正常进程。领域模型只有 V1／V2 Widget 环和共享 128 项 List，V2 Value 从 int 升至 long 并显式加 100；Extra 是不要求 CLR 业务模型的 Int64 meta 定义。
+
+| 阶段 | 实际观察 |
+|---|---|
+| V1 seed | 真实 State 与 `initial` tag、Widget 环／共享 List、两正式 refs 和准确 catalog；保存完整 IDs／heads/H 与完成帧图像 |
+| V2 readonly Upgrade | 保留的 V1 reader 解码原 DTO，当前模型升级两个 Widget；相同 S 的旧图 Pair 保 rewrite 对象独立，可复用合格 List。全文件集合／长度／SHA 不变，不登记 V2 |
+| V2 rewrite／历史 Fork／Pair | main 首 State 写两个 Widget Base，List retained；新增 Extra 后 shared 进入 S1。旧 tag Fork 按 State.S0 恢复，以 latest S1 作写入准入，ref-only 不追加图或倒退 shared。fork 首 State 同样 rewrite 两 Base，retained List 的原 Base 仍来自 S0。同 S 完整环 Pair 可共享；跨 S 的同 List ID／head／DTO 仍独立 |
+| fresh continuation | 关闭全部资源后，新 checkout 导入实际 IDs／heads/H；修改 List 只写一个 Delta，prior、batch sourceGraph 与 S 准确，H 按实际对象版本 payload 累加，Widget heads retained |
+| fresh readonly verify | 从旧 tag／新 main／fork 各自准确 S 恢复并查 meta；完成帧保持，全文件集合／长度／SHA 不变 |
+
+Pair 身份断言只验当前优化，不能从相同 current DTO 推导跨 S 共享能力，也不授公共 ReferenceEquals 保证。完成帧图像核地址、tag、user payload 与 tail-meta SHA：6 个 seed、9 个 rewrite 新帧、3 个 continuation 新帧；不是 raw RBF 全字节图像或全库 audit。本故事只使用当前默认 FS rotation 配置，不外推小文件或自定义 rotation 矩阵。
+
+### 33.2 准确来源与最终验证
+
+DG 包版本为 `0.0.0-split-repository-e2e.20261012181015`，六个 Storage 包为 `0.1.3-dev.20261011.g974fd47`，准确 storage revision 为 `974fd47abb73792f9d350af87ab91a53848952eb`。feed 位于 `.artifacts/db087-p1d-repository-package-20261012181015/feed`。本片 pack 使用既有全局 pack cache；消费者的工作目录、NuGet.Config／cache／assets 为全新隔离，assets 只有包来源、没有 ProjectReference。不能将消费者隔离表述为 pack restore 全隔离。
+
+主线核对十个包的版本／commit／nupkg 和 runtime DLL 到隔离 cache、两阶段输出；每阶段实际加载的四个程序集（Runtime、Persistence、Storage、Host）另有来源／hash 证据，不将十个输出 DLL 的核对扩大为全部实际加载检查。Runtime 包内四项 SG／Build 输入逐 ZIP entry 对齐，包内工具完成 V1／V2 Publish 与 Verify。accepted history 从一份到两份，原 V1 文件 hash 不变。pack provenance 含 214 项记录，其中 209 项非 Markdown 的源码／工程／构建输入在验收后保持；这些记录不全部等同实际编译输入。
+
+| 验证 | 主线实际结果与证据 home |
+|---|---|
+| 最终隔离包运行 | 五进程均 exit0；两个 restore 通过，四次消费者构建均 0 warnings／0 errors（4.88s／1.45s／1.71s／1.43s）。最终 receipt `.artifacts/db087-p1d-repository-package-result.json`，SHA256 `B16D1E3A70E1A935594B46C31179448D1C7B2AE633246C5F8930180A1D69CA44`；主线核验记录 `.artifacts/db087-p1d-repository-acceptance.json` |
+| source solution 构建 | exit0，0 warnings／0 errors，25.38s；`.artifacts/db087-p1d-repository-solution-build.log` |
+| 完整 source solution 回归 | **3067 passed／0 failed／0 skipped**：Persistence 1127（16s）、Serialization 133（156ms）、Storage 132（9s）、Runtime／Generator 1675（3m34s）；`.artifacts/db087-p1d-repository-regression.log` |
+| 冻结与独立复核 | 五个实际执行输入由 `.artifacts/db087-p1d-repository-tested-files.json` 记录；主线核输入、包／实际加载与帧／readonly 证据。序列化、存储两侧独立限定复核 PASS，无 must-fix |
+
+首次包运行五阶段通过，但 V2 编译有一项 CS8602；作者只补 null-forgiving 标注，最终用全新 fixture／工作目录重跑，全部构建无 warning。该修正属于消费者探针，不是产品方案被否定。生产输入未变化；source 完整回归与最终包运行是分开的验收，外部消费者不在 solution 内，不将五进程或四次构建累加到 3067。两个 readonly 阶段均比较打开前与关闭后的完整文件集合及字节。
+
+### 33.3 已验停点与限制
+
+本片取得**内部 friend split Repository＋accepted-history 的准确包资格**，不是公开默认路径资格。没有新增 Kill／断电／性能实验，不扩展 P2 private、全部类型／comparer／泛型／跨程序集或 Upgrade 矩阵，也不冻结内部 wire／format 命名。前三片故障证据仍保各自范围；本片正常多进程包消费不能替代故障窗口。历史 §10–32 保持原字节和各自运行范围。
+
+### 33.4 下一片：默认接线、按调用退旧、公开包
+
+依赖顺序已选，局部签名由实际源码和回归裁决，不预设一片完成全部删除：
+
+1. 先将公开工厂与 [Repository](../../src/DurableGraph.Persistence/Repository.cs)、[BranchCheckout](../../src/DurableGraph.Persistence/BranchCheckout.cs)、[GraphResources](../../src/DurableGraph.Persistence/GraphResources.cs) 的默认分派接到已验新路径，并运行相关产品故事。保准确来源／视图、根与身份、Event／State、history／mutable 隔离、唯一 pending 和发布前安装；不能形成新 reader 配旧 Schema 提前发布的混合停点。
+2. 按调用清零删除 SCB1 独立 `SchemaStore.Register*` 发布权威、raw-map StateRevision 消费和纯旧格式测试。保共同 BusinessWorkspace／candidate、规划与 body／ObjectVersion payload 算法；独立旧低层测试不成为保留生产残壳的理由。最终不保永久双 backend、兼容 reader、迁移或双写。
+3. 新路径与旧权威退出后，以**非 friend 的公开默认 PackageReference 消费者**验实际默认路径；此项与前两项共同构成完整 P1 停点。P2 再接已选 private 政策，不将未穷举组合追加为前置。
+
+下一片有一个必须保住的配置差异：现公开第三位置参数是 `rotationThresholdBytes`，真正下传 FrameStore；内部 split 第三位置是 `readCacheBudgetBytes`，当前使用 FS 默认 rotation。默认接线必须保 FS rotation 的可观察意义，并分别透传 cache 预算或收敛局部签名，**不能把现 rotation 数值机械传成 cache 预算**。无旧 API 兼容负担允许改签名，不允许静默改变存储配置。
+
+退旧时，[P0GraphReadCache](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs) 的目录 charge 所借 `StateRevisionReadCache.GetMapCharge`（双数组／实际 FrameAddress 位宽）及所借 `StateRevisionStore.DefaultReadCacheBudgetBytes` 两个小依赖并至存留 cache/helper；不为常数保旧 adapter，不建 charge 框架。只剩新 consumer 后，可将施工期 generic LRU／固定 wrapper 收成更小 concrete cache。格式命名、公开 meta 查询／受控编辑的局部形状未冻结；当前没有需要重开已选政策的实质产品语义阻塞。

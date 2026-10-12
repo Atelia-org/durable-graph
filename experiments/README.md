@@ -8,6 +8,7 @@
 |---|---|
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
 | 验证 DB-087 内部员工 Schema 闭包、无业务注册的 meta 冷读与跨正常进程 Delta 续写 | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md)：内部包验收，不代替公开切换或进程故障门禁 |
+| 验证 DB-087 内部 split Repository 的真实 accepted-history／Upgrade／tag／历史 Fork／ReadPair 与 Base→Delta | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md)：[Run-SplitRepositoryProbe.ps1](PackageConsumerProbe/Run-SplitRepositoryProbe.ps1)，内部 friend 准确包门禁已验，证据见 [§33](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)；不代 public-default 或进程故障资格 |
 | 验证实验性 Dictionary 的 comparer、键寻址 Delta、共享引用与双槽历史升级 | [DictionaryConsumer](PackageConsumerProbe/DictionaryConsumer/README.md)：[Run-DictionaryProbe.ps1](PackageConsumerProbe/Run-DictionaryProbe.ps1)，DB-054 产品回归 |
 | 验证显式 enum 的整数表示、完整类型组合与删除旧 CLR enum 后的历史升级续存 | [EnumConsumer](PackageConsumerProbe/EnumConsumer/README.md)：[Run-EnumProbe.ps1](PackageConsumerProbe/Run-EnumProbe.ps1)，DB-053 产品回归 |
 | 验证 Nullable 字段/泛型/数组/List 的冻结、历史精确读取与显式值升级提升 | [NullableConsumer](PackageConsumerProbe/NullableConsumer/README.md)：[Run-NullableProbe.ps1](PackageConsumerProbe/Run-NullableProbe.ps1)，DB-052 产品回归 |
