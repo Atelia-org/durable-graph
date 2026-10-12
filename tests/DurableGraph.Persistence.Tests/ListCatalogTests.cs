@@ -79,7 +79,7 @@ public sealed class ListCatalogTests {
         ObjectLayout list1 = InlineList(p1), list2 = InlineList(p2);
         RepresentationId[] ids;
         try {
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 SchemaStore schemas = file.Schemas;
                 ids = schemas.RegisterRepresentations([list1, list2, list1]);
                 Assert.Equal(new uint[] { 3, 5, 3 }, ids.Select(id => id.Value));
@@ -95,7 +95,7 @@ public sealed class ListCatalogTests {
                 Assert.False(schemas.IsFaulted);
                 Assert.Equal(6U, schemas.RegisterRepresentations([ObjectLayout.ForList(new(new(1, TypeTag.Boolean)))])[0].Value);
             }
-            using GraphResources reopened = GraphResources.OpenExisting(path);
+            using GraphResources reopened = GraphResources.OpenLegacyExisting(path);
             SchemaStore cold = reopened.Schemas;
             Assert.Equal(list1, cold.GetRepresentation(ids[0]));
             Assert.Equal(list2, cold.GetRepresentation(ids[1]));

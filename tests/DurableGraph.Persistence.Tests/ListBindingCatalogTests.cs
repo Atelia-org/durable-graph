@@ -106,7 +106,7 @@ public sealed class ListBindingCatalogTests {
     public void HistoricalReaderOnlyNeedsRetainedStateAndRechecksLateAuthorityConflict() {
         string path = Path.Combine(Path.GetTempPath(), $"list-binding-{Guid.NewGuid():N}.rbf");
         try {
-            using GraphResources file = GraphResources.CreateNew(path);
+            using GraphResources file = GraphResources.CreateLegacyNew(path);
             SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             registry.Register(new StateDefinitionBinding("RetiredPoint", SchemaKind.InlineValue, 0, null,

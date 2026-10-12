@@ -87,7 +87,7 @@ public sealed class NullableCatalogTests {
             RepresentationId[] ids;
             ObjectLayout list = ObjectLayout.ForList(new(Slot(point)));
             ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array, Slot(point)));
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 SchemaStore store = file.Schemas;
                 ids = store.RegisterRepresentations([ObjectLayout.ForDurable(owner), list, array]);
                 Assert.Equal(new uint[] { 3, 4, 5 }, ids.Select(id => id.Value));
@@ -102,7 +102,7 @@ public sealed class NullableCatalogTests {
                 Assert.Equal(2, store.Count);
                 Assert.Equal(6U, store.RegisterRepresentations([ObjectLayout.ForList(new(new(1, TypeTag.Boolean)))])[0].Value);
             }
-            using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+            using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
             SchemaStore cold = reopened.Schemas;
             Assert.Equal(list, cold.GetRepresentation(ids[1]));
             Assert.Equal(array, cold.GetRepresentation(ids[2]));
@@ -160,7 +160,7 @@ public sealed class NullableCatalogTests {
     public void CachedNullableValuesAndEmptyContainerReadersRecheckLateChildConflict() {
         string path = NewPath();
         try {
-            using GraphResources file = GraphResources.CreateNew(path);
+            using GraphResources file = GraphResources.CreateLegacyNew(path);
             SchemaStore schemas = file.Schemas;
             StateModelSnapshot snapshot = RetainedPoints().Snapshot(schemas);
             DurableFieldInfo slot = Slot(Point(1));

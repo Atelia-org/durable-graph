@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using SegmentStore = Atelia.FrameStore.FrameStore;
@@ -56,20 +57,20 @@ public sealed class SharedEventHistoryTests : IDisposable {
             Assert.Equal(GraphFrameKind.State, resumed.Head.Kind);
         }
 
-        using (SegmentStore segments = SegmentStore.Open(Path.Combine(_root, "data"))) {
-            using StateRevisionStore store = new(segments);
-            StateRevision next = store.Read(saved);
-            Assert.Equal(initial, next.ParentRevisionAddress);
-            Assert.Equal(initial, store.Read(eventRevision).ParentRevisionAddress);
-            Assert.Equal(store.ReadLiveObjectHeadMap(initial).Keys.Order(), store.ReadLiveObjectHeadMap(saved).Keys.Order());
-            Assert.Empty(next.RemovedObjectIds);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore store = resources.MetaBootstrapStore;
+            P0GraphSnapshot next = store.ReadGraph(saved);
+            IReadOnlyList<ObjectVersionRecord> writes = StorageTestData.LocalRecords(store, saved);
+            Assert.Equal(initial, next.SourceGraph);
+            Assert.Equal(initial, store.ReadGraph(eventRevision).SourceGraph);
+            Assert.Equal(store.ReadGraph(initial).Objects.Keys.Order(), store.ReadGraph(saved).Objects.Keys.Order());
             if (editState) {
                 // Only the existing child and List changed; string IDs and World reference slots remain stable.
-                Assert.Equal(2, next.LocalObjects.Count);
-                Assert.DoesNotContain(next.LocalObjects, row => row.ObjectId == stateId.Value);
+                Assert.Equal(2, writes.Count);
+                Assert.DoesNotContain(writes, row => row.ObjectId == stateId.Value);
             } else {
                 // Reusing decoded strings must not create a fresh ID or an extra string Base on first save.
-                Assert.Empty(next.LocalObjects);
+                Assert.Empty(writes);
             }
         }
 

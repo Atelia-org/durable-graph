@@ -51,7 +51,7 @@ public sealed class ValueUpgradeCatalogTests {
         string directory = Path.Combine(Path.GetTempPath(), "durable-value-rule-catalog-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try {
-            using GraphResources file = GraphResources.CreateNew(Path.Combine(directory, "schemas.rbf"));
+            using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(directory, "schemas.rbf"));
             SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             StateModelSnapshot before = registry.Snapshot(schemas);

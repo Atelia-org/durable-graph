@@ -1,3 +1,5 @@
+using System.Buffers;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
@@ -21,7 +23,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         }
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             FrameAddress bad = damage == "metadata"
-                ? resources.States.Append(StateRevision.CreateObjectHeadMapBase(null, [], []), [255])
+                ? resources.Data.Append(P0GraphWire.GraphTag, [255]).Unwrap()
                 : TestAddress(uint.MaxValue);
             byte[] payload = damage switch {
                 "short-payload" => [0],
@@ -48,9 +50,14 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         }
         FrameAddress frame;
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
-            EncodedBaseObjectBody body = BaseObjectBodyCodec.Encode(new RepresentationId(123456), new PreparedBaseBody([7]));
-            frame = resources.States.Append(StateRevision.CreateObjectHeadMapBase(null,
-                [ObjectVersionRecord.CreateBase(1, body.Body)], []), GraphMetadataCodec.Encode(GraphFrameKind.State, null, new(1)));
+            ArrayBufferWriter<byte> bytes = new();
+            BareValueWriter writer = new(bytes);
+            writer.WriteByte(P0TypedBodyCodec.FormatVersion);
+            writer.WriteByte(1);
+            writer.WriteVarUInt32(123456); // A missing descriptor in the actual pinned S.
+            writer.WriteByte(7);
+            frame = resources.MetaBootstrapStore.Append(P0GraphKind.State, null, resources.SharedMetaBootstrapRoot,
+                new(null, new(1), [ObjectVersionRecord.CreateBase(1, bytes.WrittenSpan)])).Address;
             byte[] payload = new byte[FrameAddress.EncodedSize];
             frame.TryWrite(payload);
             resources.Versions.CreateTag("unknown-schema", payload, out _).Unwrap();

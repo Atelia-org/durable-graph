@@ -107,10 +107,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        StateModelSnapshot snapshot = models.Snapshot(schemas);
-        DecodedRevision first = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
+        var states = segments.MetaBootstrapStore;
+        DecodedRevision first = DecodedRevision.ReadSplit(states, addresses[0], models);
+        StateModelSnapshot snapshot = first.SourceModels!;
         ObjectStateRecord primary = Assert.Single(first.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.InlineSchema?.Type == TypeExpr.Named("GKey", TypeExpr.Builtin(TypeTag.Int32)));
         StateValueBinding key = snapshot.ResolveStoredValue(primary.Layout.Dictionary!.KeySlot);
@@ -118,7 +117,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .MakeGenericMethod(key.StateType, key.StateOpsType);
         ObjectId originalName = default;
         for (int index = 0; index < addresses.Length; index++) {
-            DecodedRevision decoded = RevisionDecoder.ReadSnapshot(states, schemas, addresses[index], snapshot);
+            DecodedRevision decoded = DecodedRevision.ReadSplit(states, addresses[index], models);
             ObjectStateRecord row = decoded.GetRequired(primary.Id);
             Assert.Equal(DictionaryComparerKind.CurrentDefault, ((IFrozenDictionaryState)row.Content).ComparerKind);
             var entries = (Dictionary<int, (ObjectId Name, long Timestamp, int Value)>)read.Invoke(null, [row])!;
@@ -131,15 +130,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal("name-0", decoded.GetRequired(entries[0].Name).StringContent);
         }
         foreach (int index in new[] { 1, 6, 8 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
         foreach (int index in new[] { 2, 3, 4, 7 }) {
-            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(states.Read(addresses[index]).LocalObjects,
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(states, addresses[index]),
                 row => row.ObjectId == primary.Id.Value).Kind);
         }
-        Assert.DoesNotContain(states.Read(addresses[5]).LocalObjects, row => row.ObjectId == primary.Id.Value);
-        ObjectVersionRecord timeChange = Assert.Single(states.Read(addresses[2]).LocalObjects, row => row.ObjectId == primary.Id.Value);
+        Assert.DoesNotContain(DefaultRecords(states, addresses[5]), row => row.ObjectId == primary.Id.Value);
+        ObjectVersionRecord timeChange = Assert.Single(DefaultRecords(states, addresses[2]), row => row.ObjectId == primary.Id.Value);
         var replacement = ReadCompositeKeyReplacement(timeChange.Body, 100, 999);
         Assert.Equal(originalName, replacement.OldName);
         Assert.Equal(originalName, replacement.NewName);

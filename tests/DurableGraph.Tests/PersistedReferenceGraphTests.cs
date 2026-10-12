@@ -18,7 +18,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         uint characterId;
         uint[] allIds;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThresholdBytes)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThresholdBytes)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             object world = fixture.Create();
@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             first = store.Append(initial.Revision);
         }
 
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path, rotationThresholdBytes)) {
+        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path, rotationThresholdBytes)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             object loaded = fixture.Load(store, schemas, first, worldId);
@@ -52,7 +52,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(childDelta.Body.ToArray(), Assert.Single(repeated.Revision.LocalObjects).Body.ToArray());
         }
 
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path, rotationThresholdBytes)) {
+        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path, rotationThresholdBytes)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             object loaded = fixture.Load(store, schemas, changed, worldId);
@@ -68,7 +68,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal<uint>([worldId.Value], store.ReadLiveObjectHeadMap(detached).Keys);
         }
 
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path, rotationThresholdBytes)) {
+        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path, rotationThresholdBytes)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             fixture.Check(fixture.Load(store, schemas, detached, worldId), -1);
@@ -92,7 +92,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var restoreChild = assembly.GetType("FusedDelta.Host")!.GetMethod("RestoreChild")!
             .CreateDelegate<Action<object, object>>();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
         SchemaStore schemas = segments.Schemas;
         using StateRevisionStore store = new(segments.Data);
         FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
@@ -117,7 +117,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var replaceKnown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceKnown")!
             .CreateDelegate<Action<object, int>>();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
         SchemaStore schemas = segments.Schemas;
         using StateRevisionStore store = new(segments.Data);
         FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
@@ -162,7 +162,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         uint nodeId;
         uint[] ids;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             FixturePreparedWorldRevision initial = old.PrepareNew(store, schemas, old.Create());
@@ -181,7 +181,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(change2.Revision.LocalObjects).Kind);
             third = store.Append(change2.Revision);
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             Assert.Equal(3, store.ReadObjectVersionChain(third, nodeId).Records.Count);
@@ -199,7 +199,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ids.Order(), store.ReadLiveObjectHeadMap(rewritten).Keys.Order());
             Assert.Single(store.ReadObjectVersionChain(rewritten, nodeId).Records);
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             int previousUpgrades = upgradeCalls();

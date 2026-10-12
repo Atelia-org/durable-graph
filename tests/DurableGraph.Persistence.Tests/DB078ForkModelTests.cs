@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using SegmentStore = Atelia.FrameStore.FrameStore;
@@ -83,14 +84,14 @@ public sealed partial class DB078HistoryTests {
             Assert.Equal(prefix.Address, firstA.Parent);
             Assert.Equal(prefix.Address, firstB.Parent);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            Assert.Null(states.Read(firstA.RevisionAddress).ParentRevisionAddress);
-            Assert.Null(states.Read(firstB.RevisionAddress).ParentRevisionAddress);
-            Assert.Equal(firstA.RevisionAddress, states.Read(replacementA.RevisionAddress).ParentRevisionAddress);
-            Assert.Equal(firstB.RevisionAddress, states.Read(replacementB.RevisionAddress).ParentRevisionAddress);
-            Assert.Equal(replacementA.RevisionAddress, states.Read(secondA.RevisionAddress).ParentRevisionAddress);
-            Assert.Equal(replacementB.RevisionAddress, states.Read(secondB.RevisionAddress).ParentRevisionAddress);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
+            Assert.Null(states.ReadGraph(firstA.RevisionAddress).SourceGraph);
+            Assert.Null(states.ReadGraph(firstB.RevisionAddress).SourceGraph);
+            Assert.Equal(firstA.RevisionAddress, states.ReadGraph(replacementA.RevisionAddress).SourceGraph);
+            Assert.Equal(firstB.RevisionAddress, states.ReadGraph(replacementB.RevisionAddress).SourceGraph);
+            Assert.Equal(replacementA.RevisionAddress, states.ReadGraph(secondA.RevisionAddress).SourceGraph);
+            Assert.Equal(replacementB.RevisionAddress, states.ReadGraph(secondB.RevisionAddress).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using BranchCheckout coldA = reopened.Checkout("a");

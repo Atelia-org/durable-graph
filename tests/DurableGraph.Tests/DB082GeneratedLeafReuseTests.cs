@@ -25,12 +25,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             GraphReadStatistics cold = DB082Observe(repository);
             using BranchCheckout first = repository.Fork("first", source);
             Assert.Equal(0, cold.ReusedImmutableLeaves);
+            Assert.Equal(1, cold.PreparedGraphs);
             Assert.Equal(family ? 4 : 3, cold.AllocatedObjects);
             Assert.Equal(reuse ? 2 : 0, repository.PreparedStateEntry!.ImmutableLeafCount);
             GraphReadStatistics hit = DB082Observe(repository);
             using BranchCheckout second = repository.Fork("second", source);
             Assert.Equal(1, hit.PreparedStateHits);
-            Assert.Equal(0, hit.DecodedObjects);
+            Assert.Equal(0, hit.PreparedGraphs);
             Assert.Equal(0, hit.NormalizedObjects);
             Assert.Equal(reuse ? 2 : 0, hit.ReusedImmutableLeaves);
             Assert.Equal(cold.AllocatedObjects - (reuse ? 2 : 0), hit.AllocatedObjects);
@@ -58,10 +59,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             CheckpointAddress saved = first.CommitState(DB082NoRebase);
             Assert.Equal(source.Address, saved.Parent);
             Assert.Equal(source.RootId, saved.RootId);
-            StateRevision revision = DB082Resources(repository).States.Read(saved.RevisionAddress);
-            Assert.Single(revision.RemovedObjectIds);
-            Assert.Equal(DB082Resources(repository).States.ReadLiveObjectHeadMap(source.RevisionAddress).Count - 1,
-                DB082Resources(repository).States.ReadLiveObjectHeadMap(saved.RevisionAddress).Count);
+            var store = DB082Resources(repository).MetaBootstrapStore;
+            Assert.Single(DefaultRemoved(store, saved.RevisionAddress));
+            Assert.Equal(store.ReadGraph(source.RevisionAddress).Objects.Count - 1,
+                store.ReadGraph(saved.RevisionAddress).Objects.Count);
             fixture.Change(second.State!, 22);
             Assert.Equal(source.Address, second.CommitState(DB082NoRebase).Parent);
             Assert.Equal(source, main.Head);
@@ -74,14 +75,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         using BranchCheckout loaded = reopened.Checkout("first");
         Assert.Equal(0, reopen.PreparedStateHits);
         Assert.Equal(0, reopen.ReusedImmutableLeaves);
-        Assert.True(reopen.DecodedObjects > 0);
+        // Reopen prepares a fresh graph; this counter does not claim physical frame I/O.
+        Assert.Equal(1, reopen.PreparedGraphs);
         Assert.Equal(11, DB082Value(loaded.State!));
         Assert.Null(DB082Member(loaded.State!, "Right"));
         Assert.NotSame(oldLeaf, DB082Member(loaded.State!, "Left"));
         Assert.Same(DB082Member(loaded.State!, "Left"), DB082Member(loaded.State!, "Alias"));
         if (family) Assert.Equal(2, Assert.IsAssignableFrom<IList>(DB082Member(loaded.State!, "Links")).Count);
         CheckpointAddress unchanged = loaded.CommitState(DB082NoRebase);
-        Assert.Empty(DB082Resources(reopened).States.Read(unchanged.RevisionAddress).LocalObjects);
+        Assert.Empty(DefaultRecords(DB082Resources(reopened).MetaBootstrapStore, unchanged.RevisionAddress));
         using BranchCheckout sibling = reopened.Checkout("second");
         Assert.Equal(22, DB082Value(sibling.State!));
         Assert.NotNull(DB082Member(sibling.State!, "Right"));
@@ -112,7 +114,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CheckpointAddress secondCommit = second.CommitState(DB082NoRebase);
         Assert.Equal(main.Head.Address, secondCommit.Parent);
         Assert.Equal(main.Head.RootId, secondCommit.RootId);
-        Assert.Empty(DB082Resources(repository).States.Read(secondCommit.RevisionAddress).LocalObjects);
+        Assert.Empty(DefaultRecords(DB082Resources(repository).MetaBootstrapStore, secondCommit.RevisionAddress));
         // New revision, identical object head: first restoration must still build a fresh table.
         statistics = DB082Observe(repository);
         using BranchCheckout newer = repository.Fork("newer", secondCommit);
@@ -228,7 +230,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         object oldLeaf = DB082Member(first.State!, "Left")!;
         PreparedStateRestoration originalEntry = repository.PreparedStateEntry!;
         CheckpointAddress next = main.CommitState(DB082NoRebase);
-        Assert.Empty(DB082Resources(repository).States.Read(next.RevisionAddress).LocalObjects);
+        Assert.Empty(DefaultRecords(DB082Resources(repository).MetaBootstrapStore, next.RevisionAddress));
         Assert.Same(originalEntry, repository.PreparedStateEntry);
         GraphReadStatistics statistics = DB082Observe(repository);
         using BranchCheckout nextFork = repository.Fork("next", next);

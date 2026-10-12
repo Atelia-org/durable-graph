@@ -32,9 +32,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            SchemaStore schemas = segments.Schemas;
-            exact = Assert.Single(RevisionDecoder.ReadSnapshot(segments.States, schemas, original,
-                models.Snapshot(schemas)).Objects, x => x.Schema?.SchemaId == "ExtWorld").Schema!;
+            exact = Assert.Single(DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original,
+                models).Objects, x => x.Schema?.SchemaId == "ExtWorld").Schema!;
         }
 
         GeneratorTestRun library2 = RunCrossAssemblyGenerator(CrossInlineHistoryLibrary(2),
@@ -54,10 +53,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Null(current.Load(library2).GetType("InlineHistoryValues.LegacyPoint"));
         Type currentHost = current.Load(app2).GetType("InlineHistoryApp.Host")!;
         var currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path))
-        {
-            SchemaStore schemas = segments.Schemas;
-            var decoded = RevisionDecoder.ReadSnapshot(segments.States, schemas, original, currentModels.Snapshot(schemas));
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+            var decoded = DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, currentModels);
             var world = Assert.Single(decoded.Objects, x => x.Schema?.SchemaId == "ExtWorld");
             Assert.Equal(exact, world.Schema);
             Assert.Equal(1, world.Schema!.Fields[0].InlineSchema!.Version);
@@ -66,11 +63,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            using StateRevisionStore states = new(segments.Data);
-            Assert.Equal(2, states.Read(addresses[0]).LocalObjects.Count);
-            Assert.All(states.Read(addresses[0]).LocalObjects, x => Assert.Equal(ObjectVersionKind.Base, x.Kind));
-            foreach (int index in new[] { 1, 3 }) { Assert.Empty(states.Read(addresses[index]).LocalObjects); }
-            var delta = Assert.Single(states.Read(addresses[2]).LocalObjects);
+            var store = segments.MetaBootstrapStore;
+            Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
+            Assert.All(DefaultRecords(store, addresses[0]), x => Assert.Equal(ObjectVersionKind.Base, x.Kind));
+            foreach (int index in new[] { 1, 3 }) { Assert.Empty(DefaultRecords(store, addresses[index])); }
+            var delta = Assert.Single(DefaultRecords(store, addresses[2]));
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         }
     }

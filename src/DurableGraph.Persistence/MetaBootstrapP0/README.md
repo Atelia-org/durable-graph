@@ -1,11 +1,9 @@
 <a id="db-087-p0持久-meta-自举实验"></a>
-# DB-087：meta 自举内部原型
+# DB-087：meta 自举实现与分片证据
 
-本目录是产品代码内的自举原型，承担纵向实验与后续接线；默认公开 Repository 工厂尚未切换。问题与分片边界见
-[DB-087 §6](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#6-建议的重构任务顺序)。
+本目录的自举读写现已进入公开默认 Repository／BranchCheckout／GraphResources；第五片产品回归与普通非 friend README 包已验，见 [DB-087 §34](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接)。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
 
-P1 会继续演进这里的 catalog、共同 writer 和发布协议，恢复逻辑并回既有核心；临时 driver／owner
-在公开接线时合并，不整体丢弃 P0。已经提取的共同 payload 和受控容器 emitter 继续保留。
+catalog、共同 writer 与发布 owner 已接共用恢复／业务 workspace；公开前端复用这一条路径，不整体丢弃 P0。旧核心按调用清零退出是后继；共同 payload 和受控容器 emitter 保留。
 代码去向、依赖顺序与尚未敲定的问题集中在 DB-087，不以 `P0` 目录名推断最终产品边界。
 
 实验只把两种变化来源汇入共同保存：业务 Capture/比较；meta 按逻辑 key 归约修改。
@@ -15,12 +13,12 @@ descriptor 使用其 meta ObjectId；每个动态 Base 的解释仍受其 batch 
 
 真实 FS/VS 拥有文件和两个 refs。共同确认后才接受候选：Event 接受 meta、推进业务 Head，
 但保留最近 State 的业务保存基线。关闭全部资源后重新打开，必须只从实际发布根恢复。
-P0 wire 和固定员工闭包允许调整；不提供旧格式兼容、私有分支策略或公开入口切换。
+P0 wire 和员工闭包仍允许调整；不提供旧格式兼容，私有策略后置。当前默认接线不代表旧核心已全部退出或完整公开包门禁完成。
 
 从 [P0Session](P0Session.cs) 看两侧准备与安装；
 [P0GraphStore](P0GraphStore.cs) 保存共同 batch／目录／图并校验来源。
 第四片已将内部发布状态迁入 [GraphResources.MetaBootstrap](../GraphResources.MetaBootstrap.cs)，
-[P0Repository](P0Repository.cs) 仅作实验外观；内部资源 owner 已通过第四片源码验收。
+[P0Repository](P0Repository.cs) 为借用实际 owner 的薄内部外观；内部资源 owner 已通过第四片源码验收。
 [P0CatalogWorkspace](P0CatalogWorkspace.cs) 保留手工 Set 的最终逻辑意图，
 [P0CatalogView](P0CatalogView.cs) 从员工 DTO 调用 Schema 工厂；均不调用 SchemaStore。
 员工模型在本程序集内经真实 Source Generator 编译。
@@ -101,6 +99,8 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 [P1d 第三片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#32-p1d-第三片直接初始化-kill-与实际返回-outcome) 已完成 actual factory 成功创建 ref1／ref2 后外部 Kill 与实际 typed Repository 返回／fault 的限定源码验收，构建、定向与完整源码回归通过。只有两个生产文件的局部 internal afterCreateRef callback，wire／public API／默认保持；BeforeInstall 是安装前 hook，不是实际 Install 本体故障。该片运行证据保留 §32；准确 Repository／history 包的后继验收见第四片，默认接线退旧与 P2 仍后置。
 
 [P1d 第四片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history) 已通过 [内部 friend 的准确包消费者](../../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)：V1 seed／tag→V2 readonly Upgrade→latest shared 与旧 tag Fork→同／跨 S Pair→首次 rewrite Base→fresh List Delta／readonly。生产零改，包内 Generator／Build targets 与 accepted history、准确来源／实际 heads/H 均有证据；包运行与 source solution 回归分开记录于 §33。默认公开工厂仍 DB-086，内部资格不授 public-default 或完整 P1 产品停点。下一片默认前端先保 FS rotation 参数意义，再按调用清零退旧并迁两个 cache 小依赖，最后验非 friend 公开包；具体施工导航见 §33.4，P2 private 后置。
+
+[P1d 第五片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接) 已把本目录的共同读写接入公开默认 Repository／BranchCheckout／GraphResources，产品回归移接与普通非 friend README 包验收通过。rotation／cache 分别传参，准确 S／Event/State／owner／发布前安装保持；旧 Schema/State getter 仅 internal 施工低层，后继按调用清零退出。普通非 friend README 故事不代完整 accepted-history 公开包，P2 private 后置；最终源码／普通包证据只在 §34，历史各片“默认未切”保当片含义。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

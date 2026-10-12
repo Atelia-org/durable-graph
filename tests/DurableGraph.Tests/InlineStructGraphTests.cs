@@ -1,6 +1,7 @@
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
@@ -37,30 +38,29 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
         {
-            using StateRevisionStore store = new(segments.Data);
-            SchemaStore schemas = segments.Schemas;
-            StateRevision initial = store.Read(first);
-            Assert.Equal(4, initial.LocalObjects.Count); // World, Child, two distinct equal strings; no value rows.
-            Assert.All(initial.LocalObjects, record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
-            uint childId = FindGraphObject(schemas, initial, "inline.graph.child");
-            Assert.Equal(first, store.Read(unchanged).ParentRevisionAddress);
-            Assert.Empty(store.Read(unchanged).LocalObjects);
-            Assert.Empty(store.Read(unchanged).RemovedObjectIds);
-            ObjectVersionRecord ownerDelta = Assert.Single(store.Read(nested).LocalObjects);
+            var store = segments.MetaBootstrapStore;
+            var initial = store.ReadGraph(first);
+            Assert.Equal(4, DefaultRecords(store, initial.Address).Count); // World, Child, two distinct equal strings; no value rows.
+            Assert.All(DefaultRecords(store, initial.Address), record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
+            uint childId = Assert.Single(initial.Objects.Keys, id => DefaultLayout(store, first, id).Schema?.SchemaId == "inline.graph.child");
+            Assert.Equal(first, store.ReadGraph(unchanged).SourceGraph);
+            Assert.Empty(DefaultRecords(store, unchanged));
+            Assert.Empty(DefaultRemoved(store, unchanged));
+            ObjectVersionRecord ownerDelta = Assert.Single(DefaultRecords(store, nested));
             Assert.Equal(worldId.Value, ownerDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, ownerDelta.Kind);
             // Owner field 1 -> Envelope field 1 -> Leaf field 1 -> signed int 8.
             Assert.Equal<byte>([1, 1, 1, 16], ownerDelta.Body.ToArray());
-            ObjectVersionRecord childDelta = Assert.Single(store.Read(childOnly).LocalObjects);
+            ObjectVersionRecord childDelta = Assert.Single(DefaultRecords(store, childOnly));
             Assert.Equal(childId, childDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, childDelta.Kind);
-            Assert.Equal(new[] { childId }, store.Read(removed).RemovedObjectIds);
-            Assert.DoesNotContain(childId, store.ReadLiveObjectHeadMap(removed).Keys);
-            Assert.Contains(childId, store.ReadLiveObjectHeadMap(first).Keys);
-            Assert.Equal(4, store.ReadLiveObjectHeadMap(first).Count);
-            fixture.Check(fixture.LoadOld(store, schemas, first, worldId), 7, 11, true);
-            fixture.Check(fixture.LoadOld(store, schemas, childOnly, worldId), 8, 12, true);
-            fixture.Check(fixture.LoadOld(store, schemas, removed, worldId), 8, -1, true);
+            Assert.Equal(new[] { childId }, DefaultRemoved(store, removed));
+            Assert.DoesNotContain(childId, store.ReadGraph(removed).Objects.Keys);
+            Assert.Contains(childId, store.ReadGraph(first).Objects.Keys);
+            Assert.Equal(4, store.ReadGraph(first).Objects.Count);
+            fixture.Check(P0BusinessWorkspace.ReadRoot(store, first, fixture.Models()), 7, 11, true);
+            fixture.Check(P0BusinessWorkspace.ReadRoot(store, childOnly, fixture.Models()), 8, 12, true);
+            fixture.Check(P0BusinessWorkspace.ReadRoot(store, removed, fixture.Models()), 8, -1, true);
         }
 
         FrameAddress reopenedNoChange;
@@ -73,10 +73,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(world, fixture.World(loaded));
         }
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
-            using StateRevisionStore store = new(segments.Data);
-            Assert.Equal(removed, store.Read(reopenedNoChange).ParentRevisionAddress);
-            Assert.Empty(store.Read(reopenedNoChange).LocalObjects);
-            Assert.Empty(store.Read(reopenedNoChange).RemovedObjectIds);
+            var store = segments.MetaBootstrapStore;
+            Assert.Equal(removed, store.ReadGraph(reopenedNoChange).SourceGraph);
+            Assert.Empty(DefaultRecords(store, reopenedNoChange));
+            Assert.Empty(DefaultRemoved(store, reopenedNoChange));
         }
     }
 
@@ -100,10 +100,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(world, 7, 11, false);
         }
         using GraphResources segments = GraphResources.OpenExisting(directory.Path);
-        using StateRevisionStore store = new(segments.Data);
-        Assert.Equal(first, store.Read(retry).ParentRevisionAddress);
-        Assert.Empty(store.Read(retry).LocalObjects);
-        Assert.Empty(store.Read(retry).RemovedObjectIds);
+        var store = segments.MetaBootstrapStore;
+        Assert.Equal(first, store.ReadGraph(retry).SourceGraph);
+        Assert.Empty(DefaultRecords(store, retry));
+        Assert.Empty(DefaultRemoved(store, retry));
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress first;
         ObjectId worldId;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path))
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path))
         {
             using StateRevisionStore store = new(segments.Data);
             SchemaStore schemas = segments.Schemas;
@@ -124,7 +124,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Detach(world);
             first = store.Append(frozen.Revision);
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path))
         {
             using StateRevisionStore store = new(segments.Data);
             SchemaStore schemas = segments.Schemas;
@@ -139,7 +139,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void InlineStructStoredDeepReferenceValidationRejectsMissingOrWrongKindTarget(bool wrongKind) {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
         using StateRevisionStore store = new(segments.Data);
         SchemaStore schemas = segments.Schemas;
         FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.NewWorld());

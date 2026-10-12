@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -50,22 +51,22 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             Assert.Same(values, session.World.Alias);
         }
         using (GraphResources file = GraphResources.OpenExisting(_root)) {
-            var segments = file.Data;
-            using StateRevisionStore states = new(segments);
-            SchemaStore schemas = file.Schemas;
-            Assert.Empty(states.Read(reordered).LocalObjects);
-            Assert.Empty(states.Read(reordered).RemovedObjectIds);
-            StateModelSnapshot snapshot = Models().Snapshot(schemas);
-            ObjectId mapId = Assert.Single(RevisionDecoder.ReadSnapshot(states, schemas, revisions[0].Address, snapshot).Objects,
+            P0GraphStore states = file.MetaBootstrapStore;
+            Assert.Empty(Records(states, reordered));
+            P0GraphSnapshot original = states.ReadGraph(revisions[0].Address);
+            P0GraphSnapshot permutation = states.ReadGraph(reordered);
+            Assert.Equal(original.DirectoryRoot, permutation.DirectoryRoot);
+            Assert.Equal(original.Objects, permutation.Objects);
+            ObjectId mapId = Assert.Single(DecodedRevision.ReadSplit(states, revisions[0].Address, Models()).Objects,
                 row => row.Kind == ObjectStateKind.Dictionary).Id;
             foreach ((FrameAddress address, Dictionary<string, int> expected) in revisions) {
-                DecodedRevision exact = RevisionDecoder.ReadSnapshot(states, schemas, address, snapshot);
+                DecodedRevision exact = DecodedRevision.ReadSplit(states, address, Models());
                 FrozenDictionaryState<ObjectId, int> frozen = exact.GetRequired(mapId).GetDictionaryState<ObjectId, int>();
                 Dictionary<string, int> actual = frozen.Entries.ToArray().ToDictionary(
                     entry => exact.GetRequired(entry.Key).StringContent, entry => entry.Value);
                 Assert.Equal(expected.OrderBy(pair => pair.Key), actual.OrderBy(pair => pair.Key));
                 if (address != revisions[0].Address) {
-                    ObjectVersionRecord change = Assert.Single(states.Read(address).LocalObjects, row => row.ObjectId == mapId.Value);
+                    ObjectVersionRecord change = Assert.Single(Records(states, address), row => row.ObjectId == mapId.Value);
                     Assert.Equal(ObjectVersionKind.Delta, change.Kind);
                     Assert.True(change.Body.Length < 80, $"A three-entry edit encoded {change.Body.Length} bytes.");
                 }
@@ -78,9 +79,9 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             Assert.Same(session.World.Values, session.World.Alias);
             unchanged = session.Commit(NoRebase);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            Assert.Empty(states.Read(unchanged).LocalObjects);
+        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+            P0GraphStore states = file.MetaBootstrapStore;
+            Assert.Empty(Records(states, unchanged));
         }
     }
 
@@ -112,10 +113,10 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             loaded.Links = null;
             removed = session.Commit(NoRebase);
         }
-        using SegmentStore segments = OpenState();
-        using StateRevisionStore states = new(segments);
-        Assert.Single(states.Read(childOnly).LocalObjects);
-        Assert.Equal(2, states.Read(removed).RemovedObjectIds.Count);
+        using GraphResources file = GraphResources.OpenExisting(_root);
+        P0GraphStore states = file.MetaBootstrapStore;
+        Assert.Single(Records(states, childOnly));
+        Assert.Equal(2, states.ReadGraph(childOnly).Objects.Keys.Except(states.ReadGraph(removed).Objects.Keys).Count());
     }
 
     [Fact]
@@ -166,7 +167,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         DictionaryComparerKind comparer, string first, string second) {
         Directory.CreateDirectory(_root);
         using SegmentStore segments = SegmentStore.Create(Path.Combine(_root, "data"));
-        using GraphResources file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
         using StateRevisionStore states = new(segments);
         SchemaStore schemas = file.Schemas;
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32));
@@ -288,7 +289,9 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     private static ObjectVersionRecord Text(uint id, string value) =>
         ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
     private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
-    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
+    private static IReadOnlyList<ObjectVersionRecord> Records(P0GraphStore store, FrameAddress address) =>
+        store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
+
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);
         if (Path.GetDirectoryName(resolved) != Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())) ||

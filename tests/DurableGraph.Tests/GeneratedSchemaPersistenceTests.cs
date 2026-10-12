@@ -19,7 +19,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         PreparedCapturedGraph input = session.Prepare(candidate);
 
         using RawBaseDirectory directory = new();
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path))
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path))
         {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Throws<InvalidOperationException>(() => session.BeginCapture());
             session.Discard(candidate);
         }
-        using GraphResources reopenedResources = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using GraphResources reopenedResources = GraphResources.OpenLegacyReadOnlyExisting(directory.Path);
         SchemaStore reopened = reopenedResources.Schemas;
         Assert.Equal(3, reopened.Count);
         foreach (var row in input.Objects.Where(item => item.Current.Kind == ObjectStateKind.Durable)) {
@@ -60,7 +60,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         DurableSchema tag = input.Objects.Single(item => item.Current.Id == candidate.RootIds[3]).Current.Schema!;
 
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
         SchemaStore schemas = segments.Schemas;
         schemas.RegisterBatch([new DurableSchema(tag.SchemaId, tag.Version, [], tag.BaseSchema)]);
         long schemaTail = CountDataFrames(segments);
@@ -101,7 +101,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId ownerId = first.RootIds[0];
 
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
         SchemaStore schemas = segments.Schemas;
         using StateRevisionStore store = new(segments.Data);
         var firstPlan = CapturedRevisionPlanner.PrepareRevision(store, schemas, null, initial, new(100, 100));

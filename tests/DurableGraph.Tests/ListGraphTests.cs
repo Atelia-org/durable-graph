@@ -1,5 +1,6 @@
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
@@ -45,25 +46,22 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
         {
-            using StateRevisionStore states = new(segments.Data);
-            SchemaStore schemas = segments.Schemas;
-            Assert.Empty(states.Read(unchanged).LocalObjects);
-            ObjectVersionRecord resize = Assert.Single(states.Read(appended).LocalObjects);
+            var states = segments.MetaBootstrapStore;
+            Assert.Empty(DefaultRecords(states, unchanged));
+            ObjectVersionRecord resize = Assert.Single(DefaultRecords(states, appended));
             Assert.Equal(ObjectVersionKind.Delta, resize.Kind);
-            Assert.Equal(ObjectStateKind.List, BaseObjectBodyCodec.Decode(
-                Assert.Single(states.Read(first).LocalObjects, row => row.ObjectId == resize.ObjectId).Body, schemas).Kind);
-            ObjectVersionRecord child = Assert.Single(states.Read(childOnly).LocalObjects);
+            Assert.Equal(ObjectStateKind.List, DefaultLayout(states, first, resize.ObjectId).Kind);
+            ObjectVersionRecord child = Assert.Single(DefaultRecords(states, childOnly));
             Assert.NotEqual(resize.ObjectId, child.ObjectId);
-            Assert.Equal(ObjectStateKind.Durable, BaseObjectBodyCodec.Decode(
-                Assert.Single(states.Read(first).LocalObjects, row => row.ObjectId == child.ObjectId).Body, schemas).Kind);
-            StateRevision replacement = states.Read(replaced);
-            Assert.Single(replacement.RemovedObjectIds);
-            ObjectVersionRecord newList = Assert.Single(replacement.LocalObjects,
+            Assert.Equal(ObjectStateKind.Durable, DefaultLayout(states, first, child.ObjectId).Kind);
+            var replacement = states.ReadGraph(replaced);
+            Assert.Single(DefaultRemoved(states, replacement.Address));
+            ObjectVersionRecord newList = Assert.Single(DefaultRecords(states, replacement.Address),
                 row => row.Kind == ObjectVersionKind.Base && row.ObjectId != child.ObjectId &&
-                    BaseObjectBodyCodec.Decode(row.Body, schemas).Kind == ObjectStateKind.List);
+                    DefaultLayout(states, replaced, row.ObjectId).Kind == ObjectStateKind.List);
             Assert.NotEqual(resize.ObjectId, newList.ObjectId);
-            Assert.Equal(2, states.Read(removed).RemovedObjectIds.Count); // List and cyclic Node island.
-            Assert.Equal(states.ReadLiveObjectHeadMap(first).Count - 2, states.ReadLiveObjectHeadMap(removed).Count);
+            Assert.Equal(2, DefaultRemoved(states, removed).Count); // List and cyclic Node island.
+            Assert.Equal(states.ReadGraph(first).Objects.Count - 2, states.ReadGraph(removed).Objects.Count);
         }
         FrameAddress resumed;
         using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path, Method<Func<StateModelRegistry>>("Models")())) {
@@ -74,9 +72,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             resumed = commit(session);
         }
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
-            using StateRevisionStore states = new(segments.Data);
-            Assert.Empty(states.Read(resumed).LocalObjects);
-            Assert.Empty(states.Read(resumed).RemovedObjectIds);
+            var states = segments.MetaBootstrapStore;
+            Assert.Empty(DefaultRecords(states, resumed));
+            Assert.Empty(DefaultRemoved(states, resumed));
         }
     }
 
@@ -86,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("ListGraph.Host")!;
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateNew(directory.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
         using StateRevisionStore states = new(segments.Data);
         SchemaStore schemas = segments.Schemas;
         var freeze = (Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>)host.GetMethod("PrepareAndMutate")!.CreateDelegate(

@@ -18,22 +18,20 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        StateModelSnapshot snapshot = models.Snapshot(schemas);
-        DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
+        var states = segments.MetaBootstrapStore;
+        DecodedRevision initial = DecodedRevision.ReadSplit(states, addresses[0], models);
         ObjectStateRecord decimals = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.Decimal &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.ScalarDefault);
         foreach (int index in new[] { 1, 13 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
         // Each isolated scale-only edit must persist, including the enclosing World and generic Box bodies.
         for (int index = 2; index <= 12; index++) {
-            Assert.NotEmpty(states.Read(addresses[index]).LocalObjects);
+            Assert.NotEmpty(DefaultRecords(states, addresses[index]));
         }
-        ObjectVersionRecord replacement = Assert.Single(states.Read(addresses[11]).LocalObjects,
+        ObjectVersionRecord replacement = Assert.Single(DefaultRecords(states, addresses[11]),
             row => row.ObjectId == decimals.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, replacement.Kind);
         BareValueReader reader = new(replacement.Body);
@@ -44,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(decimal.GetBits(1.00m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
         Assert.Equal(decimal.GetBits(10.0m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
         reader.EnsureFullyConsumed();
-        ObjectVersionRecord patch = Assert.Single(states.Read(addresses[12]).LocalObjects,
+        ObjectVersionRecord patch = Assert.Single(DefaultRecords(states, addresses[12]),
             row => row.ObjectId == decimals.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, patch.Kind);
         reader = new(patch.Body);
@@ -58,7 +56,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrozenDictionaryState<decimal, decimal> old = decimals.GetDictionaryState<decimal, decimal>();
         Assert.Equal(decimal.GetBits(1.0m), decimal.GetBits(old.Entries.ToArray().Single(p => p.Key == 1m).Key));
         Assert.Equal(decimal.GetBits(10.0m), decimal.GetBits(old.Entries.ToArray().Single(p => p.Key == 1m).Value));
-        DecodedRevision final = RevisionDecoder.ReadSnapshot(states, schemas, addresses[^1], snapshot);
+        DecodedRevision final = DecodedRevision.ReadSplit(states, addresses[^1], models);
         foreach (ObjectStateRecord row in final.Objects.Where(row => row.Kind == ObjectStateKind.Dictionary)) {
             Assert.Equal(row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.Decimal &&
                 row.Layout.Dictionary.ValueSlot.TypeTag == TypeTag.Int32

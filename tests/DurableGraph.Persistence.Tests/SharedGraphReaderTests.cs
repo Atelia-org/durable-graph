@@ -21,7 +21,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
 
     public SharedGraphReaderTests() {
         Directory.CreateDirectory(_root);
-        _schemaFile = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _schemaFile = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
         _schemas = _schemaFile.Schemas;
         _segments = _schemaFile.Data;
         _store = new(_segments);

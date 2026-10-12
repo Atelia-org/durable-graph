@@ -17,7 +17,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(first);
         tool.Publish(history.WriteManifest(first), history.History);
         using RawBaseDirectory directory = new();
-        EmitAndLoad(first.OutputCompilation).GetType("Host")!.GetMethod("Seed")!
+        FrameAddress original = EmitAndLoad(first.OutputCompilation).GetType("Host")!.GetMethod("Seed")!
             .CreateDelegate<Func<string, FrameAddress>>()(directory.Path);
         GeneratorTestRun current = RunGenerator(RecordClassImplicitUpgradeSource(2, withContext), history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(current);
@@ -28,11 +28,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         Assert.Equal(1, assembly.GetType("R")!.GetField("Upgrades")!.GetValue(null));
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        using StateRevisionStore states = new(segments.Data);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(states.Read(addresses[0]).LocalObjects).Kind);
-        // Fixed 12B prior links make a complete Base cheaper for this small updated record.
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(states.Read(addresses[1]).LocalObjects).Kind);
-        Assert.Empty(states.Read(addresses[2]).LocalObjects);
+        var store = segments.MetaBootstrapStore;
+        ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, addresses[0]));
+        Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
+        Assert.Null(rewrite.PriorAddress);
+        Assert.Equal(1, DefaultLayout(store, original, rewrite.ObjectId).Schema!.Version);
+        Assert.Equal(2, DefaultLayout(store, addresses[0], rewrite.ObjectId).Schema!.Version);
+        Assert.Single(store.ReadObjectChain(addresses[0], rewrite.ObjectId).Entries);
+        StateModelRegistry models = assembly.GetType("Host")!.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
+        AssertRecordTypedDeltaCost(store, addresses[0], addresses[1], new(rewrite.ObjectId), models, assembly.GetType("R")!);
+        Assert.Empty(DefaultRecords(store, addresses[2]));
     }
 
     [Fact]
@@ -64,13 +69,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        using StateRevisionStore states = new(segments.Data);
-        Assert.Empty(states.Read(saved[0]).LocalObjects); // Same layout needs neither Upgrade nor a replacement Base.
-        ObjectVersionRecord changed = Assert.Single(states.Read(saved[1]).LocalObjects);
-        // Preserve exact record/class semantics; the new address cost makes this write a Base.
-        Assert.Equal(ObjectVersionKind.Base, changed.Kind);
-        Assert.Equal(Assert.Single(states.Read(original).LocalObjects).ObjectId, changed.ObjectId);
-        Assert.Empty(states.Read(saved[2]).LocalObjects);
+        var store = segments.MetaBootstrapStore;
+        Assert.Empty(DefaultRecords(store, saved[0])); // Same layout needs neither Upgrade nor a replacement Base.
+        ObjectVersionRecord changed = Assert.Single(DefaultRecords(store, saved[1]));
+        AssertRecordTypedDeltaCost(store, saved[0], saved[1], new(changed.ObjectId), currentModels, currentAssembly.GetType("Leaf")!);
+        Assert.Equal(Assert.Single(DefaultRecords(store, original)).ObjectId, changed.ObjectId);
+        Assert.Empty(DefaultRecords(store, saved[2]));
         DurableSchema before = EnumHistoryRegistry(priorAssembly).Snapshot().ResolveCurrentModel(priorAssembly.GetType("Leaf")!).CurrentSchema;
         DurableSchema after = currentModels.Snapshot().ResolveCurrentModel(currentAssembly.GetType("Leaf")!).CurrentSchema;
         Assert.Equal(before, after);

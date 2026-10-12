@@ -16,25 +16,23 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        StateModelSnapshot snapshot = models.Snapshot(schemas);
-        DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
+        var states = segments.MetaBootstrapStore;
+        DecodedRevision initial = DecodedRevision.ReadSplit(states, addresses[0], models);
         ObjectStateRecord primary = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.InlineSchema?.Type == TypeExpr.Named("record.Key", TypeExpr.Builtin(TypeTag.Int32)) &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.CurrentDefault);
         ObjectStateRecord application = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.Application);
         foreach (FrameAddress address in addresses) {
-            DecodedRevision decoded = RevisionDecoder.ReadSnapshot(states, schemas, address, snapshot);
+            DecodedRevision decoded = DecodedRevision.ReadSplit(states, address, models);
             Assert.Equal(DictionaryComparerKind.CurrentDefault, ((IFrozenDictionaryState)decoded.GetRequired(primary.Id).Content).ComparerKind);
             Assert.Equal(DictionaryComparerKind.Application, ((IFrozenDictionaryState)decoded.GetRequired(application.Id).Content).ComparerKind);
         }
         foreach (int index in new[] { 1, 5, 7 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
-        ObjectVersionRecord Local(int index) => Assert.Single(states.Read(addresses[index]).LocalObjects,
+        ObjectVersionRecord Local(int index) => Assert.Single(DefaultRecords(states, addresses[index]),
             row => row.ObjectId == primary.Id.Value);
         foreach (int index in new[] { 2, 3, 4, 6 }) {
             Assert.Equal(ObjectVersionKind.Delta, Local(index).Kind);

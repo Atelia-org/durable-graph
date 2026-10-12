@@ -20,14 +20,14 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
         DurableSchema current = new("Leaf", 2, [new(1, TypeTag.UInt16)], ancestor);
         string path = NextPath();
         RepresentationId oldId;
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             SchemaStore schemas = file.Schemas;
             oldId = schemas.RegisterRepresentations([ObjectLayout.ForDurable(old), ObjectLayout.ForDurable(current)])[0];
         }
         ObjectVersionChain chain = Chain(BaseObjectBodyCodec.Encode(oldId, new([21])), [1, 25], [1, 26]);
         Assert.Equal(new byte[] { 1, 25 }, chain.Records[1].Record.Body.ToArray());
         Assert.Equal(new byte[] { 1, 26 }, chain.Records[2].Record.Body.ToArray());
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
         SchemaStore restored = reopened.Schemas;
         int calls = 0;
         byte Read(ref BareValueReader reader) { calls++; return reader.ReadByte(); }
@@ -57,7 +57,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
             2 => new("Leaf", 1, [new(1, TypeTag.Int32)], new("Ancestor", 1, new DurableFieldInfo(1, TypeTag.SByte))),
             _ => new("Leaf", 1, [new(1, TypeTag.Int32)], new("Ancestor", 2, new DurableFieldInfo(1, TypeTag.Byte))),
         };
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(stored)])[0];
         ObjectVersionChain chain = Chain(BaseObjectBodyCodec.Encode(id, new([])), Array.Empty<byte>());
@@ -71,7 +71,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [Fact]
     public void MissingRepresentationWrongKindAndOpaqueRawBaseNeverInvokeCallbacks() {
         DurableSchema schema = new("A", 1);
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         ObjectVersionChain missing = Chain(BaseObjectBodyCodec.Encode(new(2), new([7])));
         ObjectVersionChain text = Chain(BaseObjectBodyCodec.EncodeString(new([0])));
@@ -93,7 +93,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData("04", typeof(EndOfStreamException))]
     [InlineData("0480", typeof(EndOfStreamException))]
     public void MalformedOrUnknownRepresentationFailsBeforeBodyCallbacks(string hex, Type errorType) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         ObjectVersionChain chain = Chain(new(Convert.FromHexString(hex)));
         int calls = 0;
@@ -105,7 +105,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
 
     [Fact]
     public void InlineSchemaNodeCannotBeUsedAsAnObjectBaseBeforeCallbacks() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         schemas.Register(new DurableSchema("Point", 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int32)));
@@ -125,7 +125,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData("0202020341000121")]
     [InlineData("0302020341000121")]
     public void RetiredBaseHeadersFailBeforeBodyCallbacks(string hex) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
         schemas.Register(schema);
@@ -150,7 +150,7 @@ public sealed class TypedObjectVersionReaderTests : IDisposable {
     [InlineData(false)]
     public void EveryBodyMustBeFullyConsumed(bool trailingBase) {
         DurableSchema schema = new("A", 1, new DurableFieldInfo(1, TypeTag.Byte));
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
         ObjectVersionChain chain = Chain(

@@ -16,7 +16,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ReadPairReadAndResumeReuseSuccessfulClosuresWithinOneOpen(bool family) {
+    public void ReadsRemainLazyAndAResumedExecutionEnvironmentReusesSuccessfulClosures(bool family) {
         Counts writes = new();
         StateModelRegistry writerModels = Models(family, writes);
         using (Repository repository = Create(writerModels)) {
@@ -44,14 +44,22 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
                 using var session = repository.Checkout("main");
                 Assert.Equal(7, ((RootModel)session.State!).Values!["key"]);
             }
-            Assert.Equal(family ? 1 : 0, reads.Factories);
-            Assert.Equal(1, reads.Comparers);
+            // Independent reads may close independent exact-S environments. The resident
+            // State environment is reused by another checkout of the same State.
+            int factories = reads.Factories, comparers = reads.Comparers;
+            using var resumed = repository.Checkout("main");
+            Assert.Equal(7, ((RootModel)resumed.State!).Values!["key"]);
+            Assert.Equal(factories, reads.Factories);
+            Assert.Equal(comparers, reads.Comparers);
+            Assert.Equal(family, reads.Factories > 0);
+            Assert.True(reads.Comparers > 0);
         }
+        int previousFactories = reads.Factories, previousComparers = reads.Comparers;
         using (Repository repository = Repository.OpenReadOnlyExisting(_root, models)) {
             Assert.Equal(7, ((RootModel)repository.ReadState(repository.GetHead("main"))).Values!["key"]);
         }
-        Assert.Equal(family ? 2 : 0, reads.Factories);
-        Assert.Equal(2, reads.Comparers);
+        Assert.Equal(previousFactories + (family ? 1 : 0), reads.Factories);
+        Assert.Equal(previousComparers + 1, reads.Comparers);
     }
 
     [Fact]
@@ -107,23 +115,28 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
     }
 
     [Fact]
-    public void CachedModelStillRejectsConflictingSchemaPublishedAfterSuccessfulRead() {
+    public void HistoricalReadKeepsExactSAndSaveRejectsLatestCatalogConflict() {
         using (Repository repository = Create(Models())) {
             using var session = repository.CreateBranch("main", Root(7));
         }
         DurableSchema current = new(RootSchema.SchemaId, 2, DurableFieldInfo.Reference(1, MapType));
         StateModelRegistry models = new();
         models.Register(Model<RootModel>(current, Reader(RootSchema), Reader(current)));
+        models.Register(Model<EventModel>(EventSchema));
         models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
         using Repository reader = Repository.OpenExisting(_root, models);
         CheckpointAddress head = reader.GetHead("main");
         Assert.Equal(7, ((RootModel)reader.ReadState(head)).Values!["key"]);
-        // Reading v1 into the current v2 model closes v2 without persisting it. Make a
-        // conflicting v2 authoritative afterwards; cache identity cannot waive revalidation.
-        GraphResources resources = (GraphResources)typeof(Repository)
-            .GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(reader)!;
-        resources.Schemas.Register(new DurableSchema(RootSchema.SchemaId, 2, new DurableFieldInfo(1, TypeTag.Int32)));
-        Assert.Throws<InvalidDataException>(() => ((RootModel)reader.ReadState(head)));
+        // Publish the additional declaration jointly with an unrelated Event. Historical
+        // reads retain S0; the next Save must still qualify its captured V2 against latest S.
+        using BranchCheckout checkout = reader.Checkout("main");
+        checkout.Catalog.Set(new DurableSchema(RootSchema.SchemaId, 2, new DurableFieldInfo(1, TypeTag.Int32)));
+        checkout.CommitEvent(new EventModel());
+        Assert.Equal(7, ((RootModel)reader.ReadState(head)).Values!["key"]);
+        long frames = reader.MetaBootstrapStore.AppendedFrames;
+        Assert.Throws<SchemaConflictException>(() => checkout.CommitState());
+        Assert.Equal(frames, reader.MetaBootstrapStore.AppendedFrames);
+        Assert.False(reader.IsFaulted);
     }
 
     [Theory]
@@ -147,7 +160,8 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         using (Repository repository = Create(Models())) {
             using var session = repository.CreateBranch("main", Root(7));
         }
-        string schema = Assert.Single(Directory.GetFiles(Path.Combine(_root, "versions", "refs"), "*.rbf", SearchOption.AllDirectories));
+        string schema = Directory.GetFiles(Path.Combine(_root, "versions", "refs"), "*.rbf", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal).First();
         string saved = Path.Combine(_root, "root.saved");
         File.Move(schema, saved);
         try {

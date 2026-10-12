@@ -10,7 +10,7 @@ public sealed class GraphResourcesTests : IDisposable {
     [Fact]
     public void SharedOwnerPersistsSchemaAndDataAndReadOnlyCannotWrite() {
         FrameAddress address;
-        using (GraphResources resources = GraphResources.CreateNew(_root)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(_root)) {
             resources.Schemas.Register(Schema);
             address = resources.States.Append(EmptyRevision());
             resources.Data.ConfirmDurable();
@@ -18,7 +18,7 @@ public sealed class GraphResourcesTests : IDisposable {
         Assert.False(File.Exists(Path.Combine(_root, "schemas.rbf")));
         Assert.False(File.Exists(Path.Combine(_root, "repository.lock")));
         var before = Snapshot();
-        using (GraphResources reader = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (GraphResources reader = GraphResources.OpenLegacyReadOnlyExisting(_root)) {
             Assert.True(reader.IsReadOnly);
             reader.RequireAvailable();
             Assert.Equal(Schema, reader.Schemas.GetRequired("ResourcesNode", 1));
@@ -26,47 +26,47 @@ public sealed class GraphResourcesTests : IDisposable {
             Assert.Throws<InvalidOperationException>(reader.RequireWritable);
             Assert.Throws<InvalidOperationException>(() => reader.Schemas.Register(Schema));
             Assert.Throws<InvalidOperationException>(() => reader.States.Append(EmptyRevision()));
-            using GraphResources second = GraphResources.OpenReadOnlyExisting(_root);
+            using GraphResources second = GraphResources.OpenLegacyReadOnlyExisting(_root);
             Assert.Empty(second.States.Read(address).LocalObjects);
         }
         AssertUnchanged(before);
-        using GraphResources reopened = GraphResources.OpenExisting(_root);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(_root);
         Assert.Empty(reopened.States.Read(address).LocalObjects);
     }
 
     [Fact]
     public void MissingAndOldLayoutReadOnlyOpenNeverCreatesResources() {
-        Assert.Throws<DirectoryNotFoundException>(() => GraphResources.OpenReadOnlyExisting(_root));
+        Assert.Throws<DirectoryNotFoundException>(() => GraphResources.OpenLegacyReadOnlyExisting(_root));
         Assert.False(Directory.Exists(_root));
         Directory.CreateDirectory(_root);
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenReadOnlyExisting(_root));
+        Assert.Throws<InvalidDataException>(() => GraphResources.OpenLegacyReadOnlyExisting(_root));
         Assert.Empty(Directory.GetFileSystemEntries(_root));
         File.WriteAllBytes(Path.Combine(_root, "schemas.rbf"), []);
         var before = Snapshot();
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenExisting(_root));
+        Assert.Throws<InvalidDataException>(() => GraphResources.OpenLegacyExisting(_root));
         AssertUnchanged(before);
     }
 
     [Fact]
     public void BackingLocksCoverWritersAndAllowOnlySharedReaders() {
-        using (GraphResources writer = GraphResources.CreateNew(_root)) {
-            Assert.ThrowsAny<Exception>(() => GraphResources.OpenExisting(_root));
-            Assert.ThrowsAny<Exception>(() => GraphResources.OpenReadOnlyExisting(_root));
+        using (GraphResources writer = GraphResources.CreateLegacyNew(_root)) {
+            Assert.ThrowsAny<Exception>(() => GraphResources.OpenLegacyExisting(_root));
+            Assert.ThrowsAny<Exception>(() => GraphResources.OpenLegacyReadOnlyExisting(_root));
         }
-        using GraphResources reader = GraphResources.OpenReadOnlyExisting(_root);
-        using GraphResources second = GraphResources.OpenReadOnlyExisting(_root);
-        Assert.ThrowsAny<Exception>(() => GraphResources.OpenExisting(_root));
+        using GraphResources reader = GraphResources.OpenLegacyReadOnlyExisting(_root);
+        using GraphResources second = GraphResources.OpenLegacyReadOnlyExisting(_root);
+        Assert.ThrowsAny<Exception>(() => GraphResources.OpenLegacyExisting(_root));
     }
 
     [Fact]
     public void UnselectedCompleteInvalidGraphIsNotStartupAuthority() {
         FrameAddress orphan;
-        using (GraphResources resources = GraphResources.CreateNew(_root)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(_root)) {
             resources.Schemas.Register(Schema);
             orphan = resources.Data.Append(StateRevisionStore.FrameTag, [255], [255]).Unwrap();
             resources.Data.ConfirmDurable();
         }
-        using GraphResources reopened = GraphResources.OpenExisting(_root);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(_root);
         Assert.Equal(Schema, reopened.Schemas.GetRequired("ResourcesNode", 1));
         Assert.Throws<InvalidDataException>(() => reopened.States.Read(orphan));
         Assert.ThrowsAny<Exception>(() => reopened.ReadHistory(orphan));
@@ -74,7 +74,7 @@ public sealed class GraphResourcesTests : IDisposable {
 
     [Fact]
     public void OwnerFaultAndDisposeRejectWarmedFacadesButOwnedResultsRemainReadable() {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
         StateRevisionStore retained = resources.States;
         FrameAddress address = retained.Append(StateRevision.CreateObjectHeadMapBase(null,
             [ObjectVersionRecord.CreateBase(7, [10, 20])], []));
@@ -94,7 +94,7 @@ public sealed class GraphResourcesTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(() => retained.Append(EmptyRevision()));
         Assert.Equal(address, heads[7]);
         Assert.Equal(new byte[] { 10, 20 }, Assert.Single(revision.LocalObjects).Body.ToArray());
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(_root);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(_root);
         Assert.NotSame(revision, reopened.States.Read(address));
     }
 
@@ -102,7 +102,7 @@ public sealed class GraphResourcesTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void ActualBackingClosureRejectsWarmCache(bool closeVersionStore) {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
         FrameAddress address = resources.States.Append(EmptyRevision());
         resources.States.Read(address);
         if (closeVersionStore) { resources.Versions.Dispose(); }
@@ -114,7 +114,7 @@ public sealed class GraphResourcesTests : IDisposable {
     [Fact]
     public void NormalWritableTailRecoveryPreservesCompletedFramesAndAddresses() {
         FrameAddress address;
-        using (GraphResources resources = GraphResources.CreateNew(_root)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(_root)) {
             resources.Schemas.Register(Schema);
             address = resources.States.Append(EmptyRevision());
             resources.Data.ConfirmDurable();
@@ -123,9 +123,9 @@ public sealed class GraphResourcesTests : IDisposable {
         byte[] complete = File.ReadAllBytes(active);
         File.WriteAllBytes(active, [.. complete, 1]); // Offline fixture: partial next HeadLen, no live owner.
         var damaged = Snapshot();
-        Assert.ThrowsAny<Exception>(() => GraphResources.OpenReadOnlyExisting(_root));
+        Assert.ThrowsAny<Exception>(() => GraphResources.OpenLegacyReadOnlyExisting(_root));
         AssertUnchanged(damaged);
-        using (GraphResources reopened = GraphResources.OpenExisting(_root)) {
+        using (GraphResources reopened = GraphResources.OpenLegacyExisting(_root)) {
             Assert.Contains(reopened.Data.RecoveryReports.Values, report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.Truncated);
             Assert.Equal(Schema, reopened.Schemas.GetRequired("ResourcesNode", 1));
             Assert.Empty(reopened.States.Read(address).LocalObjects);

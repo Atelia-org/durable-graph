@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using SegmentStore = Atelia.FrameStore.FrameStore;
 
@@ -5,7 +6,7 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class EventHistoryRepositoryTests {
     [Fact]
-    public void LargeStateShrinkInstallsMapBaseThenHotAndColdSavesPreserveObjectChains() {
+    public void LargeStateShrinkInstallsDirectoryBaseThenHotAndColdSavesPreserveObjectChains() {
         Node world = LargeWorld();
         FrameAddress first, shrunk, hot, cold;
         ObjectId rootId;
@@ -23,21 +24,20 @@ public sealed partial class EventHistoryRepositoryTests {
             world.Right!.Value = 9;
             hot = Save(session).RevisionAddress;
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            StateRevision revision = states.Read(shrunk);
-            Assert.Equal(ObjectHeadMapKind.Base, revision.ObjectHeadMapKind);
-            Assert.Equal(first, revision.ParentRevisionAddress);
-            Assert.Empty(revision.RemovedObjectIds);
-            ObjectVersionRecord root = Assert.Single(revision.LocalObjects);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
+            P0GraphSnapshot revision = states.ReadGraph(shrunk);
+            Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(revision.DirectoryRoot).Kind);
+            Assert.Equal(first, revision.SourceGraph);
+            ObjectVersionRecord root = Assert.Single(StorageTestData.LocalRecords(states, shrunk));
             Assert.Equal(rootId.Value, root.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, root.Kind);
-            Assert.Equal(first, root.PriorAddress);
-            Assert.Equal(2, revision.ExternalObjectHeads.Count); // Stable child and shared string.
-            Assert.Equal(3, states.ReadLiveObjectHeadMap(shrunk).Count);
-            Assert.Equal(1003, states.ReadLiveObjectHeadMap(first).Count);
-            Assert.Equal(ObjectHeadMapKind.Delta, states.Read(hot).ObjectHeadMapKind);
-            Assert.Equal(shrunk, states.Read(hot).ParentRevisionAddress);
+            Assert.Equal(states.ReadGraph(first).Objects[rootId.Value], root.PriorAddress);
+            Assert.Equal(2, revision.Objects.Count - StorageTestData.LocalRecords(states, shrunk).Count); // Retained child and shared string.
+            Assert.Equal(3, states.ReadGraph(shrunk).Objects.Count);
+            Assert.Equal(1003, states.ReadGraph(first).Objects.Count);
+            Assert.Equal(ObjectVersionKind.Delta, states.ReadDirectoryVersion(states.ReadGraph(hot).DirectoryRoot).Kind);
+            Assert.Equal(shrunk, states.ReadGraph(hot).SourceGraph);
         }
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
             using var session = repository.Checkout("main");
@@ -61,9 +61,9 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.BeforePublication, GraphCommitOutcome.NotPublished)]
-    [InlineData((int)CommitCheckpoint.AfterPublication, GraphCommitOutcome.Published)]
-    [InlineData((int)CommitCheckpoint.BeforeInstall, GraphCommitOutcome.Published)]
+    [InlineData((int)P0SaveCheckpoint.BeforePublication, GraphCommitOutcome.NotPublished)]
+    [InlineData((int)P0SaveCheckpoint.AfterPublication, GraphCommitOutcome.Published)]
+    [InlineData((int)P0SaveCheckpoint.BeforeInstall, GraphCommitOutcome.Published)]
     public void MapBaseRootReplacementKeepsPublicationAndInstallationFailureBoundaries(int point, GraphCommitOutcome outcome) {
         FrameAddress first, candidate;
         using (Repository repository = CreateRepository()) {
@@ -72,9 +72,9 @@ public sealed partial class EventHistoryRepositoryTests {
             first = session.StateRevisionAddress!.Value;
             session.CommitEvent(new Node { Value = 6 }, NoRebase);
             Node replacement = new() { Value = 7, Right = original.Right, Text = original.Text };
-            repository.Checkpoint = checkpoint => {
+            repository.MetaBootstrapCheckpoint = checkpoint => {
                 Assert.Same(original, ((Node)session.State!));
-                if (checkpoint == (CommitCheckpoint)point) { throw new IOException("interrupted map Base publication"); }
+                if (checkpoint == (P0SaveCheckpoint)point) { throw new IOException("interrupted map Base publication"); }
             };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(replacement, NoRebase));
             Assert.Equal(outcome, error.Outcome);
@@ -83,12 +83,12 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Same(original, ((Node)session.State!));
             Assert.Equal(first, session.StateRevisionAddress!.Value);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            Assert.Equal(ObjectHeadMapKind.Base, states.Read(candidate).ObjectHeadMapKind);
-            Assert.Equal(first, states.Read(candidate).ParentRevisionAddress);
-            Assert.Equal(3, states.ReadLiveObjectHeadMap(candidate).Count);
-            Assert.Equal(1003, states.ReadLiveObjectHeadMap(first).Count);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
+            Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(states.ReadGraph(candidate).DirectoryRoot).Kind);
+            Assert.Equal(first, states.ReadGraph(candidate).SourceGraph);
+            Assert.Equal(3, states.ReadGraph(candidate).Objects.Count);
+            Assert.Equal(1003, states.ReadGraph(first).Objects.Count);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using var recovered = reopened.Checkout("main");

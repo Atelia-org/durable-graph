@@ -53,13 +53,13 @@ public sealed class NominalReferenceSchemaWireTests {
         DurableSchema a = new("A", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "B"));
         DurableSchema b = new("B", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "A"));
         try {
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 SchemaStore store = file.Schemas;
                 store.Register(a);
                 Assert.Equal(1, store.Count); // Nominal names do not require or register exact target definitions.
                 store.Register(b);
             }
-            using (GraphResources file = GraphResources.OpenExisting(path)) {
+            using (GraphResources file = GraphResources.OpenLegacyExisting(path)) {
                 SchemaStore store = file.Schemas;
                 Assert.Equal(a, store.GetRequired("A", 1));
                 Assert.Equal(b, store.GetRequired("B", 1));

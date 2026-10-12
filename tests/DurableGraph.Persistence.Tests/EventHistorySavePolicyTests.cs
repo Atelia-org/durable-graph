@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Reflection;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
@@ -56,8 +57,8 @@ public sealed partial class EventHistoryRepositoryTests {
         using (var repository = Repository.OpenReadOnlyExisting(path, Models())) {
             Assert.Equal((byte)30, ((Node)repository.ReadState(repository.GetHead("main"))).Value);
         }
-        using SegmentStore segments = SegmentStore.Open(Path.Combine(path, "data"));
-        using StateRevisionStore store = new(segments);
-        return addresses.Select(address => store.Read(address).LocalObjects.Select(row => row.Kind).ToArray()).ToArray();
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(path);
+        P0GraphStore store = resources.MetaBootstrapStore;
+        return addresses.Select(address => StorageTestData.LocalRecords(store, address).Select(row => row.Kind).ToArray()).ToArray();
     }
 }

@@ -94,7 +94,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         registry.UseArrayElementUpgrades(rules);
         registry.UseListElementUpgrades(rules);
         using RawBaseDirectory files = new();
-        using GraphResources segments = GraphResources.CreateNew(files.Path);
+        using GraphResources segments = GraphResources.CreateLegacyNew(files.Path);
         SchemaStore schemas = segments.Schemas;
         StateBindingContext snapshot = registry.Snapshot(schemas);
         Type domain = assembly.GetType("CurrentMode")!;

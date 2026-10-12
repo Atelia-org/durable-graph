@@ -19,19 +19,19 @@
 
 ## 当前焦点
 
-[DB-087 P1d 第四片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history) 已通过内部 friend 的准确 PackageReference 验收：实际 split Repository 完成 V1 seed／tag、V2 readonly Upgrade、latest shared 与旧 tag Fork、准确同／跨 S Pair、首次 rewrite Base 和 fresh List Delta。源码构建／回归与隔离包结果分别记录于 §33；本片生产零改，默认公开工厂仍 DB-086，完整 P1d／P1 和 P2 尚未完成。
+[DB-087 P1d 第五片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接) 已完成公开默认前端与产品回归移接：Repository／BranchCheckout 为唯一新 session，GraphResources 公共工厂走两正式根；rotation／cache 分传，旧 Schemas/States 仅 internal 独立低层。最终源码构建／完整回归和普通非 friend README 包均通过，精确证据只保留 §34；旧核心退出、更完整 accepted-history 公开包与 P2 尚未完成，不宣布完整 P1d／P1。
 
-[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 的 P1c 整合停点已达：共同 workspace／候选、唯一 GraphResources owner、准确 S 与完整 source／heads/H、history／Pair／State 槽／owned 物理缓存保持。checkout 固定创建／恢复时的执行 S，提交只推进存储 selected S；Event/Discard 保 State 基线与 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用，DB-082 默认关闭；不保证任意跨 S closure 的领域值等价。
+当前默认恢复／保存使用准确 S、共同 workspace／候选与唯一 owner；history／Pair／State 槽／owned 物理缓存复用已验路径。checkout 执行 S 固定创建／恢复时的环境，提交只推进存储 selected S；Event/Discard 保 State 基线与 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭；不保证任意跨 S closure 的领域值等价。
 
-下一片先接公开工厂和 Repository／BranchCheckout／GraphResources 默认前端，保 FS rotation 参数原义并分别下传 cache 预算；再按调用清零删除 SCB1／raw-map 旧权威及旧格式消费，最后验非 friend 的公开默认包。最终不保双 backend／兼容壳，P2 private 后置；源码接缝和最小验收只在 DB-087 §33.4／[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图) 导航。
+后继按调用清零删除 SCB1／raw-map 权威与旧格式消费，再验非 friend 的完整 accepted-history 公开包，最后 P2 private。最小验收与来源 guard／旧全局 Schema 冲突测试的修订只在 DB-087 §34 维护；[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图) 只导航剩余依赖。旧底层 fixture 是施工过渡，不是公开兼容模式。
 
-本片起点 `f4f81ec`；续工先核实际 HEAD／工作树，再读 DB-087 §6.3／7.1。内部 friend 包不授 public-default、全部组合、断电或性能资格。依赖模式按[指南](../docs/storage-dependency.md)显式选择，下述既有默认公开基线保持。
+本片起点 `3988abb`；续工先核实际 HEAD／工作树。依赖模式按[指南](../docs/storage-dependency.md)显式选择。前三片进程／故障与第四片内部包保各自证据，当前不外推完整公开包、全部组合、断电或性能资格。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 
-[DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
+[DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
 用户已取消全库重开确认/启动审计、旧数据保留与迁移；完整帧稳定、必要读取校验、两种 Parent、outcome/fault 与 mutable 隔离保持。
-实际合同与验收只维护在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)，没有旧格式兼容模式；模型程序集须重编译，新格式库内历史升级保持。
+该轮合同与验收保留在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)；当前默认接线见 DB-087 §34，没有旧格式兼容模式，模型 accepted history 与显式 Upgrade 保持。
 准确上游依据与未公开候选入口见[依赖指南](../docs/storage-dependency.md)；原始机制证据只查[DB-085](../docs/design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)。
 下一增量由下游新库接入/真实轨迹反馈选择；容量、Schema 登记写放大和合帧导航成本的重访条件集中于[路线图](../docs/DurableGraph-research-roadmap.md#33-rbf3--framestore--versionstore-迁移)。
 
@@ -50,7 +50,7 @@ A/B 显示 Family 物化改善，但完整 Fork 未见稳定收益；不以减�
 反例与历史证书隔离见证进入回归；未改产品 API、发布或 provider 合同。重启条件与备选只维护在实验记录及路线图。
 
 [DB-080：最近 State 准备材料复用](../docs/design-branches/0080-prepared-checkpoint-reuse-implementation.md) 已实施并独立验收。
-Checkout/Fork 在独立选择请求历史位置后复用一个精确 State 槽；默认 DB-086 每次命中复核完整 live Schema 证书。内部 split 的准确 reader 环境／标准依赖接线已验，见 DB-087 §28；两者仍独立物化和导入保存身份。
+Checkout/Fork 独立选择请求历史位置后复用一个精确 State 槽；默认准确 reader 环境／完整标准依赖接线源于 DB-087 §28，命中仍独立物化和导入保存身份。旧全局 Schema 后登记不污染已 pin 的历史 S。
 证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
 默认启用的依据是实测高命中路径准备计数和分配下降；没有完整 Fork 普遍加速或总堆有界的承诺，具体证据只保留在实施记录。
 
@@ -102,7 +102,7 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 独立审阅、前后测量、源码回归与真实包验证已通过。
 下一步按真实长轨迹反馈评估 map 回溯与全量 Base 准备，重访条件见路线图，测量证据仅保留在本片。
 普通 State 已加入[目录 Base 选择](../docs/research/object-head-map-base-feasibility.md)：仅当完整目录尾部的精确字节成本
-严格小于 Remove 列表时切换；保留精确 Parent、对象内容决策与基线安装，Event 仍用独立目录 Base。
+严格小于 Remove 列表时切换是当片旧 raw-map 选择；当前员工 Dictionary 目录由共同 saver 按实际 Base/Delta 成本选择，Event 仍不安装 State。
 
 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice.md) 已贯通：
 IDurableObject 完全替代并移除 DurableBase，普通 class/record 共用资格和用户自建继承链；
@@ -137,8 +137,8 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 统一闭合目录与 Base v4 ID 头；完整 stored/current 引用验证、两阶段恢复；非泛型 Repository、Event-first/自由 E/S、跨类型 State、分支/Move/Checkout 与只读浏览；操作内 exact 解码缓存、显式 ReadPair 引用闭包共享、可写恢复隔离；升级 Base/Remove、已提交基线 head/H 增量维护 | 联合 Store 视图、更强恢复保证与有测量依据的读取优化另行排期 |
-| [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 借入共享 FrameStore，Append 候选并由 VS 发布确认；local Base/Delta records、wire v4、opaque 12B links、exact Revision live map、Parent/prior 校验、object-first 原始重建链及实际 payload H；Base/Delta 精确计量；有界 owned frame/map LRU、双数组只读地址字典与 local-record 二分 | 不解码 typed body；不拥有持久 roots、类型目录或发布 head；缓存预算约束估算驻留量，不约束总堆或操作峰值 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存 | 默认前端与产品回归已验；旧核心退出／完整公开包及 P2 尚未闭合，具体范围见 DB-087 §34 |
+| [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；新图封套／batch／员工目录与发布 owner 位于 Persistence | 旧 StateRevision／raw-map 消费仅施工低层，后继按调用退出；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：
@@ -150,7 +150,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 - Guid/decimal/TimeSpan 为内建值叶子，tag 19/20/21；DTO 直接存 CLR 值，无独立 Schema/对象行。
   Guid 固定 16-byte big-endian，decimal 公开四字固定 16-byte little-endian，TimeSpan 复用有符号 Ticks varint。
   decimal 的 scale/符号零保留；普通/Family/Runtime 共用静态完整表示比较。Dictionary 默认 ScalarDefault，
-  数值相等但表示不同的真实 key 替换产生 Remove+Add。SCB1 v2 目录语法保持；新存储 links 与 char 编码按 DB-086，不读取旧存档。
+  数值相等但表示不同的真实 key 替换产生 Remove+Add。当前默认 meta catalog 使用员工描述与对象版本，完成帧保持；旧 SCB1 语法只在施工低层，不提供存档兼容。
 - DateOnly/TimeOnly/DateTimeOffset 为内建叶子，tag 22/23/24；公开 DayNumber、日内 Ticks、clock Ticks + 整分钟 offset
   写入使用最短 varint，读取接受 Bare 的有界合法冗余，不读取本地时区或 CLR 私有布局。DateTimeOffset 普通/Family/Runtime 均用 EqualsExact；
   Dictionary 默认仍按瞬间查找，真实换 offset key 为 Remove+Add，indexer 等价 key 不替换原 key。
@@ -190,9 +190,9 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   历史 DTO/body 不携带领域泛型参数，phantom 参数不产生状态参数。已知叶子直接调用，未知槽使用 IStateOps/IValueProjection 静态约束调用。
   旧纯非泛型编译保留 Schema/GetSchema/__DurableState；迁入 Family 路径后，内部 DTO 类型引用需改用 Family alias。
 - 目录冻结定义/provider，成功闭合在 snapshot 内缓存；current 按 CLR Type，historical 按完整 stored Schema 绑定。
-  snapshot 只冻结代码能力，仍观察同一 Repository 内单调积累的 SchemaStore 权威定义。
+  Open 冻结代码配置；每个准确 S 环境持其不可变 lookup／独立闭合 memo，hot checkout models 保持，新提交不原地换环境。
   同 T 多处 exact 不一致、错误 arity/kind、未知定义及不支持的 CLR 闭合拒绝；nominal 边不递归展开对象 body。
-  UpgradePlan 持有展平去重的 exact Schema requirement set；缓存命中在 callback 前统一核对后续已注册 Schema，
+  UpgradePlan 持有展平去重的 exact Schema requirement set；缓存命中在 callback 前按该准确环境复核完整依赖，
   冲突报告 owner endpoint 到具体 base/inline 字段的稳定路径。普通 binding 缓存仍复用同一闭包算法；共享 DAG 不按树重复展开。
 - 跨程序集 public 顶层 Durable 类型可进入 nominal 表达及动态表示参数；包括外部 class、容器元素、
   `LocalBox<RemotePoint>` / `RemoteBox<LocalPoint>` 及本地 `InlineBox<T>` 闭合外部值；也支持直接固定外部值字段/Nullable/泛型值。
@@ -236,30 +236,30 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 - SG RegisterReaders 显式登记一个模型族的全部可用 Vn；StateReaderRegistry 同 binding 实例幂等，
   同 key 另一实例拒绝，读取开始复制固定索引。Schema 日志不包含可执行 reader，完全移除的模型族仍拒绝。
   Runtime typed 循环完成整链后才装箱，字段 body 保持静态绑定；无程序集扫描或一般 TypeCodec。
-- RevisionDecoder.Read 读取指定 Revision 全部 live 行，逐对象匹配完整 ObjectLayout 后解码，由 exact reader
+- 默认 ReadSplit／typed reader 读取指定图全部 live 行，按原 Base 的准确 S／descriptor 与 selected view 匹配完整 ObjectLayout，由 exact reader
   VisitReferences 验证 string/class/array/List/Dictionary 引用；class nominal 约束按 stored Schema 祖先判断，数组与 List 要求 exact nominal 类型。
   晚期失败不返回部分结果，不要求全批 body 零调用。
   DecodedRevision 保留 stored-exact DTO、查询地址及每 ID 唯一 string 实例，关闭 Store 后仍可使用；
   无 roots/领域实例/Upgrade，不是 CaptureSession.Current，不能直接作为已加载的可编辑基线。
-  RevisionReadSession 封闭同资源和冻结目录的一次操作，以 `(ObjectId, head)` 缓存 owned 行/reader；
+  旧 RevisionReadSession 的 `(ObjectId, head)` DTO cache 仅保施工低层；当前默认每侧解码保准确执行环境，owned 物理缓存只复用完成帧／完整目录；
   每视图仍物化实际 head map 并完整验证引用/Dictionary lookup，不缓存 Normalize、业务 Upgrade 或工作区。
 - StateModelRegistry 显式登记稳定 SG Model，Repository 在 Open 时固定 family、exact CLR Type 与 reader 索引；
-  创建/恢复/读取共用同一模型环境；独立低层入口仍可自行取得 snapshot。
+  配置在 Open 固定；恢复／读取按实际 S 闭合环境，同 S 可严格复用、跨 S 独立 memo，checkout 在自身寿命内保持模型环境。
   同 exact CLR Type 的其他模型原子拒绝。durable exact-current Normalize 保留值/ID 并附加 current preparation，
-  不调用历史转换委托；模型缓存仍复核实时 Schema 权威。传统非泛型入口的可选普通静态 UpgradeStateVnToVnPlus1
+  不调用历史转换委托；模型缓存复核所选准确视图的标准依赖。传统非泛型入口的可选普通静态 UpgradeStateVnToVnPlus1
   按相邻版本转换完整 leaf DTO，不重复升级祖先。已声明边逐一强类型检查；缺边仅阻止需要该边的 current Load。
   GraphReader 为独立读取与 LoadedWorld/工作区恢复共用管线：先完整 exact 解码、再升级全部 source 行，按 current Schema 重新校验全部引用；
   从所选 durable 根迭代求可达闭包，全部可达 class/array/List/Dictionary 实例分配并登记 string 后才 Hydrate。分配必须 exact、非空、彼此不同，Empty 例外。
   单图准备材料保留完整 normalized 来源、实际根、模型环境与可达顺序，不额外持有 decoded 目录。
   Repository Checkout/Fork 可驻留一份成功 State 材料及完整依赖证书；重复选择同 State 省去冷准备，mutable 分配与身份导入仍独立。
-  预闭合 factory/binding/Upgrade 证据按实际依赖传递、命中复核 live Schema；槽不替代逐请求 Head 导航或保存来源校验。
+  预闭合 factory/binding/Upgrade 证据按实际依赖传递、命中复核该 State 准确环境的完整标准依赖；槽不替代逐请求 Head 导航或保存来源校验。
   独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
-- GraphResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 VersionStore，保管唯一最新仓库根；只读不写盘、不修尾。
+- GraphResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 VersionStore，保管最新分支目录／shared 两根与唯一 pending；只读不写盘、不修尾。
   GraphReader.ReadPair 各自 Decode/Normalize/验证后，在同 ID/head、current model/完整布局、未重写且有完整状态相等 proof 的候选中，
   沿反向引用剔除依赖非候选者；剩余只读闭包共享 Allocate/Hydrate，稳定环可整体复用，changed-child 会使 owner 分裂。
-  string 直接复用同 key 的解码实例；不同 ID 的等值非空串不 intern。只读结果不导入可编辑基线。
+  共享还要求同 reader-issued 环境；string 在既有 same-ID/head 候选内按引用快路／Ordinal 完整内容证明，不 intern 不同 ID 的等值非空串。只读结果不导入可编辑基线。
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   WorldWorkspace.Stage(nextState) 发布后才安装原候选/新根；StageSnapshot 使用已提交 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State 的升级重写义务。
   快照 map Base 只列候选，保留实际 local Base/Delta 与 exact Parent external heads；后继 State 仍相对前 State；快照不为闭包外 State 成员编码 Removes。
@@ -280,7 +280,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 不占用编辑名，Move 只拒绝活动目标分支。
   ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
   EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。
-  Schema 登记独立发布完整目录；图保存 append 一个 Revision/业务 meta 帧，由 VS 根发布执行 data-first 确认，发布后不重新 Capture 或运行模型回调。
+  Schema 只记录受控意图，真实 E/S 的 joint Save 才接受；先追加 meta／业务对象与目录／图，新增 shared 时用 VS 两 ref CU，共同 data-first 确认，发布后不重捕或运行模型回调。
   GraphCommitException 区分 NotPublished / Unknown / Published；NotPublished 也须检查 IsFaulted，故障后 dispose/reopen，无透明重试或领域修改回滚。
   重开只读必要根与所选 Schema；准备所选图时检查两种 Parent、完整内容和图语义。不启动全库/orphan 图审计；只读不创建、flush 或修尾。
   恢复保证仍限正常关闭、进程中止和明确 I/O 故障；无 OS crash/power loss、目录元数据或完整后缀外部删除检测保证。
@@ -302,44 +302,13 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   PrepareBaseBody 对每版 DTO 复用 WriteBaseBody；全部 live Base 提前准备，决策后复用 bytes，性能优化留待 MVP 后。
   B/D 均为新对象记录的精确值，prior 固定12B；H 是实际读取记录的消费字节，合法冗余表示也按实际长度计入。
   ApplyDeltaBodyVn 只处理同 Vn；不证明 prior 身份，之后仍须对完整 DTO 验证引用。
-- SchemaStore 借用 GraphResources 的共享 data 与根发布入口，仅读取根选中的一个 SCB1 v2 完整闭合目录快照，不扫描或收养 orphan。
-  class Schema 记录本身就是对象表示；inline Schema、数组、List 与 Dictionary 共用从 2 起连续单调的 UInt32 编号，0 无效、1 固定 string。
-  inline 编号只作为元数据依赖，不能用于对象 Base。编号不回收、不跨仓库解释；shape/对象实例不属于表示身份。
-  SchemaKey 为派生查询/冲突索引，不单独编码；Count 只统计用户 Schema，含 inline。完整闭包检查不能因已有 ID 而跳过。
-  全部输入、完整 base/inline 闭包、名义 kind/arity、ID/单帧容量预检后，一次快照追加/VS 根发布，最后安装全部索引并交付 ID；幂等登记不追加。
-  exact base/inline 使用先前节点 ID，按依赖顺序恢复；字段 tag15 引用仍携带 closed Named/Array/List/Dictionary TargetType，
-  不绑定目标版本或形成 exact 注册依赖，nominal 自环/互环允许。Schema DAG depth≤256，数组外壳不额外占深度。
-  List 使用目录 kind=4、nominal 构造码=8；数组/List 的 exact inline 元素外壳不增加 Schema DAG 深度。
-  `.dgschema` 与 manifest 新写 v9，严格读取原 v1–v8 语法并保留已接受 history 的文件与 hash；List/Nullable/Dictionary 分别需 v5/v6/v7，Guid/decimal/TimeSpan 叶子需 v8，DateOnly/TimeOnly/DateTimeOffset 需 v9，含 nominal 实参也递归检查。
-  字段 tag 1–16 不变，history-only 参数 tag=17，Nullable tag=18/nominal 构造码=9；
-  Nullable 内部 inline 依赖仍用先前目录 ID，不新增独立 Nullable 目录行。ValueSchema 统一暴露包装内依赖，exact DAG 深度不多算包装层。
-  nominal 约束改变属于 owner Schema 改变，目标自身升版则不传播 owner 版本。
-  只校验根所选完整快照的 CRC/角色/语义；底座 normal recovery 与 lazy control open 不变。写入不确定后 faulted，须重开；
-  不重新 flush 全库。目录受单帧容量约束，无 Schema 增量链、分段或回退 reader。
-- Persistence 内部 BaseObjectBodyCodec 为 raw Base body 加 v4 类型头：格式版本 + canonical RepresentationId，返回 `EncodedBaseObjectBody`。
-  统一经 SchemaStore 取得完整 ObjectLayout；string 固定 ID 可无目录解析。仅支持 v4，每个解码结果都有 RepresentationId，旧格式明确拒绝。
-  State 类型头不再编码 SchemaKey/TypeExpr/数组元素描述，描述语法集中在目录一侧；当前 DTO/SG/body/history/Upgrade 合同不变。
-  SchemaStore.ResolveReader 使用本次操作的冻结目录，完整匹配布局；不全局缓存另一个 snapshot 的 CLR reader。
-  Delta 沿终止 Base 继承 exact 表示，仍为裸 body。TypedObjectVersionReader 在 callbacks 前匹配持久完整布局，逐 body 全消费；string 拒绝 Delta。
-  它保留单对象显式入口，与 RevisionDecoder 共用读取规则；不执行 Upgrade。
-  Schema/表示登记帧是共享元数据，不摊入对象 B/D/H；Base 的 ID 实际字节宽度计入 B。
-- CapturedRevisionPlanner 先核对 Previous/Parent、完整 prior ID 集合及所有 survivor 的完整 Base 布局，
-  包括 NoChange；再批量登记全部 current 表示、包装 Base 并调用原 planner。Schema/表示登记可持久生效，
-  但该方法不追加 State/发布/Accept，也不证明 DTO 内容与 Parent 一致；合法迁移由受控 LoadedRevisionPlanner 路径产生 BaseOnlyUpdate。
-- ObjectRevisionPlanner 只读 exact Parent，校验完整 post-live rows 的新旧分类/prior；独立入口对 NoChange/Delta Update
-  读取链 H，受控 Loaded 入口复用同 Store/SchemaStore 的已验证来源及精确 H，仍核对全部 source head，含待删除行。
-  BaseOnlyUpdate 不读取旧内容链。无 Parent 输出 map Base；普通有 Parent 的保存按目录成本选择 Base/Delta，后者显式编码 Removes。
-  typed producer 负责内容/Schema/基线对应；planner 不调用 Append/Accept，结果可作为显式 Parent 的分支追加。
-  冷解码与 ReadSession 缓存同时携带 head/H；PrepareInstall 在实际地址确定后按本次 payload 完成私有下一基线，
-  发布后才安装。Event/Discard 不推进 State，synthetic DTO 视图没有热保存来源资格，详见 DB-069。
-- Storage 的 ObjectHeadMap 与对象内容的 Base/Delta 独立组合。ReadObjectVersionChain 逐条核对
-  prior 等于该记录 exact Parent Revision 选定的对象 head，要求 direct local record；Base 截断内容链，H 随之重置。
-  Append 只预检直接 edge；完整 map 的 external heads 仍是浅声明，不认证全局实体历史。
-  ReadObjectBaseBody 仍只接受 Base head，不回退 parent 补内容；wire v4 拒绝旧版本。
-  H 含 kind/prior/length/body，不含 ObjectId/membership/共享 Frame；不是总冷读 I/O。
-  普通 Store 默认以 8 MiB 统一预算复用 owned Revision/完整 map，0 禁用驻留；Append 不 seed 读缓存。
-  冷链 H 来自 wire 读回；已提交基线按固定地址编码精确增量计量，独立 chain/map 遍历统计用于保存成本归因。
-  Store.Dispose 释放缓存但不关闭借用底层，已交付值仍可读；使用纪律与验收见 [DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md)。
+- 默认 typed ABI5：有限员工／string、builtin-only 结构容器与 dynamic descriptor 路由分责；dynamic Base 引用其 batch origin S 的 meta ObjectId，selected S 核完整 retained 布局，不借 latest 补解释。
+  Schema／TypeExpr 从指定 meta 根冷读员工 DTO 后经工厂投影，构造闭包／nominal kind/arity／limits 保持；目录排除自身、write-last，用固定 Dictionary body 与对象版本，不保 raw-map 第二权威。
+  业务与 meta producer 共用窄 saver；实际 append 后准备全部安装材料，Confirmed 才接受 State／meta，Event 只接受 meta／Head。
+  保存规划与计量保全部 source membership、实际 records／heads/H、强制 rewrite Base；物理缓存按 owner/address 复用合法 owned 值，每次仍核图关系／准确 S／typed 来源，zero 禁用、关闭／fault 清驻留。
+- 旧 SCB1／RepresentationId／Base v4、RevisionDecoder／RevisionReadSession、Captured/LoadedRevisionPlanner 与 raw StateRevisionStore 尚留明确内部低层 fixture，已经不是公开默认读写权威。
+  后继按调用清零退出旧核心与纯旧格式测试；共用 body、ObjectVersion payload／计量、planner 内核、workspace／候选与 owned LRU 不随旧格式一起删除。历史机制细节查 DB-046／067／086，不在当前工作集重复旧格式说明。
+
 - 数组对象支持 SZ/rank 2–4 与完整已有槽闭包：标量、string/class ID、inline/generic struct、递归数组。
   FrozenArrayState 拥有 shape 与元素 buffer；当前投影用静态 ref 循环，historical reader 不要求旧领域 struct CLR 类型。
   同布局稀疏 Delta 使用 row-major 索引与子 PrepareDelta；同实例保持 ID，替换/不可达继续遵循会话身份和 Remove 规则。

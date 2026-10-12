@@ -1,10 +1,7 @@
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
-using Atelia.DurableGraph.Schema;
-using Atelia.DurableGraph.Storage;
 using Atelia.VersionStore;
-
 
 namespace Atelia.DurableGraph;
 
@@ -18,13 +15,11 @@ namespace Atelia.DurableGraph;
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
 /// Keep per-view owner/context/cache outside paired graphs. Use Checkout to continue editing and committing.
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
-/// Successful binding/comparer closures may be reused across operations; callbacks and equality/hash policies
+/// Successful closures may be reused within an exact Schema environment; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
 /// </remarks>
 public sealed partial class Repository : IDisposable {
     private readonly GraphResources _resources;
-    private readonly StateModelSnapshot? _models;
-    private StateModelSnapshot LegacyModels => _models ?? throw new NotSupportedException("Legacy model access is unavailable in split storage.");
     private readonly object _identity = new();
     private readonly HashSet<string> _activeBranches = new(StringComparer.Ordinal);
     private bool _busy;
@@ -37,11 +32,6 @@ public sealed partial class Repository : IDisposable {
     internal GraphReadStatistics? RestorationStatistics { get; set; }
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
-    private Repository(GraphResources resources, StateModelSnapshot models) {
-        _resources = resources;
-        _models = models;
-    }
-
     public bool IsReadOnly => _resources.IsReadOnly;
     /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
     /// <remarks>
@@ -50,34 +40,26 @@ public sealed partial class Repository : IDisposable {
     /// history through a newly opened repository rather than reuse old domain objects or frame handles.
     /// </remarks>
     public bool IsFaulted => _resources.IsFaulted;
-    /// <summary>Creates a repository with one frozen model environment for its entire open lifetime.</summary>
-    /// <remarks>Models are captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens.</remarks>
+    /// <summary>Creates a repository with frozen code configuration and exact stored Schema views.</summary>
+    /// <remarks>Configuration is captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens. Rotation controls FrameStore file allocation; the separate cache budget controls owned physical reads.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static Repository CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) => Open(path, models, rotationThresholdBytes, true, false);
-    /// <summary>Opens the required repository root and Schema snapshot with one frozen model environment.</summary>
+    public static Repository CreateNew(string path, StateModelRegistry models,
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+    /// <summary>Opens the required repository roots with frozen code configuration and exact stored Schema views.</summary>
     /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static Repository OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) => Open(path, models, rotationThresholdBytes, false, false);
-    /// <summary>Opens existing history without writing, using one frozen model environment for all reads.</summary>
-    /// <remarks>An empty or partial registry supports inspection; successful closures are shared within this open repository.</remarks>
+    public static Repository OpenExisting(string path, StateModelRegistry models,
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+    /// <summary>Opens existing history without writing, using frozen code configuration and each graph's exact Schema view.</summary>
+    /// <remarks>An empty or partial registry supports inspection; model capabilities are still required to materialize domain graphs. The cache budget controls owned physical reads.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
-    public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models) => Open(path, models, 64L * 1024 * 1024 * 1024, false, true);
-
-    private static Repository Open(string path, StateModelRegistry models, long rotationThresholdBytes, bool create, bool readOnly) {
-        ArgumentNullException.ThrowIfNull(models);
-        GraphResources? resources = null;
-        try {
-            resources = create ? GraphResources.CreateNew(path, rotationThresholdBytes) : readOnly
-                ? GraphResources.OpenReadOnlyExisting(path) : GraphResources.OpenExisting(path, rotationThresholdBytes);
-            return new(resources, models.Snapshot(resources.Schemas));
-        } catch (Exception primary) {
-            try { resources?.Dispose(); }
-            catch (Exception cleanup) {
-                throw new AggregateException("Repository opening and resource cleanup failed.", primary, cleanup);
-            }
-            throw;
-        }
-    }
+    public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models,
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrap(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
     /// <summary>Publishes an initial State and returns a checkout retaining the supplied domain instances.</summary>
     /// <remarks>
@@ -87,27 +69,8 @@ public sealed partial class Repository : IDisposable {
     /// Reopen a faulted repository to inspect persisted history. Domain mutations are not rolled back.
     /// </remarks>
     public BranchCheckout CreateBranch(string branchName, IDurableObject initialState,
-        ReadAmplificationBaseBudgetParameters? parameters = null) {
-        if (UsesMetaBootstrap) { return CreateMetaBootstrapBranch(branchName, initialState, P0GraphKind.State, parameters); }
-        RequireWriter();
-        _busy = true;
-        bool acquired = false;
-        bool delivered = false;
-        try {
-            ArgumentNullException.ThrowIfNull(initialState);
-            ValidateNewName(branchName);
-            acquired = _activeBranches.Add(branchName);
-            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            var workspace = WorldWorkspace.CreateSnapshot(_resources.States, _resources.Schemas, initialState, LegacyModels);
-            var checkout = new BranchCheckout(this, branchName, workspace, null);
-            Publish(checkout, null, initialState, parameters ?? DefaultPolicy, initial: true);
-            delivered = true;
-            return checkout;
-        } finally {
-            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            EndOperation();
-        }
-    }
+        ReadAmplificationBaseBudgetParameters? parameters = null) =>
+        CreateMetaBootstrapBranch(branchName, initialState, P0GraphKind.State, parameters);
 
     /// <summary>Publishes an initial Event and returns a checkout with no State.</summary>
     /// <remarks>
@@ -116,27 +79,8 @@ public sealed partial class Repository : IDisposable {
     /// Publication may succeed before delivery fails; inspect the outcome and reopen a faulted repository.
     /// </remarks>
     public BranchCheckout CreateBranchFromEvent(string branchName, IDurableObject initialEvent,
-        ReadAmplificationBaseBudgetParameters? parameters = null) {
-        if (UsesMetaBootstrap) { return CreateMetaBootstrapBranch(branchName, initialEvent, P0GraphKind.Event, parameters); }
-        RequireWriter();
-        _busy = true;
-        bool acquired = false;
-        bool delivered = false;
-        try {
-            ArgumentNullException.ThrowIfNull(initialEvent);
-            ValidateNewName(branchName);
-            acquired = _activeBranches.Add(branchName);
-            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            var workspace = WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, LegacyModels);
-            var checkout = new BranchCheckout(this, branchName, workspace, null);
-            Publish(checkout, initialEvent, null, parameters ?? DefaultPolicy, initial: true);
-            delivered = true;
-            return checkout;
-        } finally {
-            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            EndOperation();
-        }
-    }
+        ReadAmplificationBaseBudgetParameters? parameters = null) =>
+        CreateMetaBootstrapBranch(branchName, initialEvent, P0GraphKind.Event, parameters);
 
     /// <summary>Restores the nearest State at the exact branch head, without materializing or replaying Events.</summary>
     /// <remarks>
@@ -146,25 +90,7 @@ public sealed partial class Repository : IDisposable {
     /// Restoration runs decoding, Upgrade and materialization, but no business handler. Constructors and field
     /// initializers do not run; application code rebuilds Transient state and interprets its own event progress.
     /// </remarks>
-    public BranchCheckout Checkout(string branchName) {
-        if (UsesMetaBootstrap) { return CheckoutMetaBootstrap(branchName); }
-        RequireWriter();
-        _busy = true;
-        bool acquired = false;
-        bool delivered = false;
-        try {
-            CheckpointAddress head = HeadCore(branchName);
-            acquired = _activeBranches.Add(branchName);
-            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, head, out PreparedStateRestoration? candidate);
-            if (candidate is not null) { _preparedState = candidate; }
-            delivered = true;
-            return checkout;
-        } finally {
-            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            EndOperation();
-        }
-    }
+    public BranchCheckout Checkout(string branchName) => CheckoutMetaBootstrap(branchName);
 
     /// <summary>Creates a durable named branch at source and returns its independently restored checkout.</summary>
     /// <param name="branchName">A new branch name; the returned checkout occupies only this branch.</param>
@@ -188,7 +114,7 @@ public sealed partial class Repository : IDisposable {
             ValidateNewName(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate);
+            BranchCheckout checkout = RestoreMetaBootstrapCheckout(branchName, source, out PreparedStateRestoration? candidate);
             MutateBranchCore(branchName, source.Address);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
@@ -199,62 +125,9 @@ public sealed partial class Repository : IDisposable {
         }
     }
 
-    private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head,
-        out PreparedStateRestoration? candidate) {
-        candidate = null;
-        if (UsesMetaBootstrap) { return RestoreMetaBootstrapCheckout(branchName, head, out candidate); }
-        ValidateSelectedGraphParent(head);
-        CheckpointAddress? state = NearestStateCore(head);
-        // Event-only histories must not even inspect another branch's resident certificate.
-        if (state is null) {
-            return new BranchCheckout(this, branchName,
-                WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, LegacyModels), head);
-        }
-        CheckFrame(state, GraphFrameKind.State);
-        ValidateSelectedGraphParent(state);
-        RevisionReadSession reads = new(_resources.States, _resources.Schemas, LegacyModels, RestorationStatistics);
-        if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
-            reads.Statistics.PreparedStateHits++;
-            if (ImmutableLeafReuseEnabled && !prepared.ImmutableLeavesCollected) {
-                // Enabling the experiment after this entry was prepared needs a fresh
-                // complete materialization certificate, including callbacks now omitted by reuse.
-                using var leafRequirements = LegacyModels.BeginSchemaRequirementCollection();
-                prepared.Validate(reads, state);
-                var restored = GraphReader.RestorePreparedState(reads, prepared.Selection,
-                    out var leaves, collectImmutableLeaves: true);
-                var restoredCheckout = new BranchCheckout(this, branchName, WorldWorkspace.FromLoaded(reads, restored), head);
-                candidate = new(state, prepared.Selection, leafRequirements.Complete(), leaves, ImmutableLeavesCollected: true);
-                return restoredCheckout;
-            }
-            prepared.Validate(reads, state);
-            var loaded = GraphReader.RestorePreparedState(reads, prepared.Selection, out _,
-                reusedLeaves: ImmutableLeafReuseEnabled ? prepared.ImmutableLeaves : null);
-            return new BranchCheckout(this, branchName, WorldWorkspace.FromLoaded(reads, loaded), head);
-        }
-
-        reads.Statistics.PreparedStateMisses++;
-        using var requirements = LegacyModels.BeginSchemaRequirementCollection();
-        PreparedGraphSelection selection = GraphReader.PrepareState(reads, state.RevisionAddress, state.RootId);
-        // Include every source/current row, even when Upgrade cuts its last incoming edge.
-        // Plans and standard checks performed throughout this lexical scope contribute too.
-        foreach ((ObjectId id, NormalizedObject row) in selection.Normalized.Objects) {
-            LegacyModels.CheckObjectLayout(row.SourceLayout, $"prepared State source object {id.Value}");
-            LegacyModels.CheckObjectLayout(row.Current.Layout, $"prepared State current object {id.Value}");
-        }
-        bool collectLeaves = PreparedStateReuseEnabled && ImmutableLeafReuseEnabled;
-        var materialized = GraphReader.RestorePreparedState(reads, selection, out var immutableLeaves,
-            collectImmutableLeaves: collectLeaves);
-        var workspace = WorldWorkspace.FromLoaded(reads, materialized);
-        var checkout = new BranchCheckout(this, branchName, workspace, head);
-        var certificate = requirements.Complete();
-        // Candidate construction precedes Fork publication; success only installs a reference.
-        if (PreparedStateReuseEnabled) { candidate = new(state, selection, certificate, immutableLeaves, collectLeaves); }
-        return checkout;
-    }
-
     public IReadOnlyList<string> ListBranches() {
         RequireAvailable();
-        return UsesMetaBootstrap ? _resources.ListMetaBootstrapBranches() : _resources.ListBranches();
+        return _resources.ListMetaBootstrapBranches();
     }
     public CheckpointAddress GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
@@ -268,8 +141,7 @@ public sealed partial class Repository : IDisposable {
     /// Each traversed graph frame is CRC checked; unopened history is not audited.
     /// </remarks>
     public IReadOnlyList<CheckpointAddress> ReadFrames(string branchName) {
-        // Split history reads graph envelopes; legacy history reads combined StateRevision frames.
-        // Neither metadata path decodes object bodies.
+        // Metadata navigation reads graph envelopes, not directories or object bodies.
         RequireAvailable();
         CheckpointAddress head = HeadCore(branchName);
         var frames = new List<CheckpointAddress>();
@@ -397,7 +269,7 @@ public sealed partial class Repository : IDisposable {
     /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public IDurableObject ReadEvent(CheckpointAddress frame) => Read(frame, GraphFrameKind.Event);
+    public IDurableObject ReadEvent(CheckpointAddress frame) => ReadMetaBootstrap(frame, GraphFrameKind.Event);
     /// <summary>Independently restores the actual domain root of a State snapshot.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
@@ -406,7 +278,7 @@ public sealed partial class Repository : IDisposable {
     /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public IDurableObject ReadState(CheckpointAddress frame) => Read(frame, GraphFrameKind.State);
+    public IDurableObject ReadState(CheckpointAddress frame) => ReadMetaBootstrap(frame, GraphFrameKind.State);
 
     /// <summary>Restores the selected graph and its nearest strict ancestor of the opposite role.</summary>
     /// <remarks>
@@ -422,38 +294,8 @@ public sealed partial class Repository : IDisposable {
         RequireAvailable();
         CheckFrame(address);
         _busy = true;
-        try {
-            if (UsesMetaBootstrap) { return ReadMetaBootstrapCheckpointCore(address); }
-            ValidateSelectedGraphParent(address);
-            GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
-            CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
-            if (previousAddress is not null) { ValidateSelectedGraphParent(previousAddress); }
-            var session = new RevisionReadSession(_resources.States, _resources.Schemas, LegacyModels);
-            IDurableObject root;
-            IDurableObject? previous;
-            if (previousAddress is null) {
-                root = GraphReader.ReadRoot<IDurableObject>(session, address.RevisionAddress, address.RootId);
-                previous = null;
-            } else {
-                (root, previous) = GraphReader.ReadIndependent(session, address.RevisionAddress, address.RootId,
-                    previousAddress.RevisionAddress, previousAddress.RootId);
-            }
-            return address.Kind == GraphFrameKind.Event
-                ? new EventCheckpoint(address, root, previous, previousAddress)
-                : new StateCheckpoint(address, root, previous, previousAddress);
-        } finally { EndOperation(); }
-    }
-
-    private IDurableObject Read(CheckpointAddress frame, GraphFrameKind kind) {
-        if (UsesMetaBootstrap) { return ReadMetaBootstrap(frame, kind); }
-        RequireAvailable();
-        CheckFrame(frame, kind);
-        _busy = true;
-        try {
-            ValidateSelectedGraphParent(frame);
-            var session = new RevisionReadSession(_resources.States, _resources.Schemas, LegacyModels);
-            return GraphReader.ReadRoot<IDurableObject>(session, frame.RevisionAddress, frame.RootId);
-        } finally { EndOperation(); }
+        try { return ReadMetaBootstrapCheckpointCore(address); }
+        finally { EndOperation(); }
     }
 
     /// <summary>Experimental read-only pair without requiring the current root types in advance.</summary>
@@ -473,13 +315,8 @@ public sealed partial class Repository : IDisposable {
         CheckFrame(first);
         CheckFrame(second);
         _busy = true;
-        try {
-            if (UsesMetaBootstrap) { return ReadMetaBootstrapPairCore(first, second); }
-            ValidateSelectedGraphParent(first);
-            ValidateSelectedGraphParent(second);
-            return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,
-                first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, LegacyModels);
-        } finally { EndOperation(); }
+        try { return ReadMetaBootstrapPairCore(first, second); }
+        finally { EndOperation(); }
     }
 
     /// <summary>Creates a named branch at any checked historical Event or State, without moving the source branch.</summary>
@@ -518,7 +355,7 @@ public sealed partial class Repository : IDisposable {
         _busy = true;
         try {
             CheckFrame(address);
-            CreateTagCore(name, address.Address);
+            CreateMetaBootstrapTagCore(name, address.Address);
         } finally { EndOperation(); }
     }
 
@@ -537,27 +374,6 @@ public sealed partial class Repository : IDisposable {
         } finally { EndOperation(); }
     }
 
-    private void CreateTagCore(string name, FrameAddress address) {
-        if (UsesMetaBootstrap) { CreateMetaBootstrapTagCore(name, address); return; }
-        byte[] payload = new byte[FrameAddress.EncodedSize];
-        if (!address.TryWrite(payload)) { throw new InvalidDataException("Invalid graph tag address."); }
-        PublicationOutcome outcome = PublicationOutcome.NotAttempted;
-        try { Checkpoint?.Invoke(CommitCheckpoint.BeforePublication); }
-        catch (Exception error) { throw new GraphCommitException(GraphCommitOutcome.NotPublished, null, error); }
-        AteliaResult<bool> result;
-        try { result = _resources.Versions.CreateTag(name, payload, out outcome); }
-        catch (Exception error) {
-            _resources.MarkFaulted();
-            throw new GraphCommitException(MapOutcome(outcome), null, error);
-        }
-        result.Unwrap();
-        try { Checkpoint?.Invoke(CommitCheckpoint.AfterPublication); }
-        catch (Exception error) {
-            _resources.MarkFaulted();
-            throw new GraphCommitException(GraphCommitOutcome.Published, null, error);
-        }
-    }
-
     /// <summary>Explicit compare-and-swap movement; requires closing the target branch's checkout first.</summary>
     /// <remarks>Other branches' active checkouts do not block movement. Both addresses belong to this open repository.</remarks>
     public void MoveBranch(string branchName, CheckpointAddress expectedHead, CheckpointAddress target) {
@@ -566,7 +382,7 @@ public sealed partial class Repository : IDisposable {
         try {
             CheckFrame(expectedHead);
             CheckFrame(target);
-            FrameAddress head = UsesMetaBootstrap ? MetaBootstrapHeadCore(branchName).Address : _resources.GetHead(branchName);
+            FrameAddress head = MetaBootstrapHeadCore(branchName).Address;
             if (_activeBranches.Contains(branchName)) { throw new InvalidOperationException("Close this branch's active checkout before moving it."); }
             if (head != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
             MutateBranchCore(branchName, target.Address);
@@ -594,79 +410,10 @@ public sealed partial class Repository : IDisposable {
     };
 
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
-        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
-        if (UsesMetaBootstrap) { return CommitMetaBootstrap(session, domainEvent, nextState, parameters); }
-        RequireAvailable();
-        _resources.RequireWritable();
-        _busy = true;
-        try {
-            if (!session.IsLiveFor(this) || !_activeBranches.Contains(session.BranchName) ||
-                HeadCore(session.BranchName).Address != session.Head.Address) {
-                throw new InvalidOperationException("Session does not own the expected branch head.");
-            }
-            CheckpointAddress? state = NearestStateCore(session.Head);
-            if (session.Workspace.ParentRevisionAddress != state?.RevisionAddress ||
-                (state is null ? session.Workspace.World is not null : session.Workspace.WorldId != state.RootId)) {
-                throw new InvalidOperationException("Checkout State baseline does not match the business chain.");
-            }
-            return Publish(session, domainEvent, nextState, parameters ?? DefaultPolicy, initial: false);
-        } finally { EndOperation(); }
-    }
+        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
+        CommitMetaBootstrap(session, domainEvent, nextState, parameters);
 
-    private CheckpointAddress Publish(BranchCheckout session, IDurableObject? domainEvent,
-        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters parameters, bool initial) {
-        FrameAddress? address = null;
-        bool writeAttempted = false;
-        bool faultOnFailure = false;
-        PublicationOutcome outcome = PublicationOutcome.NotAttempted;
-        try {
-            using PreparedWorldSave pending = domainEvent is null
-                ? session.Workspace.Stage(nextState!, parameters) : session.Workspace.StageSnapshot(domainEvent, parameters);
-            Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
-            GraphFrameKind kind = domainEvent is null ? GraphFrameKind.State : GraphFrameKind.Event;
-            FrameAddress? parent = initial ? null : session.Head.Address;
-            if (parent is { } existing) { _resources.ReadHistory(existing); }
-            byte[] metadata = GraphMetadataCodec.Encode(kind, parent, pending.RootId);
-            Checkpoint?.Invoke(CommitCheckpoint.BeforeStateAppend);
-            writeAttempted = true;
-            faultOnFailure = true;
-            try { address = _resources.States.Append(pending.Revision, metadata); }
-            catch {
-                // Capacity/semantic rejections before backing output are ordinary failures.
-                faultOnFailure = _resources.IsFaulted;
-                throw;
-            }
-            Checkpoint?.Invoke(CommitCheckpoint.AfterStateAppend);
-            if (domainEvent is null) { pending.PrepareInstall(address.Value); }
-            CheckpointAddress frame = Issue(new(address.Value, parent, kind, pending.RootId));
-            // Stage can publish Schema; derive this branch update from the owner's current root.
-            if (!initial && _resources.GetHead(session.BranchName) != session.Head.Address) {
-                throw new InvalidOperationException("Branch head no longer matches the checkout.");
-            }
-            faultOnFailure = false;
-            GraphResources.RootUpdate update = _resources.PrepareBranchRoot(session.BranchName, address.Value);
-            faultOnFailure = true;
-            Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
-            faultOnFailure = false;
-            _resources.PublishRoot(update, out outcome);
-            faultOnFailure = true;
-            Checkpoint?.Invoke(CommitCheckpoint.AfterPublication);
-            Checkpoint?.Invoke(CommitCheckpoint.BeforeInstall);
-            if (domainEvent is null) { pending.Install(); }
-            session.Head = frame;
-            return frame;
-        } catch (Exception error) {
-            if (faultOnFailure || outcome != PublicationOutcome.NotAttempted || _resources.Schemas.IsFaulted) { _resources.MarkFaulted(); }
-            // A Schema registration can fail independently, before business publication begins.
-            if (!writeAttempted && address is null) { throw; }
-            throw new GraphCommitException(MapOutcome(outcome), address, error);
-        }
-    }
-
-    private CheckpointAddress HeadCore(string branchName) {
-        if (UsesMetaBootstrap) { return MetaBootstrapHeadCore(branchName); }
-        return Issue(_resources.ReadHistory(_resources.GetHead(branchName)));
-    }
+    private CheckpointAddress HeadCore(string branchName) => MetaBootstrapHeadCore(branchName);
 
     private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, GraphFrameKind.State);
 
@@ -697,17 +444,8 @@ public sealed partial class Repository : IDisposable {
     }
     private void ValidateNewName(string name) {
         RepositoryRootCodec.ValidateBranchName(name);
-        if (UsesMetaBootstrap ? _splitRepository!.GetHead(name) is not null : _resources.HasBranch(name)) {
+        if (_splitRepository.GetHead(name) is not null) {
             throw new InvalidOperationException("Branch name already exists.");
-        }
-    }
-
-    // Typed graph preparation, rather than open or metadata navigation, checks this relation.
-    private void ValidateSelectedGraphParent(CheckpointAddress frame) {
-        FrameAddress? expectedParent = PreviousCore(frame, GraphFrameKind.State)?.RevisionAddress;
-        StateRevision revision = _resources.States.Read(frame.RevisionAddress);
-        if (revision.ParentRevisionAddress != expectedParent) {
-            throw new InvalidDataException("Graph business history and StateRevision Parent disagree.");
         }
     }
 

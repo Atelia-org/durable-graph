@@ -26,7 +26,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
         int reads = 0, applies = 0;
         GraphReadStatistics statistics = new();
         FrameAddress original, changed, rewritten;
-        using (GraphResources file = GraphResources.CreateNew(NextPath())) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(NextPath())) {
             var segments = file.Data;
             SchemaStore schemas = file.Schemas;
             using StateRevisionStore store = new(segments);
@@ -75,7 +75,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void CachedOwnerStillValidatesRemovedOrWrongKindStringInEveryView(bool wrongKind) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
@@ -97,7 +97,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
 
     [Fact]
     public void CachedOwnerStillValidatesNominalAncestryAgainstTheSecondView() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
@@ -124,7 +124,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
     [InlineData(DictionaryComparerKind.ReferenceIdentity, "", "")]
     public void CachedDictionaryRepeatsLookupValidationAfterReferencedStringsChange(
         DictionaryComparerKind kind, string firstKey, string replacement) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
@@ -149,7 +149,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
 
     [Fact]
     public void CacheCannotMakeAnInheritedObjectIntoALocalRecordAtAnotherHead() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
@@ -165,7 +165,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
 
     [Fact]
     public void PartialBodyConsumptionNeverEntersTheCache() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
@@ -182,7 +182,7 @@ public sealed class RevisionReadSessionTests : IDisposable {
 
     [Fact]
     public void SessionsNeverShareCachedResultsEvenWithTheSameModelSnapshot() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);

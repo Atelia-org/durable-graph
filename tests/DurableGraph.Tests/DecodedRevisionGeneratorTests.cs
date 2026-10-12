@@ -56,7 +56,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         const long rotationThreshold = 128;
         FrameAddress first, second, third, newBase, missingString, wrongKind, malformed;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThreshold)) {
             SchemaStore schemas = segments.Schemas;
             schemas.RegisterBatch([oldSchema, currentSchema, otherSchema]);
             using StateRevisionStore store = new(segments.Data);
@@ -91,7 +91,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .ToDictionary(path => path, File.ReadAllBytes);
 
         DecodedRevision[] retained;
-        using (GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+        using (GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(directory.Path)) {
             SchemaStore schemas = reopened.Schemas;
             using StateRevisionStore store = new(reopened.Data);
             StateReaderRegistry readers = register(true);

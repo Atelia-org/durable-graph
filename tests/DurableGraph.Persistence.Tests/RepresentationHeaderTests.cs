@@ -30,13 +30,13 @@ public sealed class RepresentationHeaderTests : IDisposable {
         string path = NewPath();
         ObjectLayout[] layouts = Enumerable.Range(2, 16383)
             .Select(value => ObjectLayout.ForDurable(new DurableSchema($"Type{value}", 1))).ToArray();
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             SchemaStore schemas = file.Schemas;
             RepresentationId[] ids = schemas.RegisterRepresentations(layouts);
             Assert.Equal(new RepresentationId(2), ids[0]);
             Assert.Equal(new RepresentationId(16384), ids[^1]);
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
         SchemaStore restored = reopened.Schemas;
         foreach ((uint id, string hex) in new (uint, string)[] {
             (127, "047FAB"), (128, "048001AB"), (16383, "04FF7FAB"), (16384, "04808001AB")
@@ -57,7 +57,7 @@ public sealed class RepresentationHeaderTests : IDisposable {
         ObjectLayout arrayLayout = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array,
             new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point)));
         string path = NewPath();
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             SchemaStore schemas = file.Schemas;
             RepresentationId[] ids = schemas.RegisterRepresentations([classLayout, arrayLayout]);
             // Point's inline Schema occupies node 3 before its array owner receives node 4.
@@ -65,7 +65,7 @@ public sealed class RepresentationHeaderTests : IDisposable {
             Assert.Equal(Convert.FromHexString("0402AB"), BaseObjectBodyCodec.Encode(ids[0], new([0xAB])).Body.ToArray());
             Assert.Equal(Convert.FromHexString("0404AB"), BaseObjectBodyCodec.Encode(ids[1], new([0xAB])).Body.ToArray());
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
         SchemaStore restored = reopened.Schemas;
         long tail = DataBytes(reopened.Data);
         var durable = BaseObjectBodyCodec.Decode(Convert.FromHexString("0402AB"), restored);
@@ -101,7 +101,7 @@ public sealed class RepresentationHeaderTests : IDisposable {
     [InlineData("03020203410001AB")]
     [InlineData("0303010402AB")]
     public void RetiredBaseFormatsFailClosedEvenWhenSchemasAreAvailable(string hex) {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore schemas = file.Schemas;
         schemas.RegisterRepresentations([ObjectLayout.ForDurable(new DurableSchema("A", 1))]);
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), schemas));
@@ -117,7 +117,7 @@ public sealed class RepresentationHeaderTests : IDisposable {
     [InlineData("00")]
     [InlineData("05")]
     public void InvalidOrUnknownIdAndVersionFailClosed(string hex) {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore schemas = file.Schemas;
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex), schemas));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode(Convert.FromHexString(hex)));

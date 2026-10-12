@@ -88,7 +88,7 @@ public sealed class DictionaryBindingCatalogTests {
     public void RetainedReaderRevalidatesEitherExactSlotAfterLateSchemaRegistration(bool keyConflict) {
         string path = Path.Combine(Path.GetTempPath(), $"dictionary-binding-{Guid.NewGuid():N}.rbf");
         try {
-            using GraphResources file = GraphResources.CreateNew(path);
+            using GraphResources file = GraphResources.CreateLegacyNew(path);
             SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             foreach (string id in new[] { "RetiredKey", "RetiredValue" }) {

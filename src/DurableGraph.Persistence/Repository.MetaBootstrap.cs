@@ -1,15 +1,13 @@
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
-using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph;
 
-// Internal owner/checkout integration. The public factories still select the legacy backend.
+// Concrete owner/checkout integration, shared by the public and internal probe factories.
 public sealed partial class Repository {
-    private readonly StateModelRegistry.FrozenConfiguration? _splitConfiguration;
-    private readonly P0Repository? _splitRepository;
-    private bool UsesMetaBootstrap => _splitRepository is not null;
+    private readonly StateModelRegistry.FrozenConfiguration _splitConfiguration;
+    private readonly P0Repository _splitRepository;
 
     private Repository(GraphResources resources, StateModelRegistry.FrozenConfiguration configuration) {
         _resources = resources;
@@ -18,24 +16,27 @@ public sealed partial class Repository {
     }
 
     internal static Repository CreateMetaBootstrapNew(string path, StateModelRegistry models,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null) =>
-        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef);
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes) =>
+        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
     internal static Repository OpenMetaBootstrapExisting(string path, StateModelRegistry models,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes);
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes,
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes) =>
+        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
     internal static Repository OpenMetaBootstrapReadOnlyExisting(string path, StateModelRegistry models,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrap(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
     private static Repository OpenMetaBootstrap(string path, StateModelRegistry models, bool create, bool readOnly,
-        long readCacheBudgetBytes, Action<uint>? afterCreateRef = null) {
+        long readCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes) {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         GraphResources? resources = null;
         try {
-            resources = create ? GraphResources.CreateMetaBootstrapNew(path, readCacheBudgetBytes, afterCreateRef) : readOnly
+            resources = create ? GraphResources.CreateMetaBootstrapNew(path, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes) : readOnly
                 ? GraphResources.OpenMetaBootstrapReadOnlyExisting(path, readCacheBudgetBytes)
-                : GraphResources.OpenMetaBootstrapExisting(path, readCacheBudgetBytes);
+                : GraphResources.OpenMetaBootstrapExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
             return new(resources, models.FreezeConfiguration());
         } catch (Exception primary) {
             try { resources?.Dispose(); }
@@ -45,14 +46,14 @@ public sealed partial class Repository {
     }
 
     internal P0GraphStore MetaBootstrapStore {
-        get { RequireAvailable(); RequireMetaBootstrapBackend(); return _splitRepository!.Store; }
+        get { RequireAvailable(); return _splitRepository.Store; }
     }
     internal FrameAddress? SharedSchemaRoot {
-        get { RequireAvailable(); RequireMetaBootstrapBackend(); return _splitRepository!.SharedSchemaRoot; }
+        get { RequireAvailable(); return _splitRepository.SharedSchemaRoot; }
     }
     internal Action<P0SaveCheckpoint>? MetaBootstrapCheckpoint {
-        get { RequireAvailable(); RequireMetaBootstrapBackend(); return _splitRepository!.Checkpoint; }
-        set { RequireAvailable(); RequireMetaBootstrapBackend(); _splitRepository!.Checkpoint = value; }
+        get { RequireAvailable(); return _splitRepository.Checkpoint; }
+        set { RequireAvailable(); _splitRepository.Checkpoint = value; }
     }
 
     private BranchCheckout CreateMetaBootstrapBranch(string branchName, IDurableObject root, P0GraphKind kind,
@@ -86,7 +87,7 @@ public sealed partial class Repository {
             CheckpointAddress head = MetaBootstrapHeadCore(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, head, out PreparedStateRestoration? candidate);
+            BranchCheckout checkout = RestoreMetaBootstrapCheckout(branchName, head, out PreparedStateRestoration? candidate);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
             return checkout;
@@ -118,10 +119,11 @@ public sealed partial class Repository {
     private BranchCheckout RestoreMetaBootstrapCheckout(string branchName, CheckpointAddress head,
         out PreparedStateRestoration? candidate) {
         candidate = null;
+        var store = _splitRepository.Store;
+        if (head.Kind == GraphFrameKind.Event) { store.ValidateMetadataRelations(head.Address); }
         CheckpointAddress? state = NearestStateCore(head);
         // An Event-only prefix never consults a resident State or its model environment.
         if (state is null) { return NewMetaBootstrapCheckout(branchName, head); }
-        var store = _splitRepository!.Store;
         if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
             DecodedRevision.SplitBindingEnvironment environment = prepared.BindingEnvironment
                 ?? throw new InvalidDataException("A split State slot must retain its reader-issued environment.");
@@ -174,7 +176,6 @@ public sealed partial class Repository {
 
     private void EnsureMetaBootstrapEditingAllowed(BranchCheckout checkout) {
         RequireWriter();
-        RequireMetaBootstrapBackend();
         RequireMetaBootstrapCheckout(checkout);
         _splitRepository!.EnsureEditingAllowed();
     }
@@ -215,7 +216,6 @@ public sealed partial class Repository {
     internal void PrepareAndDiscardMetaBootstrap(BranchCheckout checkout, IDurableObject root, P0GraphKind kind,
         ReadAmplificationBaseBudgetParameters? parameters) {
         RequireWriter();
-        RequireMetaBootstrapBackend();
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);
@@ -239,7 +239,4 @@ public sealed partial class Repository {
         return Issue(ReadHistoryCore(address));
     }
 
-    private void RequireMetaBootstrapBackend() {
-        if (!UsesMetaBootstrap) { throw new NotSupportedException("This operation requires split repository storage."); }
-    }
 }

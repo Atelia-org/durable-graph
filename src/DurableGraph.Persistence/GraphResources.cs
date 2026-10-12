@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using Atelia.VersionStore;
@@ -7,7 +8,7 @@ using PublicationStore = Atelia.VersionStore.VersionStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>Owns a matching data FrameStore, VersionStore and their DG Schema/State facades.</summary>
+/// <summary>Owns a matching data FrameStore, VersionStore and durable graph reads/publication.</summary>
 /// <remarks>
 /// Operations are serial. Facades and borrowed Data remain valid only while this owner is usable.
 /// Normal backing-store recovery runs before DG caches are constructed. Complete frames are never
@@ -15,6 +16,7 @@ namespace Atelia.DurableGraph.Persistence;
 /// uses VersionStore's data-first barrier. Dispose and reopen after an uncertain owned operation.
 /// </remarks>
 public sealed partial class GraphResources : IDisposable {
+    internal const long DefaultRotationThresholdBytes = 64L * 1024 * 1024 * 1024;
     private readonly PublicationStore _versions;
     private readonly bool _metaBootstrap;
     private readonly SchemaStore? _schemas;
@@ -35,8 +37,8 @@ public sealed partial class GraphResources : IDisposable {
     }
 
     public DataStore Data { get; }
-    public SchemaStore Schemas { get { RequireLegacyMode(); return _schemas!; } }
-    public StateRevisionStore States { get { RequireLegacyMode(); return _states!; } }
+    internal SchemaStore Schemas { get { RequireLegacyMode(); return _schemas!; } }
+    internal StateRevisionStore States { get { RequireLegacyMode(); return _states!; } }
     public bool IsReadOnly { get; }
     public bool IsFaulted {
         get {
@@ -48,14 +50,25 @@ public sealed partial class GraphResources : IDisposable {
     internal PublicationStore Versions => _versions;
     internal RefRevision RootRevision { get { RequireLegacyMode(); return _rootRevision; } }
 
-    public static GraphResources CreateNew(string path, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) =>
-        Open(path, rotationThresholdBytes, create: true, readOnly: false);
-    public static GraphResources OpenExisting(string path, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) =>
-        Open(path, rotationThresholdBytes, create: false, readOnly: false);
-    public static GraphResources OpenReadOnlyExisting(string path) =>
-        Open(path, 64L * 1024 * 1024 * 1024, create: false, readOnly: true);
+    public static GraphResources CreateNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
+        CreateMetaBootstrapNew(path, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+    public static GraphResources OpenExisting(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrapExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
+    public static GraphResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrapReadOnlyExisting(path, readCacheBudgetBytes);
 
-    private static GraphResources Open(string path, long rotationThresholdBytes, bool create, bool readOnly) {
+    // Temporary, explicit fixtures for independent SCB1/raw-State mechanism tests.
+    // No Repository factory or public facade can select this authority.
+    internal static GraphResources CreateLegacyNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
+        OpenLegacy(path, rotationThresholdBytes, create: true, readOnly: false);
+    internal static GraphResources OpenLegacyExisting(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
+        OpenLegacy(path, rotationThresholdBytes, create: false, readOnly: false);
+    internal static GraphResources OpenLegacyReadOnlyExisting(string path) =>
+        OpenLegacy(path, DefaultRotationThresholdBytes, create: false, readOnly: true);
+
+    private static GraphResources OpenLegacy(string path, long rotationThresholdBytes, bool create, bool readOnly) {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string root = Path.GetFullPath(path);
         if (create) {

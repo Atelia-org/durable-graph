@@ -38,7 +38,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Directory.CreateDirectory(schemaDirectory.Path);
         const long rotationThreshold = 128;
         FrameAddress first, second, third, repeated, missingString, wrongKind, malformed;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThreshold)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             schemas.RegisterBatch([schema]);
@@ -68,7 +68,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Array.Clear(input.Base);
         foreach (var item in input.Strings) Array.Clear(item.Body);
         input = default; // Drop prepared bodies as well; only query IDs, static reader selection and independent expectations survive.
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(directory.Path);
 
         SchemaStore coldSchemas = reopened.Schemas;
         using StateRevisionStore cold = new(reopened.Data);
@@ -100,7 +100,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         // The Base ID selects one persistent exact representation for the whole chain.
         // Neither missing registration nor a mismatched reader may enter a body callback.
-        using (GraphResources missingResources = GraphResources.CreateNew(Path.Combine(schemaDirectory.Path, "missing"))) {
+        using (GraphResources missingResources = GraphResources.CreateLegacyNew(Path.Combine(schemaDirectory.Path, "missing"))) {
             SchemaStore missing = missingResources.Schemas;
             int calls = (int)host.GetField("DecodeCalls")!.GetValue(null)!;
             Assert.Throws<InvalidDataException>(() => Load(third, missing));
@@ -112,7 +112,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         DurableSchema ancestor = schema.BaseSchema!;
         var differentAncestor = new DurableSchema(ancestor.SchemaId, ancestor.Version, []);
         FrameAddress alternateRevision;
-        using (GraphResources alternateSegments = GraphResources.CreateNew(alternateStatePath)) {
+        using (GraphResources alternateSegments = GraphResources.CreateLegacyNew(alternateStatePath)) {
             SchemaStore alternate = alternateSegments.Schemas;
             DurableSchema differentSchema = new(schema.SchemaId, schema.Version, schema.Fields.ToArray(), differentAncestor);
             RepresentationId alternateId = alternate.RegisterRepresentations([ObjectLayout.ForDurable(differentSchema)])[0];
@@ -121,7 +121,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 [ObjectVersionRecord.CreateBase(ownerId, BaseObjectBodyCodec.Encode(alternateId, new(expected[0])).Body)], []));
             alternateSegments.Data.ConfirmDurable();
         }
-        using (GraphResources alternateSegments = GraphResources.OpenReadOnlyExisting(alternateStatePath)) {
+        using (GraphResources alternateSegments = GraphResources.OpenLegacyReadOnlyExisting(alternateStatePath)) {
             SchemaStore alternate = alternateSegments.Schemas;
             using StateRevisionStore alternateStates = new(alternateSegments.Data);
             ObjectVersionChain alternateChain = alternateStates.ReadObjectVersionChain(alternateRevision, ownerId);
@@ -194,7 +194,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         const long rotationThreshold = 128;
         FrameAddress first, second, third;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThreshold)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             schemas.RegisterBatch([oldSchema, newSchema]);
@@ -208,7 +208,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         delta1 = null!;
         delta2 = null!;
         Assert.NotEqual(first, third);
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(directory.Path);
         SchemaStore coldSchemas = reopened.Schemas;
         using StateRevisionStore cold = new(reopened.Data);
         byte[] Load(FrameAddress revision) {

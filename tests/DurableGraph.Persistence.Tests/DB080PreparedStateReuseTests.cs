@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -383,10 +384,12 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             rootId = main.Head.RootId;
         }
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
-            uint childId = Assert.Single(resources.States.Read(original).LocalObjects, row => row.ObjectId != rootId.Value).ObjectId;
-            FrameAddress invalid = resources.States.Append(StateRevision.CreateObjectHeadMapDelta(original, [], [childId]),
-                GraphMetadataCodec.Encode(GraphFrameKind.State, original, rootId));
-            resources.PublishBranch("invalid", invalid, out _);
+            P0GraphStore store = resources.MetaBootstrapStore;
+            P0GraphSnapshot source = store.ReadGraph(original);
+            uint childId = Assert.Single(source.Objects.Keys, id => id != rootId.Value);
+            FrameAddress invalid = store.Append(P0GraphKind.State, original, source.SchemaRoot,
+                new(original, rootId, [], [childId])).Address;
+            resources.PublishMetaBootstrapBranchRoot(resources.PrepareMetaBootstrapBranchRoot("invalid", invalid), out _);
         }
         // Physical history/root checks permit opening; typed graph validation must still reject.
         using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models());
@@ -417,7 +420,11 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     }
 
     private static void AssertCold(GraphReadStatistics stats) {
-        Assert.True(stats.DecodedObjects > 0);
+        // Split physical decoding is measured by its Store, independently of these
+        // actual normalization/preparation/materialization counters.
+        Assert.Equal(1, stats.PreparedStateMisses);
+        Assert.True(stats.AllocatedObjects > 0);
+        Assert.True(stats.HydratedObjects > 0);
         Assert.True(stats.NormalizedObjects > 0);
         Assert.True(stats.PreparedGraphs > 0);
         Assert.True(stats.ReachabilityVisits > 0);

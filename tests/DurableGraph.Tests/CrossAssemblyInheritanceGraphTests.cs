@@ -29,9 +29,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverse);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], models.Snapshot(schemas));
+        var states = segments.MetaBootstrapStore;
+        var initial = DecodedRevision.ReadSplit(states, addresses[0], models);
         var leaf = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Leaf");
         var other = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Other");
         Assert.Equal(3, initial.Objects.Count); // Two actual leaves and their shared List; no base/inline object rows.
@@ -39,22 +38,22 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal("inherit.Middle", leaf.Schema.BaseSchema.BaseSchema!.SchemaId);
         Assert.Equal("inherit.Base", leaf.Schema.BaseSchema.BaseSchema.BaseSchema!.SchemaId);
         foreach (int index in new[] { 1, 6, 7 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
-        var child = Assert.Single(states.Read(addresses[2]).LocalObjects);
+        var child = Assert.Single(DefaultRecords(states, addresses[2]));
         Assert.Equal(other.Id.Value, child.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, child.Kind);
         // Eleven flattened fields require one two-byte bitmap. Base and leaf segments
         // must never be encoded as separate Delta bodies, even across assembly boundaries.
         byte[][] goldens = [[0x10, 0x00, 22], [0x00, 0x04, 90], [0x10, 0x04, 24, 92]];
         for (int index = 0; index < goldens.Length; index++) {
-            var delta = Assert.Single(states.Read(addresses[index + 3]).LocalObjects);
+            var delta = Assert.Single(DefaultRecords(states, addresses[index + 3]));
             Assert.Equal(leaf.Id.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(goldens[index], delta.Body.ToArray());
         }
-        var final = RevisionDecoder.ReadSnapshot(states, schemas, addresses[^1], models.Snapshot(schemas));
+        var final = DecodedRevision.ReadSplit(states, addresses[^1], models);
         Assert.Equal(initial.Objects.Select(item => item.Id).OrderBy(id => id.Value), final.Objects.Select(item => item.Id).OrderBy(id => id.Value));
     }
 

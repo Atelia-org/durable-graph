@@ -10,7 +10,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
 
     [Fact]
     public void PublicDisposeAttemptsBothActualBackingOwnersAndRetainsTheirErrorOrder() {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
         StateRevisionStore retained = resources.States;
         FrameAddress address = retained.Append(StateRevision.CreateObjectHeadMapBase(null, [], []));
         resources.Data.ConfirmDurable();
@@ -34,7 +34,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
         resources.Dispose();
 
-        using GraphResources fresh = GraphResources.OpenExisting(_root);
+        using GraphResources fresh = GraphResources.OpenLegacyExisting(_root);
         Assert.Empty(fresh.States.Read(address).LocalObjects);
     }
 
@@ -42,7 +42,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void SingleActualOwnerCloseErrorPreservesOriginalIdentityAndStack(bool versionOwner) {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
         IOException injected = new("Single owner lock close failed.");
         object target = versionOwner ? resources.Versions : GetField(resources.Data, "_core");
         int attempts = 0;
@@ -54,7 +54,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Equal(1, attempts);
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
         Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
-        using GraphResources fresh = GraphResources.OpenExisting(_root);
+        using GraphResources fresh = GraphResources.OpenLegacyExisting(_root);
         fresh.RequireAvailable();
     }
 
@@ -62,7 +62,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void OpenCleanupHelperPreservesPrimaryWithActualResourcesAndOptionalCloseFailures(bool failCleanup) {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
         IOException primary = CapturePrimary();
         IOException versionError = new("VersionStore cleanup failed.");
         IOException dataError = new("FrameStore cleanup failed.");
@@ -91,7 +91,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
             Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
             Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
             resources.Dispose();
-            using GraphResources fresh = GraphResources.OpenExisting(_root);
+            using GraphResources fresh = GraphResources.OpenLegacyExisting(_root);
             fresh.RequireAvailable();
         } finally {
             originalVersionLock?.Dispose();

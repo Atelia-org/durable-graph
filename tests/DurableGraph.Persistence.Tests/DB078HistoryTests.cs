@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Buffers;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -59,13 +60,13 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Length);
             Assert.Equal((byte)1, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            Assert.Null(states.Read(s0.RevisionAddress).ParentRevisionAddress);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
+            Assert.Null(states.ReadGraph(s0.RevisionAddress).SourceGraph);
             foreach (CheckpointAddress address in new[] { e1, e2, s1 }) {
-                Assert.Equal(s0.RevisionAddress, states.Read(address.RevisionAddress).ParentRevisionAddress);
+                Assert.Equal(s0.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
             }
-            Assert.Equal(s1.RevisionAddress, states.Read(s2.RevisionAddress).ParentRevisionAddress);
+            Assert.Equal(s1.RevisionAddress, states.ReadGraph(s2.RevisionAddress).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using BranchCheckout cold = reopened.Checkout("main");
@@ -112,14 +113,14 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal((byte)7, Assert.IsType<Message>(repository.ReadEvent(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().First())).Value);
             Assert.Equal((byte)20, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
             foreach (CheckpointAddress address in new[] { e0, e1, s0 }) {
-                Assert.Null(states.Read(address.RevisionAddress).ParentRevisionAddress);
-                Assert.All(states.Read(address.RevisionAddress).LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+                Assert.Null(states.ReadGraph(address.RevisionAddress).SourceGraph);
+                Assert.All(StorageTestData.LocalRecords(states, address.RevisionAddress), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             }
-            Assert.Equal(s0.RevisionAddress, states.Read(s1.RevisionAddress).ParentRevisionAddress);
-            Assert.Equal(s1.RevisionAddress, states.Read(s2.RevisionAddress).ParentRevisionAddress);
+            Assert.Equal(s0.RevisionAddress, states.ReadGraph(s1.RevisionAddress).SourceGraph);
+            Assert.Equal(s1.RevisionAddress, states.ReadGraph(s2.RevisionAddress).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using BranchCheckout cold = reopened.Checkout("main");
@@ -146,16 +147,15 @@ public sealed partial class DB078HistoryTests : IDisposable {
             removed = checkout.CommitState(NoRebase);
             Assert.Equal(promoted.RootId, removed.RootId);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            var originalIds = states.ReadLiveObjectHeadMap(original.RevisionAddress).Keys.Order().ToArray();
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
+            var originalIds = states.ReadGraph(original.RevisionAddress).Objects.Keys.Order().ToArray();
             Assert.Contains(promoted.RootId.Value, originalIds);
-            Assert.Equal(originalIds, states.ReadLiveObjectHeadMap(promoted.RevisionAddress).Keys.Order());
-            Assert.Empty(states.Read(promoted.RevisionAddress).LocalObjects);
-            Assert.Empty(states.Read(promoted.RevisionAddress).RemovedObjectIds);
+            Assert.Equal(originalIds, states.ReadGraph(promoted.RevisionAddress).Objects.Keys.Order());
+            Assert.Empty(StorageTestData.LocalRecords(states, promoted.RevisionAddress));
             // A smaller full head map may encode removal by absence rather than a Delta Remove row.
-            Assert.Equal(new[] { promoted.RootId.Value }, states.ReadLiveObjectHeadMap(removed.RevisionAddress).Keys);
-            Assert.DoesNotContain(original.RootId.Value, states.ReadLiveObjectHeadMap(removed.RevisionAddress).Keys);
+            Assert.Equal(new[] { promoted.RootId.Value }, states.ReadGraph(removed.RevisionAddress).Objects.Keys);
+            Assert.DoesNotContain(original.RootId.Value, states.ReadGraph(removed.RevisionAddress).Objects.Keys);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using BranchCheckout cold = reopened.Checkout("main");
@@ -344,10 +344,10 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Null(siblingView.PreviousEvent);
             Assert.Null(siblingView.PreviousEventAddress);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
             foreach (CheckpointAddress address in new[] { otherState, mainEvent2, mainState }) {
-                Assert.Equal(root.RevisionAddress, states.Read(address.RevisionAddress).ParentRevisionAddress);
+                Assert.Equal(root.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
             }
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());

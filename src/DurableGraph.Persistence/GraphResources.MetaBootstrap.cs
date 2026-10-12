@@ -7,7 +7,7 @@ using PublicationStore = Atelia.VersionStore.VersionStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
-// Concrete internal metadata-graph path. The public factories retain the legacy format.
+// Concrete metadata-graph owner used by the public factories and bounded internal probes.
 public sealed partial class GraphResources {
     private const uint BranchRef = 1, SharedRef = 2;
     private const string BranchPrefix = "branch/", SchemaKey = "schema";
@@ -53,17 +53,19 @@ public sealed partial class GraphResources {
     internal FrameAddress? SharedMetaBootstrapRoot { get { RequireMetaBootstrapAvailable(); return _baseline.SharedRoot; } }
 
     internal static GraphResources CreateMetaBootstrapNew(string path,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null) =>
-        OpenMetaBootstrap(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef);
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+        long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
+        OpenMetaBootstrap(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
     internal static GraphResources OpenMetaBootstrapExisting(string path,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, create: false, readOnly: false, readCacheBudgetBytes);
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes,
+        long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
+        OpenMetaBootstrap(path, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
     internal static GraphResources OpenMetaBootstrapReadOnlyExisting(string path,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrap(path, create: false, readOnly: true, readCacheBudgetBytes);
 
     private static GraphResources OpenMetaBootstrap(string path, bool create, bool readOnly, long readCacheBudgetBytes,
-        Action<uint>? afterCreateRef = null) {
+        Action<uint>? afterCreateRef = null, long rotationThresholdBytes = DefaultRotationThresholdBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string root = Path.GetFullPath(path);
@@ -76,7 +78,8 @@ public sealed partial class GraphResources {
         PublicationStore? versions = null;
         try {
             string dataPath = Path.Combine(root, "data"), versionsPath = Path.Combine(root, "versions");
-            data = create ? DataStore.Create(dataPath) : readOnly ? DataStore.OpenReadOnly(dataPath) : DataStore.Open(dataPath);
+            data = create ? DataStore.Create(dataPath, rotationThresholdBytes) : readOnly
+                ? DataStore.OpenReadOnly(dataPath) : DataStore.Open(dataPath, rotationThresholdBytes);
             versions = create ? PublicationStore.Create(versionsPath, data, reservedRefIdUpperBound: SharedRef)
                 : readOnly ? PublicationStore.OpenReadOnly(versionsPath, data) : PublicationStore.Open(versionsPath, data);
             if (versions.ReservedRefIdUpperBound != SharedRef) { throw new InvalidDataException("Not a P0 publication layout."); }

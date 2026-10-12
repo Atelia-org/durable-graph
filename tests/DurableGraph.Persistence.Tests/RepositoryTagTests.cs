@@ -203,7 +203,7 @@ public sealed class RepositoryTagTests : IDisposable {
         CheckpointAddress stateAddress = main.Head;
         using BranchCheckout other = repository.Fork("other", stateAddress);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
-        NormalizedRevision baseline = Baseline(main.Workspace), otherBaseline = Baseline(other.Workspace);
+        NormalizedRevision baseline = main.Baseline!, otherBaseline = other.Baseline!;
         Node mainState = Assert.IsType<Node>(main.State), otherState = Assert.IsType<Node>(other.State);
         mainState.Value = 3;
         otherState.Value = 4;
@@ -215,8 +215,8 @@ public sealed class RepositoryTagTests : IDisposable {
         Assert.Equal(stateAddress, repository.ResolveTag("main"));
         Assert.Equal(other.Head, repository.ResolveTag("other"));
         Assert.Same(entry, repository.PreparedStateEntry);
-        Assert.Same(baseline, Baseline(main.Workspace));
-        Assert.Same(otherBaseline, Baseline(other.Workspace));
+        Assert.Same(baseline, main.Baseline);
+        Assert.Same(otherBaseline, other.Baseline);
         Assert.Same(mainState, main.State);
         Assert.Same(otherState, other.State);
         Assert.Equal(stateAddress, main.Head);
@@ -293,12 +293,6 @@ public sealed class RepositoryTagTests : IDisposable {
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
     }
 
-    private static NormalizedRevision Baseline(WorldWorkspace workspace) {
-        BusinessWorkspace shared = (BusinessWorkspace)typeof(WorldWorkspace)
-            .GetField("_workspace", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(workspace)!;
-        return (NormalizedRevision)typeof(BusinessWorkspace)
-            .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(shared)!;
-    }
     private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
     private Dictionary<string, byte[]> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);

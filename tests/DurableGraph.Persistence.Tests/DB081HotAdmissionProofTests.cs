@@ -1,9 +1,9 @@
 using System.Buffers;
-using System.Reflection;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -24,12 +24,11 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void SuccessfulCommitAndClosedReaderDoNotProveUnexecutedBodyDependencies(bool family, bool delta) {
-        using Scenario scenario = Seed(family, delta);
+    public void SuccessfulCommitAndClosedReaderDoNotProveUnexecutedBodyDependencies(bool preclose, bool delta) {
+        using Scenario scenario = Seed(preclose, delta, conflict: true);
         Repository repository = scenario.Repository;
         var previous = repository.PreparedStateEntry;
         Assert.NotNull(previous);
-        RegisterConflict(repository);
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
         BranchCheckout? delivered = null;
@@ -63,8 +62,8 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void SameProviderRestoresCommittedValuesAndEarnsReuseOnlyAfterColdPreparation(bool family, bool delta) {
-        using Scenario scenario = Seed(family, delta);
+    public void SameProviderRestoresCommittedValuesAndEarnsReuseOnlyAfterColdPreparation(bool preclose, bool delta) {
+        using Scenario scenario = Seed(preclose, delta, conflict: false);
         Repository repository = scenario.Repository;
         int committed = delta ? 8 : 7;
         // The persisted candidate must not follow later edits to the original CLR instance.
@@ -109,13 +108,13 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     [Fact]
     public void PriorSuccessfulReadOfSameReaderDoesNotProveNewValuesConditionalDependency() {
         Counters counts = new();
-        using Repository repository = Repository.CreateNew(_path, Models(false, DependencyMode.BaseForSeven, counts));
-        counts.Context = Field<StateModelSnapshot>(repository, "_models");
+        using Repository repository = Repository.CreateNew(_path, Models(DependencyMode.BaseForSeven, counts));
         using BranchCheckout main = repository.CreateBranch("main", new Root { Value = 1 }, NoRebase);
         using BranchCheckout first = repository.Fork("first", main.Head);
         Assert.Equal(1, counts.BaseReads);
         Assert.Equal(0, counts.DependencyChecks);
         PreparedStateRestoration old = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
+        main.Catalog.Set(WrongDependency);
         Assert.IsType<Root>(main.State).Value = 7;
         CheckpointAddress newer = main.CommitState(NoRebase);
         Assert.Equal(1, counts.BaseReads);
@@ -124,12 +123,11 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Equal(1, counts.Allocations);
         Assert.Equal(1, counts.Hydrations);
         Assert.Same(old, repository.PreparedStateEntry);
-        RegisterConflict(repository);
         // Request the new current DTO through a Base, so the Value == 7 dependency
         // is witnessed in ReadBase rather than accidentally skipped by sparse Delta replay.
         // BaseForSeven's preparation deliberately emits a full-body Delta of Base size;
         // the normal cost selector consequently stores a Base.
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(Resources(repository).States.Read(newer.RevisionAddress).LocalObjects).Kind);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(repository, newer)).Kind);
         repository.RestorationStatistics = new();
         Assert.Throws<InvalidDataException>(() => repository.Fork("rejected", newer));
         Assert.Equal(2, counts.BaseReads);
@@ -145,26 +143,30 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Equal(1, Assert.IsType<Root>(older.State).Value);
     }
 
-    private Scenario Seed(bool family, bool delta) {
+    private Scenario Seed(bool preclose, bool delta, bool conflict) {
         Counters counts = new();
-        Repository repository = Repository.CreateNew(_path, Models(family,
+        Repository repository = Repository.CreateNew(_path, Models(
             delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts));
         try {
-            counts.Context = Field<StateModelSnapshot>(repository, "_models");
-            // Explicit preclosure must not be mistaken for executing the reader body.
-            counts.Context.ResolveReader(Owner);
-            Assert.Equal(1, counts.ReaderFactories);
-            Assert.Equal(0, counts.DependencyChecks);
             using BranchCheckout unrelated = repository.CreateBranch("unrelated", new SharedReadModel.Node { Value = 31 }, NoRebase);
             BranchCheckout warm = repository.Fork("warm", unrelated.Head);
             var previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
+            if (conflict) {
+                warm.Catalog.Set(WrongDependency);
+                warm.CommitEvent(warm.State!, NoRebase);
+            }
             BranchCheckout main = repository.CreateBranch("main", new Root { Value = 7 }, NoRebase);
+            // This is the actual checkout's frozen execution environment. Explicit
+            // preclosure still does not execute ReadBase/ReadDelta's body checks.
+            if (preclose) { main.Models.ResolveReader(Owner); }
+            Assert.Equal(1, counts.ReaderFactories);
+            Assert.Equal(0, counts.DependencyChecks);
             CheckpointAddress selected = main.Head;
             if (delta) {
                 Assert.IsType<Root>(main.State).Value = 8;
                 selected = main.CommitState(NoRebase);
-                Assert.Equal(ObjectVersionKind.Delta, Assert.Single(Resources(repository).States.Read(selected.RevisionAddress).LocalObjects).Kind);
+                Assert.Equal(ObjectVersionKind.Delta, Assert.Single(Records(repository, selected)).Kind);
             }
             Assert.Equal(delta ? 2 : 1, counts.Captures);
             Assert.Equal(0, counts.BaseReads);
@@ -182,11 +184,11 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         }
     }
 
-    private static StateModelRegistry Models(bool family, DependencyMode mode, Counters counts) {
+    private static StateModelRegistry Models(DependencyMode mode, Counters counts) {
         StateModelRegistry registry = SharedReadModel.Models();
         registry.Register(new StateDefinitionBinding(Dependency.SchemaId, SchemaKind.InlineValue, 0, null,
             [new(Dependency.SchemaId, 1, SchemaKind.InlineValue, 0, [new(1, TypeExpr.Builtin(TypeTag.Int32))])]));
-        StateReaderBinding Reader(StateBindingContext? context) {
+        StateReaderBinding Reader(StateBindingContext context) {
             counts.ReaderFactories++;
             return new StateReaderBinding<State>(Owner,
                 (ref BareValueReader input) => {
@@ -194,7 +196,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
                     State state = Read(ref input);
                     if (mode == DependencyMode.BaseAlways || mode == DependencyMode.BaseForSeven && state.Value == 7) {
                         counts.DependencyChecks++;
-                        (context ?? counts.Context!).BindSchema(Dependency);
+                        context.BindSchema(Dependency);
                     }
                     return state;
                 }, (ref BareValueReader input, in State prior) => {
@@ -202,7 +204,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
                     State state = mode == DependencyMode.BaseForSeven ? Read(ref input) : prior with { Value = input.ReadVarInt32() };
                     if (mode == DependencyMode.DeltaAlways) {
                         counts.DependencyChecks++;
-                        (context ?? counts.Context!).BindSchema(Dependency);
+                        context.BindSchema(Dependency);
                     }
                     return state;
                 }, Visit);
@@ -214,17 +216,13 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
             () => { counts.Allocations++; return new Root(); },
             (Root root, in State state, ObjectReadTable _) => { counts.Hydrations++; root.Value = state.Value; },
             (root, _) => { counts.Captures++; return new(root.Value, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue); }, Visit);
-        if (family) {
-            registry.Register(new StateDefinitionBinding(Owner.SchemaId, SchemaKind.ReferenceObject, 0, typeof(Root),
+        registry.Register(new StateDefinitionBinding(Owner.SchemaId, SchemaKind.ReferenceObject, 0, typeof(Root),
                 [new(Owner.SchemaId, 1, SchemaKind.ReferenceObject, 0,
                     [new(1, TypeExpr.Builtin(TypeTag.Int32)), new(2, TypeExpr.Builtin(TypeTag.Int64)),
                         new(3, TypeExpr.Builtin(TypeTag.Int64)), new(4, TypeExpr.Builtin(TypeTag.Int64)), new(5, TypeExpr.Builtin(TypeTag.Int64))],
                     stateTypeDefinition: typeof(State))],
                 currentModelFactory: (_, context) => Model(context.ResolveReader(Owner)),
                 historicalReaderFactory: (_, context) => Reader(context)));
-        } else {
-            registry.Register(Model(Reader(null)));
-        }
         return registry;
     }
 
@@ -246,15 +244,16 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         output.WriteVarInt32(value);
         return bytes.WrittenSpan.ToArray();
     }
-    private static void RegisterConflict(Repository repository) => Resources(repository).Schemas.Register(new DurableSchema(
-        Dependency.SchemaId, 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64)));
-    private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
-    private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
+    private static readonly DurableSchema WrongDependency = new(Dependency.SchemaId, 1, SchemaKind.InlineValue,
+        new DurableFieldInfo(1, TypeTag.Int64));
+    private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CheckpointAddress address) {
+        P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(address.Address);
+        return graph.OwnedBatch is { } batch ? repository.MetaBootstrapStore.ReadBatch(batch).Records : [];
+    }
     private enum DependencyMode { BaseAlways, DeltaAlways, BaseForSeven }
     private sealed class Root : IDurableObject { internal int Value; }
     private readonly record struct State(int Value, long A, long B, long C, long D);
     private sealed class Counters {
-        internal StateModelSnapshot? Context;
         internal int ReaderFactories, Captures, BaseReads, DeltaReads, DependencyChecks, Allocations, Hydrations;
     }
     private sealed record Scenario(Repository Repository, BranchCheckout Main, BranchCheckout Warm,

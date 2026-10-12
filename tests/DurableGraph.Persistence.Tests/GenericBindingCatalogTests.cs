@@ -69,7 +69,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
     [Fact]
     public void CacheHitsRecheckAnAuthoritativeSchemaRegisteredAfterInitialClosure() {
         Directory.CreateDirectory(_directory);
-        using GraphResources file = GraphResources.CreateNew(Path.Combine(_directory, "schemas.rbf"));
+        using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(_directory, "schemas.rbf"));
         SchemaStore store = file.Schemas;
         StateModelRegistry registry = BasicRegistry();
         StateModelSnapshot snapshot = registry.Snapshot(store);

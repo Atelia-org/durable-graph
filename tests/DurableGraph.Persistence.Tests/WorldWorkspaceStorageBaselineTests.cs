@@ -163,7 +163,7 @@ public sealed partial class WorldWorkspaceTests {
         using (StateRevisionStore foreign = new(_segments)) {
             Assert.Throws<InvalidDataException>(() => LoadedRevisionPlanner.Prepare(foreign, _schemas, valid, [], NoRebase));
         }
-        using (GraphResources foreignFile = GraphResources.CreateNew(Path.Combine(_root, "foreign-schemas.rbf"))) {
+        using (GraphResources foreignFile = GraphResources.CreateLegacyNew(Path.Combine(_root, "foreign-schemas.rbf"))) {
             SchemaStore foreign = foreignFile.Schemas;
             foreign.RegisterBatch([Old, Current]);
             Assert.Throws<InvalidDataException>(() => LoadedRevisionPlanner.Prepare(_store, foreign, valid, [], NoRebase));

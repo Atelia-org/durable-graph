@@ -292,12 +292,12 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Equal(initialState, repository.GetHead("event-only"));
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
-        Assert.Throws<InvalidDataException>(() => Repository.OpenReadOnlyExisting(_path, Models(new())));
+        using (Repository publicDefault = Repository.OpenReadOnlyExisting(_path, Models(new()))) {
+            Assert.Equal(5, Assert.IsType<NextRoot>(publicDefault.ReadState(publicDefault.GetHead("event-only"))).Value);
+        }
         AssertFilesEqual(files);
         string legacyPath = _path + "-legacy";
-        using (Repository legacy = Repository.CreateNew(legacyPath, Models(new()))) {
-            using BranchCheckout checkout = legacy.CreateBranch("main", Ring());
-        }
+        using (GraphResources legacy = GraphResources.CreateLegacyNew(legacyPath)) { }
         Assert.Throws<InvalidDataException>(() => Repository.OpenMetaBootstrapReadOnlyExisting(legacyPath, Models(new())));
         using Repository positive = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models(new()));
         Assert.Equal(5, Assert.IsType<NextRoot>(positive.ReadState(positive.GetHead("event-only"))).Value);

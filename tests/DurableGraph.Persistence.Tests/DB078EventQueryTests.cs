@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
@@ -152,8 +153,8 @@ public sealed class DB078EventQueryTests : IDisposable {
         }
         if (iteratorState == 3) { Assert.False(iterator.MoveNext()); }
         if (fault) {
-            repository.Checkpoint = point => {
-                if (point == CommitCheckpoint.AfterStateAppend) { throw new IOException("Injected publication failure."); }
+            repository.MetaBootstrapCheckpoint = point => {
+                if (point == P0SaveCheckpoint.AfterBusinessAppend) { throw new IOException("Injected publication failure."); }
             };
             Assert.Throws<GraphCommitException>(() => branch.CommitEvent(new Node(), NoRebase));
             Assert.True(repository.IsFaulted);

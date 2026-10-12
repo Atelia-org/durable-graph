@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -46,16 +47,18 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(5, repository.ReadFrames("main").Count());
             Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Count());
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore store = new(segments);
-            Assert.Null(store.Read(first).ParentRevisionAddress);
-            Assert.Equal(first, store.Read(eventAddress).ParentRevisionAddress);
-            Assert.Equal(first, store.Read(second).ParentRevisionAddress);
-            ObjectVersionRecord write = Assert.Single(store.Read(second).LocalObjects);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore store = resources.MetaBootstrapStore;
+            Assert.Null(store.ReadGraph(first).SourceGraph);
+            Assert.Equal(first, store.ReadGraph(eventAddress).SourceGraph);
+            Assert.Equal(first, store.ReadGraph(second).SourceGraph);
+            ObjectVersionRecord write = Assert.Single(StorageTestData.LocalRecords(store, second));
             Assert.Equal(ObjectVersionKind.Delta, write.Kind);
             Assert.NotEqual(rootId.Value, write.ObjectId);
-            Assert.Equal(second, store.Read(third).ParentRevisionAddress);
-            Assert.Equal(second, Assert.Single(store.Read(third).LocalObjects).PriorAddress);
+            Assert.Equal(second, store.ReadGraph(third).SourceGraph);
+            uint childId = write.ObjectId;
+            Assert.Equal(store.ReadGraph(second).Objects[childId],
+                Assert.Single(StorageTestData.LocalRecords(store, third)).PriorAddress);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using BranchCheckout loaded = reopened.Checkout("main");
@@ -108,11 +111,14 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         ObjectId originalId = session.StateId!.Value;
         session.CommitEvent(new Node(), NoRebase);
         repository.Checkpoint = checkpoint => {
-            if (checkpoint == CommitCheckpoint.BeforePublication) Assert.Same(initial, ((Node)session.State!));
             if (checkpoint == CommitCheckpoint.AfterPrepare) replacement.Value = 3;
+        };
+        repository.MetaBootstrapCheckpoint = checkpoint => {
+            if (checkpoint == P0SaveCheckpoint.BeforePublication) { Assert.Same(initial, ((Node)session.State!)); }
         };
         var published = session.CommitState(replacement, NoRebase);
         repository.Checkpoint = null;
+        repository.MetaBootstrapCheckpoint = null;
         Assert.Same(replacement, ((Node)session.State!));
         Assert.NotEqual(originalId, session.StateId!.Value);
         Assert.Equal((byte)2, ((Node)repository.ReadState(published)).Value);
@@ -137,16 +143,15 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             restored = Save(session).RevisionAddress;
             Assert.Same(child, ((Node)session.State!).Left);
         }
-        using SegmentStore segments = OpenState();
-        using StateRevisionStore store = new(segments);
-        Assert.Empty(store.Read(unchanged).LocalObjects);
-        Assert.Empty(store.Read(unchanged).RemovedObjectIds);
-        uint oldId = Assert.Single(store.ReadLiveObjectHeadMap(first).Keys, id => id != rootId.Value);
-        Assert.Equal(new[] { rootId.Value }, store.ReadLiveObjectHeadMap(removed).Keys);
-        ObjectVersionRecord fresh = Assert.Single(store.Read(restored).LocalObjects, row => row.ObjectId != rootId.Value);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(_root);
+        P0GraphStore store = resources.MetaBootstrapStore;
+        Assert.Empty(StorageTestData.LocalRecords(store, unchanged));
+        uint oldId = Assert.Single(store.ReadGraph(first).Objects.Keys, id => id != rootId.Value);
+        Assert.Equal(new[] { rootId.Value }, store.ReadGraph(removed).Objects.Keys);
+        ObjectVersionRecord fresh = Assert.Single(StorageTestData.LocalRecords(store, restored), row => row.ObjectId != rootId.Value);
         Assert.True(fresh.ObjectId > oldId);
         Assert.Equal(ObjectVersionKind.Base, fresh.Kind);
-        Assert.DoesNotContain(oldId, store.ReadLiveObjectHeadMap(restored).Keys);
+        Assert.DoesNotContain(oldId, store.ReadGraph(restored).Objects.Keys);
     }
 
     [Fact]
@@ -253,8 +258,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterStateAppend)]
-    [InlineData((int)CommitCheckpoint.BeforePublication)]
+    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend)]
+    [InlineData((int)P0SaveCheckpoint.BeforePublication)]
     public void KnownPrepublicationFailureDoesNotInstallCandidateAndColdCheckoutKeepsEventHead(int point) {
         FrameAddress first;
         using (Repository repository = CreateRepository()) {
@@ -262,7 +267,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             first = session.StateRevisionAddress!.Value;
             session.CommitEvent(new Node { Value = 7 }, NoRebase);
             ((Node)session.State!).Value = 2;
-            repository.Checkpoint = checkpoint => { if (checkpoint == (CommitCheckpoint)point) throw new IOException("interrupted"); };
+            repository.MetaBootstrapCheckpoint = checkpoint => { if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("interrupted"); };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
             Assert.Equal(first, session.StateRevisionAddress!.Value);
@@ -276,15 +281,15 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterPublication)]
-    [InlineData((int)CommitCheckpoint.BeforeInstall)]
+    [InlineData((int)P0SaveCheckpoint.AfterPublication)]
+    [InlineData((int)P0SaveCheckpoint.BeforeInstall)]
     public void PublishedStateFailureFaultsWriterAndReopenKeepsPublishedStateHead(int point) {
         FrameAddress published;
         using (Repository repository = CreateRepository()) {
             using BranchCheckout session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             session.CommitEvent(new Node(), NoRebase);
             ((Node)session.State!).Value = 9;
-            repository.Checkpoint = checkpoint => { if (checkpoint == (CommitCheckpoint)point) throw new IOException("lost completion"); };
+            repository.MetaBootstrapCheckpoint = checkpoint => { if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("lost completion"); };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
             published = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
@@ -301,16 +306,16 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     [Fact]
     public void InitialPublicationFailureDoesNotExposeEmptyBranchAndPublishedInitialStateCanResume() {
         using (Repository repository = CreateRepository()) {
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint == CommitCheckpoint.BeforePublication) throw new IOException("not bound");
+            repository.MetaBootstrapCheckpoint = checkpoint => {
+                if (checkpoint == P0SaveCheckpoint.BeforePublication) throw new IOException("not bound");
             };
             var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
         }
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint == CommitCheckpoint.AfterPublication) throw new IOException("bound but not returned");
+            repository.MetaBootstrapCheckpoint = checkpoint => {
+                if (checkpoint == P0SaveCheckpoint.AfterPublication) throw new IOException("bound but not returned");
             };
             var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node { Value = 6 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
@@ -340,13 +345,13 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             changed = Save(session).RevisionAddress;
             Assert.Same(same, ((Node)session.State!));
         }
-        using SegmentStore segments = OpenState();
-        using StateRevisionStore store = new(segments);
-        Assert.Equal(original, store.Read(upgraded).ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(store.Read(upgraded).LocalObjects).Kind);
-        Assert.Empty(store.Read(unchanged).LocalObjects);
-        Assert.Equal(unchanged, store.Read(changed).ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Delta, Assert.Single(store.Read(changed).LocalObjects).Kind);
+        using GraphResources resources = GraphResources.OpenReadOnlyExisting(_root);
+        P0GraphStore store = resources.MetaBootstrapStore;
+        Assert.Equal(original, store.ReadGraph(upgraded).SourceGraph);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(StorageTestData.LocalRecords(store, upgraded)).Kind);
+        Assert.Empty(StorageTestData.LocalRecords(store, unchanged));
+        Assert.Equal(unchanged, store.ReadGraph(changed).SourceGraph);
+        Assert.Equal(ObjectVersionKind.Delta, Assert.Single(StorageTestData.LocalRecords(store, changed)).Kind);
     }
 
 

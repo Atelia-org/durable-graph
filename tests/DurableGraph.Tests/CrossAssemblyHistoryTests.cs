@@ -33,8 +33,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var oldModels = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            SchemaStore schemas = segments.Schemas;
-            var revision = RevisionDecoder.ReadSnapshot(segments.States, schemas, original, oldModels.Snapshot(schemas));
+            var revision = DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, oldModels);
             exactWorld = Assert.Single(revision.Objects, row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
 
@@ -57,10 +56,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(currentHost.GetMethod("MissingListRuleFailsWithoutPublishing")!
             .CreateDelegate<Func<string, bool>>()(directory.Path));
         var models = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path))
-        {
-            SchemaStore schemas = segments.Schemas;
-            var decoded = RevisionDecoder.ReadSnapshot(segments.States, schemas, original, models.Snapshot(schemas));
+        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+            var decoded = DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, models);
             var world = Assert.Single(decoded.Objects, row => row.Schema?.SchemaId == "CrossWorld");
             Assert.Equal(exactWorld, world.Schema);
             Assert.Equal(1, world.Schema!.Version);
@@ -70,15 +67,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            using StateRevisionStore states = new(segments.Data);
-            Assert.Equal(2, states.Read(addresses[0]).LocalObjects.Count);
-            Assert.All(states.Read(addresses[0]).LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            var store = segments.MetaBootstrapStore;
+            Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
+            Assert.All(DefaultRecords(store, addresses[0]), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             foreach (int index in new[] { 1, 3 }) {
-                Assert.Empty(states.Read(addresses[index]).LocalObjects);
-                Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+                Assert.Empty(DefaultRecords(store, addresses[index]));
+                Assert.Empty(DefaultRemoved(store, addresses[index]));
             }
-            Assert.Single(states.Read(addresses[2]).LocalObjects);
-            if (!empty) { Assert.Equal(ObjectVersionKind.Delta, states.Read(addresses[2]).LocalObjects[0].Kind); }
+            var changed = Assert.Single(DefaultRecords(store, addresses[2]));
+            if (!empty) { Assert.Equal(ObjectVersionKind.Delta, changed.Kind); }
         }
     }
 
@@ -100,8 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, true);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            SchemaStore schemas = segments.Schemas;
-            prior = Assert.Single(RevisionDecoder.ReadSnapshot(segments.States, schemas, original, models.Snapshot(schemas)).Objects,
+            prior = Assert.Single(DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, models).Objects,
                 row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
         // Generate valid retained history first, then explicitly omit its historical value

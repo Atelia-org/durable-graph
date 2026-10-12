@@ -36,7 +36,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
                 [ObjectVersionRecord.CreateBase(1, current.Body)], []));
         }
 
-        using (GraphResources schemaFile = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (GraphResources schemaFile = GraphResources.OpenLegacyReadOnlyExisting(_root)) {
             var segments = schemaFile.Data;
             SchemaStore schemas = schemaFile.Schemas;
             using StateRevisionStore states = new(segments);
@@ -77,7 +77,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
 
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => {
-            using GraphResources rejected = GraphResources.OpenReadOnlyExisting(_root);
+            using GraphResources rejected = GraphResources.OpenLegacyReadOnlyExisting(_root);
             RevisionDecoder.Read(rejected.States, rejected.Schemas, published, WorldReaders());
         });
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
@@ -113,7 +113,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => {
-            using GraphResources rejected = GraphResources.OpenReadOnlyExisting(_root);
+            using GraphResources rejected = GraphResources.OpenLegacyReadOnlyExisting(_root);
             RevisionDecoder.Read(rejected.States, rejected.Schemas, published, WorldReaders());
         });
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
@@ -142,7 +142,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             revision = initialStates.Append(StateRevision.CreateObjectHeadMapBase(null,
                 [ObjectVersionRecord.CreateBase(12, body.Body)], []));
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(_root);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(_root);
         var stateFiles = reopened.Data;
         SchemaStore recovered = reopened.Schemas;
         long tail = DataBytes(reopened.Data);
@@ -187,10 +187,10 @@ public sealed class RepresentationIntegrationTests : IDisposable {
     }
 
     private void CreateEmptyRepository() {
-        using GraphResources repository = GraphResources.CreateNew(_root);
+        using GraphResources repository = GraphResources.CreateLegacyNew(_root);
     }
 
-    private GraphResources OpenSchemas() => GraphResources.OpenExisting(_root);
+    private GraphResources OpenSchemas() => GraphResources.OpenLegacyExisting(_root);
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);
         if (!string.Equals(Path.GetDirectoryName(resolved), Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), StringComparison.OrdinalIgnoreCase) ||

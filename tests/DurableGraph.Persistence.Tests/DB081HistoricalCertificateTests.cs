@@ -4,6 +4,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -55,15 +56,21 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         Assert.NotSame(oldEntry, renewedOldEntry);
 
         CheckpointAddress newAddress = upgraded.CommitState(NoRebase);
-        StateRevision saved = Resources(repository).States.Read(newAddress.RevisionAddress);
-        Assert.Equal(oldAddress.RevisionAddress, saved.ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(saved.LocalObjects).Kind);
+        P0GraphSnapshot saved = repository.MetaBootstrapStore.ReadGraph(newAddress.Address);
+        Assert.Equal(oldAddress.Address, saved.SourceGraph);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(repository.MetaBootstrapStore.ReadBatch(saved.OwnedBatch!.Value).Records).Kind);
         Assert.False(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
         // DB-080 has no hot admission. Retaining this old entry is valid; installing
         // its historical certificate under newAddress would be an incorrect optimization.
         Assert.Same(renewedOldEntry, repository.PreparedStateEntry);
-        Resources(repository).Schemas.Register(new DurableSchema(Intermediate, 5, SchemaKind.InlineValue,
+        upgraded.Catalog.Set(new DurableSchema(Intermediate, 5, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
+        CheckpointAddress catalogEvent = upgraded.CommitEvent(upgraded.State!, NoRebase);
+        var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_splitConfiguration");
+        var wrongEnvironment = DecodedRevision.SplitBindingEnvironment.Load(repository.MetaBootstrapStore, configuration,
+            repository.MetaBootstrapStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+        InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => renewedOldEntry.Requirements.Validate(wrongEnvironment.Models));
+        Assert.Contains(Intermediate, conflict.Message);
 
         int normalized = counts.Normalizes;
         misses = statistics.PreparedStateMisses;
@@ -83,12 +90,14 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         Assert.NotSame(currentCold.State, currentHit.State);
         Assert.Equal(17, Assert.IsType<Root>(currentHit.State).Value);
 
-        int allocated = counts.Allocations;
-        InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => repository.Fork("old-rejected", oldAddress));
-        Assert.Contains(Intermediate, conflict.Message);
-        Assert.Equal(allocated, counts.Allocations);
-        Assert.Same(currentEntry, repository.PreparedStateEntry);
-        Assert.DoesNotContain("old-rejected", repository.ListBranches());
+        // Current stored DTOs no longer depend on the intermediate Upgrade layout.
+        // That smaller certificate succeeds against the real later S, while a
+        // historical read still uses its own immutable S and remains valid.
+        Assert.True(renewedOldEntry.SchemaRequirementCount > currentEntry.SchemaRequirementCount);
+        currentEntry.Requirements.Validate(wrongEnvironment.Models);
+        using BranchCheckout oldAgain = repository.Fork("old-again", oldAddress);
+        Assert.Equal(17, Assert.IsType<Root>(oldAgain.State).Value);
+        Assert.True(Baseline(oldAgain).Objects[oldAgain.StateId!.Value].RequiresRewrite);
         Assert.False(repository.IsFaulted);
     }
 
@@ -130,9 +139,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
     private static void Keep(in int prior, out int next, UpgradeContext _) => next = prior;
     private static MethodInfo Method(string name) => typeof(DB081HistoricalCertificateTests).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
-    private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
-    private static NormalizedRevision Baseline(BranchCheckout branch) =>
-        Field<NormalizedRevision>(Field<BusinessWorkspace>(branch.Workspace, "_workspace"), "_baseline");
+    private static NormalizedRevision Baseline(BranchCheckout branch) => branch.Baseline!;
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>
         (stats.DecodedObjects, stats.NormalizedObjects, stats.PreparedGraphs, stats.AllocatedObjects, stats.HydratedObjects,
             stats.PreparedStateHits, stats.PreparedStateMisses);

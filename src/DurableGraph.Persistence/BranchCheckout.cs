@@ -1,6 +1,5 @@
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
-using Atelia.DurableGraph.Storage;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 namespace Atelia.DurableGraph;
@@ -15,10 +14,8 @@ namespace Atelia.DurableGraph;
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
-    private readonly WorldWorkspace? _workspace;
-    private readonly P0Session? _splitSession;
-    internal WorldWorkspace Workspace => _workspace ?? throw new NotSupportedException("This checkout uses split storage.");
-    internal P0Session SplitSession => _splitSession ?? throw new NotSupportedException("This checkout uses legacy storage.");
+    private readonly P0Session _splitSession;
+    internal P0Session SplitSession => _splitSession;
     internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => SplitSession.BindingEnvironment;
     internal StateModelSnapshot Models => SplitSession.Models;
     internal NormalizedRevision? Baseline => SplitSession.Baseline;
@@ -26,28 +23,21 @@ public sealed class BranchCheckout : IDisposable {
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
-    internal BranchCheckout(Repository repository, string branchName, WorldWorkspace workspace, CheckpointAddress? head) {
-        _repository = repository;
-        BranchName = branchName;
-        _workspace = workspace;
-        Head = head!; // Initial creation publishes before this checkout is delivered.
-    }
-
     internal BranchCheckout(Repository repository, string branchName, P0Session session, CheckpointAddress? head) {
         _repository = repository;
         BranchName = branchName;
         _splitSession = session;
-        Head = head!;
+        Head = head!; // Initial creation publishes before this checkout is delivered.
     }
 
     public string BranchName { get; }
     /// <summary>The current editable State root, or null before the history's first State.</summary>
     /// <remarks>Successful replacement installs the supplied instance; previously obtained CLR references do not follow it.</remarks>
-    public IDurableObject? State => _splitSession is { } split ? split.State : Workspace.World;
+    public IDurableObject? State => _splitSession.State;
     /// <summary>The committed State root identity, or null before the first State.</summary>
-    public ObjectId? StateId => State is null ? null : _splitSession is { } split ? split.RootId : Workspace.WorldId;
+    public ObjectId? StateId => State is null ? null : _splitSession.RootId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
-    public FrameAddress? StateRevisionAddress => _splitSession is { } split ? split.StateSource?.Address : Workspace.ParentRevisionAddress;
+    public FrameAddress? StateRevisionAddress => _splitSession.StateSource?.Address;
     public CheckpointAddress Head { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>

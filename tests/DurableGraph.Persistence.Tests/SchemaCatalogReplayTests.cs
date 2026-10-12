@@ -110,7 +110,7 @@ public sealed class SchemaCatalogReplayTests : IDisposable {
     [InlineData("meta")]
     public void InvalidSelectedSnapshotRowsAreNeverSkippedOrRenumbered(string kind) {
         string path = NewPath();
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             byte[] payload = kind switch {
                 "duplicate-id" => CatalogTestData.Encode([Array(2, TypeTag.Int32), Array(2, TypeTag.Byte)]),
                 "rebound-id" => CatalogTestData.Encode([Array(2, TypeTag.Int32), Array(2, TypeTag.Byte)]),
@@ -125,7 +125,7 @@ public sealed class SchemaCatalogReplayTests : IDisposable {
             resources.PublishSchema(address);
         }
         Assert.Throws<InvalidDataException>(() => {
-            using GraphResources resources = GraphResources.OpenExisting(path);
+            using GraphResources resources = GraphResources.OpenLegacyExisting(path);
         });
     }
 

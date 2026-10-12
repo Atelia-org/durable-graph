@@ -29,7 +29,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     [InlineData("branch/bad/name")]
     public void PersistedUnknownOrInvalidRootKeyRejectsOpenWithoutMutation(string key) {
         Seed();
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (GraphResources resources = GraphResources.OpenLegacyExisting(_root)) {
             // VersionStore owns opaque root bytes; the DG required root decoder owns this grammar.
             byte[] map = RootMapCodec.Encode(new Dictionary<string, FrameAddress> { [key is "magic" or "version" ? "branch/main" : key] = resources.GetHead("main") }).Unwrap();
             byte[] payload = [.. "DGR1"u8, 1, .. map];
@@ -38,9 +38,9 @@ public sealed class RepositoryRootCodecTests : IDisposable {
             resources.Versions.PublishRef(resources.RootRevision.RefId, payload, out _).Unwrap();
         }
         var before = Snapshot();
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenReadOnlyExisting(_root));
+        Assert.Throws<InvalidDataException>(() => GraphResources.OpenLegacyReadOnlyExisting(_root));
         AssertSnapshot(before);
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenExisting(_root));
+        Assert.Throws<InvalidDataException>(() => GraphResources.OpenLegacyExisting(_root));
         AssertSnapshot(before);
     }
 
@@ -50,7 +50,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         RefRevision accepted;
         byte[] acceptedPayload;
         string extraName;
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (GraphResources resources = GraphResources.OpenLegacyExisting(_root)) {
             var initial = RepositoryRootCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload);
             FrameAddress head = resources.GetHead("main");
             int low = 0, high = 10_000;
@@ -73,7 +73,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
             }
         }
         var before = Snapshot();
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (GraphResources resources = GraphResources.OpenLegacyExisting(_root)) {
             Assert.Equal(accepted, resources.RootRevision);
             FrameAddress head = resources.GetHead("main");
             Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot(extraName, head));
@@ -90,8 +90,8 @@ public sealed class RepositoryRootCodecTests : IDisposable {
 
     private static string Name(int index) => new string('a', 120) + index.ToString("D8", System.Globalization.CultureInfo.InvariantCulture);
     private void Seed() {
-        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
-        using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
+        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
+        resources.PublishBranch("main", TestAddress(), out _);
     }
     private Dictionary<string, byte[]> Snapshot() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
     private void AssertSnapshot(Dictionary<string, byte[]> expected) {

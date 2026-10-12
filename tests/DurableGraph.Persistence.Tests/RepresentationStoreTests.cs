@@ -13,7 +13,7 @@ public sealed class RepresentationStoreTests : IDisposable {
     [Fact]
     public void BuiltinStringNeedsNoFrameAndZeroOrUnknownIdsAreInvalid() {
         string path = NewPath();
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             var store = file.Schemas;
             Assert.Equal(1U, RepresentationId.String.Value);
             Assert.Same(ObjectLayout.String, store.GetRepresentation(RepresentationId.String));
@@ -26,7 +26,7 @@ public sealed class RepresentationStoreTests : IDisposable {
             Assert.Throws<InvalidDataException>(() => store.GetRepresentation(new(2)));
             Assert.Equal(typeof(string), store.ResolveReader(RepresentationId.String, new StateReaderRegistry().Snapshot(store)).StateType);
         }
-        using (GraphResources file = GraphResources.OpenReadOnlyExisting(path)) {
+        using (GraphResources file = GraphResources.OpenLegacyReadOnlyExisting(path)) {
             var store = file.Schemas;
             Assert.Same(ObjectLayout.String, store.GetRepresentation(RepresentationId.String));
             Assert.Throws<InvalidOperationException>(() => store.RegisterRepresentations([ObjectLayout.String]));
@@ -45,7 +45,7 @@ public sealed class RepresentationStoreTests : IDisposable {
         ObjectLayout array = InlineArray(point);
         RepresentationId durableId;
         RepresentationId arrayId;
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             var store = file.Schemas;
             RepresentationId[] ids = store.RegisterRepresentations([durable, ObjectLayout.String, array, durable]);
             (durableId, arrayId) = (ids[0], ids[2]);
@@ -61,7 +61,7 @@ public sealed class RepresentationStoreTests : IDisposable {
             Assert.Equal(new RepresentationId[] { arrayId, durableId }, store.RegisterRepresentations([array, equivalent]));
             Assert.Equal(tail, DataBytes(file.Data));
         }
-        using (GraphResources file = GraphResources.OpenExisting(path)) {
+        using (GraphResources file = GraphResources.OpenLegacyExisting(path)) {
             var store = file.Schemas;
             Assert.Equal(1, CountFrames(file));
             Assert.Equal(durable, store.GetRepresentation(durableId));
@@ -74,7 +74,7 @@ public sealed class RepresentationStoreTests : IDisposable {
 
     [Fact]
     public void IdentityIncludesNominalArgumentsExactInlineVersionAndRankButNotArrayShape() {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         ObjectLayout first = ObjectLayout.ForDurable(new("First", 1));
         ObjectLayout second = ObjectLayout.ForDurable(new("Second", 1));
@@ -92,7 +92,7 @@ public sealed class RepresentationStoreTests : IDisposable {
 
     [Fact]
     public void ReferenceTargetVersionDoesNotChangeOwnerOrOuterArrayRepresentation() {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         ObjectLayout owner = ObjectLayout.ForDurable(new("Owner", 1, DurableFieldInfo.Reference(1, TypeExpr.Named("Target"))));
         ObjectLayout outer = ObjectLayout.ForArray(new(TypeExprKind.VectorArray,
@@ -105,7 +105,7 @@ public sealed class RepresentationStoreTests : IDisposable {
 
     [Fact]
     public void ExistingIdCannotHideConflictingCompleteSchemaOrNestedDependency() {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         DurableSchema point = Point(1, TypeTag.Int32);
         DurableSchema owner = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point));
@@ -127,7 +127,7 @@ public sealed class RepresentationStoreTests : IDisposable {
     [InlineData(true)]
     [InlineData(false)]
     public void ArrayReferenceDeclarationConflictsAreCheckedInBothRegistrationOrders(bool referenceFirst) {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         ObjectLayout reference = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1, TypeExpr.Named("Point"))));
         if (referenceFirst) {
@@ -143,7 +143,7 @@ public sealed class RepresentationStoreTests : IDisposable {
 
     [Fact]
     public void ArrayNominalArgumentsRemainNonOwningAndValidateArity() {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         TypeExpr point = TypeExpr.Named("Point");
         ObjectLayout[] layouts = [
@@ -158,7 +158,7 @@ public sealed class RepresentationStoreTests : IDisposable {
 
     [Fact]
     public void FullInputFreezeRejectsLateGetterFailureNullAndReentryBeforeWriting() {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         ObjectLayout layout = ObjectLayout.ForDurable(new("Fresh", 1));
         long tail = DataBytes(file.Data);
@@ -179,23 +179,23 @@ public sealed class RepresentationStoreTests : IDisposable {
     public void ContainerOnlySnapshotReopensWithoutUserSchemasAndRetainsStableIds() {
         string path = NewPath();
         ObjectLayout layout = PrimitiveArray(TypeTag.Int32);
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             Assert.Equal(new RepresentationId(2), file.Schemas.RegisterRepresentations([layout])[0]);
             Assert.Equal(0, file.Schemas.Count);
             Assert.Equal(1, CountFrames(file));
         }
-        using (GraphResources file = GraphResources.OpenReadOnlyExisting(path)) {
+        using (GraphResources file = GraphResources.OpenLegacyReadOnlyExisting(path)) {
             Assert.Equal(0, file.Schemas.Count);
             Assert.Equal(layout, file.Schemas.GetRepresentation(new(2)));
             Assert.Equal(1, CountFrames(file));
         }
-        using (GraphResources file = GraphResources.OpenExisting(path)) {
+        using (GraphResources file = GraphResources.OpenLegacyExisting(path)) {
             Assert.Equal(new RepresentationId(2), file.Schemas.RegisterRepresentations([layout])[0]);
             Assert.Equal(1, CountFrames(file));
             Assert.Equal(new RepresentationId(3), file.Schemas.RegisterRepresentations([PrimitiveArray(TypeTag.Byte)])[0]);
             Assert.Equal(0, file.Schemas.Count);
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
         Assert.Equal(layout, reopened.Schemas.GetRepresentation(new(2)));
         Assert.Equal(PrimitiveArray(TypeTag.Byte), reopened.Schemas.GetRepresentation(new(3)));
     }
@@ -204,10 +204,10 @@ public sealed class RepresentationStoreTests : IDisposable {
     public void ReaderBindingUsesEachSuppliedCatalogAndRetainedCapabilityRatherThanAStoredClrType() {
         string path = NewPath();
         DurableSchema schema = new("Retired", 1, new DurableFieldInfo(1, TypeTag.Int32));
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             file.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema), InlineArray(Point(1, TypeTag.Int32))]);
         }
-        using (GraphResources file = GraphResources.OpenReadOnlyExisting(path)) {
+        using (GraphResources file = GraphResources.OpenLegacyReadOnlyExisting(path)) {
             var store = file.Schemas;
             StateReaderRegistry first = new();
             var intReader = new StateReaderBinding<int>(schema,
@@ -236,7 +236,7 @@ public sealed class RepresentationStoreTests : IDisposable {
 
     [Fact]
     public void IdExhaustionRejectsWholeBatchWithoutWritingAndExistingIdsRemainAvailable() {
-        using GraphResources file = GraphResources.CreateNew(NewPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NewPath());
         var store = file.Schemas;
         RepresentationId old = store.RegisterRepresentations([PrimitiveArray(TypeTag.Int32)])[0];
         DurableSchema existing = new("Existing", 1);

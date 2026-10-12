@@ -39,21 +39,19 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        StateModelSnapshot snapshot = models.Snapshot(schemas);
-        DecodedRevision initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
+        var states = segments.MetaBootstrapStore;
+        DecodedRevision initial = DecodedRevision.ReadSplit(states, addresses[0], models);
         ObjectStateRecord timestamps = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.DateTimeOffset &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.ScalarDefault);
         foreach (int index in new[] { 1, 13, 15, 17 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
-        for (int index = 2; index <= 12; index++) { Assert.NotEmpty(states.Read(addresses[index]).LocalObjects); }
+        for (int index = 2; index <= 12; index++) { Assert.NotEmpty(DefaultRecords(states, addresses[index])); }
         DateTimeOffset before = new(2026, 9, 10, 8, 0, 0, TimeSpan.FromHours(8));
         DateTimeOffset after = before.ToOffset(TimeSpan.Zero), value = before.AddDays(100);
-        ObjectVersionRecord replacement = Assert.Single(states.Read(addresses[11]).LocalObjects, row => row.ObjectId == timestamps.Id.Value);
+        ObjectVersionRecord replacement = Assert.Single(DefaultRecords(states, addresses[11]), row => row.ObjectId == timestamps.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, replacement.Kind);
         BareValueReader reader = new(replacement.Body);
         Assert.Equal(1U, reader.ReadVarUInt32());
@@ -63,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(after.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
         Assert.True(value.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
         reader.EnsureFullyConsumed();
-        ObjectVersionRecord patch = Assert.Single(states.Read(addresses[12]).LocalObjects, row => row.ObjectId == timestamps.Id.Value);
+        ObjectVersionRecord patch = Assert.Single(DefaultRecords(states, addresses[12]), row => row.ObjectId == timestamps.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, patch.Kind);
         reader = new(patch.Body);
         Assert.Equal(0U, reader.ReadVarUInt32());
@@ -74,7 +72,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         reader.EnsureFullyConsumed();
         ObjectStateRecord composite = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.InlineValue);
-        ObjectVersionRecord keyPatch = Assert.Single(states.Read(addresses[14]).LocalObjects, row => row.ObjectId == composite.Id.Value);
+        ObjectVersionRecord keyPatch = Assert.Single(DefaultRecords(states, addresses[14]), row => row.ObjectId == composite.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, keyPatch.Kind);
         reader = new(keyPatch.Body);
         Assert.Equal(1U, reader.ReadVarUInt32());
@@ -86,13 +84,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(after.EqualsExact(BclValueCodec.ReadDateTimeOffset(ref reader)));
         Assert.Equal(10, reader.ReadVarInt32());
         reader.EnsureFullyConsumed();
-        Assert.All(states.Read(addresses[16]).LocalObjects, row => Assert.Equal(ObjectVersionKind.Delta, row.Kind));
-        Assert.NotEmpty(states.Read(addresses[16]).LocalObjects);
+        Assert.All(DefaultRecords(states, addresses[16]), row => Assert.Equal(ObjectVersionKind.Delta, row.Kind));
+        Assert.NotEmpty(DefaultRecords(states, addresses[16]));
         // Read an old revision after all edits: old complete key/value representations remain intact.
         var oldEntry = timestamps.GetDictionaryState<DateTimeOffset, DateTimeOffset>().Entries.ToArray().Single(p => p.Key == before);
         Assert.True(before.EqualsExact(oldEntry.Key));
         Assert.True(value.EqualsExact(oldEntry.Value));
-        DecodedRevision final = RevisionDecoder.ReadSnapshot(states, schemas, addresses[^1], snapshot);
+        DecodedRevision final = DecodedRevision.ReadSplit(states, addresses[^1], models);
         foreach (ObjectStateRecord row in final.Objects.Where(row => row.Kind == ObjectStateKind.Dictionary)) {
             var slot = row.Layout.Dictionary!;
             Assert.Equal(slot.KeySlot.TypeTag == TypeTag.InlineValue || slot.ValueSlot.TypeTag == TypeTag.Int32

@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -33,6 +34,10 @@ internal sealed class StateSaveHarness : IDisposable {
     internal ObjectId? WorldId => _stateHead?.RootId;
     internal bool IsFaulted => _repository.IsFaulted;
     internal Action<CommitCheckpoint>? Checkpoint { get => _repository.Checkpoint; set => _repository.Checkpoint = value; }
+    internal Action<P0SaveCheckpoint>? MetaBootstrapCheckpoint {
+        get => _repository.MetaBootstrapCheckpoint;
+        set => _repository.MetaBootstrapCheckpoint = value;
+    }
     internal StateSaveSession<T> Create<T>(T world) where T : class, IDurableObject {
         return new(this, world, null);
     }
@@ -76,9 +81,14 @@ internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial
         }
         if (session.Head.Kind == GraphFrameKind.State) {
             Action<CommitCheckpoint>? checkpoint = repository.Checkpoint;
+            Action<P0SaveCheckpoint>? splitCheckpoint = repository.MetaBootstrapCheckpoint;
             repository.Checkpoint = null;
+            repository.MetaBootstrapCheckpoint = null;
             try { session.CommitEvent(StateSaveHarness.NewMarker(), parameters); }
-            finally { repository.Checkpoint = checkpoint; }
+            finally {
+                repository.Checkpoint = checkpoint;
+                repository.MetaBootstrapCheckpoint = splitCheckpoint;
+            }
         }
         CheckpointAddress frame = session.CommitState(parameters);
         repository.Installed(frame);

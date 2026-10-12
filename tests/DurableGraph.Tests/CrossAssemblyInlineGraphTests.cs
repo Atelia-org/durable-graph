@@ -48,23 +48,21 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverseRegistration);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], registry.Snapshot(schemas));
+        var states = segments.MetaBootstrapStore;
+        var initial = DecodedRevision.ReadSplit(states, addresses[0], registry);
         ObjectStateRecord root = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.World");
         ObjectStateRecord node = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.Node");
         foreach (int index in new[] { 1, 4, 5 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
-        var childChange = Assert.Single(states.Read(addresses[2]).LocalObjects);
+        var childChange = Assert.Single(DefaultRecords(states, addresses[2]));
         Assert.Equal(node.Id.Value, childChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, childChange.Kind);
-        var inlineChange = Assert.Single(states.Read(addresses[3]).LocalObjects);
+        var inlineChange = Assert.Single(DefaultRecords(states, addresses[3]));
         Assert.Equal(root.Id.Value, inlineChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, inlineChange.Kind);
-        Assert.Equal(initial.Objects.Count, RevisionDecoder.ReadSnapshot(states, schemas,
-            addresses[^1], registry.Snapshot(schemas)).Objects.Count);
+        Assert.Equal(initial.Objects.Count, DecodedRevision.ReadSplit(states, addresses[^1], registry).Objects.Count);
     }
 
     private const string CrossInlineValues = """

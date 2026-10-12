@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -81,8 +82,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Same(cached, repository.PreparedStateEntry.ImmutableLeaves![ids[1]]);
         control.ReturnSingleton = cached;
         GraphReadStatistics statistics = new();
-        RevisionReadSession session = new(Resources(repository).States, Resources(repository).Schemas,
-            Field<StateModelSnapshot>(repository, "_models"), statistics);
+        GraphReadContext session = new(selection.Models, statistics);
         int hydrates = control.LeafHydrates;
         // A partial trusted map isolates the ordering rule: id[0] will allocate,
         // while the later id[1] already owns the same exact-type instance.
@@ -101,27 +101,33 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void LeafCallbackRequirementsSurviveColdCollectionAndHitBackfill(bool duringAllocate, bool backfill) {
         Controls control = new() { DependencyDuringAllocate = duringAllocate, CheckDependency = true };
         using Repository repository = Create(control);
-        control.Context = Field<StateModelSnapshot>(repository, "_models");
         using BranchCheckout main = repository.CreateBranch("main", Graph());
+        CheckpointAddress original = main.Head;
         CheckpointAddress eventAddress;
         using (BranchCheckout events = repository.CreateBranchFromEvent("events", Graph(9))) { eventAddress = events.Head; }
         if (backfill) {
             repository.ImmutableLeafReuseEnabled = false;
-            // DB-080 already records this callback dependency without a leaf table.
-            using BranchCheckout disabled = repository.Fork("disabled", main.Head);
+            using BranchCheckout disabled = repository.Fork("disabled", original);
             Assert.Equal(0, repository.PreparedStateEntry!.ImmutableLeafCount);
         }
         repository.ImmutableLeafReuseEnabled = true;
-        using BranchCheckout warm = repository.Fork("warm", main.Head);
+        using BranchCheckout warm = repository.Fork("warm", original);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, entry.ImmutableLeafCount);
         Assert.True(control.DependencyChecks > 0);
         int allocations = control.LeafAllocations, hydrates = control.LeafHydrates;
-        Resources(repository).Schemas.Register(new DurableSchema(Dependency.SchemaId, 1, SchemaKind.InlineValue,
+        main.Catalog.Set(new DurableSchema(Dependency.SchemaId, 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
+        CheckpointAddress catalogEvent = main.CommitEvent(main.State!);
+        var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_splitConfiguration");
+        var wrongEnvironment = DecodedRevision.SplitBindingEnvironment.Load(repository.MetaBootstrapStore,
+            configuration, repository.MetaBootstrapStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+        InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => entry.Requirements.Validate(wrongEnvironment.Models));
+        Assert.Contains(Dependency.SchemaId, conflict.Message);
+        Assert.Equal(allocations, control.LeafAllocations);
+        Assert.Equal(hydrates, control.LeafHydrates);
         repository.RestorationStatistics = new();
-        // This Event-only request does not select the conflicting State, so it must
-        // bypass both the preparation certificate and the resident leaf table.
+        // Event-only requests still bypass the State certificate and leaf table.
         using (BranchCheckout events = repository.Checkout("events")) {
             Assert.Null(events.State);
             Assert.Equal(eventAddress, events.Head);
@@ -136,16 +142,25 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Equal(0, repository.RestorationStatistics.PreparedStateMisses);
         Assert.Equal(0, repository.RestorationStatistics.AllocatedObjects);
         Assert.Equal(0, repository.RestorationStatistics.HydratedObjects);
-        Assert.Equal(allocations, control.LeafAllocations);
-        Assert.Equal(hydrates, control.LeafHydrates);
-        Assert.Throws<InvalidDataException>(() => repository.Fork("rejected", main.Head));
-        Assert.Equal(0, repository.RestorationStatistics.AllocatedObjects);
-        Assert.Equal(0, repository.RestorationStatistics.ReusedImmutableLeaves);
+        using BranchCheckout oldHit = repository.Fork("old-hit", original);
+        Assert.Same(Assert.IsType<Owner>(warm.State).First, Assert.IsType<Owner>(oldHit.State).First);
+        Assert.Equal(1, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal(0, repository.RestorationStatistics.DecodedObjects);
         Assert.Equal(allocations, control.LeafAllocations);
         Assert.Equal(hydrates, control.LeafHydrates);
         Assert.Same(entry, repository.PreparedStateEntry);
+
+        // The actual new State selects S1. Its first complete materialization
+        // must check the callback dependency and must not install a partial table.
+        CheckpointAddress newer = main.CommitState();
+        int reused = repository.RestorationStatistics.ReusedImmutableLeaves;
+        Assert.Throws<InvalidDataException>(() => repository.Fork("rejected", newer));
+        Assert.Equal(reused, repository.RestorationStatistics.ReusedImmutableLeaves);
+        Assert.Equal(allocations + 1, control.LeafAllocations);
+        Assert.Equal(hydrates + (duringAllocate ? 0 : 1), control.LeafHydrates);
+        Assert.Same(entry, repository.PreparedStateEntry);
         Assert.DoesNotContain("rejected", repository.ListBranches());
+        Assert.False(repository.IsFaulted);
     }
 
     [Theory]
@@ -276,23 +291,28 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         StateModelRegistry registry = new();
         registry.Register(new StateDefinitionBinding(Dependency.SchemaId, SchemaKind.InlineValue, 0, null,
             [new(Dependency.SchemaId, 1, SchemaKind.InlineValue, 0, [new(1, TypeExpr.Builtin(TypeTag.Int32))])]));
-        void Check(bool allocate) {
-            if (control.CheckDependency && control.DependencyDuringAllocate == allocate) {
-                control.Context!.BindSchema(Dependency);
-                control.DependencyChecks++;
-            }
-        }
-        registry.Register(new StateModelBinding<Leaf, byte>(new(LeafSchema, ByteBody,
-            static (in byte prior, in byte next) => new(prior != next, new byte[] { next })),
-            [ByteReader(LeafSchema)], static row => row.GetState<byte>(), () => {
-                control.LeafAllocations++;
-                Check(true);
-                return control.ReturnSingleton ?? new Leaf();
-            }, (Leaf target, in byte state, ObjectReadTable _) => {
-                control.LeafHydrates++;
-                Check(false);
-                LeafValue(target) = state;
-            }, static (leaf, _) => leaf.Value, static (in byte _, IStateReferenceVisitor _) => { }, isImmutableLeaf: true));
+        registry.Register(new StateDefinitionBinding(LeafSchema.SchemaId, SchemaKind.ReferenceObject, 0, typeof(Leaf),
+            [new(LeafSchema.SchemaId, 1, SchemaKind.ReferenceObject, 0,
+                [new(1, TypeExpr.Builtin(TypeTag.Byte))], stateTypeDefinition: typeof(byte))],
+            currentModelFactory: (_, context) => {
+                void Check(bool allocate) {
+                    if (control.CheckDependency && control.DependencyDuringAllocate == allocate) {
+                        context.BindSchema(Dependency);
+                        control.DependencyChecks++;
+                    }
+                }
+                return new StateModelBinding<Leaf, byte>(new(LeafSchema, ByteBody,
+                    static (in byte prior, in byte next) => new(prior != next, new byte[] { next })),
+                    [context.ResolveReader(LeafSchema)], static row => row.GetState<byte>(), () => {
+                        control.LeafAllocations++;
+                        Check(true);
+                        return control.ReturnSingleton ?? new Leaf();
+                    }, (Leaf target, in byte state, ObjectReadTable _) => {
+                        control.LeafHydrates++;
+                        Check(false);
+                        LeafValue(target) = state;
+                    }, static (leaf, _) => leaf.Value, static (in byte _, IStateReferenceVisitor _) => { }, isImmutableLeaf: true);
+            }, historicalReaderFactory: (schema, _) => ByteReader(schema)));
         registry.Register(new StateModelBinding<Tail, byte>(new(TailSchema, ByteBody,
             static (in byte prior, in byte next) => new(prior != next, new byte[] { next })),
             [ByteReader(TailSchema)], static row => row.GetState<byte>(), static () => new(),
@@ -327,7 +347,6 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         return new(bytes.WrittenSpan);
     }
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
-    private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = nameof(Leaf.Value))]
     private static extern ref byte LeafValue(Leaf leaf);
     private sealed class Leaf(byte value = 0) : IDurableObject { internal readonly byte Value = value; }
@@ -338,7 +357,6 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         internal bool FailTail, CheckDependency, DependencyDuringAllocate;
         internal int LeafAllocations, LeafHydrates, DependencyChecks;
         internal Leaf? ReturnSingleton;
-        internal StateModelSnapshot? Context;
         internal readonly InvalidDataException Failure = new("Tail failed after the leaf hydrated.");
     }
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);

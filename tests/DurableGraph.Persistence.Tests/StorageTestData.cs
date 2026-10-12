@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Reflection;
 using Atelia.Data;
 using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.VersionStore;
 using DataStore = Atelia.FrameStore.FrameStore;
 using PublicationStore = Atelia.VersionStore.VersionStore;
@@ -94,9 +95,12 @@ internal static class StorageTestData {
 
     internal static byte[] ReadSelectedSchemaPayload(string root) {
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(root);
-        var roots = RepositoryRootCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload);
-        using FrameRead frame = resources.Data.ReadFrame(roots[RepositoryRootCodec.SchemaKey]).Unwrap();
+        using FrameRead frame = resources.Data.ReadFrame(resources.SharedMetaBootstrapRoot!.Value).Unwrap();
         return frame.Payload.ToArray();
     }
+
+    // A graph frame and its owned object batch have different addresses in the split format.
+    internal static IReadOnlyList<ObjectVersionRecord> LocalRecords(P0GraphStore store, FrameAddress graph) =>
+        store.ReadGraph(graph).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 
 }

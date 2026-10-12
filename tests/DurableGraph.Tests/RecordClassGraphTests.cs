@@ -1,6 +1,7 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
@@ -17,25 +18,48 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("Run")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        StateModelSnapshot snapshot = models.Snapshot(schemas);
-        DecodedRevision first = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], snapshot);
-        DecodedRevision final = RevisionDecoder.ReadSnapshot(states, schemas, addresses[3], snapshot);
+        var states = segments.MetaBootstrapStore;
+        DecodedRevision first = DecodedRevision.ReadSplit(states, addresses[0], models);
+        DecodedRevision final = DecodedRevision.ReadSplit(states, addresses[3], models);
         ObjectStateRecord[] oldFacts = first.Objects.Where(row => row.Schema?.Type == TypeExpr.Named("Damage")).ToArray();
         ObjectStateRecord[] newFacts = final.Objects.Where(row => row.Schema?.Type == TypeExpr.Named("Damage")).ToArray();
         Assert.Equal(2, oldFacts.Length); // Two equal records, not one equality-interned record.
         Assert.Equal(3, newFacts.Length); // with creates a third identity; the original remains reachable.
         Assert.All(oldFacts, old => Assert.Contains(newFacts, current => current.Id == old.Id));
-        Assert.Empty(states.Read(addresses[1]).LocalObjects); // Only Transient changed, despite business inequality.
-        ObjectVersionRecord changed = Assert.Single(states.Read(addresses[2]).LocalObjects);
+        Assert.Empty(DefaultRecords(states, addresses[1])); // Only Transient changed, despite business inequality.
+        ObjectVersionRecord changed = Assert.Single(DefaultRecords(states, addresses[2]));
         ObjectId ignoredId = Assert.Single(first.Objects, row => row.Schema?.Type == TypeExpr.Named("Ignored")).Id;
         Assert.Equal(ignoredId.Value, changed.ObjectId);
-        Assert.Equal(ObjectVersionKind.Base, changed.Kind); // The small changed body costs less than a 12B-prior Delta.
-        Assert.Contains(states.Read(addresses[3]).LocalObjects,
+        AssertRecordTypedDeltaCost(states, addresses[1], addresses[2], ignoredId, models,
+            assembly.GetType("RecordClasses.Ignored")!);
+        Assert.Contains(DefaultRecords(states, addresses[3]),
             row => row.Kind == ObjectVersionKind.Base && !oldFacts.Any(old => old.Id.Value == row.ObjectId));
-        Assert.Empty(states.Read(addresses[4]).LocalObjects); // Cold materialization recaptures the same complete state.
-        Assert.Empty(states.Read(addresses[4]).RemovedObjectIds);
+        Assert.Empty(DefaultRecords(states, addresses[4])); // Cold materialization recaptures the same complete state.
+        Assert.Empty(DefaultRemoved(states, addresses[4]));
+    }
+
+    private static void AssertRecordTypedDeltaCost(P0GraphStore store, FrameAddress priorGraph,
+        FrameAddress currentGraph, ObjectId id, StateModelRegistry models, Type domainType) {
+        DecodedRevision decoded = DecodedRevision.ReadSplit(store, currentGraph, models);
+        ObjectStateRecord stored = decoded.GetRequired(id);
+        StateModelBinding model = decoded.SourceModels!.ResolveCurrentModel(domainType);
+        Assert.Equal(stored.Layout, model.CurrentLayout); // Ordinary same-layout update, not an Upgrade rewrite.
+        ObjectStateRecord current = model.Normalize(stored); // Exact current DTO attaches preparation without an Upgrade callback.
+        var rawBase = current.Preparation!.PrepareBase(current);
+        Assert.Equal(12, rawBase.Body.Length);
+        byte[] typedBase = P0TypedBodyCodec.Encode(current.Layout, rawBase, decoded.SelectedSchemaView);
+        Assert.True(typedBase.Length - rawBase.Body.Length >= 3); // ABI5 + dynamic route + descriptor metaObjectId.
+        long b = ObjectVersionPayloadSize.GetBasePayloadBytes(typedBase.Length);
+        var prior = store.ReadObjectChain(priorGraph, id.Value);
+        var chain = store.ReadObjectChain(currentGraph, id.Value);
+        Assert.Equal(current.Layout, DefaultLayout(store, priorGraph, id.Value));
+        var delta = chain.Entries[^1];
+        Assert.Equal(ObjectVersionKind.Delta, delta.Record.Kind);
+        Assert.Equal(prior.Head, delta.Record.PriorAddress);
+        Assert.Equal(2, delta.Record.Body.Length);
+        Assert.Equal(16, delta.PayloadBytes); // Actual wire: kind1 + length1 + prior12 + body2.
+        Assert.True(b > delta.PayloadBytes, $"Actual typed Base B={b} must exceed persisted Delta D={delta.PayloadBytes}.");
+        Assert.Equal(checked(prior.ReconstructionPayloadBytes + delta.PayloadBytes), chain.ReconstructionPayloadBytes);
     }
 
     [Fact]

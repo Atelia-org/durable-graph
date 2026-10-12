@@ -6,8 +6,7 @@ namespace Atelia.DurableGraph;
 
 public sealed partial class Repository {
     // Metadata navigation selects business history without reading live directories or typed bodies.
-    private HistoryGraphRecord ReadHistoryCore(FrameAddress address) => UsesMetaBootstrap
-        ? _resources.ReadMetaBootstrapHistory(address) : _resources.ReadHistory(address);
+    private HistoryGraphRecord ReadHistoryCore(FrameAddress address) => _resources.ReadMetaBootstrapHistory(address);
 
     // Callers own the complete operation's busy guard. Each selected graph gets its exact S environment.
     private IDurableObject ReadMetaBootstrapRootCore(CheckpointAddress frame) {
@@ -49,23 +48,12 @@ public sealed partial class Repository {
     }
 
     private void MutateBranchCore(string branchName, FrameAddress head) {
-        if (UsesMetaBootstrap) {
-            // Complete the candidate before user publication hooks and any VS output.
-            GraphResources.MetaBootstrapBranchUpdate update = _resources.PrepareMetaBootstrapBranchRoot(branchName, head);
-            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishMetaBootstrapBranchRoot(update, out outcome));
-        } else {
-            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, head, out outcome));
-        }
+        // Complete the candidate before user publication hooks and any VS output.
+        GraphResources.MetaBootstrapBranchUpdate update = _resources.PrepareMetaBootstrapBranchRoot(branchName, head);
+        MutateRefCore((out PublicationOutcome outcome) => _resources.PublishMetaBootstrapBranchRoot(update, out outcome));
     }
 
-    private FrameAddress ResolveTagCore(string name) {
-        if (UsesMetaBootstrap) { return _resources.ResolveMetaBootstrapTag(name); }
-        var payload = _resources.Versions.ResolveTag(name).Unwrap();
-        if (!FrameAddress.TryRead(payload.Bytes, out FrameAddress address)) {
-            throw new InvalidDataException("Invalid graph address in tag payload.");
-        }
-        return address;
-    }
+    private FrameAddress ResolveTagCore(string name) => _resources.ResolveMetaBootstrapTag(name);
 
     private void CreateMetaBootstrapTagCore(string name, FrameAddress address) {
         _resources.EnsureMetaBootstrapEditingAllowed();

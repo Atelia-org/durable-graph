@@ -108,14 +108,14 @@ public sealed class ArrayWireFormatTests {
             byte[] invalid = [2, 2, .. classPrefix.AsSpan(2), .. Convert.FromHexString("030301041002")];
             Assert.Throws<InvalidDataException>(() => ReadArray(invalid));
             RepresentationId id;
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 var schemas = file.Schemas;
                 schemas.Register(point2);
                 schemas.Register(point1);
                 id = schemas.RegisterRepresentations([ObjectLayout.ForArray(layout)])[0];
                 Assert.Equal(4U, id.Value);
             }
-            using (GraphResources file = GraphResources.OpenExisting(path)) {
+            using (GraphResources file = GraphResources.OpenLegacyExisting(path)) {
                 var schemas = file.Schemas;
                 var decoded = schemas.GetRepresentation(id);
                 Assert.Equal(layout, decoded.Array);

@@ -40,7 +40,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         DurableSchema ancestor = new("Ancestor", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point));
         DurableSchema owner = new("Owner", 1, [new(1, TypeTag.InlineValue, inlineSchema: pair)], ancestor);
         string path = NextPath();
-        using (GraphResources file = GraphResources.CreateNew(path)) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
             SchemaStore store = file.Schemas;
             store.Register(owner);
             Assert.Equal(4, store.Count);
@@ -54,7 +54,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
             Assert.Equal(4, store.Count);
             Assert.False(store.IsFaulted);
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
         SchemaStore restored = reopened.Schemas;
         Assert.Equal(owner, restored.GetRequired("Owner", 1));
         Assert.Same(restored.GetRequired("Point", 1), restored.GetRequired("Ancestor", 1).Fields[0].InlineSchema);
@@ -69,7 +69,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         DurableSchema owner1 = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value1));
         DurableSchema wrong = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value2));
         DurableSchema owner2 = new("Owner", 2, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value2));
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore store = file.Schemas;
         store.Register(owner1);
         long tail = DataBytes(file.Data);
@@ -86,7 +86,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     public void FamilyKindCannotChangeWithinOrAcrossRegistrationBatches(bool sameBatch) {
         DurableSchema reference = new("A", 1);
         DurableSchema inline = new("A", 2, SchemaKind.InlineValue);
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore store = file.Schemas;
         if (!sameBatch) { store.Register(reference); }
         long tail = DataBytes(file.Data);
@@ -120,7 +120,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         var atLimit = chain[..256];
         Assert.Equal(256, SchemaCatalogWireCodec.Read(SchemaCatalogWireCodec.Write(CatalogTestData.Schemas(atLimit))).Length);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(CatalogTestData.Schemas(chain))));
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore store = file.Schemas;
         store.Register(chain[255]);
         long tail = DataBytes(file.Data);
@@ -134,7 +134,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     public void InlineSchemaCannotIdentifyObjectBaseOrBeReadAsAnObject() {
         DurableSchema inline = new("A", 1, SchemaKind.InlineValue);
         Assert.Throws<ArgumentException>(() => ObjectLayout.ForDurable(inline));
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         schemas.Register(inline);
         Assert.Throws<InvalidDataException>(() => schemas.GetRepresentation(new(2)));
@@ -150,7 +150,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         DurableSchema changed = new("Value", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.SByte));
         DurableSchema owner = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
         DurableSchema wrong = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: changed));
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         SchemaStore schemas = file.Schemas;
         schemas.Register(owner);
         StateRevisionStore states = file.States;
@@ -167,7 +167,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
     [Fact]
     public void PublishedBasePointingAtInlineSchemaRefusesSelectedGraphRead() {
         string repositoryPath = NextPath();
-        using (GraphResources resources = GraphResources.CreateNew(repositoryPath)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(repositoryPath)) {
             resources.Schemas.Register(new("A", 1, SchemaKind.InlineValue));
             // Valid Base envelope grammar, but its selected ID identifies an inline value.
             FrameAddress address = resources.States.Append(StateRevision.CreateObjectHeadMapBase(null,
@@ -176,7 +176,7 @@ public sealed class InlineSchemaStoreTests : IDisposable {
             Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(resources.States, resources.Schemas,
                 address, new StateReaderRegistry()));
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(repositoryPath);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(repositoryPath);
         Assert.Equal(1, reopened.Schemas.Count);
     }
 

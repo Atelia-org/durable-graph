@@ -37,7 +37,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress second;
         FrameAddress missingString;
         FrameAddress wrongKind;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThreshold)) {
             using StateRevisionStore store = new(segments.Data);
             first = store.Append(StateRevision.CreateObjectHeadMapBase(null,
                 input.First.Reverse().Select(record => ObjectVersionRecord.CreateBase(record.Id, record.Body)), []));
@@ -64,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (var record in input.First.Concat(input.Second)) {
             Array.Clear(record.Body);
         }
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(directory.Path);
         using StateRevisionStore cold = new(reopened.Data);
         Dictionary<uint, byte[]> ReadBodies(FrameAddress revision) => cold.ReadLiveObjectHeadMap(revision)
             .Keys.Reverse().ToDictionary(id => id, id => cold.ReadObjectBaseBody(revision, id));

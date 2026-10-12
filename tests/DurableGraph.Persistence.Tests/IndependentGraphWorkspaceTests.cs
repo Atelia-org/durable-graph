@@ -21,7 +21,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
 
     public IndependentGraphWorkspaceTests() {
         Directory.CreateDirectory(_root);
-        _file = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        _file = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
         _schemas = _file.Schemas;
         _segments = _file.Data;
         _store = new(_segments);
@@ -393,7 +393,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         _store.Dispose();
         _file.Dispose();
         _segments.Dispose();
-        _file = GraphResources.OpenReadOnlyExisting(Path.Combine(_root, "schemas.rbf"));
+        _file = GraphResources.OpenLegacyReadOnlyExisting(Path.Combine(_root, "schemas.rbf"));
         _schemas = _file.Schemas;
         _segments = _file.Data;
         _store = new(_segments);

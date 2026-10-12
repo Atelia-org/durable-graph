@@ -137,7 +137,7 @@ public sealed class CrossAssemblyNominalBindingTests {
         string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"durable-graph-nominal-reader-{Guid.NewGuid():N}"));
         Directory.CreateDirectory(root);
         try {
-            using GraphResources file = GraphResources.CreateNew(Path.Combine(root, "schemas.rbf"));
+            using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(root, "schemas.rbf"));
             var segments = file.Data;
             SchemaStore schemas = file.Schemas;
             using StateRevisionStore store = new(segments);

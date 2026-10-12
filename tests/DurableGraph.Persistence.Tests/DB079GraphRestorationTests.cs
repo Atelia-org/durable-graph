@@ -19,7 +19,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [InlineData(true)]
     public void PairCompletesBothAllocationTablesBeforeAnyHydration(bool failLastAllocation) {
         Directory.CreateDirectory(_root);
-        using GraphResources schemaFile = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        using GraphResources schemaFile = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
         SchemaStore schemas = schemaFile.Schemas;
         var segments = schemaFile.Data;
         using StateRevisionStore store = new(segments);
@@ -63,7 +63,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [InlineData(true)]
     public void EqualExactHeadWithoutEqualityProofDoesNotAuthorizeSingletonReuse(bool registerUnequalProof) {
         Directory.CreateDirectory(_root);
-        using GraphResources schemaFile = GraphResources.CreateNew(Path.Combine(_root, "schemas.rbf"));
+        using GraphResources schemaFile = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
         SchemaStore schemas = schemaFile.Schemas;
         var segments = schemaFile.Data;
         using StateRevisionStore store = new(segments);

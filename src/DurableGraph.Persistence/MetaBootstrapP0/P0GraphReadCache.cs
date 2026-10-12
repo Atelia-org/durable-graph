@@ -58,7 +58,10 @@ internal sealed class P0GraphReadCache(long budgetBytes) {
     internal static long GetDirectoryVersionCharge(P0DirectoryVersion directory) =>
         checked(32 + Align(16L + 2L * Unsafe.SizeOf<FrameAddress?>() + IntPtr.Size + sizeof(byte) + sizeof(int))
             + ArrayCharge(directory.Body.Length, sizeof(byte)));
-    internal static long GetDirectoryCharge(int count) => checked(32 + StateRevisionReadCache.GetMapCharge(count));
+    internal static long GetDirectoryCharge(int count) {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        return checked(64 + ArrayCharge(count, sizeof(uint)) + ArrayCharge(count, Unsafe.SizeOf<FrameAddress>()));
+    }
     private static long ArrayCharge(int count, int width) => Align(checked(24L + (long)count * width));
     private static long Align(long bytes) => checked((bytes + 7) & ~7L);
 }

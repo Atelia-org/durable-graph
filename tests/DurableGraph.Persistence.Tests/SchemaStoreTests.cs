@@ -15,7 +15,7 @@ public sealed class SchemaStoreTests : IDisposable {
         string path = NewPath();
         DurableSchema ancestor = new("Base", 2, new DurableFieldInfo(1, TypeTag.Int64));
         DurableSchema leaf = new("Leaf", 4, [new(2, TypeTag.String)], ancestor);
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             SchemaStore store = resources.Schemas;
             Assert.Same(leaf, store.Register(leaf));
             Assert.Equal(2, store.Count);
@@ -28,7 +28,7 @@ public sealed class SchemaStoreTests : IDisposable {
             Assert.Equal(ObjectLayout.ForDurable(leaf), store.GetRepresentation(ids[0]));
             Assert.Equal(1, CountFrames(resources));
         }
-        using (GraphResources resources = GraphResources.OpenExisting(path)) {
+        using (GraphResources resources = GraphResources.OpenLegacyExisting(path)) {
             SchemaStore store = resources.Schemas;
             Assert.Equal(leaf, store.GetRequired("Leaf", 4));
             Assert.Same(store.GetRequired("Base", 2), store.GetRequired("Leaf", 4).BaseSchema);
@@ -52,7 +52,7 @@ public sealed class SchemaStoreTests : IDisposable {
         string path = NewPath();
         DurableSchema a = new("A", 1);
         DurableSchema b = new("B", 1);
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             Assert.Equal(new RepresentationId(2), resources.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(a)])[0]);
             Assert.Equal(new RepresentationId(3), resources.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(b)])[0]);
             List<SchemaCatalogEntry[]> snapshots = [];
@@ -66,7 +66,7 @@ public sealed class SchemaStoreTests : IDisposable {
             Assert.Equal(new uint[] { 2, 3 }, current.Select(static row => row.Id.Value));
             Assert.Equal(new[] { a, b }, current.Select(static row => row.Schema));
         }
-        using GraphResources reopened = GraphResources.OpenExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(path);
         Assert.Equal(2, reopened.Schemas.Count);
         Assert.Equal(new RepresentationId[] { new(2), new(3) },
             reopened.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(a), ObjectLayout.ForDurable(b)]));
@@ -75,7 +75,7 @@ public sealed class SchemaStoreTests : IDisposable {
 
     [Fact]
     public void FullInputAndAncestorConflictsAreRejectedBeforeAnyWrite() {
-        using GraphResources resources = GraphResources.CreateNew(NewPath());
+        using GraphResources resources = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore store = resources.Schemas;
         DurableSchema old = new("Taken", 1, new DurableFieldInfo(1, TypeTag.Int32));
         store.Register(old);
@@ -93,7 +93,7 @@ public sealed class SchemaStoreTests : IDisposable {
 
     [Fact]
     public void EnumerationNullAndDepthFailuresLeaveStoreUsableAndDoNotConsumeIds() {
-        using GraphResources resources = GraphResources.CreateNew(NewPath());
+        using GraphResources resources = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore store = resources.Schemas;
         Assert.Throws<IOException>(() => store.RegisterBatch(FailingEnumeration()));
         Assert.Throws<ArgumentNullException>(() => store.RegisterBatch([new("A", 1), null!]));
@@ -106,7 +106,7 @@ public sealed class SchemaStoreTests : IDisposable {
 
     [Fact]
     public void EnumerationCannotReenterAndCaughtReentryDoesNotPoison() {
-        using GraphResources resources = GraphResources.CreateNew(NewPath());
+        using GraphResources resources = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore store = resources.Schemas;
         store.RegisterBatch(AttemptReentry());
         Assert.Equal(1, store.Count);
@@ -124,20 +124,20 @@ public sealed class SchemaStoreTests : IDisposable {
     [Fact]
     public void CompleteUnpublishedSnapshotsAndMalformedOrphansAreNotAdopted() {
         string path = NewPath();
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             resources.Schemas.Register(new("A", 1));
             byte[] orphan = SchemaCatalogWireCodec.Write(CatalogTestData.Schemas([new("A", 1), new("Unpublished", 1)]));
             resources.Data.Append(SchemaCatalogWireCodec.RbfTag, orphan).Unwrap();
             resources.Data.Append(SchemaCatalogWireCodec.RbfTag, new byte[] { 99 }).Unwrap();
             resources.Data.ConfirmDurable();
         }
-        using (GraphResources resources = GraphResources.OpenExisting(path)) {
+        using (GraphResources resources = GraphResources.OpenLegacyExisting(path)) {
             Assert.Equal(1, resources.Schemas.Count);
             Assert.Throws<SchemaNotFoundException>(() => resources.Schemas.GetRequired("Unpublished", 1));
             Assert.Equal(new RepresentationId(3),
                 resources.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(new("Accepted", 1))])[0]);
         }
-        using GraphResources reopened = GraphResources.OpenExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(path);
         Assert.Equal(2, reopened.Schemas.Count);
         Assert.Throws<SchemaNotFoundException>(() => reopened.Schemas.GetRequired("Unpublished", 1));
         Assert.Equal("Accepted", reopened.Schemas.GetRequired("Accepted", 1).SchemaId);
@@ -146,7 +146,7 @@ public sealed class SchemaStoreTests : IDisposable {
     [Fact]
     public void OrdinaryControlCapacityRejectionKeepsSchemaOwnerHealthyAndDoesNotInstallCandidate() {
         string path = NewPath();
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             var root = resources.Versions.ReadRef(1).Unwrap();
             // Reach the actual VS pre-I/O capacity check without creating a terabyte file.
             var refs = (System.Collections.IDictionary)resources.Versions.GetType()
@@ -171,7 +171,7 @@ public sealed class SchemaStoreTests : IDisposable {
             Assert.Equal(1, CountFrames(resources)); // The rejected snapshot remains a complete orphan.
             Assert.Equal(new RepresentationId(2), resources.Schemas.RegisterRepresentations([ObjectLayout.ForDurable(new("Accepted", 1))])[0]);
         }
-        using GraphResources reopened = GraphResources.OpenExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(path);
         Assert.Equal(1, reopened.Schemas.Count);
         Assert.Equal("Accepted", reopened.Schemas.GetRequired("Accepted", 1).SchemaId);
         Assert.Throws<SchemaNotFoundException>(() => reopened.Schemas.GetRequired("Rejected", 1));
@@ -183,7 +183,7 @@ public sealed class SchemaStoreTests : IDisposable {
     [InlineData("AfterPublicationConfirmed", true)]
     public void SchemaPublicationFailureFaultsOwnerAndReopenUsesTheActualSelectedRoot(string hookName, bool rootHasSchema) {
         string path = NewPath();
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             InjectPublicationFailure(resources, hookName);
             IOException error = Assert.Throws<IOException>(() => resources.Schemas.Register(new("A", 1)));
             Assert.Equal(hookName, error.Message);
@@ -193,7 +193,7 @@ public sealed class SchemaStoreTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => resources.Schemas.RegisterBatch([]));
         }
         // A close/reopen observes complete appended records, not the result of a power failure.
-        using GraphResources reopened = GraphResources.OpenExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(path);
         Assert.Equal(rootHasSchema ? 1 : 0, reopened.Schemas.Count);
         Assert.Equal(1, CountFrames(reopened)); // The complete snapshot is preserved even when unselected.
         Assert.Equal(new RepresentationId(2),
@@ -204,9 +204,9 @@ public sealed class SchemaStoreTests : IDisposable {
     [Fact]
     public void ReadOnlyStoreLoadsSelectedSnapshotWithoutWriting() {
         string path = NewPath();
-        using (GraphResources resources = GraphResources.CreateNew(path)) { resources.Schemas.Register(new("A", 1)); }
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) { resources.Schemas.Register(new("A", 1)); }
         Dictionary<string, byte[]> before = SnapshotFiles(path);
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(path)) {
+        using (GraphResources resources = GraphResources.OpenLegacyReadOnlyExisting(path)) {
             Assert.Equal(1, resources.Schemas.Count);
             Assert.Throws<InvalidOperationException>(() => resources.Schemas.Register(new("B", 1)));
             Assert.Throws<InvalidOperationException>(() => resources.Schemas.RegisterBatch([]));
@@ -218,7 +218,7 @@ public sealed class SchemaStoreTests : IDisposable {
 
     [Fact]
     public void BorrowedOwnerAndBackingLifetimeAreCheckedBeforeCachedSchemaReads() {
-        GraphResources resources = GraphResources.CreateNew(NewPath());
+        GraphResources resources = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore store = resources.Schemas;
         store.Register(new("A", 1));
         resources.Dispose();
@@ -226,7 +226,7 @@ public sealed class SchemaStoreTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(() => store.Count);
         Assert.Throws<ObjectDisposedException>(() => store.RegisterBatch([]));
 
-        using GraphResources other = GraphResources.CreateNew(NewPath());
+        using GraphResources other = GraphResources.CreateLegacyNew(NewPath());
         SchemaStore otherStore = other.Schemas;
         otherStore.Register(new("A", 1));
         other.Data.Dispose();
@@ -237,7 +237,7 @@ public sealed class SchemaStoreTests : IDisposable {
     [Fact]
     public void ClosingOwnerDuringInputPreparationCannotAppendOrInstallCandidate() {
         string path = NewPath();
-        using (GraphResources resources = GraphResources.CreateNew(path)) {
+        using (GraphResources resources = GraphResources.CreateLegacyNew(path)) {
             SchemaStore store = resources.Schemas;
             Assert.Throws<ObjectDisposedException>(() => store.RegisterBatch(CloseDuringEnumeration()));
             IEnumerable<DurableSchema> CloseDuringEnumeration() {
@@ -245,7 +245,7 @@ public sealed class SchemaStoreTests : IDisposable {
                 resources.Dispose();
             }
         }
-        using GraphResources reopened = GraphResources.OpenExisting(path);
+        using GraphResources reopened = GraphResources.OpenLegacyExisting(path);
         Assert.Equal(0, reopened.Schemas.Count);
         Assert.Equal(0, CountFrames(reopened));
     }

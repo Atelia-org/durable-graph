@@ -21,7 +21,7 @@ public sealed class RevisionDecoderTests : IDisposable {
     public void DecodesFullMembershipTypedDeltaAndOneStringInstancePerIdWithoutWriting() {
         DecodedRevision decoded;
         FrameAddress latest;
-        using (GraphResources file = GraphResources.CreateNew(NextPath())) {
+        using (GraphResources file = GraphResources.CreateLegacyNew(NextPath())) {
             var segments = file.Data;
             SchemaStore schemas = file.Schemas;
             schemas.Register(NodeSchema);
@@ -60,7 +60,7 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     [Fact]
     public void EmptyMembershipIsARealRevisionAndInvalidAddressDoesNotMeanEmpty() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);
@@ -75,7 +75,7 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void TargetRevisionReferenceValidationRejectsRemovedOrWrongKindString(bool wrongKind) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         schemas.RegisterBatch([NodeSchema, ByteSchema]);
@@ -102,7 +102,7 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(1)]
     [InlineData(2)]
     public void UnknownDefinitionReaderOrFutureVersionDoesNotFallBack(int missing) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         DurableSchema stored = missing == 2 ? new("Number", 2, new DurableFieldInfo(1, TypeTag.Byte)) : ByteSchema;
@@ -124,7 +124,7 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void FullSchemaMismatchIncludesAncestorAndPrecedesThisObjectsBody(bool ancestorMismatch) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         DurableSchema stored = new("Leaf", 1, [new(1, TypeTag.Byte)], new("Ancestor", 1));
         DurableSchema wrong = ancestorMismatch
@@ -143,7 +143,7 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     [Fact]
     public void LateUnknownReaderDoesNotPublishPartialRowsOrUseCallbackRegistration() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         DurableSchema second = new("Other", 1, new DurableFieldInfo(1, TypeTag.Byte));
         SchemaStore schemas = file.Schemas;
@@ -169,7 +169,7 @@ public sealed class RevisionDecoderTests : IDisposable {
     [InlineData(2)]
     [InlineData(3)]
     public void RejectsLateMalformedBodiesAndStringDelta(int malformed) {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         schemas.Register(NodeSchema);
@@ -194,7 +194,7 @@ public sealed class RevisionDecoderTests : IDisposable {
 
     [Fact]
     public void DeclaredHeadMustContainLocalObjectAndCannotFallbackToParent() {
-        using GraphResources file = GraphResources.CreateNew(NextPath());
+        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
         var segments = file.Data;
         SchemaStore schemas = file.Schemas;
         using StateRevisionStore store = new(segments);

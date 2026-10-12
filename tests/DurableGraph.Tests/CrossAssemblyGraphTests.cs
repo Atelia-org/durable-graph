@@ -30,24 +30,23 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = host.GetMethod("Models")!
             .CreateDelegate<Func<bool, StateModelRegistry>>()(reverseRegistration);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore states = new(segments.Data);
-        var initial = RevisionDecoder.ReadSnapshot(states, schemas, addresses[0], models.Snapshot(schemas));
+        var states = segments.MetaBootstrapStore;
+        var initial = DecodedRevision.ReadSplit(states, addresses[0], models);
         ObjectStateRecord world = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.World");
         ObjectStateRecord special = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Special");
         ObjectStateRecord dropped = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Node");
         foreach (int index in new[] { 1, 4, 6 }) {
-            Assert.Empty(states.Read(addresses[index]).LocalObjects);
-            Assert.Empty(states.Read(addresses[index]).RemovedObjectIds);
+            Assert.Empty(DefaultRecords(states, addresses[index]));
+            Assert.Empty(DefaultRemoved(states, addresses[index]));
         }
-        ObjectVersionRecord childChange = Assert.Single(states.Read(addresses[2]).LocalObjects);
+        ObjectVersionRecord childChange = Assert.Single(DefaultRecords(states, addresses[2]));
         Assert.Equal(special.Id.Value, childChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, childChange.Kind);
-        Assert.DoesNotContain(states.Read(addresses[2]).LocalObjects, r => r.ObjectId == world.Id.Value);
-        Assert.Equal(dropped.Id.Value, Assert.Single(states.Read(addresses[3]).RemovedObjectIds));
-        Assert.NotEmpty(states.Read(addresses[5]).LocalObjects);
-        Assert.All(states.Read(addresses[5]).LocalObjects, r => Assert.Equal(ObjectVersionKind.Delta, r.Kind));
-        var final = RevisionDecoder.ReadSnapshot(states, schemas, addresses[^1], models.Snapshot(schemas));
+        Assert.DoesNotContain(DefaultRecords(states, addresses[2]), r => r.ObjectId == world.Id.Value);
+        Assert.Equal(dropped.Id.Value, Assert.Single(DefaultRemoved(states, addresses[3])));
+        Assert.NotEmpty(DefaultRecords(states, addresses[5]));
+        Assert.All(DefaultRecords(states, addresses[5]), r => Assert.Equal(ObjectVersionKind.Delta, r.Kind));
+        var final = DecodedRevision.ReadSplit(states, addresses[^1], models);
         Assert.DoesNotContain(final.Objects, r => r.Id == dropped.Id);
         Assert.Contains(final.Objects, r => r.Id == special.Id);
         Assert.Contains(final.Objects, r => r.Id == world.Id);

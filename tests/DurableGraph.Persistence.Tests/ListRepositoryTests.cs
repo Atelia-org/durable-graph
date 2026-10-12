@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -5,7 +6,6 @@ using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -37,9 +37,9 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.Same(values, session.World.Values);
         }
         registered = ReadSelectedSchemaPayload(_root);
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore store = new(segments);
-            ObjectVersionRecord delta = Assert.Single(store.Read(adaptive).LocalObjects);
+        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+            P0GraphStore store = file.MetaBootstrapStore;
+            ObjectVersionRecord delta = Assert.Single(Records(store, adaptive));
             listId = new(delta.ObjectId);
             // Inserting 33 items exceeds Local's lookahead, and changing the tail
             // prevents its suffix shortcut. The tiny Delta witnesses the frozen
@@ -74,29 +74,33 @@ public sealed class ListRepositoryTests : IDisposable {
         }
         Assert.Equal(registered, ReadSelectedSchemaPayload(_root));
         using (GraphResources file = GraphResources.OpenExisting(_root)) {
-            var segments = file.Data;
-            using StateRevisionStore store = new(segments);
-            Assert.Equal(seed, store.Read(adaptive).ParentRevisionAddress);
-            Assert.Equal(adaptive, store.Read(myers).ParentRevisionAddress);
-            Assert.Equal(myers, store.Read(local).ParentRevisionAddress);
-            Assert.Equal(local, store.Read(position).ParentRevisionAddress);
+            P0GraphStore store = file.MetaBootstrapStore;
+            Assert.Equal(seed, store.ReadGraph(adaptive).SourceGraph);
+            Assert.Equal(adaptive, store.ReadGraph(myers).SourceGraph);
+            Assert.Equal(myers, store.ReadGraph(local).SourceGraph);
+            Assert.Equal(local, store.ReadGraph(position).SourceGraph);
             foreach (FrameAddress revision in new[] { myers, local, position }) {
-                ObjectVersionRecord change = Assert.Single(store.Read(revision).LocalObjects);
+                ObjectVersionRecord change = Assert.Single(Records(store, revision));
                 Assert.Equal(listId.Value, change.ObjectId);
                 Assert.Equal(ObjectVersionKind.Delta, change.Kind);
             }
 
-            SchemaStore schemas = file.Schemas;
-            // Decode historical versions with an unrelated writer choice. All deltas
-            // share one reader and inherit the same Base representation.
-            StateModelSnapshot readers = Models().Snapshot(schemas);
-            RepresentationId representation = TypedObjectVersionReader.DecodeBase(store.ReadObjectVersionChain(seed, listId.Value), schemas).RepresentationId;
-            foreach (FrameAddress revision in new[] { adaptive, myers, local, position }) {
-                Assert.Equal(representation, TypedObjectVersionReader.DecodeBase(store.ReadObjectVersionChain(revision, listId.Value), schemas).RepresentationId);
+            // Each Base resolves against the exact originating meta graph, independently
+            // of the algorithm chosen by the current reader configuration.
+            P0ObjectChain chain = store.ReadObjectChain(seed, listId.Value);
+            P0ChainEntry firstBase = chain.Entries[0];
+            P0CatalogView origin = P0CatalogView.Load(store, firstBase.SchemaRoot!.Value);
+            ObjectLayout representation = P0TypedBodyCodec.Decode(firstBase.Record.Body, origin).Layout;
+            foreach (FrameAddress address in new[] { adaptive, myers, local, position }) {
+                P0ChainEntry historicalBase = store.ReadObjectChain(address, listId.Value).Entries[0];
+                Assert.Equal(firstBase.ContainingBatch, historicalBase.ContainingBatch);
+                Assert.Equal(firstBase.SchemaRoot, historicalBase.SchemaRoot);
+                Assert.Equal(representation, P0TypedBodyCodec.Decode(historicalBase.Record.Body,
+                    P0CatalogView.Load(store, historicalBase.SchemaRoot!.Value)).Layout);
             }
-            Assert.Equal(1000, RevisionDecoder.ReadSnapshot(store, schemas, seed, readers).GetRequired(listId).GetListState<int>().Count);
-            Assert.Equal(1033, RevisionDecoder.ReadSnapshot(store, schemas, adaptive, readers).GetRequired(listId).GetListState<int>().Count);
-            FrozenListState<int> final = RevisionDecoder.ReadSnapshot(store, schemas, position, readers).GetRequired(listId).GetListState<int>();
+            Assert.Equal(1000, DecodedRevision.ReadSplit(store, seed, Models()).GetRequired(listId).GetListState<int>().Count);
+            Assert.Equal(1033, DecodedRevision.ReadSplit(store, adaptive, Models()).GetRequired(listId).GetListState<int>().Count);
+            FrozenListState<int> final = DecodedRevision.ReadSplit(store, position, Models()).GetRequired(listId).GetListState<int>();
             Assert.Equal(1035, final.Count);
             Assert.Equal(7, final[0]);
             Assert.Equal(42, final[1]);
@@ -129,15 +133,16 @@ public sealed class ListRepositoryTests : IDisposable {
             world.Values.Capacity += 100;
             unchanged = session.Commit(NoRebase);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore store = new(segments);
-            ObjectVersionRecord listChange = Assert.Single(store.Read(resize).LocalObjects);
+        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+            P0GraphStore store = file.MetaBootstrapStore;
+            ObjectVersionRecord listChange = Assert.Single(Records(store, resize));
             Assert.Equal(ObjectVersionKind.Delta, listChange.Kind);
-            Assert.Contains(listChange.ObjectId, store.ReadLiveObjectHeadMap(seed).Keys);
-            Assert.Equal(seed, store.Read(resize).ParentRevisionAddress);
-            ObjectVersionRecord childChange = Assert.Single(store.Read(childOnly).LocalObjects);
+            Assert.Contains(listChange.ObjectId, store.ReadGraph(seed).Objects.Keys);
+            Assert.Equal(seed, store.ReadGraph(resize).SourceGraph);
+            ObjectVersionRecord childChange = Assert.Single(Records(store, childOnly));
             Assert.NotEqual(listChange.ObjectId, childChange.ObjectId);
-            Assert.Empty(store.Read(unchanged).LocalObjects);
+            Assert.Empty(Records(store, unchanged));
+            Assert.Equal(store.ReadGraph(childOnly).DirectoryRoot, store.ReadGraph(unchanged).DirectoryRoot);
         }
         using StateSaveHarness cold = StateSaveHarness.OpenExisting(_root, Models());
         using StateSaveSession<World> loaded = cold.Load<World>();
@@ -165,8 +170,9 @@ public sealed class ListRepositoryTests : IDisposable {
                 if (checkpoint == CommitCheckpoint.AfterPrepare) { values[0] = 999; values.Add(66); }
             };
             frozen = session.Commit(NoRebase);
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint == CommitCheckpoint.BeforePublication) { throw new IOException("known not published"); }
+            repository.Checkpoint = null;
+            repository.MetaBootstrapCheckpoint = checkpoint => {
+                if (checkpoint == P0SaveCheckpoint.BeforePublication) { throw new IOException("known not published"); }
             };
             GraphCommitException failure = Assert.Throws<GraphCommitException>(() => session.Commit(NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, failure.Outcome);
@@ -188,15 +194,13 @@ public sealed class ListRepositoryTests : IDisposable {
             retry = session.Commit(NoRebase);
         }
         using (GraphResources file = GraphResources.OpenExisting(_root)) {
-            var segments = file.Data;
-            using StateRevisionStore store = new(segments);
-            Assert.Equal(seed, store.Read(frozen).ParentRevisionAddress);
-            Assert.Equal(frozen, store.Read(failedCandidate).ParentRevisionAddress);
-            Assert.Equal(frozen, store.Read(retry).ParentRevisionAddress);
+            P0GraphStore store = file.MetaBootstrapStore;
+            Assert.Equal(seed, store.ReadGraph(frozen).SourceGraph);
+            Assert.Equal(frozen, store.ReadGraph(failedCandidate).SourceGraph);
+            Assert.Equal(frozen, store.ReadGraph(retry).SourceGraph);
             Assert.NotEqual(failedCandidate, retry);
 
-            SchemaStore schemas = file.Schemas;
-            DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, frozen, Models().Snapshot(schemas));
+            DecodedRevision decoded = DecodedRevision.ReadSplit(store, frozen, Models());
             FrozenListState<int> old = Assert.Single(decoded.Objects, row => row.Kind == ObjectStateKind.List).GetListState<int>();
             Assert.Equal(101, old.Count);
             Assert.Equal(10000, old.Elements[0]);
@@ -225,22 +229,19 @@ public sealed class ListRepositoryTests : IDisposable {
             changed = session.Commit(NoRebase);
         }
         using GraphResources file = GraphResources.OpenExisting(_root);
-        var segments = file.Data;
-        using StateRevisionStore store = new(segments);
-        StateRevision revision = store.Read(changed);
-        IReadOnlyDictionary<uint, FrameAddress> priorHeads = store.ReadLiveObjectHeadMap(seed);
-        Assert.Equal(4, priorHeads.Keys.Except(store.ReadLiveObjectHeadMap(changed).Keys).Count());
+        P0GraphStore store = file.MetaBootstrapStore;
+        IReadOnlyDictionary<uint, FrameAddress> priorHeads = store.ReadGraph(seed).Objects;
+        Assert.Equal(4, priorHeads.Keys.Except(store.ReadGraph(changed).Objects.Keys).Count());
         // The policy may also choose Base for the small changed World body.
         // New membership, rather than representation kind, identifies the replacement.
-        ObjectVersionRecord replacement = Assert.Single(revision.LocalObjects, row => !priorHeads.ContainsKey(row.ObjectId));
+        ObjectVersionRecord replacement = Assert.Single(Records(store, changed), row => !priorHeads.ContainsKey(row.ObjectId));
         Assert.Equal(ObjectVersionKind.Base, replacement.Kind);
 
-        SchemaStore schemas = file.Schemas;
-        DecodedRevision decoded = RevisionDecoder.ReadSnapshot(store, schemas, changed, Models().Snapshot(schemas));
+        DecodedRevision decoded = DecodedRevision.ReadSplit(store, changed, Models());
         ObjectStateRecord replacementState = decoded.GetRequired(new(replacement.ObjectId));
         Assert.Equal(ObjectStateKind.List, replacementState.Kind);
         Assert.Equal(values, replacementState.GetListState<int>().Elements.ToArray());
-        Assert.Equal(2, store.ReadLiveObjectHeadMap(changed).Count);
+        Assert.Equal(2, store.ReadGraph(changed).Objects.Count);
         Assert.Equal(5, priorHeads.Count);
     }
 
@@ -328,7 +329,9 @@ public sealed class ListRepositoryTests : IDisposable {
             (mask & 8) != 0 ? reader.ReadByte() : prior.Value);
     }
     private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
-    private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
+    private static IReadOnlyList<ObjectVersionRecord> Records(P0GraphStore store, FrameAddress address) =>
+        store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
+
     public void Dispose() {
         if (Directory.Exists(_root)) { Directory.Delete(_root, recursive: true); }
     }

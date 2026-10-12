@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Reflection;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
@@ -54,20 +55,20 @@ public sealed partial class EventHistoryRepositoryTests {
             mainHead = main.CommitState(NoRebase);
             Assert.Equal((byte)8, Assert.IsType<Node>(repository.ReadState(otherHead)).Left!.Value);
         }
-        using (SegmentStore segments = OpenState()) {
-            using StateRevisionStore states = new(segments);
-            uint childId = Assert.Single(states.ReadLiveObjectHeadMap(initial.RevisionAddress).Keys, id => id != initial.RootId.Value);
-            ObjectVersionRecord firstWrite = Assert.Single(states.Read(childOnly.RevisionAddress).LocalObjects);
+        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+            P0GraphStore states = resources.MetaBootstrapStore;
+            uint childId = Assert.Single(states.ReadGraph(initial.RevisionAddress).Objects.Keys, id => id != initial.RootId.Value);
+            ObjectVersionRecord firstWrite = Assert.Single(StorageTestData.LocalRecords(states, childOnly.RevisionAddress));
             Assert.Equal(childId, firstWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, firstWrite.Kind);
-            Assert.Equal(initial.RevisionAddress, states.Read(childOnly.RevisionAddress).ParentRevisionAddress);
-            ObjectVersionRecord nextWrite = Assert.Single(states.Read(nextChildOnly.RevisionAddress).LocalObjects);
+            Assert.Equal(initial.RevisionAddress, states.ReadGraph(childOnly.RevisionAddress).SourceGraph);
+            ObjectVersionRecord nextWrite = Assert.Single(StorageTestData.LocalRecords(states, nextChildOnly.RevisionAddress));
             Assert.Equal(childId, nextWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, nextWrite.Kind);
-            Assert.Equal(childOnly.RevisionAddress, nextWrite.PriorAddress);
-            Assert.Equal(new[] { initial.RootId.Value }, states.ReadLiveObjectHeadMap(removed.RevisionAddress).Keys);
-            Assert.Equal(initial.RevisionAddress, states.Read(otherHead.RevisionAddress).ParentRevisionAddress);
-            Assert.Equal(initial.RevisionAddress, states.Read(mainHead.RevisionAddress).ParentRevisionAddress);
+            Assert.Equal(states.ReadGraph(childOnly.RevisionAddress).Objects[childId], nextWrite.PriorAddress);
+            Assert.Equal(new[] { initial.RootId.Value }, states.ReadGraph(removed.RevisionAddress).Objects.Keys);
+            Assert.Equal(initial.RevisionAddress, states.ReadGraph(otherHead.RevisionAddress).SourceGraph);
+            Assert.Equal(initial.RevisionAddress, states.ReadGraph(mainHead.RevisionAddress).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using BranchCheckout coldMain = reopened.Checkout("main");

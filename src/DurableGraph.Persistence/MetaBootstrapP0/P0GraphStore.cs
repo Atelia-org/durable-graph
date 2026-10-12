@@ -7,6 +7,7 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 // A borrowed facade with owned physical reads. Reading a graph validates its selected physical
 // relations; typed body/view/reference qualification remains with each producer.
 internal sealed class P0GraphStore : IDisposable {
+    internal const long DefaultReadCacheBudgetBytes = 8 * 1024 * 1024;
     private readonly DataStore _frames;
     private readonly Action? _ensureOwner;
     private P0GraphReadCache? _readCache;
@@ -19,7 +20,7 @@ internal sealed class P0GraphStore : IDisposable {
     private int _directoryThreshold = 5;
 
     internal P0GraphStore(DataStore frames, Action? ensureOwner = null,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) {
+        long readCacheBudgetBytes = DefaultReadCacheBudgetBytes) {
         ArgumentNullException.ThrowIfNull(frames);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         _frames = frames;
@@ -113,30 +114,13 @@ internal sealed class P0GraphStore : IDisposable {
     internal P0GraphSnapshot ReadGraph(FrameAddress address) {
         EnsureUsable();
         P0GraphMetadata metadata = ReadMetadata(address);
-        FrameAddress? source = ResolveContentSource(metadata.Kind, metadata.Parent, address);
-        RequireSchemaRoot(metadata.Kind, metadata.SchemaRoot);
-        FrameAddress? sourceDirectory = source is { } actualSource ? ReadMetadata(actualSource).DirectoryRoot : null;
-        P0DirectoryVersion directoryVersion = ReadDirectoryVersion(metadata.DirectoryRoot);
-        if (sourceDirectory == metadata.DirectoryRoot) {
-            if (metadata.OwnedBatch is not null) { throw new InvalidDataException("A reused directory cannot own a new batch."); }
-        } else {
-            if (directoryVersion.SourceGraph != source) { throw new InvalidDataException("Directory creator does not match the graph's content Parent."); }
-            if (directoryVersion.Kind == ObjectVersionKind.Delta &&
-                (sourceDirectory is null || directoryVersion.Prior != sourceDirectory)) {
-                throw new InvalidDataException("Directory Delta must extend the exact content Parent directory.");
-            }
-            if (source is null && directoryVersion.Kind != ObjectVersionKind.Base) {
-                throw new InvalidDataException("An initial directory must be Base.");
-            }
-        }
+        FrameAddress? source = ValidateMetadataRelations(address, metadata,
+            out FrameAddress? sourceDirectory, out P0Batch? batch);
         IReadOnlyDictionary<uint, FrameAddress> heads = ReadDirectory(metadata.DirectoryRoot);
         if (!heads.ContainsKey(metadata.RootId.Value)) { throw new InvalidDataException("RootId is not live."); }
         if (metadata.OwnedBatch is { } owned) {
-            P0Batch batch = ReadBatch(owned);
-            if (batch.SourceGraph != source) { throw new InvalidDataException("Owned batch does not use the graph's exact content Parent."); }
-            if (batch.SchemaRoot != metadata.SchemaRoot) { throw new InvalidDataException("Owned Base Schema root differs from the selected graph view."); }
             IReadOnlyDictionary<uint, FrameAddress>? sourceHeads = null;
-            foreach (ObjectVersionRecord record in batch.Records) {
+            foreach (ObjectVersionRecord record in batch!.Records) {
                 if (!heads.TryGetValue(record.ObjectId, out FrameAddress selected) || selected != owned) {
                     throw new InvalidDataException("Every local record must be live at the owned batch.");
                 }
@@ -152,6 +136,39 @@ internal sealed class P0GraphStore : IDisposable {
         // reconstruct old Delta chains or authenticate global entity history.
         foreach ((uint id, FrameAddress head) in heads) { _ = FindRecord(ReadBatch(head), id); }
         return new(address, metadata, source, heads, this);
+    }
+
+    // Qualify a selected Event's source links without replaying its directory,
+    // validating live membership, or invoking object body readers.
+    internal void ValidateMetadataRelations(FrameAddress address) {
+        EnsureUsable();
+        _ = ValidateMetadataRelations(address, ReadMetadata(address), out _, out _);
+    }
+
+    private FrameAddress? ValidateMetadataRelations(FrameAddress address, P0GraphMetadata metadata,
+        out FrameAddress? sourceDirectory, out P0Batch? ownedBatch) {
+        FrameAddress? source = ResolveContentSource(metadata.Kind, metadata.Parent, address);
+        RequireSchemaRoot(metadata.Kind, metadata.SchemaRoot);
+        sourceDirectory = source is { } actualSource ? ReadMetadata(actualSource).DirectoryRoot : null;
+        P0DirectoryVersion directoryVersion = ReadDirectoryVersion(metadata.DirectoryRoot);
+        if (sourceDirectory == metadata.DirectoryRoot) {
+            if (metadata.OwnedBatch is not null) { throw new InvalidDataException("A reused directory cannot own a new batch."); }
+        } else {
+            if (directoryVersion.SourceGraph != source) { throw new InvalidDataException("Directory creator does not match the graph's content Parent."); }
+            if (directoryVersion.Kind == ObjectVersionKind.Delta &&
+                (sourceDirectory is null || directoryVersion.Prior != sourceDirectory)) {
+                throw new InvalidDataException("Directory Delta must extend the exact content Parent directory.");
+            }
+            if (source is null && directoryVersion.Kind != ObjectVersionKind.Base) {
+                throw new InvalidDataException("An initial directory must be Base.");
+            }
+        }
+        ownedBatch = metadata.OwnedBatch is { } owned ? ReadBatch(owned) : null;
+        if (ownedBatch is { } batch) {
+            if (batch.SourceGraph != source) { throw new InvalidDataException("Owned batch does not use the graph's exact content Parent."); }
+            if (batch.SchemaRoot != metadata.SchemaRoot) { throw new InvalidDataException("Owned Base Schema root differs from the selected graph view."); }
+        }
+        return source;
     }
 
     internal P0GraphMetadata ReadMetadata(FrameAddress address) {

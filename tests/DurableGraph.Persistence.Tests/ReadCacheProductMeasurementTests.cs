@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Diagnostics;
 using System.Text.Json;
 using Atelia.FrameStore;
@@ -33,8 +34,21 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                 using (Repository repository = open.Value) {
                     CheckpointAddress pending = repository.GetHead("main");
                     CheckpointAddress state = Assert.IsType<CheckpointAddress>(repository.GetPreviousState(pending));
+                    P0GraphStore store = repository.MetaBootstrapStore;
+                    P0GraphReadCacheStatistics beforeReads = store.ReadCacheStatistics;
                     var first = Measure(() => ((Node)repository.ReadState(state)));
+                    P0GraphReadCacheStatistics afterFirst = store.ReadCacheStatistics;
                     var warm = Measure(() => ((Node)repository.ReadState(state)));
+                    P0GraphReadCacheStatistics afterRepeated = store.ReadCacheStatistics;
+                    Assert.True(afterFirst.BatchDecodes > beforeReads.BatchDecodes);
+                    Assert.True(afterFirst.DirectoryMaterializations > beforeReads.DirectoryMaterializations);
+                    Assert.Equal(afterFirst.GraphDecodes, afterRepeated.GraphDecodes);
+                    Assert.Equal(afterFirst.BatchDecodes, afterRepeated.BatchDecodes);
+                    Assert.Equal(afterFirst.DirectoryVersionDecodes, afterRepeated.DirectoryVersionDecodes);
+                    Assert.Equal(afterFirst.DirectoryMaterializations, afterRepeated.DirectoryMaterializations);
+                    Assert.True(afterRepeated.BatchHits > afterFirst.BatchHits);
+                    Assert.True(afterRepeated.DirectoryHits > afterFirst.DirectoryHits);
+                    Assert.InRange(afterRepeated.ResidentChargeBytes, 1L, P0GraphStore.DefaultReadCacheBudgetBytes);
                     var pair = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
                     var pairWarm = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
                     Assert.Equal(expected, Checksum(first.Value));
@@ -46,7 +60,10 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     if (sample >= 0) Write(new { Kind = "product-read", Sample = sample, DurableNodes = 17,
                         CompletedStateChanges = 3, HeadIsEvent = true, OpenReadOnly = open.Cost,
                         FirstReadAfterOpen = first.Cost, RepeatedRead = warm.Cost,
-                        ReadPairAfterReads = pair.Cost, RepeatedReadPair = pairWarm.Cost, Checksum = expected });
+                        ReadPairAfterReads = pair.Cost, RepeatedReadPair = pairWarm.Cost,
+                        PhysicalCacheBeforeReads = beforeReads, PhysicalCacheAfterFirst = afterFirst,
+                        PhysicalCacheAfterRepeated = afterRepeated,
+                        Checksum = expected });
                 }
 
                 var writableOpen = Measure(() => Repository.OpenExisting(path, models));
@@ -64,19 +81,23 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     Stamp afterPrepare = default, beforeAppend = default, afterAppend = default;
                     repository.Checkpoint = checkpoint => {
                         if (checkpoint == CommitCheckpoint.AfterPrepare) afterPrepare = Stamp.Now();
-                        else if (checkpoint == CommitCheckpoint.BeforeStateAppend) beforeAppend = Stamp.Now();
-                        else if (checkpoint == CommitCheckpoint.AfterStateAppend) afterAppend = Stamp.Now();
+
+                    };
+                    repository.MetaBootstrapCheckpoint = checkpoint => {
+                        if (checkpoint == P0SaveCheckpoint.BeforeAppend) beforeAppend = Stamp.Now();
+                        else if (checkpoint == P0SaveCheckpoint.AfterBusinessAppend) afterAppend = Stamp.Now();
                     };
                     Stamp start = Stamp.Now();
                     CheckpointAddress committed = session.CommitState(NoRebase);
                     Stamp end = Stamp.Now();
                     repository.Checkpoint = null;
+                    repository.MetaBootstrapCheckpoint = null;
                     Assert.True(afterPrepare.Timestamp > 0 && beforeAppend.Timestamp > 0 && afterAppend.Timestamp > 0);
                     Assert.Equal(nextExpected, Checksum(((Node)repository.ReadState(committed))));
                     if (sample >= 0) Write(new { Kind = "product-write", Sample = sample,
                         OpenWritable = writableOpen.Cost, ResumeAfterOpen = resume.Cost,
                         PrepareIncludingEntryPreflight = Between(start, afterPrepare),
-                        StateAppend = Between(beforeAppend, afterAppend),
+                        SharedWriterAppend = Between(beforeAppend, afterAppend),
                         CompleteStateCommit = Between(start, end), Checksum = nextExpected });
                 }
             } finally {

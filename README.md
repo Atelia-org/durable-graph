@@ -12,7 +12,7 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
 公开入口是非泛型 `Repository` / `BranchCheckout`：分别提交 Event 快照和 State，可从 Event 开始，也可连续提交同一角色。
-VersionStore 的仓库根发布 Schema 与命名分支；恢复读取已保存的结果，不重新执行历史业务处理器。
+VersionStore 共同发布共享 Schema 根与命名分支目录；恢复读取已保存的结果，不重新执行历史业务处理器。
 
 ## 最短接入路径
 
@@ -152,8 +152,8 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 省略策略参数即可使用默认 `(5, 5)`：对象级读取放大动机阈值为 5，可选 Base 软预算为 5%。
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
 
-`CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的配置，后续操作共用这一模型环境。
-修改 registry builder 只影响之后打开的仓库；同一仓库不能逐操作切换模型目录。普通模型与 Family 按需闭合，成功结果可复用。
+`CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
+读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，无 State 取创建时 shared；提交不原地换已有模型／preparation。普通模型与 Family 按需闭合，同环境可复用，不保证任意跨视图回调等价。
 历史 Normalize/Upgrade 必须由固定输入与环境决定结果且不修改输入；Capture 必须提供 canonical current DTO。
 exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 的结果必须稳定，
 不能让调用次数决定业务结果；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化放在恢复交付之后。
@@ -181,7 +181,7 @@ before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence �
 后续分支推进或移动不改变所选结尾；循环内可以调用 `ReadEvent`。`HistoryOrder.OldestFirst` 先准备范围内的轻量地址，再从旧到新输出。
 可选 `afterExclusive` 排除下界及其更早历史；同点得到空范围，非祖先下界在交付首项前拒绝。这个校验可能需要完整范围的元数据回溯。
 `ReadFrames` 仍返回从旧到新的**完整元数据链**，用于检查所有 E/S 位置；它有全量成本。两种查询都排除其他分支独有记录和未连入所选链的 orphan。
-打开只加载必要仓库根与 Schema；读取所选图时检查完整内容及两种 Parent 的对应，不执行全历史或 orphan 启动审计。
+打开只读取必要分支目录／shared 两根；所选业务图 pin 完整 Schema 视图，读取时检查内容与来源关系，不执行全历史或 orphan 启动审计。
 需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`。
 
 `ReadCheckpoint` 一次恢复当前图与最近严格祖先中另一角色的图，最多两份，全部成功才返回。
@@ -314,7 +314,7 @@ Head 是 Event 或 State 均不能独自证明某个请求是否完成；应用�
 
 正常本地构建会把当前 Schema 模板发布到模型项目的 `DurableGraphSchemaHistory/*.dgschema`。
 **将这些文件与模型源码一起提交 Git**；它们用于重新生成旧版 DTO/reader，不是可清理的 obj 缓存。
-Repository 中根选定的 SchemaSnapshot 记录实际保存时的完整布局；两者职责不同。
+运行时每个业务图 pin 的 meta catalog 记录实际保存的完整布局；构建期 history 与运行时 catalog 职责不同。读取历史可以在内存升级，第一次真实 E/S 保存才共同接受所需新 meta。
 
 首次接入建议显式设置 `DurableGraphGenerateDefinitions=true`，固定使用本文的 Family 登记外观。
 生成的代码默认位于项目 `obj` 下，可搜索 `DurableGenericStates.g.cs` 查看 DTO 和登记入口；不要编辑生成文件。
@@ -404,7 +404,7 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 
 保存失败时不要一律重试：`GraphCommitException.Outcome` 区分 NotPublished / Unknown / Published，
 同时检查仓库与工作副本的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
-按持久 head 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。通常无需直接操作 SchemaStore、Storage 或发布日志。
+按持久 head 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。应用通过 Repository 保存；必要 Schema 由真实图捕获进入共同候选，不需要独立调用 SchemaStore 登记或操作发布日志。
 
 ## 从源码打包
 

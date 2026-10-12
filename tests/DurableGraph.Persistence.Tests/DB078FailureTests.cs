@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Reflection;
 using Atelia.Data;
 using Atelia.DurableGraph.Storage;
@@ -8,14 +9,14 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class EventHistoryRepositoryTests {
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterStateAppend, false)]
-    [InlineData((int)CommitCheckpoint.BeforePublication, false)]
-    [InlineData((int)CommitCheckpoint.AfterPublication, true)]
-    [InlineData((int)CommitCheckpoint.BeforeInstall, true)]
+    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend, false)]
+    [InlineData((int)P0SaveCheckpoint.BeforePublication, false)]
+    [InlineData((int)P0SaveCheckpoint.AfterPublication, true)]
+    [InlineData((int)P0SaveCheckpoint.BeforeInstall, true)]
     public void InitialEventPublicationFailureReopensWithEitherNoBranchOrEventOnlyBranch(int point, bool published) {
         using (Repository repository = CreateRepository()) {
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint == (CommitCheckpoint)point) throw new IOException("Interrupted initial Event.");
+            repository.MetaBootstrapCheckpoint = checkpoint => {
+                if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("Interrupted initial Event.");
             };
             var failure = Assert.Throws<GraphCommitException>(() =>
                 repository.CreateBranchFromEvent("main", new Node { Value = 7 }, NoRebase));
@@ -37,18 +38,18 @@ public sealed partial class EventHistoryRepositoryTests {
 
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterStateAppend, false)]
-    [InlineData((int)CommitCheckpoint.BeforePublication, false)]
-    [InlineData((int)CommitCheckpoint.AfterPublication, true)]
-    [InlineData((int)CommitCheckpoint.BeforeInstall, true)]
+    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend, false)]
+    [InlineData((int)P0SaveCheckpoint.BeforePublication, false)]
+    [InlineData((int)P0SaveCheckpoint.AfterPublication, true)]
+    [InlineData((int)P0SaveCheckpoint.BeforeInstall, true)]
     public void FirstStateFailureNeverInstallsCandidateAndColdCheckoutUsesActualPublishedHead(int point, bool published) {
         using (Repository repository = CreateRepository()) {
             using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Node { Value = 7 }, NoRebase);
             var eventHead = checkout.Head;
-            repository.Checkpoint = checkpoint => {
+            repository.MetaBootstrapCheckpoint = checkpoint => {
                 Assert.Null(checkout.State);
                 Assert.Equal(eventHead, checkout.Head);
-                if (checkpoint == (CommitCheckpoint)point) throw new IOException("Interrupted first State.");
+                if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("Interrupted first State.");
             };
             var failure = Assert.Throws<GraphCommitException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
             Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);

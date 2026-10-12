@@ -15,7 +15,7 @@ public sealed class GenericSchemaPersistenceTests {
         Assert.Equal(schema, SchemaCatalogTestData.Read(golden)[new(type, 128)]);
         string path = Path.Combine(Path.GetTempPath(), $"generic-envelope-{Guid.NewGuid():N}.rbf");
         try {
-            using GraphResources file = GraphResources.CreateNew(path);
+            using GraphResources file = GraphResources.CreateLegacyNew(path);
             SchemaStore schemas = file.Schemas;
             RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
             var encoded = BaseObjectBodyCodec.Encode(id, new([0xAB]));
@@ -62,7 +62,7 @@ public sealed class GenericSchemaPersistenceTests {
             DurableSchema pointBox1 = new(pointBoxType, 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point1));
             DurableSchema pointBoxMissedBump = new(pointBoxType, 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point2));
             DurableSchema intBox = new(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32)), 1, new DurableFieldInfo(1, TypeTag.Int32));
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 var store = file.Schemas;
                 store.RegisterBatch([pointBox1, intBox]);
                 long tail = DataBytes(file.Data);
@@ -73,7 +73,7 @@ public sealed class GenericSchemaPersistenceTests {
                 Assert.True(store.TryGet(new(pointBoxType, 1), out var found));
                 Assert.Same(pointBox1, found);
             }
-            using (GraphResources file = GraphResources.OpenExisting(path)) {
+            using (GraphResources file = GraphResources.OpenLegacyExisting(path)) {
                 var store = file.Schemas;
                 Assert.Equal(pointBox1, store.GetRequired(pointBoxType, 1));
                 Assert.Equal(intBox, store.GetRequired(intBox.Type, 1));
@@ -89,7 +89,7 @@ public sealed class GenericSchemaPersistenceTests {
     public void DeclarationArityAndKindCannotChangeAcrossClosedFamiliesOrNominalOperands() {
         string path = Path.Combine(Path.GetTempPath(), $"durable-generic-arity-{Guid.NewGuid():N}.rbf");
         try {
-            using GraphResources file = GraphResources.CreateNew(path);
+            using GraphResources file = GraphResources.CreateLegacyNew(path);
             var store = file.Schemas;
             store.Register(new DurableSchema(TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32)), 1));
             long tail = DataBytes(file.Data);
@@ -114,7 +114,7 @@ public sealed class GenericSchemaPersistenceTests {
         DurableSchema second = registerReferenceFirst ? point : owner;
         string path = Path.Combine(Path.GetTempPath(), $"durable-generic-reference-kind-{Guid.NewGuid():N}.rbf");
         try {
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 var store = file.Schemas;
                 long tail = DataBytes(file.Data);
                 Assert.Throws<ArgumentException>(() => store.RegisterBatch([first, second]));
@@ -122,7 +122,7 @@ public sealed class GenericSchemaPersistenceTests {
                 store.Register(first);
                 Assert.Equal(1, store.Count);
             }
-            using (GraphResources file = GraphResources.OpenExisting(path)) {
+            using (GraphResources file = GraphResources.OpenLegacyExisting(path)) {
                 var store = file.Schemas;
                 long tail = DataBytes(file.Data);
                 Assert.Throws<ArgumentException>(() => store.Register(second));

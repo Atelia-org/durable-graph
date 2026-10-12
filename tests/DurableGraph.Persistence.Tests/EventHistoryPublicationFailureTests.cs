@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Reflection;
 using Atelia.Data;
 using Atelia.DurableGraph.Storage;
@@ -29,15 +30,15 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterPublication)]
-    [InlineData((int)CommitCheckpoint.BeforeInstall)]
+    [InlineData((int)P0SaveCheckpoint.AfterPublication)]
+    [InlineData((int)P0SaveCheckpoint.BeforeInstall)]
     public void PublishedEventFailureReopensAsPendingWithoutAdvancingStateBaseline(int point) {
         FrameAddress state;
         using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             state = session.StateRevisionAddress!.Value;
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint == (CommitCheckpoint)point) throw new IOException("Event published but completion interrupted");
+            repository.MetaBootstrapCheckpoint = checkpoint => {
+                if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("Event published but completion interrupted");
             };
             var failure = Assert.Throws<GraphCommitException>(() => session.CommitEvent(new Node { Value = 8 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, failure.Outcome);

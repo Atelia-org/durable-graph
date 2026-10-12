@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using EventHistoryRecovery;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -6,16 +7,16 @@ public sealed partial class EventHistoryRepositoryTests {
     // Intentionally use omitted policies here and in the linked PendingRecovery source:
     // these tests execute the consumer recovery contract with the public default API.
     [Theory]
-    [InlineData((int)CommitCheckpoint.AfterStateAppend, false)]
-    [InlineData((int)CommitCheckpoint.AfterPublication, true)]
-    [InlineData((int)CommitCheckpoint.BeforeInstall, true)]
+    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend, false)]
+    [InlineData((int)P0SaveCheckpoint.AfterPublication, true)]
+    [InlineData((int)P0SaveCheckpoint.BeforeInstall, true)]
     public void ConsumerRecoveryUsesFreshPendingOrSkipsAlreadyPublishedState(int point, bool published) {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", oldState);
             session.CommitEvent(oldEvent);
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint == (CommitCheckpoint)point) throw new IOException("State commit interrupted");
+            repository.MetaBootstrapCheckpoint = checkpoint => {
+                if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("State commit interrupted");
             };
             var error = Assert.Throws<GraphCommitException>(() => PendingRecovery.Complete<Node>(repository, session,
                 _ => { }, (state, pending) => state.Value -= Assert.IsType<Node>(pending).Value));

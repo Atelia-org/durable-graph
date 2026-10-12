@@ -15,7 +15,8 @@ using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 /// <summary>
-/// Same workload before/after DB-069. Measures the workspace save kernel, excluding
+/// Historical DB-069 legacy workspace kernel, retained as an independent mechanism measurement.
+/// This does not measure the default split Repository. The workload excludes
 /// durable flush and Journal publication. Fresh Store validation is outside timed rounds;
 /// it is not an operating-system cold-cache measurement. No timing assertions.
 /// </summary>
@@ -39,7 +40,7 @@ public sealed class HotSaveMeasurementTests(ITestOutputHelper output) {
             string path = Path.Combine(Path.GetTempPath(), $"durable-hot-save-measure-{Guid.NewGuid():N}");
             Directory.CreateDirectory(path);
             try {
-                using GraphResources schemaFile = GraphResources.CreateNew(Path.Combine(path, "schemas.rbf"));
+                using GraphResources schemaFile = GraphResources.CreateLegacyNew(Path.Combine(path, "schemas.rbf"));
                 SchemaStore schemas = schemaFile.Schemas;
                 var segments = schemaFile.Data;
                 StateModelRegistry models = Models();

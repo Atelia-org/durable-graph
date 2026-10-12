@@ -26,7 +26,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         long initialH = 0, accumulatedH = 0;
         using RawBaseDirectory directory = new();
         const long rotationThreshold = 128;
-        using (GraphResources segments = GraphResources.CreateNew(directory.Path, rotationThreshold)) {
+        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThreshold)) {
             SchemaStore schemas = segments.Schemas;
             using StateRevisionStore store = new(segments.Data);
             for (int stage = 0; stage < revisions.Length; stage++) {
@@ -172,7 +172,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(72, initialH); // 68 raw + 2 v4 representation-header + 2 ObjectVersion bytes.
         Assert.True(accumulatedH > initialH);
         Assert.Equal(revisions.Length, revisions.Distinct().Count());
-        using GraphResources reopened = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(directory.Path);
 
         SchemaStore coldSchemas = reopened.Schemas;
         using StateRevisionStore cold = new(reopened.Data);

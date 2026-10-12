@@ -107,7 +107,7 @@ public sealed class DictionaryCatalogTests {
         ObjectLayout layout = Dictionary(key, value);
         RepresentationId id;
         try {
-            using (GraphResources file = GraphResources.CreateNew(path)) {
+            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
                 SchemaStore schemas = file.Schemas;
                 RepresentationId[] ids = schemas.RegisterRepresentations([layout, layout]);
                 Assert.Equal(new uint[] { 4, 4 }, ids.Select(item => item.Value));
@@ -123,7 +123,7 @@ public sealed class DictionaryCatalogTests {
                 Assert.False(schemas.IsFaulted);
                 Assert.Equal(5U, schemas.RegisterRepresentations([fresh])[0].Value);
             }
-            using GraphResources fileRead = GraphResources.OpenExisting(path);
+            using GraphResources fileRead = GraphResources.OpenLegacyExisting(path);
             SchemaStore cold = fileRead.Schemas;
             Assert.Equal(layout, cold.GetRepresentation(id));
             Assert.Same(cold.GetRequired("K", 1), cold.GetRepresentation(id).Dictionary!.KeySlot.InlineSchema);

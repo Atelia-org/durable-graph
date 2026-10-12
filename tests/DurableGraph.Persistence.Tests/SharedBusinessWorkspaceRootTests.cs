@@ -197,8 +197,9 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
 
     // Local fixture only: each branch calls its real owner/session and examines its actual persisted heads.
     private sealed class Backend : IDisposable {
-        private readonly Repository? _legacy;
-        private readonly BranchCheckout? _checkout;
+        private readonly GraphResources? _legacy;
+        private readonly WorldWorkspace? _world;
+        private FrameAddress? _legacyHead;
         private readonly P0Repository? _split;
         private readonly P0Session? _session;
         internal Saved Initial { get; }
@@ -209,9 +210,17 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
                 _session = new(_split, "main", Models());
                 Initial = initial is not null ? Save(initial) : ReadSaved(_session.StateSource!.Address);
             } else {
-                _legacy = initial is not null ? Repository.CreateNew(path, Models()) : Repository.OpenExisting(path, Models());
-                _checkout = initial is not null ? _legacy.CreateBranch("main", initial) : _legacy.Checkout("main");
-                Initial = ReadSaved(_checkout.StateRevisionAddress!.Value, _checkout.StateId!.Value);
+                _legacy = initial is not null ? GraphResources.CreateLegacyNew(path) : GraphResources.OpenLegacyExisting(path);
+                if (initial is not null) {
+                    _world = WorldWorkspace.Create(_legacy.States, _legacy.Schemas, initial, Models());
+                    Initial = Save(initial);
+                } else {
+                    _legacyHead = _legacy.GetHead("main");
+                    using FrameRead frame = _legacy.Data.ReadFrame(_legacyHead.Value).Unwrap();
+                    ObjectId rootId = GraphMetadataCodec.Decode(frame.TailMeta).RootId;
+                    _world = WorldWorkspace.Load(_legacy.States, _legacy.Schemas, _legacyHead.Value, rootId, Models());
+                    Initial = ReadSaved(_legacyHead.Value, rootId);
+                }
             }
         }
 
@@ -221,15 +230,14 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             get {
                 object adapter = _session is not null ? typeof(P0Session)
                     .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_session)!
-                    : _checkout!.Workspace;
+                    : _world!;
                 return Assert.IsType<BusinessWorkspace>(adapter.GetType()
                     .GetField("_workspace", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(adapter));
             }
         }
         internal NormalizedRevision Baseline => Assert.IsType<NormalizedRevision>(Core.Baseline);
         internal long AppendedFrames => _split?.Store.AppendedFrames ?? 0;
-        private GraphResources LegacyResources => Assert.IsType<GraphResources>(typeof(Repository)
-            .GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_legacy));
+        private GraphResources LegacyResources => _legacy!;
 
         internal Saved Save(IDurableObject root, bool isEvent = false) {
             if (_session is not null) {
@@ -241,9 +249,14 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
                 Assert.Equal(_session.StateSource!.Address, _split.GetStateHead("main"));
                 return new(graph.Address, graph.RootId, records, removed, graph.DirectoryRoot, graph.OwnedBatch);
             }
-            CheckpointAddress checkpoint = isEvent ? _checkout!.CommitEvent(root) : _checkout!.CommitState(root);
-            Assert.Equal(checkpoint, _checkout.Head);
-            return ReadSaved(checkpoint.RevisionAddress, checkpoint.RootId);
+            using PreparedWorldSave legacySave = isEvent ? _world!.StageSnapshot(root, new(5, 5)) : _world!.Stage(root, new(5, 5));
+            FrameAddress address = LegacyResources.States.Append(legacySave.Revision,
+                GraphMetadataCodec.Encode(isEvent ? GraphFrameKind.Event : GraphFrameKind.State, _legacyHead, legacySave.RootId));
+            if (!isEvent) { legacySave.PrepareInstall(address); }
+            LegacyResources.PublishBranch("main", address, out _);
+            if (!isEvent) { legacySave.Install(); }
+            _legacyHead = address;
+            return ReadSaved(address, legacySave.RootId);
         }
 
         internal ObjectId Discard(IDurableObject root) {
@@ -256,10 +269,10 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
                 Assert.Equal(frames, _split.Store.AppendedFrames);
                 return rootId;
             }
-            CheckpointAddress before = _checkout!.Head;
+            FrameAddress? before = _legacyHead;
             ObjectId id;
-            using (PreparedWorldSave save = _checkout.Workspace.Stage(root, new(5, 5))) { id = save.RootId; }
-            Assert.Equal(before, _checkout.Head);
+            using (PreparedWorldSave save = _world!.Stage(root, new(5, 5))) { id = save.RootId; }
+            Assert.Equal(before, _legacyHead);
             return id;
         }
 
@@ -299,7 +312,6 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         }
 
         public void Dispose() {
-            _checkout?.Dispose();
             _legacy?.Dispose();
             _split?.Dispose();
         }

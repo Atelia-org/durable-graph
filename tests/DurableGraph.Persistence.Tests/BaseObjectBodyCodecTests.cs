@@ -30,7 +30,7 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
         Assert.Equal(new byte[] { 0xFF, 0x80 }, decodedText.Body.ToArray());
 
         DurableSchema schema = new("A", 128, new DurableFieldInfo(1, TypeTag.Int32));
-        using GraphResources file = GraphResources.CreateNew(_path);
+        using GraphResources file = GraphResources.CreateLegacyNew(_path);
         SchemaStore schemas = file.Schemas;
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];
         Assert.Equal(new RepresentationId(2), id);
@@ -47,7 +47,7 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
     [Fact]
     public void EmptyBodyIsValidAtTheHeaderBoundaryAndDecodeOwnsItsBody() {
         Assert.Empty(BaseObjectBodyCodec.Decode(new byte[] { 4, 1 }).Body.ToArray());
-        using GraphResources file = GraphResources.CreateNew(_path);
+        using GraphResources file = GraphResources.CreateLegacyNew(_path);
         SchemaStore schemas = file.Schemas;
         DurableSchema schema = new("A", 1);
         RepresentationId id = schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0];

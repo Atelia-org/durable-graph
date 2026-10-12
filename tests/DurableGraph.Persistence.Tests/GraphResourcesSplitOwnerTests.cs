@@ -234,7 +234,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot("main", saved.Business.Address));
         Assert.Throws<InvalidOperationException>(() => resources.PrepareSchemaRoot(saved.SharedSchemaRoot!.Value));
         Assert.Throws<InvalidOperationException>(() => resources.ReadHistory(saved.Business.Address));
-        using (GraphResources legacy = GraphResources.CreateNew(Path.Combine(_path, "legacy"))) {
+        using (GraphResources legacy = GraphResources.CreateLegacyNew(Path.Combine(_path, "legacy"))) {
             Assert.Throws<InvalidOperationException>(() => new P0Repository(legacy));
             Assert.Throws<InvalidOperationException>(() => legacy.PrepareMetaBootstrap("main", P0GraphKind.State,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, [1])])));

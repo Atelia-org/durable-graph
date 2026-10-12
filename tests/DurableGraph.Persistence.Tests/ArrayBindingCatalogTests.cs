@@ -60,7 +60,7 @@ public sealed class ArrayBindingCatalogTests {
         string directory = Path.Combine(Path.GetTempPath(), "durable-array-catalog-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try {
-            using GraphResources file = GraphResources.CreateNew(Path.Combine(directory, "schemas.rbf"));
+            using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(directory, "schemas.rbf"));
             SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             registry.Register(new StateDefinitionBinding("RetiredPoint", SchemaKind.InlineValue, 0, null,
