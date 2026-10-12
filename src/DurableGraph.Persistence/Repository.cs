@@ -1,5 +1,6 @@
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.VersionStore;
@@ -20,9 +21,10 @@ namespace Atelia.DurableGraph;
 /// Successful binding/comparer closures may be reused across operations; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
 /// </remarks>
-public sealed class Repository : IDisposable {
+public sealed partial class Repository : IDisposable {
     private readonly GraphResources _resources;
-    private readonly StateModelSnapshot _models;
+    private readonly StateModelSnapshot? _models;
+    private StateModelSnapshot LegacyModels => _models ?? throw new NotSupportedException("Legacy model access is unavailable in split storage.");
     private readonly object _identity = new();
     private readonly HashSet<string> _activeBranches = new(StringComparer.Ordinal);
     private bool _busy;
@@ -86,6 +88,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public BranchCheckout CreateBranch(string branchName, IDurableObject initialState,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
+        if (UsesMetaBootstrap) { return CreateMetaBootstrapBranch(branchName, initialState, P0GraphKind.State, parameters); }
         RequireWriter();
         _busy = true;
         bool acquired = false;
@@ -95,7 +98,7 @@ public sealed class Repository : IDisposable {
             ValidateNewName(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            var workspace = WorldWorkspace.CreateSnapshot(_resources.States, _resources.Schemas, initialState, _models);
+            var workspace = WorldWorkspace.CreateSnapshot(_resources.States, _resources.Schemas, initialState, LegacyModels);
             var checkout = new BranchCheckout(this, branchName, workspace, null);
             Publish(checkout, null, initialState, parameters ?? DefaultPolicy, initial: true);
             delivered = true;
@@ -114,6 +117,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public BranchCheckout CreateBranchFromEvent(string branchName, IDurableObject initialEvent,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
+        if (UsesMetaBootstrap) { return CreateMetaBootstrapBranch(branchName, initialEvent, P0GraphKind.Event, parameters); }
         RequireWriter();
         _busy = true;
         bool acquired = false;
@@ -123,7 +127,7 @@ public sealed class Repository : IDisposable {
             ValidateNewName(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            var workspace = WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models);
+            var workspace = WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, LegacyModels);
             var checkout = new BranchCheckout(this, branchName, workspace, null);
             Publish(checkout, initialEvent, null, parameters ?? DefaultPolicy, initial: true);
             delivered = true;
@@ -143,6 +147,7 @@ public sealed class Repository : IDisposable {
     /// initializers do not run; application code rebuilds Transient state and interprets its own event progress.
     /// </remarks>
     public BranchCheckout Checkout(string branchName) {
+        if (UsesMetaBootstrap) { return CheckoutMetaBootstrap(branchName); }
         RequireWriter();
         _busy = true;
         bool acquired = false;
@@ -175,6 +180,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public BranchCheckout Fork(string branchName, CheckpointAddress source) {
         RequireWriter();
+        RequireLegacyBackend();
         _busy = true;
         bool acquired = false;
         bool delivered = false;
@@ -202,17 +208,17 @@ public sealed class Repository : IDisposable {
         // Event-only histories must not even inspect another branch's resident certificate.
         if (state is null) {
             return new BranchCheckout(this, branchName,
-                WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, _models), head);
+                WorldWorkspace.CreateEmpty(_resources.States, _resources.Schemas, LegacyModels), head);
         }
         CheckFrame(state, GraphFrameKind.State);
         ValidateSelectedGraphParent(state);
-        RevisionReadSession reads = new(_resources.States, _resources.Schemas, _models, RestorationStatistics);
+        RevisionReadSession reads = new(_resources.States, _resources.Schemas, LegacyModels, RestorationStatistics);
         if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
             reads.Statistics.PreparedStateHits++;
             if (ImmutableLeafReuseEnabled && !prepared.ImmutableLeavesCollected) {
                 // Enabling the experiment after this entry was prepared needs a fresh
                 // complete materialization certificate, including callbacks now omitted by reuse.
-                using var leafRequirements = _models.BeginSchemaRequirementCollection();
+                using var leafRequirements = LegacyModels.BeginSchemaRequirementCollection();
                 prepared.Validate(reads, state);
                 var restored = GraphReader.RestorePreparedState(reads, prepared.Selection,
                     out var leaves, collectImmutableLeaves: true);
@@ -227,13 +233,13 @@ public sealed class Repository : IDisposable {
         }
 
         reads.Statistics.PreparedStateMisses++;
-        using var requirements = _models.BeginSchemaRequirementCollection();
+        using var requirements = LegacyModels.BeginSchemaRequirementCollection();
         PreparedGraphSelection selection = GraphReader.PrepareState(reads, state.RevisionAddress, state.RootId);
         // Include every source/current row, even when Upgrade cuts its last incoming edge.
         // Plans and standard checks performed throughout this lexical scope contribute too.
         foreach ((ObjectId id, NormalizedObject row) in selection.Normalized.Objects) {
-            _models.CheckObjectLayout(row.SourceLayout, $"prepared State source object {id.Value}");
-            _models.CheckObjectLayout(row.Current.Layout, $"prepared State current object {id.Value}");
+            LegacyModels.CheckObjectLayout(row.SourceLayout, $"prepared State source object {id.Value}");
+            LegacyModels.CheckObjectLayout(row.Current.Layout, $"prepared State current object {id.Value}");
         }
         bool collectLeaves = PreparedStateReuseEnabled && ImmutableLeafReuseEnabled;
         var materialized = GraphReader.RestorePreparedState(reads, selection, out var immutableLeaves,
@@ -246,7 +252,7 @@ public sealed class Repository : IDisposable {
         return checkout;
     }
 
-    public IReadOnlyList<string> ListBranches() { RequireAvailable(); return _resources.ListBranches(); }
+    public IReadOnlyList<string> ListBranches() { RequireAvailable(); RequireLegacyBackend(); return _resources.ListBranches(); }
     public CheckpointAddress GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
     /// <summary>Fully materializes the selected logical chain from oldest to newest, including State and Event handles.</summary>
@@ -260,6 +266,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public IReadOnlyList<CheckpointAddress> ReadFrames(string branchName) {
         RequireAvailable();
+        RequireLegacyBackend();
         CheckpointAddress head = HeadCore(branchName);
         var frames = new List<CheckpointAddress>();
         var visited = new HashSet<FrameAddress>();
@@ -292,6 +299,7 @@ public sealed class Repository : IDisposable {
     public IEnumerable<CheckpointAddress> EnumerateEvents(CheckpointAddress endInclusive,
         HistoryOrder order = HistoryOrder.NewestFirst, CheckpointAddress? afterExclusive = null) {
         RequireAvailable();
+        RequireLegacyBackend();
         CheckFrame(endInclusive);
         if (afterExclusive is not null) { CheckFrame(afterExclusive); }
         if (order is not HistoryOrder.OldestFirst and not HistoryOrder.NewestFirst) {
@@ -374,6 +382,7 @@ public sealed class Repository : IDisposable {
     /// <summary>Finds the nearest strict ancestor State of an Event, or null in an Event-only prefix.</summary>
     public CheckpointAddress? GetPreviousState(CheckpointAddress eventFrame) {
         RequireAvailable();
+        RequireLegacyBackend();
         CheckFrame(eventFrame, GraphFrameKind.Event);
         return PreviousStateCore(eventFrame);
     }
@@ -409,6 +418,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public Checkpoint ReadCheckpoint(CheckpointAddress address) {
         RequireAvailable();
+        RequireLegacyBackend();
         CheckFrame(address);
         _busy = true;
         try {
@@ -416,7 +426,7 @@ public sealed class Repository : IDisposable {
             GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
             CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
             if (previousAddress is not null) { ValidateSelectedGraphParent(previousAddress); }
-            var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
+            var session = new RevisionReadSession(_resources.States, _resources.Schemas, LegacyModels);
             IDurableObject root;
             IDurableObject? previous;
             if (previousAddress is null) {
@@ -433,12 +443,13 @@ public sealed class Repository : IDisposable {
     }
 
     private IDurableObject Read(CheckpointAddress frame, GraphFrameKind kind) {
+        if (UsesMetaBootstrap) { return ReadMetaBootstrap(frame, kind); }
         RequireAvailable();
         CheckFrame(frame, kind);
         _busy = true;
         try {
             ValidateSelectedGraphParent(frame);
-            var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
+            var session = new RevisionReadSession(_resources.States, _resources.Schemas, LegacyModels);
             return GraphReader.ReadRoot<IDurableObject>(session, frame.RevisionAddress, frame.RootId);
         } finally { EndOperation(); }
     }
@@ -457,6 +468,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public (IDurableObject First, IDurableObject Second) ReadPair(CheckpointAddress first, CheckpointAddress second) {
         RequireAvailable();
+        RequireLegacyBackend();
         CheckFrame(first);
         CheckFrame(second);
         _busy = true;
@@ -464,7 +476,7 @@ public sealed class Repository : IDisposable {
             ValidateSelectedGraphParent(first);
             ValidateSelectedGraphParent(second);
             return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,
-                first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, _models);
+                first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, LegacyModels);
         } finally { EndOperation(); }
     }
 
@@ -478,6 +490,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public CheckpointAddress CreateBranch(string branchName, CheckpointAddress selectedFrame) {
         RequireWriter();
+        RequireLegacyBackend();
         _busy = true;
         try {
             CheckFrame(selectedFrame);
@@ -501,6 +514,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public void CreateTag(string name, CheckpointAddress address) {
         RequireWriter();
+        RequireLegacyBackend();
         _busy = true;
         try {
             CheckFrame(address);
@@ -517,6 +531,7 @@ public sealed class Repository : IDisposable {
     /// </remarks>
     public CheckpointAddress ResolveTag(string name) {
         RequireAvailable();
+        RequireLegacyBackend();
         _busy = true;
         try {
             var payload = _resources.Versions.ResolveTag(name).Unwrap();
@@ -551,6 +566,7 @@ public sealed class Repository : IDisposable {
     /// <remarks>Other branches' active checkouts do not block movement. Both addresses belong to this open repository.</remarks>
     public void MoveBranch(string branchName, CheckpointAddress expectedHead, CheckpointAddress target) {
         RequireWriter();
+        RequireLegacyBackend();
         _busy = true;
         try {
             CheckFrame(expectedHead);
@@ -584,6 +600,7 @@ public sealed class Repository : IDisposable {
 
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
+        if (UsesMetaBootstrap) { return CommitMetaBootstrap(session, domainEvent, nextState, parameters); }
         RequireAvailable();
         _resources.RequireWritable();
         _busy = true;
@@ -652,6 +669,7 @@ public sealed class Repository : IDisposable {
     }
 
     private CheckpointAddress HeadCore(string branchName) {
+        if (UsesMetaBootstrap) { return MetaBootstrapHeadCore(branchName); }
         return Issue(_resources.ReadHistory(_resources.GetHead(branchName)));
     }
 

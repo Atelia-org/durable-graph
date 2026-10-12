@@ -9,8 +9,17 @@ internal sealed class P0BusinessWorkspace {
     private readonly P0GraphStore _store;
     private readonly BusinessWorkspace _workspace;
 
+    internal StateModelSnapshot Models => _workspace.Models;
+    internal NormalizedRevision? Baseline => _workspace.Baseline;
+    internal ObjectId RootId => _workspace.RootId;
+    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment { get; private init; }
+
     internal P0BusinessWorkspace(P0GraphStore store, StateModelRegistry models)
-        : this(store, new(models.Snapshot()), null) { }
+        : this(store, new BusinessWorkspace(models.Snapshot()), null) { }
+
+    internal P0BusinessWorkspace(P0GraphStore store, StateModelSnapshot models,
+        DecodedRevision.SplitBindingEnvironment? environment)
+        : this(store, new BusinessWorkspace(models), null) { BindingEnvironment = environment; }
 
     private P0BusinessWorkspace(P0GraphStore store, BusinessWorkspace workspace, P0GraphSnapshot? source) {
         _store = store;
@@ -71,13 +80,20 @@ internal sealed class P0BusinessWorkspace {
 
     internal static P0BusinessWorkspace LoadState(P0GraphStore store, FrameAddress state,
         StateModelRegistry models) {
+        return LoadState(store, state, models.FreezeConfiguration());
+    }
+
+    internal static P0BusinessWorkspace LoadState(P0GraphStore store, FrameAddress state,
+        StateModelRegistry.FrozenConfiguration configuration) {
         P0GraphSnapshot graph = store.ReadGraph(state);
         if (graph.Kind != P0GraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
-        DecodedRevision source = DecodedRevision.ReadSplit(store, state, models);
+        DecodedRevision source = DecodedRevision.ReadSplit(store, state, configuration);
         MaterializedGraph<IDurableObject> restored = GraphReader.Read<IDurableObject>(
             source, graph.RootId, new(source.SourceModels!));
         restored.Baseline.RequireSplitSource(store, source.SourceModels!);
-        return new(store, BusinessWorkspace.FromLoaded(source.SourceModels!, restored), graph);
+        return new(store, BusinessWorkspace.FromLoaded(source.SourceModels!, restored), graph) {
+            BindingEnvironment = source.BindingEnvironment,
+        };
     }
 
     internal static IDurableObject ReadRoot(P0GraphStore store, FrameAddress graph, StateModelRegistry models) {

@@ -1,7 +1,7 @@
 <a id="db-087-p0持久-meta-自举实验"></a>
 # DB-087：meta 自举内部原型
 
-本目录是产品代码内的自举原型，承担纵向实验与后续接线；公开 Repository 尚未切换。问题与分片边界见
+本目录是产品代码内的自举原型，承担纵向实验与后续接线；默认公开 Repository 工厂尚未切换。问题与分片边界见
 [DB-087 §6](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#6-建议的重构任务顺序)。
 
 P1 会继续演进这里的 catalog、共同 writer 和发布协议，恢复逻辑并回既有核心；临时 driver／owner
@@ -89,7 +89,7 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 已完成 [P1c 第三片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#22-p1c-第三片共同业务-workspace-与候选寿命)：[BusinessWorkspace／BusinessSaveCandidate](../BusinessWorkspace.cs) 合并 models、Capture、完整 baseline、根与候选寿命，保留两薄 backend／owner；Event 不建立 next baseline。真实根替换／cold Delta 和安装材料误接见证及完整源码回归已通过，未新增包或 Crash 资格。
 已完成 [P1c 第四片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#23-p1c-第四片内部-split-ownerroot)：内部 backing、双 refs、发布基线、唯一 pending 和 prepare/commit/fault 收入 GraphResources，内部 owner/root 新读新写停点已达，定向与完整源码回归通过。P0Repository 的工厂外观拥有资源，显式借用外观只释放自身；沿用 P0 root payload／wire。catalog 工作区仍由各 P0Session 持有并按最新 accepted 准备，公开 Repository 外层未合；无新包或 Crash 资格，assets 为 source mode。
 已完成 [P1c 第五片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#24-p1c-第五片冻结配置与准确-s-绑定)：StateModelRegistry.FrozenConfiguration 与 DecodedRevision.SplitBindingEnvironment 已通过定向和完整源码验收。环境从真实 Store／S 私有签发，同 S 显式复用、跨 S 独立 factory/runtime memo；稳定已注册 Model/Reader/Comparer 保原引用。hot SourceModels／P0Session 和公开入口未改，无新包或 Crash 资格，assets 为 source mode。
-下一片接 Repository／checkout 的冻结配置与环境持有，再移 history 和 Pair／缓存；具体新增 closure 的 hot／cold 故事和边界集中 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)，不由本片声称完整热冷等价。
+[P1c 第六片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#25-p1c-第六片repositorycheckout-执行环境) 已接真实 Repository 的内部 split 工厂与 BranchCheckout，构建、定向与完整源码回归通过。仅接 Create／Checkout／独立 State/Event 读取与保存、readonly 和 owner／占用 guard，默认公开工厂不切。checkout 执行 S 固定：有 State 取 State.S，无 State 取创建时最新 shared／空库 None；State 可推进存储 selected S，不换 hot models／preparation。新增 lazy closure 的构造观察与普通业务 roundtrip 分开记证，不保证任意跨 S 委托的领域值等价。下一片接 history 元数据导航＋ref／tag／Fork，再接 Pair／缓存；具体施工合同和证据集中 §6.3／7.1／25。
 现有公共路径保持，P1d 门禁后才默认切换／删旧路径，P2 另接 private；无具体反例不扩未穷举组合。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：

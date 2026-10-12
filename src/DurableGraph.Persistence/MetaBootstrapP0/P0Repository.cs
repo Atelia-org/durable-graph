@@ -56,9 +56,10 @@ internal sealed class P0Repository : IDisposable {
 
     internal P0SaveResult Commit(P0PendingSave pending,
         Action<P0GraphSnapshot>? installMeta = null, Action<P0GraphSnapshot>? installState = null,
-        Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null) {
+        Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null,
+        Action<P0GraphSnapshot>? prepareBusinessDelivery = null) {
         RequireAvailable();
-        return _resources.CommitMetaBootstrap(pending, installMeta, installState, prepareMeta, prepareState);
+        return _resources.CommitMetaBootstrap(pending, installMeta, installState, prepareMeta, prepareState, prepareBusinessDelivery);
     }
 
     internal void Discard(P0PendingSave pending) {

@@ -140,7 +140,8 @@ public sealed partial class GraphResources {
 
     internal P0SaveResult CommitMetaBootstrap(P0PendingSave pending,
         Action<P0GraphSnapshot>? installMeta = null, Action<P0GraphSnapshot>? installState = null,
-        Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null) {
+        Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null,
+        Action<P0GraphSnapshot>? prepareBusinessDelivery = null) {
         RequireMetaBootstrapAvailable();
         ArgumentNullException.ThrowIfNull(pending);
         if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
@@ -171,6 +172,7 @@ public sealed partial class GraphResources {
             RequireMetaBootstrapAvailable();
             if (selectedMeta is not null) { prepareMeta?.Invoke(selectedMeta); }
             if (pending.Kind == P0GraphKind.State) { prepareState?.Invoke(business); }
+            prepareBusinessDelivery?.Invoke(business);
             RequireMetaBootstrapAvailable();
 
             // Prepare all DG result/install material before crossing the publication boundary.

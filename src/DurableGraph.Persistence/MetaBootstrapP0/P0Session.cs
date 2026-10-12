@@ -20,9 +20,29 @@ internal sealed class P0Session {
             : new(repository.Store, models);
     }
 
+    internal P0Session(P0Repository repository, string branch,
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed) {
+        _repository = repository;
+        _branch = branch;
+        P0CatalogView? catalog = repository.SharedSchemaRoot is { } schema
+            ? P0CatalogView.Load(repository.Store, schema) : null;
+        Catalog = new(ensureEditingAllowed, catalog);
+        if (repository.GetStateHead(branch) is { } state) {
+            _business = P0BusinessWorkspace.LoadState(repository.Store, state, configuration);
+        } else {
+            DecodedRevision.SplitBindingEnvironment? environment = repository.SharedSchemaRoot is { } selected
+                ? DecodedRevision.SplitBindingEnvironment.Load(repository.Store, configuration, selected) : null;
+            _business = new(repository.Store, environment?.Models ?? configuration.CreateSnapshot(), environment);
+        }
+    }
+
     internal P0CatalogWorkspace Catalog { get; }
     internal IDurableObject? State => _business.State;
     internal P0GraphSnapshot? StateSource => _business.Source;
+    internal StateModelSnapshot Models => _business.Models;
+    internal NormalizedRevision? Baseline => _business.Baseline;
+    internal ObjectId RootId => _business.RootId;
+    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => _business.BindingEnvironment;
 
     private void EnsureEditingAllowed() {
         _repository.EnsureEditingAllowed();
@@ -57,9 +77,9 @@ internal sealed class P0SessionSave(P0Repository repository, P0PendingSave pendi
     internal P0PreparedCatalog Catalog { get; } = catalog;
     internal P0PreparedBusiness Business { get; } = business;
     internal P0PendingSave Pending { get; } = pending;
-    internal P0SaveResult Commit() {
+    internal P0SaveResult Commit(Action<P0GraphSnapshot>? prepareBusinessDelivery = null) {
         if (!Pending.IsPrepared) { throw new InvalidOperationException("The typed save is already committing or resolved."); }
-        try { return repository.Commit(Pending, Catalog.Install, Business.Install, Catalog.PrepareInstall, Business.PrepareInstall); }
+        try { return repository.Commit(Pending, Catalog.Install, Business.Install, Catalog.PrepareInstall, Business.PrepareInstall, prepareBusinessDelivery); }
         finally { Business.Dispose(); }
     }
     public void Dispose() {

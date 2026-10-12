@@ -1,6 +1,7 @@
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 namespace Atelia.DurableGraph;
 
@@ -14,25 +15,39 @@ namespace Atelia.DurableGraph;
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
-    internal WorldWorkspace Workspace { get; }
+    private readonly WorldWorkspace? _workspace;
+    private readonly P0Session? _splitSession;
+    internal WorldWorkspace Workspace => _workspace ?? throw new NotSupportedException("This checkout uses split storage.");
+    internal P0Session SplitSession => _splitSession ?? throw new NotSupportedException("This checkout uses legacy storage.");
+    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => SplitSession.BindingEnvironment;
+    internal StateModelSnapshot Models => SplitSession.Models;
+    internal NormalizedRevision? Baseline => SplitSession.Baseline;
+    internal P0CatalogWorkspace Catalog => SplitSession.Catalog;
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
     internal BranchCheckout(Repository repository, string branchName, WorldWorkspace workspace, CheckpointAddress? head) {
         _repository = repository;
         BranchName = branchName;
-        Workspace = workspace;
+        _workspace = workspace;
         Head = head!; // Initial creation publishes before this checkout is delivered.
+    }
+
+    internal BranchCheckout(Repository repository, string branchName, P0Session session, CheckpointAddress? head) {
+        _repository = repository;
+        BranchName = branchName;
+        _splitSession = session;
+        Head = head!;
     }
 
     public string BranchName { get; }
     /// <summary>The current editable State root, or null before the history's first State.</summary>
     /// <remarks>Successful replacement installs the supplied instance; previously obtained CLR references do not follow it.</remarks>
-    public IDurableObject? State => Workspace.World;
+    public IDurableObject? State => _splitSession is { } split ? split.State : Workspace.World;
     /// <summary>The committed State root identity, or null before the first State.</summary>
-    public ObjectId? StateId => State is null ? null : Workspace.WorldId;
+    public ObjectId? StateId => State is null ? null : _splitSession is { } split ? split.RootId : Workspace.WorldId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
-    public FrameAddress? StateRevisionAddress => Workspace.ParentRevisionAddress;
+    public FrameAddress? StateRevisionAddress => _splitSession is { } split ? split.StateSource?.Address : Workspace.ParentRevisionAddress;
     public CheckpointAddress Head { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>
@@ -83,6 +98,13 @@ public sealed class BranchCheckout : IDisposable {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(nextState);
         return _repository.Commit(this, null, nextState, parameters);
+    }
+
+    // A bounded discard witness; the GraphResources pending never escapes the repository operation.
+    internal void PrepareAndDiscard(IDurableObject root, P0GraphKind kind = P0GraphKind.State,
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _repository.PrepareAndDiscardMetaBootstrap(this, root, kind, parameters);
     }
 
     /// <summary>Releases this branch's editing occupancy without saving or removing its durable ref.</summary>
