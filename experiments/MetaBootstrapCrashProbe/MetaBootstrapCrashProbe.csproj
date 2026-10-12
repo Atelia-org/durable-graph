@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Reuse the existing test friend without introducing a public crash API. -->
+    <AssemblyName>Atelia.DurableGraph.Persistence.Tests</AssemblyName>
+    <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Model.cs" />
+    <Compile Include="Program.cs" />
+    <ProjectReference Include="../../src/DurableGraph/DurableGraph.csproj" />
+    <ProjectReference Include="../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj" Aliases="persistence" />
+    <ProjectReference Include="../../src/DurableGraph.Generator/DurableGraph.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+  <Target Name="RequireSourceMode" BeforeTargets="ResolveReferences" Condition="'$(UseStorageSources)' != 'true'">
+    <Error Text="MetaBootstrapCrashProbe is a source-only qualification host. Set UseStorageSources=true with the pinned source checkout." />
+  </Target>
+</Project>

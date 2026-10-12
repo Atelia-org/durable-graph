@@ -15,6 +15,7 @@
 | 验证通用 owner 显式复用值规则、嵌套工具作用域与删除旧 inline 领域声明后的历史升级 | [ValueUpgradeConsumer](PackageConsumerProbe/ValueUpgradeConsumer/README.md)：由 [Run-ValueUpgradeProbe.ps1](PackageConsumerProbe/Run-ValueUpgradeProbe.ps1) 执行；施工与验收见 [DB-039 §8](../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射) |
 | 重访泛型 DTO/静态 helper、工厂闭合、readonly accessor 与历史 Upgrade 代码形状的选择依据 | [GenericBindingShapeProbe](GenericBindingShapeProbe/README.md)：独立机制见证；实际产品验证使用上述 GenericConsumer 与 src/tests |
 | 验证单 writer 进程中止、FS/VS 发布可见性与不完整控制尾正常恢复 | [PublicationCrashProbe](PublicationCrashProbe/README.md)：DB-086 底层故障见证，非断电保证 |
+| 验证 DB-087 实际 split Repository 的 SG Widget／共享 List／meta 两 ref 保存、外部 Kill 后准确根冷读与 Delta 续写 | [MetaBootstrapCrashProbe](MetaBootstrapCrashProbe/README.md)：六个固定保存窗口的 source-only ProcessCrashOnly 见证；限定结果见 [DB-087 §31](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#31-p1d-第二片真实-dg-processcrashonly-保存窗口)，不代直接初始化、包或完整 P1d 门禁 |
 | 比较 List 区间匹配器在相同领域编辑历史上的完整 Commit、候选 Delta、实际落盘字节及冷读正确性 | [ListDeltaReplayProbe](ListDeltaReplayProbe/README.md)：DB-049 轻量实验，独立 Repository、交错算法、报告中位数与范围；不以性能胜负为验收门槛 |
 
 四个已完成或未采用路线的旧 Probe 已退出活动工作树，完整源码与证据保存在 Git 恢复点；

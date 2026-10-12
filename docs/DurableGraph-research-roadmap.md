@@ -199,7 +199,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
 FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0／P1a 已完成，P1b 有限停点已达；P1c 内部整合停点已达，P1d 首片初始化／正常恢复已验；默认公开切换与 P2 未实施**；
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0／P1a 已完成，P1b 有限停点已达；P1c 内部整合停点已达，P1d 初始化／正常恢复和有限 DG 保存进程窗口已验；完整门禁、默认公开切换与 P2 未实施**；
 真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
 联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
@@ -212,7 +212,7 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
 员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
-P1c 前九片已通过源码验收，精确范围保留 DB-087 §20–28。[第十片](design-branches/0087-meta-bootstrap-refactoring-route.md#29-p1c-第十片owned-物理缓存) 已验一份有界 owned frame/map LRU／预算与 split 实际固定角色帧／完整目录/H，构建、定向与完整源码回归通过。hit 前核 owner、每次仍核 graph/source／准确 S/model，readonly owned 值与成功 admit 保持，不接 typed cache 或扩展平台。机制层 P1c 内部停点已达；当前 [P1d 首片](design-branches/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复) 已以 tests-only 通过两正式根初始化／正常 backing recovery 的限定源码验收，运行证据只保留 §30。后继真实 DG ProcessCrashOnly、Unknown／Confirmed 未交付／orphan和准确包，再默认切换退旧；不提前宣布 P1 产品停点。DB-081 热 seed 禁用、DB-082 默认关，P2 private 及其具体公开 policy 签名后置。
+P1c 前九片已通过源码验收，精确范围保留 DB-087 §20–28。[第十片](design-branches/0087-meta-bootstrap-refactoring-route.md#29-p1c-第十片owned-物理缓存) 已验一份有界 owned frame/map LRU／预算与 split 实际固定角色帧／完整目录/H，构建、定向与完整源码回归通过。hit 前核 owner、每次仍核 graph/source／准确 S/model，readonly owned 值与成功 admit 保持，不接 typed cache 或扩展平台。机制层 P1c 内部停点已达；当前 [P1d 首片](design-branches/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复) 已以 tests-only 通过两正式根初始化／正常 backing recovery 的限定源码验收，运行证据只保留 §30。[第二片](design-branches/0087-meta-bootstrap-refactoring-route.md#31-p1d-第二片真实-dg-processcrashonly-保存窗口) 已验真实 DG 的六个保存进程窗口、准确根／S／完整 orphan 与 Delta 续写。后继直接初始化 factory Kill、实际 Repository 返回 outcome／故障关闭补缺，再准确包和默认切换退旧；不提前宣布 P1 产品停点。DB-081 热 seed 禁用、DB-082 默认关，P2 private 及其具体公开 policy 签名后置。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
 P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存已由 P1c 第十片接入，更多操作内复用仍按测量触发；不由早期观察宣称性能量级，原证据见 DB-087 §12。
