@@ -199,7 +199,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
 FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a 与 P1b 首片已实施，完整类型执行与公开切换仍待后续 P1b–d**；
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a、P1b 员工首片及闭合泛型／enum 执行资格片已完成，完整类型执行与公开切换仍待后续 P1b–d**；
 真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
 联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
@@ -211,9 +211,9 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 具体合同、P0 代码去向与分步依赖只在 DB-087 §6 维护；P1a 的真实 Upgrade、共同恢复及拒绝边界见其[第 11 节](design-branches/0087-meta-bootstrap-refactoring-route.md#11-p1a准确视图与共同恢复接线)。后续 P1 须在公开切换前验收全部现有相关能力，
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
-本轮 P1b 首片选择 Descriptor/Field/TypeExpr 强类型员工、typed／fixed-table ABI v2 和 fixed 精确 `List<int>`；内部员工 Schema/DTO 仍 V1，
+P1b 首片选择 Descriptor/Field/TypeExpr 强类型员工、typed／fixed-table ABI v2 和 fixed 精确 `List<int>`；内部员工 Schema/DTO 仍 V1，
 以含 base/inline/Nullable/`List<Point?>` 的真实 SG 消费者验证 Schema 冷读和动态用户槽增量；
-完整源码回归和隔离包四进程证据见 DB-087 [第 12 节](design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)。下一片先用真实闭合泛型／enum 消费者验同一员工描述，再补其余 fixed 路由及数组／Dictionary；
+首片完整源码回归和隔离包四进程证据见 DB-087 [第 12 节](design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)；闭合泛型／enum current V1 的源码资格见[第 13 节](design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格)，不外推完整泛型 Upgrade 或包资格。下一片按 §6.3 决定 builtin 容器结构固定头与 codec 版本来源，先验 `List<long?>`／nested List，再补数组／Dictionary；
 P1c 接公开保存/history/cache，P1d 完成初始化与 ProcessCrashOnly、真实包门禁，P2 再接 private。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。

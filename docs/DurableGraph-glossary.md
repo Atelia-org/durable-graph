@@ -149,6 +149,7 @@ flowchart TD
 |---|---|---|
 | **固定通道（builtin／employee）** | 由有限格式规则和完整布局确定解释能力，不查询业务 Schema 目录。员工是明确登记的元数据布局，不能由命名空间、marker 或仅 DTO CLR 类型授予资格。容器能否进入固定通道取决于完整槽闭包。 | `P0FixedBindings`、`P0TypedBodyCodec`；不是任意 BCL 类型免 Schema。 |
 | **布局描述节点（descriptor）与 meta ObjectId** | catalog 声明的完整 Schema／容器布局节点，直接用其 meta 图 ObjectId 寻址；动态 Base 按自身 batch 的 `(SchemaRoot, descriptor ObjectId)` 解释。inline 描述可作为精确值依赖，但不能作为对象 Base 布局；普通字段／TypeExpr 节点也不是对象 descriptor。 | `P0CatalogView`；替代独立表示编号的内部路线，未修改公开 `RepresentationId` 合同。 |
+| **闭合描述身份与执行能力** | 同 DefinitionId 的不同有序实参／版本分别拥有完整 Schema 身份；不能按 DTO CLR 类型或裸 descriptor 数字合并。enum 使用普通整数 InlineValue 布局，meta 不从名字推断 CLR enum 身份；当前 CLR 宽度与模板匹配属于执行绑定。 | `P0CatalogView`、`StateDefinitionBinding`；[完整精确 Schema](#exact-schema)与[持久枚举](#durable-enum)。 |
 | **准确 Schema 视图（selected Schema view）** | 从指定 meta 图根恢复的不可变定义／布局查询；所选业务图用它核对 retained 对象的完整布局。原 Base 的解释来源和目标模型执行能力仍分别核对，不能借最新 shared 补缺。 | `P0CatalogView`、`StateModelSnapshot` 的只读 lookup；读取不准备或发布新 meta。 |
 | **受控 meta 修改与共同保存** | meta 按逻辑 key 记录最终待改定义，业务通过 Capture／比较发现变化；两者交付对象版本记录给同一 writer，再由唯一 owner 发布。Event 接受已发布 meta，同时保留已提交 State 保存基线。 | `P0CatalogWorkspace`、`P0GraphStore`、`P0Repository`；不是通用变化追踪框架。 |
 

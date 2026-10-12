@@ -1,7 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图的就地重构路线
 
-> 更新：2026-10-12。状态：**P0、P1a 与 P1b 首片已实施；本片完整回归及隔离包四进程验收通过，公开切换仍待后续 P1b/P1c/P1d**。
-> P0 运行结果在[第 10 节](#10-p0-实施证据与方案修订)，P1a 的真实 Upgrade、共同恢复及边界证据在[第 11 节](#11-p1a准确视图与共同恢复接线)。P1b 首片的实施与验收范围见[第 12 节](#12-p1b-首片schema-员工闭包与固定-list-路由)；代码去向、后续依赖和待决问题见第 6、7 节。
+> 更新：2026-10-12。状态：**P0、P1a 与 P1b 首片已实施；P1b 第二片闭合泛型／enum 执行资格已验证，公开切换仍待后续 P1b/P1c/P1d**。
+> P0、P1a、P1b 首片证据分别见第 10–12 节；本轮不改生产／ABI 的执行资格证据见[第 13 节](#13-p1b-第二片闭合泛型与-enum-执行资格)。首片隔离包与本轮源码回归的范围分别记录，不互相外推；代码去向、后续依赖和待决问题见第 6、7 节。
 > 公开产品基线仍是 [DB-086](0086-new-storage-implementation.md)。P1 公开切换、P2 private 未实施；内部 API/wire 未冻结。
 > 用户明确无旧数据／旧 API 兼容负担；简单性按最终产品衡量，施工过程允许复杂。裁决与下一片见[第 9 节](#9-本轮裁决与下一片实验)。
 
@@ -333,18 +333,18 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 <a id="63-p1b-首片续工入口"></a>
 ### 6.3 P1b 后续续工入口
 
-已提交基线为 P0 `12f3eb2`、P1a `2740bf1`；本轮首片完成员工记录与 base/inline/Nullable/List 的源码接线及完整回归，包验收见第 12 节。下一轮先核对实际 HEAD 和工作树，读取 PROJECT-STATE、本节及第 7.1 节；不重做已通过的有限消费者，也不把本片当完整 P1b 完成。
+已提交基线为 P0 `12f3eb2`、P1a `2740bf1`、P1b 首片 `a6f1797`；第二片的闭合泛型／enum 执行资格见第 13 节。下一轮先核对实际 HEAD 和工作树，读取 PROJECT-STATE、本节及第 7.1 节；不重做已通过的有限消费者，不把 current V1 闭包当完整 generic Upgrade 资格。
 
-下一片最小问题建议：**同一员工记录和 memo 投影，能否在真实 SG 闭合泛型／enum 模型中冷读准确 Schema 与业务，并沿同一来源增量续写？** 先用一个代表性的 closed generic、enum/Nullable/inline 组合验证现有 TypeExpr 与模板能力，再按证据决定是否需要扩记录；首次接线不以冻结全部泛型 ABI 为前置。
+下一片最小问题建议：**能否用一个固定结构头表达 builtin-only `List<long?>` 和 `List<List<int>>`，无需逐种闭合类型增补固定表，同时拒绝 `List<UserClass>`／`List<Enum>` 越过动态目录？** 这是待选方案，不在本轮冻结 route 或 ABI。
 
-- 先查 `P0CatalogView/Workspace`、`P0CatalogSemantics`、`P0FixedBindings` 和现有 family/enum reader，保留 typed／fixed-table ABI 与 SG Schema 版本分责。员工 memo 仍归操作／builder，Schema 查询不转回业务 SchemaStore。
-- 后续补其余 builtin fixed 结构路由和数组／Dictionary 业务内容执行，可独立拆片。TypeExpr 已能描述 closed Array/Dictionary 语法，不等于这些对象 body、slot binding、comparer/lookup 与 Delta 已获得新后端执行资格；完整槽闭包、来源 S 和用户 exact 依赖继续检查。
-- 每片同时验无业务模型的 meta 查询、匹配环境的冷读／实际增量和有区分力的错角色／variant／构造闭包拒绝。限额直接投影与真实 cold 小反例的资格分开；数千员工行的重复读取观察留作 P1c 缓存／操作内复用触发，不先扩优化平台。
-- 保持内部入口与唯一选定写入路径，不顺带公开 P1c/P2。扩 wire/固定表时继续明确拒旧格式、保留 append-only/outcome/owner 合同，并完成对应隔离包消费者验收；没有兼容负担不意味着可以混用两套解释。
+- 准入候选是 closed TypeExpr 递归无 Named；不能仅看 `ValueSchema == null`，因为用户 reference 槽也没有 ValueSchema。复用 [TypeExprWireCodec](../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) 的 closed Bare 构造编码与限额前，必须选定 Array/List/Dictionary 根 codec 版本的持久来源及 typed ABI 影响：比较由外层 ABI 固定各 codec 与结构头显式携带版本，不借当前默认版本补解释。
+- 最小纵向模型先含 `List<long?>` 与共享 inner `List<int>` 的 nested List：无业务 Schema 查询解 fixed body、普通 Root 冷开续写、Nullable 更新和 inner List 实际 Delta；核对准确 prior／head／引用与未新增动态 builtin descriptor。另验 user nominal、enum、未知结构码／codec 和 malformed TypeExpr 拒绝。先裁决后施工，不先冻结所有泛型 ABI。
+- 数组／Dictionary 内容可随后独立拆片：分别用 builtin-only 与用户 exact 槽的小模型验证 shape／稀疏 Delta、双槽／comparer／canonical-key Delta，再补已有组合。metadata 能描述构造，不等于这些 body 与 lookup 已获新后端资格。
+- 继续保持内部入口、准确 S、append-only/outcome/owner 与 memo 归操作／builder；不顺带公开 P1c/P2。wire/生成 ABI/交付边界改变时补对应隔离包验收；物理读取成本和缓存仍在 P1c 收口。
 
 继续按 bounded-delegation 分开生产闭包、真实 SG 消费者、独立反例与包验证，主线裁决接口、统一验收并同步本地提交。先前约 8–13 轮的量级估计是实施前的滚动估计，不是剩余轮数或验收承诺；后续以本片实际工作与新反例重估。完整范围仍为第 6.2 节 P0–P2，条件片按触发条件延期。
 
-本轮 package-mode pack 会更新根项目 assets；下一轮先按[存储依赖指南](../storage-dependency.md)执行显式 source restore，再用 `--no-restore` build/test，不直接复用 package-mode assets。历史运行命令保留其当时模式含义。
+第二片未 pack，最后 restore/build 为 source 模式。下一轮仍按[存储依赖指南](../storage-dependency.md)核对模式并执行显式 source restore，再用 `--no-restore` build/test；首片包验证更新 assets 的提示保留其历史含义。
 
 ## 7. 决定性验证与未冻结的细节
 
@@ -359,7 +359,8 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 | current/Upgrade target view 的冻结与闭合 | 所选 S 的只读 lookup 约束冻结代码能力；允许缺目标定义，已有异形仍拒绝。target 无持久编号，真实 Save 在 owner guard 内按实际 Capture 布局准备 catalog，origin Base 不借 current/latest 补缺 | **P1a 有限闭包已落实**；完整闭包由 P1b、公开接线由 P1c 验收 |
 | catalog 长期 dirty 与自动依赖的边界 | 长期只留手工 Set 的最终 root 意图；`PrepareOwned(capturedLayouts)` 临时收集完整闭包，自动依赖不计长期 dirty。Discard 保留意图／领域修改，下次 Capture 重推；Event 仍不安装 State | **P1b 首片源码已验证**；同 key 修正、共享依赖、显式 List 冲突和 Discard 见 §12，容器替换／撤销 API 未新增 |
 | 员工 records 与首片 Base 路由 | typed／fixed-table ABI v2，内部员工 Schema/DTO 仍 V1；Descriptor/Field/TypeExpr 强类型节点，Schema base/inline/Nullable 为构造 DAG，字段排序仅在工厂副本，按 ObjectId memo。固定 string/员工/精确 `List<int>`，用户 Root/`List<Point?>` 动态；根声明含 inline，ResolveLayout 不授予 inline 对象头资格 | **P1b 首片源码、完整回归与隔离包已验证**；metadata 语法不授予全部业务类型执行资格，见 §12 |
-| 剩余类型执行闭包、最终 wire 与容量 | TypeExpr metadata 描述现工厂 closed constructors；泛型／enum／数组／Dictionary 与现有组合的业务执行、完整固定容器路由仍逐片验收。最终码／位宽及容量未冻结；一图一个 batch，超限清晰拒绝，不自动增加分批平台 | P1b 后续；阻塞完整当前类型能力与公开切换 |
+| 剩余类型执行闭包、最终 wire 与容量 | TypeExpr metadata 描述现工厂 closed constructors；代表性泛型／enum current 执行已验，其余组合、数组／Dictionary 和完整固定容器路由仍逐片验收。最终码／位宽及容量未冻结；一图一个 batch，超限清晰拒绝，不自动增加分批平台 | P1b 后续；阻塞完整当前类型能力与公开切换 |
+| 闭合泛型／enum current 执行与后续固定结构路由 | 第二片用既有 ABI2／DTO V1 验真实单参数 family 的两个 closed 实例、enum/Nullable/inline 和业务 Delta；手造双有序实参／版本隔离与 exact 拒绝另有边界。下片建议递归无 Named 的 fixed 结构头，根 codec 版本来源／ABI 尚待裁决 | **有限 current 执行已验证**；真实 SG 多参、generic/enum Upgrade、跨程序集及 Array/Dictionary 内容未由本片授予资格 |
 | 分离 graph/batch 后的公开诊断与 typed/cache 键 | `CheckpointAddress.RevisionAddress` 目前等于合帧地址；确定新诊断字段含义，不再当对象 head。物理 owned 缓存可按同 owner 地址，typed 行、Normalize、Upgrade/State 槽须带准确 view/model 资格；命中仍验证实际视图 membership/引用 | P1c；阻塞 history/Pair/缓存整合，具体 API 与缓存条目尚未冻结 |
 | 初始化和真实崩溃/包门禁的测试宿主 | 实现第 6.2 节已选初始化合同及真实进程终止窗口，观察必要 publication refs 与 fresh owner 续写，不新增恢复协议；为准确六包 feed、独立 DG 版本准备新的 config/cache/assets 与真实 history 消费者 | P1d；宿主和具体注入接线待实施，阻塞产品资格；P0 同进程关闭重开不能替代 |
 | shared/private 的公开配置入口 | 政策已定：应用显式选择写入归属，缺策略可以读而写时拒绝，private 是完整 view；配置位置、方法和参数签名尚未确定。不得从 branch 名、地址相等或上次内存推断策略，不以 API 未定重开该政策 | P2；先显式策略/完整 fork，再接新根 all-Base 改形、完整闭包 promotion/必要重编码及两环境冷读验收 |
@@ -412,7 +413,7 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 
 与前稿相比，明确去掉一套独立表示编号/映射、一种 membership 模式及 Event 强制目录 Base 分支，并取消新 leaf codec/tag 和通用 token/日志平台的要求。新增 OwnedBatch 是为恢复拆帧丢失的 local-record 关联，不是优化附加物。没有把简单性解释为少改旧代码。
 
-P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 随后闭合真实 V1→V2、只读 target view 和共同恢复接线，见第 11 节。**下一片是 P1b 完整员工描述与 fixed/dynamic 路由**；先以一个含 base/inline/Nullable/容器的真实消费者选定最小记录形状，再扩完整现有闭包，不继续扩建通用 P0 平台。
+P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 随后闭合真实 V1→V2、只读 target view 和共同恢复接线，见第 11 节。P1b 员工首片和代表性闭合泛型／enum 执行见第 12、13 节；**下一片按 §6.3 选择 builtin 容器结构固定路由，再补数组／Dictionary 等剩余闭包**，不扩建通用 P0 平台。
 
 本轮无需新增产品语义选择。双 ref 保持原任务方向；是否后来改成单 ref、增加原分支重建或固定业务 head 的 Schema-only，只在相应目标出现时裁决。P1a 不代表完整 P1 或 P2 已完成，也不冻结实验 wire。
 
@@ -561,3 +562,20 @@ P0 验收时待 P1 的项目为：完整 Schema/TypeExpr/inline/base/Nullable/�
 四个独立正常进程 `seed → read → continue → verify` 全部通过：无业务注册先读完整 meta，随后冷读实际 Root/List，续写两个真实 Delta，重新读取旧／新 State；只读进程前后整个测试库文件哈希不变。包顾问执行 runner，主线另核实际日志、receipt、十包／assets／DLL 哈希、唯一 cache 和 4 个不同 PID。这只证明本片内部闭包的 PackageReference 与正常进程冷开，不代替 P1d 公开接入、初始化中断、两 ref ProcessCrashOnly 或断电资格。
 
 本地证据：源码日志在 `.artifacts/db087-p1b-{build,targeted,generator,regression}.log`；包 receipt 为 `.artifacts/db087-p1b-package-result.json`，SHA256 `DFB6CF448EB563B05996326DB743BFF6A031A7DF9651DFBB7A51F5AA59AD2ACA`。完整包日志、assets、模型及进程证据保留在 `W:/TEMP/dg-meta-schema-package-20261012063600-10824-b75f77bf/`。这些是本次机器上的可追溯工件，重跑入口以受版本控制的 runner 为准。
+
+## 13. P1b 第二片：闭合泛型与 enum 执行资格
+
+本片问题：**既有员工记录能否保留同 family 不同 closed 实参，并在无业务注册的 meta 冷读后恢复 enum／Nullable／inline 的真实业务内容、共享与环，再写实际 Delta？** 本轮只扩执行资格，生产代码、员工记录、typed／fixed-table ABI2、DTO V1 与 Generator 均未改。
+
+| 已证实 | 见证与边界 |
+|---|---|
+| 真实 SG current V1 闭包与业务续写 | [GenericEnum 消费者](../../tests/DurableGraph.Tests/MetaBootstrapGenericEnumGeneratorTests.cs)：`Box<int>`／`Box<Grade?>`、`Cell<int>`／`Cell<Grade?>` 与 `Cell<Grade?>?`，Grade 为 byte enum，保留合法 unknown 233；六个 exact Schema／三个业务行，闭合 descriptor 不合并，inline 不作对象头。关闭全部资源后无业务注册 meta 查询，再恢复 alias／self／owner 环；Nullable 双向和 whole-cell Clear 后三个真实 Delta／准确 prior／同 S，后继无变化仅新增 graph 并复用目录，旧／新 State 分别冷读 |
+| 身份和准确来源有独立边界 | [GenericSchemaTests](../../tests/DurableGraph.Persistence.Tests/MetaBootstrapGenericSchemaTests.cs) 七项：手造双有序实参交换与 closed 版本 descriptor 隔离；普通 inline 的 enum-like integer shape 允许；exact inline 升版要求 owner full key 改版并保留旧 S；错误 inline version／underlying tag 在 reader body callback 为零时拒绝；Nullable 实参的已知 Reference kind 拒绝；retained Base origin S 与 selected S 同数 ID／不同 closed 实参拒绝 |
+
+enum 没有新增持久 marker；无业务 CLR 的 meta 只认证普通 InlineValue 完整布局，不能从名字推断 enum 或施加 CLR 宽度。错误宽度的拒绝资格属于 reader／完整 Schema admission。手造 Schema 的顺序／版本／传播见证不等于真实 SG 多参数、generic 继承／约束、跨程序集或 generic／enum-width／value-rule Upgrade 已验收。P1a 的历史 Upgrade、P1b 首片的包范围保留，不由本轮 current V1 代替。
+
+部分反例使用完成 raw 帧＋`ConfirmDurable` 的 orphan 地址读取，未把全部帧发布到 refs；这证明读取准入，不冒充共同 publication 轨迹。公开路径、Array／Dictionary 内容、结构 fixed header、P1c/d 与 P2 未切换，本轮无新性能或崩溃资格。
+
+准确 pin `974fd47abb73792f9d350af87ab91a53848952eb` 的显式 source restore 后运行 solution build，**0 警告、0 错误**；新增真实 SG **1/1** 与独立边界 **7/7** 通过。最终两个测试项目的 `FullyQualifiedName~MetaBootstrap` 相关回归 **94 通过、0 失败、0 跳过**：Persistence **91**、Runtime/Generator **3**。本轮未重复完整 solution 测试；前轮 2899 保留第 12 节历史含义。
+
+生产／wire／SG／包交付边界未变，本轮未 pack 或重跑 PackageReference；第 12 节包证据不覆盖本轮组合。日志在 `.artifacts/db087-p1b-generic-{restore,build,boundary,generator,persistence-regression,generator-regression}.log`；下一片入口见第 6.3 节。主线统一运行并亲读两文件，生产侧独立只读复核确认现有记录足够。

@@ -38,6 +38,11 @@ P1b 首片已实施，使用强类型 Descriptor/Field/TypeExpr 员工与 typed�
 真实消费者范围为 base／inline／Nullable／List，完整类型执行、公开接线和 private 仍待后续；
 完整源码回归与隔离包四进程验收统一在 [DB-087 §12](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)。
 
+P1b 第二片以既有记录验证闭合泛型／enum/Nullable/inline，无生产代码或 ABI 改动。
+真实 SG 的两个 Box/Cell 闭合实例可冷读共享／环并续写实际 Delta；独立反例验证有序实参、版本与准确视图，
+范围和相关回归见 [DB-087 §13](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格)。
+下一片的 builtin 结构固定路由、codec 版本来源及其余容器按 §6.3 继续；本片不授予泛型历史 Upgrade 或新包资格。
+
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 
 ```powershell

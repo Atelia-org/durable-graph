@@ -19,15 +19,16 @@
 
 ## 当前焦点
 
-[DB-087 meta 自举](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由) 已完成 P0 有限持久闭环、P1a 共同恢复／Upgrade 接线和 P1b 首片；本片已通过完整源码回归及隔离包的四进程冷读续写。公开产品路径未切换，完整 P1b、P1c–d 和 P2 尚未完成。无旧数据／旧 API 兼容负担，最终产品简单优先。
+[DB-087 meta 自举](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格) 已完成 P0 有限持久闭环、P1a 共同恢复／Upgrade、P1b 员工首片及闭合泛型／enum 执行资格片。最新一片沿用现有生产代码与 ABI，以真实 SG 和独立反例补齐源码资格；首片完整回归和隔离包证据保留原范围。公开产品路径未切换，完整 P1b、P1c–d 和 P2 尚未完成。无旧数据／旧 API 兼容负担，最终产品简单优先。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 是继续演进的产品原型。P0 已证实 descriptor meta ObjectId、员工 Dictionary、共同 writer、真实双 ref、Event/State 与冷开续写；去向表和后续依赖只维护在 DB-087 §6，限定证据见 §10。
 共同恢复保持完整 decoded 来源、准确历史 S 的只读 lookup 与 target 代码能力；Event/Discard 不消费 State rewrite。P1b 首片以固定 Descriptor/Field/TypeExpr DTO 投影完整 base／inline／Nullable 依赖，真实生成 Root 与 List<Point?> 可冷开增量续写。精确 List<int> 走固定通道，用户槽 List 走动态 descriptor；typed／fixed-table ABI 为 2，员工 Schema/DTO 仍 V1，旧实验头拒绝。固定员工只共享不可变布局，绑定 memo 归操作／builder。
-长期 dirty 只保留显式 Set 的根意图；业务 Capture 依赖每次 Prepare 临时收集，Discard 后重新推导，避免修正未接受 Schema 时粘住旧依赖。catalog 声明集合包含完整 base／inline 依赖；inline 可以查询，但不能作为对象 Base descriptor。真实 Upgrade 证据见 §11，本片源码、拒绝边界及包证据集中于 §12。
-**下一步继续 P1b**：按 [DB-087 §6.3 续工入口](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 补泛型／enum 与数组／Dictionary 等完整已有闭包，决定其余 builtin-only 容器的固定描述路由。随后 P1c 合并业务 producer、公开 Repository/history/cache；P1d 完成初始化、ProcessCrashOnly 与隔离 PackageReference 门禁后公开切换／删除旧路径；P2 再落实显式 private。极限目录测试暴露的重复 batch／目录读取归 P1c 操作内复用与物理缓存，不扩成通用缓存平台。局部待决选择集中于 §7.1。
-已提交历史基线：P0 `12f3eb2`，P1a `2740bf1`；本轮变更与验证见 DB-087 §12。压缩后从本文和 §6.3 重建任务，不要求顾问保留完整旧会话；先核对实际 HEAD／工作树再施工。
+长期 dirty 只保留显式 Set 的根意图；业务 Capture 依赖每次 Prepare 临时收集，Discard 后重新推导，避免修正未接受 Schema 时粘住旧依赖。catalog 声明集合包含完整 base／inline 依赖；inline 可以查询，但不能作为对象 Base descriptor。真实 Upgrade 证据见 §11，员工首片源码、拒绝边界及包证据集中于 §12。
+最新见证以 `Box<int>`／`Box<Grade?>`、泛型 inline 与 byte enum 验证闭合 descriptor 隔离、共享／环、Nullable 双向修改、冷读和实际 Delta；手造双有序实参／版本与同数 descriptor 错义拒绝另验。没有新增 enum marker，也不据 current V1 证明泛型历史 Upgrade；证据及边界见 DB-087 §13。
+**下一步继续 P1b**：按 [DB-087 §6.3 续工入口](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 先裁决 builtin-only 容器的结构固定头及 codec 版本来源，以 `List<long?>`／`List<List<int>>` 验收；用户 nominal／enum 槽仍走动态目录。随后补数组／Dictionary 和完整已有组合，再由 P1c 合并业务 producer、公开 Repository/history/cache；P1d 完成初始化、ProcessCrashOnly 与隔离 PackageReference 门禁后公开切换／删除旧路径；P2 落实显式 private。极限目录的重复 batch／目录读取归 P1c，不扩通用缓存平台。局部待决项集中于 §7.1。
+已提交机制基线：P0 `12f3eb2`、P1a `2740bf1`、P1b 员工首片 `a6f1797`；最新验证见 DB-087 §13。压缩后从本文和 §6.3 重建任务，不要求顾问保留完整旧会话；先核对实际 HEAD／工作树再施工。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 当前只有本片限定闭包的资格，不代表完整 Upgrade/private、进程崩溃或性能资格；极限深度只验 owned DTO 投影，小型反例和真实模型保留持久冷读。不承诺总 O(k)。SCB1/raw map 仍是公开实现事实，不做生产双写。未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。下述 DB-086 等既有公开能力基线保持。
-下一轮验证前先按[依赖指南](../docs/storage-dependency.md)执行显式 source restore；本轮最后的 package-mode 打包已更新根项目 assets，不能直接混用两种模式的输出。
+本轮已显式 source restore，最后构建／相关回归为 source mode，没有 pack。下一轮仍按[依赖指南](../docs/storage-dependency.md)核对 assets 来源；切换 source/package 模式须重新 restore，不能混用输出。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
