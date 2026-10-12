@@ -131,7 +131,8 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
     private static MethodInfo Method(string name) => typeof(DB081HistoricalCertificateTests).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
     private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
-    private static NormalizedRevision Baseline(BranchCheckout branch) => Field<NormalizedRevision>(branch.Workspace, "_baseline");
+    private static NormalizedRevision Baseline(BranchCheckout branch) =>
+        Field<NormalizedRevision>(Field<BusinessWorkspace>(branch.Workspace, "_workspace"), "_baseline");
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>
         (stats.DecodedObjects, stats.NormalizedObjects, stats.PreparedGraphs, stats.AllocatedObjects, stats.HydratedObjects,
             stats.PreparedStateHits, stats.PreparedStateMisses);

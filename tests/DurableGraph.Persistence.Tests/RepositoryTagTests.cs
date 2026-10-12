@@ -293,8 +293,12 @@ public sealed class RepositoryTagTests : IDisposable {
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
     }
 
-    private static NormalizedRevision Baseline(WorldWorkspace workspace) => (NormalizedRevision)typeof(WorldWorkspace)
-        .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(workspace)!;
+    private static NormalizedRevision Baseline(WorldWorkspace workspace) {
+        BusinessWorkspace shared = (BusinessWorkspace)typeof(WorldWorkspace)
+            .GetField("_workspace", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(workspace)!;
+        return (NormalizedRevision)typeof(BusinessWorkspace)
+            .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(shared)!;
+    }
     private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
     private Dictionary<string, byte[]> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);

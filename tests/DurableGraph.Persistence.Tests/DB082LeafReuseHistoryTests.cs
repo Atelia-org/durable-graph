@@ -256,7 +256,8 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     private static extern ref int LeafValue(Leaf leaf);
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
     private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
-    private static NormalizedRevision Baseline(BranchCheckout branch) => Field<NormalizedRevision>(branch.Workspace, "_baseline");
+    private static NormalizedRevision Baseline(BranchCheckout branch) =>
+        Field<NormalizedRevision>(Field<BusinessWorkspace>(branch.Workspace, "_workspace"), "_baseline");
     private static ObjectId LeafObjectId(BranchCheckout branch) => Baseline(branch).Objects.Single(row => row.Value.Current.Schema?.SchemaId == LeafId).Key;
     private static void AssertStorage(Repository repository, BranchCheckout branch) {
         foreach ((ObjectId id, NormalizedObject row) in Baseline(branch).Objects) {

@@ -1,7 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图的就地重构路线
 
-> 更新：2026-10-12。状态：**P0／P1a 已完成，P1b 有限停点已达；P1c 前两片已完成，workspace／公开整合及切换／P2 未实施**。
-> 历史证据保留第 10–20 节；本轮 normalized 保存材料／发布前安装准备与完整源码回归见[第 21 节](#21-p1c-第二片normalized-保存材料与发布前安装准备)。下一片 workspace 的边界与待决接缝见第 6、7 节，无新包或进程崩溃资格。
+> 更新：2026-10-12。状态：**P0／P1a 已完成，P1b 有限停点已达；P1c 前三片已验，共同 workspace 已完成；公开整合及切换／P1d／P2 未完成**。
+> 历史证据保留第 10–21 节；本轮共同 workspace 的问题、范围与完整源码验收见[第 22 节](#22-p1c-第三片共同业务-workspace-与候选寿命)。后继 owner/history 与缓存接缝见第 6、7 节。
 > 公开产品基线仍是 [DB-086](0086-new-storage-implementation.md)。P1 公开切换、P2 private 未实施；内部 API/wire 未冻结。
 > 用户明确无旧数据／旧 API 兼容负担；简单性按最终产品衡量，施工过程允许复杂。裁决与下一片见[第 9 节](#9-本轮裁决与下一片实验)。
 
@@ -304,7 +304,7 @@ P0 是已经工作的内部产品原型，P1 在它上面演进，不整体丢�
 | 员工模型、fixed bindings、typed Base 路由 | **保留已验闭包，随公开接线演进** | [员工模型](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)、[fixed 表](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0FixedBindings.cs)、[typed reader](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0TypedBodies.cs) 的限定证据见 §12–19；List／Array／Dictionary 代表路由及各自源码／包验收见 §14–16。有限表与 builtin 结构路由分开，保留 SG 契约和 Schema 工厂。P1b 有限停点已达，不等于穷举组合或公开资格；后续具体差异由 P1c 接线触发 |
 | `P0CatalogView`、`P0CatalogWorkspace` | **演进为唯一查询 view／受控 meta producer** | [view](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogView.cs) 从实际 meta 图投影，[workspace](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs) 基于 accepted 索引归约 dirty keys。完整 S 决定定义和 descriptor IDs；Schema 查询不拥有发布，不复制一份独立 RepresentationId 账本 |
 | P0 原 `Restore`、`Restored`、分配与 Hydrate 循环 | **P1a 已并回现有恢复核心** | [P0BusinessWorkspace](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs) 只转接解码与保存基线。完整 DTO/head/H/string 进入 [NormalizedRevision.Create](../../src/DurableGraph.Persistence/NormalizedRevision.cs) 和 [GraphReader.Prepare/Materialize/DeliverEditable](../../src/DurableGraph.Persistence/GraphReader.cs)，保留完整成员 Normalize、引用/字典校验、两阶段分配及身份导入 |
-| P0 业务 Capture/比较与当前 `WorldWorkspace`/planner | **并回一份业务 producer** | [WorldWorkspace.StageCore](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 与 [LoadedRevisionPlanner.Prepare](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs) 已维护升级重写、身份和 head/H；结合 P0 records/Removes 输出，替换旧 [ObjectRevisionPlanner.PrepareCore](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 对 `StateRevision`/完整 prepared rows 的输出依赖。既有全图 Base 预算继续使用，不按 meta 规则重选 |
+| P0 业务 Capture/比较与当前 `WorldWorkspace`/planner | **第三片已收共同 workspace，并通过完整源码回归** | [BusinessWorkspace／BusinessSaveCandidate](../../src/DurableGraph.Persistence/BusinessWorkspace.cs) 统一 models、Capture、完整 baseline、根与候选寿命；两 backend 保真实编码、来源检查和写计划包装。共同 planner 沿用既有全图 Base 预算，P0 保 records/Removes 与 catalog 准备顺序，不按 meta 规则重选 |
 | `P0Repository`、`P0PendingSave`、`P0Session` | **并回公开 owner／checkout** | [P0Repository.Commit](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Repository.cs) 的双 ref、唯一 pending、Confirmed 安装与 fault 规则接入 [Repository.Publish](../../src/DurableGraph.Persistence/Repository.cs) 和 [GraphResources](../../src/DurableGraph.Persistence/GraphResources.cs)。新库预留 2，先读两个必要 refs，再构造 DG views/caches；保留公开 branch 占用、只读、tag、资源与 reentry 合同，不预开全部 refs/tags，不长期并列两个 owner |
 | `RevisionReadSession`、DB-080 State 槽、DB-067 物理缓存 | **保留职责，演进资格和缓存值** | [read session](../../src/DurableGraph.Persistence/RevisionReadSession.cs) 当前按 `(Id, head)` 并用一个 live SchemaStore；[State 槽](../../src/DurableGraph.Persistence/PreparedStateRestoration.cs) 核对 Store/SchemaStore/model 引用。改为准确 owner、stored/selected S 与 target binding context；[有界物理缓存](../../src/DurableGraph.Storage/StateRevisionReadCache.cs) 的统一预算/LRU 可复用，但旧 `StateRevision` 值改为 batch/目录/graph owned 值，不把裸地址命中当 typed 资格 |
 | history、Checkpoint、tag/Fork/Move/ReadPair | **保留功能，替换帧导航接缝** | [GraphResources.ReadHistory](../../src/DurableGraph.Persistence/GraphResources.cs) 当前从 StateRevision TailMeta 读业务 Parent；[Repository.NearestStateCore/ValidateSelectedGraphParent](../../src/DurableGraph.Persistence/Repository.cs) 又依赖 Revision Parent。改读 graph 封套并派生内容 Parent；graph/batch 分离后不再假定图地址等于对象 head。句柄 owner、历史选择和 Pair 闭包证明保持 |
@@ -339,7 +339,7 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 <a id="63-p1b-首片续工入口"></a>
 ### 6.3 P1c 续工入口
 
-P0／P1a 和 P1b 的有限停点保留 §10–19，共同规划首片已验于 §20。当前第二片共享完整 normalized 保存材料、实际 heads/H 与发布前安装准备，范围见 §21；后继依下表接线，不把未穷举组合追加为前置，续工仍先核实际 HEAD／工作树。
+P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前三片已验，证据见 §20–22。第三片已合并共同 workspace 与候选寿命；下一 owner/root 先达到内部新读新写停点，依下表接线，不把未穷举组合追加为前置。续工仍先核实际 HEAD／工作树。
 
 停点覆盖现有 Schema／TypeExpr 与标量、base/inline/Nullable、generic/enum、Array/List/Dictionary 的描述与代表性 cold／增量，容器值规则和 generic provider history 分别有真实 accepted-history 见证。Application 完整 comparer 配方、rank3/4 SG 冷图、更多嵌套／约束和跨库升版仍是资格限制；没有具体接缝反例时沿用 Runtime/SG 已验算法，P1c 移接既有回归发现差异再补验。有限 P1b 不是公开 Repository/history/cache 或完整产品门禁。
 
@@ -347,13 +347,16 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，共同规划首片已验于 �
 |---|---|
 | **P1c 首片：共同业务规划已完成，见 §20**。[ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 的 `ClassifyCaptured`／`PlanObjectWrites` 共用分类、计量／预算和 records；[EncodedBaseObjectBody](../../src/DurableGraph.Persistence/EncodedBaseObjectBody.cs) owned 壳承载 producer 的完整 typed Base，两 adapter 各自调用真实 codec | 旧 `PrepareCore` 保 exact heads/H 来源前检及 StateRevision 目录包装；[P0BusinessWorkspace.PrepareOwned](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs) 保 Capture→catalog 候选→typed Encode 与 Removes；首片的独立 nextH 已由第二片共同安装材料替代。内核的结构检查不是来源认证，不查 Store/Schema、不 Append/Install，不把 tuple 变成可注入保存基线 |
 | **P1c 第二片：共享 normalized 保存材料与发布前安装准备已完成，见 §21**。P0 的 rows/H/rewrite 收为一份 [NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs)，保留两薄 backend adapter 与 owner | `ReadSplit` 内部读取准确 S 并冻结模型；具体后端读取实际追加结果，私有共同函数核完整 membership、records/prior、retained heads 与 rewrite，并按实际 payload 完成 H。meta／State 安装准备均在发布前；混合 heads/H、cold Delta、来源拒绝、安装准备失败／完整 orphan 和 typed 重入已验，既有 Upgrade/Event/Discard 由完整回归保持 |
-| **下一片：一份业务 workspace，未实施**。合并稳定 models、CaptureSession、NormalizedRevision 基线、当前 Root/RootId 和候选生命周期；P0Business 降为编码／来源适配，两 owner 保留 | 复用 [WorldWorkspace.StageCore/Install/Discard](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 与 MaterializedGraph 的身份导入；owner guard内共同Capture/Seal，P0 driver仍先准备最新catalog再typed编码，legacy仍用真实Schema/codec。可保薄prepared wrapper承载两种写计划，不造backend/policy平台。验新建／cold恢复→State Base/Delta→Event/Discard→实际类型根替换／IDs/Removes→NoChange，保reentry、完整来源和安装前失败；State Confirmed接受同候选并换材料，Event推进Head／接受meta而不装State或清rewrite，不一次合owner/history/cache |
-| **随后：公开 owner／history，再 Pair／缓存**。GraphResources/Repository 接两 ref、catalog、唯一 pending 和新 graph 导航；保留既有业务功能 | branch/Checkout/Fork/Move/tag/ReadCheckpoint/ReadPair、Event-first／根替换、Upgrade/rewrite/预算和热冷续写完整移接。处理下述三个具体接缝，不另造第二发布 owner、保存 token 或 provenance 平台 |
+| **P1c 第三片：共同 workspace 已完成，见 §22**。[BusinessWorkspace／BusinessSaveCandidate](../../src/DurableGraph.Persistence/BusinessWorkspace.cs) 拥有模型、Capture、完整 baseline、Root/RootId 与唯一候选；两 backend 适配和写计划壳保留 | P0 保 Capture→catalog→typed Encode 顺序，Event 不建立 next baseline；两 backend 的实际根替换／IDs/Removes／cold Delta 与安装材料误接见证通过，既有 Upgrade、重入和失败合同由完整源码回归保持。两 owner 保留，不合 history/cache |
+| **建议下一内部停点：共同 owner/root 能新读新写，未实施**。[GraphResources](../../src/DurableGraph.Persistence/GraphResources.cs) 集中 FS/VS、ref1 分支目录＋ref2 shared、catalog 和唯一 pending；承接 P0 的 joint publish／发布前准备／Confirmed 安装及 fault | 至少一条新建分支→State/Event→新增 Schema joint Save→全部资源 cold 开→继续 Delta 的内部轨迹；来源、refs、实际 heads/H、失败和 retained 资格完整。先有内部新读新写，不用新 reader 配旧 Schema 独立发布，也不让公开入口半切换；默认公开切换仍等 P1d |
+| **再接 history 与公开功能，未实施**。[Repository](../../src/DurableGraph.Persistence/Repository.cs) 保 branch/Checkout/Fork/Move/tag、地址和历史选择；独立 typed 恢复接准确 S | 元数据导航只读 graph 封套，不以完整 ReadGraph 物化目录代替 GetHead／EnumerateEvents。迁移最近 State／双 Parent、纯 Event 前缀、readonly 零写、根替换及 Upgrade；ReadPair 和 DB-080／物理缓存资格另片收口，不能以此宣称全部公开门禁通过 |
 | **P1d：产品门禁后默认切换与旧路径退出** | 初始化、ProcessCrashOnly、outcome/fault/orphan、独立真实包及完整既有回归按 §6.2 验收；通过后删除 SCB1/raw-map 旧入口。P2 再接已选 private 政策，不由本片扩张 |
 
 首片只共用规划算法，不一次合并 workspace。施工期间旧公开 owner 仍只旧读旧写，P0 内部入口只新读／joint publish；没有生产双写或新 reader 配旧 Schema 发布的混合停点。推荐内核形状未冻结方法签名，实现证据支持更小替代时可调整，不为规划建立接口／token。
 
-第二片的具体来源／安装接缝已落源码，验证状态见 §21；合workspace仍需确定共同候选与两种backend写计划的薄返回壳，不冻结方法签名或把任意map变保存来源。后继仍待落定 **`CheckpointAddress.RevisionAddress` 拆帧后的诊断含义**（history片，不作对象head）与 **物理缓存值／typed及State槽的view/model keys**（cache片，不由裸ID/address授typed资格），见§7.1；双ref、准确views、初始化、shared/private、Schema-only等已选政策不重新列待决。
+第三片的共同候选／薄返回壳已通过完整源码验收。后继须落实 root payload／GraphResources 发布接线、冻结代码环境到准确 S 绑定、graph 诊断地址和缓存资格；它们是具体实现接缝，不重选产品语义。Repository 在一次 Open 内冻结配置、延迟模型闭合并复用成功能力是既有合同，不能直接套用会观察外部 registry 后续注册的 ReadSplit 调用；模型 binding 身份、Pair 共享与 State 槽资格在对应片核对。
+
+`CheckpointAddress.RevisionAddress` 推荐继续表示 graph 位置，实际对象 head 仅来自每行 Storage，具体实现待 history 验收。物理缓存值和 typed／State 槽的 view/model keys 留缓存片；不由裸 ID/address 授 typed 资格。双 ref、准确 views、初始化、shared/private、Schema-only 等已选政策保持，见 §7.1；不新增公开 API 或后端平台待办。
 
 续工先核实际 HEAD／工作树，再读 PROJECT-STATE、本节与 §7.1。代码变化按[存储依赖指南](../storage-dependency.md)显式 source restore，运行 solution build 与相关测试；wire／生成 ABI／交付边界变化时补隔离包，不能以 ProjectReference 代替。既有历史总数不与新用例合算为本轮实跑。完整范围仍为 §6.2，测量触发的成本优化与新增 API 保条件片，不承诺总 O(k)。
 
@@ -367,7 +370,7 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，共同规划首片已验于 �
 |---|---|---|
 | 源无关恢复输入和 readonly Schema lookup 的具体签名 | `GraphReader.Read/ReadRoot(DecodedRevision, …, GraphReadContext)` 复用原核心；`Snapshot(schemaLookup: …)` 与 legacy SchemaStore 互斥。lookup 只查选定不可变 view，不建通用 Store/provider 平台 | **P1a 已落实**；完整公开读取与缓存资格继续 P1c |
 | 来源／安装内部字段和 reader/Append 签发点 | 完整 membership 含将 Remove 的 source 行；`ReadSplit` 私有签发 SplitStore／SelectedSchemaView／SourceModels，hot 新 S 与稳定 models 分责。具体后端读取实际 Append 结果后，共同完成 heads/H、完整候选和重写校验；发布前备齐 meta／State 安装材料 | **P1c 第二片已验，见 §21**；保 `RequireStorageSource` 与 Loaded/Captured 来源前检，不提供任意 map 或外部 view 补签 |
-| 共同 workspace 的候选与写计划返回壳 | 合 models/capture/baseline/root 与候选寿命，保 P0 Capture→catalog→typed Encode 顺序；两种 backend 写计划可暂由薄 prepared wrapper 承载，不建策略或 backend 平台 | **P1c 下一片待施工**；按 §6.3 移接 State/Event、根替换、身份、完整来源及失败合同，之后才合 owner/history/cache |
+| 共同 workspace 的候选与写计划返回壳 | BusinessWorkspace／BusinessSaveCandidate 合模型、Capture、baseline、root 和候选；两 backend 适配与 prepared 写计划壳保留，P0 仍先准备 catalog 再编码，Event 不建立 next baseline | **P1c 第三片完整源码验收通过**，见 §22；之后才接 owner/history/cache，不建策略或 backend 平台 |
 | current/Upgrade target view 的冻结与闭合 | 所选 S 的只读 lookup 约束冻结代码能力；允许缺目标定义，已有异形仍拒绝。target 无持久编号，真实 Save 在 owner guard 内按实际 Capture 布局准备 catalog，origin Base 不借 current/latest 补缺 | **内部 P1a/P1b 代表已落实**；公开接线由 P1c 验收 |
 | catalog 长期 dirty 与自动依赖的边界 | 长期只留手工 Set 的最终 root 意图；`PrepareOwned(capturedLayouts)` 临时收集完整闭包，自动依赖不计长期 dirty。Discard 保留意图／领域修改，下次 Capture 重推；Event 仍不安装 State | **P1b 首片源码已验证**；同 key 修正、共享依赖、显式 List 冲突和 Discard 见 §12，容器替换／撤销 API 未新增 |
 | 员工 records 与首片 Base 路由 | 首片时为 typed／fixed-table ABI v2，内部员工 Schema/DTO 仍 V1；Descriptor/Field/TypeExpr 强类型节点，Schema base/inline/Nullable 为构造 DAG，字段排序仅在工厂副本，按 ObjectId memo。首片精确 `List<int>` 专码由第三片 structural 路由替代；根声明含 inline，ResolveLayout 不授予 inline 对象头资格 | **P1b 首片历史证据保留于 §12**；后续 ABI 各有证据，metadata 语法不授予全部业务类型执行资格 |
@@ -379,7 +382,8 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，共同规划首片已验于 �
 | 容器 history／值规则与 State rewrite | 第六片以独立 SG V1/V2 accepted history 验 Array/List/Dictionary 双端 exact 升版、Nullable、Point 局部 Grade byte→ushort 依赖；Root 同 Schema／Self／alias 保持，沿既有 source→current 规则和 Event/Discard 合同 | **仅测试的源码资格已完成，生产零改**；§17 运行新12项，未增加包／完整回归资格；该片不覆盖多参／跨程序集，后继多参资格见 §18 |
 | 多参／泛型继承 current 与 generic provider history | 第七片分别验证两个 closed Derived 的 base／inline／实参身份，以及真实 accepted-history 的开放 Box<int>／闭合 Box<Point> 端点和错误能力拒绝；两故事资格互不替代 | **仅测试的五用例源码资格已完成，生产零改**；§18 保当片范围，跨程序集 current 后继见 §19，未外推全部约束／provider组合 |
 | 共同业务规划内核 | `ClassifyCaptured`／`PlanObjectWrites` 已共用 captured 分类、B/D/H 计量／预算和 records；旧与 P0 adapter 各自真实编码 typed Base，保全部来源检查，内核不碰 Store／发布／安装 | **P1c 首片源码已验**，见 §20；未合 workspace/owner，内部签名不作公开冻结，不新接口／token |
-| 拆帧后的 `CheckpointAddress.RevisionAddress` 诊断语义 | 当前等于旧合帧地址；新 history 应区分 graph 定位与实际对象 head，不能把该诊断值作保存 prior | **P1c history 片待定／接线**；保句柄 owner 和两种 Parent 导航 |
+| owner/root 与冻结代码到准确 S 的接线 | 共同 owner 先达到内部新读新写；准确 S lookup 不得放宽 Open 时冻结模型配置和成功闭合复用。元数据导航只读封套；完整 typed 准备另验来源和内容 | **后继内部接线未实施**；既有合同证据为 [RepositoryModelEnvironmentTests](../../tests/DurableGraph.Persistence.Tests/RepositoryModelEnvironmentTests.cs)，具体字段／冻结和 binding 接缝待施工，不当成新产品语义选择 |
+| 拆帧后的 `CheckpointAddress.RevisionAddress` 诊断落实 | 推荐继续表示 graph 位置，实际对象 head 来自每行 Storage，不能把该诊断值作保存 prior | **P1c history 接线未实施**；保句柄 owner 和两种 Parent 导航，不要求新增公开地址 API |
 | 物理缓存值和 typed／State 槽 view/model keys | 同 owner 地址可复用 owned frame；typed 行、Normalize、Upgrade/State 槽须带准确 view/model 资格，仍按实际 membership／引用校验，不由裸 ID/address 免检 | **P1c cache 片待定／接线**；保持 DB-080 材料复用和 mutable 隔离 |
 | 初始化和真实崩溃/包门禁的测试宿主 | 实现第 6.2 节已选初始化合同及进程窗口，观察必要 publication refs 与 fresh owner 续写；准确六包 feed、独立 DG 版本、新 config/cache/assets 和真实 history 消费者 | **已选合同，P1d 施工未实施**；不新增恢复协议，P0 同进程关闭重开不能替代 |
 | shared/private 的公开配置入口 | 政策已定：应用显式选择写入归属，缺策略可以读而写时拒绝，private 是完整 view；配置位置、方法和参数签名尚未确定。不得从 branch 名、地址相等或上次内存推断策略，不以 API 未定重开该政策 | P2；先显式策略/完整 fork，再接新根 all-Base 改形、完整闭包 promotion/必要重编码及两环境冷读验收 |
@@ -432,7 +436,7 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，共同规划首片已验于 �
 
 与前稿相比，明确去掉一套独立表示编号/映射、一种 membership 模式及 Event 强制目录 Base 分支，并取消新 leaf codec/tag 和通用 token/日志平台的要求。新增 OwnedBatch 是为恢复拆帧丢失的 local-record 关联，不是优化附加物。没有把简单性解释为少改旧代码。
 
-P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 的真实 V1→V2、只读 target view 和共同恢复见第 11 节；P1b 有限停点与 P1c 首片证据保留 §12–20。**第二片共享 normalized 保存材料与发布前安装准备已验**，见 §21；下一片合workspace，依赖与待决接缝见 §6.3／7.1，不扩建通用 P0 平台。
+P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 的真实 V1→V2、只读 target view 和共同恢复见第 11 节；P1b 有限停点与 P1c 前两片证据保留 §12–21。**第三片共同 workspace 与候选寿命已通过完整源码验收**，见 §22；下一 owner/root 内部新读新写停点和待决接缝见 §6.3／7.1，不扩建通用 P0 平台。
 
 本轮无需新增产品语义选择。双 ref 保持原任务方向；是否后来改成单 ref、增加原分支重建或固定业务 head 的 Schema-only，只在相应目标出现时裁决。P1a 不代表完整 P1 或 P2 已完成，也不冻结实验 wire。
 
@@ -815,3 +819,39 @@ provider history 故事为不变 Root V1＋`Box<int>`／`Box<Point>` V1→V2，P
 准确 pin 的 source restore 后，solution build **exit 0、0 警告、0 错误**；定向测试 **exit 0、8/8 通过**（新7＋改原accounting1）。完整 source solution test **exit 0、2993 通过、0 失败、0 跳过**：Persistence **1053**、Runtime/Generator **1675**、Storage **132**、Serialization **133**，均为本轮实际输出。日志 `.artifacts/db087-p1c-baseline-{restore,build-3,focused-2,regression}.log`。主线亲读九个生产文件与测试、运行上述验收，独立持久静审通过。首编译缺命名空间引用和定向夹具漏复制空目录均已修正；后者未执行到来源 guard，不记作产品语义失败。
 
 wire／ABI、SG／history、公开API与包交付边界不变，未新pack、没有新PackageReference或Crash资格；assets为source。下一片合workspace的范围、候选／写计划壳及最小验收见§6.3／7.1，尚未实施；再后接owner/history→Pair/cache→P1d→P2。§10–20保持原文，整个P1c和公开切换未完成，不新增性能承诺。
+
+## 22. P1c 第三片：共同业务 workspace 与候选寿命
+
+### 22.1 问题、范围与最小验收
+
+本片问题：**两条已共用规划和 normalized 安装材料的保存路径，能否再共享模型、Capture、完整基线、根及候选生命周期，保持真实编码和 State/Event、身份、失败合同？** 已实施并通过定向见证与完整源码回归。
+
+| 实施形状 | 职责与验收边界 |
+|---|---|
+| [BusinessWorkspace／BusinessSaveCandidate](../../src/DurableGraph.Persistence/BusinessWorkspace.cs) | 唯一 models、Capture、完整 baseline、Root/RootId、pending/staging。候选通过实际 DTO table 与 issuing backend/model 身份认领安装材料，保持单次使用；State Confirmed 接受同一冻结候选，Event 不建立 next baseline／不接受 State 身份或清 rewrite |
+| [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs)／[P0BusinessWorkspace](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs) 与两 prepared 壳 | 两 backend 各保真实编码、来源／实际追加检查；共享 Capture、准备、安装和释放。P0 保 Capture→catalog→typed Encode，以 source−candidate 算 Removes；第二片来源签发、完整成员、实际 heads/H 和发布前准备保持。两个 owner 暂保留 |
+
+最小验收跨两 adapter 覆盖新建／cold 恢复、State Base/Delta、Event/Discard／升级 rewrite、实际类型根替换、IDs/Removes/NoChange、候选互斥／重入／单次安装及准备失败。具体源码和实际计数只填本节，旧 §10–21 保持原文；不改 wire、公开 API 或 SG，不接公开 history、Pair/cache。
+
+下一 owner/root 先形成可新读新写的内部接线停点，再完整移接既有功能；P1d 门禁后才默认切换，不留新 reader 配旧 Schema 发布或公开半切换。确定合同与具体未落实接缝见 §6.3／7.1；本片不新增性能或包资格。
+
+### 22.2 定向证据与验证边界
+
+| 见证 | 实际观察／资格边界 |
+|---|---|
+| 两 backend 的实际根与保存身份 | [SharedBusinessWorkspaceRootTests](../../tests/DurableGraph.Persistence.Tests/SharedBusinessWorkspaceRootTests.cs) 的两用例分别走真实 Repository 和 P0Session refs。Widget 环与共享 List 经 child 升根、另一实际类型 Envelope 替根；Discard／Event 不接受其新身份，State 接受原实例。全资源关闭后的 List 真 Delta 核 prior／H 与另三 retained heads；移除两旧 Widget、NoChange 和 fresh 旧新历史准确。P0 NoChange 复用目录／无 batch／只增图帧；旧 backend 新增无 local records 的 Revision，存活目录仍完整。本次 Capture 游标的 ID 烧号不外推跨重开合同 |
+| 另一真实候选的安装材料拒绝 | [BusinessSaveCandidateInstallationTests](../../tests/DurableGraph.Persistence.Tests/BusinessSaveCandidateInstallationTests.cs) 在同一真实 Store、冻结模型和同数 ObjectId 上 Append 并读回两个不同候选。误接材料在安装前拒绝，原候选和安装槽未消费；正确材料仍可安装且不能重复接受。此为真实 Append／read 的机制见证，没有 refs publication，不能代替上一行的发布轨迹 |
+| 既有来源、Upgrade 和失败合同 | 原会计／完整来源／重入测试仅迁移到共同 core/candidate；历史 DB-080/081/082 的反射 helper 随字段归属迁移。新的三用例不另验 Upgrade/rewrite、Event-first 或 readonly hash 矩阵，既有断言由本轮完整回归保持 |
+
+主线亲读五个生产文件、七份原测试 helper 和两个新测试文件，独立生产静审及新用例复核通过。先行新用例定向 **3/3** 与既有定向 **41/41** 分别记于 `.artifacts/db087-p1c-workspace-new.log`／`-existing.log`，不与完整回归相加。首次完整回归暴露三份历史 helper 仍反射旧字段，迁移共同 core 后重新构建和完整运行，既有断言未改。
+
+最终 solution build 实跑 **0 警告／0 错误**、exit 0，日志 `.artifacts/db087-p1c-workspace-build-final-3.log`；同一冻结源码的完整 source solution 回归 exit 0，**2996 通过、0 失败、0 跳过**，日志 `.artifacts/db087-p1c-workspace-regression-2.log`：
+
+| 项目 | 实跑通过数 |
+|---|---:|
+| Persistence | 1056 |
+| Serialization | 133 |
+| Storage | 132 |
+| Runtime／Generator | 1675 |
+
+wire／公开 API／SG／history 交付未变，未新 pack 或运行 PackageReference／Crash；assets 为 source mode。后继 owner/history、Pair/cache、P1d 默认切换及 P2 均未实施；§10–21 保持原文，不新增性能结论。

@@ -4,30 +4,21 @@ using Atelia.DurableGraph.Storage;
 
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>Owns one editable State baseline and serial candidates, independent of head publication.</summary>
+/// <summary>Legacy storage/source adapter for the shared editable business workspace.</summary>
 internal sealed class WorldWorkspace {
     private readonly StateRevisionStore _store;
     private readonly SchemaStore _schemas;
-    private readonly StateModelSnapshot _models;
-    private readonly CaptureSession _capture;
-    private NormalizedRevision? _baseline;
-    private PreparedWorldSave? _pending;
-    private bool _staging;
+    private readonly BusinessWorkspace _workspace;
 
-    private WorldWorkspace(StateRevisionStore store, SchemaStore schemas, IDurableObject? world, ObjectId worldId,
-        StateModelSnapshot models, NormalizedRevision? baseline, CaptureSession capture) {
+    private WorldWorkspace(StateRevisionStore store, SchemaStore schemas, BusinessWorkspace workspace) {
         _store = store;
         _schemas = schemas;
-        World = world;
-        WorldId = worldId;
-        _models = models;
-        _baseline = baseline;
-        _capture = capture;
+        _workspace = workspace;
     }
 
-    internal IDurableObject? World { get; private set; }
-    internal ObjectId WorldId { get; private set; }
-    internal FrameAddress? ParentRevisionAddress => _baseline?.RevisionAddress;
+    internal IDurableObject? World => _workspace.Root;
+    internal ObjectId WorldId => _workspace.RootId;
+    internal FrameAddress? ParentRevisionAddress => _workspace.Baseline?.RevisionAddress;
 
     internal static WorldWorkspace Create(StateRevisionStore store, SchemaStore schemas,
         IDurableObject world, StateModelRegistry models) {
@@ -43,7 +34,7 @@ internal sealed class WorldWorkspace {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(snapshot);
-        return new(store, schemas, null, default, snapshot, null, new());
+        return new(store, schemas, new(snapshot));
     }
 
     internal static WorldWorkspace CreateSnapshot(StateRevisionStore store, SchemaStore schemas,
@@ -52,10 +43,7 @@ internal sealed class WorldWorkspace {
         ArgumentNullException.ThrowIfNull(schemas);
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (!snapshot.TryGetCurrentModel(world.GetType(), out _)) {
-            throw new ArgumentException("World must have its actual domain type registered.", nameof(world));
-        }
-        return new(store, schemas, world, default, snapshot, null, new());
+        return new(store, schemas, new(snapshot, world));
     }
 
     internal static WorldWorkspace Load(StateRevisionStore store, SchemaStore schemas,
@@ -82,8 +70,7 @@ internal sealed class WorldWorkspace {
 
     internal static WorldWorkspace FromLoaded<TWorld>(RevisionReadSession reads,
         MaterializedGraph<TWorld> loaded) where TWorld : class, IDurableObject =>
-        new(reads.Store, reads.Schemas, loaded.Root, loaded.RootId, reads.Models,
-            loaded.Baseline, loaded.CreateCaptureSession());
+        new(reads.Store, reads.Schemas, BusinessWorkspace.FromLoaded(reads.Models, loaded));
 
     internal PreparedWorldSave Stage(ReadAmplificationBaseBudgetParameters parameters) =>
         Stage(World ?? throw new InvalidOperationException("An explicit State root is required before the first State."), parameters);
@@ -102,59 +89,23 @@ internal sealed class WorldWorkspace {
 
     private PreparedWorldSave StageCore(IDurableObject root, ReadAmplificationBaseBudgetParameters parameters,
         bool independentSnapshot) {
-        if (_staging || _pending is not null) {
-            throw new InvalidOperationException("Resolve the current graph save before preparing another.");
-        }
-        ArgumentNullException.ThrowIfNull(root);
-        _staging = true;
-        CaptureContext? context = null;
+        BusinessSaveCandidate candidate = _workspace.Capture(root, independentSnapshot);
         try {
-            if (!_models.TryGetCurrentModel(root.GetType(), out StateModelBinding? model)) {
-                throw new ArgumentException("Root must have its actual domain type registered.", nameof(root));
-            }
-            context = _capture.BeginCapture(_models);
-            ObjectId rootId = model!.AddRoot(context, root);
-            CapturedGraph candidate = context.Seal();
-            PreparedObjectRevision prepared = _baseline is null
-                ? CapturedRevisionPlanner.PrepareRevision(_store, _schemas, null, _capture.Prepare(candidate), parameters)
-                : LoadedRevisionPlanner.Prepare(_store, _schemas, _baseline,
-                    _capture.PrepareAgainst(candidate, _baseline.CurrentDtos), parameters, independentSnapshot);
+            NormalizedRevision? baseline = _workspace.Baseline;
+            IReadOnlyList<PreparedCapturedObject> contents = candidate.PrepareContents();
+            PreparedObjectRevision prepared = baseline is null
+                ? CapturedRevisionPlanner.PrepareRevision(_store, _schemas, null,
+                    new PreparedCapturedGraph(null, candidate.Graph, contents), parameters)
+                : LoadedRevisionPlanner.Prepare(_store, _schemas, baseline, contents, parameters, independentSnapshot);
             // Snapshot completion deliberately retains the old State baseline and its rewrite
             // obligations. Only an advancing candidate prepares a replacement baseline.
             NormalizedRevision? next = independentSnapshot ? null :
-                NormalizedRevision.FromCandidate(candidate, _models, _store, _schemas, _baseline);
-            _pending = new(this, context, candidate, rootId, prepared.Revision, next,
-                independentSnapshot ? null : root);
-            return _pending;
+                NormalizedRevision.FromCandidate(candidate.Graph, _workspace.Models, _store, _schemas, baseline);
+            candidate.CompletePreparation(next);
+            return new(candidate, prepared.Revision);
         } catch {
-            context?.Dispose();
+            candidate.AbortPreparation();
             throw;
-        } finally {
-            _staging = false;
-        }
-    }
-
-    internal void Install(PreparedWorldSave pending, CapturedGraph candidate,
-        NormalizedRevision baseline, IDurableObject nextState) {
-        RequirePending(pending);
-        // Accept transfers the actual frozen candidate's live identity dictionary. Neither
-        // recapture nor user callbacks may occur after publication.
-        _capture.Accept(candidate);
-        _baseline = baseline;
-        World = nextState;
-        WorldId = pending.RootId;
-        _pending = null;
-    }
-
-    internal void Discard(PreparedWorldSave pending, CaptureContext context) {
-        RequirePending(pending);
-        context.Dispose();
-        _pending = null;
-    }
-
-    private void RequirePending(PreparedWorldSave pending) {
-        if (!ReferenceEquals(_pending, pending)) {
-            throw new InvalidOperationException("The pending save does not belong to this workspace.");
         }
     }
 }

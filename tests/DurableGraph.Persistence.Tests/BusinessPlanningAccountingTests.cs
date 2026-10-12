@@ -140,10 +140,14 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes);
     }
 
-    private static P0BusinessWorkspace Business(P0Session session) => Assert.IsType<P0BusinessWorkspace>(typeof(P0Session)
-        .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(session));
+    private static BusinessWorkspace Business(P0Session session) {
+        P0BusinessWorkspace adapter = Assert.IsType<P0BusinessWorkspace>(typeof(P0Session)
+            .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(session));
+        return Assert.IsType<BusinessWorkspace>(typeof(P0BusinessWorkspace)
+            .GetField("_workspace", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(adapter));
+    }
 
-    private static NormalizedRevision Baseline(P0Session session) => Assert.IsType<NormalizedRevision>(typeof(P0BusinessWorkspace)
+    private static NormalizedRevision Baseline(P0Session session) => Assert.IsType<NormalizedRevision>(typeof(BusinessWorkspace)
         .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Business(session)));
 
     private static void AssertAccounting(P0Repository repository, P0Session session) {

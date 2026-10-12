@@ -156,7 +156,7 @@ public sealed partial class P0BusinessPlanningAccountingTests {
                 }
             }
             Assert.Throws<InvalidDataException>(() => synthetic.RequireSplitSource(first.Store, foreign.SourceModels!));
-            FieldInfo field = typeof(P0BusinessWorkspace).GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            FieldInfo field = typeof(BusinessWorkspace).GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!;
             field.SetValue(Business(secondSession), foreign); // Both views came from actual readers, not synthetic locators.
             long frames = second.Store.AppendedFrames;
             Assert.Throws<InvalidDataException>(() => secondSession.Prepare(secondSession.State!));
@@ -198,8 +198,10 @@ public sealed partial class P0BusinessPlanningAccountingTests {
                 if (point == P0SaveCheckpoint.BeforePublication) { publicationReached = true; }
                 if (point != P0SaveCheckpoint.AfterBusinessAppend) { return; }
                 reached = true;
-                NormalizedRevision candidate = Assert.IsType<NormalizedRevision>(typeof(P0PreparedBusiness)
-                    .GetField("_next", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(save.Business));
+                BusinessSaveCandidate sharedCandidate = Assert.IsType<BusinessSaveCandidate>(typeof(P0PreparedBusiness)
+                    .GetField("_candidate", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(save.Business));
+                NormalizedRevision candidate = Assert.IsType<NormalizedRevision>(typeof(BusinessSaveCandidate)
+                    .GetField("_next", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(sharedCandidate));
                 Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == childId.Value);
                 Assert.True(MutableRows(candidate).Remove(childId)); // Fail the actual complete-membership installation check.
             };

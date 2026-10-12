@@ -31,7 +31,7 @@ internal sealed class P0Session {
     internal P0SessionSave Prepare(IDurableObject root, P0GraphKind kind = P0GraphKind.State,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
         EnsureEditingAllowed();
-        P0BusinessCapture? capture = null;
+        BusinessSaveCandidate? capture = null;
         P0PreparedCatalog? catalog = null;
         P0PreparedBusiness? business = null;
         try {
@@ -39,14 +39,14 @@ internal sealed class P0Session {
                 if (_repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
                     Catalog.RebaseOwned(P0CatalogView.Load(_repository.Store, latest));
                 }
-                capture = _business.CaptureOwned(root);
-                catalog = Catalog.PrepareOwned(capture.Candidate.Objects.Select(static row => row.Layout));
+                capture = _business.CaptureOwned(root, kind);
+                catalog = Catalog.PrepareOwned(capture.Graph.Objects.Select(static row => row.Layout));
                 business = _business.PrepareOwned(capture, catalog.View, parameters);
                 return (business.Write, catalog.Write);
             });
             return new(_repository, pending, catalog!, business!);
         } catch {
-            capture?.Dispose();
+            capture?.AbortPreparation();
             throw;
         }
     }

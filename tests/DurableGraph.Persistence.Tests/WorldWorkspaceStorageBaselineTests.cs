@@ -192,9 +192,12 @@ public sealed partial class WorldWorkspaceTests {
         return pending;
     }
 
-    private static NormalizedRevision Baseline(WorldWorkspace workspace) =>
-        Assert.IsType<NormalizedRevision>(typeof(WorldWorkspace)
-            .GetField("_baseline", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(workspace));
+    private static NormalizedRevision Baseline(WorldWorkspace workspace) {
+        BusinessWorkspace shared = Assert.IsType<BusinessWorkspace>(typeof(WorldWorkspace)
+            .GetField("_workspace", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(workspace));
+        return Assert.IsType<NormalizedRevision>(typeof(BusinessWorkspace)
+            .GetField("_baseline", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(shared));
+    }
 
     private static ObjectStorageInfo StorageOf(WorldWorkspace workspace, ObjectId id) =>
         Assert.IsType<ObjectStorageInfo>(Baseline(workspace).Objects[id].Storage);

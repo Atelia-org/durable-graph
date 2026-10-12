@@ -298,7 +298,8 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     private static MethodInfo Method(string name) => typeof(DB080PreparedStateHistoryTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
     private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
-    private static NormalizedRevision Baseline(WorldWorkspace workspace) => Field<NormalizedRevision>(workspace, "_baseline");
+    private static NormalizedRevision Baseline(WorldWorkspace workspace) =>
+        Field<NormalizedRevision>(Field<BusinessWorkspace>(workspace, "_workspace"), "_baseline");
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>
         (stats.DecodedObjects, stats.NormalizedObjects, stats.PreparedGraphs, stats.AllocatedObjects, stats.HydratedObjects, stats.PreparedStateHits, stats.PreparedStateMisses);
     private sealed class HistoryCounters { internal int Normalizes; internal int Allocations; internal int ExtraValidations; }

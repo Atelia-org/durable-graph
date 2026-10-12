@@ -85,7 +85,8 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 [P1c 首片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核) 提取共同 `ClassifyCaptured`／`PlanObjectWrites`；两 adapter 保真实 typed 编码和来源前检。当时P0的nextH维护由第二片共享NormalizedRevision的实际heads/H安装取代。
 两真实头／length-prefix边界的计量见证及完整源码回归通过；未改wire/SG/交付、无新包资格，assets source，未合workspace/owner或公开切换。
 [P1c 第二片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#21-p1c-第二片normalized-保存材料与发布前安装准备) 已验共享 normalized 保存材料、实际 heads/H 与发布前安装准备；冷读工厂自行加载准确 S 并冻结模型，保完整 source 与 rewrite。typed Commit/Dispose 拒绝重入不释放外层候选；Event 不准备或安装实际 State 存储材料，仍接受 meta。build、定向和完整源码回归通过，无新包／Crash资格。
-下一片合 workspace 的 models/capture/baseline/root 和候选寿命，暂保两薄 backend adapter／owner；再接公开 owner/history 与 Pair／缓存，均未实施，接 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)。
+已完成 [P1c 第三片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#22-p1c-第三片共同业务-workspace-与候选寿命)：[BusinessWorkspace／BusinessSaveCandidate](../BusinessWorkspace.cs) 合并 models、Capture、完整 baseline、根与候选寿命，保留两薄 backend／owner；Event 不建立 next baseline。真实根替换／cold Delta 和安装材料误接见证及完整源码回归已通过，未新增包或 Crash 资格。
+后继 owner/root 先形成内部新读新写停点，再移 history 与 Pair／缓存，接 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)。
 现有公共路径保持，P1d 门禁后才默认切换／删旧路径，P2 另接 private；无具体反例不扩未穷举组合。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
