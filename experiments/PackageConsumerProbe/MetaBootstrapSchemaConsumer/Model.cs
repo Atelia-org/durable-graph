@@ -5,7 +5,7 @@ using persistence::Atelia.DurableGraph.Persistence;
 
 namespace BootstrapSchemaClosure;
 
-// Frozen model protocol shared with MetaBootstrapSchemaClosureGeneratorTests.
+// Combines the Schema-closure story with MetaBootstrapBuiltinListGeneratorTests' List protocol.
 // This source is copied into an isolated package consumer and compiled by the packaged SG.
 [DurableType("p1.closure.base", 1)]
 public abstract partial class Base : IDurableObject {
@@ -28,6 +28,8 @@ public sealed partial class Root : Base {
     [DurableField(2)] public Point? OptionalPoint;
     [DurableField(3)] public int? Count;
     [DurableField(4)] public List<Point?> Samples = new();
+    [DurableField(5)] public List<long?> Optional = new();
+    [DurableField(6)] public List<List<int>> Nested = new();
 }
 
 public static class Host {
@@ -43,10 +45,20 @@ public static class Host {
         for (int i = 0; i < 128; i++) {
             root.Samples.Add(i % 7 == 0 ? null : new Point { X = 1000 + i, Rank = i % 3 == 0 ? null : i });
         }
+        for (int i = 0; i < 256; i++) { root.Optional.Add(ExpectedOptional(i, 0)); }
+        List<int> inner = new();
+        for (int i = 0; i < 128; i++) { inner.Add(1000 + i); }
+        for (int i = 0; i < 64; i++) { root.Nested.Add(inner); }
         return root;
     }
 
-    public static object Samples(IDurableObject value) => ((Root)value).Samples;
+    public static object[] Objects(IDurableObject value) {
+        Root root = (Root)value;
+        return [root, root.Samples, root.Optional, root.Nested, root.Nested[0]];
+    }
+
+    public static long? ExpectedOptional(int index, int stage) => stage == 1 && index == 30 ? long.MaxValue - 23
+        : index % 5 == 0 || stage == 1 && index == 31 ? null : (long)int.MaxValue + 1000 + index;
 
     public static void Change(IDurableObject value) {
         Root root = (Root)value;
@@ -55,6 +67,11 @@ public static class Host {
         root.OptionalPoint = null;
         root.Count = 99;
         root.Samples[31] = new Point { X = 7031, Rank = null };
+        root.Optional[30] = long.MaxValue - 23;
+        root.Optional[31] = null;
+        List<int> inner = root.Nested[0];
+        inner[17] = 7777;
+        root.Nested.Add(inner);
     }
 
     public static void Check(IDurableObject value, int stage) {
@@ -76,6 +93,22 @@ public static class Host {
                 if (sample is not { } present || present.X != x || present.Rank != rank) {
                     throw new InvalidOperationException("Nullable inline List element mismatch.");
                 }
+            }
+        }
+        if (root.Optional.Count != 256 || root.Nested.Count != (stage == 0 ? 64 : 65)) {
+            throw new InvalidOperationException("Builtin List count mismatch.");
+        }
+        for (int i = 0; i < 256; i++) {
+            if (root.Optional[i] != ExpectedOptional(i, stage)) { throw new InvalidOperationException("Nullable Int64 value mismatch."); }
+        }
+        List<int> inner = root.Nested[0];
+        if (inner.Count != 128) { throw new InvalidOperationException("Inner List count mismatch."); }
+        foreach (List<int> candidate in root.Nested) {
+            if (!ReferenceEquals(candidate, inner)) { throw new InvalidOperationException("Shared inner List identity mismatch."); }
+        }
+        for (int i = 0; i < 128; i++) {
+            if (inner[i] != (stage == 1 && i == 17 ? 7777 : 1000 + i)) {
+                throw new InvalidOperationException("Inner Int32 value mismatch.");
             }
         }
     }

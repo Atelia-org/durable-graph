@@ -146,7 +146,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         P0ChainEntry first = chain.Entries[0];
         Assert.Equal(ObjectVersionKind.Base, first.Record.Kind);
         BareValueReader reader = new(first.Record.Body);
-        Assert.Equal((byte)2, reader.ReadByte());
+        Assert.Equal(P0TypedBodyCodec.FormatVersion, reader.ReadByte());
         Assert.Equal((byte)1, reader.ReadByte()); // Composite List and Root both name actual meta ObjectIds.
         ObjectId descriptor = new(reader.ReadVarUInt32());
         P0CatalogView meta = P0CatalogView.Load(repository.Store, first.SchemaRoot!.Value);

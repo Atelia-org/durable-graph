@@ -350,7 +350,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         Assert.Contains(id, prepared.DescriptorIds);
         Assert.Equal(point, prepared.Schemas[new(point.Type, 1)]);
         Assert.Throws<InvalidDataException>(() => prepared.ResolveLayout(id));
-        byte[] body = Header(2, 1, id.Value);
+        byte[] body = Header(3, 1, id.Value);
         Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(body, prepared));
     }
 
@@ -359,7 +359,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         DurableSchema user = new("UserLayout", 1, new DurableFieldInfo(1, TypeTag.Int32));
         Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(user), new PreparedBaseBody([0])));
         Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(Header(1, 0, 1), null));
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(Header(2, 0, uint.MaxValue), null));
+        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(Header(3, 0, uint.MaxValue), null));
     }
 
     [Fact]

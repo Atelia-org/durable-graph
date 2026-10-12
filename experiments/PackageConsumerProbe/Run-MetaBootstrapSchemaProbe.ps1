@@ -144,6 +144,10 @@ try {
             (Get-Content -LiteralPath (Join-Path $workRoot ($_ + '.evidence.json')) -Raw | ConvertFrom-Json).ProcessId
         })
         if (@($processes | Select-Object -Unique).Count -ne 4) { throw 'Expected four independently launched consumer processes.' }
+        $typedAbis = @(@('seed', 'read', 'continue', 'verify') | ForEach-Object {
+            (Get-Content -LiteralPath (Join-Path $workRoot ($_ + '.evidence.json')) -Raw | ConvertFrom-Json).TypedBodyAbi
+        })
+        if (@($typedAbis | Select-Object -Unique).Count -ne 1) { throw 'Consumer processes reported different typed-body ABIs.' }
     }
     finally { Pop-Location }
     $packages = @(Get-ChildItem -LiteralPath $PackageSource -Filter '*.nupkg' -File | Sort-Object Name | ForEach-Object {
@@ -154,12 +158,16 @@ try {
     })
     $manifest = Join-Path $storage.PackageSource ('manifest.' + $storage.Version + '.json')
     [ordered]@{
-        SchemaVersion = 1; Scope = 'DB087 P1b internal employee Schema closure; no public migration/crash qualification';
+        SchemaVersion = 2; Scope = 'DB087 P1b internal employee Schema closure and builtin-only List fixed bodies; no public migration/crash qualification';
         DgVersion = $Version; StorageVersion = $storage.Version; StorageRevision = $storage.Revision;
         StorageManifest = $manifest; StorageManifestSha256 = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
         WorkDirectory = $workRoot; PackageSource = $PackageSource; PackageCache = $packageCache;
         Assets = $assetsPath; AssetsSha256 = (Get-FileHash -LiteralPath $assetsPath -Algorithm SHA256).Hash;
         Packages = $packages; Sources = $sources; ProcessIds = $processes; Lanes = @('seed', 'read', 'continue', 'verify');
+        TypedBodyAbi = $typedAbis[0]; BusinessObjects = 5; DeltaObjects = 5; CatalogSchemas = 3; CatalogDescriptors = 4;
+        HistoryVerify = 'unchanged'; History = @($schemas | ForEach-Object {
+            [ordered]@{ File = $_.Name; Sha256 = $accepted[$_.Name] }
+        });
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $workRoot 'result.json') -Encoding utf8NoBOM
     Write-Host "Meta Schema package consumer passed. Artifacts: $workRoot"
 }

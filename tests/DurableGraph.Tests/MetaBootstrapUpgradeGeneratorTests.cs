@@ -180,7 +180,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(latestKind, chain.Entries[^1].Record.Kind);
         P0ChainEntry first = chain.Entries[0];
         BareValueReader header = new(first.Record.Body);
-        Assert.Equal((byte)2, header.ReadByte());
+        Assert.Equal(P0TypedBodyCodec.FormatVersion, header.ReadByte());
         Assert.Equal((byte)1, header.ReadByte());
         ObjectId descriptor = new(header.ReadVarUInt32());
         P0CatalogView catalog = P0CatalogView.Load(repository.Store, first.SchemaRoot!.Value);

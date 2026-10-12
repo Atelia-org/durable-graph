@@ -31,9 +31,9 @@ Save 按实际 Capture 布局自动准备 catalog，Event/Discard 保留 State �
 公开缓存与完整产品包交付仍待后续资格。
 目录冻结、Base 候选、Schema 投影和业务 Capture／预算仍可全量工作；这里只减少受控变更的比较与发射。
 
-P1b 首片已实施，使用强类型 Descriptor/Field/TypeExpr 员工与 typed／fixed-table ABI v2；
+P1b 首片当时使用强类型 Descriptor/Field/TypeExpr 员工与 typed／fixed-table ABI v2；
 内部员工 DurableType/Schema 与生成 DTO 仍 V1，由外层 ABI 选择固定表，不伪造 history。
-精确 `List<int>` 固定，用户 Root／`List<Point?>` 继续按准确 S 的动态 descriptor 解释。
+当时精确 `List<int>` 固定，用户 Root／`List<Point?>` 按准确 S 的动态 descriptor 解释；该 List 专码已由第三片结构路由替代。
 长期 dirty 只留手工 root 意图；自动 Capture 依赖在 Prepare 中临时派生，Discard 后重新推导。
 真实消费者范围为 base／inline／Nullable／List，完整类型执行、公开接线和 private 仍待后续；
 完整源码回归与隔离包四进程验收统一在 [DB-087 §12](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)。
@@ -41,7 +41,14 @@ P1b 首片已实施，使用强类型 Descriptor/Field/TypeExpr 员工与 typed�
 P1b 第二片以既有记录验证闭合泛型／enum/Nullable/inline，无生产代码或 ABI 改动。
 真实 SG 的两个 Box/Cell 闭合实例可冷读共享／环并续写实际 Delta；独立反例验证有序实参、版本与准确视图，
 范围和相关回归见 [DB-087 §13](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格)。
-下一片的 builtin 结构固定路由、codec 版本来源及其余容器按 §6.3 继续；本片不授予泛型历史 Upgrade 或新包资格。
+该片不授予泛型历史 Upgrade 或新包资格。
+
+P1b 第三片 builtin-only List 结构固定路由已完成源码与隔离包验收，问题与证据见
+[DB-087 §14](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#14-p1b-第三片builtin-only-list-结构固定路由)。
+选 typed ABI3 的有限 string/employee 表、dynamic descriptor 与 structural TypeExpr 三路；
+List root 递归无 Named，codec 2 由 ABI 固定，精确 `List<int>` 专码移除，员工 Schema/DTO 仍 V1。
+结构 body 能力不扩大 meta 员工白名单；`List<long?>`／共享 inner 的 nested List 已验冷读、Delta与独立拒绝，真实包四进程正常冷读／续写通过。
+后继数组／Dictionary 及其根 codec 来源按 §6.3 逐片落实，公开 P1c/d 与 P2 不随本片切换。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

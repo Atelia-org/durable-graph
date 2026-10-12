@@ -9,7 +9,7 @@ using Atelia.FrameStore;
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 internal static class P0TypedBodyCodec {
-    internal const byte FormatVersion = 2;
+    internal const byte FormatVersion = 3;
     internal static byte[] Encode(ObjectLayout layout, PreparedBaseBody body, P0CatalogView? catalog = null) {
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
@@ -17,7 +17,10 @@ internal static class P0TypedBodyCodec {
         if (catalog is not null && P0FixedBindings.IsEmployee(layout)) {
             throw new InvalidDataException("Employee layouts cannot escape into a business graph.");
         }
-        if (catalog is null || P0FixedBindings.IsBuiltin(layout)) {
+        if (layout.Kind == ObjectStateKind.List && P0FixedBindings.IsBuiltin(layout)) {
+            writer.WriteByte(2);
+            TypeExprWireCodec.Write(ref writer, layout.Type);
+        } else if (catalog is null || layout.Kind == ObjectStateKind.String) {
             writer.WriteByte(0);
             writer.WriteVarUInt32(P0FixedBindings.Code(layout));
         } else {
@@ -30,12 +33,12 @@ internal static class P0TypedBodyCodec {
 
     internal static (ObjectLayout Layout, byte[] Body) Decode(ReadOnlySpan<byte> body, P0CatalogView? catalog) {
         BareValueReader reader = new(body);
-        if (reader.ReadByte() != FormatVersion) { throw new InvalidDataException("Unknown employee/typed Base ABI; only version 2 is accepted."); }
+        if (reader.ReadByte() != FormatVersion) { throw new InvalidDataException("Unknown employee/typed Base ABI; only version 3 is accepted."); }
         byte route = reader.ReadByte();
-        uint id = reader.ReadVarUInt32();
         ObjectLayout layout = route switch {
-            0 => P0FixedBindings.Layout(id),
-            1 when catalog is not null => catalog.ResolveLayout(new(id)),
+            0 => P0FixedBindings.Layout(reader.ReadVarUInt32()),
+            1 when catalog is not null => catalog.ResolveLayout(new(reader.ReadVarUInt32())),
+            2 => P0BuiltinLayouts.Resolve(TypeExprWireCodec.Read(ref reader)),
             _ => throw new InvalidDataException("A dynamic descriptor requires its exact source Schema view."),
         };
         return (layout, body[reader.ConsumedCount..].ToArray());
@@ -80,6 +83,11 @@ internal static class P0TypedReader {
                 }
             }
             var decoded = P0TypedBodyCodec.Decode(chain.Entries[0].Record.Body, origin);
+            // A null model catalog is the meta reader, whose whitelist is deliberately finite.
+            // Schema-free business List bodies use the standalone fixed reader instead.
+            if (models is null && !P0FixedBindings.TryCode(decoded.Layout, out _)) {
+                throw new InvalidDataException("A meta graph cannot contain structural business List objects.");
+            }
             if (models is not null && P0FixedBindings.IsEmployee(decoded.Layout)) {
                 throw new InvalidDataException("A business graph cannot contain fixed employee objects.");
             }

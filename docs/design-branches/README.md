@@ -24,7 +24,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | P0/P1a/P1b 员工首片及泛型／enum 执行资格片已验；公开切换/P2 未实施 | 共同 writer/双 ref、真实 Upgrade、员工/固定 List 证据见 §10–12；[§13](0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格) 沿既有代码验证代表性闭合泛型／enum current V1，源码资格不外推包/完整历史能力。下一片结构固定路由及去向/依赖/待决项见 §6–7；其余 P1b、P1c 公开整合、P1d 故障/包、P2 private 待完成 |
+| [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | P0/P1a/P1b 三个限定片已验；公开切换/P2 未实施 | 共同 writer/双 ref、真实 Upgrade、员工/闭合泛型与 enum current 证据见 §10–13；[§14](0087-meta-bootstrap-refactoring-route.md#14-p1b-第三片builtin-only-list-结构固定路由) 记录 ABI3 builtin-only List 结构头、cold/Delta/独立拒绝、源码和四进程包验收。去向/依赖/待决项见 §6–7；数组/Dictionary、完整现有组合、P1c 公开整合、P1d 故障/包、P2 private 待完成 |
 | [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | Implemented / R0–R5 已验收 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；[实施与验收](0086-new-storage-implementation.md)含源码、真实包及进程停止证据 |
 | [DB-085 新 RBF3 / Binary / FrameStore / VersionStore 迁移](0085-rbf3-framestore-versionstore-migration-feasibility.md) | 可行性调研及四项 API 复核完成；历史前置范围由DB-086取代 | [初次验证](0085-storage-migration-probe-evidence.md)与[上游 API 复核](0085-upstream-api-refinement-review.md)；不再要求严格打开/全库确认等价或旧数据迁移 |
 | [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 旧栈接入已实施；底座由 DB-086 替换 | [接入与验收](0084-durablegraph-tags-implementation.md)保留旧公开 pin、严格打开与发布证据；当前 tag 由 VS 承担，非外部可序列化地址 |
