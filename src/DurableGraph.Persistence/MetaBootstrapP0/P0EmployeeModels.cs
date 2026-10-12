@@ -1,6 +1,6 @@
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
-// Real generator input for DB-087's employee ABI 2.
+// Real generator input for DB-087's employee table, selected by the outer typed ABI.
 // The experiment reads these generated DTOs directly, without employee CLR shells.
 [DurableType("P0C", 1)]
 internal sealed partial class P0CatalogRecord : IDurableObject {
@@ -9,7 +9,7 @@ internal sealed partial class P0CatalogRecord : IDurableObject {
 
 [DurableType("P0D", 1)]
 internal sealed partial class P0DescriptorRecord : IDurableObject {
-    [DurableField(1)] internal byte Kind = 0; // 1: reference Schema; 2: List layout; 3: inline Schema.
+    [DurableField(1)] internal byte Kind = 0; // 1: reference Schema; 2: List layout; 3: inline Schema; 4: Array layout.
     [DurableField(2)] internal P0TypeExprRecord? Type = null;
     [DurableField(3)] internal int Version = 0;
     [DurableField(4)] internal List<P0FieldRecord>? Fields = null;

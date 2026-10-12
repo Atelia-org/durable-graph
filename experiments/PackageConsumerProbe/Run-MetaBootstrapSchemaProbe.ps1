@@ -158,13 +158,13 @@ try {
     })
     $manifest = Join-Path $storage.PackageSource ('manifest.' + $storage.Version + '.json')
     [ordered]@{
-        SchemaVersion = 2; Scope = 'DB087 P1b internal employee Schema closure and builtin-only List fixed bodies; no public migration/crash qualification';
+        SchemaVersion = 2; Scope = 'DB087 P1b internal employee Schema closure, fixed List/Array bodies and dynamic inline Array; no public migration/crash qualification';
         DgVersion = $Version; StorageVersion = $storage.Version; StorageRevision = $storage.Revision;
         StorageManifest = $manifest; StorageManifestSha256 = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
         WorkDirectory = $workRoot; PackageSource = $PackageSource; PackageCache = $packageCache;
         Assets = $assetsPath; AssetsSha256 = (Get-FileHash -LiteralPath $assetsPath -Algorithm SHA256).Hash;
         Packages = $packages; Sources = $sources; ProcessIds = $processes; Lanes = @('seed', 'read', 'continue', 'verify');
-        TypedBodyAbi = $typedAbis[0]; BusinessObjects = 5; DeltaObjects = 5; CatalogSchemas = 3; CatalogDescriptors = 4;
+        TypedBodyAbi = $typedAbis[0]; BusinessObjects = 7; DeltaObjects = 7; CatalogSchemas = 3; CatalogDescriptors = 5;
         HistoryVerify = 'unchanged'; History = @($schemas | ForEach-Object {
             [ordered]@{ File = $_.Name; Sha256 = $accepted[$_.Name] }
         });

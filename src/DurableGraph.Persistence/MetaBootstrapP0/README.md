@@ -45,10 +45,18 @@ P1b 第二片以既有记录验证闭合泛型／enum/Nullable/inline，无生�
 
 P1b 第三片 builtin-only List 结构固定路由已完成源码与隔离包验收，问题与证据见
 [DB-087 §14](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#14-p1b-第三片builtin-only-list-结构固定路由)。
-选 typed ABI3 的有限 string/employee 表、dynamic descriptor 与 structural TypeExpr 三路；
+第三片当时选 typed ABI3 的有限 string/employee 表、dynamic descriptor 与 structural TypeExpr 三路；
 List root 递归无 Named，codec 2 由 ABI 固定，精确 `List<int>` 专码移除，员工 Schema/DTO 仍 V1。
 结构 body 能力不扩大 meta 员工白名单；`List<long?>`／共享 inner 的 nested List 已验冷读、Delta与独立拒绝，真实包四进程正常冷读／续写通过。
-后继数组／Dictionary 及其根 codec 来源按 §6.3 逐片落实，公开 P1c/d 与 P2 不随本片切换。
+此处保留第三片历史范围，不据其授予 Array／Dictionary 资格。
+
+P1b 第四片 Array 路由已完成源码与隔离包验收，问题、选定设计与证据见
+[DB-087 §15](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#15-p1b-第四片array-结构与动态路由)。
+D variant4 复用完整 Array TypeExpr、Element、显式 codec1，Version0／Fields和Base空；
+重建完整 ArrayLayout 后核 Type，并独立核 exact inline 依赖，shape 只在 body。
+typed ABI4 固定 List2／Array1、拒旧3，Schema/DTO仍V1且不增字段；meta 有限白名单不扩大。
+真实 SG `int?[]`／`Point?[,]` cold与稀疏 Delta、raw 边界、完整源码回归和四进程组合包均已验；NoChange S2只来自源码 SG。
+随后按 §6.3 接 Dictionary 与完整剩余矩阵，公开 P1c/d 和 P2 不随本片切换。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

@@ -12,7 +12,7 @@ internal static class P0CatalogSemantics {
         foreach (DurableSchema schema in roots) { Add(schema, 1); }
         foreach (ObjectLayout layout in layouts) {
             if (layout.Schema is { } schema) { Add(schema, 1); }
-            else if (layout.List?.ElementSlot.ValueSchema is { } inline) { Add(inline, 1); }
+            else if ((layout.List?.ElementSlot.ValueSchema ?? layout.Array?.ElementSlot.ValueSchema) is { } inline) { Add(inline, 1); }
         }
         return schemas;
 
@@ -44,6 +44,7 @@ internal static class P0CatalogSemantics {
         }
         foreach (ObjectLayout layout in layouts) {
             if (layout.List is { } list) { declarations.ValidateSlot(list.ElementSlot); }
+            else if (layout.Array is { } array) { declarations.ValidateSlot(array.ElementSlot); }
         }
     }
 }

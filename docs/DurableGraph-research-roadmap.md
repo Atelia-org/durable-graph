@@ -199,7 +199,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
 FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a、P1b 员工首片、闭合泛型／enum 资格片与结构 List 路由片已完成，完整类型执行与公开切换仍待后续 P1b–d**；
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a 与 P1b 前四个限定片已完成，完整类型执行与公开切换仍待后续 P1b–d**；
 真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
 联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
@@ -214,7 +214,7 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 P1b 首片选择 Descriptor/Field/TypeExpr 强类型员工、typed／fixed-table ABI v2 和 fixed 精确 `List<int>`；内部员工 Schema/DTO 仍 V1，
 以含 base/inline/Nullable/`List<Point?>` 的真实 SG 消费者验证 Schema 冷读和动态用户槽增量；
 首片完整源码回归和隔离包四进程证据见 DB-087 [第 12 节](design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)；闭合泛型／enum current V1 的源码资格见[第 13 节](design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格)，不外推完整泛型 Upgrade 或包资格。
-第三片[结构 List 路由](design-branches/0087-meta-bootstrap-refactoring-route.md#14-p1b-第三片builtin-only-list-结构固定路由) 已完成源码与隔离包验收：ABI3 分有限表／dynamic descriptor／structural TypeExpr，closed 全树无 Named 的 List root 复用结构编码，codec 2 由 ABI 固定；员工 Schema/DTO 仍 V1。`List<long?>` 与共享 inner `List<int>` 的 nested List 已验冷读／Delta与拒绝；下一片按 §6.3 补数组，再接 Dictionary，各自先定根 codec 的持久解释来源。结构 body 能力不扩大 meta 员工白名单；
+第三片[结构 List 路由](design-branches/0087-meta-bootstrap-refactoring-route.md#14-p1b-第三片builtin-only-list-结构固定路由) 的 ABI3 证据保留原范围。第四片[Array 路由](design-branches/0087-meta-bootstrap-refactoring-route.md#15-p1b-第四片array-结构与动态路由) 已验源码与隔离包：D variant4 复用完整 Array TypeExpr／Element／codec1，Type 一致与 exact inline 分别校验，shape 在 body；当前 typed ABI4 明定 List2／Array1、拒旧3，不改员工 Schema/DTO 字段或扩大 meta 白名单。下一片按 §6.3 接 Dictionary 双槽，先解决 Normalize 前 stored lookup 检查及 descriptor／codec 来源，并保留完整数组／泛型／历史 Upgrade 组合；
 P1c 接公开保存/history/cache，P1d 完成初始化与 ProcessCrashOnly、真实包门禁，P2 再接 private。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。

@@ -47,13 +47,20 @@ internal sealed class P0CatalogView {
                 if (!_schemas.TryAdd(key, schema)) { throw new InvalidDataException("Duplicate exact Schema key."); }
                 _schemaIds.Add(key, id);
                 layout = schema.Kind == SchemaKind.ReferenceObject ? ObjectLayout.ForDurable(schema) : null;
-            } else if (node.Segment0Field1 == 2) {
-                if (!node.Segment0Field2.IsNull || node.Segment0Field3 != 0 || !node.Segment0Field4.IsNull || !node.Segment0Field7.IsNull) {
-                    throw new InvalidDataException("Wrong List descriptor variant.");
+            } else if (node.Segment0Field1 is 2 or 4) {
+                if ((node.Segment0Field1 == 2 && !node.Segment0Field2.IsNull) ||
+                    node.Segment0Field3 != 0 || !node.Segment0Field4.IsNull || !node.Segment0Field7.IsNull) {
+                    throw new InvalidDataException("Wrong container descriptor variant.");
                 }
                 DurableFieldInfo element = Field(node.Segment0Field5, 0, 1);
-                if (element.FieldId != 1) { throw new InvalidDataException("A List element slot must be canonically numbered one."); }
-                layout = Factory(() => ObjectLayout.ForList(new(element, node.Segment0Field6)));
+                if (element.FieldId != 1) { throw new InvalidDataException("A container element slot must be canonically numbered one."); }
+                if (node.Segment0Field1 == 2) { layout = Factory(() => ObjectLayout.ForList(new(element, node.Segment0Field6))); }
+                else {
+                    TypeExpr type = Expression(node.Segment0Field2, 1);
+                    if (!type.IsArray) { throw new InvalidDataException("An Array descriptor requires a closed Array type."); }
+                    layout = Factory(() => ObjectLayout.ForArray(new(type.Kind, element, node.Segment0Field6)));
+                    if (layout.Type != type) { throw new InvalidDataException("An Array descriptor's type and exact element slot disagree."); }
+                }
                 if (P0FixedBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
             } else { throw new InvalidDataException("Unknown descriptor variant."); }
             if (layout is not null) {

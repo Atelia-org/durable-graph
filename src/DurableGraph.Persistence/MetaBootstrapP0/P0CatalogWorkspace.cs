@@ -55,8 +55,8 @@ internal sealed class P0CatalogWorkspace {
         foreach (DurableSchema schema in closure.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
             _ = builder.AddSchema(schema);
         }
-        foreach (ObjectLayout layout in layouts.Where(static value => value.Kind == ObjectStateKind.List && !P0FixedBindings.IsBuiltin(value))) {
-            builder.AddList(layout.List!);
+        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array) && !P0FixedBindings.IsBuiltin(value))) {
+            builder.AddContainer(layout);
         }
         return builder.Finish(this);
     }
@@ -78,8 +78,8 @@ internal sealed class P0CatalogWorkspace {
     private static void ValidateLayout(ObjectLayout layout) {
         if (P0FixedBindings.IsBuiltin(layout)) { return; }
         if (layout.Schema is { } schema) { Validate(schema); return; }
-        if (layout.Kind != ObjectStateKind.List) {
-            throw new NotSupportedException("This slice supports business reference objects and exact List layouts; other object containers remain deferred.");
+        if (layout.Kind is not (ObjectStateKind.List or ObjectStateKind.Array)) {
+            throw new NotSupportedException("This slice supports business reference objects, exact Lists and Arrays; other object containers remain deferred.");
         }
     }
 
@@ -111,7 +111,7 @@ internal sealed class P0CatalogWorkspace {
         private readonly Dictionary<DurableSchema, ObjectId> _schemaIds = [];
         private readonly Dictionary<TypeExpr, ObjectId> _typeIds = [];
         private readonly Dictionary<DurableFieldInfo, ObjectId> _fieldIds = [];
-        private readonly HashSet<ObjectLayout> _lists = [];
+        private readonly HashSet<ObjectLayout> _containers = [];
         private ulong _next;
         private readonly ObjectId _root, _list;
 
@@ -146,16 +146,19 @@ internal sealed class P0CatalogWorkspace {
             return id;
         }
 
-        internal void AddList(ListLayout layout) {
-            ObjectLayout objectLayout = ObjectLayout.ForList(layout);
-            if (!_lists.Add(objectLayout)) { return; }
+        internal void AddContainer(ObjectLayout layout) {
+            if (!_containers.Add(layout)) { return; }
             if (_source is not null) {
-                try { _ = _source.DescriptorId(objectLayout); return; }
+                try { _ = _source.DescriptorId(layout); return; }
                 catch (InvalidDataException) { }
             }
-            ObjectId element = Field(layout.ElementSlot);
+            ObjectId type = layout.Array is { } array ? Type(array.Type) : default;
+            DurableFieldInfo slot = layout.List?.ElementSlot ?? layout.Array!.ElementSlot;
+            uint codec = layout.List?.CodecVersion ?? layout.Array!.CodecVersion;
+            ObjectId element = Field(slot);
             ObjectId id = Allocate();
-            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(2, default, 0, default, element, layout.CodecVersion, default)));
+            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(
+                layout.Array is null ? (byte)2 : (byte)4, type, 0, default, element, codec, default)));
             Declare(id);
         }
 

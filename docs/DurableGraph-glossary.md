@@ -147,7 +147,7 @@ flowchart TD
 
 | 首选词 | 含义与边界 | 内部落点 |
 |---|---|---|
-| **固定通道（builtin／employee）** | 由固定格式规则和完整布局确定 header/body 的解释能力，不查询业务 Schema 目录。有限员工表与 builtin-only 结构容器是不同资格；meta 不因后者可固定解码而扩大员工白名单。员工不能由命名空间、marker 或仅 DTO CLR 类型授予资格，结构准入核对 closed TypeExpr 全树无 Named。 | `P0FixedBindings`、`P0TypedBodyCodec`；[ABI3 List 结构路由](design-branches/0087-meta-bootstrap-refactoring-route.md#14-p1b-第三片builtin-only-list-结构固定路由) 已验源码与包；不授予任意 BCL 或所有图免 S 资格。 |
+| **固定通道（builtin／employee）** | 由固定格式规则和完整布局确定 header/body 的解释能力，不查询业务 Schema 目录。有限员工表与 builtin-only 结构容器是不同资格；meta 不因后者可固定解码而扩大员工白名单。员工不能由命名空间、marker 或仅 DTO CLR 类型授予资格，结构准入核对 closed TypeExpr 全树无 Named，并匹配所选 ABI 明确支持的对象 root／codec。 | `P0FixedBindings`、`P0TypedBodyCodec`；List 历史证据见 DB087 §14，[ABI4 Array 扩展](design-branches/0087-meta-bootstrap-refactoring-route.md#15-p1b-第四片array-结构与动态路由) 已验源码与包；不授予任意 BCL 或所有图免 S 资格。 |
 | **布局描述节点（descriptor）与 meta ObjectId** | catalog 声明的完整 Schema／容器布局节点，直接用其 meta 图 ObjectId 寻址；动态 Base 按自身 batch 的 `(SchemaRoot, descriptor ObjectId)` 解释。inline 描述可作为精确值依赖，但不能作为对象 Base 布局；普通字段／TypeExpr 节点也不是对象 descriptor。 | `P0CatalogView`；替代独立表示编号的内部路线，未修改公开 `RepresentationId` 合同。 |
 | **闭合描述身份与执行能力** | 同 DefinitionId 的不同有序实参／版本分别拥有完整 Schema 身份；不能按 DTO CLR 类型或裸 descriptor 数字合并。enum 使用普通整数 InlineValue 布局，meta 不从名字推断 CLR enum 身份；当前 CLR 宽度与模板匹配属于执行绑定。 | `P0CatalogView`、`StateDefinitionBinding`；[完整精确 Schema](#exact-schema)与[持久枚举](#durable-enum)。 |
 | **准确 Schema 视图（selected Schema view）** | 从指定 meta 图根恢复的不可变定义／布局查询；所选业务图用它核对 retained 对象的完整布局。原 Base 的解释来源和目标模型执行能力仍分别核对，不能借最新 shared 补缺。 | `P0CatalogView`、`StateModelSnapshot` 的只读 lookup；读取不准备或发布新 meta。 |

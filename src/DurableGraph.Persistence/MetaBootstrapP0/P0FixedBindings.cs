@@ -24,7 +24,7 @@ internal static class P0FixedBindings {
         StateModelSnapshot models = CreateSnapshot();
         ObjectLayout[] layouts = Types.Select(type => Binding(models, type).CurrentLayout).ToArray();
         if (layouts.Any(static layout => layout.List is { } list && list.CodecVersion != P0BuiltinLayouts.ListCodecVersion)) {
-            throw new InvalidOperationException("The fixed employee List codec no longer matches typed ABI 3.");
+            throw new InvalidOperationException("The fixed employee List codec no longer matches typed ABI 4.");
         }
         return layouts;
     }

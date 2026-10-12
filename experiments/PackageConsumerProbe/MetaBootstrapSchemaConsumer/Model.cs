@@ -5,7 +5,7 @@ using persistence::Atelia.DurableGraph.Persistence;
 
 namespace BootstrapSchemaClosure;
 
-// Combines the Schema-closure story with MetaBootstrapBuiltinListGeneratorTests' List protocol.
+// Combines the Schema-closure story with the standalone builtin-List and Array protocols.
 // This source is copied into an isolated package consumer and compiled by the packaged SG.
 [DurableType("p1.closure.base", 1)]
 public abstract partial class Base : IDurableObject {
@@ -30,6 +30,8 @@ public sealed partial class Root : Base {
     [DurableField(4)] public List<Point?> Samples = new();
     [DurableField(5)] public List<long?> Optional = new();
     [DurableField(6)] public List<List<int>> Nested = new();
+    [DurableField(7)] public int?[] ArrayOptional = new int?[128];
+    [DurableField(8)] public Point?[,] Points = new Point?[16, 8];
 }
 
 public static class Host {
@@ -49,16 +51,33 @@ public static class Host {
         List<int> inner = new();
         for (int i = 0; i < 128; i++) { inner.Add(1000 + i); }
         for (int i = 0; i < 64; i++) { root.Nested.Add(inner); }
+        for (int i = 0; i < 128; i++) { root.ArrayOptional[i] = ExpectedArrayOptional(i, 0); }
+        for (int row = 0; row < 16; row++) {
+            for (int column = 0; column < 8; column++) { root.Points[row, column] = ExpectedArrayPoint(row, column, 0); }
+        }
         return root;
     }
 
     public static object[] Objects(IDurableObject value) {
         Root root = (Root)value;
-        return [root, root.Samples, root.Optional, root.Nested, root.Nested[0]];
+        return [root, root.Samples, root.Optional, root.Nested, root.Nested[0], root.ArrayOptional, root.Points];
     }
 
     public static long? ExpectedOptional(int index, int stage) => stage == 1 && index == 30 ? long.MaxValue - 23
         : index % 5 == 0 || stage == 1 && index == 31 ? null : (long)int.MaxValue + 1000 + index;
+
+    public static int? ExpectedArrayOptional(int index, int stage) => stage == 1 && index == 20 ? int.MinValue + 17
+        : stage == 1 && index == 63 ? -12345 : index % 5 == 0 || stage == 1 && index == 21 ? null : 1000 + index;
+
+    public static Point? ExpectedArrayPoint(int row, int column, int stage) {
+        if (stage == 1) {
+            if (row == 0 && column == 0) { return new Point { X = 9000, Rank = 100 }; }
+            if (row == 7 && column == 3) { return new Point { X = 7003, Rank = null }; }
+            if (row == 7 && column == 2) { return null; }
+        }
+        int flat = row * 8 + column;
+        return flat % 9 == 0 ? null : new Point { X = 1000 + flat, Rank = flat % 4 == 0 ? null : flat };
+    }
 
     public static void Change(IDurableObject value) {
         Root root = (Root)value;
@@ -72,6 +91,12 @@ public static class Host {
         List<int> inner = root.Nested[0];
         inner[17] = 7777;
         root.Nested.Add(inner);
+        root.ArrayOptional[20] = int.MinValue + 17;
+        root.ArrayOptional[21] = null;
+        root.ArrayOptional[63] = -12345;
+        root.Points[0, 0] = new Point { X = 9000, Rank = 100 };
+        root.Points[7, 3] = new Point { X = 7003, Rank = null };
+        root.Points[7, 2] = null;
     }
 
     public static void Check(IDurableObject value, int stage) {
@@ -109,6 +134,23 @@ public static class Host {
         for (int i = 0; i < 128; i++) {
             if (inner[i] != (stage == 1 && i == 17 ? 7777 : 1000 + i)) {
                 throw new InvalidOperationException("Inner Int32 value mismatch.");
+            }
+        }
+        if (!root.ArrayOptional.GetType().IsSZArray || root.ArrayOptional.Rank != 1 || root.ArrayOptional.Length != 128 ||
+            root.ArrayOptional.GetLowerBound(0) != 0 || root.Points.GetType().IsSZArray || root.Points.Rank != 2 ||
+            root.Points.GetLength(0) != 16 || root.Points.GetLength(1) != 8 || root.Points.GetLowerBound(0) != 0 || root.Points.GetLowerBound(1) != 0) {
+            throw new InvalidOperationException("Array shape mismatch.");
+        }
+        for (int i = 0; i < 128; i++) {
+            if (root.ArrayOptional[i] != ExpectedArrayOptional(i, stage)) { throw new InvalidOperationException("Nullable Int32 array mismatch."); }
+        }
+        for (int row = 0; row < 16; row++) {
+            for (int column = 0; column < 8; column++) {
+                Point? pointValue = root.Points[row, column], expected = ExpectedArrayPoint(row, column, stage);
+                if (pointValue.HasValue != expected.HasValue || pointValue is { } actual && expected is { } present &&
+                    (actual.X != present.X || actual.Rank != present.Rank)) {
+                    throw new InvalidOperationException("Nullable Point array mismatch.");
+                }
             }
         }
     }
