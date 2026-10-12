@@ -73,13 +73,8 @@ internal static class CapturedRevisionPlanner {
 
         PreparedObject[] rows = input.Objects.Select((row, index) => {
             EncodedBaseObjectBody encodedBaseBody = BaseObjectBodyCodec.Encode(representations[index], row.BaseBody);
-            if (row.Previous is null) {
-                return PreparedObject.New(row.Current.Id, encodedBaseBody);
-            }
-            FrameAddress prior = parentHeads[row.Current.Id];
-            return row.DeltaBody is null
-                ? PreparedObject.Unchanged(row.Current.Id, prior, encodedBaseBody)
-                : PreparedObject.Compared(row.Current.Id, prior, encodedBaseBody, row.DeltaBody);
+            return ObjectRevisionPlanner.ClassifyCaptured(row, encodedBaseBody,
+                row.Previous is null ? null : parentHeads[row.Current.Id]);
         }).ToArray();
         return ObjectRevisionPlanner.PrepareRevision(store, parentRevisionAddress, rows, parameters);
     }

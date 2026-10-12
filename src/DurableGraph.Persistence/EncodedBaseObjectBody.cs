@@ -1,6 +1,6 @@
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>An owned Base object body with the StateStore type header already encoded.</summary>
+/// <summary>An owned Base object body with its producer's actual type header already encoded.</summary>
 internal sealed class EncodedBaseObjectBody {
     private readonly byte[] _body;
 

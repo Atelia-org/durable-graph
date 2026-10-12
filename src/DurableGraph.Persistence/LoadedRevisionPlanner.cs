@@ -51,15 +51,9 @@ internal static class LoadedRevisionPlanner {
         for (int index = 0; index < contents.Count; index++) {
             PreparedCapturedObject row = contents[index];
             EncodedBaseObjectBody encodedBaseBody = BaseObjectBodyCodec.Encode(representations[index], row.BaseBody);
-            if (row.Previous is null) {
-                rows.Add(PreparedObject.New(row.Current.Id, encodedBaseBody));
-            } else if (source.Objects[row.Current.Id].RequiresRewrite) {
-                rows.Add(PreparedObject.BaseOnlyUpdate(row.Current.Id, heads[row.Current.Id], encodedBaseBody));
-            } else {
-                rows.Add(row.DeltaBody is null
-                    ? PreparedObject.Unchanged(row.Current.Id, heads[row.Current.Id], encodedBaseBody)
-                    : PreparedObject.Compared(row.Current.Id, heads[row.Current.Id], encodedBaseBody, row.DeltaBody));
-            }
+            rows.Add(ObjectRevisionPlanner.ClassifyCaptured(row, encodedBaseBody,
+                row.Previous is null ? null : heads[row.Current.Id],
+                row.Previous is not null && source.Objects[row.Current.Id].RequiresRewrite));
         }
         return ObjectRevisionPlanner.PrepareLoadedRevision(store, source, rows, parameters, independentSnapshot);
     }

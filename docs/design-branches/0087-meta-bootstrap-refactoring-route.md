@@ -1,7 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图的就地重构路线
 
-> 更新：2026-10-12。状态：**P0／P1a 已完成，P1b 有限停点已达；下一 P1c 首片未实施，公开切换／P2 未实施**。
-> 历史证据保留第 10–18 节；跨程序集第八片的三用例源码验收及停点见[第 19 节](#19-p1b-第八片跨程序集继承与有限停点)。本轮生产零改，无新完整回归／包资格；P1c 依赖与待决接缝见第 6、7 节。
+> 更新：2026-10-12。状态：**P0／P1a 已完成，P1b 有限停点已达；P1c 首片共同规划已完成，后继接线／公开切换／P2 未实施**。
+> 历史证据保留第 10–19 节；本轮共同规划与完整源码回归见[第 20 节](#20-p1c-首片共同业务规划内核)。没有新包资格；P1c 后继依赖与待决接缝见第 6、7 节。
 > 公开产品基线仍是 [DB-086](0086-new-storage-implementation.md)。P1 公开切换、P2 private 未实施；内部 API/wire 未冻结。
 > 用户明确无旧数据／旧 API 兼容负担；简单性按最终产品衡量，施工过程允许复杂。裁决与下一片见[第 9 节](#9-本轮裁决与下一片实验)。
 
@@ -339,14 +339,15 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 <a id="63-p1b-首片续工入口"></a>
 ### 6.3 P1c 续工入口
 
-第八片起点 `e2cf599` 的 P0／P1a 和前七片证据保留 §10–18；[跨程序集第八片](#19-p1b-第八片跨程序集继承与有限停点) 已通过源码验收，未暴露新的具体合同差异，**P1b 有限停点已达**。下一片依下表提纯业务规划，不把未穷举组合追加为前置；续工仍先核实际 HEAD／工作树。
+第八片起点 `e2cf599` 的 P0／P1a 和前七片证据保留 §10–18；[跨程序集第八片](#19-p1b-第八片跨程序集继承与有限停点) 已通过源码验收，未暴露新的具体合同差异，**P1b 有限停点已达**。当前提纯业务规划，问题与验收见 §20；后继依下表接线，不把未穷举组合追加为前置，续工仍先核实际 HEAD／工作树。
 
 停点覆盖现有 Schema／TypeExpr 与标量、base/inline/Nullable、generic/enum、Array/List/Dictionary 的描述与代表性 cold／增量，容器值规则和 generic provider history 分别有真实 accepted-history 见证。Application 完整 comparer 配方、rank3/4 SG 冷图、更多嵌套／约束和跨库升版仍是资格限制；没有具体接缝反例时沿用 Runtime/SG 已验算法，P1c 移接既有回归发现差异再补验。有限 P1b 不是公开 Repository/history/cache 或完整产品门禁。
 
 | 依赖顺序／选定下一步 | 最小接受标准与边界 |
 |---|---|
-| **P1c 首片：提纯业务规划内核，未实施**。沿 [ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 提取内部 `ClassifyCaptured(row, owned typedBase, exactPrior?, rewrite)` 和 `PlanObjectWrites(classifiedRows, validated prior H, parameters)`；方法名可随施工调整。复用 [EncodedBaseObjectBody](../../src/DurableGraph.Persistence/EncodedBaseObjectBody.cs) owned 壳承载完整 typed Base，两 adapter 各自调用真实 codec，不造 encoder 接口 | 旧 `PrepareCore` 保 exact heads/H 来源前检及 StateRevision 目录包装；[P0BusinessWorkspace.PrepareOwned](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs) 保 Capture→catalog 候选→typed Encode、Removes 和 nextH 安装，删重复分类／计量／预算／record 循环。两现入口均验 Base/Delta/NoChange/rewrite、各自真实 ABI 头长度下的 B/D/H 预算、将 Remove 的 source 行 guard、hot 保存不重读旧链、Event/Discard/reentry；具体既有入口见 [WorldWorkspaceStorageBaselineTests](../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)。内核不认证来源，不碰 Store/Schema/Append/Install；不把零散 tuple 变成可注入保存基线 |
-| **下一片：一份业务 workspace 与准确来源／安装**。合并 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 和 P0 保存 producer，接 split graph/batch heads | 保留 [LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs)／[CapturedRevisionPlanner](../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs) 全部来源前检。完整 membership 含将 Remove 的行，资格含同 owner lifetime、准确 source、selected S／model；heads 取实际 Append snapshot.Objects，H 由受控旧 H 与本次实际 records 精确累计，冷来源 H 来自真实链。所有安装材料 publish 前备齐，不能把 graphAddress 当对象 head |
+| **P1c 首片：共同业务规划已完成，见 §20**。[ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 的 `ClassifyCaptured`／`PlanObjectWrites` 共用分类、计量／预算和 records；[EncodedBaseObjectBody](../../src/DurableGraph.Persistence/EncodedBaseObjectBody.cs) owned 壳承载 producer 的完整 typed Base，两 adapter 各自调用真实 codec | 旧 `PrepareCore` 保 exact heads/H 来源前检及 StateRevision 目录包装；[P0BusinessWorkspace.PrepareOwned](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs) 保 Capture→catalog 候选→typed Encode、Removes 和实际 records→nextH 安装。新计量边界与完整源码回归通过；内核的结构检查不是来源认证，不查 Store/Schema、不 Append/Install，不把 tuple 变成可注入保存基线 |
+| **下一片：共享完整 normalized 保存材料＋actual-head installation／prepublish 准备，未实施**。先让 P0 的 rows/H/rewrite 复用一份 [NormalizedRevision](../../src/DurableGraph.Persistence/NormalizedRevision.cs)，保留两薄 backend adapter 与 owner；内部签名待施工裁决 | 来源认证由具体 reader／owner／adapter 签发，保稳定 source／model snapshot；完整 membership 含将 Remove 的行，任意 map＋地址不能冒充来源，不伪造 legacy Store/Schemas。heads 取实际 Append snapshot.Objects 的 batch 地址，H 由受控旧 H＋本次实际 payload 精确累计或由新 Base 替换，冷来源 H 来自真实链。Append 后、Publish 前准备并校验完整安装材料；新 written／旧 retained 混合 heads/H、cold 续 Delta、Event/Discard rewrite 首 State Base、安装准备失败不推进 refs／基线且保既有 fault／完整 orphan 合同均须验收 |
+| **再下一片：合为一份业务 workspace，未实施**。再收 models/capture/baseline/World/RootId，P0Business 降为编码与来源适配 | 沿用 [WorldWorkspace](../../src/DurableGraph.Persistence/WorldWorkspace.cs) 的候选和安装语义，保 [LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs)／[CapturedRevisionPlanner](../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs) 全部来源前检、owner寿命、selected S／model准确性。Confirmed 后只接受候选／换引用，Event 只接受 meta，保 State 基线／rewrite；不一次合 owner/history/cache |
 | **随后：公开 owner／history，再 Pair／缓存**。GraphResources/Repository 接两 ref、catalog、唯一 pending 和新 graph 导航；保留既有业务功能 | branch/Checkout/Fork/Move/tag/ReadCheckpoint/ReadPair、Event-first／根替换、Upgrade/rewrite/预算和热冷续写完整移接。处理下述三个具体接缝，不另造第二发布 owner、保存 token 或 provenance 平台 |
 | **P1d：产品门禁后默认切换与旧路径退出** | 初始化、ProcessCrashOnly、outcome/fault/orphan、独立真实包及完整既有回归按 §6.2 验收；通过后删除 SCB1/raw-map 旧入口。P2 再接已选 private 政策，不由本片扩张 |
 
@@ -376,7 +377,7 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 | Dictionary descriptor／root codec／source lookup | D5 Type＋有序 Key1/Value2 Fields，Version0、Element/Base 空、codec1；ABI5固定 Dictionary1/List2/Array1、拒旧4。完整引用检查后／Normalize 前核全部 stored Dictionary lookup，current lookup 不代 source；Root Nullable key 不新增 metadata 拒绝，body/binding 沿 KeyPolicy | **第五片源码与隔离包已验**；真实 cold／Delta和阶段反例见 §16，不由局部手工 Upgrade 外推完整 SG history 矩阵 |
 | 容器 history／值规则与 State rewrite | 第六片以独立 SG V1/V2 accepted history 验 Array/List/Dictionary 双端 exact 升版、Nullable、Point 局部 Grade byte→ushort 依赖；Root 同 Schema／Self／alias 保持，沿既有 source→current 规则和 Event/Discard 合同 | **仅测试的源码资格已完成，生产零改**；§17 运行新12项，未增加包／完整回归资格；该片不覆盖多参／跨程序集，后继多参资格见 §18 |
 | 多参／泛型继承 current 与 generic provider history | 第七片分别验证两个 closed Derived 的 base／inline／实参身份，以及真实 accepted-history 的开放 Box<int>／闭合 Box<Point> 端点和错误能力拒绝；两故事资格互不替代 | **仅测试的五用例源码资格已完成，生产零改**；§18 保当片范围，跨程序集 current 后继见 §19，未外推全部约束／provider组合 |
-| 共同业务规划内核 | 选定首片仅共用 captured 分类、B/D/H 计量／预算和 records；旧与 P0 adapter 各自真实编码 typed Base，保全部来源检查，内核不碰 Store／发布／安装 | **P1c 首片未实施**；施工路线见 §6.3，方法签名未冻结，允许实证更小替代，不新接口／token |
+| 共同业务规划内核 | `ClassifyCaptured`／`PlanObjectWrites` 已共用 captured 分类、B/D/H 计量／预算和 records；旧与 P0 adapter 各自真实编码 typed Base，保全部来源检查，内核不碰 Store／发布／安装 | **P1c 首片源码已验**，见 §20；未合 workspace/owner，内部签名不作公开冻结，不新接口／token |
 | 拆帧后的 `CheckpointAddress.RevisionAddress` 诊断语义 | 当前等于旧合帧地址；新 history 应区分 graph 定位与实际对象 head，不能把该诊断值作保存 prior | **P1c history 片待定／接线**；保句柄 owner 和两种 Parent 导航 |
 | 物理缓存值和 typed／State 槽 view/model keys | 同 owner 地址可复用 owned frame；typed 行、Normalize、Upgrade/State 槽须带准确 view/model 资格，仍按实际 membership／引用校验，不由裸 ID/address 免检 | **P1c cache 片待定／接线**；保持 DB-080 材料复用和 mutable 隔离 |
 | 初始化和真实崩溃/包门禁的测试宿主 | 实现第 6.2 节已选初始化合同及进程窗口，观察必要 publication refs 与 fresh owner 续写；准确六包 feed、独立 DG 版本、新 config/cache/assets 和真实 history 消费者 | **已选合同，P1d 施工未实施**；不新增恢复协议，P0 同进程关闭重开不能替代 |
@@ -430,7 +431,7 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 
 与前稿相比，明确去掉一套独立表示编号/映射、一种 membership 模式及 Event 强制目录 Base 分支，并取消新 leaf codec/tag 和通用 token/日志平台的要求。新增 OwnedBatch 是为恢复拆帧丢失的 local-record 关联，不是优化附加物。没有把简单性解释为少改旧代码。
 
-P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 的真实 V1→V2、只读 target view 和共同恢复见第 11 节；P1b 员工、类型路由、有限 history 与跨程序集 current 见第 12–19 节，有限停点已达。**下一片 P1c 只提纯业务规划内核，未实施**；依赖与三个后继接缝见 §6.3／7.1，不扩建通用 P0 平台。
+P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 的真实 V1→V2、只读 target view 和共同恢复见第 11 节；P1b 员工、类型路由、有限 history 与跨程序集 current 见第 12–19 节，有限停点已达。**P1c 首片共同业务规划已完成**，见 §20；下一片先共享 normalized 保存材料与 actual-head installation／prepublish 准备，未实施，后继依赖与待决接缝见 §6.3／7.1，不扩建通用 P0 平台。
 
 本轮无需新增产品语义选择。双 ref 保持原任务方向；是否后来改成单 ref、增加原分支重建或固定业务 head 的 Schema-only，只在相应目标出现时裁决。P1a 不代表完整 P1 或 P2 已完成，也不冻结实验 wire。
 
@@ -761,3 +762,24 @@ provider history 故事为不变 Root V1＋`Box<int>`／`Box<Point>` V1→V2，P
 没有生产、wire／ABI、SG／history 或包交付更改，未运行完整 solution tests 或新 PackageReference，最后 assets 为 source mode；旧完整回归／包证据保各自历史范围。本片没有新拒绝或 Upgrade 用例，三程序集 current 不代证跨库定义升版或自动外部规则发现；Application 全部 comparer 配方、rank3/4 SG 冷图和更广组合保留资格限制，没有具体差异不追加为 P1b 前置。
 
 代表验收没有暴露新的具体合同差异，**P1b 有限停点已达**，精确范围保留 §12–19，旧 §10–18 未改。下一 **P1c 首片只提纯业务规划内核，未实施**；后续才收一份业务 workspace、公开 owner/history 与 Pair／缓存。依赖、最小接受标准和三个待决接缝集中 §6.3／7.1；公开默认切换／旧路径退出仍受 P1d 门禁约束，P2、进程崩溃及性能资格未扩张。
+
+## 20. P1c 首片：共同业务规划内核
+
+### 20.1 问题、落点与最小验收
+
+本片问题：**旧公开和内部自举入口能否共用 captured 分类、B/D/H 预算与 ObjectVersion records 生成，同时各自保留真实 typed 编码、完整来源前检和原保存／安装语义？** 已提取 `ClassifyCaptured`／`PlanObjectWrites`，复用 owned `EncodedBaseObjectBody` 壳；两 adapter 保真实 codec，不引入 encoder 接口或可注入保存来源。实现与完整源码回归通过。
+
+生产落点共五个文件：[ObjectRevisionPlanner](../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 新增分类／规划函数；[LoadedRevisionPlanner](../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs)／[CapturedRevisionPlanner](../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs) 只改真实 Register/编码后的分类调用，全部来源前检保留；[P0BusinessWorkspace](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs) 删除重复分类／计量／预算／records 循环；[EncodedBaseObjectBody](../../src/DurableGraph.Persistence/EncodedBaseObjectBody.cs) owned 壳明确接各 producer 的实际 typed 头。
+
+共同内核生成 records／estimates／plan，不查 Store／Schema，不 Append／发布／安装；其纯结构检查不认证来源。旧 `PrepareCore` 保 heads/H 来源前检和 StateRevision 包装，P0 保 Capture→catalog 候选→typed Encode、Removes 和实际 records→nextH 安装。完整 source 资格仍由各入口证明，含将 Remove 的 source 行；不合 workspace／owner，不改 wire／API／SG，不公开切换。
+
+### 20.2 计量见证、完整回归与边界
+
+| 验收边界 | 实际见证 |
+|---|---|
+| 两 producer 的真实 typed Base／严格预算／实际 H | [BusinessPlanningAccountingTests](../../tests/DurableGraph.Persistence.Tests/BusinessPlanningAccountingTests.cs) 新增两 Fact。旧 adapter 用真实 representation-ID 头，在 H==typed B、阈值1时保持 NoChange。P0 structural ABI5 的 List raw body 124B，typed body跨128B；B准确包含头与额外 length-prefix 1B。hot Delta 的 H=B+D，head是实际batch地址且不等graph地址；Discard/Event的optional Base不重置State H，Confirmed State Base才重置，再NoChange；全资源关闭后的cold H／继续Delta与真实链相等 |
+| 完整来源、rewrite／事件与热保存合同 | 既有 [WorldWorkspaceStorageBaselineTests](../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs) 与 planner／meta回归保持 hot不读旧链、optional Event Base不重置State、升级安装Discard保source／重试、missing/foreign来源含Remove行拒绝；既有wrong prior／分支／ticket／membership及reentry等完整回归保留。新增两Fact不冒充这些合同的新独立反例 |
+
+准确 pin 的显式 source restore 后，solution build **exit 0、0 警告、0 错误**；完整 source solution test **exit 0、2986通过、0失败、0跳过**：Persistence **1046**、Runtime/Generator **1675**、Storage **132**、Serialization **133**。新增两项为上述两个计量Fact，历史分片用例本轮一并由完整回归覆盖；总数来自本轮实际工具结果，不将旧数字相加冒称实跑。日志 `.artifacts/db087-p1c-planning-{restore,build-2,regression}.log`。
+
+主线亲读五个生产文件与两Fact，独立持久静态复核通过，无必须修复项。wire／ABI、SG／history和包交付未变，未运行新PackageReference；既有包证据保原范围，最后assets为source mode。本片只完成共同业务规划，没有否定已选产品语义，不新增性能或总O(k)承诺。下一片先共享完整normalized保存材料、actual-head installation／publish前准备，保两薄adapter／owner；再合workspace，具体签名与签发检查仍待实施，见§6.3／7.1。旧§10–19保持原文，整个P1c／公开切换／P1d／P2未完成。

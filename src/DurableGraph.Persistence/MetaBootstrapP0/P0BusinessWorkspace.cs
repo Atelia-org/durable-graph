@@ -53,41 +53,23 @@ internal sealed class P0BusinessWorkspace {
         try {
             CapturedGraph candidate = capture.Candidate;
             IReadOnlyList<PreparedCapturedObject> prepared = _capture.PrepareAgainst(candidate, _rows);
-            Dictionary<ObjectId, PreparedCapturedObject> contents = prepared.ToDictionary(static item => item.Current.Id);
-            Dictionary<ObjectId, byte[]> bases = [];
-            List<ObjectSaveEstimate> estimates = [];
-            Dictionary<ObjectId, long> nextH = [];
+            List<PreparedObject> rows = [];
             foreach (PreparedCapturedObject item in prepared) {
-                byte[] body = P0TypedBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog);
-                bases.Add(item.Current.Id, body);
-                long b = ObjectVersionPayloadSize.GetBasePayloadBytes(body.Length);
-                ObjectSaveChangeKind kind;
-                long? d = null, h = null;
-                if (item.Previous is null) { kind = ObjectSaveChangeKind.Insert; }
-                else if (_rewrite.Contains(item.Current.Id)) { kind = ObjectSaveChangeKind.BaseOnlyUpdate; }
-                else {
-                    h = _h[item.Current.Id];
-                    kind = item.DeltaBody is { HasChanges: true } ? ObjectSaveChangeKind.Update : ObjectSaveChangeKind.NoChange;
-                    if (kind == ObjectSaveChangeKind.Update) {
-                        d = ObjectVersionPayloadSize.GetDeltaPayloadBytes(item.DeltaBody!.Body.Length, Source!.Objects[item.Current.Id.Value]);
-                    }
-                    nextH.Add(item.Current.Id, h.Value);
-                }
-                estimates.Add(new(item.Current.Id, kind, b, d, h));
+                EncodedBaseObjectBody body = new(P0TypedBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog));
+                rows.Add(ObjectRevisionPlanner.ClassifyCaptured(item, body,
+                    item.Previous is null ? null : Source!.Objects[item.Current.Id.Value],
+                    _rewrite.Contains(item.Current.Id)));
             }
             // Keep the existing full post-live Base budget. P0 does not claim total O(k).
-            ObjectRepresentationPlan plan = ReadAmplificationBaseBudgetPolicy.Plan(estimates, parameters ?? new(5, 5));
-            List<ObjectVersionRecord> records = [];
-            foreach (ObjectWriteDecision decision in plan.Writes) {
-                PreparedCapturedObject item = contents[decision.ObjectId];
-                ObjectVersionRecord record = decision.Mode == ObjectRepresentationMode.Base
-                    ? ObjectVersionRecord.CreateBase(decision.ObjectId.Value, bases[decision.ObjectId])
-                    : ObjectVersionRecord.CreateDelta(decision.ObjectId.Value, Source!.Objects[decision.ObjectId.Value], item.DeltaBody!.Body);
-                records.Add(record);
+            var (records, estimates, _) = ObjectRevisionPlanner.PlanObjectWrites(rows, _h, parameters ?? new(5, 5));
+            Dictionary<ObjectId, long> nextH = estimates.Where(static estimate => estimate.ReconstructionPayloadBytes is not null)
+                .ToDictionary(static estimate => estimate.ObjectId, static estimate => estimate.ReconstructionPayloadBytes!.Value);
+            foreach (ObjectVersionRecord record in records) {
+                ObjectId id = new(record.ObjectId);
                 long bytes = record.Kind == ObjectVersionKind.Base
                     ? ObjectVersionPayloadSize.GetBasePayloadBytes(record.Body.Length)
                     : ObjectVersionPayloadSize.GetDeltaPayloadBytes(record.Body.Length, record.PriorAddress!.Value);
-                nextH[decision.ObjectId] = record.Kind == ObjectVersionKind.Base ? bytes : checked(_h[decision.ObjectId] + bytes);
+                nextH[id] = record.Kind == ObjectVersionKind.Base ? bytes : checked(_h[id] + bytes);
             }
             Dictionary<ObjectId, ObjectStateRecord> nextRows = candidate.Objects.ToDictionary(static row => row.Id);
             uint[] removed = _rows.Keys.Where(id => !nextRows.ContainsKey(id)).Select(static id => id.Value).ToArray();
