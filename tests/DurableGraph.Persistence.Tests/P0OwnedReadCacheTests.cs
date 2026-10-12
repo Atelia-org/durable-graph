@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using Atelia.Data;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
@@ -134,6 +136,90 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Equal(0, stats.EntryCount);
         Assert.Equal(0, stats.ResidentChargeBytes);
         Assert.Equal(0, stats.PeakResidentChargeBytes);
+    }
+
+    [Theory]
+    [InlineData("graph", false)]
+    [InlineData("batch", false)]
+    [InlineData("directory", false)]
+    [InlineData("graph", true)]
+    [InlineData("batch", true)]
+    [InlineData("directory", true)]
+    public void FreshMissingAndCrcDamagedFrameReadsRetryWithoutAdmissionAndKeepHealthyEntries(string role, bool corruptPayload) {
+        string path = NewPath();
+        FrameAddress rejected, healthyBatch;
+        using (Frames frames = Frames.Create(path)) {
+            using P0GraphStore writer = new(frames);
+            P0GraphSnapshot first = writer.Append(P0GraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
+            rejected = role switch {
+                "graph" => first.Address,
+                "batch" => first.OwnedBatch!.Value,
+                "directory" => first.DirectoryRoot,
+                _ => throw new InvalidOperationException(role),
+            };
+            // A later independent complete graph keeps normal EOF admission healthy.
+            P0GraphSnapshot second = writer.Append(P0GraphKind.State, null, null, new(null, new(1), [B(1, [42])]));
+            healthyBatch = second.OwnedBatch!.Value;
+            frames.ConfirmDurable();
+        }
+        string file = Assert.Single(Directory.GetFiles(path, "*.rbf", SearchOption.AllDirectories));
+        byte[] bytes = File.ReadAllBytes(file);
+        if (corruptPayload) {
+            Span<byte> encoded = stackalloc byte[FrameAddress.EncodedSize];
+            Assert.True(rejected.TryWrite(encoded));
+            long offset = SizedPtr.FromPacked(BinaryPrimitives.ReadUInt64LittleEndian(encoded[sizeof(uint)..])).Offset;
+            // Hostile offline fixture only: all writers, readers and caches have closed.
+            // The first payload byte follows HeadLen; CRC and framing remain untouched.
+            bytes[checked((int)offset + sizeof(uint))] ^= 1;
+            File.WriteAllBytes(file, bytes);
+        } else { rejected = TestAddress(uint.MaxValue); } // Canonical numeric address, genuinely absent file.
+        using (Frames reopened = Frames.OpenReadOnly(path)) {
+            using P0GraphStore fresh = new(reopened);
+            Action readRejected = role switch {
+                "graph" => () => fresh.ReadMetadata(rejected),
+                "batch" => () => fresh.ReadBatch(rejected),
+                "directory" => () => fresh.ReadDirectoryVersion(rejected),
+                _ => throw new InvalidOperationException(role),
+            };
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                AssertRejected();
+                P0GraphReadCacheStatistics failed = fresh.ReadCacheStatistics;
+                Assert.Equal(attempt, RoleMisses(failed, role));
+                Assert.Equal(0, failed.GraphHits + failed.BatchHits + failed.DirectoryVersionHits);
+                Assert.Equal(0, failed.GraphDecodes + failed.BatchDecodes + failed.DirectoryVersionDecodes);
+                Assert.Equal(0, failed.DirectoryMaterializations);
+                Assert.Equal(0, failed.EntryCount);
+                Assert.Equal(0, failed.ResidentChargeBytes);
+                Assert.Equal(0, failed.PeakResidentChargeBytes);
+                Assert.Equal(0, failed.AdmissionBypasses); // Neither positive nor negative entry was offered.
+            }
+            P0Batch healthy = fresh.ReadBatch(healthyBatch);
+            Assert.Equal(new byte[] { 42 }, Assert.Single(healthy.Records).Body.ToArray());
+            Assert.Same(healthy, fresh.ReadBatch(healthyBatch));
+            P0GraphReadCacheStatistics positive = fresh.ReadCacheStatistics;
+            Assert.Equal(1, positive.BatchDecodes);
+            Assert.Equal(1, positive.BatchHits);
+            Assert.Equal(1, positive.EntryCount);
+            Assert.True(positive.ResidentChargeBytes > 0);
+            AssertRejected();
+            P0GraphReadCacheStatistics retried = fresh.ReadCacheStatistics;
+            Assert.Equal(RoleMisses(positive, role) + 1, RoleMisses(retried, role));
+            AssertPhysicalProductionEqual(positive, retried);
+            Assert.Equal(positive.EntryCount, retried.EntryCount);
+            Assert.Equal(positive.ResidentChargeBytes, retried.ResidentChargeBytes);
+            Assert.Equal(positive.PeakResidentChargeBytes, retried.PeakResidentChargeBytes);
+            Assert.Equal(positive.Evictions, retried.Evictions);
+            Assert.Same(healthy, fresh.ReadBatch(healthyBatch));
+            Assert.Equal(0, fresh.AppendedFrames);
+
+            void AssertRejected() {
+                if (corruptPayload) {
+                    InvalidOperationException error = Assert.Throws<InvalidOperationException>(readRejected);
+                    Assert.Contains("CRC", error.Message, StringComparison.OrdinalIgnoreCase);
+                } else { Assert.Throws<FileNotFoundException>(readRejected); }
+            }
+        }
+        Assert.Equal(bytes, File.ReadAllBytes(file)); // No repair or write was performed during any read.
     }
 
     [Theory]
@@ -313,6 +399,12 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Equal(expected.DirectoryMaterializations, actual.DirectoryMaterializations);
         Assert.Equal(expected.DirectoryReplayFrames, actual.DirectoryReplayFrames);
     }
+    private static long RoleMisses(P0GraphReadCacheStatistics statistics, string role) => role switch {
+        "graph" => statistics.GraphMisses,
+        "batch" => statistics.BatchMisses,
+        "directory" => statistics.DirectoryVersionMisses,
+        _ => throw new InvalidOperationException(role),
+    };
     public void Dispose() {
         foreach (string path in _paths) { SharedReadModel.DeleteFixture(path, Prefix); }
     }

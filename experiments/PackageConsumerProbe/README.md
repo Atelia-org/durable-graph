@@ -1,8 +1,11 @@
 # Package consumer probe
 
-> Active product regression. Run when changing generated output, runtime public APIs,
-> history/build integration, or package wiring. Root-solution tests do not exercise this
-> delivery boundary. Product progress lives in [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md).
+> 产品包回归框架；各 lane 的当前状态不同。基础生成/Capture 与当前公开 Repository、split 包门禁按各自范围运行；旧读取/诊断 lanes 暂停，见下方清单。根 solution 不代替实际包交付边界；产品进度见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)。
+
+
+当前暂停的是旧 reader/raw Store 消费代码：Array、BclScalar、CompositeDictionary、Dictionary、Enum、CrossAssembly、EventHistory（含 SharedReadProbe）、Generic、HistoryCapability、List、InlineLibrary、InlineStruct、InheritanceLibrary、Nullable、Record、TemporalScalar、ValueUpgrade，以及 StateStoreConsumer 的 Program/World.V1/World.V2/GraphWorld 四文件（共 18 目录、21 个直接旧 reader 消费文件）。这些代码依赖 `RevisionDecoder`；RecordClassConsumer 另依赖旧 `GraphResources.States`/SCB1 诊断。`Schemas/States` 已收为 internal，默认 owner 不授旧模式，因此它们针对当前 G 已有编译或模式前提失效；本片不以删除旧 reader 伪称首次失效，也不保留旧适配器使其通过。后继迁移范围见 [DB-087 §36](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。StateStoreConsumer 与 HistoryCapabilityConsumer 没有独立 README，暂停说明集中在此；下文相应验收与命令只保留匹配历史包的含义。
+
+这项暂停不包括基础 `Run-Probe` 的生成/Capture body 验证、TagConsumer、ImmutableLeafConsumer、EventHistoryRecoveryConsumer、当前 MetaBootstrapSchemaConsumer/SplitRepositoryConsumer，也不暂停 ListDeltaReplayProbe。它们没有上述静态读取依赖；各自是否具备当前包或故障资格仍由自己的实际证据界定，不因其他 lane 暂停或 source 回归通过而自动获得更广资格。
 
 Storage dependencies are the six pinned Binary/FrameStore/VersionStore closure packages in
 [StorageDependency.props](../../eng/StorageDependency.props). The shared

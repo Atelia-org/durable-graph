@@ -24,7 +24,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | P1d 前六片限定验收完成；低层退出／完整公开包后继 | 历史 §10–34 保事实，已删除文件链接转固定起点的本地 Git 恢复说明；[§35](0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出) 删除旧保存壳／planner Store 入口，保共同内核与安全见证。后继低层退出→完整公开包→P2，不授完整 P1 |
+| [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | P1d 前七片限定验收完成；SCB1／owner／raw 低层及完整公开包后继 | 历史 §10–35 保事实，已删除文件链接转固定起点的本地 Git 恢复说明；[§36](0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出) 清旧 reader／Store 恢复重载／来源字段，保准确 S 与共同恢复。其余 owner／SCB1／raw→完整公开包→P2，不授完整 P1 |
 | [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | Implemented / R0–R5 已验收 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；[实施与验收](0086-new-storage-implementation.md)含源码、真实包及进程停止证据 |
 | [DB-085 新 RBF3 / Binary / FrameStore / VersionStore 迁移](0085-rbf3-framestore-versionstore-migration-feasibility.md) | 可行性调研及四项 API 复核完成；历史前置范围由DB-086取代 | [初次验证](0085-storage-migration-probe-evidence.md)与[上游 API 复核](0085-upstream-api-refinement-review.md)；不再要求严格打开/全库确认等价或旧数据迁移 |
 | [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 旧栈接入已实施；底座由 DB-086 替换 | [接入与验收](0084-durablegraph-tags-implementation.md)保留旧公开 pin、严格打开与发布证据；当前 tag 由 VS 承担，非外部可序列化地址 |

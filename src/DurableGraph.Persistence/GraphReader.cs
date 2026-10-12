@@ -1,7 +1,5 @@
-using Atelia.FrameStore;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
-using Atelia.DurableGraph.Storage;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 
@@ -9,26 +7,8 @@ namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Restores explicit graph selections without owning a publication head or editing session.</summary>
 internal static class GraphReader {
-    internal static MaterializedGraph<T> Read<T>(StateRevisionStore store, SchemaStore schemas,
-        FrameAddress revisionAddress, ObjectId rootId, StateModelSnapshot models,
-        bool requireExactRootType = false) where T : class, IDurableObject {
-        ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(schemas);
-        ArgumentNullException.ThrowIfNull(models);
-        return Read<T>(new RevisionReadSession(store, schemas, models), revisionAddress, rootId, requireExactRootType);
-    }
-
-    /// <summary>Restores an independent graph and imports its complete source for editing.</summary>
-    internal static MaterializedGraph<T> Read<T>(RevisionReadSession session,
-        FrameAddress revisionAddress, ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
-        ArgumentNullException.ThrowIfNull(session);
-        PreparedGraphSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
-        var (instances, _) = Materialize(session.Context, selection);
-        return DeliverEditable<T>(selection, instances);
-    }
-
-    // A backend supplies a fully decoded, validated exact source. No legacy Store
-    // provenance is fabricated; the backend separately owns its saving baseline.
+    // Decoded fixtures remain readable without storage authority. Actual reads carry
+    // the concrete reader's provenance, which saving validates separately.
     internal static MaterializedGraph<T> Read<T>(DecodedRevision decoded, ObjectId rootId,
         GraphReadContext context, bool requireExactRootType = false) where T : class, IDurableObject {
         PreparedGraphSelection selection = Prepare<T>(decoded, context, rootId, requireExactRootType);
@@ -44,19 +24,11 @@ internal static class GraphReader {
     }
 
     // Repository's certified State path uses the same preparation/materialization core.
-    internal static PreparedGraphSelection PrepareState(RevisionReadSession session,
-        FrameAddress revisionAddress, ObjectId rootId) => Prepare<IDurableObject>(session, revisionAddress, rootId);
-
     internal static PreparedGraphSelection PrepareState(DecodedRevision decoded, GraphReadContext context,
         ObjectId rootId) => Prepare<IDurableObject>(decoded, context, rootId);
 
     // reusedLeaves is trusted only after validation of the installed entry owning this exact
     // selection. It never accepts caller-owned live graphs or a different selection's table.
-    internal static MaterializedGraph<IDurableObject> RestorePreparedState(RevisionReadSession session,
-        PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
-        bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) =>
-        RestorePreparedState(session.Context, selection, out immutableLeaves, collectImmutableLeaves, reusedLeaves);
-
     internal static MaterializedGraph<IDurableObject> RestorePreparedState(GraphReadContext context,
         PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
         bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
@@ -74,26 +46,6 @@ internal static class GraphReader {
         return DeliverEditable<IDurableObject>(selection, instances);
     }
 
-    /// <summary>Restores just one root without constructing an editable identity import.</summary>
-    internal static T ReadRoot<T>(RevisionReadSession session, FrameAddress revisionAddress,
-        ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
-        ArgumentNullException.ThrowIfNull(session);
-        PreparedGraphSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
-        var (instances, _) = Materialize(session.Context, selection);
-        return (T)instances[rootId];
-    }
-
-    /// <summary>Restores two independent graphs with one operation's mutable allocation guard.</summary>
-    internal static (IDurableObject First, IDurableObject Second) ReadIndependent(RevisionReadSession session,
-        FrameAddress firstRevisionAddress, ObjectId firstRootId,
-        FrameAddress secondRevisionAddress, ObjectId secondRootId) {
-        ArgumentNullException.ThrowIfNull(session);
-        PreparedGraphSelection first = Prepare<IDurableObject>(session, firstRevisionAddress, firstRootId);
-        PreparedGraphSelection second = Prepare<IDurableObject>(session, secondRevisionAddress, secondRootId);
-        var (firstInstances, secondInstances) = Materialize(session.Context, first, second);
-        return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
-    }
-
     // Separate exact-view preparation environments, with one operation's mutable allocation guard.
     internal static (IDurableObject First, IDurableObject Second) ReadIndependent(
         DecodedRevision firstDecoded, GraphReadContext firstContext, ObjectId firstRootId,
@@ -104,25 +56,6 @@ internal static class GraphReader {
         PreparedGraphSelection second = Prepare<IDurableObject>(secondDecoded, secondContext, secondRootId);
         var (firstInstances, secondInstances) = Materialize(firstContext, first, second);
         return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
-    }
-
-    /// <summary>
-    /// Experimental read-only snapshots in input order. Both restores must succeed before
-    /// delivery; user callback side effects are not rolled back. Cross-graph instance sharing
-    /// or separation is not a contract. Shared results never feed editable imports.
-    /// </summary>
-    internal static (TFirst First, TSecond Second) ReadPair<TFirst, TSecond>(
-        StateRevisionStore store, SchemaStore schemas,
-        FrameAddress firstRevisionAddress, ObjectId firstRootId,
-        FrameAddress secondRevisionAddress, ObjectId secondRootId,
-        StateModelSnapshot models, GraphReadStatistics? statistics = null)
-        where TFirst : class, IDurableObject where TSecond : class, IDurableObject {
-        RevisionReadSession session = new(store, schemas, models, statistics);
-        PreparedGraphSelection first = Prepare<TFirst>(session, firstRevisionAddress, firstRootId);
-        PreparedGraphSelection second = Prepare<TSecond>(session, secondRevisionAddress, secondRootId);
-        HashSet<ObjectId> shared = FindSharedClosure(first, second);
-        var (firstInstances, secondInstances) = Materialize(session.Context, first, second, shared);
-        return ((TFirst)firstInstances[firstRootId], (TSecond)secondInstances![secondRootId]);
     }
 
     // Split views may share instances only after reusing the same reader-issued exact-S environment.
@@ -238,13 +171,6 @@ internal static class GraphReader {
         return new((T)instances[selection.RootId], selection.RootId, selection.RootModel, normalized, nextId, bindings);
     }
 
-    private static PreparedGraphSelection Prepare<T>(RevisionReadSession session, FrameAddress revisionAddress,
-        ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
-        ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
-        session.Statistics.PreparedGraphs++;
-        return PrepareCore<T>(session.Read(revisionAddress), session.Context, rootId, requireExactRootType);
-    }
-
     private static PreparedGraphSelection Prepare<T>(DecodedRevision decoded, GraphReadContext session,
         ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
@@ -254,8 +180,8 @@ internal static class GraphReader {
 
     private static PreparedGraphSelection PrepareCore<T>(DecodedRevision decoded, GraphReadContext session,
         ObjectId rootId, bool requireExactRootType) where T : class, IDurableObject {
-        // A fresh preparation normalizes each selected graph even when its stored DTOs
-        // hit the operation's exact-version cache. Certified State hits bypass this method.
+        // Fresh preparation normalizes every selected graph. Certified State hits
+        // bypass this method and retain their exact reader-issued environment.
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, session.Models, session.Statistics);
         if (!normalized.Objects.TryGetValue(rootId, out NormalizedObject? root) ||
             root.Model is not StateModelBinding rootModel || rootModel.DomainType.IsAbstract ||
@@ -276,7 +202,7 @@ internal static class GraphReader {
         HashSet<ObjectId> secondReachable = new(second.Reachable);
         HashSet<ObjectId> candidates = [];
         foreach (ObjectId id in first.Reachable) {
-            // RevisionDecoder checks Storage.Head against this exact view's head map.
+            // The concrete reader supplies each actual head from this exact view's live map.
             // Missing provenance never supplies a sharing proof, even on both sides.
             if (secondReachable.Contains(id) &&
                 first.Normalized.Objects[id].Storage is { } firstStorage &&

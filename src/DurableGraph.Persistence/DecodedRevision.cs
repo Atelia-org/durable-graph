@@ -1,7 +1,6 @@
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
-using Atelia.DurableGraph.Storage;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 namespace Atelia.DurableGraph.Persistence;
@@ -20,16 +19,13 @@ public sealed class DecodedRevision {
         : this(revisionAddress, objects, strings, new Dictionary<ObjectId, FrameAddress>()) { }
 
     internal DecodedRevision(FrameAddress revisionAddress, IEnumerable<ObjectStateRecord> objects, StringReadTable strings,
-        IReadOnlyDictionary<ObjectId, FrameAddress> objectHeads, StateRevisionStore? sourceStore = null,
-        SchemaStore? sourceSchemas = null, IReadOnlyDictionary<ObjectId, ObjectStorageInfo>? objectStorage = null) {
+        IReadOnlyDictionary<ObjectId, FrameAddress> objectHeads, IReadOnlyDictionary<ObjectId, ObjectStorageInfo>? objectStorage = null) {
         RevisionAddress = revisionAddress;
         Objects = new FrozenList<ObjectStateRecord>(objects.OrderBy(static row => row.Id));
         _objects = Objects.ToDictionary(static row => row.Id);
         Strings = strings;
         ObjectHeads = new System.Collections.ObjectModel.ReadOnlyDictionary<ObjectId, FrameAddress>(
             objectHeads.ToDictionary(static pair => pair.Key, static pair => pair.Value));
-        SourceStore = sourceStore;
-        SourceSchemas = sourceSchemas;
         ObjectStorage = new System.Collections.ObjectModel.ReadOnlyDictionary<ObjectId, ObjectStorageInfo>(
             objectStorage?.ToDictionary(static pair => pair.Key, static pair => pair.Value) ?? []);
     }
@@ -106,8 +102,6 @@ public sealed class DecodedRevision {
     internal IReadOnlyDictionary<ObjectId, FrameAddress> ObjectHeads { get; }
     // These facts can seed an editable baseline only in the same stores' lifetimes.
     // Synthetic DTO views have no storage authority; their content remains usable.
-    internal StateRevisionStore? SourceStore { get; }
-    internal SchemaStore? SourceSchemas { get; }
     internal P0GraphStore? SplitStore { get; }
     internal P0CatalogView? SelectedSchemaView { get; }
     internal StateModelSnapshot? SourceModels { get; }

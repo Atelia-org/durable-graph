@@ -15,8 +15,8 @@ public sealed class BaseObjectBodyCodecTests : IDisposable {
             typeof(DecodedBaseObjectBody),
         ];
         Assert.All(helperTypes, static type => Assert.False(type.IsPublic));
-        Assert.Null(typeof(TypedObjectVersionReader).Assembly.GetType("Atelia.DurableGraph.Persistence.BaseObjectPayloadCodec"));
-        Assert.Null(typeof(TypedObjectVersionReader).Assembly.GetType("Atelia.DurableGraph.Persistence.BaseObjectPayload"));
+        Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.BaseObjectPayloadCodec"));
+        Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.BaseObjectPayload"));
     }
 
     [Fact]

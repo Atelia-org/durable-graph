@@ -186,8 +186,6 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             Assert.Same(Resources(repository).MetaBootstrapStore, source.SplitStore);
             Assert.Same(branch.Models, source.SourceModels);
             Assert.Same(branch.BindingEnvironment!.SelectedSchemaView, source.SelectedSchemaView);
-            Assert.Null(source.SourceStore);
-            Assert.Null(source.SourceSchemas);
             foreach ((ObjectId id, NormalizedObject row) in source.Objects) {
                 P0ObjectChain chain = Resources(repository).MetaBootstrapStore.ReadObjectChain(source.RevisionAddress, id.Value);
                 Assert.Equal(new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes), row.Storage);

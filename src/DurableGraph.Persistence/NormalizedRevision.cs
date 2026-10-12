@@ -13,7 +13,6 @@ internal sealed class NormalizedRevision {
     private readonly NormalizedRevision? _candidateSource;
 
     private NormalizedRevision(FrameAddress address, Dictionary<ObjectId, NormalizedObject> objects, StringReadTable strings,
-        StateRevisionStore? sourceStore, SchemaStore? sourceSchemas,
         IReadOnlyDictionary<ObjectId, ObjectStateRecord>? currentDtos = null,
         P0GraphStore? splitStore = null, P0CatalogView? selectedSchemaView = null, StateModelSnapshot? sourceModels = null,
         bool isCandidate = false, NormalizedRevision? candidateSource = null) {
@@ -21,8 +20,6 @@ internal sealed class NormalizedRevision {
         _objects = objects;
         Strings = strings;
         CurrentDtos = currentDtos ?? objects.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
-        SourceStore = sourceStore;
-        SourceSchemas = sourceSchemas;
         SplitStore = splitStore;
         SelectedSchemaView = selectedSchemaView;
         SourceModels = sourceModels;
@@ -34,8 +31,6 @@ internal sealed class NormalizedRevision {
     internal IReadOnlyDictionary<ObjectId, NormalizedObject> Objects => _objects;
     internal StringReadTable Strings { get; }
     internal IReadOnlyDictionary<ObjectId, ObjectStateRecord> CurrentDtos { get; }
-    internal StateRevisionStore? SourceStore { get; }
-    internal SchemaStore? SourceSchemas { get; }
     internal P0GraphStore? SplitStore { get; }
     internal P0CatalogView? SelectedSchemaView { get; }
     internal StateModelSnapshot? SourceModels { get; }
@@ -46,7 +41,7 @@ internal sealed class NormalizedRevision {
         P0GraphStore store, NormalizedRevision? baseline) {
         baseline?.RequireSplitSource(store, models);
         var (rows, strings) = CreateCandidate(candidate, models, baseline);
-        return new(default, rows, strings, null, null, splitStore: store,
+        return new(default, rows, strings, splitStore: store,
             selectedSchemaView: baseline?.SelectedSchemaView, sourceModels: models, isCandidate: true, candidateSource: baseline);
     }
 
@@ -122,7 +117,7 @@ internal sealed class NormalizedRevision {
                 throw new InvalidDataException("A surviving rewritten object must install a new Base.");
             }
         }
-        return new(address, installed, Strings, null, null, CurrentDtos, splitStore, selected, SourceModels);
+        return new(address, installed, Strings, CurrentDtos, splitStore, selected, SourceModels);
     }
 
     private static void RequireSameWrites(IReadOnlyList<ObjectVersionRecord> expected, IReadOnlyList<ObjectVersionRecord> actual) {
@@ -132,12 +127,6 @@ internal sealed class NormalizedRevision {
             if (left.ObjectId != right.ObjectId || left.Kind != right.Kind || left.PriorAddress != right.PriorAddress || !left.Body.SequenceEqual(right.Body)) {
                 throw new InvalidDataException("The appended records differ from the prepared candidate.");
             }
-        }
-    }
-
-    internal void RequireStorageSource(StateRevisionStore store, SchemaStore schemas) {
-        if (!ReferenceEquals(SourceStore, store) || !ReferenceEquals(SourceSchemas, schemas)) {
-            throw new InvalidDataException("The normalized baseline must originate in these exact Store lifetimes.");
         }
     }
 
@@ -194,7 +183,7 @@ internal sealed class NormalizedRevision {
                     ? target : throw new InvalidDataException($"Dictionary key object {id.Value} is not live."));
             }
         }
-        return new(source.RevisionAddress, normalized, source.Strings, source.SourceStore, source.SourceSchemas, directory,
+        return new(source.RevisionAddress, normalized, source.Strings, directory,
             source.SplitStore, source.SelectedSchemaView, models);
     }
 

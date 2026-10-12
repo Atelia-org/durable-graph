@@ -1,7 +1,7 @@
 <a id="db-087-p0持久-meta-自举实验"></a>
 # DB-087：meta 自举实现与分片证据
 
-本目录的自举读写现已进入公开默认 Repository／BranchCheckout／GraphResources；默认接线与第六片旧保存高层退出已验，见 [DB-087 §35](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出)。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
+本目录的自举读写现已进入公开默认 Repository／BranchCheckout／GraphResources；默认接线与第六片旧保存高层退出已验；第七片旧 typed 恢复束退出已通过有限源码验收，见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
 
 catalog、共同 writer 与发布 owner 已接共用恢复／业务 workspace；公开前端复用这一条路径，不整体丢弃 P0。旧保存高层由本片删除，低层按调用清零退出是后继；共同 payload 和受控容器 emitter 保留。
 代码去向、依赖顺序与尚未敲定的问题集中在 DB-087，不以 `P0` 目录名推断最终产品边界。
@@ -103,6 +103,9 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 [P1d 第五片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接) 已把本目录的共同读写接入公开默认 Repository／BranchCheckout／GraphResources，产品回归移接与普通非 friend README 包验收通过。rotation／cache 分别传参，准确 S／Event/State／owner／发布前安装保持；旧 Schema/State getter 仅 internal 施工低层，后继按调用清零退出。普通非 friend README 故事不代完整 accepted-history 公开包，P2 private 后置；最终源码／普通包证据只在 §34，历史各片“默认未切”保当片含义。
 
 [P1d 第六片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出) 已删除旧 LoadedWorld／WorldWorkspace／PreparedWorldSave、旧 planner 与 Store 规划入口；共同 writer、workspace／候选及 WithSplitGraph 真实安装保留，有效安全见证迁移、最终源码回归与 Probe smoke 已验。SCB1／raw Store／旧 reader 另片退出，完整非 friend accepted-history 公开包再后置；不搬旧 StageCore 到新壳，不将历史源码链接当仍存 API。
+
+
+[P1d 第七片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出) 已删除 RevisionDecoder／RevisionReadSession／TypedObjectVersionReader、GraphReader 旧 Store/session 入口及 legacy 保存来源字段。ReadSplit 私有签发／完整成员与 heads/H、共同 Normalize／Pair／两阶段物化／leaf／候选检查保持；旧 typed cache 次数退役，强反例迁真实新 reader，CRC 补例与最终源码回归通过。SCB1／GraphResources 旧模式／raw Store／header codecs 和旧 probe 尚有后继，不造替代 reader，也不授完整 P1 或新包资格。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

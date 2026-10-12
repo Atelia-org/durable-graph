@@ -1,11 +1,10 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Reflection;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -135,21 +134,24 @@ public sealed class CrossAssemblyNominalBindingTests {
     [InlineData(true)]
     public void PublicExactReadUsesReaderNominalEvidenceButStillRequiresTheActualHistoricalReader(bool omitOldTargetReader) {
         string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), $"durable-graph-nominal-reader-{Guid.NewGuid():N}"));
-        Directory.CreateDirectory(root);
         try {
-            using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(root, "schemas.rbf"));
-            var segments = file.Data;
-            SchemaStore schemas = file.Schemas;
-            using StateRevisionStore store = new(segments);
             DurableSchema owner = OwnerSchema(RemoteType, 2);
             DurableSchema remote = new(RemoteType, 1, new DurableFieldInfo(1, TypeTag.Byte));
-            RepresentationId[] ids = schemas.RegisterRepresentations([ObjectLayout.ForDurable(owner), ObjectLayout.ForDurable(remote)]);
-            FrameAddress revision = store.Append(StateRevision.CreateObjectHeadMapBase(null, [
-                ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.Encode(ids[0], new PreparedBaseBody([2])).Body),
-                ObjectVersionRecord.CreateBase(2, BaseObjectBodyCodec.Encode(ids[1], new PreparedBaseBody([37])).Body),
-            ], []));
+            FrameAddress revision;
+            using (P0Repository writer = P0Repository.CreateNew(root)) {
+                P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                catalog.Set(owner);
+                catalog.Set(remote);
+                P0PreparedCatalog prepared = catalog.Prepare();
+                using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State, new(null, new(1), [
+                    ObjectVersionRecord.CreateBase(1, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(owner), new PreparedBaseBody([2]), prepared.View)),
+                    ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(remote), new PreparedBaseBody([37]), prepared.View)),
+                ]), prepared.Write);
+                revision = writer.Commit(pending).Business.Address;
+            }
+            using P0Repository file = P0Repository.OpenReadOnlyExisting(root);
             int ownerReads = 0, targetReads = 0;
-            StateReaderRegistry readers = new();
+            StateModelRegistry readers = new();
             readers.Register(new StateDefinitionBinding("Owner", SchemaKind.ReferenceObject, 1, null,
                 [new("Owner", 2, SchemaKind.ReferenceObject, 1, [new(1, Parameter)],
                     stateTypeDefinition: typeof(Owner2<>), stateParameters: [new(Parameter)])],
@@ -162,16 +164,18 @@ public sealed class CrossAssemblyNominalBindingTests {
                 }));
             DurableSchema availableTarget = omitOldTargetReader
                 ? new(RemoteType, 2, new DurableFieldInfo(1, TypeTag.Byte)) : remote;
-            readers.Register(new StateReaderBinding<byte>(availableTarget,
-                (ref BareValueReader payload) => { targetReads++; return payload.ReadByte(); },
-                static (ref BareValueReader payload, in byte prior) => throw new InvalidOperationException(),
-                static (in byte state, IStateReferenceVisitor visitor) => { }));
+            readers.Register(new StateDefinitionBinding("Remote", SchemaKind.ReferenceObject, 0, null,
+                [new("Remote", availableTarget.Version, SchemaKind.ReferenceObject, 0, [new(1, TypeExpr.Builtin(TypeTag.Byte))])],
+                historicalReaderFactory: (schema, _) => new StateReaderBinding<byte>(schema,
+                    (ref BareValueReader payload) => { targetReads++; return payload.ReadByte(); },
+                    static (ref BareValueReader payload, in byte prior) => throw new InvalidOperationException(),
+                    static (in byte state, IStateReferenceVisitor visitor) => { })));
             long schemaTail = DataBytes(file.Data);
             if (omitOldTargetReader) {
-                Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(store, schemas, revision, readers));
+                Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(file.Store, revision, readers));
                 Assert.Equal(0, targetReads);
             } else {
-                DecodedRevision decoded = RevisionDecoder.Read(store, schemas, revision, readers);
+                DecodedRevision decoded = DecodedRevision.ReadSplit(file.Store, revision, readers);
                 Assert.Equal(new ObjectId(2), decoded.GetRequired(new ObjectId(1)).GetState<Owner2<ObjectId>>().Value);
                 Assert.Equal((byte)37, decoded.GetRequired(new ObjectId(2)).GetState<byte>());
                 Assert.Equal(1, targetReads);
@@ -184,7 +188,7 @@ public sealed class CrossAssemblyNominalBindingTests {
                 !Path.GetFileName(resolved).StartsWith("durable-graph-nominal-reader-", StringComparison.Ordinal)) {
                 throw new InvalidOperationException("Refusing to delete outside the fixture's temporary directory.");
             }
-            Directory.Delete(resolved, recursive: true);
+            if (Directory.Exists(resolved)) { Directory.Delete(resolved, recursive: true); }
         }
     }
 

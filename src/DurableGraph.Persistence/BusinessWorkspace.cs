@@ -169,8 +169,6 @@ internal sealed class BusinessSaveCandidate : IDisposable {
         // environment. Another read/save's otherwise valid material cannot replace it.
         if (installation.RevisionAddress == default || !ReferenceEquals(installation.CurrentDtos, _next.CurrentDtos) ||
             !ReferenceEquals(installation.SourceModels, _next.SourceModels) ||
-            !ReferenceEquals(installation.SourceStore, _next.SourceStore) ||
-            !ReferenceEquals(installation.SourceSchemas, _next.SourceSchemas) ||
             !ReferenceEquals(installation.SplitStore, _next.SplitStore)) {
             throw new InvalidDataException("Installation must complete this actual candidate in its issuing backend and model environment.");
         }

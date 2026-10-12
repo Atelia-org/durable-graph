@@ -140,44 +140,6 @@ public sealed class InlineSchemaStoreTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => schemas.GetRepresentation(new(2)));
         Assert.Throws<InvalidDataException>(() => schemas.ResolveReader(new(2), new StateReaderRegistry().Snapshot(schemas)));
         Assert.Throws<InvalidDataException>(() => BaseObjectBodyCodec.Decode([4, 2], schemas));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas.GetRequired("A", 1), inline));
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.MatchSchema(schemas.GetRequired("A", 1), new("A", 1)));
-    }
-
-    [Fact]
-    public void ChangedNestedDefinitionRejectsTypedReadBeforeBodyCallback() {
-        DurableSchema value = new("Value", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte));
-        DurableSchema changed = new("Value", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.SByte));
-        DurableSchema owner = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: value));
-        DurableSchema wrong = new("Owner", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: changed));
-        using GraphResources file = GraphResources.CreateLegacyNew(NextPath());
-        SchemaStore schemas = file.Schemas;
-        schemas.Register(owner);
-        StateRevisionStore states = file.States;
-        FrameAddress address = states.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.Encode(schemas.RegisterRepresentations([ObjectLayout.ForDurable(owner)])[0], new([1])).Body)], []));
-        ObjectVersionChain chain = states.ReadObjectVersionChain(address, 1);
-        int calls = 0;
-        byte Read(ref BareValueReader reader) { calls++; return reader.ReadByte(); }
-        byte Apply(ref BareValueReader reader, in byte previous) { calls++; return previous; }
-        Assert.Throws<InvalidDataException>(() => TypedObjectVersionReader.ReadDurable<byte>(chain, schemas, wrong, Read, Apply));
-        Assert.Equal(0, calls);
-    }
-
-    [Fact]
-    public void PublishedBasePointingAtInlineSchemaRefusesSelectedGraphRead() {
-        string repositoryPath = NextPath();
-        using (GraphResources resources = GraphResources.CreateLegacyNew(repositoryPath)) {
-            resources.Schemas.Register(new("A", 1, SchemaKind.InlineValue));
-            // Valid Base envelope grammar, but its selected ID identifies an inline value.
-            FrameAddress address = resources.States.Append(StateRevision.CreateObjectHeadMapBase(null,
-                [ObjectVersionRecord.CreateBase(1, new byte[] { 4, 2 })], []));
-            resources.Data.ConfirmDurable();
-            Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(resources.States, resources.Schemas,
-                address, new StateReaderRegistry()));
-        }
-        using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(repositoryPath);
-        Assert.Equal(1, reopened.Schemas.Count);
     }
 
     private static DurableSchema[] InlineChain(int length) {

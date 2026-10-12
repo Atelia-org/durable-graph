@@ -5,7 +5,7 @@ using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>One successfully restored State's owned preparation and live Schema certificate.</summary>
+/// <summary>One successfully restored State's owned preparation and exact Schema certificate.</summary>
 /// <remarks>
 /// Only the repository slot retains the certificate and optional owned read-only leaf table;
 /// editable baselines retain normalized source alone. Collected distinguishes no eligible leaves
@@ -22,16 +22,6 @@ internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoin
 
     internal bool Matches(CheckpointAddress state) => StateCheckpoint == state &&
         RevisionAddress == state.RevisionAddress && RootId == state.RootId;
-
-    internal void Validate(RevisionReadSession session, CheckpointAddress state) {
-        if (state.Kind != GraphFrameKind.State || !Matches(state) ||
-            !ReferenceEquals(Selection.Models, session.Models)) {
-            throw new InvalidDataException("Prepared State does not match this exact selection and model environment.");
-        }
-        Selection.Normalized.RequireStorageSource(session.Store, session.Schemas);
-        ValidateRoot(session.Models);
-        Requirements.Validate(session.Models);
-    }
 
     internal void ValidateSplit(P0GraphStore store, StateModelRegistry.FrozenConfiguration configuration,
         CheckpointAddress state, GraphReadContext context) {

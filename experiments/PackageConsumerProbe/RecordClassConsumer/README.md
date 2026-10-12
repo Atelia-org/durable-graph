@@ -1,5 +1,7 @@
 # Record class package consumer
 
+> 当前 G 门禁暂停：此 lane 仍依赖 `GraphResources.States` 与 SCB1/raw State 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+
 Run from the repository root:
 
 ```powershell

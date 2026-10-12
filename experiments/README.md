@@ -4,16 +4,19 @@
 按正在调查的问题选择入口；无需顺序阅读所有 Probe。下列项目均不在根 solution 中，
 运行命令、证据范围与限制由各自 README 维护。
 
+
+当前旧 reader/raw Store 包 lanes 暂停，具体目录和后继消费清单见 [PackageConsumerProbe 当前状态](PackageConsumerProbe/README.md)。其历史验收记录保留；本片不整体停用 Probe。公开 Repository/Capture、当前 split 包门禁与 ListDeltaReplay 仍按各自限定范围运行，当前资格只看实际执行证据。退出旧 typed 恢复束的范围见 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。
+
 | 何时使用 | 入口 |
 |---|---|
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
 | 验证 DB-087 内部员工 Schema 闭包、无业务注册的 meta 冷读与跨正常进程 Delta 续写 | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md)：内部包验收，不代替公开切换或进程故障门禁 |
 | 验证 DB-087 内部 split Repository 的真实 accepted-history／Upgrade／tag／历史 Fork／ReadPair 与 Base→Delta | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md)：[Run-SplitRepositoryProbe.ps1](PackageConsumerProbe/Run-SplitRepositoryProbe.ps1)，内部 friend 准确包门禁已验，证据见 [§33](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)；不代 public-default 或进程故障资格 |
-| 验证实验性 Dictionary 的 comparer、键寻址 Delta、共享引用与双槽历史升级 | [DictionaryConsumer](PackageConsumerProbe/DictionaryConsumer/README.md)：[Run-DictionaryProbe.ps1](PackageConsumerProbe/Run-DictionaryProbe.ps1)，DB-054 产品回归 |
-| 验证显式 enum 的整数表示、完整类型组合与删除旧 CLR enum 后的历史升级续存 | [EnumConsumer](PackageConsumerProbe/EnumConsumer/README.md)：[Run-EnumProbe.ps1](PackageConsumerProbe/Run-EnumProbe.ps1)，DB-053 产品回归 |
-| 验证 Nullable 字段/泛型/数组/List 的冻结、历史精确读取与显式值升级提升 | [NullableConsumer](PackageConsumerProbe/NullableConsumer/README.md)：[Run-NullableProbe.ps1](PackageConsumerProbe/Run-NullableProbe.ps1)，DB-052 产品回归 |
-| 验证泛型 class/struct、定义历史、通用/闭合 Upgrade 与多代冷重开的真实包交付 | [GenericConsumer](PackageConsumerProbe/GenericConsumer/README.md)：由 [Run-GenericProbe.ps1](PackageConsumerProbe/Run-GenericProbe.ps1) 执行的产品回归；施工记录见 [DB-038 §12](../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪) |
-| 验证通用 owner 显式复用值规则、嵌套工具作用域与删除旧 inline 领域声明后的历史升级 | [ValueUpgradeConsumer](PackageConsumerProbe/ValueUpgradeConsumer/README.md)：由 [Run-ValueUpgradeProbe.ps1](PackageConsumerProbe/Run-ValueUpgradeProbe.ps1) 执行；施工与验收见 [DB-039 §8](../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射) |
+| 验证实验性 Dictionary 的 comparer、键寻址 Delta、共享引用与双槽历史升级 | [DictionaryConsumer](PackageConsumerProbe/DictionaryConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-DictionaryProbe.ps1](PackageConsumerProbe/Run-DictionaryProbe.ps1)，DB-054 产品回归 |
+| 验证显式 enum 的整数表示、完整类型组合与删除旧 CLR enum 后的历史升级续存 | [EnumConsumer](PackageConsumerProbe/EnumConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-EnumProbe.ps1](PackageConsumerProbe/Run-EnumProbe.ps1)，DB-053 产品回归 |
+| 验证 Nullable 字段/泛型/数组/List 的冻结、历史精确读取与显式值升级提升 | [NullableConsumer](PackageConsumerProbe/NullableConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-NullableProbe.ps1](PackageConsumerProbe/Run-NullableProbe.ps1)，DB-052 产品回归 |
+| 验证泛型 class/struct、定义历史、通用/闭合 Upgrade 与多代冷重开的真实包交付 | [GenericConsumer](PackageConsumerProbe/GenericConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：由 [Run-GenericProbe.ps1](PackageConsumerProbe/Run-GenericProbe.ps1) 执行的产品回归；施工记录见 [DB-038 §12](../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪) |
+| 验证通用 owner 显式复用值规则、嵌套工具作用域与删除旧 inline 领域声明后的历史升级 | [ValueUpgradeConsumer](PackageConsumerProbe/ValueUpgradeConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：由 [Run-ValueUpgradeProbe.ps1](PackageConsumerProbe/Run-ValueUpgradeProbe.ps1) 执行；施工与验收见 [DB-039 §8](../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射) |
 | 重访泛型 DTO/静态 helper、工厂闭合、readonly accessor 与历史 Upgrade 代码形状的选择依据 | [GenericBindingShapeProbe](GenericBindingShapeProbe/README.md)：独立机制见证；实际产品验证使用上述 GenericConsumer 与 src/tests |
 | 验证单 writer 进程中止、FS/VS 发布可见性与不完整控制尾正常恢复 | [PublicationCrashProbe](PublicationCrashProbe/README.md)：DB-086 底层故障见证，非断电保证 |
 | 验证 DB-087 实际 split Repository 的两次成功创建后／SG Widget 两 ref 保存，外部 Kill 后准确根 cold／Delta | [MetaBootstrapCrashProbe](MetaBootstrapCrashProbe/README.md)：source-only 的两个固定初始化窗口＋六个保存窗口；保存证据见 §31，[本片初始化与返回边界见 §32](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#32-p1d-第三片直接初始化-kill-与实际返回-outcome)，构建、矩阵与完整源码回归通过，不代包或完整 P1d 门禁 |

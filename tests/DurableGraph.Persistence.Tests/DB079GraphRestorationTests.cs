@@ -1,9 +1,9 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using State = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.State;
 
@@ -12,39 +12,35 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 /// <summary>Ordering and identity witnesses at the common graph-restoration boundary.</summary>
 public sealed class DB079GraphRestorationTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-db079-restoration-{Guid.NewGuid():N}");
+    private int _seedIndex;
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void PairCompletesBothAllocationTablesBeforeAnyHydration(bool failLastAllocation) {
-        Directory.CreateDirectory(_root);
-        using GraphResources schemaFile = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
-        SchemaStore schemas = schemaFile.Schemas;
-        var segments = schemaFile.Data;
-        using StateRevisionStore store = new(segments);
-        FrameAddress first = Seed(store, schemas, (1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
-        FrameAddress second = Seed(store, schemas, (1, new(2, 2, 0, 30)), (2, new(1, 1, 0, 40)));
+        using P0Repository repository = P0Repository.CreateNew(_root);
+        FrameAddress first = Seed(repository, (1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
+        FrameAddress second = Seed(repository, (1, new(2, 2, 0, 30)), (2, new(1, 1, 0, 40)));
         int allocations = 0, hydrations = 0;
         InvalidDataException failure = new("Last allocation of the second graph failed.");
-        StateModelSnapshot models = SharedReadModel.Models(allocate: () => {
+        StateModelRegistry models = SharedReadModel.Models(allocate: () => {
             Assert.Equal(0, hydrations);
             if (++allocations == 4 && failLastAllocation) { throw failure; }
             return new Node();
         }, hydrate: _ => {
             Assert.Equal(4, allocations);
             hydrations++;
-        }).Snapshot(schemas);
-        long stateTail = Tail(segments), schemaTail = DataBytes(schemaFile.Data);
+        });
+        long tail = DataBytes(repository.Data);
         (Node First, Node Second)? delivered = null;
 
         if (failLastAllocation) {
-            Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair<Node, Node>(
-                store, schemas, first, new(1), second, new(1), models)));
+            Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = ReadPair(repository, first, new(1), second, new(1), models)));
             Assert.Null(delivered);
             Assert.Equal(0, hydrations);
         } else {
-            delivered = GraphReader.ReadPair<Node, Node>(store, schemas, first, new(1), second, new(1), models);
+            delivered = ReadPair(repository, first, new(1), second, new(1), models);
             Assert.Equal(4, hydrations);
             Assert.Equal((byte)10, delivered.Value.First.Value);
             Assert.Equal((byte)30, delivered.Value.Second.Value);
@@ -54,29 +50,23 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             Assert.NotSame(delivered.Value.First.Next, delivered.Value.Second.Next);
         }
         Assert.Equal(4, allocations);
-        Assert.Equal(stateTail, Tail(segments));
-        Assert.Equal(schemaTail, DataBytes(schemaFile.Data));
+        Assert.Equal(tail, DataBytes(repository.Data));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void EqualExactHeadWithoutEqualityProofDoesNotAuthorizeSingletonReuse(bool registerUnequalProof) {
-        Directory.CreateDirectory(_root);
-        using GraphResources schemaFile = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
-        SchemaStore schemas = schemaFile.Schemas;
-        var segments = schemaFile.Data;
-        using StateRevisionStore store = new(segments);
-        FrameAddress address = Seed(store, schemas, (1, new(0, 0, 0, 10)));
+        using P0Repository repository = P0Repository.CreateNew(_root);
+        FrameAddress address = Seed(repository, (1, new(0, 0, 0, 10)));
         Node singleton = new();
         int allocations = 0, hydrations = 0;
-        StateModelSnapshot models = SharedReadModel.Models(
+        StateModelRegistry models = SharedReadModel.Models(
             includeEquality: registerUnequalProof, equality: static (in State _, in State _) => false,
-            allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++).Snapshot(schemas);
+            allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++);
         (Node First, Node Second)? delivered = null;
 
-        Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair<Node, Node>(
-            store, schemas, address, new(1), address, new(1), models));
+        Assert.Throws<InvalidDataException>(() => delivered = ReadPair(repository, address, new(1), address, new(1), models));
 
         Assert.Null(delivered);
         Assert.Equal(2, allocations);
@@ -203,14 +193,27 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Assert.Same(root, root.Next.Alias);
     }
 
-    private static FrameAddress Seed(StateRevisionStore store, SchemaStore schemas, params (uint Id, State State)[] rows) {
-        schemas.RegisterBatch([SharedReadModel.Schema]);
-        RepresentationId representation = schemas.RegisterRepresentations([ObjectLayout.ForDurable(SharedReadModel.Schema)])[0];
-        return store.Append(StateRevision.CreateObjectHeadMapBase(null, rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
-            BaseObjectBodyCodec.Encode(representation, SharedReadModel.Base(row.State)).Body)), []));
+    private FrameAddress Seed(P0Repository repository, params (uint Id, State State)[] rows) {
+        P0CatalogView? accepted = repository.SharedSchemaRoot is { } schema ? P0CatalogView.Load(repository.Store, schema) : null;
+        P0CatalogWorkspace workspace = new(repository.EnsureEditingAllowed, accepted);
+        workspace.Set(SharedReadModel.Schema);
+        P0PreparedCatalog catalog = workspace.Prepare();
+        string branch = $"source-{_seedIndex++}";
+        ObjectVersionRecord[] records = rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
+            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(row.State), catalog.View))).ToArray();
+        using P0PendingSave pending = repository.Prepare(branch, P0GraphKind.State,
+            new(null, new(1), records), catalog.Write);
+        return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
     }
-
-    private static long Tail(SegmentStore segments) => DataBytes(segments);
+    private static (Node First, Node Second) ReadPair(P0Repository repository,
+        FrameAddress first, ObjectId firstRoot, FrameAddress second, ObjectId secondRoot, StateModelRegistry models) {
+        StateModelRegistry.FrozenConfiguration configuration = models.FreezeConfiguration();
+        DecodedRevision a = DecodedRevision.ReadSplit(repository.Store, first, configuration);
+        DecodedRevision b = DecodedRevision.ReadSplit(repository.Store, second, configuration,
+            repository.Store.ReadMetadata(first).SchemaRoot == repository.Store.ReadMetadata(second).SchemaRoot ? a.BindingEnvironment : null);
+        var pair = GraphReader.ReadPair(a, new(a.SourceModels!), firstRoot, b, new(b.SourceModels!), secondRoot);
+        return ((Node)pair.First, (Node)pair.Second);
+    }
 
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db079-restoration-");
 }

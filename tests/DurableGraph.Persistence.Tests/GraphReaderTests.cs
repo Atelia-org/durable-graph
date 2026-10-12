@@ -1,67 +1,68 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class GraphReaderTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-reader-{Guid.NewGuid():N}");
-    private readonly GraphResources _file;
-    private readonly SegmentStore _segments;
-    private readonly SchemaStore _schemas;
-    private readonly StateRevisionStore _store;
+    private readonly P0Repository _writer;
+    private int _seedIndex;
     private static readonly DurableSchema ParentSchema = new("ReaderNode", 1);
     private static readonly DurableSchema FirstSchema = Schema("ReaderFirst");
     private static readonly DurableSchema SecondSchema = Schema("ReaderSecond");
 
-    public GraphReaderTests() {
-        Directory.CreateDirectory(_root);
-        _file = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = _file.Schemas;
-        _segments = _file.Data;
-        _store = new(_segments);
-    }
+    public GraphReaderTests() => _writer = P0Repository.CreateNew(_root);
 
     [Fact]
     public void PairRestoresInputOrderActualTypesAndEachGraphsAliasesAndCycles() {
         FrameAddress first = Seed((1, FirstSchema, new(2, 2, 10)), (2, SecondSchema, new(1, 1, 11)));
         FrameAddress second = Seed((1, FirstSchema, new(2, 2, 20)), (2, SecondSchema, new(1, 1, 21)));
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()), Model<SecondNode>(SecondSchema, () => new()));
-        StateModelSnapshot models = registry.Snapshot(_schemas);
-        long stateTail = Tail();
-        long schemaTail = DataBytes(_file.Data);
+        using P0Repository reader = OpenReader();
+        long tail = DataBytes(reader.Data);
+        StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
+        DecodedRevision secondSource = DecodedRevision.ReadSplit(reader.Store, second, configuration);
+        DecodedRevision firstSource = DecodedRevision.ReadSplit(reader.Store, first, configuration, secondSource.BindingEnvironment);
+        Assert.Same(secondSource.BindingEnvironment, firstSource.BindingEnvironment);
 
-        // Requested roots can be a durable base; restoration still uses the actual model.
-        (Node First, Node Second) pair = GraphReader.ReadPair<Node, Node>(
-            _store, _schemas, second, new(1), first, new(2), models);
-
-        Assert.IsType<FirstNode>(pair.First);
-        Assert.IsType<SecondNode>(pair.Second);
-        Assert.Equal(20, pair.First.Value);
-        Assert.Equal(11, pair.Second.Value);
-        Assert.Same(pair.First.Next, pair.First.Alias);
-        Assert.Same(pair.First, pair.First.Next!.Next);
-        Assert.Same(pair.Second.Next, pair.Second.Alias);
-        Assert.Same(pair.Second, pair.Second.Next!.Next);
-        // No assertion about identity between the two graphs: it is deliberately not promised.
-        Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, DataBytes(_file.Data));
+        // Input roots can select durable subclasses; restoration uses their actual models.
+        var pair = GraphReader.ReadPair(secondSource, new(secondSource.SourceModels!), new(1),
+            firstSource, new(firstSource.SourceModels!), new(2));
+        Node firstRoot = Assert.IsType<FirstNode>(pair.First);
+        Node secondRoot = Assert.IsType<SecondNode>(pair.Second);
+        Assert.Equal(20, firstRoot.Value);
+        Assert.Equal(11, secondRoot.Value);
+        Assert.Same(firstRoot.Next, firstRoot.Alias);
+        Assert.Same(firstRoot, firstRoot.Next!.Next);
+        Assert.Same(secondRoot.Next, secondRoot.Alias);
+        Assert.Same(secondRoot, secondRoot.Next!.Next);
+        // No assertion about identity between graphs: it is deliberately not promised.
+        Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     [Fact]
     public void SameSelectionTwiceIsLegalWithoutCrossGraphIdentityContract() {
         FrameAddress address = Seed((1, FirstSchema, new(1, 1, 4)));
-        StateModelSnapshot models = Registry(Model<FirstNode>(FirstSchema, () => new())).Snapshot(_schemas);
-        var pair = GraphReader.ReadPair<FirstNode, FirstNode>(_store, _schemas, address, new(1), address, new(1), models);
-        Assert.Equal(4, pair.First.Value);
-        Assert.Equal(4, pair.Second.Value);
-        Assert.Same(pair.First, pair.First.Next);
-        Assert.Same(pair.Second, pair.Second.Next);
+        StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()));
+        using P0Repository reader = OpenReader();
+        long tail = DataBytes(reader.Data);
+        StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
+        DecodedRevision first = DecodedRevision.ReadSplit(reader.Store, address, configuration);
+        DecodedRevision second = DecodedRevision.ReadSplit(reader.Store, address, configuration, first.BindingEnvironment);
+        Assert.Same(first.BindingEnvironment, second.BindingEnvironment);
+        var pair = GraphReader.ReadPair(first, new(first.SourceModels!), new(1), second, new(second.SourceModels!), new(1));
+        FirstNode firstRoot = Assert.IsType<FirstNode>(pair.First);
+        FirstNode secondRoot = Assert.IsType<FirstNode>(pair.Second);
+        Assert.Equal(4, firstRoot.Value);
+        Assert.Equal(4, secondRoot.Value);
+        Assert.Same(firstRoot, firstRoot.Next);
+        Assert.Same(secondRoot, secondRoot.Next);
+        Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     [Fact]
@@ -69,50 +70,70 @@ public sealed class GraphReaderTests : IDisposable {
         FrameAddress first = Seed((1, FirstSchema, new(0, 0, 1)));
         FrameAddress second = Seed((1, SecondSchema, new(0, 0, 2)));
         List<string> callbacks = [];
-        StateModelSnapshot models = Registry(
+        StateModelRegistry registry = Registry(
             Model<FirstNode>(FirstSchema, () => new(), () => callbacks.Add("first")),
             Model<SecondNode>(SecondSchema, () => new(), () => {
                 callbacks.Add("second");
                 throw new InvalidDataException("second hydration failed");
-            })).Snapshot(_schemas);
-        (Node First, Node Second)? delivered = null;
-        long stateTail = Tail();
-        long schemaTail = DataBytes(_file.Data);
+            }));
+        using P0Repository reader = OpenReader();
+        long tail = DataBytes(reader.Data);
+        StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
+        DecodedRevision firstSource = DecodedRevision.ReadSplit(reader.Store, first, configuration);
+        DecodedRevision secondSource = DecodedRevision.ReadSplit(reader.Store, second, configuration, firstSource.BindingEnvironment);
+        (IDurableObject First, IDurableObject Second)? delivered = null;
 
-        Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair<Node, Node>(
-            _store, _schemas, first, new(1), second, new(1), models));
+        Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair(
+            firstSource, new(firstSource.SourceModels!), new(1), secondSource, new(secondSource.SourceModels!), new(1)));
 
         Assert.Null(delivered);
         Assert.Equal(["first", "second"], callbacks);
-        Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, DataBytes(_file.Data));
+        Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     [Fact]
     public void MissingWrongOrNonExactRootFailsBeforeAllocation() {
         FrameAddress address = Seed((1, FirstSchema, new(0, 0, 1)));
         int allocations = 0;
-        StateModelSnapshot models = Registry(Model<FirstNode>(FirstSchema, () => { allocations++; return new(); })).Snapshot(_schemas);
-        Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(_store, _schemas, address, new(99), models));
-        Assert.Throws<InvalidDataException>(() => GraphReader.Read<SecondNode>(_store, _schemas, address, new(1), models));
-        Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(_store, _schemas, address, new(1), models, requireExactRootType: true));
-        Assert.Throws<ArgumentOutOfRangeException>(() => GraphReader.Read<Node>(_store, _schemas, address, default, models));
+        StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => { allocations++; return new(); }));
+        using P0Repository reader = OpenReader();
+        long tail = DataBytes(reader.Data);
+        DecodedRevision source = DecodedRevision.ReadSplit(reader.Store, address, registry);
+        Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(source, new(99), new(source.SourceModels!)));
+        Assert.Throws<InvalidDataException>(() => GraphReader.Read<SecondNode>(source, new(1), new(source.SourceModels!)));
+        Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(source, new(1), new(source.SourceModels!), requireExactRootType: true));
+        Assert.Throws<ArgumentOutOfRangeException>(() => GraphReader.Read<Node>(source, default, new(source.SourceModels!)));
         Assert.Equal(0, allocations);
+        Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     [Fact]
     public void IndependentMembershipDoesNotRunUnrelatedParentReadersOrModels() {
         FrameAddress parent = Seed((1, FirstSchema, new(0, 0, 1)), (9, SecondSchema, new(0, 0, 9)));
-        FrameAddress child = _store.Append(StateRevision.CreateObjectHeadMapBase(parent, [], [new(1, parent)]));
-        // No SecondNode reader/model is registered at all. Reading the whole parent fails,
-        // while this independent selection uses its own membership and only first's old head.
+        P0GraphSnapshot parentGraph = _writer.Store.ReadGraph(parent);
+        FrameAddress child;
+        // The child has its own actual complete membership, retaining only first's
+        // existing head. Directory reconstruction never invokes unrelated body readers.
+        using (P0PendingSave pending = _writer.Prepare("seed-0", P0GraphKind.State,
+            new(parent, new(1), [], [9]))) {
+            child = _writer.Commit(pending).Business.Address;
+        }
+        Assert.Equal(new uint[] { 1 }, _writer.Store.ReadGraph(child).Objects.Keys);
+        Assert.Equal(parentGraph.Objects[1], _writer.Store.ReadGraph(child).Objects[1]);
+        // No SecondNode reader/model is registered. Reading the complete parent fails;
+        // the selected child only restores its own membership and retained old first head.
         int hydrations = 0;
-        StateModelSnapshot models = Registry(Model<FirstNode>(FirstSchema, () => new(), () => hydrations++)).Snapshot(_schemas);
-        FirstNode root = GraphReader.Read<FirstNode>(_store, _schemas, child, new(1), models).Root;
+        StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new(), () => hydrations++));
+        using P0Repository reader = OpenReader();
+        long tail = DataBytes(reader.Data);
+        StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
+        DecodedRevision source = DecodedRevision.ReadSplit(reader.Store, child, configuration);
+        FirstNode root = GraphReader.Read<FirstNode>(source, new(1), new(source.SourceModels!)).Root;
         Assert.Equal(1, root.Value);
         Assert.Equal(1, hydrations);
-        Assert.Throws<InvalidDataException>(() => GraphReader.Read<FirstNode>(_store, _schemas, parent, new(1), models));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reader.Store, parent, configuration, source.BindingEnvironment));
         Assert.Equal(1, hydrations);
+        Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     private abstract class Node : IDurableObject {
@@ -158,9 +179,25 @@ public sealed class GraphReaderTests : IDisposable {
     }
 
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
-        _schemas.RegisterBatch(rows.Select(static row => row.Schema));
-        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
-            BaseObjectBodyCodec.Encode(_schemas.RegisterRepresentations([ObjectLayout.ForDurable(row.Schema)])[0], Base(row.State)).Body)), []));
+        P0CatalogView? accepted = _writer.SharedSchemaRoot is { } root ? P0CatalogView.Load(_writer.Store, root) : null;
+        P0CatalogWorkspace catalog = new(_writer.EnsureEditingAllowed, accepted);
+        // Both seeds use one real immutable catalog, including the nominal base closure.
+        catalog.Set(FirstSchema);
+        catalog.Set(SecondSchema);
+        P0PreparedCatalog meta = catalog.Prepare();
+        ObjectVersionRecord[] records = rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
+            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(row.Schema), Base(row.State), meta.View))).ToArray();
+        string branch = $"seed-{_seedIndex++}";
+        using P0PendingSave pending = _writer.Prepare(branch, P0GraphKind.State, new(null, new(1), records), meta.Write);
+        P0SaveResult saved = _writer.Commit(pending, meta.Install, prepareMeta: meta.PrepareInstall);
+        Assert.Equal(saved.Business.Address, _writer.GetHead(branch));
+        Assert.Equal(saved.Business.SchemaRoot, _writer.SharedSchemaRoot);
+        return saved.Business.Address;
+    }
+
+    private P0Repository OpenReader() {
+        _writer.Dispose();
+        return P0Repository.OpenReadOnlyExisting(_root);
     }
 
     private static PreparedBaseBody Base(State state) {
@@ -172,12 +209,8 @@ public sealed class GraphReaderTests : IDisposable {
         return new(bytes.WrittenSpan);
     }
 
-    private long Tail() => DataBytes(_segments);
-
     public void Dispose() {
-        _store.Dispose();
-        _file.Dispose();
-        _segments.Dispose();
+        _writer.Dispose();
         string resolved = Path.GetFullPath(_root);
         if (!string.Equals(Path.GetDirectoryName(resolved), Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), StringComparison.OrdinalIgnoreCase) ||
             !Path.GetFileName(resolved).StartsWith("durable-graph-reader-", StringComparison.Ordinal)) {
