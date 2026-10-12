@@ -94,7 +94,7 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 [P1c 第八片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair) 已接 split ReadPair，构建、定向与完整源码回归通过。两侧准确 S；同 reader-issued 环境才按原 Model／Preparation、完整状态与引用闭包共享，跨环境独立，仍共同物化保 mutable allocator guard。string 在已有 same-ID/head 候选内增加完整 Ordinal 内容 proof，不 intern 不同 ID、不新建 DTO cache。只读包括 Transient，不导入可编辑保存基线；身份断言只验当前优化。DB-080 最近 State 准备材料已由第九片接通，见 §28；第十片物理缓存已验，见 §29；具体接缝集中 §6.3／7.1。
 [P1c 第九片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用) 已接 split Checkout／Fork 的单 State 准备槽，构建、定向与完整源码回归通过；DB-082 既有候选默认关闭，DB-081 热 seed 禁用。物理缓存第十片已验，见 §29；缓存不替代该 State 的准确 reader 环境、完整 source 或独立可变物化资格。
 [P1c 第十片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#29-p1c-第十片owned-物理缓存) 已验 owned 物理缓存，构建、定向与完整源码回归通过：共用地址／frame+map 两组件／单预算 LRU，旧 adapter 保原计量，split 接实际固定角色帧与完整目录/H。值私有 owned 且只读，成功解析／重建后 admit，hit 前核 owner，每图／typed 仍核原关系与准确 S/model；内部预算透传供 zero／调小，不增公开 API。不从 prepared/input seed，不因上层失败回滚正确 raw/map。限定运行证据集中 §29；机制层 P1c 内部停点可进入 P1d，完整 P1 产品门禁尚未完成；后继 P1d 初始化／失败边界及进程／包门禁，再默认切换退旧，P2 private 后置。
-现有公共路径保持，P1d 门禁后才默认切换／删旧路径，P2 另接 private；无具体反例不扩未穷举组合。
+[P1d 首片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复) 已通过初始化／正常恢复的 tests-only 限定源码验收，构建、定向与完整源码回归通过，生产零改；两 CreateRef 不是 CU，缺正式 ref 不补建。lower CreateRef 故障＋fresh DG Open 不等于 DG.CreateNew 内部故障或 ProcessCrashOnly，VS writable 清理创建中 pending 遵原控制协议。结果统一记 §30；本目录不重复运行记录。后继真实 DG 进程与准确包门禁，再默认切换／删旧路径，P2 另接 private。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

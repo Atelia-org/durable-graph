@@ -73,6 +73,8 @@ internal static class StorageTestData {
             Set("ConfirmDataDurable", (Action)(() => { action(); ResourcesData(versions).ConfirmDurable(); }));
         } else if (stage == "AfterAppend") {
             Set(tag ? "AfterTagRecordAppended" : "AfterRefRecordAppended", (Action<SizedPtr>)(_ => action()));
+        } else if (stage == "BeforeNewRefRename") {
+            Set("BeforeNewRefRename", action);
         } else if (stage == "AfterConfirmed") {
             Set("AfterPublicationConfirmed", action);
         } else { throw new ArgumentOutOfRangeException(nameof(stage)); }

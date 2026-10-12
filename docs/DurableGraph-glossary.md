@@ -159,6 +159,8 @@ flowchart TD
 | **split 双图读取环境资格** | 两侧完整恢复各自准确 S；操作内严格复用同一个 reader-issued 环境后才求共享闭包，环境相同仍不代替实际 heads、Model／Preparation、完整状态／布局和 rewrite 检查。跨环境先独立物化，Pair 不借 State 槽或导入保存身份；这是保守实现边界，不是跨图身份保证。 | [DB-087 §27](design-branches/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair) 已通过限定源码验收；不由 S 地址相等或 DTO CLR 类型相同授共享资格。 |
 | **split State 准备槽** | 持最近 State 的准确 reader 环境、Selection 与完整标准依赖；请求 Head 每次独立选择，命中仍独立物化可变图并导入完整保存身份。Event-only 绕槽，Fork 发布成功后安装；不由热保存授读取资格，不供只读 Pair 使用。 | [DB-087 §28](design-branches/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用) 已通过限定源码验收；DB-082 候选仍默认关闭，不是物理缓存或新公共类型。 |
 | **owned 物理读取缓存** | 同一 owner 下按完成帧地址缓存固定角色原始事实与完整目录/H，共用 frame/map 两组件的一份驻留 charge／预算／LRU。值 owned 且只读；hit 前核 owner，可复用解析但不复用整个 graph 的关系、typed／准确 S／source 资格。成功 raw 组件无需因上层失败回滚，不缓存应用领域实例。 | [DB-087 §29](design-branches/0087-meta-bootstrap-refactoring-route.md#29-p1c-第十片owned-物理缓存) 已通过限定源码验收；内部机制复用，非公共 cache 平台。 |
+| **split 两正式根初始化** | DB-087 内部 ref1 为分支目录、ref2 为 shared 根；由两次 CreateRef 分别创建，不是 CU。Open 必须取得两正式根再构造 DG Store/cache；缺任一拒绝，不补建／删完成内容。创建中 pending 可按 VS 正常控制协议清理。 | [GraphResources split 工厂](../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)、[DB-087 §30](design-branches/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复)；初始化／正常恢复已通过限定源码验收，不授直接 DG.CreateNew 故障或进程终止资格。 |
+| **必要读取与惰性首开恢复** | 打开 DG 时读取格式要求的 roots／所选内容；未引用 ref/tag 不为全库恢复而预开。实际访问控制文件时才触发底座正常 lazy recovery；readonly 不执行写修复。完成 DG 数据帧保持 append-only，控制文件遵其自身协议。 | [GraphResources](../src/DurableGraph.Persistence/GraphResources.cs)、[DB-087 §30](design-branches/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复)；不等于启动 audit 或离线救援。 |
 
 ## 对象图、身份与状态视图
 
