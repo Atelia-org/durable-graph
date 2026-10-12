@@ -163,7 +163,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
             new(null, new(1), [ObjectVersionRecord.CreateBase(1,
                 P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(root), new PreparedBaseBody([2]), initial.View)),
                 ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(arrayA, new PreparedBaseBody([1, 0]), initial.View))]), initial.Write)) {
-            repository.Commit(pending, initial.Install);
+            repository.Commit(pending, initial.Install, prepareMeta: initial.PrepareInstall);
         }
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
         long frames = repository.Store.AppendedFrames;

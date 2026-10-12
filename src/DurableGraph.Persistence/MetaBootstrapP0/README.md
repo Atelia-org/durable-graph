@@ -82,9 +82,10 @@ Root＋两 closed Derived 的 private Base<U>／Pair<T> 和有序实参冷读／
 P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停点已达**；精确模型、三用例计数和未覆盖集中
 [DB-087 §19](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点)。
 三份真实 SG 模板经 P0 cold meta／业务恢复、整 leaf Delta／准确 prior、NoChange 和 fresh 旧新图；本片生产零改，无新完整回归或包资格，assets source。
-[P1c 首片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核) 已完成共同 `ClassifyCaptured`／`PlanObjectWrites`；两 adapter 保真实 typed 编码和来源前检，P0实际records继续维护nextH。
+[P1c 首片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核) 提取共同 `ClassifyCaptured`／`PlanObjectWrites`；两 adapter 保真实 typed 编码和来源前检。当时P0的nextH维护由第二片共享NormalizedRevision的实际heads/H安装取代。
 两真实头／length-prefix边界的计量见证及完整源码回归通过；未改wire/SG/交付、无新包资格，assets source，未合workspace/owner或公开切换。
-下一片先共享 normalized 保存材料、actual-head installation／publish 前准备，保薄 backend adapter／owner；再合 workspace，之后接公开 owner/history 与 Pair／缓存，均未实施，接 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)。
+[P1c 第二片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#21-p1c-第二片normalized-保存材料与发布前安装准备) 已验共享 normalized 保存材料、实际 heads/H 与发布前安装准备；冷读工厂自行加载准确 S 并冻结模型，保完整 source 与 rewrite。typed Commit/Dispose 拒绝重入不释放外层候选；Event 不准备或安装实际 State 存储材料，仍接受 meta。build、定向和完整源码回归通过，无新包／Crash资格。
+下一片合 workspace 的 models/capture/baseline/root 和候选寿命，暂保两薄 backend adapter／owner；再接公开 owner/history 与 Pair／缓存，均未实施，接 [§6.3](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)。
 现有公共路径保持，P1d 门禁后才默认切换／删旧路径，P2 另接 private；无具体反例不扩未穷举组合。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：

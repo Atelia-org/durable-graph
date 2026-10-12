@@ -32,7 +32,7 @@ public sealed partial class WorldWorkspaceTests {
     }
 }
 
-public sealed class P0BusinessPlanningAccountingTests : IDisposable {
+public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
     private const string Prefix = "dg-bootstrap-planning-accounting-";
     private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
 
@@ -136,11 +136,15 @@ public sealed class P0BusinessPlanningAccountingTests : IDisposable {
     }
 
     private static IReadOnlyDictionary<ObjectId, long> Accounting(P0Session session) {
-        P0BusinessWorkspace workspace = Assert.IsType<P0BusinessWorkspace>(typeof(P0Session)
-            .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(session));
-        return Assert.IsAssignableFrom<IReadOnlyDictionary<ObjectId, long>>(typeof(P0BusinessWorkspace)
-            .GetField("_h", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(workspace));
+        return Baseline(session).Objects.ToDictionary(static pair => pair.Key,
+            static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes);
     }
+
+    private static P0BusinessWorkspace Business(P0Session session) => Assert.IsType<P0BusinessWorkspace>(typeof(P0Session)
+        .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(session));
+
+    private static NormalizedRevision Baseline(P0Session session) => Assert.IsType<NormalizedRevision>(typeof(P0BusinessWorkspace)
+        .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Business(session)));
 
     private static void AssertAccounting(P0Repository repository, P0Session session) {
         P0GraphSnapshot source = session.StateSource!;

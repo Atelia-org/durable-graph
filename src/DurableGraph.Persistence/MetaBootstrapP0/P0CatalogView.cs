@@ -102,6 +102,9 @@ internal sealed class P0CatalogView {
     }
     internal ObjectId DescriptorId(ObjectLayout layout) => _ids.TryGetValue(layout, out ObjectId id) ? id
         : throw new InvalidDataException("The selected catalog lacks this complete object layout.");
+    internal void Require(ObjectLayout layout) {
+        if (!P0FixedBindings.IsBuiltin(layout)) { _ = DescriptorId(layout); }
+    }
     internal ObjectLayout ResolveLayout(ObjectId id) => _layouts.TryGetValue(id, out ObjectLayout? layout) ? layout
         : throw new InvalidDataException("This meta ObjectId is not a declared object descriptor.");
     internal ObjectId SchemaNodeId(DurableSchema schema) => _schemaIds.TryGetValue(new(schema.Type, schema.Version), out ObjectId id) &&

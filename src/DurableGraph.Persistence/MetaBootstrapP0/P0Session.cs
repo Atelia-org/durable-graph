@@ -17,7 +17,7 @@ internal sealed class P0Session {
         Catalog = new(EnsureEditingAllowed, catalog);
         _business = repository.GetStateHead(branch) is { } state
             ? P0BusinessWorkspace.LoadState(repository.Store, state, models)
-            : new(models);
+            : new(repository.Store, models);
     }
 
     internal P0CatalogWorkspace Catalog { get; }
@@ -58,11 +58,12 @@ internal sealed class P0SessionSave(P0Repository repository, P0PendingSave pendi
     internal P0PreparedBusiness Business { get; } = business;
     internal P0PendingSave Pending { get; } = pending;
     internal P0SaveResult Commit() {
-        try { return repository.Commit(Pending, Catalog.Install, Business.Install); }
+        if (!Pending.IsPrepared) { throw new InvalidOperationException("The typed save is already committing or resolved."); }
+        try { return repository.Commit(Pending, Catalog.Install, Business.Install, Catalog.PrepareInstall, Business.PrepareInstall); }
         finally { Business.Dispose(); }
     }
     public void Dispose() {
-        try { Pending.Dispose(); }
-        finally { Business.Dispose(); }
+        Pending.Dispose();
+        Business.Dispose();
     }
 }

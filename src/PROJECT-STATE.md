@@ -19,13 +19,13 @@
 
 ## 当前焦点
 
-[DB-087 P1c 首片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核) 已完成共同业务规划内核与完整源码回归；实际落点、计量见证和结果集中 §20。P1b 有限停点保留 §19，历史 §10–19 原范围不变；整个 P1c 未完成。
+[DB-087 P1c 第二片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#21-p1c-第二片normalized-保存材料与发布前安装准备) 已完成共享 normalized 保存材料、实际 heads/H 与发布前安装准备，并通过完整源码回归；问题／实现／证据集中 §21。首片共同规划保留 §20，P1b 有限停点保留 §19，整个 P1c 未完成。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型，当前 ABI5／员工 DTO V1。完整 source lookup 在引用检查后／Normalize 前；长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 保留 State 基线与 rewrite。准确 source／selected／target view、操作内 memo 和有限 meta 员工白名单保持。
-两 adapter 已共用 `ClassifyCaptured`／`PlanObjectWrites`，各自保真实 typed 编码和全部来源前检；内核不查 Store/Schema、不碰发布／安装。下一片先共享完整 normalized 保存材料、实际对象 heads／H 和 publish 前安装准备，保留薄 backend adapter／owner；再合一份业务 workspace，之后整合公开 owner/history／Pair／缓存。后继均未实施，依赖和三个具体待决接缝集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1。
+两 adapter 共用业务规划及 normalized 候选／实际安装材料；冷来源由 `ReadSplit` 自行读取准确 S 和冻结模型签发，完整成员检查含将 Remove 的行。meta／State 安装准备在发布前完成，typed Commit/Dispose 拒绝重入不再释放外层 Capture。下一片合一份业务 workspace 的 models/capture/baseline/root 与候选寿命，保两薄 backend adapter／owner；随后接公开 owner/history／Pair／缓存。后继均未实施，施工顺序、最小验收与待决接缝集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1。
 公开 Repository／SCB1／raw map 仍为 DB-086 路径，P1c–d／P2 未切换；P1d 初始化／ProcessCrashOnly／真实包门禁通过后默认切换并删除旧路径，P2 再接显式 private。无旧数据／旧 API 兼容负担，最终产品简单优先，不把未穷举组合追加为 P1b 前置。
-本片起点 `10ab041`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+本片起点 `2331051`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
-本轮共同 planner 生产改动已通过 build＋完整 source solution tests；wire／SG／交付边界未变，无新包资格，最后 assets 为 source mode。按[依赖指南](../docs/storage-dependency.md)显式 source restore，不把历史数字相加当实跑。下述既有公开基线保持。
+本片已通过 solution build、定向与完整 source solution tests，并由主线和独立持久审查验收，结果集中 §21。wire／SG／交付边界未变，无新包或进程崩溃资格，最后 assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。

@@ -127,7 +127,7 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
         using P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(RootSchema(kind)), new PreparedBaseBody([2]), prepared.View)),
                 ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(layout, body, prepared.View))]), prepared.Write);
-        return repository.Commit(pending, prepared.Install).Business.Address;
+        return repository.Commit(pending, prepared.Install, prepareMeta: prepared.PrepareInstall).Business.Address;
     }
 
     private static P0DecodedRows AssertStoredSource(P0Repository reader, FrameAddress source, StateModelRegistry models, string kind) {

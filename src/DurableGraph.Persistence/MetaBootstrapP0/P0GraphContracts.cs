@@ -48,10 +48,11 @@ internal readonly record struct P0GraphMetadata(P0GraphKind Kind, FrameAddress? 
 
 internal sealed class P0GraphSnapshot {
     internal P0GraphSnapshot(FrameAddress address, P0GraphMetadata metadata, FrameAddress? sourceGraph,
-        IReadOnlyDictionary<uint, FrameAddress> objects) {
+        IReadOnlyDictionary<uint, FrameAddress> objects, P0GraphStore? sourceOwner = null) {
         Address = address;
         Metadata = metadata;
         SourceGraph = sourceGraph;
+        SourceOwner = sourceOwner;
         Objects = new FrozenSortedDictionary<uint, FrameAddress>(new SortedDictionary<uint, FrameAddress>(
             objects.ToDictionary(static pair => pair.Key, static pair => pair.Value)));
     }
@@ -65,6 +66,7 @@ internal sealed class P0GraphSnapshot {
     internal FrameAddress? SchemaRoot => Metadata.SchemaRoot;
     internal FrameAddress? OwnedBatch => Metadata.OwnedBatch;
     internal FrameAddress? SourceGraph { get; }
+    internal P0GraphStore? SourceOwner { get; }
     internal IReadOnlyDictionary<uint, FrameAddress> Objects { get; }
     internal IReadOnlyDictionary<uint, FrameAddress> Heads => Objects;
 }

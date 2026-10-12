@@ -7,25 +7,21 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 /// <summary>Real Capture producer; the P0 graph writer receives only selected records and Removes.</summary>
 internal sealed class P0BusinessWorkspace {
+    private readonly P0GraphStore _store;
     private readonly StateModelSnapshot _models;
     private readonly CaptureSession _capture;
-    private IReadOnlyDictionary<ObjectId, ObjectStateRecord> _rows;
-    private IReadOnlyDictionary<ObjectId, long> _h;
-    private IReadOnlySet<ObjectId> _rewrite;
+    private NormalizedRevision? _baseline;
 
-    internal P0BusinessWorkspace(StateModelRegistry models)
-        : this(models.Snapshot(), new(), null, new Dictionary<ObjectId, ObjectStateRecord>(),
-            new Dictionary<ObjectId, long>(), new HashSet<ObjectId>(), null) { }
+    internal P0BusinessWorkspace(P0GraphStore store, StateModelRegistry models)
+        : this(store, models.Snapshot(), new(), null, null, null) { }
 
-    private P0BusinessWorkspace(StateModelSnapshot models, CaptureSession capture,
-        P0GraphSnapshot? source, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
-        IReadOnlyDictionary<ObjectId, long> h, IReadOnlySet<ObjectId> rewrite, IDurableObject? state) {
+    private P0BusinessWorkspace(P0GraphStore store, StateModelSnapshot models, CaptureSession capture,
+        P0GraphSnapshot? source, NormalizedRevision? baseline, IDurableObject? state) {
+        _store = store;
         _models = models;
         _capture = capture;
         Source = source;
-        _rows = rows;
-        _h = h;
-        _rewrite = rewrite;
+        _baseline = baseline;
         State = state;
     }
 
@@ -51,79 +47,60 @@ internal sealed class P0BusinessWorkspace {
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentNullException.ThrowIfNull(catalog);
         try {
+            if (Source?.Address != _baseline?.RevisionAddress) { throw new InvalidDataException("State source and normalized baseline must agree."); }
+            _baseline?.RequireSplitSource(_store, _models);
             CapturedGraph candidate = capture.Candidate;
-            IReadOnlyList<PreparedCapturedObject> prepared = _capture.PrepareAgainst(candidate, _rows);
+            IReadOnlyList<PreparedCapturedObject> prepared = _baseline is null ? _capture.Prepare(candidate).Objects
+                : _capture.PrepareAgainst(candidate, _baseline.CurrentDtos);
             List<PreparedObject> rows = [];
             foreach (PreparedCapturedObject item in prepared) {
                 EncodedBaseObjectBody body = new(P0TypedBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog));
                 rows.Add(ObjectRevisionPlanner.ClassifyCaptured(item, body,
                     item.Previous is null ? null : Source!.Objects[item.Current.Id.Value],
-                    _rewrite.Contains(item.Current.Id)));
+                    _baseline is not null && _baseline.Objects.TryGetValue(item.Current.Id, out NormalizedObject? prior) && prior.RequiresRewrite));
             }
             // Keep the existing full post-live Base budget. P0 does not claim total O(k).
-            var (records, estimates, _) = ObjectRevisionPlanner.PlanObjectWrites(rows, _h, parameters ?? new(5, 5));
-            Dictionary<ObjectId, long> nextH = estimates.Where(static estimate => estimate.ReconstructionPayloadBytes is not null)
-                .ToDictionary(static estimate => estimate.ObjectId, static estimate => estimate.ReconstructionPayloadBytes!.Value);
-            foreach (ObjectVersionRecord record in records) {
-                ObjectId id = new(record.ObjectId);
-                long bytes = record.Kind == ObjectVersionKind.Base
-                    ? ObjectVersionPayloadSize.GetBasePayloadBytes(record.Body.Length)
-                    : ObjectVersionPayloadSize.GetDeltaPayloadBytes(record.Body.Length, record.PriorAddress!.Value);
-                nextH[id] = record.Kind == ObjectVersionKind.Base ? bytes : checked(_h[id] + bytes);
-            }
-            Dictionary<ObjectId, ObjectStateRecord> nextRows = candidate.Objects.ToDictionary(static row => row.Id);
-            uint[] removed = _rows.Keys.Where(id => !nextRows.ContainsKey(id)).Select(static id => id.Value).ToArray();
-            return new(this, capture.Context, candidate, capture.Root,
-                new(Source?.Address, capture.RootId, records, removed), nextRows, nextH);
+            Dictionary<ObjectId, long> priorH = _baseline?.Objects.ToDictionary(static pair => pair.Key,
+                static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes) ?? [];
+            var (records, _, _) = ObjectRevisionPlanner.PlanObjectWrites(rows, priorH, parameters ?? new(5, 5));
+            NormalizedRevision next = NormalizedRevision.FromSplitCandidate(candidate, _models, _store, _baseline);
+            uint[] removed = _baseline?.Objects.Keys.Where(id => !next.Objects.ContainsKey(id)).Select(static id => id.Value).ToArray() ?? [];
+            return new(this, _store, capture.Context, candidate, capture.Root,
+                new(Source?.Address, capture.RootId, records, removed), next, catalog);
         } catch {
             capture.Dispose();
             throw;
         }
     }
 
-    internal void Install(P0PreparedBusiness prepared, P0GraphSnapshot graph,
-        CapturedGraph candidate, IDurableObject root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
-        IReadOnlyDictionary<ObjectId, long> h) {
+    internal void PrepareInstall(P0PreparedBusiness prepared, P0GraphSnapshot graph) {
         if (graph.Kind != P0GraphKind.State || graph.RootId != prepared.Write.RootId || graph.SourceGraph != Source?.Address) {
             throw new InvalidOperationException("Only the prepared State can install the business baseline.");
         }
+    }
+
+    internal void Install(P0GraphSnapshot graph, CapturedGraph candidate, IDurableObject root, NormalizedRevision baseline) {
         _capture.Accept(candidate);
         Source = graph;
         State = root;
-        _rows = rows;
-        _h = h;
-        _rewrite = EmptyRewrite;
+        _baseline = baseline;
     }
-
-    private static readonly IReadOnlySet<ObjectId> EmptyRewrite = new HashSet<ObjectId>();
 
     internal static P0BusinessWorkspace LoadState(P0GraphStore store, FrameAddress state,
         StateModelRegistry models) {
-        var source = Decode(store, state, models);
-        if (source.Rows.Snapshot.Kind != P0GraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
+        P0GraphSnapshot graph = store.ReadGraph(state);
+        if (graph.Kind != P0GraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
+        DecodedRevision source = DecodedRevision.ReadSplit(store, state, models);
         MaterializedGraph<IDurableObject> restored = GraphReader.Read<IDurableObject>(
-            source.Rows.ToDecodedRevision(), source.Rows.Snapshot.RootId, new(source.Models));
-        Dictionary<ObjectId, long> h = source.Rows.Storage.ToDictionary(static pair => pair.Key, static pair => pair.Value.ReconstructionPayloadBytes);
-        HashSet<ObjectId> rewrite = restored.Baseline.Objects.Values.Where(static row => row.RequiresRewrite)
-            .Select(static row => row.Current.Id).ToHashSet();
-        return new(source.Models, restored.CreateCaptureSession(), source.Rows.Snapshot,
-            restored.Baseline.CurrentDtos, h, rewrite, restored.Root);
+            source, graph.RootId, new(source.SourceModels!));
+        restored.Baseline.RequireSplitSource(store, source.SourceModels!);
+        return new(store, source.SourceModels!, restored.CreateCaptureSession(), graph, restored.Baseline, restored.Root);
     }
 
     internal static IDurableObject ReadRoot(P0GraphStore store, FrameAddress graph, StateModelRegistry models) {
-        var source = Decode(store, graph, models);
-        return GraphReader.ReadRoot<IDurableObject>(source.Rows.ToDecodedRevision(), source.Rows.Snapshot.RootId, new(source.Models));
-    }
-
-    private static (P0DecodedRows Rows, StateModelSnapshot Models) Decode(P0GraphStore store,
-        FrameAddress graph, StateModelRegistry models) {
         P0GraphSnapshot metadata = store.ReadGraph(graph);
-        if (metadata.Kind == P0GraphKind.Meta || metadata.SchemaRoot is not { } schemaRoot) {
-            throw new InvalidDataException("A typed business graph requires its exact meta root.");
-        }
-        P0CatalogView selected = P0CatalogView.Load(store, schemaRoot);
-        StateModelSnapshot snapshot = models.Snapshot(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
-        return (P0TypedReader.Read(store, graph, snapshot, selected), snapshot);
+        DecodedRevision source = DecodedRevision.ReadSplit(store, graph, models);
+        return GraphReader.ReadRoot<IDurableObject>(source, metadata.RootId, new(source.SourceModels!));
     }
 }
 
@@ -136,10 +113,41 @@ internal sealed class P0BusinessCapture(CaptureContext context, CapturedGraph ca
     public void Dispose() => Context.Dispose();
 }
 
-internal sealed class P0PreparedBusiness(P0BusinessWorkspace owner, CaptureContext context,
-    CapturedGraph candidate, IDurableObject root, P0PreparedGraphWrite write,
-    IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows, IReadOnlyDictionary<ObjectId, long> h) : IDisposable {
-    internal P0PreparedGraphWrite Write { get; } = write;
-    internal void Install(P0GraphSnapshot graph) => owner.Install(this, graph, candidate, root, rows, h);
-    public void Dispose() => context.Dispose();
+internal sealed class P0PreparedBusiness : IDisposable {
+    private readonly P0BusinessWorkspace _owner;
+    private readonly P0GraphStore _store;
+    private readonly CaptureContext _context;
+    private readonly CapturedGraph _candidate;
+    private readonly IDurableObject _root;
+    private readonly NormalizedRevision _next;
+    private readonly P0CatalogView _catalog;
+    private NormalizedRevision? _installation;
+    private P0GraphSnapshot? _graph;
+
+    internal P0PreparedBusiness(P0BusinessWorkspace owner, P0GraphStore store, CaptureContext context,
+        CapturedGraph candidate, IDurableObject root, P0PreparedGraphWrite write, NormalizedRevision next, P0CatalogView catalog) {
+        _owner = owner;
+        _store = store;
+        _context = context;
+        _candidate = candidate;
+        _root = root;
+        Write = write;
+        _next = next;
+        _catalog = catalog;
+    }
+
+    internal P0PreparedGraphWrite Write { get; }
+    internal void PrepareInstall(P0GraphSnapshot graph) {
+        if (_installation is not null) { throw new InvalidOperationException("This business installation is already prepared."); }
+        _owner.PrepareInstall(this, graph);
+        _installation = _next.WithSplitGraph(_store, graph, Write.Records, _catalog);
+        _graph = graph;
+    }
+    internal void Install(P0GraphSnapshot graph) {
+        NormalizedRevision installation = _installation ?? throw new InvalidOperationException("Prepare the business installation before publication.");
+        if (!ReferenceEquals(_graph, graph)) { throw new InvalidOperationException("Only the prepared graph can consume this installation."); }
+        _owner.Install(graph, _candidate, _root, installation);
+        _installation = null;
+    }
+    public void Dispose() => _context.Dispose();
 }

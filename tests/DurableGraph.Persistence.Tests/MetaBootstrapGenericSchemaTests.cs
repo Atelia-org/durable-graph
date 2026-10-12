@@ -195,7 +195,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         byte[] body = P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), raw, catalog.View);
         using P0PendingSave pending = repository.Prepare(branch, P0GraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)]), catalog.Write);
-        return repository.Commit(pending, catalog.Install);
+        return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall);
     }
 
     private static PreparedBaseBody UnsignedBody(ushort value) {

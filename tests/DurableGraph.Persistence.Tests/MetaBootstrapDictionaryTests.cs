@@ -331,7 +331,8 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
     }
     private static P0GraphSnapshot Publish(P0Repository repository, string branch, IEnumerable<ObjectVersionRecord> records, P0PreparedCatalog? catalog = null) {
         using P0PendingSave pending = repository.Prepare(branch, P0GraphKind.State, new(null, new(1), records), catalog?.Write);
-        return repository.Commit(pending, catalog is null ? null : catalog.Install).Business;
+        return repository.Commit(pending, catalog is null ? null : catalog.Install,
+            prepareMeta: catalog is null ? null : catalog.PrepareInstall).Business;
     }
     private sealed class SingleBody(byte[] body) : IStateBodySource {
         public int Count => 1;

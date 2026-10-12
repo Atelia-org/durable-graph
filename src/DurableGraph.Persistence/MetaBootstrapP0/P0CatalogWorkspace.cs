@@ -92,9 +92,16 @@ internal sealed class P0CatalogWorkspace {
         _accepted = accepted;
     }
 
-    internal void Accept(P0PreparedCatalog candidate, P0GraphSnapshot graph) {
+    internal void PrepareInstall(P0PreparedCatalog candidate, P0GraphSnapshot graph) {
+        if (graph.Kind != P0GraphKind.Meta || graph.SourceOwner is null || graph.RootId != candidate.View.RootId ||
+            graph.Objects.Count != candidate.View.Rows.Count || candidate.View.Rows.Keys.Any(id => !graph.Objects.ContainsKey(id.Value))) {
+            throw new InvalidDataException("Catalog installation must use its actual complete meta graph.");
+        }
         if (candidate.View.Snapshot is null) { candidate.View.AttachSnapshot(graph); }
         if (candidate.View.Snapshot!.Address != graph.Address) { throw new InvalidOperationException("Catalog installation must use its actual graph."); }
+    }
+
+    internal void Accept(P0PreparedCatalog candidate) {
         _accepted = candidate.View;
         _schemas.Clear();
         _containers.Clear();
@@ -252,11 +259,21 @@ internal sealed class P0CatalogWorkspace {
 internal sealed class P0PreparedCatalog(P0CatalogWorkspace owner, P0CatalogView view,
     P0PreparedGraphWrite? write, int addedDescriptors, IEnumerable<ObjectId> encodedIds,
     IEnumerable<ObjectId>? acceptedDescriptors = null) {
+    private P0GraphSnapshot? _installation;
     internal P0CatalogView View { get; } = view;
     internal P0PreparedGraphWrite? Write { get; } = write;
     internal int AddedDescriptors { get; } = addedDescriptors;
     internal IReadOnlyList<ObjectId> EncodedIds { get; } = new FrozenList<ObjectId>(encodedIds);
     internal int EncodedRows => EncodedIds.Count;
     internal int EncodedAcceptedDescriptors => EncodedIds.Intersect(acceptedDescriptors ?? []).Count();
-    internal void Install(P0GraphSnapshot graph) => owner.Accept(this, graph);
+    internal void PrepareInstall(P0GraphSnapshot graph) {
+        if (_installation is not null) { throw new InvalidOperationException("This catalog installation is already prepared."); }
+        owner.PrepareInstall(this, graph);
+        _installation = graph;
+    }
+    internal void Install(P0GraphSnapshot graph) {
+        if (!ReferenceEquals(_installation, graph)) { throw new InvalidOperationException("Prepare the catalog installation before publication."); }
+        owner.Accept(this);
+        _installation = null;
+    }
 }

@@ -85,7 +85,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         byte[] rootBody = P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(root), new PreparedBaseBody([0]), initial.View);
         using (var pending = repository.Prepare("main", P0GraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, rootBody)]), initial.Write)) {
-            repository.Commit(pending, initial.Install);
+            repository.Commit(pending, initial.Install, prepareMeta: initial.PrepareInstall);
         }
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
         long frames = repository.Store.AppendedFrames;

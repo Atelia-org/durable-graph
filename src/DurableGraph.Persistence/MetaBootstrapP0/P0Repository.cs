@@ -134,7 +134,8 @@ internal sealed class P0Repository : IDisposable {
     }
 
     internal P0SaveResult Commit(P0PendingSave pending,
-        Action<P0GraphSnapshot>? installMeta = null, Action<P0GraphSnapshot>? installState = null) {
+        Action<P0GraphSnapshot>? installMeta = null, Action<P0GraphSnapshot>? installState = null,
+        Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null) {
         EnsureAvailable();
         ArgumentNullException.ThrowIfNull(pending);
         if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
@@ -161,6 +162,9 @@ internal sealed class P0Repository : IDisposable {
             P0GraphSnapshot business = Store.Append(pending.Kind, parent, schemaRoot, pending.Business);
             candidate = business.Address;
             Checkpoint?.Invoke(P0SaveCheckpoint.AfterBusinessAppend);
+            EnsureAvailable();
+            if (selectedMeta is not null) { prepareMeta?.Invoke(selectedMeta); }
+            if (pending.Kind == P0GraphKind.State) { prepareState?.Invoke(business); }
             EnsureAvailable();
 
             // Prepare all DG result/install material before crossing the publication boundary.

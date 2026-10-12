@@ -136,7 +136,7 @@ internal sealed class P0GraphStore : IDisposable {
         // Shallow external-head declarations stay shallow. These checks do not
         // reconstruct old Delta chains or authenticate global entity history.
         foreach ((uint id, FrameAddress head) in heads) { _ = FindRecord(ReadBatch(head), id); }
-        return new(address, metadata, source, heads);
+        return new(address, metadata, source, heads, this);
     }
 
     internal P0GraphMetadata ReadMetadata(FrameAddress address) {

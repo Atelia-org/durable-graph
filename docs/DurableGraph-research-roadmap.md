@@ -212,7 +212,7 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
 员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
-[P1c 首片](design-branches/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核) 已完成共同业务规划及完整源码回归，两 adapter 保真实 typed 编码和来源前检，未合workspace/owner或公开切换。下一片先共享完整 normalized 保存材料、actual-head installation／publish 前准备，保薄 backend adapter／owner；再合唯一业务 workspace，之后接公开 owner/history 和 Pair／缓存，均未实施。三个局部待决合同、依赖与最小验收集中 DB-087 §6.3／7.1；P1d 完成初始化／ProcessCrashOnly／真实包门禁后默认切换，P2 再接 private，不将无具体差异的组合追加为前置。
+[P1c 首片](design-branches/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核) 已验共同业务规划；[第二片](design-branches/0087-meta-bootstrap-refactoring-route.md#21-p1c-第二片normalized-保存材料与发布前安装准备) 已验共享 normalized 保存材料、实际 heads/H 与发布前安装准备，保两 workspace／owner。下一片合唯一业务 workspace 的 models/capture/baseline/root 和候选寿命，再接公开 owner/history、Pair／缓存，均未实施。候选／两种写计划的薄返回壳、history 诊断地址与缓存 view/model 资格留对应片裁决，依赖与最小验收集中 DB-087 §6.3／7.1；P1d 完成初始化／ProcessCrashOnly／真实包门禁后默认切换，P2 再接 private，不将无具体差异的组合追加为前置。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
 P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存／操作内复用归 P1c，不由本观察宣称性能量级或本片优化，记录见 DB-087 §12。
