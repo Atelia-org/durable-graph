@@ -63,7 +63,14 @@ P1b 第五片 Dictionary 双槽与 source lookup 已完成源码与隔离包验�
 D5复用 Type＋有序 Key1/Value2 Fields，Version0、Element/Base空、codec1；ABI5明确 Dictionary1/List2/Array1、拒旧4，DTO仍V1。
 完整引用检查后、Normalize 前验证所有 stored Dictionary lookup；current lookup 不代 source，Root Nullable key 仍由 body/binding KeyPolicy准入。
 真实 SG builtin／inline双槽 Dictionary cold、Remove/Patch/Add Delta、独立阶段反例、完整源码回归和四进程组合包均已验，模型范围分开记录。
-后继按 §6.3 的有限历史／泛型／跨程序集矩阵收尾，P1c/d/P2保持后续边界。
+该片保留历史范围，P1c/d/P2保持后续边界。
+
+P1b 第六片已完成真实 history 容器值规则的限定源码资格，问题与证据见
+[DB-087 §17](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#17-p1b-第六片真实-history-容器-upgrade)。
+Root＋Array/List/Dictionary 共四对象，Key/Point/Grade V1→V2，Grade byte→ushort 经 Point 局部依赖；Root同Schema、Self/alias保持。
+沿现有 ABI5／DTO V1，readonly零写、Discard/E1/E2保留State rewrite、容器Base→Delta和独立11边界均已通过。
+本片仅新增测试、生产/wire/history与SG ABI/交付未变，build＋新12用例记证；未跑完整回归或包，无新增包资格，最后assets为source。
+后继多参／泛型继承current和有限provider history端点、跨程序集按§6.3矩阵；完整P1b/P1c/d/P2未完成。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

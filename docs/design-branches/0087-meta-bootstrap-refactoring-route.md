@@ -1,7 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图的就地重构路线
 
-> 更新：2026-10-12。状态：**P0、P1a 与 P1b 前五个限定片已验证；完整类型／历史组合能力与公开切换仍待后续 P1b/P1c/P1d**。
-> 已完成的证据保留第 10–15 节；本轮 ABI5、双槽 descriptor 和 source lookup 的选择／最小验收见[第 16 节](#16-p1b-第五片dictionary-双槽与-source-lookup)。代码去向、后续依赖和待决问题见第 6、7 节。
+> 更新：2026-10-12。状态：**P0、P1a 与 P1b 前六个限定片已验证；完整 P1b 与公开切换仍待后续**。
+> 历史证据保留第 10–16 节；第六片的真实 history 容器 Upgrade 源码资格见[第 17 节](#17-p1b-第六片真实-history-容器-upgrade)。本轮仅新增测试，无新包／完整回归资格；后续依赖和待决问题见第 6、7 节。
 > 公开产品基线仍是 [DB-086](0086-new-storage-implementation.md)。P1 公开切换、P2 private 未实施；内部 API/wire 未冻结。
 > 用户明确无旧数据／旧 API 兼容负担；简单性按最终产品衡量，施工过程允许复杂。裁决与下一片见[第 9 节](#9-本轮裁决与下一片实验)。
 
@@ -339,13 +339,13 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 <a id="63-p1b-首片续工入口"></a>
 ### 6.3 P1b 后续续工入口
 
-已提交基线为 P0 `12f3eb2`、P1a `2740bf1`、P1b 首片 `a6f1797`、第二片 `e5e7ac1`、第三片 `93f5120`、Array 第四片 `9f6454e`；各片证据保留于第 10–15 节。续工核对实际 HEAD／工作树，读取 PROJECT-STATE、本节和 §7.1，不把 current V1 闭包当完整历史 Upgrade 资格。
+已提交基线为 P0 `12f3eb2`、P1a `2740bf1`、P1b 首片 `a6f1797`、第二片 `e5e7ac1`、List `93f5120`、Array `9f6454e`、Dictionary `e216053`；证据保留第 10–16 节。续工核对实际 HEAD／工作树，读取 PROJECT-STATE、本节和 §7.1，不把 current V1 闭包当完整历史 Upgrade 资格。
 
-当前[第五片 Dictionary](#16-p1b-第五片dictionary-双槽与-source-lookup) 已完成源码与隔离包验收，问题、D5／ABI5 和完整引用检查后／Normalize 前 source lookup 的证据只记录于 §16。下一片用下述有限代表矩阵收尾 P1b；这是续工建议，模型与分片验收须主线再裁决，不是无限组合平台。
+当前[第六片](#17-p1b-第六片真实-history-容器-upgrade) 已完成真实 history 容器值规则 Upgrade 的限定源码资格；四对象模型、Grade 宽度端点与运行证据只记录于 §17。下一片移接多参／泛型继承 current 和有限 provider history 端点；跨程序集及必要合同差异随后自然分片，不把当前见证扩成全部组合平台。
 
 | 建议顺序与可执行入口 | 最低观察／明确未覆盖 |
 |---|---|
-| **先：真实 history 的容器值规则 Upgrade**。Root 保留 `Point?[]`／`List<Point?>`／`Dictionary<Key,Point?>`，独立 SG V1/V2 和 accepted history 让 Key/Point exact 升版，显式选择 Array/List/key/value 规则及 Nullable lifting。复用 [ArrayUpgradeTests](../../tests/DurableGraph.Tests/ArrayUpgradeTests.cs)、[ListUpgradeTests](../../tests/DurableGraph.Tests/ListUpgradeTests.cs)、[DictionaryUpgradeTests](../../tests/DurableGraph.Tests/DictionaryUpgradeTests.cs) 与 [P1a history driver](../../tests/DurableGraph.Tests/MetaBootstrapUpgradeGeneratorTests.cs) | old meta／DTO 准确，readonly Upgrade 不发布；三个容器按 source→current 端点 Normalize，保 ID／shape／count／comparer。Event/Discard 保留 rewrite，首 State 写新 Base，随后局部修改可 Delta；即使空／absent 也预绑定能力，缺任一必要规则在该 owner 首次 callback 前拒绝，不许诺全图零 callback。对一个值规则端点选 enum 宽度变化，复用 [EnumUpgradeTests](../../tests/DurableGraph.Tests/EnumUpgradeTests.cs)；不扩相邻路径搜索、自动规则发现或所有数值迁移 |
+| **已完成：真实 history 容器值规则代表**，第六片来源和精确边界见 §17 | 最小四对象模型中 Key/Point/Grade 升版、readonly 零写、Event/Discard 保留 rewrite、容器 Base→Delta 已证实。独立新边界只验缺 Point／target Point 冲突与 Key canonical collision，不由此宣称所有缺规则组合；泛型／跨程序集仍未由本片覆盖 |
 | **再：多参数／泛型继承 current 图**。移接 [GenericGeneratedStateTests](../../tests/DurableGraph.Tests/GenericGeneratedStateTests.cs) 的 `Derived<T,U>:Base<U>`、inline 与共享引用模型到共同持久入口；两个不同 closed 实例及有序实参 | 无业务注册 cold meta 的完整 base／inline／实参身份；真实 SG 冷图与 Base→Delta／NoChange，错误闭合／完整 Schema 拒绝。不以 current 图代验泛型历史：开放／特例 provider 另取 [GenericUpgradeBindingTests](../../tests/DurableGraph.Tests/GenericUpgradeBindingTests.cs) 的最小 history 端点，缺规则／错误实参拒绝 |
 | **随后：跨程序集与剩余合同门槛**。以 [CrossAssemblyInheritanceGraphTests](../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGraphTests.cs) 的 hidden generic base／middle／leaf 或 [真实包消费者](../../experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md) 为入口，保留独立程序集和真实导入模板 | P0 入口 cold meta／业务、继承状态、身份和整 leaf Delta；模板导入／包边界变化时完成隔离包见证。按已有 [CompositeDictionaryUpgradeTests](../../tests/DurableGraph.Tests/CompositeDictionaryUpgradeTests.cs) 等合同补必要 comparer／canonical collision、rank3/4 或嵌套组合拒绝，列出已覆盖与剩余差异，不再枚举笛卡尔积 |
 
@@ -354,7 +354,7 @@ P1b 停点是当前支持的类型都能准确描述／解码，各类新持久�
 
 继续按 bounded-delegation 分开生产闭包、真实 SG 消费者、独立反例与包验证，主线裁决接口、统一验收并同步本地提交。先前约 8–13 轮的量级估计是实施前的滚动估计，不是剩余轮数或验收承诺；后续以本片实际工作与新反例重估。完整范围仍为第 6.2 节 P0–P2，条件片按触发条件延期。
 
-第五片最后 package pack 已更新根 assets；下一轮 source 验证先按[存储依赖指南](../storage-dependency.md)显式 source restore，再用 `--no-restore` build/test，不能混用 package 输出。
+第六片只新增测试，生产／wire／history和SG ABI／包交付边界未变，没有 pack 或新 PackageReference 资格；最后 assets 为 source mode。下一轮仍按[存储依赖指南](../storage-dependency.md)核对模式并显式 restore，不混用输出。
 
 ## 7. 决定性验证与未冻结的细节
 
@@ -369,11 +369,12 @@ P1b 停点是当前支持的类型都能准确描述／解码，各类新持久�
 | current/Upgrade target view 的冻结与闭合 | 所选 S 的只读 lookup 约束冻结代码能力；允许缺目标定义，已有异形仍拒绝。target 无持久编号，真实 Save 在 owner guard 内按实际 Capture 布局准备 catalog，origin Base 不借 current/latest 补缺 | **P1a 有限闭包已落实**；完整闭包由 P1b、公开接线由 P1c 验收 |
 | catalog 长期 dirty 与自动依赖的边界 | 长期只留手工 Set 的最终 root 意图；`PrepareOwned(capturedLayouts)` 临时收集完整闭包，自动依赖不计长期 dirty。Discard 保留意图／领域修改，下次 Capture 重推；Event 仍不安装 State | **P1b 首片源码已验证**；同 key 修正、共享依赖、显式 List 冲突和 Discard 见 §12，容器替换／撤销 API 未新增 |
 | 员工 records 与首片 Base 路由 | 首片时为 typed／fixed-table ABI v2，内部员工 Schema/DTO 仍 V1；Descriptor/Field/TypeExpr 强类型节点，Schema base/inline/Nullable 为构造 DAG，字段排序仅在工厂副本，按 ObjectId memo。首片精确 `List<int>` 专码由第三片 structural 路由替代；根声明含 inline，ResolveLayout 不授予 inline 对象头资格 | **P1b 首片历史证据保留于 §12**；后续 ABI 各有证据，metadata 语法不授予全部业务类型执行资格 |
-| 剩余类型执行闭包、最终 wire 与容量 | TypeExpr metadata 描述现工厂 closed constructors；代表性泛型／enum current 执行已验，其余组合、数组／Dictionary 和完整固定容器路由仍逐片验收。最终码／位宽及容量未冻结；一图一个 batch，超限清晰拒绝，不自动增加分批平台 | P1b 后续；阻塞完整当前类型能力与公开切换 |
-| 闭合泛型／enum current 执行 | 第二片用既有 ABI2／DTO V1 验真实单参数 family 的两个 closed 实例、enum/Nullable/inline 和业务 Delta；手造双有序实参／版本隔离与 exact 拒绝另有边界 | **有限 current 执行已验证**；真实 SG 多参、generic/enum Upgrade、跨程序集及 Array/Dictionary 内容未由本片授予资格 |
+| 剩余类型执行闭包、最终 wire 与容量 | List/Array/Dictionary 代表性 structural／dynamic 路由和第六片容器值规则 history 已验；剩余多参／泛型继承、泛型 provider history、跨程序集及必要组合门槛按 §6.3 收尾。最终 wire／容量未冻结，一图一个 batch、超限清晰拒绝，不自动增加分批平台 | P1b 后续仍有明确缺口；各限定片不代表完整能力或公开切换 |
+| 闭合泛型／enum current 执行 | 第二片用当时 ABI2／DTO V1 验真实单参数 family 的两个 closed 实例、enum/Nullable/inline 和业务 Delta；手造双有序实参／版本隔离与 exact 拒绝另有边界 | **第二片历史范围保留 §13**；容器及 Grade 宽度的后继 history 见 §17，真实 SG 多参／generic provider history／跨程序集仍未覆盖 |
 | builtin-only List 结构固定头与 codec 来源 | 第三片 ABI3 route 0/1/2 分有限表／动态 descriptor／structural TypeExpr；List root 全树无 Named，List codec 2 由 ABI 固定，无额外版本字段。meta 仍限有限员工表，Schema/DTO 仍 V1 | **第三片历史源码和包证据见 §14**；第四片 ABI4 保留 List2，并显式增 Array1 |
 | Array descriptor 与 structural root | D variant4 复用完整 Array TypeExpr／Element／codec1；Version0、Fields/Base 空。重建 ArrayLayout 核 Type，并独立核 exact inline；第四片 ABI4 固定 List2/Array1，shape 在 body，不增 DTO 字段或 meta 员工资格 | **第四片历史源码／包证据见 §15**；第五片保留 Array1/List2 |
 | Dictionary descriptor／root codec／source lookup | D5 Type＋有序 Key1/Value2 Fields，Version0、Element/Base 空、codec1；ABI5固定 Dictionary1/List2/Array1、拒旧4。完整引用检查后／Normalize 前核全部 stored Dictionary lookup，current lookup 不代 source；Root Nullable key 不新增 metadata 拒绝，body/binding 沿 KeyPolicy | **第五片源码与隔离包已验**；真实 cold／Delta和阶段反例见 §16，不由局部手工 Upgrade 外推完整 SG history 矩阵 |
+| 容器 history／值规则与 State rewrite | 第六片以独立 SG V1/V2 accepted history 验 Array/List/Dictionary 双端 exact 升版、Nullable、Point 局部 Grade byte→ushort 依赖；Root 同 Schema／Self／alias 保持，沿既有 source→current 规则和 Event/Discard 合同 | **仅测试的源码资格已完成，生产零改**；§17 运行新12项，未增加包／完整回归资格，多参／跨程序集等仍未覆盖 |
 | 分离 graph/batch 后的公开诊断与 typed/cache 键 | `CheckpointAddress.RevisionAddress` 目前等于合帧地址；确定新诊断字段含义，不再当对象 head。物理 owned 缓存可按同 owner 地址，typed 行、Normalize、Upgrade/State 槽须带准确 view/model 资格；命中仍验证实际视图 membership/引用 | P1c；阻塞 history/Pair/缓存整合，具体 API 与缓存条目尚未冻结 |
 | 初始化和真实崩溃/包门禁的测试宿主 | 实现第 6.2 节已选初始化合同及真实进程终止窗口，观察必要 publication refs 与 fresh owner 续写，不新增恢复协议；为准确六包 feed、独立 DG 版本准备新的 config/cache/assets 与真实 history 消费者 | P1d；宿主和具体注入接线待实施，阻塞产品资格；P0 同进程关闭重开不能替代 |
 | shared/private 的公开配置入口 | 政策已定：应用显式选择写入归属，缺策略可以读而写时拒绝，private 是完整 view；配置位置、方法和参数签名尚未确定。不得从 branch 名、地址相等或上次内存推断策略，不以 API 未定重开该政策 | P2；先显式策略/完整 fork，再接新根 all-Base 改形、完整闭包 promotion/必要重编码及两环境冷读验收 |
@@ -426,7 +427,7 @@ P1b 停点是当前支持的类型都能准确描述／解码，各类新持久�
 
 与前稿相比，明确去掉一套独立表示编号/映射、一种 membership 模式及 Event 强制目录 Base 分支，并取消新 leaf codec/tag 和通用 token/日志平台的要求。新增 OwnedBatch 是为恢复拆帧丢失的 local-record 关联，不是优化附加物。没有把简单性解释为少改旧代码。
 
-P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 的真实 V1→V2、只读 target view 和共同恢复见第 11 节；P1b 员工、代表性泛型／enum、结构 List／Array／Dictionary 见第 12–16 节。**下一片按 §6.3 的有限代表矩阵收尾 P1b**，不扩建通用 P0 平台。
+P0 已围绕这个最小问题实施：**一个真实 Widget 的共享保存，能否把 Schema descriptor 和存活 Dictionary 都交给共同 writer，经真实 refs 发布后从零 DG 缓存恢复并续写？** 运行证据见第 10 节。P1a 的真实 V1→V2、只读 target view 和共同恢复见第 11 节；P1b 员工、代表性泛型／enum、容器路由与 history 见第 12–17 节。**下一片按 §6.3 接多参／泛型继承及有限 provider 端点，再收剩余门槛**，不扩建通用 P0 平台。
 
 本轮无需新增产品语义选择。双 ref 保持原任务方向；是否后来改成单 ref、增加原分支重建或固定业务 head 的 Schema-only，只在相应目标出现时裁决。P1a 不代表完整 P1 或 P2 已完成，也不冻结实验 wire。
 
@@ -697,3 +698,24 @@ raw orphan 读取、纯 body、Prepare 和 refs cold 的证据各有范围，不
 主线对外部与复制 receipt 独立验证：10 个 Atelia 包及 host DLL SHA、pin／版本、零 ProjectReference 的 assets、唯一 cache、当前源码副本、history、四进程 evidence／PID 和所有 command exit／成功 marker 一致；另有 LZ4 传递依赖。正常关闭的四进程不代替 ProcessCrashOnly、公开迁移或 P1d。
 
 工作目录 `W:/TEMP/dg-meta-schema-package-20261012084312-30572-455d2ed0`；receipt `.artifacts/db087-p1b-dictionary-package-result.json`，SHA256 `11037A8D55390B51A5D58F3082F0469F02863D211A7E0F4BFAB2408F068FE168`；完整日志 `.artifacts/db087-p1b-dictionary-package.log`，SHA256 `BC23B52607CA70F2930A1963C80CE9DD810030AC691C44F09B47ED9F156E553F`。本片只授内部 Dictionary 双槽／fixed与dynamic路由／source lookup 的限定源码与包资格，完整 P1b 与 P1c/d/P2 未完成。
+
+## 17. P1b 第六片：真实 history 容器 Upgrade
+
+### 17.1 问题、范围与最小验收
+
+本片问题：**经过真实 SG／accepted history 的 Key、Point、Grade V1→V2 能否在旧 meta 准确解释下升级 Array/List/Dictionary，并保持 readonly 零写与 Event/Discard 的 State rewrite，首 State 写新 Base 后继续 Delta？** 本片仅新增测试，生产零改，限定源码资格已通过。
+
+选一个四对象模型：Root＋`Point?[]`＋`List<Point?>`＋`Dictionary<Key,Point?>`；Root 的 Schema、Self／alias 保持，Key／Point exact 升版，Grade byte→ushort 作为 Point 规则的局部依赖，不另开 enum 对象或泛型矩阵。独立编译真实 V1/V2，Publish／Verify accepted history 并保留旧文件／hash；历史 DTO／body 不手造。显式选择 Array/List/key/value 值规则和 Nullable lifting，复用既有 source→current 端点，不扩相邻路径搜索或自动规则发现。
+
+最小可观察验收：关闭全部资源后无业务注册 cold 读旧 meta／exact 布局，再用 V2 能力恢复完整值、ID／shape／count／comparer、Self／alias；readonly 不追加、不改 refs 或文件。三个容器标 rewrite、Root head 保留；Discard 不安装，Event 可接受 meta 但不消费 State rewrite，首个 State 对升级容器强制 Base，后续同布局局部修改写真 Delta／准确 prior，旧／新历史再次 fresh 读取。独立负例先验空／全 absent 的缺 Point 规则预绑定、present Dictionary 缺 Point 时 key/value callback 不运行、target Point 冲突和 Key 升级 canonical collision；缺 Key／Grade 规则或关闭 Nullable lifting 的全部组合未纳入本片新增资格。按该 owner 观察失败，不要求其他 owner 回调计数为零；Grade 局部依赖与 lifting 的成功由 SG 正向验收。
+
+### 17.2 实证与准确边界
+
+| 已证实 | 见证与层次 |
+|---|---|
+| 真实 SG／accepted history 的容器 Upgrade | [ContainerUpgrade 消费者](../../tests/DurableGraph.Tests/MetaBootstrapContainerUpgradeGeneratorTests.cs)：独立 V1/V2 四对象、三个 128 项容器，Root 保持 V1，Key/Point int→long，Grade byte→ushort，经 Point 局部依赖把合法 unknown233 显式转为1233，Nullable lifting 成功。初四 Schema／七 descriptor，终七 Schema／十三 descriptor；当前 host 按完整历史 Key/Point V1 DTO 解真实 source bytes 且 callback 为零。readonly 全文件 SHA／refs 不变；Discard/E1/E2 不消费 rewrite，逐 Event 核 GetHead／GetStateHead／SharedRoot／Accepted.Snapshot 并读回两 ref payload；首 State 三新 Base，后继默认预算三真 Delta／准确 prior，Root 旧 head、Self／alias、comparer语义保持。最终 NoChange 复用目录，fresh 读全部 old/new State/Event |
+| 11 项独立拒绝与控制 | [ContainerUpgradeTests](../../tests/DurableGraph.Persistence.Tests/MetaBootstrapContainerUpgradeTests.cs)：三个容器×empty／all absent 的缺 Point 规则六项；present Dictionary 缺 value 规则一项，失败 key/value callback 为零，合法控制各二；target PointV2 exact 冲突三项；Dictionary Key 升级 canonical collision 一项。采用真实 P0 source／refs 关闭后的 cold 入口，与 SG 正向分别记证；不宣称新测缺 Key/Grade 或关闭 lifting 的全部组合 |
+
+显式 source restore 与准确上游 pin 后，最终 solution build **exit 0、0 警告、0 错误**；独立 **11/11** 已于 `.artifacts/db087-p1b-container-upgrade-targeted-2.log` 通过且文件随后未改，最终 SG **1/1** 经 `.artifacts/db087-p1b-container-upgrade-generator-final.log` 复验通过；本轮共 **12 个新用例实际通过**，重复 SG 运行不累加。最终 build 日志为 `.artifacts/db087-p1b-container-upgrade-final-build.log`。本轮按测试改动运行 build＋相关新用例，未重跑完整 solution tests；§16 的 2966 保留历史，不能加12声称实跑2978。
+
+生产／wire／history和SG ABI／包交付均未变，没有新 PackageReference 验证或包资格；前轮包保原范围，最后 assets 为 source mode。本片不证明全部泛型、跨程序集、comparer 配方、rank／嵌套或所有值升级组合，后续顺序与停点只维护 §6.3／7.1。公开 P1c/d、P2、进程崩溃与性能资格均未扩张。
