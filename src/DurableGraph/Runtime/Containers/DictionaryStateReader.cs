@@ -58,6 +58,9 @@ internal sealed class DictionaryStateReader<K, V, KOps, VOps> : DictionaryStateR
     }
 }
 
+internal readonly record struct DictionaryValueChange<K, V>(K Key, V Prior, V Current)
+    where K : unmanaged where V : unmanaged;
+
 internal static class DictionaryStateBody<K, V, KOps, VOps>
     where K : unmanaged where V : unmanaged where KOps : IStateOps<K> where VOps : IStateOps<V> {
     internal static PreparedBaseBody PrepareBase(FrozenDictionaryState<K, V> state, DictionaryLayout layout) {
@@ -105,7 +108,7 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         uint removeCount = 0, patchCount = 0, addCount = 0;
         for (int index = 0; index < prior.Count; index++) {
             if (!newKeys.Offsets.ContainsKey(oldKeys.Bytes[index])) {
-                removeWriter.WriteRawBytes(oldKeys.Bytes[index]);
+                WriteRemoval(ref removeWriter, oldKeys.Bytes[index]);
                 removeCount++;
             }
         }
@@ -114,17 +117,71 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
             V value = current.Entries[index].Value;
             if (oldKeys.Offsets.TryGetValue(key, out int previous)) {
                 V oldValue = prior.Entries[previous].Value;
-                PreparedDeltaBody delta = VOps.PrepareDelta(in oldValue, in value, layout.ValueSlot);
-                if (!delta.HasChanges) { continue; }
-                patchWriter.WriteRawBytes(key);
-                patchWriter.WriteRawBytes(delta.Body);
-                patchCount++;
+                if (WritePatch(ref patchWriter, key, in oldValue, in value, layout)) { patchCount++; }
             } else {
-                addWriter.WriteRawBytes(key);
-                VOps.WriteBase(ref addWriter, in value, layout.ValueSlot);
+                WriteAddition(ref addWriter, key, in value, layout);
                 addCount++;
             }
         }
+        return CompleteDelta(removals, removeCount, patches, patchCount, additions, addCount);
+    }
+
+    /// <summary>Encodes owner-verified, reduced operations using the ordinary Dictionary Delta wire.</summary>
+    /// <remarks>
+    /// The owner proves exact prior values, Remove/Patch membership, Add absence and an unchanged comparison policy.
+    /// This emitter encodes only supplied keys and values; it does not compare complete endpoints or authenticate their provenance.
+    /// </remarks>
+    internal static PreparedDeltaBody PrepareDeltaFromOperations(DictionaryLayout layout, ReadOnlySpan<K> removed,
+        ReadOnlySpan<DictionaryValueChange<K, V>> patched, ReadOnlySpan<DictionaryEntryState<K, V>> added) {
+        ArgumentNullException.ThrowIfNull(layout);
+        HashSet<byte[]> operations = new(DictionaryKeyBytesComparer.Instance);
+        ArrayBufferWriter<byte> removals = new(), patches = new(), additions = new();
+        BareValueWriter removeWriter = new(removals), patchWriter = new(patches), addWriter = new(additions);
+        uint removeCount = 0, patchCount = 0, addCount = 0;
+        foreach (ref readonly K key in removed) {
+            byte[] encoded = EncodeKey(in key, layout);
+            RequireOperation(operations, encoded);
+            WriteRemoval(ref removeWriter, encoded);
+            removeCount++;
+        }
+        foreach (ref readonly DictionaryValueChange<K, V> change in patched) {
+            K key = change.Key;
+            byte[] encoded = EncodeKey(in key, layout);
+            // Even a no-op Patch is an input operation and must not hide a repeated key.
+            RequireOperation(operations, encoded);
+            V prior = change.Prior, current = change.Current;
+            if (WritePatch(ref patchWriter, encoded, in prior, in current, layout)) { patchCount++; }
+        }
+        foreach (ref readonly DictionaryEntryState<K, V> entry in added) {
+            K key = entry.Key;
+            byte[] encoded = EncodeKey(in key, layout);
+            RequireOperation(operations, encoded);
+            V value = entry.Value;
+            WriteAddition(ref addWriter, encoded, in value, layout);
+            addCount++;
+        }
+        return CompleteDelta(removals, removeCount, patches, patchCount, additions, addCount);
+    }
+
+    private static void WriteRemoval(ref BareValueWriter writer, ReadOnlySpan<byte> key) => writer.WriteRawBytes(key);
+
+    private static bool WritePatch(ref BareValueWriter writer, ReadOnlySpan<byte> key, in V prior, in V current,
+        DictionaryLayout layout) {
+        PreparedDeltaBody delta = VOps.PrepareDelta(in prior, in current, layout.ValueSlot);
+        if (!delta.HasChanges) { return false; }
+        writer.WriteRawBytes(key);
+        writer.WriteRawBytes(delta.Body);
+        return true;
+    }
+
+    private static void WriteAddition(ref BareValueWriter writer, ReadOnlySpan<byte> key, in V value,
+        DictionaryLayout layout) {
+        writer.WriteRawBytes(key);
+        VOps.WriteBase(ref writer, in value, layout.ValueSlot);
+    }
+
+    private static PreparedDeltaBody CompleteDelta(ArrayBufferWriter<byte> removals, uint removeCount,
+        ArrayBufferWriter<byte> patches, uint patchCount, ArrayBufferWriter<byte> additions, uint addCount) {
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
         writer.WriteVarUInt32(removeCount);

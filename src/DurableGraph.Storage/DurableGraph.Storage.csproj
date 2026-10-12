@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Atelia.DurableGraph.Persistence" />
+    <InternalsVisibleTo Include="Atelia.DurableGraph.Persistence.Tests" />
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Atelia.DurableGraph.Storage.Tests</_Parameter1>
     </AssemblyAttribute>

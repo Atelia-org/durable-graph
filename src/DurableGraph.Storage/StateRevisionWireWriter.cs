@@ -54,11 +54,7 @@ internal static class StateRevisionWireWriter {
         WriteCount(ref writer, revision.LocalObjects.Count);
         foreach (ObjectVersionRecord record in revision.LocalObjects) {
             writer.WriteVarUInt32(record.ObjectId);
-            writer.WriteByte((byte)record.Kind);
-            if (record.PriorAddress is { } prior) {
-                FrameAddressWireCodec.Write(ref writer, prior);
-            }
-            writer.WriteBytes(record.Body);
+            ObjectVersionPayloadCodec.Write(ref writer, record.Kind, record.PriorAddress, record.Body);
         }
         switch (revision.ObjectHeadMapKind) {
             case ObjectHeadMapKind.Base:

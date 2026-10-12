@@ -174,7 +174,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
-| SchemaStore 后续能力 | MVP 单调注册已实现；联合 Commit/Ref 及复用 StateStore 的演进候选见下节，Dictionary 与内建类型 codec 完整后重访。多 writer、压缩/GC 另待真实需求 |
+| SchemaStore 后续能力 | MVP 单调注册已实现；[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订) P0 内部持久自举已验证有限闭环，公开切换与 private 尚未实施，见下节。多 writer、压缩/GC 另待真实需求 |
 | Schema/表示目录增量或分段 | DB-086选择完整SchemaSnapshot，真实目录接近单帧上限或登记写放大成为瓶颈时重访；正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-086 采用 FS/VS 的 data-first 发布、outcome 与正常不完整尾恢复，DG 保留 expected head、必要内容与 fault 检查。实际访问坏完整内容报错；OS crash/power loss、设备失效与目录持久性保证仍待明确需求和独立实验，不能由普通进程关闭/重开推导 |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
@@ -197,35 +197,30 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 
-2026-09-07 用户提出的未来技术路线：StateStore 作为基础，在 Dictionary 等 BCL 内容 codec
-可用后，评估用一个不含用户自定义类型的 StateStore 实例保存 Schema 定义集合，复用增量保存、
-历史视图、回滚与分叉。该路线合理且值得保留，尚未选择具体数据表示或替换当前 MVP 实现。
-联合 Commit/Ref 的长期约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
+2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
+FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0 内部持久实验已实施，公开路线仍 Proposed**；
+真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
+联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
-重访触发：受支持的 Dictionary 内容保存/重建、所需内建类型组合编码，以及 StateStore 的
-Revision/加载能力足以表示元数据集合；建设联合 Commit/Ref 时也应重新检查本条。
+辩证简化后的候选为业务比较／meta 脏集合 → owned records/Removes → 共用窄图 writer 与一个 PendingSave。
+Schema 员工 DTO 直接构造不可变描述，descriptor 复用 meta ObjectId；live-directory 采用固定 Dictionary，
+排除自身、write-last，locator 复用 inline body。图固定准确 catalog/目录根，sourceGraph/OwnedBatch 保留冷读来源；
+Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共享单调与私有完整视图使用同一种机制。
+推荐业务分支目录 ref＋受管 shared ref，新增共享定义或表示布局与业务版本一次共同发布。
+具体合同与分片只在 DB-087 维护；P0 已取得纵向证据，下一片 P1 须在公开切换前验收全部现有相关能力，
+不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
-届时需闭合：
+尚需执行证据：完整 builtin/表示目录闭包、公开 stored/current 视图与缓存隔离、真实 Upgrade、
+初始化与 ProcessCrashOnly、私有业务绑定及真实包消费。P0 Restore 在历史 S 不含当前 Upgrade 目标时提前拒绝，
+P1 须先区分 stored 与 target view 并接入现有恢复核心。旧全局 SchemaStore 仍是公开实现事实，尚未放宽同键冲突。
 
-- 自举：2026-09-07 用户补充“员工通道”思路，推荐由框架显式内建的类型码及 Schema/codec
-  解释基元、受支持 BCL 构造和 DurableGraph 元数据类型，仅用户定义类型通过 SchemaStore
-  取得定义；不能以程序集/namespace 归属自动豁免所有类型。内建复合类型不必退化为字典树，
-  可以用内建 SchemaDefinition/FieldDefinition 等强类型数据表示（名称为示意，尚未实现）。
-  若 Dictionary 的 key/value 和实际内容均属于内建类型闭包，即可在没有已加载 SchemaStore
-  的情况下读回目录；Dictionary<string, UserClass> 则仍需解析 UserClass 的 Schema。
-  目录中的用户 Schema 引用首先是元数据值，不能在解码这些描述数据时递归启动用户对象加载。
-- 内建合同：豁免的是 SchemaStore 查询，不是持久布局的版本管理。内建类型身份及其 codec
-  版本仍须由明确格式规则确定，不能直接依赖当前 CLR fields 布局；版本可由外层格式约定，
-  不预先要求每个对象增加版本字段。引用类型继续共用对象身份、Capture 和 Base/Delta 流程。
-- 逻辑职责：复用 StateStore 保存集合，不取消 Schema 的规范定义、exact 依赖与同 key 冲突检查；
-  不让一般字典写入绕过 SchemaStore 语义。
-- 联合视图：Commit/Ref 绑定各 Store 的 exact roots/Revision，加载与整体回滚使用同一组引用。
-  Schema 记录物理保留不等于在所有 Commit 中可见；不要将 MVP 的全局注册索引直接当作未来视图。
-- 冲突作用域：回滚/分叉后，同 `(SchemaId, Version)` 的一致性是仓库全局约束还是视图约束，
-  须单独裁决。不能隐式允许同 key 不同定义而仍以无视图的 key 查找；任何选择都要保证历史 State
-  永远解析到原 exact 定义。本条不授权 MVP 放宽冲突检查。
-- 迁移与恢复：从 MVP 注册日志转入版本化目录时，定义旧 Schema 引用的解析、联合发布顺序和
-  故障恢复；届时再实施，不现在预建迁移或双写框架。
+首轮建议用显式新根创建新私有分支验证同键异形，全 live 新 Base、无 external retained heads；
+一套固定代码环境只执行其有匹配能力的布局；这是首片入口范围，不是永久产品禁令。
+显式无变化 CommitState 可以复用目录、选择新 S；原分支内重建、按操作选模型、业务 head 不动的 Schema-only
+及 DurableSchema CLR 本体直存按消费者另行裁定；已有库迁移不在本轮范围。
+采用私有视图不授权跳过 Generator accepted history、重解释旧 bytes 或回退共享受管目录；
+不新增动态 fallback、永久全历史占键扫描、第二发布权威或全库启动审计。
 
 ## 5. 后续切片验收素材
 

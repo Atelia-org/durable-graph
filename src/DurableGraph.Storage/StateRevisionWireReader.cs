@@ -96,19 +96,7 @@ internal static class StateRevisionWireReader {
         uint previous = 0;
         for (int index = 0; index < count; index++) {
             uint objectId = ReadNextObjectId(ref reader, previous);
-            int payloadStart = reader.ConsumedCount;
-            ObjectVersionKind kind = reader.ReadByte() switch {
-                (byte)ObjectVersionKind.Base => ObjectVersionKind.Base,
-                (byte)ObjectVersionKind.Delta => ObjectVersionKind.Delta,
-                byte value => throw new InvalidDataException($"Unknown ObjectVersion kind {value}."),
-            };
-            FrameAddress? prior = kind == ObjectVersionKind.Delta
-                ? FrameAddressWireCodec.Read(ref reader)
-                : null;
-            // ReadBytes validates bounded UInt32 length and remaining bounds before copying.
-            ReadOnlySpan<byte> body = reader.ReadBytes();
-            int encodedPayloadBytes = reader.ConsumedCount - payloadStart;
-            records[index] = ObjectVersionRecord.FromDecoded(objectId, kind, prior, body, encodedPayloadBytes);
+            records[index] = ObjectVersionPayloadCodec.ReadRecord(ref reader, objectId);
             previous = objectId;
         }
 

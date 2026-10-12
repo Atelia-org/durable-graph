@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DurableGraph\DurableGraph.csproj" />
     <ProjectReference Include="..\DurableGraph.Storage\DurableGraph.Storage.csproj" />
+    <ProjectReference Include="..\DurableGraph.Generator\DurableGraph.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
     <PackageReference Include="Atelia.Binary" Version="$(StoragePackageVersion)" />

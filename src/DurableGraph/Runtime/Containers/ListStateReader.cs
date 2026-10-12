@@ -75,6 +75,22 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         ListDeltaPlanFactory<TState>? planFactory = null) =>
         PrepareDeltaObserved(prior, current, layout, out _, algorithm, planFactory);
 
+    /// <summary>Encodes an owner-verified unchanged prefix and its new tail using the ordinary List Delta wire.</summary>
+    /// <remarks>The owner proves the exact prior and that its prefix is unchanged; this emitter does not inspect old elements.</remarks>
+    internal static PreparedDeltaBody PrepareAppendDelta(int priorCount, ReadOnlySpan<TState> appended, ListLayout layout) {
+        ArgumentOutOfRangeException.ThrowIfNegative(priorCount);
+        if (priorCount > Array.MaxLength || appended.Length > Array.MaxLength - priorCount) {
+            throw new ArgumentOutOfRangeException(nameof(priorCount), "The appended List exceeds the supported CLR buffer length.");
+        }
+        ArgumentNullException.ThrowIfNull(layout);
+        ArrayBufferWriter<byte> buffer = new();
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32((uint)(priorCount + appended.Length));
+        if (priorCount != 0) { WriteSourceRange(ref writer, Copy, 0, priorCount); }
+        if (!appended.IsEmpty) { TryWriteNewRange(ref writer, buffer, appended, layout, null, out _); }
+        return new(!appended.IsEmpty, buffer.WrittenSpan);
+    }
+
     internal static PreparedDeltaBody PrepareDeltaObserved(FrozenListState<TState> prior, FrozenListState<TState> current,
         ListLayout layout, out ListDeltaCompetitionObservation observation,
         ListDeltaAlgorithm algorithm = ListDeltaAlgorithm.Adaptive,
@@ -131,13 +147,8 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
         foreach (ListDeltaRange range in ranges) {
             if (range.OldStart < 0) {
-                writer.WriteByte(New);
-                writer.WriteVarUInt32((uint)range.Count);
-                if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
-                for (int index = 0; index < range.Count; index++) {
-                    TOps.WriteBase(ref writer, in current.OwnedElements[range.NewStart + index], layout.ElementSlot);
-                    if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
-                }
+                if (!TryWriteNewRange(ref writer, buffer, current.Elements.Slice(range.NewStart, range.Count),
+                        layout, exclusiveByteLimit, out writtenBytes)) { return false; }
                 continue;
             }
             bool rangeStarted = false;
@@ -168,6 +179,19 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         }
         if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
         result = new(true, buffer.WrittenSpan);
+        return true;
+    }
+
+    private static bool TryWriteNewRange(ref BareValueWriter writer, ArrayBufferWriter<byte> buffer,
+        ReadOnlySpan<TState> elements, ListLayout layout, int? exclusiveByteLimit, out int writtenBytes) {
+        writer.WriteByte(New);
+        writer.WriteVarUInt32((uint)elements.Length);
+        if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
+        foreach (ref readonly TState element in elements) {
+            TOps.WriteBase(ref writer, in element, layout.ElementSlot);
+            if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
+        }
+        writtenBytes = buffer.WrittenCount;
         return true;
     }
 

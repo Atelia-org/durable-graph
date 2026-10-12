@@ -10,6 +10,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Atelia.DurableGraph.Tests" />
     <InternalsVisibleTo Include="Atelia.DurableGraph.Persistence" />
+    <InternalsVisibleTo Include="Atelia.DurableGraph.Persistence.Tests" />
     <InternalsVisibleTo Include="Atelia.ListDeltaReplayProbe" />
     <ProjectReference Include="..\DurableGraph.Serialization\DurableGraph.Serialization.csproj" />
     <ProjectReference Include="..\DurableGraph.Generator\DurableGraph.Generator.csproj"

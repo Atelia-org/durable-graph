@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DurableGraph.Persistence\DurableGraph.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\DurableGraph.Generator\DurableGraph.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
