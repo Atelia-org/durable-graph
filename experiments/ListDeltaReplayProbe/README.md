@@ -9,34 +9,46 @@ Acceptance and measured costs are recorded in [ADAPTIVE.md](ADAPTIVE.md).
 The first three-writer matrix and its historical default decision are recorded in [RESULTS.md](RESULTS.md).
 Two white-box adverse families and boundary controls are described in [WHITEBOX.md](WHITEBOX.md).
 Research-only complementary fallback coordinators and byte-cost counterexamples are in [FALLBACK.md](FALLBACK.md).
-The executable uses Runtime/StateStore test friendship only for obtaining closed element operations
-and directly measuring their List body implementation. This is not a package delivery test.
+The executable uses the public default Repository/BranchCheckout for saves and historical domain reads.
+Runtime/Persistence test friendship supplies the stored-exact split DTO view, actual object-version
+payload accounting and closed List element operations for direct body measurement. This is not a
+package delivery test. The default two-root/meta-bootstrap route is described in
+[DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接).
 
 Run from the repository root, with no competing builds or benchmark processes:
 
 ```powershell
+# Build the probe with the explicit storage source mode from docs/storage-dependency.md.
+$storageSourceRoot = 'E:/repos/Atelia-org/atelia-storage'
+dotnet build experiments/ListDeltaReplayProbe/ListDeltaReplayProbe.csproj -c Release -m:1 -nr:false `
+    -p:UseStorageSources=true "-p:StorageSourceRoot=$storageSourceRoot"
+
 # Small complete correctness smoke: 5 workloads, all algorithms, 14 edits plus initial commit.
-./experiments/ListDeltaReplayProbe/Run-Probe.ps1
+$smokeOutput = Join-Path 'experiments/ListDeltaReplayProbe/obj' ('split-smoke-' + [Guid]::NewGuid().ToString('N'))
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Counts '8' -Repeats 1 -Rounds 1 -DiffRepeats 1 -NoBuild -Output $smokeOutput
 
 # Representative three-scale run, including repeated fresh repositories and interleaved writers.
-./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Counts '32,512,4096' -Repeats 3 -DiffRepeats 5
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Counts '32,512,4096' -Repeats 3 -DiffRepeats 5 -NoBuild
 
 # A larger targeted repetition; avoid an unrestricted largest-width/count Cartesian product.
-./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Counts '8192' -Repeats 3 -Rounds 2 -DiffRepeats 5
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Counts '8192' -Repeats 3 -Rounds 2 -DiffRepeats 5 -NoBuild
 
 # Two white-box families: local window and global edit-depth boundaries, with controls.
-./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite whitebox -Counts '4096,16384' -Repeats 3 -DiffRepeats 31
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite whitebox -Counts '4096,16384' -Repeats 3 -DiffRepeats 31 -NoBuild
 
 # Research on identical captured frozen pairs; raw payloads, no repository publication.
-./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite fallback -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite fallback -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9 -NoBuild
 
 # DB-051: four product writers on those same fixture families, including Marker and duplicates.
 # Set DOTNET_TieredCompilation=0 for a representative measurement and record it in the output.
-./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite adaptive -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9 -Seed 49001
+./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite adaptive -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9 -Seed 49001 -NoBuild
 ./experiments/ListDeltaReplayProbe/Run-Probe.ps1 -Suite adaptive -Counts '32,512,4096' -Repeats 3 -DiffRepeats 9 -Seed 49002 -NoBuild
 ```
 
-The runner builds Release unless `-NoBuild` is supplied. `-Output` must name a new directory;
+The source checkout must match the pin in [the storage dependency workflow](../../docs/storage-dependency.md).
+Alternatively build in package mode with the complete pinned local feed and a task NuGet.Config.
+The runner builds Release in its default package mode unless `-NoBuild` is supplied; the commands
+above reuse the explicitly selected build. `-Output` must name a new directory;
 existing repositories are never adopted, deleted or reused. Defaults retain artifacts below ignored
 `obj/`. The representative ordinary run executes 2,520 measured save steps and 80 warmup save steps;
 budget several minutes depending on flush latency and historical-chain verification. The smoke
@@ -102,16 +114,22 @@ scales and repetitions. Edits and fingerprints are outside timing; the complete 
 includes a minimal independent marker Event followed by State, both captures, graph writes,
 and both VS root publication barriers. The marker has no World/List reference. The initial
 step measures CreateBranch (S0); repository creation is Setup. Per-step payload counters and
-isolated Diff samples remain State-only. Report Measurement.Version is 2: whole-save timings
-and repository bytes are not directly comparable with the earlier publication.rbf reports.
+isolated Diff samples remain State-only. Installed root IDs, complete live membership and object head/H
+are recorded after the save timing and allocation sample end.
 
-After closing the writer, fresh readers materialize every historical Revision and verify complete
-content/order/count, shared List identity, repeated children and cycles. An additional Repository
-reopen/load verifies the latest graph without selecting the old writer algorithm. This is cold
-handles/bindings, not a cleared OS page cache. Its lower-priority metric includes repository integrity
-checks and writable-open flushes; do not describe it as raw decoder throughput.
+After closing the writer, a fresh read-only Repository obtains its own CheckpointAddress handles
+through ReadFrames and aligns their actual State addresses with the recorded trace. ReadState
+materializes every historical domain graph; ReadEvent verifies each independent marker. Complete
+content/order/count, shared List identity, repeated children and cycles must agree with the script.
+The actual split graph, decoded DTO view and object chains also verify both parent relations,
+root IDs, complete live IDs, object heads and reconstruction payload H against the installed save
+baseline. An additional writable Repository reopen/Checkout verifies the latest graph and baseline
+without selecting the old writer algorithm. This is cold handles/bindings, not a cleared OS page cache.
+Its lower-priority metric includes normal upstream tail recovery, necessary root/Schema reads and
+writable-open flushes; do not describe it as raw decoder throughput.
 
-The exact frozen states read from consecutive revisions also enter direct product PrepareDelta.
+The exact frozen states from ReadSplit at each actual graph's selected Schema root also enter direct
+product PrepareDelta for consecutive States. No latest Schema substitution or old revision adapter is used.
 Reflection closes the generic test entry outside timing; one untimed call precedes repeated samples.
 Every candidate is Apply-checked even when the storage policy selected Base, and both inputs are
 checked against their original Base encodings. StateEquals, HasChanges and reconstructed bytes must
@@ -133,12 +151,17 @@ Reports:
 - `summary.md`: concise comparison. Correctness is the only automatic gate; no performance winner
   or maximum cold-read latency is required.
 
-Object payload bytes exclude ObjectId, membership and shared frame overhead. Under DB-086,
-`DataFileBytes` sums shared data (Schema snapshots and Event/State graph frames), while
-`ControlFileBytes` sums VS control files. State per-step payload counts exclude marker Events.
-Measurement version 3 is not whole-save-comparable with the prior separate-file reports. Historical
-RESULTS/WHITEBOX reports retain their original measurement boundary. Candidate Delta sizes include
-NoChange bodies as preparation observations. Undo and child-only edits must leave List slot state
+Object payload bytes exclude ObjectId, membership and shared frame overhead. State per-step counts
+come only from the actual graph's OwnedBatch records and each selected object's final chain entry's
+PayloadBytes; an absent OwnedBatch contributes no writes. They exclude marker Events, meta graphs
+and directory records. `DataFileBytes` sums shared data including meta graphs, directory versions,
+object batches and Event/State graph envelopes; `ControlFileBytes` sums VS control files.
+Measurement.Version = 4 identifies this split-store measurement route. It does not establish physical-cost
+or whole-save performance continuity with version 3's earlier DB-086 combined format.
+Compare only runs from the same storage route and compiled-source fingerprints. Historical
+ADAPTIVE/RESULTS/WHITEBOX/FALLBACK reports remain frozen with their original measurement boundaries.
+Candidate Delta sizes include NoChange bodies as preparation observations. Undo and child-only edits
+must leave List slot state
 unchanged and cannot produce a List Delta; the policy may still choose an ordinary Base rewrite
 to reduce read amplification, and that write remains included in the actual-byte report.
 Flush variability and full-graph work can obscure matcher differences; preserve that observation.

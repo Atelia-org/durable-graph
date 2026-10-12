@@ -83,17 +83,24 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun run = RunGenerator(ListGraphSource);
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("ListGraph.Host")!;
+        object world = host.GetMethod("NewWorld")!.CreateDelegate<Func<object>>()();
+        var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>();
+        var mutate = host.GetMethod("MutatePrepared")!.CreateDelegate<Action<object>>();
+        var check = host.GetMethod("Check")!.CreateDelegate<Action<object, int>>();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
-        using StateRevisionStore states = new(segments.Data);
-        SchemaStore schemas = segments.Schemas;
-        var freeze = (Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>)host.GetMethod("PrepareAndMutate")!.CreateDelegate(
-            typeof(Func<StateRevisionStore, SchemaStore, FixturePreparedWorldRevision>));
-        FixturePreparedWorldRevision prepared = freeze(states, schemas);
-        FrameAddress address = states.Append(prepared.Revision);
-        var verify = (Action<StateRevisionStore, SchemaStore, FrameAddress, ObjectId>)host.GetMethod("LoadAndCheck")!.CreateDelegate(
-            typeof(Action<StateRevisionStore, SchemaStore, FrameAddress, ObjectId>));
-        verify(states, schemas, address, prepared.WorldId);
+        bool mutated = false;
+        using (Repository repository = Repository.CreateNew(directory.Path, models())) {
+            repository.Checkpoint = checkpoint => {
+                if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
+                mutate(world);
+                mutated = true;
+            };
+            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)world);
+            Assert.True(mutated);
+            Assert.Same(world, checkout.State);
+        }
+        using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, models());
+        check(reopened.ReadState(reopened.GetHead("main")), 0);
     }
 
     private const string ListGraphSource = """
@@ -176,14 +183,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if(stage==3) v.Replaceable=new List<int>(v.Replaceable);
                 if(stage==4) v.Island=null;
             }
-            public static FixturePreparedWorldRevision PrepareAndMutate(StateRevisionStore states,SchemaStore schemas) {
-                World world=new();
-                FixturePreparedWorldRevision result=FixtureLoadedWorld.PrepareNew(states,schemas,world,Models(),new(1000000,1));
+            public static object NewWorld() => new World();
+            public static void MutatePrepared(object value) {
+                World world=(World)value;
                 world.Numbers.Clear(); world.Points[0]=new Point {X=999}; world.Strings.Clear();
-                return result;
             }
-            public static void LoadAndCheck(StateRevisionStore states,SchemaStore schemas,FrameAddress address,ObjectId id) =>
-                FixtureLoadedWorld.Load<World>(states,schemas,address,id,Models()).World.Check(0);
         }
         """;
 }

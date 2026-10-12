@@ -5,6 +5,7 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
@@ -23,7 +24,8 @@ internal sealed record RunResult(string Workload, int Count, int Repeat, string 
 
 internal static class Replay {
     private const long StoreOptions = 1024 * 1024;
-    private sealed record Saved(FrameAddress Address, string Fingerprint, double Ms, long Allocated, string Edit);
+    private sealed record Saved(FrameAddress Address, ObjectId RootId, IReadOnlyDictionary<ObjectId, ObjectStorageInfo> Storage,
+        string Fingerprint, double Ms, long Allocated, string Edit);
     private delegate DiffResult DiffRunner(ObjectStateRecord prior, ObjectStateRecord current, ListDeltaAlgorithm algorithm, int repeats);
 
     internal static RunResult Run<T>(Workload<T> workload, int count, int repeat, ListDeltaAlgorithm algorithm,
@@ -31,7 +33,6 @@ internal static class Replay {
         World<T> world = workload.Seed(count);
         StateModelRegistry models = Models(algorithm);
         List<Saved> saved = [];
-        ObjectId worldId;
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
         Repository repository = Repository.CreateNew(directory, models, StoreOptions);
@@ -41,7 +42,6 @@ internal static class Replay {
         using (repository) {
             try {
                 Save("Initial");
-                worldId = session!.StateId!.Value;
                 foreach (Edit edit in script.Take(operationLimit ?? script.Length)) {
                     if (applyEdit is null) { workload.Apply(world, edit); }
                     else { applyEdit(world, edit); }
@@ -65,45 +65,86 @@ internal static class Replay {
                     session.CommitEvent(new ReplayEvent(), parameters);
                     session.CommitState(parameters);
                 }
-                FrameAddress address = session.StateRevisionAddress!.Value;
                 double elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
                 long bytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
-                saved.Add(new(address, fingerprint, elapsed, bytes, edit));
+                // Keep installed identity/head/H diagnostics outside both save measurements.
+                FrameAddress address = session.StateRevisionAddress!.Value;
+                ObjectId rootId = session.StateId!.Value;
+                if (session.Head.Kind != GraphFrameKind.State || session.Head.RevisionAddress != address || session.Head.RootId != rootId) {
+                    throw new InvalidOperationException("Committed State and checkout baseline differ.");
+                }
+                Dictionary<ObjectId, ObjectStorageInfo> storage = session.Baseline!.Objects.ToDictionary(
+                    pair => pair.Key, pair => pair.Value.Storage ?? throw new InvalidOperationException("A saved object lacks head/H."));
+                saved.Add(new(address, rootId, storage, fingerprint, elapsed, bytes, edit));
             }
         }
 
         // Validation uses fresh file handles after the writer closes. No original algorithm is
         // supplied to readers; historical materialization is deliberately outside Commit timing.
         List<StepResult> steps = [];
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(directory)) {
-            SchemaStore schemas = resources.Schemas;
-            StateRevisionStore states = resources.States;
-            StateModelSnapshot snapshot = models.Snapshot(schemas);
-            if (!snapshot.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? binding)) {
-                throw new InvalidOperationException("No current List binding.");
-            }
-            ListObjectBinding listBinding = (ListObjectBinding)binding!;
-            DiffRunner measure = typeof(Replay).GetMethod(nameof(Measure), BindingFlags.Static | BindingFlags.NonPublic)!
-                .MakeGenericMethod(listBinding.ElementBinding.StateType, listBinding.ElementBinding.StateOpsType).CreateDelegate<DiffRunner>();
+        using (Repository reader = Repository.OpenReadOnlyExisting(directory, Models())) {
+            P0GraphStore store = reader.MetaBootstrapStore;
+            // Reissue handles from the reopened owner's published history; Saved addresses are diagnostics.
+            IReadOnlyList<CheckpointAddress> history = reader.ReadFrames("main");
+            if (history.Count != saved.Count * 2 - 1) { throw new InvalidOperationException("Published E/S history length differs from the trace."); }
+            DiffRunner? measure = null;
             ObjectStateRecord? previous = null;
             ObjectId listId = default;
             for (int index = 0; index < saved.Count; index++) {
                 Saved entry = saved[index];
-                LoadedWorld<World<T>> loaded = LoadedWorld.Load<World<T>>(states, schemas, entry.Address, worldId, Models());
-                if (workload.Fingerprint(loaded.World) != entry.Fingerprint) { throw new InvalidOperationException("Historical domain graph differs from edit script."); }
-                DecodedRevision decoded = RevisionDecoder.Read(states, schemas, entry.Address, Readers());
+                CheckpointAddress checkpoint = history[index * 2];
+                if (checkpoint.Kind != GraphFrameKind.State || checkpoint.RevisionAddress != entry.Address ||
+                    checkpoint.RootId != entry.RootId || entry.RootId != saved[0].RootId) {
+                    throw new InvalidOperationException("Published State address or root identity differs from the saved trace.");
+                }
+                if (index != 0) {
+                    CheckpointAddress marker = history[index * 2 - 1];
+                    if (marker.Kind != GraphFrameKind.Event || reader.ReadEvent(marker) is not ReplayEvent) {
+                        throw new InvalidOperationException("An edit's independent marker Event is missing.");
+                    }
+                }
+                World<T> loaded = (World<T>)reader.ReadState(checkpoint);
+                if (workload.Fingerprint(loaded) != entry.Fingerprint) { throw new InvalidOperationException("Historical domain graph differs from edit script."); }
+                // Direct Diff consumes stored-exact states decoded against this graph's actual selected S.
+                DecodedRevision decoded = DecodedRevision.ReadSplit(store, checkpoint.RevisionAddress, Models());
+                if (!decoded.SourceModels!.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? binding)) {
+                    throw new InvalidOperationException("No current List binding.");
+                }
+                ListObjectBinding listBinding = (ListObjectBinding)binding!;
+                measure ??= typeof(Replay).GetMethod(nameof(Measure), BindingFlags.Static | BindingFlags.NonPublic)!
+                    .MakeGenericMethod(listBinding.ElementBinding.StateType, listBinding.ElementBinding.StateOpsType).CreateDelegate<DiffRunner>();
                 ObjectStateRecord current = decoded.Objects.Single(row => row.Kind == ObjectStateKind.List && row.Layout.Equals(listBinding.CurrentLayout));
                 if (index != 0 && current.Id != listId) { throw new InvalidOperationException("List identity changed across resize/edit."); }
                 listId = current.Id;
-                StateRevision revision = states.Read(entry.Address);
+                P0GraphSnapshot graph = store.ReadGraph(entry.Address);
+                FrameAddress? expectedParent = index == 0 ? null : history[index * 2 - 1].RevisionAddress;
+                FrameAddress? expectedSource = index == 0 ? null : saved[index - 1].Address;
+                if (graph.Kind != P0GraphKind.State || graph.RootId != entry.RootId ||
+                    graph.Parent != expectedParent || graph.SourceGraph != expectedSource ||
+                    !graph.Objects.Keys.Order().SequenceEqual(entry.Storage.Keys.Select(id => id.Value).Order()) ||
+                    !decoded.Objects.Select(row => row.Id).SequenceEqual(entry.Storage.Keys.Order())) {
+                    throw new InvalidOperationException("Stored State roots, parents or complete live IDs differ from the installed baseline.");
+                }
+                foreach ((ObjectId id, ObjectStorageInfo expected) in entry.Storage) {
+                    P0ObjectChain chain = store.ReadObjectChain(entry.Address, id.Value);
+                    if (graph.Objects[id.Value] != expected.Head || decoded.ObjectHeads[id] != expected.Head ||
+                        decoded.ObjectStorage[id] != expected || chain.Head != expected.Head ||
+                        chain.ReconstructionPayloadBytes != expected.ReconstructionPayloadBytes) {
+                        throw new InvalidOperationException("Stored object head/H differs from the installed baseline.");
+                    }
+                }
                 int bases = 0, deltas = 0, listPayload = 0;
                 long baseBytes = 0, deltaBytes = 0;
                 string listKind = "NoChange";
-                foreach (ObjectVersionRecord row in revision.LocalObjects) {
-                    ObjectVersionChainEntry actual = states.ReadObjectVersionChain(entry.Address, row.ObjectId).Records[^1];
-                    if (row.Kind == ObjectVersionKind.Base) { bases++; baseBytes += actual.ObjectVersionPayloadBytes; }
-                    else { deltas++; deltaBytes += actual.ObjectVersionPayloadBytes; }
-                    if (row.ObjectId == listId.Value) { listKind = row.Kind.ToString(); listPayload = actual.ObjectVersionPayloadBytes; }
+                IReadOnlyList<ObjectVersionRecord> records = graph.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
+                foreach (ObjectVersionRecord row in records) {
+                    P0ChainEntry actual = store.ReadObjectChain(entry.Address, row.ObjectId).Entries[^1];
+                    if (actual.ContainingBatch != graph.OwnedBatch || actual.Record.Kind != row.Kind || actual.Record.PriorAddress != row.PriorAddress) {
+                        throw new InvalidOperationException("State payload accounting selected a different object version.");
+                    }
+                    if (row.Kind == ObjectVersionKind.Base) { bases++; baseBytes += actual.PayloadBytes; }
+                    else { deltas++; deltaBytes += actual.PayloadBytes; }
+                    if (row.ObjectId == listId.Value) { listKind = row.Kind.ToString(); listPayload = actual.PayloadBytes; }
                 }
                 DiffResult? diff = previous is null ? null : measure(previous, current, algorithm, settings.DiffRepeats);
                 if (entry.Edit.EndsWith(":Undo", StringComparison.Ordinal) || entry.Edit.EndsWith(":ChildOnly", StringComparison.Ordinal)) {
@@ -123,6 +164,12 @@ internal static class Replay {
         double coldMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long coldAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         if (workload.Fingerprint(((World<T>)restored.State!)) != saved[^1].Fingerprint) { throw new InvalidOperationException("Cold latest graph differs."); }
+        Saved latest = saved[^1];
+        if (restored.StateId != latest.RootId || restored.StateRevisionAddress != latest.Address ||
+            restored.Baseline!.Objects.Count != latest.Storage.Count || restored.Baseline.Objects.Any(pair =>
+                !latest.Storage.TryGetValue(pair.Key, out ObjectStorageInfo expected) || pair.Value.Storage != expected)) {
+            throw new InvalidOperationException("Cold latest root, live IDs or head/H differ from the saved baseline.");
+        }
         return new(workload.Name, count, repeat, algorithm.ToString(), directory, setupMs, setupAllocated, coldMs, coldAllocated,
             DirectorySize(Path.Combine(directory, "data")),
             DirectorySize(Path.Combine(directory, "versions")), steps.ToArray());
@@ -169,15 +216,11 @@ internal static class Replay {
 
     private static StateModelRegistry Models(ListDeltaAlgorithm? algorithm = null) {
         StateModelRegistry models = new();
+#pragma warning disable CS0436 // Intentionally register this probe's local SG definitions, visible alongside Persistence's through IVT.
         Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
+#pragma warning restore CS0436
         if (algorithm is { } selected) { models.UseListDeltaAlgorithm(selected); }
         return models;
-    }
-
-    private static StateReaderRegistry Readers() {
-        StateReaderRegistry readers = new();
-        Atelia.DurableGraph.Generated.DurableDefinitions.Register(readers);
-        return readers;
     }
 
     private static long DirectorySize(string directory) => Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length);

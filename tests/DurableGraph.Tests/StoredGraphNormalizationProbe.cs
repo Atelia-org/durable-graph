@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 namespace Atelia.DurableGraph.Tests;
 
 // Legacy test-only normalization witness. Its ProbeSnapshot vocabulary is not the current
-// stored/current DTO view or the FixtureLoadedWorld/StateRevision product contract.
+// stored/current DTO view or the public Repository product contract.
 
 internal enum ProbeStoredFieldKind {
     Invalid = 0,

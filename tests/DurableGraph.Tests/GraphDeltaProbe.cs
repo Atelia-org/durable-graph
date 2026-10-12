@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Atelia.DurableGraph.Tests;
 
 // Legacy test-only mechanism witness. Its Save/Accept vocabulary and reachability-derived
-// removals are not the current FixtureLoadedWorld Prepare or StateRevision planning contract.
+// removals are not the current public Repository save contract.
 
 internal readonly record struct ProbeId {
     internal ProbeId(long value) {

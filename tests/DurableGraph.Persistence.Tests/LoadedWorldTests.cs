@@ -1,50 +1,42 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
+// Restore/save invariants survive the retired LoadedWorld facade through the
+// current split reader, shared GraphReader, and the actual repository save owner.
 public sealed class LoadedWorldTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-loaded-world-{Guid.NewGuid():N}");
-    private readonly GraphResources _file;
-    private readonly SegmentStore _segments;
-    private readonly SchemaStore _schemas;
-    private readonly StateRevisionStore _store;
+    private readonly P0Repository _repository;
+    private P0GraphStore Store => _repository.Store;
     // A real stable scalar makes sparse field updates smaller than a complete Base.
     private const ulong InitialSequence = 0xFEDC_BA98_7654_3210UL;
     private static readonly DurableSchema Old = Schema("World", 1);
     private static readonly DurableSchema Current = Schema("World", 2);
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
 
-    public LoadedWorldTests() {
-        Directory.CreateDirectory(_root);
-        _file = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = _file.Schemas;
-        _segments = _file.Data;
-        _store = new(_segments);
-    }
+    public LoadedWorldTests() => _repository = P0Repository.CreateNew(_root);
 
     [Fact]
     public void NormalizationFollowsCompleteDeltaChainAndRetainsSourceRowsWithoutWriting() {
-        _schemas.Register(Old);
-        FrameAddress first = _store.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [Durable(1, Old, new(2, 8, 0)), Text(8, "removed by upgrade")], []));
-        FrameAddress second = _store.Append(StateRevision.CreateObjectHeadMapDelta(first,
-            [ObjectVersionRecord.CreateDelta(1, first, Delta(new(2, 8, 0), new(3, 8, 0)).Body)], []));
-        FrameAddress third = _store.Append(StateRevision.CreateObjectHeadMapDelta(second,
-            [ObjectVersionRecord.CreateDelta(1, second, Delta(new(3, 8, 0), new(4, 8, 0, InitialSequence - 1)).Body)], []));
+        FrameAddress first = Seed(Old, new(2, 8, 0), Text(8, "removed by upgrade"));
+        FrameAddress firstHead = Store.ReadGraph(first).Objects[1];
+        FrameAddress second = Append(first,
+            _ => [ObjectVersionRecord.CreateDelta(1, firstHead, Delta(new(2, 8, 0), new(3, 8, 0)).Body)]);
+        FrameAddress secondHead = Store.ReadGraph(second).Objects[1];
+        FrameAddress third = Append(second,
+            _ => [ObjectVersionRecord.CreateDelta(1, secondHead, Delta(new(3, 8, 0), new(4, 8, 0, InitialSequence - 1)).Body)]);
         StateModelRegistry models = Registry(Model(upgrade: state => state with { Value = (byte)(state.Value + 10), TextId = new ObjectId(0) }));
-        StateModelSnapshot snapshot = models.Snapshot();
-        DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, third, snapshot.Readers);
-        long schemaTail = DataBytes(_file.Data);
-        long stateTail = Tail();
-        NormalizedRevision normalized = NormalizedRevision.Create(decoded, snapshot);
+        DecodedRevision decoded = DecodedRevision.ReadSplit(Store, third, models);
+        long tail = Tail();
+        FrameAddress? shared = _repository.SharedSchemaRoot;
+        NormalizedRevision normalized = NormalizedRevision.Create(decoded, decoded.SourceModels!);
         Assert.Equal(new State(4, 8, 0, InitialSequence - 1), decoded.GetRequired(new ObjectId(1)).GetState<State>());
         Assert.Equal(new State(14, 0, 0, InitialSequence - 1), normalized.Objects[new ObjectId(1)].Current.GetState<State>());
         Assert.True(normalized.Objects[new ObjectId(1)].RequiresRewrite);
@@ -52,8 +44,33 @@ public sealed class LoadedWorldTests : IDisposable {
         Assert.Equal(Current, normalized.Objects[new ObjectId(1)].Current.Schema);
         Assert.Contains(new ObjectId(8), normalized.Objects.Keys);
         Assert.Same(decoded.GetRequired(new ObjectId(8)).StringContent, normalized.Objects[new ObjectId(8)].Current.StringContent);
-        Assert.Equal(schemaTail, DataBytes(_file.Data));
-        Assert.Equal(stateTail, Tail());
+        Assert.Equal(3, Store.ReadObjectChain(third, 1).Entries.Count);
+        Assert.Equal(shared, _repository.SharedSchemaRoot);
+        Assert.Equal(tail, Tail());
+    }
+
+    [Fact]
+    public void ReadOnlyUpgradeUsesThePinnedSourceWithoutAppendingOrRegisteringTheTarget() {
+        FrameAddress address = Seed(Old, new(5, 8, 0), Text(8, "old"));
+        FrameAddress schema = _repository.SharedSchemaRoot!.Value;
+        _repository.Dispose();
+        Dictionary<string, byte[]> before = Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(_root, path), File.ReadAllBytes, StringComparer.Ordinal);
+        using (P0Repository reader = P0Repository.OpenReadOnlyExisting(_root)) {
+            DecodedRevision decoded = DecodedRevision.ReadSplit(reader.Store, address,
+                Registry(Model(upgrade: state => state with { Value = 6, TextId = default })));
+            World world = GraphReader.ReadRoot<World>(decoded, new ObjectId(1), new(decoded.SourceModels!));
+            Assert.Equal((byte)6, world.Value);
+            Assert.Null(world.Text);
+            Assert.Equal(schema, decoded.SelectedSchemaView!.Snapshot!.Address);
+            Assert.DoesNotContain(new SchemaKey(Current.Type, Current.Version), decoded.SelectedSchemaView.Schemas.Keys);
+            Assert.Equal(schema, reader.SharedSchemaRoot);
+            Assert.Equal(address, reader.GetHead("main"));
+        }
+        Dictionary<string, byte[]> after = Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(_root, path), File.ReadAllBytes, StringComparer.Ordinal);
+        Assert.Equal(before.Keys.Order(StringComparer.Ordinal), after.Keys.Order(StringComparer.Ordinal));
+        foreach (var file in before) { Assert.Equal(file.Value, after[file.Key]); }
     }
 
     [Theory]
@@ -62,82 +79,101 @@ public sealed class LoadedWorldTests : IDisposable {
     public void InvalidUpgradeReferenceFailsBeforeWorldDeliveryAndDoesNotWrite(uint badId) {
         FrameAddress address = Seed(Old, new(1, 0, 0));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(badId) }));
-        long schemaTail = DataBytes(_file.Data);
-        long stateTail = Tail();
-        LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models));
+        long tail = Tail();
+        FrameAddress? shared = _repository.SharedSchemaRoot;
+        World? delivered = null;
+        Assert.Throws<InvalidDataException>(() => delivered = ReadWorld(address, models));
         Assert.Null(delivered);
-        Assert.Equal(schemaTail, DataBytes(_file.Data));
-        Assert.Equal(stateTail, Tail());
+        Assert.Equal(shared, _repository.SharedSchemaRoot);
+        Assert.Equal(tail, Tail());
     }
 
     [Fact]
     public void CurrentRowsAreNotUpgradedAndLateUnknownSourceFamilyStillFails() {
         FrameAddress address = Seed(Current, new(7, 0, 0));
         StateModelRegistry models = Registry(Model(upgrade: _ => throw new Exception("must not run")));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
-        Assert.Equal((byte)7, loaded.World.Value);
-        Assert.Empty(loaded.Prepare(NoRebase).Revision.LocalObjects);
+        P0Session session = new(_repository, "main", models);
+        World world = Assert.IsType<World>(session.State);
+        Assert.Equal((byte)7, world.Value);
+        using (P0SessionSave unchanged = session.Prepare(world, parameters: NoRebase)) {
+            Assert.Empty(unchanged.Business.Write.Records);
+        }
         DurableSchema unknown = Schema("Unknown", 1);
-        _schemas.Register(unknown);
-        FrameAddress bad = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, unknown, new(1, 0, 0))], []));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, bad, new ObjectId(1), models));
+        FrameAddress bad = Append(address, catalog => [Durable(99, unknown, new(1, 0, 0), catalog)], unknown);
+        Assert.Throws<InvalidDataException>(() => ReadWorld(bad, models));
     }
 
     [Fact]
     public void EmptyAliasKeepsOriginalBaselineSlotUntilRealDeltaAndRemoveArePersisted() {
         FrameAddress address = Seed(Current, new(7, 9, 0), Text(3, ""), Text(9, ""));
         StateModelRegistry models = Registry(Model());
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
-        Assert.Same(string.Empty, loaded.World.Text);
-        PreparedWorldRevision plan = loaded.Prepare(NoRebase);
-        ObjectVersionRecord write = Assert.Single(plan.Revision.LocalObjects);
-        Assert.Equal(ObjectVersionKind.Delta, write.Kind);
-        Assert.Equal(1u, write.ObjectId);
-        Assert.Equal(new uint[] { 9 }, plan.Revision.RemovedObjectIds);
-        FrameAddress next = _store.Append(plan.Revision);
-        DecodedRevision decoded = RevisionDecoder.ReadSnapshot(_store, _schemas, next, models.Snapshot().Readers);
+        P0Session session = new(_repository, "main", models);
+        World world = Assert.IsType<World>(session.State);
+        Assert.Same(string.Empty, world.Text);
+        FrameAddress next;
+        using (P0SessionSave save = session.Prepare(world, parameters: NoRebase)) {
+            ObjectVersionRecord write = Assert.Single(save.Business.Write.Records);
+            Assert.Equal(ObjectVersionKind.Delta, write.Kind);
+            Assert.Equal(1u, write.ObjectId);
+            Assert.Equal(new uint[] { 9 }, save.Business.Write.RemovedIds);
+            next = save.Commit().Business.Address;
+        }
+        DecodedRevision decoded = DecodedRevision.ReadSplit(Store, next, models);
         Assert.Equal(new ObjectId(3), decoded.GetRequired(new ObjectId(1)).GetState<State>().TextId);
-        Assert.Equal(new ObjectId(9), RevisionDecoder.ReadSnapshot(_store, _schemas, address, models.Snapshot().Readers).GetRequired(new ObjectId(1)).GetState<State>().TextId);
-        Assert.Same(string.Empty, LoadedWorld.Load<World>(_store, _schemas, next, plan.WorldId, models).World.Text);
-        Assert.Empty(LoadedWorld.Load<World>(_store, _schemas, next, new ObjectId(1), models).Prepare(NoRebase).Revision.LocalObjects);
+        Assert.Equal(new ObjectId(9), DecodedRevision.ReadSplit(Store, address, models).GetRequired(new ObjectId(1)).GetState<State>().TextId);
+        Assert.Same(string.Empty, ReadWorld(next, models).Text);
+        P0Session reloaded = new(_repository, "main", models);
+        using P0SessionSave unchanged = reloaded.Prepare(reloaded.State!, parameters: NoRebase);
+        Assert.Empty(unchanged.Business.Write.Records);
     }
 
     [Fact]
     public void UpgradedUnchangedWorldForcesBaseAndNewLoadClearsRewriteObligation() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         StateModelRegistry models = Registry(Model());
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
-        PreparedWorldRevision plan = loaded.Prepare(NoRebase);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(plan.Revision.LocalObjects).Kind);
-        Assert.Equal(address, plan.Revision.ParentRevisionAddress);
-        loaded.World.Value = 99;
-        FrameAddress next = _store.Append(plan.Revision);
-        LoadedWorld<World> reloaded = LoadedWorld.Load<World>(_store, _schemas, next, plan.WorldId, models);
-        Assert.Equal((byte)5, reloaded.World.Value); // The plan owns content from before the edit.
-        Assert.Equal(InitialSequence, reloaded.World.Sequence);
-        Assert.Empty(reloaded.Prepare(NoRebase).Revision.LocalObjects);
-        reloaded.World.Value = 6;
-        Assert.Equal(ObjectVersionKind.Delta, Assert.Single(reloaded.Prepare(NoRebase).Revision.LocalObjects).Kind);
-        PreparedWorldRevision repeated = loaded.Prepare(NoRebase);
-        Assert.Equal(address, repeated.Revision.ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(repeated.Revision.LocalObjects).Kind);
-        Assert.Equal(address, loaded.ParentRevisionAddress);
+        P0Session session = new(_repository, "main", models);
+        World world = Assert.IsType<World>(session.State);
+        using (P0SessionSave discarded = session.Prepare(world, parameters: NoRebase)) {
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(discarded.Business.Write.Records).Kind);
+            Assert.Equal(address, discarded.Business.Write.SourceGraph);
+        }
+        Assert.Equal(address, session.StateSource!.Address);
+        FrameAddress next;
+        using (P0SessionSave frozen = session.Prepare(world, parameters: NoRebase)) {
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(frozen.Business.Write.Records).Kind);
+            world.Value = 99;
+            next = frozen.Commit().Business.Address;
+        }
+        P0Session reloaded = new(_repository, "main", models);
+        World restored = Assert.IsType<World>(reloaded.State);
+        Assert.Equal((byte)5, restored.Value); // The plan owns content from before the edit.
+        Assert.Equal(InitialSequence, restored.Sequence);
+        Assert.False(reloaded.Baseline!.Objects[new ObjectId(1)].RequiresRewrite);
+        using (P0SessionSave unchanged = reloaded.Prepare(restored, parameters: NoRebase)) {
+            Assert.Empty(unchanged.Business.Write.Records);
+        }
+        restored.Value = 6;
+        using P0SessionSave changed = reloaded.Prepare(restored, parameters: NoRebase);
+        Assert.Equal(ObjectVersionKind.Delta, Assert.Single(changed.Business.Write.Records).Kind);
+        Assert.Equal(next, changed.Business.Write.SourceGraph);
+        Assert.Equal(next, session.StateSource!.Address);
     }
 
     [Fact]
     public void AllocationStartsAboveCompleteSourceMembershipEvenAfterUpgradeCutsTheLargestId() {
         FrameAddress address = Seed(Old, new(1, 100, 0), Text(100, "old"));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1),
-            Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) })));
-        Assert.Null(loaded.World.Text);
-        loaded.World.Text = new string('n', 1);
-        PreparedWorldRevision first = loaded.Prepare(NoRebase);
-        Assert.Equal(new uint[] { 1, 101 }, first.Revision.LocalObjectIds);
-        Assert.Equal(new uint[] { 1, 101 }, _store.ReadLiveObjectHeadMap(_store.Append(first.Revision)).Keys);
-        PreparedWorldRevision second = loaded.Prepare(NoRebase);
-        Assert.Equal(new uint[] { 1, 102 }, second.Revision.LocalObjectIds); // Discard burns IDs.
-        Assert.Equal(address, second.Revision.ParentRevisionAddress);
+        P0Session session = new(_repository, "main", Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) })));
+        World world = Assert.IsType<World>(session.State);
+        Assert.Null(world.Text);
+        world.Text = new string('n', 1);
+        using (P0SessionSave first = session.Prepare(world, parameters: NoRebase)) {
+            Assert.Equal(new uint[] { 1, 101 }, first.Business.Write.Records.Select(row => row.ObjectId));
+        }
+        Assert.Equal(address, session.StateSource!.Address);
+        using P0SessionSave second = session.Prepare(world, parameters: NoRebase);
+        Assert.Equal(new uint[] { 1, 102 }, second.Business.Write.Records.Select(row => row.ObjectId)); // Discard burns IDs.
+        Assert.Equal(address, second.Business.Write.SourceGraph);
+        Assert.Equal(new uint[] { 1, 102 }, second.Commit().Business.Objects.Keys);
     }
 
     [Theory]
@@ -145,41 +181,55 @@ public sealed class LoadedWorldTests : IDisposable {
     [InlineData(true)]
     public void ExhaustedCursorAllowsLoadAndExistingPrepareButRejectsNewStrings(bool upgrade) {
         FrameAddress address = Seed(upgrade ? Old : Current, new(1, uint.MaxValue, 0), Text(uint.MaxValue, "retained"));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
-        string retained = loaded.World.Text!;
-        PreparedWorldRevision valid = loaded.Prepare(NoRebase);
-        Assert.Equal(upgrade ? 1 : 0, valid.Revision.LocalObjects.Count);
-        loaded.World.Text = new string('x', 1);
-        Assert.Throws<InvalidOperationException>(() => loaded.Prepare(NoRebase));
-        loaded.World.Text = retained;
-        Assert.Equal(upgrade ? 1 : 0, loaded.Prepare(NoRebase).Revision.LocalObjects.Count);
-        Assert.Equal(address, loaded.ParentRevisionAddress);
+        P0Session session = new(_repository, "main", Registry(Model()));
+        World world = Assert.IsType<World>(session.State);
+        string retained = world.Text!;
+        using (P0SessionSave valid = session.Prepare(world, parameters: NoRebase)) {
+            Assert.Equal(upgrade ? 1 : 0, valid.Business.Write.Records.Count);
+        }
+        world.Text = new string('x', 1);
+        Assert.Throws<InvalidOperationException>(() => session.Prepare(world, parameters: NoRebase));
+        world.Text = retained;
+        using P0SessionSave retry = session.Prepare(world, parameters: NoRebase);
+        Assert.Equal(upgrade ? 1 : 0, retry.Business.Write.Records.Count);
+        Assert.Equal(address, session.StateSource!.Address);
     }
 
     [Fact]
     public void EncodingFailureReleasesCaptureAndRetainsUpgradeRewriteAndBaseline() {
         bool fail = true;
         FrameAddress address = Seed(Old, new(5, 0, 0));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1),
-            Registry(Model(beforePrepare: () => { if (fail) throw new InvalidOperationException("test encoding failure"); })));
-        Assert.Throws<InvalidOperationException>(() => loaded.Prepare(NoRebase));
+        P0Session session = new(_repository, "main", Registry(Model(beforePrepare: () => {
+            if (fail) { throw new InvalidOperationException("test encoding failure"); }
+        })));
+        World world = Assert.IsType<World>(session.State);
+        long tail = Tail();
+        Assert.Throws<InvalidOperationException>(() => session.Prepare(world, parameters: NoRebase));
+        Assert.Equal(tail, Tail());
+        Assert.False(_repository.HasPending);
         fail = false;
-        PreparedWorldRevision retried = loaded.Prepare(NoRebase);
-        Assert.Equal(address, retried.Revision.ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retried.Revision.LocalObjects).Kind);
+        using P0SessionSave retry = session.Prepare(world, parameters: NoRebase);
+        Assert.Equal(address, retry.Business.Write.SourceGraph);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Business.Write.Records).Kind);
     }
 
     [Fact]
     public void CurrentSchemaConflictDoesNotAppendStateOrAdvanceLoadedParent() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
-        _schemas.Register(new DurableSchema("World", 2, new DurableFieldInfo(1, TypeTag.Int64)));
+        P0Session session = new(_repository, "main", Registry(Model()));
+        World world = Assert.IsType<World>(session.State);
+        // A conflicting final intent meets the captured target in the same temporary
+        // catalog; no global registration mutates the source's accurate old view.
+        session.Catalog.Set(new DurableSchema("World", 2, new DurableFieldInfo(1, TypeTag.Int64)));
         long tail = Tail();
-        // The frozen model resolver detects the newly registered conflict before Schema registration.
-        Assert.Throws<InvalidDataException>(() => loaded.Prepare(NoRebase));
+        Assert.Throws<SchemaConflictException>(() => session.Prepare(world, parameters: NoRebase));
         Assert.Equal(tail, Tail());
-        Assert.Equal(address, loaded.ParentRevisionAddress);
-        Assert.Throws<InvalidDataException>(() => loaded.Prepare(NoRebase));
+        Assert.Equal(address, session.StateSource!.Address);
+        Assert.False(_repository.HasPending);
+        session.Catalog.Set(Current);
+        using P0SessionSave retry = session.Prepare(world, parameters: NoRebase);
+        Assert.Equal(address, retry.Business.Write.SourceGraph);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Business.Write.Records).Kind);
     }
 
     [Theory]
@@ -188,45 +238,44 @@ public sealed class LoadedWorldTests : IDisposable {
     [InlineData(99u)]
     public void InvalidWorldIdDoesNotGuessARoot(uint id) {
         FrameAddress address = Seed(Current, new(1, 9, 0), Text(9, "text"));
-        StateModelRegistry models = Registry(Model());
+        DecodedRevision decoded = DecodedRevision.ReadSplit(Store, address, Registry(Model()));
         if (id == 0) {
-            Assert.Throws<ArgumentOutOfRangeException>(() => LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(id), models));
+            Assert.Throws<ArgumentOutOfRangeException>(() => GraphReader.ReadRoot<World>(decoded, new ObjectId(id), new(decoded.SourceModels!), true));
         } else {
-            Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(id), models));
+            Assert.Throws<InvalidDataException>(() => GraphReader.ReadRoot<World>(decoded, new ObjectId(id), new(decoded.SourceModels!), true));
         }
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<OtherWorld>(_store, _schemas, address, new ObjectId(1), models));
+        Assert.Throws<InvalidDataException>(() => GraphReader.ReadRoot<OtherWorld>(decoded, new ObjectId(1), new(decoded.SourceModels!), true));
     }
 
     [Fact]
     public void HydrationPreservesSharedAndEqualIndependentStringIdentityWithoutConstructorInitializers() {
         FrameAddress shared = Seed(Current, new(1, 8, 8), Text(8, "same"));
         StateModelRegistry models = Registry(Model());
-        LoadedWorld<World> first = LoadedWorld.Load<World>(_store, _schemas, shared, new ObjectId(1), models);
-        Assert.Same(first.World.Text, first.World.Alias);
-        Assert.Equal(0, first.World.TransientMarker);
-        FrameAddress distinct = _store.Append(StateRevision.CreateObjectHeadMapDelta(shared,
-            [Durable(1, Current, new(1, 8, 9)), Text(9, "same")], []));
-        LoadedWorld<World> second = LoadedWorld.Load<World>(_store, _schemas, distinct, new ObjectId(1), models);
-        Assert.Equal(second.World.Text, second.World.Alias);
-        Assert.NotSame(second.World.Text, second.World.Alias);
+        World first = ReadWorld(shared, models);
+        Assert.Same(first.Text, first.Alias);
+        Assert.Equal(0, first.TransientMarker);
+        FrameAddress distinct = Append(shared,
+            catalog => [Durable(1, Current, new(1, 8, 9), catalog), Text(9, "same")]);
+        World second = ReadWorld(distinct, models);
+        Assert.Equal(second.Text, second.Alias);
+        Assert.NotSame(second.Text, second.Alias);
     }
 
     [Fact]
     public void UpgradeFailureAndLateRegistrationCannotPublishAPartialLoadedView() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         StateModelRegistry models = Registry(Model(upgrade: _ => throw new InvalidOperationException("upgrade failure")));
-        LoadedWorld<World>? result = null;
-        Assert.Throws<InvalidOperationException>(() => result = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models));
+        World? result = null;
+        Assert.Throws<InvalidOperationException>(() => result = ReadWorld(address, models));
         Assert.Null(result);
 
         DurableSchema other = Schema("Other", 1);
-        _schemas.Register(other);
-        FrameAddress withOther = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, other, new(1, 0, 0))], []));
+        FrameAddress withOther = Append(address, catalog => [Durable(99, other, new(1, 0, 0), catalog)], other);
         StateModelBinding late = ModelCore<OtherWorld>(current: other, old: other);
         StateModelRegistry changing = new();
         changing.Register(Model(onRead: () => changing.Register(late)));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, withOther, new ObjectId(1), changing));
-        Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, withOther, new ObjectId(1), changing).World.Value);
+        Assert.Throws<InvalidDataException>(() => ReadWorld(withOther, changing));
+        Assert.Equal((byte)5, ReadWorld(withOther, changing).Value);
     }
 
     [Fact]
@@ -234,12 +283,11 @@ public sealed class LoadedWorldTests : IDisposable {
         FrameAddress address = Seed(Current, new(5, 0, 0));
         DurableSchema otherOld = Schema("Other", 1);
         DurableSchema otherCurrent = Schema("Other", 2);
-        _schemas.Register(otherOld);
-        FrameAddress withOther = _store.Append(StateRevision.CreateObjectHeadMapDelta(address, [Durable(99, otherOld, new(1, 0, 0))], []));
+        FrameAddress withOther = Append(address, catalog => [Durable(99, otherOld, new(1, 0, 0), catalog)], otherOld);
         StateModelRegistry models = Registry(Model());
         models.Register(ModelCore<OtherWorld>(upgrade: _ => throw new InvalidOperationException("unreachable upgrade fails"), current: otherCurrent, old: otherOld));
-        LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidOperationException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, withOther, new ObjectId(1), models));
+        World? delivered = null;
+        Assert.Throws<InvalidOperationException>(() => delivered = ReadWorld(withOther, models));
         Assert.Null(delivered);
     }
 
@@ -247,14 +295,15 @@ public sealed class LoadedWorldTests : IDisposable {
     public void RecursivePrepareFailureLeavesOwnerReusable() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
         bool reenter = true;
-        LoadedWorld<World>? loaded = null;
-        loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1),
-            Registry(Model(beforePrepare: () => { if (reenter) loaded!.Prepare(NoRebase); })));
-        Assert.Throws<InvalidOperationException>(() => loaded.Prepare(NoRebase));
+        P0Session? session = null;
+        session = new(_repository, "main", Registry(Model(beforePrepare: () => {
+            if (reenter) { session!.Prepare(session.State!, parameters: NoRebase); }
+        })));
+        Assert.Throws<InvalidOperationException>(() => session.Prepare(session.State!, parameters: NoRebase));
         reenter = false;
-        PreparedWorldRevision retried = loaded.Prepare(NoRebase);
-        Assert.Equal(address, retried.Revision.ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retried.Revision.LocalObjects).Kind);
+        using P0SessionSave retry = session.Prepare(session.State!, parameters: NoRebase);
+        Assert.Equal(address, retry.Business.Write.SourceGraph);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Business.Write.Records).Kind);
     }
 
     [Fact]
@@ -265,7 +314,7 @@ public sealed class LoadedWorldTests : IDisposable {
         models.Register(original);
         Assert.Throws<InvalidOperationException>(() => models.Register(Model()));
         Assert.Same(original, models.Snapshot().Models[TypeExpr.Named("World")]);
-        Assert.Equal((byte)5, LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models).World.Value);
+        Assert.Equal((byte)5, ReadWorld(address, models).Value);
     }
 
     [Fact]
@@ -292,17 +341,27 @@ public sealed class LoadedWorldTests : IDisposable {
     [Fact]
     public void DefiniteAppendFailureDoesNotAdvanceTheLoadedBaseline() {
         FrameAddress address = Seed(Old, new(5, 0, 0));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), Registry(Model()));
-        PreparedWorldRevision plan = loaded.Prepare(NoRebase);
-        long tail = DataBytes(_segments);
-        StateRevision invalid = StateRevision.CreateObjectHeadMapDelta(DifferentTicket(address), plan.Revision.LocalObjects, []);
-        Assert.ThrowsAny<Exception>(() => _store.Append(invalid));
-        Assert.Equal(tail, DataBytes(_segments));
-        PreparedWorldRevision retry = loaded.Prepare(NoRebase);
-        Assert.Equal(address, loaded.ParentRevisionAddress);
-        Assert.Equal(address, retry.Revision.ParentRevisionAddress);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Revision.LocalObjects).Kind);
-        Assert.NotEqual(address, _store.Append(retry.Revision));
+        P0Session session = new(_repository, "main", Registry(Model()));
+        long tail = Tail();
+        _repository.Checkpoint = checkpoint => {
+            if (checkpoint == P0SaveCheckpoint.BeforeAppend) { throw new InvalidOperationException("definite pre-append failure"); }
+        };
+        using (P0SessionSave failed = session.Prepare(session.State!, parameters: NoRebase)) {
+            GraphCommitException error = Assert.Throws<GraphCommitException>(() => failed.Commit());
+            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            Assert.Null(error.CandidateRevisionAddress);
+        }
+        Assert.Equal(tail, Tail());
+        Assert.False(_repository.HasPending);
+        Assert.False(_repository.IsFaulted);
+        Assert.Equal(address, _repository.GetHead("main"));
+        Assert.Equal(address, session.StateSource!.Address);
+        Assert.True(session.Baseline!.Objects[new ObjectId(1)].RequiresRewrite);
+        _repository.Checkpoint = null;
+        using P0SessionSave retry = session.Prepare(session.State!, parameters: NoRebase);
+        Assert.Equal(address, retry.Business.Write.SourceGraph);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Business.Write.Records).Kind);
+        Assert.NotEqual(address, retry.Commit().Business.Address);
     }
 
     private class World : IDurableObject {
@@ -359,15 +418,32 @@ public sealed class LoadedWorldTests : IDisposable {
     private static DurableSchema Schema(string id, int version) => new(id, version,
         new DurableFieldInfo(1, TypeTag.Byte), new DurableFieldInfo(2, TypeTag.String), new DurableFieldInfo(3, TypeTag.String),
         new DurableFieldInfo(4, TypeTag.UInt64));
-    private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) {
-        _schemas.Register(schema);
-        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, new[] { Durable(1, schema, state) }.Concat(strings), []));
+    private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) =>
+        Append(null, catalog => new[] { Durable(1, schema, state, catalog) }.Concat(strings), schema);
+
+    // Fixture construction uses the real typed writer and paired publication owner.
+    // Hand-written bodies isolate this restore/save contract; they are not a second kernel.
+    private FrameAddress Append(FrameAddress? source, Func<P0CatalogView, IEnumerable<ObjectVersionRecord>> records,
+        params DurableSchema[] schemas) {
+        P0CatalogView? accepted = _repository.SharedSchemaRoot is { } root ? P0CatalogView.Load(Store, root) : null;
+        P0CatalogWorkspace catalog = new(_repository.EnsureEditingAllowed, accepted);
+        foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
+        P0PreparedCatalog meta = catalog.Prepare();
+        using P0PendingSave pending = _repository.Prepare("main", P0GraphKind.State,
+            new(source, new ObjectId(1), records(meta.View)), meta.Write);
+        return _repository.Commit(pending, meta.Install, prepareMeta: meta.PrepareInstall).Business.Address;
     }
-    private ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(
-            _schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], Base(state)).Body);
+
+    private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state, P0CatalogView catalog) =>
+        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), catalog));
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
+        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+
+    private World ReadWorld(FrameAddress address, StateModelRegistry models) {
+        DecodedRevision source = DecodedRevision.ReadSplit(Store, address, models);
+        return GraphReader.ReadRoot<World>(source, Store.ReadMetadata(address).RootId, new(source.SourceModels!), true);
+    }
+
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);
@@ -397,11 +473,9 @@ public sealed class LoadedWorldTests : IDisposable {
             (mask & 4) != 0 ? new ObjectId(reader.ReadVarUInt32()) : prior.AliasId,
             (mask & 8) != 0 ? reader.ReadVarUInt64() : prior.Sequence);
     }
-    private long Tail() => DataBytes(_segments);
+    private long Tail() => DataBytes(_repository.Data);
     public void Dispose() {
-        _store.Dispose();
-        _file.Dispose();
-        _segments.Dispose();
+        _repository.Dispose();
         string resolved = Path.GetFullPath(_root);
         if (!string.Equals(Path.GetDirectoryName(resolved), Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), StringComparison.OrdinalIgnoreCase) ||
             !Path.GetFileName(resolved).StartsWith("durable-graph-loaded-world-", StringComparison.Ordinal)) {

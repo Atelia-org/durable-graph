@@ -1,9 +1,9 @@
 <a id="db-087-p0持久-meta-自举实验"></a>
 # DB-087：meta 自举实现与分片证据
 
-本目录的自举读写现已进入公开默认 Repository／BranchCheckout／GraphResources；第五片产品回归与普通非 friend README 包已验，见 [DB-087 §34](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接)。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
+本目录的自举读写现已进入公开默认 Repository／BranchCheckout／GraphResources；默认接线与第六片旧保存高层退出已验，见 [DB-087 §35](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出)。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
 
-catalog、共同 writer 与发布 owner 已接共用恢复／业务 workspace；公开前端复用这一条路径，不整体丢弃 P0。旧核心按调用清零退出是后继；共同 payload 和受控容器 emitter 保留。
+catalog、共同 writer 与发布 owner 已接共用恢复／业务 workspace；公开前端复用这一条路径，不整体丢弃 P0。旧保存高层由本片删除，低层按调用清零退出是后继；共同 payload 和受控容器 emitter 保留。
 代码去向、依赖顺序与尚未敲定的问题集中在 DB-087，不以 `P0` 目录名推断最终产品边界。
 
 实验只把两种变化来源汇入共同保存：业务 Capture/比较；meta 按逻辑 key 归约修改。
@@ -101,6 +101,8 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 [P1d 第四片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history) 已通过 [内部 friend 的准确包消费者](../../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)：V1 seed／tag→V2 readonly Upgrade→latest shared 与旧 tag Fork→同／跨 S Pair→首次 rewrite Base→fresh List Delta／readonly。生产零改，包内 Generator／Build targets 与 accepted history、准确来源／实际 heads/H 均有证据；包运行与 source solution 回归分开记录于 §33。默认公开工厂仍 DB-086，内部资格不授 public-default 或完整 P1 产品停点。下一片默认前端先保 FS rotation 参数意义，再按调用清零退旧并迁两个 cache 小依赖，最后验非 friend 公开包；具体施工导航见 §33.4，P2 private 后置。
 
 [P1d 第五片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接) 已把本目录的共同读写接入公开默认 Repository／BranchCheckout／GraphResources，产品回归移接与普通非 friend README 包验收通过。rotation／cache 分别传参，准确 S／Event/State／owner／发布前安装保持；旧 Schema/State getter 仅 internal 施工低层，后继按调用清零退出。普通非 friend README 故事不代完整 accepted-history 公开包，P2 private 后置；最终源码／普通包证据只在 §34，历史各片“默认未切”保当片含义。
+
+[P1d 第六片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出) 已删除旧 LoadedWorld／WorldWorkspace／PreparedWorldSave、旧 planner 与 Store 规划入口；共同 writer、workspace／候选及 WithSplitGraph 真实安装保留，有效安全见证迁移、最终源码回归与 Probe smoke 已验。SCB1／raw Store／旧 reader 另片退出，完整非 friend accepted-history 公开包再后置；不搬旧 StageCore 到新壳，不将历史源码链接当仍存 API。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

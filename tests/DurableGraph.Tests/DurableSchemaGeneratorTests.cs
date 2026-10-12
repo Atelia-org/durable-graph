@@ -362,9 +362,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     // retain their original reference/import environment (including historical-name probes).
     private static bool NeedsFixtureBridge(string source) =>
         source.Contains("FixtureGraphRepository", StringComparison.Ordinal) ||
-        source.Contains("FixtureGraphSession", StringComparison.Ordinal) ||
-        source.Contains("FixtureLoadedWorld", StringComparison.Ordinal) ||
-        source.Contains("FixturePreparedWorldRevision", StringComparison.Ordinal);
+        source.Contains("FixtureGraphSession", StringComparison.Ordinal);
 
     private static string WithFixtureBridgeImport(string source) => NeedsFixtureBridge(source)
         ? "global using Atelia.Binary;\nglobal using Atelia.DurableGraph.Tests;\n" + source : "global using Atelia.Binary;\n" + source;

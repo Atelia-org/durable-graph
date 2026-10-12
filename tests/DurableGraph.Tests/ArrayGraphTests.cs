@@ -144,27 +144,24 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void GeneratedArrayPreparedStateOwnsElementsAndNestedInlineCopies() {
         ArrayGraphFixture fixture = CompileArrayGraph();
         using RawBaseDirectory directory = new();
-        FrameAddress first;
-        ObjectId worldId;
-        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path))
-        {
-            using StateRevisionStore states = new(segments.Data);
-            SchemaStore schemas = segments.Schemas;
-            object world = fixture.NewWorld();
-            FixturePreparedWorldRevision prepared = fixture.PrepareNew(states, schemas, world);
-            worldId = prepared.WorldId;
-            fixture.Change(world, 1);
-            fixture.Change(world, 2);
-            fixture.Replace(world);
-            fixture.Detach(world);
-            first = states.Append(prepared.Revision);
+        object world = fixture.NewWorld();
+        bool mutated = false;
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+            repository.Checkpoint = checkpoint => {
+                if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
+                fixture.Change(world, 1);
+                fixture.Change(world, 2);
+                fixture.Replace(world);
+                fixture.Detach(world);
+                mutated = true;
+            };
+            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)world);
+            Assert.True(mutated);
+            Assert.Same(world, checkout.State);
+            fixture.Check(world, 2, true, true);
         }
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path))
-        {
-            using StateRevisionStore states = new(segments.Data);
-            SchemaStore schemas = segments.Schemas;
-            fixture.Check(fixture.LoadOld(states, schemas, first, worldId), 0, false, false);
-        }
+        using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, fixture.Models());
+        fixture.Check(reopened.ReadState(reopened.GetHead("main")), 0, false, false);
     }
 
     [Theory]
@@ -219,10 +216,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public void Repair(object world, object old, int failure) => Method<Action<object, object, int>>("Repair")(world, old, failure);
         public void Check(object world, int stage, bool replaced, bool detached) =>
             Method<Action<object, int, bool, bool>>("Check")(world, stage, replaced, detached);
-        public FixturePreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world) =>
-            Method<Func<StateRevisionStore, SchemaStore, object, FixturePreparedWorldRevision>>("PrepareNew")(states, schemas, world);
-        public object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, ObjectId worldId) =>
-            Method<Func<StateRevisionStore, SchemaStore, FrameAddress, ObjectId, object>>("LoadOld")(states, schemas, address, worldId);
+
     }
 
     private const string ArrayGraphSource = """
@@ -367,10 +361,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 if(failure==0) ((World)world).Island=(Node[])old;
                 else ((World)world).Matrix=(int[,])old;
             }
-            public static FixturePreparedWorldRevision PrepareNew(StateRevisionStore states,SchemaStore schemas,object world) =>
-                FixtureLoadedWorld.PrepareNew(states,schemas,(World)world,Models(),new(1000000,1));
-            public static object LoadOld(StateRevisionStore states,SchemaStore schemas,FrameAddress address,ObjectId worldId) =>
-                FixtureLoadedWorld.Load<World>(states,schemas,address,worldId,Models()).World;
+
         }
         """;
 }

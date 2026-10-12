@@ -7,7 +7,6 @@ using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -165,14 +164,11 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     [InlineData(DictionaryComparerKind.ReferenceIdentity, "", "")]
     public void ExactReadRejectsLookupKeyCollisionEvenInUnreachableDictionary(
         DictionaryComparerKind comparer, string first, string second) {
-        Directory.CreateDirectory(_root);
-        using SegmentStore segments = SegmentStore.Create(Path.Combine(_root, "data"));
-        using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
-        using StateRevisionStore states = new(segments);
-        SchemaStore schemas = file.Schemas;
+        using P0Repository repository = P0Repository.CreateNew(_root);
+        P0CatalogWorkspace workspace = new(repository.EnsureEditingAllowed);
+        workspace.Set(Schema);
+        P0PreparedCatalog catalog = workspace.Prepare();
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32));
-        RepresentationId mapRepresentation = schemas.RegisterRepresentations([ObjectLayout.ForDictionary(layout)])[0];
-        RepresentationId worldRepresentation = schemas.RegisterRepresentations([ObjectLayout.ForDurable(Schema)])[0];
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);
         writer.WriteByte((byte)comparer);
@@ -180,15 +176,15 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         writer.WriteVarUInt32(3); writer.WriteVarInt32(10);
         writer.WriteVarUInt32(4); writer.WriteVarInt32(20);
         State empty = default;
-        FrameAddress address = states.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [ObjectVersionRecord.CreateBase(1, BaseObjectBodyCodec.Encode(worldRepresentation, Base(in empty)).Body),
-             ObjectVersionRecord.CreateBase(2, BaseObjectBodyCodec.Encode(mapRepresentation, new(bytes.WrittenSpan)).Body),
-             Text(3, first), Text(4, second)], []));
-        StateReaderRegistry readers = new();
-        readers.Register(new StateReaderBinding<State>(Schema, Read, Apply, Visit));
-        Assert.Throws<InvalidDataException>(() => RevisionDecoder.Read(states, schemas, address, readers));
+        ObjectVersionRecord[] rows = [ObjectVersionRecord.CreateBase(1,
+            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(Schema), Base(in empty), catalog.View)),
+            ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.ForDictionary(layout), new(bytes.WrittenSpan), catalog.View)),
+            Text(3, first), Text(4, second)];
+        using P0PendingSave pending = repository.Prepare("main", P0GraphKind.State, new(null, new(1), rows), catalog.Write);
+        FrameAddress address = repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(repository.Store, address, Models()));
         int normalizations = 0;
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(states, schemas, address, new(1),
+        Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.LoadState(repository.Store, address,
             Models(() => normalizations++)));
         Assert.Equal(0, normalizations);
     }
@@ -287,7 +283,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         public int GetHashCode(string value) { Calls++; return StringComparer.Ordinal.GetHashCode(value); }
     }
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase(value)).Body);
+        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
     private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
     private static IReadOnlyList<ObjectVersionRecord> Records(P0GraphStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];

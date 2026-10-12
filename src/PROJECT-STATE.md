@@ -19,13 +19,13 @@
 
 ## 当前焦点
 
-[DB-087 P1d 第五片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接) 已完成公开默认前端与产品回归移接：Repository／BranchCheckout 为唯一新 session，GraphResources 公共工厂走两正式根；rotation／cache 分传，旧 Schemas/States 仅 internal 独立低层。最终源码构建／完整回归和普通非 friend README 包均通过，精确证据只保留 §34；旧核心退出、更完整 accepted-history 公开包与 P2 尚未完成，不宣布完整 P1d／P1。
+[DB-087 P1d 第六片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出) 已完成旧保存高层退出：LoadedWorld／WorldWorkspace／PreparedWorldSave、两旧 planner／PreparedObjectRevision 与旧 Store 规划入口删除，共同业务 workspace／候选、纯规划内核和 WithSplitGraph 实际安装保留。有效安全见证迁移、最终源码回归与 Probe smoke 已验，证据集中于 §35；第五片公开默认和普通 README 包保原限定资格。
 
-当前默认恢复／保存使用准确 S、共同 workspace／候选与唯一 owner；history／Pair／State 槽／owned 物理缓存复用已验路径。checkout 执行 S 固定创建／恢复时的环境，提交只推进存储 selected S；Event/Discard 保 State 基线与 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭；不保证任意跨 S closure 的领域值等价。
+当前默认两根／meta 自举、准确 S、共同 owner、history／Pair／State 槽与 owned 物理缓存保持。checkout 执行 S／models 稳定，保存可推进 selected S；Event/Discard 不推进 State 或消费 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。完整 source／实际 heads/H／同候选安装和 root／ID／共享环语义由真实新路径继续验。
 
-后继按调用清零删除 SCB1／raw-map 权威与旧格式消费，再验非 friend 的完整 accepted-history 公开包，最后 P2 private。最小验收与来源 guard／旧全局 Schema 冲突测试的修订只在 DB-087 §34 维护；[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图) 只导航剩余依赖。旧底层 fixture 是施工过渡，不是公开兼容模式。
+本片已删旧保存高层，SCB1／raw Store／旧 reader 和 GraphResources internal legacy 模式另片按调用退出；不把测试形状作为保壳理由。后继低层清零→完整非 friend accepted-history 公开包→P2，尚不宣布完整 P1d／P1。证据与迁移表只保留 DB-087 §35，[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图) 导航依赖。
 
-本片起点 `3988abb`；续工先核实际 HEAD／工作树。依赖模式按[指南](../docs/storage-dependency.md)显式选择。前三片进程／故障与第四片内部包保各自证据，当前不外推完整公开包、全部组合、断电或性能资格。
+本片起点 `79cc577`；续工先核 HEAD／工作树，按[依赖指南](../docs/storage-dependency.md)选择准确模式。本片不改 wire／公开保存语义，不新增包或进程／性能资格。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
@@ -288,10 +288,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   传统生成路径不为完全删除的族生成 reader；Family 路径可按 retained history 生成 state-only exact reader，
   但 editable Load 仍要求每个 source 引用对象族有 current/migration CLR 模型和 Normalize。只承诺读已 Remove 该族的新 Revision 才能删除其恢复能力，
   仍支持旧 Revision 则须保留相应 reader/Normalize。见 DB-036 H1 真实包回归。
-- 内部 LoadedWorld 仅保留机制见证/低层测试桥接，不是下游保存 API。PrepareNew 从普通新建图生成无 Parent 的完整冻结计划，返回 WorldId；可持久登记 Schema/表示，
-  不追加 State 或执行 State 屏障/发布，不安装基线。单根非空且要求 exact 已登记 CLR 类型。
-- LoadedWorld.Prepare 固定 Parent/WorldId，返回 owned StateRevision，成功或失败均释放临时 Capture，
-  不推进基线。此内部低层路径由宿主 Append 后重新 Load；产品同实例连续保存使用 BranchCheckout。Schema/表示登记不代表发布。
+- 旧 LoadedWorld／WorldWorkspace 保存壳退出，真实准备／恢复与连续保存分别由共同 GraphReader／BusinessWorkspace 和 BranchCheckout／P0Session 承担；不保替代旧保存适配器。
   Empty 反向映射选择最小 source ID，但基线槽保留旧 ID，首次 Capture 形成真实 Delta/Remove。
   分配从完整 source live max+1 起，只承诺会话内单调；uint 耗尽不阻止已有对象保存。
   恢复的可达 durable 实例身份导入同一捕获会话；child-only 修改不改变 owner ID 槽，
@@ -306,7 +303,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   Schema／TypeExpr 从指定 meta 根冷读员工 DTO 后经工厂投影，构造闭包／nominal kind/arity／limits 保持；目录排除自身、write-last，用固定 Dictionary body 与对象版本，不保 raw-map 第二权威。
   业务与 meta producer 共用窄 saver；实际 append 后准备全部安装材料，Confirmed 才接受 State／meta，Event 只接受 meta／Head。
   保存规划与计量保全部 source membership、实际 records／heads/H、强制 rewrite Base；物理缓存按 owner/address 复用合法 owned 值，每次仍核图关系／准确 S／typed 来源，zero 禁用、关闭／fault 清驻留。
-- 旧 SCB1／RepresentationId／Base v4、RevisionDecoder／RevisionReadSession、Captured/LoadedRevisionPlanner 与 raw StateRevisionStore 尚留明确内部低层 fixture，已经不是公开默认读写权威。
+- 旧 SCB1／RepresentationId／Base v4、RevisionDecoder／RevisionReadSession 与 raw StateRevisionStore 尚留内部低层 fixture，已非公开默认权威；旧保存高层及 Captured/LoadedRevisionPlanner 由本片退出。
   后继按调用清零退出旧核心与纯旧格式测试；共用 body、ObjectVersion payload／计量、planner 内核、workspace／候选与 owned LRU 不随旧格式一起删除。历史机制细节查 DB-046／067／086，不在当前工作集重复旧格式说明。
 
 - 数组对象支持 SZ/rank 2–4 与完整已有槽闭包：标量、string/class ID、inline/generic struct、递归数组。
@@ -353,7 +350,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 
 | 准备修改 | 先查源码/测试，再按需读合同 |
 |---|---|
-| 热保存基线、head/H 与增量安装 | [DB-069](../docs/design-branches/0069-incremental-save-baseline.md)、[NormalizedRevision](DurableGraph.Persistence/NormalizedRevision.cs)、[基线回归](../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)、[前后测量](../tests/DurableGraph.Persistence.Tests/HotSaveMeasurementTests.cs) |
+| 热保存基线、head/H 与增量安装 | [DB-069](../docs/design-branches/0069-incremental-save-baseline.md)、[NormalizedRevision](DurableGraph.Persistence/NormalizedRevision.cs)、[基线回归](../tests/DurableGraph.Persistence.Tests/P0NormalizedBusinessBaselineTests.cs)、[实际计量回归](../tests/DurableGraph.Persistence.Tests/BusinessPlanningAccountingTests.cs) |
 | IDurableObject、record class 与旧基类迁移 | [DB-068](../docs/design-branches/0068-record-class-model-slice.md)、[准入](DurableGraph/IDurableObject.cs)、[record 图回归](../tests/DurableGraph.Tests/RecordClassGraphTests.cs)、[真包三代/旧包迁移](../experiments/PackageConsumerProbe/RecordClassConsumer/README.md) |
 | Revision/map 读缓存、双数组字典与 Store 寿命 | [DB-067](../docs/design-branches/0067-owned-revision-read-cache-design.md)、[缓存](DurableGraph.Storage/StateRevisionReadCache.cs)、[预算与失败测试](../tests/DurableGraph.Storage.Tests/StateRevisionReadCacheTests.cs) |
 | 默认保存、事件快照和失败恢复用法 | [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice.md)、[包示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)、[同源恢复测试](../tests/DurableGraph.Persistence.Tests/EventHistoryConsumerRecoveryTests.cs)、[README 原文验证](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) |
@@ -374,7 +371,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 | 可组合值 Upgrade / 规则集 / Context 子作用域 | [DB-039](../docs/design-branches/0039-composable-value-upgrade-design.md)、[值绑定](DurableGraph/Runtime/Binding/StateBindingContext.ValueUpgrade.cs)、[SG 属性](DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs)、[历史包](../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) |
 | 泛型/历史绑定/UpgradeContext | [DB-038](../docs/design-branches/0038-generic-schema-state-and-binding-design.md)、[绑定上下文](DurableGraph/Runtime/Binding/StateBindingContext.cs)、[生成模板](DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)、[三代历史包](../experiments/PackageConsumerProbe/GenericConsumer/README.md) |
 | inline struct/嵌套 DTO/Schema DAG | [DB-037](../docs/design-branches/0037-inline-struct-state-slice.md)、[生成值 helper](DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs)、[真实生成图](../tests/DurableGraph.Tests/InlineStructGraphTests.cs)、[历史包](../experiments/PackageConsumerProbe/InlineStructConsumer) |
-| 独立图工作区、资源与读取 | [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice.md)、[工作区](DurableGraph.Persistence/WorldWorkspace.cs)、[资源](DurableGraph.Persistence/GraphResources.cs)、[读取](DurableGraph.Persistence/GraphReader.cs) |
+| 独立图工作区、资源与读取 | [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice.md)、[工作区](DurableGraph.Persistence/BusinessWorkspace.cs)、[资源](DurableGraph.Persistence/GraphResources.cs)、[读取](DurableGraph.Persistence/GraphReader.cs) |
 | EventHistory、分支发布与恢复 | [DB-063](../docs/design-branches/0063-event-history-journal-slice.md)、[Repository](DurableGraph.Persistence/Repository.cs)、[工作副本](DurableGraph.Persistence/BranchCheckout.cs)、[集成测试](../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs) |
 | 操作内 exact 解码复用与只读闭包共享 | [DB-064](../docs/design-branches/0064-shared-revision-decoding-design.md)、[读取会话](DurableGraph.Persistence/RevisionReadSession.cs)、[引用闭包](DurableGraph.Persistence/GraphReader.cs)、[共享测试](../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、[Checkout 与续写](../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) |
 | 领域引用图/首次准备 | [DB-034](../docs/design-branches/0034-durable-reference-graph-batch.md)、[真实生成图冷读](../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs)、[双视图与失败测试](../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs) |

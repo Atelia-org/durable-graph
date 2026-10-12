@@ -1,6 +1,7 @@
 using System.Reflection;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
@@ -18,65 +19,66 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         uint characterId;
         uint[] allIds;
-        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path, rotationThresholdBytes)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), rotationThresholdBytes)) {
             object world = fixture.Create();
-            FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, world);
-            Assert.Null(initial.Revision.ParentRevisionAddress);
-            Assert.All(initial.Revision.LocalObjects, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            worldId = initial.WorldId;
-            characterId = FindGraphObject(schemas, initial.Revision, "reference.character");
-            allIds = initial.Revision.LocalObjectIds.ToArray();
+            using BranchCheckout branch = repository.CreateBranch("main", (IDurableObject)world, ReferenceGraphNoRebase);
+            first = branch.Head.RevisionAddress;
+            worldId = branch.StateId!.Value;
+            P0GraphStore store = ReferenceGraphStore(repository);
+            Assert.Null(store.ReadGraph(first).SourceGraph);
+            Assert.All(DefaultRecords(store, first), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            characterId = FindGraphObject(store, first, "reference.character");
+            allIds = store.ReadGraph(first).Objects.Keys.ToArray();
             Assert.Equal(5, allIds.Length); // World, Character, Item, shared nonempty string, Empty.
-            fixture.ChangeNew(world, 999);
-            first = store.Append(initial.Revision);
+            repository.CreateTag("initial", branch.Head);
+            fixture.Change(world, 999); // The actual committed graph owns its prior values.
+            fixture.ResetConstructors();
+            fixture.Check(repository.ReadState(branch.Head), 7);
         }
-
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path, rotationThresholdBytes)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
-            object loaded = fixture.Load(store, schemas, first, worldId);
-            fixture.Check(loaded, 7);
-            Assert.Empty(fixture.Prepare(loaded).Revision.LocalObjects);
-            fixture.Change(loaded, 8);
-            FixturePreparedWorldRevision update = fixture.Prepare(loaded);
-            Assert.Equal(first, update.Revision.ParentRevisionAddress);
-            ObjectVersionRecord childDelta = Assert.Single(update.Revision.LocalObjects);
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes)) {
+            fixture.ResetConstructors();
+            using BranchCheckout loaded = repository.Checkout("main");
+            fixture.Check(loaded.State!, 7);
+            CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
+            P0GraphStore store = ReferenceGraphStore(repository);
+            Assert.Empty(DefaultRecords(store, unchanged.Address));
+            Assert.Empty(DefaultRemoved(store, unchanged.Address));
+            fixture.Change(loaded.State!, 8);
+            changed = loaded.CommitState(ReferenceGraphNoRebase).Address;
+            Assert.Equal(unchanged.Address, store.ReadGraph(changed).SourceGraph);
+            ObjectVersionRecord childDelta = Assert.Single(DefaultRecords(store, changed));
             Assert.Equal(characterId, childDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, childDelta.Kind);
-            Assert.Empty(update.Revision.RemovedObjectIds);
-            changed = store.Append(update.Revision);
-            FixturePreparedWorldRevision repeated = fixture.Prepare(loaded);
-            Assert.Equal(first, repeated.Revision.ParentRevisionAddress);
-            Assert.Equal(childDelta.Body.ToArray(), Assert.Single(repeated.Revision.LocalObjects).Body.ToArray());
+            Assert.Empty(DefaultRemoved(store, changed));
+            Assert.Equal(2, store.ReadObjectChain(changed, characterId).Entries.Count);
+            CheckpointAddress repeated = loaded.CommitState(ReferenceGraphNoRebase);
+            Assert.Empty(DefaultRecords(store, repeated.Address));
+            Assert.Equal(changed, store.ReadGraph(repeated.Address).SourceGraph);
+            repository.CreateTag("changed", loaded.Head);
         }
-
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path, rotationThresholdBytes)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
-            object loaded = fixture.Load(store, schemas, changed, worldId);
-            fixture.Check(loaded, 8);
-            fixture.Detach(loaded);
-            FixturePreparedWorldRevision removal = fixture.Prepare(loaded);
-            Assert.Equal(changed, removal.Revision.ParentRevisionAddress);
-            Assert.Equal(ObjectHeadMapKind.Base, removal.Revision.ObjectHeadMapKind);
-            Assert.Empty(removal.Revision.ExternalObjectHeads);
-            ObjectVersionRecord worldChange = Assert.Single(removal.Revision.LocalObjects);
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes)) {
+            fixture.ResetConstructors();
+            using BranchCheckout loaded = repository.Checkout("main");
+            fixture.Check(loaded.State!, 8);
+            FrameAddress parent = loaded.StateRevisionAddress!.Value;
+            fixture.Detach(loaded.State!);
+            detached = loaded.CommitState(ReferenceGraphNoRebase).Address;
+            P0GraphStore store = ReferenceGraphStore(repository);
+            Assert.Equal(parent, store.ReadGraph(detached).SourceGraph);
+            ObjectVersionRecord worldChange = Assert.Single(DefaultRecords(store, detached));
             Assert.Equal(worldId.Value, worldChange.ObjectId);
-            detached = store.Append(removal.Revision);
-            Assert.Equal<uint>([worldId.Value], store.ReadLiveObjectHeadMap(detached).Keys);
+            Assert.Equal(allIds.Where(id => id != worldId.Value).Order(), DefaultRemoved(store, detached));
+            Assert.Equal<uint>([worldId.Value], store.ReadGraph(detached).Objects.Keys);
         }
-
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path, rotationThresholdBytes)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
-            fixture.Check(fixture.Load(store, schemas, detached, worldId), -1);
-            fixture.Check(fixture.Load(store, schemas, first, worldId), 7);
-            fixture.Check(fixture.Load(store, schemas, changed, worldId), 8);
-            Assert.Equal(allIds.Order(), store.ReadLiveObjectHeadMap(first).Keys.Order());
-            Assert.Equal(2, store.ReadObjectVersionChain(changed, characterId).Records.Count);
-            Assert.Single(store.ReadObjectVersionChain(changed, worldId.Value).Records);
+        using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, fixture.Models())) {
+            fixture.ResetConstructors();
+            fixture.Check(repository.ReadState(repository.GetHead("main")), -1);
+            fixture.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
+            fixture.Check(repository.ReadState(repository.ResolveTag("changed")), 8);
+            P0GraphStore store = ReferenceGraphStore(repository);
+            Assert.Equal(allIds.Order(), store.ReadGraph(first).Objects.Keys.Order());
+            Assert.Equal(2, store.ReadObjectChain(changed, characterId).Entries.Count);
+            Assert.Single(store.ReadObjectChain(changed, worldId.Value).Entries);
             Assert.NotEqual(first, detached);
         }
     }
@@ -87,25 +89,29 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(generated);
         Assembly assembly = EmitAndLoad(generated.OutputCompilation);
         ReferenceGraphFixture fixture = new(assembly);
-        var replaceUnknown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceUnknown")!
-            .CreateDelegate<Func<object, object>>();
-        var restoreChild = assembly.GetType("FusedDelta.Host")!.GetMethod("RestoreChild")!
-            .CreateDelegate<Action<object, object>>();
+        var replaceUnknown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceUnknown")!.CreateDelegate<Func<object, object>>();
+        var restoreChild = assembly.GetType("FusedDelta.Host")!.GetMethod("RestoreChild")!.CreateDelegate<Action<object, object>>();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore store = new(segments.Data);
-        FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
-        FrameAddress first = store.Append(initial.Revision);
-        object loaded = fixture.Load(store, schemas, first, initial.WorldId);
-        object previous = replaceUnknown(loaded);
-        Assert.Throws<InvalidOperationException>(() => fixture.Prepare(loaded));
-        restoreChild(loaded, previous);
-        FixturePreparedWorldRevision recovered = fixture.Prepare(loaded);
-        Assert.Equal(first, recovered.Revision.ParentRevisionAddress);
-        Assert.Empty(recovered.Revision.LocalObjects);
-        Assert.Empty(recovered.Revision.RemovedObjectIds);
-        fixture.Check(loaded, 7);
+        using Repository repository = Repository.CreateNew(directory.Path, fixture.Models());
+        using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)fixture.Create(), ReferenceGraphNoRebase);
+        CheckpointAddress first = main.Head;
+        fixture.ResetConstructors();
+        using BranchCheckout loaded = repository.Fork("loaded", first);
+        P0GraphStore store = ReferenceGraphStore(repository);
+        long frames = store.AppendedFrames;
+        object previous = replaceUnknown(loaded.State!);
+        Assert.Throws<InvalidOperationException>(() => loaded.CommitState(ReferenceGraphNoRebase));
+        Assert.Equal(first, loaded.Head);
+        Assert.Equal(first, repository.GetHead("loaded"));
+        Assert.Equal(first.Address, loaded.StateRevisionAddress);
+        Assert.Equal(frames, store.AppendedFrames);
+        Assert.False(repository.IsFaulted);
+        restoreChild(loaded.State!, previous);
+        CheckpointAddress recovered = loaded.CommitState(ReferenceGraphNoRebase);
+        Assert.Equal(first.Address, store.ReadGraph(recovered.Address).SourceGraph);
+        Assert.Empty(DefaultRecords(store, recovered.Address));
+        Assert.Empty(DefaultRemoved(store, recovered.Address));
+        fixture.Check(loaded.State!, 7);
     }
 
     [Fact]
@@ -114,46 +120,49 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(generated);
         Assembly assembly = EmitAndLoad(generated.OutputCompilation);
         ReferenceGraphFixture fixture = new(assembly);
-        var replaceKnown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceKnown")!
-            .CreateDelegate<Action<object, int>>();
+        var replaceKnown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceKnown")!.CreateDelegate<Action<object, int>>();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
-        SchemaStore schemas = segments.Schemas;
-        using StateRevisionStore store = new(segments.Data);
-        FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.Create());
-        uint previousCharacter = FindGraphObject(schemas, initial.Revision, "reference.character");
-        uint previousItem = FindGraphObject(schemas, initial.Revision, "reference.item");
-        uint sourceMaximum = initial.Revision.LocalObjectIds.Max();
-        FrameAddress first = store.Append(initial.Revision);
-        object loaded = fixture.Load(store, schemas, first, initial.WorldId);
-        replaceKnown(loaded, 42);
-        FixturePreparedWorldRevision replacement = fixture.Prepare(loaded);
-        Assert.Equal(first, replacement.Revision.ParentRevisionAddress);
-        Assert.Contains(previousCharacter, replacement.Revision.RemovedObjectIds);
-        Assert.Contains(previousItem, replacement.Revision.RemovedObjectIds);
-        Assert.Equal(3, replacement.Revision.RemovedObjectIds.Count); // Old Character, Item and distinct name string.
-        Assert.Single(replacement.Revision.LocalObjects, row => row.ObjectId == initial.WorldId.Value);
-        ObjectVersionRecord[] newRows = replacement.Revision.LocalObjects.Where(row => row.ObjectId != initial.WorldId.Value).ToArray();
+        using Repository repository = Repository.CreateNew(directory.Path, fixture.Models());
+        using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)fixture.Create(), ReferenceGraphNoRebase);
+        CheckpointAddress first = main.Head;
+        repository.CreateTag("initial", first);
+        P0GraphStore store = ReferenceGraphStore(repository);
+        uint previousCharacter = FindGraphObject(store, first.Address, "reference.character");
+        uint previousItem = FindGraphObject(store, first.Address, "reference.item");
+        uint sourceMaximum = store.ReadGraph(first.Address).Objects.Keys.Max();
+        fixture.ResetConstructors();
+        using BranchCheckout loaded = repository.Fork("loaded", first);
+        replaceKnown(loaded.State!, 42);
+        CheckpointAddress changed = loaded.CommitState(ReferenceGraphNoRebase);
+        Assert.Equal(first.Address, store.ReadGraph(changed.Address).SourceGraph);
+        Assert.Contains(previousCharacter, DefaultRemoved(store, changed.Address));
+        Assert.Contains(previousItem, DefaultRemoved(store, changed.Address));
+        Assert.Equal(3, DefaultRemoved(store, changed.Address).Count); // Old Character, Item and distinct name string.
+        Assert.Single(DefaultRecords(store, changed.Address), row => row.ObjectId == first.RootId.Value);
+        ObjectVersionRecord[] newRows = DefaultRecords(store, changed.Address).Where(row => row.ObjectId != first.RootId.Value).ToArray();
         Assert.Equal(3, newRows.Length);
         Assert.All(newRows, row => {
             Assert.True(row.ObjectId > sourceMaximum);
             Assert.Equal(ObjectVersionKind.Base, row.Kind);
         });
-        FrameAddress changed = store.Append(replacement.Revision);
-        fixture.Check(fixture.Load(store, schemas, changed, initial.WorldId), 42);
-        fixture.Check(fixture.Load(store, schemas, first, initial.WorldId), 7);
-        Assert.Equal(5, store.ReadLiveObjectHeadMap(changed).Count);
+        fixture.ResetConstructors();
+        fixture.Check(repository.ReadState(changed), 42);
+        fixture.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
+        Assert.Equal(5, store.ReadGraph(changed.Address).Objects.Count);
     }
 
     [Fact]
     public void PersistedReferenceGraphHistoricalMultiDeltaUpgradeKeepsIdsAndForcesOnlyChangedSchemaBase() {
         using AncestryHistoryDirectory history = new();
+        SchemaHistoryTool tool = new();
         GeneratorTestRun oldRun = RunGenerator(ReferenceHistorySource(1));
         AssertSchemaOnlyCompiles(oldRun);
-        new SchemaHistoryTool().Publish(history.WriteManifest(oldRun), history.History);
+        tool.Publish(history.WriteManifest(oldRun), history.History);
         ReferenceGraphFixture old = new(EmitAndLoad(oldRun.OutputCompilation));
         GeneratorTestRun currentRun = RunGenerator(ReferenceHistorySource(2), history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(currentRun);
+        tool.Publish(history.WriteManifest(currentRun), history.History);
+        tool.Verify(history.WriteManifest(currentRun), history.History);
         Assembly currentAssembly = EmitAndLoad(currentRun.OutputCompilation);
         ReferenceGraphFixture current = new(currentAssembly);
         var upgradeCalls = currentAssembly.GetType("FusedDelta.Host")!.GetMethod("UpgradeCalls")!.CreateDelegate<Func<int>>();
@@ -162,91 +171,79 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         uint nodeId;
         uint[] ids;
-        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
-            FixturePreparedWorldRevision initial = old.PrepareNew(store, schemas, old.Create());
-            worldId = initial.WorldId;
-            nodeId = FindGraphObject(schemas, initial.Revision, "reference.history.node");
-            ids = initial.Revision.LocalObjectIds.ToArray();
-            first = store.Append(initial.Revision);
-            object loaded = old.Load(store, schemas, first, worldId);
-            old.Change(loaded, 8);
-            FixturePreparedWorldRevision change1 = old.Prepare(loaded);
-            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(change1.Revision.LocalObjects).Kind);
-            second = store.Append(change1.Revision);
-            loaded = old.Load(store, schemas, second, worldId);
-            old.Change(loaded, 9);
-            FixturePreparedWorldRevision change2 = old.Prepare(loaded);
-            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(change2.Revision.LocalObjects).Kind);
-            third = store.Append(change2.Revision);
+        using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
+            using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)old.Create(), ReferenceGraphNoRebase);
+            first = main.Head.Address;
+            worldId = main.StateId!.Value;
+            P0GraphStore store = ReferenceGraphStore(repository);
+            nodeId = FindGraphObject(store, first, "reference.history.node");
+            ids = store.ReadGraph(first).Objects.Keys.ToArray();
+            repository.CreateTag("initial", main.Head);
+            old.Change(main.State!, 8);
+            second = main.CommitState(ReferenceGraphNoRebase).Address;
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, second)).Kind);
+            old.Change(main.State!, 9);
+            third = main.CommitState(ReferenceGraphNoRebase).Address;
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, third)).Kind);
+            repository.CreateTag("old-latest", main.Head);
         }
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
-            Assert.Equal(3, store.ReadObjectVersionChain(third, nodeId).Records.Count);
-            object loaded = current.Load(store, schemas, third, worldId);
-            current.Check(loaded, 9);
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+            current.ResetConstructors();
+            P0GraphStore store = ReferenceGraphStore(repository);
+            Assert.Equal(3, store.ReadObjectChain(third, nodeId).Entries.Count);
+            using BranchCheckout loaded = repository.Checkout("main");
+            current.Check(loaded.State!, 9);
             Assert.Equal(1, upgradeCalls());
-            FixturePreparedWorldRevision rewrite = current.Prepare(loaded);
-            Assert.Equal(third, rewrite.Revision.ParentRevisionAddress);
-            Assert.Empty(rewrite.Revision.RemovedObjectIds);
-            ObjectVersionRecord record = Assert.Single(rewrite.Revision.LocalObjects);
+            Assert.Equal(worldId, loaded.StateId);
+            rewritten = loaded.CommitState(ReferenceGraphNoRebase).Address;
+            Assert.Equal(third, store.ReadGraph(rewritten).SourceGraph);
+            Assert.Empty(DefaultRemoved(store, rewritten));
+            ObjectVersionRecord record = Assert.Single(DefaultRecords(store, rewritten));
             Assert.Equal(nodeId, record.ObjectId);
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
-            Assert.Equal(2, BaseObjectBodyCodec.Decode(record.Body, schemas).Layout.Schema!.Version);
-            rewritten = store.Append(rewrite.Revision);
-            Assert.Equal(ids.Order(), store.ReadLiveObjectHeadMap(rewritten).Keys.Order());
-            Assert.Single(store.ReadObjectVersionChain(rewritten, nodeId).Records);
+            Assert.Equal(2, DefaultLayout(store, rewritten, nodeId).Schema!.Version);
+            Assert.Equal(ids.Order(), store.ReadGraph(rewritten).Objects.Keys.Order());
+            Assert.Single(store.ReadObjectChain(rewritten, nodeId).Entries);
         }
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path)) {
-            SchemaStore schemas = segments.Schemas;
-            using StateRevisionStore store = new(segments.Data);
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+            current.ResetConstructors();
             int previousUpgrades = upgradeCalls();
-            object loaded = current.Load(store, schemas, rewritten, worldId);
-            current.Check(loaded, 9);
+            using BranchCheckout loaded = repository.Checkout("main");
+            current.Check(loaded.State!, 9);
             Assert.Equal(previousUpgrades, upgradeCalls());
-            Assert.Empty(current.Prepare(loaded).Revision.LocalObjects);
-            current.Check(current.Load(store, schemas, first, worldId), 7);
-            current.Check(current.Load(store, schemas, third, worldId), 9);
-            old.Check(old.Load(store, schemas, third, worldId), 9);
+            Assert.Equal(worldId, loaded.StateId);
+            CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
+            Assert.Empty(DefaultRecords(ReferenceGraphStore(repository), unchanged.Address));
+            current.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
+            current.Check(repository.ReadState(repository.ResolveTag("old-latest")), 9);
+        }
+        using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, old.Models())) {
+            old.ResetConstructors();
+            old.Check(repository.ReadState(repository.ResolveTag("old-latest")), 9);
         }
     }
 
-    private static uint FindGraphObject(SchemaStore schemas, StateRevision revision, string schemaId) => Assert.Single(
-        revision.LocalObjects, row => BaseObjectBodyCodec.Decode(row.Body, schemas).Layout.Schema?.SchemaId == schemaId).ObjectId;
+    private static readonly ReadAmplificationBaseBudgetParameters ReferenceGraphNoRebase = new(1000000, 1);
+    private static uint FindGraphObject(P0GraphStore store, FrameAddress graph, string schemaId) => Assert.Single(
+        store.ReadGraph(graph).Objects.Keys, id => DefaultLayout(store, graph, id).Schema?.SchemaId == schemaId);
+    private static P0GraphStore ReferenceGraphStore(Repository repository) =>
+        ((GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!).MetaBootstrapStore;
 
     private sealed class ReferenceGraphFixture(Assembly assembly) {
         private readonly Type _host = assembly.GetType("FusedDelta.Host")!;
         public object Create() => _host.GetMethod("Create")!.CreateDelegate<Func<object>>()();
-        public FixturePreparedWorldRevision PrepareNew(StateRevisionStore store, SchemaStore schemas, object world) =>
-            _host.GetMethod("PrepareNew")!.CreateDelegate<Func<StateRevisionStore, SchemaStore, object, FixturePreparedWorldRevision>>()(store, schemas, world);
-        public object Load(StateRevisionStore store, SchemaStore schemas, FrameAddress address, ObjectId worldId) =>
-            _host.GetMethod("Load")!.CreateDelegate<Func<StateRevisionStore, SchemaStore, FrameAddress, ObjectId, object>>()(store, schemas, address, worldId);
-        public FixturePreparedWorldRevision Prepare(object loaded) => _host.GetMethod("Prepare")!.CreateDelegate<Func<object, FixturePreparedWorldRevision>>()(loaded);
-        public void Check(object loaded, int expected) => _host.GetMethod("Check")!.CreateDelegate<Action<object, int>>()(loaded, expected);
-        public void Change(object loaded, int value) => _host.GetMethod("Change")!.CreateDelegate<Action<object, int>>()(loaded, value);
-        public void ChangeNew(object world, int value) => _host.GetMethod("ChangeNew")!.CreateDelegate<Action<object, int>>()(world, value);
-        public void Detach(object loaded) => _host.GetMethod("Detach")!.CreateDelegate<Action<object>>()(loaded);
+        public StateModelRegistry Models() => _host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
+        public void ResetConstructors() => assembly.GetType("FusedDelta.World")!.GetField("ConstructorCalls")!.SetValue(null, 0);
+        public void Check(object world, int expected) => _host.GetMethod("Check")!.CreateDelegate<Action<object, int>>()(world, expected);
+        public void Change(object world, int value) => _host.GetMethod("Change")!.CreateDelegate<Action<object, int>>()(world, value);
+        public void Detach(object world) => _host.GetMethod("Detach")!.CreateDelegate<Action<object>>()(world);
     }
 
     private const string ReferenceGraphHost = """
         public static object Create() => new World();
-        public static Atelia.DurableGraph.Tests.FixturePreparedWorldRevision PrepareNew(
-            Atelia.DurableGraph.Storage.StateRevisionStore store,
-            Atelia.DurableGraph.Persistence.SchemaStore schemas, object world) =>
-            Atelia.DurableGraph.Tests.FixtureLoadedWorld.PrepareNew(store, schemas, (World)world, Models(), new(1000000, 1));
-        public static object Load(Atelia.DurableGraph.Storage.StateRevisionStore store,
-            Atelia.DurableGraph.Persistence.SchemaStore schemas, Atelia.FrameStore.FrameAddress address, ObjectId worldId) {
-            World.ConstructorCalls = 0;
-            return Atelia.DurableGraph.Tests.FixtureLoadedWorld.Load<World>(store, schemas, address, worldId, Models());
-        }
-        public static Atelia.DurableGraph.Tests.FixturePreparedWorldRevision Prepare(object loaded) =>
-            ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).Prepare(new(1000000, 1));
-        public static void Check(object loaded, int expected) => ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).World.Check(expected);
-        public static void Change(object loaded, int value) => ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).World.Change(value);
-        public static void ChangeNew(object world, int value) => ((World)world).Change(value);
-        public static void Detach(object loaded) => ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).World.Detach();
+        public static void Check(object world, int expected) => ((World)world).Check(expected);
+        public static void Change(object world, int value) => ((World)world).Change(value);
+        public static void Detach(object world) => ((World)world).Detach();
         """;
 
     private static readonly string ReferenceGraphSource = FusedDeltaPreamble + """
@@ -304,16 +301,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public sealed class Unknown : Entity { public Unknown(World world) : base(world) { } }
         public static class Host {
-            private static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
+            public static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
                 var models = new Atelia.DurableGraph.Persistence.StateModelRegistry();
                 World.__DurableState.RegisterModel(models); Entity.__DurableState.RegisterModel(models);
                 Character.__DurableState.RegisterModel(models); Item.__DurableState.RegisterModel(models);
                 return models;
             }
-            public static object ReplaceUnknown(object loaded) => ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).World.ReplaceUnknown();
-            public static void ReplaceKnown(object loaded, int value) => ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).World.ReplaceKnown(value);
+            public static object ReplaceUnknown(object loaded) => ((World)loaded).ReplaceUnknown();
+            public static void ReplaceKnown(object loaded, int value) => ((World)loaded).ReplaceKnown(value);
             public static void RestoreChild(object loaded, object saved) {
-                ((Atelia.DurableGraph.Tests.FixtureLoadedWorld<World>)loaded).World.RestoreChild(saved);
+                ((World)loaded).RestoreChild(saved);
                 World.ConstructorCalls = 0;
             }
         """ + ReferenceGraphHost + "\n}";
@@ -356,7 +353,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         public static class Host {
             public static int UpgradeCalls() => Node.Upgrades;
-            private static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
+            public static Atelia.DurableGraph.Persistence.StateModelRegistry Models() {
                 var models = new Atelia.DurableGraph.Persistence.StateModelRegistry();
                 World.__DurableState.RegisterModel(models); Node.__DurableState.RegisterModel(models);
                 return models;

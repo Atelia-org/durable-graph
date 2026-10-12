@@ -7,31 +7,6 @@ using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
-public sealed partial class WorldWorkspaceTests {
-    [Fact]
-    public void LegacyAdapterActualTypedBaseEqualityKeepsNoChangeAtThresholdOne() {
-        World world = new();
-        WorldWorkspace workspace = WorldWorkspace.Create(_store, _schemas, world, Registry(Model()));
-        using (PreparedWorldSave first = workspace.Stage(new(1, 100))) { Install(first); }
-        ObjectVersionChain chain = _store.ReadObjectVersionChain(workspace.ParentRevisionAddress!.Value, workspace.WorldId.Value);
-        ObjectVersionRecord record = Assert.Single(chain.Records).Record;
-        Assert.Equal(ObjectVersionKind.Base, record.Kind);
-        Assert.Equal((byte)4, record.Body[0]); // This adapter uses the actual legacy representation-ID head, not the P0 head.
-        DecodedBaseObjectBody decoded = BaseObjectBodyCodec.Decode(record.Body, _schemas);
-        Assert.True(record.Body.Length > decoded.Body.Length);
-        long b = ObjectVersionPayloadSize.GetBasePayloadBytes(record.Body.Length);
-        Assert.Equal(b, chain.ReconstructionPayloadBytes);
-        Assert.Equal(b, StorageOf(workspace, workspace.WorldId).ReconstructionPayloadBytes);
-        Assert.True(b > ObjectVersionPayloadSize.GetBasePayloadBytes(decoded.Body.Length));
-
-        // At H == actual typed B there is no optional Base motive; omitting the head would create one.
-        using PreparedWorldSave unchanged = StageWithoutReadingChains(workspace, new(1, 100));
-        Assert.Empty(unchanged.Revision.LocalObjects);
-        Assert.Empty(unchanged.Revision.RemovedObjectIds);
-        Assert.Equal(b, StorageOf(workspace, workspace.WorldId).ReconstructionPayloadBytes);
-    }
-}
-
 public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
     private const string Prefix = "dg-bootstrap-planning-accounting-";
     private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));

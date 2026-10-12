@@ -110,27 +110,23 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void InlineStructPreparedCandidateDoesNotFollowLaterDomainSlotOrReferencedObjectMutations() {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
-        FrameAddress first;
-        ObjectId worldId;
-        using (GraphResources segments = GraphResources.CreateLegacyNew(directory.Path))
-        {
-            using StateRevisionStore store = new(segments.Data);
-            SchemaStore schemas = segments.Schemas;
-            object world = fixture.NewWorld();
-            FixturePreparedWorldRevision frozen = fixture.PrepareNew(store, schemas, world);
-            worldId = frozen.WorldId;
-            fixture.ChangeNested(world, 999);
-            fixture.ChangeChild(world, 888);
-            fixture.Detach(world);
-            first = store.Append(frozen.Revision);
+        object world = fixture.NewWorld();
+        bool mutated = false;
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+            repository.Checkpoint = checkpoint => {
+                if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
+                fixture.ChangeNested(world, 999);
+                fixture.ChangeChild(world, 888);
+                fixture.Detach(world);
+                mutated = true;
+            };
+            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)world);
+            Assert.True(mutated);
+            Assert.Same(world, checkout.State);
         }
-        using (GraphResources segments = GraphResources.OpenLegacyExisting(directory.Path))
-        {
-            using StateRevisionStore store = new(segments.Data);
-            SchemaStore schemas = segments.Schemas;
-            fixture.Check(fixture.LoadOld(store, schemas, first, worldId), 7, 11, true);
-            Assert.Equal(4, store.ReadLiveObjectHeadMap(first).Count);
-        }
+        using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, fixture.Models());
+        fixture.Check(reopened.ReadState(reopened.GetHead("main")), 7, 11, true);
+        Assert.Equal(4, reopened.MetaBootstrapStore.ReadGraph(reopened.GetHead("main").RevisionAddress).Objects.Count);
     }
 
     [Theory]
@@ -139,31 +135,39 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void InlineStructStoredDeepReferenceValidationRejectsMissingOrWrongKindTarget(bool wrongKind) {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
-        using GraphResources segments = GraphResources.CreateLegacyNew(directory.Path);
-        using StateRevisionStore store = new(segments.Data);
-        SchemaStore schemas = segments.Schemas;
-        FixturePreparedWorldRevision initial = fixture.PrepareNew(store, schemas, fixture.NewWorld());
-        ObjectVersionRecord owner = Assert.Single(initial.Revision.LocalObjects,
-            record => record.ObjectId == initial.WorldId.Value);
-        DecodedBaseObjectBody envelope = BaseObjectBodyCodec.Decode(owner.Body, schemas);
-        byte[] body = envelope.Body.ToArray();
-        uint childId = FindGraphObject(schemas, initial.Revision, "inline.graph.child");
+        FrameAddress first;
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)fixture.NewWorld());
+            first = checkout.StateRevisionAddress!.Value;
+        }
+        using GraphResources resources = GraphResources.OpenExisting(directory.Path);
+        P0GraphStore store = resources.MetaBootstrapStore;
+        P0GraphSnapshot initial = store.ReadGraph(first);
+        P0CatalogView catalog = P0CatalogView.Load(store, initial.SchemaRoot!.Value);
+        ObjectVersionRecord owner = Assert.Single(DefaultRecords(store, first),
+            record => record.ObjectId == initial.RootId.Value);
+        var envelope = P0TypedBodyCodec.Decode(owner.Body, catalog);
+        byte[] body = envelope.Body;
+        uint childId = Assert.Single(initial.Objects.Keys, id =>
+            DefaultLayout(store, first, id).Schema?.SchemaId == "inline.graph.child");
         Assert.Equal(14, body[0]); // Envelope.Inner.X = 7, followed by the nested Child ID.
         Assert.Equal(childId, (uint)body[1]);
         uint replacement = wrongKind
-            ? initial.Revision.LocalObjects.First(record =>
-                BaseObjectBodyCodec.Decode(record.Body, schemas).Kind == ObjectStateKind.String).ObjectId
-            : initial.Revision.LocalObjectIds.Max() + 1;
+            ? initial.Objects.Keys.First(id => DefaultLayout(store, first, id).Kind == ObjectStateKind.String)
+            : initial.Objects.Keys.Max() + 1;
         Assert.InRange(replacement, 1u, 127u);
-        body[1] = (byte)replacement; // Canonical one-byte ID; no broken wire/framing to mask visitor failure.
-        ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.WorldId.Value,
-            BaseObjectBodyCodec.Encode(envelope.RepresentationId, new(body)).Body);
-        FrameAddress address = store.Append(StateRevision.CreateObjectHeadMapBase(null,
-            initial.Revision.LocalObjects.Select(record => record.ObjectId == initial.WorldId.Value ? invalidOwner : record), []));
+        body[1] = (byte)replacement; // Canonical one-byte ID; framing remains valid.
+        ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.RootId.Value,
+            P0TypedBodyCodec.Encode(envelope.Layout, new(body), catalog));
+        P0GraphSnapshot invalid = store.Append(P0GraphKind.State, first, initial.SchemaRoot,
+            new P0PreparedGraphWrite(first, initial.RootId, [invalidOwner]));
+        Assert.Equal(initial.SchemaRoot, invalid.SchemaRoot);
+        Assert.Equal(initial.Objects.Keys, invalid.Objects.Keys);
 
-        // Exact DTO reading itself must reject; rejection cannot be deferred until domain Hydrate.
-        Assert.Throws<InvalidDataException>(() => fixture.ReadStored(store, schemas, address));
-        Assert.Throws<InvalidDataException>(() => fixture.LoadOld(store, schemas, address, initial.WorldId));
+        // Exact DTO reading must reject before domain Hydrate; a valid sibling is the positive control.
+        fixture.Check(P0BusinessWorkspace.ReadRoot(store, first, fixture.Models()), 7, 11, true);
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(store, invalid.Address, fixture.Models()));
+        Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.ReadRoot(store, invalid.Address, fixture.Models()));
     }
 
     private static InlineGraphFixture CompileInlineGraph() {
@@ -189,12 +193,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         public void RestoreChild(object world, object child) => Method<Action<object, object>>("RestoreChild")(world, child);
         public void Check(object world, int value, int childValue, bool cold)
             => Method<Action<object, int, int, bool>>("Check")(world, value, childValue, cold);
-        public FixturePreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world)
-            => Method<Func<StateRevisionStore, SchemaStore, object, FixturePreparedWorldRevision>>("PrepareNew")(states, schemas, world);
-        public object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, ObjectId worldId)
-            => Method<Func<StateRevisionStore, SchemaStore, FrameAddress, ObjectId, object>>("LoadOld")(states, schemas, address, worldId);
-        public DecodedRevision ReadStored(StateRevisionStore states, SchemaStore schemas, FrameAddress address)
-            => Method<Func<StateRevisionStore, SchemaStore, FrameAddress, DecodedRevision>>("ReadStored")(states, schemas, address);
+
     }
 
     private const string InlineGraphSource = """
@@ -310,16 +309,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static void RestoreChild(object world, object child) => ((World)world).SetChild((Child)child);
             public static void Check(object world, int value, int childValue, bool cold)
                 => ((World)world).Check(value, childValue, cold);
-            public static FixturePreparedWorldRevision PrepareNew(StateRevisionStore states, SchemaStore schemas, object world)
-                => FixtureLoadedWorld.PrepareNew(states, schemas, (World)world, Models(), new(1000000, 1));
-            public static object LoadOld(StateRevisionStore states, SchemaStore schemas, FrameAddress address, ObjectId worldId)
-                => FixtureLoadedWorld.Load<World>(states, schemas, address, worldId, Models()).World;
-            public static DecodedRevision ReadStored(StateRevisionStore states, SchemaStore schemas, FrameAddress address) {
-                StateReaderRegistry readers = new();
-                global::InlineGraph.World.__DurableState.RegisterReaders(readers);
-                global::InlineGraph.Child.__DurableState.RegisterReaders(readers);
-                return RevisionDecoder.Read(states, schemas, address, readers);
-            }
+
         }
         """;
 }

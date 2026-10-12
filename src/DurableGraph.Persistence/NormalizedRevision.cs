@@ -42,12 +42,6 @@ internal sealed class NormalizedRevision {
 
     // Candidate DTOs are prepared before append. Unwritten objects retain their committed
     // storage facts; actual writes complete a separate installation before publication.
-    internal static NormalizedRevision FromCandidate(CapturedGraph candidate, StateModelSnapshot models,
-        StateRevisionStore store, SchemaStore schemas, NormalizedRevision? baseline) {
-        var (rows, strings) = CreateCandidate(candidate, models, baseline);
-        return new(default, rows, strings, store, schemas, sourceModels: models, isCandidate: true, candidateSource: baseline);
-    }
-
     internal static NormalizedRevision FromSplitCandidate(CapturedGraph candidate, StateModelSnapshot models,
         P0GraphStore store, NormalizedRevision? baseline) {
         baseline?.RequireSplitSource(store, models);
@@ -71,20 +65,6 @@ internal sealed class NormalizedRevision {
         return (rows, strings);
     }
 
-    internal NormalizedRevision WithAddress(FrameAddress address, StateRevision revision) {
-        if (!_isCandidate || RevisionAddress != default || SourceStore is null || SourceSchemas is null) {
-            throw new InvalidOperationException("Only a private save candidate can prepare an installation.");
-        }
-        // Read this Store's actual appended frame/map. This does not reopen old content chains.
-        StateRevision actual = SourceStore.Read(address);
-        if (actual.ParentRevisionAddress != _candidateSource?.RevisionAddress || actual.ParentRevisionAddress != revision.ParentRevisionAddress) {
-            throw new InvalidDataException("An installation must use its candidate's exact content Parent.");
-        }
-        RequireSameWrites(revision.LocalObjects, actual.LocalObjects);
-        IReadOnlyDictionary<uint, FrameAddress> heads = SourceStore.ReadLiveObjectHeadMap(address);
-        return CompleteInstallation(address, actual.LocalObjects, heads, SourceStore, SourceSchemas, null, null);
-    }
-
     internal NormalizedRevision WithSplitGraph(P0GraphStore store, P0GraphSnapshot graph,
         IReadOnlyList<ObjectVersionRecord> expectedRecords, P0CatalogView selected) {
         if (!_isCandidate || RevisionAddress != default || !ReferenceEquals(SplitStore, store) ||
@@ -100,13 +80,12 @@ internal sealed class NormalizedRevision {
         IReadOnlyList<ObjectVersionRecord> records = actual.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
         RequireSameWrites(expectedRecords, records);
         foreach (NormalizedObject row in _objects.Values) { selected.Require(row.Current.Layout); }
-        return CompleteInstallation(actual.Address, records, actual.Objects, null, null, store, selected);
+        return CompleteInstallation(actual.Address, records, actual.Objects, store, selected);
     }
 
-    // Actual maps reach this private calculation only through a concrete backend check above.
+    // Actual maps reach this private calculation only through the concrete source check above.
     private NormalizedRevision CompleteInstallation(FrameAddress address, IReadOnlyList<ObjectVersionRecord> records,
-        IReadOnlyDictionary<uint, FrameAddress> heads, StateRevisionStore? sourceStore, SchemaStore? sourceSchemas,
-        P0GraphStore? splitStore, P0CatalogView? selected) {
+        IReadOnlyDictionary<uint, FrameAddress> heads, P0GraphStore splitStore, P0CatalogView selected) {
         if (heads.Count != _objects.Count || _objects.Keys.Any(id => !heads.ContainsKey(id.Value))) {
             throw new InvalidDataException("Installed membership must equal the complete captured candidate.");
         }
@@ -143,7 +122,7 @@ internal sealed class NormalizedRevision {
                 throw new InvalidDataException("A surviving rewritten object must install a new Base.");
             }
         }
-        return new(address, installed, Strings, sourceStore, sourceSchemas, CurrentDtos, splitStore, selected, SourceModels);
+        return new(address, installed, Strings, null, null, CurrentDtos, splitStore, selected, SourceModels);
     }
 
     private static void RequireSameWrites(IReadOnlyList<ObjectVersionRecord> expected, IReadOnlyList<ObjectVersionRecord> actual) {

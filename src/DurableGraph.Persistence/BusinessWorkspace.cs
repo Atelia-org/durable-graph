@@ -33,7 +33,7 @@ internal sealed class BusinessWorkspace {
     internal IDurableObject? Root { get; private set; }
     internal ObjectId RootId { get; private set; }
 
-    // Both backends import the controlled loader's actual object identities and allocation cursor.
+    // Import the controlled loader's actual object identities and allocation cursor.
     internal static BusinessWorkspace FromLoaded<T>(StateModelSnapshot models, MaterializedGraph<T> loaded)
         where T : class, IDurableObject =>
         new(models, loaded.CreateCaptureSession(), loaded.Baseline, loaded.Root, loaded.RootId);
@@ -122,7 +122,7 @@ internal sealed class BusinessWorkspace {
     }
 }
 
-/// <summary>The actual sealed Capture and its preparation/installation lifetime, shared by both encoders.</summary>
+/// <summary>The actual sealed Capture and its preparation/installation lifetime.</summary>
 internal sealed class BusinessSaveCandidate : IDisposable {
     private BusinessWorkspace? _owner;
     private readonly CaptureContext _context;

@@ -154,7 +154,9 @@ internal static class FallbackFixtures {
 
         internal CaptureBinding() {
             StateModelRegistry registry = new();
+#pragma warning disable CS0436 // Intentionally register this probe's local SG definitions, visible alongside Persistence's through IVT.
             Atelia.DurableGraph.Generated.DurableDefinitions.Register(registry);
+#pragma warning restore CS0436
             _snapshot = registry.Snapshot();
             if (!_snapshot.TryGetCurrentModel(typeof(World<T>), out StateModelBinding? model) || model is null ||
                 !_snapshot.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? list) || list is not ListObjectBinding listBinding) {

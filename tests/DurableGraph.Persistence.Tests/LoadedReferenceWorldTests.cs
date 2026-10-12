@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -5,25 +6,15 @@ using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.Rbf;
 using Atelia.FrameStore;
-using SegmentStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class LoadedReferenceWorldTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-reference-world-{Guid.NewGuid():N}");
-    private readonly GraphResources _file;
-    private readonly SegmentStore _segments;
-    private readonly SchemaStore _schemas;
-    private readonly StateRevisionStore _store;
+    private readonly P0Repository _repository;
+    private P0GraphStore Store => _repository.Store;
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
-
-    public LoadedReferenceWorldTests() {
-        Directory.CreateDirectory(_root);
-        _file = GraphResources.CreateLegacyNew(Path.Combine(_root, "schemas.rbf"));
-        _schemas = _file.Schemas;
-        _segments = _file.Data;
-        _store = new(_segments);
-    }
+    public LoadedReferenceWorldTests() => _repository = P0Repository.CreateNew(_root);
 
     [Fact]
     public void StoredAndCurrentReferencesUseTheirOwnExactAncestry() {
@@ -39,7 +30,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         StateModelBinding target = Model<Node>(currentTarget, () => { allocations++; return new Node(); }, oldTarget,
             upgrade: state => { upgrades++; return state; });
         StateModelRegistry unchangedOwner = Registry(Model<World>(ownerV1, () => { allocations++; return new World(); }), target);
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), unchangedOwner));
+        Assert.Throws<InvalidDataException>(() => Load(source, unchangedOwner));
         Assert.Equal(1, upgrades); // Stored B ancestry was accepted, then current C ancestry rejected.
         Assert.Equal(0, allocations);
 
@@ -47,12 +38,13 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         StateModelRegistry clearedOwner = Registry(
             Model<World>(ownerV2, () => new World(), ownerV1, upgrade: state => state with { NextId = new ObjectId(0) }),
             Model<Node>(currentTarget, () => { targetAllocations++; return new Node(); }, oldTarget));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), clearedOwner);
-        Assert.Null(loaded.World.Next);
+        P0BusinessWorkspace loaded = Load(source, clearedOwner);
+        Assert.Null(((World)loaded.State!).Next);
         Assert.Equal(0, targetAllocations);
-        PreparedWorldRevision prepared = loaded.Prepare(NoRebase);
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(prepared.Revision.LocalObjects).Kind);
-        Assert.Equal(new uint[] { 1 }, _store.ReadLiveObjectHeadMap(_store.Append(prepared.Revision)).Keys);
+        P0Session session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
+        using P0SessionSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(prepared.Business.Write.Records).Kind);
+        Assert.Equal(new uint[] { 1 }, prepared.Commit().Business.Objects.Keys);
     }
 
     [Fact]
@@ -66,7 +58,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         int upgrades = 0;
         StateModelRegistry models = Registry(Model<World>(owner, () => new World()),
             Model<Node>(currentTarget, () => new Node(), oldTarget, upgrade: state => { upgrades++; return state; }));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
+        Assert.Throws<InvalidDataException>(() => Load(source, models));
         Assert.Equal(0, upgrades);
     }
 
@@ -82,10 +74,12 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             Model<AbstractNode>(currentOrphan, () => throw new Exception("Must not allocate an unreachable abstract row"), oldOrphan,
                 upgrade: state => state with { NextId = new ObjectId(orphanReference) }));
         if (orphanReference != 0) {
-            Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
+            Assert.Throws<InvalidDataException>(() => Load(source, models));
         } else {
-            LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models);
-            Assert.Equal(new uint[] { 9 }, loaded.Prepare(NoRebase).Revision.RemovedObjectIds);
+            P0BusinessWorkspace loaded = Load(source, models);
+            P0Session session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
+            using P0SessionSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
+            Assert.Equal(new uint[] { 9 }, prepared.Business.Write.RemovedIds);
         }
     }
 
@@ -96,15 +90,15 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void WrongKindFamilyOrMissingTargetIsRejectedBeforeAllocation(uint reference) {
         DurableSchema worldSchema = Schema("World", 1, "Expected");
         DurableSchema otherSchema = Schema("Other", 1, "Expected");
-        _schemas.RegisterBatch([worldSchema, otherSchema]);
-        FrameAddress source = _store.Append(StateRevision.CreateObjectHeadMapBase(null,
-            [Durable(1, worldSchema, new(reference, 1)),
-             ObjectVersionRecord.CreateBase(2, BaseObjectBodyCodec.EncodeString(StringPayloadCodec.PrepareBase("text")).Body),
-             Durable(3, otherSchema, new(0, 3))], []));
+        P0PreparedCatalog catalog = PrepareCatalog([worldSchema, otherSchema]);
+        FrameAddress source = Publish(catalog,
+            [Durable(catalog.View, 1, worldSchema, new(reference, 1)),
+             ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("text"), catalog.View)),
+             Durable(catalog.View, 3, otherSchema, new(0, 3))]);
         int allocated = 0;
         StateModelRegistry models = Registry(Model<World>(worldSchema, () => { allocated++; return new World(); }),
             Model<Node>(otherSchema, () => { allocated++; return new Node(); }));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
+        Assert.Throws<InvalidDataException>(() => Load(source, models));
         Assert.Equal(0, allocated);
     }
 
@@ -120,8 +114,8 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         StateModelRegistry models = Registry(Model<World>(schema,
             () => ++allocations == 2 && nullAllocation ? null! : singleton,
             onHydrate: () => hydrations++));
-        LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
+        P0BusinessWorkspace? delivered = null;
+        Assert.Throws<InvalidDataException>(() => delivered = Load(source, models));
         Assert.Null(delivered);
         Assert.Equal(2, allocations);
         Assert.Equal(0, hydrations);
@@ -133,7 +127,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         FrameAddress source = Seed((1, schema, new State(0, 1)));
         int hydrations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => new DerivedWorld(), onHydrate: () => hydrations++));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
+        Assert.Throws<InvalidDataException>(() => Load(source, models));
         Assert.Equal(0, hydrations);
     }
 
@@ -148,13 +142,13 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             if (++hydrations == 2) throw new InvalidDataException("Late hydrate failure");
         }));
         long stateTail = Tail();
-        long schemaTail = DataBytes(_file.Data);
-        LoadedWorld<World>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = LoadedWorld.Load<World>(_store, _schemas, source, new ObjectId(1), models));
+        long schemaTail = DataBytes(_repository.Data);
+        P0BusinessWorkspace? delivered = null;
+        Assert.Throws<InvalidDataException>(() => delivered = Load(source, models));
         Assert.Null(delivered);
         Assert.Equal(2, hydrations);
         Assert.Equal(stateTail, Tail());
-        Assert.Equal(schemaTail, DataBytes(_file.Data));
+        Assert.Equal(schemaTail, DataBytes(_repository.Data));
     }
 
     [Fact]
@@ -175,13 +169,14 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void UnchangedOwnerReferencesAreValidatedAgainstQueriedRevisionMembership() {
         DurableSchema schema = Schema("World", 1, "World");
         FrameAddress original = Seed((1, schema, new State(2, 1)), (2, schema, new State(0, 2)));
-        FrameAddress removed = _store.Append(StateRevision.CreateObjectHeadMapDelta(original, [], [2]));
+        FrameAddress removed = Store.Append(P0GraphKind.State, original, Store.ReadGraph(original).SchemaRoot,
+            new(original, new(1), [], [2])).Address;
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.Load<World>(_store, _schemas, removed, new ObjectId(1), models));
+        Assert.Throws<InvalidDataException>(() => Load(removed, models));
         Assert.Equal(0, allocations);
-        LoadedWorld<World> oldView = LoadedWorld.Load<World>(_store, _schemas, original, new ObjectId(1), models);
-        Assert.Equal((byte)2, Assert.IsType<World>(oldView.World.Next).Value);
+        P0BusinessWorkspace oldView = Load(original, models);
+        Assert.Equal((byte)2, Assert.IsType<World>(((World)oldView.State!).Next).Value);
         Assert.Equal(2, allocations);
     }
 
@@ -198,23 +193,25 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
                 captures++;
                 if (child.Value == 2) throw new InvalidDataException("Late child Capture failure");
             }));
-        long schemaTail = DataBytes(_file.Data);
+        long schemaTail = DataBytes(_repository.Data);
         long stateTail = Tail();
-        Assert.Throws<InvalidDataException>(() => LoadedWorld.PrepareNew(_store, _schemas, world, models, NoRebase));
+        P0Session session = new(_repository, "main", models);
+        Assert.Throws<InvalidDataException>(() => session.Prepare(world, parameters: NoRebase));
         Assert.Equal(3, captures);
-        Assert.Equal(schemaTail, DataBytes(_file.Data));
+        Assert.Equal(schemaTail, DataBytes(_repository.Data));
         Assert.Equal(stateTail, Tail());
 
         lateChild.Value = 3;
-        PreparedWorldRevision repaired = LoadedWorld.PrepareNew(_store, _schemas, world, models, NoRebase);
+        using P0SessionSave repaired = session.Prepare(world, parameters: NoRebase);
         Assert.Equal(6, captures);
-        Assert.Null(repaired.Revision.ParentRevisionAddress);
-        Assert.Equal(3, repaired.Revision.LocalObjects.Count);
-        Assert.All(repaired.Revision.LocalObjects, static row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-        Assert.True(Tail() > stateTail); // Successful preparation accepted Schema into the shared data owner.
-        FrameAddress address = _store.Append(repaired.Revision);
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, repaired.WorldId, models);
-        Assert.Equal((byte)3, Assert.IsType<Node>(loaded.World.Next!.Next).Value);
+        Assert.Null(repaired.Business.Write.SourceGraph);
+        Assert.Equal(3, repaired.Business.Write.Records.Count);
+        Assert.All(repaired.Business.Write.Records, static row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+        Assert.Equal(stateTail, Tail()); // Joint preparation does not separately append Schema.
+        FrameAddress address = repaired.Commit().Business.Address;
+        Assert.True(Tail() > stateTail);
+        P0BusinessWorkspace loaded = Load(address, models);
+        Assert.Equal((byte)3, Assert.IsType<Node>(((World)loaded.State!).Next!.Next).Value);
     }
 
     [Fact]
@@ -231,8 +228,8 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             Assert.Equal(count, allocations);
             hydrations++;
         }));
-        LoadedWorld<World> loaded = LoadedWorld.Load<World>(_store, _schemas, address, new ObjectId(1), models);
-        Domain? cursor = loaded.World;
+        P0BusinessWorkspace loaded = Load(address, models);
+        Domain? cursor = ((World)loaded.State!);
         for (int id = 1; id <= count; id++) {
             Assert.NotNull(cursor);
             Assert.Equal((byte)(id % 251), cursor.Value);
@@ -289,13 +286,23 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         foreach (StateModelBinding model in models) registry.Register(model);
         return registry;
     }
+    private P0BusinessWorkspace Load(FrameAddress source, StateModelRegistry models) =>
+        P0BusinessWorkspace.LoadState(Store, source, models);
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
-        _schemas.RegisterBatch(rows.Select(static row => row.Schema));
-        return _store.Append(StateRevision.CreateObjectHeadMapBase(null, rows.Select(row => Durable(row.Id, row.Schema, row.State)), []));
+        P0PreparedCatalog catalog = PrepareCatalog(rows.Select(static row => row.Schema));
+        return Publish(catalog, rows.Select(row => Durable(catalog.View, row.Id, row.Schema, row.State)));
     }
-    private ObjectVersionRecord Durable(uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, BaseObjectBodyCodec.Encode(
-            _schemas.RegisterRepresentations([ObjectLayout.ForDurable(schema)])[0], Base(state)).Body);
+    private P0PreparedCatalog PrepareCatalog(IEnumerable<DurableSchema> schemas) {
+        P0CatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
+        foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
+        return catalog.Prepare();
+    }
+    private FrameAddress Publish(P0PreparedCatalog catalog, IEnumerable<ObjectVersionRecord> records) {
+        using P0PendingSave pending = _repository.Prepare("main", P0GraphKind.State, new(null, new(1), records), catalog.Write);
+        return _repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
+    }
+    private static ObjectVersionRecord Durable(P0CatalogView catalog, uint id, DurableSchema schema, State state) =>
+        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), catalog));
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);
@@ -303,11 +310,9 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         writer.WriteByte(state.Value);
         return new(bytes.WrittenSpan);
     }
-    private long Tail() => DataBytes(_segments);
+    private long Tail() => DataBytes(_repository.Data);
     public void Dispose() {
-        _store.Dispose();
-        _file.Dispose();
-        _segments.Dispose();
+        _repository.Dispose();
         string resolved = Path.GetFullPath(_root);
         if (!string.Equals(Path.GetDirectoryName(resolved), Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), StringComparison.OrdinalIgnoreCase) ||
             !Path.GetFileName(resolved).StartsWith("durable-graph-reference-world-", StringComparison.Ordinal)) {
