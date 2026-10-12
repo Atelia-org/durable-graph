@@ -27,6 +27,24 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     private readonly Dictionary<Type, object> _dictionaryComparers = [];
     private Func<Type, object?>? _dictionaryComparerResolver;
 
+    /// <summary>Creates an application-local registration builder.</summary>
+    public StateModelRegistry() { }
+
+    private StateModelRegistry(StateModelRegistry source) {
+        _models = new(source._models);
+        _types = new(source._types);
+        _readers = new(source._readers);
+        _definitions = new(source._definitions, StringComparer.Ordinal);
+        _valueUpgradeRules = new(source._valueUpgradeRules);
+        _arrayElementUpgradeRuleSet = source._arrayElementUpgradeRuleSet;
+        _listElementUpgradeRuleSet = source._listElementUpgradeRuleSet;
+        _dictionaryKeyUpgradeRuleSet = source._dictionaryKeyUpgradeRuleSet;
+        _dictionaryValueUpgradeRuleSet = source._dictionaryValueUpgradeRuleSet;
+        _listDeltaAlgorithm = source._listDeltaAlgorithm;
+        _dictionaryComparers = new(source._dictionaryComparers);
+        _dictionaryComparerResolver = source._dictionaryComparerResolver;
+    }
+
     /// <summary>Selects the current comparer for Application-mode instances of one closed Dictionary type.</summary>
     /// <remarks>
     /// Standard modes and CurrentDefault ignore this selection. Configuration is copied into future snapshots;
@@ -162,6 +180,20 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         }
         // A concrete stable binding may coexist with its own declaration catalog. It remains
         // the selected binding for that exact CLR closure; templates serve other closures.
+    }
+
+    // Retains only registered configuration, never a snapshot's view-bound closure memo.
+    internal FrozenConfiguration FreezeConfiguration() => new(this);
+
+    internal sealed class FrozenConfiguration {
+        private readonly StateModelRegistry _configuration;
+
+        internal FrozenConfiguration(StateModelRegistry source) => _configuration = new(source);
+
+        // Each exact view receives fresh mutable closure indexes. Registered capabilities
+        // and delegate/comparer references retain the existing configuration-freezing contract.
+        internal StateModelSnapshot CreateSnapshot(Func<SchemaKey, DurableSchema?>? schemaLookup = null) =>
+            _configuration.Snapshot(schemaLookup: schemaLookup);
     }
 
     // Freeze every index before any reader, Upgrade, Capture or Hydrate callback runs.

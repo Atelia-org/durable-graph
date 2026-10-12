@@ -36,27 +36,67 @@ public sealed class DecodedRevision {
 
     // Only the concrete reader can add split-store provenance. A DTO/map fixture
     // or P0DecodedRows.ToDecodedRevision remains useful for reads without save authority.
-    private DecodedRevision(P0GraphStore store, StateModelSnapshot models, P0CatalogView selected, P0DecodedRows source)
+    private DecodedRevision(P0GraphStore store, SplitBindingEnvironment environment, P0DecodedRows source)
         : this(source.Snapshot.Address, source.Rows.Values,
             StringReadTable.FromDecoded(source.Rows.Values.Where(static row => row.Kind == ObjectStateKind.String)
                 .Select(static row => (row.Id, row.StringContent))),
             source.Snapshot.Objects.ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value),
             objectStorage: source.Storage) {
         SplitStore = store;
-        SelectedSchemaView = selected;
-        SourceModels = models;
+        SelectedSchemaView = environment.SelectedSchemaView;
+        SourceModels = environment.Models;
+        BindingEnvironment = environment;
     }
 
     internal static DecodedRevision ReadSplit(P0GraphStore store, FrameAddress graph, StateModelRegistry registry) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(registry);
+        return ReadSplit(store, graph, registry.FreezeConfiguration());
+    }
+
+    internal static DecodedRevision ReadSplit(P0GraphStore store, FrameAddress graph,
+        StateModelRegistry.FrozenConfiguration configuration, SplitBindingEnvironment? reuseEnvironment = null) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(configuration);
         P0GraphSnapshot source = store.ReadGraph(graph);
         if (source.Kind == P0GraphKind.Meta || source.SchemaRoot is not { } schemaRoot) {
             throw new InvalidDataException("A business read requires its exact owner and selected Schema view.");
         }
-        P0CatalogView selected = P0CatalogView.Load(store, schemaRoot);
-        StateModelSnapshot models = registry.Snapshot(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
-        return new(store, models, selected, P0TypedReader.Read(store, graph, models, selected));
+        SplitBindingEnvironment environment = reuseEnvironment ?? SplitBindingEnvironment.Load(store, configuration, schemaRoot);
+        environment.RequireMatches(store, configuration, schemaRoot);
+        return new(store, environment, P0TypedReader.Read(store, graph, environment.Models, environment.SelectedSchemaView));
+    }
+
+    // Explicit same-S reuse, without an owner-wide history cache or externally supplied view.
+    // Only actual meta loading can construct this environment; every reuse still reads the graph.
+    internal sealed class SplitBindingEnvironment {
+        private readonly P0GraphStore _store;
+        private readonly StateModelRegistry.FrozenConfiguration _configuration;
+        private readonly FrameAddress _schemaRoot;
+
+        private SplitBindingEnvironment(P0GraphStore store, StateModelRegistry.FrozenConfiguration configuration,
+            FrameAddress schemaRoot, P0CatalogView selected) {
+            _store = store;
+            _configuration = configuration;
+            _schemaRoot = schemaRoot;
+            SelectedSchemaView = selected;
+            Models = configuration.CreateSnapshot(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
+        }
+
+        internal P0CatalogView SelectedSchemaView { get; }
+        internal StateModelSnapshot Models { get; }
+
+        internal static SplitBindingEnvironment Load(P0GraphStore store,
+            StateModelRegistry.FrozenConfiguration configuration, FrameAddress schemaRoot) =>
+            new(store, configuration, schemaRoot, P0CatalogView.Load(store, schemaRoot));
+
+        internal void RequireMatches(P0GraphStore store, StateModelRegistry.FrozenConfiguration configuration,
+            FrameAddress schemaRoot) {
+            if (!ReferenceEquals(_store, store) || !ReferenceEquals(_configuration, configuration) || _schemaRoot != schemaRoot ||
+                SelectedSchemaView.Snapshot is not { } selected || selected.Address != _schemaRoot || !ReferenceEquals(selected.SourceOwner, store)) {
+                throw new InvalidDataException("A split binding environment requires its exact Store, frozen configuration and selected Schema root.");
+            }
+        }
     }
 
     public FrameAddress RevisionAddress { get; }
@@ -71,6 +111,7 @@ public sealed class DecodedRevision {
     internal P0GraphStore? SplitStore { get; }
     internal P0CatalogView? SelectedSchemaView { get; }
     internal StateModelSnapshot? SourceModels { get; }
+    internal SplitBindingEnvironment? BindingEnvironment { get; }
     internal IReadOnlyDictionary<ObjectId, ObjectStorageInfo> ObjectStorage { get; }
 
     /// <summary>Returns the exact content for a live ID; zero and absent IDs are invalid.</summary>
