@@ -22,7 +22,8 @@
 [DB-087 meta 自举](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#11-p1a准确视图与共同恢复接线) 已完成 P0 有限持久闭环与 P1a 共同恢复／Upgrade 接线；公开产品路径未切换，P1b–d 和 P2 尚未实施。无旧数据／旧 API 兼容负担，最终产品简单优先。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 是继续演进的产品原型。P0 已证实 descriptor meta ObjectId、员工 Dictionary、共同 writer、真实双 ref、Event/State 与冷开续写；去向表和后续依赖只维护在 DB-087 §6，限定证据见 §10。
 P1a 删除 P0 重复 Restore，完整 decoded 来源接入原 GraphReader/NormalizedRevision；历史 S 约束只读 lookup，target 新布局可由冻结代码能力闭合，读取不准备／发布 meta。Save 从实际 Capture 收集布局，再准备 catalog；Event/Discard 不消费 State rewrite。固定员工只共享不可变布局，绑定 memo 归操作／builder，owner guard 覆盖跨 session 准备。真实 V1→V2 及独立边界证据见 DB-087 §11。
-**下一步 P1b**：先用含 base/inline/Nullable/容器的真实消费者选定最小员工 records 与 fixed/dynamic 路由，再补完整已有闭包和格式拒绝。随后 P1c 合并业务 producer、公开 Repository/history/cache；P1d 完成初始化、ProcessCrashOnly 与隔离 PackageReference 门禁后公开切换／删除旧路径；P2 再落实显式 private。局部待决选择集中于 DB-087 §7.1，无需重开已定的共享／私有政策。
+**下一步 P1b**：按 [DB-087 §6.3 续工入口](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 用含 base/inline/Nullable/容器的真实消费者选定最小员工 records 与 fixed/dynamic 路由，再补完整已有闭包和格式拒绝。随后 P1c 合并业务 producer、公开 Repository/history/cache；P1d 完成初始化、ProcessCrashOnly 与隔离 PackageReference 门禁后公开切换／删除旧路径；P2 再落实显式 private。局部待决选择集中于 DB-087 §7.1，无需重开已定的共享／私有政策。
+实现基线：P0 提交 `12f3eb2`，P1a 提交 `2740bf1`；对应验证集中在 DB-087 §10–11。压缩后从本文和 §6.3 重建任务，不要求顾问保留完整旧会话；先核对实际 HEAD／工作树再施工。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 当前证据仍是同进程关闭所有资源后新开和有限 Schema 闭包，未证明完整 Upgrade/private、新进程或性能资格；不承诺总 O(k)。SCB1/raw map 仍是公开实现事实，不做生产双写。未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。下述 DB-086 等既有公开能力基线保持。
 

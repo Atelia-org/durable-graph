@@ -324,6 +324,21 @@ P2 依赖完整 P1，按四步接线：**显式策略＋完整 shared fork → �
 
 代码改动运行 `dotnet build DurableGraph.slnx` 与相关测试，准确 source/package mode 见[依赖指南](../storage-dependency.md)。wire、生成 ABI 或包交付改变时完成隔离 PackageReference 验收，不能以 ProjectReference 代替。
 
+### 6.3 P1b 首片续工入口
+
+已提交的实现基线为 P0 `12f3eb2`、P1a `2740bf1`。下一轮先核对 HEAD 和工作树，读取 PROJECT-STATE、本节及第 7.1 节，再按源码定位；不必重新通读原型调查或重复已经通过的 P0/P1a 实验。
+
+首片问题：**现有员工图能否描述一个含 base、inline、Nullable 和 List 的真实生成模型，在没有业务 CLR 注册的环境中恢复完整 Schema，再在匹配模型环境中冷读业务并续写？** 这为完整记录语法提供真实消费者，首片通过后再扩泛型、enum、数组、Dictionary 与其余现有组合；具体拆片可随证据调整。
+
+- 优先检查 `P0EmployeeModels`、`P0CatalogView/Workspace`、`P0FixedBindings`、`P0TypedBodies`，对照已有 `DurableSchema`、`TypeExpr`、`DurableFieldInfo` 和容器 layout 的工厂／限制。旧 `SchemaCatalogWireCodec` 提供完整语义检查的对照，旧独立发布机制不随之保留。
+- 先确定代表性模型所需的最小 records／依赖引用和 fixed/dynamic 路由方案，把选择与拒绝理由写回第 7.1 节；P0 的业务 `List<int>` 动态 descriptor 是早期见证，不是最终必须沿用的路由。固定容器仍须检查完整槽闭包，未知员工码或用户布局逃逸必须拒绝。
+- 最小验收同时包含正向冷开续写、无业务模型的 meta 查询，以及构造依赖环／错误 variant／错误引用等有区分力的拒绝见证；沿用准确来源 S、descriptor 合法集合、共同恢复和受控容器 emitter。meta 编码不得重新依赖业务 SchemaStore。
+- 保持内部入口，P1b 不顺带切公开 Repository、设计 private API 或扩通用 resolver/token/追踪框架。静态固定通道只持不可变布局，绑定 memo 继续归操作／builder；具体 wire 变化按第 6.2 节完成相应包验收。
+
+适合继续用 bounded-delegation 分开 Schema／生成器闭包、持久接线和独立反例审查；主线裁决共享接口并统一构建、运行验收、同步文档及本地提交。只有实质产品语义取舍才需用户决定，普通内部形状在已有授权内推进。
+
+2026-10-12 的施工量级估计：未来 3–5 轮可较有把握地逐片规划，P1b–P2 合计约 8–13 轮（P1b 2–3、P1c 3–5、P1d 1–2、P2 2–3），以本轮工作量为参照，遇到反例随证据重估。这是滚动估计，不是验收承诺；完整范围为第 6.2 节 P0–P2，条件片仍按触发条件延期。
+
 ## 7. 决定性验证与未冻结的细节
 
 ### 7.1 设计接缝的决定状态
