@@ -19,13 +19,13 @@
 
 ## 当前焦点
 
-[DB-087 P1d 第二片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#31-p1d-第二片真实-dg-processcrashonly-保存窗口) 已验六个真实 DG ProcessCrashOnly 保存窗口：source host 使用 SG Widget 环／共享 List／新增 meta，外部 Kill 后 fresh 核准确两根／S、完成 orphan 保留及实际 Delta 续写；宿主构建、矩阵与完整源码回归通过，证据只保留 §31。前片初始化／正常恢复见 §30。后继优先直接 factory 两 CreateRef 后 Kill／实际 Repository outcome 与故障关闭→准确包→默认切换退旧→P2 private；完整 P1d／P1 产品门禁尚未完成。
+[DB-087 P1d 第三片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#32-p1d-第三片直接初始化-kill-与实际返回-outcome) 已完成直接 DG factory 的两次成功 CreateRef 后 Kill、实际 typed Repository 返回 outcome／fault 的限定源码验收；新增生产接缝只在两个 internal 工厂文件下传局部 callback，wire／public API／默认保持。初始化二窗、原保存六窗重跑、新增返回测试、构建和完整源码回归均通过，证据只保留 §32。前片保存进程／正常恢复分别见 §31／§30；后继准确 split Repository＋历史 Upgrade／tag／Fork／ReadPair／Delta 包消费者→默认切换退旧→P2，完整 P1d／P1 产品门禁尚未完成。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型，当前 ABI5／员工 DTO V1。完整 source lookup 在引用检查后／Normalize 前；长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 保留 State 基线与 rewrite。准确 source／selected／target view、操作内 memo 和有限 meta 员工白名单保持。
 内部 GraphResources、共同候选与发布前安装保持。Open 冻结配置，checkout 固定创建／恢复时的执行 S：有 State 取 State.S，无 State 取创建时 latest shared／空库 None；存储 SelectedSchemaView 可推进，hot models／preparation 不换。历史 Fork 按 selected head 恢复，ref-only 不倒退 shared S。split Pair 两侧准确 S，同 reader-issued 环境才求完整状态／引用闭包共享；跨环境独立、两侧共同物化保 mutable allocator guard。string 在原 same-ID/head 候选内以 Ordinal 内容证明，不 intern 不同 ID，不新增 DTO cache。State 槽已验持准确 State 的 reader 环境／Selection／完整标准依赖；命中仍独立物化，Event-only 绕槽，Fork 发布成功后安装。DB-081 热 seed 禁用，DB-082 既有候选已随第九片移接，仍默认关闭。默认公开工厂不切，不保证任意跨 S closure 的领域值等价。
 默认公开工厂仍走 DB-086 的 SCB1／raw map 路径；内部 split 工厂返回真实 Repository，并调用已移接的现有 public 方法。P1c 内部整合停点已达，P1d／P2 未完成；P1d 初始化／ProcessCrashOnly／真实包门禁通过后默认切换并删除旧路径，P2 再接显式 private。无旧数据／旧 API 兼容负担，最终产品简单优先，不把未穷举组合追加为 P1b 前置。
-本片起点 `9a72091`；续工先核实际 HEAD／工作树，再读本文和 DB-087 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、完整进程故障或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+本片起点 `b16c0fd`；续工先核实际 HEAD／工作树，再读本文和 DB-087 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、完整进程故障或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
-本片只新增 solution 外的有限 source host；生产／solution／test 源码零改，wire、公开 API 和默认工厂保持。ProcessCrashOnly 仅限所验保存窗口，不授新 PackageReference、直接 factory 初始化、断电或性能资格，assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
+本片在两个生产文件新增局部 internal callback，扩展有限 source host 初始化 mode 并补实际 Repository 返回测试；wire、public API 和默认工厂保持。ProcessCrashOnly 仅限所验保存／成功创建后窗口，不授新 PackageReference、断电或性能资格，assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。

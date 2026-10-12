@@ -11,6 +11,7 @@ using MetaBootstrapCrash;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
 using persistence::Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+using DataStore = Atelia.FrameStore.FrameStore;
 using PublicationStore = Atelia.VersionStore.VersionStore;
 
 // READY is diagnostic evidence, never publication authority. Only a fresh owner
@@ -27,9 +28,12 @@ internal static class Program {
     private sealed record ReadyEvidence(string Protocol, string Window, int ProcessId, string OldState, string OldSchema,
         uint RootId, uint ListId, ObjectEvidence[] Objects, string? CandidateMeta, string? CandidateBusiness,
         FrameEvidence[] OldFrames, FrameEvidence[] CapturedFrames, int CuEndsSeen, int BeforeCuFlushCalls, string PublicationStage);
+    private sealed record FileImage(string Path, string Sha256);
+    private sealed record InitReadyEvidence(string Protocol, string Window, int ProcessId, uint CompletedRefId,
+        uint[] CompletedRefs, FileImage[] FormalRefImages, int DeclaredUserDataFrames);
 
     private static int Main(string[] args) {
-        if (args.Length < 1) { throw new ArgumentException("Expected seed, writer or verify."); }
+        if (args.Length < 1) { throw new ArgumentException("Expected seed, writer, verify, init-writer or init-verify."); }
         Dictionary<string, string> options = Parse(args);
         string repositoryPath = Path.GetFullPath(Required(options, "repo"));
         switch (args[0]) {
@@ -37,10 +41,186 @@ internal static class Program {
             case "writer": Writer(repositoryPath, Window(options), Path.GetFullPath(Required(options, "ready"))); break;
             case "verify": Verify(repositoryPath, Window(options), Path.GetFullPath(Required(options, "ready")),
                 Path.GetFullPath(Required(options, "result"))); break;
-            default: throw new ArgumentException("Expected seed, writer or verify.");
+            case "init-writer": InitWriter(repositoryPath, InitWindow(options), Path.GetFullPath(Required(options, "ready"))); break;
+            case "init-verify": InitVerify(repositoryPath, InitWindow(options), Path.GetFullPath(Required(options, "ready")),
+                Path.GetFullPath(Required(options, "result"))); break;
+            default: throw new ArgumentException("Expected seed, writer, verify, init-writer or init-verify.");
         }
         Console.WriteLine("MetaBootstrapCrash:" + args[0] + ":Passed");
         return 0;
+    }
+
+    private static void InitWriter(string repositoryPath, string window, string readyPath) {
+        uint target = window == "AfterFirstCreateRef" ? 1u : 2u;
+        List<uint> completed = [];
+        using Repository unexpected = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models(), afterCreateRef: localId => {
+            completed.Add(localId);
+            Need(localId == (uint)completed.Count, "The factory must complete refs1/2 in order.");
+            if (localId != target) { return; }
+            // CreateRef has returned: its private RBF was flushed, closed and renamed.
+            // Only those closed formal control files are hashed here; the borrowed
+            // FrameStore remains exclusive and no Repository has been delivered.
+            string refsPath = Path.Combine(repositoryPath, "versions", "refs");
+            FileImage[] files = Directory.GetFiles(refsPath, "*.rbf").Order(StringComparer.Ordinal)
+                .Select(path => new FileImage(Path.GetRelativePath(repositoryPath, path), Hash(File.ReadAllBytes(path)))).ToArray();
+            Need(files.Length == completed.Count, "Unexpected formal ref set at the factory checkpoint.");
+            Need(Directory.GetFiles(Path.Combine(repositoryPath, "versions", "creating")).Length == 0,
+                "A successful CreateRef must not leave private pending output.");
+            // This is a source-informed declaration, not an active FS inventory.
+            // The fresh verifier independently measures the actual user-frame count.
+            Wait(new InitReadyEvidence(Protocol, window, Environment.ProcessId, localId,
+                completed.ToArray(), files, DeclaredUserDataFrames: 0), readyPath);
+        });
+        throw new InvalidOperationException("The factory checkpoint was not reached; initialization writer must be killed externally.");
+    }
+
+    private static void InitVerify(string repositoryPath, string window, string readyPath, string resultPath) {
+        InitReadyEvidence ready = JsonSerializer.Deserialize<InitReadyEvidence>(File.ReadAllText(readyPath), Json)
+            ?? throw new InvalidDataException("Missing initialization READY evidence.");
+        bool complete = window == "AfterSecondCreateRef";
+        uint[] refs = complete ? [1, 2] : [1];
+        Need(ready.Protocol == Protocol && ready.Window == window && ready.ProcessId != Environment.ProcessId &&
+            ready.CompletedRefId == refs[^1] && ready.CompletedRefs.SequenceEqual(refs) && ready.DeclaredUserDataFrames == 0,
+            "Initialization READY must describe the exact successful factory returns in another process.");
+        Dictionary<string, string> initialFiles = SnapshotFiles(repositoryPath);
+        Need(ready.FormalRefImages.Length == refs.Length, "Wrong formal ref image count.");
+        foreach (FileImage image in ready.FormalRefImages) {
+            Need(initialFiles.TryGetValue(image.Path, out string? hash) && hash == image.Sha256,
+                "A successful factory's formal ref file changed after external Kill.");
+        }
+        if (complete) {
+            using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())) {
+                GraphResources resources = Resources(reader);
+                Need(reader.IsReadOnly && reader.ListBranches().Count == 0 && reader.SharedSchemaRoot is null,
+                    "Two completed factory refs must open as an empty readonly DG repository.");
+                CheckEmptyInitializationRoots(resources.Versions, complete: true);
+                Need(Inventory(resources).Length == 0, "The initialization factory must not contain user data frames.");
+            }
+        } else { RejectIncompleteFactory(repositoryPath, readOnly: true); }
+        Need(SameFiles(initialFiles, SnapshotFiles(repositoryPath)), "Readonly factory verification changed files.");
+
+        if (!complete) {
+            RejectIncompleteFactory(repositoryPath, readOnly: false);
+            Need(SameFiles(initialFiles, SnapshotFiles(repositoryPath)), "Writable DG Open must not complete or delete an initialized formal root.");
+        }
+        // Both fresh exclusive acquisitions must succeed after the failed DG opens
+        // (or successful readonly close). This also independently validates actual
+        // formal roots and the zero user-frame declaration without a DG cache.
+        using (DataStore data = DataStore.Open(Path.Combine(repositoryPath, "data")))
+        using (PublicationStore versions = PublicationStore.Open(Path.Combine(repositoryPath, "versions"), data)) {
+            Need(versions.ReservedRefIdUpperBound == 2 && versions.ListRefs().Unwrap().Select(id => id.LocalId).Order().SequenceEqual(refs),
+                "Fresh exclusive backing must expose precisely the completed formal refs.");
+            CheckEmptyInitializationRoots(versions, complete);
+            int userFrames = 0;
+            data.Inventory(_ => userFrames++).Unwrap();
+            Need(userFrames == 0, "Actual initialized data has unexpected user frames.");
+            Need(data.RecoveryReports.Values.All(report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.None) && versions.RecoveryReports.Count == 0,
+                "After-successful-CreateRef Kill must not require backing tail repair.");
+        }
+        Need(SameFiles(initialFiles, SnapshotFiles(repositoryPath)), "Initialization verification changed completed data or formal ref bytes.");
+        string? seedState = null, schema = null, continuationState = null;
+        ObjectEvidence[] objects = [];
+        if (complete) {
+            (FrameAddress state, FrameAddress selectedSchema, FrameAddress next, ObjectEvidence[] storage) =
+                SeedEmptyInitializationThenColdContinue(repositoryPath);
+            seedState = Encode(state);
+            schema = Encode(selectedSchema);
+            continuationState = Encode(next);
+            objects = storage;
+        }
+        WriteJson(resultPath, new { Protocol, Lane = "init-verify", Passed = true, ProcessId = Environment.ProcessId,
+            WriterProcessId = ready.ProcessId, Window = window,
+            ObservedInitialization = complete ? "CompleteEmptyRoots" : "MissingSecondRef",
+            InitialUserDataFrames = 0, FileBytesPreserved = true, ReadOnlyFilesUnchanged = true, LocksReleased = true,
+            SingleDelta = complete, ExactPrior = complete, IdsPreserved = complete, HVerified = complete,
+            SeedState = seedState, Schema = schema, ContinuationState = continuationState, Objects = objects,
+            TypedBodyAbi = P0TypedBodyCodec.FormatVersion });
+    }
+
+    private static void RejectIncompleteFactory(string repositoryPath, bool readOnly) {
+        try {
+            using Repository unexpected = readOnly ? Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())
+                : Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models());
+        } catch (InvalidOperationException error) {
+            Need(error.Message.Contains("[VersionStore.RefNotFound]", StringComparison.Ordinal), "Fresh DG rejected for a cause other than missing ref2.");
+            return;
+        }
+        throw new InvalidDataException("DG must refuse incomplete initialization rather than fill or ignore ref2.");
+    }
+
+    private static void CheckEmptyInitializationRoots(PublicationStore versions, bool complete) {
+        Need(DecodeRoot(versions.ReadRef(1).Unwrap().Payload, "P0R1"u8).Count == 0, "Initial branch root payload must be exactly empty.");
+        if (complete) { Need(DecodeRoot(versions.ReadRef(2).Unwrap().Payload, "P0S1"u8).Count == 0, "Initial shared root payload must be exactly empty."); }
+        else {
+            var missing = versions.ReadRef(2);
+            Need(missing.IsFailure && missing.Error!.ErrorCode == "VersionStore.RefNotFound", "Missing ref2 must remain absent after failed DG Open.");
+        }
+    }
+
+    private static (FrameAddress State, FrameAddress Schema, FrameAddress Next, ObjectEvidence[] Objects)
+        SeedEmptyInitializationThenColdContinue(string repositoryPath) {
+        FrameAddress state, schema;
+        ObjectEvidence[] initial;
+        FrameEvidence[] seedFrames;
+        uint listId;
+        using (Repository seed = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models())) {
+            seed.PreparedStateReuseEnabled = false;
+            Need(seed.ListBranches().Count == 0 && seed.SharedSchemaRoot is null, "Writable DG must see the complete empty initialization.");
+            using BranchCheckout main = seed.CreateBranch("main", HostModel.Ring());
+            seed.CreateTag("initial", main.Head);
+            state = main.Head.RevisionAddress;
+            schema = seed.SharedSchemaRoot!.Value;
+            initial = Objects(main);
+            listId = ListId(main);
+            Need(initial.Length == 3, "Seed must contain the Widget ring and shared List.");
+            P0GraphSnapshot graph = seed.MetaBootstrapStore.ReadGraph(state);
+            Need(RequiredSchema(graph) == schema, "Seed storage pin must match its actual shared root.");
+            CheckCatalog(P0CatalogView.Load(seed.MetaBootstrapStore, schema), extra: false);
+            CheckStorage(seed, graph, initial);
+            Need(graph.Objects[listId] != state, "The List head must be its actual batch rather than the graph address.");
+            GraphResources resources = Resources(seed);
+            seedFrames = Inventory(resources).Select(frame => CaptureFrame(resources, frame)).ToArray();
+        }
+        FrameAddress next;
+        ObjectEvidence[] updated;
+        using (Repository reopened = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models())) {
+            reopened.PreparedStateReuseEnabled = false;
+            using BranchCheckout cold = reopened.Checkout("main");
+            Widget root = HostModel.Check(cold.State, 7);
+            Need(cold.StateRevisionAddress == state && Objects(cold).SequenceEqual(initial), "Cold checkout must preserve complete seed IDs, actual heads and H.");
+            ObjectEvidence list = initial.Single(row => row.Id == listId);
+            root.Numbers[7] = 201;
+            next = cold.CommitState().RevisionAddress;
+            P0GraphSnapshot graph = reopened.MetaBootstrapStore.ReadGraph(next);
+            Need(graph.SourceGraph == state && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
+                "Cold continuation must preserve the selected content source and Schema pin.");
+            P0Batch batch = reopened.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value);
+            Need(batch.SourceGraph == state && batch.SchemaRoot == schema && batch.Records.Count == 1, "Cold continuation must write exactly one actual record.");
+            ObjectVersionRecord delta = batch.Records[0];
+            Need(delta.ObjectId == listId && delta.Kind == ObjectVersionKind.Delta && delta.PriorAddress == Decode(list.Head),
+                "Cold continuation must be a List Delta with exact prior.");
+            updated = Objects(cold);
+            Need(updated.Select(row => row.Id).SequenceEqual(initial.Select(row => row.Id)), "Cold continuation changed complete IDs.");
+            ObjectEvidence nextList = updated.Single(row => row.Id == listId);
+            Need(Decode(nextList.Head) == graph.OwnedBatch && Decode(nextList.Head) != next &&
+                delta.EncodedPayloadBytes is { } bytes && nextList.H == checked(list.H + bytes), "Actual batch head or incremented H disagrees.");
+            foreach (ObjectEvidence row in initial.Where(row => row.Id != listId)) {
+                Need(updated.Single(candidate => candidate.Id == row.Id) == row, "Cold continuation changed retained heads/H.");
+            }
+            CheckStorage(reopened, graph, updated);
+            CheckFrames(Resources(reopened), seedFrames);
+            HostModel.Check(reopened.ReadState(reopened.GetHead("main")), 201);
+            HostModel.Check(reopened.ReadState(reopened.ResolveTag("initial")), 7);
+        }
+        using (Repository final = Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())) {
+            Need(final.GetHead("main").RevisionAddress == next && final.SharedSchemaRoot == schema, "Fresh continuation roots disagree.");
+            HostModel.Check(final.ReadState(final.GetHead("main")), 201);
+            HostModel.Check(final.ReadState(final.ResolveTag("initial")), 7);
+            P0GraphSnapshot graph = final.MetaBootstrapStore.ReadGraph(next);
+            CheckStorage(final, graph, updated);
+            CheckFrames(Resources(final), seedFrames);
+        }
+        return (state, schema, next, updated);
     }
 
     private static void Seed(string repositoryPath, string resultPath) {
@@ -320,7 +500,7 @@ internal static class Program {
             .SetValue(hooks, (Action<uint>)(_ => beforeCuFlush()));
         field.SetValue(versions, hooks);
     }
-    private static void Wait(ReadyEvidence evidence, string path) {
+    private static void Wait(object evidence, string path) {
         WriteJson(path, evidence);
         Console.WriteLine("READY");
         Console.Out.Flush();
@@ -350,6 +530,8 @@ internal static class Program {
     private static Dictionary<string, string> SnapshotFiles(string repositoryPath) =>
         Directory.GetFiles(repositoryPath, "*", SearchOption.AllDirectories)
             .ToDictionary(path => Path.GetRelativePath(repositoryPath, path), path => Hash(File.ReadAllBytes(path)));
+    private static bool SameFiles(Dictionary<string, string> expected, Dictionary<string, string> actual) =>
+        expected.Count == actual.Count && expected.All(pair => actual.TryGetValue(pair.Key, out string? hash) && hash == pair.Value);
     private static Dictionary<string, string> Parse(string[] args) {
         if (args.Length % 2 != 1) { throw new ArgumentException("Options must be --name value pairs."); }
         Dictionary<string, string> result = new(StringComparer.Ordinal);
@@ -365,6 +547,11 @@ internal static class Program {
     private static string Window(Dictionary<string, string> options) {
         string window = Required(options, "window");
         Need(Windows.Contains(window, StringComparer.Ordinal), "Unknown process-crash window.");
+        return window;
+    }
+    private static string InitWindow(Dictionary<string, string> options) {
+        string window = Required(options, "window");
+        Need(window is "AfterFirstCreateRef" or "AfterSecondCreateRef", "Unknown direct factory initialization window.");
         return window;
     }
     private static void Need(bool condition, string message) {

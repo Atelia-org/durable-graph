@@ -53,8 +53,8 @@ public sealed partial class GraphResources {
     internal FrameAddress? SharedMetaBootstrapRoot { get { RequireMetaBootstrapAvailable(); return _baseline.SharedRoot; } }
 
     internal static GraphResources CreateMetaBootstrapNew(string path,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, create: true, readOnly: false, readCacheBudgetBytes);
+        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null) =>
+        OpenMetaBootstrap(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef);
     internal static GraphResources OpenMetaBootstrapExisting(string path,
         long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrap(path, create: false, readOnly: false, readCacheBudgetBytes);
@@ -62,7 +62,8 @@ public sealed partial class GraphResources {
         long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrap(path, create: false, readOnly: true, readCacheBudgetBytes);
 
-    private static GraphResources OpenMetaBootstrap(string path, bool create, bool readOnly, long readCacheBudgetBytes) {
+    private static GraphResources OpenMetaBootstrap(string path, bool create, bool readOnly, long readCacheBudgetBytes,
+        Action<uint>? afterCreateRef = null) {
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string root = Path.GetFullPath(path);
@@ -81,7 +82,9 @@ public sealed partial class GraphResources {
             if (versions.ReservedRefIdUpperBound != SharedRef) { throw new InvalidDataException("Not a P0 publication layout."); }
             if (create) {
                 versions.CreateRef(BranchRef, EncodeBranches(new(StringComparer.Ordinal)), out _).Unwrap();
+                afterCreateRef?.Invoke(BranchRef);
                 versions.CreateRef(SharedRef, EncodeShared(null), out _).Unwrap();
+                afterCreateRef?.Invoke(SharedRef);
             }
             // Missing either ref is an incomplete initialization, never a resumable create.
             RefBytesSnapshot branches = versions.ReadRef(BranchRef).Unwrap();

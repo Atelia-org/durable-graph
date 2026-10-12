@@ -2,6 +2,7 @@
 param(
     [string]$AssemblyPath = (Join-Path $PSScriptRoot 'bin/Debug/net10.0/Atelia.DurableGraph.Persistence.Tests.dll'),
     [string]$RunRoot,
+    [switch]$InitializationOnly,
     [ValidateRange(5, 300)][int]$ReadyTimeoutSeconds = 60,
     [ValidateRange(5, 600)][int]$HostTimeoutSeconds = 120,
     [ValidateRange(5, 60)][int]$StopTimeoutSeconds = 30
@@ -57,6 +58,7 @@ foreach ($file in @(Get-ChildItem -LiteralPath (Split-Path -Parent $assembly) -F
 $receipt = [ordered]@{
     ProtocolVersion = 1
     Scope = 'ProcessCrashOnly'
+    Mode = $(if ($InitializationOnly) { 'Initialization' } else { 'Save' })
     StorageMode = 'Source'
     BuildProperties = [ordered]@{ UseStorageSources = $true; BuildsPerformedByController = 0 }
     StartedUtc = [DateTime]::UtcNow.ToString('O')
@@ -168,14 +170,17 @@ function Read-Result {
     return $result
 }
 
-$windows = @(
+$windows = if ($InitializationOnly) { @(
+    @{ Name = 'AfterFirstCreateRef'; Expected = 'MissingSecondRef'; CompletedRefId = 1 },
+    @{ Name = 'AfterSecondCreateRef'; Expected = 'CompleteEmptyRoots'; CompletedRefId = 2 }
+) } else { @(
     @{ Name = 'AfterMetaAppend'; Expected = 'Old' },
     @{ Name = 'AfterBusinessAppend'; Expected = 'Old' },
     @{ Name = 'AfterFirstCuEnd'; Expected = 'Old' },
     @{ Name = 'AfterAllCuEnd'; Expected = 'New' },
     @{ Name = 'AfterPublicationConfirmed'; Expected = 'New' },
     @{ Name = 'BeforeInstall'; Expected = 'New' }
-)
+) }
 Save-Receipt
 try {
     foreach ($window in $windows) {
@@ -187,12 +192,15 @@ try {
         $verifyPath = Join-Path $directory 'verify.json'
         $lane = [ordered]@{ Window = $window.Name; Expected = $window.Expected; Fixture = $fixture; Seed = $null; Writer = $null; Verifier = $null; Passed = $false }
         $receipt.Windows += $lane
-        $lane.Seed = Invoke-ProbeHost -HostArguments @('seed', '--repo', $fixture, '--result', $seedPath) -LogPrefix (Join-Path $directory 'seed') -Lane $lane -Role 'Seed'
-        $seed = Read-Result -Path $seedPath -ExpectedProcessId $lane.Seed.ProcessId
-        $lane.Seed['Result'] = $seedPath
-        Save-Receipt
+        if (-not $InitializationOnly) {
+            $lane.Seed = Invoke-ProbeHost -HostArguments @('seed', '--repo', $fixture, '--result', $seedPath) -LogPrefix (Join-Path $directory 'seed') -Lane $lane -Role 'Seed'
+            $seed = Read-Result -Path $seedPath -ExpectedProcessId $lane.Seed.ProcessId
+            $lane.Seed['Result'] = $seedPath
+            Save-Receipt
+        }
 
-        $writer = Start-ProbeProcess -HostArguments @('writer', '--repo', $fixture, '--window', $window.Name, '--ready', $readyPath) -LogPrefix (Join-Path $directory 'writer') -ReadyProtocol
+        $writerCommand = if ($InitializationOnly) { 'init-writer' } else { 'writer' }
+        $writer = Start-ProbeProcess -HostArguments @($writerCommand, '--repo', $fixture, '--window', $window.Name, '--ready', $readyPath) -LogPrefix (Join-Path $directory 'writer') -ReadyProtocol
         try {
             $deadline = [DateTime]::UtcNow.AddSeconds($ReadyTimeoutSeconds)
             while (-not $writer.OutputTask.IsCompleted -or -not (Test-Path -LiteralPath $readyPath -PathType Leaf)) {
@@ -204,15 +212,33 @@ try {
                 throw "Writer did not park at READY for $($window.Name)."
             }
             $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
-            if ($ready.Protocol -ne 'DG.MetaBootstrapCrashProbe.v1' -or $ready.Protocol -ne $seed.Protocol -or
-                $ready.Window -ne $window.Name -or [int]$ready.ProcessId -ne $writer.ProcessId -or
-                [string]::IsNullOrWhiteSpace([string]$ready.OldState) -or [string]::IsNullOrWhiteSpace([string]$ready.OldSchema) -or
-                [string]::IsNullOrWhiteSpace([string]$ready.PublicationStage) -or @($ready.CapturedFrames).Count -eq 0) {
+            if ($ready.Protocol -ne 'DG.MetaBootstrapCrashProbe.v1' -or
+                $ready.Window -ne $window.Name -or [int]$ready.ProcessId -ne $writer.ProcessId) {
                 throw "READY evidence does not match the controlled writer/window $($window.Name)."
             }
-            if ($ready.OldState -ne $seed.State -or $ready.OldSchema -ne $seed.Schema -or
-                $ready.RootId -ne $seed.RootId -or $ready.ListId -ne $seed.ListId) {
-                throw "Writer did not start from the completed seed roots and object IDs at $($window.Name)."
+            if ($InitializationOnly) {
+                if ($ready.CompletedRefId -ne $window.CompletedRefId -or
+                    @($ready.CompletedRefs).Count -ne $window.CompletedRefId -or $ready.CompletedRefs[0] -ne 1 -or
+                    ($window.CompletedRefId -eq 2 -and $ready.CompletedRefs[1] -ne 2) -or
+                    @($ready.FormalRefImages).Count -ne $window.CompletedRefId -or
+                    $null -eq $ready.DeclaredUserDataFrames -or $ready.DeclaredUserDataFrames -ne 0) {
+                    throw "Initialization READY does not prove the requested completed CreateRef boundary at $($window.Name)."
+                }
+                foreach ($image in $ready.FormalRefImages) {
+                    if ([string]::IsNullOrWhiteSpace([string]$image.Path) -or $image.Sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+                        throw 'Initialization READY must identify each completed formal ref image and its SHA256.'
+                    }
+                }
+            } else {
+                if ($ready.Protocol -ne $seed.Protocol -or
+                    [string]::IsNullOrWhiteSpace([string]$ready.OldState) -or [string]::IsNullOrWhiteSpace([string]$ready.OldSchema) -or
+                    [string]::IsNullOrWhiteSpace([string]$ready.PublicationStage) -or @($ready.CapturedFrames).Count -eq 0) {
+                    throw "Save READY lacks completed seed/candidate evidence at $($window.Name)."
+                }
+                if ($ready.OldState -ne $seed.State -or $ready.OldSchema -ne $seed.Schema -or
+                    $ready.RootId -ne $seed.RootId -or $ready.ListId -ne $seed.ListId) {
+                    throw "Writer did not start from the completed seed roots and object IDs at $($window.Name)."
+                }
             }
             $readyObservedUtc = [DateTime]::UtcNow.ToString('O')
             Kill-ProbeProcess $writer # External process termination: the writer never executes normal Dispose.
@@ -229,19 +255,41 @@ try {
             Save-Receipt
         }
 
-        $lane.Verifier = Invoke-ProbeHost -HostArguments @('verify', '--repo', $fixture, '--window', $window.Name, '--ready', $readyPath, '--result', $verifyPath) -LogPrefix (Join-Path $directory 'verify') -Lane $lane -Role 'Verifier'
+        $verifierCommand = if ($InitializationOnly) { 'init-verify' } else { 'verify' }
+        $lane.Verifier = Invoke-ProbeHost -HostArguments @($verifierCommand, '--repo', $fixture, '--window', $window.Name, '--ready', $readyPath, '--result', $verifyPath) -LogPrefix (Join-Path $directory 'verify') -Lane $lane -Role 'Verifier'
         $verified = Read-Result -Path $verifyPath -ExpectedProcessId $lane.Verifier.ProcessId
+        $observedProperty = if ($InitializationOnly) { 'ObservedInitialization' } else { 'ObservedOldOrNew' }
         if ($lane.Verifier.ProcessId -eq $lane.Writer.ProcessId -or [int]$verified.WriterProcessId -ne $lane.Writer.ProcessId -or
-            $verified.Window -ne $window.Name -or $verified.ObservedOldOrNew -ne $window.Expected) {
-            throw "Fresh verifier did not confirm the expected old/new pair at $($window.Name)."
+            $verified.Window -ne $window.Name -or $verified.$observedProperty -ne $window.Expected) {
+            throw "Fresh verifier did not confirm the expected result at $($window.Name)."
         }
-        foreach ($check in @('SingleDelta', 'ExactPrior', 'IdsPreserved', 'HVerified', 'CompletedFramesPreserved', 'ReadOnlyFilesUnchanged', 'NoNonNoneRecovery')) {
+        $checks = if ($InitializationOnly) { @('FileBytesPreserved', 'ReadOnlyFilesUnchanged', 'LocksReleased') }
+            else { @('SingleDelta', 'ExactPrior', 'IdsPreserved', 'HVerified', 'CompletedFramesPreserved', 'ReadOnlyFilesUnchanged', 'NoNonNoneRecovery') }
+        foreach ($check in $checks) {
             if ($verified.$check -isnot [bool] -or -not $verified.$check) { throw "Verifier failed $check at $($window.Name)." }
         }
+        if ($InitializationOnly) {
+            $hasTypedContinuation = $window.CompletedRefId -eq 2
+            foreach ($check in @('SingleDelta', 'ExactPrior', 'IdsPreserved', 'HVerified')) {
+                if ($verified.$check -isnot [bool] -or $verified.$check -ne $hasTypedContinuation) {
+                    throw "Initialization verifier has an incorrect typed continuation marker $check at $($window.Name)."
+                }
+            }
+            if ($null -eq $verified.InitialUserDataFrames -or $verified.InitialUserDataFrames -ne 0) {
+                throw 'Direct factory initialization must not create meta or business user data frames.'
+            }
+        }
         $lane.Verifier['Result'] = $verifyPath
-        $lane.Verifier['ObservedOldOrNew'] = $verified.ObservedOldOrNew
-        $lane.Verifier['SelectedState'] = $verified.SelectedState
-        $lane.Verifier['SelectedSchema'] = $verified.SelectedSchema
+        $lane.Verifier[$observedProperty] = $verified.$observedProperty
+        if ($InitializationOnly) {
+            $lane.Verifier['InitialUserDataFrames'] = $verified.InitialUserDataFrames
+            $lane.Verifier['SeedState'] = $verified.SeedState
+            $lane.Verifier['Schema'] = $verified.Schema
+            $lane.Verifier['Objects'] = $verified.Objects
+        } else {
+            $lane.Verifier['SelectedState'] = $verified.SelectedState
+            $lane.Verifier['SelectedSchema'] = $verified.SelectedSchema
+        }
         $lane.Verifier['ContinuationState'] = $verified.ContinuationState
         $lane.Passed = $true
         Save-Receipt

@@ -18,8 +18,8 @@ public sealed partial class Repository {
     }
 
     internal static Repository CreateMetaBootstrapNew(string path, StateModelRegistry models,
-        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes);
+        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null) =>
+        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef);
     internal static Repository OpenMetaBootstrapExisting(string path, StateModelRegistry models,
         long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes);
@@ -28,12 +28,12 @@ public sealed partial class Repository {
         OpenMetaBootstrap(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
     private static Repository OpenMetaBootstrap(string path, StateModelRegistry models, bool create, bool readOnly,
-        long readCacheBudgetBytes) {
+        long readCacheBudgetBytes, Action<uint>? afterCreateRef = null) {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         GraphResources? resources = null;
         try {
-            resources = create ? GraphResources.CreateMetaBootstrapNew(path, readCacheBudgetBytes) : readOnly
+            resources = create ? GraphResources.CreateMetaBootstrapNew(path, readCacheBudgetBytes, afterCreateRef) : readOnly
                 ? GraphResources.OpenMetaBootstrapReadOnlyExisting(path, readCacheBudgetBytes)
                 : GraphResources.OpenMetaBootstrapExisting(path, readCacheBudgetBytes);
             return new(resources, models.FreezeConfiguration());
