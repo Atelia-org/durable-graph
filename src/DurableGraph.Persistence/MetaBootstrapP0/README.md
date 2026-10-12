@@ -27,8 +27,8 @@ P0 wire 和固定员工闭包允许调整；不提供旧格式兼容、私有分
 P0 首轮见证接受无继承、无泛型的 ReferenceObject Schema，基元字段、简单命名引用及 List<int>。
 P1a 已将恢复并回 GraphReader/NormalizedRevision，真实 V1→V2 可在只读路径升级而不发布 meta；
 Save 按实际 Capture 布局自动准备 catalog，Event/Discard 保留 State 重写义务。
-固定通道只共享不可变布局，绑定缓存归操作／builder。私有模式、完整 Schema variants／Upgrade、
-公开缓存与完整产品包交付仍待后续资格。
+固定通道只共享不可变布局，绑定缓存归操作／builder。内部类型／history 的代表资格见下述 P1b 记录；
+私有模式、公开缓存与完整产品包交付仍待后续资格。
 目录冻结、Base 候选、Schema 投影和业务 Capture／预算仍可全量工作；这里只减少受控变更的比较与发射。
 
 P1b 首片当时使用强类型 Descriptor/Field/TypeExpr 员工与 typed／fixed-table ABI v2；
@@ -77,7 +77,13 @@ P1b 第七片已完成真实 SG 多参／泛型继承 current 与有限 provider
 Root＋两 closed Derived 的 private Base<U>／Pair<T> 和有序实参冷读／Delta，与另一个 Box<int>／Box<Point> accepted-history 端点分开验收。
 开放／必要闭合 provider 的输出、缺失／错误 source DTO 三个cold拒绝，与current的warm wronglayout分层记证，不外推所有泛型仲裁。
 本片仅新增测试，build零警告错／五新用例通过，生产/ABI/wire/SG/history交付未变，未跑完整回归或新包，assets source。
-下一自然片跨程序集＋必要合同差异收有限P1b停点，再P1c，公开P1c/d/P2未切换。
+该片保留历史范围；跨程序集 current 后继见第八片，不外推全部 provider 仲裁或跨库升版。
+
+P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停点已达**；精确模型、三用例计数和未覆盖集中
+[DB-087 §19](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点)。
+三份真实 SG 模板经 P0 cold meta／业务恢复、整 leaf Delta／准确 prior、NoChange 和 fresh 旧新图；本片生产零改，无新完整回归或包资格，assets source。
+下一 [P1c 首片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 只提纯业务规划内核，未实施；两 adapter 保真实 typed 编码和来源前检，之后才合并 workspace、公开 owner/history 与 Pair／缓存。
+现有公共路径保持，P1d 门禁后才默认切换／删旧路径，P2 另接 private；无具体反例不扩未穷举组合。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

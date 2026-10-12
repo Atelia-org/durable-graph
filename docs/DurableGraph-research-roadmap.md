@@ -199,7 +199,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
 FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a 与 P1b 前七个限定片已完成，完整 P1b 与公开切换仍待后续**；
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0／P1a 已完成，P1b 有限停点已达；P1c/d 公开整合与切换、P2 未实施**；
 真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
 联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
@@ -211,11 +211,8 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 具体合同、P0 代码去向与分步依赖只在 DB-087 §6 维护；P1a 的真实 Upgrade、共同恢复及拒绝边界见其[第 11 节](design-branches/0087-meta-bootstrap-refactoring-route.md#11-p1a准确视图与共同恢复接线)。后续 P1 须在公开切换前验收全部现有相关能力，
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
-P1b 首片选择 Descriptor/Field/TypeExpr 强类型员工、typed／fixed-table ABI v2 和 fixed 精确 `List<int>`；内部员工 Schema/DTO 仍 V1，
-以含 base/inline/Nullable/`List<Point?>` 的真实 SG 消费者验证 Schema 冷读和动态用户槽增量；
-首片完整源码回归和隔离包四进程证据见 DB-087 [第 12 节](design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)；闭合泛型／enum current V1 的源码资格见[第 13 节](design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格)，不外推完整泛型 Upgrade 或包资格。
-容器路由和 history 的范围保留 §14–17，当前生产基线 ABI5／DTO V1未改。第七片[多参／泛型继承与 provider history](design-branches/0087-meta-bootstrap-refactoring-route.md#18-p1b-第七片多参泛型继承与-provider-history) 已完成五用例源码资格：current 的两个 closed Derived／Base／Pair 图，与 accepted-history 的开放 Box<int>／必要闭合 Box<Point> 及三拒绝分别记证，无新增生产／完整回归／包资格。下一自然片只收跨程序集＋必要合同差异，达到有限 P1b 停点后进入 P1c；范围仍集中 §6.3，不扩大矩阵；
-P1c 接公开保存/history/cache，P1d 完成初始化与 ProcessCrashOnly、真实包门禁，P2 再接 private。
+员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
+下一 [P1c 首片](design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 仅提纯业务规划内核，未实施；两 adapter 保真实 typed 编码和来源前检，不一次合并 workspace。后继才收唯一业务 workspace 与实际 heads／准确 owner/view 来源、公开 owner/history 和 Pair／缓存。三个局部待决合同、依赖与最小验收集中 DB-087 §6.3／7.1；P1d 完成初始化／ProcessCrashOnly／真实包门禁后默认切换，P2 再接 private，不将无具体差异的组合追加为前置。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
 P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存／操作内复用归 P1c，不由本观察宣称性能量级或本片优化，记录见 DB-087 §12。

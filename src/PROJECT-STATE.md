@@ -19,14 +19,13 @@
 
 ## 当前焦点
 
-[DB-087 meta 自举第七片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#18-p1b-第七片多参泛型继承与-provider-history) 已完成真实 SG 多参／泛型继承 current 和有限 generic provider accepted-history 的限定源码资格。两个 closed Derived 的 base／inline／有序实参、增量／身份，以及 Box<int>／Box<Point> 的 origin、开放／必要闭合端点和三个拒绝分别记证；精确范围和五用例结果只记录于 §18。生产零改，无本轮新包／完整回归资格。
-[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型。证据范围逐片保留 §10–18；当前基线 ABI5／员工 DTO V1，完整 source lookup 在引用检查后／Normalize 前。长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 不安装 State 基线，准确 source／selected／target view 与操作内 memo 保持。
-结构容器全树无 Named，用户 nominal／enum 仍动态；扩大 body 能力不扩大 meta 员工白名单。低层纯结构图与带 durable Root 的业务工作区分别验收，不外推所有图零 S 读取。公开 Repository／SCB1／raw map、完整 P1b、P1c–d 和 P2 未切换；无旧数据／旧 API 兼容负担，最终产品简单优先。
-下一片按 [DB-087 §6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 收跨程序集＋必要合同差异，达到有限 P1b 停点后进入 P1c，不扩大矩阵。最低观察／未覆盖集中于 §6.3／7.1；P1c 收公开保存/history/cache 与物理复用，P1d 完成初始化／ProcessCrashOnly／公开包门禁后切换，P2 接显式 private。
-已提交基线：P0 `12f3eb2`、P1a `2740bf1`、P1b 员工 `a6f1797`、泛型／enum `e5e7ac1`、List `93f5120`、Array `9f6454e`、Dictionary `e216053`、容器history `d3a70f2`；证据见 §10–17。续工核对实际 HEAD／工作树，从本文、§6.3 与 §18 重建任务。
+[DB-087 P1b 有限停点已达](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点)：三程序集 hidden generic base／middle／leaf 代表已完成 cold meta／业务、整 leaf Delta／准确 prior、NoChange 和 fresh 旧新图；本轮生产零改。精确源码验收和未穷举限制只记录于 §19，历史范围保留 §10–18。
+[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型，当前 ABI5／员工 DTO V1。完整 source lookup 在引用检查后／Normalize 前；长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 保留 State 基线与 rewrite。准确 source／selected／target view、操作内 memo 和有限 meta 员工白名单保持。
+下一 [P1c 首片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 只提纯业务规划内核，**未实施**：两 adapter 保真实 typed 编码和全部来源前检，共用分类／计量／预算／record 生成，不一次合并 workspace，不碰发布／安装。后继才接一份业务 workspace、准确 owner/view 来源与实际对象 heads，再整合公开 owner/history／Pair／缓存；最小验收与三个具体待决接缝集中 §6.3／7.1。
+公开 Repository／SCB1／raw map 仍为 DB-086 路径，P1c–d／P2 未切换；P1d 初始化／ProcessCrashOnly／真实包门禁通过后默认切换并删除旧路径，P2 再接显式 private。无旧数据／旧 API 兼容负担，最终产品简单优先，不把未穷举组合追加为 P1b 前置。
+本片起点 `e2cf599`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
-当前限定能力不代表完整 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)。未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。下述 DB-086 等既有公开基线保持。
-本片仅新增测试，未 pack、未跑完整 solution tests，最后 assets 为 source mode。下一轮按[依赖指南](../docs/storage-dependency.md)显式验证，不把历史总数加新用例当本轮全套。
+本轮仅新增测试，未跑完整 solution tests／新包，最后 assets 为 source mode。代码施工按[依赖指南](../docs/storage-dependency.md)显式 source restore，再 build／相关测试；不把历史总数加新用例当本轮全套。下述既有公开基线保持。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
