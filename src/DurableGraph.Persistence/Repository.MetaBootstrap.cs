@@ -91,8 +91,10 @@ public sealed partial class Repository {
 
     private BranchCheckout NewMetaBootstrapCheckout(string branchName, CheckpointAddress? head) {
         BranchCheckout? checkout = null;
-        var session = new P0Session(_splitRepository!, branchName, _splitConfiguration!,
-            () => EnsureMetaBootstrapEditingAllowed(checkout!));
+        Action editingGuard = () => EnsureMetaBootstrapEditingAllowed(checkout!);
+        var session = head is null
+            ? new P0Session(_splitRepository!, branchName, _splitConfiguration!, editingGuard)
+            : new P0Session(_splitRepository!, branchName, head.Address, _splitConfiguration!, editingGuard);
         checkout = new(this, branchName, session, head);
         return checkout;
     }
@@ -132,7 +134,7 @@ public sealed partial class Repository {
         using P0SessionSave pending = checkout.SplitSession.Prepare(root, kind, parameters);
         Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
         CheckpointAddress? head = null;
-        pending.Commit(graph => head = IssueMetaBootstrap(graph.Address, graph.Metadata));
+        pending.Commit(graph => head = Issue(ReadHistoryCore(graph.Address)));
         checkout.Head = head!;
         return head!;
     }
@@ -155,23 +157,13 @@ public sealed partial class Repository {
         CheckFrame(frame, kind);
         _busy = true;
         try {
-            DecodedRevision source = DecodedRevision.ReadSplit(_splitRepository!.Store, frame.Address, _splitConfiguration!);
-            return GraphReader.ReadRoot<IDurableObject>(source, frame.RootId, new(source.SourceModels!));
+            return ReadMetaBootstrapRootCore(frame);
         } finally { EndOperation(); }
     }
 
     private CheckpointAddress MetaBootstrapHeadCore(string branchName) {
         FrameAddress address = _splitRepository!.GetHead(branchName) ?? throw new KeyNotFoundException("Branch does not exist.");
-        return IssueMetaBootstrap(address, _splitRepository.Store.ReadMetadata(address));
-    }
-
-    private CheckpointAddress IssueMetaBootstrap(FrameAddress address, P0GraphMetadata metadata) {
-        GraphFrameKind kind = metadata.Kind switch {
-            P0GraphKind.Event => GraphFrameKind.Event,
-            P0GraphKind.State => GraphFrameKind.State,
-            _ => throw new InvalidDataException("A branch checkpoint must select a business State or Event."),
-        };
-        return Issue(new(address, metadata.Parent, kind, metadata.RootId));
+        return Issue(ReadHistoryCore(address));
     }
 
     private void RequireLegacyBackend() {

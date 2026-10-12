@@ -180,7 +180,6 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public BranchCheckout Fork(string branchName, CheckpointAddress source) {
         RequireWriter();
-        RequireLegacyBackend();
         _busy = true;
         bool acquired = false;
         bool delivered = false;
@@ -190,7 +189,7 @@ public sealed partial class Repository : IDisposable {
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
             BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate);
-            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, source.Address, out outcome));
+            MutateBranchCore(branchName, source.Address);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
             return checkout;
@@ -203,6 +202,7 @@ public sealed partial class Repository : IDisposable {
     private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head,
         out PreparedStateRestoration? candidate) {
         candidate = null;
+        if (UsesMetaBootstrap) { return NewMetaBootstrapCheckout(branchName, head); }
         ValidateSelectedGraphParent(head);
         CheckpointAddress? state = NearestStateCore(head);
         // Event-only histories must not even inspect another branch's resident certificate.
@@ -252,7 +252,10 @@ public sealed partial class Repository : IDisposable {
         return checkout;
     }
 
-    public IReadOnlyList<string> ListBranches() { RequireAvailable(); RequireLegacyBackend(); return _resources.ListBranches(); }
+    public IReadOnlyList<string> ListBranches() {
+        RequireAvailable();
+        return UsesMetaBootstrap ? _resources.ListMetaBootstrapBranches() : _resources.ListBranches();
+    }
     public CheckpointAddress GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
     /// <summary>Fully materializes the selected logical chain from oldest to newest, including State and Event handles.</summary>
@@ -265,8 +268,9 @@ public sealed partial class Repository : IDisposable {
     /// Each traversed graph frame is CRC checked; unopened history is not audited.
     /// </remarks>
     public IReadOnlyList<CheckpointAddress> ReadFrames(string branchName) {
+        // Split history reads graph envelopes; legacy history reads combined StateRevision frames.
+        // Neither metadata path decodes object bodies.
         RequireAvailable();
-        RequireLegacyBackend();
         CheckpointAddress head = HeadCore(branchName);
         var frames = new List<CheckpointAddress>();
         var visited = new HashSet<FrameAddress>();
@@ -274,7 +278,7 @@ public sealed partial class Repository : IDisposable {
         while (cursor is not null) {
             if (!visited.Add(cursor.Address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
             frames.Add(cursor);
-            cursor = cursor.Parent is { } parent ? Issue(_resources.ReadHistory(parent)) : null;
+            cursor = cursor.Parent is { } parent ? Issue(ReadHistoryCore(parent)) : null;
         }
         frames.Reverse();
         return frames;
@@ -299,7 +303,6 @@ public sealed partial class Repository : IDisposable {
     public IEnumerable<CheckpointAddress> EnumerateEvents(CheckpointAddress endInclusive,
         HistoryOrder order = HistoryOrder.NewestFirst, CheckpointAddress? afterExclusive = null) {
         RequireAvailable();
-        RequireLegacyBackend();
         CheckFrame(endInclusive);
         if (afterExclusive is not null) { CheckFrame(afterExclusive); }
         if (order is not HistoryOrder.OldestFirst and not HistoryOrder.NewestFirst) {
@@ -327,7 +330,7 @@ public sealed partial class Repository : IDisposable {
                         while (probe is not null && probe != afterExclusive) {
                             if (!probeVisited.Add(probe.Address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
                             if (probe.Kind == GraphFrameKind.Event) { buffered?.Add(probe); }
-                            probe = probe.Parent is { } parent ? Issue(_resources.ReadHistory(parent)) : null;
+                            probe = probe.Parent is { } parent ? Issue(ReadHistoryCore(parent)) : null;
                         }
                         if (afterExclusive is not null && probe is null) {
                             throw new ArgumentException("The lower bound is not an ancestor of the selected end.", nameof(afterExclusive));
@@ -351,7 +354,7 @@ public sealed partial class Repository : IDisposable {
         CheckpointAddress? afterExclusive, ref FrameAddress? cursor, HashSet<FrameAddress> visited) {
         while (cursor is { } address && address != afterExclusive?.Address) {
             if (!visited.Add(address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
-            CheckpointAddress frame = address == endInclusive.Address ? endInclusive : Issue(_resources.ReadHistory(address));
+            CheckpointAddress frame = address == endInclusive.Address ? endInclusive : Issue(ReadHistoryCore(address));
             cursor = frame.Parent;
             if (frame.Kind == GraphFrameKind.Event) { return frame; }
         }
@@ -382,7 +385,6 @@ public sealed partial class Repository : IDisposable {
     /// <summary>Finds the nearest strict ancestor State of an Event, or null in an Event-only prefix.</summary>
     public CheckpointAddress? GetPreviousState(CheckpointAddress eventFrame) {
         RequireAvailable();
-        RequireLegacyBackend();
         CheckFrame(eventFrame, GraphFrameKind.Event);
         return PreviousStateCore(eventFrame);
     }
@@ -418,10 +420,10 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public Checkpoint ReadCheckpoint(CheckpointAddress address) {
         RequireAvailable();
-        RequireLegacyBackend();
         CheckFrame(address);
         _busy = true;
         try {
+            if (UsesMetaBootstrap) { return ReadMetaBootstrapCheckpointCore(address); }
             ValidateSelectedGraphParent(address);
             GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
             CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
@@ -490,12 +492,11 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public CheckpointAddress CreateBranch(string branchName, CheckpointAddress selectedFrame) {
         RequireWriter();
-        RequireLegacyBackend();
         _busy = true;
         try {
             CheckFrame(selectedFrame);
             ValidateNewName(branchName);
-            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, selectedFrame.Address, out outcome));
+            MutateBranchCore(branchName, selectedFrame.Address);
             return selectedFrame;
         } finally { EndOperation(); }
     }
@@ -514,7 +515,6 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public void CreateTag(string name, CheckpointAddress address) {
         RequireWriter();
-        RequireLegacyBackend();
         _busy = true;
         try {
             CheckFrame(address);
@@ -531,18 +531,14 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public CheckpointAddress ResolveTag(string name) {
         RequireAvailable();
-        RequireLegacyBackend();
         _busy = true;
         try {
-            var payload = _resources.Versions.ResolveTag(name).Unwrap();
-            if (!FrameAddress.TryRead(payload.Bytes, out FrameAddress address)) {
-                throw new InvalidDataException("Invalid graph address in tag payload.");
-            }
-            return Issue(_resources.ReadHistory(address));
+            return Issue(ReadHistoryCore(ResolveTagCore(name)));
         } finally { EndOperation(); }
     }
 
     private void CreateTagCore(string name, FrameAddress address) {
+        if (UsesMetaBootstrap) { CreateMetaBootstrapTagCore(name, address); return; }
         byte[] payload = new byte[FrameAddress.EncodedSize];
         if (!address.TryWrite(payload)) { throw new InvalidDataException("Invalid graph tag address."); }
         PublicationOutcome outcome = PublicationOutcome.NotAttempted;
@@ -566,15 +562,14 @@ public sealed partial class Repository : IDisposable {
     /// <remarks>Other branches' active checkouts do not block movement. Both addresses belong to this open repository.</remarks>
     public void MoveBranch(string branchName, CheckpointAddress expectedHead, CheckpointAddress target) {
         RequireWriter();
-        RequireLegacyBackend();
         _busy = true;
         try {
             CheckFrame(expectedHead);
             CheckFrame(target);
-            FrameAddress head = _resources.GetHead(branchName);
+            FrameAddress head = UsesMetaBootstrap ? MetaBootstrapHeadCore(branchName).Address : _resources.GetHead(branchName);
             if (_activeBranches.Contains(branchName)) { throw new InvalidOperationException("Close this branch's active checkout before moving it."); }
             if (head != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
-            MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranch(branchName, target.Address, out outcome));
+            MutateBranchCore(branchName, target.Address);
         } finally { EndOperation(); }
     }
 
@@ -679,7 +674,7 @@ public sealed partial class Repository : IDisposable {
         var visited = new HashSet<FrameAddress> { frame.Address };
         while (frame.Parent is { } parent) {
             if (!visited.Add(parent)) { throw new InvalidDataException("Graph business history contains a cycle."); }
-            frame = Issue(_resources.ReadHistory(parent));
+            frame = Issue(ReadHistoryCore(parent));
             if (frame.Kind == kind) { return frame; }
         }
         return null;
@@ -690,7 +685,7 @@ public sealed partial class Repository : IDisposable {
         while (frame.Kind != GraphFrameKind.State) {
             if (frame.Parent is not { } parent) { return null; }
             if (!visited.Add(parent)) { throw new InvalidDataException("Graph business history contains a cycle."); }
-            frame = Issue(_resources.ReadHistory(parent));
+            frame = Issue(ReadHistoryCore(parent));
         }
         return frame;
     }
@@ -702,7 +697,9 @@ public sealed partial class Repository : IDisposable {
     }
     private void ValidateNewName(string name) {
         RepositoryRootCodec.ValidateBranchName(name);
-        if (_resources.HasBranch(name)) { throw new InvalidOperationException("Branch name already exists."); }
+        if (UsesMetaBootstrap ? _splitRepository!.GetHead(name) is not null : _resources.HasBranch(name)) {
+            throw new InvalidOperationException("Branch name already exists.");
+        }
     }
 
     // Typed graph preparation, rather than open or metadata navigation, checks this relation.

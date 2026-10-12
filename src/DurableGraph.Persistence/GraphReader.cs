@@ -86,6 +86,18 @@ internal static class GraphReader {
         return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
     }
 
+    // Separate exact-view preparation environments, with one operation's mutable allocation guard.
+    internal static (IDurableObject First, IDurableObject Second) ReadIndependent(
+        DecodedRevision firstDecoded, GraphReadContext firstContext, ObjectId firstRootId,
+        DecodedRevision secondDecoded, GraphReadContext secondContext, ObjectId secondRootId) {
+        ArgumentNullException.ThrowIfNull(firstContext);
+        ArgumentNullException.ThrowIfNull(secondContext);
+        PreparedGraphSelection first = Prepare<IDurableObject>(firstDecoded, firstContext, firstRootId);
+        PreparedGraphSelection second = Prepare<IDurableObject>(secondDecoded, secondContext, secondRootId);
+        var (firstInstances, secondInstances) = Materialize(firstContext, first, second);
+        return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
+    }
+
     /// <summary>
     /// Experimental read-only snapshots in input order. Both restores must succeed before
     /// delivery; user callback side effects are not rolled back. Cross-graph instance sharing

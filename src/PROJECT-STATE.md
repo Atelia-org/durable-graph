@@ -19,11 +19,11 @@
 
 ## 当前焦点
 
-[DB-087 P1c 第六片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#25-p1c-第六片repositorycheckout-执行环境) 已接真实 Repository／BranchCheckout 的冻结配置与执行环境，构建、定向与完整源码回归通过；证据集中 §25，前五片保留 §20–24。下一片为 history 元数据导航＋ref／tag／Fork，两个具体接缝和最小验收集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1；Pair／缓存后置，整个 P1c 未完成。
+[DB-087 P1c 第七片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#26-p1c-第七片history-元数据与-ref-操作) 已接 history 元数据导航、ref／tag／Fork 与独立 ReadCheckpoint，构建、定向与完整源码回归通过；证据集中 §26，前六片保留 §20–25。下一片先接准确 S 双侧 ReadPair，再接 DB-080 准备材料与物理缓存，选定边界和局部形状集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1，整个 P1c 未完成。
 [内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型，当前 ABI5／员工 DTO V1。完整 source lookup 在引用检查后／Normalize 前；长期 dirty 只留显式 Set 意图，自动依赖每次 Prepare 推导；Event/Discard 保留 State 基线与 rewrite。准确 source／selected／target view、操作内 memo 和有限 meta 员工白名单保持。
-内部 GraphResources、共同候选与发布前安装保持。第六片只接内部真实 Repository 的 Create／Checkout／独立 State/Event 读取与保存、readonly 和 owner／占用 guard；公开工厂仍不切。Open 冻结配置，checkout 固定创建／恢复时的执行 S：有 State 取 State.S，无 State 取最新 shared／空库 None；存储 SelectedSchemaView 可推进，hot models／preparation 不换。独立读取每次 fresh 环境，不新增 owner cache；新 cold checkout 使用新的准确 S，不保证任意跨 S closure 的领域值等价。随后移 history 其余功能和 Pair／缓存，施工导航集中 [§6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口)／§7.1。
+内部 GraphResources、共同候选与发布前安装保持。Open 冻结配置，checkout 固定创建／恢复时的执行 S：有 State 取 State.S，无 State 取创建时 latest shared／空库 None；存储 SelectedSchemaView 可推进，hot models／preparation 不换。历史 Fork 从 selected head 恢复最近 State，ref-only 只推进分支目录、不倒退 shared S；发布前准备完整恢复与交付材料，metadata 不解业务 body。ReadCheckpoint 两侧准确 S、共同物化但不共享可变领域实例，保跨图错误 allocator 拒绝。下一片跨 S Pair 先独立物化，同 S 严格环境复用与共享算法仅候选；默认公开工厂不切，不保证任意跨 S closure 的领域值等价。
 默认公开工厂仍走 DB-086 的 SCB1／raw map 路径；内部 split 工厂返回真实 Repository，并调用已移接的现有 public 方法。P1c–d／P2 未完成；P1d 初始化／ProcessCrashOnly／真实包门禁通过后默认切换并删除旧路径，P2 再接显式 private。无旧数据／旧 API 兼容负担，最终产品简单优先，不把未穷举组合追加为 P1b 前置。
-第六片起点 `b83e139`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+第七片起点 `0df5122`；续工先核实际 HEAD／工作树，再读本文和 §6.3／7.1。当前内部资格不代表完整公开功能、全部 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)；未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 本片未改变 wire、公开 API、SG 或交付边界，无新 PackageReference／Crash 资格，最后 assets 为 source mode。续工按[依赖指南](../docs/storage-dependency.md)显式 source restore；下述既有公开基线保持。
 

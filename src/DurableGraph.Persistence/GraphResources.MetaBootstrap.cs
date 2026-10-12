@@ -95,6 +95,86 @@ public sealed partial class GraphResources {
     internal FrameAddress? GetMetaBootstrapStateHead(string branch) =>
         MetaBootstrapStore.ResolveContentSource(P0GraphKind.State, GetMetaBootstrapHead(branch));
 
+    internal IReadOnlyList<string> ListMetaBootstrapBranches() {
+        RequireMetaBootstrapAvailable();
+        return _baseline.Branches.Keys.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    // Metadata navigation intentionally does not read a directory, batch or typed body.
+    internal HistoryGraphRecord ReadMetaBootstrapHistory(FrameAddress address) {
+        P0GraphMetadata metadata = MetaBootstrapStore.ReadMetadata(address);
+        GraphFrameKind kind = metadata.Kind switch {
+            P0GraphKind.State => GraphFrameKind.State,
+            P0GraphKind.Event => GraphFrameKind.Event,
+            _ => throw new InvalidDataException("A branch checkpoint must select a business State or Event."),
+        };
+        return new(address, metadata.Parent, kind, metadata.RootId);
+    }
+
+    internal sealed record MetaBootstrapBranchUpdate(GraphResources Owner,
+        MetaBootstrapPublicationBaseline ExpectedBaseline, RefRevision ExpectedRevision,
+        MetaBootstrapPublicationBaseline NextBaseline, byte[] Payload);
+
+    internal MetaBootstrapBranchUpdate PrepareMetaBootstrapBranchRoot(string branch, FrameAddress head) {
+        EnsureMetaBootstrapEditingAllowed();
+        RepositoryRootCodec.ValidateBranchName(branch);
+        _ = ReadMetaBootstrapHistory(head);
+        var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) { [branch] = head };
+        MetaBootstrapPublicationBaseline next = new(branches, _baseline.SharedRoot);
+        return new(this, _baseline, _branchRevision, next, EncodeBranches(branches));
+    }
+
+    // This operation updates only the branch ref. The shared Schema head and revision stay fixed.
+    internal void PublishMetaBootstrapBranchRoot(MetaBootstrapBranchUpdate candidate, out PublicationOutcome outcome) {
+        outcome = PublicationOutcome.NotAttempted;
+        EnsureMetaBootstrapEditingAllowed();
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (!ReferenceEquals(candidate.Owner, this) || !ReferenceEquals(candidate.ExpectedBaseline, _baseline) ||
+            candidate.ExpectedRevision != _branchRevision) {
+            throw new InvalidOperationException("Branch publication requires this owner's latest prepared root.");
+        }
+        bool publicationRejected = false;
+        _committing = true;
+        try {
+            var published = _versions.PublishRef(_branchRevision.RefId, candidate.Payload, out outcome);
+            publicationRejected = published.IsFailure;
+            RefRevision revision = published.Unwrap();
+            _baseline = candidate.NextBaseline;
+            _branchRevision = revision;
+        } catch {
+            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !MetaBootstrapBackingUsable()) { MarkFaulted(); }
+            throw;
+        } finally { _committing = false; }
+    }
+
+    internal void CreateMetaBootstrapTag(string name, FrameAddress address, out PublicationOutcome outcome) {
+        outcome = PublicationOutcome.NotAttempted;
+        EnsureMetaBootstrapEditingAllowed();
+        _ = ReadMetaBootstrapHistory(address);
+        byte[] payload = new byte[FrameAddress.EncodedSize];
+        if (!address.TryWrite(payload)) { throw new InvalidDataException("Invalid graph tag address."); }
+        bool publicationRejected = false;
+        _committing = true;
+        try {
+            var published = _versions.CreateTag(name, payload, out outcome);
+            publicationRejected = published.IsFailure;
+            published.Unwrap();
+        } catch {
+            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !MetaBootstrapBackingUsable()) { MarkFaulted(); }
+            throw;
+        } finally { _committing = false; }
+    }
+
+    internal FrameAddress ResolveMetaBootstrapTag(string name) {
+        RequireMetaBootstrapAvailable();
+        var payload = _versions.ResolveTag(name).Unwrap();
+        if (payload.Bytes.Length != FrameAddress.EncodedSize || !FrameAddress.TryRead(payload.Bytes, out FrameAddress address)) {
+            throw new InvalidDataException("Invalid graph address in tag payload.");
+        }
+        _ = ReadMetaBootstrapHistory(address);
+        return address;
+    }
+
     internal void EnsureMetaBootstrapEditingAllowed() {
         RequireMetaBootstrapAvailable();
         if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }

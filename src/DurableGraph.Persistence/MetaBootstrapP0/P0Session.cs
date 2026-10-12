@@ -21,13 +21,24 @@ internal sealed class P0Session {
     }
 
     internal P0Session(P0Repository repository, string branch,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed) {
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed)
+        : this(repository, branch, configuration, ensureEditingAllowed, repository.GetStateHead(branch)) { }
+
+    // The selected business head is owner-checked by Repository before restoring a historical Fork.
+    // No target branch is published or consulted to choose the State being restored.
+    internal P0Session(P0Repository repository, string branch, FrameAddress selectedHead,
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed)
+        : this(repository, branch, configuration, ensureEditingAllowed,
+            repository.Store.ResolveContentSource(P0GraphKind.State, selectedHead)) { }
+
+    private P0Session(P0Repository repository, string branch,
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, FrameAddress? sourceState) {
         _repository = repository;
         _branch = branch;
         P0CatalogView? catalog = repository.SharedSchemaRoot is { } schema
             ? P0CatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
-        if (repository.GetStateHead(branch) is { } state) {
+        if (sourceState is { } state) {
             _business = P0BusinessWorkspace.LoadState(repository.Store, state, configuration);
         } else {
             DecodedRevision.SplitBindingEnvironment? environment = repository.SharedSchemaRoot is { } selected
