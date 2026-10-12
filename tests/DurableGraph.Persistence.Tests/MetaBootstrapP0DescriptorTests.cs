@@ -33,7 +33,8 @@ public sealed class MetaBootstrapP0DescriptorTests : IDisposable {
         ObjectStateRecord source = prepared.View.Rows[id];
         DescriptorDto dto = source.GetState<DescriptorDto>();
         ObjectStateRecord bad = P0FixedBindings.WithPreparation(new(id, source.Schema!,
-            new DescriptorDto(3, dto.Segment0Field2, dto.Segment0Field3, dto.Segment0Field4, dto.Segment0Field5, dto.Segment0Field6)));
+            new DescriptorDto(255, dto.Segment0Field2, dto.Segment0Field3, dto.Segment0Field4,
+                dto.Segment0Field5, dto.Segment0Field6, dto.Segment0Field7)));
         byte[] body = P0TypedBodyCodec.Encode(bad.Layout, bad.Preparation!.PrepareBase(bad));
         ObjectVersionRecord[] records = prepared.Write!.Records.Select(row => row.ObjectId == id.Value
             ? ObjectVersionRecord.CreateBase(row.ObjectId, body) : row).ToArray();
@@ -64,13 +65,17 @@ public sealed class MetaBootstrapP0DescriptorTests : IDisposable {
     }
 
     [Fact]
-    public void Unsupported_schema_shapes_are_rejected_before_a_candidate_is_prepared() {
+    public void Reserved_names_are_rejected_and_inherited_schema_closure_is_prepared() {
         P0CatalogWorkspace owner = new(static () => { });
         Assert.Throws<NotSupportedException>(() => owner.Set(new DurableSchema("P0D", 1, [new(1, TypeTag.Int32)])));
+        Assert.Throws<NotSupportedException>(() => owner.Set(new DurableSchema("P0T", 2, [new(1, TypeTag.Int32)])));
         DurableSchema parent = new("Parent", 1, [new(1, TypeTag.Int32)]);
         DurableSchema inherited = new("Child", 1, [new(2, TypeTag.Int32)], baseSchema: parent);
-        Assert.Throws<NotSupportedException>(() => owner.Set(inherited));
         Assert.Equal(0, owner.DirtyCount);
+        owner.Set(inherited);
+        P0CatalogView prepared = owner.Prepare().View;
+        Assert.Equal(parent, prepared.Schemas[new(parent.Type, parent.Version)]);
+        Assert.Equal(inherited, prepared.Schemas[new(inherited.Type, inherited.Version)]);
     }
 
     [Fact]

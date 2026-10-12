@@ -38,7 +38,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             listId = LiveListId(repository, state, models);
             P0ObjectChain rootChain = repository.Store.ReadObjectChain(state, saved.Business.RootId.Value);
             BareValueReader header = new(rootChain.Entries[0].Record.Body);
-            Assert.Equal((byte)1, header.ReadByte());
+            Assert.Equal((byte)2, header.ReadByte());
             Assert.Equal((byte)1, header.ReadByte()); // The dynamic route points directly to a meta descriptor ObjectId.
             ObjectId descriptor = new(header.ReadVarUInt32());
             ObjectLayout widgetLayout = models.Snapshot().ResolveCurrentModel(typeof(DB087Widget)).CurrentLayout;

@@ -40,8 +40,7 @@ internal sealed class P0Session {
                     Catalog.RebaseOwned(P0CatalogView.Load(_repository.Store, latest));
                 }
                 capture = _business.CaptureOwned(root);
-                Catalog.RegisterCapturedLayoutsOwned(capture.Candidate.Objects.Select(static row => row.Layout));
-                catalog = Catalog.PrepareOwned();
+                catalog = Catalog.PrepareOwned(capture.Candidate.Objects.Select(static row => row.Layout));
                 business = _business.PrepareOwned(capture, catalog.View, parameters);
                 return (business.Write, catalog.Write);
             });

@@ -160,8 +160,7 @@ internal static class SchemaCatalogWireCodec {
         private readonly Dictionary<SchemaKey, RepresentationId> _schemaIds = new();
         private readonly HashSet<ObjectLayout> _containers = new();
         private readonly Dictionary<RepresentationId, int> _heights = new();
-        private readonly Dictionary<string, SchemaKind> _kinds = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> _arities = new(StringComparer.Ordinal);
+        private readonly SchemaDeclarationValidator _declarations = new();
         private ulong _next = 2;
 
         internal DurableSchema ResolveSchema(RepresentationId id, SchemaKind kind) {
@@ -182,7 +181,7 @@ internal static class SchemaCatalogWireCodec {
             if (entry.Id.Value != _next) { throw new InvalidDataException("Catalog IDs must be contiguous, increasing values starting at two."); }
             int height = 1;
             if (entry.Schema is { } schema) {
-                ValidateDeclaration(schema.Type, schema.Kind);
+                _declarations.ValidateDeclaration(schema.Type, schema.Kind);
                 if (schema.BaseSchema is { } ancestor) { AddDependency(ancestor, SchemaKind.ReferenceObject); }
                 foreach (DurableFieldInfo field in schema.Fields) { ValidateSlot(field); }
                 if (!_schemaIds.TryAdd(Key(schema), entry.Id)) {
@@ -208,50 +207,16 @@ internal static class SchemaCatalogWireCodec {
             }
 
             void ValidateSlot(DurableFieldInfo field) {
-                if (field.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
+                if (field.TargetType is { } target) { _declarations.ValidateDeclaration(target, SchemaKind.ReferenceObject); }
                 if (field.ValueSchema is { } inline) { AddDependency(inline, SchemaKind.InlineValue); }
             }
 
             void ValidateContainerSlot(DurableFieldInfo field) {
-                if (field.TargetType is { } target) { ValidateDeclaration(target, SchemaKind.ReferenceObject); }
+                if (field.TargetType is { } target) { _declarations.ValidateDeclaration(target, SchemaKind.ReferenceObject); }
                 if (field.ValueSchema is { } inline) { RequireSchema(inline, SchemaKind.InlineValue); }
             }
         }
 
-        private void ValidateDeclaration(TypeExpr type, SchemaKind kind) {
-            // Container elements and generic arguments carry nominal identities only;
-            // a named argument can represent either a class or an inline value.
-            if (!type.IsArray && !type.IsList && !type.IsDictionary) {
-                string id = type.DefinitionId!;
-                if (_kinds.TryGetValue(id, out SchemaKind previous) && previous != kind) {
-                    throw new InvalidDataException($"Schema family '{id}' cannot change kind across versions.");
-                }
-                _kinds[id] = kind;
-            }
-            ValidateArities(type);
-        }
-
-        private void ValidateArities(TypeExpr type) {
-            if (type.IsNullable) {
-                TypeExpr child = type.ElementType!;
-                if (child.Kind == TypeExprKind.Named) { ValidateDeclaration(child, SchemaKind.InlineValue); }
-                else { ValidateArities(child); }
-                return;
-            }
-            if (type.IsArray || type.IsList) { ValidateArities(type.ElementType!); return; }
-            if (type.IsDictionary) {
-                ValidateArities(type.KeyType!);
-                ValidateArities(type.ValueType!);
-                return;
-            }
-            if (type.Kind != TypeExprKind.Named) { return; }
-            string id = type.DefinitionId!;
-            if (_arities.TryGetValue(id, out int arity) && arity != type.Arguments.Length) {
-                throw new InvalidDataException($"Schema definition '{id}' cannot change generic arity.");
-            }
-            _arities[id] = type.Arguments.Length;
-            foreach (TypeExpr argument in type.Arguments) { ValidateArities(argument); }
-        }
     }
 
     private sealed class LimitedBufferWriter : IBufferWriter<byte> {

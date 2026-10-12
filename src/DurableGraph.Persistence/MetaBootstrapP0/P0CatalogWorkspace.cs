@@ -5,10 +5,11 @@ using Atelia.DurableGraph.Storage;
 using CatalogDto = Atelia.DurableGraph.Generated.Family_503043.V1;
 using DescriptorDto = Atelia.DurableGraph.Generated.Family_503044.V1;
 using FieldDto = Atelia.DurableGraph.Generated.Family_503046.V1;
+using TypeDto = Atelia.DurableGraph.Generated.Family_503054.V1;
 
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
-/// <summary>Only logical dirty keys survive Discard; candidate IDs are allocated during Prepare.</summary>
+/// <summary>Dirty state contains explicit final requests, never their derived dependency closure.</summary>
 internal sealed class P0CatalogWorkspace {
     private readonly Action _ensureEditingAllowed;
     private readonly Dictionary<SchemaKey, DurableSchema> _schemas = [];
@@ -27,57 +28,59 @@ internal sealed class P0CatalogWorkspace {
         _ensureEditingAllowed();
         Validate(schema);
         SchemaKey key = new(schema.Type, schema.Version);
-        if (_accepted is not null && _accepted.Schemas.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) {
-            throw new SchemaConflictException(prior, schema);
-        }
+        CheckAccepted(key, schema);
         _schemas[key] = schema;
     }
 
     internal void Set(ObjectLayout layout) {
         _ensureEditingAllowed();
         if (layout.Schema is { } schema) { Set(schema); return; }
-        if (layout.Kind != ObjectStateKind.List || layout.List!.ElementSlot.TypeTag != TypeTag.Int32) {
-            throw new NotSupportedException("P0 only accepts reference Schemas and List<int> descriptors.");
-        }
-        _containers.Add(layout);
+        ValidateLayout(layout);
+        if (!P0FixedBindings.IsBuiltin(layout)) { _containers.Add(layout); }
     }
 
     internal P0PreparedCatalog Prepare() {
         _ensureEditingAllowed();
-        return PrepareOwned();
+        return PrepareOwned([]);
     }
 
-    // Only the repository's lexical preparation driver invokes the owned methods.
-    internal P0PreparedCatalog PrepareOwned() {
+    internal P0PreparedCatalog PrepareOwned(IEnumerable<ObjectLayout> capturedLayouts) {
+        ObjectLayout[] layouts = _containers.Concat(capturedLayouts).Distinct().ToArray();
+        foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
+        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = P0CatalogSemantics.Collect(_schemas.Values, layouts);
+        foreach ((SchemaKey key, DurableSchema schema) in closure) { CheckAccepted(key, schema); }
+        P0CatalogSemantics.ValidateDeclarations((_accepted?.Schemas.Values ?? []).Concat(closure.Values),
+            (_accepted?.ObjectLayouts ?? []).Concat(layouts));
         Builder builder = new(_accepted);
-        foreach (DurableSchema schema in _schemas.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
-            ObjectLayout layout = ObjectLayout.ForDurable(schema);
-            if (!builder.Contains(layout)) { builder.AddSchema(schema); }
+        foreach (DurableSchema schema in closure.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
+            _ = builder.AddSchema(schema);
         }
-        foreach (ObjectLayout layout in _containers) {
-            if (!builder.Contains(layout)) { builder.AddList(layout.List!); }
+        foreach (ObjectLayout layout in layouts.Where(static value => value.Kind == ObjectStateKind.List && !P0FixedBindings.IsBuiltin(value))) {
+            builder.AddList(layout.List!);
         }
         return builder.Finish(this);
     }
 
-    internal static void Validate(DurableSchema schema) {
-        ArgumentNullException.ThrowIfNull(schema);
-        if (schema.Kind != SchemaKind.ReferenceObject || schema.BaseSchema is not null || schema.Type.Arguments.Length != 0 ||
-            schema.SchemaId is "P0C" or "P0D" or "P0F" or "P0H") {
-            throw new NotSupportedException("P0 requires an unreserved, non-generic reference Schema without ancestry.");
-        }
-        foreach (DurableFieldInfo field in schema.Fields) {
-            if (TypeTagFacts.IsBuiltin(field.TypeTag)) { continue; }
-            if (field.TypeTag == TypeTag.ObjectReference && field.TargetType is { } target &&
-                (target.Kind == TypeExprKind.Named && target.Arguments.Length == 0 ||
-                 target == TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32)))) { continue; }
-            throw new NotSupportedException("The field is outside P0's explicitly finite Schema closure.");
+    private void CheckAccepted(SchemaKey key, DurableSchema schema) {
+        if (_accepted is not null && _accepted.Schemas.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) {
+            throw new SchemaConflictException(prior, schema);
         }
     }
 
-    internal void Rebase(P0CatalogView accepted) {
-        _ensureEditingAllowed();
-        RebaseOwned(accepted);
+    internal static void Validate(DurableSchema schema) {
+        ArgumentNullException.ThrowIfNull(schema);
+        if (schema.SchemaId is "P0C" or "P0D" or "P0F" or "P0H" or "P0T") {
+            throw new NotSupportedException("Employee declaration identifiers are reserved.");
+        }
+        if (!schema.Type.IsClosed) { throw new NotSupportedException("Only closed Schemas can be persisted."); }
+    }
+
+    private static void ValidateLayout(ObjectLayout layout) {
+        if (P0FixedBindings.IsBuiltin(layout)) { return; }
+        if (layout.Schema is { } schema) { Validate(schema); return; }
+        if (layout.Kind != ObjectStateKind.List) {
+            throw new NotSupportedException("This slice supports business reference objects and exact List layouts; other object containers remain deferred.");
+        }
     }
 
     internal void RebaseOwned(P0CatalogView accepted) {
@@ -87,47 +90,6 @@ internal sealed class P0CatalogWorkspace {
             }
         }
         _accepted = accepted;
-    }
-
-    internal void RegisterCapturedLayoutsOwned(IEnumerable<ObjectLayout> layouts) {
-        Dictionary<SchemaKey, DurableSchema> schemas = [];
-        HashSet<ObjectLayout> containers = [];
-        foreach (ObjectLayout layout in layouts.Distinct()) {
-            if (layout.Kind == ObjectStateKind.String) { continue; }
-            if (layout.Schema is { } schema) {
-                Validate(schema);
-                SchemaKey key = new(schema.Type, schema.Version);
-                if (schemas.TryGetValue(key, out DurableSchema? sameKey) && !sameKey.Equals(schema)) {
-                    throw new SchemaConflictException(sameKey, schema);
-                }
-                schemas[key] = schema;
-            } else {
-                if (layout.Kind != ObjectStateKind.List || layout.List!.ElementSlot.TypeTag != TypeTag.Int32) {
-                    throw new NotSupportedException("P0 only accepts reference Schemas and List<int> descriptors.");
-                }
-                containers.Add(layout);
-            }
-        }
-        // Validate the complete batch against both authorities before modifying dirty state.
-        foreach ((SchemaKey key, DurableSchema schema) in schemas) {
-            if (_accepted is not null && _accepted.Schemas.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) {
-                throw new SchemaConflictException(prior, schema);
-            }
-            if (_schemas.TryGetValue(key, out DurableSchema? dirty) && !dirty.Equals(schema)) {
-                throw new SchemaConflictException(dirty, schema);
-            }
-        }
-        foreach ((SchemaKey key, DurableSchema schema) in schemas) {
-            if (_accepted is null || !_accepted.Schemas.ContainsKey(key)) { _schemas.TryAdd(key, schema); }
-        }
-        foreach (ObjectLayout layout in containers) {
-            bool accepted = false;
-            if (_accepted is not null) {
-                try { _ = _accepted.DescriptorId(layout); accepted = true; }
-                catch (InvalidDataException) { }
-            }
-            if (!accepted) { _containers.Add(layout); }
-        }
     }
 
     internal void Accept(P0PreparedCatalog candidate, P0GraphSnapshot graph) {
@@ -146,9 +108,12 @@ internal sealed class P0CatalogWorkspace {
         private readonly List<ObjectId> _added = [];
         private readonly List<ObjectStateRecord> _new = [];
         private readonly Dictionary<string, ObjectId> _strings = new(StringComparer.Ordinal);
+        private readonly Dictionary<DurableSchema, ObjectId> _schemaIds = [];
+        private readonly Dictionary<TypeExpr, ObjectId> _typeIds = [];
+        private readonly Dictionary<DurableFieldInfo, ObjectId> _fieldIds = [];
+        private readonly HashSet<ObjectLayout> _lists = [];
         private ulong _next;
-        private readonly ObjectId _root;
-        private readonly ObjectId _list;
+        private readonly ObjectId _root, _list;
 
         internal Builder(P0CatalogView? source) {
             _source = source;
@@ -160,65 +125,79 @@ internal sealed class P0CatalogWorkspace {
             foreach (ObjectStateRecord row in _rows.Values.Where(static row => row.Kind == ObjectStateKind.String)) {
                 _strings.TryAdd(row.StringContent, row.Id);
             }
-            if (source is null) {
-                Add(new ObjectStateRecord(_root, Schema(typeof(P0CatalogRecord)), new CatalogDto(_list)));
-            }
+            if (source is not null) {
+                foreach (DurableSchema schema in source.Schemas.Values) { _schemaIds.Add(schema, source.SchemaNodeId(schema)); }
+            } else { Add(new(_root, Schema(typeof(P0CatalogRecord)), new CatalogDto(_list))); }
         }
 
-        internal bool Contains(ObjectLayout layout) {
-            if (_source is null) { return false; }
-            try { _ = _source.DescriptorId(layout); return true; }
-            catch (InvalidDataException) { return false; }
-        }
-
-        internal void AddSchema(DurableSchema schema) {
-            ObjectId name = String(schema.SchemaId);
+        internal ObjectId AddSchema(DurableSchema schema) {
+            if (_schemaIds.TryGetValue(schema, out ObjectId known)) { return known; }
+            ObjectId ancestor = schema.BaseSchema is { } parent ? AddSchema(parent) : default;
+            ObjectId type = Type(schema.Type);
             ObjectId[] fields = schema.Fields.Select(Field).ToArray();
             ObjectId list = Allocate();
-            Add(new ObjectStateRecord(list, List(typeof(List<P0FieldRecord>)), new FrozenListState<ObjectId>(fields)));
-            ObjectId descriptor = Allocate();
-            Add(new ObjectStateRecord(descriptor, Schema(typeof(P0DescriptorRecord)),
-                new DescriptorDto(1, name, schema.Version, list, default, 0)));
-            _added.Add(descriptor);
-            _declared.Add(descriptor);
-        }
-
-        internal void AddList(ListLayout layout) {
-            ObjectId element = Field(layout.ElementSlot);
-            ObjectId descriptor = Allocate();
-            Add(new ObjectStateRecord(descriptor, Schema(typeof(P0DescriptorRecord)),
-                new DescriptorDto(2, default, 0, default, element, layout.CodecVersion)));
-            _added.Add(descriptor);
-            _declared.Add(descriptor);
-        }
-
-        private ObjectId Field(DurableFieldInfo field) {
-            byte kind = 0;
-            ObjectId name = default;
-            if (field.TypeTag == TypeTag.ObjectReference) {
-                if (field.TargetType!.IsList) { kind = 2; }
-                else { kind = 1; name = String(field.TargetType.DefinitionId!); }
-            }
+            Add(new(list, List(typeof(List<P0FieldRecord>)), new FrozenListState<ObjectId>(fields)));
             ObjectId id = Allocate();
-            Add(new ObjectStateRecord(id, Schema(typeof(P0FieldRecord)),
-                new FieldDto(field.FieldId, (byte)field.TypeTag, kind, name)));
+            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(
+                schema.Kind == SchemaKind.ReferenceObject ? (byte)1 : (byte)3,
+                type, schema.Version, list, default, 0, ancestor)));
+            _schemaIds.Add(schema, id);
+            Declare(id);
             return id;
         }
 
+        internal void AddList(ListLayout layout) {
+            ObjectLayout objectLayout = ObjectLayout.ForList(layout);
+            if (!_lists.Add(objectLayout)) { return; }
+            if (_source is not null) {
+                try { _ = _source.DescriptorId(objectLayout); return; }
+                catch (InvalidDataException) { }
+            }
+            ObjectId element = Field(layout.ElementSlot);
+            ObjectId id = Allocate();
+            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(2, default, 0, default, element, layout.CodecVersion, default)));
+            Declare(id);
+        }
+
+        private ObjectId Type(TypeExpr type) {
+            if (_typeIds.TryGetValue(type, out ObjectId known)) { return known; }
+            ObjectId name = type.Kind == TypeExprKind.Named ? String(type.DefinitionId!) : default;
+            ObjectId arguments = default;
+            if (type.Arguments.Length != 0) {
+                ObjectId[] values = type.Arguments.Select(Type).ToArray();
+                arguments = Allocate();
+                Add(new(arguments, List(typeof(List<P0TypeExprRecord>)), new FrozenListState<ObjectId>(values)));
+            }
+            ObjectId id = Allocate();
+            Add(new(id, Schema(typeof(P0TypeExprRecord)), new TypeDto((byte)type.Kind, (byte)type.BuiltinTag, name, arguments)));
+            _typeIds.Add(type, id);
+            return id;
+        }
+
+        private ObjectId Field(DurableFieldInfo field) {
+            if (_fieldIds.TryGetValue(field, out ObjectId known)) { return known; }
+            ObjectId target = field.TargetType is { } nominal ? Type(nominal) : default;
+            ObjectId inline = field.InlineSchema is { } schema ? AddSchema(schema) : default;
+            ObjectId nullable = field.NullableLayout is { } child ? Field(child.ElementSlot) : default;
+            ObjectId id = Allocate();
+            Add(new(id, Schema(typeof(P0FieldRecord)), new FieldDto(field.FieldId, (byte)field.TypeTag, target, inline, nullable)));
+            _fieldIds.Add(field, id);
+            return id;
+        }
+
+        private void Declare(ObjectId id) { _added.Add(id); _declared.Add(id); }
         private ObjectId String(string value) {
             if (_strings.TryGetValue(value, out ObjectId prior)) { return prior; }
             ObjectId id = Allocate();
             _strings.Add(value, id);
-            Add(new ObjectStateRecord(id, value));
+            Add(new(id, value));
             return id;
         }
-
         private ObjectId Allocate() => _next <= uint.MaxValue ? new((uint)_next++)
-            : throw new InvalidOperationException("The P0 meta ObjectId domain is exhausted.");
+            : throw new InvalidOperationException("The meta ObjectId domain is exhausted.");
         private DurableSchema Schema(Type type) => _models.ResolveCurrentModel(type).CurrentSchema;
         private ListLayout List(Type type) => _models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding)
             ? binding!.CurrentLayout.List! : throw new InvalidDataException("Missing fixed List binding.");
-
         private void Add(ObjectStateRecord row) {
             ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, _models);
             _rows.Add(row.Id, prepared);
@@ -242,24 +221,17 @@ internal sealed class P0CatalogWorkspace {
             }
             byte[] encodedBase = P0TypedBodyCodec.Encode(list.Layout, list.Preparation!.PrepareBase(list));
             encodedIds.Add(list.Id);
-            long b = ObjectVersionPayloadSize.GetBasePayloadBytes(encodedBase.Length);
-            long h = b;
+            long b = ObjectVersionPayloadSize.GetBasePayloadBytes(encodedBase.Length), h = b;
             if (_source is null) { records.Add(ObjectVersionRecord.CreateBase(_list.Value, encodedBase)); }
             else {
-                PreparedDeltaBody delta = ListStateBody<ObjectId, ObjectIdStateOps>.PrepareAppendDelta(
-                    _source.DescriptorIds.Count, _added.ToArray(), list.Layout.List!);
+                PreparedDeltaBody delta = ListStateBody<ObjectId, ObjectIdStateOps>.PrepareAppendDelta(_source.DescriptorIds.Count, _added.ToArray(), list.Layout.List!);
                 var prior = _source.Snapshot!.Objects[_list.Value];
                 long d = ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior);
-                if (b <= d || _source.DescriptorListH + d > 5L * b) {
-                    records.Add(ObjectVersionRecord.CreateBase(_list.Value, encodedBase));
-                } else {
-                    records.Add(ObjectVersionRecord.CreateDelta(_list.Value, prior, delta.Body));
-                    h = _source.DescriptorListH + d;
-                }
+                if (b <= d || _source.DescriptorListH + d > 5L * b) { records.Add(ObjectVersionRecord.CreateBase(_list.Value, encodedBase)); }
+                else { records.Add(ObjectVersionRecord.CreateDelta(_list.Value, prior, delta.Body)); h = _source.DescriptorListH + d; }
             }
             P0CatalogView view = new(_root, _rows, descriptorListH: h);
-            return new(owner, view, new(_source?.Snapshot?.Address, _root, records), _added.Count, encodedIds,
-                _source?.DescriptorIds);
+            return new(owner, view, new(_source?.Snapshot?.Address, _root, records), _added.Count, encodedIds, _source?.DescriptorIds);
         }
     }
 }

@@ -1,6 +1,6 @@
 # DurableGraph 项目术语表
 
-> 用语校准：2026-10-11；存储词义按 [DB-086 新栈方案](design-branches/0086-new-storage-refactoring-plan.md) 与当前源码接线更新，整体验收状态见 [PROJECT-STATE](../src/PROJECT-STATE.md)。公共基础见 [078-A 记录](design-branches/0078-a-repository-free-history-implementation.md)，Checkpoint/固定查询见 [078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
+> 用语校准：2026-10-12；存储词义按 [DB-086 新栈方案](design-branches/0086-new-storage-refactoring-plan.md) 与当前源码接线更新，整体验收状态见 [PROJECT-STATE](../src/PROJECT-STATE.md)。公共基础见 [078-A 记录](design-branches/0078-a-repository-free-history-implementation.md)，Checkpoint/固定查询见 [078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
 > 本文是项目首选术语的维护入口；定义概念、区分歧义并映射代码，不代替各分片合同。
 > 公共入口为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`；签出操作为 `Checkout`。旧名只作历史映射，固定模型环境由本次 Open 持有。
 > 当前能力查 [PROJECT-STATE](../src/PROJECT-STATE.md)，长期约束查[目标设计](DurableGraph-target-design-v0.md)，未完成工作查[路线图](DurableGraph-research-roadmap.md)。
@@ -106,6 +106,7 @@ flowchart TD
 ## Schema、类型与生成代码
 
 统一目录的设计与实现证据见 [DB-046](design-branches/0046-unified-schema-catalog-slice.md)。
+下表中的 `RepresentationId`、`SchemaCatalogEntry` 与 `SchemaStore` 描述当前公开路径；DB-087 内部自举路径的不同含义见[自举术语](#meta-bootstrap)。不把内部接线推定为公开 API 已切换。
 
 | 项目内术语／代码符号 | 释义与示意 | 关键代码 |
 |---|---|---|
@@ -137,6 +138,19 @@ flowchart TD
 | <a id="object-binding"></a>**当前对象绑定（ObjectBinding）** | 一个受支持 CLR 引用类型的 current layout、Capture、Normalize、引用遍历、Allocate(record)/Hydrate 能力；统一承接 class、string、array、List、Dictionary。对象边界允许类型擦除，字段/元素热循环仍静态绑定；历史 reader 可独立取得。 | [ObjectBinding](../src/DurableGraph/Runtime/Binding/ObjectBinding.cs)、[ArrayObjectBinding](../src/DurableGraph/Runtime/Containers/ArrayObjectBinding.cs)、[ListObjectBinding](../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs) |
 | <a id="model-binding"></a>**当前模型绑定（StateModelBinding）** | ObjectBinding 的用户 durable class 适配器，负责一个闭合族的当前实现及其保留 reader。Repository 打开时冻结模型、定义及 Upgrade provider；SchemaStore 仍是 Repository 内单调积累的实时权威，缓存 UpgradePlan 以 exact Schema requirement set 在 callback 前复核后来登记的定义。 | [StateModelBinding](../src/DurableGraph/Runtime/Binding/StateModelBinding.cs)、[StateModelRegistry](../src/DurableGraph.Persistence/StateModelRegistry.cs)、[Schema requirement set](design-branches/0042-upgrade-schema-requirement-set.md) |
 | <a id="base-state-projection"></a>**基类状态投影（StateBaseProjection）** | current model 显式授予、按完整 Schema/DTO 冷绑定的强类型 Capture/Hydrate 委托。Family class 处理本声明字段并通过 immediate base 投影访问祖先状态，消费方无需知道基类 private 字段的 CLR 类型。只作用于同一领域实例，不独立分配、登记或升级基类；普通整对象 binding 仍要求 exact CLR 类型，完整 leaf DTO/body 仍展开。 | [StateBaseProjection](../src/DurableGraph/Runtime/Binding/StateBaseProjection.cs)、[投影生成](../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[DB-061](design-branches/0061-cross-assembly-inheritance-slice.md) |
+
+<a id="meta-bootstrap"></a>
+
+### 内部 meta 自举路径的用语
+
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 区分布局解释来源与变化获取方式；以下词义不另立公共类型，实施范围以该案为准。
+
+| 首选词 | 含义与边界 | 内部落点 |
+|---|---|---|
+| **固定通道（builtin／employee）** | 由有限格式规则和完整布局确定解释能力，不查询业务 Schema 目录。员工是明确登记的元数据布局，不能由命名空间、marker 或仅 DTO CLR 类型授予资格。容器能否进入固定通道取决于完整槽闭包。 | `P0FixedBindings`、`P0TypedBodyCodec`；不是任意 BCL 类型免 Schema。 |
+| **布局描述节点（descriptor）与 meta ObjectId** | catalog 声明的完整 Schema／容器布局节点，直接用其 meta 图 ObjectId 寻址；动态 Base 按自身 batch 的 `(SchemaRoot, descriptor ObjectId)` 解释。inline 描述可作为精确值依赖，但不能作为对象 Base 布局；普通字段／TypeExpr 节点也不是对象 descriptor。 | `P0CatalogView`；替代独立表示编号的内部路线，未修改公开 `RepresentationId` 合同。 |
+| **准确 Schema 视图（selected Schema view）** | 从指定 meta 图根恢复的不可变定义／布局查询；所选业务图用它核对 retained 对象的完整布局。原 Base 的解释来源和目标模型执行能力仍分别核对，不能借最新 shared 补缺。 | `P0CatalogView`、`StateModelSnapshot` 的只读 lookup；读取不准备或发布新 meta。 |
+| **受控 meta 修改与共同保存** | meta 按逻辑 key 记录最终待改定义，业务通过 Capture／比较发现变化；两者交付对象版本记录给同一 writer，再由唯一 owner 发布。Event 接受已发布 meta，同时保留已提交 State 保存基线。 | `P0CatalogWorkspace`、`P0GraphStore`、`P0Repository`；不是通用变化追踪框架。 |
 
 ## 对象图、身份与状态视图
 

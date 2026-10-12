@@ -1,4 +1,5 @@
-# DB-087 P0：持久 meta 自举实验
+<a id="db-087-p0持久-meta-自举实验"></a>
+# DB-087：meta 自举内部原型
 
 本目录是产品代码内的自举原型，承担纵向实验与后续接线；公开 Repository 尚未切换。问题与分片边界见
 [DB-087 §6](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#6-建议的重构任务顺序)。
@@ -19,16 +20,23 @@ P0 wire 和固定员工闭包允许调整；不提供旧格式兼容、私有分
 从 [P0Session](P0Session.cs) 看两侧准备与安装；
 [P0GraphStore](P0GraphStore.cs) 保存共同 batch／目录／图并校验来源，
 [P0Repository](P0Repository.cs) 是唯一发布 owner。
-[P0CatalogWorkspace](P0CatalogWorkspace.cs) 只保留逻辑脏集合，
+[P0CatalogWorkspace](P0CatalogWorkspace.cs) 保留手工 Set 的最终逻辑意图，
 [P0CatalogView](P0CatalogView.cs) 从员工 DTO 调用 Schema 工厂；均不调用 SchemaStore。
 员工模型在本程序集内经真实 Source Generator 编译。
 
-P0 接受无继承、无泛型的 ReferenceObject Schema，基元字段、简单命名引用及 List<int>。
+P0 首轮见证接受无继承、无泛型的 ReferenceObject Schema，基元字段、简单命名引用及 List<int>。
 P1a 已将恢复并回 GraphReader/NormalizedRevision，真实 V1→V2 可在只读路径升级而不发布 meta；
 Save 按实际 Capture 布局自动准备 catalog，Event/Discard 保留 State 重写义务。
 固定通道只共享不可变布局，绑定缓存归操作／builder。私有模式、完整 Schema variants／Upgrade、
-公开缓存与包交付仍待后续资格。
+公开缓存与完整产品包交付仍待后续资格。
 目录冻结、Base 候选、Schema 投影和业务 Capture／预算仍可全量工作；这里只减少受控变更的比较与发射。
+
+P1b 首片已实施，使用强类型 Descriptor/Field/TypeExpr 员工与 typed／fixed-table ABI v2；
+内部员工 DurableType/Schema 与生成 DTO 仍 V1，由外层 ABI 选择固定表，不伪造 history。
+精确 `List<int>` 固定，用户 Root／`List<Point?>` 继续按准确 S 的动态 descriptor 解释。
+长期 dirty 只留手工 root 意图；自动 Capture 依赖在 Prepare 中临时派生，Discard 后重新推导。
+真实消费者范围为 base／inline／Nullable／List，完整类型执行、公开接线和 private 仍待后续；
+完整源码回归与隔离包四进程验收统一在 [DB-087 §12](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 
@@ -36,7 +44,7 @@ Save 按实际 Capture 布局自动准备 catalog，Event/Discard 保留 State �
 dotnet build DurableGraph.slnx -c Release -m:1 -nr:false -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage
 dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage --filter FullyQualifiedName~MetaBootstrap
 
-dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage --filter FullyQualifiedName~MetaBootstrapAcceptedHistoryUpgrade
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage --filter FullyQualifiedName~MetaBootstrap
 dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage
 ```
 

@@ -26,6 +26,12 @@ Four separate processes cover Event-first and State tags, empty-model metadata r
 ref-only Checkout and named Fork continuation, and immutable positions after branch movement.
 It consumes the same exact storage pin through the ten-package feed.
 
+The [internal meta Schema consumer](MetaBootstrapSchemaConsumer/README.md) runs with
+`./Run-MetaBootstrapSchemaProbe.ps1`. It uses the existing test friend assembly name to
+exercise DB-087's internal backend through actual packages: generated base/inline/Nullable/List
+Schema, meta reads without business registration, and Root/List Delta continuation across four
+normal processes. This witness does not qualify the public backend switch or crash recovery.
+
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual
 analyzer reference, `AdditionalFiles`, build hook, or `Import`.

@@ -97,7 +97,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(s0, repository.GetHead("main"));
             Assert.Equal(meta0, repository.SharedSchemaRoot);
             Assert.False(session.Catalog.Accepted.Schemas.ContainsKey(currentKey));
-            Assert.True(session.Catalog.DirtyCount > 0);
+            // Automatically discovered dependencies belong to this capture, not a second dirty authority.
+            // The unchanged live V2 root will rediscover them on the next real save.
+            Assert.Equal(0, session.Catalog.DirtyCount);
             Assert.Same(root, session.State);
             Assert.Equal(s0, session.StateSource.Address);
 
@@ -178,7 +180,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(latestKind, chain.Entries[^1].Record.Kind);
         P0ChainEntry first = chain.Entries[0];
         BareValueReader header = new(first.Record.Body);
-        Assert.Equal((byte)1, header.ReadByte());
+        Assert.Equal((byte)2, header.ReadByte());
         Assert.Equal((byte)1, header.ReadByte());
         ObjectId descriptor = new(header.ReadVarUInt32());
         P0CatalogView catalog = P0CatalogView.Load(repository.Store, first.SchemaRoot!.Value);

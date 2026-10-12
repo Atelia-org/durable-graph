@@ -13,7 +13,8 @@ internal static class P0FixedBindings {
 
     private static readonly Type[] Types = [
         typeof(string), typeof(P0CatalogRecord), typeof(P0DescriptorRecord), typeof(P0FieldRecord),
-        typeof(List<P0DescriptorRecord>), typeof(List<P0FieldRecord>),
+        typeof(List<P0DescriptorRecord>), typeof(List<P0FieldRecord>), typeof(P0TypeExprRecord),
+        typeof(List<P0TypeExprRecord>), typeof(List<int>),
     ];
     // CLR initialization serializes this finite closure. Only immutable layouts escape;
     // no shared lazy resolver or context-capturing operation binding survives here.
@@ -29,11 +30,22 @@ internal static class P0FixedBindings {
         throw new InvalidDataException("Missing fixed employee binding.");
 
     internal static uint Code(ObjectLayout layout) {
-        for (int index = 0; index < Layouts.Length; index++) {
-            if (Layouts[index].Equals(layout)) { return (uint)index + 1; }
-        }
-        throw new InvalidDataException("This object layout is outside P0's fixed employee closure.");
+        return TryCode(layout, out uint code) ? code :
+            throw new InvalidDataException("This object layout is outside the fixed employee/builtin closure.");
     }
+
+    internal static bool TryCode(ObjectLayout layout, out uint code) {
+        for (int index = 0; index < Layouts.Length; index++) {
+            if (Layouts[index].Equals(layout)) { code = (uint)index + 1; return true; }
+        }
+        code = 0;
+        return false;
+    }
+
+    internal static bool IsBuiltin(ObjectLayout layout) => layout.Kind == ObjectStateKind.String ||
+        Layout(typeof(List<int>)).Equals(layout);
+
+    internal static bool IsEmployee(ObjectLayout layout) => !IsBuiltin(layout) && TryCode(layout, out _);
 
     internal static ObjectLayout Layout(uint code) => code > 0 && code <= Layouts.Length
         ? Layouts[code - 1] : throw new InvalidDataException("Unknown fixed employee code.");
