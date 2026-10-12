@@ -34,6 +34,20 @@ public sealed partial class Repository {
             : new StateCheckpoint(address, root, previous, previousAddress);
     }
 
+    private (IDurableObject First, IDurableObject Second) ReadMetaBootstrapPairCore(
+        CheckpointAddress firstAddress, CheckpointAddress secondAddress) {
+        var store = _splitRepository!.Store;
+        DecodedRevision first = DecodedRevision.ReadSplit(store, firstAddress.Address, _splitConfiguration!);
+        DecodedRevision.SplitBindingEnvironment? environment = first.BindingEnvironment;
+        if (store.ReadMetadata(secondAddress.Address).SchemaRoot != environment?.SelectedSchemaView.Snapshot?.Address) {
+            environment = null;
+        }
+        // ReadSplit verifies the actual Store, frozen configuration and graph's exact S on reuse.
+        DecodedRevision second = DecodedRevision.ReadSplit(store, secondAddress.Address, _splitConfiguration!, environment);
+        return GraphReader.ReadPair(first, new(first.SourceModels!), firstAddress.RootId,
+            second, new(second.SourceModels!), secondAddress.RootId);
+    }
+
     private void MutateBranchCore(string branchName, FrameAddress head) {
         if (UsesMetaBootstrap) {
             // Complete the candidate before user publication hooks and any VS output.

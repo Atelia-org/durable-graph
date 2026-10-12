@@ -470,11 +470,11 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public (IDurableObject First, IDurableObject Second) ReadPair(CheckpointAddress first, CheckpointAddress second) {
         RequireAvailable();
-        RequireLegacyBackend();
         CheckFrame(first);
         CheckFrame(second);
         _busy = true;
         try {
+            if (UsesMetaBootstrap) { return ReadMetaBootstrapPairCore(first, second); }
             ValidateSelectedGraphParent(first);
             ValidateSelectedGraphParent(second);
             return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,

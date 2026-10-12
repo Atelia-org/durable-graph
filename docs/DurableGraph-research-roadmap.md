@@ -212,7 +212,7 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
 员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
-P1c 前七片已通过源码验收；[第七片](design-branches/0087-meta-bootstrap-refactoring-route.md#26-p1c-第七片history-元数据与-ref-操作) 已接 history 元数据导航＋ref／tag／Fork、独立 ReadCheckpoint。历史 Fork 按 selected head 的最近 State 恢复，ref-only 保 shared S，完整交付材料先于发布；默认公开工厂仍 DB-086。下一片先接准确 S 双侧 ReadPair，再接 DB-080 准备材料与物理缓存；跨 S 独立物化的安全边界已选，同 S 严格环境复用／共享算法、槽值和缓存形状仍待施工验证，详细接缝集中 DB-087 §6.3／7.1，不冻结新公共签名。P1d 门禁后才默认切换与退旧，P2 再接 private，不扩无具体差异的组合矩阵。
+P1c 前七片已通过源码验收；[第八片](design-branches/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair) 已接准确 S 双侧 ReadPair，构建、定向与完整源码回归通过。同 reader-issued 环境仅是保守共享门禁，完整 Model／Preparation、state proof、实际 heads／rewrite 和引用闭包仍检查；跨环境独立，不新增 DTO cache。下一片从请求 Head 导航最近 State，持其准确执行环境／Selection 接 DB-080，Event-only 绕槽、命中仍 mutable 独立，完整恢复及 Fork 发布成功后才装槽；具体入口集中 DB-087 §6.3／7.1。随后迁物理缓存，默认关闭 DB-082 候选随片范围由施工按消费者裁定，不建立通用缓存框架。默认工厂保持 DB-086；P1d 门禁后默认切换与退旧，P2 再接 private。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
 P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存／操作内复用归 P1c，不由本观察宣称性能量级或本片优化，记录见 DB-087 §12。

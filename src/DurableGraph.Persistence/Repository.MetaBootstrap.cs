@@ -166,9 +166,6 @@ public sealed partial class Repository {
         return Issue(ReadHistoryCore(address));
     }
 
-    private void RequireLegacyBackend() {
-        if (UsesMetaBootstrap) { throw new NotSupportedException("This operation is not yet connected to split repository storage."); }
-    }
     private void RequireMetaBootstrapBackend() {
         if (!UsesMetaBootstrap) { throw new NotSupportedException("This operation requires split repository storage."); }
     }

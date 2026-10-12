@@ -117,6 +117,20 @@ internal static class GraphReader {
         return ((TFirst)firstInstances[firstRootId], (TSecond)secondInstances![secondRootId]);
     }
 
+    // Split views may share instances only after reusing the same reader-issued exact-S environment.
+    internal static (IDurableObject First, IDurableObject Second) ReadPair(
+        DecodedRevision firstDecoded, GraphReadContext firstContext, ObjectId firstRootId,
+        DecodedRevision secondDecoded, GraphReadContext secondContext, ObjectId secondRootId) {
+        ArgumentNullException.ThrowIfNull(firstContext);
+        ArgumentNullException.ThrowIfNull(secondContext);
+        PreparedGraphSelection first = Prepare<IDurableObject>(firstDecoded, firstContext, firstRootId);
+        PreparedGraphSelection second = Prepare<IDurableObject>(secondDecoded, secondContext, secondRootId);
+        HashSet<ObjectId> shared = firstDecoded.BindingEnvironment is { } environment &&
+            ReferenceEquals(environment, secondDecoded.BindingEnvironment) ? FindSharedClosure(first, second) : [];
+        var (firstInstances, secondInstances) = Materialize(firstContext, first, second, shared);
+        return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
+    }
+
     // A null shared set means independent graphs. Only ReadPair supplies a proven set;
     // even an empty proven set retains Pair's existing cross-graph string identity guard.
     private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) Materialize(
@@ -301,7 +315,8 @@ internal static class GraphReader {
             return false;
         }
         if (first.Current.Kind == ObjectStateKind.String) {
-            return ReferenceEquals(first.Current.StringContent, second.Current.StringContent);
+            return ReferenceEquals(first.Current.StringContent, second.Current.StringContent) ||
+                StringComparer.Ordinal.Equals(first.Current.StringContent, second.Current.StringContent);
         }
         ICapturedStatePreparation? firstPreparation = first.Current.Preparation;
         ICapturedStatePreparation? secondPreparation = second.Current.Preparation;
