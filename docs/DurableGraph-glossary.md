@@ -1,6 +1,6 @@
 # DurableGraph 项目术语表
 
-> 用语校准：2026-10-12；存储词义按 [DB-086 新栈方案](design-branches/0086-new-storage-refactoring-plan.md) 与当前源码接线更新，整体验收状态见 [PROJECT-STATE](../src/PROJECT-STATE.md)。公共基础见 [078-A 记录](design-branches/0078-a-repository-free-history-implementation.md)，Checkpoint/固定查询见 [078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
+> 用语校准：2026-10-13；存储词义按 [DB-086 新栈方案](design-branches/0086-new-storage-refactoring-plan.md) 与当前源码接线更新，整体验收状态见 [PROJECT-STATE](../src/PROJECT-STATE.md)。公共基础见 [078-A 记录](design-branches/0078-a-repository-free-history-implementation.md)，Checkpoint/固定查询见 [078-B 记录](design-branches/0078-b-checkpoint-history-query-implementation.md)。[DB-083](design-branches/0083-repository-checkpoint-api-user-stories.md) 的后续目标/候选词义仍不作为已实施合同。
 > 本文是项目首选术语的维护入口；定义概念、区分歧义并映射代码，不代替各分片合同。
 > 公共入口为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`；签出操作为 `Checkout`。旧名只作历史映射，固定模型环境由本次 Open 持有。
 > 当前能力查 [PROJECT-STATE](../src/PROJECT-STATE.md)，长期约束查[目标设计](DurableGraph-target-design-v0.md)，未完成工作查[路线图](DurableGraph-research-roadmap.md)。
@@ -158,6 +158,7 @@ flowchart TD
 | **split 元数据导航与 ref-only 操作** | DB-087 内部 history 导航只查 graph 封套，不解业务 DTO；历史 Fork 从 selected head 选择最近 State 后独立恢复。ref-only 更新只发布分支目录，shared Schema root 与完整 graph 数据保持；tag 沿不可变名字绑定协议。内容 source 与业务 Parent 分开，句柄只属于签发的 open owner。 | [DB-087 §26 的限定源码验收](design-branches/0087-meta-bootstrap-refactoring-route.md#26-p1c-第七片history-元数据与-ref-操作) 已完成；默认公开工厂保持 DB-086，不授 Pair／缓存资格。 |
 | **split 双图读取环境资格** | 两侧完整恢复各自准确 S；操作内严格复用同一个 reader-issued 环境后才求共享闭包，环境相同仍不代替实际 heads、Model／Preparation、完整状态／布局和 rewrite 检查。跨环境先独立物化，Pair 不借 State 槽或导入保存身份；这是保守实现边界，不是跨图身份保证。 | [DB-087 §27](design-branches/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair) 已通过限定源码验收；不由 S 地址相等或 DTO CLR 类型相同授共享资格。 |
 | **split State 准备槽** | 持最近 State 的准确 reader 环境、Selection 与完整标准依赖；请求 Head 每次独立选择，命中仍独立物化可变图并导入完整保存身份。Event-only 绕槽，Fork 发布成功后安装；不由热保存授读取资格，不供只读 Pair 使用。 | [DB-087 §28](design-branches/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用) 已通过限定源码验收；DB-082 候选仍默认关闭，不是物理缓存或新公共类型。 |
+| **owned 物理读取缓存** | 同一 owner 下按完成帧地址缓存固定角色原始事实与完整目录/H，共用 frame/map 两组件的一份驻留 charge／预算／LRU。值 owned 且只读；hit 前核 owner，可复用解析但不复用整个 graph 的关系、typed／准确 S／source 资格。成功 raw 组件无需因上层失败回滚，不缓存应用领域实例。 | [DB-087 §29](design-branches/0087-meta-bootstrap-refactoring-route.md#29-p1c-第十片owned-物理缓存) 已通过限定源码验收；内部机制复用，非公共 cache 平台。 |
 
 ## 对象图、身份与状态视图
 

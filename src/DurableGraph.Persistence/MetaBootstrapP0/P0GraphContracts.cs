@@ -74,8 +74,22 @@ internal sealed class P0GraphSnapshot {
 internal sealed record P0Batch(FrameAddress? SourceGraph, FrameAddress? SchemaRoot,
     IReadOnlyList<ObjectVersionRecord> Records);
 
-internal sealed record P0DirectoryVersion(FrameAddress? SourceGraph, ObjectVersionKind Kind,
-    FrameAddress? Prior, byte[] Body, int PayloadBytes);
+internal sealed class P0DirectoryVersion {
+    private readonly byte[] _body;
+    internal P0DirectoryVersion(FrameAddress? sourceGraph, ObjectVersionKind kind, FrameAddress? prior,
+        ReadOnlySpan<byte> body, int payloadBytes) {
+        SourceGraph = sourceGraph;
+        Kind = kind;
+        Prior = prior;
+        _body = body.ToArray();
+        PayloadBytes = payloadBytes;
+    }
+    internal FrameAddress? SourceGraph { get; }
+    internal ObjectVersionKind Kind { get; }
+    internal FrameAddress? Prior { get; }
+    internal ReadOnlySpan<byte> Body => _body;
+    internal int PayloadBytes { get; }
+}
 
 internal sealed record P0ChainEntry(ObjectVersionRecord Record, FrameAddress ContainingBatch,
     FrameAddress? SourceGraph, FrameAddress? SchemaRoot, int PayloadBytes);

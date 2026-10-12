@@ -1,4 +1,5 @@
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using Atelia.VersionStore;
 using DataStore = Atelia.FrameStore.FrameStore;
@@ -24,7 +25,7 @@ public sealed partial class GraphResources {
     }
 
     private GraphResources(DataStore data, PublicationStore versions,
-        RefBytesSnapshot branches, RefBytesSnapshot shared) {
+        RefBytesSnapshot branches, RefBytesSnapshot shared, long readCacheBudgetBytes) {
         Data = data;
         IsReadOnly = versions.IsReadOnly;
         _metaBootstrap = true;
@@ -32,7 +33,7 @@ public sealed partial class GraphResources {
         _branchRevision = branches.Revision;
         _sharedRevision = shared.Revision;
         _baseline = new(DecodeBranches(branches.Payload), DecodeShared(shared.Payload));
-        _metaBootstrapStore = new(data, RequireMetaBootstrapAvailable);
+        _metaBootstrapStore = new(data, RequireMetaBootstrapAvailable, readCacheBudgetBytes);
         try {
             if (_baseline.SharedRoot is { } schema && _metaBootstrapStore.ReadMetadata(schema).Kind != P0GraphKind.Meta) {
                 throw new InvalidDataException("The shared root must select a P0 meta graph.");
@@ -51,11 +52,18 @@ public sealed partial class GraphResources {
     internal bool HasMetaBootstrapPending { get { RequireMetaBootstrapAvailable(); return _pending is not null; } }
     internal FrameAddress? SharedMetaBootstrapRoot { get { RequireMetaBootstrapAvailable(); return _baseline.SharedRoot; } }
 
-    internal static GraphResources CreateMetaBootstrapNew(string path) => OpenMetaBootstrap(path, create: true, readOnly: false);
-    internal static GraphResources OpenMetaBootstrapExisting(string path) => OpenMetaBootstrap(path, create: false, readOnly: false);
-    internal static GraphResources OpenMetaBootstrapReadOnlyExisting(string path) => OpenMetaBootstrap(path, create: false, readOnly: true);
+    internal static GraphResources CreateMetaBootstrapNew(string path,
+        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrap(path, create: true, readOnly: false, readCacheBudgetBytes);
+    internal static GraphResources OpenMetaBootstrapExisting(string path,
+        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrap(path, create: false, readOnly: false, readCacheBudgetBytes);
+    internal static GraphResources OpenMetaBootstrapReadOnlyExisting(string path,
+        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) =>
+        OpenMetaBootstrap(path, create: false, readOnly: true, readCacheBudgetBytes);
 
-    private static GraphResources OpenMetaBootstrap(string path, bool create, bool readOnly) {
+    private static GraphResources OpenMetaBootstrap(string path, bool create, bool readOnly, long readCacheBudgetBytes) {
+        ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string root = Path.GetFullPath(path);
         if (create) {
@@ -78,7 +86,7 @@ public sealed partial class GraphResources {
             // Missing either ref is an incomplete initialization, never a resumable create.
             RefBytesSnapshot branches = versions.ReadRef(BranchRef).Unwrap();
             RefBytesSnapshot shared = versions.ReadRef(SharedRef).Unwrap();
-            return new(data, versions, branches, shared);
+            return new(data, versions, branches, shared, readCacheBudgetBytes);
         }
         catch (Exception error) {
             CloseResources(error, null, versions, data);

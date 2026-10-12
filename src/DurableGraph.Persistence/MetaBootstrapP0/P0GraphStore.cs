@@ -4,21 +4,36 @@ using DataStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
-// A borrowed, uncached P0 facade. Reading a graph validates its selected physical
+// A borrowed facade with owned physical reads. Reading a graph validates its selected physical
 // relations; typed body/view/reference qualification remains with each producer.
 internal sealed class P0GraphStore : IDisposable {
     private readonly DataStore _frames;
     private readonly Action? _ensureOwner;
+    private P0GraphReadCache? _readCache;
+    private long _graphHits, _graphMisses, _graphDecodes;
+    private long _batchHits, _batchMisses, _batchDecodes;
+    private long _directoryVersionHits, _directoryVersionMisses, _directoryVersionDecodes;
+    private long _directoryHits, _directoryMisses, _directoryMaterializations, _directoryReplayFrames, _directoryPayloadHits;
     private bool _disposed;
     private bool _appending;
     private int _directoryThreshold = 5;
 
-    internal P0GraphStore(DataStore frames, Action? ensureOwner = null) {
+    internal P0GraphStore(DataStore frames, Action? ensureOwner = null,
+        long readCacheBudgetBytes = StateRevisionStore.DefaultReadCacheBudgetBytes) {
         ArgumentNullException.ThrowIfNull(frames);
+        ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         _frames = frames;
         _ensureOwner = ensureOwner;
         EnsureUsable();
+        if (readCacheBudgetBytes != 0) { _readCache = new(readCacheBudgetBytes); }
     }
+
+    internal P0GraphReadCacheStatistics ReadCacheStatistics => new(
+        _graphHits, _graphMisses, _graphDecodes, _batchHits, _batchMisses, _batchDecodes,
+        _directoryVersionHits, _directoryVersionMisses, _directoryVersionDecodes,
+        _directoryHits, _directoryMisses, _directoryMaterializations, _directoryReplayFrames, _directoryPayloadHits,
+        _readCache?.Evictions ?? 0, _readCache?.AdmissionBypasses ?? 0,
+        _readCache?.ResidentChargeBytes ?? 0, _readCache?.PeakResidentChargeBytes ?? 0, _readCache?.EntryCount ?? 0);
 
     internal long AppendedFrames { get; private set; }
     internal int DirectoryReadAmplificationThreshold {
@@ -141,30 +156,70 @@ internal sealed class P0GraphStore : IDisposable {
 
     internal P0GraphMetadata ReadMetadata(FrameAddress address) {
         EnsureUsable();
-        return P0GraphWire.DecodeGraph(ReadPayload(address, P0GraphWire.GraphTag));
+        if (_readCache is { } cache && cache.TryGetGraph(address, out var cached)) {
+            _graphHits++;
+            return cached;
+        }
+        _graphMisses++;
+        P0GraphMetadata graph = P0GraphWire.DecodeGraph(ReadPayload(address, P0GraphWire.GraphTag));
+        _graphDecodes++;
+        _readCache?.AdmitGraph(address, graph);
+        return graph;
     }
 
     internal P0Batch ReadBatch(FrameAddress address) {
         EnsureUsable();
-        return P0GraphWire.DecodeBatch(ReadPayload(address, P0GraphWire.BatchTag));
+        if (_readCache is { } cache && cache.TryGetBatch(address, out var cached)) {
+            _batchHits++;
+            return cached;
+        }
+        _batchMisses++;
+        P0Batch batch = P0GraphWire.DecodeBatch(ReadPayload(address, P0GraphWire.BatchTag));
+        _batchDecodes++;
+        _readCache?.AdmitBatch(address, batch);
+        return batch;
     }
 
     internal P0DirectoryVersion ReadDirectoryVersion(FrameAddress address) {
         EnsureUsable();
-        return P0GraphWire.DecodeDirectory(ReadPayload(address, P0GraphWire.DirectoryTag));
+        if (_readCache is { } cache && cache.TryGetDirectoryVersion(address, out var cached)) {
+            _directoryVersionHits++;
+            return cached;
+        }
+        _directoryVersionMisses++;
+        P0DirectoryVersion directory = P0GraphWire.DecodeDirectory(ReadPayload(address, P0GraphWire.DirectoryTag));
+        _directoryVersionDecodes++;
+        _readCache?.AdmitDirectoryVersion(address, directory);
+        return directory;
     }
 
     internal IReadOnlyDictionary<uint, FrameAddress> ReadDirectory(FrameAddress address) {
         EnsureUsable();
+        if (_readCache is { } cache && cache.TryGetDirectory(address, out var cached)) {
+            _directoryHits++;
+            return cached.Heads;
+        }
+        _directoryMisses++;
         var chain = ReadDirectoryChain(address);
         IReadOnlyDictionary<uint, FrameAddress> heads = P0DirectoryCodec.ReadBase(chain[0].Body);
         for (int i = 1; i < chain.Count; i++) { heads = P0DirectoryCodec.ApplyDelta(heads, chain[i].Body); }
-        return new FrozenSortedDictionary<uint, FrameAddress>(new SortedDictionary<uint, FrameAddress>(
+        var frozen = new FrozenSortedDictionary<uint, FrameAddress>(new SortedDictionary<uint, FrameAddress>(
             heads.ToDictionary(static pair => pair.Key, static pair => pair.Value)));
+        long bytes = chain.Aggregate(0L, static (sum, version) => checked(sum + version.PayloadBytes));
+        _directoryMaterializations++;
+        _readCache?.AdmitDirectory(address, new(frozen, bytes));
+        return frozen;
     }
 
-    internal long ReadDirectoryPayloadBytes(FrameAddress address) =>
-        ReadDirectoryChain(address).Aggregate(0L, static (bytes, version) => checked(bytes + version.PayloadBytes));
+    internal long ReadDirectoryPayloadBytes(FrameAddress address) {
+        EnsureUsable();
+        if (_readCache is { } cache && cache.TryGetDirectory(address, out var cached)) {
+            _directoryPayloadHits++;
+            return cached.PayloadBytes;
+        }
+        // A cost-only miss does not force a complete map materialization.
+        return ReadDirectoryChain(address).Aggregate(0L, static (bytes, version) => checked(bytes + version.PayloadBytes));
+    }
 
     internal P0ObjectChain ReadObjectChain(FrameAddress graphAddress, uint objectId) {
         if (objectId == 0) { throw new ArgumentOutOfRangeException(nameof(objectId)); }
@@ -220,6 +275,7 @@ internal sealed class P0GraphStore : IDisposable {
         while (true) {
             if (!visited.Add(address)) { throw new InvalidDataException("Directory prior chain contains a cycle."); }
             P0DirectoryVersion version = ReadDirectoryVersion(address);
+            _directoryReplayFrames++;
             versions.Add(version);
             // A new Base does not certify or read a discarded earlier content chain.
             if (version.Kind == ObjectVersionKind.Base) { break; }
@@ -281,9 +337,18 @@ internal sealed class P0GraphStore : IDisposable {
 
     private void EnsureUsable() {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _frames.EnsureUsable();
-        _ensureOwner?.Invoke();
+        try {
+            _frames.EnsureUsable();
+            _ensureOwner?.Invoke();
+        } catch {
+            _readCache = null;
+            throw;
+        }
     }
 
-    public void Dispose() => _disposed = true;
+    public void Dispose() {
+        if (_disposed) { return; }
+        _disposed = true;
+        _readCache = null;
+    }
 }

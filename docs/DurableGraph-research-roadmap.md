@@ -212,10 +212,10 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
 员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
-P1c 前七片已通过源码验收；[第八片](design-branches/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair) 已接准确 S 双侧 ReadPair，构建、定向与完整源码回归通过。同 reader-issued 环境仅是保守共享门禁，完整 Model／Preparation、state proof、实际 heads／rewrite 和引用闭包仍检查；跨环境独立，不新增 DTO cache。[第九片](design-branches/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用) 已接 DB-080：从请求 Head 导航最近 State，持其准确执行环境／Selection 和完整标准依赖，Event-only 绕槽、命中仍 mutable 独立，完整恢复及 Fork 发布成功后才装槽；构建、定向与完整源码回归通过。DB-082 既有候选同片移接仍默认关闭，DB-081 热 seed 禁用。下一片迁物理缓存，保 source／view/model 资格，不建立通用缓存框架。默认工厂保持 DB-086；P1d 门禁后默认切换与退旧，P2 再接 private。
+P1c 前九片已通过源码验收，精确范围保留 DB-087 §20–28。[第十片](design-branches/0087-meta-bootstrap-refactoring-route.md#29-p1c-第十片owned-物理缓存) 已验一份有界 owned frame/map LRU／预算与 split 实际固定角色帧／完整目录/H，构建、定向与完整源码回归通过。hit 前核 owner、每次仍核 graph/source／准确 S/model，readonly owned 值与成功 admit 保持，不接 typed cache 或扩展平台。机制层 P1c 已可进入 P1d 内部停点：先验两 CreateRef 初始化／失败边界，再验 DG ProcessCrashOnly、Unknown／Confirmed 未交付／orphan与真实包，后默认切换退旧；不提前宣布 P1 产品停点。DB-081 热 seed 禁用、DB-082 默认关，P2 private 及其具体公开 policy 签名后置。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
-P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存／操作内复用归 P1c，不由本观察宣称性能量级或本片优化，记录见 DB-087 §12。
+P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存已由 P1c 第十片接入，更多操作内复用仍按测量触发；不由早期观察宣称性能量级，原证据见 DB-087 §12。
 旧全局 SchemaStore 仍是公开实现事实，尚未放宽同键冲突。
 
 首轮建议用显式新根创建新私有分支验证同键异形，全 live 新 Base、无 external retained heads；
