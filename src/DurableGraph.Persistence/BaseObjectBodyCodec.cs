@@ -33,7 +33,7 @@ internal static class BaseObjectBodyCodec {
         BinaryPayloadReader reader = new(encodedBody);
         byte version = reader.ReadByte();
         if (version != 4) {
-            throw new InvalidDataException($"Unsupported Base type header version {version}.");
+            throw AuditFormat.Unsupported($"Unsupported Base type header version {version}.");
         }
 
         RepresentationId representationId = new(reader.ReadUInt32());

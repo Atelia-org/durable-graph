@@ -16,16 +16,19 @@ namespace Atelia.DurableGraph.Persistence;
 internal sealed class HistoryJournal : IDisposable {
     private readonly FileStream _repositoryLock;
     private readonly string _path;
+    private bool _ownsLock = true;
     private readonly List<HistoryGraphRecord> _frames = [];
     private JournalStore _journal;
     private bool _confirmed;
     private bool _disposed;
+    private readonly bool _readOnlyCandidate;
 
-    private HistoryJournal(string path, FileStream repositoryLock, JournalStore journal, bool readOnly) {
+    private HistoryJournal(string path, FileStream repositoryLock, JournalStore journal, bool readOnly, bool readOnlyCandidate = false) {
         _path = path;
         _repositoryLock = repositoryLock;
         _journal = journal;
         IsReadOnly = readOnly;
+        _readOnlyCandidate = readOnlyCandidate;
     }
 
     internal JournalStore Journal {
@@ -56,27 +59,36 @@ internal sealed class HistoryJournal : IDisposable {
         }
     }
 
-    internal static HistoryJournal Open(string root, bool readOnly) {
+    internal static HistoryJournal Open(string root, bool readOnly, bool readOnlyCandidate = false) =>
+        OpenCore(root, readOnly, readOnlyCandidate, null);
+
+    internal static HistoryJournal OpenBorrowed(string root, FileStream repositoryLock) =>
+        OpenCore(root, false, false, repositoryLock);
+
+    internal void AdoptLock() => _ownsLock = true;
+
+    private static HistoryJournal OpenCore(string root, bool readOnly, bool readOnlyCandidate, FileStream? borrowedLock) {
+        if (readOnlyCandidate && !readOnly) { throw new ArgumentException("The candidate requires a read-only journal."); }
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         root = Path.GetFullPath(root);
         if (!Directory.Exists(root)) { throw new DirectoryNotFoundException(root); }
-        FileStream repositoryLock = OpenLock(root, create: false, readOnly);
+        FileStream repositoryLock = borrowedLock ?? OpenLock(root, create: false, readOnly);
         HistoryJournal? owner = null;
         JournalStore? journal = null;
         try {
             string path = Path.Combine(root, "journal");
             string refObjects = Path.Combine(path, "refs", "objects");
             if (!Directory.Exists(refObjects)) { throw new DirectoryNotFoundException(refObjects); }
-            ValidatePhysicalFiles(path);
-            List<EventAddress> addresses = ReadPhysicalAddresses(path);
+            if (!readOnlyCandidate) { ValidatePhysicalFiles(path); }
+            List<EventAddress> addresses = readOnlyCandidate ? [] : ReadPhysicalAddresses(path);
             journal = JournalStore.OpenReadOnlyExisting(path, StrictOptions());
-            owner = new(path, repositoryLock, journal, readOnly);
+            owner = new(path, repositoryLock, journal, readOnly, readOnlyCandidate) { _ownsLock = borrowedLock is null };
             foreach (EventAddress address in addresses) { owner._frames.Add(owner.Read(address)); }
             return owner;
         } catch {
             if (owner is not null) { owner.Dispose(); }
             else {
-                try { journal?.Dispose(); } finally { repositoryLock.Dispose(); }
+                try { journal?.Dispose(); } finally { if (borrowedLock is null) { repositoryLock.Dispose(); } }
             }
             throw;
         }
@@ -88,7 +100,18 @@ internal sealed class HistoryJournal : IDisposable {
     }
 
     internal HistoryGraphRecord Read(EventAddress address) {
-        using EventFrame frame = Journal.ReadEvent(address).Unwrap();
+        try {
+            using EventFrame frame = Journal.ReadEvent(address).Unwrap();
+            return Decode(address, frame);
+        }
+        catch (Exception error) when (_readOnlyCandidate &&
+            error is InvalidDataException or IOException or ArgumentException or InvalidOperationException or AteliaException) {
+            error.Data["DurableGraph.JournalAddress"] = address.ToString();
+            throw;
+        }
+    }
+
+    internal static HistoryGraphRecord Decode(EventAddress address, EventFrame frame) {
         if (frame.Header.Parent is { } parent && (parent.SegmentNumber > address.SegmentNumber ||
             parent.SegmentNumber == address.SegmentNumber && parent.Ticket.Offset >= address.Ticket.Offset)) {
             throw new InvalidDataException("A Journal parent must physically precede its child.");
@@ -108,7 +131,9 @@ internal sealed class HistoryJournal : IDisposable {
         return address;
     }
 
-    internal void ConfirmDurable() {
+    internal void ConfirmDurable() => ConfirmDurable(null);
+
+    internal void ConfirmDurable(Action<string, Action>? confirmFile) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsReadOnly) { throw new InvalidOperationException("A read-only journal cannot be promoted or flushed."); }
         if (_confirmed) { return; }
@@ -125,7 +150,8 @@ internal sealed class HistoryJournal : IDisposable {
             path.StartsWith(eventsPrefix, StringComparison.Ordinal) ? 0 :
             path.StartsWith(refObjectsPrefix, StringComparison.Ordinal) ? 1 : 2).ThenBy(path => path, StringComparer.Ordinal)) {
             using IRbfFile file = RbfFile.OpenExisting(filePath);
-            file.DurableFlush();
+            if (confirmFile is null) { file.DurableFlush(); }
+            else { confirmFile(filePath, () => file.DurableFlush()); }
             AfterConfirmFile?.Invoke(filePath);
         }
         _journal = JournalStore.OpenExisting(_path, StrictOptions());
@@ -138,11 +164,7 @@ internal sealed class HistoryJournal : IDisposable {
         Path.Combine(root, "repository.lock"), create ? FileMode.CreateNew : FileMode.Open,
         readOnly ? FileAccess.Read : FileAccess.ReadWrite, readOnly ? FileShare.Read : FileShare.None);
 
-    private static EventJournalOptions StrictOptions() => new() {
-        EventSegmentStoreOptions = new() { RecoverActiveTailOnOpen = false },
-        RefSegmentStoreOptions = new() { RecoverActiveTailOnOpen = false },
-        RefOpLogOptions = new() { RecoverActiveTailOnOpen = false },
-    };
+    private static EventJournalOptions StrictOptions() => new();
 
     private static string[] ValidatePhysicalFiles(string path) {
         if (!Directory.Exists(path)) { throw new DirectoryNotFoundException(path); }
@@ -180,6 +202,6 @@ internal sealed class HistoryJournal : IDisposable {
     public void Dispose() {
         if (_disposed) { return; }
         _disposed = true;
-        try { _journal.Dispose(); } finally { _repositoryLock.Dispose(); }
+        try { _journal.Dispose(); } finally { if (_ownsLock) { _repositoryLock.Dispose(); } }
     }
 }

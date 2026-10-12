@@ -102,7 +102,7 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Fact]
-    public void FirstStateUnknownRefWriteFailureLeavesNoInstalledCandidateAndReopensEventOnly() {
+    public void FirstStateRefPublicationLockAttemptYieldsNotPublishedAndReopensEventOnly() {
         using (Repository repository = CreateRepository()) {
             using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Node { Value = 7 }, NoRebase);
             var eventHead = checkout.Head;
@@ -111,13 +111,15 @@ public sealed partial class EventHistoryRepositoryTests {
             try {
                 repository.Checkpoint = checkpoint => {
                     if (checkpoint == CommitCheckpoint.BeforePublication) {
-                        // AdvanceRef opens its backing ref object only inside publication. Prevent
-                        // that real I/O without changing any persisted frame or product test seam.
+                        // The new runtime holds ref object files open across publication, so
+                        // this exclusive external open throws inside the checkpoint, before
+                        // any ref write is attempted. No persisted frame is changed.
                         blocked = new FileStream(refFile, FileMode.Open, FileAccess.Read, FileShare.None);
                     }
                 };
                 var failure = Assert.Throws<GraphCommitException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
-                Assert.Equal(GraphCommitOutcome.Unknown, failure.Outcome);
+                Assert.Equal(GraphCommitOutcome.NotPublished, failure.Outcome);
+                Assert.Null(blocked);
                 Assert.True(repository.IsFaulted);
                 Assert.Null(checkout.State);
                 Assert.Equal(eventHead, checkout.Head);

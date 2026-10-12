@@ -82,7 +82,7 @@ public sealed class GraphResourcesTests : IDisposable {
         File.WriteAllBytes(path, bytes);
         var before = Snapshot();
         Assert.ThrowsAny<Exception>(() => {
-            RbfSegmentStoreOptions options = new() { RecoverActiveTailOnOpen = true };
+            RbfSegmentStoreOptions options = new();
             using GraphResources rejected = readOnly ? GraphResources.OpenReadOnlyExisting(_root, options) : GraphResources.OpenExisting(_root, options);
         });
         AssertUnchanged(before);

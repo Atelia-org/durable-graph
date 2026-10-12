@@ -1,11 +1,14 @@
 # 实验与回归入口
 
 产品当前能力与下一步见 [src/PROJECT-STATE.md](../src/PROJECT-STATE.md)。
-按正在调查的问题选择入口；无需顺序阅读所有 Probe。下列项目均不在根 solution 中，
+按正在调查的问题选择入口；无需顺序阅读所有 Probe。独立项目通常不在根 solution 中；部分 runner 调用现有测试项目。
 运行命令、证据范围与限制由各自 README 维护。
 
 | 何时使用 | 入口 |
 |---|---|
+| 验证统一根视图、目录与真实段轮转及恢复再次中断 | [UnifiedRootProbe](UnifiedRootProbe/README.md)：固定双值及目录/单次轮转对照均已验收；保留 orphan、完整目录与原 EventJournal 成本对照，不是 DG 产品格式或平台断电保证 |
+| 比较只读 Normal 候选与公开打开的 Open、首次查询/图读取、字节与内存成本 | [ReadOnlyNormalCostProbe](ReadOnlyNormalCostProbe/README.md)：DB-085 内部实验，复用 Persistence.Tests；受控来源，公开默认未切换 |
+| 验证真实提交和恢复再次中断后的续写/冷开 | [RecoveryCrashProbe](RecoveryCrashProbe/README.md)：DB-085 S0-C 内部宿主与 S0-D CLI 闭环；新建夹具、真实短写/外部终止、输出中断后直接严格续写；不提供平台断电保证 |
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
 | 验证实验性 Dictionary 的 comparer、键寻址 Delta、共享引用与双槽历史升级 | [DictionaryConsumer](PackageConsumerProbe/DictionaryConsumer/README.md)：[Run-DictionaryProbe.ps1](PackageConsumerProbe/Run-DictionaryProbe.ps1)，DB-054 产品回归 |
 | 验证显式 enum 的整数表示、完整类型组合与删除旧 CLR enum 后的历史升级续存 | [EnumConsumer](PackageConsumerProbe/EnumConsumer/README.md)：[Run-EnumProbe.ps1](PackageConsumerProbe/Run-EnumProbe.ps1)，DB-053 产品回归 |

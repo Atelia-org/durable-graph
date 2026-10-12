@@ -282,12 +282,15 @@ public sealed class StateRevisionReadCacheTests : IDisposable {
         string path = NewPath();
         RbfSegmentStoreOptions options = new() {
             NewStoreLayout = RbfSegmentStoreLayout.Flat,
-            RecoverActiveTailOnOpen = false,
         };
         FrameAddress address;
         using (SegmentStore segments = SegmentStore.CreateNew(path, options)) {
             using StateRevisionStore store = new(segments);
             address = store.AppendDurably(Base(1, [10]));
+            // Open-time tail validation fully checks only the last frame; append a
+            // successor so the damaged frame stays historical and per-read CRC
+            // failures remain observable.
+            _ = store.AppendDurably(Base(2, [20]));
         }
         string file = Assert.Single(Directory.GetFiles(path, "*.rbf", SearchOption.AllDirectories));
         byte[] bytes = File.ReadAllBytes(file);
@@ -416,7 +419,7 @@ public sealed class StateRevisionReadCacheTests : IDisposable {
             _ = store.ReadLiveObjectHeadMap(oldAddress);
         }
         // Explicit offline rescue: no StateRevisionStore or read cache exists here.
-        RbfSegmentStoreOptions strict = new() { RecoverActiveTailOnOpen = false };
+        RbfSegmentStoreOptions strict = new();
         using (SegmentStore rescue = SegmentStore.OpenExisting(path, strict)) {
             using RbfSegmentWriterLease writer = rescue.OpenActiveWriter();
             writer.File.Truncate(oldAddress.FrameTicket.Offset);

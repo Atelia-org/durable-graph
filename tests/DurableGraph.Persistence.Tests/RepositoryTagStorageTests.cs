@@ -22,7 +22,6 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     [Theory]
     [InlineData("duplicate")]
     [InlineData("version")]
-    [InlineData("missing-target")]
     [InlineData("unknown-frame")]
     [InlineData("tombstone")]
     [InlineData("crc")]
@@ -31,7 +30,6 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         EventAddress target = CreateTaggedRepository();
         byte[] payload = EncodeTag(damage == "duplicate" ? "anchor" : "raw", target);
         if (damage == "version") { BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4), 2); }
-        if (damage == "missing-target") { BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(16), uint.MaxValue); }
         uint frameTag = damage == "unknown-frame" ? 0x1234_5678u : JournalStore.TagBindingFrameTag;
         SizedPtr ticket;
         using (IRbfFile file = RbfFile.OpenExisting(RefLogPath)) {
@@ -53,7 +51,36 @@ public sealed class RepositoryTagStorageTests : IDisposable {
             byte[] bytes = File.ReadAllBytes(RefLogPath);
             File.WriteAllBytes(RefLogPath, bytes[..^1]);
         }
-        AssertBothOpensRejectWithoutChangingFiles(expectInvalidData: true, crcMismatch: damage == "crc");
+        AssertBothOpensRejectWithoutChangingFiles(
+            expectInvalidData: damage is "tombstone" or "truncated-tail",
+            expectCatalogInvalid: damage is "duplicate" or "version" or "unknown-frame",
+            crcMismatch: damage == "crc");
+    }
+
+    [Fact]
+    public void UnknownTagTargetIsAcceptedAtReplayWithoutRepair() {
+        EventAddress target = CreateTaggedRepository();
+        byte[] payload = EncodeTag("raw", target);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(16), uint.MaxValue);
+        using (IRbfFile file = RbfFile.OpenExisting(RefLogPath)) {
+            file.Append(JournalStore.TagBindingFrameTag, payload).Unwrap();
+            file.DurableFlush();
+        }
+        Dictionary<string, byte[]> before = Snapshot();
+        // Replay validates binding format and name uniqueness, not target existence,
+        // so open succeeds without repair. Target readability is checked lazily by
+        // ResolveTag; DG-level target checks are covered by CheckedReadableTagTarget tests.
+        using (JournalStore writable = JournalStore.OpenExisting(JournalPath, StrictOptions())) {
+            var resolved = writable.ResolveTag("raw");
+            Assert.True(resolved.IsFailure);
+            Assert.Contains("TagTargetInvalid", resolved.Error!.ToString());
+        }
+        using (JournalStore readOnly = JournalStore.OpenReadOnlyExisting(JournalPath, StrictOptions())) {
+            var resolved = readOnly.ResolveTag("raw");
+            Assert.True(resolved.IsFailure);
+            Assert.Contains("TagTargetInvalid", resolved.Error!.ToString());
+        }
+        AssertUnchanged(before);
     }
 
     [Theory]
@@ -162,7 +189,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         Assert.True(frame.IsTombstone);
     }
 
-    private void AssertBothOpensRejectWithoutChangingFiles(bool expectInvalidData, bool crcMismatch = false) {
+    private void AssertBothOpensRejectWithoutChangingFiles(bool expectInvalidData, bool crcMismatch = false, bool expectCatalogInvalid = false) {
         Dictionary<string, byte[]> before = Snapshot();
         foreach (bool readOnly in new[] { true, false }) {
             Action open = () => {
@@ -172,6 +199,10 @@ public sealed class RepositoryTagStorageTests : IDisposable {
             if (crcMismatch) {
                 InvalidOperationException error = Assert.Throws<InvalidOperationException>(open);
                 Assert.Contains("[Rbf.CrcMismatch]", error.Message);
+            }
+            else if (expectCatalogInvalid) {
+                StorageOpenException error = Assert.Throws<StorageOpenException>(open);
+                _ = Assert.IsType<InvalidDataException>(error.InnerException);
             }
             else if (expectInvalidData) { Assert.Throws<InvalidDataException>(open); }
             else { Assert.ThrowsAny<Exception>(open); }
@@ -183,11 +214,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         "ref-object" => Assert.Single(Directory.GetFiles(Path.Combine(JournalPath, "refs", "objects"), "*.rbf", SearchOption.AllDirectories)),
         _ => throw new ArgumentOutOfRangeException(nameof(component)),
     };
-    private static EventJournalOptions StrictOptions() => new() {
-        EventSegmentStoreOptions = new() { RecoverActiveTailOnOpen = false },
-        RefSegmentStoreOptions = new() { RecoverActiveTailOnOpen = false },
-        RefOpLogOptions = new() { RecoverActiveTailOnOpen = false },
-    };
+    private static EventJournalOptions StrictOptions() => new();
     private Dictionary<string, byte[]> Snapshot() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);
     private void AssertUnchanged(Dictionary<string, byte[]> before) {

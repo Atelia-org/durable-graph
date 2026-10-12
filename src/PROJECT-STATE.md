@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-09-28；DB-077、DB-078-A/B/C、DB-079/080 与 DB-084 DG tag 已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-09-30；DB-077、DB-078-A/B/C、DB-079/080 与 DB-084 DG tag 已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -12,12 +12,26 @@
 - 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
+- 会话旁支的架构讨论：[统一盘上不可变容器 / storage-2](../docs/design-branches/0085-storage-2-exploration.md)；用户提出统一 Repository、Node 分配与发布，可能另建新仓复用成果，当前仅保存讨论入口，不替换主线状态或启动重构。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
 
 四个早期 Probe 已归档到 Git，默认搜索优先 src/tests 与活动回归；只有具体历史机制问题才查
 [归档恢复索引](../experiments/ARCHIVE.md)，不要把旧项目整体恢复为续工上下文。
 
 ## 当前焦点
+
+[DB-085 storage / DG 联合崩溃恢复](../docs/design-branches/0085-joint-crash-recovery-design.md) 的三路径方向已获用户确认：Normal 按需校验、协议恢复、完整 Audit。
+Audit 核心在产品库提供 API，新维护 CLI 调用同一核心；高级别数据安全仅绑定已验证的受控存储栈，候选 OpenZFS + 4 SSD。
+[统一根目录与轮转对照](../docs/design-branches/0085-unified-root-metadata-experiment.md)已完成并通过独立验收：真实 EventFrame/Create 身份与第二段创建中，唯一根可替代候选 catalog/ref/locator 独立发布；旧视图固定，完整 orphan 保留，恢复再次中断后能续写。全部完整目录含 orphan 的代数/前代根转换资格已用反例收口。候选 Header 0–3B 补齐仅属隔离实验，不扩展产品 rescue。
+[固定双值机制实验](../docs/design-branches/0085-unified-root-experiment.md)与[候选对照](../docs/design-branches/0085-unified-root-comparison.md)保留机制证据和设计来源。新证据支持继续优先研究统一根，但完整目录复制、长祖先重复读、writer/恢复全量资格仍有明显成本；短根尾的 Open 还会验证最新候选目录，不能泛称常数成本。
+当前停在机制验收，不切换产品格式或公开 Open/writer/Audit/rescue，不自动恢复旧 S1 工单。下一项决定性证据应是实际 DG Schema/State/Journal 的版本接缝、代表性目录规模下一次真实图提交与首次图读，再裁决产品协议；不自动铺开全面重构。仍仅有进程故障/F2 模型证据，没有目录项或平台断电保证。成本、限制和版本化原始证据只维护在本片记录；原 S0 合同和验收保持。
+[第 0/1 片](../docs/design-branches/0085-audit-implementation.md)已实现并通过独立验收：共同结构校验、`RepositoryMaintenance.Audit` 与薄 CLI audit；持锁只读检查完整历史及 orphan 依赖，保持现有 Normal/可写行为及已有适配 working tree。
+该候选需显式 `UseStorageSources=true` 与兄弟仓路径联调；原开发 feed/公开 pin 尚不含新 Audit API，未制作新包。
+[第 2 片内部只读 Normal 成本实验](../docs/design-branches/0085-normal-readonly-experiment.md)已完成并通过独立验收：候选移出无关历史 sweep/常驻，按需校验 Journal 祖先及 State 依赖闭包，Open + 首次真实读取已计量。固定依赖下的无关历史成本已消除；长祖先重复检查和 Schema 成本仍显著，暂不切换公开只读默认，公开 Open/可写路径保持。
+用户已选择受控来源边界：随机读取不独立证明物理帧成员资格，内嵌帧反例保留，未知来源先 Audit；被访问依赖矛盾仍拒绝。复跑本片须显式源码模式及 `ShouldUnsetParentConfigurationAndPlatform=false`，避免 solution 将外部存储项目构建为 Debug；详见实验记录。
+[S0-A 写序/短尾](../docs/design-branches/0085-s0a-tail-qualification.md)、[S0-B 固定 EOF/保留依赖](../docs/design-branches/0085-s0b-fixed-eof-qualification.md)及 [S0-C 真实恢复/再次中断](../docs/design-branches/0085-s0c-recovery-implementation.md)均已完成并通过独立验收。
+内部恢复在同次独占锁内重新取得资格、关闭候选、复核边界、截断/flush，再以全新资源严格打开并保守确认全部依赖，成功才交付 writer；完整事实含 orphan 保留。仅限已初始化单 branch、各 store 首段、最多一个支持短尾；Trailer 1–11B 的 Unresolved 仍拒绝。真实部分写入与外部 kill→恢复再 kill→续写→冷开已有证据，全部改盘只在新建夹具；普通公开 Open/writer/Audit 保持。
+[S0-D 薄 CLI rescue/显式维护接线](../docs/design-branches/0085-s0d-cli-rescue-implementation.md)已完成并通过独立验收：`rescue --check/--apply` 明确区分只读资格与执行，库内以空 registry 调用同一受限核心，关闭资源后返回纯数据报告；输出失败/中断后直接严格续写已有证据，不冻结广泛恢复 API。完整入口成本已计量，保守资格的全历史/重复依赖成本仍显著；公开只读的操作内验证去重另见路线图。快速 writer/S1、平台 S2 尚未实施，可信发布因果证明与 Clean/活动前沿仍待实证；无新增公开恢复或断电保证。
 
 [DB-084 DG tag 接入](../docs/design-branches/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
 不可变绑定由上游 EventJournal 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
@@ -74,6 +88,14 @@ P5 公开包下载、签名与 Source Link、私有缓存下的完整构建/Stor
 日常 build/test 直接从 nuget.org restore；Prepare 仅为独立 probes 下载公开 nupkg，不再 clone 或重打存储包。
 普通构建、显式源码联调及本地开发包的独立 NuGet 配置统一见[存储依赖指南](../docs/storage-dependency.md)；
 本片只改交付接线，不改变下述存储格式、恢复和产品能力。
+
+DB-085 之前的存储适配试用基线（2026-09-29）：通过开发 feed 试用上游五包同版 `0.2.0-dev.20260929034500`
+（来源 bf7d68ab3f3fbad18b87549dbf6ce2aae499c24a），方式为 `.artifacts/storage-dev/NuGet.Config`
+加 `-p:StoragePackageVersion` 显式覆盖，props 公开 pin 暂不变，结束试用后按依赖指南恢复公开包。
+产品代码已适配上游 breaking 变化：`RecoverActiveTailOnOpen` 移除（严格打开为唯一行为）、
+测试 fake 补齐 `IRbfFile` scan-boundary 成员；tag replay 只查格式与名字唯一性，target 可读性
+由 ResolveTag 惰性校验（TagTargetInvalid）；ref 发布失败在尝试前确定性映射 NotPublished 并 fault。
+全量 2976 项测试通过。
 
 [DB-071：程序集与命名空间组织](../docs/design-branches/0071-assembly-namespace-organization-review.md) 已实施：
 七项目依赖保持；底层包为 Serialization/Storage，上层为 Persistence，主程序集内分根/Schema/Runtime。

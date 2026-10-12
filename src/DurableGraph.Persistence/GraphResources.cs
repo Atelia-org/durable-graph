@@ -48,7 +48,14 @@ internal sealed class GraphResources : IDisposable {
     internal static GraphResources OpenReadOnlyExisting(string path, RbfSegmentStoreOptions? options = null) =>
         Open(path, options, create: false, readOnly: true);
 
-    private static GraphResources Open(string path, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
+    internal static GraphResources OpenReadOnlyCandidate(string path, RbfSegmentStoreOptions? options = null) =>
+        Open(path, options, create: false, readOnly: true, readOnlyCandidate: true);
+
+    internal static GraphResources OpenRecoveryExisting(string path, Action<string, Action> confirmFile) =>
+        Open(path, null, create: false, readOnly: false, confirmFile: confirmFile);
+
+    private static GraphResources Open(string path, RbfSegmentStoreOptions? options, bool create, bool readOnly, bool readOnlyCandidate = false,
+        Action<string, Action>? confirmFile = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string root = Path.GetFullPath(path);
         if (!Directory.Exists(root)) { throw new DirectoryNotFoundException(root); }
@@ -58,9 +65,13 @@ internal sealed class GraphResources : IDisposable {
             string schemaPath = Path.Combine(root, "schemas.rbf");
             schemas = create ? RbfFile.CreateNew(schemaPath) :
                 readOnly ? RbfFile.OpenReadOnlyExisting(schemaPath) : RbfFile.OpenExisting(schemaPath);
-            SchemaStore schemaStore = new(schemas, readOnly);
+            SchemaStore schemaStore = confirmFile is null ? new(schemas, readOnly) :
+                new(schemas, readOnly, default, action => confirmFile(schemaPath, action));
             // Also confirm an empty header. Count excludes built-in container registrations.
-            if (!readOnly && schemaStore.Count == 0) { schemas.DurableFlush(); }
+            if (!readOnly && schemaStore.Count == 0) {
+                if (confirmFile is null) { schemas.DurableFlush(); }
+                else { confirmFile(schemaPath, () => schemas.DurableFlush()); }
+            }
             string statePath = Path.Combine(root, "state");
             RbfSegmentStoreOptions strict = StrictOptions(options);
             if (create) {
@@ -70,10 +81,13 @@ internal sealed class GraphResources : IDisposable {
             } else {
                 // Check historical as well as active files before the store caches read handles.
                 if (!Directory.Exists(statePath)) { throw new DirectoryNotFoundException(statePath); }
-                foreach (string filePath in Directory.EnumerateFiles(statePath, "*.rbf", SearchOption.AllDirectories)) {
+                foreach (string filePath in readOnlyCandidate ? Array.Empty<string>() : Directory.EnumerateFiles(statePath, "*.rbf", SearchOption.AllDirectories)) {
                     using IRbfFile file = readOnly ? RbfFile.OpenReadOnlyExisting(filePath) : RbfFile.OpenExisting(filePath);
                     ValidatePhysicalFile(file);
-                    if (!readOnly) { file.DurableFlush(); }
+                    if (!readOnly) {
+                        if (confirmFile is null) { file.DurableFlush(); }
+                        else { confirmFile(filePath, () => file.DurableFlush()); }
+                    }
                 }
                 segments = readOnly ? SegmentStore.OpenReadOnlyExisting(statePath, strict) : SegmentStore.OpenExisting(statePath, strict);
             }
@@ -92,7 +106,6 @@ internal sealed class GraphResources : IDisposable {
             SegmentSizeThresholdBytes = supplied.SegmentSizeThresholdBytes,
             HistoricalReaderPoolCapacity = supplied.HistoricalReaderPoolCapacity,
             CacheMode = supplied.CacheMode,
-            RecoverActiveTailOnOpen = false,
         };
     }
 

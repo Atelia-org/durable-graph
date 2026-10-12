@@ -24,6 +24,7 @@ public sealed class Repository : IDisposable {
     private readonly HistoryJournal _history;
     private readonly GraphResources _resources;
     private readonly StateModelSnapshot _models;
+    private readonly bool _readOnlyCandidate;
     private readonly object _identity = new();
     private readonly HashSet<string> _activeBranches = new(StringComparer.Ordinal);
     private bool _busy;
@@ -36,12 +37,14 @@ public sealed class Repository : IDisposable {
     internal GraphReadStatistics? RestorationStatistics { get; set; }
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
-    private Repository(HistoryJournal history, GraphResources resources, StateModelSnapshot models) {
+    private Repository(HistoryJournal history, GraphResources resources, StateModelSnapshot models, bool readOnlyCandidate = false,
+        Action<string, Action>? confirmFile = null) {
         _history = history;
         _resources = resources;
         _models = models;
-        ValidateHistory();
-        if (!resources.IsReadOnly) { history.ConfirmDurable(); }
+        _readOnlyCandidate = readOnlyCandidate;
+        if (!readOnlyCandidate) { ValidateHistory(); }
+        if (!resources.IsReadOnly) { history.ConfirmDurable(confirmFile); }
     }
 
     public bool IsReadOnly => _resources.IsReadOnly;
@@ -65,6 +68,22 @@ public sealed class Repository : IDisposable {
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) => Open(path, models, options, false, true);
 
+    // DB-085 controlled-source experiment. Checked random reads do not independently
+    // certify physical frame boundaries; unknown sources require the complete Audit.
+    internal static Repository OpenReadOnlyCandidate(string path, StateModelRegistry models, RbfSegmentStoreOptions? options = null) {
+        ArgumentNullException.ThrowIfNull(models);
+        HistoryJournal? history = null;
+        GraphResources? resources = null;
+        try {
+            history = HistoryJournal.Open(path, readOnly: true, readOnlyCandidate: true);
+            resources = GraphResources.OpenReadOnlyCandidate(path, options);
+            return new(history, resources, models.Snapshot(resources.Schemas), readOnlyCandidate: true);
+        } catch {
+            try { resources?.Dispose(); } finally { history?.Dispose(); }
+            throw;
+        }
+    }
+
     private static Repository Open(string path, StateModelRegistry models, RbfSegmentStoreOptions? options, bool create, bool readOnly) {
         ArgumentNullException.ThrowIfNull(models);
         HistoryJournal? history = null;
@@ -79,6 +98,26 @@ public sealed class Repository : IDisposable {
             throw;
         }
     }
+
+    // Recovery owns the lock until final delivery; failed construction never releases it.
+    internal static Repository OpenRecoveryBorrowed(string path, StateModelRegistry models, FileStream repositoryLock,
+        Action<string> checkpoint, Action<string, Action> confirmFile) {
+        HistoryJournal? history = null;
+        GraphResources? resources = null;
+        try {
+            history = HistoryJournal.OpenBorrowed(path, repositoryLock);
+            checkpoint("AfterHistoryOpen");
+            resources = GraphResources.OpenRecoveryExisting(path, confirmFile);
+            checkpoint("AfterGraphResourcesOpen");
+            checkpoint("BeforeJournalConfirmation");
+            return new(history, resources, models.Snapshot(resources.Schemas), confirmFile: confirmFile);
+        } catch {
+            try { resources?.Dispose(); } finally { history?.Dispose(); }
+            throw;
+        }
+    }
+
+    internal void AdoptRecoveryLock() => _history.AdoptLock();
 
     /// <summary>Publishes an initial State and returns a checkout retaining the supplied domain instances.</summary>
     /// <remarks>
@@ -304,6 +343,7 @@ public sealed class Repository : IDisposable {
             _busy = true;
             try {
                 if (!prepared) {
+                    ValidateCandidateFrame(endInclusive);
                     if (order == HistoryOrder.OldestFirst) { buffered = []; }
                     if (afterExclusive is not null || buffered is not null) {
                         CheckpointAddress? probe = endInclusive;
@@ -321,6 +361,7 @@ public sealed class Repository : IDisposable {
                 next = buffered is not null
                     ? bufferedIndex >= 0 ? buffered[bufferedIndex--] : null
                     : ReadNextEventCore(endInclusive, afterExclusive, ref cursor);
+                if (next is not null) { ValidateCandidateFrame(next); }
             } finally { EndOperation(); }
             // HistoryJournal.Read has already disposed its frame/lease. No repository guard
             // survives the yield, including when the caller stops before completing the range.
@@ -364,6 +405,7 @@ public sealed class Repository : IDisposable {
     public CheckpointAddress? GetPreviousState(CheckpointAddress eventFrame) {
         RequireAvailable();
         CheckFrame(eventFrame, GraphFrameKind.Event);
+        ValidateCandidateFrame(eventFrame);
         return PreviousStateCore(eventFrame);
     }
 
@@ -401,6 +443,7 @@ public sealed class Repository : IDisposable {
         CheckFrame(address);
         _busy = true;
         try {
+            ValidateCandidateFrame(address);
             GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
             CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
             var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
@@ -424,6 +467,7 @@ public sealed class Repository : IDisposable {
         CheckFrame(frame, kind);
         _busy = true;
         try {
+            ValidateCandidateFrame(frame);
             var session = new RevisionReadSession(_resources.States, _resources.Schemas, _models);
             return GraphReader.ReadRoot<IDurableObject>(session, frame.RevisionAddress, frame.RootId);
         } finally { EndOperation(); }
@@ -447,6 +491,8 @@ public sealed class Repository : IDisposable {
         CheckFrame(second);
         _busy = true;
         try {
+            ValidateCandidateFrame(first);
+            ValidateCandidateFrame(second);
             return GraphReader.ReadPair<IDurableObject, IDurableObject>(_resources.States, _resources.Schemas,
                 first.RevisionAddress, first.RootId, second.RevisionAddress, second.RootId, _models);
         } finally { EndOperation(); }
@@ -634,7 +680,7 @@ public sealed class Repository : IDisposable {
 
     private CheckpointAddress HeadCore(string branchName) {
         RefId branch = _history.Journal.OpenBranch(branchName).Unwrap();
-        EventAddress head = _history.Journal.GetHead(branch) ?? throw new InvalidDataException("EventHistory branches cannot have empty heads.");
+        EventAddress head = RepositoryGraphValidator.RequireBranchHead(_history.Journal.GetHead(branch));
         return Issue(_history.Read(head));
     }
     private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, GraphFrameKind.State);
@@ -654,7 +700,16 @@ public sealed class Repository : IDisposable {
         }
         return frame;
     }
-    private CheckpointAddress Issue(HistoryGraphRecord record) => new(_identity, record);
+    private CheckpointAddress Issue(HistoryGraphRecord record) {
+        if (_readOnlyCandidate) { ValidateCandidateRecord(record); }
+        return new(_identity, record);
+    }
+    private void ValidateCandidateRecord(HistoryGraphRecord record) =>
+        RepositoryGraphValidator.ValidateAncestry(_resources.States, _resources.Schemas, record, _history.Read);
+
+    private void ValidateCandidateFrame(CheckpointAddress frame) {
+        if (_readOnlyCandidate) { ValidateCandidateRecord(_history.Read(frame.Address)); }
+    }
     private void CheckFrame(CheckpointAddress frame, GraphFrameKind? kind = null) {
         ArgumentNullException.ThrowIfNull(frame);
         if (!ReferenceEquals(frame.Owner, _identity)) { throw new ArgumentException("Frame was issued by another repository instance.", nameof(frame)); }
@@ -676,35 +731,17 @@ public sealed class Repository : IDisposable {
         // This derived index carries only navigation; Journal Parent remains the persisted authority.
         var nearestStates = new Dictionary<EventAddress, HistoryGraphRecord?>();
         foreach (HistoryGraphRecord record in physicalRecords) {
-            HistoryGraphRecord? baseline = null;
-            if (record.Parent is { } parentAddress) {
-                if (!records.ContainsKey(parentAddress) || !nearestStates.TryGetValue(parentAddress, out baseline)) {
-                    throw new InvalidDataException("Journal Parent is missing from the preceding physical history.");
-                }
-            }
+            HistoryGraphRecord? baseline = RepositoryGraphValidator.FindBaseline(record, nearestStates);
             ValidateGraph(record, baseline?.RevisionAddress);
             nearestStates.Add(record.Address, record.Kind == GraphFrameKind.State ? record : baseline);
         }
         foreach (string branch in _history.Journal.ListBranches()) {
-            if (!records.ContainsKey(HeadCore(branch).Address)) {
-                throw new InvalidDataException("Branch head is absent from physical Journal history.");
-            }
+            RepositoryGraphValidator.RequireBranchMembership(HeadCore(branch).Address, records.ContainsKey);
         }
     }
 
-    private void ValidateGraph(HistoryGraphRecord record, FrameAddress? expectedParent) {
-        StateRevision revision = _resources.States.Read(record.RevisionAddress);
-        if (revision.ParentRevisionAddress != expectedParent) { throw new InvalidDataException("Journal and StateRevision Parent disagree."); }
-        var objects = _resources.States.ReadLiveObjectHeadMap(record.RevisionAddress);
-        if (!objects.ContainsKey(record.RootId.Value)) { throw new InvalidDataException("Graph root is absent from Revision membership."); }
-        foreach (uint id in objects.Keys) {
-            ObjectVersionChain chain = _resources.States.ReadObjectVersionChain(record.RevisionAddress, id);
-            DecodedBaseObjectBody body = BaseObjectBodyCodec.Decode(chain.Records[0].Record.Body, _resources.Schemas);
-            if (body.Kind == ObjectStateKind.Durable && body.Layout.Schema!.Kind != SchemaKind.ReferenceObject) { throw new InvalidDataException("Object Base cannot select an inline Schema."); }
-            if (body.Kind == ObjectStateKind.String && chain.Records.Count != 1) { throw new InvalidDataException("String cannot have a Delta chain."); }
-            if (id == record.RootId.Value && body.Kind != ObjectStateKind.Durable) { throw new InvalidDataException("Graph root must be durable."); }
-        }
-    }
+    private void ValidateGraph(HistoryGraphRecord record, FrameAddress? expectedParent) =>
+        RepositoryGraphValidator.ValidateGraph(_resources.States, _resources.Schemas, record, expectedParent);
 
     internal void Release(BranchCheckout session) {
         if (_busy) { throw new InvalidOperationException("Cannot dispose a session during a repository operation."); }

@@ -24,6 +24,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
+| [DB-085 storage / DG 联合崩溃恢复](design-branches/0085-joint-crash-recovery-design.md) | [统一根目录/轮转对照](design-branches/0085-unified-root-metadata-experiment.md)已验收，支持继续优先研究[统一根候选](design-branches/0085-unified-root-comparison.md)，尚未选择产品格式。下一决定性证据来自实际 DG Schema/State/Journal 版本接缝及代表性目录规模的真实图提交/首读成本，不自动迁移或恢复旧 S1。完整目录复制、重复祖先读取与保守 writer/恢复全扫仍是成本门；公开只读接入前仍须操作内去重及长祖先/导航复测。tag、根日志轮转、完整生命周期、快速 writer、Trailer 合法补全、F2 前提与受控平台门保持未决 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
 | [DB-084 EventJournal 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-durablegraph-tags-implementation.md) 保留准确公开包、创建/解析、严格打开与失败证据。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
 | [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-implementation.md) 保持 |

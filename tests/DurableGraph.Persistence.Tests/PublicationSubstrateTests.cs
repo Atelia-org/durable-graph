@@ -92,7 +92,6 @@ public sealed class PublicationSubstrateTests : IDisposable {
         string publicationPath = NextPath();
         var options = new RbfSegmentStoreOptions {
             SegmentSizeThresholdBytes = 32,
-            RecoverActiveTailOnOpen = false,
         };
         SizedPtr first;
         SizedPtr second;
@@ -127,9 +126,9 @@ public sealed class PublicationSubstrateTests : IDisposable {
     }
 
     [Fact]
-    public void DisablingSegmentRecoveryPreservesTornBytesForStrictValidation() {
+    public void StrictOpenRejectsTornTailAndPreservesTornBytes() {
         string path = NextPath();
-        var options = new RbfSegmentStoreOptions { RecoverActiveTailOnOpen = false };
+        var options = new RbfSegmentStoreOptions();
         string activePath;
         using (SegmentStore segments = SegmentStore.CreateNew(path, options)) {
             using RbfSegmentWriterLease writer = segments.OpenActiveWriter();
@@ -139,10 +138,9 @@ public sealed class PublicationSubstrateTests : IDisposable {
         }
         byte[] torn = File.ReadAllBytes(activePath)[..^4];
         File.WriteAllBytes(activePath, torn);
-        using (SegmentStore segments = SegmentStore.OpenExisting(path, options)) {
-            using RbfSegmentReaderLease reader = segments.OpenReader(segments.ActiveSegmentNumber);
-            Assert.ThrowsAny<Exception>(() => ReadAll(reader.File));
-        }
+        // Strict open validates the active tail up front and rejects a torn tail
+        // without repairing or truncating it.
+        Assert.ThrowsAny<Exception>(() => SegmentStore.OpenExisting(path, options));
         Assert.Equal(torn, File.ReadAllBytes(activePath));
     }
 
@@ -193,6 +191,8 @@ public sealed class PublicationSubstrateTests : IDisposable {
         public AteliaResult<RbfFrame> ReadFrame(SizedPtr ptr, Span<byte> buffer) => inner.ReadFrame(ptr, buffer);
         public RbfReverseSequence ScanReverse(bool showTombstone = false) => inner.ScanReverse(showTombstone);
         public RbfForwardSequence ScanForward(bool showTombstone = false) => inner.ScanForward(showTombstone);
+        public AteliaResult<RbfScanBoundary> GetScanBoundaryAfter(SizedPtr ticket) => inner.GetScanBoundaryAfter(ticket);
+        public AteliaResult<RbfForwardSequence> ScanForward(RbfScanBoundary boundary, bool showTombstone = false) => inner.ScanForward(boundary, showTombstone);
         public long GetPhysicalOffsetImmediatelyAfter(SizedPtr ticket) => inner.GetPhysicalOffsetImmediatelyAfter(ticket);
         public AteliaResult<OptionalRbfFrameInfo> ReadFrameInfoImmediatelyAfter(SizedPtr ticket) => inner.ReadFrameInfoImmediatelyAfter(ticket);
         public AteliaResult<RbfFrameInfo> ReadFrameInfo(SizedPtr ticket) => inner.ReadFrameInfo(ticket);

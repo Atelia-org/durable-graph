@@ -406,6 +406,45 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 同时检查仓库与工作副本的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
 按持久 head 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。通常无需直接操作 SchemaStore、Storage 或发布日志。
 
+## 离线结构审计
+
+当前源码候选提供库内 Audit 和维护 CLI。先关闭 Repository 及其他 writer；Audit 只读持有现存的 `repository.lock`，不需要模型注册，也不以正常打开成功为前提。
+
+```csharp
+RepositoryAuditReport report = RepositoryMaintenance.Audit(path, cancellationToken);
+if (!report.IsHealthy) {
+    foreach (RepositoryAuditFinding finding in report.Findings) {
+        Console.WriteLine($"{finding.Kind} {finding.Code} {finding.RelativePath}@{finding.Offset}: {finding.Message}");
+    }
+}
+```
+
+在[显式源码联调](docs/storage-dependency.md#显式源码联调)构建完成后运行：
+
+```powershell
+dotnet src/DurableGraph.Cli/bin/Release/net10.0/Atelia.DurableGraph.Cli.dll audit <repository-path> --json
+```
+
+检查覆盖 Schema、全部 State/Journal 的持久结构与依赖，以及分支、tag、历史 ref moves 和目录索引。
+`Completion` 区分完成、未完成和取消；未知格式、I/O 或缺少检查依赖不能得出健康结论。
+报告不验证应用业务 body、factory/Upgrade，也不证明部署环境的断电持久性。Audit 的实施边界见
+[DB-085 首片](docs/design-branches/0085-audit-implementation.md)。退出码为 0 健康、1 参数错误、2 完成但数据无效、3 未完成/取消。
+
+源码候选另提供受限的显式救援，调用前同样关闭全部 Repository/Store：
+
+```powershell
+dotnet src/DurableGraph.Cli/bin/Release/net10.0/Atelia.DurableGraph.Cli.dll rescue <repository-path> --check --json
+dotnet src/DurableGraph.Cli/bin/Release/net10.0/Atelia.DurableGraph.Cli.dll rescue <repository-path> --apply --json
+```
+
+必须明确选择 `--check`（只读资格）或 `--apply`（重新持锁推导并执行）；检查报告不能作为执行计划。
+当前仅支持已初始化、单个已绑定 branch、各 store 首段、State/Event 提交留下的至多一个合格短尾；保留所有完整事实和 orphan。
+tag、轮转、checkpoint、分支生命周期及部分 Trailer 的未决形态仍拒绝。成功仅证明结构维护，资源已由库关闭；实际读取业务图仍需相应模型。
+`--read-budget <bytes>` 只限制资格阶段的 RBF 请求，不限制执行、严格打开或总内存。省略 `--json` 输出同一报告的文本形式。
+rescue 退出码：0 检查合格/执行成功，1 参数错误，2 资格拒绝，3 检查未完成，4 动作失败，5 打开/交付/关闭失败，6 输出失败。
+失败可能发生在截断之后，应检查报告的动作与取消标志；输出丢失后重新检查磁盘。无动作成功仍执行依赖确认屏障。
+恢复核心和维护接缝保持内部，普通 Open 不修尾；范围、证据及剩余门槛见 [S0-D 施工记录](docs/design-branches/0085-s0d-cli-rescue-implementation.md)。
+
 ## 从源码打包
 
 当前包组织为 `Atelia.DurableGraph`、`.Persistence`、`.Storage` 和 `.Serialization`。

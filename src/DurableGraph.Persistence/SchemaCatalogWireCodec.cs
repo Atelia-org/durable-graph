@@ -65,7 +65,7 @@ internal static class SchemaCatalogWireCodec {
         IReadOnlyDictionary<RepresentationId, SchemaCatalogEntry> registered) {
         ArgumentNullException.ThrowIfNull(registered);
         var reader = new BinaryPayloadReader(payload);
-        if (reader.ReadByte() != Version) { throw new InvalidDataException("Unknown Schema catalog version."); }
+        if (reader.ReadByte() != Version) { throw AuditFormat.Unsupported("Unknown Schema catalog version."); }
         uint count = reader.ReadUInt32();
         // The shortest row is a List: ID, kind, codec version, slot.
         if (count == 0 || count > (uint)reader.RemainingCount / 4) {
@@ -105,18 +105,18 @@ internal static class SchemaCatalogWireCodec {
                     uint codecVersion = reader.ReadUInt32();
                     byte constructor = reader.ReadByte();
                     if (codecVersion != 1 || constructor is < 4 or > 7) {
-                        throw new InvalidDataException("Unsupported array codec version or constructor.");
+                        throw AuditFormat.Unsupported("Unsupported array codec version or constructor.");
                     }
                     entry = SchemaCatalogEntry.ForArray(id, new((TypeExprKind)constructor, ReadSlot(ref reader, 1, state), codecVersion));
                 }
                 else if (kind == 4) {
                     uint codecVersion = reader.ReadUInt32();
-                    if (codecVersion != 2) { throw new InvalidDataException("Unsupported List codec version."); }
+                    if (codecVersion != 2) { throw AuditFormat.Unsupported("Unsupported List codec version."); }
                     entry = SchemaCatalogEntry.ForList(id, new(ReadSlot(ref reader, 1, state), codecVersion));
                 }
                 else if (kind == 5) {
                     uint codecVersion = reader.ReadUInt32();
-                    if (codecVersion != 1) { throw new InvalidDataException("Unsupported Dictionary codec version."); }
+                    if (codecVersion != 1) { throw AuditFormat.Unsupported("Unsupported Dictionary codec version."); }
                     DurableFieldInfo keySlot = ReadSlot(ref reader, 1, state);
                     DurableFieldInfo valueSlot = ReadSlot(ref reader, 2, state);
                     entry = SchemaCatalogEntry.ForDictionary(id, new(keySlot, valueSlot, codecVersion));

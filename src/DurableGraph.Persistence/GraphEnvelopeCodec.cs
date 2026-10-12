@@ -27,7 +27,7 @@ internal static class GraphEnvelopeCodec {
         foreach (byte expected in Magic) {
             if (reader.ReadByte() != expected) { throw new InvalidDataException("Unknown graph envelope magic."); }
         }
-        if (reader.ReadByte() != Version) { throw new InvalidDataException("Unknown graph envelope version."); }
+        if (reader.ReadByte() != Version) { throw AuditFormat.Unsupported("Unknown graph envelope version."); }
         uint fileNumber = reader.ReadUInt32();
         SizedPtr ticket = SizedPtr.Deserialize(reader.ReadUInt64());
         ObjectId rootId = new(reader.ReadUInt32());

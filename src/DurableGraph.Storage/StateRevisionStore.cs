@@ -16,6 +16,8 @@ namespace Atelia.DurableGraph.Storage;
 /// an offline rescue operation: close all old Stores and caches, rescue, then open anew.
 /// </remarks>
 public sealed class StateRevisionStore : IDisposable {
+    public const byte WireVersion = StateRevisionWireFormat.Version;
+    public const uint RbfTag = StateRevisionWireFormat.RbfTag;
     /// <summary>Default estimated resident read-cache budget per Store: 8 MiB.</summary>
     public const long DefaultReadCacheBudgetBytes = 8 * 1024 * 1024;
     private readonly IRbfSegmentStore _segmentStore;

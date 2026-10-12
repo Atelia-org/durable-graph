@@ -28,29 +28,45 @@ public sealed class SchemaStore {
     private bool _busy;
     private long _acceptedTail;
 
-    public SchemaStore(IRbfFile file, bool readOnly = false) {
+    public SchemaStore(IRbfFile file, bool readOnly = false) : this(file, readOnly, default) { }
+
+    internal SchemaStore(IRbfFile file, bool readOnly, CancellationToken cancellationToken, Action<Action>? confirmExisting = null) {
         ArgumentNullException.ThrowIfNull(file);
         _file = file;
         _readOnly = readOnly;
         var frames = file.ScanForward(showTombstone: true).GetEnumerator();
         bool hadFrames = false;
+        long? nextFrameOffset = null;
         while (frames.MoveNext()) {
+            cancellationToken.ThrowIfCancellationRequested();
             hadFrames = true;
-            using RbfPooledFrame frame = file.ReadPooledFrame(frames.Current.Ticket).Unwrap();
-            if (frame.IsTombstone || frame.TailMetaLength != 0 || frame.Tag != SchemaCatalogWireCodec.RbfTag) {
-                throw new InvalidDataException("Unexpected frame in the dedicated SchemaStore file.");
+            try {
+                using RbfPooledFrame frame = file.ReadPooledFrame(frames.Current.Ticket).Unwrap();
+                if (frame.IsTombstone || frame.TailMetaLength != 0 || frame.Tag != SchemaCatalogWireCodec.RbfTag) {
+                    throw new InvalidDataException("Unexpected frame in the dedicated SchemaStore file.");
+                }
+                // The decoder validates the complete batch before it can affect visibility.
+                SchemaCatalogEntry[] entries = SchemaCatalogWireCodec.Read(frame.PayloadAndMeta, _nodes);
+                foreach (SchemaCatalogEntry entry in entries) { Install(entry, _nodes, _schemas, _representationIds); }
+                _nextRepresentationId += (uint)entries.Length;
+                nextFrameOffset = file.GetPhysicalOffsetImmediatelyAfter(frames.Current.Ticket);
             }
-            // The decoder validates the complete batch before it can affect visibility.
-            SchemaCatalogEntry[] entries = SchemaCatalogWireCodec.Read(frame.PayloadAndMeta, _nodes);
-            foreach (SchemaCatalogEntry entry in entries) { Install(entry, _nodes, _schemas, _representationIds); }
-            _nextRepresentationId += (uint)entries.Length;
+            catch (Exception frameError) {
+                frameError.Data["DurableGraph.Offset"] = frames.Current.Ticket.Offset;
+                throw;
+            }
         }
         if (frames.TerminationError is { } error) {
-            throw new InvalidDataException($"SchemaStore framing is invalid; no automatic tail recovery is performed. {error.Message}");
+            var framingError = new InvalidDataException($"SchemaStore framing is invalid; no automatic tail recovery is performed. {error.Message}");
+            if (nextFrameOffset is { } offset) { framingError.Data["DurableGraph.Offset"] = offset; }
+            throw framingError;
         }
         // Merely reading bytes left in the OS cache after an uncertain outcome
         // is not a new durable barrier, including catalogs containing only containers.
-        if (!readOnly && hadFrames) { file.DurableFlush(); }
+        if (!readOnly && hadFrames) {
+            if (confirmExisting is null) { file.DurableFlush(); }
+            else { confirmExisting(() => file.DurableFlush()); }
+        }
         _acceptedTail = file.TailOffset;
     }
 

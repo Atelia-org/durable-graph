@@ -24,6 +24,10 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [统一盘上不可变容器 / storage-2 旁支](0085-storage-2-exploration.md) | Discussion，用户提出的新方向 | 探讨统一 Repository、AddressableNodeAllocator 与 ref/branch/tag 发布；可能另建仓复用旧代码，尚未选型或实施，不替换主线施工状态 |
+| [DB-085 统一根的目录与轮转对照](0085-unified-root-metadata-experiment.md) | 已完成并独立验收；[原范围](0085-unified-root-metadata-next.md) | 唯一根替代候选 catalog/ref/locator、真实轮转与恢复再中断成立；完整目录/全量资格成本已计量，产品 Schema/State/Journal 接缝仍待证，不批准迁移 |
+| [DB-085 统一系统根与现发布协议对照](0085-unified-root-comparison.md) | [首个机制实验](0085-unified-root-experiment.md)已验收；产品方案仍为候选 | 固定双值唯一根、固定 EOF、有界 Open+首读、保留 orphan 及真实再中断续写已有证据；保守 writer/恢复仍全扫；目录/单次轮转另见上条，tag 与真实 DG 图接缝未证，不切换公开路径，旧 S0 验收保持 |
+| [DB-085 storage / DG 联合崩溃恢复](0085-joint-crash-recovery-design.md) | 第 0/1、2 片与 S0-A/B/C/D 内部实验已验收；完整恢复产品仍待后续 | [首片记录](0085-audit-implementation.md)：共同校验、库内 Audit 和薄 CLI；[只读 Normal 实验](0085-normal-readonly-experiment.md)消除固定依赖下的无关历史成本，公开默认未切换；[S0-A](0085-s0a-tail-qualification.md)检验真实写序与短尾，[S0-B](0085-s0b-fixed-eof-qualification.md)证明固定 EOF/保留依赖资格并计量成本；[S0-C](0085-s0c-recovery-implementation.md)已证明同锁内真实恢复/再次中断及续写冷开，并计量完整成本；[S0-D](0085-s0d-cli-rescue-implementation.md)已接通同核心薄 CLI rescue，资源关闭/输出中断及完整入口增量已验证；S1/S2 待后续 |
 | [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 上游公开包与 DG 接入已实施 | [接入与验收](0084-durablegraph-tags-implementation.md)；逐包公开 pin、创建/解析固定点、严格打开与真实发布 outcome；非外部可序列化地址 |
 | [DB-083 Repository / Checkpoint 用户故事](0083-repository-checkpoint-api-user-stories.md) | A/B/C 与 DG tag 已实施 | 非泛型工作副本、Event-first、跨类型 State、nearest PreviousEvent、固定历史查询、每分支工作副本/named Fork、同打开地址；跨重开 tag 单列 DB-084 |
 | [DB-082 单图准备材料范围的 ImmutableLeaf 复用](0082-prepared-immutable-leaf-reuse-slice.md) | 候选已实现，默认关闭 | [实现与成本裁决](0082-prepared-immutable-leaf-reuse-implementation.md)；同 State 的只读叶表、身份/交付/依赖门经回归，A/B 未证明稳定完整 Fork 收益；内部开关保留重跑，不扩展公共 options |
