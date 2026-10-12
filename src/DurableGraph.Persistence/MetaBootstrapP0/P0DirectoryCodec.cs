@@ -12,9 +12,12 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 /// <summary>The ordinary Dictionary body, with a real generated inline locator value.</summary>
 internal static class P0DirectoryCodec {
-    private static readonly StateModelSnapshot Employees = P0FixedBindings.CreateSnapshot();
-    internal static DictionaryLayout Layout { get; } = new(new(1, TypeTag.UInt32),
-        Employees.ResolveCurrentValue(typeof(P0HeadLocator)).Slot);
+    internal static DictionaryLayout Layout { get; } = CreateLayout();
+
+    private static DictionaryLayout CreateLayout() {
+        StateModelSnapshot employees = P0FixedBindings.CreateSnapshot();
+        return new(new(1, TypeTag.UInt32), employees.ResolveCurrentValue(typeof(P0HeadLocator)).Slot);
+    }
 
     internal static PreparedBaseBody PrepareBase(IReadOnlyDictionary<uint, FrameAddress> current) =>
         DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.PrepareBase(Freeze(current), Layout);

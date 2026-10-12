@@ -11,18 +11,21 @@ internal static class P0FixedBindings {
         return definitions.Snapshot();
     }
 
-    private static readonly StateModelSnapshot Snapshot = CreateSnapshot();
-    private static readonly ObjectLayout[] Layouts = [
-        ObjectLayout.String,
-        Snapshot.ResolveCurrentModel(typeof(P0CatalogRecord)).CurrentLayout,
-        Snapshot.ResolveCurrentModel(typeof(P0DescriptorRecord)).CurrentLayout,
-        Snapshot.ResolveCurrentModel(typeof(P0FieldRecord)).CurrentLayout,
-        Binding(typeof(List<P0DescriptorRecord>)).CurrentLayout,
-        Binding(typeof(List<P0FieldRecord>)).CurrentLayout,
+    private static readonly Type[] Types = [
+        typeof(string), typeof(P0CatalogRecord), typeof(P0DescriptorRecord), typeof(P0FieldRecord),
+        typeof(List<P0DescriptorRecord>), typeof(List<P0FieldRecord>),
     ];
+    // CLR initialization serializes this finite closure. Only immutable layouts escape;
+    // no shared lazy resolver or context-capturing operation binding survives here.
+    private static readonly ObjectLayout[] Layouts = CreateLayouts();
 
-    private static ObjectBinding Binding(Type type) =>
-        Snapshot.TryGetCurrentObjectBinding(type, out ObjectBinding? binding) ? binding! :
+    private static ObjectLayout[] CreateLayouts() {
+        StateModelSnapshot models = CreateSnapshot();
+        return Types.Select(type => Binding(models, type).CurrentLayout).ToArray();
+    }
+
+    private static ObjectBinding Binding(StateModelSnapshot models, Type type) =>
+        models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding) ? binding! :
         throw new InvalidDataException("Missing fixed employee binding.");
 
     internal static uint Code(ObjectLayout layout) {
@@ -35,11 +38,19 @@ internal static class P0FixedBindings {
     internal static ObjectLayout Layout(uint code) => code > 0 && code <= Layouts.Length
         ? Layouts[code - 1] : throw new InvalidDataException("Unknown fixed employee code.");
 
-    internal static ObjectReaderBinding Reader(ObjectLayout layout) {
-        _ = Code(layout);
-        return Snapshot.ResolveObjectReader(layout);
+    internal static ObjectLayout Layout(Type type) {
+        int index = Array.IndexOf(Types, type);
+        return index >= 0 ? Layouts[index] : throw new InvalidDataException("Unknown fixed employee CLR type.");
     }
 
-    internal static ObjectStateRecord WithPreparation(ObjectStateRecord row) =>
-        Binding(Snapshot.GetDomainType(row.Layout.Type)).Normalize(row);
+    internal static ObjectReaderBinding Reader(ObjectLayout layout, StateModelSnapshot? models = null) {
+        _ = Code(layout);
+        return (models ?? CreateSnapshot()).ResolveObjectReader(layout);
+    }
+
+    internal static ObjectStateRecord WithPreparation(ObjectStateRecord row, StateModelSnapshot? models = null) {
+        _ = Code(row.Layout);
+        models ??= CreateSnapshot();
+        return Binding(models, models.GetDomainType(row.Layout.Type)).Normalize(row);
+    }
 }

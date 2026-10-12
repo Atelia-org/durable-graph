@@ -19,11 +19,12 @@
 
 ## 当前焦点
 
-[DB-087 meta 自举](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订) 的 P0 已实现有限内部持久闭环；公开产品路径未切换，P1/P2 未实施。无旧数据／旧 API 兼容负担，最终产品简单优先。
-[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 以真实生成 Widget/List 及共享环，验证业务 Capture/全图预算与 meta 脏集合共用 records/Removes、对象 payload、Dictionary 目录及唯一发布 owner。descriptor 复用 meta ObjectId；员工 DTO 经现有 SG 和 Schema 工厂恢复，三 uint inline locator 搬运完整地址 bits。
-实际双 ref 发布、关闭全部 FS/VS/DG 资源后重开续写、目录 Base/Delta/复用、sourceGraph/OwnedBatch 拒绝、Event 接受 meta 而保留 State 基线、Discard 与发布失败已有运行见证；准确证据和局限只维护在 DB-087 §10。
-**下一步**：按 DB-087 §6 进入 P1 的公开接线与既有能力门禁，先解决旧 S 不含当前 Upgrade 目标时实验 Restore 提前拒绝的问题，区分 stored/target views 并复用现有恢复核心；补全 fixed builtin/Schema 闭包、缓存及真实包/ProcessCrashOnly 资格后才能公开切换。P2 private 随后收口。
-P0 是同进程的新资源重开与有限 Schema 闭包，不是新进程、完整 Upgrade/private 或性能资格；仍有全量冻结/投影/读取成本，不承诺总 O(k)。SCB1/raw map 仍是公开实现事实，P1 再退出，不做生产双写。未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。下述 DB-086 等既有公开能力基线保持。
+[DB-087 meta 自举](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#11-p1a准确视图与共同恢复接线) 已完成 P0 有限持久闭环与 P1a 共同恢复／Upgrade 接线；公开产品路径未切换，P1b–d 和 P2 尚未实施。无旧数据／旧 API 兼容负担，最终产品简单优先。
+[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 是继续演进的产品原型。P0 已证实 descriptor meta ObjectId、员工 Dictionary、共同 writer、真实双 ref、Event/State 与冷开续写；去向表和后续依赖只维护在 DB-087 §6，限定证据见 §10。
+P1a 删除 P0 重复 Restore，完整 decoded 来源接入原 GraphReader/NormalizedRevision；历史 S 约束只读 lookup，target 新布局可由冻结代码能力闭合，读取不准备／发布 meta。Save 从实际 Capture 收集布局，再准备 catalog；Event/Discard 不消费 State rewrite。固定员工只共享不可变布局，绑定 memo 归操作／builder，owner guard 覆盖跨 session 准备。真实 V1→V2 及独立边界证据见 DB-087 §11。
+**下一步 P1b**：先用含 base/inline/Nullable/容器的真实消费者选定最小员工 records 与 fixed/dynamic 路由，再补完整已有闭包和格式拒绝。随后 P1c 合并业务 producer、公开 Repository/history/cache；P1d 完成初始化、ProcessCrashOnly 与隔离 PackageReference 门禁后公开切换／删除旧路径；P2 再落实显式 private。局部待决选择集中于 DB-087 §7.1，无需重开已定的共享／私有政策。
+续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
+当前证据仍是同进程关闭所有资源后新开和有限 Schema 闭包，未证明完整 Upgrade/private、新进程或性能资格；不承诺总 O(k)。SCB1/raw map 仍是公开实现事实，不做生产双写。未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。下述 DB-086 等既有公开能力基线保持。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 已完成实施和源码/真实包验收。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。

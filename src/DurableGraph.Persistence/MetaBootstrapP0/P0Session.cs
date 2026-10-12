@@ -8,7 +8,6 @@ internal sealed class P0Session {
     private readonly P0Repository _repository;
     private readonly string _branch;
     private readonly P0BusinessWorkspace _business;
-    private bool _preparing;
 
     internal P0Session(P0Repository repository, string branch, StateModelRegistry models) {
         _repository = repository;
@@ -17,8 +16,8 @@ internal sealed class P0Session {
             ? P0CatalogView.Load(repository.Store, schema) : null;
         Catalog = new(EnsureEditingAllowed, catalog);
         _business = repository.GetStateHead(branch) is { } state
-            ? P0BusinessWorkspace.LoadState(repository.Store, state, models, repository.EnsureEditingAllowed)
-            : new(models, repository.EnsureEditingAllowed);
+            ? P0BusinessWorkspace.LoadState(repository.Store, state, models)
+            : new(models);
     }
 
     internal P0CatalogWorkspace Catalog { get; }
@@ -27,26 +26,30 @@ internal sealed class P0Session {
 
     private void EnsureEditingAllowed() {
         _repository.EnsureEditingAllowed();
-        if (_preparing) { throw new InvalidOperationException("The typed driver is preparing a frozen save."); }
     }
 
     internal P0SessionSave Prepare(IDurableObject root, P0GraphKind kind = P0GraphKind.State,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
         EnsureEditingAllowed();
-        if (_repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
-            Catalog.Rebase(P0CatalogView.Load(_repository.Store, latest));
-        }
-        P0PreparedCatalog catalog = Catalog.Prepare();
-        _preparing = true;
+        P0BusinessCapture? capture = null;
+        P0PreparedCatalog? catalog = null;
         P0PreparedBusiness? business = null;
         try {
-            business = _business.Prepare(root, catalog.View, parameters);
-            P0PendingSave pending = _repository.Prepare(_branch, kind, business.Write, catalog.Write);
-            return new(_repository, pending, catalog, business);
+            P0PendingSave pending = _repository.PrepareFrom(_branch, kind, () => {
+                if (_repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
+                    Catalog.RebaseOwned(P0CatalogView.Load(_repository.Store, latest));
+                }
+                capture = _business.CaptureOwned(root);
+                Catalog.RegisterCapturedLayoutsOwned(capture.Candidate.Objects.Select(static row => row.Layout));
+                catalog = Catalog.PrepareOwned();
+                business = _business.PrepareOwned(capture, catalog.View, parameters);
+                return (business.Write, catalog.Write);
+            });
+            return new(_repository, pending, catalog!, business!);
         } catch {
-            business?.Dispose();
+            capture?.Dispose();
             throw;
-        } finally { _preparing = false; }
+        }
     }
 }
 

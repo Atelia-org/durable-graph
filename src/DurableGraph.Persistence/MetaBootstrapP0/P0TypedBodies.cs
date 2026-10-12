@@ -48,6 +48,12 @@ internal sealed class P0DecodedRows {
     internal P0GraphSnapshot Snapshot { get; }
     internal IReadOnlyDictionary<ObjectId, ObjectStateRecord> Rows { get; }
     internal IReadOnlyDictionary<ObjectId, ObjectStorageInfo> Storage { get; }
+
+    internal DecodedRevision ToDecodedRevision() => new(Snapshot.Address, Rows.Values,
+        StringReadTable.FromDecoded(Rows.Values.Where(static row => row.Kind == ObjectStateKind.String)
+            .Select(static row => (row.Id, row.StringContent))),
+        Snapshot.Objects.ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value),
+        objectStorage: Storage);
 }
 
 internal static class P0TypedReader {
@@ -58,6 +64,7 @@ internal static class P0TypedReader {
         Dictionary<ObjectId, ObjectStorageInfo> storage = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Reader)> readers = [];
         Dictionary<FrameAddress, P0CatalogView> origins = [];
+        StateModelSnapshot? employees = models is null ? P0FixedBindings.CreateSnapshot() : null;
         foreach (uint id in snapshot.Objects.Keys) {
             P0ObjectChain chain = store.ReadObjectChain(graph, id);
             P0CatalogView? origin = null;
@@ -72,7 +79,7 @@ internal static class P0TypedReader {
             if (selected is not null && decoded.Layout.Kind != ObjectStateKind.String) {
                 _ = selected.DescriptorId(decoded.Layout); // Complete interpretation, not bare-ID equality.
             }
-            ObjectReaderBinding reader = models is null ? P0FixedBindings.Reader(decoded.Layout)
+            ObjectReaderBinding reader = models is null ? P0FixedBindings.Reader(decoded.Layout, employees)
                 : models.ResolveObjectReader(decoded.Layout);
             ObjectStateRecord row = reader.Read(new(id), new Bodies(chain, decoded.Body));
             rows.Add(row.Id, row);

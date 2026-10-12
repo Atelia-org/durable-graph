@@ -44,6 +44,11 @@ internal sealed class P0CatalogWorkspace {
 
     internal P0PreparedCatalog Prepare() {
         _ensureEditingAllowed();
+        return PrepareOwned();
+    }
+
+    // Only the repository's lexical preparation driver invokes the owned methods.
+    internal P0PreparedCatalog PrepareOwned() {
         Builder builder = new(_accepted);
         foreach (DurableSchema schema in _schemas.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
             ObjectLayout layout = ObjectLayout.ForDurable(schema);
@@ -72,12 +77,57 @@ internal sealed class P0CatalogWorkspace {
 
     internal void Rebase(P0CatalogView accepted) {
         _ensureEditingAllowed();
+        RebaseOwned(accepted);
+    }
+
+    internal void RebaseOwned(P0CatalogView accepted) {
         foreach (DurableSchema dirty in _schemas.Values) {
             if (accepted.Schemas.TryGetValue(new(dirty.Type, dirty.Version), out DurableSchema? prior) && !prior.Equals(dirty)) {
                 throw new SchemaConflictException(prior, dirty);
             }
         }
         _accepted = accepted;
+    }
+
+    internal void RegisterCapturedLayoutsOwned(IEnumerable<ObjectLayout> layouts) {
+        Dictionary<SchemaKey, DurableSchema> schemas = [];
+        HashSet<ObjectLayout> containers = [];
+        foreach (ObjectLayout layout in layouts.Distinct()) {
+            if (layout.Kind == ObjectStateKind.String) { continue; }
+            if (layout.Schema is { } schema) {
+                Validate(schema);
+                SchemaKey key = new(schema.Type, schema.Version);
+                if (schemas.TryGetValue(key, out DurableSchema? sameKey) && !sameKey.Equals(schema)) {
+                    throw new SchemaConflictException(sameKey, schema);
+                }
+                schemas[key] = schema;
+            } else {
+                if (layout.Kind != ObjectStateKind.List || layout.List!.ElementSlot.TypeTag != TypeTag.Int32) {
+                    throw new NotSupportedException("P0 only accepts reference Schemas and List<int> descriptors.");
+                }
+                containers.Add(layout);
+            }
+        }
+        // Validate the complete batch against both authorities before modifying dirty state.
+        foreach ((SchemaKey key, DurableSchema schema) in schemas) {
+            if (_accepted is not null && _accepted.Schemas.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) {
+                throw new SchemaConflictException(prior, schema);
+            }
+            if (_schemas.TryGetValue(key, out DurableSchema? dirty) && !dirty.Equals(schema)) {
+                throw new SchemaConflictException(dirty, schema);
+            }
+        }
+        foreach ((SchemaKey key, DurableSchema schema) in schemas) {
+            if (_accepted is null || !_accepted.Schemas.ContainsKey(key)) { _schemas.TryAdd(key, schema); }
+        }
+        foreach (ObjectLayout layout in containers) {
+            bool accepted = false;
+            if (_accepted is not null) {
+                try { _ = _accepted.DescriptorId(layout); accepted = true; }
+                catch (InvalidDataException) { }
+            }
+            if (!accepted) { _containers.Add(layout); }
+        }
     }
 
     internal void Accept(P0PreparedCatalog candidate, P0GraphSnapshot graph) {
@@ -89,7 +139,7 @@ internal sealed class P0CatalogWorkspace {
     }
 
     private sealed class Builder {
-        private static readonly StateModelSnapshot Models = P0FixedBindings.CreateSnapshot();
+        private readonly StateModelSnapshot _models = P0FixedBindings.CreateSnapshot();
         private readonly P0CatalogView? _source;
         private readonly Dictionary<ObjectId, ObjectStateRecord> _rows;
         private readonly List<ObjectId> _declared;
@@ -165,12 +215,12 @@ internal sealed class P0CatalogWorkspace {
 
         private ObjectId Allocate() => _next <= uint.MaxValue ? new((uint)_next++)
             : throw new InvalidOperationException("The P0 meta ObjectId domain is exhausted.");
-        private static DurableSchema Schema(Type type) => Models.ResolveCurrentModel(type).CurrentSchema;
-        private static ListLayout List(Type type) => Models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding)
+        private DurableSchema Schema(Type type) => _models.ResolveCurrentModel(type).CurrentSchema;
+        private ListLayout List(Type type) => _models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding)
             ? binding!.CurrentLayout.List! : throw new InvalidDataException("Missing fixed List binding.");
 
         private void Add(ObjectStateRecord row) {
-            ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row);
+            ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, _models);
             _rows.Add(row.Id, prepared);
             _new.Add(prepared);
         }
@@ -178,10 +228,10 @@ internal sealed class P0CatalogWorkspace {
         internal P0PreparedCatalog Finish(P0CatalogWorkspace owner) {
             if (_source is not null && _added.Count == 0) { return new(owner, _source, null, 0, []); }
             ObjectStateRecord list = P0FixedBindings.WithPreparation(new ObjectStateRecord(_list,
-                List(typeof(List<P0DescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())));
+                List(typeof(List<P0DescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())), _models);
             _rows[_list] = list;
             StateReferenceValidator validator = new(_rows);
-            foreach (ObjectStateRecord row in _rows.Values) { P0FixedBindings.Reader(row.Layout).VisitReferences(row, validator); }
+            foreach (ObjectStateRecord row in _rows.Values) { P0FixedBindings.Reader(row.Layout, _models).VisitReferences(row, validator); }
             List<ObjectVersionRecord> records = [];
             List<ObjectId> encodedIds = [];
             foreach (ObjectStateRecord row in _new) {

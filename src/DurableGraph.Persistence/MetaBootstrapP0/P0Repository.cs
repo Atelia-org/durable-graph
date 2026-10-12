@@ -17,7 +17,7 @@ internal sealed class P0Repository : IDisposable {
     private PublicationBaseline _baseline;
     private RefRevision _branchRevision, _sharedRevision;
     private P0PendingSave? _pending;
-    private bool _committing, _faulted, _disposed;
+    private bool _preparing, _committing, _faulted, _disposed;
 
     // This reference is the operation's exact baseline; it is never changed in place.
     internal sealed class PublicationBaseline(Dictionary<string, FrameAddress> branches, FrameAddress? sharedRoot) {
@@ -93,12 +93,31 @@ internal sealed class P0Repository : IDisposable {
     internal void EnsureEditingAllowed() {
         EnsureAvailable();
         if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
-        if (_pending is not null || _committing) { throw new InvalidOperationException("A P0 save is already pending."); }
+        if (_pending is not null || _preparing || _committing) { throw new InvalidOperationException("A P0 save is already being prepared or pending."); }
     }
 
     internal P0PendingSave Prepare(string branch, P0GraphKind kind,
         P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog = null) {
         EnsureEditingAllowed();
+        return PrepareCore(branch, kind, business, catalog);
+    }
+
+    internal P0PendingSave PrepareFrom(string branch, P0GraphKind kind,
+        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) {
+        EnsureEditingAllowed();
+        ArgumentNullException.ThrowIfNull(produce);
+        RepositoryRootCodec.ValidateBranchName(branch);
+        if (kind is not P0GraphKind.State and not P0GraphKind.Event) { throw new ArgumentException("Prepare requires a business graph kind.", nameof(kind)); }
+        _preparing = true;
+        try {
+            var prepared = produce();
+            return PrepareCore(branch, kind, prepared.Business, prepared.Catalog);
+        } finally { _preparing = false; }
+    }
+
+    private P0PendingSave PrepareCore(string branch, P0GraphKind kind,
+        P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog) {
+        EnsureAvailable();
         RepositoryRootCodec.ValidateBranchName(branch);
         ArgumentNullException.ThrowIfNull(business);
         if (kind is not P0GraphKind.State and not P0GraphKind.Event) { throw new ArgumentException("Prepare requires a business graph kind.", nameof(kind)); }
@@ -275,6 +294,7 @@ internal sealed class P0Repository : IDisposable {
 
     public void Dispose() {
         if (_disposed) { return; }
+        if (_preparing) { throw new InvalidOperationException("An active P0 preparation cannot be disposed recursively."); }
         _disposed = true;
         _pending?.Finish();
         _pending = null;

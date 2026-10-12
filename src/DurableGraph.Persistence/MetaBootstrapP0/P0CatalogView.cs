@@ -11,7 +11,6 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 /// <summary>DTO-to-factory projection for the P0 finite, explicitly checked descriptor shapes.</summary>
 internal sealed class P0CatalogView {
-    private static readonly StateModelSnapshot FixedModels = P0FixedBindings.CreateSnapshot();
     private readonly Dictionary<ObjectLayout, ObjectId> _ids = [];
     private readonly Dictionary<ObjectId, ObjectLayout> _layouts = [];
     private readonly Dictionary<SchemaKey, DurableSchema> _schemas = [];
@@ -82,7 +81,7 @@ internal sealed class P0CatalogView {
 
     private ObjectStateRecord Require(ObjectId id, Type type) {
         if (id.IsNull || !Rows.TryGetValue(id, out ObjectStateRecord? row) ||
-            !FixedModels.TryGetCurrentObjectBinding(type, out ObjectBinding? binding) || !binding!.CurrentLayout.Equals(row.Layout)) {
+            !P0FixedBindings.Layout(type).Equals(row.Layout)) {
             throw new InvalidDataException("Missing or wrongly typed employee node.");
         }
         return row;

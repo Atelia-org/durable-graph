@@ -199,7 +199,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
 FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0 内部持久实验已实施，公开路线仍 Proposed**；
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0 与 P1a 内部接线已实施，公开切换仍待 P1b–d**；
 真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
 联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
@@ -208,12 +208,14 @@ Schema 员工 DTO 直接构造不可变描述，descriptor 复用 meta ObjectId�
 排除自身、write-last，locator 复用 inline body。图固定准确 catalog/目录根，sourceGraph/OwnedBatch 保留冷读来源；
 Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共享单调与私有完整视图使用同一种机制。
 推荐业务分支目录 ref＋受管 shared ref，新增共享定义或表示布局与业务版本一次共同发布。
-具体合同与分片只在 DB-087 维护；P0 已取得纵向证据，下一片 P1 须在公开切换前验收全部现有相关能力，
+具体合同、P0 代码去向与分步依赖只在 DB-087 §6 维护；P1a 的真实 Upgrade、共同恢复及拒绝边界见其[第 11 节](design-branches/0087-meta-bootstrap-refactoring-route.md#11-p1a准确视图与共同恢复接线)。后续 P1 须在公开切换前验收全部现有相关能力，
 不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
 
-尚需执行证据：完整 builtin/表示目录闭包、公开 stored/current 视图与缓存隔离、真实 Upgrade、
-初始化与 ProcessCrashOnly、私有业务绑定及真实包消费。P0 Restore 在历史 S 不含当前 Upgrade 目标时提前拒绝，
-P1 须先区分 stored 与 target view 并接入现有恢复核心。旧全局 SchemaStore 仍是公开实现事实，尚未放宽同键冲突。
+下一片 P1b 先确定完整员工记录、TypeExpr/容器描述与 fixed/dynamic 路由，再补齐已有类型闭包；
+P1c 接公开保存/history/cache，P1d 完成初始化与 ProcessCrashOnly、真实包门禁，P2 再接 private。
+P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
+完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。
+旧全局 SchemaStore 仍是公开实现事实，尚未放宽同键冲突。
 
 首轮建议用显式新根创建新私有分支验证同键异形，全 live 新 Base、无 external retained heads；
 一套固定代码环境只执行其有匹配能力的布局；这是首片入口范围，不是永久产品禁令。

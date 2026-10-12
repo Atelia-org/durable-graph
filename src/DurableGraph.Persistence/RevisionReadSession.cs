@@ -15,7 +15,6 @@ namespace Atelia.DurableGraph.Persistence;
 internal sealed class RevisionReadSession {
     private readonly Dictionary<(ObjectId Id, FrameAddress Head),
         (ObjectStateRecord Row, ObjectReaderBinding Binding, ObjectStorageInfo Storage)> _objects = [];
-    private readonly HashSet<object> _mutableInstances = new(ReferenceEqualityComparer.Instance);
 
     internal RevisionReadSession(StateRevisionStore store, SchemaStore schemas, StateModelSnapshot models,
         GraphReadStatistics? statistics = null) {
@@ -24,25 +23,20 @@ internal sealed class RevisionReadSession {
         ArgumentNullException.ThrowIfNull(models);
         Store = store;
         Schemas = schemas;
-        Models = models;
-        Statistics = statistics ?? new();
-        MeasureMaterialization = statistics is not null;
+        Context = new(models, statistics);
     }
 
     internal StateRevisionStore Store { get; }
     internal SchemaStore Schemas { get; }
-    internal StateModelSnapshot Models { get; }
-    internal GraphReadStatistics Statistics { get; }
-    internal bool MeasureMaterialization { get; }
+    internal GraphReadContext Context { get; }
+    internal StateModelSnapshot Models => Context.Models;
+    internal GraphReadStatistics Statistics => Context.Statistics;
+    internal bool MeasureMaterialization => Context.MeasureMaterialization;
 
     // Independent restores may share stored DTOs. Trusted reused immutable leaves also
     // enter this guard before allocation: an allocator cannot return one under another ID.
     // Pair's explicit shared closure skips re-registration of the same shared row.
-    internal void RequireUniqueMutableInstance(object instance) {
-        if (!_mutableInstances.Add(instance)) {
-            throw new InvalidDataException("Independent graphs must allocate distinct mutable instances.");
-        }
-    }
+    internal void RequireUniqueMutableInstance(object instance) => Context.RequireUniqueMutableInstance(instance);
 
     internal DecodedRevision Read(FrameAddress revisionAddress) =>
         RevisionDecoder.ReadCore(Store, Schemas, revisionAddress, (id, head) => {

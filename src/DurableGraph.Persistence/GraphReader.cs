@@ -23,8 +23,24 @@ internal static class GraphReader {
         FrameAddress revisionAddress, ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentNullException.ThrowIfNull(session);
         PreparedGraphSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
-        var (instances, _) = Materialize(session, selection);
+        var (instances, _) = Materialize(session.Context, selection);
         return DeliverEditable<T>(selection, instances);
+    }
+
+    // A backend supplies a fully decoded, validated exact source. No legacy Store
+    // provenance is fabricated; the backend separately owns its saving baseline.
+    internal static MaterializedGraph<T> Read<T>(DecodedRevision decoded, ObjectId rootId,
+        GraphReadContext context, bool requireExactRootType = false) where T : class, IDurableObject {
+        PreparedGraphSelection selection = Prepare<T>(decoded, context, rootId, requireExactRootType);
+        var (instances, _) = Materialize(context, selection);
+        return DeliverEditable<T>(selection, instances);
+    }
+
+    internal static T ReadRoot<T>(DecodedRevision decoded, ObjectId rootId,
+        GraphReadContext context, bool requireExactRootType = false) where T : class, IDurableObject {
+        PreparedGraphSelection selection = Prepare<T>(decoded, context, rootId, requireExactRootType);
+        var (instances, _) = Materialize(context, selection);
+        return (T)instances[rootId];
     }
 
     // Repository's certified State path uses the same preparation/materialization core.
@@ -37,7 +53,7 @@ internal static class GraphReader {
         PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
         bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         immutableLeaves = null;
-        var (instances, _) = Materialize(session, selection, reusedLeaves: reusedLeaves);
+        var (instances, _) = Materialize(session.Context, selection, reusedLeaves: reusedLeaves);
         if (collectImmutableLeaves) {
             Dictionary<ObjectId, object>? leaves = null;
             foreach (ObjectId id in selection.Reachable) {
@@ -55,7 +71,7 @@ internal static class GraphReader {
         ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentNullException.ThrowIfNull(session);
         PreparedGraphSelection selection = Prepare<T>(session, revisionAddress, rootId, requireExactRootType);
-        var (instances, _) = Materialize(session, selection);
+        var (instances, _) = Materialize(session.Context, selection);
         return (T)instances[rootId];
     }
 
@@ -66,7 +82,7 @@ internal static class GraphReader {
         ArgumentNullException.ThrowIfNull(session);
         PreparedGraphSelection first = Prepare<IDurableObject>(session, firstRevisionAddress, firstRootId);
         PreparedGraphSelection second = Prepare<IDurableObject>(session, secondRevisionAddress, secondRootId);
-        var (firstInstances, secondInstances) = Materialize(session, first, second);
+        var (firstInstances, secondInstances) = Materialize(session.Context, first, second);
         return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
     }
 
@@ -85,14 +101,14 @@ internal static class GraphReader {
         PreparedGraphSelection first = Prepare<TFirst>(session, firstRevisionAddress, firstRootId);
         PreparedGraphSelection second = Prepare<TSecond>(session, secondRevisionAddress, secondRootId);
         HashSet<ObjectId> shared = FindSharedClosure(first, second);
-        var (firstInstances, secondInstances) = Materialize(session, first, second, shared);
+        var (firstInstances, secondInstances) = Materialize(session.Context, first, second, shared);
         return ((TFirst)firstInstances[firstRootId], (TSecond)secondInstances![secondRootId]);
     }
 
     // A null shared set means independent graphs. Only ReadPair supplies a proven set;
     // even an empty proven set retains Pair's existing cross-graph string identity guard.
     private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) Materialize(
-        RevisionReadSession session, PreparedGraphSelection first, PreparedGraphSelection? second = null,
+        GraphReadContext session, PreparedGraphSelection first, PreparedGraphSelection? second = null,
         HashSet<ObjectId>? shared = null, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         long started = session.MeasureMaterialization ? Stopwatch.GetTimestamp() : 0;
         try {
@@ -105,7 +121,7 @@ internal static class GraphReader {
     }
 
     private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) MaterializeCore(
-        RevisionReadSession session, PreparedGraphSelection first, PreparedGraphSelection? second,
+        GraphReadContext session, PreparedGraphSelection first, PreparedGraphSelection? second,
         HashSet<ObjectId>? shared, IReadOnlyDictionary<ObjectId, object>? reusedLeaves) {
         Dictionary<object, ObjectId> allocations = new(ReferenceEqualityComparer.Instance);
         Dictionary<ObjectId, object> firstInstances = AllocateGraph(session, first, allocations, reusedLeaves: reusedLeaves);
@@ -120,7 +136,7 @@ internal static class GraphReader {
         return (firstInstances, secondInstances);
     }
 
-    private static Dictionary<ObjectId, object> AllocateGraph(RevisionReadSession session,
+    private static Dictionary<ObjectId, object> AllocateGraph(GraphReadContext session,
         PreparedGraphSelection selection, Dictionary<object, ObjectId> allocations,
         Dictionary<ObjectId, object>? firstInstances = null, HashSet<ObjectId>? shared = null,
         IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
@@ -159,7 +175,7 @@ internal static class GraphReader {
         return instances;
     }
 
-    private static void HydrateGraph(RevisionReadSession session, PreparedGraphSelection selection,
+    private static void HydrateGraph(GraphReadContext session, PreparedGraphSelection selection,
         Dictionary<ObjectId, object> instances, ObjectReadTable table, HashSet<ObjectId>? shared = null,
         IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         foreach ((ObjectId id, object instance) in instances) {
@@ -192,7 +208,18 @@ internal static class GraphReader {
         ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
         ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
         session.Statistics.PreparedGraphs++;
-        DecodedRevision decoded = session.Read(revisionAddress);
+        return PrepareCore<T>(session.Read(revisionAddress), session.Context, rootId, requireExactRootType);
+    }
+
+    private static PreparedGraphSelection Prepare<T>(DecodedRevision decoded, GraphReadContext session,
+        ObjectId rootId, bool requireExactRootType = false) where T : class, IDurableObject {
+        ArgumentOutOfRangeException.ThrowIfZero(rootId.Value, nameof(rootId));
+        session.Statistics.PreparedGraphs++;
+        return PrepareCore<T>(decoded, session, rootId, requireExactRootType);
+    }
+
+    private static PreparedGraphSelection PrepareCore<T>(DecodedRevision decoded, GraphReadContext session,
+        ObjectId rootId, bool requireExactRootType) where T : class, IDurableObject {
         // A fresh preparation normalizes each selected graph even when its stored DTOs
         // hit the operation's exact-version cache. Certified State hits bypass this method.
         NormalizedRevision normalized = NormalizedRevision.Create(decoded, session.Models, session.Statistics);

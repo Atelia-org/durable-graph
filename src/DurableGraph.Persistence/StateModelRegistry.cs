@@ -165,12 +165,12 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     }
 
     // Freeze every index before any reader, Upgrade, Capture or Hydrate callback runs.
-    internal StateModelSnapshot Snapshot(SchemaStore? schemas = null) => new(
+    internal StateModelSnapshot Snapshot(SchemaStore? schemas = null, Func<SchemaKey, DurableSchema?>? schemaLookup = null) => new(
         new Dictionary<TypeExpr, StateModelBinding>(_models),
         new Dictionary<Type, StateModelBinding>(_types),
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),
         new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal), schemas,
         new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet, _listElementUpgradeRuleSet,
         _listDeltaAlgorithm, _dictionaryKeyUpgradeRuleSet, _dictionaryValueUpgradeRuleSet,
-        new Dictionary<Type, object>(_dictionaryComparers), _dictionaryComparerResolver);
+        new Dictionary<Type, object>(_dictionaryComparers), _dictionaryComparerResolver, schemaLookup);
 }

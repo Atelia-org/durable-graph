@@ -8,21 +8,19 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 /// <summary>Real Capture producer; the P0 graph writer receives only selected records and Removes.</summary>
 internal sealed class P0BusinessWorkspace {
     private readonly StateModelSnapshot _models;
-    private readonly Action _ensureEditingAllowed;
     private readonly CaptureSession _capture;
     private IReadOnlyDictionary<ObjectId, ObjectStateRecord> _rows;
     private IReadOnlyDictionary<ObjectId, long> _h;
     private IReadOnlySet<ObjectId> _rewrite;
 
-    internal P0BusinessWorkspace(StateModelRegistry models, Action ensureEditingAllowed)
-        : this(models.Snapshot(), ensureEditingAllowed, new(), null, new Dictionary<ObjectId, ObjectStateRecord>(),
+    internal P0BusinessWorkspace(StateModelRegistry models)
+        : this(models.Snapshot(), new(), null, new Dictionary<ObjectId, ObjectStateRecord>(),
             new Dictionary<ObjectId, long>(), new HashSet<ObjectId>(), null) { }
 
-    private P0BusinessWorkspace(StateModelSnapshot models, Action ensureEditingAllowed, CaptureSession capture,
+    private P0BusinessWorkspace(StateModelSnapshot models, CaptureSession capture,
         P0GraphSnapshot? source, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
         IReadOnlyDictionary<ObjectId, long> h, IReadOnlySet<ObjectId> rewrite, IDurableObject? state) {
         _models = models;
-        _ensureEditingAllowed = ensureEditingAllowed;
         _capture = capture;
         Source = source;
         _rows = rows;
@@ -34,15 +32,26 @@ internal sealed class P0BusinessWorkspace {
     internal P0GraphSnapshot? Source { get; private set; }
     internal IDurableObject? State { get; private set; }
 
-    internal P0PreparedBusiness Prepare(IDurableObject root, P0CatalogView catalog,
-        ReadAmplificationBaseBudgetParameters? parameters = null) {
-        _ensureEditingAllowed();
+    // P0Repository.PrepareFrom owns the lexical preparation guard around these two stages.
+    internal P0BusinessCapture CaptureOwned(IDurableObject root) {
         ArgumentNullException.ThrowIfNull(root);
-        ArgumentNullException.ThrowIfNull(catalog);
         CaptureContext context = _capture.BeginCapture(_models);
         try {
             ObjectId rootId = _models.ResolveCurrentModel(root.GetType()).AddRoot(context, root);
             CapturedGraph candidate = context.Seal();
+            return new(context, candidate, root, rootId);
+        } catch {
+            context.Dispose();
+            throw;
+        }
+    }
+
+    internal P0PreparedBusiness PrepareOwned(P0BusinessCapture capture, P0CatalogView catalog,
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
+        ArgumentNullException.ThrowIfNull(capture);
+        ArgumentNullException.ThrowIfNull(catalog);
+        try {
+            CapturedGraph candidate = capture.Candidate;
             IReadOnlyList<PreparedCapturedObject> prepared = _capture.PrepareAgainst(candidate, _rows);
             Dictionary<ObjectId, PreparedCapturedObject> contents = prepared.ToDictionary(static item => item.Current.Id);
             Dictionary<ObjectId, byte[]> bases = [];
@@ -82,9 +91,10 @@ internal sealed class P0BusinessWorkspace {
             }
             Dictionary<ObjectId, ObjectStateRecord> nextRows = candidate.Objects.ToDictionary(static row => row.Id);
             uint[] removed = _rows.Keys.Where(id => !nextRows.ContainsKey(id)).Select(static id => id.Value).ToArray();
-            return new(this, context, candidate, root, new(Source?.Address, rootId, records, removed), nextRows, nextH);
+            return new(this, capture.Context, candidate, capture.Root,
+                new(Source?.Address, capture.RootId, records, removed), nextRows, nextH);
         } catch {
-            context.Dispose();
+            capture.Dispose();
             throw;
         }
     }
@@ -106,76 +116,42 @@ internal sealed class P0BusinessWorkspace {
     private static readonly IReadOnlySet<ObjectId> EmptyRewrite = new HashSet<ObjectId>();
 
     internal static P0BusinessWorkspace LoadState(P0GraphStore store, FrameAddress state,
-        StateModelRegistry models, Action ensureEditingAllowed) {
-        StateModelSnapshot snapshot = models.Snapshot();
-        Restored restored = Restore(store, state, snapshot);
-        if (restored.Decoded.Snapshot.Kind != P0GraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
-        Dictionary<ObjectId, long> h = restored.Decoded.Storage.ToDictionary(static pair => pair.Key, static pair => pair.Value.ReconstructionPayloadBytes);
-        return new(snapshot, ensureEditingAllowed, new(restored.NextId, restored.Bindings), restored.Decoded.Snapshot,
-            restored.Rows, h, restored.Rewrite, restored.Root);
+        StateModelRegistry models) {
+        var source = Decode(store, state, models);
+        if (source.Rows.Snapshot.Kind != P0GraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
+        MaterializedGraph<IDurableObject> restored = GraphReader.Read<IDurableObject>(
+            source.Rows.ToDecodedRevision(), source.Rows.Snapshot.RootId, new(source.Models));
+        Dictionary<ObjectId, long> h = source.Rows.Storage.ToDictionary(static pair => pair.Key, static pair => pair.Value.ReconstructionPayloadBytes);
+        HashSet<ObjectId> rewrite = restored.Baseline.Objects.Values.Where(static row => row.RequiresRewrite)
+            .Select(static row => row.Current.Id).ToHashSet();
+        return new(source.Models, restored.CreateCaptureSession(), source.Rows.Snapshot,
+            restored.Baseline.CurrentDtos, h, rewrite, restored.Root);
     }
 
-    internal static IDurableObject ReadRoot(P0GraphStore store, FrameAddress graph, StateModelRegistry models) =>
-        Restore(store, graph, models.Snapshot()).Root;
+    internal static IDurableObject ReadRoot(P0GraphStore store, FrameAddress graph, StateModelRegistry models) {
+        var source = Decode(store, graph, models);
+        return GraphReader.ReadRoot<IDurableObject>(source.Rows.ToDecodedRevision(), source.Rows.Snapshot.RootId, new(source.Models));
+    }
 
-    private static Restored Restore(P0GraphStore store, FrameAddress graph, StateModelSnapshot models) {
+    private static (P0DecodedRows Rows, StateModelSnapshot Models) Decode(P0GraphStore store,
+        FrameAddress graph, StateModelRegistry models) {
         P0GraphSnapshot metadata = store.ReadGraph(graph);
         if (metadata.Kind == P0GraphKind.Meta || metadata.SchemaRoot is not { } schemaRoot) {
             throw new InvalidDataException("A typed business graph requires its exact meta root.");
         }
         P0CatalogView selected = P0CatalogView.Load(store, schemaRoot);
-        P0DecodedRows decoded = P0TypedReader.Read(store, graph, models, selected);
-        Dictionary<ObjectId, ObjectStateRecord> rows = [];
-        Dictionary<ObjectId, ObjectBinding> bindings = [];
-        HashSet<ObjectId> rewrite = [];
-        foreach (ObjectStateRecord source in decoded.Rows.Values) {
-            Type type = models.GetDomainType(source.Layout.Type);
-            if (!models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding)) { throw new InvalidDataException("Missing current object binding."); }
-            ObjectStateRecord current = binding!.Normalize(source);
-            if (current.Layout.Kind != ObjectStateKind.String) { _ = selected.DescriptorId(current.Layout); }
-            rows.Add(current.Id, current);
-            bindings.Add(current.Id, binding);
-            if (!source.Layout.Equals(current.Layout)) { rewrite.Add(current.Id); }
-        }
-        StateReferenceValidator validator = new(rows);
-        foreach (ObjectStateRecord row in rows.Values) { bindings[row.Id].VisitReferences(row, validator); }
-        Reachable visitor = new();
-        visitor.Add(metadata.RootId);
-        for (int index = 0; index < visitor.Ids.Count; index++) {
-            ObjectId id = visitor.Ids[index];
-            if (!rows.TryGetValue(id, out ObjectStateRecord? row)) { throw new InvalidDataException("Missing root or reachable object."); }
-            bindings[id].VisitReferences(row, visitor);
-        }
-        Dictionary<ObjectId, object> instances = [];
-        foreach (ObjectId id in visitor.Ids) {
-            object instance = bindings[id].Allocate(rows[id]);
-            if (instance.GetType() != bindings[id].DomainType) { throw new InvalidDataException("Allocation must return its exact current type."); }
-            instances.Add(id, instance);
-        }
-        ObjectReadTable table = new(instances);
-        foreach (ObjectId id in visitor.Ids) { bindings[id].Hydrate(instances[id], rows[id], table); }
-        if (instances[metadata.RootId] is not IDurableObject root) { throw new InvalidDataException("The root must be a durable object."); }
-        Dictionary<object, ObjectId> identities = new(ReferenceEqualityComparer.Instance);
-        foreach (var item in instances.Where(item => rows[item.Key].Kind != ObjectStateKind.String)) { identities.Add(item.Value, item.Key); }
-        foreach (ObjectStateRecord row in rows.Values.OrderBy(static row => row.Id)) {
-            if (row.Kind == ObjectStateKind.String) { identities.TryAdd(row.StringContent, row.Id); }
-        }
-        return new(root, decoded, rows, rewrite, identities, (ulong)rows.Keys.Max().Value + 1);
+        StateModelSnapshot snapshot = models.Snapshot(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
+        return (P0TypedReader.Read(store, graph, snapshot, selected), snapshot);
     }
+}
 
-    private sealed record Restored(IDurableObject Root, P0DecodedRows Decoded,
-        Dictionary<ObjectId, ObjectStateRecord> Rows, HashSet<ObjectId> Rewrite,
-        Dictionary<object, ObjectId> Bindings, ulong NextId);
-
-    private sealed class Reachable : IStateReferenceVisitor {
-        private readonly HashSet<ObjectId> _ids = [];
-        internal List<ObjectId> Ids { get; } = [];
-        internal void Add(ObjectId id) { if (!id.IsNull && _ids.Add(id)) { Ids.Add(id); } }
-        public void VisitString(ObjectId id) => Add(id);
-        public void VisitDurable(ObjectId id, string nominalSchemaId) => Add(id);
-        public void VisitDurable(ObjectId id, TypeExpr nominalType) => Add(id);
-        public void VisitObject(ObjectId id, TypeExpr declaredType) => Add(id);
-    }
+internal sealed class P0BusinessCapture(CaptureContext context, CapturedGraph candidate,
+    IDurableObject root, ObjectId rootId) : IDisposable {
+    internal CaptureContext Context { get; } = context;
+    internal CapturedGraph Candidate { get; } = candidate;
+    internal IDurableObject Root { get; } = root;
+    internal ObjectId RootId { get; } = rootId;
+    public void Dispose() => Context.Dispose();
 }
 
 internal sealed class P0PreparedBusiness(P0BusinessWorkspace owner, CaptureContext context,
