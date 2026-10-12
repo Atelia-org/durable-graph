@@ -55,7 +55,7 @@ internal sealed class P0CatalogWorkspace {
         foreach (DurableSchema schema in closure.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
             _ = builder.AddSchema(schema);
         }
-        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array) && !P0FixedBindings.IsBuiltin(value))) {
+        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !P0FixedBindings.IsBuiltin(value))) {
             builder.AddContainer(layout);
         }
         return builder.Finish(this);
@@ -78,8 +78,8 @@ internal sealed class P0CatalogWorkspace {
     private static void ValidateLayout(ObjectLayout layout) {
         if (P0FixedBindings.IsBuiltin(layout)) { return; }
         if (layout.Schema is { } schema) { Validate(schema); return; }
-        if (layout.Kind is not (ObjectStateKind.List or ObjectStateKind.Array)) {
-            throw new NotSupportedException("This slice supports business reference objects, exact Lists and Arrays; other object containers remain deferred.");
+        if (layout.Kind is not (ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary)) {
+            throw new NotSupportedException("This slice supports business reference objects and exact Lists, Arrays and Dictionaries.");
         }
     }
 
@@ -152,13 +152,23 @@ internal sealed class P0CatalogWorkspace {
                 try { _ = _source.DescriptorId(layout); return; }
                 catch (InvalidDataException) { }
             }
-            ObjectId type = layout.Array is { } array ? Type(array.Type) : default;
-            DurableFieldInfo slot = layout.List?.ElementSlot ?? layout.Array!.ElementSlot;
-            uint codec = layout.List?.CodecVersion ?? layout.Array!.CodecVersion;
-            ObjectId element = Field(slot);
+            ObjectId type = layout.Kind == ObjectStateKind.List ? default : Type(layout.Type);
+            ObjectId fields = default, element = default;
+            byte kind;
+            uint codec;
+            if (layout.Dictionary is { } dictionary) {
+                ObjectId[] values = [Field(dictionary.KeySlot), Field(dictionary.ValueSlot)];
+                fields = Allocate();
+                Add(new(fields, List(typeof(List<P0FieldRecord>)), new FrozenListState<ObjectId>(values)));
+                kind = 5;
+                codec = dictionary.CodecVersion;
+            } else {
+                element = Field(layout.List?.ElementSlot ?? layout.Array!.ElementSlot);
+                kind = layout.Array is null ? (byte)2 : (byte)4;
+                codec = layout.List?.CodecVersion ?? layout.Array!.CodecVersion;
+            }
             ObjectId id = Allocate();
-            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(
-                layout.Array is null ? (byte)2 : (byte)4, type, 0, default, element, codec, default)));
+            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(kind, type, 0, fields, element, codec, default)));
             Declare(id);
         }
 

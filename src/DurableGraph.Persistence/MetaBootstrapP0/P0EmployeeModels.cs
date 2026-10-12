@@ -9,7 +9,7 @@ internal sealed partial class P0CatalogRecord : IDurableObject {
 
 [DurableType("P0D", 1)]
 internal sealed partial class P0DescriptorRecord : IDurableObject {
-    [DurableField(1)] internal byte Kind = 0; // 1: reference Schema; 2: List layout; 3: inline Schema; 4: Array layout.
+    [DurableField(1)] internal byte Kind = 0; // 1: reference Schema; 2: List; 3: inline Schema; 4: Array; 5: Dictionary.
     [DurableField(2)] internal P0TypeExprRecord? Type = null;
     [DurableField(3)] internal int Version = 0;
     [DurableField(4)] internal List<P0FieldRecord>? Fields = null;

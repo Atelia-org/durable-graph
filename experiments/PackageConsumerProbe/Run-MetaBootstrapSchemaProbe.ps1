@@ -89,7 +89,7 @@ try {
         Invoke-LoggedDotNet (@('restore', $consumerProject, '--configfile', $nugetConfig, '--disable-parallel', '--packages', $packageCache) + $properties)
         Invoke-LoggedDotNet (@('build', $consumerProject, '-c', 'Release', '--no-restore', '-m:1', '-nr:false') + $properties)
         $schemas = @(Get-ChildItem -LiteralPath $history -Filter '*.dgschema' -File)
-        if ($schemas.Count -ne 3) { throw 'Expected exactly the independently generated Base, Point and Root histories.' }
+        if ($schemas.Count -ne 4) { throw 'Expected exactly the independently generated Base, Point, Key and Root histories.' }
         $accepted = @{}
         foreach ($schema in $schemas) { $accepted[$schema.Name] = (Get-FileHash -LiteralPath $schema.FullName -Algorithm SHA256).Hash }
         Invoke-LoggedDotNet (@('build', $consumerProject, '-c', 'Release', '--no-restore', '-m:1', '-nr:false', '-p:DurableGraphSchemaHistoryMode=Verify') + $properties)
@@ -148,6 +148,7 @@ try {
             (Get-Content -LiteralPath (Join-Path $workRoot ($_ + '.evidence.json')) -Raw | ConvertFrom-Json).TypedBodyAbi
         })
         if (@($typedAbis | Select-Object -Unique).Count -ne 1) { throw 'Consumer processes reported different typed-body ABIs.' }
+        if ($typedAbis[0] -ne 5) { throw 'The Dictionary slice requires typed-body ABI 5.' }
     }
     finally { Pop-Location }
     $packages = @(Get-ChildItem -LiteralPath $PackageSource -Filter '*.nupkg' -File | Sort-Object Name | ForEach-Object {
@@ -158,13 +159,14 @@ try {
     })
     $manifest = Join-Path $storage.PackageSource ('manifest.' + $storage.Version + '.json')
     [ordered]@{
-        SchemaVersion = 2; Scope = 'DB087 P1b internal employee Schema closure, fixed List/Array bodies and dynamic inline Array; no public migration/crash qualification';
+        SchemaVersion = 2; Scope = 'DB087 P1b internal employee Schema closure and List/Array/Dictionary bodies; no public migration/crash qualification';
         DgVersion = $Version; StorageVersion = $storage.Version; StorageRevision = $storage.Revision;
         StorageManifest = $manifest; StorageManifestSha256 = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
         WorkDirectory = $workRoot; PackageSource = $PackageSource; PackageCache = $packageCache;
         Assets = $assetsPath; AssetsSha256 = (Get-FileHash -LiteralPath $assetsPath -Algorithm SHA256).Hash;
         Packages = $packages; Sources = $sources; ProcessIds = $processes; Lanes = @('seed', 'read', 'continue', 'verify');
-        TypedBodyAbi = $typedAbis[0]; BusinessObjects = 7; DeltaObjects = 7; CatalogSchemas = 3; CatalogDescriptors = 5;
+        TypedBodyAbi = $typedAbis[0]; BusinessObjects = 9; DeltaObjects = 9; CatalogSchemas = 4; CatalogDescriptors = 7;
+        DictionaryComparers = @('ScalarDefault', 'CurrentDefault');
         HistoryVerify = 'unchanged'; History = @($schemas | ForEach-Object {
             [ordered]@{ File = $_.Name; Sha256 = $accepted[$_.Name] }
         });

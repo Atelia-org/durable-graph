@@ -13,8 +13,9 @@ using persistence::Atelia.DurableGraph.Persistence;
 using persistence::Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 internal static class Program {
-    private sealed record BusinessIds(uint Root, uint Samples, uint Optional, uint Nested, uint Inner, uint ArrayOptional, uint Points) {
-        internal uint[] All => [Root, Samples, Optional, Nested, Inner, ArrayOptional, Points];
+    private sealed record BusinessIds(uint Root, uint Samples, uint Optional, uint Nested, uint Inner, uint ArrayOptional, uint Points,
+        uint Scalars, uint Entries) {
+        internal uint[] All => [Root, Samples, Optional, Nested, Inner, ArrayOptional, Points, Scalars, Entries];
     }
     private sealed record Witness(string State0, string? State1, string Schema, BusinessIds Ids, Dictionary<uint, string> Heads);
 
@@ -45,9 +46,9 @@ internal static class Program {
         Need(session.Catalog.Accepted is null && session.Catalog.DirtyCount == 0, "Seed must not manually register catalog entries.");
         using var pending = session.Prepare(Host.Create());
         CheckCatalog(pending.Catalog.View);
-        Need(pending.Business.Write.Records.Count == 7 && pending.Business.Write.Records.All(row => row.Kind == ObjectVersionKind.Base), "First save must write Root, four Lists and two Array Base rows.");
+        Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.All(row => row.Kind == ObjectVersionKind.Base), "First save must write Root, four Lists, two Arrays and two Dictionary Base rows.");
         P0SaveResult saved = pending.Commit();
-        Need(saved.Business.Objects.Count == 7, "Inline/base/Nullable must not create rows; the shared inner List must create only one.");
+        Need(saved.Business.Objects.Count == 9, "Inline/base/Nullable must not create rows; the shared inner List must create only one.");
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
         Need(saved.Business.SchemaRoot == schema, "The business graph must pin its actual meta root.");
         BusinessIds ids = CheckRows(repository, saved.Business.Address, pending.Catalog.View, models);
@@ -103,7 +104,7 @@ internal static class Program {
         using var pending = session.Prepare(restored, parameters: new(1_000_000, 1));
         Need(pending.Catalog.Write is null && pending.Catalog.AddedDescriptors == 0 && pending.Catalog.EncodedIds.Count == 0, "Same-shape continuation must reuse the catalog.");
         Need(pending.Business.Write.SourceGraph == s0 && pending.Business.Write.RemovedIds.Count == 0, "Continuation must preserve the exact content source and live set.");
-        Need(pending.Business.Write.Records.Count == 7 && pending.Business.Write.Records.Select(row => row.ObjectId).Order().SequenceEqual(witness.Ids.All.Order()), "Sparse changes must write exactly the seven existing objects.");
+        Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.Select(row => row.ObjectId).Order().SequenceEqual(witness.Ids.All.Order()), "Sparse changes must write exactly the nine existing objects.");
         foreach (ObjectVersionRecord row in pending.Business.Write.Records) {
             Need(row.Kind == ObjectVersionKind.Delta, "Every stored change must be a real Delta.");
             Need(row.PriorAddress == session.StateSource!.Objects[row.ObjectId] && row.PriorAddress == Address(witness.Heads[row.ObjectId]), "Delta priors must match the restored seed heads.");
@@ -125,18 +126,24 @@ internal static class Program {
         var expected = Expected();
         StateModelSnapshot snapshot = models.Snapshot(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
         P0DecodedRows decoded = P0TypedReader.Read(repository.Store, graph, snapshot, meta);
-        Need(decoded.Rows.Count == 7, "Business graph must contain exactly Root, four Lists and two Arrays.");
+        Need(decoded.Rows.Count == 9, "Business graph must contain exactly Root, four Lists, two Arrays and two Dictionaries.");
         uint Find(ObjectLayout layout) => decoded.Rows.Values.Single(row => row.Layout.Equals(layout)).Id.Value;
         BusinessIds ids = new(Find(ObjectLayout.ForDurable(expected.Root)), Find(ObjectLayout.ForList(expected.List)),
             Find(ObjectLayout.ForList(expected.Optional)), Find(ObjectLayout.ForList(expected.Nested)), Find(ObjectLayout.ForList(expected.Inner)),
-            Find(ObjectLayout.ForArray(expected.ArrayOptional)), Find(ObjectLayout.ForArray(expected.Points)));
+            Find(ObjectLayout.ForArray(expected.ArrayOptional)), Find(ObjectLayout.ForArray(expected.Points)),
+            Find(ObjectLayout.ForDictionary(expected.Scalars)), Find(ObjectLayout.ForDictionary(expected.Entries)));
         Need(decoded.Snapshot.RootId.Value == ids.Root && expected.Root.Equals(decoded.Rows[new(ids.Root)].Schema), "Business rows must use the recovered complete Root Schema.");
         Need(((IFrozenArrayState)decoded.Rows[new(ids.ArrayOptional)].Content).Shape.Equals(new ArrayShape(128)) &&
             ((IFrozenArrayState)decoded.Rows[new(ids.Points)].Content).Shape.Equals(new ArrayShape(16, 8)), "Decoded arrays must retain their exact persisted shapes.");
-        foreach (uint id in new[] { ids.Root, ids.Samples, ids.Points }) {
+        Need(((IFrozenDictionaryState)decoded.Rows[new(ids.Scalars)].Content).Count == 128 &&
+            ((IFrozenDictionaryState)decoded.Rows[new(ids.Scalars)].Content).ComparerKind == DictionaryComparerKind.ScalarDefault &&
+            ((IFrozenDictionaryState)decoded.Rows[new(ids.Entries)].Content).Count == 128 &&
+            ((IFrozenDictionaryState)decoded.Rows[new(ids.Entries)].Content).ComparerKind == DictionaryComparerKind.CurrentDefault,
+            "Dictionary contents must retain their exact count and stored comparison policy.");
+        foreach (uint id in new[] { ids.Root, ids.Samples, ids.Points, ids.Entries }) {
             P0ObjectChain chain = repository.Store.ReadObjectChain(graph, id);
             BareValueReader header = new(chain.Entries[0].Record.Body);
-            Need(header.ReadByte() == P0TypedBodyCodec.FormatVersion && header.ReadByte() == 1, "User Root/List/Array must use the current typed ABI's dynamic route.");
+            Need(header.ReadByte() == P0TypedBodyCodec.FormatVersion && header.ReadByte() == 1, "User Root/List/Array/Dictionary must use the current typed ABI's dynamic route.");
             ObjectId descriptor = new(header.ReadVarUInt32());
             Need(descriptor == meta.DescriptorId(decoded.Rows[new(id)].Layout), "Base descriptor ObjectId must belong to the selected exact catalog.");
             var body = P0TypedBodyCodec.Decode(chain.Entries[0].Record.Body, meta);
@@ -144,7 +151,7 @@ internal static class Program {
             bool requiresCatalog = false;
             try { _ = P0TypedBodyCodec.Decode(chain.Entries[0].Record.Body, catalog: null); }
             catch (InvalidDataException) { requiresCatalog = true; }
-            Need(requiresCatalog, "User Root/List/Array must require its source catalog.");
+            Need(requiresCatalog, "User Root/List/Array/Dictionary must require its source catalog.");
         }
         return ids;
     }
@@ -184,6 +191,21 @@ internal static class Program {
             int? value = Host.ExpectedArrayOptional(i, stage);
             Need(array[i].HasValue == value.HasValue && (!value.HasValue || array[i].Value == value.Value), "Fixed Nullable Int32 array decoding mismatch.");
         }
+        P0ObjectChain mappingChain = repository.Store.ReadObjectChain(graph, ids.Scalars);
+        var mappingBody = P0TypedBodyCodec.Decode(mappingChain.Entries[0].Record.Body, catalog: null);
+        Need(mappingBody.Layout.Equals(ObjectLayout.ForDictionary(expected.Scalars)), "Fixed Dictionary header must recover both exact slots and codec.");
+        DictionaryStateReader mappingReader = (DictionaryStateReader)empty.ResolveObjectReader(mappingBody.Layout);
+        ObjectStateRecord mappingRow = mappingReader.Read(new(ids.Scalars), new Bodies(mappingChain, mappingBody.Body));
+        mappingReader.ValidateLookupKeys(mappingRow, static _ => throw new InvalidDataException("Builtin scalar keys must not resolve object rows."));
+        FrozenDictionaryState<int, NullableState<long>> mapping = mappingRow.GetDictionaryState<int, NullableState<long>>();
+        Need(mappingRow.Id == new ObjectId(ids.Scalars) && mapping.Count == 128 && mapping.ComparerKind == DictionaryComparerKind.ScalarDefault,
+            "Fixed Dictionary body must retain its ID, count and comparison policy.");
+        Dictionary<int, long?> actual = new();
+        foreach (var pair in mapping.Entries) { actual.Add(pair.Key, pair.Value.HasValue ? pair.Value.Value : null); }
+        foreach (int key in Host.DictionaryKeys(stage)) {
+            Need(actual.TryGetValue(key, out long? value) && value == Host.ExpectedScalarValue(key, stage), "Fixed Dictionary must decode every complete key and Nullable Int64 value.");
+        }
+        Need(actual.ContainsKey(5) == (stage == 0), "Fixed Dictionary must apply the actual key removal.");
     }
 
     private sealed class Bodies(P0ObjectChain chain, byte[] first) : IStateBodySource {
@@ -193,36 +215,44 @@ internal static class Program {
 
     private static void CheckCatalog(P0CatalogView meta) {
         var expected = Expected();
-        Need(meta.Schemas.Count == 3 && meta.DescriptorIds.Count == 5, "Expected exactly Root, Base, Point, composite List and composite Array descriptors.");
+        Need(meta.Schemas.Count == 4 && meta.DescriptorIds.Count == 7, "Expected Root, Base, Point, Key and the three user-container descriptors.");
         foreach (ObjectLayout builtin in new[] { ObjectLayout.ForList(expected.Optional), ObjectLayout.ForList(expected.Nested),
-            ObjectLayout.ForList(expected.Inner), ObjectLayout.ForArray(expected.ArrayOptional) }) {
+            ObjectLayout.ForList(expected.Inner), ObjectLayout.ForArray(expected.ArrayOptional), ObjectLayout.ForDictionary(expected.Scalars) }) {
             bool rejectedDescriptor = false;
             try { _ = meta.DescriptorId(builtin); }
             catch (InvalidDataException) { rejectedDescriptor = true; }
-            Need(rejectedDescriptor, "Builtin-only List/Array layouts must not acquire catalog descriptors.");
+            Need(rejectedDescriptor, "Builtin-only List/Array/Dictionary layouts must not acquire catalog descriptors.");
         }
-        foreach (DurableSchema schema in new[] { expected.Root, expected.Base, expected.Point }) {
+        foreach (DurableSchema schema in new[] { expected.Root, expected.Base, expected.Point, expected.Key }) {
             Need(meta.Schemas.TryGetValue(new(schema.Type, schema.Version), out DurableSchema? stored) && schema.Equals(stored), "Cold employee projection must preserve the complete Schema.");
         }
         ObjectId rootId = meta.DescriptorId(ObjectLayout.ForDurable(expected.Root));
         ObjectId baseId = meta.DescriptorId(ObjectLayout.ForDurable(expected.Base));
         ObjectId listId = meta.DescriptorId(ObjectLayout.ForList(expected.List));
         ObjectId arrayId = meta.DescriptorId(ObjectLayout.ForArray(expected.Points));
+        ObjectId mappingId = meta.DescriptorId(ObjectLayout.ForDictionary(expected.Entries));
         _ = meta.ResolveLayout(rootId);
         _ = meta.ResolveLayout(baseId);
         _ = meta.ResolveLayout(listId);
         Need(meta.ResolveLayout(arrayId).Equals(ObjectLayout.ForArray(expected.Points)), "Catalog must recover the full rank-two exact inline Array layout.");
-        ObjectId inlineId = meta.DescriptorIds.Single(id => id != rootId && id != baseId && id != listId && id != arrayId);
+        Need(meta.ResolveLayout(mappingId).Equals(ObjectLayout.ForDictionary(expected.Entries)), "Catalog must recover the complete inline key/value Dictionary layout.");
+        ObjectId[] inlineIds = meta.DescriptorIds.Where(id => id != rootId && id != baseId && id != listId && id != arrayId && id != mappingId).ToArray();
+        Need(inlineIds.Length == 2, "Point and Key must have exactly two inline descriptors.");
         // Inline Schemas describe values and must never become object-row layouts.
-        bool rejectedInline = false;
-        try { _ = meta.ResolveLayout(inlineId); }
-        catch (InvalidDataException) { rejectedInline = true; }
-        Need(rejectedInline, "The inline descriptor must reject object-row use.");
+        foreach (ObjectId inlineId in inlineIds) {
+            bool rejectedInline = false;
+            try { _ = meta.ResolveLayout(inlineId); }
+            catch (InvalidDataException) { rejectedInline = true; }
+            Need(rejectedInline, "The inline descriptor must reject object-row use.");
+        }
     }
 
     private static (DurableSchema Root, DurableSchema Base, DurableSchema Point, ListLayout List,
-        ListLayout Optional, ListLayout Nested, ListLayout Inner, ArrayLayout ArrayOptional, ArrayLayout Points) Expected() {
+        ListLayout Optional, ListLayout Nested, ListLayout Inner, ArrayLayout ArrayOptional, ArrayLayout Points,
+        DurableSchema Key, DictionaryLayout Scalars, DictionaryLayout Entries) Expected() {
         DurableSchema point = new("p1.closure.point", 1, SchemaKind.InlineValue,
+            new DurableFieldInfo(1, TypeTag.Int32), DurableFieldInfo.Nullable(2, new(1, TypeTag.Int32)));
+        DurableSchema key = new("p1.closure.key", 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int32), DurableFieldInfo.Nullable(2, new(1, TypeTag.Int32)));
         DurableSchema @base = new("p1.closure.base", 1, [
             new(1, TypeTag.Int32), new(2, TypeTag.Double), new(3, TypeTag.Double), new(4, TypeTag.Double), new(5, TypeTag.Double),
@@ -233,14 +263,18 @@ internal static class Program {
         ListLayout nested = new(DurableFieldInfo.Reference(1, inner.Type));
         ArrayLayout arrayOptional = new(TypeExprKind.VectorArray, DurableFieldInfo.Nullable(1, new(1, TypeTag.Int32)), codecVersion: 1);
         ArrayLayout points = new(TypeExprKind.Rank2Array, DurableFieldInfo.Nullable(1, new(1, TypeTag.InlineValue, inlineSchema: point)), codecVersion: 1);
+        DictionaryLayout scalars = new(new(1, TypeTag.Int32), DurableFieldInfo.Nullable(2, new(1, TypeTag.Int64)), codecVersion: 1);
+        DictionaryLayout entries = new(new(1, TypeTag.InlineValue, inlineSchema: key),
+            DurableFieldInfo.Nullable(2, new(1, TypeTag.InlineValue, inlineSchema: point)), codecVersion: 1);
         DurableSchema root = new("p1.closure.root", 1, [
             new(1, TypeTag.InlineValue, inlineSchema: point),
             DurableFieldInfo.Nullable(2, new(1, TypeTag.InlineValue, inlineSchema: point)),
             DurableFieldInfo.Nullable(3, new(1, TypeTag.Int32)), DurableFieldInfo.Reference(4, list.Type),
             DurableFieldInfo.Reference(5, optional.Type), DurableFieldInfo.Reference(6, nested.Type),
             DurableFieldInfo.Reference(7, arrayOptional.Type), DurableFieldInfo.Reference(8, points.Type),
+            DurableFieldInfo.Reference(9, scalars.Type), DurableFieldInfo.Reference(10, entries.Type),
         ], @base);
-        return (root, @base, point, list, optional, nested, inner, arrayOptional, points);
+        return (root, @base, point, list, optional, nested, inner, arrayOptional, points, key, scalars, entries);
     }
 
     private static object AssemblyEvidence(Assembly assembly) => new {

@@ -29,7 +29,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         FrozenArrayState<NullableState<int>> state = new(new(lengths), values);
         PreparedBaseBody raw = ArrayStateBody<NullableState<int>, NullableStateOps<int, Int32StateOps>>.PrepareBase(state, layout);
         byte[] bytes = P0TypedBodyCodec.Encode(ObjectLayout.ForArray(layout), raw);
-        Assert.Equal((byte)4, bytes[0]);
+        Assert.Equal((byte)5, bytes[0]);
         Assert.Equal((byte)2, bytes[1]);
         var decoded = P0TypedBodyCodec.Decode(bytes, null);
         Assert.Equal(ObjectLayout.ForArray(layout), decoded.Layout);
@@ -125,7 +125,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         Assert.Single(loaded.DescriptorIds);
         Assert.Equal(layout, loaded.ResolveLayout(loaded.DescriptorId(layout)));
         byte[] body = P0TypedBodyCodec.Encode(layout, new PreparedBaseBody([0]), loaded);
-        Assert.Equal((byte)4, body[0]);
+        Assert.Equal((byte)5, body[0]);
         Assert.Equal((byte)1, body[1]);
         Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(body, null));
         Assert.Equal(layout, P0TypedBodyCodec.Decode(body, loaded).Layout);

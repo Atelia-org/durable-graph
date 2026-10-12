@@ -22,13 +22,13 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         PreparedBaseBody raw = ListStateBody<NullableState<long>, NullableStateOps<long, Int64StateOps>>.PrepareBase(new(values), list);
         byte[] encoded = P0TypedBodyCodec.Encode(ObjectLayout.ForList(list), raw);
         BareValueReader header = new(encoded);
-        Assert.Equal((byte)4, header.ReadByte());
+        Assert.Equal((byte)5, header.ReadByte());
         Assert.Equal((byte)2, header.ReadByte());
         Assert.Equal(list.Type, TypeExprWireCodec.Read(ref header));
         Assert.Equal(raw.Body, encoded[header.ConsumedCount..]);
         var decoded = P0TypedBodyCodec.Decode(encoded, null);
         Assert.Equal(ObjectLayout.ForList(list), decoded.Layout);
-        Assert.Equal(2u, decoded.Layout.List!.CodecVersion); // ABI4 fixes the version; no current default fills it in.
+        Assert.Equal(2u, decoded.Layout.List!.CodecVersion); // ABI5 fixes the version; no current default fills it in.
         StateModelSnapshot models = NoSchemas();
         ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout, models).Read(new(71), new SingleBody(decoded.Body));
         Assert.Equal(values, row.GetListState<NullableState<long>>().Elements.ToArray());
@@ -58,11 +58,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body));
         Assert.Empty(row.GetListState<ObjectId>().Elements.ToArray());
         Assert.NotNull(P0FixedBindings.WithPreparation(row, NoSchemas()).Preparation);
-        if (constructor == "dictionary") {
-            Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(Structural(nested), null));
-        } else {
-            Assert.Equal(nested, P0TypedBodyCodec.Decode(Structural(nested), null).Layout.Type);
-        }
+        Assert.Equal(nested, P0TypedBodyCodec.Decode(Structural(nested), null).Layout.Type);
     }
 
     [Theory]
@@ -87,7 +83,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
             catalog.Set(layout);
             P0CatalogView view = catalog.Prepare().View;
             byte[] dynamic = P0TypedBodyCodec.Encode(layout, new PreparedBaseBody([0]), view);
-            Assert.Equal((byte)4, dynamic[0]);
+            Assert.Equal((byte)5, dynamic[0]);
             Assert.Equal((byte)1, dynamic[1]);
             Assert.Equal(layout, P0TypedBodyCodec.Decode(dynamic, view).Layout);
             Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(dynamic, null));
@@ -183,7 +179,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         Array.Fill(type, (byte)TypeExprKind.List, 0, depth - 1);
         type[depth - 1] = (byte)TypeExprKind.Builtin;
         type[depth] = (byte)TypeTag.Int32;
-        byte[] bytes = [4, 2, .. type, 0];
+        byte[] bytes = [5, 2, .. type, 0];
         if (!valid) { Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(bytes, null)); return; }
         var decoded = P0TypedBodyCodec.Decode(bytes, null);
         TypeExpr expected = TypeExpr.Builtin(TypeTag.Int32);
@@ -206,13 +202,13 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         byte[] good = Structural(TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32)));
         Assert.Equal(ObjectStateKind.List, P0TypedBodyCodec.Decode(good, null).Layout.Kind);
         byte[] bad = corruption switch {
-            "open" => [4, 2, (byte)TypeExprKind.List, (byte)TypeExprKind.Parameter, 0],
-            "nullableString" => [4, 2, (byte)TypeExprKind.List, (byte)TypeExprKind.Nullable, (byte)TypeExprKind.Builtin, (byte)TypeTag.String, 0],
-            "truncated" => [4, 2, (byte)TypeExprKind.List],
-            "unknownBuiltin" => [4, 2, (byte)TypeExprKind.List, (byte)TypeExprKind.Builtin, 255, 0],
-            "unknownRoute" => [4, 255, 0],
-            "removedListCode" => [4, 0, 9, 0],
-            _ => [3, .. good.AsSpan(1).ToArray()],
+            "open" => [5, 2, (byte)TypeExprKind.List, (byte)TypeExprKind.Parameter, 0],
+            "nullableString" => [5, 2, (byte)TypeExprKind.List, (byte)TypeExprKind.Nullable, (byte)TypeExprKind.Builtin, (byte)TypeTag.String, 0],
+            "truncated" => [5, 2, (byte)TypeExprKind.List],
+            "unknownBuiltin" => [5, 2, (byte)TypeExprKind.List, (byte)TypeExprKind.Builtin, 255, 0],
+            "unknownRoute" => [5, 255, 0],
+            "removedListCode" => [5, 0, 9, 0],
+            _ => [4, .. good.AsSpan(1).ToArray()],
         };
         if (corruption == "truncated") {
             Assert.Throws<EndOfStreamException>(() => P0TypedBodyCodec.Decode(bad, null));
@@ -227,7 +223,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
     private static byte[] Structural(TypeExpr type) {
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
-        writer.WriteByte(4);
+        writer.WriteByte(5);
         writer.WriteByte(2);
         TypeExprWireCodec.Write(ref writer, type);
         writer.WriteByte(0); // An empty List body; root-type rejection occurs before body interpretation.

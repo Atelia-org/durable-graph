@@ -19,11 +19,11 @@
 
 ## 当前焦点
 
-[DB-087 meta 自举第四片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#15-p1b-第四片array-结构与动态路由) 已完成 Array 路由的源码、完整回归及隔离包验收。D variant4 复用完整 Array TypeExpr／Element／显式 codec1，typed ABI4 指定 List2／Array1、拒旧3；员工 Schema/DTO V1 与字段不变，shape 在 body。真实 SG `int?[]`／`Point?[,]` cold、两个 sparse Delta、独立 raw 边界和四进程组合包证据只记录于 §15；包不代验源码 NoChange S2。
-[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型。此前 P0 共同 writer／双 ref、P1a 准确历史 S／共同恢复／Upgrade、P1b 员工／闭合泛型／enum／结构 List 的限定证据保留于 §10–14；不由历史包代验 ABI4。长期 dirty 只留显式 Set 意图，自动 Capture 依赖每次 Prepare 推导；Event/Discard 不安装 State 基线，完整 source／selected／target view 资格与操作内 memo 保持。
+[DB-087 meta 自举第五片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#16-p1b-第五片dictionary-双槽与-source-lookup) 已完成 Dictionary 双槽和 source lookup 的源码、完整回归及隔离包验收。D5 Type＋有序 Key1/Value2 Fields，Version0、Element/Base null、codec1；typed ABI5 明定 Dictionary1/List2/Array1、拒旧4，员工 DTO V1 不变。所有 stored Dictionary 在完整引用检查后／Normalize 前验证 lookup；真实 SG cold／Delta、独立阶段反例、四进程组合包及数字只记录于 §16。
+[内部入口](DurableGraph.Persistence/MetaBootstrapP0/README.md) 继续作为产品原型。P0、P1a 与 P1b 前四个限定片的证据保留于 §10–15，不由历史包代验 ABI5。长期 dirty 只留显式 Set 意图，自动 Capture 依赖每次 Prepare 推导；Event/Discard 不安装 State 基线，完整 source／selected／target view 资格与操作内 memo 保持。
 结构容器全树无 Named，用户 nominal／enum 仍动态；扩大 body 能力不扩大 meta 员工白名单。低层纯结构图与带 durable Root 的业务工作区分别验收，不外推所有图零 S 读取。公开 Repository／SCB1／raw map、完整 P1b、P1c–d 和 P2 未切换；无旧数据／旧 API 兼容负担，最终产品简单优先。
-Array 片之后按 [DB-087 §6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 接 Dictionary 双槽／comparer／canonical-key Delta，先裁决 descriptor 与根 codec 来源；完整数组组合、SG 泛型与历史 Upgrade 矩阵及接缝状态集中于 §6.3／7.1。P1c 收公开保存/history/cache 与物理复用，P1d 完成初始化／ProcessCrashOnly／公开包门禁后切换，P2 接显式 private。
-已提交机制基线：P0 `12f3eb2`、P1a `2740bf1`、P1b 员工首片 `a6f1797`、泛型／enum `e5e7ac1`、结构 List `93f5120`；资格见 §10–14。续工核对实际 HEAD／工作树，从本文、§6.3 与 §15 重建任务。
+Dictionary 之后按 [DB-087 §6.3](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#63-p1b-首片续工入口) 的有限矩阵收尾：先真实 history 的 Array/List/Dictionary 值规则 Upgrade，再多参／泛型继承 current，跨程序集自然分片；最低观察、未覆盖与 P1b 停止条件集中于 §6.3／7.1，不新增无穷组合。P1c 收公开保存/history/cache 与物理复用，P1d 完成初始化／ProcessCrashOnly／公开包门禁后切换，P2 接显式 private。
+已提交基线：P0 `12f3eb2`、P1a `2740bf1`、P1b 员工 `a6f1797`、泛型／enum `e5e7ac1`、List `93f5120`、Array `9f6454e`；证据见 §10–15。续工核对实际 HEAD／工作树，从本文、§6.3 与 §16 重建任务。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 当前限定能力不代表完整 Upgrade/private、进程崩溃或性能资格，不承诺总 O(k)。未实施导航见[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。下述 DB-086 等既有公开基线保持。
 本片最后 package-mode pack 已更新根 assets；下一轮 source 验证先按[依赖指南](../docs/storage-dependency.md)显式 source restore，再用 `--no-restore` build/test，不混用 package 输出。

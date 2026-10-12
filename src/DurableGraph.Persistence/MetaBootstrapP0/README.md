@@ -54,9 +54,16 @@ P1b 第四片 Array 路由已完成源码与隔离包验收，问题、选定设
 [DB-087 §15](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#15-p1b-第四片array-结构与动态路由)。
 D variant4 复用完整 Array TypeExpr、Element、显式 codec1，Version0／Fields和Base空；
 重建完整 ArrayLayout 后核 Type，并独立核 exact inline 依赖，shape 只在 body。
-typed ABI4 固定 List2／Array1、拒旧3，Schema/DTO仍V1且不增字段；meta 有限白名单不扩大。
+第四片当时 typed ABI4 固定 List2／Array1、拒旧3，Schema/DTO仍V1且不增字段；meta 有限白名单不扩大。
 真实 SG `int?[]`／`Point?[,]` cold与稀疏 Delta、raw 边界、完整源码回归和四进程组合包均已验；NoChange S2只来自源码 SG。
-随后按 §6.3 接 Dictionary 与完整剩余矩阵，公开 P1c/d 和 P2 不随本片切换。
+该片保留历史范围，公开 P1c/d 和 P2 不随其切换。
+
+P1b 第五片 Dictionary 双槽与 source lookup 已完成源码与隔离包验收，问题和证据见
+[DB-087 §16](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#16-p1b-第五片dictionary-双槽与-source-lookup)。
+D5复用 Type＋有序 Key1/Value2 Fields，Version0、Element/Base空、codec1；ABI5明确 Dictionary1/List2/Array1、拒旧4，DTO仍V1。
+完整引用检查后、Normalize 前验证所有 stored Dictionary lookup；current lookup 不代 source，Root Nullable key 仍由 body/binding KeyPolicy准入。
+真实 SG builtin／inline双槽 Dictionary cold、Remove/Patch/Add Delta、独立阶段反例、完整源码回归和四进程组合包均已验，模型范围分开记录。
+后继按 §6.3 的有限历史／泛型／跨程序集矩阵收尾，P1c/d/P2保持后续边界。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

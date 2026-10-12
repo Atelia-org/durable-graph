@@ -164,6 +164,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static void AssertBootstrapArrayVectorWithoutCatalog(P0Repository repository, P0GraphSnapshot graph,
         uint id, ArrayLayout expected) {
         P0ChainEntry first = Assert.Single(repository.Store.ReadObjectChain(graph.Address, id).Entries);
+        Assert.Equal((byte)5, first.Record.Body[0]); // ABI5 retains Array codec 1; this is a fresh current-format witness.
         var decoded = P0TypedBodyCodec.Decode(first.Record.Body, catalog: null);
         Assert.Equal(ObjectLayout.ForArray(expected), decoded.Layout);
         StateModelSnapshot empty = new StateModelRegistry().Snapshot();

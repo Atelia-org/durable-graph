@@ -13,6 +13,10 @@ internal static class P0CatalogSemantics {
         foreach (ObjectLayout layout in layouts) {
             if (layout.Schema is { } schema) { Add(schema, 1); }
             else if ((layout.List?.ElementSlot.ValueSchema ?? layout.Array?.ElementSlot.ValueSchema) is { } inline) { Add(inline, 1); }
+            else if (layout.Dictionary is { } dictionary) {
+                if (dictionary.KeySlot.ValueSchema is { } key) { Add(key, 1); }
+                if (dictionary.ValueSlot.ValueSchema is { } value) { Add(value, 1); }
+            }
         }
         return schemas;
 
@@ -45,6 +49,10 @@ internal static class P0CatalogSemantics {
         foreach (ObjectLayout layout in layouts) {
             if (layout.List is { } list) { declarations.ValidateSlot(list.ElementSlot); }
             else if (layout.Array is { } array) { declarations.ValidateSlot(array.ElementSlot); }
+            else if (layout.Dictionary is { } dictionary) {
+                declarations.ValidateSlot(dictionary.KeySlot);
+                declarations.ValidateSlot(dictionary.ValueSlot);
+            }
         }
     }
 }

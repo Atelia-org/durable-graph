@@ -62,6 +62,20 @@ internal sealed class P0CatalogView {
                     if (layout.Type != type) { throw new InvalidDataException("An Array descriptor's type and exact element slot disagree."); }
                 }
                 if (P0FixedBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
+            } else if (node.Segment0Field1 == 5) {
+                if (node.Segment0Field3 != 0 || !node.Segment0Field5.IsNull || !node.Segment0Field7.IsNull) {
+                    throw new InvalidDataException("Wrong Dictionary descriptor variant.");
+                }
+                TypeExpr type = Expression(node.Segment0Field2, 1);
+                if (!type.IsDictionary) { throw new InvalidDataException("A Dictionary descriptor requires a closed Dictionary type."); }
+                ObjectId[] fields = Require(node.Segment0Field4, typeof(List<P0FieldRecord>)).GetListState<ObjectId>().Elements.ToArray();
+                if (fields.Length != 2) { throw new InvalidDataException("A Dictionary descriptor requires exactly two ordered slots."); }
+                DurableFieldInfo key = Field(fields[0], 0, 1), value = Field(fields[1], 0, 1);
+                // The factory canonicalizes field IDs, so authenticate their roles before construction.
+                if (key.FieldId != 1 || value.FieldId != 2) { throw new InvalidDataException("Dictionary slots must be ordered key one then value two."); }
+                layout = Factory(() => ObjectLayout.ForDictionary(new(key, value, node.Segment0Field6)));
+                if (layout.Type != type) { throw new InvalidDataException("A Dictionary descriptor's type and exact slots disagree."); }
+                if (P0FixedBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
             } else { throw new InvalidDataException("Unknown descriptor variant."); }
             if (layout is not null) {
                 if (!_ids.TryAdd(layout, id)) { throw new InvalidDataException("Duplicate complete object descriptor layout."); }

@@ -157,7 +157,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint id, ObjectLayout expected) {
         P0ObjectChain chain = repository.Store.ReadObjectChain(graph.Address, id);
         P0ChainEntry first = Assert.Single(chain.Entries);
-        Assert.Equal((byte)4, first.Record.Body[0]); // ABI4 retains structural Lists; this is a fresh current-format witness.
+        Assert.Equal((byte)5, first.Record.Body[0]); // ABI5 retains structural Lists; this is a fresh current-format witness.
         var decoded = P0TypedBodyCodec.Decode(first.Record.Body, catalog: null);
         Assert.Equal(expected, decoded.Layout); // Resolve the structural layout without hardcoding its route or construction bytes.
         StateModelSnapshot empty = new StateModelRegistry().Snapshot();
