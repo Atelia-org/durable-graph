@@ -199,7 +199,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
 FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a 与 P1b 前六个限定片已完成，完整 P1b 与公开切换仍待后续**；
+[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0、P1a 与 P1b 前七个限定片已完成，完整 P1b 与公开切换仍待后续**；
 真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
 联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
@@ -214,7 +214,7 @@ Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共�
 P1b 首片选择 Descriptor/Field/TypeExpr 强类型员工、typed／fixed-table ABI v2 和 fixed 精确 `List<int>`；内部员工 Schema/DTO 仍 V1，
 以含 base/inline/Nullable/`List<Point?>` 的真实 SG 消费者验证 Schema 冷读和动态用户槽增量；
 首片完整源码回归和隔离包四进程证据见 DB-087 [第 12 节](design-branches/0087-meta-bootstrap-refactoring-route.md#12-p1b-首片schema-员工闭包与固定-list-路由)；闭合泛型／enum current V1 的源码资格见[第 13 节](design-branches/0087-meta-bootstrap-refactoring-route.md#13-p1b-第二片闭合泛型与-enum-执行资格)，不外推完整泛型 Upgrade 或包资格。
-List／Array／Dictionary 的 ABI3–5 和限定包证据保留 §14–16，当前生产基线 ABI5／DTO V1未改。第六片[真实 history 容器 Upgrade](design-branches/0087-meta-bootstrap-refactoring-route.md#17-p1b-第六片真实-history-容器-upgrade) 仅增加测试，已验 Key/Point/Grade 升版、Point局部Grade byte→ushort依赖、readonly 零写、Discard/E1/E2 保留 rewrite 和容器 Base→Delta；独立缺 Point／target冲突／canonical collision 另记，无新包或完整回归资格。下一片按 §6.3 接多参／泛型继承 current、有限 provider history 端点，再跨程序集和必要合同差异；
+容器路由和 history 的范围保留 §14–17，当前生产基线 ABI5／DTO V1未改。第七片[多参／泛型继承与 provider history](design-branches/0087-meta-bootstrap-refactoring-route.md#18-p1b-第七片多参泛型继承与-provider-history) 已完成五用例源码资格：current 的两个 closed Derived／Base／Pair 图，与 accepted-history 的开放 Box<int>／必要闭合 Box<Point> 及三拒绝分别记证，无新增生产／完整回归／包资格。下一自然片只收跨程序集＋必要合同差异，达到有限 P1b 停点后进入 P1c；范围仍集中 §6.3，不扩大矩阵；
 P1c 接公开保存/history/cache，P1d 完成初始化与 ProcessCrashOnly、真实包门禁，P2 再接 private。
 P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
 完整公开 Upgrade 与缓存资格尚待后续，不能以有限模型见证替代；具体待决接缝见 DB-087 §7.1。

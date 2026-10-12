@@ -70,7 +70,14 @@ P1b 第六片已完成真实 history 容器值规则的限定源码资格，问�
 Root＋Array/List/Dictionary 共四对象，Key/Point/Grade V1→V2，Grade byte→ushort 经 Point 局部依赖；Root同Schema、Self/alias保持。
 沿现有 ABI5／DTO V1，readonly零写、Discard/E1/E2保留State rewrite、容器Base→Delta和独立11边界均已通过。
 本片仅新增测试、生产/wire/history与SG ABI/交付未变，build＋新12用例记证；未跑完整回归或包，无新增包资格，最后assets为source。
-后继多参／泛型继承current和有限provider history端点、跨程序集按§6.3矩阵；完整P1b/P1c/d/P2未完成。
+该片保留历史范围，完整P1b/P1c/d/P2未完成。
+
+P1b 第七片已完成真实 SG 多参／泛型继承 current 与有限 provider history 的源码资格，问题与证据见
+[DB-087 §18](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#18-p1b-第七片多参泛型继承与-provider-history)。
+Root＋两 closed Derived 的 private Base<U>／Pair<T> 和有序实参冷读／Delta，与另一个 Box<int>／Box<Point> accepted-history 端点分开验收。
+开放／必要闭合 provider 的输出、缺失／错误 source DTO 三个cold拒绝，与current的warm wronglayout分层记证，不外推所有泛型仲裁。
+本片仅新增测试，build零警告错／五新用例通过，生产/ABI/wire/SG/history交付未变，未跑完整回归或新包，assets source。
+下一自然片跨程序集＋必要合同差异收有限P1b停点，再P1c，公开P1c/d/P2未切换。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

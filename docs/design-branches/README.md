@@ -24,7 +24,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | P0/P1a/P1b 前六个限定片已验；公开切换/P2 未实施 | 历史证据保留 §10–16；[§17](0087-meta-bootstrap-refactoring-route.md#17-p1b-第六片真实-history-容器-upgrade) 仅新增测试，验真实 SG/history 的容器／Nullable／Grade规则、State rewrite和新12用例，未授新包／完整回归资格。有限后继矩阵与接缝见 §6–7；多参／泛型继承/provider history、跨程序集、P1c/d、P2待完成 |
+| [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | P0/P1a/P1b 前七个限定片已验；公开切换/P2未实施 | 历史证据保留 §10–17；[§18](0087-meta-bootstrap-refactoring-route.md#18-p1b-第七片多参泛型继承与-provider-history) 仅新增测试，两个真实 SG 故事＋三history拒绝共五用例通过，warm layout和cold资格分层，无新完整回归／包资格。跨程序集＋必要差异和P1c/d/P2待完成，接缝见§6–7 |
 | [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | Implemented / R0–R5 已验收 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；[实施与验收](0086-new-storage-implementation.md)含源码、真实包及进程停止证据 |
 | [DB-085 新 RBF3 / Binary / FrameStore / VersionStore 迁移](0085-rbf3-framestore-versionstore-migration-feasibility.md) | 可行性调研及四项 API 复核完成；历史前置范围由DB-086取代 | [初次验证](0085-storage-migration-probe-evidence.md)与[上游 API 复核](0085-upstream-api-refinement-review.md)；不再要求严格打开/全库确认等价或旧数据迁移 |
 | [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 旧栈接入已实施；底座由 DB-086 替换 | [接入与验收](0084-durablegraph-tags-implementation.md)保留旧公开 pin、严格打开与发布证据；当前 tag 由 VS 承担，非外部可序列化地址 |
