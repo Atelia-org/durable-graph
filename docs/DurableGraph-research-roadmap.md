@@ -201,7 +201,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 剩余依赖顺序：
 
-1. [P2 后继](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：显式 Shared／私有新根与准确冷续写已接线；后续选择完整 private view 转 shared 的具体入口，比较全部定义／布局、同形复用／新项共同加入／异形拒绝，并验证 retained 兼容／必要重编码。当前普通 Shared 保存只允许完整目录已被接纳，不暗作 promotion。容器 layout 替换与两套同键异形独立编译环境的真实包资格仍待闭合。选择不持久化；无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes。
+1. [P2 后继](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：显式 Shared／私有新根与准确冷续写、单次完整目录 ToShared 已接线。后续先补依赖异形 inline 的完整容器消费者与显式 layout 替换入口，验证未触及的深层依赖及新根重编码边界，再闭合两套同键异形独立编译环境的真实包资格。普通 Shared 保存只允许完整目录已被接纳，完整导入另须显式 ToShared；后者不改变默认归属与执行环境。选择不持久化；无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes。
 2. [条件延期](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)：原分支重建、按操作选模型、业务 head 不动的 Schema-only 和读取／保存成本优化，只由真实消费者或测量触发；不预先承诺总 O(k)。
 
 十九个有效旧包 lanes 暂停当前 G 并原地保资产，按需迁移不作公开门禁前置，门禁通过也不自动恢复未迁 lane 资格。DB-081 热 seed 禁用、DB-082 默认关。

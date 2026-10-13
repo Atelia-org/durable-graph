@@ -23,11 +23,13 @@
 
 默认两根／meta 自举、准确 S、共同 owner、history／Pair／State 槽与 owned 物理缓存保持。Synthetic DTO 可作读取机制输入，但不授保存来源；物理命中不豁免每图完整 refs／lookup／来源检查，不新建 typed DTO cache。checkout 执行 S／models 稳定，保存可推进 selected S；Event/Discard 不推进 State 或消费 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
-[P2 显式写入归属](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)已接线：Open 的可空 SchemaWriteMode 仍仅 Shared，普通 checkout 省略选择时业务保存／编辑在 Capture 前拒绝。CreatePrivateBranch／CheckoutPrivate 另显式授该 checkout 私有保存，不持久化模式；IsReadOnly 只描述底座。原 rotation/cache 位置、共同 owner／CU、来源与故障 guard 保持。
+[P2 显式写入归属](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)已接线：Open 的可空 SchemaWriteMode 仍仅 Shared，普通 checkout 省略选择时默认业务保存／编辑在 Capture 前拒绝。CreatePrivateBranch／CheckoutPrivate 另显式授该 checkout 私有保存，不持久化模式；IsReadOnly 只描述底座。原 rotation/cache 位置、共同 owner／CU、来源与故障 guard 保持。
 
 私有首片已接完整 frozen shared fork＋显式 Schema 替换、新根 all-live Base、准确冷签出与增量续写。meta 来源取 Head.S、业务恢复／比较取最近 State.S；private 不 rebase latest shared，只发布 ref1并保持 shared ref2。普通 Shared 保存先核完整 view 已被 shared 同形接受，阻止不可达定义丢失。验收与当前有限范围集中在 DB-087 §9。
 
-下一片完整 private→shared 操作，先合并全部声明／布局，再裁 retained 兼容／必要重编码；具体入口与最小纵向故事待接。容器 layout 替换和独立异形代码环境真实包资格尚未闭合，不称完整 P2 停点。十九个有效旧包 lanes 继续暂停，不因代表门禁自动恢复资格。
+单次完整目录 `CommitStateToShared`／`CommitEventToShared` 已接线：实际 Head.S 的全部声明／布局与手工意图合入最新 shared，同形复用／新项加入／同 key 异形拒绝，仍经唯一 pending／CU。显式入口可用于无 Open 写模式的 RW checkout，不改变默认归属或执行环境；Discard／冲突保原 accepted／dirty。相容 retained Base 按 origin S 解编号并保 heads/H，真实 Upgrade rewrite 仍强制 Base；Event 不推进 State。限定验收集中在 DB-087 §9。
+
+下一片先补依赖异形 inline 的完整容器新根消费者，确定显式 layout 替换入口和未触及依赖的最小闭包规则；随后闭合两套同键异形独立代码环境的准确包资格。容器替换与该包资格仍未实施，不称完整 P2 停点。十九个有效旧包 lanes 继续暂停，不因代表门禁自动恢复资格。
 
 DB-087 只维护当前契约与续工；原逐片过程冻结于[压缩前完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，来源 `ecc8068`。P1 包限定证据见[消费者记录](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)；私有源码分片与验证见 [DB-087 §9](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)，准确公开包证据只在[消费者记录](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)维护。显式 Prepare/Discard 保源码资格；不把同形私有包故事外推同键异形包、crash 或性能。续工核实际 HEAD／工作树，并按[依赖指南](../docs/storage-dependency.md)选择准确模式。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
@@ -141,7 +143,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／私有新根与冷续写 | [DB-087 P1 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立；P2 完整转 shared、retained 改形及容器 layout 替换尚未实施，限定资格见其 §9 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／私有新根与冷续写、单次完整目录 ToShared | [DB-087 P1 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立；P2 容器 layout 替换与双异形独立编译包资格未闭合，限定资格见其 §9 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 

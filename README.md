@@ -153,7 +153,7 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
-普通工作副本保存还须显式选择 `schemaWriteMode: SchemaWriteMode.Shared`；RW Open 省略时可以读取、签出及发布 ref/tag，普通工作副本不能提交业务图。
+普通工作副本的默认保存还须显式选择 `schemaWriteMode: SchemaWriteMode.Shared`；RW Open 省略时可以读取、签出及发布 ref/tag，默认业务提交提前拒绝。下述 ToShared 入口另为单次提交显式选择归属。
 `IsReadOnly == false` 只表示底座可写，不表示已选择 Schema 写入归属。选择仅属于本次打开，冷开后需再次明确选择。
 读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，普通 checkout 无 State 取创建时 shared；提交不原地换已有模型／preparation。普通模型与 Family 按需闭合，同环境可复用，不保证任意跨视图回调等价。
 历史 Normalize/Upgrade 必须由固定输入与环境决定结果且不修改输入；Capture 必须提供 canonical current DTO。
@@ -161,7 +161,9 @@ exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍�
 不能让调用次数决定业务结果；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化放在恢复交付之后。
 
 开发阶段可用 `CreatePrivateBranch(name, initialState, schemaOverrides)` 创建新分支和新根：冻结完整 shared 目录，显式替换给出的完整 Schema 定义，首次业务对象全部写 Base，保留未触及声明。该入口直接为返回的工作副本选择私有保存；再次打开后用 `CheckoutPrivate(name)` 继续，私有保存只推进分支目录，不改 shared 根。私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S。代码环境须与目标定义匹配；不使用新模型物化旧异形业务图。
-已有私有定义仍不可改写；替换项若使未触及的 base／inline／容器精确依赖不一致，创建直接拒绝。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝；完整推广入口尚未提供。具体范围与验收见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。
+已有私有定义仍不可改写；替换项若使未触及的 base／inline／容器精确依赖不一致，创建直接拒绝。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
+
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。容器改形替换入口仍待实施；具体范围与验收见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。
 
 ### 3. 独立浏览与分支
 

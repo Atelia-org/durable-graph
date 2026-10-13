@@ -17,8 +17,9 @@ namespace Atelia.DurableGraph;
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Successful closures may be reused within an exact Schema environment; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
-/// Shared business saves require an explicit Schema write mode selected when opening. Private branch entry
-/// points select their own write destination. Without either choice, business capture is rejected.
+/// Default Shared business saves require an explicit Schema write mode selected when opening. Private branch entry
+/// points select their own write destination, and ToShared commits select shared for one operation.
+/// Without an explicit choice, business capture is rejected.
 /// </remarks>
 public sealed partial class Repository : IDisposable {
     private readonly GraphResources _resources;
@@ -35,8 +36,8 @@ public sealed partial class Repository : IDisposable {
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
     public bool IsReadOnly => _resources.IsReadOnly;
-    /// <summary>The Open-level Schema write destination, or null when ordinary checkouts cannot save business graphs.</summary>
-    /// <remarks>Immutable for this open. A missing mode does not make backing resources read-only: reads, checkout restoration, ref-only operations and explicit private branch entry points remain available.</remarks>
+    /// <summary>The Open-level Schema write destination, or null when default business commits are not admitted.</summary>
+    /// <remarks>Immutable for this open. A missing mode does not make backing resources read-only: reads, checkout restoration, ref-only operations, explicit private branch entry points and ToShared commits remain available.</remarks>
     public SchemaWriteMode? SchemaWriteMode { get; }
     /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
     /// <remarks>
@@ -419,6 +420,10 @@ public sealed partial class Repository : IDisposable {
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
         CommitMetaBootstrap(session, domainEvent, nextState, parameters);
+
+    internal CheckpointAddress CommitToShared(BranchCheckout session, IDurableObject? domainEvent,
+        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
+        CommitMetaBootstrap(session, domainEvent, nextState, parameters, toShared: true);
 
     private CheckpointAddress HeadCore(string branchName) => MetaBootstrapHeadCore(branchName);
 

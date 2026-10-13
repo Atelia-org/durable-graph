@@ -103,6 +103,52 @@ internal sealed class P0CatalogWorkspace {
         return builder.Finish(this);
     }
 
+    // Promotion imports the complete declared Head.S, including definitions that no
+    // captured business object reaches. The owner derives and freezes both roots;
+    // neither an external view nor this workspace's possibly older accepted view
+    // can substitute for loading those actual graphs.
+    internal void ValidateToSharedOwned(P0GraphStore store, FrameAddress? headSchemaRoot,
+        FrameAddress? latestSharedRoot) {
+        _ = CollectToSharedOwned(store, headSchemaRoot, latestSharedRoot, []);
+    }
+
+    internal P0PreparedCatalog PrepareToSharedOwned(P0GraphStore store, FrameAddress? headSchemaRoot,
+        FrameAddress? latestSharedRoot, IEnumerable<ObjectLayout> capturedLayouts) {
+        var (target, schemas, layouts) = CollectToSharedOwned(store, headSchemaRoot, latestSharedRoot, capturedLayouts);
+        // Only the latest shared graph supplies meta priors, retained rows and the
+        // destination ID domain. Source descriptor numbers are never copied.
+        Builder builder = new(target, null);
+        foreach (DurableSchema schema in schemas.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
+            _ = builder.AddSchema(schema);
+        }
+        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !P0FixedBindings.IsBuiltin(value))) {
+            builder.AddContainer(layout);
+        }
+        // Keep the original workspace unchanged until the common pending save is
+        // confirmed; discard preserves its accepted view and explicit dirty roots.
+        return builder.Finish(this);
+    }
+
+    private (P0CatalogView? Target, IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas, ObjectLayout[] Layouts)
+        CollectToSharedOwned(P0GraphStore store, FrameAddress? headSchemaRoot, FrameAddress? latestSharedRoot,
+            IEnumerable<ObjectLayout> capturedLayouts) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(capturedLayouts);
+        P0CatalogView? source = headSchemaRoot is { } head ? P0CatalogView.Load(store, head) : null;
+        P0CatalogView? target = latestSharedRoot is { } shared ? P0CatalogView.Load(store, shared) : null;
+        ObjectLayout[] layouts = (source?.ObjectLayouts ?? []).Concat(_containers).Concat(capturedLayouts).Distinct().ToArray();
+        foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
+        IReadOnlyDictionary<SchemaKey, DurableSchema> schemas = P0CatalogSemantics.Collect(
+            (source?.Schemas.Values ?? []).Concat(_schemas.Values), layouts);
+        // Collect checks complete same-key equality across both views and every
+        // exact base/inline/container dependency, before any IDs or bodies exist.
+        ObjectLayout[] mergedLayouts = (target?.ObjectLayouts ?? []).Concat(layouts).Distinct().ToArray();
+        IReadOnlyDictionary<SchemaKey, DurableSchema> merged = P0CatalogSemantics.Collect(
+            (target?.Schemas.Values ?? []).Concat(schemas.Values), mergedLayouts);
+        P0CatalogSemantics.ValidateDeclarations(merged.Values, mergedLayouts);
+        return (target, schemas, layouts);
+    }
+
     private void CheckAccepted(SchemaKey key, DurableSchema schema) {
         IReadOnlyDictionary<SchemaKey, DurableSchema>? accepted = _privateBootstrap ? _bootstrapSchemas : _accepted?.Schemas;
         if (accepted is not null && accepted.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) {

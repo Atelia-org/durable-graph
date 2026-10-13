@@ -200,19 +200,20 @@ public sealed partial class Repository {
     }
 
     private CheckpointAddress CommitMetaBootstrap(BranchCheckout checkout, IDurableObject? domainEvent,
-        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireSchemaWriter(checkout);
+        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters, bool toShared = false) {
+        if (toShared) { RequireWriter(); }
+        else { RequireSchemaWriter(checkout); }
         _busy = true;
         try {
             RequireMetaBootstrapCheckout(checkout);
             return PublishMetaBootstrap(checkout, domainEvent ?? nextState!,
-                domainEvent is null ? P0GraphKind.State : P0GraphKind.Event, parameters ?? DefaultPolicy);
+                domainEvent is null ? P0GraphKind.State : P0GraphKind.Event, parameters ?? DefaultPolicy, toShared);
         } finally { EndOperation(); }
     }
 
     private CheckpointAddress PublishMetaBootstrap(BranchCheckout checkout, IDurableObject root, P0GraphKind kind,
-        ReadAmplificationBaseBudgetParameters parameters) {
-        using P0SessionSave pending = checkout.SplitSession.Prepare(root, kind, parameters);
+        ReadAmplificationBaseBudgetParameters parameters, bool toShared = false) {
+        using P0SessionSave pending = checkout.SplitSession.Prepare(root, kind, parameters, toShared);
         Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
         CheckpointAddress? head = null;
         pending.Commit(graph => head = Issue(ReadHistoryCore(graph.Address)));
@@ -221,13 +222,14 @@ public sealed partial class Repository {
     }
 
     internal void PrepareAndDiscardMetaBootstrap(BranchCheckout checkout, IDurableObject root, P0GraphKind kind,
-        ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireSchemaWriter(checkout);
+        ReadAmplificationBaseBudgetParameters? parameters, bool toShared = false) {
+        if (toShared) { RequireWriter(); }
+        else { RequireSchemaWriter(checkout); }
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);
             RequireMetaBootstrapCheckout(checkout);
-            using P0SessionSave pending = checkout.SplitSession.Prepare(root, kind, parameters ?? DefaultPolicy);
+            using P0SessionSave pending = checkout.SplitSession.Prepare(root, kind, parameters ?? DefaultPolicy, toShared);
             Checkpoint?.Invoke(CommitCheckpoint.AfterPrepare);
         } finally { EndOperation(); }
     }

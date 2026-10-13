@@ -1,6 +1,6 @@
 # 公开 accepted-history 包消费者
 
-此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入与同形私有新根／冷续写。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以完整私有目录中的不可达声明验证写入归属。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
+此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入、同形私有新根／冷续写与完整目录 Event ToShared。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以私有不可达声明验证完整推广与新 Shared owner 增量保存。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
 
 项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至2个且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
 
@@ -19,12 +19,12 @@
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
 | `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
-| `continue`／V2 | 无配置普通保存拒且全文件零变，显式 Shared 冷单 List Delta；再建立完整同形 private view＋不可达新声明／新根全 Base，ordinary Shared 保存拒，显式私有冷单 Delta、真实 prior/H、ref2 revision／payload 保持 |
-| `verify`／V2 | fresh readonly 核旧 tag、main／fork／private／Event、准确各图 S与原／新 meta descriptor；旧完成帧保持，完整文件集合／SHA不变 |
+| `continue`／V2 | 无配置默认保存拒且全文件零变，显式 Shared 冷单 List Delta；同形 private 新根／不可达声明、私有冷 Delta及 ref2 保持；随后无配置 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／private Base origin |
+| `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、旧 private State、推广 Event／Shared State、准确各图 S与完整 meta 声明；全部完成帧保持，完整文件集合／SHA不变 |
 
 每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
-公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；同形私有包不授同键异形独立编译、private promotion、进程 Kill、断电、全类型组合、内部 baseline H或性能资格。其他19个暂停 lane不因本例通过恢复资格。
+公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、ToShared 后的跨 PID writer 续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19个暂停 lane不因本例通过恢复资格。
 
 <a id="2026-10-13-限定验收"></a>
 ## 2026-10-13 限定验收
@@ -94,4 +94,29 @@
 - witness SHA256：`A181A4E1FD546E11C9D566BDD03C91AED4D0A6FF855D80B25FB182E9799172F8`
 - 主线独立审计 SHA256：`E9EF9C27219913F72B64500A56F1586A83CD308297E5AF2F0C2395FFACD6B46C`
 
-此包仅验证同形完整 fork＋新增不可达声明；两套 same-key/version 异形独立编译的真实包、private→shared promotion、容器 layout 替换、显式 Discard 的包见证、crash／断电与性能均待各自资格，不从源码或本例外推。
+该次包仅验证同形完整 fork＋新增不可达声明，未授 private→shared promotion；后继见下节，不回改历史资格。两套 same-key/version 异形独立编译、容器 layout 替换、显式 Discard、crash／断电与性能仍待各自资格。
+
+<a id="p2-promotion-package-evidence"></a>
+## P2 完整目录 Event ToShared 与 Shared 冷续写的准确包验收
+
+本片保原五进程与全部 Shared／private 断言，在 `continue` 私有单 Delta／ref2 不变段之后调用公开 `CommitEventToShared(root)`。完整 Widget V1／V2 和不可达声明一起进入 shared；业务无变化时复用目录／heads/H、无 OwnedBatch，Event 不换 State 地址／ID／实例。全关后在同一 PID 用新 Shared owner 普通签出，继续实际单 List Delta；最终独立 `verify` PID 全程只读。此处冷续写是 fresh owner，未声称另一个 writer PID。
+
+主线实跑、独立核工件及只读反审，有限 PASS；runner 将五个 promotion／cold continue 布尔及 `PromotedSharedColdValues` 列为必需判据。复用现有限 WireInspector，不扩格式白名单、产品诊断 API 或实验协议。
+
+| 证据 | 结果 |
+|---|---|
+| DG G／Storage S | `0.0.0-public-history-e2e.20261013045456.6924`／`0.1.3-dev.20261011.g974fd47`；准确 S 来源 `974fd47abb73792f9d350af87ab91a53848952eb`，未远程发布 |
+| 受控生产来源 | HEAD `66416728935286083822b95c94dd1b073b600303`＋五份生产修改；189 项输入冻结 hash 与本片接线相同。`ProductionInputsMatchHead=false`／`IncludesUncommittedProductionSource=true`，**不是 clean 6641672 包**；消费者／runner 修改单列 |
+| 实际包与工具 | 十包 ZIP→cache→stage→五 PID 50 份实际加载 DLL 核对；普通非 friend／两版 assets 无 ProjectReference；四份编译输入、四次实际 Rebuild／包 SG／Build Publish及Verify，history1→2且旧V1保持 |
+| 共同推广 | shared 接受三份完整声明及不可达 descriptor26；实际 ref1／ref2 revision 和 payload 均推进。推广 Event pin 新 shared S，目录／全部 heads/H 与先前 private State 相同；旧 private S 保含义 |
+| Shared 冷增量 | 新 owner 从推广 Event 选最近旧 private State；仅 List 写 Delta，准确 Parent／source／prior、IDs 保持，实际 H227→251（24B）；Widget head/H9保持，各 Base 的原 batch／private origin S 不变 |
+| 关闭与只读 | 物理观察在相应 owners 全关后；两 readonly lane 各8文件完整集合／SHA不变，独立 Verify 核私有旧值202、推广 Event202、Shared 新值203；旧帧、9个 private 帧、新增4个推广帧及3个续写帧保持 |
+| 其他资格 | 准确 source mode 构建零警告／错误，2736项通过；10个新增聚焦案例另通过。同一十包 feed 的 README 原文／named Fork／冷重开／最终 Verify 通过，不能代替异形包资格 |
+
+工件 `W:\TEMP\dg-p2-promotion-20261013-045454-537e7c43` 保唯一 feed／source sidecar、`result.json`／witness／evidence／assets／history／编译日志。仓库忽略目录 `.artifacts/db087-p2-promotion-20261013/` 的 `package-run-path.txt` 导航，`accept-package.py`／`independent-acceptance.json` 保存主线核验；`readme-package.log` 导航原文示例，工作目录为 `experiments/PackageConsumerProbe/obj/readme-20261013045922-25824-52a2b01e`。
+
+- result SHA256：`14DBAD5193544354B6B80FAB1C8013900B18B52E953A76FA227A281905118EAA`
+- witness SHA256：`5C1E131CD09F8029BDCCDE6C0950022474C8586A5912A39045A8F7E4DC50A5AE`
+- 主线独立审计 SHA256：`28866995201E03C2421D82EAD19969E4C5F059651BB51400CAAD668EAC720243`
+
+此包只授同形完整目录 Event ToShared＋新 owner Shared Delta；不同数字 descriptor／真实 Upgrade rewrite／layout-only CU 的新增资格在源码测试，不混称包证据。两套异形独立编译环境、容器改形替换、显式 Discard、内部 Unknown 窗口、进程 Kill／断电及性能未新增资格。
