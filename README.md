@@ -164,7 +164,7 @@ exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍�
 私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S，不借 latest shared 补缺。已有私有定义不可改写；同 key 内容不同的未定稿版本应在不同 baseline fork 试验，需要继承已接受草稿的数据再改型则递增版本。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
 开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow.md)。
 
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 普通包故事须以新 G 另验，旧包结果不能代替本次源码的资格。
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
 
 ### 3. 独立浏览与分支
 

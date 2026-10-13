@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-[DB-088 第一轮](../docs/design-branches/0088-development-schema-workflow.md#7-第一轮结果与第二轮入口)已完成：新根 overrides／container replacements 与专用状态退出，六组测试迁移及两普通消费者接线完成，源码构建／回归通过。当前下一片只做第二轮新 G 的 Development、Split、PrivateContainer 普通包门禁及必要尾修；新消费者尚无实际包资格，旧 G 不代替。当前 assets／DLL 为准确 source mode，pack 前须显式切 package mode。无设计阻塞；默认 Publish、主／次版本、V3/V4 迁移压缩及自动重放不扩入本片。
+[DB-088 实施与限定验收](../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)已完成：新根 overrides／container replacements 与专用状态退出，必要源码回归已迁移；新 G 的 Development、Split、PrivateContainer 三条普通包故事通过。当前无必经施工或设计阻塞，不需要备用第三轮。下一产品增量由真实消费者反馈选择；默认 Publish、主／次版本、V3/V4 迁移压缩与自动重放仍见[路线图 §4.2](../docs/DurableGraph-research-roadmap.md#42-开发-schema-与正式定稿)。
 
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
@@ -28,11 +28,11 @@ Open 省略归属时普通业务写入提前拒；CheckoutPrivate或单次 ToSha
 
 准确 origin／selected／execution S、共同 source／pending／fault owner、history／Pair／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
-删除前普通包资格保留在 [Split](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)与[PrivateContainer](../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md) 的历史段；当前源与 runner 已改为普通 baseline fork／正常升版，不能将旧 pair／同版异形包资格套到新故事。第二轮以新 G 重验 Development、Split、PrivateContainer；源码资格与包资格分开维护在 DB-088。
+当前普通 baseline fork／正常升版包资格来自 G `0.0.0-db088-e2e.20261013141051.30576`、生产提交 `ca5598b` 与准确 S 六包，三个故事共 17 个独立 PID；源码精确身份／source／H 与有限包观察分开维护在 DB-088。删除前包资格仍保留在各消费者历史段，不改写为当前故事。
 
-DB-087 原有限停点已完成；DB-088 第二轮新 G 验收仍是当前必经片，不受旧停点的循环任务终止规则影响。其他增量与条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。19个有效旧包 lanes 继续暂停，按需迁移不作本片前置。内部名称／wire 未冻结，P0 核心是当前产品路径。
+DB-087 原有限停点与 DB-088 后继删减均已完成；其他增量与条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。19个有效旧包 lanes 继续暂停，按需迁移。内部名称／wire 未冻结，P0 核心是当前产品路径。
 
-DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；DB-088 本次 root build/test 后 assets／DLL 已为 source mode，旧开发实验曾在仓外 stage 消费旧准确 G；本次未新 pack。后续切 package mode 须按[依赖指南](../docs/storage-dependency.md)重新 restore；不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
+DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；DB-088 第二轮已新 pack，root solution build/test 后 assets／DLL 为准确 S package mode，隔离 cache 位于其仓外任务工件。未来 source 联调须按[依赖指南](../docs/storage-dependency.md)显式重新 restore，不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。

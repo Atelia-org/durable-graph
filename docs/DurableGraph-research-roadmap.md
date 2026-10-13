@@ -205,9 +205,9 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 4.2 开发 Schema 与正式定稿
 
-用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。当前实验与删减前置见 [DB-088](design-branches/0088-development-schema-workflow.md)，不重复本案完成停点。
+用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。开发故事、特例退出与源码／新包限定验收均已完成，见 [DB-088 §7](design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)，不重复本案完成停点。
 
-DB-088 第一轮退出同 key 新根 bootstrap、Schema overrides 与完整 container replacements，保普通 private／ToShared／fault 规律；后续门禁为新 G 的 Development、Split、PrivateContainer 三条普通包故事，旧 G 不能替代删除后资格。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
+DB-088 已退出同 key 新根 bootstrap、Schema overrides 与完整 container replacements，保普通 private／ToShared／fault 规律；删除后的 Development、Split、PrivateContainer 三条新 G 普通包故事已通过，无剩余必经门禁。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
 
 ## 5. 后续切片验收素材
 

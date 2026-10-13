@@ -223,9 +223,13 @@ internal static class Program {
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(state);
         FrameAddress schema = RequiredSchema(graph);
-        Need(actual.SharedSchemaRoot == schema && schema != before.SharedSchemaRoot &&
+        Need(actual.BranchHeads["private"] == state && actual.SharedSchemaRoot == schema && schema != before.SharedSchemaRoot &&
             graph.RootId == witness.ARootId && graph.Heads.Keys.Order().SequenceEqual(before.Graph(Address(witness.BState!)).Heads.Keys.Order()),
             "Compatible ToShared must publish the complete directory and preserve user identities.");
+        Need(graph.Parent == Address(witness.BState!) && graph.SourceGraph == Address(witness.BState!),
+            "Promotion must preserve the exact cold private business source and parent.");
+        Need(!actual.Refs[1].Revision.Equals(before.Refs[1].Revision) && !actual.Refs[2].Revision.Equals(before.Refs[2].Revision),
+            "Promotion must publish both the business branch and shared Schema refs.");
         CheckCatalog(actual, schema, wide: true, keeper: true);
         CheckFrames(actual, witness.CompleteFrames);
         Need(actual.BranchHeads["main"] == before.BranchHeads["main"] && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],

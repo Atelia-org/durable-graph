@@ -22,7 +22,7 @@ SchemaStore／SCB1、RepresentationId、旧 Base header、WorldWorkspace／Loade
 用户明确无旧数据／API 兼容负担，简单性按最终产品衡量；不提供旧格式 reader、生产双写或迁移壳。这不授权修改、删除或修复已完成持久帧。完整帧 append-only、必要来源校验、正常底座恢复、串行 owner 与故障关闭仍成立。
 自举不预设更快或代码更少，固定引导规则也不必消除自身。
 
-删除前基线已通过[公开 accepted-history 包门禁](#public-package-gate)与[P2 双异形独立环境包门禁](#private-plan)，原约定范围已完成。DB-088 的特例退出属于后继需求，删除后的新 G 包资格仍须独立验收；其他增量只按[条件延期](#open-questions)中的真实消费者或测量选择。
+删除前基线已通过[公开 accepted-history 包门禁](#public-package-gate)与[P2 双异形独立环境包门禁](#private-plan)，原约定范围已完成。DB-088 的特例退出属于后继需求，删除后的源码回归与三条新 G 普通包故事已独立通过，见 [DB-088 §7](0088-development-schema-workflow.md#7-实施结果与限定验收)；其他增量只按[条件延期](#open-questions)中的真实消费者或测量选择。
 
 2026-10-13 完工后用户校准了开发故事：从固定 shared baseline 建立多个保身份的 V2 草稿 fork，继承旧草稿改形则升版本，最终只接纳一个定稿版本。开发流程与同 key 新根特例退出集中在 [DB-088](0088-development-schema-workflow.md)；本文既有验收保删除前资格，当前 private 路径为 baseline ref-only 分支与 `CheckoutPrivate`，不再提供新根 overrides／container replacements。
 十九个有效旧 PackageConsumer lanes 暂停当前 G，源资产与历史证据原地保留；选择性迁移不是该门禁前置，也不自动恢复未迁 lane 的资格。
@@ -258,7 +258,7 @@ P1 在上述有限范围内已完成；不将代表故事扩展为全部类型�
 <a id="private-plan"></a>
 ## 9. P2：显式归属、完整私有视图与有限停点
 
-DB-087 原约定的有限 P2 已在删除前完成。用户后续校准的开发故事与第一轮删减由 [DB-088](0088-development-schema-workflow.md#6-下一轮实施合同与停点) 承接：当前保真实 baseline、身份与升版路径，退出同 key 新根替换。旧门禁证明原版本；当前普通包须以新 G 重验，不把迁移源码或历史包计数当作新包结果。
+DB-087 原约定的有限 P2 已在删除前完成。用户后续校准的开发故事、特例删减与新包验收由 [DB-088 §7](0088-development-schema-workflow.md#7-实施结果与限定验收) 承接：当前保真实 baseline、身份与升版路径，退出同 key 新根替换。旧门禁证明原版本；删除后的当前三条普通包故事已以新 G 通过，迁移源码与历史包计数仍不能替代新包结果。
 
 ### 显式 shared 写准入
 
@@ -303,7 +303,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="open-questions"></a>
 ## 10. 局部未决与条件延期
 
-本案约定的有限 P1／P2 范围已完成，无剩余必经门禁或产品政策阻塞。完整目录 ToShared、retained／rewrite 分责保留；完整容器替换与双异形独立包只保删除前资格，DB-088 承接特例退出后的回归／新包门禁；后续由真实业务接入或测量选择增量，不再机械排本案施工轮次。wire／内部 API 未冻结不要求预先做命名、程序集或后端统一。
+本案约定的有限 P1／P2 范围已完成，无剩余必经门禁或产品政策阻塞。完整目录 ToShared、retained／rewrite 分责保留；完整容器替换与双异形独立包只保删除前资格，DB-088 已完成特例退出后的回归／三条新包门禁；后续由真实业务接入或测量选择增量，不再机械排本案施工轮次。wire／内部 API 未冻结不要求预先做命名、程序集或后端统一。
 
 以下只在真实消费者或测量触发时重访：
 

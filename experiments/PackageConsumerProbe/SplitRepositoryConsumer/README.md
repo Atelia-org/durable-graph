@@ -2,9 +2,17 @@
 
 此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入、真实 baseline 的私有 fork／冷续写与完整目录 Event ToShared。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以私有不可达声明验证完整推广与新 Shared owner 增量保存。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
 
-**DB-088 第一轮迁移状态：**当前源已改走真实 baseline 与生成的 `PrivateUnused` Event；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。当前修改尚未通过新 G 普通包运行；此资格属于第二轮，下面历史工件保留其原生产来源与新根故事，不授当前修改资格。
+**DB-088 当前资格：**真实 baseline 与生成的 `PrivateUnused` Event 已通过删除特例后的新 G 普通包门禁；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。下面旧工件保留其原生产来源与新根故事；新资格见下一节。
 
 项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
+
+## DB-088 第二轮：删除特例后的新 G 验收
+
+G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50ac6968f1b12988043`；准确 Storage S `0.1.3-dev.20261011.g974fd47`／`974fd47abb73792f9d350af87ab91a53848952eb`。受控新 pack 的 189 项生产输入、实际包／DLL与 SG／Build inputs 核验通过；两 stage 四次成功 Publish／Verify Rebuild，五个独立 PID全部 exit0，history 1→3且原 V1保持。
+
+实测 baseline private 的 Event Head.S 与较旧 State.S、全关冷 List Delta、普通 Widget ToShared 的完整不可达 Event 声明、两 ref 发布、旧完整帧及 readonly 保持。List H `202→226→250→274`，每 Delta24；Widget1／3仍H9且head不变。Shared冷 writer 是 continue PID内全关后新owner，verify为独立readonly PID；没有进程故障或性能资格。
+
+工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/split`；`result.json` SHA256 `D789A980C17EBFB53C2F1F908A7688A4EBF04E3E65B6B1C21FE528E1BC7CB85E`。工件根保共同 feed／source sidecar与 `independent-acceptance.json`，完整停点见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)。
 
 由 [Run-SplitRepositoryProbe.ps1](../Run-SplitRepositoryProbe.ps1) 完成全部阶段。读取[依赖指南](../../../docs/storage-dependency.md)后，在仓根传入经过 Prepare 核验的完整六包 feed：
 
@@ -29,7 +37,7 @@
 公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、ToShared 后的跨 PID writer 续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19个暂停 lane不因本例通过恢复资格。
 
 <a id="2026-10-13-限定验收"></a>
-## 2026-10-13 限定验收
+## 历史资格：2026-10-13 DB-087 P1 限定验收
 
 主线程实跑并独立核 source／包／加载／history 工件，另有只读独立复核，有限 PASS；[DB-087 P1 停点](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，当片后继 P2 尚未实施，只改消费者／runner／observer和文档，生产代码／API不变；后继准入与同形私有见证另见[写准入](#p2-admission-package-evidence)／[私有新根](#p2-private-package-evidence)，不回改本节历史资格。
 
@@ -53,9 +61,9 @@
 - 主线程独立审计 SHA256：`93817BBA4207D6960F1417DD6F689C1CCA27EA431FBED5C4BC0250662D0E65AD`
 
 <a id="p2-admission-package-evidence"></a>
-## P2 写准入首片的公开包复验
+## 历史资格：P2 写准入首片的公开包复验
 
-当前消费者所有实际 writer Open 显式选择 `SchemaWriteMode.Shared`，读取工厂保原义。`continue` 在冷 Delta 前用普通公开 API 完成一个无配置反例：准确读取与 Checkout 成功，State／Event 保存各以 InvalidOperationException 拒绝，Head／State 地址／ID／实例和 owner 健康不变；全部资源关闭后整个文件集合／SHA不变，然后显式 Shared 继续原来的单 List Delta。
+当片消费者所有实际 writer Open 显式选择 `SchemaWriteMode.Shared`，读取工厂保原义。`continue` 在冷 Delta 前用普通公开 API 完成一个无配置反例：准确读取与 Checkout 成功，State／Event 保存各以 InvalidOperationException 拒绝，Head／State 地址／ID／实例和 owner 健康不变；全部资源关闭后整个文件集合／SHA不变，然后显式 Shared 继续原来的单 List Delta。
 
 主线程实跑、独立核工件并经只读反审，有限 PASS。runner 现在把 `UnconfiguredSaveRejected` 列为 continue 必需判据；尾修后在全新 stage／cache 复用同一不可变 feed，再完成五个进程，未重包或覆盖原版本。源码 2708 项、活动 Replay Count8（20 个实测库／300 修订）、CrashProbe 仅构建和 README 原文包故事另有各自资格，不把它们混为 package crash／性能证据。
 
@@ -75,7 +83,7 @@
 该次写准入复验包只覆盖 Widget／List 的有限 Shared／history 故事；完整 private view、显式 Discard 的包见证、全类型组合、任意 Pair 身份、进程故障和性能均未新增资格。同形私有后继的资格另见下节。
 
 <a id="p2-private-package-evidence"></a>
-## P2 同形私有新根与冷续写的准确包验收
+## 历史资格：P2 同形私有新根与冷续写的准确包验收
 
 本片在原五进程末尾加入公开 `CreatePrivateBranch`／`CheckoutPrivate`，以匹配 V2 模型的全新 Widget 环与共享 List 创建新业务根。私有目录保完整 Widget V1／V2 声明及原 descriptor IDs，再显式加入不被业务图引用的 `probe.private.unreachable` V1 Int32field1。普通无配置／Shared Checkout 的 State／Event 均拒绝且健康、全关文件零变；显式私有签出后实际单 List Delta 续写。
 
@@ -99,7 +107,7 @@
 该次包仅验证同形完整 fork＋新增不可达声明，未授 private→shared promotion；后继见下节，不回改历史资格。两套 same-key/version 异形独立编译、容器 layout 替换、显式 Discard、crash／断电与性能仍待各自资格。
 
 <a id="p2-promotion-package-evidence"></a>
-## P2 完整目录 Event ToShared 与 Shared 冷续写的准确包验收
+## 历史资格：P2 完整目录 Event ToShared 与 Shared 冷续写的准确包验收
 
 本片保原五进程与全部 Shared／private 断言，在 `continue` 私有单 Delta／ref2 不变段之后调用公开 `CommitEventToShared(root)`。完整 Widget V1／V2 和不可达声明一起进入 shared；业务无变化时复用目录／heads/H、无 OwnedBatch，Event 不换 State 地址／ID／实例。全关后在同一 PID 用新 Shared owner 普通签出，继续实际单 List Delta；最终独立 `verify` PID 全程只读。此处冷续写是 fresh owner，未声称另一个 writer PID。
 
