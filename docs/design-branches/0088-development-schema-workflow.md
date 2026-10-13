@@ -58,7 +58,7 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 `CreateBranch(checkpoint)` 是独立 ref 发布，随后 `CheckoutPrivate` 失败不会回滚这个已创建名字；该分支仍准确指向 baseline，可在正确环境中重新签出。不能把旧复合新根入口的“恢复失败不留名字”合同套到两个公开操作上。身份验收必须使用区别于空会话分配的源 IDs，并核实际 source，而非只比数字偶合。
 
-后续施工落点：
+已完成的替换边界：
 
 | 范围 | 替换边界 |
 |---|---|
@@ -75,11 +75,12 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 实际 MSBuild 与普通包故事也已通过：[DevelopmentSchemaConsumer](../../experiments/PackageConsumerProbe/DevelopmentSchemaConsumer/README.md) 复用准确现存十包，六次成功 Rebuild、一次预期 DG0015 拒绝、五个全新进程。Off 保 V1 输入，定稿 B 才 Publish／Verify，正式 history 只有 V1＋V2B；private 两 refs、原业务历史、全部资源关闭后的读／续写和 readonly 均按其 README 的限定范围验证。完整来源／live IDs／H 与实际包／MSBuild 分层，不互相替代；当前生产源码未修改，没有新 wire／API／版本策略或新 pack。
 
-以上是删除前实验，生产源码当时未修改，资格保其准确来源。它支持删减方向；第一轮完成情况与剩余新 G 门禁见 §7，不把旧包成功当作删除后资格。
+以上是删除前实验，生产源码当时未修改，资格保其准确来源。它支持删减方向；两轮实施结果与删除后新 G 资格见 §7，不把旧包成功当作删除后资格。
 
 仍未验证或定型：V3/V4 数据继承到单一定稿版本的直接交付／迁移压缩、主／次版本、开发新增数据重放工具及更自动的 draft／release 管理。当前已有整数版本与显式 Off 足够完成首选流程，默认 Publish 尚未修改；不以实验通过宣称这些易用性机制已实现。
 
-## 6. 下一轮实施合同与停点
+<a id="6-下一轮实施合同与停点"></a>
+## 6. 实施合同与验收边界
 
 以下产品形状和源码／包见证已按两轮实施完成。此节保留完整产品／验收合同，不作为重复施工清单；最终资格见 §7。§5 的旧实验资格不代替删除后的验收。
 
@@ -145,4 +146,6 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 本轮工件根 `W:/TEMP/dg-db088-round2-20261013-141026-16448`，含 `task.json`、`pack-final.log`、不可变 feed／source sidecar、三个故事的 `result.json`／witness／evidence／实际编译日志，以及 `solution-build.log`、三份测试日志／TRX、`main-acceptance.json` 与 `independent-acceptance.json`。主线复核 189 项生产输入、170 份实际 loaded DLL、全部命令／消费输入／evidence hash 与 98 项 TRX；12 份活动 Markdown 的 916 个本地链接／锚点检查无错误。复跑选择新的仓外目录与独立 G；不改写旧包、history 或完整帧。
 
-本案必经施工已结束，不需要备用第三轮。当前 assets／DLL 为准确 S package mode；未来源码联调须显式重新 restore。默认 Publish、V3/V4 直接压缩交付、主／次版本、自动重放与 draft／release 管理继续由[路线图](../DurableGraph-research-roadmap.md#42-开发-schema-与正式定稿)记录延期，不扩大本次资格。
+第三轮仅作收尾复核：实现合同与普通包冻结证据分别独立审查，主线再次核对当前 189 项生产输入、170 份实际 loaded DLL、三个 receipt／17 个独立 PID 及原 98 项 TRX。这是既有证据复核，没有重新执行包故事或测试；记录在忽略目录 `.artifacts/db088-round3-20261013-222637/revalidated-acceptance.json`。已核范围内未见未完成代码／包门禁或产品阻塞。
+
+本案无剩余必经施工。当前 assets／DLL 为准确 S package mode；未来源码联调须显式重新 restore。默认 Publish、V3/V4 直接压缩交付、主／次版本、自动重放与 draft／release 管理继续由[路线图](../DurableGraph-research-roadmap.md#42-开发-schema-与正式定稿)记录延期，不扩大本次资格。
