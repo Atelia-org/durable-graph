@@ -22,15 +22,15 @@
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
 Shared 准入、完整 frozen shared fork＋显式 Schema／容器替换、新 private 根 all-live Base、准确冷签出与增量续写、完整目录单次 ToShared 均已接线。private 只发布 ref1且不 rebase latest shared；新增 shared 走同一两 ref CU。旧 rows／heads／S 保含义，普通 Shared 保存核完整目录已被接纳，显式 ToShared 同形复用／新项加入／同 key 异形拒绝，不改变默认归属或执行环境。
-Open 省略归属时普通业务写入提前拒；CreatePrivateBranch／CheckoutPrivate或单次 ToShared另明确选择，模式不持久化。meta 写来源取实际 Head.S，业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State保存可推进 selected S。
+Open 省略归属时普通业务写入提前拒；CreatePrivateBranch／CheckoutPrivate或单次 ToShared另明确选择，模式不持久化。私有后续 meta 写来源取实际 Head.S；Shared／ToShared 的目标 meta 写来源取 latest shared，ToShared 的完整待导入声明另取实际 Head.S。业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State保存可推进 selected S。
 
 准确 origin／selected／execution S、共同 source／pending／fault owner、history／Pair／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
 有限普通包验收分层维护在 [V1→V2／同形 private／完整 ToShared](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)与[双异形独立 A/B history／六 PID](../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)。后者实际覆盖公共完整 pair、Nullable inline List、Keeper 保留、双方冷 Delta／准确 prior/H、错误环境与 ToShared 冲突拒绝、两个全程 readonly PID 零写；不外推其他类型／故障／性能。源码失败边界与完整容器组合保 [DB-087 §9](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)的原资格。
 
-本案没有剩余必经片或待决产品政策；下一增量从真实下游接入、业务轨迹或增长测量选择，条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。不继续机械追加 DB-087 门禁；19个有效旧包 lanes 继续暂停，按需迁移不作本案前置。内部名称／wire 未冻结，P0 核心是当前产品路径。
+本案没有剩余必经片或待决产品政策；下一增量从真实下游接入、业务轨迹或增长测量选择，条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。再次收到同一 DB-087 循环任务时先核停点；没有新反例或需求就报告完成，不自动扩围或重跑全部门禁。19个有效旧包 lanes 继续暂停，按需迁移不作本案前置。内部名称／wire 未冻结，P0 核心是当前产品路径。
 
-DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；本轮包 pack 后本仓生产项目 assets／DLL 为 package mode，切回 source build/test 须按[依赖指南](../docs/storage-dependency.md)显式 restore，不能把混合输出作来源证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
+DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；最近一次包 pack 后本仓生产项目 assets／DLL 为 package mode，切回 source build/test 须按[依赖指南](../docs/storage-dependency.md)显式 restore，不能把混合输出作来源证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
@@ -186,7 +186,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   普通 class 仍不支持一般属性，marker 不授予接口持久槽、boxed 身份或任意外部基类。迁移与证据见 DB-068。
 - `TypeExpr` 区分 builtin、named 定义及有序实参、声明内 parameter、SZ/rank 2–4 数组和内建 List/Nullable/Dictionary 构造；持久 key 为闭合 TypeExpr + 定义版本。
   SchemaId 只表示定义 ID，不能用来区分闭合族。base/inline 显式升版仍沿定义传播；Box<int> 也随 Box 定义升版。
-  目标仓库内同 key 完整布局严格一致；两个独立空库仍可能首次登记同 key 异形，不提供闭合历史账本或跨库 key 互换保证。
+  同一已接受 Schema 目录的声明索引内同 key 完整布局严格一致；同仓库的显式 private 新 view 可与 shared 同 key 异形，旧 view 含义保持。不同 view 或两个独立空库的 key 不授布局互换保证，不提供闭合历史账本。
   TypeExpr depth≤64、展开 nodes≤4096、arity≤32，exact 布局 DAG depth≤256。
 - 含泛型/Nullable 当前定义或历史、当前 enum/record struct、显式 DurableUpgrade 或值规则/依赖属性的编译，
   以及有当前声明且保留无当前声明的 inline history 的编译，使用 `Generated.Family_<UTF8HexId>.Vn<TState...>`，
@@ -270,7 +270,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 - Repository 拥有 GraphResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
   CreateBranch(initialState) / CreateBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
-  业务 Parent 指向提交前精确 Head；Revision Parent 指向该业务 Parent 自身或祖先中最近 State，无 State 时为 null。
+  业务 Parent 指向提交前精确 Head；业务内容来源取该 Parent 自身或祖先中最近 State，无 State 时为 null，旧称 Revision Parent。
   Checkout 保持精确 Head，只恢复最近 State 及完整来源；纯 Event 前缀交付 State=null、全新空 CaptureSession。
   Fork 在完整 guard 内占用新名字、恢复并构造工作副本后才发布 ref，不追加历史图；源副本可保持存活，未提交修改不参与。
   不同恢复的 mutable 图独立，完整身份与保存来源保持；普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查。

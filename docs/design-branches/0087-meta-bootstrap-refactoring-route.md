@@ -1,6 +1,6 @@
 # DB-087：meta 自举与共享／私有 Schema 视图
 
-> 校准：2026-10-13。本文只保留当前契约、源码落点、后续门禁与未决问题。
+> 校准：2026-10-13。本文只保留当前契约、源码落点、已获资格与条件延期。
 > 默认公开路径已接 meta 自举，旧保存／typed reader／Schema 权威／raw Storage 束已退出。
 > 旧权威退出、有限非 friend accepted-history 与双异形独立环境包门禁已验，约定的有限 P1／P2 产品停点均成立；资格边界见 §8／§9。
 > 包验收限真实 Widget／Root 与 List 代表故事，不增加 ProcessCrashOnly、断电或性能资格；内部 API／wire 未冻结。
@@ -117,7 +117,7 @@ Repository Open 冻结代码配置；reader 从实际 Store／S 私有签发环�
 同 S 可显式复用闭合 memo，不同 S 独立；已显式注册的稳定 Model／Reader／Comparer 仍可保原引用。不能用外部 view、相等地址或 synthetic DTO 补保存来源。Synthetic 可作读取机制输入，不授可编辑来源认证。
 
 checkout 执行 S／models／preparation 在其寿命内固定：有 State 取该 State.S，普通 checkout 无 State 取创建时 latest shared，空库无 S。
-具体 private 新根以完整 bootstrap 逻辑 lookup 闭合；私有冷签出有 State 仍取 State.S，纯 Event 前缀则取 Head.S。meta 写来源独立取当前 Head.S，不能以 State.S 或 latest shared 代替。
+具体 private 新根以完整 bootstrap 逻辑 lookup 闭合；私有冷签出有 State 仍取 State.S，纯 Event 前缀则取 Head.S。私有后续 meta 写来源独立取当前 Head.S，不能以 State.S 或 latest shared 代替。
 State 提交可推进存储 selected S，不替换旧执行环境；热后首次闭合新类型仍看起始 S，新 cold checkout 另按其最近 State.S 闭合。
 这是稳定执行环境的寿命边界，不承诺任意 view-sensitive callback 的跨 S 热冷领域值等价。
 
@@ -230,7 +230,7 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 
 **有限 P1 门禁已通过。** [SplitRepositoryConsumer](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md) 已就地转为普通程序集，以真实 PackageReference 消费公开默认 Repository；复跑、包来源、receipt 与限制只在其 README 维护。
 既有内部 friend 的 history 包、普通非 friend README 包和 source 回归各保原资格，不能互相代替。
-该 P1 门禁当片只改消费者与文档；旧权威退出、唯一默认路径与该代表包故事共同形成 P1 停点。后续按 §9 接 P2，不再将本节当作待实施任务。
+该 P1 门禁当片只改消费者与文档；旧权威退出、唯一默认路径与该代表包故事共同形成 P1 停点。已完成的 P2 契约与资格见 §9，本节不再作为待实施任务。
 
 最小代表故事采用真实 SG Widget V1→V2 显式 Upgrade、共享引用／环与 List：
 

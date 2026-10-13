@@ -193,7 +193,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
 | UpgradeContext 的动态工具与生命周期扩展 | 当前查询已声明、已绑定的值工具；具体迁移确需执行中解析时，再裁决首个业务回调前失败保证。池化/异步或合法跨回调工具复用有消费者后，再设计生命周期；不提前添加服务定位器、租约或通用工具平台 |
 | 值规则的跨程序集与更广生成外观 | 本地 marker/provider 已可显式使用只读导入的外部 inline 历史端点，仍不扫描依赖库的业务方法或自动选择规则。实际需要跨库发现/复用规则或更广属性入口时，再扩展显式登记/诊断；Runtime 的 builtin/引用/闭合模式能力不自动扩张 SG 外观 |
-| 泛型闭合历史账本/独立版本 | 用户已选 MVP 仓库内严格一致；要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库) |
+| 泛型闭合历史账本/独立版本 | 同一已接受目录内严格一致；[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#view-contract) 允许显式 private 新 view 同键异形，不能跨 view 互换布局。要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，历史问题见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库) |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 

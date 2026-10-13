@@ -244,7 +244,8 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
   元数据缓存只是派生结果，后续登记的 exact base/inline 定义仍必须与缓存的完整依赖闭包一致。
-- 2026-09-08 用户选择泛型闭合 Schema 的 MVP 保证范围为目标 Repository 内严格一致，暂不增加闭合历史账本。
+- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本；最初的 Repository 单调注册表已由[DB-087 准确视图](design-branches/0087-meta-bootstrap-refactoring-route.md#view-contract)的边界承接。
+  shared 与各已接受 private view 内均拒绝同 key 异形；显式私有新根替换可使不同 view 同 key 异形，不能互换解释旧 bytes。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
   [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库)。
@@ -304,16 +305,18 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 持久 Schema 需要规范表示与一致性校验；当前运行时 GetHashCode 不能充当持久 SchemaHash。
 规范表示不能依赖反射顺序、metadata token、MVID、AssemblyVersion 或进程随机 hash。
 
-完整闭合对象表示在仓库内获得持久整数 ID，新写 Base 通过该 ID
-取得领域身份与 exact 持久表示布局，Delta 沿用 Base。SchemaStore 封装描述及其解析；当前程序用保留的
-历史代码绑定 DTO/reader，CLR Type/委托本身不落盘。同 ID 不重绑定，引用目标版本仍由目标自己的 Base 决定。
-ID 由所属目录统一分配，等价完整表示复用；登记先于使用该 ID 的 State 发布，放弃一次 State 不撤销已登记表示。
-对象寻址合同见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。目录内部采用
-[DB-046](design-branches/0046-unified-schema-catalog-slice.md) 选择的统一闭合记录：用户 class 的 Schema 记录
-就是其对象表示记录；inline Schema 与数组进入同一编号空间，base/inline exact 依赖按目录 ID 引用。
+完整 Schema／容器布局作为 meta 描述节点保存；动态 Base 以自身 batch 的 `(origin SchemaRoot, descriptor ObjectId)`
+取得 exact 布局，Delta 沿用 Base。当前程序用保留历史代码绑定 DTO/reader，CLR Type/委托本身不落盘。
+已接受 descriptor 不重绑定，等价完整表示在所选目录内复用；引用目标版本仍由目标自己的 Base 决定。
+Schema 编辑仅准备受控意图，meta 先于引用它的业务内容追加，再由同一 pending／发布 owner 共同接受。
+Discard 保手工修改意图但不接受候选定义；Event 可接受 meta／Head，但不推进 State 基线。没有独立 SchemaStore 发布或第二份表示 ID 权威。
+当前合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#bootstrap-contract)；
+[DB-045](design-branches/0045-persisted-representation-id-slice.md)／[DB-046](design-branches/0046-unified-schema-catalog-slice.md) 保整数寻址／统一记录的历史来由。用户 class 的 Schema 节点
+也是对象 descriptor；inline Schema 与容器描述进入同一 meta 图，base/inline exact 依赖按节点 ID 引用。
 inline 记录只描述嵌套值，不能被 Base 当作独立对象表示；普通引用槽只约束无版本 nominal 类型，
 目标版本不成为引用方的 exact 依赖。`SchemaKey` 是由完整名义类型与定义版本派生的查询、冲突索引，
-同 key 异形仍须拒绝，不能靠新编号绕过。一次登记的完整缺失闭包经一个批次持久化后才交付 ID。
+同一已接受目录的声明索引内同 key 异形仍须拒绝，不能靠新编号绕过；显式私有新根替换使用新 view／descriptor，保旧 view 含义。
+候选的完整缺失闭包随业务共同发布后才取得接受资格，不因 bytes 已追加或分配了编号而提前接受。
 [DB-047](design-branches/0047-list-content-object-slice.md) 的 List 扩展复用同一编号空间，
 以明确内建构造和内容 codec 解释，无需用户 Schema；其元素若为用户 inline 值，仍须登记完整 exact 依赖。
 Count 与 Capacity 均不属于 ListLayout；前者属于对象内容，后者不持久化。引用 List 的 owner 只约束 nominal 类型，
