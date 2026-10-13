@@ -15,6 +15,7 @@ internal static class WireInspector {
     private const uint GraphTag = 0x37474250, BatchTag = 0x37424250, DirectoryTag = 0x37444250;
     private const int Limit = 1_000_000;
     private const string WidgetName = "package.split.widget";
+    private const string PrivateUnusedName = "probe.private.unreachable";
 
     internal enum GraphKind : byte { Event = 1, State = 2, Meta = 3 }
     internal sealed record FrameImage(FrameAddress Address, uint Tag, string PayloadSha256, string TailMetaSha256);
@@ -36,7 +37,7 @@ internal static class WireInspector {
         internal IReadOnlyDictionary<uint, FrameAddress> Objects => Heads;
     }
     internal sealed record Catalog(IReadOnlyList<uint> DeclaredIds, IReadOnlyDictionary<int, uint> WidgetDescriptors,
-        IReadOnlyDictionary<int, IReadOnlyList<int>> WidgetFields);
+        IReadOnlyDictionary<int, IReadOnlyList<int>> WidgetFields, uint? PrivateUnusedDescriptor = null);
 
     internal sealed class Snapshot {
         internal Snapshot(IReadOnlyDictionary<string, FrameAddress> branchHeads, FrameAddress? sharedSchemaRoot,
@@ -327,6 +328,7 @@ internal static class WireInspector {
             Require(declared.Distinct().Count() == declared.Length, "Repeated catalog declaration.");
             Dictionary<int, uint> widgets = [];
             Dictionary<int, IReadOnlyList<int>> fieldsByVersion = [];
+            uint? privateUnused = null;
             foreach (uint id in declared) {
                 BareValueReader descriptor = Employee(graph, id, 3);
                 byte kind = descriptor.ReadByte();
@@ -335,9 +337,22 @@ internal static class WireInspector {
                 uint fields = Nonzero(ref descriptor);
                 uint element = descriptor.ReadVarUInt32(), codec = descriptor.ReadVarUInt32(), ancestor = descriptor.ReadVarUInt32();
                 descriptor.EnsureFullyConsumed();
-                Require(kind == 1 && version is 1 or 2 && element == 0 && codec == 0 && ancestor == 0 &&
-                    TypeName(graph, type) == WidgetName, "This probe only interprets the Widget V1/V2 descriptors.");
+                string name = TypeName(graph, type);
+                Require(kind == 1 && element == 0 && codec == 0 && ancestor == 0,
+                    "The finite probe requires a reference descriptor without container or base slots.");
                 uint[] members = ReferenceList(graph, fields, 6);
+                if (name == PrivateUnusedName) {
+                    Require(version == 1 && privateUnused is null && members.Length == 1,
+                        "The private unused declaration must be unique V1 with one field.");
+                    BareValueReader unused = Employee(graph, members[0], 4);
+                    Require(unused.ReadVarInt32() == 1 && unused.ReadByte() == 2 && unused.ReadVarUInt32() == 0 &&
+                        unused.ReadVarUInt32() == 0 && unused.ReadVarUInt32() == 0,
+                        "The private unused declaration requires exactly Int32 field1 with no composed slots.");
+                    unused.EnsureFullyConsumed();
+                    privateUnused = id;
+                    continue;
+                }
+                Require(name == WidgetName && version is 1 or 2, "Unknown declaration outside the finite probe.");
                 List<int> fieldIds = [];
                 foreach (uint member in members) {
                     BareValueReader field = Employee(graph, member, 4);
@@ -358,7 +373,7 @@ internal static class WireInspector {
                 widgets.Add(version, id);
                 fieldsByVersion.Add(version, fieldIds.AsReadOnly());
             }
-            return new(Array.AsReadOnly(declared), Freeze(widgets), Freeze(fieldsByVersion));
+            return new(Array.AsReadOnly(declared), Freeze(widgets), Freeze(fieldsByVersion), privateUnused);
         }
 
         private string TypeName(Graph graph, uint id, int depth = 0) {
@@ -372,7 +387,7 @@ internal static class WireInspector {
                 return "Int32";
             }
             if (kind == 2) {
-                Require(builtin == 0 && name != 0 && arguments == 0, "Expected a nongeneric named Widget.");
+                Require(builtin == 0 && name != 0 && arguments == 0, "Expected a nongeneric named probe type.");
                 BareValueReader text = Employee(graph, name, 1);
                 string value = text.ReadString();
                 text.EnsureFullyConsumed();

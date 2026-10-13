@@ -460,7 +460,11 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 统一 Commit/Ref 应共同选择 StateStore、SchemaStore、ArtifactStore 的 exact 视图，支持整体推进、
 回滚与分叉；不能让旧 State 视图意外配上最新 Schema/Artifact 视图。整体回滚不要求删除已追加的
 物理记录。MVP 的 Repository 内单调 Schema 注册表是阶段性简化，不将其全局可见性冻结为长期合同。
-SchemaStore 未来复用 StateStore 的候选路径和自举问题见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+本案选择 Schema descriptor 与存活目录复用对象序列化／版本保存，业务比较与受控 meta 编辑汇入共同发布 owner。
+业务图 pin 准确 Schema 根；shared 目录与分支 rewind 分责，private 采用完整冻结 view，不以 latest shared 补缺。
+已接受定义不可改写；新私有根的显式替换产生新 descriptor，旧图及其 origin Schema 解释保持。
+将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
+具体实现资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)，未闭合的推广与保留 head 规则见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
 只有已发布的 exact head/manifest 引用的 candidate 才取得权威。文件存在、时间戳或最新编号
 都不够。被引用数据应先完成规定的 durability barrier，再发布；具体 process/OS crash、

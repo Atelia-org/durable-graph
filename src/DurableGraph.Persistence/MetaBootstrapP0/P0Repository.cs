@@ -54,6 +54,12 @@ internal sealed class P0Repository : IDisposable {
         return _resources.PrepareMetaBootstrapFrom(branch, kind, produce);
     }
 
+    internal P0PendingSave PreparePrivateFrom(string branch, P0GraphKind kind,
+        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) {
+        RequireAvailable();
+        return _resources.PreparePrivateMetaBootstrapFrom(branch, kind, produce);
+    }
+
     internal P0SaveResult Commit(P0PendingSave pending,
         Action<P0GraphSnapshot>? installMeta = null, Action<P0GraphSnapshot>? installState = null,
         Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null,

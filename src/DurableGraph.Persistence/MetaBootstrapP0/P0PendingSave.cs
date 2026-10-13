@@ -1,3 +1,5 @@
+using Atelia.FrameStore;
+
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 // One owner-bound operation. Discard never appends or accepts either producer.
@@ -6,13 +8,16 @@ internal sealed class P0PendingSave : IDisposable {
     private PendingState _state;
 
     internal P0PendingSave(GraphResources owner, GraphResources.MetaBootstrapPublicationBaseline baseline,
-        string branch, P0GraphKind kind, P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog) {
+        string branch, P0GraphKind kind, P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog,
+        bool privateCatalog, FrameAddress? catalogSource) {
         Owner = owner;
         Baseline = baseline;
         Branch = branch;
         Kind = kind;
         Business = business;
         Catalog = catalog;
+        PrivateCatalog = privateCatalog;
+        CatalogSource = catalogSource;
     }
 
     internal GraphResources Owner { get; }
@@ -21,6 +26,8 @@ internal sealed class P0PendingSave : IDisposable {
     internal P0GraphKind Kind { get; }
     internal P0PreparedGraphWrite Business { get; }
     internal P0PreparedGraphWrite? Catalog { get; }
+    internal bool PrivateCatalog { get; }
+    internal FrameAddress? CatalogSource { get; }
     internal bool IsPrepared => _state == PendingState.Prepared;
 
     internal void BeginCommit() {

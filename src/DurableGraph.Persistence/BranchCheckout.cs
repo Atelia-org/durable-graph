@@ -11,12 +11,14 @@ namespace Atelia.DurableGraph;
 /// business handlers; the application interprets its own processing progress. At most one checkout per branch
 /// may be active; different branches may have live checkouts together, with serial repository operations.
 /// Dispose explicitly to release the branch. Losing this object does not automatically release occupancy.
-/// Restoration and in-memory editing do not select a Schema write destination. Commit requires the owning
-/// Repository to have been opened with an explicit Schema write mode; missing selection rejects before capture.
+/// Restoration and in-memory editing do not select a Schema write destination. Ordinary checkouts require an
+/// Open-level Schema write mode; CreatePrivateBranch/CheckoutPrivate explicitly select a private destination.
+/// Missing selection rejects Commit before capture.
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
     private readonly P0Session _splitSession;
+    internal bool UsesPrivateSchemas { get; }
     internal P0Session SplitSession => _splitSession;
     internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => SplitSession.BindingEnvironment;
     internal StateModelSnapshot Models => SplitSession.Models;
@@ -25,10 +27,12 @@ public sealed class BranchCheckout : IDisposable {
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
-    internal BranchCheckout(Repository repository, string branchName, P0Session session, CheckpointAddress? head) {
+    internal BranchCheckout(Repository repository, string branchName, P0Session session, CheckpointAddress? head,
+        bool usesPrivateSchemas = false) {
         _repository = repository;
         BranchName = branchName;
         _splitSession = session;
+        UsesPrivateSchemas = usesPrivateSchemas;
         Head = head!; // Initial creation publishes before this checkout is delivered.
     }
 

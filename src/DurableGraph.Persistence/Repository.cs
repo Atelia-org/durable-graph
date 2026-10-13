@@ -17,8 +17,8 @@ namespace Atelia.DurableGraph;
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Successful closures may be reused within an exact Schema environment; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
-/// Business saves require an explicit Schema write mode selected when opening. Without one, writable backing
-/// resources still allow checkout restoration and ref-only operations, but business capture is rejected.
+/// Shared business saves require an explicit Schema write mode selected when opening. Private branch entry
+/// points select their own write destination. Without either choice, business capture is rejected.
 /// </remarks>
 public sealed partial class Repository : IDisposable {
     private readonly GraphResources _resources;
@@ -35,8 +35,8 @@ public sealed partial class Repository : IDisposable {
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
     public bool IsReadOnly => _resources.IsReadOnly;
-    /// <summary>The Schema write destination selected for this open repository, or null when business saves are not admitted.</summary>
-    /// <remarks>Immutable for this open. A missing mode does not make backing resources read-only: reads, checkout restoration and ref-only operations remain available.</remarks>
+    /// <summary>The Open-level Schema write destination, or null when ordinary checkouts cannot save business graphs.</summary>
+    /// <remarks>Immutable for this open. A missing mode does not make backing resources read-only: reads, checkout restoration, ref-only operations and explicit private branch entry points remain available.</remarks>
     public SchemaWriteMode? SchemaWriteMode { get; }
     /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
     /// <remarks>
@@ -468,10 +468,33 @@ public sealed partial class Repository : IDisposable {
         RequireAvailable();
         _resources.RequireWritable();
     }
-    private void RequireSchemaWriter() {
+    private void RequireSchemaWriter(BranchCheckout? checkout = null) {
         RequireWriter();
-        if (SchemaWriteMode != global::Atelia.DurableGraph.SchemaWriteMode.Shared) {
+        if (checkout?.UsesPrivateSchemas != true && SchemaWriteMode != global::Atelia.DurableGraph.SchemaWriteMode.Shared) {
             throw new InvalidOperationException("Business saves require an explicit Schema write mode when opening the repository.");
+        }
+        if (checkout is not null) {
+            RequireMetaBootstrapCheckout(checkout);
+            if (!checkout.UsesPrivateSchemas && _splitRepository.Store.ReadMetadata(checkout.Head.Address).SchemaRoot is { } selected) {
+                P0CatalogView source = P0CatalogView.Load(_splitRepository.Store, selected);
+                P0CatalogView? shared = _splitRepository.SharedSchemaRoot is { } latest
+                    ? P0CatalogView.Load(_splitRepository.Store, latest) : null;
+                // A Shared save cannot silently drop declarations from a private view.
+                // Only an already-contained complete view may return to this destination.
+                foreach (var (key, schema) in source.Schemas) {
+                    if (shared is null || !shared.Schemas.TryGetValue(key, out var accepted)) {
+                        throw new InvalidOperationException("The complete selected Schema view is not accepted by the shared catalog.");
+                    }
+                    if (!accepted.Equals(schema)) { throw new SchemaConflictException(accepted, schema); }
+                }
+                foreach (var layout in source.ObjectLayouts) {
+                    if (shared is null) { throw new InvalidOperationException("The complete selected layout view is not accepted by the shared catalog."); }
+                    try { shared.Require(layout); }
+                    catch (InvalidDataException error) {
+                        throw new InvalidOperationException("The complete selected layout view is not accepted by the shared catalog.", error);
+                    }
+                }
+            }
         }
     }
     private void RequireAvailable() {

@@ -1,6 +1,6 @@
 # 公开 accepted-history 包消费者
 
-此目录已就地转为 DB-087 P1 的有限公开回归，并为 P2 写准入首片提供代表包见证。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。问题是：真实 SG Widget V1→V2 与共享 List／环，能否经自举 meta、真实 refs 发布后，关闭全部资源、按准确历史 S 恢复并继续增量保存？最小验收是下表五个独立进程全部成功，并完成包来源、history 和持久字节核对。
+此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入与同形私有新根／冷续写。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以完整私有目录中的不可达声明验证写入归属。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
 
 项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至2个且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
 
@@ -19,17 +19,17 @@
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
 | `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
-| `continue`／V2 | 无配置 RW Open可读／Checkout，State／Event 保存提前拒且健康，关闭后完整文件集合／SHA不变；再显式 Shared fresh owner 恢复当前 V2，无再次历史 Upgrade；同一 List 改一个槽，实际单 Delta，核完整 IDs、准确 source／same-ID prior／S 与实耗 H累加，Widget head/H沿用 |
-| `verify`／V2 | fresh readonly 核旧 tag、main／fork／Event、准确各图 S与原／新 meta descriptor；旧完成帧保持，完整文件集合／SHA不变 |
+| `continue`／V2 | 无配置普通保存拒且全文件零变，显式 Shared 冷单 List Delta；再建立完整同形 private view＋不可达新声明／新根全 Base，ordinary Shared 保存拒，显式私有冷单 Delta、真实 prior/H、ref2 revision／payload 保持 |
+| `verify`／V2 | fresh readonly 核旧 tag、main／fork／private／Event、准确各图 S与原／新 meta descriptor；旧完成帧保持，完整文件集合／SHA不变 |
 
-每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本与有限 Widget1/2 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、未知 ABI／布局直接拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
+每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
-公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 继续由既有源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；没有 private、进程 Kill、断电、全类型组合、内部 baseline H或性能新资格。其他19个暂停 lane不因本例通过恢复资格。
+公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；同形私有包不授同键异形独立编译、private promotion、进程 Kill、断电、全类型组合、内部 baseline H或性能资格。其他19个暂停 lane不因本例通过恢复资格。
 
 <a id="2026-10-13-限定验收"></a>
 ## 2026-10-13 限定验收
 
-主线程实跑并独立核 source／包／加载／history 工件，另有只读独立复核，有限 PASS；[DB-087 P1 停点](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，当片后继 P2 尚未实施，只改消费者／runner／observer和文档，生产代码／API不变；当前 P2 写准入首片另见[下方复验](#p2-admission-package-evidence)，不回改本节历史资格。
+主线程实跑并独立核 source／包／加载／history 工件，另有只读独立复核，有限 PASS；[DB-087 P1 停点](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，当片后继 P2 尚未实施，只改消费者／runner／observer和文档，生产代码／API不变；后继准入与同形私有见证另见[写准入](#p2-admission-package-evidence)／[私有新根](#p2-private-package-evidence)，不回改本节历史资格。
 
 | 证据 | 结果 |
 |---|---|
@@ -70,4 +70,28 @@
 - final result SHA256：`4BA34C65C3345C83A9E82B2AC9528F0CCE23CCD662EB321C310E0D93DCD09226`
 - 主线程独立审计 SHA256：`321259DC53F880C01E64054E37306FD873259D578AE5CC3207B1D53342ACC818`
 
-包仍只覆盖 Widget／List 的有限 Shared／history 故事；完整 private view、显式 Discard 的包见证、全类型组合、任意 Pair 身份、进程故障和性能均未新增资格。
+该次写准入复验包只覆盖 Widget／List 的有限 Shared／history 故事；完整 private view、显式 Discard 的包见证、全类型组合、任意 Pair 身份、进程故障和性能均未新增资格。同形私有后继的资格另见下节。
+
+<a id="p2-private-package-evidence"></a>
+## P2 同形私有新根与冷续写的准确包验收
+
+本片在原五进程末尾加入公开 `CreatePrivateBranch`／`CheckoutPrivate`，以匹配 V2 模型的全新 Widget 环与共享 List 创建新业务根。私有目录保完整 Widget V1／V2 声明及原 descriptor IDs，再显式加入不被业务图引用的 `probe.private.unreachable` V1 Int32field1。普通无配置／Shared Checkout 的 State／Event 均拒绝且健康、全关文件零变；显式私有签出后实际单 List Delta 续写。
+
+主线程实跑并独立核工件，有限 PASS；只读反审另核实际五宿主、包／工具来源及完整私有断言。runner 将四个 private continue 布尔与最终 `PrivateColdValues` 列为必需判据；没有新增 lane／协议／friend 或诊断 API。
+
+| 证据 | 结果 |
+|---|---|
+| DG G／Storage S | `0.0.0-public-history-e2e.20261013040446.29200`／`0.1.3-dev.20261011.g974fd47`；准确 S 来源 `974fd47abb73792f9d350af87ab91a53848952eb`，未远程发布 |
+| 受控生产来源 | 源 HEAD `5cb7667343a64fc671fdf0d126b9f8b7c058b518`＋八份生产修改／新增 `Repository.PrivateSchemas.cs`；189 项生产输入 hash 与接线相同。`ProductionInputsMatchHead=false`／`IncludesUncommittedProductionSource=true`，**不是 clean 5cb7667 包**；消费者／runner 来源另列 |
+| 实际包与执行 | 十包 ZIP→cache→stage→五进程 50 份实际加载 DLL 匹配；普通宿主／两版 assets 无 ProjectReference；四份编译输入、四次实际 Rebuild／包 SG／Build Publish及Verify，history1→2且旧文件保持 |
+| 私有持久轨迹 | 完整私有 S 与 shared S 不同，保 Widget V1 descriptor12／V2 descriptor21，新增不可达 descriptor26；首3live全 Base／空来源，冷仅 List Delta／exact prior／H203→227，Widget head/H9保持；ref2 actual完整 RefRevision／payload 不变，main／fork 保原轨迹 |
+| 关闭与只读 | 所有物理观察在相应 owners全关后；最终回读第三分支、准确 S／IDs／值及完成帧；两 readonly lane 各8文件集合／SHA不变。新增9个私有完成帧（meta、初 State、续 State 各 batch／目录／graph）保持 |
+| 其他验证 | 准确 source mode solution build 零警告／错误，2726项通过；18个新源码聚焦案例另通过。同一十包 feed 的 README 原文示例／named Fork／冷重开／最终 Verify 通过，不把它作为私有改形包故事 |
+
+工件为 `W:\TEMP\dg-p2-private-20261013-040445-d93775b0`，含唯一 feed、source sidecar、`result.json`、witness／evidence／assets／history／编译日志。仓库忽略目录 `.artifacts/db087-p2-private-20261013/` 中 `package-run-path.txt` 导航，`accept-package.py`／`independent-acceptance.json` 保存主线实际核验；`readme-package.log` 导航原文包示例，工作目录为 `experiments/PackageConsumerProbe/obj/readme-20261013040901-19012-2db014e2`。
+
+- result SHA256：`FC3F8CEC999D08F990AA14A579F47D625885D3537FF956A395EA64BE4B470847`
+- witness SHA256：`A181A4E1FD546E11C9D566BDD03C91AED4D0A6FF855D80B25FB182E9799172F8`
+- 主线独立审计 SHA256：`E9EF9C27219913F72B64500A56F1586A83CD308297E5AF2F0C2395FFACD6B46C`
+
+此包仅验证同形完整 fork＋新增不可达声明；两套 same-key/version 异形独立编译的真实包、private→shared promotion、容器 layout 替换、显式 Discard 的包见证、crash／断电与性能均待各自资格，不从源码或本例外推。

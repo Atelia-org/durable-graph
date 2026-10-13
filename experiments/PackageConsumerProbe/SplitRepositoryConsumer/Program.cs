@@ -7,6 +7,7 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
+using Atelia.VersionStore;
 using SplitRepositoryPackage;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
@@ -17,6 +18,7 @@ using S = global::Atelia.DurableGraph.Generated.Family_7061636B6167652E73706C697
 internal static class Program {
     private const string Protocol = "DG.SplitRepositoryConsumer.v1";
     private const string WidgetName = "package.split.widget";
+    private static readonly DurableSchema PrivateUnused = new("probe.private.unreachable", 1, new DurableFieldInfo(1, TypeTag.Int32));
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private sealed record StorageEvidence(uint Id, string Head, long H);
     private sealed record FrameImage(string Address, uint Tag, string PayloadSha256, string TailMetaSha256);
@@ -24,7 +26,11 @@ internal static class Program {
         uint WidgetDescriptorId, StorageEvidence[] SeedObjects, FrameImage[] SeedFrames,
         string? MainState = null, string? RewriteEvent = null, string? RewriteState = null, string? RewriteSchema = null,
         uint? CurrentWidgetDescriptorId = null, StorageEvidence[]? RewriteObjects = null, FrameImage[]? RewriteFrames = null,
-        string? ContinuationState = null, StorageEvidence[]? ContinuationObjects = null, FrameImage[]? ContinuationFrames = null);
+        string? ContinuationState = null, StorageEvidence[]? ContinuationObjects = null, FrameImage[]? ContinuationFrames = null,
+        string? PrivateSeedState = null, string? PrivateState = null, string? PrivateSchema = null,
+        uint? PrivateRootId = null, uint? PrivateListId = null, uint? PrivateUnusedDescriptorId = null,
+        StorageEvidence[]? PrivateSeedObjects = null, StorageEvidence[]? PrivateObjects = null, FrameImage[]? PrivateFrames = null);
+    private sealed record SharedRefImage(RefRevision Revision, byte[] Payload);
 
     private static int Main(string[] args) {
         if (args.Length != 3) { throw new ArgumentException("Expected seed|upgrade|rewrite|continue|verify, database and witness path."); }
@@ -270,11 +276,140 @@ internal static class Program {
         HashSet<string> previousFrames = witness.SeedFrames.Concat(witness.RewriteFrames!).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
         Witness next = witness with { ContinuationState = Hex(continued), ContinuationObjects = updated,
             ContinuationFrames = Frames(actual).Where(frame => !previousFrames.Contains(frame.Address)).ToArray() };
+        next = PrivateStory(database, next, actual);
         WriteJson(witnessPath, next);
         return new { next.ContinuationState, Objects = updated, SingleListDelta = true, ExactPrior = true, IdsPreserved = true,
             ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true,
-            UnconfiguredSaveRejected = true };
+            UnconfiguredSaveRejected = true, next.PrivateSeedState, next.PrivateState, next.PrivateSchema,
+            PrivateObjects = next.PrivateObjects, PrivateUnusedDescriptor = next.PrivateUnusedDescriptorId,
+            PrivateFrozenCatalog = true, PrivateColdListDelta = true, PrivateSharedRootUnchanged = true, PrivateSharedSaveRejected = true };
     }
+
+    private static Witness PrivateStory(string database, Witness witness, WireInspector.Snapshot shared) {
+        SharedRefImage sharedRef = ReadSharedRef(database);
+        FrameAddress initial;
+        uint rootId;
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            Widget root = Ring();
+            root.Value += 100;
+            root.Child!.Value += 100;
+            root.Numbers[7] = 201;
+            using BranchCheckout created = repository.CreatePrivateBranch("private", root, [Schema(2), PrivateUnused]);
+            initial = created.Head.RevisionAddress;
+            rootId = created.StateId!.Value.Value;
+            Need(created.StateRevisionAddress == initial && ReferenceEquals(created.State, root),
+                "The explicit private entry must create and accept the supplied fresh State without an Open write mode.");
+            Check(created.State, upgraded: true, atSeven: 201);
+        }
+        WireInspector.Snapshot seeded = WireInspector.Read(database);
+        WireInspector.Graph seedGraph = seeded.Graph(initial);
+        FrameAddress privateSchema = RequiredSchema(seedGraph);
+        Need(privateSchema != Address(witness.RewriteSchema!) && seedGraph.Kind == WireInspector.GraphKind.State &&
+            seedGraph.Parent is null && seedGraph.SourceGraph is null && seedGraph.RootId == rootId &&
+            seedGraph.Heads.Count == 3 && seedGraph.OwnedBatch is not null,
+            "The private new root must use its distinct full view and no business source.");
+        uint listId = seedGraph.Heads.Keys.Single(id => WireInspector.Header(seeded.ObjectChain(initial, id).Entries[0].Record.Body).Route == 2);
+        foreach (uint id in seedGraph.Heads.Keys) {
+            var chain = seeded.ObjectChain(initial, id);
+            Need(chain.Head == seedGraph.OwnedBatch && chain.Entries.Count == 1 && chain.Entries[0].Record.Kind == ObjectVersionKind.Base &&
+                chain.Entries[0].Record.PriorAddress is null && chain.Entries[0].SourceGraph is null &&
+                chain.Entries[0].SchemaRoot == privateSchema && chain.H == chain.Entries[0].Record.ActualPayloadBytes,
+                "Every new private live object must start at its own actual Base and reset wire H.");
+            if (id != listId) { CheckWidgetBase(seeded, initial, id, 2, witness.CurrentWidgetDescriptorId!.Value); }
+        }
+        uint unused = CheckPrivateCatalog(seeded, privateSchema, witness);
+        StorageEvidence[] initialRows = Storage(seeded, seedGraph);
+        RejectOrdinaryPrivateSaves(database, configuredShared: false, initial);
+        RejectOrdinaryPrivateSaves(database, configuredShared: true, initial);
+
+        FrameAddress next;
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout current = repository.CheckoutPrivate("private");
+            Widget root = Check(current.State, upgraded: true, atSeven: 201);
+            Need(current.Head.RevisionAddress == initial && current.StateRevisionAddress == initial && current.StateId!.Value.Value == rootId,
+                "Cold explicit private checkout must import its own exact root identity and source.");
+            root.Numbers[7] = 202;
+            next = current.CommitState().RevisionAddress;
+            Need(ReferenceEquals(root, current.State) && current.StateId!.Value.Value == rootId,
+                "Confirmed private State must accept the original edited instances and identity.");
+        }
+        WireInspector.Snapshot actual = WireInspector.Read(database);
+        WireInspector.Graph graph = actual.Graph(next);
+        Need(graph.Parent == initial && graph.SourceGraph == initial && graph.RootId == rootId &&
+            RequiredSchema(graph) == privateSchema && graph.OwnedBatch is not null &&
+            graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).SequenceEqual(new[] { listId }),
+            "Private cold continuation must write only the changed List against its exact State and frozen S.");
+        var priorList = seeded.ObjectChain(initial, listId);
+        var currentList = actual.ObjectChain(next, listId);
+        var delta = currentList.Entries[^1];
+        Need(delta.Record.Kind == ObjectVersionKind.Delta && delta.Record.PriorAddress == priorList.Head &&
+            delta.ContainingBatch == graph.OwnedBatch && delta.SourceGraph == initial && delta.SchemaRoot == privateSchema &&
+            currentList.H == checked(priorList.H + delta.Record.ActualPayloadBytes),
+            "Private List Delta must preserve its exact prior and add actual encoded payload bytes to H.");
+        StorageEvidence[] rows = Storage(actual, graph);
+        Need(rows.Select(row => row.Id).SequenceEqual(initialRows.Select(row => row.Id)), "Private continuation changed complete membership IDs.");
+        foreach (StorageEvidence row in initialRows.Where(row => row.Id != listId)) {
+            Need(rows.Single(candidate => candidate.Id == row.Id) == row, "Private continuation changed a retained Widget head/H.");
+        }
+        Need(CheckPrivateCatalog(actual, privateSchema, witness) == unused, "Private frozen declarations or IDs changed after cold saving.");
+        CheckRefs(actual, Address(witness.RewriteSchema!), ("main", Address(witness.MainState!)),
+            ("fork", Address(witness.ContinuationState!)), ("private", next));
+        CheckStorage(actual, actual.Graph(Address(witness.ContinuationState!)), witness.ContinuationObjects!);
+        CheckFrames(actual, Frames(shared));
+        Need(SameSharedRef(sharedRef, ReadSharedRef(database)), "Private saves changed the actual shared ref revision or payload.");
+        Dictionary<string, string> beforeRead = FileImages(database);
+        using (Repository reader = Repository.OpenReadOnlyExisting(database, Models())) {
+            Check(reader.ReadState(reader.GetHead("main")), upgraded: true);
+            Check(reader.ReadState(reader.GetHead("fork")), upgraded: true, atSeven: 201);
+            Check(reader.ReadState(reader.GetHead("private")), upgraded: true, atSeven: 202);
+        }
+        Need(SameFiles(beforeRead, FileImages(database)), "Readonly shared/private cold recovery changed repository files.");
+        HashSet<string> oldFrames = Frames(shared).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
+        return witness with { PrivateSeedState = Hex(initial), PrivateState = Hex(next), PrivateSchema = Hex(privateSchema),
+            PrivateRootId = rootId, PrivateListId = listId, PrivateUnusedDescriptorId = unused,
+            PrivateSeedObjects = initialRows, PrivateObjects = rows,
+            PrivateFrames = Frames(actual).Where(frame => !oldFrames.Contains(frame.Address)).ToArray() };
+    }
+
+    private static void RejectOrdinaryPrivateSaves(string database, bool configuredShared, FrameAddress initial) {
+        Dictionary<string, string> before = FileImages(database);
+        using (Repository repository = Repository.OpenExisting(database, Models(),
+            schemaWriteMode: configuredShared ? SchemaWriteMode.Shared : null)) {
+            using BranchCheckout ordinary = repository.Checkout("private");
+            Widget root = Check(ordinary.State, upgraded: true, atSeven: 201);
+            ObjectId? rootId = ordinary.StateId;
+            foreach (Action save in new Action[] { () => ordinary.CommitState(), () => ordinary.CommitEvent(root) }) {
+                bool rejected = false;
+                try { save(); }
+                catch (InvalidOperationException) { rejected = true; }
+                Need(rejected && !repository.IsFaulted && ordinary.Head.RevisionAddress == initial &&
+                    ordinary.StateRevisionAddress == initial && ordinary.StateId == rootId && ReferenceEquals(ordinary.State, root) &&
+                    repository.GetHead("private").RevisionAddress == initial,
+                    "Ordinary private-head save must reject missing mode or the complete unmatched declaration without advancing or faulting.");
+            }
+        }
+        Need(SameFiles(before, FileImages(database)), "Rejected ordinary private-head saves changed repository files.");
+    }
+
+    private static uint CheckPrivateCatalog(WireInspector.Snapshot actual, FrameAddress schema, Witness witness) {
+        var catalog = actual.Catalogs[schema];
+        Need(catalog.DeclaredIds.Count == 3 && catalog.WidgetDescriptors.Count == 2 &&
+            catalog.WidgetDescriptors[1] == witness.WidgetDescriptorId && catalog.WidgetDescriptors[2] == witness.CurrentWidgetDescriptorId &&
+            catalog.PrivateUnusedDescriptor is { } unused && catalog.DeclaredIds.Contains(unused) &&
+            unused != witness.WidgetDescriptorId && unused != witness.CurrentWidgetDescriptorId,
+            "Private full catalog must retain unreachable V1/current V2 IDs and declare the exact unused Int32 schema.");
+        return catalog.PrivateUnusedDescriptor!.Value;
+    }
+
+    private static SharedRefImage ReadSharedRef(string database) {
+        using var data = Atelia.FrameStore.FrameStore.OpenReadOnly(Path.Combine(database, "data"));
+        using var versions = Atelia.VersionStore.VersionStore.OpenReadOnly(Path.Combine(database, "versions"), data);
+        RefBytesSnapshot snapshot = versions.ReadRef(2).Unwrap();
+        return new(snapshot.Revision, snapshot.Payload.ToArray());
+    }
+
+    private static bool SameSharedRef(SharedRefImage before, SharedRefImage after) =>
+        before.Revision.Equals(after.Revision) && before.Payload.AsSpan().SequenceEqual(after.Payload);
 
     private static object Verify(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
@@ -285,6 +420,8 @@ internal static class Program {
             Check(repository.ReadState(initial), upgraded: true);
             Check(repository.ReadState(repository.GetHead("main")), upgraded: true);
             Check(repository.ReadState(repository.GetHead("fork")), upgraded: true, atSeven: 201);
+            Need(repository.GetHead("private").RevisionAddress == Address(witness.PrivateState!), "The private published head changed.");
+            Check(repository.ReadState(repository.GetHead("private")), upgraded: true, atSeven: 202);
             Check(repository.ReadEvent(repository.ReadFrames("fork").Single(frame => frame.RevisionAddress == Address(witness.RewriteEvent!))), upgraded: true);
             var pair = repository.ReadPair(initial, repository.GetHead("fork"));
             Widget old = Check(pair.First, upgraded: true), current = Check(pair.Second, upgraded: true, atSeven: 201);
@@ -293,7 +430,7 @@ internal static class Program {
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         FrameAddress schema = Address(witness.RewriteSchema!), next = Address(witness.ContinuationState!);
-        CheckRefs(actual, schema, ("main", Address(witness.MainState!)), ("fork", next));
+        CheckRefs(actual, schema, ("main", Address(witness.MainState!)), ("fork", next), ("private", Address(witness.PrivateState!)));
         Need(CheckCatalog(actual, Address(witness.SeedSchema), current: false) == witness.WidgetDescriptorId &&
             CheckCatalog(actual, schema, current: true, version: 1) == witness.WidgetDescriptorId &&
             CheckCatalog(actual, schema, current: true) == witness.CurrentWidgetDescriptorId,
@@ -306,10 +443,18 @@ internal static class Program {
         CheckStorage(actual, actual.Graph(Address(witness.SeedState)), witness.SeedObjects);
         CheckStorage(actual, actual.Graph(Address(witness.RewriteState!)), witness.RewriteObjects!);
         CheckStorage(actual, actual.Graph(next), witness.ContinuationObjects!);
-        CheckFrames(actual, witness.SeedFrames.Concat(witness.RewriteFrames!).Concat(witness.ContinuationFrames!));
+        FrameAddress privateSeed = Address(witness.PrivateSeedState!), privateHead = Address(witness.PrivateState!);
+        Need(RequiredSchema(actual.Graph(privateSeed)) == Address(witness.PrivateSchema!) &&
+            RequiredSchema(actual.Graph(privateHead)) == Address(witness.PrivateSchema!) &&
+            CheckPrivateCatalog(actual, Address(witness.PrivateSchema!), witness) == witness.PrivateUnusedDescriptorId,
+            "Final private graphs must preserve their exact full frozen catalog and declaration IDs.");
+        CheckStorage(actual, actual.Graph(privateSeed), witness.PrivateSeedObjects!);
+        CheckStorage(actual, actual.Graph(privateHead), witness.PrivateObjects!);
+        CheckFrames(actual, witness.SeedFrames.Concat(witness.RewriteFrames!).Concat(witness.ContinuationFrames!).Concat(witness.PrivateFrames!));
         Need(SameFiles(before, FileImages(database)), "Final readonly verification changed repository files.");
         return new { ReadOnlyFilesUnchanged = true, OldTagPreserved = true, MainAndForkValues = true, AccurateSchemaPins = true,
-            ActualRefsVerified = true, CompleteStorageVerified = true, CompleteFramesPreserved = true, CrossSPairIndependent = true };
+            ActualRefsVerified = true, CompleteStorageVerified = true, CompleteFramesPreserved = true, CrossSPairIndependent = true,
+            PrivateColdValues = true };
     }
 
     private static S.V1 ReadHistoricalWidget(WireInspector.Snapshot actual, FrameAddress graph, uint id, uint descriptor) {

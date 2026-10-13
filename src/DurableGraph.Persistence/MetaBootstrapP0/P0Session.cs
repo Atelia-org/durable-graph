@@ -1,4 +1,5 @@
 using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Schema;
 using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
@@ -7,7 +8,23 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 internal sealed class P0Session {
     private readonly P0Repository _repository;
     private readonly string _branch;
-    private readonly P0BusinessWorkspace _business;
+    private P0BusinessWorkspace _business = null!;
+    private readonly bool _privateCatalog;
+    private readonly StateModelRegistry.FrozenConfiguration? _bootstrapConfiguration;
+    private readonly IEnumerable<DurableSchema>? _bootstrapOverrides;
+    private readonly Action? _bootstrapEditingGuard;
+
+    // The first private fork is built only in the owner's producer window.
+    internal P0Session(P0Repository repository, string branch,
+        StateModelRegistry.FrozenConfiguration configuration, IEnumerable<DurableSchema> schemaOverrides,
+        Action ensureEditingAllowed) {
+        _repository = repository;
+        _branch = branch;
+        _privateCatalog = true;
+        _bootstrapConfiguration = configuration;
+        _bootstrapOverrides = schemaOverrides;
+        _bootstrapEditingGuard = ensureEditingAllowed;
+    }
 
     internal P0Session(P0Repository repository, string branch, StateModelRegistry models) {
         _repository = repository;
@@ -21,52 +38,64 @@ internal sealed class P0Session {
     }
 
     internal P0Session(P0Repository repository, string branch,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed)
-        : this(repository, branch, configuration, ensureEditingAllowed, repository.GetStateHead(branch)) { }
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, bool privateCatalog = false)
+        : this(repository, branch, configuration, ensureEditingAllowed, repository.GetStateHead(branch), privateCatalog,
+            repository.GetHead(branch)) { }
 
     // The selected business head is owner-checked by Repository before restoring a historical Fork.
     // No target branch is published or consulted to choose the State being restored.
     internal P0Session(P0Repository repository, string branch, FrameAddress selectedHead,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed)
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, bool privateCatalog = false)
         : this(repository, branch, configuration, ensureEditingAllowed,
-            repository.Store.ResolveContentSource(P0GraphKind.State, selectedHead)) { }
+            repository.Store.ResolveContentSource(P0GraphKind.State, selectedHead), privateCatalog, selectedHead) { }
 
     private P0Session(P0Repository repository, string branch,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, FrameAddress? sourceState) {
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, FrameAddress? sourceState,
+        bool privateCatalog, FrameAddress? selectedHead) {
         _repository = repository;
         _branch = branch;
-        P0CatalogView? catalog = repository.SharedSchemaRoot is { } schema
+        _privateCatalog = privateCatalog;
+        FrameAddress? catalogRoot = privateCatalog
+            ? PrivateCatalogRoot(repository, selectedHead) : repository.SharedSchemaRoot;
+        P0CatalogView? catalog = catalogRoot is { } schema
             ? P0CatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
         if (sourceState is { } state) {
             _business = P0BusinessWorkspace.LoadState(repository.Store, state, configuration);
         } else {
-            DecodedRevision.SplitBindingEnvironment? environment = repository.SharedSchemaRoot is { } selected
+            DecodedRevision.SplitBindingEnvironment? environment = catalogRoot is { } selected
                 ? DecodedRevision.SplitBindingEnvironment.Load(repository.Store, configuration, selected) : null;
             _business = new(repository.Store, environment?.Models ?? configuration.CreateSnapshot(), environment);
         }
     }
 
     internal P0Session(P0Repository repository, string branch, P0BusinessWorkspace business,
-        Action ensureEditingAllowed) {
+        Action ensureEditingAllowed, bool privateCatalog = false, FrameAddress? selectedHead = null) {
         if (business.Source is not { } source || !ReferenceEquals(source.SourceOwner, repository.Store)) {
             throw new InvalidDataException("A restored business workspace must belong to this exact repository Store.");
         }
         _repository = repository;
         _branch = branch;
         _business = business;
-        P0CatalogView? catalog = repository.SharedSchemaRoot is { } schema
+        _privateCatalog = privateCatalog;
+        FrameAddress? catalogRoot = privateCatalog
+            ? PrivateCatalogRoot(repository, selectedHead ?? repository.GetHead(branch)) : repository.SharedSchemaRoot;
+        P0CatalogView? catalog = catalogRoot is { } schema
             ? P0CatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
     }
 
-    internal P0CatalogWorkspace Catalog { get; }
-    internal IDurableObject? State => _business.State;
-    internal P0GraphSnapshot? StateSource => _business.Source;
+    internal P0CatalogWorkspace Catalog { get; private set; } = null!;
+    internal IDurableObject? State => _business?.State;
+    internal P0GraphSnapshot? StateSource => _business?.Source;
     internal StateModelSnapshot Models => _business.Models;
-    internal NormalizedRevision? Baseline => _business.Baseline;
-    internal ObjectId RootId => _business.RootId;
-    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => _business.BindingEnvironment;
+    internal NormalizedRevision? Baseline => _business?.Baseline;
+    internal ObjectId RootId => _business?.RootId ?? default;
+    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => _business?.BindingEnvironment;
+
+    private static FrameAddress PrivateCatalogRoot(P0Repository repository, FrameAddress? selectedHead) =>
+        selectedHead is { } head && repository.Store.ReadMetadata(head).SchemaRoot is { } schema ? schema
+            : throw new InvalidDataException("A private checkout requires the current business head's exact Schema pin.");
 
     private void EnsureEditingAllowed() {
         _repository.EnsureEditingAllowed();
@@ -79,15 +108,24 @@ internal sealed class P0Session {
         P0PreparedCatalog? catalog = null;
         P0PreparedBusiness? business = null;
         try {
-            P0PendingSave pending = _repository.PrepareFrom(_branch, kind, () => {
-                if (_repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
+            (P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog) Produce() {
+                if (_business is null) {
+                    Catalog = P0CatalogWorkspace.CreatePrivateForkOwned(_bootstrapEditingGuard!,
+                        _repository.Store, _repository.SharedSchemaRoot,
+                        _bootstrapOverrides!.ToArray());
+                    _business = new(_repository.Store,
+                        _bootstrapConfiguration!.CreateSnapshot(Catalog.LookupBootstrapSchema), null);
+                }
+                if (!_privateCatalog && _repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
                     Catalog.RebaseOwned(P0CatalogView.Load(_repository.Store, latest));
                 }
                 capture = _business.CaptureOwned(root, kind);
                 catalog = Catalog.PrepareOwned(capture.Graph.Objects.Select(static row => row.Layout));
                 business = _business.PrepareOwned(capture, catalog.View, parameters);
                 return (business.Write, catalog.Write);
-            });
+            }
+            P0PendingSave pending = _privateCatalog ? _repository.PreparePrivateFrom(_branch, kind, Produce)
+                : _repository.PrepareFrom(_branch, kind, Produce);
             return new(_repository, pending, catalog!, business!);
         } catch {
             capture?.AbortPreparation();

@@ -84,7 +84,7 @@ public sealed partial class Repository {
         }
     }
 
-    private BranchCheckout CheckoutMetaBootstrap(string branchName) {
+    private BranchCheckout CheckoutMetaBootstrap(string branchName, bool privateCatalog = false) {
         RequireWriter();
         _busy = true;
         bool acquired = false;
@@ -93,7 +93,7 @@ public sealed partial class Repository {
             CheckpointAddress head = MetaBootstrapHeadCore(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreMetaBootstrapCheckout(branchName, head, out PreparedStateRestoration? candidate);
+            BranchCheckout checkout = RestoreMetaBootstrapCheckout(branchName, head, out PreparedStateRestoration? candidate, privateCatalog);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
             return checkout;
@@ -103,33 +103,33 @@ public sealed partial class Repository {
         }
     }
 
-    private BranchCheckout NewMetaBootstrapCheckout(string branchName, CheckpointAddress? head) {
+    private BranchCheckout NewMetaBootstrapCheckout(string branchName, CheckpointAddress? head, bool privateCatalog = false) {
         BranchCheckout? checkout = null;
         Action editingGuard = () => EnsureMetaBootstrapEditingAllowed(checkout!);
         var session = head is null
-            ? new P0Session(_splitRepository!, branchName, _splitConfiguration!, editingGuard)
-            : new P0Session(_splitRepository!, branchName, head.Address, _splitConfiguration!, editingGuard);
-        checkout = new(this, branchName, session, head);
+            ? new P0Session(_splitRepository!, branchName, _splitConfiguration!, editingGuard, privateCatalog)
+            : new P0Session(_splitRepository!, branchName, head.Address, _splitConfiguration!, editingGuard, privateCatalog);
+        checkout = new(this, branchName, session, head, privateCatalog);
         return checkout;
     }
 
     private BranchCheckout NewMetaBootstrapCheckout(string branchName, CheckpointAddress head,
-        P0BusinessWorkspace business) {
+        P0BusinessWorkspace business, bool privateCatalog = false) {
         BranchCheckout? checkout = null;
         var session = new P0Session(_splitRepository!, branchName, business,
-            () => EnsureMetaBootstrapEditingAllowed(checkout!));
-        checkout = new(this, branchName, session, head);
+            () => EnsureMetaBootstrapEditingAllowed(checkout!), privateCatalog, head.Address);
+        checkout = new(this, branchName, session, head, privateCatalog);
         return checkout;
     }
 
     private BranchCheckout RestoreMetaBootstrapCheckout(string branchName, CheckpointAddress head,
-        out PreparedStateRestoration? candidate) {
+        out PreparedStateRestoration? candidate, bool privateCatalog = false) {
         candidate = null;
         var store = _splitRepository.Store;
         if (head.Kind == GraphFrameKind.Event) { store.ValidateMetadataRelations(head.Address); }
         CheckpointAddress? state = NearestStateCore(head);
         // An Event-only prefix never consults a resident State or its model environment.
-        if (state is null) { return NewMetaBootstrapCheckout(branchName, head); }
+        if (state is null) { return NewMetaBootstrapCheckout(branchName, head, privateCatalog); }
         if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
             DecodedRevision.SplitBindingEnvironment environment = prepared.BindingEnvironment
                 ?? throw new InvalidDataException("A split State slot must retain its reader-issued environment.");
@@ -141,7 +141,7 @@ public sealed partial class Repository {
                 var materializedLeaf = GraphReader.RestorePreparedState(context, prepared.Selection,
                     out var leaves, collectImmutableLeaves: true);
                 var leafBusiness = P0BusinessWorkspace.FromLoaded(store, environment, materializedLeaf);
-                BranchCheckout leafCheckout = NewMetaBootstrapCheckout(branchName, head, leafBusiness);
+                BranchCheckout leafCheckout = NewMetaBootstrapCheckout(branchName, head, leafBusiness, privateCatalog);
                 candidate = new(state, prepared.Selection, leafRequirements.Complete(), leaves,
                     ImmutableLeavesCollected: true, BindingEnvironment: environment);
                 return leafCheckout;
@@ -150,7 +150,7 @@ public sealed partial class Repository {
             var materializedHit = GraphReader.RestorePreparedState(context, prepared.Selection, out _,
                 reusedLeaves: ImmutableLeafReuseEnabled ? prepared.ImmutableLeaves : null);
             return NewMetaBootstrapCheckout(branchName, head,
-                P0BusinessWorkspace.FromLoaded(store, environment, materializedHit));
+                P0BusinessWorkspace.FromLoaded(store, environment, materializedHit), privateCatalog);
         }
 
         var metadata = store.ReadMetadata(state.Address);
@@ -172,7 +172,7 @@ public sealed partial class Repository {
         var materialized = GraphReader.RestorePreparedState(reads, selection, out var immutableLeaves,
             collectImmutableLeaves: collectLeaves);
         var business = P0BusinessWorkspace.FromLoaded(store, sourceEnvironment, materialized);
-        BranchCheckout restored = NewMetaBootstrapCheckout(branchName, head, business);
+        BranchCheckout restored = NewMetaBootstrapCheckout(branchName, head, business, privateCatalog);
         var certificate = requirements.Complete();
         if (PreparedStateReuseEnabled) {
             candidate = new(state, selection, certificate, immutableLeaves, collectLeaves, sourceEnvironment);
@@ -184,7 +184,7 @@ public sealed partial class Repository {
         RequireWriter();
         RequireMetaBootstrapCheckout(checkout);
         _splitRepository!.EnsureEditingAllowed();
-        RequireSchemaWriter();
+        RequireSchemaWriter(checkout);
     }
 
     private void RequireMetaBootstrapCheckout(BranchCheckout checkout) {
@@ -201,7 +201,7 @@ public sealed partial class Repository {
 
     private CheckpointAddress CommitMetaBootstrap(BranchCheckout checkout, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireSchemaWriter();
+        RequireSchemaWriter(checkout);
         _busy = true;
         try {
             RequireMetaBootstrapCheckout(checkout);
@@ -222,7 +222,7 @@ public sealed partial class Repository {
 
     internal void PrepareAndDiscardMetaBootstrap(BranchCheckout checkout, IDurableObject root, P0GraphKind kind,
         ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireSchemaWriter();
+        RequireSchemaWriter(checkout);
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);

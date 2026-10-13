@@ -201,7 +201,15 @@ public sealed partial class GraphResources {
     }
 
     internal P0PendingSave PrepareMetaBootstrapFrom(string branch, P0GraphKind kind,
-        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) {
+        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) =>
+        PrepareMetaBootstrapFromCore(branch, kind, produce, privateCatalog: false);
+
+    internal P0PendingSave PreparePrivateMetaBootstrapFrom(string branch, P0GraphKind kind,
+        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) =>
+        PrepareMetaBootstrapFromCore(branch, kind, produce, privateCatalog: true);
+
+    private P0PendingSave PrepareMetaBootstrapFromCore(string branch, P0GraphKind kind,
+        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce, bool privateCatalog) {
         EnsureMetaBootstrapEditingAllowed();
         ArgumentNullException.ThrowIfNull(produce);
         ValidateBranchName(branch);
@@ -209,12 +217,12 @@ public sealed partial class GraphResources {
         _preparing = true;
         try {
             var prepared = produce();
-            return PrepareMetaBootstrapCore(branch, kind, prepared.Business, prepared.Catalog);
+            return PrepareMetaBootstrapCore(branch, kind, prepared.Business, prepared.Catalog, privateCatalog);
         } finally { _preparing = false; }
     }
 
     private P0PendingSave PrepareMetaBootstrapCore(string branch, P0GraphKind kind,
-        P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog) {
+        P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog, bool privateCatalog = false) {
         RequireMetaBootstrapAvailable();
         ValidateBranchName(branch);
         ArgumentNullException.ThrowIfNull(business);
@@ -223,10 +231,18 @@ public sealed partial class GraphResources {
         if (business.SourceGraph != MetaBootstrapStore.ResolveContentSource(kind, parent)) {
             throw new InvalidDataException("The business candidate must use the branch's exact latest State source.");
         }
-        if (catalog is not null && catalog.SourceGraph != _baseline.SharedRoot) {
-            throw new InvalidDataException("The catalog candidate must use the latest shared meta source.");
+        // Select the actual owner-bound source, never a caller-supplied Schema address.
+        FrameAddress? catalogSource = privateCatalog && parent is { } existing
+            ? MetaBootstrapStore.ReadMetadata(existing).SchemaRoot
+                ?? throw new InvalidDataException("A private continuation requires its current business head's Schema pin.")
+            : _baseline.SharedRoot;
+        if (catalogSource is { } source && MetaBootstrapStore.ReadMetadata(source).Kind != P0GraphKind.Meta) {
+            throw new InvalidDataException("The selected catalog source must be an actual meta graph.");
         }
-        var pending = new P0PendingSave(this, _baseline, branch, kind, business, catalog);
+        if (catalog is not null && catalog.SourceGraph != catalogSource) {
+            throw new InvalidDataException("The catalog candidate must use the exact selected meta source.");
+        }
+        var pending = new P0PendingSave(this, _baseline, branch, kind, business, catalog, privateCatalog, catalogSource);
         _pending = pending;
         return pending;
     }
@@ -253,8 +269,8 @@ public sealed partial class GraphResources {
             MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.BeforeAppend);
             RequireMetaBootstrapAvailable();
             P0GraphSnapshot? selectedMeta = pending.Catalog is not null
-                ? store.Append(P0GraphKind.Meta, _baseline.SharedRoot, null, pending.Catalog)
-                : _baseline.SharedRoot is { } currentMeta ? store.ReadGraph(currentMeta) : null;
+                ? store.Append(P0GraphKind.Meta, pending.CatalogSource, null, pending.Catalog)
+                : pending.CatalogSource is { } currentMeta ? store.ReadGraph(currentMeta) : null;
             if (pending.Catalog is not null) { MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.AfterMetaAppend); }
             RequireMetaBootstrapAvailable();
             FrameAddress? schemaRoot = selectedMeta?.Address;
@@ -272,14 +288,15 @@ public sealed partial class GraphResources {
             var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) {
                 [pending.Branch] = business.Address
             };
-            var nextBaseline = new MetaBootstrapPublicationBaseline(branches, schemaRoot);
+            FrameAddress? sharedRoot = pending.PrivateCatalog ? _baseline.SharedRoot : schemaRoot;
+            var nextBaseline = new MetaBootstrapPublicationBaseline(branches, sharedRoot);
             byte[] branchPayload = EncodeBranches(branches);
-            byte[]? sharedPayload = pending.Catalog is null ? null : EncodeShared(schemaRoot);
+            byte[]? sharedPayload = pending.PrivateCatalog || pending.Catalog is null ? null : EncodeShared(schemaRoot);
             Dictionary<RefId, ReadOnlyMemory<byte>>? changes = sharedPayload is null ? null : new() {
                 [_branchRevision.RefId] = branchPayload,
                 [_sharedRevision.RefId] = sharedPayload
             };
-            var saved = new P0SaveResult(business, selectedMeta, schemaRoot);
+            var saved = new P0SaveResult(business, selectedMeta, sharedRoot);
             MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.BeforePublication);
             RequireMetaBootstrapAvailable();
 
