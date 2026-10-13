@@ -463,9 +463,10 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 本案选择 Schema descriptor 与存活目录复用对象序列化／版本保存，业务比较与受控 meta 编辑汇入共同发布 owner。
 业务图 pin 准确 Schema 根；shared 目录与分支 rewind 分责，private 采用完整冻结 view，不以 latest shared 补缺。
 已接受定义不可改写；新私有根的显式替换产生新 descriptor，旧图及其 origin Schema 解释保持。
+容器替换以完整 old／new 布局为端点，并验证实际冻结目录与全部未触及依赖；Schema 同键替换与容器声明替换分别明确授权，不按 nominal TypeExpr 自动改写。目标已存在时复用完整 descriptor，builtin 目标不取得动态身份；旧 descriptor 行与旧视图保持。
 将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
 单次显式 Shared 提交与工作副本的默认归属分责；不得借此原地更换冻结执行环境。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
-具体实现资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)，未闭合的容器替换与异形包资格见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+具体实现资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)，未闭合的双异形环境包资格见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
 只有已发布的 exact head/manifest 引用的 candidate 才取得权威。文件存在、时间戳或最新编号
 都不够。被引用数据应先完成规定的 durability barrier，再发布；具体 process/OS crash、

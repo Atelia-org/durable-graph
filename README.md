@@ -163,7 +163,9 @@ exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍�
 开发阶段可用 `CreatePrivateBranch(name, initialState, schemaOverrides)` 创建新分支和新根：冻结完整 shared 目录，显式替换给出的完整 Schema 定义，首次业务对象全部写 Base，保留未触及声明。该入口直接为返回的工作副本选择私有保存；再次打开后用 `CheckoutPrivate(name)` 继续，私有保存只推进分支目录，不改 shared 根。私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S。代码环境须与目标定义匹配；不使用新模型物化旧异形业务图。
 已有私有定义仍不可改写；替换项若使未触及的 base／inline／容器精确依赖不一致，创建直接拒绝。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
 
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。容器改形替换入口仍待实施；具体范围与验收见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。
+首次创建还可用 `containerReplacements: [(oldLayout, newLayout)]` 显式替换完整 List／Array／Dictionary 布局。old 必须是冻结 shared 中实际声明的动态布局，两个端点都包含完整槽与 codec；TypeExpr 单独不能标识 inline 版本。已有目标复用 descriptor，多个替换目标合并；builtin 目标不创建动态 descriptor。Schema 同键改形仍须通过 `schemaOverrides` 明确给出，遗漏的未触及依赖不会自动改写。完整布局可由已有公共 Schema／Layout 工厂构造，无需用新代码物化旧根。
+
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。
 
 ### 3. 独立浏览与分支
 

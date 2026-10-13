@@ -12,17 +12,20 @@ internal sealed class P0Session {
     private readonly bool _privateCatalog;
     private readonly StateModelRegistry.FrozenConfiguration? _bootstrapConfiguration;
     private readonly IEnumerable<DurableSchema>? _bootstrapOverrides;
+    private readonly IEnumerable<(ObjectLayout OldLayout, ObjectLayout NewLayout)>? _bootstrapContainerReplacements;
     private readonly Action? _bootstrapEditingGuard;
 
     // The first private fork is built only in the owner's producer window.
     internal P0Session(P0Repository repository, string branch,
         StateModelRegistry.FrozenConfiguration configuration, IEnumerable<DurableSchema> schemaOverrides,
-        Action ensureEditingAllowed) {
+        Action ensureEditingAllowed,
+        IEnumerable<(ObjectLayout OldLayout, ObjectLayout NewLayout)>? containerReplacements = null) {
         _repository = repository;
         _branch = branch;
         _privateCatalog = true;
         _bootstrapConfiguration = configuration;
         _bootstrapOverrides = schemaOverrides;
+        _bootstrapContainerReplacements = containerReplacements;
         _bootstrapEditingGuard = ensureEditingAllowed;
     }
 
@@ -112,7 +115,7 @@ internal sealed class P0Session {
                 if (_business is null) {
                     Catalog = P0CatalogWorkspace.CreatePrivateForkOwned(_bootstrapEditingGuard!,
                         _repository.Store, _repository.SharedSchemaRoot,
-                        _bootstrapOverrides!.ToArray());
+                        _bootstrapOverrides!.ToArray(), _bootstrapContainerReplacements?.ToArray() ?? []);
                     _business = new(_repository.Store,
                         _bootstrapConfiguration!.CreateSnapshot(Catalog.LookupBootstrapSchema), null);
                 }

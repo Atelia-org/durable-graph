@@ -18,6 +18,8 @@ internal sealed class P0CatalogWorkspace {
     private readonly HashSet<ObjectLayout> _containers = [];
     private P0CatalogView? _accepted;
     private IReadOnlyDictionary<SchemaKey, DurableSchema>? _bootstrapSchemas;
+    private ObjectLayout[]? _bootstrapContainers;
+    private IReadOnlyDictionary<ObjectLayout, ObjectLayout>? _bootstrapContainerReplacements;
     private bool _privateBootstrap;
 
     internal P0CatalogWorkspace(Action ensureEditingAllowed, P0CatalogView? accepted = null) {
@@ -28,10 +30,12 @@ internal sealed class P0CatalogWorkspace {
     // Load the frozen shared view inside the owner's preparation window, rather than
     // accepting external DTO/view material supplemented with a real graph address.
     internal static P0CatalogWorkspace CreatePrivateForkOwned(Action ensureEditingAllowed,
-        P0GraphStore store, FrameAddress? sourceSharedRoot, IReadOnlyCollection<DurableSchema> schemaOverrides) {
+        P0GraphStore store, FrameAddress? sourceSharedRoot, IReadOnlyCollection<DurableSchema> schemaOverrides,
+        IReadOnlyCollection<(ObjectLayout OldLayout, ObjectLayout NewLayout)> containerReplacements) {
         ArgumentNullException.ThrowIfNull(ensureEditingAllowed);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(schemaOverrides);
+        ArgumentNullException.ThrowIfNull(containerReplacements);
         P0CatalogView? actualShared = sourceSharedRoot is { } address ? P0CatalogView.Load(store, address) : null;
         P0CatalogWorkspace workspace = new(ensureEditingAllowed, actualShared);
         foreach (DurableSchema schema in schemaOverrides) {
@@ -44,12 +48,34 @@ internal sealed class P0CatalogWorkspace {
         }
         Dictionary<SchemaKey, DurableSchema> schemas = actualShared?.Schemas.ToDictionary() ?? [];
         foreach (var pair in P0CatalogSemantics.Collect(workspace._schemas.Values, [])) { schemas[pair.Key] = pair.Value; }
-        ObjectLayout[] containers = actualShared?.ObjectLayouts.Where(static layout => layout.Schema is null).ToArray() ?? [];
+        ObjectLayout[] sourceContainers = actualShared?.ObjectLayouts.Where(static layout => layout.Schema is null).ToArray() ?? [];
+        Dictionary<ObjectLayout, ObjectLayout> replacements = [];
+        HashSet<ObjectLayout> requested = [];
+        foreach ((ObjectLayout oldLayout, ObjectLayout newLayout) in containerReplacements) {
+            ArgumentNullException.ThrowIfNull(oldLayout);
+            ArgumentNullException.ThrowIfNull(newLayout);
+            if (oldLayout.Kind is not (ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) ||
+                P0FixedBindings.IsBuiltin(oldLayout) || !sourceContainers.Contains(oldLayout)) {
+                throw new InvalidDataException("A replaced layout must be an exact declared dynamic container in the frozen source.");
+            }
+            if (!requested.Add(oldLayout)) { throw new ArgumentException("A container layout can be replaced only once.", nameof(containerReplacements)); }
+            if (newLayout.Kind is not (ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) ||
+                P0FixedBindings.IsEmployee(newLayout)) {
+                throw new ArgumentException("A replacement must be a business List, Array or Dictionary layout.", nameof(containerReplacements));
+            }
+            ValidateLayout(newLayout);
+            if (!oldLayout.Equals(newLayout)) { replacements.Add(oldLayout, newLayout); }
+        }
+        ObjectLayout[] containers = sourceContainers.Except(replacements.Keys).Concat(replacements.Values).Distinct().ToArray();
         // Preserve every untouched declaration. A retained exact dependency on a replaced
         // definition is rejected, rather than silently rewritten or removed from the view.
-        _ = P0CatalogSemantics.Collect(schemas.Values, containers);
-        P0CatalogSemantics.ValidateDeclarations(schemas.Values, containers);
-        workspace._bootstrapSchemas = schemas.ToFrozenDictionary();
+        // Only explicit Schema overrides authorize replacing an existing Schema key;
+        // new container dependencies may add keys but cannot silently change old ones.
+        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = P0CatalogSemantics.Collect(schemas.Values, containers);
+        P0CatalogSemantics.ValidateDeclarations(closure.Values, containers);
+        workspace._bootstrapSchemas = closure.ToFrozenDictionary();
+        workspace._bootstrapContainers = containers;
+        workspace._bootstrapContainerReplacements = replacements.ToFrozenDictionary();
         workspace._privateBootstrap = true;
         return workspace;
     }
@@ -59,7 +85,7 @@ internal sealed class P0CatalogWorkspace {
         .TryGetValue(key, out DurableSchema? schema) ? schema : null;
 
     internal P0CatalogView? Accepted => _accepted;
-    internal int DirtyCount => _schemas.Count + _containers.Count;
+    internal int DirtyCount => _schemas.Count + _containers.Count + (_bootstrapContainerReplacements?.Count ?? 0);
 
     internal void Set(DurableSchema schema) {
         _ensureEditingAllowed();
@@ -82,14 +108,14 @@ internal sealed class P0CatalogWorkspace {
     }
 
     internal P0PreparedCatalog PrepareOwned(IEnumerable<ObjectLayout> capturedLayouts) {
-        ObjectLayout[] layouts = _containers.Concat(capturedLayouts).Distinct().ToArray();
+        ObjectLayout[] layouts = (_privateBootstrap ? _bootstrapContainers! : Array.Empty<ObjectLayout>()).Concat(_containers).Concat(capturedLayouts).Distinct().ToArray();
         foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
-        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = P0CatalogSemantics.Collect(_schemas.Values, layouts);
+        IEnumerable<DurableSchema> requested = _privateBootstrap ? _bootstrapSchemas!.Values.Concat(_schemas.Values) : _schemas.Values;
+        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = P0CatalogSemantics.Collect(requested, layouts);
         foreach ((SchemaKey key, DurableSchema schema) in closure) { CheckAccepted(key, schema); }
         IEnumerable<DurableSchema> existing = _privateBootstrap ? _bootstrapSchemas!.Values : _accepted?.Schemas.Values ?? [];
-        IEnumerable<ObjectLayout> existingLayouts = _accepted?.ObjectLayouts ?? [];
+        IEnumerable<ObjectLayout> existingLayouts = _privateBootstrap ? _bootstrapContainers! : _accepted?.ObjectLayouts ?? [];
         if (_privateBootstrap) {
-            existingLayouts = existingLayouts.Where(static layout => layout.Schema is null);
             _ = P0CatalogSemantics.Collect(existing.Concat(closure.Values), existingLayouts.Concat(layouts));
         }
         P0CatalogSemantics.ValidateDeclarations(existing.Concat(closure.Values), existingLayouts.Concat(layouts));
@@ -100,6 +126,7 @@ internal sealed class P0CatalogWorkspace {
         foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !P0FixedBindings.IsBuiltin(value))) {
             builder.AddContainer(layout);
         }
+        if (_privateBootstrap) { builder.ReplaceContainers(_bootstrapContainerReplacements!); }
         return builder.Finish(this);
     }
 
@@ -195,6 +222,8 @@ internal sealed class P0CatalogWorkspace {
         _accepted = candidate.View;
         _schemas.Clear();
         _containers.Clear();
+        _bootstrapContainers = null;
+        _bootstrapContainerReplacements = null;
         _privateBootstrap = false;
     }
 
@@ -209,7 +238,7 @@ internal sealed class P0CatalogWorkspace {
         private readonly Dictionary<DurableSchema, ObjectId> _schemaIds = [];
         private readonly Dictionary<TypeExpr, ObjectId> _typeIds = [];
         private readonly Dictionary<DurableFieldInfo, ObjectId> _fieldIds = [];
-        private readonly HashSet<ObjectLayout> _containers = [];
+        private readonly Dictionary<ObjectLayout, ObjectId> _containers = [];
         private bool _replacedDeclaration;
         private ulong _next;
         private readonly ObjectId _root, _list;
@@ -255,10 +284,14 @@ internal sealed class P0CatalogWorkspace {
             return id;
         }
 
-        internal void AddContainer(ObjectLayout layout) {
-            if (!_containers.Add(layout)) { return; }
+        internal ObjectId AddContainer(ObjectLayout layout) {
+            if (_containers.TryGetValue(layout, out ObjectId known)) { return known; }
             if (_source is not null) {
-                try { _ = _source.DescriptorId(layout); return; }
+                try {
+                    ObjectId prior = _source.DescriptorId(layout);
+                    _containers.Add(layout, prior);
+                    return prior;
+                }
                 catch (InvalidDataException) { }
             }
             ObjectId type = layout.Kind == ObjectStateKind.List ? default : Type(layout.Type);
@@ -278,7 +311,26 @@ internal sealed class P0CatalogWorkspace {
             }
             ObjectId id = Allocate();
             Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(kind, type, 0, fields, element, codec, default)));
+            _containers.Add(layout, id);
             Declare(id);
+            return id;
+        }
+
+        internal void ReplaceContainers(IReadOnlyDictionary<ObjectLayout, ObjectLayout> replacements) {
+            if (replacements.Count == 0) { return; }
+            Dictionary<ObjectId, ObjectId> ids = [];
+            foreach ((ObjectLayout oldLayout, ObjectLayout newLayout) in replacements) {
+                ObjectId oldId = _source!.DescriptorId(oldLayout);
+                // Fixed layouts have no dynamic declaration. An existing destination
+                // keeps its immutable descriptor; multiple old members may converge.
+                ObjectId newId = P0FixedBindings.IsBuiltin(newLayout) ? default : AddContainer(newLayout);
+                ids.Add(oldId, newId);
+            }
+            ObjectId[] declared = _declared.Select(id => ids.GetValueOrDefault(id, id))
+                .Where(static id => !id.IsNull).Distinct().ToArray();
+            _declared.Clear();
+            _declared.AddRange(declared);
+            _replacedDeclaration = true;
         }
 
         private ObjectId Type(TypeExpr type) {
@@ -327,7 +379,7 @@ internal sealed class P0CatalogWorkspace {
         }
 
         internal P0PreparedCatalog Finish(P0CatalogWorkspace owner) {
-            if (_source is not null && _added.Count == 0) { return new(owner, _source, null, 0, []); }
+            if (_source is not null && _added.Count == 0 && !_replacedDeclaration) { return new(owner, _source, null, 0, []); }
             ObjectStateRecord list = P0FixedBindings.WithPreparation(new ObjectStateRecord(_list,
                 List(typeof(List<P0DescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())), _models);
             _rows[_list] = list;

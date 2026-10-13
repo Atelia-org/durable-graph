@@ -29,7 +29,9 @@
 
 单次完整目录 `CommitStateToShared`／`CommitEventToShared` 已接线：实际 Head.S 的全部声明／布局与手工意图合入最新 shared，同形复用／新项加入／同 key 异形拒绝，仍经唯一 pending／CU。显式入口可用于无 Open 写模式的 RW checkout，不改变默认归属或执行环境；Discard／冲突保原 accepted／dirty。相容 retained Base 按 origin S 解编号并保 heads/H，真实 Upgrade rewrite 仍强制 Base；Event 不推进 State。限定验收集中在 DB-087 §9。
 
-下一片先补依赖异形 inline 的完整容器新根消费者，确定显式 layout 替换入口和未触及依赖的最小闭包规则；随后闭合两套同键异形独立代码环境的准确包资格。容器替换与该包资格仍未实施，不称完整 P2 停点。十九个有效旧包 lanes 继续暂停，不因代表门禁自动恢复资格。
+完整容器替换已接 `CreatePrivateBranch(..., containerReplacements: pairs)`：old 按实际 frozen shared 的完整动态声明认证，最终声明同时替换／去重；Schema overrides 另授权同键改形，未触及深层依赖必须闭合。目标已有 descriptor 复用，builtin 目标只移除动态声明；旧 rows／heads／S 不变。真实双 SG 与持久边界的限定验收集中在 DB-087 §9。
+
+下一片闭合两套同键同版异形独立代码环境的准确包资格：独立 `PrivateContainerConsumer`／runner 与 A/B history、stage；四次真实 Publish／Verify Rebuild，A seed→B private 创建→A/B 各冷 Delta→A/B 各独立 PID readonly 验证。复用准确十包来源和现有窄 wire 观察，不改旧五进程 history 门禁，不新增公开诊断 API。该包资格仍未实施，不称完整 P2 停点；没有需用户选择的产品政策阻塞。十九个有效旧包 lanes 继续暂停，不因代表门禁自动恢复资格。
 
 DB-087 只维护当前契约与续工；原逐片过程冻结于[压缩前完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，来源 `ecc8068`。P1 包限定证据见[消费者记录](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)；私有源码分片与验证见 [DB-087 §9](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)，准确公开包证据只在[消费者记录](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)维护。显式 Prepare/Discard 保源码资格；不把同形私有包故事外推同键异形包、crash 或性能。续工核实际 HEAD／工作树，并按[依赖指南](../docs/storage-dependency.md)选择准确模式。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
@@ -143,7 +145,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／私有新根与冷续写、单次完整目录 ToShared | [DB-087 P1 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立；P2 容器 layout 替换与双异形独立编译包资格未闭合，限定资格见其 §9 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／私有新根与完整容器替换、冷续写、单次完整目录 ToShared | [DB-087 P1 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立；P2 双异形独立编译包资格未闭合，源码／包限定资格见其 §9 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 

@@ -12,9 +12,14 @@ public sealed partial class Repository {
     /// open's frozen model configuration; no old business graph is materialized. The new graph writes all live
     /// objects as Base and publishes only the branch directory. Shared Schema roots are unchanged.
     /// This explicit entry permits private saving on a writable open even without an Open-level write mode.
+    /// Optional container replacements identify both sides by complete layouts, including exact slots and codec.
+    /// Each old layout must be an actual declared dynamic container in the frozen shared view; untouched
+    /// declarations remain. These replacements do not authorize conflicting Schema definitions: use schemaOverrides.
+    /// Previously accepted nodes, frames and views remain immutable.
     /// </remarks>
     public BranchCheckout CreatePrivateBranch(string branchName, IDurableObject initialState,
-        IEnumerable<DurableSchema> schemaOverrides, ReadAmplificationBaseBudgetParameters? parameters = null) {
+        IEnumerable<DurableSchema> schemaOverrides, ReadAmplificationBaseBudgetParameters? parameters = null,
+        IEnumerable<(ObjectLayout OldLayout, ObjectLayout NewLayout)>? containerReplacements = null) {
         RequireWriter();
         _busy = true;
         bool acquired = false, delivered = false;
@@ -28,7 +33,7 @@ public sealed partial class Repository {
             // Initial shared loading, override enumeration and model closure run
             // inside the existing owner preparation guard, before any append.
             P0Session session = new(_splitRepository, branchName, _splitConfiguration, schemaOverrides,
-                () => EnsureMetaBootstrapEditingAllowed(checkout!));
+                () => EnsureMetaBootstrapEditingAllowed(checkout!), containerReplacements);
             checkout = new(this, branchName, session, null, usesPrivateSchemas: true);
             PublishMetaBootstrap(checkout, initialState, P0GraphKind.State, parameters ?? DefaultPolicy);
             delivered = true;
