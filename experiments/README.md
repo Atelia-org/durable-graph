@@ -5,7 +5,9 @@
 运行命令、证据范围与限制由各自 README 维护。
 
 
-当前旧 reader/raw Store 包 lanes 暂停，具体目录和后继消费清单见 [PackageConsumerProbe 当前状态](PackageConsumerProbe/README.md)。其历史验收记录保留；本片不整体停用 Probe。公开 Repository/Capture、当前 split 包门禁与 ListDeltaReplay 仍按各自限定范围运行，当前资格只看实际执行证据。旧 typed 恢复束退出保留在 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)；当前 SCB1/旧 Schema 权威与 owner 模式退出见 [§37](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)。旧包读取及 header/representation/raw Store 诊断需后继迁移，raw Storage/codec 仍后置，本片不声称整个底层退出。
+当前旧 reader/raw Store 包 lanes 暂停。直接旧 raw 消费的 23 个 C# 文件/19 目录及须保留的 SG 业务资产，只维护在 [PackageConsumerProbe 静态清单](PackageConsumerProbe/README.md)；源码/tests 清零不表示全仓已迁。历史验收保留，本片不整体停用 Probe。
+
+旧 typed 恢复与 SCB1/owner 退出保留在 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)／[§37](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)；当前十一 raw 类型及旧 GraphMetadata/TailMeta 路径退出见 [§38](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。公开 Repository/Capture、当前 split 包门禁与 ListDeltaReplay 保各自限定范围。后继完整非 friend accepted-history 代表门禁不要求先全迁19 lanes，也不会自动授未迁 lanes 当前 G 资格。
 
 | 何时使用 | 入口 |
 |---|---|

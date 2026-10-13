@@ -17,7 +17,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void PhysicalCacheModePreservesColdGeneratedHistoryTypedQualificationAndDeltaContinuation(bool cached) {
-        long budget = cached ? StateRevisionStore.DefaultReadCacheBudgetBytes : 0;
+        long budget = cached ? P0GraphStore.DefaultReadCacheBudgetBytes : 0;
         ObjectId listId;
         ObjectStorageInfo storage;
         FrameAddress savedAddress, schemaRoot;

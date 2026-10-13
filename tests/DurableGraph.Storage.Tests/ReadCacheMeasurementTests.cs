@@ -3,7 +3,6 @@ using System.Text.Json;
 using Atelia.FrameStore;
 using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
 using Xunit.Abstractions;
-using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Storage.Tests;
 
@@ -29,89 +28,9 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
                 Assert.Equal(unchecked(first.Value * 100), repeated.Value);
                 if (sample >= 0) Write(new { Kind = "arrays", Count = count, Sample = sample,
                     Build = build.Cost, Freeze = freeze.Cost, FirstQueryAndTraversal = first.Cost,
-                    Repeated100QueryAndTraversal = repeated.Cost, Checksum = first.Value,
-                    EstimatedMapChargeBytes = StateRevisionReadCache.GetMapCharge(count) });
+                    Repeated100QueryAndTraversal = repeated.Cost, Checksum = first.Value });
             }
         }
-    }
-
-    [Theory]
-    [InlineData("fitting", 32, 64, 2)]
-    [InlineData("oversize", 16, 4096, 0)]
-    [InlineData("thrashing", 16, 128, 6)]
-    public void Measure_actual_store_budgets(string fixture, int objectCount, int bodyBytes, int depth) {
-        string path = Path.Combine(Path.GetTempPath(), $"durable-read-cache-measure-{Guid.NewGuid():N}");
-        try {
-            FrameAddress head;
-            long maximumFrameCharge;
-            using (Frames segments = Frames.Create(path)) {
-                using StateRevisionStore writer = new(segments, 0);
-                StateRevision revision = StateRevision.CreateObjectHeadMapBase(null, Records(objectCount, bodyBytes, 0, null), []);
-                head = writer.Append(revision);
-                maximumFrameCharge = StateRevisionReadCache.GetRevisionCharge(revision);
-                for (int step = 1; step <= depth; step++) {
-                    revision = StateRevision.CreateObjectHeadMapDelta(head, Records(objectCount, bodyBytes, step, head), []);
-                    head = writer.Append(revision);
-                    maximumFrameCharge = Math.Max(maximumFrameCharge, StateRevisionReadCache.GetRevisionCharge(revision));
-                }
-                segments.ConfirmDurable();
-            }
-
-            long smallBudget = fixture == "oversize"
-                ? 2 * (StateRevisionReadCache.EntryOverheadBytes + StateRevisionReadCache.GetMapCharge(objectCount))
-                : StateRevisionReadCache.EntryOverheadBytes + maximumFrameCharge;
-            ulong? expected = null;
-            foreach (long budget in new[] { 0L, StateRevisionStore.DefaultReadCacheBudgetBytes, smallBudget }) {
-                for (int sample = -1; sample < 3; sample++) {
-                    using Frames segments = Frames.OpenReadOnly(path);
-                    using StateRevisionStore store = new(segments, budget);
-                    var first = Measure(() => ReadAll(store, head));
-                    var firstStats = store.ReadCacheStatistics;
-                    var warm = Measure(() => ReadAll(store, head));
-                    var warmStats = store.ReadCacheStatistics;
-                    expected ??= first.Value;
-                    Assert.Equal(expected.Value, first.Value);
-                    Assert.Equal(first.Value, warm.Value);
-                    Assert.InRange(warmStats.ResidentChargeBytes, 0, budget);
-                    Assert.InRange(warmStats.PeakResidentChargeBytes, 0, budget);
-                    if (sample >= 0) Write(new { Kind = "store", Fixture = fixture, ObjectCount = objectCount,
-                        BodyBytes = bodyBytes, Depth = depth, BudgetBytes = budget, Sample = sample,
-                        First = first.Cost, Warm = warm.Cost, Checksum = first.Value,
-                        FirstStatistics = firstStats, AfterWarmStatistics = warmStats });
-                }
-            }
-        } finally {
-            string resolved = Path.GetFullPath(path);
-            Assert.Equal(Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())), Path.GetDirectoryName(resolved), ignoreCase: true);
-            Assert.StartsWith("durable-read-cache-measure-", Path.GetFileName(resolved));
-            if (Directory.Exists(resolved)) Directory.Delete(resolved, recursive: true);
-        }
-    }
-
-    private static ObjectVersionRecord[] Records(int count, int bodyBytes, int step, FrameAddress? prior) {
-        ObjectVersionRecord[] records = new ObjectVersionRecord[count];
-        for (uint id = 1; id <= count; id++) {
-            byte[] body = new byte[bodyBytes];
-            for (int i = 0; i < body.Length; i++) body[i] = (byte)(id + step + i);
-            records[id - 1] = prior is { } address
-                ? ObjectVersionRecord.CreateDelta(id, address, body) : ObjectVersionRecord.CreateBase(id, body);
-        }
-        return records;
-    }
-
-    private static ulong ReadAll(StateRevisionStore store, FrameAddress head) {
-        ulong hash = 14695981039346656037UL;
-        foreach ((uint id, FrameAddress address) in store.ReadLiveObjectHeadMap(head)) {
-            hash = Mix(hash, id);
-            hash = Mix(hash, unchecked((uint)address.GetHashCode()));
-            ObjectVersionChain chain = store.ReadObjectVersionChain(head, id);
-            hash = Mix(hash, (ulong)chain.ReconstructionPayloadBytes);
-            foreach (ObjectVersionChainEntry entry in chain.Records) {
-                hash = Mix(hash, (ulong)entry.ObjectVersionPayloadBytes);
-                foreach (byte value in entry.Record.Body) hash = Mix(hash, value);
-            }
-        }
-        return hash;
     }
 
     private static ulong Query(IReadOnlyDictionary<uint, FrameAddress> items, int count) {
@@ -123,7 +42,6 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
         return sum;
     }
 
-    private static ulong Mix(ulong hash, ulong value) => unchecked((hash ^ value) * 1099511628211UL);
     private static (T Value, Cost Cost) Measure<T>(Func<T> action) {
         long allocated = GC.GetAllocatedBytesForCurrentThread();
         long start = Stopwatch.GetTimestamp();

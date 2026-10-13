@@ -113,6 +113,105 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     }
 
     [Fact]
+    public void Rotated_batches_with_equal_tickets_keep_full_address_cache_keys_and_reject_wrong_length() {
+        string path = NewPath();
+        FrameAddress first, second;
+        byte[] firstBody = Enumerable.Repeat((byte)10, 256).ToArray();
+        byte[] secondBody = Enumerable.Repeat((byte)20, 256).ToArray();
+        using (Frames frames = Frames.Create(path, 128)) {
+            first = RawBatch(frames, null, [B(1, firstBody)]);
+            second = RawBatch(frames, null, [B(1, secondBody)]);
+            frames.ConfirmDurable();
+        }
+        Span<byte> firstBytes = stackalloc byte[FrameAddress.EncodedSize];
+        Span<byte> secondBytes = stackalloc byte[FrameAddress.EncodedSize];
+        Assert.True(first.TryWrite(firstBytes));
+        Assert.True(second.TryWrite(secondBytes));
+        Assert.NotEqual(BinaryPrimitives.ReadUInt32LittleEndian(firstBytes), BinaryPrimitives.ReadUInt32LittleEndian(secondBytes));
+        Assert.Equal(firstBytes[4..].ToArray(), secondBytes[4..].ToArray());
+        using Frames reopened = Frames.OpenReadOnly(path);
+        using P0GraphStore reader = new(reopened);
+        P0Batch firstOwned = reader.ReadBatch(first), secondOwned = reader.ReadBatch(second);
+        Assert.Equal(firstBody, Assert.Single(firstOwned.Records).Body.ToArray());
+        Assert.Equal(secondBody, Assert.Single(secondOwned.Records).Body.ToArray());
+        Assert.NotSame(firstOwned, secondOwned);
+        Assert.Same(firstOwned, reader.ReadBatch(first));
+        Assert.Same(secondOwned, reader.ReadBatch(second));
+        P0GraphReadCacheStatistics before = reader.ReadCacheStatistics;
+        FrameAddress wrongLength = DifferentTicket(first);
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            Assert.Throws<InvalidOperationException>(() => reader.ReadBatch(wrongLength));
+            P0GraphReadCacheStatistics rejected = reader.ReadCacheStatistics;
+            Assert.Equal(before.BatchMisses + attempt, rejected.BatchMisses);
+            Assert.Equal(before.BatchDecodes, rejected.BatchDecodes);
+            Assert.Equal(before.EntryCount, rejected.EntryCount);
+            Assert.Equal(before.ResidentChargeBytes, rejected.ResidentChargeBytes);
+        }
+        Assert.Same(firstOwned, reader.ReadBatch(first));
+        Assert.Same(secondOwned, reader.ReadBatch(second));
+        Assert.Equal(0, reader.AppendedFrames);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Combined_directory_components_over_budget_preserve_the_first_component_and_other_hot_entries(bool mapFirst) {
+        using Frames frames = Frames.Create(NewPath());
+        ObjectVersionRecord[] records = Enumerable.Range(1, 64).Select(id => B((uint)id, [10])).ToArray();
+        FrameAddress firstBatch = RawBatch(frames, null, records);
+        FrameAddress secondBatch = RawBatch(frames, null, records);
+        var original = new SortedDictionary<uint, FrameAddress>(records.ToDictionary(row => row.ObjectId, _ => firstBatch));
+        var changed = new SortedDictionary<uint, FrameAddress>(records.ToDictionary(row => row.ObjectId, _ => secondBatch));
+        FrameAddress baseDirectory = RawDirectory(frames, null, ObjectVersionKind.Base, null, original);
+        FrameAddress hotGraph = RawGraph(frames, null, baseDirectory, null);
+        FrameAddress directory = mapFirst
+            ? frames.Append(P0GraphWire.DirectoryTag, P0GraphWire.EncodeDirectory(hotGraph, ObjectVersionKind.Delta,
+                baseDirectory, P0DirectoryCodec.PrepareDelta(original, changed).Body)).Unwrap()
+            : baseDirectory;
+        long versionCharge;
+        using (P0GraphStore probe = new(frames)) { versionCharge = P0GraphReadCache.GetDirectoryVersionCharge(probe.ReadDirectoryVersion(directory)); }
+        long frameEntry = P0GraphReadCache.EntryOverheadBytes + versionCharge;
+        long mapEntry = P0GraphReadCache.EntryOverheadBytes + P0GraphReadCache.GetDirectoryCharge(64);
+        long hotEntry = P0GraphReadCache.EntryOverheadBytes + P0GraphReadCache.GetGraphCharge();
+        long budget = Math.Max(frameEntry, mapEntry) + hotEntry;
+        Assert.True(frameEntry + P0GraphReadCache.GetDirectoryCharge(64) > budget);
+        using P0GraphStore reader = new(frames, readCacheBudgetBytes: budget);
+        if (mapFirst) {
+            // Real ancestor reads evict the root frame; successful materialization
+            // must look its address up again and admit the complete root map.
+            IReadOnlyDictionary<uint, FrameAddress> heads = reader.ReadDirectory(directory);
+            Assert.Equal(changed.OrderBy(static pair => pair.Key), heads.OrderBy(static pair => pair.Key));
+            Assert.True(reader.ReadCacheStatistics.Evictions > 0);
+            reader.ReadMetadata(hotGraph);
+            P0GraphReadCacheStatistics before = reader.ReadCacheStatistics;
+            P0DirectoryVersion returned = reader.ReadDirectoryVersion(directory);
+            Assert.Equal(ObjectVersionKind.Delta, returned.Kind);
+            Assert.Equal(before.AdmissionBypasses + 1, reader.ReadCacheStatistics.AdmissionBypasses);
+            Assert.Equal(before.Evictions, reader.ReadCacheStatistics.Evictions);
+            Assert.Equal(before.ResidentChargeBytes, reader.ReadCacheStatistics.ResidentChargeBytes);
+            Assert.Same(heads, reader.ReadDirectory(directory));
+            reader.ReadMetadata(hotGraph);
+            Assert.Equal(before.GraphDecodes, reader.ReadCacheStatistics.GraphDecodes);
+        } else {
+            P0DirectoryVersion version = reader.ReadDirectoryVersion(directory);
+            reader.ReadMetadata(hotGraph);
+            P0GraphReadCacheStatistics before = reader.ReadCacheStatistics;
+            IReadOnlyDictionary<uint, FrameAddress> heads = reader.ReadDirectory(directory);
+            Assert.Equal(original.OrderBy(static pair => pair.Key), heads.OrderBy(static pair => pair.Key));
+            Assert.Equal(before.AdmissionBypasses + 1, reader.ReadCacheStatistics.AdmissionBypasses);
+            Assert.Same(version, reader.ReadDirectoryVersion(directory));
+            Assert.NotSame(heads, reader.ReadDirectory(directory));
+            Assert.Equal(before.Evictions, reader.ReadCacheStatistics.Evictions);
+            Assert.Equal(before.ResidentChargeBytes, reader.ReadCacheStatistics.ResidentChargeBytes);
+            reader.ReadMetadata(hotGraph);
+            Assert.Equal(before.GraphDecodes, reader.ReadCacheStatistics.GraphDecodes);
+        }
+        Assert.Equal(2, reader.ReadCacheStatistics.EntryCount);
+        Assert.InRange(reader.ReadCacheStatistics.PeakResidentChargeBytes, 1, budget);
+        Assert.Equal(0, reader.AppendedFrames);
+    }
+
+    [Fact]
     public void ZeroBudgetRepeatsProductionAndNegativeBudgetsRejectBeforeBackingUse() {
         using Frames frames = Frames.Create(NewPath());
         int ownerChecks = 0;

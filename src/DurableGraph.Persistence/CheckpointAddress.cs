@@ -27,9 +27,9 @@ public sealed class CheckpointAddress : IEquatable<CheckpointAddress> {
     internal FrameAddress? Parent { get; }
     /// <summary>The graph's State/Event role, independently of its domain root's CLR type.</summary>
     public GraphFrameKind Kind { get; }
-    /// <summary>The underlying StateRevision address for diagnostics, not a cross-reopen bookmark.</summary>
+    /// <summary>The underlying graph frame address for diagnostics, not a cross-reopen bookmark.</summary>
     public StateFrameAddress RevisionAddress { get; }
-    /// <summary>The root's object identity interpreted within this graph's StateRevision.</summary>
+    /// <summary>The root's object identity interpreted within this graph.</summary>
     public ObjectId RootId { get; }
     /// <summary>Compares the issuing open repository and committed graph position.</summary>
     public bool Equals(CheckpointAddress? other) => other is not null && ReferenceEquals(Owner, other.Owner) && Address == other.Address;

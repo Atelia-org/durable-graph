@@ -5,7 +5,7 @@ using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
-// Default graph/batch/directory wire, distinct from legacy StateRevision/SCB1. Tests can encode malformed relations
+// Default graph/batch/directory wire. Tests can encode malformed relations
 // and append the resulting well-framed bytes through the real borrowed FrameStore.
 internal static class P0GraphWire {
     internal const int MaxCollectionCount = 1_000_000;

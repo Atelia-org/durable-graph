@@ -3,7 +3,22 @@
 > 产品包回归框架；各 lane 的当前状态不同。基础生成/Capture 与当前公开 Repository、split 包门禁按各自范围运行；旧读取/诊断 lanes 暂停，见下方清单。根 solution 不代替实际包交付边界；产品进度见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)。
 
 
-当前暂停的是旧 reader/raw Store 消费代码：Array、BclScalar、CompositeDictionary、Dictionary、Enum、CrossAssembly、EventHistory（含 SharedReadProbe）、Generic、HistoryCapability、List、InlineLibrary、InlineStruct、InheritanceLibrary、Nullable、Record、TemporalScalar、ValueUpgrade，以及 StateStoreConsumer 的 Program/World.V1/World.V2/GraphWorld 四文件（共 18 目录、21 个直接旧 reader 消费文件）。这些代码依赖 `RevisionDecoder`；RecordClassConsumer 另依赖旧 `GraphResources.States`/SCB1 诊断。这些 getter 在 §36 时已 internal 且默认 owner 不授旧模式，旧 lanes 当时已有编译或模式前提失效；当前旧 `SchemaStore`/SCB1、RepresentationId/Base v4 与 legacy owner 模式也已退出（范围见 [DB-087 §37](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)）。旧 typed 恢复束退出记录仍见 [§36](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。本次退出不提供适配器，也不声称 raw Storage/codec 已清零；后者与这 18 个包 consumer 的当前诊断迁移继续后置。StateStoreConsumer 与 HistoryCapabilityConsumer 没有独立 README，暂停说明集中在此；下文相应验收与命令只保留匹配历史包的含义。
+当前暂停的旧 lanes 在 §36 之前已有 getter 可访问性或默认 owner 模式前提失效；退出记录依次见 [旧 typed 恢复束 §36](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)、[SCB1/旧 Schema 权威与 owner 模式 §37](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)、[旧 raw Storage 束 §38](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。§38 从 `8243898` 退出十一 raw 类型及旧 GraphMetadata/TailMeta 路径；共用 ObjectVersion records/payload、地址、body 与当前 split 读取保留。本片不为旧 lanes 重建 adapter，源码/tests 清零不等于全仓调用清零。
+
+以下静态清单只统计仍直接消费旧 raw Store/chain 的 **23 个 C# 文件、19 个暂停目录**；它不是全部已删除 reader/Schema 符号的兼容清单。目录下 Model/Library/history 文件不计入这个 raw 直接消费数，业务资产仍保留。各 lane 针对当前 G 不能运行；下文相应命令与旧验收仅保留匹配历史包版本的意义。
+
+| 暂停目录与直接消费文件 | 直接旧 raw 符号/诊断 | 保留的 SG/业务故事 |
+|---|---|---|
+| Array、List：各 `Program.cs` | StateRevisionStore、ObjectVersionChain、ReadLiveObjectHeadMap；CheckRepresentations/CheckReorderedRegistration 另属已退出的 header 诊断 | 多种容器形状、共享环、resize、inline 元素历史升级与续写 |
+| BclScalar、TemporalScalar、Enum、Nullable：各 `Program.cs` | StateRevisionStore、ReadLiveObjectHeadMap、ReadObjectVersionChain | 精确标量/enum/Nullable、删除旧 CLR 声明后升级、冷读与原身份续写 |
+| Dictionary、CompositeDictionary、Record：各 `Program.cs` | StateRevision/StateRevisionStore、key Delta 与对象 heads 诊断 | 双槽历史、Application comparer、共享引用、record 及 lookup 碰撞 |
+| Generic、InlineStruct、ValueUpgrade：各 `Program.cs` | StateRevisionStore、ObjectVersionChain 或旧目录/链诊断 | closed generic、嵌套 inline、规则作用域与删除旧值类型后的 Upgrade |
+| CrossAssembly、InlineLibrary、InheritanceLibrary、RecordClass：各 `Host/Program.cs` | StateRevisionStore 或 StateRevision/ObjectVersionChain | 实际独立包/程序集、隐藏继承与值状态、readonly/constructor bypass、记录继承历史 |
+| EventHistory：`Program.cs`、`SharedReadProbe.cs` | StateRevisionStore/ObjectVersionChain、CheckActualHeads | 不强制交替的 E/S、历史查询、ReadPair 的共享/分裂与 editable 隔离 |
+| HistoryCapability：`Program.cs` | StateRevisionStore/ObjectVersionChain 与旧 exact 读取诊断 | readers-only 与 Upgrade 能力区别、abstract orphan 全图升级、删除 CLR shell 后的历史拒绝 |
+| StateStore：`Program.cs`、`World.V1.cs`、`World.V2.cs`、`GraphWorld.cs` | StateRevisionStore/StateRevision/ObjectVersionChain、旧目录/链/Schema 注册诊断 | 真实 V1 seed→V2 cold Upgrade、共享字符串与派生环、readonly hydration、Base/NoChange/Delta、Remove |
+
+这些目录都混有真实 SG 模型和公开 Repository 故事，没有可以按“纯旧 codec”整删的 lane。后继按具体公开故事选择性迁移 `ReadState`/`ReadEvent`/`ReadCheckpoint`/`ReadPair`/`Fork` 与领域值检查；旧 header/raw 诊断及 runner markers 一并重审。完整非 friend 的公开 accepted-history 代表门禁仍后置；19 lanes 全迁不是进入该门禁的技术依赖，门禁成功也不自动授未迁 lanes 当前资格。StateStore 与 HistoryCapability 没有独立 README，暂停说明集中在此。
 
 这项暂停不包括基础 `Run-Probe` 的生成/Capture body 验证、TagConsumer、ImmutableLeafConsumer、EventHistoryRecoveryConsumer、当前 MetaBootstrapSchemaConsumer/SplitRepositoryConsumer，也不暂停 ListDeltaReplayProbe。它们没有上述静态读取依赖；各自是否具备当前包或故障资格仍由自己的实际证据界定，不因其他 lane 暂停或 source 回归通过而自动获得更广资格。
 

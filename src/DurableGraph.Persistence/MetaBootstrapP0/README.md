@@ -1,7 +1,7 @@
 <a id="db-087-p0持久-meta-自举实验"></a>
 # DB-087：meta 自举实现与分片证据
 
-本目录的自举读写现已进入公开默认 Repository／BranchCheckout／GraphResources；默认接线与第六片旧保存高层退出已验；第七片旧 typed 恢复束退出已通过有限源码验收，见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
+本目录的自举读写已进入公开默认 Repository／BranchCheckout／GraphResources；旧保存／typed reader／Schema 权威／owner 模式与 raw Storage 束已退出，限定源码验收见 [DB-087 §38](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。后继有限非 friend 公开 accepted-history 准确包门禁尚未完成。其余段落保留各历史片的实施范围，不以旧“默认未切”说明推定当前状态。
 
 catalog、共同 writer 与发布 owner 已接共用恢复／业务 workspace；公开前端复用这一条路径，不整体丢弃 P0。旧保存高层由本片删除，低层按调用清零退出是后继；共同 payload 和受控容器 emitter 保留。
 代码去向、依赖顺序与尚未敲定的问题集中在 DB-087，不以 `P0` 目录名推断最终产品边界。
@@ -105,9 +105,11 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 [P1d 第六片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出) 已删除旧 LoadedWorld／WorldWorkspace／PreparedWorldSave、旧 planner 与 Store 规划入口；共同 writer、workspace／候选及 WithSplitGraph 真实安装保留，有效安全见证迁移、最终源码回归与 Probe smoke 已验。SCB1／raw Store／旧 reader 另片退出，完整非 friend accepted-history 公开包再后置；不搬旧 StageCore 到新壳，不将历史源码链接当仍存 API。
 
 
-[P1d 第七片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出) 已删除 RevisionDecoder／RevisionReadSession／TypedObjectVersionReader、GraphReader 旧 Store/session 入口及 legacy 保存来源字段。ReadSplit 私有签发／完整成员与 heads/H、共同 Normalize／Pair／两阶段物化／leaf／候选检查保持；旧 typed cache 次数退役，强反例迁真实新 reader，CRC 补例与最终源码回归通过。SCB1／GraphResources 旧模式／raw Store／header codecs 和旧 probe 尚有后继，不造替代 reader，也不授完整 P1 或新包资格。
+[P1d 第七片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出) 已删除 RevisionDecoder／RevisionReadSession／TypedObjectVersionReader、GraphReader 旧 Store/session 入口及 legacy 保存来源字段。ReadSplit 私有签发／完整成员与 heads/H、共同 Normalize／Pair／两阶段物化／leaf／候选检查保持；旧 typed cache 次数退役，强反例迁真实新 reader，CRC 补例与最终源码回归通过。该片的 SCB1／GraphResources 旧模式／raw Store／header codecs 后继退出已由 §37–38 完成，旧 probe 仍暂停当前 G、按需迁移；不造替代 reader，不改该片原资格或授完整 P1／新包资格。
 
-[P1d 第八片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出) 已退出旧 SchemaStore／SCB1 catalog／RepresentationId／Base header 与 GraphResources legacy 模式，最终源码构建／完整回归通过限定验收。Snapshot 仅保所选不可变 view 的 lookup，成功 memo 仍复核标准 exact 依赖；真实清理、锁、根 grammar／cold 容量拒绝迁入唯一 owner。后继 raw Storage 束与剩余旧 probe→完整非 friend accepted-history 公开包→P2，不新增包、进程或性能资格。
+[P1d 第八片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出) 已退出旧 SchemaStore／SCB1 catalog／RepresentationId／Base header 与 GraphResources legacy 模式，最终源码构建／完整回归通过限定验收。Snapshot 仅保所选不可变 view 的 lookup，成功 memo 仍复核标准 exact 依赖；真实清理、锁、根 grammar／cold 容量拒绝迁入唯一 owner。该片后继 raw 束退出见下段，原资格不扩到包、进程或性能。
+
+[P1d 第九片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出) 已退出旧 raw Storage 十一类型与旧 TailMeta codec，最终源码构建、定向与完整回归通过限定验收。共用 records／payload／精确计量、地址／只读字典与 owned LRU 保留；真实 P0 承接必要来源、Base 截链、循环、CRC／失败不 admit、完整地址键与组件预算规律，不造替代 Store。下一步直接验有限非 friend 公开 accepted-history 准确包，再接 P2；十九个有效旧包 lane 的资产原地保留并暂停当前 G，选择性迁移不是该门禁前置，也不自动恢复未迁 lane 资格。不新增包、进程或性能证据，运行记录只维护 §38。
 
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 

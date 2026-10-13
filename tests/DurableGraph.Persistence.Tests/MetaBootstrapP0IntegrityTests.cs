@@ -1,3 +1,4 @@
+using System.Buffers;
 using Atelia.Data;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Storage;
@@ -244,6 +245,97 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Complete_two_frame_object_or_directory_prior_cycles_fail_cold_and_warm(bool objectPrior) {
+        using Fixture fixture = CreateFixture();
+        P0GraphSnapshot positive = fixture.State(null, [B(1, [10])]);
+        var cycle = fixture.AppendCycle(objectPrior);
+        fixture.Cold(store => {
+            if (objectPrior) {
+                Assert.Equal(cycle.First, store.ReadGraph(cycle.Selection).Objects[1]);
+                Assert.Equal(cycle.Second, Assert.Single(store.ReadBatch(cycle.First).Records).PriorAddress);
+                Assert.Equal(cycle.First, Assert.Single(store.ReadBatch(cycle.Second).Records).PriorAddress);
+            } else {
+                Assert.Equal(cycle.Second, store.ReadDirectoryVersion(cycle.First).Prior);
+                Assert.Equal(cycle.First, store.ReadDirectoryVersion(cycle.Second).Prior);
+            }
+            for (int attempt = 0; attempt < 2; attempt++) {
+                InvalidDataException error = objectPrior
+                    ? Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(cycle.Selection, 1))
+                    : Assert.Throws<InvalidDataException>(() => store.ReadDirectory(cycle.First));
+                Assert.Contains("cycle", error.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            Assert.Equal(new byte[] { 10 }, Assert.Single(store.ReadObjectChain(positive.Address, 1).Entries).Record.Body.ToArray());
+            Assert.Equal(0, store.AppendedFrames);
+        });
+    }
+
+    [Fact]
+    public void Cold_and_warm_chain_H_keeps_actual_redundant_body_length_bytes() {
+        using Fixture fixture = CreateFixture();
+        ArrayBufferWriter<byte> payload = new();
+        BareValueWriter writer = new(payload);
+        writer.WriteRawBytes("P0B1"u8);
+        writer.WriteBoolean(false);
+        writer.WriteBoolean(true);
+        WriteAddress(writer, fixture.SchemaRoot);
+        writer.WriteVarUInt32(1);
+        writer.WriteVarUInt32(1);
+        writer.WriteByte((byte)ObjectVersionKind.Base);
+        writer.WriteRawBytes([0x81, 0x00, 0x10]); // Legal redundant length=1, followed by one body byte.
+        FrameAddress batch = fixture.RawBatch(payload.WrittenSpan);
+        FrameAddress directory = fixture.BaseDirectory(null, Map((1u, batch)));
+        FrameAddress graph = fixture.Graph(P0GraphKind.State, null, 1, directory, batch);
+        fixture.Cold(store => {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                P0ObjectChain chain = store.ReadObjectChain(graph, 1);
+                P0ChainEntry entry = Assert.Single(chain.Entries);
+                Assert.Equal(batch, chain.Head);
+                Assert.Equal(new byte[] { 0x10 }, entry.Record.Body.ToArray());
+                Assert.Equal(4, entry.Record.EncodedPayloadBytes); // kind + two length bytes + body.
+                Assert.Equal(4, entry.PayloadBytes);
+                Assert.Equal(4, chain.ReconstructionPayloadBytes);
+                Assert.Equal(3, ObjectVersionPayloadSize.GetBasePayloadBytes(1)); // Canonical re-encoding is shorter.
+            }
+            Assert.True(store.ReadCacheStatistics.BatchHits > 0);
+            Assert.Equal(0, store.AppendedFrames);
+        });
+    }
+
+    [Theory]
+    [InlineData(1_000_001u, false)]
+    [InlineData(1_000_000u, false)]
+    [InlineData(2u, true)]
+    public void Completed_batch_count_cap_and_remaining_guard_reject_before_admission(uint count, bool oneMinimumEntry) {
+        using Fixture fixture = CreateFixture();
+        ArrayBufferWriter<byte> payload = new();
+        BareValueWriter writer = new(payload);
+        writer.WriteRawBytes("P0B1"u8);
+        writer.WriteBoolean(false);
+        writer.WriteBoolean(false);
+        writer.WriteVarUInt32(count);
+        if (oneMinimumEntry) { writer.WriteRawBytes([1, (byte)ObjectVersionKind.Base, 0]); }
+        FrameAddress bad = fixture.RawBatch(payload.WrittenSpan);
+        FrameAddress good = fixture.Batch(null, [B(1, [])]);
+        fixture.Cold(store => {
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() => store.ReadBatch(bad));
+                Assert.Contains("count", error.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(attempt, store.ReadCacheStatistics.BatchMisses);
+                Assert.Equal(0, store.ReadCacheStatistics.BatchDecodes);
+                Assert.Equal(0, store.ReadCacheStatistics.BatchHits);
+                Assert.Equal(0, store.ReadCacheStatistics.EntryCount);
+                Assert.Equal(0, store.ReadCacheStatistics.ResidentChargeBytes);
+            }
+            P0Batch healthy = store.ReadBatch(good);
+            Assert.Empty(Assert.Single(healthy.Records).Body.ToArray());
+            Assert.Same(healthy, store.ReadBatch(good));
+            Assert.Equal(0, store.AppendedFrames);
+        });
+    }
+
     private Fixture CreateFixture() {
         string root = Path.Combine(_temporaryRoot, RootPrefix + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -300,6 +392,55 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
 
         internal FrameAddress Batch(FrameAddress? source, ObjectVersionRecord[] records) =>
             _frames.Append(P0GraphWire.BatchTag, P0GraphWire.EncodeBatch(source, SchemaRoot, records)).Unwrap();
+
+        internal FrameAddress RawBatch(ReadOnlySpan<byte> payload) => _frames.Append(P0GraphWire.BatchTag, payload).Unwrap();
+
+        internal (FrameAddress First, FrameAddress Second, FrameAddress Selection) AppendCycle(bool objectPrior) {
+            FrameAddress witness = TestAddress();
+            byte[] graphTemplate = P0GraphWire.EncodeGraph(P0GraphKind.State, null, new(1), witness, SchemaRoot, null);
+            using FrameBuilder firstGraphBuilder = _frames.BeginAppend(graphTemplate.Length, 0, out FrameAddress firstGraph);
+            using FrameBuilder secondGraphBuilder = _frames.BeginAppend(graphTemplate.Length, 0, out FrameAddress secondGraph);
+            if (objectPrior) {
+                int length = P0GraphWire.EncodeBatch(witness, SchemaRoot, [D(1, witness, [])]).Length;
+                using FrameBuilder firstBuilder = _frames.BeginAppend(length, 0, out FrameAddress first);
+                using FrameBuilder secondBuilder = _frames.BeginAppend(length, 0, out FrameAddress second);
+                // No DG Store operation runs under these backing writer leases.
+                // Each completed source graph selects the next exact batch head.
+                FrameAddress firstDirectory = BaseDirectory(null, Map((1u, second)));
+                FrameAddress secondDirectory = BaseDirectory(null, Map((1u, first)));
+                BareValueWriter firstGraphWriter = new(firstGraphBuilder.PayloadAndMeta);
+                firstGraphWriter.WriteRawBytes(P0GraphWire.EncodeGraph(P0GraphKind.State, null, new(1), firstDirectory, SchemaRoot, null));
+                BareValueWriter secondGraphWriter = new(secondGraphBuilder.PayloadAndMeta);
+                secondGraphWriter.WriteRawBytes(P0GraphWire.EncodeGraph(P0GraphKind.State, null, new(1), secondDirectory, SchemaRoot, null));
+                BareValueWriter firstWriter = new(firstBuilder.PayloadAndMeta);
+                firstWriter.WriteRawBytes(P0GraphWire.EncodeBatch(firstGraph, SchemaRoot, [D(1, second, [])]));
+                BareValueWriter secondWriter = new(secondBuilder.PayloadAndMeta);
+                secondWriter.WriteRawBytes(P0GraphWire.EncodeBatch(secondGraph, SchemaRoot, [D(1, first, [])]));
+                Assert.Equal(firstGraph, firstGraphBuilder.EndAppend(P0GraphWire.GraphTag).Unwrap());
+                Assert.Equal(secondGraph, secondGraphBuilder.EndAppend(P0GraphWire.GraphTag).Unwrap());
+                Assert.Equal(first, firstBuilder.EndAppend(P0GraphWire.BatchTag).Unwrap());
+                Assert.Equal(second, secondBuilder.EndAppend(P0GraphWire.BatchTag).Unwrap());
+                return (first, second, secondGraph);
+            } else {
+                byte[] delta = P0DirectoryCodec.PrepareDelta(Map((1u, witness)), Map((1u, witness))).Body.ToArray();
+                int length = P0GraphWire.EncodeDirectory(witness, ObjectVersionKind.Delta, witness, delta).Length;
+                using FrameBuilder firstBuilder = _frames.BeginAppend(length, 0, out FrameAddress first);
+                using FrameBuilder secondBuilder = _frames.BeginAppend(length, 0, out FrameAddress second);
+                BareValueWriter firstGraphWriter = new(firstGraphBuilder.PayloadAndMeta);
+                firstGraphWriter.WriteRawBytes(P0GraphWire.EncodeGraph(P0GraphKind.State, null, new(1), second, SchemaRoot, null));
+                BareValueWriter secondGraphWriter = new(secondGraphBuilder.PayloadAndMeta);
+                secondGraphWriter.WriteRawBytes(P0GraphWire.EncodeGraph(P0GraphKind.State, null, new(1), first, SchemaRoot, null));
+                BareValueWriter firstWriter = new(firstBuilder.PayloadAndMeta);
+                firstWriter.WriteRawBytes(P0GraphWire.EncodeDirectory(firstGraph, ObjectVersionKind.Delta, second, delta));
+                BareValueWriter secondWriter = new(secondBuilder.PayloadAndMeta);
+                secondWriter.WriteRawBytes(P0GraphWire.EncodeDirectory(secondGraph, ObjectVersionKind.Delta, first, delta));
+                Assert.Equal(firstGraph, firstGraphBuilder.EndAppend(P0GraphWire.GraphTag).Unwrap());
+                Assert.Equal(secondGraph, secondGraphBuilder.EndAppend(P0GraphWire.GraphTag).Unwrap());
+                Assert.Equal(first, firstBuilder.EndAppend(P0GraphWire.DirectoryTag).Unwrap());
+                Assert.Equal(second, secondBuilder.EndAppend(P0GraphWire.DirectoryTag).Unwrap());
+                return (first, second, secondGraph);
+            }
+        }
 
         internal FrameAddress BaseDirectory(FrameAddress? source, IReadOnlyDictionary<uint, FrameAddress> heads) =>
             Directory(source, ObjectVersionKind.Base, null, P0DirectoryCodec.PrepareBase(heads).Body);

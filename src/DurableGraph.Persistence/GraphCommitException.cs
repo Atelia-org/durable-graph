@@ -34,7 +34,7 @@ public sealed class GraphCommitException : IOException {
 
     /// <summary>The known publication result, independently of the repository's IsFaulted status.</summary>
     public GraphCommitOutcome Outcome { get; }
-    /// <summary>The candidate StateRevision address when known; null for ref-only and tag operations. It does not establish publication or form a bookmark.</summary>
+    /// <summary>The candidate graph frame address when known; null for ref-only and tag operations. It does not establish publication or form a bookmark.</summary>
     public FrameAddress? CandidateRevisionAddress { get; }
 }
 

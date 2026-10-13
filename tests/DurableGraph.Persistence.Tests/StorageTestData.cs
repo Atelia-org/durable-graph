@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Buffers.Binary;
 using System.Reflection;
 using Atelia.Data;
@@ -38,30 +37,6 @@ internal static class StorageTestData {
         Span<byte> bytes = stackalloc byte[FrameAddress.EncodedSize];
         if (!address.TryWrite(bytes)) { throw new InvalidOperationException("Invalid fixture address."); }
         writer.WriteRawBytes(bytes);
-    }
-
-    internal static FrameAddress AppendUnchecked(DataStore data, StateRevision revision, ReadOnlySpan<byte> metadata = default) {
-        ArrayBufferWriter<byte> payload = new();
-        BareValueWriter writer = new(payload);
-        writer.WriteByte(4);
-        writer.WriteByte((byte)revision.ObjectHeadMapKind);
-        writer.WriteBoolean(revision.ParentRevisionAddress.HasValue);
-        if (revision.ParentRevisionAddress is { } parent) { WriteAddress(writer, parent); }
-        writer.WriteVarUInt32((uint)revision.LocalObjects.Count);
-        foreach (var record in revision.LocalObjects) {
-            writer.WriteVarUInt32(record.ObjectId);
-            writer.WriteByte((byte)record.Kind);
-            if (record.PriorAddress is { } prior) { WriteAddress(writer, prior); }
-            writer.WriteBytes(record.Body);
-        }
-        if (revision.ObjectHeadMapKind == ObjectHeadMapKind.Base) {
-            writer.WriteVarUInt32((uint)revision.ExternalObjectHeads.Count);
-            foreach (var (id, head) in revision.ExternalObjectHeads) { writer.WriteVarUInt32(id); WriteAddress(writer, head); }
-        } else {
-            writer.WriteVarUInt32((uint)revision.RemovedObjectIds.Count);
-            foreach (uint id in revision.RemovedObjectIds) { writer.WriteVarUInt32(id); }
-        }
-        return data.Append(StateRevisionStore.FrameTag, payload.WrittenSpan, metadata).Unwrap();
     }
 
     internal static GraphResources ResourcesOf(Repository repository) =>
