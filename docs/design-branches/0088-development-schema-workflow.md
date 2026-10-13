@@ -1,6 +1,6 @@
 # DB-088：固定用户基线上的 Schema 开发与定稿
 
-> 状态：2026-10-13，最小纵向实验已通过；特例删减尚未实施。承接 DB-087 完成后的用户需求校准；不是重新打开自举重构排期。
+> 状态：2026-10-13，最小纵向实验已通过，实施前语义校核已收束；特例删减尚未实施。承接 DB-087 完成后的用户需求校准；不是重新打开自举重构排期。
 
 ## 1. 问题与用户决定
 
@@ -10,9 +10,11 @@
 
 - 首选开发流程是固定 shared baseline → 每次模型调整后建立新的 dev fork → baseline 版本加一的当前草稿。各 fork 的草稿可同版本异形。
 - 原用户图仍存活对象的 ObjectId、共享与循环需要保持；开发新增数据通常可以重建或重放。
-- 如果要继承上一草稿的数据继续改模型，应递增 V3、V4；同一分支已接受的同 SchemaKey 定义不能被另一形状替换。
+- 如果要继承上一草稿的数据继续改模型，应递增 V3、V4；同一已接纳目录及其后续增量中的同 SchemaKey 定义不能改形。
 - 对外只交付一个定稿新版本；开发用主／次版本号只是备选，不预先加入身份或版本平台。
 - 先验证完整开发故事，再按证据删减 DB-087 的同 key 新根替换特例。
+
+当前实现将不可改形约束作用于已接纳目录：两个 fork 从尚无该 key 的共同 baseline 独立新增时可接纳不同形状，完整合并仍须检查冲突；尚未接纳的 dirty 候选可在 Discard 后更正。这些实现边界来自 `P0CatalogWorkspace.CheckAccepted`／`CollectToSharedOwned` 和对应回归，不是增加新的全仓库唯一形状政策。
 
 DB-087 的 append-only、共同 writer、准确 origin／selected／execution S、完整 source／prior／OwnedBatch、refs 原子发布、single writer 与故障寿命合同全部保持。无旧数据／API 兼容负担。
 
@@ -49,7 +51,7 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 | fixed 员工引导、meta ObjectId、完整布局与来源校验 | 保留 | 各 fork 可有不同 V2 形状，旧 bytes 仍须准确解释 |
 | 完整 ToShared 与两 ref CU | 保留 | 发布一致性合同；最终干净 fork 控制导入范围 |
 | 同 key Schema overrides／完整 container replacements | 删除目标，未实施 | 超出当前用户需求；先替换仍有价值的目录、故障与冷恢复见证 |
-| 单独 private bootstrap lookup／空来源 Workspace／声明替换 | 随入口删除，未实施 | 普通 baseline 恢复已验证可以承担首选流程；尚未删除或完成覆盖迁移 |
+| 私有新根 bootstrap lookup／延迟空来源建根／声明替换 | 随入口删除，未实施 | 普通 baseline 恢复承担首选流程；保普通 Shared 新图及 Event-only 合法空 State 工作区 |
 | 主／次版本、draft token、自动 merge／过滤 | 延期 | 没有此次实验的必要消费，不预建框架 |
 
 删除不能连带丢失完整闭包、实际来源、Event／Discard、发布失败及旧帧保持的回归。现有消费者是复杂性成本的证据，不构成兼容约束。施工顺序为先形成新正控故事，再迁移非特例语义见证，最后删除 API 与专用状态；不为保存旧测试重新建设替代入口。
@@ -83,21 +85,32 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 **最终产品形状：**
 
-- 删除整个公开 `CreatePrivateBranch(name, initialState, schemaOverrides, ..., containerReplacements)` 入口；不保空 overrides 重载、obsolete／compat adapter、internal 替代建根入口或通用 Fork 策略。首选路线继续使用现有 ref-only `CreateBranch`／`Fork` 与 `CheckoutPrivate`，无需先造便利 API。
+- 删除整个公开 `CreatePrivateBranch(name, initialState, schemaOverrides, ..., containerReplacements)` 入口；不保空 overrides 重载、obsolete／compat adapter、internal 替代建根入口或通用 Fork 策略。首选路线为 ref-only `CreateBranch(checkpoint)`→`CheckoutPrivate`。`Fork` 则先恢复、后发布 ref，交付普通 checkout；关闭后可另行签出 private。两者保持各自失败语义，无需先造便利 API。
 - `P0Session` 删除 overrides 专用构造器、`_bootstrapConfiguration`／`_bootstrapOverrides`／`_bootstrapContainerReplacements`／`_bootstrapEditingGuard` 及首次 Prepare 创建空业务 Workspace 的分支。保普通 Shared 新建图、Event-only 的合法空 State 工作区和所有真实来源恢复构造路径，不按“空来源”关键词整删。
-- `P0CatalogWorkspace` 删除 `CreatePrivateForkOwned`／`LookupBootstrapSchema`、`_privateBootstrap` 和其逻辑替换表；Builder 去掉 bootstrap 参数、同 key 声明替换、`ReplaceContainers`／`_replacedDeclaration` 及一般 replacement Delta 分支。正常新增版本／容器声明、同形复用、无变化复用和 append Delta 保持；已接受定义仍不可改形。
+- `P0CatalogWorkspace` 删除 `CreatePrivateForkOwned`／`LookupBootstrapSchema`、`_privateBootstrap` 和其逻辑替换表；Builder 去掉 bootstrap 参数、同 key 声明替换、`ReplaceContainers`／`_replacedDeclaration` 及一般 replacement Delta 分支。正常新增版本／容器声明、同形复用、无变化复用和 append Delta 保持；旧 Schema／完整容器布局的声明保留，新版追加共存，已接纳定义不可改形。
 - 保 `UsesPrivateSchemas`／private 保存目的地选择、私有 meta 来源 Head.S、业务基线 State.S、冻结 execution view、准确 origin S、完整 ToShared 与共同 writer／owner。目录不可达声明和依赖不能因删特例而被裁剪。
 - 删除的是**私有新根专用 bootstrap**，不删除 **meta 自举固定引导**：员工 DTO／fixed bindings／builtin codec、Schema 工厂、descriptor meta ObjectId、存活 Dictionary 与对象版本核心全部保留。`MetaBootstrapP0` 内部名称不构成另一次改名或整束删除任务。
 
 **依赖顺序与交付：**
 
-1. 先对 §4 的六组测试与两活动消费者做断言去向表。区别必须保的产品规律、已有回归可直接承担的规律、只属于删除特例的用例；保真实 source／ID／闭包／Event／Discard／fault／旧帧证据，不要求把 no-op／合流／removal-only／同版替换端点认证重新实现一遍。
-2. 将必要 source 测试改到 baseline fork＋不同版本 Upgrade。优先覆盖 private 的 actual Head.S（包括 Event 接受 meta）、完整不可达目录、真实来源拒绝、发布前拒绝与发布边界冷裁决。`CreateBranch(checkpoint)` 已独立发布，后续签出失败只释放占用并保 branch 指 baseline，不套用旧复合入口失败时删除名字的断言。
+1. 先对 §4 的六组测试与两活动消费者做断言去向表，按产品规律分配见证，不要求文件、用例、观察字段或 PID 数量一一对应。区别必须保、已有回归可直接承担、只属于删除特例的断言；保真实 source／ID／闭包／Event／Discard／fault／旧帧证据，不重建 no-op／合流／removal-only／同版替换端点认证。
+2. 必要 source／Event／Discard／fault 测试迁到真实 baseline 的普通 private 路径；仅模型改型／rewrite 故事需要不同版本 history／Upgrade，同形机制用例以 `Catalog.Set`／Event 产生实际变化。保 Event 为 Head、State.S 较旧时的全关冷签出，完整不可达目录和错误真实来源拒绝；Development 的单一纵向故事不替代这些见证。两步 `CreateBranch(checkpoint)` 成功后，签出失败只释放占用并保 branch 指 baseline；`Fork` 恢复失败不发布名字。
 3. 删除上述公开入口和内部专用状态、调用点及仅特例用例。允许测试迁移与代码删除一起完成可构建片，不为了逐步编译留下第二产品路径。正常版本升级须带匹配的 Schema／历史 reader／Upgrade；不放松同 view 同 key 冲突或完整 layout 校验。
-4. 迁移 Split／PrivateContainer 的公开故事与其有限 observer／runner。PrivateContainer 从 shared Point V1 的用户图恢复到 private Point V2，显式提供必要 inline／Nullable／List 元素 Upgrade；保 Keeper 等不可达已声明项，保 root／List 身份与冷续，不再使用人工 old/new layout pairs。若某观察仅属于旧替换格式，用更小的新观察替代，不将旧 inspector 变成通用 wire 平台。
+4. 迁移 Split／PrivateContainer 的公开故事与其有限 observer／runner。Split 将原 overrides 注入的 `PrivateUnused` 改为真实 SG Event，并在 Open 前注册其 definition；普通 private 签出后提交该 Event，使声明进入 Head.S 而 State／身份／rewrite 不推进。全部关闭后从 Event Head 冷签出，最终 ToShared 捕获普通 Widget，核对当前 State 不可达的 Event 声明仍完整导入；不能再次捕获该 Event 根来补声明、掩盖导入缺陷。普通包不借 internal `Catalog.Set`、IVT 或新公开 meta 登记入口。
+
+   PrivateContainer 先保存 Keeper，再保存并冻结含 Keeper 声明的 main baseline；现夹具在 main/tag 后才保存 Keeper，不能原样保其“从 latest shared 继承”断言。Point V1→V2 使用一个现有 child provider、开启 `AllowNullableLifting` 的已注册规则集与 `UseListElementUpgrades`，不另建 Nullable wrapper 或容器转换 API；nominal List 引用未变时不为此强制 Root 升版。保完整旧／新 Point 与 List 声明、原 root／List 身份、升级 Base 及冷 Delta。V2 带 V1 history 应可只读升级 V1；无实际冲突时 ToShared 应成功。退出旧 missing-pair／同名修正、双向 wrong-read 和同 V1 ToShared 必冲突观察；同 V2 异形拒绝由 Development A/B 与必要源码回归承担，不另造竞争包故事或通用 inspector。
 5. 删除片用明确 source mode 构建 solution 并运行相关源码回归；最终整合跑全套源码 tests。公开包重新以**新 G**消费准确 S feed，运行 Development 与已迁移的代表故事；pack 使用 package mode／独立版本与准确来源。此次旧 G 的成功不能授删除后的产品资格。冻结旧工件与归档不改写、不清理。
 6. 收束活动 README／术语表／target／PROJECT-STATE／DB-087 与索引中的旧入口、替换能力和资格说明；历史证据保原版本与 successor 指针。当前待办只在路线图保留，不累积施工日志。
 
+**迁移时最易退化的证据：**
+
+| 规律 | 最小见证与去向 |
+|---|---|
+| 错误但真实的 source | 普通 fork 最初可与 main 共用 State。先让 private 接纳一条新声明并保存 State，再经 Event 接纳另一条；显式核 private State≠main State、Head.S≠State.S／shared.S，再保 `PrivateSchemaRepositoryTests.Private_raw_preparation…` 的三种拒绝，避免把正确来源当错来源 |
+| 完整不可达目录与 ToShared 冲突 | `PrivateSchemaPromotionTests` 保实际 Head.S 全目录、目标 latest shared meta priors 与 descriptor 数字碰撞 remap。冲突用“baseline 尚无 K→private 接纳 B→shared 后接纳同 key 异形 A→ToShared 在 Capture 前拒绝”；核 refs／帧／baseline 不变、owner 健康且 private 仍可保存，不能提前在 Set 阶段拒绝来替代 |
+| 缺 List 元素 Upgrade | 复用 [ListUpgradeTests](../../tests/DurableGraph.Tests/ListUpgradeTests.cs)、[NullableUpgradeTests](../../tests/DurableGraph.Tests/NullableUpgradeTests.cs) 和 [MetaBootstrapContainerUpgradeTests](../../tests/DurableGraph.Persistence.Tests/MetaBootstrapContainerUpgradeTests.cs) 的空／全 absent 预检；迁移源码夹具补公共 `CheckoutPrivate` 缺规则负例：零输出、健康、保已创建 baseline 名字并释放占用，关闭后在匹配环境重开可签出。当前内部预检证据不自动授这项公开资格 |
+| 发布 outcome／可见性／旧 owner 寿命 | private 用例保 ref1-only／ref2 不变及完整帧；Unknown 冷开旧／新、Published 后未交付和安装失败由既有 [SplitRepositoryPublicationOutcomeTests](../../tests/DurableGraph.Persistence.Tests/SplitRepositoryPublicationOutcomeTests.cs) 与 [MetaBootstrapP0PublicationTests](../../tests/DurableGraph.Persistence.Tests/MetaBootstrapP0PublicationTests.cs) 承担。保 fault 后 cache／borrowed Store 拒用与 fresh reopen 实 refs 裁决，不向各容器夹具复制故障矩阵，也不将 NotPublished 等同健康 |
+
 **完成验收：**生产源码中公开新根入口与专用状态已退出，活动执行代码不再依赖 overrides／container replacements；实验中的异形 V2 草稿可各自从固定 V1 baseline 接纳，已有同分支定义保持不可变，不增加“仅限 V1→V2”的产品限制。原用户存活身份、共享／循环、真实 Base／Delta／source／prior／H、Event／Discard rewrite、完整目录和 ref1／ref2／fault／旧帧规律经对应测试证实，新 G 普通包的冷恢复与发布故事通过，活动文档一致。
 
-此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九个暂停 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。
+此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九个暂停 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。实施前校核仅静读源码与交叉质询，未新增运行时资格；以上迁移、公共缺规则负例与删除后新 G 均待实施验收。

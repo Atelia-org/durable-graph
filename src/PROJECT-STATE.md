@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-[DB-088 开发与定稿实验](../docs/design-branches/0088-development-schema-workflow.md)已通过：固定 shared V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，保原始存活身份；源码真实 Base／Delta／source／H 与普通包实际 MSBuild Off／Publish／Verify 分层验收。下一轮直接按[§6 实施合同](../docs/design-branches/0088-development-schema-workflow.md#6-下一轮实施合同与停点)迁移必要 private／ToShared／fault 见证，删除整个 `CreatePrivateBranch` 及同 key overrides／container replacements／私有新根 bootstrap 状态；保 meta 自举引导，不留替代入口。当前未删除，无设计阻塞；默认 Publish、主／次版本、直接 V3/V4→单版交付及自动重放不属本片。
+[DB-088 开发与定稿实验](../docs/design-branches/0088-development-schema-workflow.md)已通过：固定 shared V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，保原始存活身份；源码真实 Base／Delta／source／H 与普通包实际 MSBuild Off／Publish／Verify 分层验收。[§6 实施合同](../docs/design-branches/0088-development-schema-workflow.md#6-下一轮实施合同与停点)已完成实施前语义校核：先校准 baseline pin、正常升版与回归去向，再删除整个 `CreatePrivateBranch` 及同 key overrides／container replacements／私有新根 bootstrap 状态；保 meta 自举引导，不留替代入口。机制见证无需一律 Upgrade；当前未删除，迁移与公共缺规则拒绝仍待可执行验收，无新设计阻塞。默认 Publish、主／次版本、直接 V3/V4→单版交付及自动重放不属本片。
 
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
