@@ -43,13 +43,13 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 三方独立评审及交叉质询已收敛于先验故事、迁移语义覆盖后删特例。主线按实际恢复／发布与 Build 接线复核；以下区分已选核心与尚未删除的特例：
 
-| 项目 | 暂定裁决 | 理由与验收要求 |
+| 项目 | 目标裁决 | 理由与验收要求 |
 |---|---|---|
 | 准确 baseline 恢复、身份导入与 private 增量 | 保留 | 真实用户复现场景所需，不能用空来源的新根替代 |
 | fixed 员工引导、meta ObjectId、完整布局与来源校验 | 保留 | 各 fork 可有不同 V2 形状，旧 bytes 仍须准确解释 |
 | 完整 ToShared 与两 ref CU | 保留 | 发布一致性合同；最终干净 fork 控制导入范围 |
-| 同 key Schema overrides／完整 container replacements | 删减候选 | 超出当前用户需求；先替换仍有价值的目录、故障与冷恢复见证 |
-| 单独 private bootstrap lookup／空来源 Workspace／声明替换 | 随入口删除的候选 | 普通 baseline 恢复可以承担首选流程；尚未删除或完成等价覆盖迁移 |
+| 同 key Schema overrides／完整 container replacements | 删除目标，未实施 | 超出当前用户需求；先替换仍有价值的目录、故障与冷恢复见证 |
+| 单独 private bootstrap lookup／空来源 Workspace／声明替换 | 随入口删除，未实施 | 普通 baseline 恢复已验证可以承担首选流程；尚未删除或完成覆盖迁移 |
 | 主／次版本、draft token、自动 merge／过滤 | 延期 | 没有此次实验的必要消费，不预建框架 |
 
 删除不能连带丢失完整闭包、实际来源、Event／Discard、发布失败及旧帧保持的回归。现有消费者是复杂性成本的证据，不构成兼容约束。施工顺序为先形成新正控故事，再迁移非特例语义见证，最后删除 API 与专用状态；不为保存旧测试重新建设替代入口。
@@ -76,3 +76,28 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 实验支持删减方向，尚未删除 DB-087 特例。下一施工片按 §4 保留真实目录／source／Event／fault 规律，迁移两旧消费者与六组测试中的必要见证，再删除 `CreatePrivateBranch` 的同 key overrides／container replacements、P0Session bootstrap 状态和 Builder 声明替换。no-op／合流／dynamic→fixed 等只属于拟删除特例，不要求重建等价框架。删除片须重新 build／相关 tests；公开 API 退出影响的活动包故事须使用新 G 重新验收，旧包证据保其来源，不把此次复用包当成删除后资格。
 
 仍未验证或定型：V3/V4 数据继承到单一定稿版本的直接交付／迁移压缩、主／次版本、开发新增数据重放工具及更自动的 draft／release 管理。当前已有整数版本与显式 Off 足够完成首选流程，默认 Publish 尚未修改；不以实验通过宣称这些易用性机制已实现。
+
+## 6. 下一轮实施合同与停点
+
+目标已选，无待决产品政策阻塞：退出整套同 key 私有新根替换能力，保留从真实 baseline 恢复、保身份和正常升版的 private 路径。§5 的实验通过是删除前置证据，不是删除完成证据。
+
+**最终产品形状：**
+
+- 删除整个公开 `CreatePrivateBranch(name, initialState, schemaOverrides, ..., containerReplacements)` 入口；不保空 overrides 重载、obsolete／compat adapter、internal 替代建根入口或通用 Fork 策略。首选路线继续使用现有 ref-only `CreateBranch`／`Fork` 与 `CheckoutPrivate`，无需先造便利 API。
+- `P0Session` 删除 overrides 专用构造器、`_bootstrapConfiguration`／`_bootstrapOverrides`／`_bootstrapContainerReplacements`／`_bootstrapEditingGuard` 及首次 Prepare 创建空业务 Workspace 的分支。保普通 Shared 新建图、Event-only 的合法空 State 工作区和所有真实来源恢复构造路径，不按“空来源”关键词整删。
+- `P0CatalogWorkspace` 删除 `CreatePrivateForkOwned`／`LookupBootstrapSchema`、`_privateBootstrap` 和其逻辑替换表；Builder 去掉 bootstrap 参数、同 key 声明替换、`ReplaceContainers`／`_replacedDeclaration` 及一般 replacement Delta 分支。正常新增版本／容器声明、同形复用、无变化复用和 append Delta 保持；已接受定义仍不可改形。
+- 保 `UsesPrivateSchemas`／private 保存目的地选择、私有 meta 来源 Head.S、业务基线 State.S、冻结 execution view、准确 origin S、完整 ToShared 与共同 writer／owner。目录不可达声明和依赖不能因删特例而被裁剪。
+- 删除的是**私有新根专用 bootstrap**，不删除 **meta 自举固定引导**：员工 DTO／fixed bindings／builtin codec、Schema 工厂、descriptor meta ObjectId、存活 Dictionary 与对象版本核心全部保留。`MetaBootstrapP0` 内部名称不构成另一次改名或整束删除任务。
+
+**依赖顺序与交付：**
+
+1. 先对 §4 的六组测试与两活动消费者做断言去向表。区别必须保的产品规律、已有回归可直接承担的规律、只属于删除特例的用例；保真实 source／ID／闭包／Event／Discard／fault／旧帧证据，不要求把 no-op／合流／removal-only／同版替换端点认证重新实现一遍。
+2. 将必要 source 测试改到 baseline fork＋不同版本 Upgrade。优先覆盖 private 的 actual Head.S（包括 Event 接受 meta）、完整不可达目录、真实来源拒绝、发布前拒绝与发布边界冷裁决。`CreateBranch(checkpoint)` 已独立发布，后续签出失败只释放占用并保 branch 指 baseline，不套用旧复合入口失败时删除名字的断言。
+3. 删除上述公开入口和内部专用状态、调用点及仅特例用例。允许测试迁移与代码删除一起完成可构建片，不为了逐步编译留下第二产品路径。正常版本升级须带匹配的 Schema／历史 reader／Upgrade；不放松同 view 同 key 冲突或完整 layout 校验。
+4. 迁移 Split／PrivateContainer 的公开故事与其有限 observer／runner。PrivateContainer 从 shared Point V1 的用户图恢复到 private Point V2，显式提供必要 inline／Nullable／List 元素 Upgrade；保 Keeper 等不可达已声明项，保 root／List 身份与冷续，不再使用人工 old/new layout pairs。若某观察仅属于旧替换格式，用更小的新观察替代，不将旧 inspector 变成通用 wire 平台。
+5. 删除片用明确 source mode 构建 solution 并运行相关源码回归；最终整合跑全套源码 tests。公开包重新以**新 G**消费准确 S feed，运行 Development 与已迁移的代表故事；pack 使用 package mode／独立版本与准确来源。此次旧 G 的成功不能授删除后的产品资格。冻结旧工件与归档不改写、不清理。
+6. 收束活动 README／术语表／target／PROJECT-STATE／DB-087 与索引中的旧入口、替换能力和资格说明；历史证据保原版本与 successor 指针。当前待办只在路线图保留，不累积施工日志。
+
+**完成验收：**生产源码中公开新根入口与专用状态已退出，活动执行代码不再依赖 overrides／container replacements；实验中的异形 V2 草稿可各自从固定 V1 baseline 接纳，已有同分支定义保持不可变，不增加“仅限 V1→V2”的产品限制。原用户存活身份、共享／循环、真实 Base／Delta／source／prior／H、Event／Discard rewrite、完整目录和 ref1／ref2／fault／旧帧规律经对应测试证实，新 G 普通包的冷恢复与发布故事通过，活动文档一致。
+
+此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九个暂停 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。

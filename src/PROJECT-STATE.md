@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-[DB-088 开发与定稿实验](../docs/design-branches/0088-development-schema-workflow.md)已通过：固定 shared V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，保原始存活身份；源码真实 Base／Delta／source／H 与普通包实际 MSBuild Off／Publish／Verify 分层验收。下一片迁移必要 private／ToShared／fault 见证，再删除同 key 新根 overrides／container replacements 与 bootstrap 特例；当前未删除、生产源码未变。默认 Publish 未改，主／次版本、直接 V3/V4→单版交付及自动重放另待真实需求；不做过滤推广或通用框架。
+[DB-088 开发与定稿实验](../docs/design-branches/0088-development-schema-workflow.md)已通过：固定 shared V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，保原始存活身份；源码真实 Base／Delta／source／H 与普通包实际 MSBuild Off／Publish／Verify 分层验收。下一轮直接按[§6 实施合同](../docs/design-branches/0088-development-schema-workflow.md#6-下一轮实施合同与停点)迁移必要 private／ToShared／fault 见证，删除整个 `CreatePrivateBranch` 及同 key overrides／container replacements／私有新根 bootstrap 状态；保 meta 自举引导，不留替代入口。当前未删除，无设计阻塞；默认 Publish、主／次版本、直接 V3/V4→单版交付及自动重放不属本片。
 
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
@@ -32,7 +32,7 @@ Open 省略归属时普通业务写入提前拒；CreatePrivateBranch／Checkout
 
 本案没有剩余必经片或待决产品政策；下一增量从真实下游接入、业务轨迹或增长测量选择，条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。再次收到同一 DB-087 循环任务时先核停点；没有新反例或需求就报告完成，不自动扩围或重跑全部门禁。19个有效旧包 lanes 继续暂停，按需迁移不作本案前置。内部名称／wire 未冻结，P0 核心是当前产品路径。
 
-DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；最近一次包 pack 后本仓生产项目 assets／DLL 为 package mode，切回 source build/test 须按[依赖指南](../docs/storage-dependency.md)显式 restore，不能把混合输出作来源证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
+DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；DB-088 本次 root build/test 后 assets／DLL 已为 source mode，普通包验收只在仓外 stage 消费旧准确 G，未新 pack。后续切 package mode 须按[依赖指南](../docs/storage-dependency.md)重新 restore；不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
