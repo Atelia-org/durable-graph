@@ -174,7 +174,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
-| Schema/meta 后续能力 | 默认 meta 自举与旧权威退出已验；完整公开 accepted-history 包门禁和 private 未完成，见 [DB-087 后续路线](design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)。多 writer、压缩/GC 另待真实需求 |
+| Schema/meta 后续能力 | 默认 meta 自举、旧权威退出及有限公开 accepted-history 包已验，P1 停点成立；private 未完成，见 [DB-087 P2 路线](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。多 writer、压缩/GC 另待真实需求 |
 | Schema 目录分页或分段 | DB-087 已用 meta 对象版本增量保存；真实目录接近单帧上限或保存成本成为瓶颈时重访更细粒度机制。正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-086 采用 FS/VS 的 data-first 发布、outcome 与正常不完整尾恢复，DG 保留 expected head、必要内容与 fault 检查。实际访问坏完整内容报错；OS crash/power loss、设备失效与目录持久性保证仍待明确需求和独立实验，不能由普通进程关闭/重开推导 |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
@@ -197,13 +197,12 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 
-[DB-087 当前停点](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：默认公开入口已走 meta 自举，旧保存／typed／Schema／raw 权威退出，P1d 前九片通过各自限定验收。业务比较与受控 meta 变化汇入共同 writer／PendingSave／发布 owner；联合发布的长期约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
+[DB-087 当前停点](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：默认公开入口已走 meta 自举，旧保存／typed／Schema／raw 权威退出，[有限公开 accepted-history 准确包门禁](design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)已通过，P1 产品停点成立。业务比较与受控 meta 变化汇入共同 writer／PendingSave／发布 owner；联合发布的长期约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
-依赖顺序只保三步：
+剩余依赖顺序：
 
-1. [有限非 friend 公开 accepted-history 准确包门禁](design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)：实际公开路径完成 Widget/List 的历史 Upgrade、准确 S、tag/Fork/Pair 与冷开 Delta；不能以内部 friend、普通 README 包或源码测试代替。通过后才授 P1 产品停点。
-2. [P2 私有完整视图](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：显式 shared/private 策略→完整 fork→匹配环境的新根 all-Base 改形→完整闭包转 shared／必要重编码→两环境冷读续写及错环境拒绝。无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes。
-3. [条件延期](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)：原分支重建、按操作选模型、业务 head 不动的 Schema-only 和读取／保存成本优化，只由真实消费者或测量触发；不预先承诺总 O(k)。
+1. [P2 私有完整视图](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：先确定显式 shared/private 配置位置／签名及写准入→完整 frozen fork→匹配环境的新根 all-Base 改形→完整闭包转 shared／必要重编码→两环境冷读续写及错环境拒绝。无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes；当前无策略写拒尚未接线。
+2. [条件延期](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)：原分支重建、按操作选模型、业务 head 不动的 Schema-only 和读取／保存成本优化，只由真实消费者或测量触发；不预先承诺总 O(k)。
 
 十九个有效旧包 lanes 暂停当前 G 并原地保资产，按需迁移不作公开门禁前置，门禁通过也不自动恢复未迁 lane 资格。DB-081 热 seed 禁用、DB-082 默认关。
 具体契约、源码落点和 P2 局部待决入口只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md)；历次过程、运行计数、故障窗口和包证据从其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)按需查[冻结完整稿](archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，旧“下一片”不作为当前排期。

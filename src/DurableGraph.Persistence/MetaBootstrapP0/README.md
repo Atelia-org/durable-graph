@@ -1,7 +1,7 @@
 <a id="db-087-p0持久-meta-自举实验"></a>
 # DB-087：meta 自举实现与分片证据
 
-本目录的自举读写已进入公开默认 Repository／BranchCheckout／GraphResources；旧保存／typed reader／Schema 权威／owner 模式与 raw Storage 束已退出。[当前状态](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)与[后继公开 accepted-history 包门禁](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)维护活动合同；该门禁尚未完成。下文各分片实施／验收直接链接冻结归档，保留当片含义，不用旧“默认未切”说明推定当前状态。
+本目录的自举读写已进入公开默认 Repository／BranchCheckout／GraphResources；旧保存／typed reader／Schema 权威／owner 模式与 raw Storage 束已退出。[有限公开 accepted-history 包门禁](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)已通过，P1停点成立，后继为[P2私有完整视图](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。活动合同见[当前状态](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)；下文各分片实施／验收保冻结历史含义，旧“下一步／默认未切”不是当前排期。
 
 catalog、共同 writer 与发布 owner 已接共用恢复／业务 workspace；公开前端复用这一条路径，不整体丢弃 P0。旧保存与 raw 低层已退出，共同 payload 和受控容器 emitter 保留。
 代码去向、依赖顺序与尚未敲定的问题集中在 [DB-087 活动合同](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#implementation-map)，不以 `P0` 目录名推断最终产品边界。
@@ -13,7 +13,7 @@ descriptor 使用其 meta ObjectId；每个动态 Base 的解释仍受其 batch 
 
 真实 FS/VS 拥有文件和两个 refs。共同确认后才接受候选：Event 接受 meta、推进业务 Head，
 但保留最近 State 的业务保存基线。关闭全部资源后重新打开，必须只从实际发布根恢复。
-P0 wire 和员工闭包仍允许调整；不提供旧格式兼容，私有策略后置。旧核心退出与完整公开包门禁是不同证据层次；当前尚未完成后者。
+P0 wire 和员工闭包仍允许调整；不提供旧格式兼容，私有策略尚未接线。旧核心退出与公开包门禁是不同证据层次；当前两者已形成有限P1停点，包运行／来源与限制见[消费者验收](../../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)。
 
 从 [P0Session](P0Session.cs) 看两侧准备与安装；
 [P0GraphStore](P0GraphStore.cs) 保存共同 batch／目录／图并校验来源。

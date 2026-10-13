@@ -18,7 +18,7 @@
 | HistoryCapability：`Program.cs` | StateRevisionStore/ObjectVersionChain 与旧 exact 读取诊断 | readers-only 与 Upgrade 能力区别、abstract orphan 全图升级、删除 CLR shell 后的历史拒绝 |
 | StateStore：`Program.cs`、`World.V1.cs`、`World.V2.cs`、`GraphWorld.cs` | StateRevisionStore/StateRevision/ObjectVersionChain、旧目录/链/Schema 注册诊断 | 真实 V1 seed→V2 cold Upgrade、共享字符串与派生环、readonly hydration、Base/NoChange/Delta、Remove |
 
-这些目录都混有真实 SG 模型和公开 Repository 故事，没有可以按“纯旧 codec”整删的 lane。后继按具体公开故事选择性迁移 `ReadState`/`ReadEvent`/`ReadCheckpoint`/`ReadPair`/`Fork` 与领域值检查；旧 header/raw 诊断及 runner markers 一并重审。完整非 friend 的公开 accepted-history 代表门禁仍后置；19 lanes 全迁不是进入该门禁的技术依赖，门禁成功也不自动授未迁 lanes 当前资格。StateStore 与 HistoryCapability 没有独立 README，暂停说明集中在此。
+这些目录都混有真实 SG 模型和公开 Repository 故事，没有可以按“纯旧 codec”整删的 lane。后继按具体公开故事选择性迁移 `ReadState`/`ReadEvent`/`ReadCheckpoint`/`ReadPair`/`Fork` 与领域值检查；旧 header/raw 诊断及 runner markers 一并重审。有限非 friend 公开 accepted-history 代表门禁已通过；19 lanes全迁不是该门禁依赖，通过也不自动授未迁 lanes当前资格。StateStore 与 HistoryCapability 没有独立 README，暂停说明集中在此。
 
 这项暂停不包括基础 `Run-Probe` 的生成/Capture body 验证、TagConsumer、ImmutableLeafConsumer、EventHistoryRecoveryConsumer、当前 MetaBootstrapSchemaConsumer/SplitRepositoryConsumer，也不暂停 ListDeltaReplayProbe。它们没有上述静态读取依赖；各自是否具备当前包或故障资格仍由自己的实际证据界定，不因其他 lane 暂停或 source 回归通过而自动获得更广资格。
 
@@ -49,6 +49,13 @@ The [internal meta Schema consumer](MetaBootstrapSchemaConsumer/README.md) runs 
 exercise DB-087's internal backend through actual packages: generated base/inline/Nullable/List
 Schema, meta reads without business registration, and Root/List Delta continuation across four
 normal processes. This witness does not qualify the public backend switch or crash recovery.
+
+The [public accepted-history consumer](SplitRepositoryConsumer/README.md) now runs through
+`./Run-SplitRepositoryProbe.ps1 -StoragePackageSource <verified-six-package-feed>` with an ordinary,
+non-friend assembly identity. Five isolated processes cover Widget V1→V2, readonly exact-S Upgrade,
+tag/Fork/Event/Pair, actual heads/prior/H and cold List Delta. Its verified ten-package/tool/load chain
+completes the finite DB-087 P1 gate; private views and additional crash/performance claims remain outside
+its scope. Reusing this lane's feed also requires its controlled pack-source provenance sidecar.
 
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual

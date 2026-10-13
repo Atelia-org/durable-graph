@@ -7,25 +7,22 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
 using SplitRepositoryPackage;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
-using persistence::Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using S = global::Atelia.DurableGraph.Generated.Family_7061636B6167652E73706C69742E776964676574;
 
-// The witness is diagnostic data. Every lane independently opens the actual
-// Repository and reads its necessary refs, graph pins and object chains.
+// Witnesses are diagnostic. Physical checks independently read public backing
+// stores after every Repository and checkout in that operation has closed.
 internal static class Program {
     private const string Protocol = "DG.SplitRepositoryConsumer.v1";
     private const string WidgetName = "package.split.widget";
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
-    private static readonly DurableSchema Extra = new("package.split.extra", 1, new DurableFieldInfo(1, TypeTag.Int64));
     private sealed record StorageEvidence(uint Id, string Head, long H);
-    private sealed record FrameImage(string Address, uint Tag, int TailMetaLength, string PayloadAndMetaSha256);
+    private sealed record FrameImage(string Address, uint Tag, string PayloadSha256, string TailMetaSha256);
     private sealed record Witness(string SeedState, string SeedSchema, uint RootId, uint ChildId, uint ListId,
         uint WidgetDescriptorId, StorageEvidence[] SeedObjects, FrameImage[] SeedFrames,
-        string? MainState = null, string? RewriteState = null, string? RewriteSchema = null,
+        string? MainState = null, string? RewriteEvent = null, string? RewriteState = null, string? RewriteSchema = null,
         uint? CurrentWidgetDescriptorId = null, StorageEvidence[]? RewriteObjects = null, FrameImage[]? RewriteFrames = null,
         string? ContinuationState = null, StorageEvidence[]? ContinuationObjects = null, FrameImage[]? ContinuationFrames = null);
 
@@ -47,13 +44,18 @@ internal static class Program {
 #else
 #error HistoryVersion must be 1 or 2.
 #endif
+        // The observed ABI comes from real Base records, after all product owners close.
+        WireInspector.Snapshot actual = WireInspector.Read(database);
         WriteJson(Path.Combine(Path.GetDirectoryName(witnessPath)!, lane + ".evidence.json"), new {
-            Protocol, Lane = lane, Passed = true, ProcessId = Environment.ProcessId,
-            TypedBodyAbi = P0TypedBodyCodec.FormatVersion,
+            Protocol, Lane = lane, Passed = true, ProcessId = Environment.ProcessId, actual.TypedBodyAbi,
             RuntimeAssembly = AssemblyEvidence(typeof(DurableSchema).Assembly),
             PersistenceAssembly = AssemblyEvidence(typeof(Repository).Assembly),
             StorageAssembly = AssemblyEvidence(typeof(ObjectVersionRecord).Assembly),
-            HostAssembly = AssemblyEvidence(typeof(Widget).Assembly), Observations = observations,
+            HostAssembly = AssemblyEvidence(typeof(Widget).Assembly),
+            LoadedAssemblies = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(assembly => assembly.GetName().Name?.StartsWith("Atelia.", StringComparison.Ordinal) == true)
+                .OrderBy(assembly => assembly.GetName().Name, StringComparer.Ordinal).Select(AssemblyEvidence).ToArray(),
+            Observations = observations,
         });
         Console.WriteLine("SplitRepositoryConsumer:" + lane + ":Passed");
         return 0;
@@ -61,29 +63,32 @@ internal static class Program {
 
 #if HISTORY_V1
     private static object Seed(string database, string witnessPath) {
-        Witness witness;
-        using (Repository repository = Repository.CreateMetaBootstrapNew(database, Models())) {
+        FrameAddress state;
+        uint rootId;
+        using (Repository repository = Repository.CreateNew(database, Models())) {
             using BranchCheckout main = repository.CreateBranch("main", Ring());
             repository.CreateTag("initial", main.Head);
-            Widget root = Check(main.State, upgraded: false);
-            P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(main.Head.RevisionAddress);
-            FrameAddress schema = RequiredSchema(graph);
-            P0CatalogView catalog = CheckCatalog(repository, schema, current: false);
-            StorageEvidence[] objects = Storage(main);
-            uint list = main.Baseline!.Objects.Single(pair => pair.Value.Current.Kind == ObjectStateKind.List).Key.Value;
-            uint child = main.Baseline.Objects.Single(pair => pair.Key.Value != graph.RootId.Value && pair.Key.Value != list).Key.Value;
-            Need(objects.Length == 3 && graph.RootId.Value == main.StateId!.Value.Value, "Seed must have complete three-object membership.");
-            CheckStorage(repository, graph, objects);
-            CheckRefs(repository, schema, ("main", graph.Address));
-            uint descriptor = catalog.SchemaNodeId(Schema(1)).Value;
-            CheckWidgetBase(repository.MetaBootstrapStore, graph.Address, graph.RootId.Value, Schema(1), descriptor);
-            CheckWidgetBase(repository.MetaBootstrapStore, graph.Address, child, Schema(1), descriptor);
-            witness = new(Hex(graph.Address), Hex(schema), graph.RootId.Value, child, list, descriptor, objects, Frames(Resources(repository)));
-            Need(root.Numbers[7] == 7, "Seed contents changed before closure.");
+            state = main.Head.RevisionAddress;
+            rootId = main.StateId!.Value.Value;
+            Check(main.State, upgraded: false);
         }
+        WireInspector.Snapshot actual = WireInspector.Read(database);
+        WireInspector.Graph graph = actual.Graph(state);
+        FrameAddress schema = RequiredSchema(graph);
+        CheckRefs(actual, schema, ("main", state));
+        Need(graph.Kind == WireInspector.GraphKind.State && graph.RootId == rootId && graph.Heads.Count == 3,
+            "Seed must have complete three-object State membership.");
+        uint descriptor = CheckCatalog(actual, schema, current: false);
+        uint list = graph.Heads.Keys.Single(id => WireInspector.Header(actual.ObjectChain(state, id).Entries[0].Record.Body).Route == 2);
+        uint child = graph.Heads.Keys.Single(id => id != rootId && id != list);
+        CheckWidgetBase(actual, state, rootId, 1, descriptor);
+        CheckWidgetBase(actual, state, child, 1, descriptor);
+        StorageEvidence[] objects = Storage(actual, graph);
+        Witness witness = new(Hex(state), Hex(schema), rootId, child, list, descriptor, objects, Frames(actual));
+        CheckStorage(actual, graph, objects);
         WriteJson(witnessPath, witness);
-        return new { SeedState = witness.SeedState, SeedSchema = witness.SeedSchema, Objects = witness.SeedObjects,
-            WidgetDescriptorId = witness.WidgetDescriptorId, RingAndSharedList = true, ActualRefsVerified = true, CompleteStorageVerified = true };
+        return new { witness.SeedState, witness.SeedSchema, Objects = objects, WidgetDescriptorId = descriptor,
+            RingAndSharedList = true, ActualRefsVerified = true, CompleteStorageVerified = true };
     }
 #endif
 
@@ -91,31 +96,32 @@ internal static class Program {
     private static object Upgrade(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         Dictionary<string, string> before = FileImages(database);
+        WireInspector.Snapshot original = WireInspector.Read(database);
+        FrameAddress seed = Address(witness.SeedState), schema = Address(witness.SeedSchema);
+        CheckRefs(original, schema, ("main", seed));
+        Need(CheckCatalog(original, schema, current: false) == witness.WidgetDescriptorId, "The persisted V1 descriptor ID changed.");
+        S.V1 root = ReadHistoricalWidget(original, seed, witness.RootId, witness.WidgetDescriptorId);
+        S.V1 child = ReadHistoricalWidget(original, seed, witness.ChildId, witness.WidgetDescriptorId);
+        Need(Widget.UpgradeCalls == 0 && root.Segment0Field1 == 1 && child.Segment0Field1 == 2 &&
+            root.Segment0Field2.Value == witness.ListId && child.Segment0Field2 == root.Segment0Field2 &&
+            root.Segment0Field3.Value == witness.ChildId && child.Segment0Field3.Value == witness.RootId,
+            "The generated accepted V1 body reader must preserve exact historical values/IDs without Upgrade.");
         int upgrades;
-        using (Repository repository = Repository.OpenMetaBootstrapReadOnlyExisting(database, Models())) {
-            CheckRefs(repository, Address(witness.SeedSchema), ("main", Address(witness.SeedState)));
-            Need(CheckCatalog(repository, Address(witness.SeedSchema), current: false).SchemaNodeId(Schema(1)).Value == witness.WidgetDescriptorId,
-                "The persisted V1 descriptor ID changed.");
-            DecodedRevision decoded = DecodedRevision.ReadSplit(repository.MetaBootstrapStore, Address(witness.SeedState), Models());
-            Need(Widget.UpgradeCalls == 0 && decoded.Objects.Count == 3, "Exact accepted V1 reading must not normalize.");
-            S.V1 root = decoded.GetRequired(new(witness.RootId)).GetState<S.V1>();
-            S.V1 child = decoded.GetRequired(new(witness.ChildId)).GetState<S.V1>();
-            Need(root.Segment0Field1 == 1 && child.Segment0Field1 == 2 && root.Segment0Field2.Value == witness.ListId &&
-                child.Segment0Field2 == root.Segment0Field2 && root.Segment0Field3.Value == witness.ChildId && child.Segment0Field3.Value == witness.RootId,
-                "Exact historical DTO values or reference IDs disagree.");
-            Check(repository.ReadState(repository.ResolveTag("initial")), upgraded: true);
+        using (Repository repository = Repository.OpenReadOnlyExisting(database, Models())) {
+            CheckpointAddress initial = repository.ResolveTag("initial");
+            Need(initial.RevisionAddress == seed, "The initial tag changed.");
+            Check(repository.ReadState(initial), upgraded: true);
             Need(Widget.UpgradeCalls == 2, "Readonly materialization must Upgrade both historical Widget rows.");
-            var pair = repository.ReadPair(repository.ResolveTag("initial"), repository.ResolveTag("initial"));
+            var pair = repository.ReadPair(initial, initial);
             Widget first = Check(pair.First, upgraded: true), second = Check(pair.Second, upgraded: true);
             Need(!ReferenceEquals(first, second) && ReferenceEquals(first.Numbers, second.Numbers),
-                "Historical rewrite excludes Widgets; the unchanged same-S List remains shareable.");
-            P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(Address(witness.SeedState));
-            CheckStorage(repository, graph, witness.SeedObjects);
-            CheckFrames(Resources(repository), witness.SeedFrames);
-            Need(repository.MetaBootstrapStore.AppendedFrames == 0 && repository.SharedSchemaRoot == Address(witness.SeedSchema),
-                "Readonly Upgrade must not register V2 or change storage roots.");
+                "Historical rewrite excludes Widgets; the unchanged same-S List remains shareable in this fixture.");
             upgrades = Widget.UpgradeCalls;
         }
+        WireInspector.Snapshot after = WireInspector.Read(database);
+        CheckRefs(after, schema, ("main", seed));
+        CheckStorage(after, after.Graph(seed), witness.SeedObjects);
+        CheckFrames(after, witness.SeedFrames);
         Need(SameFiles(before, FileImages(database)), "Readonly accepted-history Upgrade changed repository files.");
         return new { ReadOnlyFilesUnchanged = true, ExactHistoricalDto = true, ReadOnlyUpgrade = true, UpgradeCalls = upgrades,
             SameSUnchangedListShared = true, RewriteWidgetsIndependent = true, ActualRefsVerified = true, CompleteFramesPreserved = true };
@@ -123,249 +129,257 @@ internal static class Program {
 
     private static object Rewrite(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
-        Witness nextWitness;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(database, Models())) {
-            CheckRefs(repository, Address(witness.SeedSchema), ("main", Address(witness.SeedState)));
-            FrameAddress mainState, schema;
-            using (BranchCheckout main = repository.Checkout("main")) {
-                Check(main.State, upgraded: true);
-                Need(Storage(main).SequenceEqual(witness.SeedObjects), "Cold source heads/H must come from the old State.");
-                CheckRewrite(main, witness, expected: true);
-                main.Catalog.Set(Extra); // No business CLR model exists for this metadata-only definition.
-                mainState = main.CommitState().RevisionAddress;
-                schema = repository.SharedSchemaRoot!.Value;
-                Need(schema != Address(witness.SeedSchema), "The V2 closure and unknown Extra must advance the shared catalog.");
-                CheckRewrittenState(repository, main, mainState, witness, schema);
-            }
-            // The latest shared authority now contains V2, but the selected historical
-            // tag still restores through its own State.S0 execution environment.
-            CheckpointAddress selected = repository.ResolveTag("initial");
-            long framesBeforeFork = repository.MetaBootstrapStore.AppendedFrames;
-            using BranchCheckout fork = repository.Fork("fork", selected);
-            Need(repository.MetaBootstrapStore.AppendedFrames == framesBeforeFork && repository.SharedSchemaRoot == schema,
-                "Historical ref-only Fork must not append a graph or rewind shared S.");
-            Need(fork.Head.RevisionAddress == Address(witness.SeedState) && fork.StateRevisionAddress == Address(witness.SeedState) &&
-                fork.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address == Address(witness.SeedSchema) &&
-                fork.Baseline!.SelectedSchemaView!.Snapshot!.Address == Address(witness.SeedSchema) &&
-                fork.Catalog.Accepted!.Snapshot!.Address == schema,
-                "Fork must separate selected State.S0 execution/source from latest S1 write authority.");
-            Check(fork.State, upgraded: true);
-            CheckRewrite(fork, witness, expected: true);
-            Need(Storage(fork).SequenceEqual(witness.SeedObjects), "Fork must import complete old IDs and wire heads/H.");
-            CheckRefs(repository, schema, ("main", mainState), ("fork", Address(witness.SeedState)));
-            FrameAddress rewritten = fork.CommitState().RevisionAddress;
-            Need(repository.SharedSchemaRoot == schema, "Fork must reuse the already-published exact V2 catalog.");
-            CheckRewrittenState(repository, fork, rewritten, witness, schema);
-            CheckRefs(repository, schema, ("main", mainState), ("fork", rewritten));
-            CheckCatalog(repository, schema, current: true);
-            var same = repository.ReadPair(fork.Head, fork.Head);
-            Widget sameFirst = Check(same.First, upgraded: true), sameSecond = Check(same.Second, upgraded: true);
-            Need(ReferenceEquals(sameFirst, sameSecond), "Same-S exact no-rewrite cycle must retain Pair sharing eligibility.");
-            P0GraphSnapshot old = repository.MetaBootstrapStore.ReadGraph(Address(witness.SeedState));
-            P0GraphSnapshot current = repository.MetaBootstrapStore.ReadGraph(rewritten);
-            Need(old.SchemaRoot != current.SchemaRoot && old.Objects[witness.ListId] == current.Objects[witness.ListId],
-                "Cross-S witness must retain the same List ID/head and current contents.");
-            var mixed = repository.ReadPair(selected, fork.Head);
-            Widget oldRoot = Check(mixed.First, upgraded: true), newRoot = Check(mixed.Second, upgraded: true);
-            Need(!ReferenceEquals(oldRoot, newRoot) && !ReferenceEquals(oldRoot.Numbers, newRoot.Numbers),
-                "Different exact-S environments must not share mutable instances despite equal V2 DTO values.");
-            Need(oldRoot.Value == newRoot.Value && oldRoot.Child!.Value == newRoot.Child!.Value && oldRoot.Numbers.SequenceEqual(newRoot.Numbers),
-                "Cross-S Pair positive contents must agree with independent current reads.");
-            CheckFrames(Resources(repository), witness.SeedFrames);
-            P0CatalogView accepted = CheckCatalog(repository, schema, current: true);
-            Need(accepted.SchemaNodeId(Schema(1)).Value == witness.WidgetDescriptorId,
-                "The retained V1 descriptor must reuse its original metaObjectId.");
-            uint descriptor = accepted.SchemaNodeId(Schema(2)).Value;
-            nextWitness = witness with { MainState = Hex(mainState), RewriteState = Hex(rewritten), RewriteSchema = Hex(schema),
-                CurrentWidgetDescriptorId = descriptor, RewriteObjects = Storage(fork),
-                RewriteFrames = Frames(Resources(repository)).Where(frame => !witness.SeedFrames.Any(oldFrame => oldFrame.Address == frame.Address)).ToArray() };
+        FrameAddress seed = Address(witness.SeedState), oldSchema = Address(witness.SeedSchema), mainState;
+        WireInspector.Snapshot original = WireInspector.Read(database);
+        CheckRefs(original, oldSchema, ("main", seed));
+        CheckStorage(original, original.Graph(seed), witness.SeedObjects);
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout main = repository.Checkout("main");
+            Check(main.State, upgraded: true);
+            Need(main.StateRevisionAddress == seed && main.StateId!.Value.Value == witness.RootId,
+                "Cold main must select the exact historical State and root ID.");
+            mainState = main.CommitState().RevisionAddress;
         }
-        WriteJson(witnessPath, nextWitness);
-        return new { MainState = nextWitness.MainState, RewriteState = nextWitness.RewriteState, RewriteSchema = nextWitness.RewriteSchema,
-            Objects = nextWitness.RewriteObjects, HistoricalForkUsesStateS = true, LatestCatalogRemainsIndependent = true,
+        WireInspector.Snapshot latest = WireInspector.Read(database);
+        FrameAddress schema = RequiredSchema(latest.Graph(mainState));
+        Need(schema != oldSchema, "The automatically captured V2 closure must advance the shared catalog.");
+        uint descriptor = CheckCatalog(latest, schema, current: true);
+        CheckRefs(latest, schema, ("main", mainState));
+        CheckRewrittenState(latest, mainState, seed, witness, schema, descriptor);
+
+        // Closing after Fork makes its ref-only nature observable independently.
+        int beforeFork = Widget.UpgradeCalls;
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout fork = repository.Fork("fork", repository.ResolveTag("initial"));
+            Need(fork.Head.RevisionAddress == seed && fork.StateRevisionAddress == seed && fork.StateId!.Value.Value == witness.RootId,
+                "Historical Fork must restore the tag's nearest State, independently of latest shared S.");
+            Check(fork.State, upgraded: true);
+            Need(Widget.UpgradeCalls == beforeFork + 2, "Historical Fork must execute accepted V1 history for both Widgets.");
+        }
+        WireInspector.Snapshot forked = WireInspector.Read(database);
+        CheckRefs(forked, schema, ("main", mainState), ("fork", seed));
+        Need(Frames(forked).SequenceEqual(Frames(latest)), "Historical ref-only Fork appended or changed completed frames.");
+        CheckStorage(forked, forked.Graph(seed), witness.SeedObjects);
+
+        FrameAddress eventAddress, rewritten;
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout fork = repository.Checkout("fork");
+            Widget root = Check(fork.State, upgraded: true);
+            ObjectId rootId = fork.StateId!.Value;
+            eventAddress = fork.CommitEvent(root).RevisionAddress;
+            Need(fork.Head.RevisionAddress == eventAddress && fork.StateRevisionAddress == seed && fork.StateId == rootId &&
+                ReferenceEquals(root, fork.State), "Confirmed Event must discard its State candidate and retain the original State instance/ID/source.");
+            Check(repository.ReadEvent(fork.Head), upgraded: true);
+            rewritten = fork.CommitState().RevisionAddress;
+            Need(fork.StateRevisionAddress == rewritten && fork.StateId == rootId && ReferenceEquals(root, fork.State),
+                "The following State must accept the original upgraded instances and IDs.");
+            var same = repository.ReadPair(fork.Head, fork.Head);
+            Need(ReferenceEquals(Check(same.First, upgraded: true), Check(same.Second, upgraded: true)),
+                "Same-S exact no-rewrite cycle must remain Pair-shareable in this fixture.");
+            var mixed = repository.ReadPair(repository.ResolveTag("initial"), fork.Head);
+            Widget oldRoot = Check(mixed.First, upgraded: true), newRoot = Check(mixed.Second, upgraded: true);
+            Need(!ReferenceEquals(oldRoot, newRoot) && !ReferenceEquals(oldRoot.Numbers, newRoot.Numbers) &&
+                oldRoot.Value == newRoot.Value && oldRoot.Child!.Value == newRoot.Child!.Value && oldRoot.Numbers.SequenceEqual(newRoot.Numbers),
+                "Different exact-S Pair environments must preserve equal contents without sharing this fixture's mutable instances.");
+        }
+        WireInspector.Snapshot actual = WireInspector.Read(database);
+        CheckRefs(actual, schema, ("main", mainState), ("fork", rewritten));
+        WireInspector.Graph domainEvent = actual.Graph(eventAddress);
+        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == seed && domainEvent.SourceGraph == seed &&
+            RequiredSchema(domainEvent) == schema, "Event must separately pin S1 while retaining State0 as its content source.");
+        CheckRewrittenState(actual, rewritten, eventAddress, witness, schema, descriptor);
+        Need(actual.ObjectChain(seed, witness.ListId).Head == actual.ObjectChain(rewritten, witness.ListId).Head &&
+            RequiredSchema(actual.Graph(seed)) != RequiredSchema(actual.Graph(rewritten)),
+            "The cross-S Pair witness must have the same retained List ID/head and current contents.");
+        Need(CheckCatalog(actual, schema, current: true, version: 1) == witness.WidgetDescriptorId,
+            "The accepted V1 descriptor must reuse its original metaObjectId.");
+        CheckFrames(actual, witness.SeedFrames);
+        HashSet<string> previous = witness.SeedFrames.Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
+        Witness next = witness with { MainState = Hex(mainState), RewriteEvent = Hex(eventAddress), RewriteState = Hex(rewritten),
+            RewriteSchema = Hex(schema), CurrentWidgetDescriptorId = descriptor, RewriteObjects = Storage(actual, actual.Graph(rewritten)),
+            RewriteFrames = Frames(actual).Where(frame => !previous.Contains(frame.Address)).ToArray() };
+        WriteJson(witnessPath, next);
+        return new { next.MainState, next.RewriteEvent, next.RewriteState, next.RewriteSchema, Objects = next.RewriteObjects,
+            HistoricalForkUsesStateS = true, LatestCatalogRemainsIndependent = true, EventCandidateDiscardKeepsStateRewrite = true,
             RewrittenLiveWidgetBases = 2, RetainedListHeadAndH = true, SameSPairShared = true, CrossSPairIndependent = true,
             ActualRefsVerified = true, CompleteFramesPreserved = true, RetainedDescriptorId = witness.WidgetDescriptorId,
-            CurrentDescriptorId = nextWitness.CurrentWidgetDescriptorId };
+            CurrentDescriptorId = descriptor };
     }
 
     private static object Continue(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         FrameAddress rewritten = Address(witness.RewriteState!), schema = Address(witness.RewriteSchema!);
-        StorageEvidence[] priorRows = witness.RewriteObjects ?? throw new InvalidDataException("Missing confirmed rewrite storage.");
-        Witness nextWitness;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(database, Models())) {
-            CheckRefs(repository, schema, ("main", Address(witness.MainState!)), ("fork", rewritten));
+        WireInspector.Snapshot previous = WireInspector.Read(database);
+        CheckRefs(previous, schema, ("main", Address(witness.MainState!)), ("fork", rewritten));
+        StorageEvidence[] priorRows = Storage(previous, previous.Graph(rewritten));
+        Need(priorRows.SequenceEqual(witness.RewriteObjects!), "Actual cold source storage differs from the last confirmed observation.");
+        FrameAddress continued;
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
             using BranchCheckout fork = repository.Checkout("fork");
             Widget root = Check(fork.State, upgraded: true);
-            Need(Widget.UpgradeCalls == 0 && fork.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address == schema,
-                "Fresh V2 State uses its own S1 without another historical Upgrade.");
-            Need(Storage(fork).SequenceEqual(priorRows), "Cold complete storage must equal previously observed actual heads/H.");
-            CheckRewrite(fork, witness, expected: false);
-            StorageEvidence prior = priorRows.Single(row => row.Id == witness.ListId);
+            Need(Widget.UpgradeCalls == 0 && fork.StateRevisionAddress == rewritten && fork.StateId!.Value.Value == witness.RootId,
+                "The fresh current State must retain root identity without another historical Upgrade.");
             root.Numbers[7] = 201;
-            FrameAddress continued = fork.CommitState().RevisionAddress;
-            P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(continued);
-            Need(graph.Parent == rewritten && graph.SourceGraph == rewritten && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
-                "Cold Delta must select the exact current content Parent and Schema.");
-            P0Batch batch = repository.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value);
-            Need(batch.SourceGraph == rewritten && batch.SchemaRoot == schema && batch.Records.Count == 1, "Only the List should write a new object record.");
-            ObjectVersionRecord delta = batch.Records[0];
-            Need(delta.Kind == ObjectVersionKind.Delta && delta.ObjectId == witness.ListId && delta.PriorAddress == Address(prior.Head),
-                "The actual List Delta must reference the selected object's exact head.");
-            StorageEvidence[] updated = Storage(fork);
-            Need(updated.Select(row => row.Id).SequenceEqual(priorRows.Select(row => row.Id)), "Delta continuation changed complete IDs.");
-            StorageEvidence list = updated.Single(row => row.Id == witness.ListId);
-            Need(Address(list.Head) == graph.OwnedBatch && Address(list.Head) != continued && delta.EncodedPayloadBytes is { } bytes &&
-                list.H == checked(prior.H + bytes), "Installed head/H must use the actual batch and decoded payload cost.");
-            foreach (StorageEvidence row in priorRows.Where(row => row.Id != witness.ListId)) {
-                Need(updated.Single(candidate => candidate.Id == row.Id) == row, "Delta continuation changed an unchanged Widget head/H.");
-            }
-            CheckStorage(repository, graph, updated);
-            CheckRefs(repository, schema, ("main", Address(witness.MainState!)), ("fork", continued));
-            CheckFrames(Resources(repository), witness.SeedFrames.Concat(witness.RewriteFrames!));
+            continued = fork.CommitState().RevisionAddress;
             Check(repository.ReadState(repository.ResolveTag("initial")), upgraded: true);
             Check(repository.ReadState(repository.GetHead("fork")), upgraded: true, atSeven: 201);
-            HashSet<string> previous = witness.SeedFrames.Concat(witness.RewriteFrames!).Select(frame => frame.Address).ToHashSet();
-            nextWitness = witness with { ContinuationState = Hex(continued), ContinuationObjects = updated,
-                ContinuationFrames = Frames(Resources(repository)).Where(frame => !previous.Contains(frame.Address)).ToArray() };
         }
-        WriteJson(witnessPath, nextWitness);
-        return new { ContinuationState = nextWitness.ContinuationState, Objects = nextWitness.ContinuationObjects,
-            SingleListDelta = true, ExactPrior = true, IdsPreserved = true, ActualWireH = true,
-            RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true };
+        WireInspector.Snapshot actual = WireInspector.Read(database);
+        WireInspector.Graph graph = actual.Graph(continued);
+        Need(graph.Parent == rewritten && graph.SourceGraph == rewritten && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
+            "Cold Delta must select the exact current content Parent and Schema.");
+        uint[] written = graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).ToArray();
+        Need(written.SequenceEqual(new[] { witness.ListId }), "Only the List may have a newly written local object record.");
+        var chain = actual.ObjectChain(continued, witness.ListId);
+        var delta = chain.Entries[^1];
+        var prior = previous.ObjectChain(rewritten, witness.ListId);
+        Need(delta.Record.Kind == ObjectVersionKind.Delta && delta.Record.PriorAddress == prior.Head &&
+            delta.ContainingBatch == graph.OwnedBatch && delta.SourceGraph == rewritten && delta.SchemaRoot == schema,
+            "The actual List Delta must reference the selected object's exact head/source/S.");
+        StorageEvidence[] updated = Storage(actual, graph);
+        Need(updated.Select(row => row.Id).SequenceEqual(priorRows.Select(row => row.Id)) && chain.Head == graph.OwnedBatch &&
+            chain.Head != continued && chain.H == checked(prior.H + delta.Record.ActualPayloadBytes),
+            "Complete IDs and wire H must use the actual batch, not the graph address or a re-encoded estimate.");
+        foreach (StorageEvidence row in priorRows.Where(row => row.Id != witness.ListId)) {
+            Need(updated.Single(candidate => candidate.Id == row.Id) == row, "Delta continuation changed an unchanged Widget head/H.");
+        }
+        CheckStorage(actual, graph, updated);
+        CheckRefs(actual, schema, ("main", Address(witness.MainState!)), ("fork", continued));
+        CheckFrames(actual, witness.SeedFrames.Concat(witness.RewriteFrames!));
+        HashSet<string> previousFrames = witness.SeedFrames.Concat(witness.RewriteFrames!).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
+        Witness next = witness with { ContinuationState = Hex(continued), ContinuationObjects = updated,
+            ContinuationFrames = Frames(actual).Where(frame => !previousFrames.Contains(frame.Address)).ToArray() };
+        WriteJson(witnessPath, next);
+        return new { next.ContinuationState, Objects = updated, SingleListDelta = true, ExactPrior = true, IdsPreserved = true,
+            ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true };
     }
 
     private static object Verify(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         Dictionary<string, string> before = FileImages(database);
-        using (Repository repository = Repository.OpenMetaBootstrapReadOnlyExisting(database, Models())) {
-            FrameAddress schema = Address(witness.RewriteSchema!), next = Address(witness.ContinuationState!);
-            CheckRefs(repository, schema, ("main", Address(witness.MainState!)), ("fork", next));
-            P0CatalogView original = CheckCatalog(repository, Address(witness.SeedSchema), current: false);
-            P0CatalogView accepted = CheckCatalog(repository, schema, current: true);
-            Need(original.SchemaNodeId(Schema(1)).Value == witness.WidgetDescriptorId &&
-                accepted.SchemaNodeId(Schema(1)).Value == witness.WidgetDescriptorId &&
-                accepted.SchemaNodeId(Schema(2)).Value == witness.CurrentWidgetDescriptorId,
-                "Fresh catalogs must preserve the exact old/new descriptor identities.");
+        using (Repository repository = Repository.OpenReadOnlyExisting(database, Models())) {
             CheckpointAddress initial = repository.ResolveTag("initial");
             Need(initial.RevisionAddress == Address(witness.SeedState), "The immutable initial tag moved.");
             Check(repository.ReadState(initial), upgraded: true);
             Check(repository.ReadState(repository.GetHead("main")), upgraded: true);
             Check(repository.ReadState(repository.GetHead("fork")), upgraded: true, atSeven: 201);
+            Check(repository.ReadEvent(repository.ReadFrames("fork").Single(frame => frame.RevisionAddress == Address(witness.RewriteEvent!))), upgraded: true);
             var pair = repository.ReadPair(initial, repository.GetHead("fork"));
             Widget old = Check(pair.First, upgraded: true), current = Check(pair.Second, upgraded: true, atSeven: 201);
-            Need(!ReferenceEquals(old, current) && !ReferenceEquals(old.Numbers, current.Numbers), "Final cross-S reads must remain independent.");
-            P0GraphSnapshot seed = repository.MetaBootstrapStore.ReadGraph(Address(witness.SeedState));
-            P0GraphSnapshot rewritten = repository.MetaBootstrapStore.ReadGraph(Address(witness.RewriteState!));
-            P0GraphSnapshot continued = repository.MetaBootstrapStore.ReadGraph(next);
-            Need(RequiredSchema(seed) == Address(witness.SeedSchema) && RequiredSchema(rewritten) == schema && RequiredSchema(continued) == schema,
-                "Old and new graph pins must remain exact after all owners close.");
-            CheckStorage(repository, seed, witness.SeedObjects);
-            CheckStorage(repository, rewritten, witness.RewriteObjects!);
-            CheckStorage(repository, continued, witness.ContinuationObjects!);
-            CheckFrames(Resources(repository), witness.SeedFrames.Concat(witness.RewriteFrames!).Concat(witness.ContinuationFrames!));
-            Need(repository.MetaBootstrapStore.AppendedFrames == 0, "Final readonly history reads must not append.");
+            Need(!ReferenceEquals(old, current) && !ReferenceEquals(old.Numbers, current.Numbers),
+                "Final cross-S Pair must retain independent mutable instances in this fixture.");
         }
+        WireInspector.Snapshot actual = WireInspector.Read(database);
+        FrameAddress schema = Address(witness.RewriteSchema!), next = Address(witness.ContinuationState!);
+        CheckRefs(actual, schema, ("main", Address(witness.MainState!)), ("fork", next));
+        Need(CheckCatalog(actual, Address(witness.SeedSchema), current: false) == witness.WidgetDescriptorId &&
+            CheckCatalog(actual, schema, current: true, version: 1) == witness.WidgetDescriptorId &&
+            CheckCatalog(actual, schema, current: true) == witness.CurrentWidgetDescriptorId,
+            "Fresh catalogs must preserve declared exact old/new descriptor identities.");
+        Need(RequiredSchema(actual.Graph(Address(witness.SeedState))) == Address(witness.SeedSchema) &&
+            RequiredSchema(actual.Graph(Address(witness.MainState!))) == schema &&
+            RequiredSchema(actual.Graph(Address(witness.RewriteEvent!))) == schema &&
+            RequiredSchema(actual.Graph(Address(witness.RewriteState!))) == schema && RequiredSchema(actual.Graph(next)) == schema,
+            "All old/new/Event graph pins must remain exact after every owner closes.");
+        CheckStorage(actual, actual.Graph(Address(witness.SeedState)), witness.SeedObjects);
+        CheckStorage(actual, actual.Graph(Address(witness.RewriteState!)), witness.RewriteObjects!);
+        CheckStorage(actual, actual.Graph(next), witness.ContinuationObjects!);
+        CheckFrames(actual, witness.SeedFrames.Concat(witness.RewriteFrames!).Concat(witness.ContinuationFrames!));
         Need(SameFiles(before, FileImages(database)), "Final readonly verification changed repository files.");
         return new { ReadOnlyFilesUnchanged = true, OldTagPreserved = true, MainAndForkValues = true, AccurateSchemaPins = true,
             ActualRefsVerified = true, CompleteStorageVerified = true, CompleteFramesPreserved = true, CrossSPairIndependent = true };
     }
 
-    private static void CheckRewrite(BranchCheckout checkout, Witness witness, bool expected) {
-        Need(checkout.Baseline!.Objects.Count == 3, "Loaded baseline must keep complete membership.");
-        foreach (uint id in new[] { witness.RootId, witness.ChildId }) {
-            var row = checkout.Baseline.Objects[new(id)];
-            Need(row.RequiresRewrite == expected && row.Current.Schema!.Equals(Schema(2)), "Widget current Schema or rewrite qualification disagrees.");
-            if (expected) { Need(row.SourceLayout.Schema!.Equals(Schema(1)), "Historical source must remain the exact stored V1 layout."); }
-        }
-        Need(!checkout.Baseline.Objects[new(witness.ListId)].RequiresRewrite, "The unchanged builtin List must not acquire a Widget rewrite.");
+    private static S.V1 ReadHistoricalWidget(WireInspector.Snapshot actual, FrameAddress graph, uint id, uint descriptor) {
+        CheckWidgetBase(actual, graph, id, 1, descriptor);
+        var chain = actual.ObjectChain(graph, id);
+        Need(chain.Entries.Count == 1, "The seed Widget must have one complete Base.");
+        var header = WireInspector.Header(chain.Entries[0].Record.Body);
+        BareValueReader reader = new(header.Body);
+        S.V1 value = S.BodyV1.Read(ref reader, Schema(1));
+        reader.EnsureFullyConsumed();
+        return value;
     }
-    private static void CheckRewrittenState(Repository repository, BranchCheckout checkout, FrameAddress address,
-        Witness witness, FrameAddress schema) {
-        P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(address);
-        Need(graph.Parent == Address(witness.SeedState) && graph.SourceGraph == Address(witness.SeedState) && RequiredSchema(graph) == schema,
-            "First State must derive from the exact V1 State and pin the accepted new Schema.");
-        P0Batch batch = repository.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value);
-        Need(batch.SourceGraph == Address(witness.SeedState) && batch.SchemaRoot == schema && batch.Records.Count == 2 &&
-            batch.Records.Select(record => record.ObjectId).Order().SequenceEqual(new[] { witness.RootId, witness.ChildId }.Order()) &&
-            batch.Records.All(record => record.Kind == ObjectVersionKind.Base && record.PriorAddress is null),
+
+    private static void CheckRewrittenState(WireInspector.Snapshot actual, FrameAddress address, FrameAddress businessParent,
+        Witness witness, FrameAddress schema, uint descriptor) {
+        WireInspector.Graph graph = actual.Graph(address);
+        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == businessParent && graph.SourceGraph == Address(witness.SeedState) &&
+            RequiredSchema(graph) == schema && graph.OwnedBatch is not null && graph.RootId == witness.RootId,
+            "The first State must retain its exact V1 content source, business Parent, root ID and new Schema pin.");
+        uint[] written = graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).Order().ToArray();
+        Need(written.SequenceEqual(new[] { witness.RootId, witness.ChildId }.Order()),
             "Every rewritten-live Widget must write Base; the untouched List must remain retained.");
-        P0CatalogView catalog = CheckCatalog(repository, schema, current: true);
-        uint descriptor = catalog.SchemaNodeId(Schema(2)).Value;
-        foreach (uint id in new[] { witness.RootId, witness.ChildId }) {
-            CheckWidgetBase(repository.MetaBootstrapStore, address, id, Schema(2), descriptor);
-            P0ObjectChain chain = repository.MetaBootstrapStore.ReadObjectChain(address, id);
-            Need(chain.Entries.Count == 1 && chain.Head == graph.OwnedBatch, "Rewritten Widget Base must truncate its reconstruction chain.");
+        foreach (uint id in written) {
+            var chain = actual.ObjectChain(address, id);
+            Need(chain.Entries.Count == 1 && chain.Head == graph.OwnedBatch && chain.Entries[0].Record.Kind == ObjectVersionKind.Base &&
+                chain.Entries[0].Record.PriorAddress is null && chain.Entries[0].SourceGraph == Address(witness.SeedState) &&
+                chain.Entries[0].SchemaRoot == schema, "Rewritten Widget must have an actual new Base and exact source context.");
+            CheckWidgetBase(actual, address, id, 2, descriptor);
         }
-        StorageEvidence list = witness.SeedObjects.Single(row => row.Id == witness.ListId);
-        Need(Storage(checkout).Single(row => row.Id == witness.ListId) == list, "Retained List head/H changed during Widget Upgrade.");
-        Need(repository.MetaBootstrapStore.ReadObjectChain(address, witness.ListId).Entries[0].SchemaRoot == Address(witness.SeedSchema),
-            "Retained List keeps its actual old Base origin, independently of the selected new S.");
-        CheckRewrite(checkout, witness, expected: false);
-        CheckStorage(repository, graph, Storage(checkout));
-        Check(checkout.State, upgraded: true);
+        StorageEvidence priorList = witness.SeedObjects.Single(row => row.Id == witness.ListId);
+        Need(Storage(actual, graph).Single(row => row.Id == witness.ListId) == priorList &&
+            actual.ObjectChain(address, witness.ListId).Entries[0].SchemaRoot == Address(witness.SeedSchema),
+            "Retained List must keep old head/H and Base origin S0 despite selected new S1.");
     }
 #endif
 
-    private static P0CatalogView CheckCatalog(Repository repository, FrameAddress schema, bool current) {
-        P0CatalogView catalog = P0CatalogView.Load(repository.MetaBootstrapStore, schema);
-        Need(catalog.Schemas[Key(1)].Equals(Schema(1)), "The stored exact V1 definition changed.");
-        Need(catalog.Schemas.ContainsKey(Key(2)) == current && catalog.Schemas.ContainsKey(new(Extra.Type, Extra.Version)) == current,
-            "V2 and unknown Extra must exist only in the selected new catalog.");
-        if (current) {
-            Need(catalog.Schemas[Key(2)].Equals(Schema(2)) && catalog.Schemas[new(Extra.Type, Extra.Version)].Equals(Extra),
-                "The new complete definitions disagree.");
-            Need(catalog.SchemaNodeId(Schema(1)) != catalog.SchemaNodeId(Schema(2)), "Distinct Widget versions must have distinct descriptor IDs.");
-        }
-        Need(catalog.DescriptorIds.Count == (current ? 3 : 1), "Unexpected root-declared descriptor count.");
-        return catalog;
+    private static uint CheckCatalog(WireInspector.Snapshot actual, FrameAddress schema, bool current, int? version = null) {
+        var catalog = actual.Catalogs[schema];
+        Need(catalog.WidgetDescriptors.ContainsKey(1) && catalog.WidgetDescriptors.ContainsKey(2) == current &&
+            catalog.WidgetDescriptors.Count == (current ? 2 : 1) && catalog.DeclaredIds.Count == (current ? 2 : 1),
+            "Actual catalog must declare exactly the stored Widget versions, independently of available CLR models.");
+        if (current) { Need(catalog.WidgetDescriptors[1] != catalog.WidgetDescriptors[2], "Distinct Widget versions need distinct descriptor IDs."); }
+        uint id = catalog.WidgetDescriptors[version ?? (current ? 2 : 1)];
+        Need(catalog.DeclaredIds.Contains(id), "Widget descriptor must be declared by the selected catalog root.");
+        return id;
     }
-    private static void CheckWidgetBase(P0GraphStore store, FrameAddress graph, uint id, DurableSchema expected, uint descriptor) {
-        P0ChainEntry origin = store.ReadObjectChain(graph, id).Entries[0];
-        P0CatalogView catalog = P0CatalogView.Load(store, origin.SchemaRoot!.Value);
-        BareValueReader reader = new(origin.Record.Body);
-        Need(reader.ReadByte() == P0TypedBodyCodec.FormatVersion && reader.ReadByte() == 1 && reader.ReadVarUInt32() == descriptor,
-            "Widget Base must use the actual typed ABI and exact dynamic metaObjectId.");
-        Need(catalog.DescriptorIds.Contains(new(descriptor)) && P0TypedBodyCodec.Decode(origin.Record.Body, catalog).Layout.Schema!.Equals(expected),
-            "The Base descriptor must be declared by its accurate source catalog and reconstruct its full Schema.");
+
+    private static void CheckWidgetBase(WireInspector.Snapshot actual, FrameAddress graph, uint id, int version, uint descriptor) {
+        var origin = actual.ObjectChain(graph, id).Entries[0];
+        Need(origin.Record.Kind == ObjectVersionKind.Base && origin.Record.PriorAddress is null && origin.SchemaRoot is not null,
+            "Widget chain must start at a complete Base with its own source S.");
+        var header = WireInspector.Header(origin.Record.Body);
+        var catalog = actual.Catalogs[origin.SchemaRoot!.Value];
+        Need(header.FormatVersion == actual.TypedBodyAbi && header.FormatVersion == 5 && header.Route == 1 && header.DescriptorId == descriptor &&
+            catalog.WidgetDescriptors[version] == descriptor && catalog.DeclaredIds.Contains(descriptor),
+            "Actual Base header must resolve its declared dynamic metaObjectId through the exact origin catalog.");
     }
-    private static void CheckStorage(Repository repository, P0GraphSnapshot graph, StorageEvidence[] storage) {
-        Need(graph.Objects.Keys.Order().SequenceEqual(storage.Select(row => row.Id).Order()), "Actual complete directory membership disagrees.");
+
+    private static void CheckStorage(WireInspector.Snapshot actual, WireInspector.Graph graph, StorageEvidence[] storage) {
+        Need(graph.Heads.Keys.Order().SequenceEqual(storage.Select(row => row.Id).Order()), "Actual complete directory membership disagrees.");
         foreach (StorageEvidence row in storage) {
-            P0ObjectChain chain = repository.MetaBootstrapStore.ReadObjectChain(graph.Address, row.Id);
-            Need(chain.Head == Address(row.Head) && graph.Objects[row.Id] == chain.Head && chain.ReconstructionPayloadBytes == row.H,
-                "Actual object head or wire reconstruction payload H disagrees.");
+            var chain = actual.ObjectChain(graph.Address, row.Id);
+            long measured = chain.Entries.Aggregate(0L, (sum, entry) => checked(sum + entry.Record.ActualPayloadBytes));
+            Need(chain.Head == Address(row.Head) && graph.Heads[row.Id] == chain.Head && chain.H == row.H && measured == row.H,
+                "Actual object head or decoded wire reconstruction payload H disagrees.");
         }
     }
-    private static void CheckRefs(Repository repository, FrameAddress schema, params (string Branch, FrameAddress Address)[] branches) {
-        GraphResources resources = Resources(repository);
-        RefBytesSnapshot actualBranches = resources.Versions.ReadRef(1).Unwrap(), actualShared = resources.Versions.ReadRef(2).Unwrap();
-        Need(actualBranches.Payload.StartsWith("P0R1"u8) && actualShared.Payload.StartsWith("P0S1"u8), "Actual ref payload roles disagree.");
-        IReadOnlyDictionary<string, FrameAddress> branchRoots = RootMapCodec.Decode(actualBranches.Payload[4..]).Unwrap();
-        IReadOnlyDictionary<string, FrameAddress> shared = RootMapCodec.Decode(actualShared.Payload[4..]).Unwrap();
-        Need(branchRoots.Count == branches.Length && shared.Count == 1 && shared["schema"] == schema && repository.SharedSchemaRoot == schema,
-            "Actual ref2 must select the exact expected Schema authority.");
-        foreach (var branch in branches) {
-            Need(branchRoots["branch/" + branch.Branch] == branch.Address && repository.GetHead(branch.Branch).RevisionAddress == branch.Address,
-                "Actual ref1 and the Repository branch head disagree.");
-        }
+
+    private static void CheckRefs(WireInspector.Snapshot actual, FrameAddress schema, params (string Branch, FrameAddress Address)[] branches) {
+        Need(actual.BranchHeads.Count == branches.Length && actual.SharedSchemaRoot == schema,
+            "Actual two formal refs must select the expected branch directory and shared Schema authority.");
+        foreach (var branch in branches) { Need(actual.BranchHeads[branch.Branch] == branch.Address, "Actual formal branch root disagrees."); }
     }
+
     private static StateModelRegistry Models() {
         StateModelRegistry registry = new();
-        registry.Register(global::Atelia.DurableGraph.Generated.Family_7061636B6167652E73706C69742E776964676574.Definition);
+        registry.Register(S.Definition);
         return registry;
     }
+
     private static DurableSchema Schema(int version) => new(WidgetName, version,
         new DurableFieldInfo(1, version == 1 ? TypeTag.Int32 : TypeTag.Int64),
         DurableFieldInfo.Reference(2, TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32))),
         DurableFieldInfo.Reference(3, TypeExpr.Named(WidgetName)));
-    private static SchemaKey Key(int version) => new(TypeExpr.Named(WidgetName), version);
+
     private static Widget Ring() {
         List<int> values = Enumerable.Range(0, 128).ToList();
         Widget root = new() { Value = 1, Numbers = values };
         root.Child = new() { Value = 2, Numbers = values, Child = root };
         return root;
     }
+
     private static Widget Check(IDurableObject? value, bool upgraded, int atSeven = 7) {
         Need(value is Widget, "Unexpected root CLR type.");
         Widget root = (Widget)value!;
@@ -375,32 +389,26 @@ internal static class Program {
         for (int i = 0; i < 128; i++) { Need(root.Numbers[i] == (i == 7 ? atSeven : i), "List contents disagree."); }
         return root;
     }
-    private static StorageEvidence[] Storage(BranchCheckout checkout) => checkout.Baseline!.Objects.OrderBy(pair => pair.Key)
-        .Select(pair => new StorageEvidence(pair.Key.Value, Hex(pair.Value.Storage!.Value.Head), pair.Value.Storage.Value.ReconstructionPayloadBytes)).ToArray();
-    private static GraphResources Resources(Repository repository) =>
-        (GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
-    private static FrameImage[] Frames(GraphResources resources) {
-        List<FrameInfo> info = [];
-        resources.Data.Inventory(info.Add).Unwrap();
-        return info.Select(frame => {
-            using FrameRead read = resources.Data.ReadFrame(frame.Address).Unwrap();
-            return new FrameImage(Hex(frame.Address), read.Tag, read.TailMetaLength, Hash(read.PayloadAndMeta));
-        }).ToArray();
-    }
-    private static void CheckFrames(GraphResources resources, IEnumerable<FrameImage> images) {
+
+    private static StorageEvidence[] Storage(WireInspector.Snapshot actual, WireInspector.Graph graph) => graph.Heads.Keys.Order()
+        .Select(id => { var chain = actual.ObjectChain(graph.Address, id); return new StorageEvidence(id, Hex(chain.Head), chain.H); }).ToArray();
+    private static FrameImage[] Frames(WireInspector.Snapshot actual) => actual.Frames.OrderBy(frame => Hex(frame.Address), StringComparer.Ordinal)
+        .Select(frame => new FrameImage(Hex(frame.Address), frame.Tag, frame.PayloadSha256, frame.TailMetaSha256)).ToArray();
+    private static void CheckFrames(WireInspector.Snapshot actual, IEnumerable<FrameImage> images) {
+        Dictionary<string, FrameImage> frames = Frames(actual).ToDictionary(frame => frame.Address, StringComparer.Ordinal);
         foreach (FrameImage image in images) {
-            using FrameRead read = resources.Data.ReadFrame(Address(image.Address)).Unwrap();
-            Need(read.Tag == image.Tag && read.TailMetaLength == image.TailMetaLength && Hash(read.PayloadAndMeta) == image.PayloadAndMetaSha256,
-                "A previously completed frame changed or disappeared.");
+            Need(frames.TryGetValue(image.Address, out FrameImage? current) && current == image,
+                "A previously completed frame's address/tag/payload/tail metadata changed or disappeared.");
         }
     }
-    private static FrameAddress RequiredSchema(P0GraphSnapshot graph) => graph.SchemaRoot ?? throw new InvalidDataException("Missing exact Schema root.");
+
+    private static FrameAddress RequiredSchema(WireInspector.Graph graph) => graph.SchemaRoot ?? throw new InvalidDataException("Missing exact Schema root.");
     private static Dictionary<string, string> FileImages(string root) => Directory.GetFiles(root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => Path.GetRelativePath(root, path), path => Hash(File.ReadAllBytes(path)));
     private static bool SameFiles(Dictionary<string, string> before, Dictionary<string, string> after) =>
         before.Count == after.Count && before.All(pair => after.TryGetValue(pair.Key, out string? value) && value == pair.Value);
-    private static object AssemblyEvidence(Assembly assembly) => new { Name = assembly.GetName().Name, Path = assembly.Location,
-        Sha256 = Hash(File.ReadAllBytes(assembly.Location)) };
+    private static object AssemblyEvidence(Assembly assembly) => new { Name = assembly.GetName().Name, assembly.FullName,
+        Path = assembly.Location, Sha256 = Hash(File.ReadAllBytes(assembly.Location)) };
     private static Witness ReadWitness(string path) => JsonSerializer.Deserialize<Witness>(File.ReadAllText(path), Json)
         ?? throw new InvalidDataException("Missing witness.");
     private static void WriteJson(string path, object value) {

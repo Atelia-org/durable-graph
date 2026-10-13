@@ -19,13 +19,13 @@
 
 ## 当前焦点
 
-[DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：默认公开入口已接 meta 自举；旧保存、typed 恢复、Schema 权威及 raw Storage 束均已退出，P1d 前九片通过各自限定验收。共用 payload／计量、地址、只读字典／owned LRU 保留，当前只有一份业务保存／恢复和发布 owner。
+[DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：默认公开入口已接 meta 自举；旧保存、typed 恢复、Schema 权威及 raw Storage 束均已退出，有限非 friend 公开 accepted-history 准确包门禁通过，P1 产品停点成立。共用 payload／计量、地址、只读字典／owned LRU 保留，当前只有一份业务保存／恢复和发布 owner。
 
 默认两根／meta 自举、准确 S、共同 owner、history／Pair／State 槽与 owned 物理缓存保持。Synthetic DTO 可作读取机制输入，但不授保存来源；物理命中不豁免每图完整 refs／lookup／来源检查，不新建 typed DTO cache。checkout 执行 S／models 稳定，保存可推进 selected S；Event/Discard 不推进 State 或消费 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
-下一片是[有限非 friend 公开 accepted-history 准确包门禁](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)，通过后再接 [P2 私有视图](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)，尚不授完整 P1。十九个有效旧包 lanes 暂停当前 G，资产原地保留；选择性迁移不是该门禁前置，也不因新门禁通过自动恢复旧 lane 资格。
+下一片进入 [P2 私有视图](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：先落实显式 shared/private 配置与写准入，再接完整 frozen fork／匹配环境的新根 all-Base 改形；具体配置位置／签名待有限施工片落实。P2 尚未实施，当前 shared 默认仍正常可写，不提前套用未来“无策略写拒”。十九个有效旧包 lanes 继续暂停当前 G，按需迁移，不因新门禁通过自动恢复资格。
 
-DB-087 已压缩为当前契约、源码落点、门禁和待决问题；原逐片过程冻结于[压缩前完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，来源 `ecc8068`。按需从[证据索引](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)定位历史，不将旧“下一片”当新排期。此次只整理文档，无新增产品资格；续工核实际 HEAD／工作树，并按[依赖指南](../docs/storage-dependency.md)选择准确模式。
+DB-087 只维护当前契约与续工；原逐片过程冻结于[压缩前完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，来源 `ecc8068`。本轮复用既有消费者就地转公开身份，未改生产代码／API；真实两版 SG、history、五进程、包／加载来源与只读零写的限定验收见[消费者记录](../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)。显式 Prepare/Discard 保源码资格，包故事验证 Event 内部候选丢弃；不新增 private／crash／性能结论。续工核实际 HEAD／工作树，并按[依赖指南](../docs/storage-dependency.md)选择准确模式。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
@@ -137,7 +137,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存 | 默认前端与产品回归已验；旧 raw 束退出已验，范围见 [DB-087 证据索引](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)，完整公开包与 P2 后置 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存 | 默认前端、旧权威退出及有限公开 accepted-history 包已验；[DB-087 P1 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，P2 未实施 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 

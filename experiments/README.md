@@ -7,13 +7,13 @@
 
 当前旧 reader/raw Store 包 lanes 暂停。直接旧 raw 消费的 23 个 C# 文件/19 目录及须保留的 SG 业务资产，只维护在 [PackageConsumerProbe 静态清单](PackageConsumerProbe/README.md)；源码/tests 清零不表示全仓已迁。历史验收保留，本片不整体停用 Probe。
 
-旧 typed 恢复与 SCB1/owner 退出保留在 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)／[§37](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)；当前十一 raw 类型及旧 GraphMetadata/TailMeta 路径退出见 [§38](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。公开 Repository/Capture、当前 split 包门禁与 ListDeltaReplay 保各自限定范围。后继完整非 friend accepted-history 代表门禁不要求先全迁19 lanes，也不会自动授未迁 lanes 当前 G 资格。
+旧 typed 恢复与 SCB1/owner 退出保留在 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)／[§37](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)；当前十一 raw 类型及旧 GraphMetadata/TailMeta 路径退出见 [§38](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。公开 Repository/Capture、当前公开包门禁与 ListDeltaReplay 保各自限定范围。非 friend accepted-history 代表门禁已通过，不自动授未迁19 lanes当前 G资格；后继为P2私有完整视图。
 
 | 何时使用 | 入口 |
 |---|---|
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
 | 验证 DB-087 内部员工 Schema 闭包、无业务注册的 meta 冷读与跨正常进程 Delta 续写 | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md)：内部包验收，不代替公开切换或进程故障门禁 |
-| 验证 DB-087 内部 split Repository 的真实 accepted-history／Upgrade／tag／历史 Fork／ReadPair 与 Base→Delta | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md)：[Run-SplitRepositoryProbe.ps1](PackageConsumerProbe/Run-SplitRepositoryProbe.ps1)，内部 friend 准确包门禁已验，证据见 [§33](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)；不代 public-default 或进程故障资格 |
+| 验证 DB-087 公开默认 Repository 的 accepted-history／Upgrade／准确 S／tag／历史 Fork／Event／ReadPair 与冷开 Base→Delta | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md)：[Run-SplitRepositoryProbe.ps1](PackageConsumerProbe/Run-SplitRepositoryProbe.ps1)，有限非 friend 准确包门禁已验；[P1停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，不代 P2或故障／性能资格 |
 | 验证实验性 Dictionary 的 comparer、键寻址 Delta、共享引用与双槽历史升级 | [DictionaryConsumer](PackageConsumerProbe/DictionaryConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-DictionaryProbe.ps1](PackageConsumerProbe/Run-DictionaryProbe.ps1)，DB-054 产品回归 |
 | 验证显式 enum 的整数表示、完整类型组合与删除旧 CLR enum 后的历史升级续存 | [EnumConsumer](PackageConsumerProbe/EnumConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-EnumProbe.ps1](PackageConsumerProbe/Run-EnumProbe.ps1)，DB-053 产品回归 |
 | 验证 Nullable 字段/泛型/数组/List 的冻结、历史精确读取与显式值升级提升 | [NullableConsumer](PackageConsumerProbe/NullableConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-NullableProbe.ps1](PackageConsumerProbe/Run-NullableProbe.ps1)，DB-052 产品回归 |

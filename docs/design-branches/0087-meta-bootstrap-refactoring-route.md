@@ -2,8 +2,8 @@
 
 > 校准：2026-10-13。本文只保留当前契约、源码落点、后续门禁与未决问题。
 > 默认公开路径已接 meta 自举，旧保存／typed reader／Schema 权威／raw Storage 束已退出。
-> P1d 前九片通过各自限定验收；完整非 friend 公开 accepted-history 包门禁尚未完成，P2 私有视图未实现。
-> 本次是文档压缩，不增加源码、包、ProcessCrashOnly 或性能资格；内部 API／wire 未冻结。
+> 旧权威退出与有限非 friend 公开 accepted-history 包门禁已验，P1 产品停点成立；P2 私有视图未实现。
+> 包验收限真实 Widget/List 代表故事，不增加 ProcessCrashOnly、断电或性能资格；内部 API／wire 未冻结。
 > [压缩前全文](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)冻结自 `ecc80683f35e2f42795530d28c8974dfb43d95dd`，保留原分片的来源、过程、运行记录与限制。
 
 <a id="current-status"></a>
@@ -22,7 +22,7 @@ SchemaStore／SCB1、RepresentationId、旧 Base header、WorldWorkspace／Loade
 用户明确无旧数据／API 兼容负担，简单性按最终产品衡量；不提供旧格式 reader、生产双写或迁移壳。这不授权修改、删除或修复已完成持久帧。完整帧 append-only、必要来源校验、正常底座恢复、串行 owner 与故障关闭仍成立。
 自举不预设更快或代码更少，固定引导规则也不必消除自身。
 
-当前缺口是[有限公开 accepted-history 准确包门禁](#public-package-gate)，通过后再接[P2 私有视图](#private-plan)。
+当前已通过[有限公开 accepted-history 准确包门禁](#public-package-gate)，后继是[P2 私有视图](#private-plan)。
 十九个有效旧 PackageConsumer lanes 暂停当前 G，源资产与历史证据原地保留；选择性迁移不是该门禁前置，也不自动恢复未迁 lane 的资格。
 当前能力只在 [PROJECT-STATE](../../src/PROJECT-STATE.md) 维护，未实施导航见[路线图 §4.1](../DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
@@ -223,18 +223,18 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 
 <a id="63-p1b-首片续工入口"></a>
 <a id="public-package-gate"></a>
-## 8. 下一门禁：有限公开 accepted-history 准确包
+## 8. 公开 accepted-history 包门禁与 P1 停点
 
-目标是以**非 friend、普通 PackageReference** 的真实公开默认 Repository 消费者补齐 P1 包停点。
+**有限 P1 门禁已通过。** [SplitRepositoryConsumer](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md) 已就地转为普通程序集，以真实 PackageReference 消费公开默认 Repository；复跑、包来源、receipt 与限制只在其 README 维护。
 既有内部 friend 的 history 包、普通非 friend README 包和 source 回归各保原资格，不能互相代替。
-本轮压缩不执行该门禁；具体 runner／夹具形状由下一有限施工片决定，不先建平台。
+本轮未改生产代码或公开 API；旧权威退出、唯一默认路径与该代表包故事共同形成 P1 停点。后续按 §9 接 P2，不再将本节当作待实施任务。
 
 最小代表故事采用真实 SG Widget V1→V2 显式 Upgrade、共享引用／环与 List：
 
 1. V1 进程 seed／State／tag，保 accepted history 与完整持久证据。
 2. V2 从准确旧 S readonly Upgrade，目标尚未编号亦成功；全关前后文件集合／bytes 相同，旧 history 文件保持。
 3. main 推进新 shared S；从旧 State tag Fork，读取仍按旧 State.S，写准入看 latest shared。
-4. 首次 State 对仍 live 的升级对象写 Base，未变 List 可沿用其 origin S/head；Event／Discard 不提前消费 rewrite。
+4. 首次 State 对仍 live 的升级对象写 Base，未变 List 可沿用其 origin S/head；公开 Event 丢弃其业务候选而不消费 State rewrite。显式 Prepare/Discard 仍由既有源码回归覆盖，不新增公开入口或将二者资格混称。
 5. 同 reader 环境 Pair 验完整共享闭包，跨 S Pair 独立恢复；same current DTO 不代环境资格，旧 tag 解释保持。
 6. fresh owner 继续实际单 List Delta，核当前值、ObjectId、实际 heads／prior 来源及链 record 实耗 H：Base 重置、Delta 累加、retained 保持。再 readonly 冷读旧 tag／新分支，旧完成帧保持。
 
@@ -248,7 +248,7 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 
 验收采用具体故事、独立关闭／重开和公开行为／实际 backing 证据，不重复所有 family／provider／comparer／rank 矩阵。
 十九个有效暂停 lanes 不是前置；包门禁也不授未迁 lanes 当前资格，不新增进程 Kill／断电／性能结论。
-唯一公开默认路径、旧权威退出与该有限包门禁共同决定完整 P1 停点；完成前仍不宣告 P1 已完成。
+P1 在上述有限范围内已完成；不将代表故事扩展为全部类型组合、任意 Pair 实例身份承诺或 P2 资格。
 
 <a id="private-plan"></a>
 ## 9. P2：已选政策、尚未实现
@@ -272,7 +272,7 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 <a id="open-questions"></a>
 ## 10. 局部未决与条件延期
 
-当前没有需要重新选择产品政策的阻塞。P1 包消费者的局部形状和 P2 配置签名可在各自有限施工片落实。wire／内部 API 未冻结不等于要先做命名、程序集或后端统一；新格式变化按准确 source／package模式验证。
+当前没有需要重新选择产品政策的阻塞。下一片先落实 P2 显式 shared/private 配置与写准入，再接完整 private fork 和同 key 异形的新根 all-Base 见证；配置位置／签名仍是局部待决，不建设通用策略框架。wire／内部 API 未冻结不等于要先做命名、程序集或后端统一；新格式变化按准确 source／package模式验证。
 
 以下只在真实消费者或测量触发时重访：
 
@@ -351,6 +351,6 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 <a id="retired-raw-storage-source"></a>
 ### 包、默认接线与旧权威退出
 
-[内部 friend 包 §33](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)和[普通公开包／默认接线 §34](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接)分责，不代尚待实施的完整公开accepted-history门禁。
+[内部 friend 包 §33](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)和[普通公开包／默认接线 §34](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接)保原资格；当前[公开 accepted-history 门禁](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)已通过，两者不互相代替。
 [退旧 §35–38](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出)将有效规律迁真实新路径，保实际计量／来源／CRC／no-admit／清理／锁／容量；最新源码回归与活动Replay只保其运行用途，不授新包或性能。
 退休源码与本地Git恢复见[保存](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-save-source)／[typed reader](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-typed-reader-source)／[Schema权威](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-schema-authority-source)／[raw Storage](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-raw-storage-source)；不假定本地历史已发布远程。
