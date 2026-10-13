@@ -19,19 +19,19 @@
 
 ## 当前焦点
 
-[DB-087 P1d 第九片](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出) 已退出旧 raw Store／Revision／map／chain／wire／cache adapter 的十一类型束及旧 TailMeta codec，最终源码构建、定向与完整回归通过限定验收。实际共享 payload／计量、地址、只读字典／owned LRU 保留；有效读取／缓存规律映射至真实 P0，不造替代 Store。
+[DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：默认公开入口已接 meta 自举；旧保存、typed 恢复、Schema 权威及 raw Storage 束均已退出，P1d 前九片通过各自限定验收。共用 payload／计量、地址、只读字典／owned LRU 保留，当前只有一份业务保存／恢复和发布 owner。
 
 默认两根／meta 自举、准确 S、共同 owner、history／Pair／State 槽与 owned 物理缓存保持。Synthetic DTO 可作读取机制输入，但不授保存来源；物理命中不豁免每图完整 refs／lookup／来源检查，不新建 typed DTO cache。checkout 执行 S／models 稳定，保存可推进 selected S；Event/Discard 不推进 State 或消费 rewrite。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
-后继直接验有限的非 friend 公开 Repository＋accepted-history 准确包故事，再接 P2，尚不授完整 P1。十九个有效旧包 lanes 暂停当前 G，资产原地保留；选择性迁移不是该门禁前置，也不因新门禁通过自动恢复旧 lane 资格。范围／反例／运行证据只维护 [DB-087 §38](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)，[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图) 只导航依赖。
+下一片是[有限非 friend 公开 accepted-history 准确包门禁](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)，通过后再接 [P2 私有视图](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)，尚不授完整 P1。十九个有效旧包 lanes 暂停当前 G，资产原地保留；选择性迁移不是该门禁前置，也不因新门禁通过自动恢复旧 lane 资格。
 
-本片起点 `8243898`；续工核 HEAD／工作树，按[依赖指南](../docs/storage-dependency.md)选择准确模式。本片不新增包、进程或性能资格；默认公开 Repository 保存／恢复语义保持。
+DB-087 已压缩为当前契约、源码落点、门禁和待决问题；原逐片过程冻结于[压缩前完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，来源 `ecc8068`。按需从[证据索引](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)定位历史，不将旧“下一片”当新排期。此次只整理文档，无新增产品资格；续工核实际 HEAD／工作树，并按[依赖指南](../docs/storage-dependency.md)选择准确模式。
 续工授权：用户已允许按需自主进行本地 Git 提交；在完成分片验收并同步文档后形成可追溯提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。
 用户已取消全库重开确认/启动审计、旧数据保留与迁移；完整帧稳定、必要读取校验、两种 Parent、outcome/fault 与 mutable 隔离保持。
-该轮合同与验收保留在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)；当前默认接线见 DB-087 §34，没有旧格式兼容模式，模型 accepted history 与显式 Upgrade 保持。
+该轮合同与验收保留在[实施记录](../docs/design-branches/0086-new-storage-implementation.md)；当前默认接线见 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)，没有旧格式兼容模式，模型 accepted history 与显式 Upgrade 保持。
 准确上游依据与未公开候选入口见[依赖指南](../docs/storage-dependency.md)；原始机制证据只查[DB-085](../docs/design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)。
 下一增量由下游新库接入/真实轨迹反馈选择；容量、Schema 登记写放大和合帧导航成本的重访条件集中于[路线图](../docs/DurableGraph-research-roadmap.md#33-rbf3--framestore--versionstore-迁移)。
 
@@ -50,7 +50,7 @@ A/B 显示 Family 物化改善，但完整 Fork 未见稳定收益；不以减�
 反例与历史证书隔离见证进入回归；未改产品 API、发布或 provider 合同。重启条件与备选只维护在实验记录及路线图。
 
 [DB-080：最近 State 准备材料复用](../docs/design-branches/0080-prepared-checkpoint-reuse-implementation.md) 已实施并独立验收。
-Checkout/Fork 独立选择请求历史位置后复用一个精确 State 槽；默认准确 reader 环境／完整标准依赖接线源于 DB-087 §28，命中仍独立物化和导入保存身份。旧全局 Schema 后登记不污染已 pin 的历史 S。
+Checkout/Fork 独立选择请求历史位置后复用一个精确 State 槽；默认准确 reader 环境／完整标准依赖接线源于 [DB-087 归档 §28](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用)，命中仍独立物化和导入保存身份。旧全局 Schema 后登记不污染已 pin 的历史 S。
 证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
 默认启用的依据是实测高命中路径准备计数和分配下降；没有完整 Fork 普遍加速或总堆有界的承诺，具体证据只保留在实施记录。
 
@@ -137,7 +137,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存 | 默认前端与产品回归已验；旧 raw 束退出已验，范围见 DB-087 §38，完整公开包与 P2 后置 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存 | 默认前端与产品回归已验；旧 raw 束退出已验，范围见 [DB-087 证据索引](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)，完整公开包与 P2 后置 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
 
@@ -303,7 +303,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   Schema／TypeExpr 从指定 meta 根冷读员工 DTO 后经工厂投影，构造闭包／nominal kind/arity／limits 保持；目录排除自身、write-last，用固定 Dictionary body 与对象版本，不保 raw-map 第二权威。
   业务与 meta producer 共用窄 saver；实际 append 后准备全部安装材料，Confirmed 才接受 State／meta，Event 只接受 meta／Head。
   保存规划与计量保全部 source membership、实际 records／heads/H、强制 rewrite Base；物理缓存按 owner/address 复用合法 owned 值，每次仍核图关系／准确 S／typed 来源，zero 禁用、关闭／fault 清驻留。
-- 旧保存高层／typed 恢复束及 SCB1／RepresentationId／Base v4／GraphResources legacy 模式已退出；第九片已删除 raw Store／wire／map／chain／cache adapter 与旧 TailMeta codec，最终源码验收见 §38。
+- 旧保存高层／typed 恢复束及 SCB1／RepresentationId／Base v4／GraphResources legacy 模式已退出；第九片已删除 raw Store／wire／map／chain／cache adapter 与旧 TailMeta codec，最终源码验收见 [DB-087 归档 §38](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。
   共用 body、ObjectVersion payload／计量、planner 内核、workspace／候选与 owned LRU 保留；不为旧夹具恢复第二条生产路径。历史机制细节查 DB-046／067／086，不在当前工作集重复旧格式说明。
 
 - 数组对象支持 SZ/rank 2–4 与完整已有槽闭包：标量、string/class ID、inline/generic struct、递归数组。
@@ -378,7 +378,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 | Schema、DTO、静态 body | [Generator tests](../tests/DurableGraph.Tests)、[DB-019](../docs/design-branches/0019-schema-ancestry-implementation-slice.md)、[DB-022](../docs/design-branches/0022-versioned-state-dto-capture.md)、[DB-023](../docs/design-branches/0023-scalar-schema-dto-slice.md) |
 | 同版 DTO Delta 准备与应用 | [DB-027](../docs/design-branches/0027-generated-same-schema-delta-body-slice.md)、[body tests](../tests/DurableGraph.Tests/FusedDeltaBodyTests.cs)、[history/Capture tests](../tests/DurableGraph.Tests/FusedDeltaHistoryTests.cs) |
 | Capture 与 string 读取 | [DB-024](../docs/design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-025](../docs/design-branches/0025-string-object-decoding-slice.md) |
-| 持久 Schema、Base 引用及 typed 冷读 | [catalog 工作区](DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)、[真实 Schema 闭包 tests](../tests/DurableGraph.Persistence.Tests/MetaBootstrapSchemaClosureTests.cs)、[默认 typed reader](DurableGraph.Persistence/MetaBootstrapP0/P0TypedBodies.cs)、[旧权威退出](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出) |
+| 持久 Schema、Base 引用及 typed 冷读 | [catalog 工作区](DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)、[真实 Schema 闭包 tests](../tests/DurableGraph.Persistence.Tests/MetaBootstrapSchemaClosureTests.cs)、[默认 typed reader](DurableGraph.Persistence/MetaBootstrapP0/P0TypedBodies.cs)、[旧权威退出（归档）](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出) |
 | current 升级、readonly 恢复与续写 | [DB-033](../docs/design-branches/0033-upgrade-restore-resave-batch.md)、[SG tests](../tests/DurableGraph.Tests/GeneratedStateModelTests.cs)、[加载 tests](../tests/DurableGraph.Persistence.Tests/LoadedWorldTests.cs)、[冷重开集成](../tests/DurableGraph.Tests/LoadedWorldGeneratorTests.cs) |
 | 完整历史 DTO 目录与 reader 登记 | [DB-032](../docs/design-branches/0032-exact-revision-decoding-slice.md)、[ReadSplit](DurableGraph.Persistence/DecodedRevision.cs)、[生成冷读 tests](../tests/DurableGraph.Tests/DecodedRevisionGeneratorTests.cs) |
 | 异构图统一准备内容 | [DB-030](../docs/design-branches/0030-captured-object-preparation-slice.md)、[runtime tests](../tests/DurableGraph.Tests/CapturedGraphPreparationTests.cs)、[生成 tests](../tests/DurableGraph.Tests/GeneratedCapturePreparationTests.cs) |

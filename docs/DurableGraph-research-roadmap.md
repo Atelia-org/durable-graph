@@ -174,8 +174,8 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
-| SchemaStore 后续能力 | MVP 单调注册已实现；[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订) P0 内部持久自举已验证有限闭环，公开切换与 private 尚未实施，见下节。多 writer、压缩/GC 另待真实需求 |
-| Schema/表示目录增量或分段 | DB-086选择完整SchemaSnapshot，真实目录接近单帧上限或登记写放大成为瓶颈时重访；正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
+| Schema/meta 后续能力 | 默认 meta 自举与旧权威退出已验；完整公开 accepted-history 包门禁和 private 未完成，见 [DB-087 后续路线](design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)。多 writer、压缩/GC 另待真实需求 |
+| Schema 目录分页或分段 | DB-087 已用 meta 对象版本增量保存；真实目录接近单帧上限或保存成本成为瓶颈时重访更细粒度机制。正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-086 采用 FS/VS 的 data-first 发布、outcome 与正常不完整尾恢复，DG 保留 expected head、必要内容与 fault 检查。实际访问坏完整内容报错；OS crash/power loss、设备失效与目录持久性保证仍待明确需求和独立实验，不能由普通进程关闭/重开推导 |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
 | DerivedStore | 真实昂贵派生消费者出现；定义 exact 输入围栏、recipe/builder/model 身份、stale/missing 及可删重建 |
@@ -197,33 +197,16 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 
-2026-09-07 的“员工通道／Schema 复用对象存储”方向，在 Dictionary 内容管线和 DB-086 共享
-FS/VS 底座完成后，由 2026-10-12 用户指定的原型经验与共享／私有策略触发重新调查。
-[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md) 的 **P0／P1a 已完成，P1b 有限停点和 P1c 内部整合停点已达；默认前端／产品回归与普通公开包已验，旧保存／typed 恢复／Schema 权威及 owner 模式已退出；[P1d 第九片](design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出) 旧 raw Storage 束退出已通过限定源码验收，完整非 friend 公开 accepted-history 包与 P2 后置**；
-真实 SG Widget/List、meta descriptor/Dictionary、双 ref 和关闭资源后重开续写的限定证据见其[第 10 节](design-branches/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)，不以此代替完整产品资格。
-联合发布的长期目标仍见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
+[DB-087 当前停点](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：默认公开入口已走 meta 自举，旧保存／typed／Schema／raw 权威退出，P1d 前九片通过各自限定验收。业务比较与受控 meta 变化汇入共同 writer／PendingSave／发布 owner；联合发布的长期约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。
 
-辩证简化后的候选为业务比较／meta 脏集合 → owned records/Removes → 共用窄图 writer 与一个 PendingSave。
-Schema 员工 DTO 直接构造不可变描述，descriptor 复用 meta ObjectId；live-directory 采用固定 Dictionary，
-排除自身、write-last，locator 复用 inline body。图固定准确 catalog/目录根，sourceGraph/OwnedBatch 保留冷读来源；
-Event 统一目录编码，确认后接受 meta 而不安装 State 基线。共享单调与私有完整视图使用同一种机制。
-推荐业务分支目录 ref＋受管 shared ref，新增共享定义或表示布局与业务版本一次共同发布。
-具体合同、P0 代码去向与分步依赖只在 DB-087 §6 维护；P1a 的真实 Upgrade、共同恢复及拒绝边界见其[第 11 节](design-branches/0087-meta-bootstrap-refactoring-route.md#11-p1a准确视图与共同恢复接线)。P1 停点还须准确非 friend 公开 accepted-history 包的有限代表故事，
-不预先承诺总 O(k)。用户明确无旧数据／API 兼容要求，SCB1 和 raw map 旧权威直接退出，不做迁移壳或生产双写。
+依赖顺序只保三步：
 
-员工 D/F/T、fixed／dynamic 路由与完整 Schema 投影的内部基线为 ABI5／员工 DTO V1；源码与隔离包各保原范围于 DB-087 §12–16，history 代表与后继泛型／跨程序集资格分别见 §17–19。第八片[跨程序集有限停点](design-branches/0087-meta-bootstrap-refactoring-route.md#19-p1b-第八片跨程序集继承与有限停点) 仅测试改动，未暴露新合同差异，不扩大为全部组合、跨库升版或新包资格。
-P1c 的共同 planner／workspace／owner、准确 S 环境、history／Pair／State 槽与 owned 物理缓存已达内部停点；历史源码证据保留于 DB-087 §20–29。P1d 的初始化／正常恢复、有限 ProcessCrashOnly／返回 outcome、内部 friend 包与默认前端／普通公开包已有分层证据，旧保存／typed reader／Schema 权威与 owner 模式退出已验，分别保留于 §30–37。[第九片](design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出) 已退出 raw Storage 十一类型及旧 TailMeta codec，最终源码构建／完整回归通过限定验收。随后直接验有限非 friend 公开 accepted-history 准确包，再接 P2；十九个有效暂停 lane 原地保留，选择性迁移不作该门禁前置，未迁 lane 也不自动获得当前资格。DB-081 热 seed 禁用、DB-082 默认关，不提前宣布 P1 产品停点。
-P1a 已纠正历史 S 缺 Upgrade 目标就提前拒绝的问题：只读 target 无持久编号，真实 Save 才准备新 catalog。
-完整非 friend 公开 accepted-history 包资格尚待下一门禁，不能以有限模型、内部 friend 或普通 README 包见证替代；具体接缝见 DB-087 §7.1。
-P1b 首片的高深度 cold 验证触发具体读取成本：数千员工行反复 `ReadGraph`／逐 head `ReadBatch`，主线主动停止长运行，极限投影和小型真实 cold 反例分开验证。物理缓存已由 P1c 第十片接入，更多操作内复用仍按测量触发；不由早期观察宣称性能量级，原证据见 DB-087 §12。
-默认历史按图 pin 的准确 S 解释；第八片已删除旧全局 SchemaStore 输入和独立发布权威，保固定 view 的标准依赖／memo 复核与单调 shared 的同 key 完整形状冲突规则。
+1. [有限非 friend 公开 accepted-history 准确包门禁](design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)：实际公开路径完成 Widget/List 的历史 Upgrade、准确 S、tag/Fork/Pair 与冷开 Delta；不能以内部 friend、普通 README 包或源码测试代替。通过后才授 P1 产品停点。
+2. [P2 私有完整视图](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：显式 shared/private 策略→完整 fork→匹配环境的新根 all-Base 改形→完整闭包转 shared／必要重编码→两环境冷读续写及错环境拒绝。无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes。
+3. [条件延期](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)：原分支重建、按操作选模型、业务 head 不动的 Schema-only 和读取／保存成本优化，只由真实消费者或测量触发；不预先承诺总 O(k)。
 
-首轮建议用显式新根创建新私有分支验证同键异形，全 live 新 Base、无 external retained heads；
-一套固定代码环境只执行其有匹配能力的布局；这是首片入口范围，不是永久产品禁令。
-显式无变化 CommitState 可以复用目录、选择新 S；原分支内重建、按操作选模型、业务 head 不动的 Schema-only
-及 DurableSchema CLR 本体直存按消费者另行裁定；已有库迁移不在本轮范围。
-采用私有视图不授权跳过 Generator accepted history、重解释旧 bytes 或回退共享受管目录；
-不新增动态 fallback、永久全历史占键扫描、第二发布权威或全库启动审计。
+十九个有效旧包 lanes 暂停当前 G 并原地保资产，按需迁移不作公开门禁前置，门禁通过也不自动恢复未迁 lane 资格。DB-081 热 seed 禁用、DB-082 默认关。
+具体契约、源码落点和 P2 局部待决入口只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md)；历次过程、运行计数、故障窗口和包证据从其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)按需查[冻结完整稿](archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，旧“下一片”不作为当前排期。
 
 ## 5. 后续切片验收素材
 
