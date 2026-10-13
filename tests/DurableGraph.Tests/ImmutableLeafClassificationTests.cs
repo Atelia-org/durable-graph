@@ -421,7 +421,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 }
                 public static IDurableObject Create() => new World();
                 public static void Save(string path, IDurableObject world, StateModelRegistry models, ReadAmplificationBaseBudgetParameters parameters) {
-                    using var repository = Repository.CreateNew(path, models);
+                    using var repository = Repository.CreateNew(path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
                     using var session = repository.CreateBranch("main", (World)world, parameters);
                 }
             }

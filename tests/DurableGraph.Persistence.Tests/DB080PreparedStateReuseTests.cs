@@ -45,7 +45,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             Assert.Equal(source.Address, b.CommitState(NoRebase).Parent);
             Assert.Equal(source, main.Head);
         }
-        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models());
+        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         reopened.PreparedStateReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
         Node previous;
@@ -219,7 +219,8 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
                 return new Node();
             }, hydrate: node => {
                 if (fail && phase == "hydrate" && node.Value == 20) throw failure;
-            }));
+            }),
+            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.PreparedStateReuseEnabled = reuse;
         using BranchCheckout warm = repository.Fork("warm", repository.GetHead("main"));
         var successfulEntry = repository.PreparedStateEntry;
@@ -294,7 +295,8 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         }
         int normalized = 0;
         using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(currentVersion: 2,
-            normalize: row => { normalized++; return row.GetState<SharedReadModel.State>(); }));
+            normalize: row => { normalized++; return row.GetState<SharedReadModel.State>(); }),
+            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.PreparedStateReuseEnabled = reuse;
         CheckpointAddress head = repository.GetHead("main");
         CheckpointAddress state = repository.GetPreviousState(head)!;
@@ -392,7 +394,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             resources.PublishMetaBootstrapBranchRoot(resources.PrepareMetaBootstrapBranchRoot("invalid", invalid), out _);
         }
         // Physical history/root checks permit opening; typed graph validation must still reject.
-        using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models());
+        using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout warm = repository.Fork("warm", repository.GetHead("main"));
         var previous = repository.PreparedStateEntry;
         Assert.NotNull(previous);
@@ -493,7 +495,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             static (target, _) => target.Value, Visit);
     }
 
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
 
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db080-reuse-");
 }

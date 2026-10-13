@@ -17,6 +17,8 @@ namespace Atelia.DurableGraph;
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Successful closures may be reused within an exact Schema environment; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
+/// Business saves require an explicit Schema write mode selected when opening. Without one, writable backing
+/// resources still allow checkout restoration and ref-only operations, but business capture is rejected.
 /// </remarks>
 public sealed partial class Repository : IDisposable {
     private readonly GraphResources _resources;
@@ -33,6 +35,9 @@ public sealed partial class Repository : IDisposable {
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
     public bool IsReadOnly => _resources.IsReadOnly;
+    /// <summary>The Schema write destination selected for this open repository, or null when business saves are not admitted.</summary>
+    /// <remarks>Immutable for this open. A missing mode does not make backing resources read-only: reads, checkout restoration and ref-only operations remain available.</remarks>
+    public SchemaWriteMode? SchemaWriteMode { get; }
     /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
     /// <remarks>
     /// Independent of GraphCommitException.Outcome: a NotPublished attempt can still fault the writer.
@@ -41,19 +46,21 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public bool IsFaulted => _resources.IsFaulted;
     /// <summary>Creates a repository with frozen code configuration and exact stored Schema views.</summary>
-    /// <remarks>Configuration is captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens. Rotation controls FrameStore file allocation; the separate cache budget controls owned physical reads.</remarks>
+    /// <remarks>Configuration is captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens. Rotation controls FrameStore file allocation; the separate cache budget controls owned physical reads. Select a Schema write mode explicitly before saving business graphs; a missing mode permits inspection and ref-only operations.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository CreateNew(string path, StateModelRegistry models,
         long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes,
+            rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
     /// <summary>Opens the required repository roots with frozen code configuration and exact stored Schema views.</summary>
-    /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities.</remarks>
+    /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities. Select a Schema write mode explicitly before saving business graphs. Without a mode, checkout restoration and ref-only operations remain available.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository OpenExisting(string path, StateModelRegistry models,
         long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes,
+            rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
     /// <summary>Opens existing history without writing, using frozen code configuration and each graph's exact Schema view.</summary>
     /// <remarks>An empty or partial registry supports inspection; model capabilities are still required to materialize domain graphs. The cache budget controls owned physical reads.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
@@ -63,7 +70,7 @@ public sealed partial class Repository : IDisposable {
 
     /// <summary>Publishes an initial State and returns a checkout retaining the supplied domain instances.</summary>
     /// <remarks>
-    /// Requires a writable repository and a new branch name. The root must be nonnull and registered.
+    /// Requires a writable repository, an explicit Schema write mode and a new branch name. The root must be nonnull and registered.
     /// Other branches may have active checkouts. Dispose the returned checkout to release its branch.
     /// Failure can occur after publication but before delivery; inspect the outcome and IsFaulted independently.
     /// Reopen a faulted repository to inspect persisted history. Domain mutations are not rolled back.
@@ -74,7 +81,7 @@ public sealed partial class Repository : IDisposable {
 
     /// <summary>Publishes an initial Event and returns a checkout with no State.</summary>
     /// <remarks>
-    /// Requires a writable repository and a new branch name; other branches may have active checkouts.
+    /// Requires a writable repository, an explicit Schema write mode and a new branch name; other branches may have active checkouts.
     /// The Event is captured without installing a State or a saving baseline. No empty-head branch is created.
     /// Publication may succeed before delivery fails; inspect the outcome and reopen a faulted repository.
     /// </remarks>
@@ -460,6 +467,12 @@ public sealed partial class Repository : IDisposable {
     private void RequireWriter() {
         RequireAvailable();
         _resources.RequireWritable();
+    }
+    private void RequireSchemaWriter() {
+        RequireWriter();
+        if (SchemaWriteMode != global::Atelia.DurableGraph.SchemaWriteMode.Shared) {
+            throw new InvalidOperationException("Business saves require an explicit Schema write mode when opening the repository.");
+        }
     }
     private void RequireAvailable() {
         ObjectDisposedException.ThrowIf(_disposed, this);

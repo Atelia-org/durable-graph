@@ -282,7 +282,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     private static bool IsAlive(WeakReference<Leaf> weak) => weak.TryGetTarget(out _);
 
     private Repository Create(Controls control) {
-        Repository repository = Repository.CreateNew(_path, Models(control));
+        Repository repository = Repository.CreateNew(_path, Models(control), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.ImmutableLeafReuseEnabled = true;
         return repository;
     }

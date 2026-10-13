@@ -11,6 +11,8 @@ namespace Atelia.DurableGraph;
 /// business handlers; the application interprets its own processing progress. At most one checkout per branch
 /// may be active; different branches may have live checkouts together, with serial repository operations.
 /// Dispose explicitly to release the branch. Losing this object does not automatically release occupancy.
+/// Restoration and in-memory editing do not select a Schema write destination. Commit requires the owning
+/// Repository to have been opened with an explicit Schema write mode; missing selection rejects before capture.
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;

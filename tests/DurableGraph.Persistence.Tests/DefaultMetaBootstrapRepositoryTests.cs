@@ -20,7 +20,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         ObjectId listId;
         ObjectStorageInfo savedList;
         FrameImage[] completed;
-        using (Repository repository = Repository.CreateNew(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0)) {
+        using (Repository repository = Repository.CreateNew(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             DB087Widget root = Ring();
             using BranchCheckout main = repository.CreateBranch("main", root);
             initialState = main.Head.RevisionAddress;
@@ -98,7 +98,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         }
         AssertFilesUnchanged(readOnlyImages, SnapshotFiles(path));
 
-        using (Repository reopened = Repository.OpenExisting(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0)) {
+        using (Repository reopened = Repository.OpenExisting(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout cold = reopened.Checkout("main");
             DB087Widget root = AssertRing(cold.State, 201);
             Assert.Equal(savedState, cold.StateRevisionAddress);
@@ -142,7 +142,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     public void PublicCacheBudgetControlsActualColdReadProductionAndOwnedLifetime(long budget) {
         string path = NewPath();
         FrameAddress saved;
-        using (Repository seed = Repository.CreateNew(path, Models(), readCacheBudgetBytes: budget)) {
+        using (Repository seed = Repository.CreateNew(path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             saved = main.Head.RevisionAddress;
         }
@@ -187,9 +187,9 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     [Fact]
     public void PublicFactoryNegativeBudgetsRejectBeforeCreatingOrOpeningBackingResources() {
         string path = NewPath();
-        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateNew(path, Models(), readCacheBudgetBytes: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateNew(path, Models(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
         Assert.Throws<ArgumentOutOfRangeException>(() => GraphResources.CreateNew(path, readCacheBudgetBytes: -1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenExisting(path, Models(), readCacheBudgetBytes: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenExisting(path, Models(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
         Assert.Throws<ArgumentOutOfRangeException>(() => GraphResources.OpenExisting(path, readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => GraphResources.OpenReadOnlyExisting(path, readCacheBudgetBytes: -1));

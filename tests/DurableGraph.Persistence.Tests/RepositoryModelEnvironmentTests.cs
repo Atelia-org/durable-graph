@@ -30,7 +30,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
 
         Counts reads = new();
         StateModelRegistry models = Models(family, reads);
-        using (Repository repository = Repository.OpenExisting(_root, models)) {
+        using (Repository repository = Repository.OpenExisting(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.Equal(0, reads.Factories);
             Assert.Equal(0, reads.Comparers);
             CheckpointAddress head = repository.GetHead("main");
@@ -73,7 +73,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             Assert.Equal(before, session.Head);
             Assert.False(repository.IsFaulted);
         }
-        using (Repository repository = Repository.OpenExisting(_root, models)) {
+        using (Repository repository = Repository.OpenExisting(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using var session = repository.Checkout("main");
             session.CommitEvent(new EventModel());
         }
@@ -104,12 +104,12 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
         }
         AssertFiles(before);
-        using (Repository repository = Repository.OpenExisting(_root, events)) {
+        using (Repository repository = Repository.OpenExisting(_root, events, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.Throws<InvalidDataException>(() => repository.Checkout("main"));
             Assert.False(repository.IsFaulted);
             Assert.IsType<EventModel>(((IDurableObject)repository.ReadEvent(repository.GetHead("main"))));
         }
-        using Repository reopened = Repository.OpenExisting(_root, all);
+        using Repository reopened = Repository.OpenExisting(_root, all, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var restored = reopened.Checkout("main");
         Assert.Equal(7, ((RootModel)restored.State!).Values!["key"]);
     }
@@ -124,7 +124,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         models.Register(Model<RootModel>(current, Reader(RootSchema), Reader(current)));
         models.Register(Model<EventModel>(EventSchema));
         models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
-        using Repository reader = Repository.OpenExisting(_root, models);
+        using Repository reader = Repository.OpenExisting(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress head = reader.GetHead("main");
         Assert.Equal(7, ((RootModel)reader.ReadState(head)).Values!["key"]);
         // Publish the additional declaration jointly with an unrelated Event. Historical
@@ -146,8 +146,8 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
     public void NullModelsAreRejectedBeforeAnyDirectoryOrResourceAcquisition(int entry) {
         ArgumentNullException error = Assert.Throws<ArgumentNullException>(() => {
             using Repository repository = entry switch {
-                0 => Repository.CreateNew(_root, null!),
-                1 => Repository.OpenExisting(_root, null!),
+                0 => Repository.CreateNew(_root, null!, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared),
+                1 => Repository.OpenExisting(_root, null!, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared),
                 _ => Repository.OpenReadOnlyExisting(_root, null!),
             };
         });
@@ -165,16 +165,16 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         string saved = Path.Combine(_root, "root.saved");
         File.Move(schema, saved);
         try {
-            Assert.ThrowsAny<Exception>(() => Repository.OpenExisting(_root, Models()));
+            Assert.ThrowsAny<Exception>(() => Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
         } finally {
             File.Move(saved, schema);
         }
-        using Repository repositoryAfterFailure = Repository.OpenExisting(_root, Models());
+        using Repository repositoryAfterFailure = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var resumed = repositoryAfterFailure.Checkout("main");
         Assert.Equal(7, ((RootModel)resumed.State!).Values!["key"]);
     }
 
-    private Repository Create(StateModelRegistry models) => Repository.CreateNew(_root, models);
+    private Repository Create(StateModelRegistry models) => Repository.CreateNew(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
     private static RootModel Root(int value) => new() { Values = new(new StringProxy()) { ["key"] = value } };
     private static DurableSchema Schema(string id) => new(id, 1, DurableFieldInfo.Reference(1, MapType));
     private static StateModelRegistry Models(bool family = false, Counts? counts = null) {

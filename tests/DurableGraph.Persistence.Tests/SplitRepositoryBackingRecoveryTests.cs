@@ -34,7 +34,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models()));
         AssertFilesEqual(damagedFiles, SnapshotFiles()); // Failed read-only admission repairs nothing and releases its resources.
 
-        using (Repository recovered = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository recovered = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             GraphResources resources = ResourcesOf(recovered);
             var report = Assert.Single(resources.Data.RecoveryReports);
             Assert.Equal(fileId, report.Key);
@@ -50,7 +50,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         AssertFilesEqual(completeFiles, SnapshotFiles()); // Only the incomplete suffix was discarded; all completed bytes are exact.
 
         FrameAddress continued;
-        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             AssertHealthyActive(ResourcesOf(writer).Data, fileId, completeLength);
             using BranchCheckout checkout = writer.Checkout("main");
             DB087Widget root = AssertRing(checkout.State, 201);
@@ -90,7 +90,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         SeedResult seed = Seed();
         byte[] ordinaryPayload = [30, 40, 50];
         RefRevision ordinaryRevision;
-        using (Repository owner = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository owner = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             var versions = ResourcesOf(owner).Versions;
             // DG reserves only 1/2. The explicit-ID CreateRef overload cannot create
             // ordinary ref3; automatic H+1 is the actual public VersionStore route.
@@ -120,7 +120,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         }
         AssertFilesEqual(damagedFiles, SnapshotFiles()); // DG's required-root readonly open did not audit/ref-repair the unrelated control file.
 
-        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             GraphResources resources = ResourcesOf(writer);
             IReadOnlyList<VersionStoreRecoveryReport> reports = resources.Versions.RecoveryReports;
             Assert.Empty(reports);
@@ -156,7 +156,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
     }
 
     private SeedResult Seed() {
-        using Repository seed = Repository.CreateMetaBootstrapNew(_path, Models());
+        using Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         DB087Widget root = Ring();
         using BranchCheckout main = seed.CreateBranch("main", root);
         main.Catalog.Set(Extra);

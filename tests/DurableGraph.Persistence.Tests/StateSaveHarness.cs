@@ -24,11 +24,11 @@ internal sealed class StateSaveHarness : IDisposable {
     }
     internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), false);
     }
     internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), true);
     }
     internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
     internal ObjectId? WorldId => _stateHead?.RootId;

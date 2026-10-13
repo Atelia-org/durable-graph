@@ -50,7 +50,7 @@ public sealed partial class DB078HistoryTests {
             Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
         }
         // Both graph candidates are complete; one CU End cannot expose either root.
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
         Assert.False(P0CatalogView.Load(reopened.MetaBootstrapStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
         P0GraphSnapshot orphan = reopened.MetaBootstrapStore.ReadGraph(candidate);
@@ -77,7 +77,7 @@ public sealed partial class DB078HistoryTests {
             Assert.True(repository.IsFaulted);
             Assert.Equal(previous, main.Head.RevisionAddress);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
         Assert.False(P0CatalogView.Load(reopened.MetaBootstrapStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
         Assert.Equal(previous, reopened.GetHead("main").RevisionAddress);

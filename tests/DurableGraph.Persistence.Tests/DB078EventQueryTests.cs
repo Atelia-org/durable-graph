@@ -72,8 +72,8 @@ public sealed class DB078EventQueryTests : IDisposable {
             using BranchCheckout branch = repository.CreateBranchFromEvent("main", new Node(), NoRebase);
             stale = branch.Head;
         }
-        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }));
-        using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models());
+        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout other = foreign.CreateBranchFromEvent("main", new Node(), NoRebase);
         CheckpointAddress valid = reopened.GetHead("main");
         foreach (CheckpointAddress bad in new[] { stale, other.Head }) {
@@ -169,6 +169,6 @@ public sealed class DB078EventQueryTests : IDisposable {
         }
     }
 
-    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
+    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db078-query-");
 }

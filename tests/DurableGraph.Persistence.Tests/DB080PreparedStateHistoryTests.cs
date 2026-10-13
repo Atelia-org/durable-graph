@@ -39,12 +39,12 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         VerifyPreclosedDependency(false, factory);
 
     private void VerifyPreclosedDependency(bool evict, string? extraFactory) {
-        using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()))) {
+        using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout state = seed.CreateBranch("main", new HistoricalRoot { Value = 17 }, NoRebase);
             using BranchCheckout events = seed.CreateBranchFromEvent("events", new HistoricalRoot { Value = 29 }, NoRebase);
         }
         HistoryCounters counters = new();
-        using Repository repository = Repository.OpenExisting(_root, HistoryModels(current: true, counters, extraFactory));
+        using Repository repository = Repository.OpenExisting(_root, HistoryModels(current: true, counters, extraFactory), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress address = repository.GetHead("main");
         CheckpointAddress eventAddress = repository.GetHead("events");
         // A real readonly operation restores the historical root in its own exact
@@ -172,7 +172,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     [InlineData(true)]
     public void UpgradedSourceRetainsUnreachableRowsHighIdsEmptyIdentityAndRewrite(bool enableReuse) {
         SeedCompleteHistoricalSource();
-        using Repository repository = Repository.OpenExisting(_root, ProvenanceModels());
+        using Repository repository = Repository.OpenExisting(_root, ProvenanceModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.PreparedStateReuseEnabled = enableReuse;
         repository.RestorationStatistics = new();
         CheckpointAddress address = repository.GetHead("main");
@@ -224,7 +224,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     }
 
     private void SeedCompleteHistoricalSource() {
-        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
+        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout branch = repository.CreateBranch("main", new Node(), NoRebase);
         GraphResources resources = Resources(repository);
         P0GraphStore store = resources.MetaBootstrapStore;

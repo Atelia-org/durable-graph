@@ -193,7 +193,7 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         private readonly BranchCheckout _checkout;
         internal Saved Initial { get; }
         private Backend(string path, DB087Widget? initial) {
-            _repository = initial is not null ? Repository.CreateNew(path, Models()) : Repository.OpenExisting(path, Models());
+            _repository = initial is not null ? Repository.CreateNew(path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared) : Repository.OpenExisting(path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
             _checkout = initial is not null ? _repository.CreateBranch("main", initial) : _repository.Checkout("main");
             Initial = ReadSaved(_checkout.Head.Address);
         }

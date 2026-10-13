@@ -23,7 +23,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Counts counts = new();
         StateModelRegistry models = Models(counts);
         CheckpointAddress stale;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, models)) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.Empty(counts.NextLookups);
             models.Register(LateModel());
             using BranchCheckout checkout = repository.Checkout("main");
@@ -41,7 +41,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             root.Numbers[7] = 1;
             checkout.CommitState(); // The rejected late type did not poison this checkout or leave a pending save.
         }
-        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, models);
+        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout restored = reopened.Checkout("main");
         Assert.True(restored.Models.TryGetCurrentModel(typeof(LateRoot), out _));
         CheckpointAddress accepted = restored.CommitEvent(new LateRoot { Value = 4 });
@@ -57,7 +57,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Counts counts = new();
         FrameAddress oldState, finalState, currentSchema;
         ObjectId oldRootId, listId;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts))) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout checkout = repository.Checkout("main");
             DB087Widget original = AssertWidget(checkout.State, 0);
             oldState = checkout.StateRevisionAddress!.Value;
@@ -168,7 +168,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         AssertFilesEqual(files);
 
         Counts coldCounts = new();
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(coldCounts))) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(coldCounts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout checkout = repository.Checkout("main");
             Assert.Equal(finalState, checkout.StateRevisionAddress);
             Assert.Equal(currentSchema, checkout.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
@@ -199,7 +199,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
     [Fact]
     public void CheckoutFailuresReleaseOccupancyAndAnOldDisposeDoesNotReleaseItsSuccessor() {
         Seed();
-        using (Repository inspector = Repository.OpenMetaBootstrapExisting(_path, new())) {
+        using (Repository inspector = Repository.OpenMetaBootstrapExisting(_path, new(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.Throws<KeyNotFoundException>(() => inspector.Checkout("missing"));
             Assert.Throws<KeyNotFoundException>(() => inspector.Checkout("missing"));
             Assert.Throws<InvalidDataException>(() => inspector.Checkout("main"));
@@ -208,7 +208,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         }
         CheckpointAddress stale;
         P0GraphStore retained;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(new()))) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             BranchCheckout old = repository.Checkout("main");
             Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
             old.Dispose();
@@ -222,7 +222,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             retained = repository.MetaBootstrapStore;
         }
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadGraph(stale.RevisionAddress));
-        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(new()));
+        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Throws<ArgumentException>(() => reopened.ReadState(stale));
         AssertWidget(reopened.ReadState(reopened.GetHead("main")), 2);
     }
@@ -231,7 +231,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
     public void CaptureCallbackReentryRejectionsPreserveTheOuterRepositoryCandidateAndBranchOccupancy() {
         Seed(withSide: true);
         Counts counts = new();
-        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts));
+        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout checkout = repository.Checkout("main");
         CheckpointAddress before = checkout.Head;
         DB087Widget original = AssertWidget(checkout.State, 0);
@@ -262,7 +262,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
     public void EventFirstCheckoutUsesCreationSharedSchemaAndUnsupportedOrWrongBackendEntriesCannotPublish() {
         Seed();
         Counts counts = new();
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts))) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using (BranchCheckout main = repository.Checkout("main")) {
                 main.Catalog.Set(Extra);
                 main.CommitEvent(main.State!);
@@ -317,7 +317,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
     public void AdapterPreparationFailureIsRetryableAndConfirmedPublicationFailureRequiresAFreshOwner(bool published) {
         Seed();
         FrameAddress old, actual;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(new()))) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout checkout = repository.Checkout("main");
             CheckpointAddress before = checkout.Head;
             old = before.RevisionAddress;
@@ -357,7 +357,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
     }
 
     private void Seed(bool withSide = false) {
-        using Repository repository = Repository.CreateMetaBootstrapNew(_path, Models(new()));
+        using Repository repository = Repository.CreateMetaBootstrapNew(_path, Models(new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", Ring());
         if (withSide) { using BranchCheckout side = repository.CreateBranch("side", Ring()); }
     }

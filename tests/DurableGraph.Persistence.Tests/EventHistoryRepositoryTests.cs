@@ -60,7 +60,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(store.ReadGraph(second).Objects[childId],
                 Assert.Single(StorageTestData.LocalRecords(store, third)).PriorAddress);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout loaded = reopened.Checkout("main");
         Node loadedState = Assert.IsType<Node>(loaded.State);
         Assert.NotNull(loadedState.Left);
@@ -82,7 +82,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             session.CommitEvent(new Node { Left = child, Right = child, Value = 7 }, NoRebase);
             Assert.Equal((byte)7, ((Node)repository.ReadEvent(session.Head)).Value);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout session = repository.Checkout("main");
             Node pending = ((Node)repository.ReadEvent(session.Head));
             Assert.Same(pending.Left, pending.Right);
@@ -273,7 +273,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(first, session.StateRevisionAddress!.Value);
             Assert.Equal(GraphFrameKind.Event, session.Head.Kind);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("main");
         Assert.Equal(first, recovered.StateRevisionAddress!.Value);
         Assert.Equal((byte)1, ((Node)recovered.State!).Value);
@@ -296,7 +296,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.True(repository.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => session.CommitState(NoRebase));
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("main");
         Assert.Equal(published, recovered.StateRevisionAddress!.Value);
         Assert.Equal((byte)9, ((Node)recovered.State!).Value);
@@ -312,7 +312,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
             repository.MetaBootstrapCheckpoint = checkpoint => {
                 if (checkpoint == P0SaveCheckpoint.AfterPublication) throw new IOException("bound but not returned");
@@ -320,7 +320,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node { Value = 6 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
         }
-        using Repository read = Repository.OpenExisting(_root, Models());
+        using Repository read = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout resumed = read.Checkout("main");
         Assert.Equal((byte)6, ((Node)resumed.State!).Value);
     }
@@ -334,7 +334,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             original = session.StateRevisionAddress!.Value;
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models(upgrade: true))) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(upgrade: true), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using var session = namedFork ? repository.Fork("child", repository.GetHead("main")) : repository.Checkout("main");
             Assert.Equal((byte)11, ((Node)session.State!).Value);
             Node same = ((Node)session.State!);
@@ -520,7 +520,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             (mask & 8) != 0 ? input.ReadByte() : prior.Value,
             (mask & 16) != 0 ? input.ReadVarUInt64() : prior.Sequence);
     }
-    private Repository CreateRepository(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models());
+    private Repository CreateRepository(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
     private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
 
     public void Dispose() {

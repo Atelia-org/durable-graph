@@ -30,7 +30,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     [Fact]
     public void BeforeOutputNotPublishedKeepsTheOwnerHealthyAndRequiresAnExplicitRetry() {
         SeedResult seed = Seed();
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Assert.NotNull(repository.PreparedStateEntry);
             GraphResources resources = ResourcesOf(repository);
@@ -91,7 +91,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         SeedResult seed = Seed();
         FrameAddress candidate = default;
         FrameImage[] captured = [];
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Assert.NotNull(repository.PreparedStateEntry); // Actual cold checkout populated the State slot.
             GraphResources resources = ResourcesOf(repository);
@@ -159,7 +159,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
 
     private void VerifySelectedAndContinue(SeedResult seed, bool visible, FrameAddress? candidate, FrameImage[] capturedFrames) {
         FrameAddress continued;
-        using (Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             GraphResources resources = ResourcesOf(reopened);
             P0GraphStore store = reopened.MetaBootstrapStore;
             IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Versions.ReadRef(1).Unwrap(), "P0R1"u8);
@@ -241,7 +241,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     }
 
     private SeedResult Seed() {
-        using Repository repository = Repository.CreateMetaBootstrapNew(_path, Models());
+        using Repository repository = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", Ring());
         repository.CreateTag("initial", main.Head);
         P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(main.Head.RevisionAddress);

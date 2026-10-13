@@ -108,7 +108,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     [Fact]
     public void PriorSuccessfulReadOfSameReaderDoesNotProveNewValuesConditionalDependency() {
         Counters counts = new();
-        using Repository repository = Repository.CreateNew(_path, Models(DependencyMode.BaseForSeven, counts));
+        using Repository repository = Repository.CreateNew(_path, Models(DependencyMode.BaseForSeven, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", new Root { Value = 1 }, NoRebase);
         using BranchCheckout first = repository.Fork("first", main.Head);
         Assert.Equal(1, counts.BaseReads);
@@ -146,7 +146,8 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     private Scenario Seed(bool preclose, bool delta, bool conflict) {
         Counters counts = new();
         Repository repository = Repository.CreateNew(_path, Models(
-            delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts));
+            delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts),
+            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         try {
             using BranchCheckout unrelated = repository.CreateBranch("unrelated", new SharedReadModel.Node { Value = 31 }, NoRebase);
             BranchCheckout warm = repository.Fork("warm", unrelated.Head);

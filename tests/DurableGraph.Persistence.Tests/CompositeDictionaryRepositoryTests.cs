@@ -162,7 +162,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     public void ConfigurationAddedAfterOpenCannotEnterItsFrozenEnvironmentUntilReopen() {
         StateModelRegistry models = Models<string>();
         World<string> world = new();
-        using Repository repository = Repository.CreateNew(_root, models);
+        using Repository repository = Repository.CreateNew(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         FrameAddress seed;
         using (BranchCheckout session = repository.CreateBranch("main", world, NoRebase)) {
             seed = session.StateRevisionAddress!.Value;
@@ -179,7 +179,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Assert.Equal(seed, session.StateRevisionAddress!.Value);
         }
         repository.Dispose();
-        using Repository reopened = Repository.OpenExisting(_root, models);
+        using Repository reopened = Repository.OpenExisting(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using (BranchCheckout session = reopened.Checkout("main")) {
             ((World<string>)session.State!).First = new(new StringProxy(StringComparer.Ordinal));
             session.CommitState(NoRebase);

@@ -20,11 +20,11 @@ public sealed class FixtureGraphRepository : IDisposable {
     }
     public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), false);
     }
     public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), true);
     }
     public FrameAddress? HeadRevisionAddress => _stateAddress;
     public bool IsFaulted => _repository.IsFaulted;

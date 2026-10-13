@@ -67,7 +67,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(source.Address, second.CommitState(DB082NoRebase).Parent);
             Assert.Equal(source, main.Head);
         }
-        using Repository reopened = Repository.OpenExisting(directory.Path, fixture.Models);
+        using Repository reopened = Repository.OpenExisting(directory.Path, fixture.Models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         reopened.PreparedStateReuseEnabled = true;
         reopened.ImmutableLeafReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
@@ -267,7 +267,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static Repository DB082Create(string path, DB082Fixture fixture, bool reuse) {
-        Repository repository = Repository.CreateNew(path, fixture.Models, 64L * 1024 * 1024 * 1024);
+        Repository repository = Repository.CreateNew(path, fixture.Models, 64L * 1024 * 1024 * 1024, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.PreparedStateReuseEnabled = true;
         repository.ImmutableLeafReuseEnabled = reuse;
         return repository;

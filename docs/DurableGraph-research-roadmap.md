@@ -201,7 +201,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 剩余依赖顺序：
 
-1. [P2 私有完整视图](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：先确定显式 shared/private 配置位置／签名及写准入→完整 frozen fork→匹配环境的新根 all-Base 改形→完整闭包转 shared／必要重编码→两环境冷读续写及错环境拒绝。无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes；当前无策略写拒尚未接线。
+1. [P2 私有完整视图](design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)：显式 Shared／无配置写拒已接线；后续为具体 private 新分支入口→完整 frozen fork→匹配环境的新根 all-Base 改形→完整闭包转 shared／必要重编码→两环境冷读续写及错环境拒绝。无 overlay/latest fallback，不跳过 accepted history 或重解释旧 bytes；选择不持久化；须拆开 selected S 与共享发布目的地，private 不借 latest shared rebase，转 shared 比较完整声明 view。
 2. [条件延期](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)：原分支重建、按操作选模型、业务 head 不动的 Schema-only 和读取／保存成本优化，只由真实消费者或测量触发；不预先承诺总 O(k)。
 
 十九个有效旧包 lanes 暂停当前 G 并原地保资产，按需迁移不作公开门禁前置，门禁通过也不自动恢复未迁 lane 资格。DB-081 热 seed 禁用、DB-082 默认关。

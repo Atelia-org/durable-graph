@@ -3,12 +3,13 @@
 Purpose: replay the same ordinary domain edits into independent DurableGraph repositories and
 compare codec-2 List writers under the same policy, with correctness ahead of performance ranking.
 
-Current focus: remove the replay's old wire/read facade dependency while the product retires the old
-save core. Saves and historical domain reads now use the public default Repository/BranchCheckout;
-stored-exact DTOs and actual payload accounting use the real split store at each graph's selected S.
-The minimum acceptance is the README Count 8 ordinary smoke: every published E/S position and State
-fingerprint, root/live IDs/head/H, cold latest baseline and candidate Delta Apply/frozen inputs pass.
-The integrating thread owns build and executable validation; no new performance result is asserted here.
+Current focus: keep the public Repository/BranchCheckout replay on the current meta-bootstrap route.
+Writable opens now explicitly select `SchemaWriteMode.Shared`; the choice is per open and does not
+change measurements or workload semantics. Stored-exact DTOs and actual payload accounting use the
+real split store at each graph's selected S. The finite correctness witness is the README Count 8
+ordinary smoke: published E/S fingerprints, IDs/head/H, cold baseline and candidate Apply/frozen
+inputs. Historical performance results retain their own versions; no speed claim follows from this
+write-admission integration. Validation is indexed from the active [DB-087 slice](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan).
 
 [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md) is implemented and accepted:
 full Local incumbent plus byte-limited Myers competition, independent search budgets and Adaptive as

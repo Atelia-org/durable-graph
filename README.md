@@ -101,8 +101,8 @@ var models = new StateModelRegistry();
 Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 
 using var repository = Directory.Exists(path)
-    ? Repository.OpenExisting(path, models)
-    : Repository.CreateNew(path, models);
+    ? Repository.OpenExisting(path, models, schemaWriteMode: SchemaWriteMode.Shared)
+    : Repository.CreateNew(path, models, schemaWriteMode: SchemaWriteMode.Shared);
 using var session = repository.ListBranches().Contains("main")
     ? repository.Checkout("main")
     : repository.CreateBranch("main", NewWorld()); // 已保存初始 S0。
@@ -153,6 +153,8 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
+业务保存还须显式选择 `schemaWriteMode: SchemaWriteMode.Shared`；RW Open 省略时可以读取、签出及发布 ref/tag，但不能提交业务图。
+`IsReadOnly == false` 只表示底座可写，不表示已选择 Schema 写入归属。选择仅属于本次打开，冷开后需再次传入；private 尚未提供。
 读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，无 State 取创建时 shared；提交不原地换已有模型／preparation。普通模型与 Family 按需闭合，同环境可复用，不保证任意跨视图回调等价。
 历史 Normalize/Upgrade 必须由固定输入与环境决定结果且不修改输入；Capture 必须提供 canonical current DTO。
 exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 的结果必须稳定，
@@ -212,7 +214,7 @@ Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享�
 它的 `main` Head 是已保存的 State，分支名 `left` / `right` 须尚未存在，`models` 沿用打开前注册的固定配置：
 
 ```csharp
-using (var branches = Repository.OpenExisting(path, models)) {
+using (var branches = Repository.OpenExisting(path, models, schemaWriteMode: SchemaWriteMode.Shared)) {
     using var source = branches.Checkout("main");
     var selected = source.Head;
     using var left = branches.Fork("left", selected);

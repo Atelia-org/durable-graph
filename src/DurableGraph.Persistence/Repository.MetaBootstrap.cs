@@ -9,35 +9,41 @@ public sealed partial class Repository {
     private readonly StateModelRegistry.FrozenConfiguration _splitConfiguration;
     private readonly P0Repository _splitRepository;
 
-    private Repository(GraphResources resources, StateModelRegistry.FrozenConfiguration configuration) {
+    private Repository(GraphResources resources, StateModelRegistry.FrozenConfiguration configuration,
+        SchemaWriteMode? schemaWriteMode) {
         _resources = resources;
         _splitConfiguration = configuration;
         _splitRepository = new(resources);
+        SchemaWriteMode = schemaWriteMode;
     }
 
     internal static Repository CreateMetaBootstrapNew(string path, StateModelRegistry models,
         long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes) =>
-        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes, schemaWriteMode);
     internal static Repository OpenMetaBootstrapExisting(string path, StateModelRegistry models,
         long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes) =>
-        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes,
+            rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
     internal static Repository OpenMetaBootstrapReadOnlyExisting(string path, StateModelRegistry models,
         long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrap(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
     private static Repository OpenMetaBootstrap(string path, StateModelRegistry models, bool create, bool readOnly,
         long readCacheBudgetBytes, Action<uint>? afterCreateRef = null,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes) {
+        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
+        if (schemaWriteMode is { } mode && mode != global::Atelia.DurableGraph.SchemaWriteMode.Shared) {
+            throw new ArgumentOutOfRangeException(nameof(schemaWriteMode), schemaWriteMode, "Unknown Schema write mode.");
+        }
         GraphResources? resources = null;
         try {
             resources = create ? GraphResources.CreateMetaBootstrapNew(path, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes) : readOnly
                 ? GraphResources.OpenMetaBootstrapReadOnlyExisting(path, readCacheBudgetBytes)
                 : GraphResources.OpenMetaBootstrapExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
-            return new(resources, models.FreezeConfiguration());
+            return new(resources, models.FreezeConfiguration(), schemaWriteMode);
         } catch (Exception primary) {
             try { resources?.Dispose(); }
             catch (Exception cleanup) { throw new AggregateException("Repository opening and resource cleanup failed.", primary, cleanup); }
@@ -58,7 +64,7 @@ public sealed partial class Repository {
 
     private BranchCheckout CreateMetaBootstrapBranch(string branchName, IDurableObject root, P0GraphKind kind,
         ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireWriter();
+        RequireSchemaWriter();
         _busy = true;
         bool acquired = false;
         bool delivered = false;
@@ -178,6 +184,7 @@ public sealed partial class Repository {
         RequireWriter();
         RequireMetaBootstrapCheckout(checkout);
         _splitRepository!.EnsureEditingAllowed();
+        RequireSchemaWriter();
     }
 
     private void RequireMetaBootstrapCheckout(BranchCheckout checkout) {
@@ -194,7 +201,7 @@ public sealed partial class Repository {
 
     private CheckpointAddress CommitMetaBootstrap(BranchCheckout checkout, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireWriter();
+        RequireSchemaWriter();
         _busy = true;
         try {
             RequireMetaBootstrapCheckout(checkout);
@@ -215,7 +222,7 @@ public sealed partial class Repository {
 
     internal void PrepareAndDiscardMetaBootstrap(BranchCheckout checkout, IDurableObject root, P0GraphKind kind,
         ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireWriter();
+        RequireSchemaWriter();
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);

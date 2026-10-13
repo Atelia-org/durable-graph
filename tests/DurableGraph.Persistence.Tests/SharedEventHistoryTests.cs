@@ -21,14 +21,14 @@ public sealed class SharedEventHistoryTests : IDisposable {
         Node domainEvent = new() { Next = child, Alias = child, Text = text, Links = links, Value = 7 };
         FrameAddress initial, eventRevision, saved;
         ObjectId stateId;
-        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout session = repository.CreateBranch("main", world, NoRebase);
             initial = session.StateRevisionAddress!.Value;
             stateId = session.StateId!.Value;
             eventRevision = session.CommitEvent(domainEvent, NoRebase).RevisionAddress;
         }
 
-        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout resumed = repository.Checkout("main");
             Node pending = ((Node)repository.ReadEvent(resumed.Head));
             Node restoredState = Assert.IsType<Node>(resumed.State);
@@ -86,7 +86,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
 
     [Fact]
     public void CheckoutRejectsASingletonAllocatorBeforeHydratingItsMutableGraph() {
-        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout session = repository.CreateBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
             session.CommitEvent(new Node { Value = 7 }, NoRebase);
         }
@@ -95,7 +95,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
         List<byte> hydratedValues = [];
         StateModelRegistry broken = SharedReadModel.Models(allocate: () => singleton,
             hydrate: node => hydratedValues.Add(node.Value));
-        using Repository reopened = Repository.OpenExisting(_root, broken);
+        using Repository reopened = Repository.OpenExisting(_root, broken, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         BranchCheckout? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = reopened.Checkout("main"));
@@ -105,7 +105,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
         Assert.Equal((byte)0, singleton.Value);
         Assert.False(reopened.IsFaulted);
         reopened.Dispose();
-        using Repository healthy = Repository.OpenExisting(_root, SharedReadModel.Models());
+        using Repository healthy = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout retry = healthy.Checkout("main");
         Assert.Equal((byte)1, ((Node)retry.State!).Value);
         Assert.Equal((byte)7, ((Node)healthy.ReadEvent(retry.Head)).Value);

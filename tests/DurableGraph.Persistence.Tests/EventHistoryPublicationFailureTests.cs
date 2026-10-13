@@ -18,14 +18,14 @@ public sealed partial class EventHistoryRepositoryTests {
         using (Repository empty = CreateRepository()) { }
         var before = SnapshotFiles();
         int captures = 0;
-        using (Repository repository = Repository.OpenExisting(_root, Models(_ => captures++))) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(_ => captures++), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.ThrowsAny<Exception>(() => repository.CreateBranch(name, new Node(), NoRebase));
             Assert.Equal(0, captures);
             Assert.False(repository.IsFaulted);
             Assert.Empty(repository.ListBranches());
         }
         AssertFiles(before);
-        using Repository retry = Repository.OpenExisting(_root, Models());
+        using Repository retry = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var valid = retry.CreateBranch("main", new Node(), NoRebase);
     }
 
@@ -45,7 +45,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(state, session.StateRevisionAddress!.Value);
             Assert.True(repository.IsFaulted);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var resumed = reopened.Checkout("main");
         Assert.Equal(state, resumed.StateRevisionAddress!.Value);
         Assert.Equal((byte)1, ((Node)resumed.State!).Value);

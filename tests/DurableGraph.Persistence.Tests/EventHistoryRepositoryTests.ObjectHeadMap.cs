@@ -39,7 +39,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(ObjectVersionKind.Delta, states.ReadDirectoryVersion(states.ReadGraph(hot).DirectoryRoot).Kind);
             Assert.Equal(shrunk, states.ReadGraph(hot).SourceGraph);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using var session = repository.Checkout("main");
             Assert.Equal(rootId, session.StateId!.Value);
             Assert.Null(((Node)session.State!).Left);
@@ -90,7 +90,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(3, states.ReadGraph(candidate).Objects.Count);
             Assert.Equal(1003, states.ReadGraph(first).Objects.Count);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var recovered = reopened.Checkout("main");
         if (outcome == GraphCommitOutcome.Published) {
             Assert.Equal(candidate, recovered.StateRevisionAddress!.Value);

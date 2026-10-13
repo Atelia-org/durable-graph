@@ -77,7 +77,7 @@ try {
     $configured = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        "using var repository = Repository.OpenExisting(path, models);`n" +
+        "using var repository = Repository.OpenExisting(path, models, schemaWriteMode: SchemaWriteMode.Shared);`n" +
         "using var session = repository.Checkout(""main"");`nWorld world = (World)session.State!;`n" +
         (Get-Example "csharp" 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
         "`nif (world.Hero.Hp != 96 || !ReferenceEquals(world, session.State)) { throw new InvalidOperationException(); }`n" +
@@ -89,7 +89,7 @@ try {
     $fork = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        (Get-Example "csharp" 'using (var branches = Repository.OpenExisting(path, models))')
+        (Get-Example "csharp" 'using (var branches = Repository.OpenExisting(')
     [IO.File]::WriteAllText((Join-Path $projectRoot "Program.cs"), $fork, $utf8)
     $actual = (& dotnet run --project $project --no-restore @properties -- $database | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $actual -notmatch 'Forks: source=96, left=95, right=94') {

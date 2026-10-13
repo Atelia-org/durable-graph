@@ -53,7 +53,7 @@ internal static class Program {
     private static void InitWriter(string repositoryPath, string window, string readyPath) {
         uint target = window == "AfterFirstCreateRef" ? 1u : 2u;
         List<uint> completed = [];
-        using Repository unexpected = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models(), afterCreateRef: localId => {
+        using Repository unexpected = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared, afterCreateRef: localId => {
             completed.Add(localId);
             Need(localId == (uint)completed.Count, "The factory must complete refs1/2 in order.");
             if (localId != target) { return; }
@@ -140,7 +140,7 @@ internal static class Program {
     private static void RejectIncompleteFactory(string repositoryPath, bool readOnly) {
         try {
             using Repository unexpected = readOnly ? Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())
-                : Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models());
+                : Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
         } catch (InvalidOperationException error) {
             Need(error.Message.Contains("[VersionStore.RefNotFound]", StringComparison.Ordinal), "Fresh DG rejected for a cause other than missing ref2.");
             return;
@@ -163,7 +163,7 @@ internal static class Program {
         ObjectEvidence[] initial;
         FrameEvidence[] seedFrames;
         uint listId;
-        using (Repository seed = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models())) {
+        using (Repository seed = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             Need(seed.ListBranches().Count == 0 && seed.SharedSchemaRoot is null, "Writable DG must see the complete empty initialization.");
             using BranchCheckout main = seed.CreateBranch("main", HostModel.Ring());
@@ -183,7 +183,7 @@ internal static class Program {
         }
         FrameAddress next;
         ObjectEvidence[] updated;
-        using (Repository reopened = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models())) {
+        using (Repository reopened = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             reopened.PreparedStateReuseEnabled = false;
             using BranchCheckout cold = reopened.Checkout("main");
             Widget root = HostModel.Check(cold.State, 7);
@@ -225,7 +225,7 @@ internal static class Program {
 
     private static void Seed(string repositoryPath, string resultPath) {
         object evidence;
-        using (Repository repository = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models())) {
+        using (Repository repository = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             repository.PreparedStateReuseEnabled = false;
             using BranchCheckout main = repository.CreateBranch("main", HostModel.Ring());
             repository.CreateTag("initial", main.Head);
@@ -248,7 +248,7 @@ internal static class Program {
     private static void Writer(string repositoryPath, string window, string readyPath) {
         // These scopes intentionally never complete: the controller must kill this
         // process after READY. There is no exception/finally path used as a crash.
-        using Repository repository = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models());
+        using Repository repository = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
         repository.PreparedStateReuseEnabled = false;
         using BranchCheckout main = repository.Checkout("main");
         Widget root = HostModel.Check(main.State, 7);
@@ -385,7 +385,7 @@ internal static class Program {
         Need(beforeReadOnly.Count == afterReadOnly.Count && beforeReadOnly.All(pair => afterReadOnly.TryGetValue(pair.Key, out string? hash) && hash == pair.Value),
             "Readonly root, typed and completed-frame verification changed repository files.");
 
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models())) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             repository.PreparedStateReuseEnabled = false;
             GraphResources resources = Resources(repository);
             Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,

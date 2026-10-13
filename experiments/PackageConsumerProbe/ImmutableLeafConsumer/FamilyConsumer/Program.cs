@@ -16,11 +16,11 @@ internal static class Program {
         string directory = Path.GetFullPath(args.Single());
         Require(ReadImmutableLeafFlag(ResolveLeafBinding()), "The Family leaf binding must report IsImmutableLeaf=true.");
         Leaf leaf = new(42);
-        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options, schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout session = repository.CreateBranch("main", leaf, Policy);
             Require(((Leaf)session.State!).Value == 42, "CreateBranch lost the seed value.");
         }
-        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options, schemaWriteMode: SchemaWriteMode.Shared)) {
             EnableLeafExperiment(repository);
             using BranchCheckout session = repository.Checkout("main");
             Require(((Leaf)session.State!).Value == 42, "The reopened world lost the leaf's persisted value.");
@@ -50,7 +50,7 @@ internal static class Program {
             Owner independent = (Owner)repository.ReadState(committed);
             Require(independent.Counter == 1 && !ReferenceEquals(independent.First, leftOwner.First), "ReadState must remain independent of the leaf table.");
         }
-        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options, schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout left = repository.Checkout("owner-left");
             using BranchCheckout right = repository.Checkout("owner-right");
             Require(((Owner)left.State!).Counter == 1 && ((Owner)right.State!).Counter == 0, "Cold reopen lost independent saves.");

@@ -20,11 +20,11 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
 
     [Fact]
     public void CurrentStateDropsHistoricalOnlyCertificateWhileEventsPreserveRewriteAndDoNotRepopulateSlot() {
-        using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()))) {
+        using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout initial = seed.CreateBranch("main", new Root { Value = 17 }, NoRebase);
         }
         Counters counts = new();
-        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts));
+        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
         CheckpointAddress oldAddress = repository.GetHead("main");

@@ -18,7 +18,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         DurableSchema requested = models.Snapshot().ResolveCurrentModel(replacement.GetType()).CurrentSchema;
         DurableSchema conflicting = new(requested.Type, requested.Version, []);
         using RawBaseDirectory directory = new();
-        using (Repository repository = Repository.CreateNew(directory.Path, models)) {
+        using (Repository repository = Repository.CreateNew(directory.Path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout checkout = repository.CreateBranch("main", original);
             CheckpointAddress head = checkout.Head;
             FrameAddress? schemaRoot = repository.SharedSchemaRoot;

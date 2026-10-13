@@ -112,7 +112,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         object world = fixture.NewWorld();
         bool mutated = false;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             repository.Checkpoint = checkpoint => {
                 if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
                 fixture.ChangeNested(world, 999);
@@ -136,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
         FrameAddress first;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)fixture.NewWorld());
             first = checkout.StateRevisionAddress!.Value;
         }

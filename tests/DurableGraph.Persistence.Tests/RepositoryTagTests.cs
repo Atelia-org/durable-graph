@@ -30,7 +30,7 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.Equal(intermediate, repository.GetHead("main"));
             Assert.Equal(old, repository.ResolveTag("start"));
         }
-        using (Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models())) {
+        using (Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress selected = reopened.ResolveTag("start");
             Assert.NotEqual(old, selected);
             Assert.Equal(old.Address, selected.Address);
@@ -79,7 +79,7 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.Equal(new[] { "future-branch", "same" }, seed.ListBranches().Order());
         }
         var before = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress lower = repository.ResolveTag("same"), upper = repository.ResolveTag("same-other");
             Assert.NotEqual(lower, upper);
             Assert.Equal((byte)1, Assert.IsType<Node>(repository.ReadState(lower)).Value);
@@ -101,7 +101,7 @@ public sealed class RepositoryTagTests : IDisposable {
             using BranchCheckout main = seed.CreateBranch("main", new Node(), NoRebase);
         }
         var before = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
+        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("main"));
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("missing"));
             Assert.Equal("main", Assert.Single(repository.ListBranches()));
@@ -117,7 +117,7 @@ public sealed class RepositoryTagTests : IDisposable {
             using BranchCheckout main = seed.CreateBranch("main", new Node { Value = 1 }, NoRebase);
         }
         var before = SnapshotFiles();
-        using (Repository metadata = Repository.OpenExisting(_root, new StateModelRegistry())) {
+        using (Repository metadata = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress head = metadata.GetHead("main");
             metadata.CreateTag("saved", head);
             Assert.Equal(head, metadata.ResolveTag("saved"));
@@ -142,9 +142,9 @@ public sealed class RepositoryTagTests : IDisposable {
             seed.CreateTag("saved", old);
         }
         var before = SnapshotFiles();
-        using Repository foreign = Repository.CreateNew(_root + "-foreign", SharedReadModel.Models());
+        using Repository foreign = Repository.CreateNew(_root + "-foreign", SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout foreignBranch = foreign.CreateBranch("main", new Node { Value = 2 }, NoRebase);
-        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress current = repository.ResolveTag("saved");
             Assert.NotEqual(old, current);
             Assert.NotEqual(foreignBranch.Head, current);
@@ -263,7 +263,7 @@ public sealed class RepositoryTagTests : IDisposable {
             seed.CreateTag("标签/正文", main.Head);
         }
         var before = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
+        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress address = repository.GetHead("main");
             Assert.Equal(address, repository.ResolveTag("a"));
             Assert.Equal(address, repository.ResolveTag(longest));
@@ -293,7 +293,7 @@ public sealed class RepositoryTagTests : IDisposable {
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
     }
 
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
     private Dictionary<string, byte[]> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);
     private void AssertFiles(Dictionary<string, byte[]> before) {

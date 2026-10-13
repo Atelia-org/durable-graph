@@ -146,7 +146,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         object world = fixture.NewWorld();
         bool mutated = false;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             repository.Checkpoint = checkpoint => {
                 if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
                 fixture.Change(world, 1);

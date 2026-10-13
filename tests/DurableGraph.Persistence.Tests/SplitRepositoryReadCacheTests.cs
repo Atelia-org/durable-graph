@@ -21,7 +21,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
         ObjectId listId;
         ObjectStorageInfo storage;
         FrameAddress savedAddress, schemaRoot;
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), readCacheBudgetBytes: budget)) {
+        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             DB087Widget root = Ring();
             using BranchCheckout main = seed.CreateBranch("main", root);
@@ -114,7 +114,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             Assert.Equal(0, reader.MetaBootstrapStore.AppendedFrames);
         }
         AssertFilesEqual(files, SnapshotFiles());
-        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), readCacheBudgetBytes: budget);
+        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         reopened.PreparedStateReuseEnabled = false;
         Assert.Null(reopened.PreparedStateEntry);
         using BranchCheckout cold = reopened.Checkout("main");

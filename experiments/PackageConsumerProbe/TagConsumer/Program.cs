@@ -35,7 +35,7 @@ internal static class Program {
     }
 
     private static void Seed(string path) {
-        using var repository = Repository.CreateNew(path, Models());
+        using var repository = Repository.CreateNew(path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
         using var checkout = repository.CreateBranchFromEvent("main", new TagEvent { Code = 7 });
         CheckpointAddress firstEvent = checkout.Head;
         repository.CreateTag("event-start", firstEvent);
@@ -67,7 +67,7 @@ internal static class Program {
         using (var prior = Repository.OpenReadOnlyExisting(path, new StateModelRegistry())) {
             oldOwner = prior.ResolveTag("state-baseline");
         }
-        using var repository = Repository.OpenExisting(path, Models());
+        using var repository = Repository.OpenExisting(path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
         CheckpointAddress firstEvent = repository.ResolveTag("event-start");
         CheckpointAddress firstState = repository.ResolveTag("state-baseline");
         Require(oldOwner != firstState, "A reopened tag returned a stale owner handle.");

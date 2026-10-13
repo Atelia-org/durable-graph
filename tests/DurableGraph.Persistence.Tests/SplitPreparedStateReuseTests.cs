@@ -25,7 +25,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void DifferentEventHeadsReuseOneStateButKeepMutableGraphsAndColdDeltaSourcesIndependent(bool reuse) {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, GeneratedModels())) {
+        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             seed.CreateTag("state", main.Head);
             seed.CreateTag("event1", main.CommitEvent(new DB087Widget { Value = 51 }));
@@ -35,7 +35,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         FrameAddress saved;
         ObjectId listId;
         ObjectStorageInfo savedStorage;
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, GeneratedModels())) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             repository.PreparedStateReuseEnabled = reuse;
             Assert.Null(repository.PreparedStateEntry);
             CheckpointAddress state = repository.ResolveTag("state"), e1 = repository.ResolveTag("event1"), e2 = repository.ResolveTag("event2");
@@ -93,7 +93,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(e1.RevisionAddress, oldGraph.Parent);
             Assert.Equal(prior.Head, Assert.Single(repository.MetaBootstrapStore.ReadBatch(oldGraph.OwnedBatch!.Value).Records).PriorAddress);
         }
-        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, GeneratedModels());
+        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Null(reopened.PreparedStateEntry);
         using BranchCheckout cold = reopened.Checkout("second");
         DB087Widget coldRoot = AssertRing(cold.State, changedIndex: 7, changedValue: 200);
@@ -115,7 +115,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
 
     [Fact]
     public void EventOnlyHeadsBypassTheSlotAndReadonlyQueriesNeverSeedOrReplaceIt() {
-        using Repository repository = Repository.CreateMetaBootstrapNew(_path, GeneratedModels());
+        using Repository repository = Repository.CreateMetaBootstrapNew(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", Ring());
         CheckpointAddress state = main.Head;
         repository.ReadState(state);
@@ -156,7 +156,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     public void FailedColdReplacementKeepsOldPreparationAndSameNameRetryRemainsCold(string phase) {
         SeedProbes();
         Controls controls = new();
-        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(2, controls));
+        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(2, controls), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout warm = repository.Fork("warm", repository.GetHead("main"));
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         controls.FailPhase = phase;
@@ -186,7 +186,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     [InlineData(true)]
     public void ForkPublicationFailureDoesNotInstallUndeliveredStateMaterial(bool afterPublication) {
         SeedProbes();
-        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(1, new()));
+        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout warm = repository.Fork("warm", repository.GetHead("main"));
         PreparedStateRestoration previous = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         var before = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
@@ -230,7 +230,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         Controls controls = new() { CheckBodyDependency = true };
         StateModelRegistry registry = ProbeModels(1, controls);
         try {
-            using Repository repository = Repository.OpenMetaBootstrapExisting(_path, registry);
+            using Repository repository = Repository.OpenMetaBootstrapExisting(_path, registry, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
             CheckpointAddress state = repository.GetHead("main");
             using BranchCheckout warm = repository.Fork("warm", state);
             PreparedStateRestoration prepared = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
@@ -292,7 +292,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     public void CachedHistoricalRewriteSurvivesDiscardAndEventsUntilStateBaseThenColdContinuesDelta() {
         SeedProbes();
         Controls controls = new();
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(2, controls))) {
+        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(2, controls), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress original = repository.GetHead("main");
             using BranchCheckout first = repository.Fork("first", original);
             PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
@@ -341,7 +341,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
                 second.Baseline!.Objects[listId].Storage!.Value.ReconstructionPayloadBytes);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(first.State).Padding[7]);
         }
-        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(2, new()));
+        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(2, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout cold = reopened.Checkout("second");
         ProbeRoot coldRoot = Assert.IsType<ProbeRoot>(cold.State);
         Assert.Equal(7, coldRoot.Value);
@@ -361,7 +361,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     [Fact]
     public void OptionalLeafReuseBackfillsOnlyAfterSuccessAndRegistersTrustedLeavesBeforeOtherAllocation() {
         LeafControls controls = new();
-        using Repository repository = Repository.CreateMetaBootstrapNew(_path, LeafModels(controls));
+        using Repository repository = Repository.CreateMetaBootstrapNew(_path, LeafModels(controls), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", new LeafOwner { First = new(7), Second = new(8) });
         Assert.False(repository.ImmutableLeafReuseEnabled);
         using BranchCheckout disabled = repository.Fork("disabled", main.Head);
@@ -415,7 +415,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     }
 
     private void SeedProbes() {
-        using Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()));
+        using Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
         using BranchCheckout other = seed.CreateBranch("other", new ProbeRoot { Value = 8 });
     }

@@ -18,7 +18,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.True(repository.IsFaulted);
             candidate = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(visible, reopened.ListBranches().Contains("main"));
         P0GraphSnapshot appended = reopened.MetaBootstrapStore.ReadGraph(candidate);
         P0CatalogView candidateCatalog = P0CatalogView.Load(reopened.MetaBootstrapStore, appended.SchemaRoot!.Value);
@@ -72,7 +72,7 @@ public sealed partial class RepositoryTagFailureWindowTests : IDisposable {
     [InlineData("AfterConfirmed", GraphCommitOutcome.Published, true)]
     public void ActualTagPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, GraphCommitOutcome outcome, bool visible) {
         FrameAddress saved;
-        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
             saved = main.Head.RevisionAddress;
             InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage), tag: true);

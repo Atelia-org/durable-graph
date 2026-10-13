@@ -32,7 +32,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         ObjectId rootId, leafId;
         CheckpointAddress saved;
         ObjectStorageInfo savedLeafStorage;
-        using (Repository repository = Repository.OpenExisting(_root, Models(current: true, new()))) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(current: true, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             repository.ImmutableLeafReuseEnabled = reuse;
             GraphReadStatistics statistics = new();
             repository.RestorationStatistics = statistics;
@@ -76,7 +76,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
             Assert.Equal(leafId, LeafObjectId(hit));
             saved = unchanged;
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(current: true, new()));
+        using Repository reopened = Repository.OpenExisting(_root, Models(current: true, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         reopened.ImmutableLeafReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
         using BranchCheckout restored = reopened.Checkout("saved");
@@ -95,7 +95,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
     [Fact]
     public void SuccessorRevisionWithUnchangedLeafHeadBuildsItsOwnLeafTable() {
-        using Repository repository = Repository.CreateNew(_root, Models(current: true, new()));
+        using Repository repository = Repository.CreateNew(_root, Models(current: true, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.ImmutableLeafReuseEnabled = true;
         Leaf live = new(41);
         using BranchCheckout seed = repository.CreateBranch("main", new Root { Value = 17, Leaf = live }, NoRebase);
@@ -125,7 +125,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     public void NewRevisionBuildsNewLeafTableAndDropsOnlyObsoleteHistoricalRequirements() {
         Seed();
         Counters counts = new();
-        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts));
+        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         repository.ImmutableLeafReuseEnabled = true;
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
@@ -202,7 +202,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     }
 
     private void Seed() {
-        using Repository repository = Repository.CreateNew(_root, Models(current: false, new()));
+        using Repository repository = Repository.CreateNew(_root, Models(current: false, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout branch = repository.CreateBranch("main", new Root { Value = 17, Leaf = new(41) }, NoRebase);
     }
 

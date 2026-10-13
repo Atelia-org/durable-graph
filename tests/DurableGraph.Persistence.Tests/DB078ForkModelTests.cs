@@ -26,7 +26,7 @@ public sealed partial class DB078HistoryTests {
             main.CommitEvent(new Message { Value = 2 }, NoRebase);
             eventHead = main.CommitEvent(new Message { Value = 3 }, NoRebase);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false))) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             CheckpointAddress source = repository.GetHead("main");
             using BranchCheckout child = repository.Fork("child", source);
@@ -41,7 +41,7 @@ public sealed partial class DB078HistoryTests {
             Assert.Equal(source.Address, saved.Parent);
             Assert.Equal(source, main.Head);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout cold = reopened.Checkout("child");
         Assert.Equal((byte)1, Assert.IsType<Alpha>(cold.State).Value);
         Assert.Equal(GraphFrameKind.State, cold.Head.Kind);
@@ -53,7 +53,7 @@ public sealed partial class DB078HistoryTests {
             using BranchCheckout main = repository.CreateBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
             main.CommitEvent(new Message { Value = 2 }, NoRebase);
         }
-        using (Repository metadata = Repository.OpenExisting(_root, new StateModelRegistry())) {
+        using (Repository metadata = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = metadata.Checkout("main");
             using BranchCheckout a = metadata.Fork("a", main.Head);
             using BranchCheckout b = metadata.Fork("b", main.Head);
@@ -66,7 +66,7 @@ public sealed partial class DB078HistoryTests {
             Assert.False(metadata.IsFaulted);
         }
         CheckpointAddress firstA, firstB, replacementA, replacementB, secondA, secondB;
-        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             using BranchCheckout a = repository.Checkout("a");
             using BranchCheckout b = repository.Checkout("b");
@@ -93,7 +93,7 @@ public sealed partial class DB078HistoryTests {
             Assert.Equal(replacementA.RevisionAddress, states.ReadGraph(secondA.RevisionAddress).SourceGraph);
             Assert.Equal(replacementB.RevisionAddress, states.ReadGraph(secondB.RevisionAddress).SourceGraph);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout coldA = reopened.Checkout("a");
         using BranchCheckout coldB = reopened.Checkout("b");
         Assert.Equal((byte)5, Assert.IsType<Beta>(coldA.State).Value);
@@ -108,7 +108,7 @@ public sealed partial class DB078HistoryTests {
             using BranchCheckout main = repository.CreateBranch("main", new Alpha(), NoRebase);
             main.CommitEvent(new Message(), NoRebase);
         }
-        using Repository repositoryWithoutModels = Repository.OpenExisting(_root, new StateModelRegistry());
+        using Repository repositoryWithoutModels = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress source = repositoryWithoutModels.GetHead("main");
         var before = SnapshotLiveFiles();
         BranchCheckout? delivered = null;

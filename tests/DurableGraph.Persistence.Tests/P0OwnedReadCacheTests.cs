@@ -218,7 +218,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Throws<ArgumentOutOfRangeException>(() => new P0GraphStore(frames, () => ownerChecks++, readCacheBudgetBytes: -1));
         Assert.Equal(0, ownerChecks);
         string repositoryPath = NewPath();
-        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateMetaBootstrapNew(repositoryPath, new(), readCacheBudgetBytes: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateMetaBootstrapNew(repositoryPath, new(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
         Assert.False(Directory.Exists(repositoryPath));
         FrameAddress batch = RawBatch(frames, null, [B(1, [10])]);
         FrameAddress directory = RawDirectory(frames, null, ObjectVersionKind.Base, null, Map((1u, batch)));

@@ -57,7 +57,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
     private void Run(bool family, bool containers, string scenario, int sample, bool enabled, StreamWriter? file) {
         string path = Path.Combine(Path.GetTempPath(), FixturePrefix + Guid.NewGuid().ToString("N"));
         try {
-            using Repository repository = Repository.CreateNew(path, Models(family));
+            using Repository repository = Repository.CreateNew(path, Models(family), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
             repository.PreparedStateReuseEnabled = enabled;
             CheckpointAddress[] requests = Seed(repository, containers, scenario);
             GraphReadStatistics statistics = new();

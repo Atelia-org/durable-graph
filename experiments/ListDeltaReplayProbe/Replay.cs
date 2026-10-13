@@ -35,7 +35,7 @@ internal static class Replay {
         List<Saved> saved = [];
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
-        Repository repository = Repository.CreateNew(directory, models, StoreOptions);
+        Repository repository = Repository.CreateNew(directory, models, StoreOptions, schemaWriteMode: SchemaWriteMode.Shared);
         BranchCheckout? session = null;
         double setupMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long setupAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
@@ -159,7 +159,7 @@ internal static class Replay {
 
         allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         started = Stopwatch.GetTimestamp();
-        using Repository reopened = Repository.OpenExisting(directory, Models(), StoreOptions);
+        using Repository reopened = Repository.OpenExisting(directory, Models(), StoreOptions, schemaWriteMode: SchemaWriteMode.Shared);
         using BranchCheckout restored = reopened.Checkout("main");
         double coldMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long coldAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;

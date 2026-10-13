@@ -74,7 +74,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB087 P1d finite non-friend public Repository accepted-history PackageReference gate; no private/process-crash/performance qualification'
+    Scope = 'DB087 finite non-friend public Repository accepted-history and Shared-write-admission PackageReference gate; no private/process-crash/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot
@@ -303,7 +303,7 @@ function Invoke-Consumer {
             'seed' { @('RingAndSharedList', 'ActualRefsVerified', 'CompleteStorageVerified') }
             'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'SameSUnchangedListShared', 'RewriteWidgetsIndependent') }
             'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'EventCandidateDiscardKeepsStateRewrite') }
-            'continue' { @('SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads') }
+            'continue' { @('UnconfiguredSaveRejected', 'SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads') }
             'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSPairIndependent') }
         }
         foreach ($check in $requiredObservations) {

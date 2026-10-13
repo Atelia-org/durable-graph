@@ -73,7 +73,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string path = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
         try {
             using Repository repository = Repository.CreateNew(path, model.Models(),
-                64L * 1024 * 1024 * 1024);
+                64L * 1024 * 1024 * 1024,
+                schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
             repository.PreparedStateReuseEnabled = true;
             repository.ImmutableLeafReuseEnabled = enabled;
             var seed = SeedLeafMeasurement(repository, model, scenario);

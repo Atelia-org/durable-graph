@@ -31,7 +31,7 @@ public sealed partial class EventHistoryRepositoryTests {
         ReadAmplificationBaseBudgetParameters currentDefault) {
         string path = Path.Combine(_root, name);
         List<FrameAddress> addresses = [];
-        using (var repository = Repository.CreateNew(path, Models())) {
+        using (var repository = Repository.CreateNew(path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Node state = new();
             using var session = includeOverrides
                 ? repository.CreateBranch("main", state, NoRebase)

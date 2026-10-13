@@ -42,7 +42,7 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
                 static (ref BareValueReader reader) => reader.ReadVarInt32(),
                 static (ref BareValueReader reader, in int _) => reader.ReadVarInt32(),
                 static (in int _, IStateReferenceVisitor _) => { })));
-        using Repository repository = Repository.CreateNew(_path, models);
+        using Repository repository = Repository.CreateNew(_path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", new Root { Value = 7 });
         CheckpointAddress original = main.Head;
         using (BranchCheckout first = repository.Fork("first", original)) {

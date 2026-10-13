@@ -19,7 +19,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         uint characterId;
         uint[] allIds;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), rotationThresholdBytes)) {
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             object world = fixture.Create();
             using BranchCheckout branch = repository.CreateBranch("main", (IDurableObject)world, ReferenceGraphNoRebase);
             first = branch.Head.RevisionAddress;
@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.ResetConstructors();
             fixture.Check(repository.ReadState(branch.Head), 7);
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             fixture.ResetConstructors();
             using BranchCheckout loaded = repository.Checkout("main");
             fixture.Check(loaded.State!, 7);
@@ -56,7 +56,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(changed, store.ReadGraph(repeated.Address).SourceGraph);
             repository.CreateTag("changed", loaded.Head);
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             fixture.ResetConstructors();
             using BranchCheckout loaded = repository.Checkout("main");
             fixture.Check(loaded.State!, 8);
@@ -92,7 +92,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var replaceUnknown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceUnknown")!.CreateDelegate<Func<object, object>>();
         var restoreChild = assembly.GetType("FusedDelta.Host")!.GetMethod("RestoreChild")!.CreateDelegate<Action<object, object>>();
         using RawBaseDirectory directory = new();
-        using Repository repository = Repository.CreateNew(directory.Path, fixture.Models());
+        using Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)fixture.Create(), ReferenceGraphNoRebase);
         CheckpointAddress first = main.Head;
         fixture.ResetConstructors();
@@ -122,7 +122,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ReferenceGraphFixture fixture = new(assembly);
         var replaceKnown = assembly.GetType("FusedDelta.Host")!.GetMethod("ReplaceKnown")!.CreateDelegate<Action<object, int>>();
         using RawBaseDirectory directory = new();
-        using Repository repository = Repository.CreateNew(directory.Path, fixture.Models());
+        using Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)fixture.Create(), ReferenceGraphNoRebase);
         CheckpointAddress first = main.Head;
         repository.CreateTag("initial", first);
@@ -171,7 +171,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId worldId;
         uint nodeId;
         uint[] ids;
-        using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
+        using (Repository repository = Repository.CreateNew(directory.Path, old.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)old.Create(), ReferenceGraphNoRebase);
             first = main.Head.Address;
             worldId = main.StateId!.Value;
@@ -187,7 +187,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, third)).Kind);
             repository.CreateTag("old-latest", main.Head);
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             current.ResetConstructors();
             P0GraphStore store = ReferenceGraphStore(repository);
             Assert.Equal(3, store.ReadObjectChain(third, nodeId).Entries.Count);
@@ -205,7 +205,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ids.Order(), store.ReadGraph(rewritten).Objects.Keys.Order());
             Assert.Single(store.ReadObjectChain(rewritten, nodeId).Entries);
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             current.ResetConstructors();
             int previousUpgrades = upgradeCalls();
             using BranchCheckout loaded = repository.Checkout("main");

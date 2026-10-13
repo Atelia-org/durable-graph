@@ -40,7 +40,7 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         AssertFiles(before);
         if (!orphan) {
-            using Repository writer = Repository.OpenExisting(_root, Models());
+            using Repository writer = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
             var head = writer.GetHead("main");
             Assert.Throws<InvalidDataException>(() => writer.Checkout("main"));
             Assert.Throws<InvalidDataException>(() => writer.Fork("invalid-fork", head));
@@ -73,7 +73,7 @@ public sealed partial class EventHistoryRepositoryTests {
             else { Assert.Throws<InvalidDataException>(() => reader.ReadEvent(head)); }
             Assert.False(reader.IsFaulted);
         }
-        using Repository writer = Repository.OpenExisting(_root, Models());
+        using Repository writer = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress selected = writer.GetHead("main");
         Assert.Throws<InvalidDataException>(() => writer.Checkout("main"));
         Assert.Throws<InvalidDataException>(() => writer.Fork("invalid-fork", selected));

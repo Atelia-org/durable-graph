@@ -128,7 +128,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             checks++;
             Assert.Throws<InvalidOperationException>(() => active!.ResolveTag("stable"));
             Assert.Throws<InvalidOperationException>(() => active!.CreateTag("nested", target!));
-        }));
+        }),
+        schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         active = repository;
         using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
         target = main.Head;
@@ -167,7 +168,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         AssertSnapshot(before);
     }
 
-    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
+    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
     private static T Field<T>(object instance, string name) =>
         (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
     private static void AssertFaultedOperations(Repository repository, BranchCheckout main, CheckpointAddress address) {

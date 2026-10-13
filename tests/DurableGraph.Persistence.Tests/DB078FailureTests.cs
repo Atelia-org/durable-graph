@@ -25,7 +25,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.NotNull(failure.CandidateRevisionAddress);
             Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(published, reopened.ListBranches().Contains("main"));
         if (published) {
             using BranchCheckout checkout = reopened.Checkout("main");
@@ -59,7 +59,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Throws<InvalidOperationException>(() => checkout.CommitState(new Node(), NoRebase));
             Assert.Throws<InvalidOperationException>(() => checkout.CommitEvent(new Node(), NoRebase));
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("main");
         if (published) {
             Assert.Equal((byte)9, Assert.IsType<Node>(recovered.State).Value);
@@ -84,7 +84,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Null(checkout.State);
             Assert.Equal(eventHead, checkout.Head);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("main");
         Assert.Equal((byte)9, Assert.IsType<Node>(recovered.State).Value);
         Assert.Equal(GraphFrameKind.State, recovered.Head.Kind);

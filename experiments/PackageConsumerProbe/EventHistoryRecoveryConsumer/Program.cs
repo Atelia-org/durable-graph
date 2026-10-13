@@ -26,9 +26,9 @@ internal static class Program {
         // The catch is inside using: report health, then leave and dispose this attempt.
         try {
             using var repository = mode is "init-record" or "hot"
-                ? Repository.CreateNew(directory, Models())
+                ? Repository.CreateNew(directory, Models(), schemaWriteMode: SchemaWriteMode.Shared)
                 : mode == "verify" ? Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true))
-                : Repository.OpenExisting(directory, Models());
+                : Repository.OpenExisting(directory, Models(), schemaWriteMode: SchemaWriteMode.Shared);
             try {
                 if (mode == "verify") {
                     // This catalog intentionally excludes World and Character.

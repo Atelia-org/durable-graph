@@ -116,7 +116,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         FrameAddress state0, schemaRoot;
         ObjectId listId;
         Dictionary<ObjectId, ObjectStorageInfo> storage;
-        using (Repository seed = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository seed = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             state0 = main.Head.RevisionAddress;
@@ -138,7 +138,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
 
         FrameAddress state1;
         ObjectStorageInfo continuedStorage;
-        using (Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models())) {
+        using (Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             reopened.PreparedStateReuseEnabled = false;
             Assert.Equal(state0, reopened.GetHead("main").RevisionAddress);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
@@ -195,7 +195,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => {
             using Repository unexpected = readOnly
                 ? Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models())
-                : Repository.OpenMetaBootstrapExisting(_path, Models());
+                : Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         });
         Assert.Contains("[VersionStore.RefNotFound]", error.Message, StringComparison.Ordinal);
     }

@@ -146,7 +146,7 @@ public sealed partial class EventHistoryRepositoryTests {
         BranchCheckout oldOther = oldRepository.Fork("other", oldMain.Head);
         CheckpointAddress oldAddress = oldMain.Head;
         oldRepository.Dispose();
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout current = reopened.Checkout("main");
         using BranchCheckout currentOther = reopened.Checkout("other");
         Assert.Throws<ObjectDisposedException>(() => oldMain.CommitState(NoRebase));
@@ -170,7 +170,7 @@ public sealed partial class EventHistoryRepositoryTests {
             old = main.Head;
         }
         int hydrations = 0;
-        using (Repository repository = Repository.OpenExisting(_root, Models(onHydrate: _ => hydrations++))) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(onHydrate: _ => hydrations++), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress current = repository.GetHead("main");
             var before = SnapshotLiveFiles();
             Assert.Throws<ArgumentNullException>(() => repository.Fork("null", null!));

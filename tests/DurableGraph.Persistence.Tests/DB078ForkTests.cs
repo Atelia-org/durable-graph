@@ -70,7 +70,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(initial.RevisionAddress, states.ReadGraph(otherHead.RevisionAddress).SourceGraph);
             Assert.Equal(initial.RevisionAddress, states.ReadGraph(mainHead.RevisionAddress).SourceGraph);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout coldMain = reopened.Checkout("main");
         using BranchCheckout coldA = reopened.Checkout("a");
         using BranchCheckout coldB = reopened.Checkout("b");
@@ -168,7 +168,8 @@ public sealed partial class EventHistoryRepositoryTests {
         using Repository repository = Repository.OpenExisting(_root, Models(upgrade: true, onNormalize: () => {
             normalizationCalls++;
             if (fail) throw new InvalidDataException("upgrade failed");
-        }));
+        }),
+        schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress source = repository.GetHead("main");
         var before = SnapshotLiveFiles();
         Assert.Throws<InvalidDataException>(() => repository.Fork("child", source));
@@ -213,7 +214,7 @@ public sealed partial class EventHistoryRepositoryTests {
                 other.CommitState(NoRebase);
             }
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("child");
         Assert.Equal((byte)1, Assert.IsType<Node>(recovered.State).Value);
     }
@@ -252,7 +253,7 @@ public sealed partial class EventHistoryRepositoryTests {
         Dictionary<string, byte[]> before = ImmutableHistoryPaths().ToDictionary(path => path, File.ReadAllBytes);
         Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data"), StringComparison.OrdinalIgnoreCase));
         Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
-        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             using BranchCheckout a = repository.Fork("a", main.Head);
             using BranchCheckout b = repository.Fork("b", main.Head);
@@ -278,7 +279,7 @@ public sealed partial class EventHistoryRepositoryTests {
             onNormalize: () => { if (phase == "normalize") throw new InvalidDataException("normalize failed"); },
             allocate: () => phase == "allocate" ? throw new InvalidDataException("allocate failed") : new Node(),
             onHydrate: _ => { if (phase == "hydrate") throw new InvalidDataException("hydrate failed"); });
-        using (Repository repository = Repository.OpenExisting(_root, models)) {
+        using (Repository repository = Repository.OpenExisting(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.Throws<InvalidDataException>(() => repository.Fork("child", repository.GetHead("main")));
             Assert.False(repository.IsFaulted);
             Assert.Equal(new[] { "main" }, repository.ListBranches());

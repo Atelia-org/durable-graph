@@ -20,7 +20,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     // contract continues to require read-only results without promising cross-view identity.
     [Fact]
     public void SameSchemaSharesStableGeneratedClosureAndChangedChildSplitsItsAncestors() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, GeneratedModels())) {
+        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             SplitPairEnvelope root = Envelope();
             using BranchCheckout main = seed.CreateBranch("main", root);
             CheckpointAddress s0 = main.Head;
@@ -81,7 +81,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
 
     [Fact]
     public void DifferentSchemaHydrationClosuresKeepEqualCurrentDtosIndependentAndMatchSingleReads() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()))) {
+        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             seed.CreateTag("before", main.Head);
             main.Catalog.Set(Extra);
@@ -125,7 +125,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
 
     [Fact]
     public void HistoricalRewriteIsNotSharedEvenWithinOneEnvironmentAndConfirmedBaseBecomesEligible() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()))) {
+        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             seed.CreateTag("old", main.Head);
         }
@@ -149,7 +149,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(2, counts.Hydrates);
         }
         AssertFilesEqual(files, SnapshotFiles());
-        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, registry)) {
+        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, registry, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = writer.Checkout("main");
             CheckpointAddress current = main.CommitState();
             P0GraphSnapshot graph = writer.MetaBootstrapStore.ReadGraph(current.RevisionAddress);
@@ -250,7 +250,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     }
 
     private CheckpointAddress SeedProbePair() {
-        using Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()));
+        using Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
         CheckpointAddress first = main.Head;
         seed.CreateTag("first", first);

@@ -65,7 +65,7 @@ internal static class Program {
     private static object Seed(string database, string witnessPath) {
         FrameAddress state;
         uint rootId;
-        using (Repository repository = Repository.CreateNew(database, Models())) {
+        using (Repository repository = Repository.CreateNew(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.CreateBranch("main", Ring());
             repository.CreateTag("initial", main.Head);
             state = main.Head.RevisionAddress;
@@ -133,7 +133,7 @@ internal static class Program {
         WireInspector.Snapshot original = WireInspector.Read(database);
         CheckRefs(original, oldSchema, ("main", seed));
         CheckStorage(original, original.Graph(seed), witness.SeedObjects);
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
+        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Check(main.State, upgraded: true);
             Need(main.StateRevisionAddress == seed && main.StateId!.Value.Value == witness.RootId,
@@ -149,7 +149,7 @@ internal static class Program {
 
         // Closing after Fork makes its ref-only nature observable independently.
         int beforeFork = Widget.UpgradeCalls;
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
+        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout fork = repository.Fork("fork", repository.ResolveTag("initial"));
             Need(fork.Head.RevisionAddress == seed && fork.StateRevisionAddress == seed && fork.StateId!.Value.Value == witness.RootId,
                 "Historical Fork must restore the tag's nearest State, independently of latest shared S.");
@@ -162,7 +162,7 @@ internal static class Program {
         CheckStorage(forked, forked.Graph(seed), witness.SeedObjects);
 
         FrameAddress eventAddress, rewritten;
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
+        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout fork = repository.Checkout("fork");
             Widget root = Check(fork.State, upgraded: true);
             ObjectId rootId = fork.StateId!.Value;
@@ -213,8 +213,29 @@ internal static class Program {
         CheckRefs(previous, schema, ("main", Address(witness.MainState!)), ("fork", rewritten));
         StorageEvidence[] priorRows = Storage(previous, previous.Graph(rewritten));
         Need(priorRows.SequenceEqual(witness.RewriteObjects!), "Actual cold source storage differs from the last confirmed observation.");
+        Dictionary<string, string> beforeUnconfigured = FileImages(database);
+        using (Repository unconfigured = Repository.OpenExisting(database, Models())) {
+            Need(!unconfigured.IsReadOnly && unconfigured.SchemaWriteMode is null,
+                "Missing Schema write configuration must retain writable backing resources without admitting business saves.");
+            using BranchCheckout main = unconfigured.Checkout("main");
+            Widget root = Check(main.State, upgraded: true);
+            FrameAddress head = main.Head.RevisionAddress;
+            FrameAddress? state = main.StateRevisionAddress;
+            ObjectId? rootId = main.StateId;
+            Check(unconfigured.ReadState(unconfigured.GetHead("main")), upgraded: true);
+            foreach (Action save in new Action[] { () => main.CommitState(), () => main.CommitEvent(root) }) {
+                bool rejected = false;
+                try { save(); }
+                catch (InvalidOperationException) { rejected = true; }
+                Need(rejected && !unconfigured.IsFaulted && main.Head.RevisionAddress == head &&
+                    unconfigured.GetHead("main").RevisionAddress == head && main.StateRevisionAddress == state &&
+                    main.StateId == rootId && ReferenceEquals(main.State, root),
+                    "An unconfigured State/Event save must be rejected without advancing or faulting the loaded checkout.");
+            }
+        }
+        Need(SameFiles(beforeUnconfigured, FileImages(database)), "Unconfigured business-save rejection changed repository files.");
         FrameAddress continued;
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
+        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout fork = repository.Checkout("fork");
             Widget root = Check(fork.State, upgraded: true);
             Need(Widget.UpgradeCalls == 0 && fork.StateRevisionAddress == rewritten && fork.StateId!.Value.Value == witness.RootId,
@@ -251,7 +272,8 @@ internal static class Program {
             ContinuationFrames = Frames(actual).Where(frame => !previousFrames.Contains(frame.Address)).ToArray() };
         WriteJson(witnessPath, next);
         return new { next.ContinuationState, Objects = updated, SingleListDelta = true, ExactPrior = true, IdsPreserved = true,
-            ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true };
+            ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true,
+            UnconfiguredSaveRejected = true };
     }
 
     private static object Verify(string database, string witnessPath) {

@@ -213,7 +213,7 @@ public sealed class DB078CheckpointTests : IDisposable {
             using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         }
-        using Repository empty = Repository.OpenExisting(_root, new StateModelRegistry());
+        using Repository empty = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Checkpoint? delivered = null;
         Assert.ThrowsAny<Exception>(() => delivered = empty.ReadCheckpoint(empty.GetHead("main")));
         Assert.Null(delivered);
@@ -223,6 +223,6 @@ public sealed class DB078CheckpointTests : IDisposable {
 
     private static Node Root(Checkpoint checkpoint) => Assert.IsType<Node>(checkpoint is EventCheckpoint e ? e.Event : ((StateCheckpoint)checkpoint).State);
     private static Node Previous(Checkpoint checkpoint) => Assert.IsType<Node>(checkpoint is EventCheckpoint e ? e.PreviousState : ((StateCheckpoint)checkpoint).PreviousEvent);
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db078-checkpoint-");
 }
