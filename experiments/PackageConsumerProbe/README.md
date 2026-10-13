@@ -20,7 +20,9 @@
 
 这些目录都混有真实 SG 模型和公开 Repository 故事，没有可以按“纯旧 codec”整删的 lane。后继按具体公开故事选择性迁移 `ReadState`/`ReadEvent`/`ReadCheckpoint`/`ReadPair`/`Fork` 与领域值检查；旧 header/raw 诊断及 runner markers 一并重审。有限非 friend 公开 accepted-history 代表门禁已通过；19 lanes全迁不是该门禁依赖，通过也不自动授未迁 lanes当前资格。StateStore 与 HistoryCapability 没有独立 README，暂停说明集中在此。
 
-这项暂停不包括基础 `Run-Probe` 的生成/Capture body 验证、TagConsumer、ImmutableLeafConsumer、EventHistoryRecoveryConsumer、当前 MetaBootstrapSchemaConsumer/SplitRepositoryConsumer，也不暂停 ListDeltaReplayProbe。它们没有上述静态读取依赖；各自是否具备当前包或故障资格仍由自己的实际证据界定，不因其他 lane 暂停或 source 回归通过而自动获得更广资格。
+这项暂停不包括基础 `Run-Probe`、TagConsumer、ImmutableLeafConsumer、EventHistoryRecoveryConsumer、MetaBootstrapSchemaConsumer／SplitRepositoryConsumer／PrivateContainerConsumer或 ListDeltaReplayProbe。它们没有上述旧 raw 静态读取依赖；各 lane 只按实际证据授包／源码／故障资格。
+
+[PrivateContainerConsumer](PrivateContainerConsumer/README.md)与 `Run-PrivateContainerProbe.ps1` 已验普通 PackageReference 的同键同版异形私有新根／完整 Nullable inline List 替换；A/B独立 V1 history、四次 Rebuild、六独立 PID核双方冷 Delta、不可达声明／ref2／旧帧保持、错误环境与 ToShared冲突、两个全程 readonly零写。它与既有 V1→V2／同形推广包共同闭合 DB-087有限 P1／P2；19暂停 lanes不因此复活，原始证据只在各消费者 README维护。
 
 Storage dependencies are the six pinned Binary/FrameStore/VersionStore closure packages in
 [StorageDependency.props](../../eng/StorageDependency.props). The shared

@@ -466,7 +466,7 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 容器替换以完整 old／new 布局为端点，并验证实际冻结目录与全部未触及依赖；Schema 同键替换与容器声明替换分别明确授权，不按 nominal TypeExpr 自动改写。目标已存在时复用完整 descriptor，builtin 目标不取得动态身份；旧 descriptor 行与旧视图保持。
 将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
 单次显式 Shared 提交与工作副本的默认归属分责；不得借此原地更换冻结执行环境。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
-具体实现资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)，未闭合的双异形环境包资格见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+具体实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)；原分支重建、同 Open 双异形模型、Schema-only 与优化的重访条件见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
 只有已发布的 exact head/manifest 引用的 candidate 才取得权威。文件存在、时间戳或最新编号
 都不够。被引用数据应先完成规定的 durability barrier，再发布；具体 process/OS crash、

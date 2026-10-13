@@ -2,8 +2,8 @@
 
 > 校准：2026-10-13。本文只保留当前契约、源码落点、后续门禁与未决问题。
 > 默认公开路径已接 meta 自举，旧保存／typed reader／Schema 权威／raw Storage 束已退出。
-> 旧权威退出与有限非 friend 公开 accepted-history 包门禁已验，P1 产品停点成立；P2 显式 Shared、私有新根／完整容器替换／冷续写与完整目录 ToShared 已接线，限定验收见 §9。
-> 包验收限真实 Widget/List 代表故事，不增加 ProcessCrashOnly、断电或性能资格；内部 API／wire 未冻结。
+> 旧权威退出、有限非 friend accepted-history 与双异形独立环境包门禁已验，约定的有限 P1／P2 产品停点均成立；资格边界见 §8／§9。
+> 包验收限真实 Widget／Root 与 List 代表故事，不增加 ProcessCrashOnly、断电或性能资格；内部 API／wire 未冻结。
 > [压缩前全文](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)冻结自 `ecc80683f35e2f42795530d28c8974dfb43d95dd`，保留原分片的来源、过程、运行记录与限制。
 
 <a id="current-status"></a>
@@ -22,7 +22,7 @@ SchemaStore／SCB1、RepresentationId、旧 Base header、WorldWorkspace／Loade
 用户明确无旧数据／API 兼容负担，简单性按最终产品衡量；不提供旧格式 reader、生产双写或迁移壳。这不授权修改、删除或修复已完成持久帧。完整帧 append-only、必要来源校验、正常底座恢复、串行 owner 与故障关闭仍成立。
 自举不预设更快或代码更少，固定引导规则也不必消除自身。
 
-当前已通过[有限公开 accepted-history 准确包门禁](#public-package-gate)，后继是[P2 私有视图](#private-plan)。
+当前已通过[公开 accepted-history 包门禁](#public-package-gate)与[P2 双异形独立环境包门禁](#private-plan)，本案约定范围已完成，无剩余必经施工片。后续只按[条件延期](#open-questions)中的真实消费者或测量选择增量。
 十九个有效旧 PackageConsumer lanes 暂停当前 G，源资产与历史证据原地保留；选择性迁移不是该门禁前置，也不自动恢复未迁 lane 的资格。
 当前能力只在 [PROJECT-STATE](../../src/PROJECT-STATE.md) 维护，未实施导航见[路线图 §4.1](../DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
@@ -254,9 +254,9 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 P1 在上述有限范围内已完成；不将代表故事扩展为全部类型组合、任意 Pair 实例身份承诺或 P2 资格。
 
 <a id="private-plan"></a>
-## 9. P2：显式归属、私有新根与后继
+## 9. P2：显式归属、私有新根与有限停点
 
-用户 0008 方向的 shared／private 政策保持。Shared 写准入、完整私有新根／容器改形替换／冷续写与单次完整目录 ToShared 已接线；双异形环境包资格仍未闭合，不称完整 P2 停点。
+用户 0008 方向的 shared／private 政策保持。Shared 写准入、完整私有新根／容器改形替换／冷续写与单次完整目录 ToShared 已接线；双异形独立环境准确包已通过，有限 P2 停点成立。契约保留如下，历次源码和包不互相代替资格。
 
 ### 显式 shared 写准入
 
@@ -284,10 +284,9 @@ P1 在上述有限范围内已完成；不将代表故事扩展为全部类型�
 
 本片独立复核否定外来 view＋地址补签与仅可达布局推广两个细节，分别收为实际 Store/root Load 和完整包含检查；没有新增 token／策略框架，无需重新选择产品政策。
 
-私有首片源码验收（提交 `6641672`）：准确 source mode 下 solution build 零警告／错误，2726 项通过、零失败／跳过。新增 [双 SG 故事](../../tests/DurableGraph.Tests/PrivateSchemaViewGeneratorTests.cs) 2 Fact，以各自合法 history 证明同键同版 int／long Widget、共享 List／环、全部新 Base、A 旧分支续写、Event／Discard／准确冷 Delta／实际链 H及错误环境拒；新增 [私有保存边界](../../tests/DurableGraph.Persistence.Tests/PrivateSchemaRepositoryTests.cs) 11 方法／16 案例，补无变化根复用、不可达声明 Capture0拒、纯 Event 冷签出、inline 未闭合拒与同名修正、真实错误 meta／business 来源及 after-meta／before-publication／after-publication 冷裁决。完成帧保留，不外推进程 Kill／断电／性能。
-首次测试中的程序集可访问性、Family 夹具和故障 hook 重入观测已局部修正，未放宽产品 guard／断言；最终聚焦 18 案例及全套均通过。命令、日志和主线工件审计保于忽略目录 `.artifacts/db087-p2-private-20261013/`。
+私有首片源码验收在提交 `6641672` 与 `.artifacts/db087-p2-private-20261013/`：[双 SG 故事](../../tests/DurableGraph.Tests/PrivateSchemaViewGeneratorTests.cs)核同键同版 Widget、共享／环、全部新 Base、A/B 冷续、Event／Discard及实际 H；[保存边界](../../tests/DurableGraph.Persistence.Tests/PrivateSchemaRepositoryTests.cs)核无变化复用、不可达声明、纯 Event 前缀、完整依赖与真实来源拒绝、三发布窗口冷裁决和完成帧保持。准确源码构建／全套通过，不外推进程 Kill／断电／性能。
 普通公开包以同形 Widget V2＋不可达私有声明验证实际新根／冷 Delta、完整目录与 ref2 保持，[准确包证据](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#p2-private-package-evidence)只在消费者记录维护；不能代替两套同键异形代码环境的包资格。
-首片仅支持 Schema 定义替换的入口由下述完整容器替换补齐；双异形环境包故事仍待后继，不回改前片包资格。
+首片仅支持 Schema 定义替换的入口由下述完整容器替换补齐；双异形包另由本节末尾的新消费者授予，不回改前片包资格。
 
 ### 单次完整目录 ToShared
 
@@ -301,8 +300,7 @@ P1 在上述有限范围内已完成；不将代表故事扩展为全部类型�
 
 源码接缝集中在 [BranchCheckout](../../src/DurableGraph.Persistence/BranchCheckout.cs)、[P0Session](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs) 与 [P0CatalogWorkspace](../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)；未修改 GraphResources 发布协议、ABI5 或员工 DTO V1，不新增模式切换／token／追踪框架。
 
-ToShared 当片源码验收（提交 `733820e`）：准确 source mode 最终整库构建零警告／错误，2736 项通过、零失败／跳过（Persistence 895／Serialization 133／Storage 36／Runtime+Generator 1672）。新增 [真实双 SG 故事](../../tests/DurableGraph.Tests/PrivateSchemaPromotionGeneratorTests.cs) 1 Fact，沿合法 V1→V2 history 验实际同数字异义碰撞、不可达 Holder／动态 List 完整导入、retained origin S、Event／Discard 保 rewrite、State 两个 Base 与冷单 List Delta；新增 [保存边界](../../tests/DurableGraph.Persistence.Tests/PrivateSchemaPromotionTests.cs) 7 方法／9 案例，补 ordinary/null Open、layout-only 双 ref CU、冲突 Capture0／修正、真实错误来源、三发布窗口两旧／两新与完成帧保持。两聚焦合计 10 案例通过；独立复核补强未发布时 ref1 revision／payload 原样断言后，整库重构建及 Persistence 895 项再次通过。
-实际命令／日志在忽略目录 `.artifacts/db087-p2-promotion-20261013/`；无新增 Unknown 内部窗口、进程 Kill、断电或性能资格。准确普通包的当片范围与证据单独见[消费者 ToShared 记录](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#p2-promotion-package-evidence)，不以源码回归代替。
+ToShared 源码验收在提交 `733820e` 与 `.artifacts/db087-p2-promotion-20261013/`：[真实 SG 故事](../../tests/DurableGraph.Tests/PrivateSchemaPromotionGeneratorTests.cs)核编号碰撞、不可达声明／动态 List 完整导入、retained origin S、Event／Discard 保 rewrite及后 State Base／冷 Delta；[保存边界](../../tests/DurableGraph.Persistence.Tests/PrivateSchemaPromotionTests.cs)核 ordinary/null Open、layout-only 双 ref CU、冲突 Capture0／修正、真实来源与三窗口两旧／两新、旧帧保持。准确源码构建／全套通过；[普通包证据](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#p2-promotion-package-evidence)单独保其同形故事资格，不授新 Unknown／Kill／断电／性能。
 
 ### 完整容器布局替换
 
@@ -319,12 +317,24 @@ ToShared 当片源码验收（提交 `733820e`）：准确 source mode 最终整
 限定源码见证是 [PrivateContainerSchemaReplacementGeneratorTests](../../tests/DurableGraph.Tests/PrivateContainerSchemaReplacementGeneratorTests.cs) 的 2 Fact（各有两个真实 SG、独立合法 V1 history）：Point 同键同版 int／long，`Point[]`／`List<Point>`／`Dictionary<int,Point>` 的同 Type／异完整布局；逐项遗漏及不可达 Deep→Point／Unused→Deep 拒绝；完整修正后 4 个真实 Base，A/B 各冷续 3 个实际 Delta、准确 prior／chain H、环／alias／旧帧与只读全文件字节保持。公共逻辑 pair 逐项等于实际 SG binding，仅把 internal Snapshot 用作测试核验，不称公共获取路径。
 保存边界见 [PrivateContainerReplacementTests](../../tests/DurableGraph.Persistence.Tests/PrivateContainerReplacementTests.cs) 的 6 方法／14 案例：no-op pin、目标复用／合流、removal-only 与新依赖、完整 old／endpoint、Schema 授权及遗漏闭包的手写 Capture0／同名修正、枚举 guard、真实生成 List 的 Capture 后拒绝，三发布窗口冷开 ref1 旧／新裁决、ref2 始终保持和完成帧保持。枚举重入以原本可成功的 GetHead 正控隔离，不借已占用 checkout 证明 guard。
 
-本轮准确 source mode（存储来源 `974fd47abb73792f9d350af87ab91a53848952eb`）最终整库构建零警告／错误，新增聚焦 16 案例及全套 2752 项通过、零失败／跳过：Persistence 909／Serialization 133／Storage 36／Runtime+Generator 1674。独立复核的枚举 guard 尾修后重构建、14 项聚焦与全套均验实际新字节，无产品 guard 放宽；命令／日志和主线 frozen input 审计集中在 `.artifacts/db087-p2-container-replacement-20261013/`。本片未运行新 PackageReference 门禁，不重新授前片包资格，不授所有 Nullable／rank／comparer 组合、显式 Discard 初始化、Unknown 内部窗口、进程 Kill、断电或性能。
+容器替换源码验收（提交 `d92a3b1`）：准确 source mode（存储来源 `974fd47abb73792f9d350af87ab91a53848952eb`）整库构建零警告／错误，聚焦 16 案例及全套 2752 项通过、零失败／跳过：Persistence 909／Serialization 133／Storage 36／Runtime+Generator 1674。frozen input／日志在 `.artifacts/db087-p2-container-replacement-20261013/`。该当片未运行新包；下述包另授其 List／Nullable inline 代表，不外推源码全部容器组合、显式 Discard 初始化、Unknown／Kill／断电或性能。
 
-### 私有后继依赖
+### 双异形环境包资格与有限停点
 
-剩余是双异形独立代码环境的准确包门禁。新建有限 `PrivateContainerConsumer`／`Run-PrivateContainerProbe.ps1`，复用现有准确十包／来源 sidecar、隔离 assets／实际加载核验和窄 wire 观察；A/B 独立 history／stage／模型文件，各真实 Publish＋Verify，共四次 Rebuild。既有 Split 五进程两版共用 history，不能直接改为同键同版异形，否则会正确触发 Publish 冲突；保其协议与历史资格。
-最小包消费者用共同 Root V1、inline Point V1 的 int／long 和共享 `List<Point?>`，另保不可达 Keeper 声明；公开工厂构造完整 pair。建议六 PID：A seed、B private 创建、A cold Delta、B cold Delta、A readonly verify、B readonly verify。核缺 pair 拒、全 Base、ref2 保持、双方准确 S／prior／H、错误环境拒、异形 ToShared 冲突、完成帧与两个全程 readonly PID 文件零写。已有同形私有／ToShared 包与本轮 source 不代此门禁，包只授其实际 List／Nullable inline 代表组合。
+独立 [PrivateContainerConsumer](../../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)与 [runner](../../experiments/PackageConsumerProbe/Run-PrivateContainerProbe.ps1)已通过准确包门禁。A/B 分别以普通 PackageReference 编译相同 Root／Keeper V1 与 int／long Point V1，独立合法 history，各 Publish＋Verify，共四次真实 Rebuild；十包、包内 SG／Build、assets／cache／stage／六 PID 实际加载逐层核对。保留既有 Split 的 V1→V2 共用 history 协议，不借改写旧 history 接纳异形。
+实际六 PID 为 A seed、B private 创建、A/B 各冷 Delta、A/B 各全程 readonly。共享 128 项 `List<Point?>` 具有真实 absent／present与 B 超 Int32 值；缺 pair 拒绝后关闭同名修正，B 新根三 Base／空业务来源、meta 来源准确 frozen shared、完整 Keeper 保留、Point／List 旧 rows 保持但退出新声明。双方单 List Delta／真实 prior／H，两 Root retained；B ToShared 异形冲突健康拒绝，两个 readonly PID 全文件零写，全部完成帧保持。准确包版本、源码来源、PID／record／原始 payload与 hash 证据只在消费者 README 维护；本片未改生产字节。
+
+综合现有证据，约定的有限 P1／P2 停点成立：
+
+| 必经能力 | 验收入口与边界 |
+|---|---|
+| DurableSchema 逻辑内容、descriptor 与存活 Dictionary 共用版本保存，按特定根冷读 | [员工／目录源码](#implementation-map)、[自举证据](#自举闭包与类型路由)；固定员工 DTO 经工厂恢复完整 Schema，不承诺任意 CLR meta 对象直接 Capture |
+| 唯一 pending／writer／CU、真实来源、无变化／Discard／Event与故障规律 | [保存与来源契约](#save-contract)、[来源证据](#保存owner-与历史)、[故障证据](#初始化故障与进程窗口)及上列源码回归；原 ProcessCrashOnly保其限定窗口 |
+| 默认公开切换／旧权威退出、真实 accepted-history Upgrade／准确 S／冷增量 | [P1 包门禁](#public-package-gate)、[旧权威退出证据](#包默认接线与旧权威退出) |
+| 显式 Shared／完整 private fork／完整容器替换／双方独立环境冷续 | 本节源码与[新双异形包](../../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)；包仅授实际 List／Nullable inline 代表 |
+| 完整目录单次 ToShared、相容 retained 与真正 rewrite 分责 | 本节源码与[既有同形推广包](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#p2-promotion-package-evidence)；新双异形包另授冲突拒绝 |
+
+本片准确 source build 零警告／错误、既有 16 项聚焦复核通过；前片 2752 项全套日志与生产／测试 hash 保其原资格，本片未重复全套。没有遗留产品政策选择或必经施工片；不把以下条件延期追加为停点前置。
 
 私有首片保图内共享／环，不承诺跨完整重建的数字 ObjectId 连续。
 私有改形新建 descriptor ObjectId 并替换目录声明成员，不改写已接受 descriptor；旧 S 保持旧节点与含义。
@@ -336,7 +346,7 @@ ToShared 当片源码验收（提交 `733820e`）：准确 source mode 最终整
 <a id="open-questions"></a>
 ## 10. 局部未决与条件延期
 
-当前没有需要重新选择产品政策的阻塞。完整目录 ToShared、相容 retained／真实 rewrite 分责与完整容器替换均已接线；old/new 参数、同时替换／合流／builtin 目标及未触及依赖规则已定。剩余双异形代码环境准确包资格按 §9 的有限入口实施；通过后综合现有 P1／P2 证据核完整停点，不自动扩展以下条件延期项。wire／内部 API 未冻结不等于先做命名、程序集或后端统一。
+本案约定的有限 P1／P2 范围已完成，无剩余必经门禁或产品政策阻塞。完整目录 ToShared、retained／rewrite 分责、完整容器替换和双异形独立包资格均已验；后续由真实业务接入或测量选择增量，不再机械排本案施工轮次。wire／内部 API 未冻结不要求预先做命名、程序集或后端统一。
 
 以下只在真实消费者或测量触发时重访：
 

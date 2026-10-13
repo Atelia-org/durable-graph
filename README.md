@@ -165,7 +165,7 @@ exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍�
 
 首次创建还可用 `containerReplacements: [(oldLayout, newLayout)]` 显式替换完整 List／Array／Dictionary 布局。old 必须是冻结 shared 中实际声明的动态布局，两个端点都包含完整槽与 codec；TypeExpr 单独不能标识 inline 版本。已有目标复用 descriptor，多个替换目标合并；builtin 目标不创建动态 descriptor。Schema 同键改形仍须通过 `schemaOverrides` 明确给出，遗漏的未触及依赖不会自动改写。完整布局可由已有公共 Schema／Layout 工厂构造，无需用新代码物化旧根。
 
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。 默认 meta 自举与 shared／private 的有限 P1／P2 范围已完成；[双异形独立包见证](experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)验证完整 Nullable inline List 替换及双方冷续写，其他条件延期按真实需求选择。
 
 ### 3. 独立浏览与分支
 
