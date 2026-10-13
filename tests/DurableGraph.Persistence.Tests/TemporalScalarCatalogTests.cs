@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -41,22 +42,31 @@ public sealed class TemporalScalarCatalogTests {
     [InlineData(TypeTag.TimeOnly, 23)]
     [InlineData(TypeTag.DateTimeOffset, 24)]
     public void ContainerCatalogUsesLeafTagsWithoutAdditionalMetadataNodes(TypeTag tag, byte code) {
-        Assert.Equal(2, SchemaCatalogWireCodec.Version);
+        Assert.Equal(code, (byte)tag);
+        P0CatalogWorkspace workspace = new(static () => { });
+        List<ObjectLayout> layouts = [];
         for (byte rank = 4; rank <= 7; rank++) {
-            AssertCatalog(SchemaCatalogEntry.ForArray(new(2), new((TypeExprKind)rank, new(1, tag))),
-                [2, 1, 2, 3, 1, rank, code]);
+            layouts.Add(ObjectLayout.ForArray(new((TypeExprKind)rank, new(1, tag))));
         }
-        AssertCatalog(SchemaCatalogEntry.ForList(new(2), new(new(1, tag))), [2, 1, 2, 4, 2, code]);
-        AssertCatalog(SchemaCatalogEntry.ForDictionary(new(2), new(new(1, tag), new(2, tag))),
-            [2, 1, 2, 5, 1, code, code]);
+        layouts.Add(ObjectLayout.ForList(new(new(1, tag))));
+        layouts.Add(ObjectLayout.ForDictionary(new(new(1, tag), new(2, tag))));
+        foreach (ObjectLayout layout in layouts) { workspace.Set(layout); }
+        P0CatalogView view = workspace.Prepare().View;
+        Assert.Empty(view.Schemas);
+        Assert.Empty(view.DescriptorIds);
+        foreach (ObjectLayout layout in layouts) { view.Require(layout); }
     }
 
     [Fact]
     public void TemporalFieldsShareOneOwnerSchemaRecord() {
         DurableSchema schema = new("C", 1, new DurableFieldInfo(1, TypeTag.DateOnly),
             new DurableFieldInfo(2, TypeTag.TimeOnly), new DurableFieldInfo(3, TypeTag.DateTimeOffset));
-        SchemaCatalogEntry row = SchemaCatalogEntry.ForSchema(new(2), schema);
-        AssertCatalog(row, [2, 1, 2, 1, 2, 3, 67, 0, 1, 0, 3, 1, 22, 2, 23, 3, 24]);
+        P0CatalogWorkspace workspace = new(static () => { });
+        workspace.Set(schema);
+        P0CatalogView view = workspace.Prepare().View;
+        Assert.Equal(schema, Assert.Single(view.Schemas).Value);
+        Assert.Single(view.DescriptorIds);
+        view.Require(ObjectLayout.ForDurable(schema));
     }
 
     [Fact]
@@ -64,13 +74,6 @@ public sealed class TemporalScalarCatalogTests {
         foreach (byte code in Enumerable.Range(1, 14).Concat(Enumerable.Range(19, 3)).Select(value => (byte)value)) {
             AssertNominal(TypeExpr.Builtin((TypeTag)code), [1, code]);
         }
-    }
-
-    private static void AssertCatalog(SchemaCatalogEntry row, byte[] golden) {
-        Assert.Equal(golden, SchemaCatalogWireCodec.Write([row]));
-        SchemaCatalogEntry decoded = Assert.Single(SchemaCatalogWireCodec.Read(golden));
-        Assert.Equal(row.Id, decoded.Id);
-        Assert.Equal(row.Layout, decoded.Layout);
     }
 
     private static void AssertNominal(TypeExpr type, byte[] golden) {

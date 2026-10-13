@@ -1,5 +1,8 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -85,11 +88,9 @@ public sealed class DictionaryBindingCatalogTests {
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void RetainedReaderRevalidatesEitherExactSlotAfterLateSchemaRegistration(bool keyConflict) {
+    public void RetainedReaderChecksBothExactSlotsInEachImmutableSelectedView(bool keyConflict) {
         string path = Path.Combine(Path.GetTempPath(), $"dictionary-binding-{Guid.NewGuid():N}.rbf");
         try {
-            using GraphResources file = GraphResources.CreateLegacyNew(path);
-            SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             foreach (string id in new[] { "RetiredKey", "RetiredValue" }) {
                 registry.Register(new StateDefinitionBinding(id, SchemaKind.InlineValue, 0, null,
@@ -101,13 +102,43 @@ public sealed class DictionaryBindingCatalogTests {
             DurableSchema value = new("RetiredValue", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
             ObjectLayout layout = ObjectLayout.ForDictionary(new(new(1, TypeTag.InlineValue, inlineSchema: key),
                 new(2, TypeTag.InlineValue, inlineSchema: value)));
-            StateModelSnapshot snapshot = registry.Snapshot(schemas);
+            DurableSchema conflict = new(keyConflict ? "RetiredKey" : "RetiredValue", 1,
+                SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
+            P0CatalogView selected = LoadView("matching", key, value), other = LoadView("conflicting",
+                keyConflict ? conflict : key, keyConflict ? value : conflict);
+            int lookups = 0;
+            StateModelSnapshot snapshot = registry.Snapshot(schemaLookup: lookup => {
+                lookups++;
+                return selected.Schemas.GetValueOrDefault(lookup);
+            });
             ObjectReaderBinding reader = snapshot.ResolveObjectReader(layout);
+            int beforeHit = lookups;
             Assert.Same(reader, snapshot.ResolveObjectReader(layout));
+            Assert.True(lookups > beforeHit);
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(layout.Type));
-            schemas.Register(new DurableSchema(keyConflict ? "RetiredKey" : "RetiredValue", 1,
-                SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64)));
-            Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(layout));
+            StateModelSnapshot rejected = registry.Snapshot(schemaLookup: lookup => other.Schemas.GetValueOrDefault(lookup));
+            InvalidDataException error = Assert.Throws<InvalidDataException>(() => rejected.ResolveObjectReader(layout));
+            Assert.IsType<SchemaConflictException>(error.InnerException);
+            Assert.Same(reader, snapshot.ResolveObjectReader(layout));
+            Assert.Equal(key, selected.Schemas[new(key.Type, key.Version)]);
+            Assert.Equal(value, selected.Schemas[new(value.Type, value.Version)]);
+            Assert.Equal(conflict, other.Schemas[new(conflict.Type, conflict.Version)]);
+
+            P0CatalogView LoadView(string name, params DurableSchema[] schemas) {
+                string repositoryPath = Path.Combine(path, name);
+                FrameAddress selectedRoot;
+                using (var writer = P0Repository.CreateNew(repositoryPath)) {
+                    P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                    foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
+                    P0PreparedCatalog candidate = catalog.Prepare();
+                    using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                        new(null, new(1), [ObjectVersionRecord.CreateBase(1,
+                            P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                    selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
+                }
+                using var reopened = P0Repository.OpenReadOnlyExisting(repositoryPath);
+                return P0CatalogView.Load(reopened.Store, selectedRoot);
+            }
         } finally { DeleteTestPath(path); }
     }
 

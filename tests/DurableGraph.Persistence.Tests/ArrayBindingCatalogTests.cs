@@ -2,6 +2,8 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.Rbf;
 using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -56,12 +58,10 @@ public sealed class ArrayBindingCatalogTests {
     }
 
     [Fact]
-    public void HistoricalArrayReaderNeedsOnlyRetainedInlineStateAndRechecksSchemaAuthority() {
+    public void HistoricalArrayReaderNeedsOnlyRetainedStateAndChecksEachImmutableSelectedView() {
         string directory = Path.Combine(Path.GetTempPath(), "durable-array-catalog-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try {
-            using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(directory, "schemas.rbf"));
-            SchemaStore schemas = file.Schemas;
             StateReaderRegistry registry = new();
             registry.Register(new StateDefinitionBinding("RetiredPoint", SchemaKind.InlineValue, 0, null,
                 [new("RetiredPoint", 1, SchemaKind.InlineValue, 0, [new(1, TypeExpr.Builtin(TypeTag.Int32))])],
@@ -70,14 +70,42 @@ public sealed class ArrayBindingCatalogTests {
             DurableSchema exact = new("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
             ObjectLayout layout = ObjectLayout.ForArray(new(TypeExprKind.VectorArray,
                 new(1, TypeTag.InlineValue, inlineSchema: exact)));
-            StateModelSnapshot snapshot = registry.Snapshot(schemas);
+            DurableSchema conflict = new("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
+            P0CatalogView selected = LoadView("matching", exact), other = LoadView("conflicting", conflict);
+            int lookups = 0;
+            StateModelSnapshot snapshot = registry.Snapshot(schemaLookup: key => {
+                lookups++;
+                return selected.Schemas.GetValueOrDefault(key);
+            });
             ObjectReaderBinding reader = snapshot.ResolveObjectReader(layout);
+            int beforeHit = lookups;
             Assert.Same(reader, snapshot.ResolveObjectReader(layout));
+            Assert.True(lookups > beforeHit);
             Assert.Equal(layout, reader.Layout);
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(layout.Type));
 
-            schemas.Register(new DurableSchema("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64)));
-            Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(layout));
+            StateModelSnapshot rejected = registry.Snapshot(schemaLookup: key => other.Schemas.GetValueOrDefault(key));
+            InvalidDataException error = Assert.Throws<InvalidDataException>(() => rejected.ResolveObjectReader(layout));
+            Assert.IsType<SchemaConflictException>(error.InnerException);
+            Assert.Same(reader, snapshot.ResolveObjectReader(layout));
+            Assert.Equal(exact, selected.Schemas[new(exact.Type, exact.Version)]);
+            Assert.Equal(conflict, other.Schemas[new(exact.Type, exact.Version)]);
+
+            P0CatalogView LoadView(string name, DurableSchema schema) {
+                string path = Path.Combine(directory, name);
+                FrameAddress selectedRoot;
+                using (var writer = P0Repository.CreateNew(path)) {
+                    P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                    catalog.Set(schema);
+                    P0PreparedCatalog candidate = catalog.Prepare();
+                    using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                        new(null, new(1), [ObjectVersionRecord.CreateBase(1,
+                            P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                    selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
+                }
+                using var reopened = P0Repository.OpenReadOnlyExisting(path);
+                return P0CatalogView.Load(reopened.Store, selectedRoot);
+            }
         } finally { Directory.Delete(directory, recursive: true); }
     }
 

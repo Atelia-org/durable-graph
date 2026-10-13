@@ -392,7 +392,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 MetadataReference.CreateFromFile(typeof(Atelia.FrameStore.FrameAddress).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(AteliaResult<>).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Serialization.PreparedBaseBody).Assembly.Location)).Append(
-                MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Persistence.SchemaStore).Assembly.Location)).Append(
+                MetadataReference.CreateFromFile(typeof(global::Atelia.DurableGraph.Repository).Assembly.Location)).Append(
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Storage.ObjectVersionChain).Assembly.Location)),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,

@@ -64,7 +64,7 @@ public sealed partial class Repository {
         bool delivered = false;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            RepositoryRootCodec.ValidateBranchName(branchName);
+            GraphResources.ValidateBranchName(branchName);
             if (_splitRepository!.GetHead(branchName) is not null) { throw new InvalidOperationException("Branch name already exists."); }
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }

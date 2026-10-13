@@ -7,9 +7,8 @@ namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>One frozen application code catalog with successful closures memoized locally.</summary>
 /// <remarks>
-/// Models, readers, definitions and Upgrade providers are frozen. The optional SchemaStore remains
-/// a live, repository-wide monotonic authority, so cached closures recheck definitions registered later.
-/// A read-only lookup instead binds one operation/workspace to its selected frozen Schema view;
+/// Models, readers, definitions and Upgrade providers are frozen.
+/// A read-only lookup binds one operation/workspace to its selected frozen Schema view;
 /// it does not consult a newer repository root or allocate persistent descriptor IDs.
 /// </remarks>
 internal sealed partial class StateModelSnapshot : StateBindingContext {
@@ -27,21 +26,17 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     private readonly HashSet<(string Kind, object Key)> _closing = [];
     private readonly HashSet<Type> _validatedDomainTypes = [];
     private readonly Dictionary<Type, bool> _managedValueTypes = [];
-    private readonly SchemaStore? _schemas;
     private readonly Func<SchemaKey, DurableSchema?>? _schemaLookup;
 
     internal StateModelSnapshot(Dictionary<TypeExpr, StateModelBinding> models,
         Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
-        Dictionary<string, StateDefinitionBinding>? definitions = null, SchemaStore? schemas = null,
+        Dictionary<string, StateDefinitionBinding>? definitions = null,
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
         Type? arrayElementUpgradeRuleSet = null, Type? listElementUpgradeRuleSet = null,
         ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive,
         Type? dictionaryKeyUpgradeRuleSet = null, Type? dictionaryValueUpgradeRuleSet = null,
         Dictionary<Type, object>? dictionaryComparers = null, Func<Type, object?>? dictionaryComparerResolver = null,
         Func<SchemaKey, DurableSchema?>? schemaLookup = null) {
-        if (schemas is not null && schemaLookup is not null) {
-            throw new ArgumentException("A snapshot requires one Schema lookup authority.", nameof(schemaLookup));
-        }
         _models = models;
         _types = types;
         _readers = readers;
@@ -55,7 +50,6 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         _dictionaryComparerResolver = dictionaryComparerResolver;
         if (!Enum.IsDefined(listDeltaAlgorithm)) { throw new ArgumentOutOfRangeException(nameof(listDeltaAlgorithm)); }
         _listDeltaAlgorithm = listDeltaAlgorithm;
-        _schemas = schemas;
         _schemaLookup = schemaLookup;
         foreach (StateDefinitionBinding definition in _definitions.Values) {
             if (definition.DomainTypeDefinition is { } domain && !_domainDefinitions.TryAdd(domain, definition)) {
@@ -120,7 +114,6 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     }
 
     public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) {
-        if (_schemas is not null && _schemas.TryGet(new SchemaKey(type, version), out schema)) { return true; }
         schema = _schemaLookup?.Invoke(new(type, version));
         return schema is not null;
     }

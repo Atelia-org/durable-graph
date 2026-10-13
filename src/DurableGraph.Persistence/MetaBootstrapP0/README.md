@@ -107,6 +107,8 @@ P1b 第八片的三程序集继承代表已完成源码验收，**有限 P1b 停
 
 [P1d 第七片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出) 已删除 RevisionDecoder／RevisionReadSession／TypedObjectVersionReader、GraphReader 旧 Store/session 入口及 legacy 保存来源字段。ReadSplit 私有签发／完整成员与 heads/H、共同 Normalize／Pair／两阶段物化／leaf／候选检查保持；旧 typed cache 次数退役，强反例迁真实新 reader，CRC 补例与最终源码回归通过。SCB1／GraphResources 旧模式／raw Store／header codecs 和旧 probe 尚有后继，不造替代 reader，也不授完整 P1 或新包资格。
 
+[P1d 第八片](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出) 已退出旧 SchemaStore／SCB1 catalog／RepresentationId／Base header 与 GraphResources legacy 模式，最终源码构建／完整回归通过限定验收。Snapshot 仅保所选不可变 view 的 lookup，成功 memo 仍复核标准 exact 依赖；真实清理、锁、根 grammar／cold 容量拒绝迁入唯一 owner。后继 raw Storage 束与剩余旧 probe→完整非 friend accepted-history 公开包→P2，不新增包、进程或性能资格。
+
 验证命令从仓库根执行，准确上游 pin 及 source/package 模式见[依赖指南](../../../docs/storage-dependency.md)：
 
 ```powershell

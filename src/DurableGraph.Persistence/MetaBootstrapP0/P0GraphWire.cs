@@ -8,6 +8,7 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 // Default graph/batch/directory wire, distinct from legacy StateRevision/SCB1. Tests can encode malformed relations
 // and append the resulting well-framed bytes through the real borrowed FrameStore.
 internal static class P0GraphWire {
+    internal const int MaxCollectionCount = 1_000_000;
     internal const uint BatchTag = 0x37424250; // PBB7
     internal const uint DirectoryTag = 0x37444250; // PBD7
     internal const uint GraphTag = 0x37474250; // PBG7
@@ -18,7 +19,7 @@ internal static class P0GraphWire {
     internal static byte[] EncodeBatch(FrameAddress? sourceGraph, FrameAddress? schemaRoot,
         IReadOnlyList<ObjectVersionRecord> records) {
         ArgumentNullException.ThrowIfNull(records);
-        if (records.Count == 0 || records.Count > StateRevisionWireFormat.MaxCollectionCount) {
+        if (records.Count == 0 || records.Count > MaxCollectionCount) {
             throw new ArgumentException("A batch requires a bounded nonempty record set.", nameof(records));
         }
         var buffer = new ArrayBufferWriter<byte>();
@@ -42,7 +43,7 @@ internal static class P0GraphWire {
         RequireMagic(ref reader, BatchMagic);
         FrameAddress? sourceGraph = ReadOptional(ref reader), schemaRoot = ReadOptional(ref reader);
         uint count = reader.ReadVarUInt32();
-        if (count == 0 || count > StateRevisionWireFormat.MaxCollectionCount || count > (uint)(reader.RemainingCount / 3)) {
+        if (count == 0 || count > MaxCollectionCount || count > (uint)(reader.RemainingCount / 3)) {
             throw new InvalidDataException("Invalid batch record count.");
         }
         var records = new ObjectVersionRecord[(int)count];

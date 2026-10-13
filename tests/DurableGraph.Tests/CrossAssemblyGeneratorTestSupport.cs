@@ -20,7 +20,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 typeof(Atelia.FrameStore.FrameAddress).Assembly,
                 typeof(AteliaResult<>).Assembly,
                 typeof(Serialization.PreparedBaseBody).Assembly,
-                typeof(Persistence.SchemaStore).Assembly,
+                typeof(global::Atelia.DurableGraph.Repository).Assembly,
                 typeof(Storage.ObjectVersionChain).Assembly,
             }.Select(assembly => MetadataReference.CreateFromFile(assembly.Location)))
                 .Concat(FixtureBridgeReferences(source))

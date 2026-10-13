@@ -1,6 +1,8 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -67,27 +69,56 @@ public sealed class GenericBindingCatalogTests : IDisposable {
     }
 
     [Fact]
-    public void CacheHitsRecheckAnAuthoritativeSchemaRegisteredAfterInitialClosure() {
-        Directory.CreateDirectory(_directory);
-        using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(_directory, "schemas.rbf"));
-        SchemaStore store = file.Schemas;
+    public void CachedBindingsRecheckTheirSelectedImmutableSchemaViewWithoutBorrowingAnotherViewsClosure() {
         StateModelRegistry registry = BasicRegistry();
-        StateModelSnapshot snapshot = registry.Snapshot(store);
         DurableSchema first = Point(1);
         DurableSchema owner = new(TypeExpr.Named("Box", TypeExpr.Named("Point")), 1, Inline(1, first));
-        snapshot.BindSchema(first);
-        snapshot.ResolveStoredValue(Inline(1, first));
-        snapshot.BindSchema(owner);
-        snapshot.ResolveReader(owner);
-        // Registration is independent of code factories. The newly authoritative layout
-        // conflicts with a previously derived but not yet persisted cache entry.
-        store.Register(new DurableSchema("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64)));
-        Assert.Throws<InvalidDataException>(() => snapshot.BindSchema(first));
-        Assert.Throws<InvalidDataException>(() => snapshot.ResolveStoredValue(Inline(1, first)));
-        // The owner itself was never registered. Its cached exact child still must
-        // agree with a newly authoritative repository definition.
-        Assert.Throws<InvalidDataException>(() => snapshot.BindSchema(owner));
-        Assert.Throws<InvalidDataException>(() => snapshot.ResolveReader(owner));
+        DurableSchema conflicting = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
+        P0CatalogView selected = LoadView("matching", first), other = LoadView("conflicting", conflicting);
+        var code = registry.FreezeConfiguration();
+        int lookups = 0;
+        StateModelSnapshot snapshot = code.CreateSnapshot(key => {
+            lookups++;
+            return selected.Schemas.GetValueOrDefault(key);
+        });
+        StateSchemaBinding point = snapshot.BindSchema(first), boundOwner = snapshot.BindSchema(owner);
+        StateValueBinding value = snapshot.ResolveStoredValue(Inline(1, first));
+        StateReaderBinding reader = snapshot.ResolveReader(owner);
+        int beforeHits = lookups;
+        Assert.Same(point, snapshot.BindSchema(first));
+        StateValueBinding cachedValue = snapshot.ResolveStoredValue(Inline(1, first));
+        Assert.Equal(value.Slot, cachedValue.Slot);
+        Assert.Equal(value.StateOpsType, cachedValue.StateOpsType);
+        Assert.Same(boundOwner, snapshot.BindSchema(owner));
+        Assert.Same(reader, snapshot.ResolveReader(owner));
+        Assert.True(lookups > beforeHits); // Successful memo hits still perform the standard exact checks.
+        StateModelSnapshot rejected = code.CreateSnapshot(key => other.Schemas.GetValueOrDefault(key));
+        foreach (Action action in new Action[] {
+            () => rejected.BindSchema(first), () => rejected.ResolveStoredValue(Inline(1, first)),
+            () => rejected.BindSchema(owner), () => rejected.ResolveReader(owner),
+        }) {
+            InvalidDataException error = Assert.Throws<InvalidDataException>(action);
+            Assert.IsType<SchemaConflictException>(error.InnerException);
+        }
+        Assert.Same(reader, snapshot.ResolveReader(owner));
+        Assert.Equal(first, selected.Schemas[new(first.Type, first.Version)]);
+        Assert.Equal(conflicting, other.Schemas[new(first.Type, first.Version)]);
+
+        P0CatalogView LoadView(string name, DurableSchema schema) {
+            string path = Path.Combine(_directory, name);
+            FrameAddress selectedRoot;
+            using (var writer = P0Repository.CreateNew(path)) {
+                P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                catalog.Set(schema);
+                P0PreparedCatalog candidate = catalog.Prepare();
+                using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                    new(null, new(1), [ObjectVersionRecord.CreateBase(1,
+                        P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
+            }
+            using var reader = P0Repository.OpenReadOnlyExisting(path);
+            return P0CatalogView.Load(reader.Store, selectedRoot);
+        }
     }
 
     [Fact]

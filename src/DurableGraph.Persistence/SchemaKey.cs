@@ -2,7 +2,7 @@ using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>
-/// Locates a Schema by its closed nominal type and definition version within one SchemaStore.
+/// Locates a Schema by its closed nominal type and definition version within an exact Schema view.
 /// Exactness still requires equality of the complete definition.
 /// </summary>
 public readonly record struct SchemaKey {

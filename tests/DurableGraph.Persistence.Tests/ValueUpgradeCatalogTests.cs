@@ -48,22 +48,15 @@ public sealed class ValueUpgradeCatalogTests {
 
     [Fact]
     public void GeneratedRegistrationCanUseTheReaderOnlySinkWithoutRunningUpgrade() {
-        string directory = Path.Combine(Path.GetTempPath(), "durable-value-rule-catalog-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try {
-            using GraphResources file = GraphResources.CreateLegacyNew(Path.Combine(directory, "schemas.rbf"));
-            SchemaStore schemas = file.Schemas;
-            StateReaderRegistry registry = new();
-            StateModelSnapshot before = registry.Snapshot(schemas);
-            StateValueUpgradeRuleSet rules = new(typeof(Rules), []);
-            IStateDefinitionRegistration sink = registry;
-            sink.Register(rules);
-            sink.Register(rules);
-            Assert.Throws<InvalidDataException>(() => before.GetValueUpgradeRuleSet(typeof(Rules)));
-            Assert.Same(rules, registry.Snapshot(schemas).GetValueUpgradeRuleSet(typeof(Rules)));
-            Assert.Throws<InvalidOperationException>(() => sink.Register(new StateValueUpgradeRuleSet(typeof(Rules), [])));
-            Assert.Equal(0, schemas.Count);
-        } finally { Directory.Delete(directory, recursive: true); }
+        StateReaderRegistry registry = new();
+        StateModelSnapshot before = registry.Snapshot(schemaLookup: null);
+        StateValueUpgradeRuleSet rules = new(typeof(Rules), []);
+        IStateDefinitionRegistration sink = registry;
+        sink.Register(rules);
+        sink.Register(rules);
+        Assert.Throws<InvalidDataException>(() => before.GetValueUpgradeRuleSet(typeof(Rules)));
+        Assert.Same(rules, registry.Snapshot(schemaLookup: null).GetValueUpgradeRuleSet(typeof(Rules)));
+        Assert.Throws<InvalidOperationException>(() => sink.Register(new StateValueUpgradeRuleSet(typeof(Rules), [])));
     }
 
     private static MethodInfo Method(string name) => typeof(ValueUpgradeCatalogTests).GetMethod(name,

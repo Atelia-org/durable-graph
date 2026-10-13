@@ -199,7 +199,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
     }
 
     [Fact]
-    public void OneResourcesOwnerSharesPendingAcrossBorrowedFacadesAndRejectsForeignAndLegacyEntryPoints() {
+    public void OneResourcesOwnerSharesPendingAcrossBorrowedFacadesAndRejectsForeignPending() {
         using GraphResources resources = GraphResources.CreateMetaBootstrapNew(_path);
         using P0Repository first = new(resources);
         using P0Repository second = new(resources);
@@ -228,27 +228,6 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         Assert.Equal(saved.Business.Address, second.GetHead("main"));
         Assert.Equal((byte)1, Assert.Single(second.Store.ReadObjectChain(saved.Business.Address, 1).Entries).Record.Body[0]);
 
-        long frames = second.Store.AppendedFrames;
-        Assert.Throws<InvalidOperationException>(() => resources.Schemas);
-        Assert.Throws<InvalidOperationException>(() => resources.States);
-        Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot("main", saved.Business.Address));
-        Assert.Throws<InvalidOperationException>(() => resources.PrepareSchemaRoot(saved.SharedSchemaRoot!.Value));
-        Assert.Throws<InvalidOperationException>(() => resources.ReadHistory(saved.Business.Address));
-        using (GraphResources legacy = GraphResources.CreateLegacyNew(Path.Combine(_path, "legacy"))) {
-            Assert.Throws<InvalidOperationException>(() => new P0Repository(legacy));
-            Assert.Throws<InvalidOperationException>(() => legacy.PrepareMetaBootstrap("main", P0GraphKind.State,
-                new(null, new(1), [ObjectVersionRecord.CreateBase(1, [1])])));
-            FrameAddress legacyState = legacy.States.Append(StateRevision.CreateObjectHeadMapBase(null, [], []));
-            GraphResources.RootUpdate actualLegacyUpdate = legacy.PrepareBranchRoot("main", legacyState);
-            Assert.Throws<InvalidOperationException>(() => resources.PublishRoot(actualLegacyUpdate, out _));
-            Assert.False(legacy.IsFaulted);
-            Assert.False(resources.IsFaulted);
-            // The material rejected by the wrong mode is valid at its actual issuing owner.
-            legacy.PublishRoot(actualLegacyUpdate, out _);
-            Assert.Equal(legacyState, legacy.GetHead("main"));
-        }
-        Assert.Equal(frames, second.Store.AppendedFrames);
-        Assert.Equal(saved.Business.Address, second.GetHead("main"));
         // Rejections did not consume or fault the shared owner; a valid next save still publishes.
         using P0PendingSave next = resources.PrepareMetaBootstrap("main", P0GraphKind.State,
             new(resources.GetMetaBootstrapStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [2])]),

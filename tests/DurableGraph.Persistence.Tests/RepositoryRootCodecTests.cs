@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.VersionStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using PublicationStore = Atelia.VersionStore.VersionStore;
@@ -9,89 +10,131 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void RootCodewordFreezesMagicVersionAndSelectedKeyGrammar() {
-        Assert.Equal(Convert.FromHexString("444752310100"), RepositoryRootCodec.Encode(new Dictionary<string, FrameAddress>()));
-        Dictionary<string, FrameAddress> roots = new(StringComparer.Ordinal) {
-            ["schema"] = TestAddress(), ["branch/main"] = TestAddress(2), ["branch/branch-name.1"] = TestAddress(3)
-        };
-        Assert.Equal(roots.OrderBy(pair => pair.Key), RepositoryRootCodec.Decode(RepositoryRootCodec.Encode(roots)).OrderBy(pair => pair.Key));
-        Assert.Throws<InvalidDataException>(() => RepositoryRootCodec.Decode(Convert.FromHexString("004752310100")));
-        Assert.Throws<InvalidDataException>(() => RepositoryRootCodec.Decode(Convert.FromHexString("444752310200")));
+    public void RequiredBranchAndSharedRefsUseDistinctHeadersAndSelectedKeyGrammar() {
+        using GraphResources resources = GraphResources.CreateNew(_root);
+        Assert.Equal(2u, resources.Versions.ReservedRefIdUpperBound);
+        var initialBranches = resources.Versions.ReadRef(1).Unwrap();
+        var initialShared = resources.Versions.ReadRef(2).Unwrap();
+        Assert.Equal("P0R1"u8.ToArray(), initialBranches.Payload[..4].ToArray());
+        Assert.Equal("P0S1"u8.ToArray(), initialShared.Payload[..4].ToArray());
+        Assert.Empty(RootMapCodec.Decode(initialBranches.Payload[4..]).Unwrap());
+        Assert.Empty(RootMapCodec.Decode(initialShared.Payload[4..]).Unwrap());
+        GraphResources.ValidateBranchName("main");
+        GraphResources.ValidateBranchName("branch-name.1");
+        FrameAddress head = Seed(resources);
+        var extra = resources.PrepareMetaBootstrapBranchRoot("branch-name.1", head);
+        resources.PublishMetaBootstrapBranchRoot(extra, out _);
+        var branches = RootMapCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload[4..]).Unwrap();
+        Assert.Equal(new[] { "branch/branch-name.1", "branch/main" }, branches.Keys.Order());
+        Assert.All(branches.Values, address => Assert.Equal(head, address));
+        var shared = RootMapCodec.Decode(resources.Versions.ReadRef(2).Unwrap().Payload[4..]).Unwrap();
+        Assert.Equal("schema", Assert.Single(shared).Key);
+        Assert.Equal(resources.SharedMetaBootstrapRoot, shared["schema"]);
+        Assert.Equal(P0GraphKind.Meta, resources.MetaBootstrapStore.ReadMetadata(shared["schema"]).Kind);
     }
 
     [Theory]
-    [InlineData("magic")]
-    [InlineData("version")]
-    [InlineData("unknown")]
-    [InlineData("branch/")]
-    [InlineData("branch/Upper")]
-    [InlineData("branch/main.lock")]
-    [InlineData("branch/bad/name")]
-    public void PersistedUnknownOrInvalidRootKeyRejectsOpenWithoutMutation(string key) {
-        Seed();
-        using (GraphResources resources = GraphResources.OpenLegacyExisting(_root)) {
-            // VersionStore owns opaque root bytes; the DG required root decoder owns this grammar.
-            byte[] map = RootMapCodec.Encode(new Dictionary<string, FrameAddress> { [key is "magic" or "version" ? "branch/main" : key] = resources.GetHead("main") }).Unwrap();
-            byte[] payload = [.. "DGR1"u8, 1, .. map];
-            if (key == "magic") { payload[0] = 0; }
-            if (key == "version") { payload[4] = 2; }
-            resources.Versions.PublishRef(resources.RootRevision.RefId, payload, out _).Unwrap();
+    [InlineData(1u, "magic")]
+    [InlineData(1u, "version")]
+    [InlineData(1u, "header-role")]
+    [InlineData(1u, "unknown")]
+    [InlineData(1u, "schema")]
+    [InlineData(1u, "branch/")]
+    [InlineData(1u, "branch/Upper")]
+    [InlineData(1u, "branch/main.lock")]
+    [InlineData(1u, "branch/bad/name")]
+    [InlineData(2u, "magic")]
+    [InlineData(2u, "version")]
+    [InlineData(2u, "header-role")]
+    [InlineData(2u, "unknown")]
+    [InlineData(2u, "branch/main")]
+    [InlineData(2u, "schema-extra")]
+    public void PersistedUnknownOrInvalidRootKeyRejectsOpenWithoutMutation(uint refId, string mutation) {
+        using (GraphResources resources = GraphResources.CreateNew(_root)) { Seed(resources); }
+        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+            // VersionStore owns opaque bytes. These are complete valid VS publications
+            // whose required DG root grammar is deliberately invalid; there is no pending tail.
+            FrameAddress selected = refId == 1 ? resources.GetMetaBootstrapHead("main")!.Value : resources.SharedMetaBootstrapRoot!.Value;
+            string validKey = refId == 1 ? "branch/main" : "schema";
+            string key = mutation is "magic" or "version" or "header-role" or "schema-extra" ? validKey : mutation;
+            Dictionary<string, FrameAddress> roots = new(StringComparer.Ordinal) { [key] = selected };
+            if (mutation == "schema-extra") { roots["extra"] = selected; }
+            byte[] map = RootMapCodec.Encode(roots).Unwrap();
+            byte[] magic = refId == 1 ? "P0R1"u8.ToArray() : "P0S1"u8.ToArray();
+            if (mutation == "header-role") { magic = refId == 1 ? "P0S1"u8.ToArray() : "P0R1"u8.ToArray(); }
+            byte[] payload = [.. magic, .. map];
+            if (mutation == "magic") { payload[0] = 0; }
+            if (mutation == "version") { payload[3] = (byte)'2'; }
+            resources.Versions.PublishRef(resources.Versions.ReadRef(refId).Unwrap().Revision.RefId, payload, out _).Unwrap();
         }
         var before = Snapshot();
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenLegacyReadOnlyExisting(_root));
+        Assert.Throws<InvalidDataException>(() => GraphResources.OpenReadOnlyExisting(_root));
         AssertSnapshot(before);
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenLegacyExisting(_root));
+        Assert.Throws<InvalidDataException>(() => GraphResources.OpenExisting(_root));
         AssertSnapshot(before);
     }
 
     [Fact]
     public void RealColdRootCapacityRefusalPreservesPublishedRootAndHealthyOwner() {
-        Seed();
+        using (GraphResources resources = GraphResources.CreateNew(_root)) { Seed(resources); }
         RefRevision accepted;
-        byte[] acceptedPayload;
+        RefRevision sharedAccepted;
+        byte[] acceptedPayload, sharedPayload;
         string extraName;
-        using (GraphResources resources = GraphResources.OpenLegacyExisting(_root)) {
-            var initial = RepositoryRootCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload);
-            FrameAddress head = resources.GetHead("main");
+        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+            var initial = RootMapCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload[4..]).Unwrap();
+            FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
+            var shared = resources.Versions.ReadRef(2).Unwrap();
+            sharedAccepted = shared.Revision;
+            sharedPayload = shared.Payload.ToArray();
             int low = 0, high = 10_000;
             while (high - low > 1) {
                 int count = low + (high - low) / 2;
                 var body = RootMapCodec.Encode(Candidate(count));
-                if (!body.IsFailure && body.Value!.Length + 5 <= PublicationStore.MaxRootPayloadLength) { low = count; }
+                if (!body.IsFailure && body.Value!.Length + 4 <= PublicationStore.MaxRootPayloadLength) { low = count; }
                 else { high = count; }
             }
-            acceptedPayload = RepositoryRootCodec.Encode(Candidate(low));
+            acceptedPayload = [.. "P0R1"u8, .. RootMapCodec.Encode(Candidate(low)).Unwrap()];
             extraName = Name(low);
+            GraphResources.ValidateBranchName(extraName);
             Assert.True(acceptedPayload.Length <= PublicationStore.MaxRootPayloadLength);
-            Assert.Throws<InvalidOperationException>(() => RepositoryRootCodec.Encode(Candidate(low + 1)));
-            accepted = resources.Versions.PublishRef(resources.RootRevision.RefId, acceptedPayload, out _).Unwrap();
+            var refused = RootMapCodec.Encode(Candidate(low + 1));
+            Assert.True(refused.IsFailure || refused.Value!.Length + 4 > PublicationStore.MaxRootPayloadLength);
+            accepted = resources.Versions.PublishRef(resources.Versions.ReadRef(1).Unwrap().Revision.RefId, acceptedPayload, out _).Unwrap();
 
             Dictionary<string, FrameAddress> Candidate(int count) {
                 var roots = new Dictionary<string, FrameAddress>(initial, StringComparer.Ordinal);
-                for (int index = 0; index < count; index++) { roots[RepositoryRootCodec.BranchPrefix + Name(index)] = head; }
+                for (int index = 0; index < count; index++) { roots["branch/" + Name(index)] = head; }
                 return roots;
             }
         }
         var before = Snapshot();
-        using (GraphResources resources = GraphResources.OpenLegacyExisting(_root)) {
-            Assert.Equal(accepted, resources.RootRevision);
-            FrameAddress head = resources.GetHead("main");
-            Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot(extraName, head));
+        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+            var branchBefore = resources.Versions.ReadRef(1).Unwrap();
+            Assert.Equal(accepted, branchBefore.Revision);
+            FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
+            long appended = resources.MetaBootstrapStore.AppendedFrames;
+            Assert.Throws<InvalidOperationException>(() => resources.PrepareMetaBootstrapBranchRoot(extraName, head));
             Assert.False(resources.IsFaulted);
             resources.RequireAvailable();
-            Assert.Equal(accepted, resources.RootRevision);
-            Assert.False(resources.HasBranch(extraName));
+            Assert.Equal(appended, resources.MetaBootstrapStore.AppendedFrames);
+            Assert.Null(resources.GetMetaBootstrapHead(extraName));
             var current = resources.Versions.ReadRef(1).Unwrap();
             Assert.Equal(accepted, current.Revision);
             Assert.Equal(acceptedPayload, current.Payload.ToArray());
+            var shared = resources.Versions.ReadRef(2).Unwrap();
+            Assert.Equal(sharedAccepted, shared.Revision);
+            Assert.Equal(sharedPayload, shared.Payload.ToArray());
         }
         AssertSnapshot(before);
     }
 
     private static string Name(int index) => new string('a', 120) + index.ToString("D8", System.Globalization.CultureInfo.InvariantCulture);
-    private void Seed() {
-        using GraphResources resources = GraphResources.CreateLegacyNew(_root);
-        resources.PublishBranch("main", TestAddress(), out _);
+    private static FrameAddress Seed(GraphResources resources) {
+        using P0Repository facade = new(resources);
+        P0Session session = new(facade, "main", SharedReadModel.Models());
+        using P0SessionSave save = session.Prepare(new Node { Value = 7 });
+        return save.Commit().Business.Address;
     }
     private Dictionary<string, byte[]> Snapshot() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
     private void AssertSnapshot(Dictionary<string, byte[]> expected) {

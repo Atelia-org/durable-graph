@@ -28,7 +28,6 @@ public sealed partial class GraphResources {
         RefBytesSnapshot branches, RefBytesSnapshot shared, long readCacheBudgetBytes) {
         Data = data;
         IsReadOnly = versions.IsReadOnly;
-        _metaBootstrap = true;
         _versions = versions;
         _branchRevision = branches.Revision;
         _sharedRevision = shared.Revision;
@@ -45,8 +44,8 @@ public sealed partial class GraphResources {
         }
     }
 
-    private readonly P0GraphStore? _metaBootstrapStore;
-    internal P0GraphStore MetaBootstrapStore { get { RequireMetaBootstrapAvailable(); return _metaBootstrapStore!; } }
+    private readonly P0GraphStore _metaBootstrapStore;
+    internal P0GraphStore MetaBootstrapStore { get { RequireMetaBootstrapAvailable(); return _metaBootstrapStore; } }
     internal Action<P0SaveCheckpoint>? MetaBootstrapCheckpoint { get; set; }
     internal bool IsMetaBootstrapFaulted => _faulted || (!_disposed && !MetaBootstrapBackingUsable());
     internal bool HasMetaBootstrapPending { get { RequireMetaBootstrapAvailable(); return _pending is not null; } }
@@ -102,7 +101,7 @@ public sealed partial class GraphResources {
 
     internal FrameAddress? GetMetaBootstrapHead(string branch) {
         RequireMetaBootstrapAvailable();
-        RepositoryRootCodec.ValidateBranchName(branch);
+        ValidateBranchName(branch);
         return _baseline.Branches.TryGetValue(branch, out FrameAddress head) ? head : null;
     }
 
@@ -131,7 +130,7 @@ public sealed partial class GraphResources {
 
     internal MetaBootstrapBranchUpdate PrepareMetaBootstrapBranchRoot(string branch, FrameAddress head) {
         EnsureMetaBootstrapEditingAllowed();
-        RepositoryRootCodec.ValidateBranchName(branch);
+        ValidateBranchName(branch);
         _ = ReadMetaBootstrapHistory(head);
         var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) { [branch] = head };
         MetaBootstrapPublicationBaseline next = new(branches, _baseline.SharedRoot);
@@ -205,7 +204,7 @@ public sealed partial class GraphResources {
         Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) {
         EnsureMetaBootstrapEditingAllowed();
         ArgumentNullException.ThrowIfNull(produce);
-        RepositoryRootCodec.ValidateBranchName(branch);
+        ValidateBranchName(branch);
         if (kind is not P0GraphKind.State and not P0GraphKind.Event) { throw new ArgumentException("PrepareMetaBootstrap requires a business graph kind.", nameof(kind)); }
         _preparing = true;
         try {
@@ -217,7 +216,7 @@ public sealed partial class GraphResources {
     private P0PendingSave PrepareMetaBootstrapCore(string branch, P0GraphKind kind,
         P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog) {
         RequireMetaBootstrapAvailable();
-        RepositoryRootCodec.ValidateBranchName(branch);
+        ValidateBranchName(branch);
         ArgumentNullException.ThrowIfNull(business);
         if (kind is not P0GraphKind.State and not P0GraphKind.Event) { throw new ArgumentException("PrepareMetaBootstrap requires a business graph kind.", nameof(kind)); }
         FrameAddress? parent = GetMetaBootstrapHead(branch);
@@ -332,7 +331,6 @@ public sealed partial class GraphResources {
     }
 
     internal void DiscardMetaBootstrap(P0PendingSave pending) {
-        if (!_metaBootstrap) { throw new InvalidOperationException("Legacy resources cannot discard a metadata graph save."); }
         if (_committing || !ReferenceEquals(pending.Owner, this) || !ReferenceEquals(_pending, pending) || !pending.IsPrepared) {
             throw new InvalidOperationException("DiscardMetaBootstrap requires this owner's inactive, unused pending save.");
         }
@@ -341,7 +339,6 @@ public sealed partial class GraphResources {
     }
 
     internal void RequireMetaBootstrapAvailable() {
-        if (!_metaBootstrap) { throw new InvalidOperationException("This owner uses legacy Schema/State frames; metadata graph operations are unavailable."); }
         RequireAvailable();
     }
 
@@ -376,7 +373,7 @@ public sealed partial class GraphResources {
         foreach ((string key, FrameAddress head) in roots) {
             if (!key.StartsWith(BranchPrefix, StringComparison.Ordinal)) { throw new InvalidDataException("Unknown P0 branch-root key."); }
             string name = key[BranchPrefix.Length..];
-            try { RepositoryRootCodec.ValidateBranchName(name); }
+            try { ValidateBranchName(name); }
             catch (ArgumentException error) { throw new InvalidDataException("Invalid P0 branch name.", error); }
             branches.Add(name, head);
         }

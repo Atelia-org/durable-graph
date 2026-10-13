@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using System.Buffers;
@@ -45,7 +46,7 @@ public sealed class NullableCatalogTests {
     }
 
     [Fact]
-    public void IndependentGoldenUsesNullableTypeConstructorAndRecursiveSlotWithoutChildFieldId() {
+    public void IndependentNominalGoldenUsesTheNullableTypeConstructor() {
         TypeExpr type = TypeExpr.Named("B", TypeExpr.Nullable(TypeExpr.Named("P")),
             TypeExpr.List(TypeExpr.Nullable(TypeExpr.Builtin(TypeTag.Int32))));
         byte[] nominalGolden = Convert.FromHexString("02034202090203500008090102");
@@ -56,73 +57,29 @@ public sealed class NullableCatalogTests {
             Exception? error = Record.Exception(() => ReadType(prefix));
             Assert.True(error is InvalidDataException or EndOfStreamException, $"Prefix {i}: {error}");
         }
-
-        DurableSchema owner = new("O", 1, DurableFieldInfo.Nullable(7, new(1, TypeTag.Int32)));
-        byte[] ownerGolden = Convert.FromHexString("0201020102034F00010001071202");
-        Assert.Equal(ownerGolden, SchemaCatalogTestData.Write([owner]));
-        Assert.Equal(owner, SchemaCatalogTestData.Read(ownerGolden)[new("O", 1)]);
-        SchemaCatalogEntry list = SchemaCatalogEntry.ForList(new(2), new(DurableFieldInfo.Nullable(1, new(1, TypeTag.Int32))));
-        byte[] listGolden = Convert.FromHexString("02010204021202");
-        Assert.Equal(listGolden, SchemaCatalogWireCodec.Write([list]));
-        Assert.Equal(list.Layout, Assert.Single(SchemaCatalogWireCodec.Read(listGolden)).Layout);
-        for (int i = 0; i < listGolden.Length; i++) {
-            byte[] prefix = listGolden[..i];
-            Exception? error = Record.Exception(() => SchemaCatalogWireCodec.Read(prefix));
-            Assert.True(error is InvalidDataException or EndOfStreamException, $"Catalog prefix {i}: {error}");
-        }
     }
 
     [Fact]
-    public void InlineNullableDependencyUsesEarlierIntegerIdAndColdCatalogPreservesItsVersion() {
+    public void InlineNullableProjectionPreservesCompleteChildVersionAcrossContainers() {
         DurableSchema point = Point(1);
         DurableSchema owner = new("O", 1, Slot(point));
-        byte[] golden = Convert.FromHexString("02020202020350000100010102030102034F0001000101121002");
-        Assert.Equal(golden, SchemaCatalogTestData.Write([point, owner]));
-        SchemaCatalogEntry[] rows = SchemaCatalogWireCodec.Read(golden);
-        Assert.Same(rows[0].Schema, rows[1].Schema!.Fields[0].NullableLayout!.ElementSlot.InlineSchema);
-        Assert.Same(rows[0].Schema, rows[1].Schema!.Fields[0].ValueSchema);
-
-        string path = NewPath();
-        try {
-            RepresentationId[] ids;
-            ObjectLayout list = ObjectLayout.ForList(new(Slot(point)));
-            ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array, Slot(point)));
-            using (GraphResources file = GraphResources.CreateLegacyNew(path)) {
-                SchemaStore store = file.Schemas;
-                ids = store.RegisterRepresentations([ObjectLayout.ForDurable(owner), list, array]);
-                Assert.Equal(new uint[] { 3, 4, 5 }, ids.Select(id => id.Value));
-                Assert.Equal(2, store.Count);
-                long tail = DataBytes(file.Data);
-                Assert.Equal(ids, store.RegisterRepresentations([ObjectLayout.ForDurable(owner), list, array]));
-                Assert.Equal(tail, DataBytes(file.Data));
-                DurableSchema bad = new("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte));
-                Assert.Throws<SchemaConflictException>(() => store.RegisterRepresentations([
-                    ObjectLayout.ForList(new(new(1, TypeTag.Boolean))), ObjectLayout.ForArray(new(TypeExprKind.VectorArray, Slot(bad)))]));
-                Assert.Equal(tail, DataBytes(file.Data));
-                Assert.Equal(2, store.Count);
-                Assert.Equal(6U, store.RegisterRepresentations([ObjectLayout.ForList(new(new(1, TypeTag.Boolean)))])[0].Value);
-            }
-            using GraphResources reopened = GraphResources.OpenLegacyReadOnlyExisting(path);
-            SchemaStore cold = reopened.Schemas;
-            Assert.Equal(list, cold.GetRepresentation(ids[1]));
-            Assert.Equal(array, cold.GetRepresentation(ids[2]));
-            Assert.Same(cold.GetRequired("P", 1), cold.GetRepresentation(ids[1]).List!.ElementSlot.ValueSchema);
-        }
-        finally { DeleteTestPath(path); }
-    }
-
-    [Theory]
-    [InlineData("010102040202")] // Retired SCB1 v1, otherwise valid.
-    [InlineData("02010204021204")] // Nullable string.
-    [InlineData("0201020402120F02035000")] // Nullable reference.
-    [InlineData("0201020402121202")] // Nested Nullable.
-    [InlineData("02010204021211")] // History-only parameter tag.
-    [InlineData("02010204021200")] // Unknown child.
-    [InlineData("0201020402121001")] // String ID is not an inline Schema.
-    [InlineData("0201020402121002")] // Self dependency.
-    [InlineData("0201020402121003")] // Forward dependency.
-    public void MalformedNullableCatalogSlotsAndRetiredVersionAreRejected(string hex) {
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(Convert.FromHexString(hex)));
+        ObjectLayout list = ObjectLayout.ForList(new(Slot(point)));
+        ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array, Slot(point)));
+        P0CatalogWorkspace workspace = new(static () => { });
+        workspace.Set(owner);
+        workspace.Set(list);
+        workspace.Set(array);
+        P0CatalogView view = workspace.Prepare().View;
+        Assert.Equal(2, view.Schemas.Count);
+        Assert.Equal(4, view.DescriptorIds.Count); // Point, owner and two dynamic containers.
+        DurableSchema projectedPoint = view.Schemas[new("P", 1)];
+        Assert.Equal(point, projectedPoint);
+        Assert.Equal(owner, view.Schemas[new("O", 1)]);
+        Assert.Same(projectedPoint, view.Schemas[new("O", 1)].Fields[0].ValueSchema);
+        Assert.Equal(list, view.ResolveLayout(view.DescriptorId(list)));
+        Assert.Equal(array, view.ResolveLayout(view.DescriptorId(array)));
+        Assert.Same(projectedPoint, view.ResolveLayout(view.DescriptorId(list)).List!.ElementSlot.ValueSchema);
+        Assert.Same(projectedPoint, view.ResolveLayout(view.DescriptorId(array)).Array!.ElementSlot.ValueSchema);
     }
 
     [Theory]
@@ -157,60 +114,83 @@ public sealed class NullableCatalogTests {
     }
 
     [Fact]
-    public void CachedNullableValuesAndEmptyContainerReadersRecheckLateChildConflict() {
-        string path = NewPath();
-        try {
-            using GraphResources file = GraphResources.CreateLegacyNew(path);
-            SchemaStore schemas = file.Schemas;
-            StateModelSnapshot snapshot = RetainedPoints().Snapshot(schemas);
-            DurableFieldInfo slot = Slot(Point(1));
-            ObjectLayout list = ObjectLayout.ForList(new(slot));
-            ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, slot));
-            snapshot.ResolveStoredValue(slot);
-            snapshot.ResolveObjectReader(list);
-            snapshot.ResolveObjectReader(array);
-            schemas.Register(new DurableSchema("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte)));
-            Assert.Throws<InvalidDataException>(() => snapshot.ResolveStoredValue(slot));
-            Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(list));
-            Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(array));
-        }
-        finally { DeleteTestPath(path); }
+    public void CachedNullableValuesAndEmptyContainerReadersRecheckChangedSchemaLookup() {
+        P0CatalogView selected = Project(Point(1));
+        StateModelRegistry.FrozenConfiguration configuration = RetainedPoints().FreezeConfiguration();
+        StateModelSnapshot snapshot = configuration.CreateSnapshot(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
+        DurableFieldInfo slot = Slot(Point(1));
+        ObjectLayout list = ObjectLayout.ForList(new(slot));
+        ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, slot));
+        snapshot.ResolveStoredValue(slot);
+        snapshot.ResolveObjectReader(list);
+        snapshot.ResolveObjectReader(array);
+        // This code-only lookup witness checks cached dependency guards. Actual
+        // reader-issued exact-S environments retain their immutable selected view.
+        selected = Project(new DurableSchema("P", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte)));
+        Assert.Throws<InvalidDataException>(() => snapshot.ResolveStoredValue(slot));
+        Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(list));
+        Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(array));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NullableNominalChildEstablishesValueKindInEitherRegistrationOrder(bool ownerFirst) {
+    public void NullableNominalChildEstablishesValueKindInEitherPreparationOrder(bool ownerFirst) {
         DurableSchema owner = new("O", 1, DurableFieldInfo.Reference(1,
             TypeExpr.List(TypeExpr.Nullable(TypeExpr.Named("P")))));
         DurableSchema wrongKind = new("P", 1);
-        SchemaCatalogEntry[] rows = CatalogTestData.Schemas(ownerFirst ? [owner, wrongKind] : [wrongKind, owner]);
-        Assert.Throws<ArgumentException>(() => SchemaCatalogWireCodec.Write(rows));
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(CatalogTestData.Encode(rows)));
+        P0CatalogWorkspace workspace = new(static () => { });
+        foreach (DurableSchema schema in ownerFirst ? new[] { owner, wrongKind } : [wrongKind, owner]) {
+            workspace.Set(schema);
+        }
+        Assert.Throws<InvalidDataException>(() => workspace.Prepare());
+    }
+
+    [Theory]
+    [InlineData(256, true)]
+    [InlineData(257, false)]
+    public void NullableInlineWrappersKeepTheExactSchemaDepthBudget(int depth, bool valid) {
+        DurableSchema inline = new("NullableDepth0", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
+        for (int index = 1; index < depth; index++) {
+            inline = new DurableSchema($"NullableDepth{index}", 1, SchemaKind.InlineValue, Slot(inline));
+        }
+        ObjectLayout list = ObjectLayout.ForList(new(Slot(inline)));
+        P0CatalogWorkspace workspace = new(static () => { });
+        workspace.Set(inline);
+        workspace.Set(list);
+        if (!valid) {
+            Assert.Throws<InvalidDataException>(() => workspace.Prepare());
+            Assert.Null(workspace.Accepted);
+            return;
+        }
+        P0CatalogView prepared = workspace.Prepare().View;
+        Dictionary<ObjectId, ObjectStateRecord> rows = prepared.Rows.ToDictionary();
+        ObjectStateRecord declarations = rows[prepared.DescriptorListId];
+        // Project the outer container first, so a child-first memo cannot mask
+        // the complete Nullable(InlineValue) chain's depth.
+        rows[declarations.Id] = new(declarations.Id, declarations.Layout.List!,
+            new FrozenListState<ObjectId>(prepared.DescriptorIds.Reverse().ToArray()));
+        P0CatalogView projected = new(prepared.RootId, rows);
+        Assert.Equal(depth, projected.Schemas.Count);
+        Assert.Equal(inline, projected.Schemas[new(inline.Type, 1)]);
+        Assert.Equal(list, projected.ResolveLayout(projected.DescriptorId(list)));
+        Assert.Same(projected.Schemas[new(inline.Type, 1)],
+            projected.ResolveLayout(projected.DescriptorId(list)).List!.ElementSlot.ValueSchema);
     }
 
     [Fact]
-    public void NullableWrapperKeepsExactSchemaDepthAndWireDepthLimits() {
-        DurableSchema[] chain = new DurableSchema[257];
-        for (int i = 0; i < chain.Length; i++) {
-            chain[i] = new($"P{i}", 1, SchemaKind.InlineValue,
-                i == 0 ? new(1, TypeTag.Int32) : Slot(chain[i - 1]));
-        }
-        SchemaCatalogEntry[] registered = SchemaCatalogWireCodec.Read(SchemaCatalogTestData.Write(chain[..256]));
-        Assert.Equal(256, registered.Length);
-        Assert.Throws<ArgumentException>(() => SchemaCatalogTestData.Write(chain));
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogWireCodec.Read(
-            CatalogTestData.Encode(CatalogTestData.Schemas(chain))));
-        SchemaCatalogEntry list = SchemaCatalogEntry.ForList(new(258), new(Slot(chain[255])));
-        SchemaCatalogEntry[] complete = SchemaCatalogWireCodec.Read(SchemaCatalogWireCodec.Write([.. registered, list]));
-        Assert.Equal(list.Layout, complete[^1].Layout);
-        Assert.Same(complete[^2].Schema, complete[^1].List!.ElementSlot.ValueSchema);
-
+    public void NullableNominalWrapperKeepsWireDepthLimit() {
         TypeExpr type = TypeExpr.Nullable(TypeExpr.Builtin(TypeTag.Int32));
         for (int i = 2; i < TypeExpr.MaximumDepth; i++) { type = TypeExpr.List(type); }
         Assert.Equal(type, ReadType(WriteType(type)));
         byte[] tooDeep = [.. Enumerable.Repeat((byte)8, TypeExpr.MaximumDepth - 1), 9, 1, 2];
         Assert.Throws<InvalidDataException>(() => ReadType(tooDeep));
+    }
+
+    private static P0CatalogView Project(DurableSchema schema) {
+        P0CatalogWorkspace workspace = new(static () => { });
+        workspace.Set(schema);
+        return workspace.Prepare().View;
     }
 
     private static StateModelRegistry RetainedPoints() {
@@ -227,7 +207,6 @@ public sealed class NullableCatalogTests {
     private static DurableSchema Point(int version) => new("P", version, SchemaKind.InlineValue,
         new DurableFieldInfo(1, version == 1 ? TypeTag.Int32 : TypeTag.Int64));
     private static DurableFieldInfo Slot(DurableSchema child) => DurableFieldInfo.Nullable(1, new(1, TypeTag.InlineValue, inlineSchema: child));
-    private static string NewPath() => Path.Combine(Path.GetTempPath(), $"nullable-catalog-{Guid.NewGuid():N}.rbf");
     private static byte[] WriteType(TypeExpr type) {
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);

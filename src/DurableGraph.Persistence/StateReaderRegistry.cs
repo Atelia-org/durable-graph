@@ -1,4 +1,5 @@
 using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Application-local exact-version readers, explicitly registered by model families.</summary>
@@ -35,6 +36,7 @@ public sealed class StateReaderRegistry : IStateReaderRegistration {
 
     internal Dictionary<SchemaKey, StateReaderBinding> Snapshot() => new(_bindings);
 
-    internal StateModelSnapshot Snapshot(SchemaStore schemas) => new([], [], new(_bindings), new(_definitions, StringComparer.Ordinal), schemas,
-        new(_valueUpgradeRules));
+    internal StateModelSnapshot Snapshot(Func<SchemaKey, DurableSchema?>? schemaLookup) =>
+        new([], [], new(_bindings), new(_definitions, StringComparer.Ordinal),
+            new(_valueUpgradeRules), schemaLookup: schemaLookup);
 }

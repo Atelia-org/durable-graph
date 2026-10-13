@@ -443,7 +443,7 @@ public sealed partial class Repository : IDisposable {
         if (kind is not null && frame.Kind != kind) { throw new ArgumentException("Frame has the wrong Event/State role.", nameof(frame)); }
     }
     private void ValidateNewName(string name) {
-        RepositoryRootCodec.ValidateBranchName(name);
+        GraphResources.ValidateBranchName(name);
         if (_splitRepository.GetHead(name) is not null) {
             throw new InvalidOperationException("Branch name already exists.");
         }

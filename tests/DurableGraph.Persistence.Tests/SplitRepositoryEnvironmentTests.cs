@@ -297,9 +297,17 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         }
         AssertFilesEqual(files);
         string legacyPath = _path + "-legacy";
-        using (GraphResources legacy = GraphResources.CreateLegacyNew(legacyPath)) { }
+        Directory.CreateDirectory(legacyPath);
+        using (var data = Atelia.FrameStore.FrameStore.Create(Path.Combine(legacyPath, "data"))) {
+            using var versions = Atelia.VersionStore.VersionStore.Create(Path.Combine(legacyPath, "versions"), data,
+                reservedRefIdUpperBound: 1);
+            versions.CreateRef(1, [0], out _).Unwrap(); // Valid opaque VS payload, incompatible required ref layout.
+        }
+        var incompatibleFiles = Directory.GetFiles(legacyPath, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => Repository.OpenMetaBootstrapReadOnlyExisting(legacyPath, Models(new())));
-        using Repository positive = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models(new()));
+        Assert.Equal(incompatibleFiles.Keys.Order(), Directory.GetFiles(legacyPath, "*", SearchOption.AllDirectories).Order());
+        foreach ((string path, byte[] bytes) in incompatibleFiles) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
+        using Repository positive = Repository.OpenReadOnlyExisting(_path, Models(new()));
         Assert.Equal(5, Assert.IsType<NextRoot>(positive.ReadState(positive.GetHead("event-only"))).Value);
     }
 

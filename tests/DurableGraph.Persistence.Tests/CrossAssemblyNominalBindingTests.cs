@@ -110,7 +110,7 @@ public sealed class CrossAssemblyNominalBindingTests {
 
         Assert.True(result.Value.IsNull);
         Assert.Equal(2, result.Generation);
-        // The intermediate v2 does not exist in a SchemaStore. A generic output with an
+        // The intermediate v2 has no persisted declaration. A generic output with an
         // unbound T uses BuildSlot; a closed ObjectId output uses InferSlotFromState.
         Assert.Equal(OwnerSchema(RemoteType, 2), snapshot.InferSchemaFromState(current.Type, 2, typeof(Owner2<ObjectId>)));
     }

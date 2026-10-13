@@ -1,7 +1,5 @@
 using System.Runtime.ExceptionServices;
 using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
-using Atelia.DurableGraph.Storage;
-using Atelia.FrameStore;
 using Atelia.VersionStore;
 using DataStore = Atelia.FrameStore.FrameStore;
 using PublicationStore = Atelia.VersionStore.VersionStore;
@@ -18,37 +16,19 @@ namespace Atelia.DurableGraph.Persistence;
 public sealed partial class GraphResources : IDisposable {
     internal const long DefaultRotationThresholdBytes = 64L * 1024 * 1024 * 1024;
     private readonly PublicationStore _versions;
-    private readonly bool _metaBootstrap;
-    private readonly SchemaStore? _schemas;
-    private readonly StateRevisionStore? _states;
-    private Dictionary<string, FrameAddress> _root = new(StringComparer.Ordinal);
-    private RefRevision _rootRevision;
     private bool _faulted;
     private bool _disposed;
 
-    private GraphResources(DataStore data, PublicationStore versions, RefBytesSnapshot root) {
-        Data = data;
-        _versions = versions;
-        _root = RepositoryRootCodec.Decode(root.Payload);
-        _rootRevision = root.Revision;
-        IsReadOnly = versions.IsReadOnly;
-        _schemas = new(this, _root.TryGetValue(RepositoryRootCodec.SchemaKey, out var schema) ? schema : null);
-        _states = new(data);
-    }
-
     public DataStore Data { get; }
-    internal SchemaStore Schemas { get { RequireLegacyMode(); return _schemas!; } }
-    internal StateRevisionStore States { get { RequireLegacyMode(); return _states!; } }
     public bool IsReadOnly { get; }
     public bool IsFaulted {
         get {
-            if (_faulted || _schemas?.IsFaulted == true) { return true; }
+            if (_faulted) { return true; }
             try { Data.EnsureUsable(); _versions.EnsureUsable(); return false; }
             catch (InvalidOperationException) { return true; }
         }
     }
     internal PublicationStore Versions => _versions;
-    internal RefRevision RootRevision { get { RequireLegacyMode(); return _rootRevision; } }
 
     public static GraphResources CreateNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
         long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
@@ -59,123 +39,15 @@ public sealed partial class GraphResources : IDisposable {
     public static GraphResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
         OpenMetaBootstrapReadOnlyExisting(path, readCacheBudgetBytes);
 
-    // Temporary, explicit fixtures for independent SCB1/raw-State mechanism tests.
-    // No Repository factory or public facade can select this authority.
-    internal static GraphResources CreateLegacyNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
-        OpenLegacy(path, rotationThresholdBytes, create: true, readOnly: false);
-    internal static GraphResources OpenLegacyExisting(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
-        OpenLegacy(path, rotationThresholdBytes, create: false, readOnly: false);
-    internal static GraphResources OpenLegacyReadOnlyExisting(string path) =>
-        OpenLegacy(path, DefaultRotationThresholdBytes, create: false, readOnly: true);
-
-    private static GraphResources OpenLegacy(string path, long rotationThresholdBytes, bool create, bool readOnly) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        string root = Path.GetFullPath(path);
-        if (create) {
-            if (Directory.Exists(root) || File.Exists(root)) { throw new IOException("Repository path already exists."); }
-            Directory.CreateDirectory(root);
-        } else {
-            if (!Directory.Exists(root)) { throw new DirectoryNotFoundException(root); }
-            // Reject old DG layouts before invoking the writable backing-store factories.
-            if (!Directory.Exists(Path.Combine(root, "data")) || !Directory.Exists(Path.Combine(root, "versions"))) {
-                throw new InvalidDataException("This directory is not a new-format DurableGraph repository.");
-            }
+    internal static void ValidateBranchName(string name) {
+        if (name is null || name.Length is < 1 or > 128 || name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(".lock", StringComparison.Ordinal)) {
+            throw new ArgumentException("Invalid branch name.", nameof(name));
         }
-        DataStore? data = null;
-        PublicationStore? versions = null;
-        try {
-            string dataPath = Path.Combine(root, "data");
-            data = create ? DataStore.Create(dataPath, rotationThresholdBytes) : readOnly
-                ? DataStore.OpenReadOnly(dataPath) : DataStore.Open(dataPath, rotationThresholdBytes);
-            string versionsPath = Path.Combine(root, "versions");
-            versions = create ? PublicationStore.Create(versionsPath, data, reservedRefIdUpperBound: 1) : readOnly
-                ? PublicationStore.OpenReadOnly(versionsPath, data) : PublicationStore.Open(versionsPath, data);
-            if (create) {
-                versions.CreateRef(1, RepositoryRootCodec.Encode(new Dictionary<string, FrameAddress>(StringComparer.Ordinal)), out _).Unwrap();
-            }
-            RefBytesSnapshot snapshot = versions.ReadRef(1).Unwrap();
-            return new(data, versions, snapshot);
-        } catch (Exception primary) {
-            CloseResources(primary, null, versions, data);
-            throw;
+        for (int i = 0; i < name.Length; i++) {
+            char c = name[i];
+            bool valid = c is >= 'a' and <= 'z' || c is >= '0' and <= '9' || i > 0 && c is '.' or '_' or '-';
+            if (!valid) { throw new ArgumentException("Invalid branch name.", nameof(name)); }
         }
-    }
-
-    internal IReadOnlyList<string> ListBranches() {
-        RequireLegacyMode();
-        RequireAvailable();
-        return _root.Keys.Where(static key => key.StartsWith(RepositoryRootCodec.BranchPrefix, StringComparison.Ordinal))
-            .Select(static key => key[RepositoryRootCodec.BranchPrefix.Length..]).Order(StringComparer.Ordinal).ToArray();
-    }
-
-    internal bool HasBranch(string name) {
-        RequireLegacyMode();
-        RequireAvailable();
-        RepositoryRootCodec.ValidateBranchName(name);
-        return _root.ContainsKey(RepositoryRootCodec.BranchPrefix + name);
-    }
-
-    internal FrameAddress GetHead(string name) {
-        RequireLegacyMode();
-        RequireAvailable();
-        RepositoryRootCodec.ValidateBranchName(name);
-        return _root.TryGetValue(RepositoryRootCodec.BranchPrefix + name, out var head)
-            ? head : throw new KeyNotFoundException($"Branch '{name}' was not found.");
-    }
-
-    internal sealed record RootUpdate(Dictionary<string, FrameAddress> Roots, byte[] Payload, RefRevision ExpectedRevision);
-
-    internal RootUpdate PrepareBranchRoot(string name, FrameAddress head) {
-        RequireLegacyMode();
-        RequireWritable();
-        RepositoryRootCodec.ValidateBranchName(name);
-        return PrepareRoot(new Dictionary<string, FrameAddress>(_root, StringComparer.Ordinal) {
-            [RepositoryRootCodec.BranchPrefix + name] = head
-        });
-    }
-
-    internal RootUpdate PrepareSchemaRoot(FrameAddress address) {
-        RequireLegacyMode();
-        RequireWritable();
-        return PrepareRoot(new Dictionary<string, FrameAddress>(_root, StringComparer.Ordinal) {
-            [RepositoryRootCodec.SchemaKey] = address
-        });
-    }
-
-    private RootUpdate PrepareRoot(Dictionary<string, FrameAddress> candidate) =>
-        new(candidate, RepositoryRootCodec.Encode(candidate), _rootRevision);
-
-    internal void PublishBranch(string name, FrameAddress head, out PublicationOutcome outcome) {
-        outcome = PublicationOutcome.NotAttempted;
-        PublishRoot(PrepareBranchRoot(name, head), out outcome);
-    }
-
-    internal void PublishSchema(FrameAddress address) => PublishRoot(PrepareSchemaRoot(address), out _);
-
-    internal void PublishRoot(RootUpdate candidate, out PublicationOutcome outcome) {
-        outcome = PublicationOutcome.NotAttempted;
-        RequireLegacyMode();
-        RequireWritable();
-        if (candidate.ExpectedRevision != _rootRevision) {
-            throw new InvalidOperationException("Repository publication must use the latest root.");
-        }
-        AteliaResult<RefRevision> result;
-        try { result = _versions.PublishRef(_rootRevision.RefId, candidate.Payload, out outcome); }
-        catch { MarkFaulted(); throw; }
-        RefRevision published = result.Unwrap();
-        _root = candidate.Roots;
-        _rootRevision = published;
-    }
-
-    internal HistoryGraphRecord ReadHistory(FrameAddress address) {
-        RequireLegacyMode();
-        RequireAvailable();
-        using FrameRead frame = Data.ReadFrame(address).Unwrap();
-        if (frame.IsTombstone || frame.Tag != StateRevisionStore.FrameTag) {
-            throw new InvalidDataException("A graph checkpoint must select a complete StateRevision frame.");
-        }
-        var metadata = GraphMetadataCodec.Decode(frame.TailMeta);
-        return new(address, metadata.Parent, metadata.Kind, metadata.RootId);
     }
 
     internal void EnsureBackingUsable() {
@@ -190,20 +62,18 @@ public sealed partial class GraphResources : IDisposable {
         }
     }
 
-    internal void RequireAvailable() {
-        EnsureBackingUsable();
-        if (_schemas?.IsFaulted == true) { throw new InvalidOperationException("Schema resources are faulted; dispose and reopen before further operations."); }
-    }
+    internal void RequireAvailable() => EnsureBackingUsable();
+
     internal void RequireWritable() {
         RequireAvailable();
         if (IsReadOnly) { throw new InvalidOperationException("Graph resources are read-only."); }
     }
+
     internal void MarkFaulted() {
         _faulted = true;
         // Data can remain healthy after a DG delivery/install failure. A retained owned facade
         // must still reject both warmed reads and new appends until this owner is reopened.
-        _states?.Dispose();
-        _metaBootstrapStore?.Dispose();
+        _metaBootstrapStore.Dispose();
     }
 
     public void Dispose() {
@@ -212,11 +82,7 @@ public sealed partial class GraphResources : IDisposable {
         _disposed = true;
         _pending?.Finish();
         _pending = null;
-        CloseResources(null, (IDisposable?)_metaBootstrapStore ?? _states, _versions, Data);
-    }
-
-    private void RequireLegacyMode() {
-        if (_metaBootstrap) { throw new InvalidOperationException("This owner uses metadata graphs; legacy Schema/State operations are unavailable."); }
+        CloseResources(null, _metaBootstrapStore, _versions, Data);
     }
 
     // Keep failure evidence while attempting every owned resource. Backing owners aggregate their
