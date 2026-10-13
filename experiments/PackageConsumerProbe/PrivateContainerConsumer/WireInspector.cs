@@ -375,7 +375,7 @@ internal static class WireInspector {
                     DurableFieldInfo element = Field(node.Element);
                     Require(element.FieldId == 1 && element.TypeTag == TypeTag.Nullable &&
                         element.NullableLayout!.ElementSlot.InlineSchema is { } point &&
-                        point.SchemaId == PointName && point.Version == 1, "List must contain a complete nullable inline Point slot.");
+                        point.SchemaId == PointName && point.Version is 1 or 2, "List must contain a complete nullable inline Point slot.");
                     layout = ObjectLayout.ForList(new ListLayout(element, node.Codec));
                 }
                 if (layout is not null) { Require(layouts.TryAdd(layout, id), "Repeated complete object layout."); }
@@ -400,27 +400,27 @@ internal static class WireInspector {
                 Enter(1, id);
                 try {
                     var node = Descriptor(id);
-                    Require(node.Kind is 1 or 3 && node.Type != 0 && node.Version == 1 && node.Fields != 0 &&
+                    Require(node.Kind is 1 or 3 && node.Type != 0 && node.Version is 1 or 2 && node.Fields != 0 &&
                         node.Element == 0 && node.Codec == 0 && node.Base == 0, "Unsupported exact Schema variant.");
                     TypeExpr type = Expression(node.Type);
                     Require(type.Kind == TypeExprKind.Named && type.Arguments.Length == 0, "Expected a closed nongeneric probe Schema.");
                     DurableFieldInfo[] fields = ReferenceList(graph, node.Fields, 6).Select(member => Field(member, depth + 1)).ToArray();
                     switch (type.DefinitionId) {
                         case RootName:
-                            Require(node.Kind == 1 && fields.SequenceEqual(new[] {
+                            Require(node.Kind == 1 && node.Version == 1 && fields.SequenceEqual(new[] {
                                 DurableFieldInfo.Reference(1, TypeExpr.List(TypeExpr.Nullable(TypeExpr.Named(PointName)))),
                                 DurableFieldInfo.Reference(2, TypeExpr.Named(RootName)),
                             }), "Root must have its two exact nominal reference fields.");
                             break;
                         case PointName:
                             Require(node.Kind == 3 && fields.Length == 4 && fields[0].FieldId == 1 &&
-                                fields[0].TypeTag is TypeTag.Int32 or TypeTag.Int64 &&
+                                ((node.Version == 1 && fields[0].TypeTag == TypeTag.Int32) || (node.Version == 2 && fields[0].TypeTag == TypeTag.Int64)) &&
                                 fields.Skip(1).SequenceEqual(new[] { new DurableFieldInfo(2, TypeTag.Double),
                                     new DurableFieldInfo(3, TypeTag.Double), new DurableFieldInfo(4, TypeTag.Double) }),
                                 "Point must contain X and three exact Double padding fields.");
                             break;
                         case KeeperName:
-                            Require(node.Kind == 1 && fields.SequenceEqual(new[] { new DurableFieldInfo(1, TypeTag.Int64) }),
+                            Require(node.Kind == 1 && node.Version == 1 && fields.SequenceEqual(new[] { new DurableFieldInfo(1, TypeTag.Int64) }),
                                 "Keeper must have its exact Int64 value field.");
                             break;
                         default: throw new InvalidDataException("Unknown Schema outside the finite probe.");

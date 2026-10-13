@@ -74,7 +74,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB087 finite non-friend public Repository accepted-history, Shared admission, same-shape private new-root/cold-continuation, complete Event-to-Shared promotion and fresh-Shared-owner List Delta PackageReference gate; five PIDs with final independent-PID read-only verification, no fresh-PID-writer/same-key-reshape/process-crash/performance qualification'
+    Scope = 'DB087 finite non-friend public Repository accepted-history, Shared admission, baseline private fork, SG Event meta acceptance and cold-continuation, complete Event-to-Shared promotion and fresh-Shared-owner List Delta PackageReference gate; five PIDs with final independent-PID read-only verification, no fresh-PID-writer/same-key-reshape/process-crash/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot
@@ -304,7 +304,7 @@ function Invoke-Consumer {
             'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'SameSUnchangedListShared', 'RewriteWidgetsIndependent') }
             'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'EventCandidateDiscardKeepsStateRewrite') }
             'continue' { @('UnconfiguredSaveRejected', 'SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
-                'PrivateFrozenCatalog', 'PrivateColdListDelta', 'PrivateSharedRootUnchanged', 'PrivateSharedSaveRejected',
+                'PrivateBaselineIdentities', 'PrivateEventAcceptsMetaOnly', 'PrivateFrozenCatalog', 'PrivateColdListDelta', 'PrivateSharedRootUnchanged', 'PrivateSharedSaveRejected',
                 'CompletePromotion', 'PromotionRefsAdvanced', 'PromotionEventRetainsState', 'SharedColdOwnerListDelta', 'PromotionRetainedOrigins') }
             'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSPairIndependent', 'PrivateColdValues', 'PromotedSharedColdValues') }
         }
@@ -442,7 +442,8 @@ try {
             $publishConsumption = Require-ActualCompilerConsumption -Command $publish -Mode 'Publish' -ConsumerRoot $consumerRoot
             Require-PreservedHistory $priorHistory
             $accepted = @(Get-HistoryImages)
-            if ($accepted.Count -ne $historyVersion) { throw "Stage V$historyVersion expected $historyVersion actual accepted history files." }
+            $expectedHistoryCount = if ($historyVersion -eq 1) { 1 } else { 3 } # Widget V1/V2 plus generated Event V1.
+            if ($accepted.Count -ne $expectedHistoryCount) { throw "Stage V$historyVersion expected $expectedHistoryCount actual accepted history files." }
             foreach ($image in $accepted) {
                 $text = Get-Content -LiteralPath (Join-Path $history $image.File) -Raw
                 if (!$text.StartsWith("// durable-graph-schema-history:9`n", [StringComparison]::Ordinal)) { throw 'Expected canonical history v9 from the packaged tool.' }

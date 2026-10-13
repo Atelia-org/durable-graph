@@ -12,7 +12,7 @@ namespace Atelia.DurableGraph;
 /// may be active; different branches may have live checkouts together, with serial repository operations.
 /// Dispose explicitly to release the branch. Losing this object does not automatically release occupancy.
 /// Restoration and in-memory editing do not select a Schema write destination. Ordinary checkouts require an
-/// Open-level Schema write mode; CreatePrivateBranch/CheckoutPrivate explicitly select a private destination.
+/// Open-level Schema write mode; CheckoutPrivate explicitly selects a private destination.
 /// ToShared commits explicitly select shared for one operation. Other commits without a selection reject before capture.
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {

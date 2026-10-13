@@ -160,12 +160,11 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 的结果必须稳定，
 不能让调用次数决定业务结果；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化放在恢复交付之后。
 
-开发阶段可用 `CreatePrivateBranch(name, initialState, schemaOverrides)` 创建新分支和新根：冻结完整 shared 目录，显式替换给出的完整 Schema 定义，首次业务对象全部写 Base，保留未触及声明。该入口直接为返回的工作副本选择私有保存；再次打开后用 `CheckoutPrivate(name)` 继续，私有保存只推进分支目录，不改 shared 根。私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S。代码环境须与目标定义匹配；不使用新模型物化旧异形业务图。
-已有私有定义仍不可改写；替换项若使未触及的 base／inline／容器精确依赖不一致，创建直接拒绝。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
+开发阶段先用 `CreateBranch(name, baselineCheckpoint)` 从固定用户快照建立分支，再用 `CheckoutPrivate(name)` 签出。在匹配历史 reader／Upgrade 的模型环境中，旧业务图恢复后保留存活对象身份、共享与循环，正常升版的布局保存为新 Base。私有保存只推进分支目录，不改 shared 根。两个操作分开：创建 ref 成功后，签出失败保留该名字及 baseline 指向；修正模型环境后可以重试。
+私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S，不借 latest shared 补缺。已有私有定义不可改写；同 key 内容不同的未定稿版本应在不同 baseline fork 试验，需要继承已接受草稿的数据再改型则递增版本。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
+开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow.md)。
 
-首次创建还可用 `containerReplacements: [(oldLayout, newLayout)]` 显式替换完整 List／Array／Dictionary 布局。old 必须是冻结 shared 中实际声明的动态布局，两个端点都包含完整槽与 codec；TypeExpr 单独不能标识 inline 版本。已有目标复用 descriptor，多个替换目标合并；builtin 目标不创建动态 descriptor。Schema 同键改形仍须通过 `schemaOverrides` 明确给出，遗漏的未触及依赖不会自动改写。完整布局可由已有公共 Schema／Layout 工厂构造，无需用新代码物化旧根。
-
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。 默认 meta 自举与 shared／private 的有限 P1／P2 范围已完成；[双异形独立包见证](experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)验证完整 Nullable inline List 替换及双方冷续写，其他条件延期按真实需求选择。
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 普通包故事须以新 G 另验，旧包结果不能代替本次源码的资格。
 
 ### 3. 独立浏览与分支
 

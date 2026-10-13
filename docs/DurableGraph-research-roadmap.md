@@ -197,7 +197,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 
-[DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)已完成：默认 meta 自举、旧权威退出、显式 Shared、完整 private fork／容器替换、双方冷续与完整目录单次 ToShared；普通 accepted-history 及双异形独立环境包分别通过。业务比较与受控 meta 变化进入共同 writer／PendingSave／发布 owner，长期联合发布约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。此处不再保本案必经工单。
+[DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)原停点已完成：默认 meta 自举、旧权威退出、显式 Shared、完整私有视图与 ToShared。新根／容器替换及双异形独立包只保删除前资格；[DB-088](design-branches/0088-development-schema-workflow.md)承接真实 baseline 开发故事和特例退出后的验收。业务比较与受控 meta 变化进入共同 writer／PendingSave／发布 owner，长期联合发布约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。此处不再保本案必经工单。
 
 后续仅在真实需求出现时选择一项：[原分支重建／按操作选模型、业务 head 不动的 Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)。先说明消费者／身份合同或给测量，再形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
 
@@ -207,7 +207,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。当前实验与删减前置见 [DB-088](design-branches/0088-development-schema-workflow.md)，不重复本案完成停点。
 
-后续按验收迁移仍有效的 private／ToShared／fault 覆盖，再删除同 key 新根 bootstrap、Schema overrides 与完整 container replacements 特例。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
+DB-088 第一轮退出同 key 新根 bootstrap、Schema overrides 与完整 container replacements，保普通 private／ToShared／fault 规律；后续门禁为新 G 的 Development、Split、PrivateContainer 三条普通包故事，旧 G 不能替代删除后资格。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
 
 ## 5. 后续切片验收素材
 

@@ -1,8 +1,10 @@
 # 公开 accepted-history 包消费者
 
-此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入、同形私有新根／冷续写与完整目录 Event ToShared。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以私有不可达声明验证完整推广与新 Shared owner 增量保存。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
+此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入、真实 baseline 的私有 fork／冷续写与完整目录 Event ToShared。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以私有不可达声明验证完整推广与新 Shared owner 增量保存。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
 
-项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至2个且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
+**DB-088 第一轮迁移状态：**当前源已改走真实 baseline 与生成的 `PrivateUnused` Event；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。当前修改尚未通过新 G 普通包运行；此资格属于第二轮，下面历史工件保留其原生产来源与新根故事，不授当前修改资格。
+
+项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
 
 由 [Run-SplitRepositoryProbe.ps1](../Run-SplitRepositoryProbe.ps1) 完成全部阶段。读取[依赖指南](../../../docs/storage-dependency.md)后，在仓根传入经过 Prepare 核验的完整六包 feed：
 
@@ -19,7 +21,7 @@
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
 | `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
-| `continue`／V2 | 无配置默认保存拒且全文件零变，显式 Shared 冷单 List Delta；同形 private 新根／不可达声明、私有冷 Delta及 ref2 保持；随后无配置 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／private Base origin |
+| `continue`／V2 | 无配置默认保存拒且全文件零变，显式 Shared 冷单 List Delta；真实 baseline checkpoint→CheckoutPrivate；SG Event 接纳 State 不可达声明而不推进 State；Event Head 全关冷签出、私有 List Delta及 ref2 保持；随后无配置 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／准确旧 Base origin |
 | `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、旧 private State、推广 Event／Shared State、准确各图 S与完整 meta 声明；全部完成帧保持，完整文件集合／SHA不变 |
 
 每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。

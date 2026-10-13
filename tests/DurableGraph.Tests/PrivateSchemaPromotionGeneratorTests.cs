@@ -23,11 +23,14 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using (Repository repository = Repository.CreateNew(directory.Path, v1.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout origin = repository.CreateBranch("origin", v1.CreateSharedOrigin());
+            repository.CreateTag("baseline", origin.Head);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, v1.Models())) {
             // The Holder and its dynamic List are real live objects in the first
             // save. Replacing the business root leaves their declarations in S.
-            using BranchCheckout branch = repository.CreatePrivateBranch("private", v1.CreateHolder(), v1.PrivateSchemas());
+            repository.CreateBranch("private", repository.ResolveTag("baseline"));
+            using BranchCheckout branch = repository.CheckoutPrivate("private");
+            branch.CommitState(v1.CreateHolder());
             FrameAddress holderState = branch.Head.RevisionAddress;
             P0GraphStore store = ReferenceGraphStore(repository);
             unreachableList = Assert.Single(store.ReadGraph(holderState).Objects.Keys
@@ -240,7 +243,6 @@ public sealed partial class DurableSchemaGeneratorTests {
         internal IDurableObject WidgetFromHolder(object root) => _host.GetMethod("WidgetFromHolder")!.CreateDelegate<Func<object, IDurableObject>>()(root);
         internal DurableSchema Schema(string name) => _host.GetMethod("Schema")!
             .CreateDelegate<Func<StateBindingContext, string, DurableSchema>>()(Models().Snapshot(), name);
-        internal DurableSchema[] PrivateSchemas() => [Schema("Widget"), Schema("Holder")];
         internal void Check(object root, long value, int seven, bool late = false) => _host.GetMethod("Check")!
             .CreateDelegate<Action<object, long, int, bool>>()(root, value, seven, late);
         internal void ChangeList(object root, int index, int value) => _host.GetMethod("ChangeList")!.CreateDelegate<Action<object, int, int>>()(root, index, value);

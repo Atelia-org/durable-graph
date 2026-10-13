@@ -1,36 +1,35 @@
 # Private container package consumer
 
-本目录验证 [DB-087](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan) 的同键同版异形私有新根。普通程序集 `DurableGraph.PrivateContainerConsumer` 通过 PackageReference 调用公开 Repository；A/B 独立编译、各有合法 V1 accepted history。有限包门禁已通过，与既有 [V1→V2／ToShared 门禁](../SplitRepositoryConsumer/README.md)及源码故障回归一起闭合 DB-087 的有限 P1/P2 产品停点。
+本目录承接 [DB-088 §6](../../../docs/design-branches/0088-development-schema-workflow.md#6-下一轮实施合同与停点)，使用普通 PackageReference 和公开 Repository 验证固定真实用户基线上 Point V1→V2 的 private Upgrade、完整 ToShared 与冷增量。**第一轮仅迁移消费者和 runner，尚未用删除特例后的新 G 编译／执行；以下当前故事不继承旧包运行资格。**
 
-模型是同一 `pc.root` V1、`pc.point` V1、`pc.keeper` V1。Point 的 X 在 A 为 int、B 为 long，另有三个相同 Double 字段；两 Root 成环、共享 128 项 `List<Point?>`，实际包含 absent/present，B 的 present 值超过 Int32。Keeper 在另一分支接受，其声明在 B 根中不可达。Root 的完整 Schema 在两个环境中相同，List 的 nominal TypeExpr 相同而完整 Nullable inline 布局不同。
+A 为 `pc.point` V1（int X），B 为 V2（long X）；Root／Keeper 保 V1。两 Root 成环并共享含 absent/present 的 128 项 `List<Point?>`。先保存 Keeper，再保存 main/tag，因此用户 baseline 的准确 S 已包含不可达 Keeper。B 的一个 child provider 将 X 加 5,000,000,000，注册规则集开启 `AllowNullableLifting`，通过 `UseListElementUpgrades` 应用于 List；不另设 Nullable wrapper、Root 强制升版或容器 replacement。
 
-old/new 布局用公共 DurableSchema／DurableFieldInfo／ListLayout／ObjectLayout 工厂表达，owner 核实际冻结目录。没有 IVT、internal Snapshot、产品私有反射、手动 Analyzer／AdditionalFiles／Import 或 ProjectReference。Persistence 的 extern alias 只解决既有命名空间别名，不授内部访问。
+普通程序集 `DurableGraph.PrivateContainerConsumer` 无 IVT、ProjectReference、手动 Analyzer／AdditionalFiles／Import 或产品私有反射。WireInspector 仅在全部产品资源关闭后经公开 FS／VS／Bare 观察 ABI5、本故事有限 Schema、实际 refs／完整目录、origin／selected S、source／prior／H 与旧完整帧；不作为产品启动 audit 或通用格式平台。
 
-## 运行
-
-从仓根执行，存储 feed 须带准确六包及其 manifest：
+## 运行与待验收故事
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-PrivateContainerProbe.ps1 `
-    -StoragePackageSource '/path/to/verified/storage-feed'
+    -PackageSource '/path/to/new-ten-package-feed' -Version '<new G>'
 ```
 
-也可提供完整十包 `-PackageSource <feed> -Version <G>` 与对应 source sidecar，跳过 pack。WorkDirectory 必须全新且位于 DG／storage 仓外。runner 创建独立 NuGet.Config／cache、空 Directory.Build.* 隔离材料、A/B stage 和 history；各执行 Publish＋Verify Rebuild，共四次。只复制本目录五个 .cs／.csproj 输入；不共用或改写 A/B history。
+新 feed 须含准确六 Storage 包、四 DG 包及 source sidecar；亦可通过 `-StoragePackageSource` 由 runner 受控 pack。第二轮使用新 G，不能复用历史 G 证明 API 删除后的资格。WorkDirectory 须全新、位于两个仓外；旧工件不修改或清理。
 
-| 独立进程 | 实际验收 |
+runner 复制五份本地源码／项目文件，独立 NuGet.Config／cache、空 Directory.Build.* 隔离；A Publish／Verify 形成三份 V1，B 先复制这些精确 history 再 Publish／Verify，形成 V1＋Point V2 共四份。四次真实 Rebuild 的 package／SG／Build 输入与 loaded DLL 保留核验，运行前后 history 保原字节。
+
+| 全新进程 | 待新 G 验收行为 |
 |---|---|
-| A `seed` | main 三 live Base、环／共享 List、old tag；另存 Keeper，shared 的完整目录包含其不可达声明 |
-| B `create` | 缺 pair 在输出前拒绝、健康且名字未占、全文件／两 ref 不变；关闭后同名 fresh owner 完整修正，新业务空来源、三 live 全 Base；只改 private 声明，保 Root／Keeper／旧员工 rows／shared ref2 |
-| A `continue-a` | 新 PID 冷签出 main，单 List 真 Delta；selected S 可取较新 shared，Base origin S 仍为原 main；准确 prior／H、两 Root retained、private 分支不变 |
-| B `continue-b` | 新 PID 冷签出 private；完整 ToShared 因同键 Point 异形健康拒绝，关闭后实际 refs／frames／全文件不变；再 fresh private owner 单 List Delta、准确 prior／H、shared ref2 保持 |
-| A `verify-a` | 全程独立 PID readonly，main／old tag 正控、private 错误环境拒绝；实际根／链／旧帧和全部文件集合／bytes 不变 |
-| B `verify-b` | 全程独立 PID readonly，private 正控、main 错误环境拒绝；同样核准确根／链、完成帧及全部文件集合／bytes 不变 |
+| A seed | Keeper 后 main；真实 refs/tag、环／共享 List、三 live Base；baseline 含 Keeper |
+| B create | `CreateBranch(old)`→`CheckoutPrivate`，正常 Point Upgrade；保 baseline 三对象 ID、业务来源与 Root heads/H；List 写升级 Base，旧／新 Point 和 List 声明共存；ref2 不变 |
+| A continue-a | 冷开 main，单 List 真 Delta，exact source/prior/H；两 Root retained、private 和 ref2 不变 |
+| B continue-b | 冷开 private，单 List 真 Delta，exact source/prior/H；两 Root retained、main 和 ref2 不变 |
+| B promote-b | 再冷开，无冲突完整 ToShared 成功；全部旧／新声明和不可达 Keeper 导入，存活用户身份保持，旧完整帧保留 |
+| A verify-a | 全程 readonly main/tag 正控、实际 refs／链／完成帧及全部文件集合／bytes 保持；不要求旧代码读取未来 V2 |
+| B verify-b | 全程 readonly private 正控，也能将 main V1 升为当前 V2；精确 refs／链／完成帧与零写 |
 
-缺 pair 的同名修正与 ToShared 拒绝后的续写都使用关闭后的 fresh owner，不授同一 hot rejected workspace 重试资格。A/B 两次 cold Delta 则各由真正的新 writer PID 执行；不承诺跨两个新根的 ObjectId 连续。
+同版双向错读由 [DevelopmentSchemaConsumer](../DevelopmentSchemaConsumer/README.md) 的独立 V2 草稿故事承担。本例退出 missing-pair／同名修正、双向 wrong-read 与同版 ToShared 必冲突观察，不重建替代入口。Array／Dictionary、发布故障、Unknown／Kill／断电、性能不属于本包片；源码回归保各自资格。
 
-[WireInspector](WireInspector.cs) 仅在产品资源全关后以公开 FS／VS／Bare 和 Schema 工厂核本例 ABI5、三份定义及动态 Nullable inline List。它观察实际两 ref revision／payload、声明与 live IDs、graph／OwnedBatch／目录来源、Base origin S、selected 完整布局、同 ID prior 和 record 实耗 H；声明 List 支持普通 Copy/New/CopyAndPatch。领域值由实际公开读取核验。此有限全 inventory 观察不是产品启动 audit、公共诊断 API 或格式冻结。
-
-## 2026-10-13 限定验收
+## 历史资格：2026-10-13 DB-087 原入口（已被本故事替代）
 
 本片只新增消费者／runner 和文档，生产代码保持提交 `d92a3b15e18d0d7309584c0933ef6f6ca8bd8c2c`。受控 pack／验收时冻结的保守 189 项输入匹配该 HEAD，并经 pack 前／后／最终 sidecar 和主线实际 Git blob 对照；消费者未提交工作树单独记录，不称整个工作树 clean。验收通过后，仅在该保守范围内更新 P0 README三句活动导航并单独记录；原包／sidecar和生产代码字节不变，不把当时189项匹配说成当前文档仍全相同。包未远程发布。
 

@@ -1,6 +1,6 @@
 # DB-088：固定用户基线上的 Schema 开发与定稿
 
-> 状态：2026-10-13，最小纵向实验已通过，实施前语义校核已收束；特例删减尚未实施。承接 DB-087 完成后的用户需求校准；不是重新打开自举重构排期。
+> 状态：2026-10-13，第一轮生产特例退出、测试及消费者迁移完成，源码构建与回归通过；第二轮新 G 普通包门禁待验。承接 DB-087 完成后的用户需求校准。
 
 ## 1. 问题与用户决定
 
@@ -50,8 +50,8 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 | 准确 baseline 恢复、身份导入与 private 增量 | 保留 | 真实用户复现场景所需，不能用空来源的新根替代 |
 | fixed 员工引导、meta ObjectId、完整布局与来源校验 | 保留 | 各 fork 可有不同 V2 形状，旧 bytes 仍须准确解释 |
 | 完整 ToShared 与两 ref CU | 保留 | 发布一致性合同；最终干净 fork 控制导入范围 |
-| 同 key Schema overrides／完整 container replacements | 删除目标，未实施 | 超出当前用户需求；先替换仍有价值的目录、故障与冷恢复见证 |
-| 私有新根 bootstrap lookup／延迟空来源建根／声明替换 | 随入口删除，未实施 | 普通 baseline 恢复承担首选流程；保普通 Shared 新图及 Event-only 合法空 State 工作区 |
+| 同 key Schema overrides／完整 container replacements | 已删除，源码已验 | 必要目录、故障与冷恢复见证已迁移；新 G 待验 |
+| 私有新根 bootstrap lookup／延迟空来源建根／声明替换 | 已随入口删除 | 普通 baseline 恢复承担首选流程；保普通 Shared 新图及 Event-only 合法空 State 工作区 |
 | 主／次版本、draft token、自动 merge／过滤 | 延期 | 没有此次实验的必要消费，不预建框架 |
 
 删除不能连带丢失完整闭包、实际来源、Event／Discard、发布失败及旧帧保持的回归。现有消费者是复杂性成本的证据，不构成兼容约束。施工顺序为先形成新正控故事，再迁移非特例语义见证，最后删除 API 与专用状态；不为保存旧测试重新建设替代入口。
@@ -75,13 +75,13 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 实际 MSBuild 与普通包故事也已通过：[DevelopmentSchemaConsumer](../../experiments/PackageConsumerProbe/DevelopmentSchemaConsumer/README.md) 复用准确现存十包，六次成功 Rebuild、一次预期 DG0015 拒绝、五个全新进程。Off 保 V1 输入，定稿 B 才 Publish／Verify，正式 history 只有 V1＋V2B；private 两 refs、原业务历史、全部资源关闭后的读／续写和 readonly 均按其 README 的限定范围验证。完整来源／live IDs／H 与实际包／MSBuild 分层，不互相替代；当前生产源码未修改，没有新 wire／API／版本策略或新 pack。
 
-实验支持删减方向，尚未删除 DB-087 特例。下一施工片按 §4 保留真实目录／source／Event／fault 规律，迁移两旧消费者与六组测试中的必要见证，再删除 `CreatePrivateBranch` 的同 key overrides／container replacements、P0Session bootstrap 状态和 Builder 声明替换。no-op／合流／dynamic→fixed 等只属于拟删除特例，不要求重建等价框架。删除片须重新 build／相关 tests；公开 API 退出影响的活动包故事须使用新 G 重新验收，旧包证据保其来源，不把此次复用包当成删除后资格。
+以上是删除前实验，生产源码当时未修改，资格保其准确来源。它支持删减方向；第一轮完成情况与剩余新 G 门禁见 §7，不把旧包成功当作删除后资格。
 
 仍未验证或定型：V3/V4 数据继承到单一定稿版本的直接交付／迁移压缩、主／次版本、开发新增数据重放工具及更自动的 draft／release 管理。当前已有整数版本与显式 Off 足够完成首选流程，默认 Publish 尚未修改；不以实验通过宣称这些易用性机制已实现。
 
 ## 6. 下一轮实施合同与停点
 
-目标已选，无待决产品政策阻塞：退出整套同 key 私有新根替换能力，保留从真实 baseline 恢复、保身份和正常升版的 private 路径。§5 的实验通过是删除前置证据，不是删除完成证据。
+第一轮已实施以下产品形状和源码见证。此节保留完整产品／验收合同，不作为重复施工清单；当前剩余工作只有 §7 的第二轮门禁与其必要尾修。§5 的旧实验资格不代替删除后的验收。
 
 **最终产品形状：**
 
@@ -113,4 +113,23 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 **完成验收：**生产源码中公开新根入口与专用状态已退出，活动执行代码不再依赖 overrides／container replacements；实验中的异形 V2 草稿可各自从固定 V1 baseline 接纳，已有同分支定义保持不可变，不增加“仅限 V1→V2”的产品限制。原用户存活身份、共享／循环、真实 Base／Delta／source／prior／H、Event／Discard rewrite、完整目录和 ref1／ref2／fault／旧帧规律经对应测试证实，新 G 普通包的冷恢复与发布故事通过，活动文档一致。
 
-此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九个暂停 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。实施前校核仅静读源码与交叉质询，未新增运行时资格；以上迁移、公共缺规则负例与删除后新 G 均待实施验收。
+此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九个暂停 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。
+
+## 7. 第一轮结果与第二轮入口
+
+生产四文件已退出整个新根 API、八个专用 bootstrap 状态及 Builder 声明替换；净减少约 170 行。业务／meta 保存核心、固定员工引导、普通 Shared 新图与 Event-only 空 State 保持；没有替代入口或新 wire。
+
+| 原六组测试 | 必要规律的实际去向 |
+|---|---|
+| PrivateSchemaRepositoryTests | 普通 baseline fork、高位 IDs、Event Head.S 冷签出、Discard／无变化、三种真实错误来源、单 ref 故障与旧完整帧、Event-only |
+| PrivateSchemaPromotionTests | 完整不可达声明、Event 后新声明从 actual Head.S 导入、descriptor 数字碰撞 remap、Capture 前真实冲突、两 ref 故障与旧帧；17 个方法／23 cases 分布于前两文件 |
+| PrivateContainerReplacementTests | 删除仅替换功能用例和文件；一般故障／帧规律并入前两组，普通容器升版由下述及既有 Upgrade 回归承担 |
+| PrivateSchemaViewGeneratorTests | 真实 V1→V2／身份与来源、完整声明、Event／Discard、冷 List Delta／prior／H；同 V2 异形拒读由 Development A/B 承担 |
+| PrivateSchemaPromotionGeneratorTests | 真实 baseline→Holder 保存，保不可达完整目录、碰撞 remap 与 Upgrade／Event rewrite |
+| PrivateContainerSchemaReplacementGeneratorTests | 真实 SG Array／Nullable List／Dictionary 升版；公共缺 List 规则两次健康拒绝、保名字并释放占用、匹配环境冷开、高位 IDs、3 Base→3 冷 Delta／准确 prior／H |
+
+主线准确 source mode（Storage `974fd47abb73792f9d350af87ab91a53848952eb`）Release solution build 零 warning／error；全套 **2735 passed／0 failed／0 skipped**（Persistence 893、Serialization 133、Storage 36、Runtime／SG 1673）。最后两 Persistence 文件补强后再次 solution build 和相关 **23／23** 回归通过。两 runner 的 PowerShell AST 零错误；独立源码审查通过。证据在忽略目录 `.artifacts/db088-round1-20261013/`：`build-final.log`、`tests.log`、`private-final.log`／`private-final.trx`。全套共用 TRX 名被后续项目覆盖，因此四项目总数依据完整 `tests.log`，不声称每项目各存一份 TRX。
+
+两消费者源码／runner 已迁移，**未制作新 G、未执行新普通包故事**。Split 新增真实 SG PrivateUnused Event，保 Event Head 冷签出及 Widget ToShared；compiler history 从 V1 一份到三份。PrivateContainer 的 B 继承 A 三份 V1 history 后追加 Point V2，七个进程阶段含成功 `promote-b`；保旧／新布局共存。上述编译布局、规则接线、有限 observer 和实际冷续／refs 结果仍待第二轮，旧包工件不授新资格。
+
+第二轮：使用准确 S 完整 feed，以 package mode 制作独立新 G；依次执行 Development、Split、PrivateContainer 的普通 PackageReference 门禁，主线核输入／加载 DLL／实际 MSBuild／refs／冷开证据并修真实失败。核两 consumer README 与 runner 的新 history／阶段预期，收束新资格和活动文档后提交；不重复第一轮删减。当前无设计阻塞，第三轮仅作实测尾修余量。

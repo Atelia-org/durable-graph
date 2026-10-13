@@ -1,5 +1,4 @@
 using Atelia.DurableGraph.Storage;
-using Atelia.DurableGraph.Schema;
 using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
@@ -8,26 +7,8 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 internal sealed class P0Session {
     private readonly P0Repository _repository;
     private readonly string _branch;
-    private P0BusinessWorkspace _business = null!;
+    private readonly P0BusinessWorkspace _business;
     private readonly bool _privateCatalog;
-    private readonly StateModelRegistry.FrozenConfiguration? _bootstrapConfiguration;
-    private readonly IEnumerable<DurableSchema>? _bootstrapOverrides;
-    private readonly IEnumerable<(ObjectLayout OldLayout, ObjectLayout NewLayout)>? _bootstrapContainerReplacements;
-    private readonly Action? _bootstrapEditingGuard;
-
-    // The first private fork is built only in the owner's producer window.
-    internal P0Session(P0Repository repository, string branch,
-        StateModelRegistry.FrozenConfiguration configuration, IEnumerable<DurableSchema> schemaOverrides,
-        Action ensureEditingAllowed,
-        IEnumerable<(ObjectLayout OldLayout, ObjectLayout NewLayout)>? containerReplacements = null) {
-        _repository = repository;
-        _branch = branch;
-        _privateCatalog = true;
-        _bootstrapConfiguration = configuration;
-        _bootstrapOverrides = schemaOverrides;
-        _bootstrapContainerReplacements = containerReplacements;
-        _bootstrapEditingGuard = ensureEditingAllowed;
-    }
 
     internal P0Session(P0Repository repository, string branch, StateModelRegistry models) {
         _repository = repository;
@@ -88,13 +69,13 @@ internal sealed class P0Session {
         Catalog = new(ensureEditingAllowed, catalog);
     }
 
-    internal P0CatalogWorkspace Catalog { get; private set; } = null!;
-    internal IDurableObject? State => _business?.State;
-    internal P0GraphSnapshot? StateSource => _business?.Source;
+    internal P0CatalogWorkspace Catalog { get; }
+    internal IDurableObject? State => _business.State;
+    internal P0GraphSnapshot? StateSource => _business.Source;
     internal StateModelSnapshot Models => _business.Models;
-    internal NormalizedRevision? Baseline => _business?.Baseline;
-    internal ObjectId RootId => _business?.RootId ?? default;
-    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => _business?.BindingEnvironment;
+    internal NormalizedRevision? Baseline => _business.Baseline;
+    internal ObjectId RootId => _business.RootId;
+    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => _business.BindingEnvironment;
 
     private static FrameAddress PrivateCatalogRoot(P0Repository repository, FrameAddress? selectedHead) =>
         selectedHead is { } head && repository.Store.ReadMetadata(head).SchemaRoot is { } schema ? schema
@@ -112,13 +93,6 @@ internal sealed class P0Session {
         P0PreparedBusiness? business = null;
         try {
             (P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog) Produce() {
-                if (_business is null) {
-                    Catalog = P0CatalogWorkspace.CreatePrivateForkOwned(_bootstrapEditingGuard!,
-                        _repository.Store, _repository.SharedSchemaRoot,
-                        _bootstrapOverrides!.ToArray(), _bootstrapContainerReplacements?.ToArray() ?? []);
-                    _business = new(_repository.Store,
-                        _bootstrapConfiguration!.CreateSnapshot(Catalog.LookupBootstrapSchema), null);
-                }
                 FrameAddress? headSchemaRoot = null, latestSharedRoot = null;
                 if (toShared) {
                     // Freeze both actual roots inside the owner producer window. The

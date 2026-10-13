@@ -22,9 +22,9 @@
 
 这项暂停不包括基础 `Run-Probe`、TagConsumer、ImmutableLeafConsumer、EventHistoryRecoveryConsumer、MetaBootstrapSchemaConsumer／SplitRepositoryConsumer／PrivateContainerConsumer或 ListDeltaReplayProbe。它们没有上述旧 raw 静态读取依赖；各 lane 只按实际证据授包／源码／故障资格。
 
-[PrivateContainerConsumer](PrivateContainerConsumer/README.md)与 `Run-PrivateContainerProbe.ps1` 已验普通 PackageReference 的同键同版异形私有新根／完整 Nullable inline List 替换；A/B独立 V1 history、四次 Rebuild、六独立 PID核双方冷 Delta、不可达声明／ref2／旧帧保持、错误环境与 ToShared冲突、两个全程 readonly零写。它与既有 V1→V2／同形推广包共同闭合 DB-087有限 P1／P2；19暂停 lanes不因此复活，原始证据只在各消费者 README维护。
+[PrivateContainerConsumer](PrivateContainerConsumer/README.md)与 `Run-PrivateContainerProbe.ps1` 原已验同键同版新根／Nullable inline List 替换，原版本与六 PID 结果保其删除前资格。DB-088 将活动故事改为真实 baseline 上 Point V1→V2／Nullable lifting／List 元素 Upgrade，保 root／List 身份、Keeper 完整目录及冷增量；待新 G 普通包重验，不复用旧冲突／missing-pair 预期。19 暂停 lanes 不因此复活，原始证据只在各消费者 README 维护。
 
-[DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md) 与 `Run-DevelopmentSchemaProbe.ps1` 已验 [DB-088](../../docs/design-branches/0088-development-schema-workflow.md) 的有限开发流程：普通包从固定 V1/tag ref-only 分叉并 `CheckoutPrivate`，两个异形 V2 用实际 MSBuild Off，定稿 B 才 Publish／Verify 与完整 ToShared；六次成功 Rebuild／一次预期 DG0015／五 PID。精确 live ID／prior／H 由源码故事另证；不依赖新根 overrides，不扩为主／次版本或迁移链压缩。
+[DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md) 与 `Run-DevelopmentSchemaProbe.ps1` 已验 [DB-088](../../docs/design-branches/0088-development-schema-workflow.md) 的有限开发流程：普通包从固定 V1/tag ref-only 分叉并 `CheckoutPrivate`，两个异形 V2 用实际 MSBuild Off，定稿 B 才 Publish／Verify 与完整 ToShared；六次成功 Rebuild／一次预期 DG0015／五 PID。精确 live ID／prior／H 由源码故事另证；不依赖新根 overrides；这是删除前现存 G 的证据，删除后需与已迁移 Split／PrivateContainer 一起以新 G 重验。不扩为主／次版本或迁移链压缩。
 
 Storage dependencies are the six pinned Binary/FrameStore/VersionStore closure packages in
 [StorageDependency.props](../../eng/StorageDependency.props). The shared
@@ -58,8 +58,8 @@ The [public accepted-history consumer](SplitRepositoryConsumer/README.md) now ru
 `./Run-SplitRepositoryProbe.ps1 -StoragePackageSource <verified-six-package-feed>` with an ordinary,
 non-friend assembly identity. Five isolated processes cover Widget V1→V2, readonly exact-S Upgrade,
 tag/Fork/Event/Pair, actual heads/prior/H and cold List Delta. Its verified ten-package/tool/load chain
-completes the finite DB-087 P1 gate; private views and additional crash/performance claims remain outside
-its scope. Reusing this lane's feed also requires its controlled pack-source provenance sidecar.
+completed the original finite DB-087 P1 gate. Its migrated DB-088 private/Event full-directory
+story requires a new G package run; old evidence grants no new crash/performance claims. Reusing this lane's feed also requires its controlled pack-source provenance sidecar.
 
 This experiment verifies the reusable delivery boundary rather than project-to-project wiring.
 The consumer project has one `PackageReference` to `Atelia.DurableGraph`; it contains no manual

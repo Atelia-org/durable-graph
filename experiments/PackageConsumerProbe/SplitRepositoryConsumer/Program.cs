@@ -18,7 +18,6 @@ using S = global::Atelia.DurableGraph.Generated.Family_7061636B6167652E73706C697
 internal static class Program {
     private const string Protocol = "DG.SplitRepositoryConsumer.v1";
     private const string WidgetName = "package.split.widget";
-    private static readonly DurableSchema PrivateUnused = new("probe.private.unreachable", 1, new DurableFieldInfo(1, TypeTag.Int32));
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private sealed record StorageEvidence(uint Id, string Head, long H);
     private sealed record FrameImage(string Address, uint Tag, string PayloadSha256, string TailMetaSha256);
@@ -27,7 +26,7 @@ internal static class Program {
         string? MainState = null, string? RewriteEvent = null, string? RewriteState = null, string? RewriteSchema = null,
         uint? CurrentWidgetDescriptorId = null, StorageEvidence[]? RewriteObjects = null, FrameImage[]? RewriteFrames = null,
         string? ContinuationState = null, StorageEvidence[]? ContinuationObjects = null, FrameImage[]? ContinuationFrames = null,
-        string? PrivateSeedState = null, string? PrivateState = null, string? PrivateSchema = null,
+        string? PrivateSeedState = null, string? PrivateState = null, string? PrivateSchema = null, string? PrivateCatalogEvent = null,
         uint? PrivateRootId = null, uint? PrivateListId = null, uint? PrivateUnusedDescriptorId = null,
         StorageEvidence[]? PrivateSeedObjects = null, StorageEvidence[]? PrivateObjects = null, FrameImage[]? PrivateFrames = null,
         string? PromotionEvent = null, string? PromotionSchema = null, uint? PromotedUnusedDescriptorId = null,
@@ -286,7 +285,7 @@ internal static class Program {
             ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true,
             UnconfiguredSaveRejected = true, next.PrivateSeedState, next.PrivateState, next.PrivateSchema,
             PrivateObjects = next.PrivateObjects, PrivateUnusedDescriptor = next.PrivateUnusedDescriptorId,
-            PrivateFrozenCatalog = true, PrivateColdListDelta = true, PrivateSharedRootUnchanged = true, PrivateSharedSaveRejected = true,
+            PrivateBaselineIdentities = true, PrivateEventAcceptsMetaOnly = true, PrivateFrozenCatalog = true, PrivateColdListDelta = true, PrivateSharedRootUnchanged = true, PrivateSharedSaveRejected = true,
             next.PromotionEvent, next.PromotionSchema, next.SharedContinuationState, next.PromotedUnusedDescriptorId,
             CompletePromotion = true, PromotionRefsAdvanced = true, PromotionEventRetainsState = true,
             SharedColdOwnerListDelta = true, PromotionRetainedOrigins = true };
@@ -294,46 +293,43 @@ internal static class Program {
 
     private static Witness PrivateStory(string database, Witness witness, WireInspector.Snapshot shared) {
         RefImage sharedRef = ReadSharedRef(database);
-        FrameAddress initial;
-        uint rootId;
+        FrameAddress initial = Address(witness.ContinuationState!), catalogEvent;
+        uint rootId = witness.RootId, listId = witness.ListId;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            Widget root = Ring();
-            root.Value += 100;
-            root.Child!.Value += 100;
-            root.Numbers[7] = 201;
-            using BranchCheckout created = repository.CreatePrivateBranch("private", root, [Schema(2), PrivateUnused]);
-            initial = created.Head.RevisionAddress;
-            rootId = created.StateId!.Value.Value;
-            Need(created.StateRevisionAddress == initial && ReferenceEquals(created.State, root),
-                "The explicit private entry must create and accept the supplied fresh State without an Open write mode.");
-            Check(created.State, upgraded: true, atSeven: 201);
+            // Publish the baseline ref first; explicit private checkout restores its
+            // original identities. Registration alone must not persist the Event type.
+            repository.CreateBranch("private", repository.GetHead("fork"));
+            using BranchCheckout created = repository.CheckoutPrivate("private");
+            Widget root = Check(created.State, upgraded: true, atSeven: 201);
+            Need(created.Head.RevisionAddress == initial && created.StateRevisionAddress == initial &&
+                created.StateId!.Value.Value == rootId, "Private fork must restore the actual baseline identities.");
+            catalogEvent = created.CommitEvent(new PrivateUnused { Value = 41 }).RevisionAddress;
+            Need(created.Head.RevisionAddress == catalogEvent && created.StateRevisionAddress == initial &&
+                created.StateId!.Value.Value == rootId && ReferenceEquals(created.State, root),
+                "Private Event must accept meta without advancing the State baseline, identity or instance.");
         }
         WireInspector.Snapshot seeded = WireInspector.Read(database);
-        WireInspector.Graph seedGraph = seeded.Graph(initial);
-        FrameAddress privateSchema = RequiredSchema(seedGraph);
-        Need(privateSchema != Address(witness.RewriteSchema!) && seedGraph.Kind == WireInspector.GraphKind.State &&
-            seedGraph.Parent is null && seedGraph.SourceGraph is null && seedGraph.RootId == rootId &&
-            seedGraph.Heads.Count == 3 && seedGraph.OwnedBatch is not null,
-            "The private new root must use its distinct full view and no business source.");
-        uint listId = seedGraph.Heads.Keys.Single(id => WireInspector.Header(seeded.ObjectChain(initial, id).Entries[0].Record.Body).Route == 2);
-        foreach (uint id in seedGraph.Heads.Keys) {
-            var chain = seeded.ObjectChain(initial, id);
-            Need(chain.Head == seedGraph.OwnedBatch && chain.Entries.Count == 1 && chain.Entries[0].Record.Kind == ObjectVersionKind.Base &&
-                chain.Entries[0].Record.PriorAddress is null && chain.Entries[0].SourceGraph is null &&
-                chain.Entries[0].SchemaRoot == privateSchema && chain.H == chain.Entries[0].Record.ActualPayloadBytes,
-                "Every new private live object must start at its own actual Base and reset wire H.");
-            if (id != listId) { CheckWidgetBase(seeded, initial, id, 2, witness.CurrentWidgetDescriptorId!.Value); }
-        }
+        WireInspector.Graph seedGraph = seeded.Graph(initial), eventGraph = seeded.Graph(catalogEvent);
+        FrameAddress privateSchema = RequiredSchema(eventGraph);
+        Need(privateSchema != Address(witness.RewriteSchema!) &&
+            RequiredSchema(seedGraph) == Address(witness.RewriteSchema!) &&
+            eventGraph.Kind == WireInspector.GraphKind.Event && eventGraph.Parent == initial &&
+            eventGraph.SourceGraph == initial && seedGraph.RootId == rootId,
+            "Private Event must pin its newly accepted directory independently of the older State S.");
+        Need(CheckCatalog(shared, RequiredSchema(seedGraph), current: true) == witness.CurrentWidgetDescriptorId,
+            "The baseline catalog must not already contain the Event declaration.");
         uint unused = CheckPrivateCatalog(seeded, privateSchema, witness);
         StorageEvidence[] initialRows = Storage(seeded, seedGraph);
-        RejectOrdinaryPrivateSaves(database, configuredShared: false, initial);
-        RejectOrdinaryPrivateSaves(database, configuredShared: true, initial);
+        Need(initialRows.SequenceEqual(witness.ContinuationObjects!), "Fork changed source heads, H or IDs.");
+        Need(SameSharedRef(sharedRef, ReadSharedRef(database)), "Private ref creation and Event changed shared ref2.");
+        RejectOrdinaryPrivateSaves(database, configuredShared: false, catalogEvent, initial);
+        RejectOrdinaryPrivateSaves(database, configuredShared: true, catalogEvent, initial);
 
         FrameAddress next;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
             using BranchCheckout current = repository.CheckoutPrivate("private");
             Widget root = Check(current.State, upgraded: true, atSeven: 201);
-            Need(current.Head.RevisionAddress == initial && current.StateRevisionAddress == initial && current.StateId!.Value.Value == rootId,
+            Need(current.Head.RevisionAddress == catalogEvent && current.StateRevisionAddress == initial && current.StateId!.Value.Value == rootId,
                 "Cold explicit private checkout must import its own exact root identity and source.");
             root.Numbers[7] = 202;
             next = current.CommitState().RevisionAddress;
@@ -342,7 +338,7 @@ internal static class Program {
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(next);
-        Need(graph.Parent == initial && graph.SourceGraph == initial && graph.RootId == rootId &&
+        Need(graph.Parent == catalogEvent && graph.SourceGraph == initial && graph.RootId == rootId &&
             RequiredSchema(graph) == privateSchema && graph.OwnedBatch is not null &&
             graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).SequenceEqual(new[] { listId }),
             "Private cold continuation must write only the changed List against its exact State and frozen S.");
@@ -369,16 +365,18 @@ internal static class Program {
             Check(reader.ReadState(reader.GetHead("main")), upgraded: true);
             Check(reader.ReadState(reader.GetHead("fork")), upgraded: true, atSeven: 201);
             Check(reader.ReadState(reader.GetHead("private")), upgraded: true, atSeven: 202);
+            Need(reader.ReadEvent(reader.ReadFrames("private").Single(frame => frame.RevisionAddress == catalogEvent)) is PrivateUnused { Value: 41 },
+                "Readonly must recover the generated Event through its own accepted private S.");
         }
         Need(SameFiles(beforeRead, FileImages(database)), "Readonly shared/private cold recovery changed repository files.");
         HashSet<string> oldFrames = Frames(shared).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
-        return witness with { PrivateSeedState = Hex(initial), PrivateState = Hex(next), PrivateSchema = Hex(privateSchema),
+        return witness with { PrivateSeedState = Hex(initial), PrivateState = Hex(next), PrivateSchema = Hex(privateSchema), PrivateCatalogEvent = Hex(catalogEvent),
             PrivateRootId = rootId, PrivateListId = listId, PrivateUnusedDescriptorId = unused,
             PrivateSeedObjects = initialRows, PrivateObjects = rows,
             PrivateFrames = Frames(actual).Where(frame => !oldFrames.Contains(frame.Address)).ToArray() };
     }
 
-    private static void RejectOrdinaryPrivateSaves(string database, bool configuredShared, FrameAddress initial) {
+    private static void RejectOrdinaryPrivateSaves(string database, bool configuredShared, FrameAddress eventHead, FrameAddress initial) {
         Dictionary<string, string> before = FileImages(database);
         using (Repository repository = Repository.OpenExisting(database, Models(),
             schemaWriteMode: configuredShared ? SchemaWriteMode.Shared : null)) {
@@ -389,9 +387,9 @@ internal static class Program {
                 bool rejected = false;
                 try { save(); }
                 catch (InvalidOperationException) { rejected = true; }
-                Need(rejected && !repository.IsFaulted && ordinary.Head.RevisionAddress == initial &&
+                Need(rejected && !repository.IsFaulted && ordinary.Head.RevisionAddress == eventHead &&
                     ordinary.StateRevisionAddress == initial && ordinary.StateId == rootId && ReferenceEquals(ordinary.State, root) &&
-                    repository.GetHead("private").RevisionAddress == initial,
+                    repository.GetHead("private").RevisionAddress == eventHead,
                     "Ordinary private-head save must reject missing mode or the complete unmatched declaration without advancing or faulting.");
             }
         }
@@ -404,7 +402,7 @@ internal static class Program {
             catalog.WidgetDescriptors[1] == witness.WidgetDescriptorId && catalog.WidgetDescriptors[2] == witness.CurrentWidgetDescriptorId &&
             catalog.PrivateUnusedDescriptor is { } unused && catalog.DeclaredIds.Contains(unused) &&
             unused != witness.WidgetDescriptorId && unused != witness.CurrentWidgetDescriptorId,
-            "Private full catalog must retain unreachable V1/current V2 IDs and declare the exact unused Int32 schema.");
+            "Private full catalog must retain unreachable V1/current V2 IDs and the State-unreachable SG Event schema.");
         return catalog.PrivateUnusedDescriptor!.Value;
     }
 
@@ -474,7 +472,7 @@ internal static class Program {
         }
         foreach (uint id in graph.Heads.Keys) {
             Need(actual.ObjectChain(continued, id).Entries[0].ContainingBatch == before.ObjectChain(privateState, id).Entries[0].ContainingBatch &&
-                actual.ObjectChain(continued, id).Entries[0].SchemaRoot == Address(witness.PrivateSchema!),
+                actual.ObjectChain(continued, id).Entries[0].SchemaRoot == before.ObjectChain(privateState, id).Entries[0].SchemaRoot,
                 "Retained Base interpretation must remain tied to its exact private origin S.");
         }
         Need(CheckPrivateCatalog(actual, sharedSchema, witness) == unused && actual.SharedSchemaRoot == sharedSchema,
@@ -520,6 +518,8 @@ internal static class Program {
             var privateHistory = repository.ReadFrames("private");
             Check(repository.ReadState(privateHistory.Single(frame => frame.RevisionAddress == Address(witness.PrivateState!))), upgraded: true, atSeven: 202);
             Check(repository.ReadEvent(privateHistory.Single(frame => frame.RevisionAddress == Address(witness.PromotionEvent!))), upgraded: true, atSeven: 202);
+            Need(repository.ReadEvent(privateHistory.Single(frame => frame.RevisionAddress == Address(witness.PrivateCatalogEvent!))) is PrivateUnused { Value: 41 },
+                "The original generated Event must remain readable through its own private origin S after promotion.");
             Check(repository.ReadEvent(repository.ReadFrames("fork").Single(frame => frame.RevisionAddress == Address(witness.RewriteEvent!))), upgraded: true);
             var pair = repository.ReadPair(initial, repository.GetHead("fork"));
             Widget old = Check(pair.First, upgraded: true), current = Check(pair.Second, upgraded: true, atSeven: 201);
@@ -543,7 +543,8 @@ internal static class Program {
         CheckStorage(actual, actual.Graph(Address(witness.RewriteState!)), witness.RewriteObjects!);
         CheckStorage(actual, actual.Graph(next), witness.ContinuationObjects!);
         FrameAddress privateSeed = Address(witness.PrivateSeedState!), privateHead = Address(witness.PrivateState!);
-        Need(RequiredSchema(actual.Graph(privateSeed)) == Address(witness.PrivateSchema!) &&
+        Need(RequiredSchema(actual.Graph(privateSeed)) == Address(witness.RewriteSchema!) &&
+            RequiredSchema(actual.Graph(Address(witness.PrivateCatalogEvent!))) == Address(witness.PrivateSchema!) &&
             RequiredSchema(actual.Graph(privateHead)) == Address(witness.PrivateSchema!) &&
             CheckPrivateCatalog(actual, Address(witness.PrivateSchema!), witness) == witness.PrivateUnusedDescriptorId,
             "Final private graphs must preserve their exact full frozen catalog and declaration IDs.");
@@ -638,6 +639,9 @@ internal static class Program {
     private static StateModelRegistry Models() {
         StateModelRegistry registry = new();
         registry.Register(S.Definition);
+#if HISTORY_V2
+        registry.Register(global::Atelia.DurableGraph.Generated.Family_70726F62652E707269766174652E756E726561636861626C65.Definition);
+#endif
         return registry;
     }
 

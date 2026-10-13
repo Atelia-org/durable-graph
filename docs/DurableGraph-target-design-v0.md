@@ -245,7 +245,7 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
   元数据缓存只是派生结果，后续登记的 exact base/inline 定义仍必须与缓存的完整依赖闭包一致。
 - 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本；最初的 Repository 单调注册表已由[DB-087 准确视图](design-branches/0087-meta-bootstrap-refactoring-route.md#view-contract)的边界承接。
-  shared 与各已接受 private view 内均拒绝同 key 异形；显式私有新根替换可使不同 view 同 key 异形，不能互换解释旧 bytes。
+  shared 与各已接受 private view 内均拒绝同 key 异形；从尚无该 key 的共同 baseline 独立 fork 后，可各自接纳同 key 异形草稿，不能互换解释旧 bytes。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
   [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库)。
@@ -315,7 +315,7 @@ Discard 保手工修改意图但不接受候选定义；Event 可接受 meta／H
 也是对象 descriptor；inline Schema 与容器描述进入同一 meta 图，base/inline exact 依赖按节点 ID 引用。
 inline 记录只描述嵌套值，不能被 Base 当作独立对象表示；普通引用槽只约束无版本 nominal 类型，
 目标版本不成为引用方的 exact 依赖。`SchemaKey` 是由完整名义类型与定义版本派生的查询、冲突索引，
-同一已接受目录的声明索引内同 key 异形仍须拒绝，不能靠新编号绕过；显式私有新根替换使用新 view／descriptor，保旧 view 含义。
+同一已接受目录的声明索引内同 key 异形仍须拒绝，不能靠新编号绕过；独立 baseline fork 可新增各自尚未接纳的草稿定义，保旧 view 含义。
 候选的完整缺失闭包随业务共同发布后才取得接受资格，不因 bytes 已追加或分配了编号而提前接受。
 [DB-047](design-branches/0047-list-content-object-slice.md) 的 List 扩展复用同一编号空间，
 以明确内建构造和内容 codec 解释，无需用户 Schema；其元素若为用户 inline 值，仍须登记完整 exact 依赖。
@@ -465,8 +465,8 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 物理记录。MVP 的 Repository 内单调 Schema 注册表是阶段性简化，不将其全局可见性冻结为长期合同。
 本案选择 Schema descriptor 与存活目录复用对象序列化／版本保存，业务比较与受控 meta 编辑汇入共同发布 owner。
 业务图 pin 准确 Schema 根；shared 目录与分支 rewind 分责，private 采用完整冻结 view，不以 latest shared 补缺。
-已接受定义不可改写；新私有根的显式替换产生新 descriptor，旧图及其 origin Schema 解释保持。
-容器替换以完整 old／new 布局为端点，并验证实际冻结目录与全部未触及依赖；Schema 同键替换与容器声明替换分别明确授权，不按 nominal TypeExpr 自动改写。目标已存在时复用完整 descriptor，builtin 目标不取得动态身份；旧 descriptor 行与旧视图保持。
+已接受定义不可改写；private 从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。
+各草稿可从同一已发布 baseline 独立 fork；若要继承已接受草稿的数据继续改型，则递增版本，不在同一目录重定义同 key。容器元素升级使用已有规则集及 Nullable lifting，不另设目录替换入口。最终只交付一个版本时从原 baseline 建立干净 final fork，而非从完整 ToShared 中过滤开发历史；具体路线见 [DB-088](design-branches/0088-development-schema-workflow.md)。
 将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
 单次显式 Shared 提交与工作副本的默认归属分责；不得借此原地更换冻结执行环境。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
 具体实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)；原分支重建、同 Open 双异形模型、Schema-only 与优化的重访条件见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。

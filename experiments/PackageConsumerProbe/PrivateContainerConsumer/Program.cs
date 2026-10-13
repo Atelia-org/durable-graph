@@ -14,7 +14,7 @@ using persistence::Atelia.DurableGraph.Persistence;
 // diagnostic: after every product owner closes, the observer re-reads actual
 // formal refs, complete catalogs and exact object-version chains independently.
 internal static class Program {
-    private const string Protocol = "DG.PrivateContainerConsumer.v1";
+    private const string Protocol = "DG.PrivateContainerConsumer.v2";
 #if SHAPE_A
     private const string ShapeEnvironment = "A";
 #elif SHAPE_B
@@ -41,6 +41,7 @@ internal static class Program {
             "create" when Wide => Create(database, witnessPath),
             "continue-a" when !Wide => Continue(database, witnessPath),
             "continue-b" when Wide => Continue(database, witnessPath),
+            "promote-b" when Wide => Promote(database, witnessPath),
             "verify-a" when !Wide => Verify(database, witnessPath),
             "verify-b" when Wide => Verify(database, witnessPath),
             _ => throw new ArgumentException("This phase does not belong to the compiled shape environment."),
@@ -68,23 +69,22 @@ internal static class Program {
         FrameAddress state, keeperState;
         uint rootId;
         using (Repository repository = Repository.CreateNew(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+            using (BranchCheckout keeper = repository.CreateBranch("keeper", new Keeper { Value = 1234567890123L })) {
+                keeperState = keeper.Head.RevisionAddress;
+            }
             using (BranchCheckout main = repository.CreateBranch("main", Ring())) {
                 Check(main.State, changed: false);
                 repository.CreateTag("old", main.Head);
                 state = main.Head.RevisionAddress;
                 rootId = main.StateId!.Value.Value;
             }
-            using BranchCheckout keeper = repository.CreateBranch("keeper", new Keeper { Value = 1234567890123L });
-            Need(keeper.State is Keeper { Value: 1234567890123L }, "Keeper was not saved with its generated model.");
-            keeperState = keeper.Head.RevisionAddress;
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(state);
         FrameAddress mainSchema = RequiredSchema(graph), shared = actual.SharedSchemaRoot!.Value;
-        CheckCatalog(actual, mainSchema, wide: false, keeper: false);
+        CheckCatalog(actual, mainSchema, wide: false, keeper: true);
         CheckCatalog(actual, shared, wide: false, keeper: true);
-        Need(shared != mainSchema && RequiredSchema(actual.Graph(keeperState)) == shared,
-            "The unreachable Keeper must be an accepted declaration in the latest shared view.");
+        Need(shared == mainSchema, "The frozen main baseline must already contain the unreachable Keeper declaration.");
         Need(actual.BranchHeads.Count == 2 && actual.BranchHeads["main"] == state &&
             actual.BranchHeads["keeper"] == keeperState && graph.RootId == rootId, "Actual branch refs disagree with seed delivery.");
         uint list = ListId(actual, graph, wide: false), child = graph.Heads.Keys.Single(id => id != rootId && id != list);
@@ -106,25 +106,15 @@ internal static class Program {
         CheckFrames(before, witness.CompleteFrames);
         Need(before.BranchHeads["main"] == Address(witness.AState) &&
             before.SharedSchemaRoot == Address(witness.SharedSchema), "B must fork the actual complete frozen shared view.");
-        Dictionary<string, string> originalFiles = FileImages(database);
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
-            ExpectConflict(() => repository.CreatePrivateBranch("private", Ring(), [PointSchema(wide: true)]));
-            Need(!repository.IsFaulted && !repository.ListBranches().Contains("private"),
-                "Omitting the exact List replacement must reject healthily and release the branch name.");
-        }
-        WireInspector.Snapshot rejected = WireInspector.Read(database);
-        CheckUnchanged(before, rejected, bothRefs: true);
-        Need(SameFiles(originalFiles, FileImages(database)), "Missing-pair rejection changed repository files.");
-
         FrameAddress state;
         uint rootId;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout branch = repository.CreatePrivateBranch("private", Ring(), [PointSchema(wide: true)],
-                containerReplacements: [(ListLayout(wide: false), ListLayout(wide: true))]);
+            repository.CreateBranch("private", repository.ResolveTag("old"));
+            using BranchCheckout branch = repository.CheckoutPrivate("private");
             Check(branch.State, changed: false);
-            state = branch.Head.RevisionAddress;
+            Need(branch.StateId!.Value.Value == witness.ARootId, "Upgrade must preserve the original root identity.");
+            state = branch.CommitState().RevisionAddress;
             rootId = branch.StateId!.Value.Value;
-            Need(!repository.IsFaulted, "The corrected same-name private creation faulted.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(state);
@@ -132,17 +122,26 @@ internal static class Program {
         Need(schema != before.SharedSchemaRoot && actual.BranchHeads.Count == 3 && actual.BranchHeads["private"] == state &&
             actual.BranchHeads["main"] == before.BranchHeads["main"] && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],
             "Private creation must only add its new business branch.");
-        Need(graph.RootId == rootId && graph.Parent is null && graph.SourceGraph is null,
-            "B creation must have an empty business source, independent of A object identities.");
-        CheckAllBase(actual, graph, schema);
+        Need(graph.RootId == rootId && graph.Parent == Address(witness.SeedState) && graph.SourceGraph == Address(witness.SeedState) &&
+            graph.Heads.Keys.Order().SequenceEqual(before.Graph(Address(witness.SeedState)).Heads.Keys.Order()),
+            "The private fork must retain baseline IDs and exact business source.");
+        uint upgradedList = witness.AListId;
+        WireInspector.Chain upgraded = actual.ObjectChain(state, upgradedList);
+        Need(upgraded.Entries.Count == 1 && upgraded.Entries[0].Record.Kind == ObjectVersionKind.Base &&
+            upgraded.Entries[0].SourceGraph == Address(witness.SeedState) && upgraded.Entries[0].SchemaRoot == schema,
+            "The changed inline List must be rewritten as a genuine upgrade Base.");
+        foreach (StorageEvidence row in witness.ASeedObjects.Where(row => row.Id != upgradedList)) {
+            WireInspector.Chain retained = actual.ObjectChain(state, row.Id);
+            Need(retained.Head == Address(row.Head) && retained.H == row.H, "Unchanged Root records must retain baseline heads/H.");
+        }
         CheckCatalog(actual, schema, wide: true, keeper: true);
         WireInspector.Catalog oldCatalog = before.Catalogs[Address(witness.SharedSchema)], target = actual.Catalogs[schema];
         uint oldPoint = oldCatalog.SchemaNodeId(PointSchema(wide: false)), newPoint = target.SchemaNodeId(PointSchema(wide: true));
         uint oldList = oldCatalog.DescriptorId(ListLayout(wide: false)), newList = target.DescriptorId(ListLayout(wide: true));
         uint keeper = oldCatalog.DescriptorId(ObjectLayout.ForDurable(KeeperSchema()));
-        Need(newPoint != oldPoint && newList != oldList && !target.DeclaredIds.Contains(oldPoint) &&
-            !target.DeclaredIds.Contains(oldList) && target.LiveIds.Contains(oldPoint) && target.LiveIds.Contains(oldList),
-            "Exact Point/List replacements must change declarations and preserve prior live employee nodes.");
+        Need(newPoint != oldPoint && newList != oldList && target.DeclaredIds.Contains(oldPoint) &&
+            target.DeclaredIds.Contains(oldList) && target.LiveIds.Contains(oldPoint) && target.LiveIds.Contains(oldList),
+            "Normal version growth must retain old and new Point/List declarations.");
         Need(target.DescriptorId(ObjectLayout.ForDurable(RootSchema())) == oldCatalog.DescriptorId(ObjectLayout.ForDurable(RootSchema())) &&
             target.DescriptorId(ObjectLayout.ForDurable(KeeperSchema())) == keeper,
             "Untouched Root and unreachable Keeper descriptors must be retained in the full frozen fork.");
@@ -158,7 +157,7 @@ internal static class Program {
         Witness next = witness with { BSeedState = Hex(state), BState = Hex(state), BSchema = Hex(schema),
             BRootId = rootId, BChildId = child, BListId = list, BSeedObjects = rows, BObjects = rows, CompleteFrames = Frames(actual) };
         WriteJson(witnessPath, next);
-        return new { MissingPairRejected = true, CorrectedSameName = true, AllLiveBase = true, EmptyBusinessSource = true,
+        return new { BaselineIdentitiesPreserved = true, UpgradeListBase = true, ExactBusinessSource = true,
             FullFrozenFork = true, KeeperPreserved = true, SharedRefUnchanged = true,
             State = Hex(state), Schema = Hex(schema), RootId = rootId, ChildId = child, ListId = list,
             OldPointId = oldPoint, NewPointId = newPoint, OldListId = oldList, NewListId = newList, KeeperId = keeper,
@@ -175,19 +174,6 @@ internal static class Program {
         CheckStorage(before, before.Graph(source), priorRows);
         CheckFrames(before, witness.CompleteFrames);
         Need(before.BranchHeads[branchName] == source, "Cold continuation must use the actual prior branch State.");
-        if (Wide) {
-            Dictionary<string, string> originalFiles = FileImages(database);
-            using (Repository repository = Repository.OpenExisting(database, Models())) {
-                using BranchCheckout branch = repository.CheckoutPrivate(branchName);
-                Check(branch.State, changed: false);
-                ExpectConflict(() => branch.CommitStateToShared());
-                Need(!repository.IsFaulted && branch.Head.RevisionAddress == source && branch.StateRevisionAddress == source,
-                    "An incompatible complete ToShared merge must reject healthily without advancing checkout State.");
-            }
-            WireInspector.Snapshot rejected = WireInspector.Read(database);
-            CheckUnchanged(before, rejected, bothRefs: true);
-            Need(SameFiles(originalFiles, FileImages(database)), "The same-key ToShared conflict changed files.");
-        }
         FrameAddress nextState;
         using (Repository repository = Repository.OpenExisting(database, Models(),
             schemaWriteMode: Wide ? null : SchemaWriteMode.Shared)) {
@@ -220,9 +206,34 @@ internal static class Program {
             : witness with { AState = Hex(nextState), AObjects = rows, CompleteFrames = Frames(actual) };
         WriteJson(witnessPath, next);
         return new { SingleListDelta = true, ExactPrior = true, ActualWireH = true, IdsPreserved = true,
-            RetainedRootHeads = true, PrivateRefUnchanged = !Wide, SharedPromotionConflictRejected = Wide, SharedRefUnchanged = true,
+            RetainedRootHeads = true, PrivateRefUnchanged = !Wide, SharedRefUnchanged = true,
             State = Hex(nextState), SourceState = Hex(source), Schema = Hex(schema), ListId = list, Objects = rows,
             Refs = RefFacts(actual), Graph = GraphFacts(actual, graph), CompleteFramesPreserved = true };
+    }
+
+    private static object Promote(string database, string witnessPath) {
+        Witness witness = ReadWitness(witnessPath);
+        WireInspector.Snapshot before = WireInspector.Read(database);
+        FrameAddress state;
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout branch = repository.CheckoutPrivate("private");
+            Check(branch.State, changed: true);
+            state = branch.CommitStateToShared().RevisionAddress;
+        }
+        WireInspector.Snapshot actual = WireInspector.Read(database);
+        WireInspector.Graph graph = actual.Graph(state);
+        FrameAddress schema = RequiredSchema(graph);
+        Need(actual.SharedSchemaRoot == schema && schema != before.SharedSchemaRoot &&
+            graph.RootId == witness.ARootId && graph.Heads.Keys.Order().SequenceEqual(before.Graph(Address(witness.BState!)).Heads.Keys.Order()),
+            "Compatible ToShared must publish the complete directory and preserve user identities.");
+        CheckCatalog(actual, schema, wide: true, keeper: true);
+        CheckFrames(actual, witness.CompleteFrames);
+        Need(actual.BranchHeads["main"] == before.BranchHeads["main"] && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],
+            "Promotion must not move unrelated branch refs.");
+        WriteJson(witnessPath, witness with { BState = Hex(state), BSchema = Hex(schema), SharedSchema = Hex(schema),
+            BObjects = Storage(actual, graph), CompleteFrames = Frames(actual) });
+        return new { CompletePromotion = true, IdsPreserved = true, CompleteFramesPreserved = true,
+            Refs = RefFacts(actual), Catalog = CatalogFacts(actual, schema), Graph = GraphFacts(actual, graph) };
     }
 
     private static object Verify(string database, string witnessPath) {
@@ -236,10 +247,7 @@ internal static class Program {
             Need(reader.IsReadOnly && reader.GetHead(own).RevisionAddress == selected,
                 "Readonly must select the actual branch root from the formal ref.");
             Check(reader.ReadState(reader.GetHead(own)), changed: true);
-            bool rejected = false;
-            try { _ = reader.ReadState(reader.GetHead(foreign)); }
-            catch (InvalidDataException) { rejected = true; }
-            Need(rejected && !reader.IsFaulted, "Wrong code environment must reject the other exact shape without delivery or fault.");
+            if (Wide) { Check(reader.ReadState(reader.GetHead(foreign)), changed: true); }
             if (!Wide) {
                 CheckpointAddress old = reader.ResolveTag("old");
                 Need(old.RevisionAddress == Address(witness.SeedState), "The old tag binding moved.");
@@ -252,14 +260,14 @@ internal static class Program {
         Need(actual.SharedSchemaRoot == Address(witness.SharedSchema) && actual.BranchHeads.Count == 3 &&
             actual.BranchHeads["main"] == Address(witness.AState) && actual.BranchHeads["private"] == Address(witness.BState!) &&
             actual.BranchHeads["keeper"] == Address(witness.KeeperState), "Final actual root pair disagrees with the observed history.");
-        CheckCatalog(actual, Address(witness.SharedSchema), wide: false, keeper: true);
+        CheckCatalog(actual, Address(witness.SharedSchema), wide: true, keeper: true);
         CheckCatalog(actual, Address(witness.BSchema!), wide: true, keeper: true);
         CheckStorage(actual, actual.Graph(Address(witness.SeedState)), witness.ASeedObjects);
         CheckStorage(actual, actual.Graph(Address(witness.AState)), witness.AObjects);
         CheckStorage(actual, actual.Graph(Address(witness.BSeedState!)), witness.BSeedObjects!);
         CheckStorage(actual, actual.Graph(Address(witness.BState!)), witness.BObjects!);
         CheckFrames(actual, witness.CompleteFrames);
-        return new { ReadOnlyFilesUnchanged = true, OwnBranchRead = true, WrongEnvironmentRejected = true,
+        return new { ReadOnlyFilesUnchanged = true, OwnBranchRead = true, BaselineUpgradeRead = Wide,
             CompleteFramesPreserved = true, OldTagRead = !Wide, State = Hex(selected), Schema = Hex(RequiredSchema(actual.Graph(selected))),
             SharedSchema = witness.SharedSchema, PrivateSchema = witness.BSchema, Refs = RefFacts(actual),
             AObjects = witness.AObjects, BObjects = witness.BObjects, Graph = GraphFacts(actual, actual.Graph(selected)) };
@@ -300,24 +308,26 @@ internal static class Program {
     }
 
     private static uint ListId(WireInspector.Snapshot actual, WireInspector.Graph graph, bool wide) {
-        uint descriptor = actual.Catalogs[RequiredSchema(graph)].DescriptorId(ListLayout(wide));
+
         return graph.Heads.Keys.Single(id => {
             WireInspector.Entry origin = actual.ObjectChain(graph.Address, id).Entries[0];
             WireInspector.BaseHeader header = WireInspector.Header(origin.Record.Body);
-            return header.Route == 1 && header.DescriptorId == descriptor;
+            return header.Route == 1 && origin.SchemaRoot is { } originSchema &&
+                actual.Catalogs[originSchema].ResolveLayout(header.DescriptorId!.Value).Kind == ObjectStateKind.List;
         });
     }
 
     private static void CheckCatalog(WireInspector.Snapshot actual, FrameAddress schema, bool wide, bool keeper) {
         WireInspector.Catalog catalog = actual.Catalogs[schema];
-        DurableSchema[] expected = keeper ? [RootSchema(), PointSchema(wide), KeeperSchema()] : [RootSchema(), PointSchema(wide)];
-        Need(catalog.Schemas.Count == expected.Length && catalog.DeclaredIds.Count == expected.Length + 1,
+        DurableSchema[] expected = wide ? [RootSchema(), PointSchema(false), PointSchema(true), KeeperSchema()] :
+            keeper ? [RootSchema(), PointSchema(false), KeeperSchema()] : [RootSchema(), PointSchema(false)];
+        Need(catalog.Schemas.Count == expected.Length && catalog.DeclaredIds.Count == expected.Length + (wide ? 2 : 1),
             "The actual full Schema and descriptor declaration set has the wrong membership.");
         foreach (DurableSchema definition in expected) {
             Need(catalog.Schemas.TryGetValue(new(definition.Type, definition.Version), out DurableSchema? stored) && stored.Equals(definition) &&
                 catalog.DeclaredIds.Contains(catalog.SchemaNodeId(definition)), "Actual metadata differs from the full public Schema factory.");
         }
-        Need(catalog.DescriptorIds.Count == (keeper ? 3 : 2) && catalog.DeclaredIds.Contains(catalog.DescriptorId(ListLayout(wide))),
+        Need(catalog.DescriptorIds.Count == (wide ? 4 : keeper ? 3 : 2) && catalog.DeclaredIds.Contains(catalog.DescriptorId(ListLayout(wide))),
             "The actual object-bearing layouts must include the complete exact Nullable inline List.");
     }
 
@@ -351,12 +361,15 @@ internal static class Program {
     private static StateModelRegistry Models() {
         StateModelRegistry result = new();
         global::Atelia.DurableGraph.Generated.DurableDefinitions.Register(result);
+#if SHAPE_B
+        result.UseListElementUpgrades(typeof(PointRules));
+#endif
         return result;
     }
     private static DurableSchema RootSchema() => new("pc.root", 1,
         DurableFieldInfo.Reference(1, TypeExpr.List(TypeExpr.Nullable(TypeExpr.Named("pc.point")))),
         DurableFieldInfo.Reference(2, TypeExpr.Named("pc.root")));
-    private static DurableSchema PointSchema(bool wide) => new("pc.point", 1, SchemaKind.InlineValue,
+    private static DurableSchema PointSchema(bool wide) => new("pc.point", wide ? 2 : 1, SchemaKind.InlineValue,
         new(1, wide ? TypeTag.Int64 : TypeTag.Int32), new(2, TypeTag.Double), new(3, TypeTag.Double), new(4, TypeTag.Double));
     private static DurableSchema KeeperSchema() => new("pc.keeper", 1, new DurableFieldInfo(1, TypeTag.Int64));
     private static ObjectLayout ListLayout(bool wide) => ObjectLayout.ForList(new ListLayout(
@@ -395,15 +408,6 @@ internal static class Program {
         }
         return root;
     }
-    private static void ExpectConflict(Action action) {
-        bool rejected = false;
-        try { action(); }
-        catch (SchemaConflictException conflict) {
-            Need(conflict.SchemaId == "pc.point" && conflict.Version == 1, "Rejection must identify the actual same-key Point shape conflict.");
-            rejected = true;
-        }
-        Need(rejected, "The incompatible complete Point shape was accepted.");
-    }
     private static StorageEvidence[] Storage(WireInspector.Snapshot actual, WireInspector.Graph graph) => graph.Heads.Keys.Order()
         .Select(id => { WireInspector.Chain chain = actual.ObjectChain(graph.Address, id); return new StorageEvidence(id, Hex(chain.Head), chain.H); }).ToArray();
     private static FrameImage[] Frames(WireInspector.Snapshot actual) => actual.Frames.OrderBy(frame => Hex(frame.Address), StringComparer.Ordinal)
@@ -415,8 +419,8 @@ internal static class Program {
         WireInspector.Catalog catalog = actual.Catalogs[address];
         return new { Address = Hex(address), catalog.DeclaredIds, catalog.LiveIds,
             RootId = catalog.SchemaNodeId(RootSchema()), KeeperId = catalog.SchemaNodeId(KeeperSchema()),
-            PointId = catalog.SchemaIds[new SchemaKey("pc.point", 1)],
-            ListId = catalog.DescriptorIds.Single(pair => pair.Key.List is not null).Value };
+            PointIds = catalog.SchemaIds.Where(pair => pair.Key.Type.DefinitionId == "pc.point").Select(pair => new { pair.Key.Version, Id = pair.Value }).ToArray(),
+            ListIds = catalog.DescriptorIds.Where(pair => pair.Key.List is not null).Select(pair => pair.Value).ToArray() };
     }
     private static object GraphFacts(WireInspector.Snapshot actual, WireInspector.Graph graph) => new {
         Address = Hex(graph.Address), Kind = graph.Kind.ToString(), Parent = HexOrNull(graph.Parent), SourceGraph = HexOrNull(graph.SourceGraph),

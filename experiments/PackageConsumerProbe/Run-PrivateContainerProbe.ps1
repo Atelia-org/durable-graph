@@ -78,7 +78,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB087 finite ordinary PackageReference private container replacement gate: independent same-key/version int/long inline models, shared List<Nullable<Point>> and ring, complete frozen catalog with unreachable Keeper, six fresh PIDs and four actual Publish/Verify Rebuilds with separate immutable V1 histories; no reshape migration/Upgrade/multi-environment Open/Array/Dictionary/process-crash/power-loss/performance qualification'
+    Scope = 'DB088 ordinary package normal Point V1-to-V2 Upgrade, nullable lifting and List elements, real baseline identities, full old/new catalog and ToShared, cold Delta/prior/H; pending new G acceptance, no Array/Dictionary/crash/power-loss/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot
@@ -288,7 +288,7 @@ function Invoke-Consumer {
             throw "Consumer $Lane failed; inspect its stdout/stderr in $workRoot."
         }
         $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
-        if ($evidence.Protocol -cne 'DG.PrivateContainerConsumer.v1' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
+        if ($evidence.Protocol -cne 'DG.PrivateContainerConsumer.v2' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
             $evidence.Lane -cne $Lane -or $evidence.ShapeEnvironment -cne $Stage.ShapeEnvironment -or $evidence.ProcessId -ne $process.Id -or $evidence.TypedBodyAbi -ne 5) {
             throw "Consumer $Lane did not report its actual successful process and current typed ABI."
         }
@@ -319,11 +319,12 @@ function Invoke-Consumer {
         }
         $requiredObservations = switch ($Lane) {
             'seed' { @('RingAndSharedList', 'FullSharedCatalog', 'ActualRefs', 'CompleteFrames') }
-            'create' { @('MissingPairRejected', 'CorrectedSameName', 'AllLiveBase', 'EmptyBusinessSource', 'FullFrozenFork', 'KeeperPreserved', 'SharedRefUnchanged') }
+            'create' { @('BaselineIdentitiesPreserved', 'UpgradeListBase', 'ExactBusinessSource', 'FullFrozenFork', 'KeeperPreserved', 'SharedRefUnchanged') }
             'continue-a' { @('SingleListDelta', 'ExactPrior', 'ActualWireH', 'IdsPreserved', 'RetainedRootHeads', 'PrivateRefUnchanged') }
-            'continue-b' { @('SingleListDelta', 'ExactPrior', 'ActualWireH', 'IdsPreserved', 'RetainedRootHeads', 'SharedPromotionConflictRejected', 'SharedRefUnchanged') }
-            'verify-a' { @('ReadOnlyFilesUnchanged', 'OwnBranchRead', 'WrongEnvironmentRejected', 'CompleteFramesPreserved', 'OldTagRead') }
-            'verify-b' { @('ReadOnlyFilesUnchanged', 'OwnBranchRead', 'WrongEnvironmentRejected', 'CompleteFramesPreserved') }
+            'continue-b' { @('SingleListDelta', 'ExactPrior', 'ActualWireH', 'IdsPreserved', 'RetainedRootHeads', 'SharedRefUnchanged') }
+            'verify-a' { @('ReadOnlyFilesUnchanged', 'OwnBranchRead', 'CompleteFramesPreserved', 'OldTagRead') }
+            'verify-b' { @('ReadOnlyFilesUnchanged', 'OwnBranchRead', 'BaselineUpgradeRead', 'CompleteFramesPreserved') }
+            'promote-b' { @('CompletePromotion', 'IdsPreserved', 'CompleteFramesPreserved') }
             default { throw "Unknown fixed consumer phase: $Lane" }
         }
         foreach ($check in $requiredObservations) {
@@ -463,9 +464,12 @@ try {
     Push-Location $workRoot
     try {
         foreach ($shape in @('A', 'B')) {
-            # Each incompatible same-key/version code environment publishes and
-            # verifies its own immutable accepted history. No history crosses stages.
+            # The V2 stage imports frozen V1 history before publishing its next version.
             $historyRoot = $histories[$shape]
+            [IO.Directory]::CreateDirectory($historyRoot) | Out-Null
+            if ($shape -ceq 'B') {
+                foreach ($image in $stages.A.History) { Copy-Item -LiteralPath (Join-Path $histories.A $image.File) -Destination (Join-Path $historyRoot $image.File) }
+            }
             $consumerRoot = Join-Path $workRoot ('stage-' + $shape.ToLowerInvariant())
             [IO.Directory]::CreateDirectory($consumerRoot) | Out-Null
             foreach ($source in $sourceFiles) { Copy-Item -LiteralPath $source.FullName -Destination (Join-Path $consumerRoot $source.Name) }
@@ -477,12 +481,12 @@ try {
             $publish = Invoke-LoggedDotNet (@('build', $project, '-c', 'Release', '--no-restore', '-t:Rebuild', '-m:1', '-nr:false', '-v:normal', '-p:UseSharedCompilation=false', '-p:DurableGraphSchemaHistoryMode=Publish') + $properties)
             $publishConsumption = Require-ActualCompilerConsumption -Command $publish -Mode 'Publish' -ConsumerRoot $consumerRoot
             $accepted = @(Get-HistoryImages -HistoryRoot $historyRoot)
-            if ($accepted.Count -ne 3) { throw "Shape $shape must publish exactly three actual owned V1 history files." }
+            if ($accepted.Count -ne $(if ($shape -ceq 'A') { 3 } else { 4 })) { throw "Stage $shape has the wrong complete history count." }
             foreach ($image in $accepted) {
                 $text = Get-Content -LiteralPath (Join-Path $historyRoot $image.File) -Raw
-                if ($image.File -cnotmatch '^schema\.[0-9a-f]{64}\.V1\.[0-9a-f]{64}\.dgschema$' -or
+                if ($image.File -cnotmatch '^schema\.[0-9a-f]{64}\.V[12]\.[0-9a-f]{64}\.dgschema$' -or
                     !$text.StartsWith('// durable-graph-schema-history:9' + [char]10, [StringComparison]::Ordinal) -or $text.Contains([char]13)) {
-                    throw 'Expected canonical immutable V1 history v9 from the packaged tool.'
+                    throw 'Expected canonical immutable V1/V2 history v9 from the packaged tool.'
                 }
             }
             $verify = Invoke-LoggedDotNet (@('build', $project, '-c', 'Release', '--no-restore', '-t:Rebuild', '-m:1', '-nr:false', '-v:normal', '-p:UseSharedCompilation=false', '-p:DurableGraphSchemaHistoryMode=Verify') + $properties)
@@ -548,32 +552,27 @@ try {
             }
             Save-Receipt
         }
-        # The three keys are identical between environments; only Point changes
-        # its accepted V1 shape. This is independent history, not an Upgrade lane.
-        foreach ($schemaId in @('pc.root', 'pc.point', 'pc.keeper')) {
-            $schemaHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($schemaId))).ToLowerInvariant()
-            $prefix = 'schema.' + $schemaHash + '.V1.'
-            $a = @($stages.A.History | Where-Object { $_.File.StartsWith($prefix, [StringComparison]::Ordinal) })
-            $b = @($stages.B.History | Where-Object { $_.File.StartsWith($prefix, [StringComparison]::Ordinal) })
-            if ($a.Count -ne 1 -or $b.Count -ne 1 -or (($a[0].Sha256 -ceq $b[0].Sha256) -ne ($schemaId -cne 'pc.point'))) {
-                throw "Independent histories do not have the expected same keys and int/long Point difference: $schemaId"
-            }
+        # Released V1 files must remain exact inputs to the next-version stage.
+        foreach ($image in $stages.A.History) {
+            $b = @($stages.B.History | Where-Object { $_.File -ceq $image.File })
+            if ($b.Count -ne 1 -or $b[0].Sha256 -cne $image.Sha256) { throw 'V2 did not preserve exact V1 history.' }
         }
-        $receipt['IndependentHistoryKeysVerified'] = $true
+        $receipt['ReleasedHistoryPreserved'] = $true
         foreach ($phase in @(
             @{ Lane = 'seed'; Shape = 'A' }, @{ Lane = 'create'; Shape = 'B' },
             @{ Lane = 'continue-a'; Shape = 'A' }, @{ Lane = 'continue-b'; Shape = 'B' },
+            @{ Lane = 'promote-b'; Shape = 'B' },
             @{ Lane = 'verify-a'; Shape = 'A' }, @{ Lane = 'verify-b'; Shape = 'B' }
         )) {
             Require-FrozenStageSources -ConsumerRoot $stages[$phase.Shape].ConsumerRoot
             Invoke-Consumer -Lane $phase.Lane -Stage $stages[$phase.Shape]
             foreach ($shape in @('A', 'B')) {
                 Require-PreservedHistory -HistoryRoot $histories[$shape] -Prior $stages[$shape].History
-                if (@(Get-HistoryImages -HistoryRoot $histories[$shape]).Count -ne 3) { throw 'Consumer execution changed an accepted history file set.' }
+                if (@(Get-HistoryImages -HistoryRoot $histories[$shape]).Count -ne $stages[$shape].History.Count) { throw 'Consumer execution changed an accepted history file set.' }
             }
         }
     } finally { Pop-Location }
-    if (@($receipt.Processes.ProcessId | Select-Object -Unique).Count -ne 6) { throw 'Expected six independently launched consumer processes.' }
+    if (@($receipt.Processes.ProcessId | Select-Object -Unique).Count -ne 7) { throw 'Expected seven independently launched consumer processes.' }
     if (@($receipt.Commands | Where-Object { $_.Arguments -contains '-t:Rebuild' }).Count -ne 4) { throw 'Expected exactly four actual Publish/Verify Rebuild commands.' }
     foreach ($stage in $receipt.Stages) {
         foreach ($binary in $stage.Binaries) {

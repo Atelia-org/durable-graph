@@ -16,6 +16,7 @@
     <Compile Include="WireInspector.cs" />
     <Compile Include="Widget.V1.cs" Condition="'$(HistoryVersion)' == '1'" />
     <Compile Include="Widget.V2.cs" Condition="'$(HistoryVersion)' == '2'" />
+    <Compile Include="PrivateUnused.cs" Condition="'$(HistoryVersion)' == '2'" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" Aliases="persistence" />
   </ItemGroup>

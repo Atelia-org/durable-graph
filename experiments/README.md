@@ -7,15 +7,15 @@
 
 当前旧 reader/raw Store 包 lanes 暂停。直接旧 raw 消费的 23 个 C# 文件/19 目录及须保留的 SG 业务资产，只维护在 [PackageConsumerProbe 静态清单](PackageConsumerProbe/README.md)；源码/tests 清零不表示全仓已迁。历史验收保留，本片不整体停用 Probe。
 
-旧 typed 恢复与 SCB1/owner 退出保留在 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)／[§37](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)；十一 raw 类型及旧 GraphMetadata/TailMeta 路径退出见 [§38](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。公开 accepted-history与双异形 private 代表包共同闭合有限 P1／P2；ListDeltaReplay 与其他 source／包各保范围，不授未迁19 lanes当前 G资格。
+旧 typed 恢复与 SCB1/owner 退出保留在 [DB-087 §36](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)／[§37](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)；十一 raw 类型及旧 GraphMetadata/TailMeta 路径退出见 [§38](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。公开 accepted-history 与旧双异形 private 代表包保 DB-087 原有限 P1／P2 资格；DB-088 删特例后的活动故事待新 G 重验；ListDeltaReplay 与其他 source／包各保范围，不授未迁19 lanes当前 G资格。
 
 | 何时使用 | 入口 |
 |---|---|
 | 修改 Generator 输出、runtime 公共 API、history/build 或 package 接线，需要验证真实单包消费者 | [PackageConsumerProbe](PackageConsumerProbe/README.md)：活动产品回归 |
 | 验证 DB-087 内部员工 Schema 闭包、无业务注册的 meta 冷读与跨正常进程 Delta 续写 | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md)：内部包验收，不代替公开切换或进程故障门禁 |
-| 验证 DB-087 公开默认 Repository 的 accepted-history／Upgrade／准确 S／tag／历史 Fork／Event／ReadPair 与冷开 Base→Delta | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md)：[runner](PackageConsumerProbe/Run-SplitRepositoryProbe.ps1)，已验有限普通包，另授 P2 同形 private／完整 ToShared；不代双异形包、故障或性能 |
-| 验证同键同版异形完整 private fork／容器替换、双方独立 PID冷 Delta／只读零写 | [PrivateContainerConsumer](PackageConsumerProbe/PrivateContainerConsumer/README.md)：[runner](PackageConsumerProbe/Run-PrivateContainerProbe.ps1)，A/B独立合法 history／准确十包／六PID；与既有分层证据闭合 DB-087有限停点 |
-| 验证固定 V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，实际 MSBuild Off／Publish／Verify | [DevelopmentSchemaConsumer](PackageConsumerProbe/DevelopmentSchemaConsumer/README.md)：[runner](PackageConsumerProbe/Run-DevelopmentSchemaProbe.ps1)，DB-088 有限开发流程已验；精确 live IDs／prior／H 另由源码故事授资格 |
+| 验证 DB-087 公开默认 Repository 的 accepted-history／Upgrade／准确 S／tag／历史 Fork／Event／ReadPair 与冷开 Base→Delta | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md)：[runner](PackageConsumerProbe/Run-SplitRepositoryProbe.ps1)，原已验有限普通包及 P2 同形新根／完整 ToShared；DB-088 活动 baseline／Event 全目录故事待新 G 重验，不授故障或性能 |
+| 验证 baseline Point V1→V2／Nullable lifting／List 元素 Upgrade，保身份及完整目录／冷 Delta | [PrivateContainerConsumer](PackageConsumerProbe/PrivateContainerConsumer/README.md)：[runner](PackageConsumerProbe/Run-PrivateContainerProbe.ps1)，DB-088 迁移后待新 G 重验；旧 A/B 异形／六 PID 仅保删除前资格 |
+| 验证固定 V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，实际 MSBuild Off／Publish／Verify | [DevelopmentSchemaConsumer](PackageConsumerProbe/DevelopmentSchemaConsumer/README.md)：[runner](PackageConsumerProbe/Run-DevelopmentSchemaProbe.ps1)，DB-088 有限开发流程已在旧 G 验证，删特例后待新 G 重验；精确 live IDs／prior／H 另由源码故事授资格 |
 | 验证实验性 Dictionary 的 comparer、键寻址 Delta、共享引用与双槽历史升级 | [DictionaryConsumer](PackageConsumerProbe/DictionaryConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-DictionaryProbe.ps1](PackageConsumerProbe/Run-DictionaryProbe.ps1)，DB-054 产品回归 |
 | 验证显式 enum 的整数表示、完整类型组合与删除旧 CLR enum 后的历史升级续存 | [EnumConsumer](PackageConsumerProbe/EnumConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-EnumProbe.ps1](PackageConsumerProbe/Run-EnumProbe.ps1)，DB-053 产品回归 |
 | 验证 Nullable 字段/泛型/数组/List 的冻结、历史精确读取与显式值升级提升 | [NullableConsumer](PackageConsumerProbe/NullableConsumer/README.md)（旧 reader/diagnostic lane 当前暂停）：[Run-NullableProbe.ps1](PackageConsumerProbe/Run-NullableProbe.ps1)，DB-052 产品回归 |
