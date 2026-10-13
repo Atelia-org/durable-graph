@@ -24,6 +24,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-088 开发 Schema 与定稿](0088-development-schema-workflow.md) | 最小纵向实验已验；新根改形特例尚未删除 | 用户校准的固定 V1→独立 V2 草稿 fork→定稿 V2；保身份、源码实际 Base／Delta／source／H 与普通包 MSBuild／五 PID分层。后续迁语义见证及删特例；不预建主／次版本 |
 | [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | 约定有限 P1／P2 已完成；默认 meta 自举、完整 private／容器替换／ToShared与双异形独立包停点成立 | 活动稿保当前契约、[有限停点审计](0087-meta-bootstrap-refactoring-route.md#private-plan)与条件延期；旧保存／typed／Schema／raw 权威已退出。包按 [V1→V2／推广](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)和[双异形环境](../../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)各自资格解释；旧过程见 [2026-10-13 完整稿](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md) |
 | [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | Implemented / R0–R5 已验收 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；[实施与验收](0086-new-storage-implementation.md)含源码、真实包及进程停止证据 |
 | [DB-085 新 RBF3 / Binary / FrameStore / VersionStore 迁移](0085-rbf3-framestore-versionstore-migration-feasibility.md) | 可行性调研及四项 API 复核完成；历史前置范围由DB-086取代 | [初次验证](0085-storage-migration-probe-evidence.md)与[上游 API 复核](0085-upstream-api-refinement-review.md)；不再要求严格打开/全库确认等价或旧数据迁移 |

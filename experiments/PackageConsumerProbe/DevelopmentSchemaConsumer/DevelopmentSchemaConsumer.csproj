@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>DurableGraph.DevelopmentSchemaConsumer</AssemblyName>
+    <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ShapeStage Condition="'$(ShapeStage)' == ''">V1</ShapeStage>
+    <DefineConstants>$(DefineConstants);SHAPE_$(ShapeStage)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Widget.V1.cs" Condition="'$(ShapeStage)' == 'V1'" />
+    <Compile Include="Widget.V2A.cs" Condition="'$(ShapeStage)' == 'A'" />
+    <Compile Include="Widget.V2B.cs" Condition="'$(ShapeStage)' == 'B'" />
+    <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" Aliases="persistence" />
+  </ItemGroup>
+</Project>

@@ -24,6 +24,8 @@
 
 [PrivateContainerConsumer](PrivateContainerConsumer/README.md)与 `Run-PrivateContainerProbe.ps1` 已验普通 PackageReference 的同键同版异形私有新根／完整 Nullable inline List 替换；A/B独立 V1 history、四次 Rebuild、六独立 PID核双方冷 Delta、不可达声明／ref2／旧帧保持、错误环境与 ToShared冲突、两个全程 readonly零写。它与既有 V1→V2／同形推广包共同闭合 DB-087有限 P1／P2；19暂停 lanes不因此复活，原始证据只在各消费者 README维护。
 
+[DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md) 与 `Run-DevelopmentSchemaProbe.ps1` 已验 [DB-088](../../docs/design-branches/0088-development-schema-workflow.md) 的有限开发流程：普通包从固定 V1/tag ref-only 分叉并 `CheckoutPrivate`，两个异形 V2 用实际 MSBuild Off，定稿 B 才 Publish／Verify 与完整 ToShared；六次成功 Rebuild／一次预期 DG0015／五 PID。精确 live ID／prior／H 由源码故事另证；不依赖新根 overrides，不扩为主／次版本或迁移链压缩。
+
 Storage dependencies are the six pinned Binary/FrameStore/VersionStore closure packages in
 [StorageDependency.props](../../eng/StorageDependency.props). The shared
 [PackageProbeSupport.ps1](PackageProbeSupport.ps1) packs four DG packages at an independent version G.

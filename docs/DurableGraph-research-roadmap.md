@@ -203,6 +203,12 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 19个有效旧包 lanes 暂停当前 G并原地保资产，代表门禁不恢复未迁资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿](archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)；旧“下一片”不作为当前排期。
 
+### 4.2 开发 Schema 与正式定稿
+
+用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。当前实验与删减前置见 [DB-088](design-branches/0088-development-schema-workflow.md)，不重复本案完成停点。
+
+后续按验收迁移仍有效的 private／ToShared／fault 覆盖，再删除同 key 新根 bootstrap、Schema overrides 与完整 container replacements 特例。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
+
 ## 5. 后续切片验收素材
 
 每轮只挑与问题有关的见证，不重复搬运全部历史闸门：

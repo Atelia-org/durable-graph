@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+[DB-088 开发与定稿实验](../docs/design-branches/0088-development-schema-workflow.md)已通过：固定 shared V1 用户快照→独立 V2 草稿 fork→仅定稿 V2，保原始存活身份；源码真实 Base／Delta／source／H 与普通包实际 MSBuild Off／Publish／Verify 分层验收。下一片迁移必要 private／ToShared／fault 见证，再删除同 key 新根 overrides／container replacements 与 bootstrap 特例；当前未删除、生产源码未变。默认 Publish 未改，主／次版本、直接 V3/V4→单版交付及自动重放另待真实需求；不做过滤推广或通用框架。
+
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
 Shared 准入、完整 frozen shared fork＋显式 Schema／容器替换、新 private 根 all-live Base、准确冷签出与增量续写、完整目录单次 ToShared 均已接线。private 只发布 ref1且不 rebase latest shared；新增 shared 走同一两 ref CU。旧 rows／heads／S 保含义，普通 Shared 保存核完整目录已被接纳，显式 ToShared 同形复用／新项加入／同 key 异形拒绝，不改变默认归属或执行环境。

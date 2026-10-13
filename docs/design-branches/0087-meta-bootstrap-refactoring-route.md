@@ -23,6 +23,8 @@ SchemaStore／SCB1、RepresentationId、旧 Base header、WorldWorkspace／Loade
 自举不预设更快或代码更少，固定引导规则也不必消除自身。
 
 当前已通过[公开 accepted-history 包门禁](#public-package-gate)与[P2 双异形独立环境包门禁](#private-plan)，本案约定范围已完成，无剩余必经施工片。后续只按[条件延期](#open-questions)中的真实消费者或测量选择增量。
+
+2026-10-13 完工后用户校准了开发故事：从固定 shared baseline 建立多个保身份的 V2 草稿 fork，继承旧草稿改形则升版本，最终只接纳一个定稿版本。新接缝与同 key 新根特例的删减候选集中在 [DB-088](0088-development-schema-workflow.md)；本文既有验收保历史资格，不把特例当作首选开发流程，也不声称已删除。
 十九个有效旧 PackageConsumer lanes 暂停当前 G，源资产与历史证据原地保留；选择性迁移不是该门禁前置，也不自动恢复未迁 lane 的资格。
 当前能力只在 [PROJECT-STATE](../../src/PROJECT-STATE.md) 维护，未实施导航见[路线图 §4.1](../DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 

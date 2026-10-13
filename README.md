@@ -352,7 +352,7 @@ public static class WorldUpgrades {
 
 升版规则：
 
-- 同一个 Schema ID/版本的字段布局必须一致；不能修改已有 history 来伪装成从未变过。
+- 同一份已接受 history 中同一个 Schema ID/版本的字段布局必须一致；不能修改已有 history 来伪装成从未变过。
 - 基类或嵌套值类型布局变化，会要求受影响的 owner/派生类型升版；普通引用目标自身升版不传播到引用方。
 - 升级转换的是完整对象 DTO；框架不自动额外执行每层基类的 Upgrade。
 - Upgrade 只转换当前这个对象的字段，不读取其他对象或分配新 ObjectId。不能假设缺失转换会使用默认值补齐。
@@ -367,6 +367,23 @@ dotnet build QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVer
 
 初次 Publish 后再 Clean/Verify，可同时验证 history 确实能作为下一次编译的输入。
 构建属性及诊断说明见 [Build 工具](src/DurableGraph.Build/README.md)。
+
+### 开发尚未定稿的 Schema
+
+默认构建模式为 `Publish`，会冻结本次候选；实验性下一版本在定稿前可显式使用
+`-p:DurableGraphSchemaHistoryMode=Off`。Off 保留已发布 `.dgschema` 作为生成器输入和校验依据，
+只停止候选写入／Verify；已经接纳的同版本定义仍不可改形。草稿输入应只含此前已发布的 history，
+定稿时再显式 `Publish`，随后 Clean／Rebuild 并 `Verify`。无需删除此前已发布的 history。
+
+复现用户场景时，可固定一个旧版 checkpoint，以 `CreateBranch(name, checkpoint)` 建分支，再
+`CheckoutPrivate(name)` 按当前模型 Upgrade 原图并保留仍存活对象身份。重要模型调整后从同一
+baseline 建立新的 dev fork；需要继承上次已保存草稿数据再改模型时，应递增 Schema 版本，
+并在该 dev 独立的 history 中保留相邻模板与 Upgrade。两个公开操作分开完成，签出失败不会
+撤销已经发布的新分支。
+
+完整 ToShared 会导入全部声明；只交付一个定稿新版本时，从固定 baseline 建立干净的 final fork，
+执行 baseline→定稿的 Upgrade 和必要重放，再接纳 compiler history 与运行时 Shared。
+实际开发故事与特例删减边界见 [DB-088](docs/design-branches/0088-development-schema-workflow.md)。
 
 ## 当前能放进模型的内容
 
