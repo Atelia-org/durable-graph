@@ -184,10 +184,10 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
                 throw new IOException("Publication interruption");
             }
         };
-        GraphCommitException error = Assert.Throws<GraphCommitException>(() => repository.Fork("candidate", newer));
+        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.Fork("candidate", newer));
         Assert.Equal(hydrates + 1, control.LeafHydrates);
-        Assert.Equal(phase == "before" ? GraphCommitOutcome.NotPublished :
-            phase == "after" ? GraphCommitOutcome.Published : GraphCommitOutcome.Unknown, error.Outcome);
+        Assert.Equal(phase == "before" ? RepositoryPublicationOutcome.NotPublished :
+            phase == "after" ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.Unknown, error.Outcome);
         Assert.Equal((byte)7, deliveredLeaf.Value);
         repository.OperationStageObserver = null;
         if (phase == "before") {
@@ -224,7 +224,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
             repository.OperationStageObserver = point => {
                 if (point == RepositoryOperationStage.AfterPublication) { throw new IOException("fault"); }
             };
-            Assert.Throws<GraphCommitException>(() => repository.Fork("fault", main.Head));
+            Assert.Throws<RepositoryPublicationException>(() => repository.Fork("fault", main.Head));
             Assert.True(repository.IsFaulted);
         }
         if (finish != "evict") { Assert.Null(repository.PreparedStateEntry); }

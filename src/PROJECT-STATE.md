@@ -20,7 +20,8 @@
 
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D5 及 E1／E2／E3 已限定验收，有限源码组织完成；入口从[源码导航](DurableGraph.Persistence/README.md)进入。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。
 [D4](../docs/design-branches/0092-type-namespace-refactoring/README.md#d4-status)将纯 `WithFieldId`／`NominalType` 归回 Schema 的 `DurableFieldInfo`，保编号与完整槽相等；[D5](../docs/design-branches/0092-type-namespace-refactoring/README.md#d5-status)公开业务角色为根 namespace 的 `CheckpointKind`，仍在 Persistence 程序集，与内部 StoredGraphKind 分责。源码、根回归及孤立 Replay 编译通过，准确新 G 普通 SG／Build 消费和新库跨进程冷续写／只读历史查询通过。各片包来源与有限资格只查当片记录；生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。
-按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。后续公开候选仍逐项核职责收益，程序集调整另判，具体入口和重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。
+当前按 [D6 有限合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status)收敛最后三组候选：发布异常／结果类型采用根空间 RepositoryPublication 名称；三个 ValueProjection helper 与 ObjectStateKind 保名。源码、根回归与 API 映射已验收，准确新 G 有限消费待验收；保持 outcome、候选地址、fault/lifetime 和现有程序集边界。
+按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。具体后续需求和重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 
@@ -288,7 +289,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
   EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。
   Schema 只记录受控意图，真实 E/S 的 joint Save 才接受；先追加 meta／业务对象与目录／图，新增 shared 时用 VS 两 ref CU，共同 data-first 确认，发布后不重捕或运行模型回调。
-  GraphCommitException 区分 NotPublished / Unknown / Published；NotPublished 也须检查 IsFaulted，故障后 dispose/reopen，无透明重试或领域修改回滚。
+  RepositoryPublicationException 区分 NotPublished / Unknown / Published；NotPublished 也须检查 IsFaulted，故障后 dispose/reopen，无透明重试或领域修改回滚。
   重开只读必要根与所选 Schema；准备所选图时检查两种 Parent、完整内容和图语义。不启动全库/orphan 图审计；只读不创建、flush 或修尾。
   恢复保证仍限正常关闭、进程中止和明确 I/O 故障；无 OS crash/power loss、目录元数据或完整后缀外部删除检测保证。
 - 迁移壳可保留旧族 reader/Upgrade，退出 current World 可达闭包后不分配；仍完整验证 source 行。

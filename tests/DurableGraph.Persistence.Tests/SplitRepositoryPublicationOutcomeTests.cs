@@ -15,17 +15,17 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     private static readonly DurableSchema Extra = new("SplitPublicationExtra", 1, new DurableFieldInfo(1, TypeTag.Int64));
 
     [Theory]
-    [InlineData("BeforeDataConfirm", 0, GraphCommitOutcome.NotPublished, false)]
-    [InlineData("AfterAppend", 1, GraphCommitOutcome.Unknown, false)]
-    [InlineData("AfterAppend", 2, GraphCommitOutcome.Unknown, true)]
-    [InlineData("AfterConfirmed", 0, GraphCommitOutcome.Published, true)]
+    [InlineData("BeforeDataConfirm", 0, RepositoryPublicationOutcome.NotPublished, false)]
+    [InlineData("AfterAppend", 1, RepositoryPublicationOutcome.Unknown, false)]
+    [InlineData("AfterAppend", 2, RepositoryPublicationOutcome.Unknown, true)]
+    [InlineData("AfterConfirmed", 0, RepositoryPublicationOutcome.Published, true)]
     public void ActualTwoRefPublicationReturnsOutcomeAndFaultsWithoutDeliveringOrInstalling(
-        string stage, int failOnAppend, GraphCommitOutcome outcome, bool visible) =>
+        string stage, int failOnAppend, RepositoryPublicationOutcome outcome, bool visible) =>
         AssertFaultedMutation(stage, failOnAppend, outcome, visible);
 
     [Fact]
     public void ConfirmedBeforeInstallInterruptionPublishesBothRootsButKeepsTheUndeliveredCheckoutBaseline() =>
-        AssertFaultedMutation("BeforeInstall", 0, GraphCommitOutcome.Published, visible: true);
+        AssertFaultedMutation("BeforeInstall", 0, RepositoryPublicationOutcome.Published, visible: true);
 
     [Fact]
     public void BeforeOutputNotPublishedKeepsTheOwnerHealthyAndRequiresAnExplicitRetry() {
@@ -51,8 +51,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
                 if (point == RepositorySaveStage.BeforeAppend) { attempts++; throw failure; }
             };
             CheckpointAddress? delivered = null;
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => delivered = main.CommitState());
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = main.CommitState());
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Same(failure, error.InnerException);
             Assert.Null(error.CandidateRevisionAddress);
             Assert.Null(delivered);
@@ -87,7 +87,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         VerifySelectedAndContinue(seed, visible: true, candidate: null, capturedFrames: []);
     }
 
-    private void AssertFaultedMutation(string stage, int failOnAppend, GraphCommitOutcome outcome, bool visible) {
+    private void AssertFaultedMutation(string stage, int failOnAppend, RepositoryPublicationOutcome outcome, bool visible) {
         SeedResult seed = Seed();
         FrameAddress candidate = default;
         FrameImage[] captured = [];
@@ -127,7 +127,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             main.Catalog.Set(Extra); // Ensures the save updates meta and the business ref together.
             root.Numbers[7] = 201;
             CheckpointAddress? delivered = null;
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => delivered = main.CommitState());
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = main.CommitState());
             Assert.Equal(outcome, error.Outcome);
             Assert.Same(failure, error.InnerException);
             Assert.NotEqual(default, candidate);

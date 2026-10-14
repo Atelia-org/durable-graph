@@ -53,7 +53,7 @@ public sealed class BranchCheckout : IDisposable {
     public CheckpointAddress Head { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>
-    /// Independent of GraphCommitException.Outcome: NotPublished can still be faulted. A healthy repository
+    /// Independent of RepositoryPublicationException.Outcome: NotPublished can still be faulted. A healthy repository
     /// does not imply that application mutations were rolled back.
     /// </remarks>
     public bool IsFaulted => _repository.IsFaulted;
@@ -95,7 +95,7 @@ public sealed class BranchCheckout : IDisposable {
     /// only newly encountered instances receive new identities. A root type change is not a Schema Upgrade.
     /// Candidates are prepared before publication and installed only afterward. Publication may succeed before
     /// installation or delivery fails; do not infer rollback or retry against old references. Inspect IsFaulted
-    /// independently of GraphCommitException.Outcome and reopen a faulted repository to inspect its history.
+    /// independently of RepositoryPublicationException.Outcome and reopen a faulted repository to inspect its history.
     /// </remarks>
     public CheckpointAddress CommitState(IDurableObject nextState, ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);

@@ -28,8 +28,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             };
             // The real subsequent upstream CreateTag rejects its disposed owner before output;
             // VersionStore supplies NotAttempted despite the exception.
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => repository.CreateTag("candidate", address));
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("candidate", address));
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Null(error.CandidateRevisionAddress);
             Assert.IsType<ObjectDisposedException>(error.InnerException);
             Assert.True(repository.IsFaulted);
@@ -62,8 +62,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
                     throw injected;
                 }
             };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => repository.CreateTag("candidate", address));
-            Assert.Equal(afterPublication ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("candidate", address));
+            Assert.Equal(afterPublication ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Null(error.CandidateRevisionAddress);
             Assert.Same(injected, error.InnerException);
             repository.OperationStageObserver = null;

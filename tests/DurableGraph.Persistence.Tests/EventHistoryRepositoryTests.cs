@@ -268,8 +268,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             session.CommitEvent(new Node { Value = 7 }, NoRebase);
             ((Node)session.State!).Value = 2;
             repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)point) throw new IOException("interrupted"); };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => session.CommitState(NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Equal(first, session.StateRevisionAddress!.Value);
             Assert.Equal(CheckpointKind.Event, session.Head.Kind);
         }
@@ -290,8 +290,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             session.CommitEvent(new Node(), NoRebase);
             ((Node)session.State!).Value = 9;
             repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)point) throw new IOException("lost completion"); };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
-            Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => session.CommitState(NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
             published = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
             Assert.True(repository.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => session.CommitState(NoRebase));
@@ -309,16 +309,16 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == RepositorySaveStage.BeforePublication) throw new IOException("not bound");
             };
-            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), NoRebase));
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateBranch("main", new Node(), NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
         }
         using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == RepositorySaveStage.AfterPublication) throw new IOException("bound but not returned");
             };
-            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node { Value = 6 }, NoRebase));
-            Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateBranch("main", new Node { Value = 6 }, NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
         }
         using Repository read = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout resumed = read.Checkout("main");

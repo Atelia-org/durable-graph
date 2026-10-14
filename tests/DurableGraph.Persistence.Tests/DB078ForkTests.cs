@@ -194,10 +194,10 @@ public sealed partial class EventHistoryRepositoryTests {
             var before = ImmutableHistoryFiles();
             repository.OperationStageObserver = checkpoint => { if (checkpoint == (RepositoryOperationStage)point) throw new IOException("fork interruption"); };
             BranchCheckout? delivered = null;
-            GraphCommitException failure = Assert.Throws<GraphCommitException>(() => delivered = repository.Fork("child", main.Head));
+            RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.Fork("child", main.Head));
             Assert.Null(delivered);
             Assert.Null(failure.CandidateRevisionAddress);
-            Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);
+            Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
             Assert.Equal(published, repository.IsFaulted);
             AssertHistoryFiles(before);
             repository.OperationStageObserver = null;

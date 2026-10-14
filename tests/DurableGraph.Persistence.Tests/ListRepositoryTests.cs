@@ -174,8 +174,8 @@ public sealed class ListRepositoryTests : IDisposable {
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == RepositorySaveStage.BeforePublication) { throw new IOException("known not published"); }
             };
-            GraphCommitException failure = Assert.Throws<GraphCommitException>(() => session.Commit(NoRebase));
-            Assert.Equal(GraphCommitOutcome.NotPublished, failure.Outcome);
+            RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => session.Commit(NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, failure.Outcome);
             failedCandidate = Assert.IsType<FrameAddress>(failure.CandidateRevisionAddress);
             Assert.Equal(frozen, repository.HeadRevisionAddress);
             Assert.Equal(frozen, session.ParentRevisionAddress);

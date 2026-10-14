@@ -59,17 +59,17 @@ public sealed partial class Repository {
         _resources.EnsureEditingAllowed();
         PublicationOutcome outcome = PublicationOutcome.NotAttempted;
         try { OperationStageObserver?.Invoke(RepositoryOperationStage.BeforePublication); }
-        catch (Exception error) { throw new GraphCommitException(GraphCommitOutcome.NotPublished, null, error); }
+        catch (Exception error) { throw new RepositoryPublicationException(RepositoryPublicationOutcome.NotPublished, null, error); }
         try { _resources.CreateStoredTag(name, address, out outcome); }
         catch (Exception error) {
             // Pre-I/O validation and an ordinary VS rejection retain their original error.
             if (outcome == PublicationOutcome.NotAttempted && !_resources.IsFaulted) { throw; }
-            throw new GraphCommitException(MapOutcome(outcome), null, error);
+            throw new RepositoryPublicationException(MapOutcome(outcome), null, error);
         }
         try { OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPublication); }
         catch (Exception error) {
             _resources.MarkFaulted();
-            throw new GraphCommitException(GraphCommitOutcome.Published, null, error);
+            throw new RepositoryPublicationException(RepositoryPublicationOutcome.Published, null, error);
         }
     }
 }

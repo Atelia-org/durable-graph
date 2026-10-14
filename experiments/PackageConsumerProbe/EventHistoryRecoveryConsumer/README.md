@@ -56,7 +56,7 @@ the example explicitly rebuilds Transient lookup before applying an event. A sec
 the application protocol reports no unfinished work performs no business application and appends nothing. The runner compares
 persisted bytes, and verifies read-only browsing changes neither bytes nor file timestamps.
 
-On any exception the example logs the exception and, when available, GraphCommitException.Outcome
+On any exception the example logs the exception and, when available, RepositoryPublicationException.Outcome
 and repository.IsFaulted, then leaves the using scopes. It does not reuse old State/Event references,
 retry automatically, repair files, or synthesize a replacement Event. An Open failure has no
 repository health to report. This conservative policy does not imply every pre-write failure

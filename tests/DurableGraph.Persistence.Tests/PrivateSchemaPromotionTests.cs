@@ -316,7 +316,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     public void Two_ref_promotion_failure_recovers_both_old_or_both_new_and_preserves_complete_frames(int stage, bool visible) {
         FrameAddress oldHead, oldShared, mainHead;
         FrameImage[] complete;
-        GraphCommitException error;
+        RepositoryPublicationException error;
         RefImage shared, oldBranches;
         using (Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
@@ -336,9 +336,9 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             IOException injected = new("Promotion publication interrupted.");
             repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)stage) { throw injected; } };
             CheckpointAddress? delivered = null;
-            error = Assert.Throws<GraphCommitException>(() => delivered = dev.CommitStateToShared(root, NoRebase));
+            error = Assert.Throws<RepositoryPublicationException>(() => delivered = dev.CommitStateToShared(root, NoRebase));
             Assert.Same(injected, error.InnerException);
-            Assert.Equal(visible ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
+            Assert.Equal(visible ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.Null(delivered);
             Assert.Equal(oldHead, dev.Head.RevisionAddress);

@@ -18,9 +18,9 @@ public sealed partial class EventHistoryRepositoryTests {
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("State commit interrupted");
             };
-            var error = Assert.Throws<GraphCommitException>(() => PendingRecovery.Complete<Node>(repository, session,
+            var error = Assert.Throws<RepositoryPublicationException>(() => PendingRecovery.Complete<Node>(repository, session,
                 _ => { }, (state, pending) => state.Value -= Assert.IsType<Node>(pending).Value));
-            Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
+            Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.Equal((byte)7, oldState.Value); // Failed delivery does not roll back application memory.
         }

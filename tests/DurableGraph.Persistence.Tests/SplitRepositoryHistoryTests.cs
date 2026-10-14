@@ -265,11 +265,11 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
                 if (point == (published ? RepositoryOperationStage.AfterPublication : RepositoryOperationStage.BeforePublication)) { throw injected; }
             };
             BranchCheckout? delivered = null;
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => delivered = repository.Fork("candidate", main.Head));
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.Fork("candidate", main.Head));
             Assert.Null(delivered);
             Assert.Null(error.CandidateRevisionAddress);
             Assert.Same(injected, error.InnerException);
-            Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
+            Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Equal(published, repository.IsFaulted);
             repository.OperationStageObserver = null;
             if (published) {

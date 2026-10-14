@@ -262,7 +262,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         FrameAddress oldHead, mainHead, oldSchema;
         FrameImage[] complete;
         RefImage shared;
-        GraphCommitException error;
+        RepositoryPublicationException error;
         using (Repository repository = CreateShared()) {
             using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
             repository.CreateBranch("dev", main.Head);
@@ -282,8 +282,8 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
                 if (checkpoint == (RepositorySaveStage)stage) { outputAtFailure = store.AppendedFrames; throw failure; }
             };
             CheckpointAddress? delivered = null;
-            error = Assert.Throws<GraphCommitException>(() => delivered = dev.CommitState(NoRebase));
-            Assert.Equal(visible ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
+            error = Assert.Throws<RepositoryPublicationException>(() => delivered = dev.CommitState(NoRebase));
+            Assert.Equal(visible ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Same(failure, error.InnerException);
             Assert.True(outputAtFailure > before);
             Assert.True(repository.IsFaulted);

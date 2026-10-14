@@ -347,8 +347,8 @@ public sealed class LoadedWorldTests : IDisposable {
             if (checkpoint == RepositorySaveStage.BeforeAppend) { throw new InvalidOperationException("definite pre-append failure"); }
         };
         using (PreparedBranchSave failed = session.Prepare(session.State!, parameters: NoRebase)) {
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => failed.Commit());
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => failed.Commit());
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Null(error.CandidateRevisionAddress);
         }
         Assert.Equal(tail, Tail());

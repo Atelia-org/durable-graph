@@ -44,7 +44,7 @@ public sealed partial class Repository : IDisposable {
     public SchemaWriteMode? SchemaWriteMode { get; }
     /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
     /// <remarks>
-    /// Independent of GraphCommitException.Outcome: a NotPublished attempt can still fault the writer.
+    /// Independent of RepositoryPublicationException.Outcome: a NotPublished attempt can still fault the writer.
     /// False does not mean application mutations were rolled back. Recovery must inspect persisted
     /// history through a newly opened repository rather than reuse old domain objects or frame handles.
     /// </remarks>
@@ -114,7 +114,7 @@ public sealed partial class Repository : IDisposable {
     /// the exact source Head. Does not materialize Events, replay handlers, capture graphs or append history frames.
     /// Mutable instances are independent of other restorations, preserving aliases and cycles within this graph.
     /// All restoration and checkout preparation precede ref publication; ordinary restoration failures leave no
-    /// new ref. Publication can succeed before delivery fails: inspect GraphCommitException.Outcome and IsFaulted
+    /// new ref. Publication can succeed before delivery fails: inspect RepositoryPublicationException.Outcome and IsFaulted
     /// independently, then reopen a faulted repository to inspect refs. Application callback effects are not rolled back.
     /// </remarks>
     public BranchCheckout Fork(string branchName, CheckpointAddress source) {
@@ -337,7 +337,7 @@ public sealed partial class Repository : IDisposable {
     /// Requires a writable repository, a new branch name and an address issued by this open instance.
     /// Active checkouts on other branches do not prevent this operation.
     /// Creates only a persistent ref: no domain graph is restored and no editing checkout is acquired.
-    /// Publication may succeed before delivery fails; inspect GraphCommitException.Outcome and IsFaulted
+    /// Publication may succeed before delivery fails; inspect RepositoryPublicationException.Outcome and IsFaulted
     /// independently, and reopen a faulted repository to inspect the actual published refs.
     /// </remarks>
     public CheckpointAddress CreateBranch(string branchName, CheckpointAddress selectedFrame) {
@@ -359,7 +359,7 @@ public sealed partial class Repository : IDisposable {
     /// Branch movement and later commits never move the tag.
     /// No domain graph is materialized and no branch head or checkout baseline changes.
     /// Validation failures preserve their original error. Publication failures report an
-    /// explicit GraphCommitException outcome; inspect IsFaulted independently. Dispose and
+    /// explicit RepositoryPublicationException outcome; inspect IsFaulted independently. Dispose and
     /// reopen a faulted repository, then ResolveTag to inspect the actual binding. Do not
     /// blindly retry a creation whose publication may already have succeeded.
     /// </remarks>
@@ -412,14 +412,14 @@ public sealed partial class Repository : IDisposable {
             OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPublication);
         } catch (Exception error) {
             if (outcome != PublicationOutcome.NotAttempted) { _resources.MarkFaulted(); }
-            throw new GraphCommitException(MapOutcome(outcome), null, error);
+            throw new RepositoryPublicationException(MapOutcome(outcome), null, error);
         }
     }
 
-    private static GraphCommitOutcome MapOutcome(PublicationOutcome outcome) => outcome switch {
-        PublicationOutcome.Confirmed => GraphCommitOutcome.Published,
-        PublicationOutcome.Unknown => GraphCommitOutcome.Unknown,
-        _ => GraphCommitOutcome.NotPublished,
+    private static RepositoryPublicationOutcome MapOutcome(PublicationOutcome outcome) => outcome switch {
+        PublicationOutcome.Confirmed => RepositoryPublicationOutcome.Published,
+        PublicationOutcome.Unknown => RepositoryPublicationOutcome.Unknown,
+        _ => RepositoryPublicationOutcome.NotPublished,
     };
 
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,

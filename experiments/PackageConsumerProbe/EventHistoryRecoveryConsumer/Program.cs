@@ -66,7 +66,7 @@ internal static class Program {
             }
             catch (Exception error) {
                 Console.Error.WriteLine(error);
-                Console.Error.WriteLine($"Outcome={(error is GraphCommitException commit ? commit.Outcome.ToString() : "unclassified")}; IsFaulted={repository.IsFaulted}");
+                Console.Error.WriteLine($"Outcome={(error is RepositoryPublicationException commit ? commit.Outcome.ToString() : "unclassified")}; IsFaulted={repository.IsFaulted}");
                 return 1; // No automatic retry, rollback, deletion, or replacement Event.
             }
         }

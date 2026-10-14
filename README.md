@@ -435,7 +435,7 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 正常打开由 FrameStore/VersionStore 恢复不完整尾部，只读打开不写不修；不承诺完整 OS crash/power-loss 保证。仓库使用共享 `data/` 与发布 `versions/`，不另建 repository.lock。
 当前运行时只支持新建的新存储格式库；模型程序集需要重编译，模型的 accepted history 与显式 Upgrade 继续保留。
 
-保存失败时不要一律重试：`GraphCommitException.Outcome` 区分 NotPublished / Unknown / Published，
+保存失败时不要一律重试：`RepositoryPublicationException.Outcome` 区分 NotPublished / Unknown / Published，
 同时检查仓库与工作副本的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
 按持久 head 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。应用通过 Repository 保存；必要 Schema 由真实图捕获进入共同候选，不需要独立调用 SchemaStore 登记或操作发布日志。
 

@@ -340,9 +340,9 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             }
         };
         BranchCheckout? delivered = null;
-        GraphCommitException failure = Assert.Throws<GraphCommitException>(() => delivered = repository.Fork("failed", newer));
+        RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.Fork("failed", newer));
         Assert.Null(delivered);
-        Assert.Equal(afterPublication ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);
+        Assert.Equal(afterPublication ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
         Assert.Equal(afterPublication, repository.IsFaulted);
         repository.OperationStageObserver = null;
         if (afterPublication) {

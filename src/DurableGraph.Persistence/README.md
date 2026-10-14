@@ -16,6 +16,7 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 | 任务 | 源码入口 |
 |---|---|
 | 公开仓库、持续编辑与历史读取 | [Repository](Repository.cs)、[BranchCheckout](BranchCheckout.cs)、[Checkpoint](Checkpoint.cs)、[CheckpointAddress](CheckpointAddress.cs)／[CheckpointKind](CheckpointKind.cs) |
+| graph／branch-ref／tag 发布失败合同 | [RepositoryPublicationException／Outcome](RepositoryPublicationException.cs)；内部 [RepositoryOperationStage](RepositoryOperationStage.cs) 仅为故障注入 hook |
 | 准确执行环境与共同恢复／比较 | [ModelExecutionEnvironment](ModelExecutionEnvironment.cs)、[GraphReader](GraphReader.cs) |
 | meta 查询、意图与 Schema 工厂 | [SchemaCatalogView](SchemaCatalogView.cs)、[SchemaCatalogWorkspace](SchemaCatalogWorkspace.cs) |
 | 固定员工、登记与有限绑定 | [BootstrapRecords](BootstrapRecords.cs)、[BootstrapBindings](BootstrapBindings.cs) |

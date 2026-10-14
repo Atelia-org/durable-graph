@@ -39,8 +39,8 @@ public sealed partial class DB078HistoryTests {
             int graphCheckpoints = 0;
             repository.OperationStageObserver = _ => graphCheckpoints++;
             InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("First joint End outcome unknown."));
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
-            Assert.Equal(GraphCommitOutcome.Unknown, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.Unknown, error.Outcome);
             Assert.IsType<IOException>(error.InnerException);
             candidate = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
             Assert.Equal(1, graphCheckpoints);
@@ -72,8 +72,8 @@ public sealed partial class DB078HistoryTests {
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == RepositorySaveStage.BeforePublication) { throw new IOException("Joint publication interrupted."); }
             };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.Equal(previous, main.Head.RevisionAddress);
         }

@@ -6,14 +6,14 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class EventHistoryRepositoryTests {
     [Theory]
-    [InlineData("BeforeDataConfirm", GraphCommitOutcome.NotPublished, false)]
-    [InlineData("AfterAppend", GraphCommitOutcome.Unknown, false)]
-    [InlineData("AfterConfirmed", GraphCommitOutcome.Published, true)]
-    public void ActualRootPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, GraphCommitOutcome outcome, bool visible) {
+    [InlineData("BeforeDataConfirm", RepositoryPublicationOutcome.NotPublished, false)]
+    [InlineData("AfterAppend", RepositoryPublicationOutcome.Unknown, false)]
+    [InlineData("AfterConfirmed", RepositoryPublicationOutcome.Published, true)]
+    public void ActualRootPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, RepositoryPublicationOutcome outcome, bool visible) {
         FrameAddress candidate;
         using (Repository repository = CreateRepository()) {
             InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage));
-            var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), NoRebase));
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateBranch("main", new Node(), NoRebase));
             Assert.Equal(outcome, error.Outcome);
             Assert.True(repository.IsFaulted);
             candidate = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
@@ -49,8 +49,8 @@ public sealed partial class EventHistoryRepositoryTests {
         repository.SaveStageObserver = checkpoint => {
             if (checkpoint == (RepositorySaveStage)point) { throw new IOException("Post publication installation interruption"); }
         };
-        GraphCommitException error = Assert.Throws<GraphCommitException>(() => main.CommitState(NoRebase));
-        Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
+        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => main.CommitState(NoRebase));
+        Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
         Assert.True(repository.IsFaulted);
         resources.Data.EnsureUsable();
         Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
@@ -67,16 +67,16 @@ public sealed partial class RepositoryTagFailureWindowTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "durable-tag-window-" + Guid.NewGuid().ToString("N"));
 
     [Theory]
-    [InlineData("BeforeDataConfirm", GraphCommitOutcome.NotPublished, false)]
-    [InlineData("AfterAppend", GraphCommitOutcome.Unknown, true)]
-    [InlineData("AfterConfirmed", GraphCommitOutcome.Published, true)]
-    public void ActualTagPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, GraphCommitOutcome outcome, bool visible) {
+    [InlineData("BeforeDataConfirm", RepositoryPublicationOutcome.NotPublished, false)]
+    [InlineData("AfterAppend", RepositoryPublicationOutcome.Unknown, true)]
+    [InlineData("AfterConfirmed", RepositoryPublicationOutcome.Published, true)]
+    public void ActualTagPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, RepositoryPublicationOutcome outcome, bool visible) {
         FrameAddress saved;
         using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
             saved = main.Head.RevisionAddress;
             InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage), tag: true);
-            var error = Assert.Throws<GraphCommitException>(() => repository.CreateTag("candidate", main.Head));
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("candidate", main.Head));
             Assert.Equal(outcome, error.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.Null(error.CandidateRevisionAddress);

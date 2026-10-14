@@ -57,7 +57,7 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.BranchCheckout.CommitState(' = 2
         'P:Atelia.DurableGraph.BranchCheckout.State' = 1
         'P:Atelia.DurableGraph.BranchCheckout.IsFaulted' = 1
-        'T:Atelia.DurableGraph.Persistence.GraphCommitException' = 1
+        'T:Atelia.DurableGraph.RepositoryPublicationException' = 1
         'T:Atelia.DurableGraph.CheckpointAddress' = 1
         'T:Atelia.DurableGraph.Checkpoint' = 1
         'T:Atelia.DurableGraph.EventCheckpoint' = 1

@@ -329,9 +329,9 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             IOException failure = new("split repository adapter boundary");
             if (published) {
                 repository.SaveStageObserver = point => { if (point == RepositorySaveStage.AfterPublication) { throw failure; } };
-                GraphCommitException error = Assert.Throws<GraphCommitException>(() => checkout.CommitState());
+                RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => checkout.CommitState());
                 Assert.Same(failure, error.InnerException);
-                Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
+                Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
                 Assert.True(repository.IsFaulted);
                 Assert.Same(baseline, checkout.Baseline);
                 Assert.Equal(before, checkout.Head);

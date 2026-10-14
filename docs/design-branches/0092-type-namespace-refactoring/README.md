@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4／D5 已限定验收；D5 公开 CheckpointKind 的源码、根回归和准确新 G 普通消费／冷续写通过。有限文件组织完成。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4／D5 已限定验收；有限文件组织完成。D6 正在验证公开发布类型迁移；另两组候选保名，见[有限收敛](#d6-status)。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)／[D4](#d4-status)，当片见 [D5](#d5-status)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)／[D4](#d4-status)／[D5](#d5-status)，当片见 [D6](#d6-status)。
 
 已处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料，并完成有限文件组织。
 公共接入入口和已有 `Schema`／`Runtime` 分工保持；其余公开名称与程序集归属分别按现行职责收益判断，后续入口见[路线图](../../DurableGraph-research-roadmap.md)。
@@ -86,7 +86,7 @@ B 基线 GraphResources（现 RepositoryResources）上指向默认路径的内�
 | `NormalizedRevision` → `NormalizedGraphState` | [实现](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)既含归一化来源，也含未追加 candidate，后续才安装实际 heads/H；不用 PublishedRevision 或只服务保存的 SaveBaseline。`FromSplitCandidate/WithSplitGraph/RequireSplitSource` 改为表达真实来源／安装职责的名称，保原校验 |
 | `MaterializedGraph<T>` → `EditableGraphRestoration<T>` | [声明与交付](../../../src/DurableGraph.Persistence/GraphReader.cs)除领域根还含 normalized baseline、ID 游标和反向身份，只由 editable delivery 产生；不把纯只读根包装成此材料 |
 | `ObjectRevisionPlanner` → `ObjectWritePlanner` | [实现](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs)只分类／规划对象写入，source membership 和 Removes 在持久 adapter。同步纠正 [ObjectRepresentationPlan](../../../src/DurableGraph.Persistence/ObjectRepresentationPlan.cs)中仍声称 planner 供应 membership difference 的旧注释 |
-| `CommitCheckpoint` → `RepositoryOperationStage` | [声明](../../../src/DurableGraph.Persistence/GraphCommitException.cs)为外观层阶段 hook，不是历史读取；与 RepositorySaveStage 各处于不同层。改 hook 名但不合并枚举、移注入点或顺手删未使用成员 |
+| `CommitCheckpoint` → `RepositoryOperationStage` | [声明](../../../src/DurableGraph.Persistence/RepositoryOperationStage.cs)为外观层阶段 hook，不是历史读取；与 RepositorySaveStage 各处于不同层。改 hook 名但不合并枚举、移注入点或顺手删未使用成员 |
 
 `Split` 并不总是历史词：测试／包故事可能借它描述 shared/private 或准确视图场景。
 这里只收回曾表示并行 backend 的内部标签，不批量改实验名、fixture 类型或历史记录。
@@ -124,9 +124,9 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | `Atelia.DurableGraph.Serialization.StringPayloadCodec` | D1 已采用 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringBodyPreparer.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
 | `Atelia.DurableGraph.Persistence.GraphResources` | [D3](#d3-status)采用 `Atelia.DurableGraph.Persistence.RepositoryResources`；实际拥有仓库级 FS/VS、branch/shared 基线、唯一 pending 和 fault。namespace 与公开成员保持，直接迁移并重编译，不与薄 facade 合并 |
 | `Atelia.DurableGraph.Persistence.GraphFrameKind` | [D5](#d5-status)采用根空间 `Atelia.DurableGraph.CheckpointKind`，与 CheckpointAddress 的业务角色对应；[enum](../../../src/DurableGraph.Persistence/CheckpointKind.cs)仅 Event/State，仍在 Persistence 程序集。不与内部 StoredGraphKind 合并或加 Meta |
-| `Atelia.DurableGraph.Persistence.GraphCommitException/GraphCommitOutcome` | 候选根空间 `RepositoryPublicationException/RepositoryPublicationOutcome`；[现合同](../../../src/DurableGraph.Persistence/GraphCommitException.cs)已覆盖 graph、branch-ref 和 tag。现行为无缺陷；不为根空间整齐自动搬 public companion，不改 outcome/fault/候选地址含义 |
-| `.Runtime.StringValueProjection/DurableValueProjection<T>/ObjectValueProjection<T>` | 可分别明确为 StringReferenceProjection/DurableReferenceProjection/ObjectReferenceProjection；[实现](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)在引用与 ObjectId 间转换。收益中等，先不全改；保通用 IValueProjection，不授 object/interface 通配能力，不因未发现调用就删 public helper |
-| `Atelia.DurableGraph.Schema.ObjectStateKind` | 可考虑 ObjectLayoutKind；[实际拥有者](../../../src/DurableGraph/Schema/ObjectLayout.cs)是布局，ObjectStateRecord 代理分类。收益较低，保现名可行，不借此统一所有 kind 数值／协议 |
+| `Atelia.DurableGraph.Persistence.GraphCommitException/GraphCommitOutcome` | [D6](#d6-status)采用根空间 `RepositoryPublicationException/RepositoryPublicationOutcome`；[现合同](../../../src/DurableGraph.Persistence/RepositoryPublicationException.cs)覆盖 graph、branch-ref 和 tag。仍在 Persistence 程序集，保 outcome/fault/候选地址；内部阶段 hook 保原 namespace |
+| `.Runtime.StringValueProjection/DurableValueProjection<T>/ObjectValueProjection<T>` | [D6](#d6-status)保名并关闭本轮候选。[实现](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)在引用与 ObjectId 间转换，属于 IValueProjection 值槽投影家族，Value 不限定 CLR 值类型。保通用接口／支持范围和 public helper |
+| `Atelia.DurableGraph.Schema.ObjectStateKind` | [D6](#d6-status)保名并关闭本轮候选。[ObjectLayout](../../../src/DurableGraph/Schema/ObjectLayout.cs)和 ObjectStateRecord 共享冻结内容分类；不只描述 layout，不对应业务 State 或 wire kind |
 
 `Atelia.DurableGraph.Schema.DurableFieldInfo` 描述带正编号的完整持久值槽：普通字段用声明内 FieldId，Array/List/Nullable child 规范为 1，Dictionary key/value 规范为 1/2；它不是容器元素的索引。
 [D4](#d4-status)采用局部归位，保现名和 record 相等。`ValueSlot`／`ValueSlotLayout` 纯改名仍需解释编号，并不能代替完整布局；不拆多套公开槽类型、不移除 FieldId、不改编号。
@@ -149,7 +149,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 ## 8. 后续施工顺序与验收
 
 先冻结当片旧全名→新全名与配套成员表，再实施；下面是建议次序，不是全部候选自动获批的队列。
-保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D4 保文件位置，D5 只提取一个公开 enum，E1／E2 只改同目录 basename，E3 按有限表并入既有目录且保多类型文件。不得用 rename 掩盖合并 owner、删校验或改行为。
+保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D4 保文件位置，D5 提取一个公开 enum，D6 分开公开发布合同与内部阶段 hook；E1／E2 只改同目录 basename，E3 按有限表并入既有目录且保多类型文件。不得用 rename 掩盖合并 owner、删校验或改行为。
 
 | 片 | 有限范围 | 最小可观察验收 |
 |---|---|---|
@@ -451,3 +451,42 @@ Family 的 seed／continue／verify 为三个独立 PID：新库保存真实初�
 实际 assets、独立 cache、输出、编译输入及 generated／history 均核验；33 次加载映像（30 次包 DLL＋3 次消费者）逐一匹配所选字节。包内公开／protected API 1359 行亦只有同一六行类型 FQN 变化。
 包凭据 `.artifacts/db092-d5/package/consumer-result.json`，SHA256 `D040BB4EE2E8F4399897E0D3659D2A7B75B0B0936C368EBE7500ADB587108D8F`；主线程接受凭据为同片 `root-acceptance.json`，独立复核为 `review/final-review.json`。集成 diff 与链接检查无新增缺口，117 处历史问题保持原范围。
 当前停点：D5 的名称／namespace、源码、根回归、Replay 编译及上述准确新 G 普通消费完成。没有 Family、物理 Base/Delta kind、Upgrade、private promotion、Fork/Pair、旧包／旧数据兼容、Crash/Kill 或性能资格；前片结果不代授。后续候选与重访条件只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+<a id="d6-status"></a>
+## 16. D6：发布合同命名与剩余候选收敛
+
+2026-10-14；基线 `e33373a`。本轮 Goal 仅收敛 §6 剩余的发布类型、引用投影 helper 和对象内容分类三组，不继续扩充候选。
+调查、独立质疑与主线程源码核对后，采用以下决定：
+
+| 候选 | 决定与依据 |
+|---|---|
+| `GraphCommitException`／`GraphCommitOutcome` | 实施根 namespace 的 `RepositoryPublicationException`／`RepositoryPublicationOutcome`。Repository 的 ref-only 与 tag 发布也使用同一失败合同，无新图且候选地址为空；旧 GraphCommit 名称收窄了实际职责。它们是公开 Repository 操作的 catch 合同，归入接入 namespace；程序集仍为 Persistence |
+| `StringValueProjection`／`DurableValueProjection<T>`／`ObjectValueProjection<T>` | 保名。它们是 `IValueProjection<TDomain,TState>` 值槽投影家族中的引用实现，当前 XML 已明确引用与 ObjectId 的转换；Value 不承诺 CLR 值类型。保通用接口与三个 public helper，不因局部未调用就删除 |
+| `ObjectStateKind` | 保名。它区分 captured／decoded 对象内容，`ObjectLayout.Kind` 与 `ObjectStateRecord.Kind` 是同一分类轴，不只属于 layout；当前 XML 明确它不是 wire type code。单改 LayoutKind 收窄了内容分类含义 |
+
+有限代码范围：两个公开类型共置于 `RepositoryPublicationException.cs`；内部阶段 hook 单列 `RepositoryOperationStage.cs`，仍在 `.Persistence`。
+同步现行 C# 类型引用、相关注释和包 XML 的精确 member FQN 断言；不合并其他 owner、改程序集、成员或访问级别，不保兼容壳。
+outcome 的默认 int／0、1、2、候选地址与 InnerException、消息原文、全部发布映射／hook／fault／安装与寿命检查保持。
+
+| 旧完整类型名 | 新完整类型名 |
+|---|---|
+| `Atelia.DurableGraph.Persistence.GraphCommitException` | `Atelia.DurableGraph.RepositoryPublicationException` |
+| `Atelia.DurableGraph.Persistence.GraphCommitOutcome` | `Atelia.DurableGraph.RepositoryPublicationOutcome` |
+
+最小验收：源码仅有批准的标识符、namespace、文件拆出和 XML member FQN 差异；根构建与 Persistence／Runtime／Generator／Build 相关测试通过；公开 API 只有两类型的批准 FQN 变化。
+准确新 G 普通非 friend 消费者编译新 catch／属性合同，并验证新库保存、ref-only 分支与 tag、冷开只读；内部确定性失败回归与普通包证据分别记录，不把 catch 编译声称为三个 outcome 的包故障运行。
+源码已完成：27 份既有 C# 只作批准替换，删除旧混合文件并提取两份新文件；共迁移 142 个标识符、7 处 XML／注释引用及一处 PS 的 XML member FQN。
+独立原 Git/blob 核验 609 份基线非 Markdown，580 份其他文件原字节保持；两个保名候选组、SG／Build 和协议代码均保持。
+公开／protected API 共 1359 行，仅十行受两类型完整 FQN 映射影响；不声明属性／nullable 元数据穷举或二进制兼容。
+
+```powershell
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+```
+
+根 Rebuild 零警告／错误；Persistence 893 项与 Runtime／Generator／Build 1628 项全部通过，失败／跳过为零。
+既有确定性回归覆盖图／ref-only／tag 失败、候选地址、三个 outcome、NotPublished 可健康或 faulted、故障后停止服务与重开检查；没有改变注入面或增加公开故障 hook。
+源码凭据 `.artifacts/db092-d6/source/result.json` SHA256 为 `7B31E7D5AD1996660E41DC7DCD2A27D2F18933F4E0DD4CD590983DC567C37A66`；独立源码复核 `.artifacts/db092-d6/review/source-review.json` SHA256 为 `23F6C6AE259B06CA5469AF79C6AF9A8E14163A82E04B4AF67D962D40244ED6C7`。当片根日志与 API 清单位于同一切片工件目录。
+
+当前状态：源码、根回归与 API 映射已验收；准确新 G 有限消费待验收。其余两组已作保名结论；重访只由真实消费歧义或新的独立分类需求触发，后续条件只维护在[路线图](../../DurableGraph-research-roadmap.md)。

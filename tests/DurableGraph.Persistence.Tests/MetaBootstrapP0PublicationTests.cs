@@ -9,12 +9,12 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
     private readonly string _path = Path.Combine(Path.GetTempPath(), "dg-bootstrap-publication-" + Guid.NewGuid().ToString("N"));
 
     [Theory]
-    [InlineData("BeforeDataConfirm", 0, GraphCommitOutcome.NotPublished, false)]
-    [InlineData("AfterAppend", 1, GraphCommitOutcome.Unknown, false)]
-    [InlineData("AfterAppend", 2, GraphCommitOutcome.Unknown, true)]
-    [InlineData("AfterConfirmed", 0, GraphCommitOutcome.Published, true)]
+    [InlineData("BeforeDataConfirm", 0, RepositoryPublicationOutcome.NotPublished, false)]
+    [InlineData("AfterAppend", 1, RepositoryPublicationOutcome.Unknown, false)]
+    [InlineData("AfterAppend", 2, RepositoryPublicationOutcome.Unknown, true)]
+    [InlineData("AfterConfirmed", 0, RepositoryPublicationOutcome.Published, true)]
     public void Real_conditional_publication_cold_open_observes_both_old_or_both_new(
-        string stage, int failOnAppend, GraphCommitOutcome expected, bool visible) {
+        string stage, int failOnAppend, RepositoryPublicationOutcome expected, bool visible) {
         FrameAddress oldBusiness, oldMeta;
         long before;
         FrameAddress? candidate = null;
@@ -29,7 +29,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
                 if (stage != "AfterAppend" || ++appends == failOnAppend) { throw new IOException("P0 real publication window"); }
             });
             int installed = 0;
-            var error = Assert.Throws<GraphCommitException>(() => repository.Commit(pending,
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.Commit(pending,
                 _ => installed++, _ => installed++));
             Assert.Equal(expected, error.Outcome);
             Assert.True(repository.IsFaulted);
@@ -63,9 +63,9 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             oldMeta = repository.SharedSchemaRoot!.Value;
             using var pending = Prepare(repository, 2);
             int metaInstalls = 0;
-            var error = Assert.Throws<GraphCommitException>(() => repository.Commit(pending,
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.Commit(pending,
                 _ => metaInstalls++, _ => throw new IOException("State install failed after meta install")));
-            Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
+            Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
             Assert.Equal(1, metaInstalls);
             Assert.True(repository.IsFaulted);
             candidate = error.CandidateRevisionAddress!.Value;
@@ -92,8 +92,8 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
                 if ((int)point == checkpoint) { throw new IOException("Stop before publication"); }
             };
             using var pending = Prepare(repository, 2);
-            var error = Assert.Throws<GraphCommitException>(() => repository.Commit(pending));
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.Commit(pending));
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
         }
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.Equal(oldBusiness, reopened.GetHead("main"));

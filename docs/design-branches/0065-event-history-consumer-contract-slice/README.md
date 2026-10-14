@@ -1,7 +1,7 @@
 # DB-065 · EventHistory 消费者上手与恢复合同
 
 > 整理说明：2026-10-14 从 `docs/design-branches/0065-event-history-consumer-contract-slice.md` 搬入问题入口；正文来源 Git `8ef9fca`。
-> 适用性：默认调用、公开 XML、引用快照和同源恢复的当片验收；默认阈值后继见 [DB-070](../0070-read-amplification-default/README.md)，后续公共 API 见 [DB-083](../0083-checkpoint-api-user-stories/README.md)。
+> 适用性：默认调用、公开 XML、引用快照和同源恢复的当片验收；默认阈值后继见 [DB-070](../0070-read-amplification-default/README.md)，后续公共 API 见 [DB-083](../0083-checkpoint-api-user-stories/README.md)，发布类型现名见 [DB-092 D6](../0092-type-namespace-refactoring/README.md#d6-status)。
 > 本文原过程与测试数字保留当时基线；当前能力与焦点见 [PROJECT-STATE](../../../src/PROJECT-STATE.md)。
 
 > 状态：已实施 / G0–G3 验收完成；2026-09-11。实际交付与证据见 §9。
@@ -34,7 +34,7 @@
 
 [Publish](../../../src/DurableGraph.Persistence/Repository.cs) 先 Stage，再 State/Journal 屏障与 ref 发布，
 最后 Install、更新 Head/PendingEvent 并返回。写入前失败可以直接抛原异常；发生追加尝试后才按发布阶段包装
-[GraphCommitException](../../../src/DurableGraph.Persistence/GraphCommitException.cs)。NotPublished 也可能已经使仓库 faulted。
+[GraphCommitException（现名 RepositoryPublicationException）](../../../src/DurableGraph.Persistence/RepositoryPublicationException.cs)。NotPublished 也可能已经使仓库 faulted。
 
 [ReadFrames/ReadEvents](../../../src/DurableGraph.Persistence/Repository.cs) 返回所选 branch head 的逻辑祖先链，
 从旧到新，以数组完整物化；不把物理 orphan 或其他分支独有记录混入该链。它们不恢复领域对象。

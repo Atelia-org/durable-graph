@@ -156,7 +156,7 @@ public sealed class DB078EventQueryTests : IDisposable {
             repository.SaveStageObserver = point => {
                 if (point == RepositorySaveStage.AfterBusinessAppend) { throw new IOException("Injected publication failure."); }
             };
-            Assert.Throws<GraphCommitException>(() => branch.CommitEvent(new Node(), NoRebase));
+            Assert.Throws<RepositoryPublicationException>(() => branch.CommitEvent(new Node(), NoRebase));
             Assert.True(repository.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());
             Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());

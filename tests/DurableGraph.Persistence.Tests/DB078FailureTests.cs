@@ -18,9 +18,9 @@ public sealed partial class EventHistoryRepositoryTests {
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("Interrupted initial Event.");
             };
-            var failure = Assert.Throws<GraphCommitException>(() =>
+            var failure = Assert.Throws<RepositoryPublicationException>(() =>
                 repository.CreateBranchFromEvent("main", new Node { Value = 7 }, NoRebase));
-            Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);
+            Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.NotNull(failure.CandidateRevisionAddress);
             Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
@@ -51,8 +51,8 @@ public sealed partial class EventHistoryRepositoryTests {
                 Assert.Equal(eventHead, checkout.Head);
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("Interrupted first State.");
             };
-            var failure = Assert.Throws<GraphCommitException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
-            Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);
+            var failure = Assert.Throws<RepositoryPublicationException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
+            Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
             Assert.Null(checkout.State);
             Assert.Equal(eventHead, checkout.Head);
             Assert.True(checkout.IsFaulted);
@@ -78,8 +78,8 @@ public sealed partial class EventHistoryRepositoryTests {
             using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Node { Value = 7 }, NoRebase);
             var eventHead = checkout.Head;
             InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("After root record append"));
-            var failure = Assert.Throws<GraphCommitException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
-            Assert.Equal(GraphCommitOutcome.Unknown, failure.Outcome);
+            var failure = Assert.Throws<RepositoryPublicationException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
+            Assert.Equal(RepositoryPublicationOutcome.Unknown, failure.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.Null(checkout.State);
             Assert.Equal(eventHead, checkout.Head);

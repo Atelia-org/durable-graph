@@ -199,7 +199,7 @@ Event 提交不触碰 State 材料槽，也不生成供 Fork 使用的 Event DTO
 → 创建持久 ref → 执行无用户 callback 的安装/交付。
 它与朴素 ref+Load 的成功结果一致，并把可预见的恢复失败移到发布之前。
 
-这不是持久化和内存返回的原子事务。沿用 [GraphCommitOutcome](../../../src/DurableGraph.Persistence/GraphCommitException.cs)
+这不是持久化和内存返回的原子事务。沿用 [GraphCommitOutcome（现名 RepositoryPublicationOutcome）](../../../src/DurableGraph.Persistence/RepositoryPublicationException.cs)
 对 NotPublished/Unknown/Published 与 IsFaulted 的区分：
 
 - 恢复/校验失败：没有本次新 ref，不交付半图；不回滚用户回调的外部副作用。

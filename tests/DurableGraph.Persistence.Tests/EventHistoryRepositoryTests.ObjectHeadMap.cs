@@ -61,10 +61,10 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)RepositorySaveStage.BeforePublication, GraphCommitOutcome.NotPublished)]
-    [InlineData((int)RepositorySaveStage.AfterPublication, GraphCommitOutcome.Published)]
-    [InlineData((int)RepositorySaveStage.BeforeInstall, GraphCommitOutcome.Published)]
-    public void MapBaseRootReplacementKeepsPublicationAndInstallationFailureBoundaries(int point, GraphCommitOutcome outcome) {
+    [InlineData((int)RepositorySaveStage.BeforePublication, RepositoryPublicationOutcome.NotPublished)]
+    [InlineData((int)RepositorySaveStage.AfterPublication, RepositoryPublicationOutcome.Published)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall, RepositoryPublicationOutcome.Published)]
+    public void MapBaseRootReplacementKeepsPublicationAndInstallationFailureBoundaries(int point, RepositoryPublicationOutcome outcome) {
         FrameAddress first, candidate;
         using (Repository repository = CreateRepository()) {
             Node original = LargeWorld();
@@ -76,7 +76,7 @@ public sealed partial class EventHistoryRepositoryTests {
                 Assert.Same(original, ((Node)session.State!));
                 if (checkpoint == (RepositorySaveStage)point) { throw new IOException("interrupted map Base publication"); }
             };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(replacement, NoRebase));
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => session.CommitState(replacement, NoRebase));
             Assert.Equal(outcome, error.Outcome);
             candidate = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
             Assert.True(repository.IsFaulted);
@@ -92,7 +92,7 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var recovered = reopened.Checkout("main");
-        if (outcome == GraphCommitOutcome.Published) {
+        if (outcome == RepositoryPublicationOutcome.Published) {
             Assert.Equal(candidate, recovered.StateRevisionAddress!.Value);
             Assert.Equal((byte)7, ((Node)recovered.State!).Value);
             Assert.Null(((Node)recovered.State!).Left);

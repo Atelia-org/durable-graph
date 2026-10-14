@@ -333,12 +333,12 @@ public sealed partial class RepositoryResources {
             bool fault = outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable() ||
                 (publishing ? !publicationRejected : store.AppendedFrames != framesBefore);
             if (fault) { MarkFaulted(); }
-            GraphCommitOutcome mapped = outcome switch {
-                PublicationOutcome.Confirmed => GraphCommitOutcome.Published,
-                PublicationOutcome.Unknown => GraphCommitOutcome.Unknown,
-                _ => GraphCommitOutcome.NotPublished,
+            RepositoryPublicationOutcome mapped = outcome switch {
+                PublicationOutcome.Confirmed => RepositoryPublicationOutcome.Published,
+                PublicationOutcome.Unknown => RepositoryPublicationOutcome.Unknown,
+                _ => RepositoryPublicationOutcome.NotPublished,
             };
-            throw new GraphCommitException(mapped, candidate, error);
+            throw new RepositoryPublicationException(mapped, candidate, error);
         }
         finally {
             pending.Finish();

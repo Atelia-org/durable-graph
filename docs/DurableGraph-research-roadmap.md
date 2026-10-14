@@ -23,7 +23,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-092 命名与组织](design-branches/0092-type-namespace-refactoring/README.md) | 下一候选核 GraphCommitException／GraphCommitOutcome 对图、branch-ref 和 tag 共同发布的角色，选择保名或 RepositoryPublication 名称；名称／namespace／程序集分别判断，保持 outcome、候选地址及 fault/lifetime。引用投影 helper 仍按职责收益逐项判断。DurableFieldInfo 保名，仅在真实消费歧义出现时重访全局槽名，保编号／完整相等。程序集调整只由真实依赖／消费边界触发，不预设拆包、全项目目录规范化或兼容框架 |
+| [DB-092 D6 发布合同](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 根空间 RepositoryPublicationException／Outcome 的源码、根回归和 API 映射已验收，准确新包有限消费待验收；保持发布结果、候选地址与 fault/lifetime。引用投影 helper 和 ObjectStateKind 已决定保名，不再列作待实施候选 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
 | [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前发布合同与活动资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
 | [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md) 保持 |
@@ -157,6 +157,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
+| [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |
 | DateTime 的完整保存合同 | 真实模型需要 DateTime 时，选择是否限制 UTC/Unspecified、接受公开状态规范化，或保留更完整的 Local ambiguous-DST 信息；需跨时区/DST 见证。三者公开行为不同，不随 DB-058 开放。平台依据及候选见 [DB-058 §3.3](design-branches/0058-temporal-scalar-value-slice/README.md#33-为什么-datetime-留在另一个问题中) |
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |

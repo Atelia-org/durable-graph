@@ -205,10 +205,10 @@ public sealed partial class P0BusinessPlanningAccountingTests {
                 Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == childId.Value);
                 Assert.True(MutableRows(candidate).Remove(childId)); // Fail the actual complete-membership installation check.
             };
-            GraphCommitException error = Assert.Throws<GraphCommitException>(() => save.Commit());
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => save.Commit());
             Assert.True(reached);
             Assert.False(publicationReached);
-            Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
+            Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.IsType<InvalidDataException>(error.InnerException);
             orphan = error.CandidateRevisionAddress!.Value;
             Assert.True(repository.IsFaulted);

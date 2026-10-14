@@ -196,9 +196,9 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             }
         };
         BranchCheckout? delivered = null;
-        GraphCommitException error = Assert.Throws<GraphCommitException>(() => delivered = repository.Fork("retry", repository.GetHead("other")));
+        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.Fork("retry", repository.GetHead("other")));
         Assert.Null(delivered);
-        Assert.Equal(afterPublication ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
+        Assert.Equal(afterPublication ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
         Assert.Equal(afterPublication, repository.IsFaulted);
         repository.OperationStageObserver = null;
         if (afterPublication) {
