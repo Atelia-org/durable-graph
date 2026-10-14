@@ -18,10 +18,8 @@
 
 ## 当前焦点
 
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1／D2 及 E1／E2／E3 已限定验收，有限源码组织完成；现行名称与入口从[源码导航](DurableGraph.Persistence/README.md)进入。
-[D3](../docs/design-branches/0092-type-namespace-refactoring/README.md#d3-status)已将唯一仓库级资源 owner 改为 `RepositoryResources`；当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`。成员、namespace、发布与寿命保持；根构建、相关回归及准确新 G 的直接资源消费／同库冷续写通过。生成合同及旧生成输出清理从 D1／D2 和[构建指引](../README.md)进入，D3 的准确包来源与有限资格只查其记录。
-
-[D4](../docs/design-branches/0092-type-namespace-refactoring/README.md#d4-status)已将两项纯槽转换从 Runtime 的 `StateBindingContext` 归回 Schema 的 `DurableFieldInfo`，静态签名与实现保持；类型名、FieldId 与完整槽相等保留。源码独立复核、根构建和相关回归通过，准确新包消费按当片合同继续验收。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D4 及 E1／E2／E3 已限定验收，有限源码组织完成；入口从[源码导航](DurableGraph.Persistence/README.md)进入。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。
+[D4](../docs/design-branches/0092-type-namespace-refactoring/README.md#d4-status)将同签名的 `WithFieldId`／`NominalType` 归回 Schema 的 `DurableFieldInfo`，四种 Schema layout 不再依赖 DG Runtime；类型名、FieldId 与完整槽相等保留。根回归与直接新包调用通过，普通／Family 均消费真实 SG／Build，Family 新库保存／冷续写通过；准确包来源与有限资格查当片记录。生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。
 按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。后续公开候选仍逐项核职责收益，程序集调整另判，具体入口和重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。

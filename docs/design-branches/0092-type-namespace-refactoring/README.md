@@ -1,6 +1,6 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3 已限定验收；D4 两项纯槽转换已归回 Schema，源码、根构建及相关回归通过，准确新 G 消费待验收。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4 已限定验收；有限文件组织完成，D4 两项纯槽转换归回 Schema，根回归和准确新 G 的直接调用／冷续写通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
 > 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)，当片见 [D4](#d4-status)。
 
@@ -116,7 +116,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 6. 公开候选与尚不宜机械处理的问题
 
-这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。D3 采用仓库资源 owner 名称；其余候选保独立判断，不因没有兼容负担而自动全改。
+这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。D3 采用仓库资源 owner 名称；D4 将两项纯槽转换归回既有 Schema 类型。其余候选保独立判断，不因没有兼容负担而自动全改。
 
 | 提案基线完整类型名 | 采用结果与限制 |
 |---|---|
@@ -156,7 +156,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
-| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
+| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称；[D4](#d4-status)归位两个纯槽 static 方法 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
 | E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名，[E3](#e3-status)将旧阶段目录的 16 份源码并入 Persistence 根并迁移导航；多类型文件共置 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
@@ -176,9 +176,9 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名。本轮有限组织与 D3 范围完成，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名，D4 将两项纯槽转换归回 Schema。本轮有限组织与 D3／D4 范围完成，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)／[D4](#d4-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
 
 <a id="e1-status"></a>
 ## 10. E1：文件名对应现行类型
@@ -386,4 +386,26 @@ dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-b
 
 根 Rebuild 零警告／错误；Persistence 893 项、Runtime／Generator／Build 1628 项全部通过，失败／跳过为零。集成 diff 与本地链接核验没有新增引用缺口；117 处历史问题未扩入本片。
 源码 receipt 为 `.artifacts/db092-d4/source/result.json`，SHA256 `E673875572712D4A32AD673BA9E4EB928087870606AE6D0E597EDEE617D612DB`；独立源码凭据在 `review/source-review.json`，主线程 API／根验证日志在同一切片目录。
-此处的源码和根资格不代授新包消费；准确 producer／新 G 与实际消费者结果待完成后记录。
+准确新包由源码／合同提交 `6a5f4eed7bf64cc6a3361ffe3664b0db611bd7cd` 单次 Prepare 生产；188 个生产输入在前后及当前 Git 对照中保持，六个 S 原包与四个 DG 包的身份／字节、实际 SG／Build／props／targets均核验。
+
+| 包证据 | 准确来源 |
+|---|---|
+| DG G | `0.0.0-db092-d4-e2e.20261014122747.5400` |
+| Storage S／来源 | `0.1.3-dev.20261014.g758cebf`／`758cebf8ba82788ba91435d34fd484dff32095fd` |
+| 完整十包 feed | `.artifacts/db092-d4/package/feed` |
+| 独立消费者／cache／新库 | `W:/TEMP/dg-db092-d4-slots-20261014T122850-39940` |
+
+两份非 friend PackageReference compilation 实际消费同一新 G，没有 ProjectReference、手写 analyzer/import 或内部反射：
+
+| 消费者 | 实际观察 |
+|---|---|
+| ordinary | 现行 Consumer 的 ProbeVersion=3，实际 `__DurableState` 路径及既有完整断言通过；packaged SG 与 Build Publish／CI Verify 通过，7 份 accepted history 保持 |
+| Family | Point V1＋State V1，字段编号 3/7/11/17/23，含 Point?、Array、List、Dictionary 与 self-cycle；直接调用新 owner 两方法，核 scalar/reference/inline/Nullable、规范编号、输入保持及同 nominal／不同 exact inline 版本，2 份 accepted history 保持 |
+
+Family 的 seed／continue／verify 为三个独立 PID：新库保存真实初始内容和 tag，全关后冷签出相同根 ID/head，编辑全部容器及 Nullable 后提交新 head；再次冷开只读验证 current 与 initial tag，整个只读阶段文件 SHA 保持。
+四个运行 PID 均 exit 0，34 次实际加载映像逐一匹配所选包或普通消费者 DLL 字节；两份 assets、独立 cache、输出、实际编译输入与两种生成 manifest 的唯一性均核验。包内公开／protected API 1359 行也只改变两个方法 owner。
+
+任务脚本首轮 Family 编译／只读运行误用同名日志，原编译日志被覆盖；保留原 controller／receipt 和缺口说明，仅补一次同 G、同输入的 CI Verify 到独立日志。运行 DLL、源输入、generated、history 与首轮已捕获 SHA 保持；不把未执行的修正版 controller 当成首轮来源。首轮 PDB 未捕获，不授其字节等价。
+最终包凭据为 `.artifacts/db092-d4/package/qualification-result.json`，SHA256 `A16BFE2788C86E4CF7C3B44228496106E520EB5C601EB5D11A312F9094D60C3E`；原 consumer receipt 与 `log-recovery-result.json` 分别保运行与补日志来源。主线程接受凭据为同片的 `root-pack-acceptance.json`、`root-consumer-acceptance.json`、API 清单与实际根验证日志。
+
+当前停点：D4 的公开方法归属、源码、根回归与上述准确新 G 有限消费完成，类型名保留。正常续写证明新 head／内容保持，没有检查物理 Base/Delta kind；手工 V2 槽反例不授持久 Upgrade 资格，也不授旧数据兼容、dirty SG、dual-view、Crash/Kill 或性能资格。后续入口只维护在[路线图](../../DurableGraph-research-roadmap.md)。
