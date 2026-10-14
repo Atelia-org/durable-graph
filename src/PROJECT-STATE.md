@@ -18,10 +18,9 @@
 
 ## 当前焦点
 
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D5 及 E1／E2／E3 已限定验收，有限源码组织完成；入口从[源码导航](DurableGraph.Persistence/README.md)进入。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。
-[D4](../docs/design-branches/0092-type-namespace-refactoring/README.md#d4-status)将纯 `WithFieldId`／`NominalType` 归回 Schema 的 `DurableFieldInfo`，保编号与完整槽相等；[D5](../docs/design-branches/0092-type-namespace-refactoring/README.md#d5-status)公开业务角色为根 namespace 的 `CheckpointKind`，仍在 Persistence 程序集，与内部 StoredGraphKind 分责。源码、根回归及孤立 Replay 编译通过，准确新 G 普通 SG／Build 消费和新库跨进程冷续写／只读历史查询通过。各片包来源与有限资格只查当片记录；生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。
-当前按 [D6 有限合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status)收敛最后三组候选：发布异常／结果类型采用根空间 RepositoryPublication 名称；三个 ValueProjection helper 与 ObjectStateKind 保名。源码、根回归与 API 映射已验收，准确新 G 有限消费待验收；保持 outcome、候选地址、fault/lifetime 和现有程序集边界。
-按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。具体后续需求和重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限源码组织与本轮候选已收敛；源码入口见[导航](DurableGraph.Persistence/README.md)。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。纯槽转换归 Schema 的 `DurableFieldInfo`，保编号与完整相等。
+公开历史角色 `CheckpointKind` 与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。
+本轮无剩余必经分片；后续由真实消费／依赖问题触发，重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛，不预设程序集拆分。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 

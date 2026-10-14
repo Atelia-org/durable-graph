@@ -1,11 +1,11 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4／D5 已限定验收；有限文件组织完成。D6 正在验证公开发布类型迁移；另两组候选保名，见[有限收敛](#d6-status)。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1–D6 及 E1／E2／E3 已限定验收；有限文件组织完成。D6 公开发布合同的新包有限消费通过，另两组候选保名，本轮三组已收敛，见[最终结果](#d6-status)。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
 > 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)／[D4](#d4-status)／[D5](#d5-status)，当片见 [D6](#d6-status)。
 
 已处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料，并完成有限文件组织。
-公共接入入口和已有 `Schema`／`Runtime` 分工保持；其余公开名称与程序集归属分别按现行职责收益判断，后续入口见[路线图](../../DurableGraph-research-roadmap.md)。
+公共接入入口和已有 `Schema`／`Runtime` 分工保持；本轮剩余公开名称已逐项裁决，没有未完成的必经施工。未来由实际消费或依赖问题触发重访，条件见[路线图](../../DurableGraph-research-roadmap.md)。
 
 ## 1. 范围与判断依据
 
@@ -156,7 +156,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
-| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称；[D4](#d4-status)归位两个纯槽 static 方法；[D5](#d5-status)采用根空间 CheckpointKind | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
+| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称；[D4](#d4-status)归位两个纯槽 static 方法；[D5](#d5-status)采用根空间 CheckpointKind；[D6](#d6-status)采用根空间发布合同、关闭其余保名候选 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
 | E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名，[E3](#e3-status)将旧阶段目录的 16 份源码并入 Persistence 根并迁移导航；多类型文件共置 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
@@ -176,9 +176,9 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名，D4 将两项纯槽转换归回 Schema，D5 采用根空间 CheckpointKind。本轮有限组织与 D3／D4／D5 范围完成，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名，D4 将两项纯槽转换归回 Schema，D5 采用根空间 CheckpointKind，D6 采用根空间发布合同并保留两个候选组现名。本轮有限范围已收敛，没有剩余必经分片。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)／[D4](#d4-status)／[D5](#d5-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)／[D4](#d4-status)／[D5](#d5-status)／[D6](#d6-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；名称与程序集重访条件只维护在[路线图](../../DurableGraph-research-roadmap.md)。
 
 <a id="e1-status"></a>
 ## 10. E1：文件名对应现行类型
@@ -489,4 +489,25 @@ dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-b
 既有确定性回归覆盖图／ref-only／tag 失败、候选地址、三个 outcome、NotPublished 可健康或 faulted、故障后停止服务与重开检查；没有改变注入面或增加公开故障 hook。
 源码凭据 `.artifacts/db092-d6/source/result.json` SHA256 为 `7B31E7D5AD1996660E41DC7DCD2A27D2F18933F4E0DD4CD590983DC567C37A66`；独立源码复核 `.artifacts/db092-d6/review/source-review.json` SHA256 为 `23F6C6AE259B06CA5469AF79C6AF9A8E14163A82E04B4AF67D962D40244ED6C7`。当片根日志与 API 清单位于同一切片工件目录。
 
-当前状态：源码、根回归与 API 映射已验收；准确新 G 有限消费待验收。其余两组已作保名结论；重访只由真实消费歧义或新的独立分类需求触发，后续条件只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+准确新包从源码／合同提交 `92daf6e7d9d60a15b147a3d40d66225cd14218a9` 单次 Prepare；190 份生产输入在打包前后、当前源码与 producer Git blob 间一致。四个 DG 包及六个准确 S 原包的 nuspec、来源和实际字节核验通过。
+
+| 包证据 | 准确来源 |
+|---|---|
+| DG G | `0.0.0-db092-d6-e2e.20261014152614.38328` |
+| Storage S／来源 | `0.1.3-dev.20261014.g758cebf`／`758cebf8ba82788ba91435d34fd484dff32095fd` |
+| 完整十包 feed | `.artifacts/db092-d6/package/feed` |
+| 中立消费者目录 | `W:/TEMP/dg-db092-d6-publication-20261014T152729-38864` |
+
+一个非 friend、仅普通 PackageReference 的 Exe 使用单个标量 Sample 模型和普通 `__DurableState` 登记；实际包内 SG／Build 的 Publish 与 CI Verify 通过，一个 history 原字节保持。
+新类型的根 namespace、实际 Persistence DLL、enum int／0、1、2、sealed IOException、无 public 构造器与两属性签名均核验；真实 catch 表达式编译通过。
+
+| 独立进程 | 实际观察 |
+|---|---|
+| seed 20988 | 新库保存 State10；ref-only bookmark 分支与 saved tag 不追加图、不改 main；保存 State11 后 main 两图、bookmark 一图，tag／bookmark 保持 State10 |
+| readonly 17052 | 全关后冷开只读，准确 head、历史、tag 和内容保持；库内所有文件 SHA 前后一致 |
+
+实际 assets／独立 cache／编译输入／输出与所选包核对；22 次加载映像（20 次包 DLL＋2 次消费者）匹配准确字节。包内 API 同为 1359 行、仅两 FQN 的十行映射，与根清单完整相同。
+普通消费者没有公开故障注入，两个进程均 `WrappedCatchObserved=false`；不把 catch 编译和正常运行声称为新包三个 outcome 的失败／恢复资格，那部分由上述根确定性回归证明。
+包凭据 `.artifacts/db092-d6/package/consumer-result.json` SHA256 为 `346D2185691C8A1B6CFBFB4F08E310EFB5093169286971A7ACEB7D7F4EC4FB7B`；主线程实际包核验为 `root-package-acceptance.json`，最终集成复核与 Goal 完成审计位于同片工件目录。
+
+当前停点：三组均已裁决，采用的公开发布类型迁移、源码／根回归／API 和准确新 G 普通有限消费已完成；两个保名候选组已关闭，本轮 Goal 无剩余必经施工。没有 Family、物理 Base/Delta kind、旧包／旧数据兼容、Upgrade、private promotion、Fork/Pair、Crash/Kill 或性能资格。后续只按[路线图](../../DurableGraph-research-roadmap.md)中的真实消费／依赖触发条件重访。
