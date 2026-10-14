@@ -13,7 +13,7 @@
 
 ## 当前实现与验证入口
 
-- [NormalizedGraphState](../../../src/DurableGraph.Persistence/NormalizedRevision.cs) 的 `RequireStoredSource`、`PrepareGraphInstallation` 与实际记录安装计量。
+- [NormalizedGraphState](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs) 的 `RequireStoredSource`、`PrepareGraphInstallation` 与实际记录安装计量。
 - [共同 workspace／候选](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)、[P0 producer／安装准备](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs)、[唯一发布 owner](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)。
 - [混合新／保留 head/H、完整 source 与冷续写](../../../tests/DurableGraph.Persistence.Tests/P0NormalizedBusinessBaselineTests.cs)、[真实 B/D/H、Event／Discard 与确认 Base](../../../tests/DurableGraph.Persistence.Tests/BusinessPlanningAccountingTests.cs)、[候选安装材料归属](../../../tests/DurableGraph.Persistence.Tests/BusinessSaveCandidateInstallationTests.cs)。
 

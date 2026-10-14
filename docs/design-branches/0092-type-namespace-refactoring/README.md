@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1 已限定验收；现行职责名已有对应文件名，E1 的源码字节、根构建、相关测试与链接检查通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2 已限定验收；Generator、公开内容操作与本片 Persistence 类型已有对应文件名，源码字节、根构建、相关测试与链接检查通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)，当片见 [E1](#e1-status)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)，当片见 [E2](#e2-status)。
 
 建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
 保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
@@ -77,15 +77,15 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 
 ## 4. Persistence 的其他内部名称
 
-本节左侧为 B 基线，右侧已实施，均在 `Atelia.DurableGraph.Persistence`；nested 类型保 nested，文件及结构未抽取。
+本节左侧为 B 基线，右侧已实施，均在 `Atelia.DurableGraph.Persistence`；nested 类型保 nested，结构未抽取；[E2](#e2-status)对应执行环境、归一化材料与写规划器的文件名。
 
 | 当前名 → 推荐名 | 事实、传播范围与边界 |
 |---|---|
-| `StateModelSnapshot` → `ModelExecutionEnvironment` | [实现](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)含准确 lookup、按需闭合工厂和 memo；[FrozenConfiguration](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)才区分冻结的配置。同步改返回该环境的 `Snapshot/CreateSnapshot` 为 `CreateEnvironment`；真正复制 reader 索引的 Snapshot 保留。不是搬入 Runtime 的理由 |
+| `StateModelSnapshot` → `ModelExecutionEnvironment` | [实现](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs)含准确 lookup、按需闭合工厂和 memo；[FrozenConfiguration](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)才区分冻结的配置。同步改返回该环境的 `Snapshot/CreateSnapshot` 为 `CreateEnvironment`；真正复制 reader 索引的 Snapshot 保留。不是搬入 Runtime 的理由 |
 | `DecodedRevision.SplitBindingEnvironment` → `DecodedRevision.SchemaViewBindingEnvironment` | [实现](../../../src/DurableGraph.Persistence/DecodedRevision.cs)是携带实际 Store＋冻结配置＋准确 S 来源的绑定封套，内部持有上行 ModelExecutionEnvironment；复用仍核完整来源，两层不能合并。`ReadSplit` → `ReadStoredGraph`；只改默认路径标签，不扩大跨 Store／跨 S 共享 |
-| `NormalizedRevision` → `NormalizedGraphState` | [实现](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)既含归一化来源，也含未追加 candidate，后续才安装实际 heads/H；不用 PublishedRevision 或只服务保存的 SaveBaseline。`FromSplitCandidate/WithSplitGraph/RequireSplitSource` 改为表达真实来源／安装职责的名称，保原校验 |
+| `NormalizedRevision` → `NormalizedGraphState` | [实现](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)既含归一化来源，也含未追加 candidate，后续才安装实际 heads/H；不用 PublishedRevision 或只服务保存的 SaveBaseline。`FromSplitCandidate/WithSplitGraph/RequireSplitSource` 改为表达真实来源／安装职责的名称，保原校验 |
 | `MaterializedGraph<T>` → `EditableGraphRestoration<T>` | [声明与交付](../../../src/DurableGraph.Persistence/GraphReader.cs)除领域根还含 normalized baseline、ID 游标和反向身份，只由 editable delivery 产生；不把纯只读根包装成此材料 |
-| `ObjectRevisionPlanner` → `ObjectWritePlanner` | [实现](../../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)只分类／规划对象写入，source membership 和 Removes 在持久 adapter。同步纠正 [ObjectRepresentationPlan](../../../src/DurableGraph.Persistence/ObjectRepresentationPlan.cs)中仍声称 planner 供应 membership difference 的旧注释 |
+| `ObjectRevisionPlanner` → `ObjectWritePlanner` | [实现](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs)只分类／规划对象写入，source membership 和 Removes 在持久 adapter。同步纠正 [ObjectRepresentationPlan](../../../src/DurableGraph.Persistence/ObjectRepresentationPlan.cs)中仍声称 planner 供应 membership difference 的旧注释 |
 | `CommitCheckpoint` → `RepositoryOperationStage` | [声明](../../../src/DurableGraph.Persistence/GraphCommitException.cs)为外观层阶段 hook，不是历史读取；与 RepositorySaveStage 各处于不同层。改 hook 名但不合并枚举、移注入点或顺手删未使用成员 |
 
 `Split` 并不总是历史词：测试／包故事可能借它描述 shared/private 或准确视图场景。
@@ -150,7 +150,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 ## 8. 后续施工顺序与验收
 
 先冻结当片旧全名→新全名与配套成员表，再实施；下面是建议次序，不是全部候选自动获批的队列。
-保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D 保文件位置，E1 只改同目录 basename。不得用 rename 掩盖合并 owner、删校验或改行为。
+保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D 保文件位置，E1／E2 只改同目录 basename。不得用 rename 掩盖合并 owner、删校验或改行为。
 
 | 片 | 有限范围 | 最小可观察验收 |
 |---|---|---|
@@ -158,7 +158,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
 | D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
-| E：组织判断 | [E1](#e1-status)先对应已稳定的类型与文件名；目录与多类型文件另判 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
+| E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名；目录与多类型文件另判 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
 命名分片采用当前包的新建库故事验收，不为旧包新增兼容壳或常驻迁移门禁。
@@ -177,9 +177,9 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1 对应其文件名，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)已完成有限文件名对应，具体下一片和其余公开候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)已完成有限文件名对应，具体下一片和其余公开候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
 
 <a id="e1-status"></a>
 ## 10. E1：文件名对应现行类型
@@ -212,3 +212,33 @@ dotnet test tests/DurableGraph.Serialization.Tests/DurableGraph.Serialization.Te
 根 Rebuild 零警告／错误；Runtime／Generator／Build 1628 项及 Serialization 133 项全部通过，失败／跳过为零。集成 diff 和本地链接检查通过，没有新增历史引用缺口。
 完整路径表与移动 receipt 位于 `.artifacts/db092-e1/source/`，`result.json` SHA256 `F9B056030A9422E24D5936F866BC9575987A6EC9B9461FBA0CD5EA09AD6121A9`；主线程字节验收为 `.artifacts/db092-e1/root-source-acceptance.json`，构建／测试日志在同一切片工件目录。
 本片没有制作新 G 或重跑包消费者／存档故事，不把 D2 原 G 的资格回填为 E1 新包证据；文件路径会改变调试来源，不声明 DLL／PDB 字节相等。后续范围只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+<a id="e2-status"></a>
+## 11. E2：Persistence 文件名对应现行类型
+
+2026-10-14；基线 `eb2638be99722a862c5ba6042c5bf3736a641595`。问题：B 已改名的执行环境、归一化材料与对象写规划器，能否直接按类型名定位文件？
+本片只移动 `src/DurableGraph.Persistence/` 同目录中的 6 个文件，C# 原始字节保持；`NormalizedObject` 留在原文件内容中。
+最小验收是 6 对文件与 Git 基线完整字节相同，没有失效的编译／脚本路径，根构建与 Persistence 回归通过，incoming links 没有新增缺口。
+
+| 旧 basename | 新 basename |
+|---|---|
+| `StateModelSnapshot.cs` | `ModelExecutionEnvironment.cs` |
+| `StateModelSnapshot.Arrays.cs` | `ModelExecutionEnvironment.Arrays.cs` |
+| `StateModelSnapshot.Lists.cs` | `ModelExecutionEnvironment.Lists.cs` |
+| `StateModelSnapshot.Dictionaries.cs` | `ModelExecutionEnvironment.Dictionaries.cs` |
+| `NormalizedRevision.cs` | `NormalizedGraphState.cs` |
+| `ObjectRevisionPlanner.cs` | `ObjectWritePlanner.cs` |
+
+实施者、独立复核者与主线程核对移动前后原始字节；主线程另核 601 个其他非文档跟踪文件保持。Persistence 使用 SDK 默认编译收集，未发现旧 basename 的 Compile／脚本硬编码或 CallerFilePath 依赖。
+更新 29 份文档中的 49 个当前源码链接；历史符号文字、Git 来源与冻结证据保其原义。目录、namespace、类型／成员、程序集／包、生成入口与持久协议保持。
+
+使用现有准确 S pin 的 package-mode assets，主线程运行：
+
+```powershell
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+```
+
+根 Rebuild 零警告／错误；Persistence 893 项全部通过，失败／跳过为零。集成 diff 和本地链接检查通过，没有新增历史引用缺口。
+完整路径表和移动 receipt 位于 `.artifacts/db092-e2/source/`，`result.json` SHA256 `7209632448E8E279F82904C5ABD2C87A8252111C88123F59E741C3CD0E0A1026`；主线程字节验收为 `.artifacts/db092-e2/root-source-acceptance.json`，构建／测试日志在同一切片工件目录。
+本片没有制作新 G 或重跑包消费者／存档故事，不声明 DLL／PDB 字节等价。旧 P0 源码目录未动，后续范围只维护在[路线图](../../DurableGraph-research-roadmap.md)。

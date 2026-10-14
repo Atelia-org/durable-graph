@@ -35,7 +35,7 @@ DB-051 已完成默认 List Delta 竞争。下一步推荐补一项常见值形�
   CLR `Nullable<TState>` 不符合这里的泛型约束，不能直接充当生成 DTO 的状态类型。
 - [StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs) 的 StateFieldTemplate 固定版本目前只接受顶层 named inline。
   [StateBindingContext](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 的 Match、NominalType、WithFieldId 与 exact 依赖证书需要识别包装内的值依赖。
-- [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 的 current/stored 值绑定与 CLR/nominal 双向映射需要一起扩展。
+- [StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 的 current/stored 值绑定与 CLR/nominal 双向映射需要一起扩展。
 - [现有拒绝回归](../../../tests/DurableGraph.Tests/ScalarStateDtoTests.cs) 的 `ScalarTypeRecognitionKeepsUnsupportedValueKindsOutsideTheSlice`
   同时列出 enum 与 int?；实施时只迁出 Nullable 断言，保留其余负例，不整体删除该测试。
 - [值 Upgrade](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.ValueUpgrade.cs) 的 provider 匹配、子依赖选择与 requirement 收集直接使用 InlineSchema；

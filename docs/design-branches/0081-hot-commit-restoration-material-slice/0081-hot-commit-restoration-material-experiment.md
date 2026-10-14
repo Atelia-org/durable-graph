@@ -16,7 +16,7 @@
 
 现成的保存安装机制已经解决了来源和发布问题：
 
-- [NormalizedRevision.FromCandidate / WithAddress](../../../src/DurableGraph.Persistence/NormalizedRevision.cs) 保留本次完整候选、实际 binding、独立的新 revision、每行 exact head/H 与 Store 来源。
+- [NormalizedRevision.FromCandidate / WithAddress](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs) 保留本次完整候选、实际 binding、独立的新 revision、每行 exact head/H 与 Store 来源。
 - [PreparedWorldSave](../../../src/DurableGraph.Persistence/PreparedWorldSave.cs) 在发布前准备安装，只有 State 推进工作副本；Event 没有下一 State 基线。
 - [Repository.Publish](../../../src/DurableGraph.Persistence/Repository.cs) 保留明确的 append、Journal、ref 和 Install 顺序。未来有证明时可在发布前构造局部候选，正常 Install 后仅赋值槽引用。
 - [StateModelBinding.Normalize](../../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs) 对 exact current DTO 已有恒等合同；无需为新 current State 重放旧历史 Upgrade。
@@ -24,7 +24,7 @@
 缺口在被省略的 reader 路径：
 
 1. [StateReaderBinding](../../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) 接受任意 `ReadBase` / `ApplyDelta` 委托。它们可以通过同一 binding context 执行标准 Schema 检查，甚至按正在读取的值选择依赖。
-2. [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 的闭合证书记录 factory **实际执行**的检查；解析 reader 或再次验证 factory 证书不会执行 reader body。
+2. [StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 的闭合证书记录 factory **实际执行**的检查；解析 reader 或再次验证 factory 证书不会执行 reader body。
 3. [普通生成 reader](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs) 与 [Family reader](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs) 都使用同一公开 reader 类型，没有传递完整的读写对应与依赖闭合证明。知道生成源码做什么，不等于 Runtime 已有识别并验证该能力的协议。
 4. [StateValueBinding](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 的动态值操作仍可来自自定义 `IStateOps`；仅信任容器外壳不能证明元素操作。每份产品 State 必须有 durable 根，因此内建 string 的已知实现也不足以形成有用的完整图资格。
 

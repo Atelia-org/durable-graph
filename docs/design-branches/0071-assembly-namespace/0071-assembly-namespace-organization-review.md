@@ -87,7 +87,7 @@ Storage 故意使用底层数值 ID，不要求它为了命名整齐改用 Runti
 先用 `History/`、`Reading/`、`Saving/`、`Catalog/`、`Binding/` 目录表达职责即可。
 
 `StateModelRegistry` 虽名为模型注册器，也不宜按名机械搬回 Runtime：
-[Snapshot](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 依赖同程序集的 [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)，
+[Snapshot](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 依赖同程序集的 [StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs)，
 后者连接实时 `SchemaStore` 权威，并承载闭合绑定缓存。
 Runtime 的 `IStateModelRegistration`/`StateBindingContext` 与上层实现之间已有分工；移动实现需要另行设计。
 

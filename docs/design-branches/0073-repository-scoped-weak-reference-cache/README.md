@@ -62,7 +62,7 @@ DB-072/073/074 是同一方向的设计材料，不能互相充当独立收益�
 ### 2.2 Family capability 为 true，不等于 binding 跨读取稳定
 
 [StateModelRegistry.Snapshot](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 每次复制目录；
-[StateModelSnapshot.TryGetCurrentModel](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 只在本 snapshot 内缓存工厂产物。
+[StateModelSnapshot.TryGetCurrentModel](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 只在本 snapshot 内缓存工厂产物。
 [Family 工厂](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) 每次创建新的 preparation/binding，
 Normalize 与 source reader 委托还引用本次 context。
 
@@ -73,7 +73,7 @@ DB-075 修复了资格和最终类型证明，**没有改变 binding 的寿命**
 
 也不在本片复用整个 repository 长寿命 snapshot。反例是 Application Dictionary comparer：
 [registry 合同](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 明确成功解析结果按 snapshot 缓存，
-不冻结 resolver 捕获的外部状态；[实现](../../../src/DurableGraph.Persistence/StateModelSnapshot.Dictionaries.cs) 与
+不冻结 resolver 捕获的外部状态；[实现](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.Dictionaries.cs) 与
 [测试](../../../tests/DurableGraph.Persistence.Tests/CompositeDictionaryRepositoryTests.cs)
 `ApplicationRecipeCanReturnStandardComparerWithoutModeDriftAcrossReloadAndDelta` 均维持新 snapshot 独立解析。
 即使 registry 配置 token 未变，沿用旧 snapshot 也会延长 comparer/factory 结果的有效期。

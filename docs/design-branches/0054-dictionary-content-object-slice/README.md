@@ -21,7 +21,7 @@ TValue 已有的投影、完整 exact 布局、融合 Delta 和值 Upgrade 可�
 |---|---|---|
 | 内容对象与静态投影 | [ListObjectBinding](../../../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs)、[IStateOps / IValueProjection](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) | key/value 两套已闭合能力 |
 | owned 状态、历史 body | [FrozenListState](../../../src/DurableGraph/Runtime/Containers/FrozenListState.cs)、[ListStateReader](../../../src/DurableGraph/Runtime/Containers/ListStateReader.cs) | 无序 entries、键寻址稀疏 Delta |
-| exact/current 绑定 | [List snapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.Lists.cs) | 两槽完整依赖与内建 Dictionary 路由 |
+| exact/current 绑定 | [List snapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.Lists.cs) | 两槽完整依赖与内建 Dictionary 路由 |
 | 容器 owner Upgrade | [ListUpgrade](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.ListUpgrade.cs) | 分开的 key/value 工具与升级后键冲突检查 |
 | 持久表示 | [SchemaStore](../../../src/DurableGraph.Persistence/SchemaStore.cs)、[catalog codec](../../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs) | 一个双实参内建构造及双槽目录记录 |
 | 恢复/下一次基线 | [WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) | 沿用全分配后 Hydrate；不把枚举位置当持久身份 |
@@ -219,7 +219,7 @@ key 和 value 都参与 VisitReferences、目标类型验证和可达性；键�
 浮点重复判断遵循 .NET 默认查找相等而非 body bytes；两个 string ID 可内容相等，应在内容 comparer 下拒绝重复。
 所有 source 行都接受完整 exact/current 验证，包括之后不可达的字典，沿用当前 source 处理合同。
 具体接缝是 [RevisionDecoder.ReadCore](../../../src/DurableGraph.Persistence/RevisionDecoder.cs) 在完整目标表和引用校验后、
-返回 DecodedRevision 前检查全部 source 字典；[NormalizedRevision.Create](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)
+返回 DecodedRevision 前检查全部 source 字典；[NormalizedRevision.Create](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)
 在所有 Normalize 及 current 引用校验后检查全部 current 字典。不能只在可达 World 的 Hydrate/Add 中验证。
 局部 typed reader 不承诺在缺少引用目标表时完成跨对象内容验证，Revision/World API 才提供完整图级结果。
 

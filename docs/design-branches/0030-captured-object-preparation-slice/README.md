@@ -44,7 +44,7 @@ Base → Delta → 策略主动 Base → NoChange、new/remove 和冷重开验�
   Seal 后尚未保留通用的准备操作。
 - [CaptureSession](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) 的 Current 只表示已 Accept 的内存图，
   RequireCandidate 能检查当前 unresolved candidate；没有 Storage 地址或发布含义。
-- [ObjectRevisionPlanner](../../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) 校验 ID/prior/H，
+- [ObjectRevisionPlanner](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs) 校验 ID/prior/H，
   不认证 DTO/Schema。raw wire 没有类型头，拿 current codec 成功解码或 roundtrip 同一段 bytes，
   也不能证明该记录原本属于这个 exact Schema。
 

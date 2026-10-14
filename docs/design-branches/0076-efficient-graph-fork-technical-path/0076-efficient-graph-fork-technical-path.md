@@ -139,7 +139,7 @@ current 恒等消除这项差异，避免永久维护“保存 current”和“�
 这两个名字表示内部职责，不预先要求新增同名公共类型。
 
 **恢复准备（Prepare）** 从固定已提交检查点和模型环境取得完整、owned、已验证的 current 恢复材料。
-利用 [NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedRevision.cs) 和 GraphReader 现有 selection（单图准备材料），
+利用 [NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs) 和 GraphReader 现有 selection（单图准备材料），
 不要再造一份只有 reachable DTO、缺保存来源的 fork snapshot。
 
 | 可共享的准备材料 | 每份子图独有的状态 |
@@ -288,7 +288,7 @@ fork 成本 = ref 发布 + 读取/解码 + Normalize/验证 + 分配/填充 + �
 
 主要事实入口：[Repository](../../../src/DurableGraph.Persistence/Repository.cs)、
 [WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs)、[GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)、
-[StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)、
+[StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs)、
 [CaptureSession](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)。
 现有边界由 [EventHistoryRepositoryTests](../../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)、
 [WorldWorkspaceStorageBaselineTests](../../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)、

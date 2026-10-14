@@ -24,7 +24,7 @@
 ## 实际接缝与审查裁决
 
 - [Runtime requirements](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.Requirements.cs) 提供同步词法收集，成功子范围合并、异常释放、完整 ObjectLayout 的 Schema/容器槽检查；沿用原 `ExactSchemaRequirementSet` 去重、冲突诊断和 live 权威复核。
-- [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 的 model、reader、value、Nullable 与容器闭合缓存，以及 owner/容器/value UpgradePlan，保存各自闭合时的标准检查证据；缓存命中复核并传递这些证据。
+- [StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 的 model、reader、value、Nullable 与容器闭合缓存，以及 owner/容器/value UpgradePlan，保存各自闭合时的标准检查证据；缓存命中复核并传递这些证据。
 - [Repository](../../../src/DurableGraph.Persistence/Repository.cs) 仅在 Checkout/Fork 选择最近 State 后查一个槽。冷范围跨完整 Prepare、全部 source/current layouts、物化和工作副本构造；完成后形成候选，Fork 发布成功后只安装引用。无 State 早返不碰槽；fault/Dispose 清槽。
 - [PreparedStateRestoration](../../../src/DurableGraph.Persistence/PreparedStateRestoration.cs) 将精确 State 选择、[单图材料](../../../src/DurableGraph.Persistence/PreparedGraphSelection.cs)与证书组合；命中复核模型、同 Store 来源、根实际 binding 和全部 requirements。[GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)继续承担独立物化与保存身份导入。活动工作副本保留 normalized 保存来源，不持有 State 证书或槽。
 

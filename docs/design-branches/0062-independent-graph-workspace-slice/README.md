@@ -26,7 +26,7 @@ E1 不推进或破坏 S0 比较基线，S1 正确产生相对 S0 的 Delta；E1 
 | [WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) | 拥有固定 World、模型快照、Capture 与 NormalizedRevision；Load 把解码、升级、实例化和可写基线组装放在一起；Stage 校验固定根 ID |
 | [CaptureSession](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) | Accept 替换整个实例绑定集合；Discard 保留已消耗的 cursor，却不推进 Current。不能把 E Accept 到 State 的捕获会话 |
 | [LoadedRevisionPlanner](../../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs) | 支持 candidate 是 source 的不同可达子集，并保留完整 source provenance、Upgrade 强制 Base 义务 |
-| [ObjectRevisionPlanner](../../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs) | 有 Parent 时固定输出 map Delta 及完整差集 Removes；需要另一种目录输出方式，正文策略不用替换 |
+| [ObjectRevisionPlanner](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs) | 有 Parent 时固定输出 map Delta 及完整差集 Removes；需要另一种目录输出方式，正文策略不用替换 |
 | [StateRevision](../../../src/DurableGraph.Storage/StateRevision.cs) | 已允许有 Parent 的 map Base、local Delta 与 external heads；这种组合无需新 Storage 格式 |
 | [RevisionDecoder](../../../src/DurableGraph.Persistence/RevisionDecoder.cs) | 解码指定 Revision 全部 live 行；只要 E 的 membership 本身独立，既有路径即可避免解码无关 State 行 |
 | 旧 GraphRepository（后由 [DB-063](../0063-event-history-journal-slice/README.md) 替代） / [PreparedWorldSave](../../../src/DurableGraph.Persistence/PreparedWorldSave.cs) | 已有数据屏障、单次候选、发布后安装的核心顺序；专用 publication Parent 必须等于 Revision Parent 的校验仅适用旧外观 |

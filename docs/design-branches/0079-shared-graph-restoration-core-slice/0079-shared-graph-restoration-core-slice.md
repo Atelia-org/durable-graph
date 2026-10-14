@@ -30,7 +30,7 @@ ReadPair 的共享证明仍由原 FindSharedClosure/HasSameCurrentState 负责�
 
 ## 2. 内部材料边界
 
-沿用 [NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)，将现有私有 selection 提升为可复用的内部单图准备材料（prepared selection）；
+沿用 [NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)，将现有私有 selection 提升为可复用的内部单图准备材料（prepared selection）；
 名字由施工裁定，不为其新增公共 ForkSource、Workspace 或通用策略接口。
 
 | 材料 | 必须保留 |

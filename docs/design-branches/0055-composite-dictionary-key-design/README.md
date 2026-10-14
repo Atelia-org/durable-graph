@@ -278,10 +278,10 @@ Key/Value 的 exact 布局变化继续分别选显式 Upgrade 工具，空容器
 |---|---|
 | [DictionaryKeyPolicy](../../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs)、[ComparerKind](../../../src/DurableGraph/DictionaryComparerKind.cs) | 分开可表示 key、模式识别、stored 资格与 current comparer 创建；扩展 4/5，标准规则不泛化成任意 Default |
 | [Generator.TemplateHistory](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) | 放开已知 Durable struct key 的局部资格拦截，保留不支持形状诊断；Dictionary 双实参原本已触发 Family |
-| [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[Dictionary snapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.Dictionaries.cs) | typed 选择、一个 resolver、snapshot 配置与惰性缓存；不扩展历史 reader 工厂 |
+| [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[Dictionary snapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.Dictionaries.cs) | typed 选择、一个 resolver、snapshot 配置与惰性缓存；不扩展历史 reader 工厂 |
 | [DictionaryObjectBinding](../../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs) | Capture 识别/预检，Allocate 注入并包装当前 comparer；Hydrate 保持同实例 TryAdd |
 | [DictionaryStateReader](../../../src/DurableGraph/Runtime/Containers/DictionaryStateReader.cs)、[FrozenDictionaryState](../../../src/DurableGraph/Runtime/Containers/FrozenDictionaryState.cs) | 新模式资格、根 null/零宽检查；新模式跳过业务 lookup，保留 canonical 索引/所有编码操作 |
-| [DictionaryUpgrade](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.DictionaryUpgrade.cs)、[RevisionDecoder](../../../src/DurableGraph.Persistence/RevisionDecoder.cs)、[NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedRevision.cs) | exact 与新业务边界分开；不在只读/归一化阶段执行 comparer resolver；策略保留和碰撞诊断准确 |
+| [DictionaryUpgrade](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.DictionaryUpgrade.cs)、[RevisionDecoder](../../../src/DurableGraph.Persistence/RevisionDecoder.cs)、[NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs) | exact 与新业务边界分开；不在只读/归一化阶段执行 comparer resolver；策略保留和碰撞诊断准确 |
 | [WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) | 核对分配/填充及回捕边界，原则上不增加全图阶段或第二份模式状态 |
 
 ## 9. 建议施工顺序与最小验收

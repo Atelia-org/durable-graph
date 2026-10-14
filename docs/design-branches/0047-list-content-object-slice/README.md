@@ -157,7 +157,7 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 代码入口：
 [数组当前投影](../../../src/DurableGraph/Runtime/Containers/ArrayObjectBinding.cs)、[历史 reader/body](../../../src/DurableGraph/Runtime/Containers/ArrayStateReader.cs)、
 [数组升级](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.ArrayUpgrade.cs)、[对象引用验证](../../../src/DurableGraph/Runtime/Binding/StateReferenceVisitor.cs)、
-[绑定快照](../../../src/DurableGraph.Persistence/StateModelSnapshot.Arrays.cs)、[SchemaCatalog](../../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs)、
+[绑定快照](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.Arrays.cs)、[SchemaCatalog](../../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs)、
 [SG 类型模式](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs)、[Shared 模式](../../../src/Shared/SchemaHistoryTypePattern.cs)。
 实施时审查全部 IsArray 分支：只有“内建引用构造”的判断应扩为 List，维数/shape/数组规则选择保持数组专用。
 

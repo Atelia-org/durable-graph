@@ -40,7 +40,7 @@ DB-058 后，常用标量、record、泛型、Nullable、数组/List/Dictionary 
   [历史工厂](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs)从完整槽绑定取得同类操作数。
   这些动态表示参数不要求生成代码点名外部 DTO。
 - [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)及
-  [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)已有显式登记与跨 Type 闭合；
+  [StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs)已有显式登记与跨 Type 闭合；
   不按程序集扫描或选择 reader。引用的 exact 版本仍从被引用对象自己的 Base 取得。
 - [BindSchema / MatchValue](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs)目前对 named 槽一律查询 Definition，
   而普通非泛型 SG 入口只登记 concrete Model。跨两种生成路径的 nominal 检查需要局部接通。

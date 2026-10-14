@@ -170,7 +170,7 @@ visitor.VisitDurable(id.Value, slot.TargetType!);
 不需要逐字段 Type 查找、DynamicInvoke 或新程序集。typed→raw 的桥接已由独立见证执行。
 
 实际改造面主要在 SG 引用字段/属性/构造器、引用 projection/ops、
-[snapshot 状态表示选择](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)、DTO 参数反推与用户 Upgrade 代码。
+[snapshot 状态表示选择](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs)、DTO 参数反推与用户 Upgrade 代码。
 选择目标 DTO 不能简单调用 ResolveReader 递归展开引用 body；当前特意截断此依赖，
 已有 `Node<T> → Node<Node<T>>` 产品用例依赖按实际有限对象/类型闭合。
 

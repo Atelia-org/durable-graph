@@ -18,7 +18,7 @@ DB-078-C 再把占用范围放宽为不同分支各一个工作副本。这里�
 
 实施前 [Repository](../../../src/DurableGraph.Persistence/Repository.cs) 的 Open 不接收模型；
 CreateBranch、`Resume`、ReadState/Event/Pair 各自取得 snapshot。
-[StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 已有成功闭合缓存，
+[StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 已有成功闭合缓存，
 [WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) 已有接收 snapshot 的加载入口；
 因此先调整所有权与参数传递，无须另造公共 ModelContext。
 
@@ -82,7 +82,7 @@ WorldWorkspace 的创建与恢复都接收此 snapshot。低层独立 GraphReade
 “exact current 不调用历史转换委托”则是本片明确保证。业务初始化/副作用在物化交付后执行。
 
 这个快路的权威边界必须同时落实：产品 Normalize 前仍通过 repo 的 `ResolveModel` 取得/复核 binding，
-当前唯一产品调用点是 [NormalizedRevision.Create](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)，
+当前唯一产品调用点是 [NormalizedRevision.Create](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)，
 它经 StateModelSnapshot 检查完整 current Schema 的 live 权威。
 内部 bare binding.Normalize 不单独承担 repository 权威验证；binary 静态 binding 原本也没有这种 context。
 **公共 `StateBindingContext.Normalize<T>` 的零步 requirement 验证保持不变**；历史转换及其完整依赖检查保持。

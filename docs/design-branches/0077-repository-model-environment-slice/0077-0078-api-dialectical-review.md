@@ -94,7 +94,7 @@ repo Dispose 清其集合，旧工作副本的后续清理不访问 Store、不�
 不能直接返回可能无 preparation 的 reader row，不做任意委托纯度检测。
 
 最强反例是缓存 Family binding 后迟注册 Schema 冲突，再脱离 context 直接 Normalize。
-RequireSource 不能替代 live 权威；但当前唯一产品调用点 [NormalizedRevision.Create](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)
+RequireSource 不能替代 live 权威；但当前唯一产品调用点 [NormalizedRevision.Create](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)
 每行先 ResolveModel，经 StateModelSnapshot 的 BindSchema/CheckRegistered 后才调用内部 Normalize。
 内部 bare binding 不单独承担 repository 权威，binary 静态 binding 本来也不持有这样的 context。
 公共 [StateBindingContext.Normalize](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) 的零步 requirements 检查保持，

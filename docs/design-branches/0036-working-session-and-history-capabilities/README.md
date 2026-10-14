@@ -32,7 +32,7 @@
   因此重新 Load 会分配另一套实例，继续使用原 LoadedWorld 则仍从原 Parent 分支准备。
 - [CaptureSession](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)：已有 candidate 身份检查、Accept/Discard、
   live bindings 转移和单调 cursor；这是可复用的内核，Accept 本身不是持久 Commit。
-- [NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedRevision.cs) 与
+- [NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs) 与
   [LoadedRevisionPlanner](../../../src/DurableGraph.Persistence/LoadedRevisionPlanner.cs)：保存完整 source membership、
   current DTO、SourceSchema/RequiresRewrite，已经拥有加载后首次升级续写所需信息。
 - [StateRevisionStore.Append](../../../src/DurableGraph.Storage/StateRevisionStore.cs) 只在 writer lease

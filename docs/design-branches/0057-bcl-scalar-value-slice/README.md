@@ -49,7 +49,7 @@
 - [history 解析/模板](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) 与
   [Build 工具](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) 有连续 tag 上界和格式能力判定；
   新标量可能出现在直接字段，也可能只出现在 Nullable、容器、泛型/base 的 nominal 实参里。
-- [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 需要闭合 CLR ↔ nominal ↔ stored 槽双向映射；
+- [StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 需要闭合 CLR ↔ nominal ↔ stored 槽双向映射；
   [TypeExpr wire](../../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) 与
   [目录 codec](../../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs) 的 ReadSlot 也各自只把 1–14 当叶子。
 - [DictionaryKeyPolicy](../../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs) 的 current key 入口能复用 builtin binding，

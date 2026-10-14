@@ -211,7 +211,7 @@ incumbent 是原有 owned PreparedDeltaBody。竞争者仅使用局部 scratch�
 | G1 | [ListDeltaMatcher](../../../src/DurableGraph/Runtime/Containers/ListDeltaMatcher.cs) 完整 Local 观察、明确 Myers 完成状态；kernel/协调 tests | 基准完全等价，停滞信号不扰动搜索 |
 | G2 | 公共 encoder 的严格长度上限；新增有界编码 tests | false/null、相等截断、子调用边界和异常合同通过 |
 | G3 | Runtime Adaptive 协调；enum、body/binding 默认与分派 | 不大于 Local 的性质与全部坏例子通过 |
-| G4 | [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 默认；StateStore tests、Probe 及真实包 | 默认/冻结/同格式落盘闭环 |
+| G4 | [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs) 默认；StateStore tests、Probe 及真实包 | 默认/冻结/同格式落盘闭环 |
 | G5 | 根集成、独立审查、文档收口与提交 | 必需验证通过，无未处理缺陷或把计划写成实现 |
 
 G1 与 G0/G2 可独立委派，但 ListStateReader 只由一个 Runtime owner 编辑；G3 在两边合同稳定后集成。

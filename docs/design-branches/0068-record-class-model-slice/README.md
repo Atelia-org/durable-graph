@@ -189,7 +189,7 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 - [IDurableObject](../../../src/DurableGraph/IDurableObject.cs)、[StateModelBinding](../../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs)、
   [StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)、[StateBaseProjection](../../../src/DurableGraph/Runtime/Binding/StateBaseProjection.cs)。
 - [CaptureContext](../../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[ObjectReadTable](../../../src/DurableGraph/Runtime/Capture/ObjectReadTable.cs)、
-  [BuiltinStateValues](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)、[StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)。
+  [BuiltinStateValues](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)、[StateModelSnapshot](../../../src/DurableGraph.Persistence/ModelExecutionEnvironment.cs)。
 - [Ancestry](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs)、[CrossAssembly](../../../src/DurableGraph.Generator/DurableGraphGenerator.CrossAssembly.cs)、
   [Records](../../../src/DurableGraph.Generator/DurableGraphGenerator.Records.cs)、[GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)、
   [GeneratedState](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs)。祖先终点须统一，不能只改诊断入口。
