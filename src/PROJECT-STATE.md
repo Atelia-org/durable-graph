@@ -18,7 +18,9 @@
 
 ## 当前焦点
 
-[DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前产品机制和活动门禁保持，旧模型仅保编译资产。完成证据集中在该记录，下一产品增量仍由真实消费者选择。
+[DB-092 命名重构提案](../docs/design-branches/0092-type-namespace-refactoring/README.md)已完成分模块调查与方案整合，建议先收回默认内核的阶段名、执行环境误称及 Generator 的 Family 分析名。代码和公开合同尚未改名；程序集／文件组织待命名稳定后另判，不把候选表视作已批准施工队列。
+
+[DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 
 [DB-089 checkout 环境与 factory 查询收窄](../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring/0089-checkout-environment-and-factory-query-refactoring.md)的有限 A／B／C 范围已完成：protected 查询保准确核心解析，内部反例与真实 SG／phantom 正控保全；源码和新 G 普通包通过限定门禁，包括准确 CS0122、外部派生 override／自身调用、Split 热读回／同 owner 重签出与全关冷开增量续写。长期合同已归入[目标设计](../docs/DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)，结果证据集中于 DB-089。当前无剩余必经施工或设计阻塞；下一增量由真实消费者反馈选择，条件延期见[路线图 §4.3](../docs/DurableGraph-research-roadmap.md#43-checkout-执行环境与-factory-查询入口)，不自动开启 refresh、保存读回或跨 S 共享。
 
