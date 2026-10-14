@@ -1,11 +1,11 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2 已限定验收；Generator、公开内容操作与本片 Persistence 类型已有对应文件名，源码字节、根构建、相关测试与链接检查通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3 已限定验收；本轮有限文件组织已完成，旧 P0 源码目录退出，根构建、相关回归与链接检查通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)，当片见 [E2](#e2-status)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)，当片见 [E3](#e3-status)。
 
-建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
-保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
+已处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料，并完成有限文件组织。
+公共接入入口和已有 `Schema`／`Runtime` 分工保持；其余公开名称与程序集归属分别按现行职责收益判断，后续入口见[路线图](../../DurableGraph-research-roadmap.md)。
 
 ## 1. 范围与判断依据
 
@@ -29,7 +29,7 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 | `.Schema` | 保留不可变描述与 exact layout | [DurableSchema](../../../src/DurableGraph/Schema/DurableSchema.cs)、[ObjectLayout](../../../src/DurableGraph/Schema/ObjectLayout.cs)不因名称含 State 就成为业务 State 图 |
 | `.Runtime` | 保留执行绑定、捕获、静态状态操作和容器能力 | [ObjectBinding](../../../src/DurableGraph/Runtime/Binding/ObjectBinding.cs)、[StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)含实际 CLR 工厂与执行能力；本轮不按子目录再分公开 namespace |
 | `.Persistence` | 保留持久化集成；接纳去阶段名后的默认内核 | [GraphResources](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)是资源与共同发布 owner；[DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)和工作区连接准确存储视图与 Runtime |
-| `.Persistence.MetaBootstrapP0` | B／C 已退出该 CLR namespace；历史文件路径暂保 | 基线 16 份 C# 中 B 迁移 14 份，C 收尾员工与固定绑定两份；当前 [StoredGraphKind](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)承载 Event、State、Meta 与分支保存；P0 不再作为产品分层 |
+| `.Persistence.MetaBootstrapP0` | B／C 已退出该 CLR namespace；[E3](#e3-status)将 16 份源码并入 Persistence 根 | B 迁移 14 份，C 收尾员工与固定绑定两份；当前 [StoredGraphKind](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)承载 Event、State、Meta 与分支保存；P0 不再作为产品分层或源码目录 |
 | `.Serialization`／`.Storage` | 保留；类型按下表逐项判断 | [PreparedBaseBody](../../../src/DurableGraph.Serialization/PreparedBaseBody.cs)、[ObjectVersionPayloadCodec](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)仍是共同字节契约 |
 | `.Generator`／`.Build`／`.SchemaHistory` | 保留工具阶段和 source-linked 文本协议 | [Generator 项目](../../../src/DurableGraph.Generator/DurableGraph.Generator.csproj)、[Build 项目](../../../src/DurableGraph.Build/DurableGraph.Build.csproj)的目标框架与运行方式不同；[Shared 协议](../../../src/Shared/SchemaHistoryReferenceProtocol.cs)不是新运行时包 |
 
@@ -46,18 +46,18 @@ C 的生成与存档资格另见其记录。表保旧名便于迁移检索，不
 
 | 当前名 → 推荐名 | 职责与证据 | 必须保留的区别 |
 |---|---|---|
-| `P0Repository` → `RepositoryStorageFacade` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Repository.cs)转发 Store、head、prepare/commit；默认借用，Create/Open 工厂也可拥有 GraphResources | façade 不是第二个发布 owner；不命名为 Borrowed 或 RepositoryCore，不顺便删壳 |
-| `P0Session` → `BranchSaveSession`；`P0SessionSave` → `PreparedBranchSave` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)保存分支 State 工作区与 catalog 意图，准备一次共同保存 | 前者有寿命内状态，后者有一次准备／提交／释放寿命；不替代公开 BranchCheckout |
-| `P0BusinessWorkspace` → `BusinessPersistenceAdapter`；`P0PreparedBusiness` → `PreparedBusinessWrite` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs)包装 BusinessWorkspace，补 Store/source/S、typed Base、规划与实际安装 | 与共同 [BusinessWorkspace](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)的 Capture/身份职责不同，不能直接去前缀造成同名 |
-| `P0PendingSave` → `PendingRepositorySave`；`P0SaveResult` → `RepositorySaveResult` | [pending](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0PendingSave.cs)、[结果](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)承载业务／可选 meta／共同发布材料 | Prepare、Append、发布结果、Confirmed 后安装仍分开；名字不授发布资格 |
-| `P0GraphStore` → `GraphRecordStore` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphStore.cs)借用 FS，追加／读取 graph、batch、head directory，检查物理与来源关系 | 不负责 VS 发布、Upgrade 或领域实例物化；不能改成上游 FrameStore |
-| `P0GraphKind` → `StoredGraphKind`；`P0GraphMetadata` → `GraphEnvelope`；`P0GraphSnapshot` → `StoredGraphRevision` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)分别为三种存储角色、封套、地址＋完整 heads＋来源 owner | Revision 不含已物化 CLR 图，也不一定已发布；内部 Meta 与公开业务 Event/State enum 不合并 |
-| `P0PreparedGraphWrite` → `PreparedGraphWrite`；`P0GraphWire` → `GraphFrameCodec` | [写材料](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[wire](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphWire.cs)分别为 owned 对象记录／Remove 和 graph/batch/directory 三种帧的编码 | 不是完整交易或领域序列化器；保留全部已有关系校验、帧角色和编码 |
-| `P0Batch` → `ObjectVersionBatch`；`P0ChainEntry` → `ObjectVersionChainEntry`；`P0ObjectChain` → `ObjectVersionChain` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)持对象版本、准确 prior 和 batch 来源 | heads 指 batch 地址；Base→Delta 链与业务 ancestry 不混称 |
-| `P0DirectoryCodec` → `ObjectHeadDirectoryCodec`；`P0DirectoryVersion` → `ObjectHeadDirectoryVersion`；`P0DirectoryResult` → `MaterializedObjectHeadDirectory` | [codec](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0DirectoryCodec.cs)、[版本](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[完整目录](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs) | 这里是 ObjectId→head，不是文件目录或 Schema catalog；完整结果保实际重建 payload 成本 |
-| `P0TypedBodyCodec` → `TypedBaseBodyCodec`；`P0TypedReader` → `StoredGraphDecoder`；`P0DecodedRows` → `DecodedGraphRows` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0TypedBodies.cs)编码／解释 Base 类型头，读取全部 live 行并核 origin/selected 来源与引用 | Delta 没有同类 Base 头；Decoder 不执行 Upgrade、Allocate 或 Hydrate，不与后续 GraphReader 合并 |
-| `P0GraphReadCache` → `GraphPhysicalReadCache`；`P0GraphReadCacheStatistics` → `GraphPhysicalReadStatistics` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs)复用完成封套、batch、directory version 和完整 heads | 不缓存 typed DTO／模型执行结果／领域实例；命中仍不能替代图语义和准确 S 验证 |
-| `P0SaveCheckpoint` → `RepositorySaveStage` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)是共同保存 hook 的阶段；[Kill 见证](../../../experiments/MetaBootstrapCrashProbe/Program.cs)据此选择窗口 | 与公共 Checkpoint 历史位置不同；只改符号，保 hook 位置、枚举值和实验窗口含义 |
+| `P0Repository` → `RepositoryStorageFacade` | [声明](../../../src/DurableGraph.Persistence/RepositoryStorageFacade.cs)转发 Store、head、prepare/commit；默认借用，Create/Open 工厂也可拥有 GraphResources | façade 不是第二个发布 owner；不命名为 Borrowed 或 RepositoryCore，不顺便删壳 |
+| `P0Session` → `BranchSaveSession`；`P0SessionSave` → `PreparedBranchSave` | [声明](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)保存分支 State 工作区与 catalog 意图，准备一次共同保存 | 前者有寿命内状态，后者有一次准备／提交／释放寿命；不替代公开 BranchCheckout |
+| `P0BusinessWorkspace` → `BusinessPersistenceAdapter`；`P0PreparedBusiness` → `PreparedBusinessWrite` | [声明](../../../src/DurableGraph.Persistence/BusinessPersistenceAdapter.cs)包装 BusinessWorkspace，补 Store/source/S、typed Base、规划与实际安装 | 与共同 [BusinessWorkspace](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)的 Capture/身份职责不同，不能直接去前缀造成同名 |
+| `P0PendingSave` → `PendingRepositorySave`；`P0SaveResult` → `RepositorySaveResult` | [pending](../../../src/DurableGraph.Persistence/PendingRepositorySave.cs)、[结果](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)承载业务／可选 meta／共同发布材料 | Prepare、Append、发布结果、Confirmed 后安装仍分开；名字不授发布资格 |
+| `P0GraphStore` → `GraphRecordStore` | [声明](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)借用 FS，追加／读取 graph、batch、head directory，检查物理与来源关系 | 不负责 VS 发布、Upgrade 或领域实例物化；不能改成上游 FrameStore |
+| `P0GraphKind` → `StoredGraphKind`；`P0GraphMetadata` → `GraphEnvelope`；`P0GraphSnapshot` → `StoredGraphRevision` | [声明](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)分别为三种存储角色、封套、地址＋完整 heads＋来源 owner | Revision 不含已物化 CLR 图，也不一定已发布；内部 Meta 与公开业务 Event/State enum 不合并 |
+| `P0PreparedGraphWrite` → `PreparedGraphWrite`；`P0GraphWire` → `GraphFrameCodec` | [写材料](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)、[wire](../../../src/DurableGraph.Persistence/GraphFrameCodec.cs)分别为 owned 对象记录／Remove 和 graph/batch/directory 三种帧的编码 | 不是完整交易或领域序列化器；保留全部已有关系校验、帧角色和编码 |
+| `P0Batch` → `ObjectVersionBatch`；`P0ChainEntry` → `ObjectVersionChainEntry`；`P0ObjectChain` → `ObjectVersionChain` | [声明](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)持对象版本、准确 prior 和 batch 来源 | heads 指 batch 地址；Base→Delta 链与业务 ancestry 不混称 |
+| `P0DirectoryCodec` → `ObjectHeadDirectoryCodec`；`P0DirectoryVersion` → `ObjectHeadDirectoryVersion`；`P0DirectoryResult` → `MaterializedObjectHeadDirectory` | [codec](../../../src/DurableGraph.Persistence/ObjectHeadDirectoryCodec.cs)、[版本](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)、[完整目录](../../../src/DurableGraph.Persistence/GraphPhysicalReadCache.cs) | 这里是 ObjectId→head，不是文件目录或 Schema catalog；完整结果保实际重建 payload 成本 |
+| `P0TypedBodyCodec` → `TypedBaseBodyCodec`；`P0TypedReader` → `StoredGraphDecoder`；`P0DecodedRows` → `DecodedGraphRows` | [声明](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs)编码／解释 Base 类型头，读取全部 live 行并核 origin/selected 来源与引用 | Delta 没有同类 Base 头；Decoder 不执行 Upgrade、Allocate 或 Hydrate，不与后续 GraphReader 合并 |
+| `P0GraphReadCache` → `GraphPhysicalReadCache`；`P0GraphReadCacheStatistics` → `GraphPhysicalReadStatistics` | [声明](../../../src/DurableGraph.Persistence/GraphPhysicalReadCache.cs)复用完成封套、batch、directory version 和完整 heads | 不缓存 typed DTO／模型执行结果／领域实例；命中仍不能替代图语义和准确 S 验证 |
+| `P0SaveCheckpoint` → `RepositorySaveStage` | [声明](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)是共同保存 hook 的阶段；[Kill 见证](../../../experiments/MetaBootstrapCrashProbe/Program.cs)据此选择窗口 | 与公共 Checkpoint 历史位置不同；只改符号，保 hook 位置、枚举值和实验窗口含义 |
 
 基线 `P0GraphSnapshot.Objects/Heads` 实际是同一 head map，B 已统一为 `StoredGraphRevision.ObjectHeads` 并适配调用者。
 GraphResources 上指向默认路径的内部成员已按实际职责收回 backend 标签，例如 `MetaBootstrapStore` → `GraphStore`。
@@ -67,9 +67,9 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 
 | 当前名 → 推荐名 | 依据与限定 |
 |---|---|
-| `P0CatalogView` → `SchemaCatalogView`；`P0CatalogWorkspace` → `SchemaCatalogWorkspace`；`P0PreparedCatalog` → `PreparedSchemaCatalogWrite`；`P0CatalogSemantics` → `SchemaCatalogSemantics` | [view](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogView.cs)、[workspace](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)、[规则](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogSemantics.cs)含完整用户 Schema 和容器 descriptor；不是独立发布的旧 SchemaStore |
-| `P0CatalogRecord` → `SchemaCatalogRecord`；`P0DescriptorRecord` → `LayoutDescriptorRecord`；`P0FieldRecord` → `LayoutSlotRecord`；`P0TypeExprRecord` → `TypeExprRecord`；`P0HeadLocator` → `ObjectHeadLocator` | [员工声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)；descriptor 也描述容器，slot 也服务元素/key/value/Nullable child；head locator 是固定地址状态，不能替代 FrameAddress |
-| `P0EmployeeDefinitions` → `BootstrapDefinitions`；`P0FixedBindings` → `BootstrapBindings`；`P0BuiltinLayouts` → `BuiltinObjectLayouts` | [员工登记](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)、[固定表](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0FixedBindings.cs)、[builtin 布局](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BuiltinLayouts.cs)保有限员工/string 与 builtin-only structural 路由；不把 bootstrap 扩成任意定义发现服务 |
+| `P0CatalogView` → `SchemaCatalogView`；`P0CatalogWorkspace` → `SchemaCatalogWorkspace`；`P0PreparedCatalog` → `PreparedSchemaCatalogWrite`；`P0CatalogSemantics` → `SchemaCatalogSemantics` | [view](../../../src/DurableGraph.Persistence/SchemaCatalogView.cs)、[workspace](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs)、[规则](../../../src/DurableGraph.Persistence/SchemaCatalogSemantics.cs)含完整用户 Schema 和容器 descriptor；不是独立发布的旧 SchemaStore |
+| `P0CatalogRecord` → `SchemaCatalogRecord`；`P0DescriptorRecord` → `LayoutDescriptorRecord`；`P0FieldRecord` → `LayoutSlotRecord`；`P0TypeExprRecord` → `TypeExprRecord`；`P0HeadLocator` → `ObjectHeadLocator` | [员工声明](../../../src/DurableGraph.Persistence/BootstrapRecords.cs)；descriptor 也描述容器，slot 也服务元素/key/value/Nullable child；head locator 是固定地址状态，不能替代 FrameAddress |
+| `P0EmployeeDefinitions` → `BootstrapDefinitions`；`P0FixedBindings` → `BootstrapBindings`；`P0BuiltinLayouts` → `BuiltinObjectLayouts` | [员工登记](../../../src/DurableGraph.Persistence/BootstrapRecords.cs)、[固定表](../../../src/DurableGraph.Persistence/BootstrapBindings.cs)、[builtin 布局](../../../src/DurableGraph.Persistence/BuiltinObjectLayouts.cs)保有限员工/string 与 builtin-only structural 路由；不把 bootstrap 扩成任意定义发现服务 |
 
 员工带 `DurableType`，C 单列 CLR 名与 namespace 收尾，并验证生成结果和当前新包从空库保存／冷开／续写。
 不要为让字符串整齐改持久 SchemaId：`P0C/P0D/P0F/P0T/P0H`、V1、FieldId、字段类型保持；
@@ -150,7 +150,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 ## 8. 后续施工顺序与验收
 
 先冻结当片旧全名→新全名与配套成员表，再实施；下面是建议次序，不是全部候选自动获批的队列。
-保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D 保文件位置，E1／E2 只改同目录 basename。不得用 rename 掩盖合并 owner、删校验或改行为。
+保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D 保文件位置，E1／E2 只改同目录 basename，E3 按有限表并入既有目录且保多类型文件。不得用 rename 掩盖合并 owner、删校验或改行为。
 
 | 片 | 有限范围 | 最小可观察验收 |
 |---|---|---|
@@ -158,7 +158,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
 | D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
-| E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名；目录与多类型文件另判 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
+| E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名，[E3](#e3-status)将旧阶段目录的 16 份源码并入 Persistence 根并迁移导航；多类型文件共置 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
 命名分片采用当前包的新建库故事验收，不为旧包新增兼容壳或常驻迁移门禁。
@@ -171,15 +171,15 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 实施时额外核对以下容易逃过 IDE Rename 的接缝：
 
 - [SG metadata identity](../../../src/DurableGraph.Generator/DurableGraphGenerator.CrossAssembly.cs)与 [export 验证](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs)：`global::`、GetTypeByMetadataName、准确 Generated helper 和 marker 所属程序集都是真实合同；不能只改拼接文本，或放宽为仅名称匹配。
-- [持久 wire](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphWire.cs)：PBB7/PBD7/PBG7、P0B1/P0D1/P0G1，发布根 P0R1/P0S1，typed ABI5、graph kind 值、完整 FrameAddress 编码保持。P0 字符串仍可作为协议历史标识存续。
+- [持久 wire](../../../src/DurableGraph.Persistence/GraphFrameCodec.cs)：PBB7/PBD7/PBG7、P0B1/P0D1/P0G1，发布根 P0R1/P0S1，typed ABI5、graph kind 值、完整 FrameAddress 编码保持。P0 字符串仍可作为协议历史标识存续。
 - 生成 hints、export 合同 1/2、history 模板 v9、accepted `.dgschema` 文件名和字节保持；员工与用户 SchemaId／FieldId 不变。
 - source rename 不等于可见性调整；namespace 迁移不改变 IVT 的程序集身份，也不改变 owner/lifetime、正常 backing 恢复或离线救援纪律。
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录。本轮有限组织范围完成，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)已完成有限文件名对应，具体下一片和其余公开候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
 
 <a id="e1-status"></a>
 ## 10. E1：文件名对应现行类型
@@ -242,3 +242,48 @@ dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.
 根 Rebuild 零警告／错误；Persistence 893 项全部通过，失败／跳过为零。集成 diff 和本地链接检查通过，没有新增历史引用缺口。
 完整路径表和移动 receipt 位于 `.artifacts/db092-e2/source/`，`result.json` SHA256 `7209632448E8E279F82904C5ABD2C87A8252111C88123F59E741C3CD0E0A1026`；主线程字节验收为 `.artifacts/db092-e2/root-source-acceptance.json`，构建／测试日志在同一切片工件目录。
 本片没有制作新 G 或重跑包消费者／存档故事，不声明 DLL／PDB 字节等价。旧 P0 源码目录未动，后续范围只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+<a id="e3-status"></a>
+## 12. E3：退出旧阶段源码目录
+
+2026-10-14；基线 `e60cfbcc8788fdff7019341757a67f30bb8b4817`。问题：已进入同一 `.Persistence` namespace 的默认内核，能否按现行职责定位，不再经历史阶段路径查找？
+本片将旧 `src/DurableGraph.Persistence/MetaBootstrapP0/` 中恰好 16 份 C# 并入既有 Persistence 根目录，原始字节保持；有效 README 迁为[程序集源码导航](../../../src/DurableGraph.Persistence/README.md)。
+最小验收是 16 对文件与 Git 基线完整字节相同、其他源码／配置保持、无失效编译／脚本路径，根构建和 Persistence 回归通过，迁移后的入链／出链没有新增缺口。
+
+下表旧 basename 均位于旧目录，新 basename 均位于 `src/DurableGraph.Persistence/`：
+
+| 旧 basename | 新 basename |
+|---|---|
+| `P0BuiltinLayouts.cs` | `BuiltinObjectLayouts.cs` |
+| `P0BusinessWorkspace.cs` | `BusinessPersistenceAdapter.cs` |
+| `P0CatalogSemantics.cs` | `SchemaCatalogSemantics.cs` |
+| `P0CatalogView.cs` | `SchemaCatalogView.cs` |
+| `P0CatalogWorkspace.cs` | `SchemaCatalogWorkspace.cs` |
+| `P0DirectoryCodec.cs` | `ObjectHeadDirectoryCodec.cs` |
+| `P0EmployeeModels.cs` | `BootstrapRecords.cs` |
+| `P0FixedBindings.cs` | `BootstrapBindings.cs` |
+| `P0GraphContracts.cs` | `GraphPersistenceContracts.cs` |
+| `P0GraphReadCache.cs` | `GraphPhysicalReadCache.cs` |
+| `P0GraphStore.cs` | `GraphRecordStore.cs` |
+| `P0GraphWire.cs` | `GraphFrameCodec.cs` |
+| `P0PendingSave.cs` | `PendingRepositorySave.cs` |
+| `P0Repository.cs` | `RepositoryStorageFacade.cs` |
+| `P0Session.cs` | `BranchSaveSession.cs` |
+| `P0TypedBodies.cs` | `StoredGraphBodies.cs` |
+
+`BootstrapRecords` 共置固定员工记录、ObjectHeadLocator 与登记；`GraphPersistenceContracts` 共置图、batch、目录、chain 与共同保存合同；`StoredGraphBodies` 同时含 typed Base 编码、DTO 行与完整图解码，不以单一 decoder 命名。
+其他文件中的准备结果与缓存统计等 companion 同样保持共置。namespace、成员、访问级别、程序集／包、生成合同、员工 IDs／Family 与 wire 保持；既有 P0 测试宿主和历史协议标识不随目录机械更名。
+
+实施者、独立复核者与主线程核对 16 对 Git 原始字节；主线程另核 591 个其他非文档跟踪文件保持。Persistence 采用 SDK 默认编译收集，未发现旧路径的 Compile／脚本／打包硬编码或 CallerFilePath 依赖。
+修复 10 份文档中 86 个当前源码链接，另重算迁移 README 的 7 个未移动目标出链；导航补充公开入口、执行环境与共同合同，入链从当前工作集进入。历史包 scope 裸路径、Git 来源与冻结 receipt 保其原义。
+
+使用现有准确 S pin 的 package-mode assets，主线程运行：
+
+```powershell
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+```
+
+根 Rebuild 零警告／错误；Persistence 893 项全部通过，失败／跳过为零。集成 diff 和本地链接检查通过，没有新增历史引用缺口。
+完整路径表与移动 receipt 位于 `.artifacts/db092-e3/source/`，`result.json` SHA256 `029601F73F2A4823EFFCB4E4C231FFCFC7E04D19D4ABCD157EB184A90B1D2118`；主线程字节验收为 `.artifacts/db092-e3/root-source-acceptance.json`，构建／测试日志在同一切片工件目录。
+本片没有制作新 G 或重跑包消费者／存档故事，不声明 DLL／PDB 字节等价，也不重授 C／D1／D2 的准确包资格。有限文件组织已完成；余下名称与程序集选择从[路线图](../../DurableGraph-research-roadmap.md)进入，不把本片升级为全项目目录整理。

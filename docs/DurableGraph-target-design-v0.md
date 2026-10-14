@@ -299,7 +299,7 @@ factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protecte
   物理分配与轮转由底座承担，不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
 - 存活目录使用员工 Dictionary body 与对象版本。已有来源时，无变化沿用原目录；有变化比较完整 Base/Delta payload，
   当 `B ≤ D` 或 `H + D > 目录阈值 × B` 时写 Base，否则写 Delta；初始目录写 Base。
-  这独立于对象表示的可选 Base 预算，实际实现见 [GraphRecordStore](../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphStore.cs)。
+  这独立于对象表示的可选 Base 预算，实际实现见 [GraphRecordStore](../src/DurableGraph.Persistence/GraphRecordStore.cs)。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
 - 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing batch 的

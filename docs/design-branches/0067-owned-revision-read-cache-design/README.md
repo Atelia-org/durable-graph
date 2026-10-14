@@ -15,7 +15,7 @@
 
 ## 当前实现与验证入口
 
-- [共享 LRU](../../../src/DurableGraph.Storage/OwnedFrameReadCache.cs)、[双数组字典](../../../src/DurableGraph.Storage/FrozenSortedDictionary.cs)、[P0 组件与 charge](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs)、[实际读取／关系验证／释放](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphStore.cs)。
+- [共享 LRU](../../../src/DurableGraph.Storage/OwnedFrameReadCache.cs)、[双数组字典](../../../src/DurableGraph.Storage/FrozenSortedDictionary.cs)、[P0 组件与 charge](../../../src/DurableGraph.Persistence/GraphPhysicalReadCache.cs)、[实际读取／关系验证／释放](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)。
 - [真实缓存回归](../../../tests/DurableGraph.Persistence.Tests/P0OwnedReadCacheTests.cs)覆盖 zero／负预算、整项 LRU、两组件超额、完整地址键、fresh 缺帧／CRC 错误不准入、暖目录不能认证坏图、坏 prior、owned 隔离及 owner fault/close 清驻留。
 - [双数组所有权与排序](../../../tests/DurableGraph.Storage.Tests/FrozenSortedDictionaryTests.cs)、[当前字典机制测量](../../../tests/DurableGraph.Storage.Tests/ReadCacheMeasurementTests.cs)、[资源寿命](../../../tests/DurableGraph.Persistence.Tests/GraphResourcesSplitOwnerTests.cs)。测量耗时不是测试通过阈值或整体恢复性能承诺。
 
