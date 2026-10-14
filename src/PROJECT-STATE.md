@@ -149,7 +149,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
 | [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／真实 baseline private 升版、冷续写、单次完整目录 ToShared | [DB-087 有限 P1／P2 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)成立；原分支重建、同 Open 双异形模型及性能等按条件延期，源码／包各保限定资格 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
-| [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody、显式 body 的 typed slot与元素 ref 循环 | 完整数组/List 对象操作位于 Runtime；其他 BCL 内容 codec 尚无 |
+| [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：
 

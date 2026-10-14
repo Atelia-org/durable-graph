@@ -1,5 +1,5 @@
 using Atelia.Binary;
-namespace Atelia.DurableGraph.Serialization;
+namespace Atelia.DurableGraph.Serialization.Tests;
 
 /// <summary>
 /// Encodes only the elements of an existing array, without dimensions or an object header.

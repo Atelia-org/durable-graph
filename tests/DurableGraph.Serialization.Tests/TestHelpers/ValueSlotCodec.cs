@@ -1,5 +1,5 @@
 using Atelia.Binary;
-namespace Atelia.DurableGraph.Serialization;
+namespace Atelia.DurableGraph.Serialization.Tests;
 
 internal delegate void ReadSlot<T>(ref BareValueReader reader, ref T value) where T : struct;
 internal delegate void WriteSlot<T>(ref BareValueWriter writer, ref T value) where T : struct;

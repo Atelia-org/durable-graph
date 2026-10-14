@@ -87,7 +87,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 | 024 | [引用 Capture、revision 身份与 ObjectId 复用](0024-reference-capture-and-reusable-object-ids/README.md) |
 | 023 | [13 种标量 Schema/history/DTO 贯通](0023-scalar-schema-dto-slice/README.md) |
 | 022 | [Versioned DTO、Capture 与 binary body](0022-versioned-state-dto-capture/README.md) |
-| 020 | [typed 值槽位与数组元素 binding](0020-typed-slot-array-binding-slice/README.md) |
+| 020 | [typed 值槽位与数组元素 binding](0020-typed-slot-array-binding-slice/README.md)；当前仅为测试机制见证，产品使用静态 SG body |
 | 019 | [祖先 Schema/history 与 exact 依赖](0019-schema-ancestry-implementation-slice/README.md) |
 | 018 | [统一引用身份、TypeCodec 与 Serializer 形状](0018-generated-graph-codec-shape/README.md)；混合历史草稿；见 DTO／泛型后继 |
 | 017 | [对象 codec 设计要点与 Robird 证据](0017-object-codec-design-points/README.md) |

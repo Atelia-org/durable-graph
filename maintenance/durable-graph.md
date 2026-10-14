@@ -4,7 +4,7 @@
 
 - 目标：逐轮消除有证据的技术债或实施有真实收益的安全重构，直至已知线索均有妥善处理的结论。范围覆盖当前产品源码、测试、构建与活动实验；不把路线图中的条件延期当作自动实施授权。
 - 用户指定本文件为任务状态入口；使用 `convergent-maintenance`，复杂实施按需 `bounded-delegation`，设计问题优先 `dialectical-simplification`。
-- Goal 持续执行，无固定轮数上限；2026-10-15 启动，已完成 **6 轮**。只有完成复核、验收和收尾的维护结果才计一轮。
+- Goal 持续执行，无固定轮数上限；2026-10-15 启动，已完成 **7 轮**。只有完成复核、验收和收尾的维护结果才计一轮。
 - 草稿窗口：不承担旧数据或 API 兼容；仍保完整帧 append-only、正常 FS/VS 恢复、准确来源、发布 outcome、fault/reentry/lifetime 检查。保留他人工作，不推送或发布。
 - 产品事实与导航：[PROJECT-STATE](../src/PROJECT-STATE.md)；长期约束和条件延期分别归目标设计与路线图，不在此复制。
 
@@ -20,6 +20,8 @@
 
 第 6 轮 M005 已验收：owned manifest 同次解析 records 与 reference hash，Build 二次读取已退出；保 owned BOM／CRLF 接受边界和 reference 原文 canonical/hash 规则。根 build 零警告错误，history／Build 351 项（含新增 5 个编码正反例）全部通过；源码与新用例独立复核通过。
 
+第 7 轮 M006 已验收：两套 codec 精确迁入 Serialization.Tests/TestHelpers，仅改测试 namespace，Serialization 三个无用 IVT 已退出；保全部 primitive/ref 循环／泛型机制测试，DB-020 当前仅保测试见证。根 build 零警告错误，Serialization 133 与 SG 静态 body 71 项通过；独立源码复核、DLL metadata 无旧类型／IVT 和变更链接可达检查通过。
+
 ## 线索与裁决
 
 | 线索 | 证据与当前判断 | 状态／下一步 |
@@ -29,7 +31,7 @@
 | M003：ToShared 操作内 catalog 重载 | 单一同步 wrapper 实际 Load Head.S 与 latest shared 各一次；保完整 precheck／postcheck 和 target Builder | 已处理／第 5 轮：根 build 零警告错误，921＋11 项通过。counter、新 root layout 的 late 冲突、Event-only 四资源停止与 owner 重入均通过，失败不安装／不消费 dirty；不承诺完整保存加速 |
 | M004：SG kind／arity 同形重复 | packed表和逐named全表扫描已退出；单一 nominal 索引保首值、累计record/field冲突，参数／exact独立 | 已处理／第4轮：根build零警告错误，942项通过。14个实际RunGenerator用例含排序前后direct/nested正反例、单phase单诊断、独立family/field/cycle；不建诊断去重框架 |
 | M005：Build manifest 读两次 | ParseManifest 同次 out reference hash，LoadAvailable 无 owned 路径，二读入口已删除 | 已处理／第 6 轮：根 build 零警告错误，351 项通过；owned BOM×CRLF 四组合及 reference BOM 拒绝均已核。保各层完整 closure 与 accepted bytes；不授实测加速或并发错误资格 |
-| M006：仅测试消费的旧 codec 留在产品程序集 | Serialization 的 internal ValueSlotCodec／ArrayElementCodec 消费者仅 Serialization.Tests；Runtime/SG 使用静态 IStateOps | 待复核消费者闭包：可移测试 helper、保机制见证并删除无用 IVT；不恢复旧 runtime 路由 |
+| M006：仅测试消费的旧 codec 留在产品程序集 | 全部实际消费者均在 Serialization.Tests；两个 codec 已迁测试 helper，产品保静态 body 路由 | 已处理／第 7 轮：根 build 零警告错误，133＋71 项通过；精确逻辑比对、消费者闭包、产品 DLL metadata 和链接复核通过，三个无用 IVT 已删。DB-020 原时期正文／证据保持 |
 | M007：FrozenState 可收窄 owned buffer 出口 | 原三个 backing-array getter 已删；Array/List 和活动 ListDeltaReplayProbe 两处 friend 读取使用已有 span | 已处理／第 2 轮：根与活动实验 build 零警告错误，根四个测试项目 2,694 项全部通过（含隔离、畸形 Delta、浮点、Upgrade）。源码无旧 getter；仅普通 C# 边界收窄，不声称抵御 Unsafe |
 | M008：默认保存重复 checkout 来源核验 | Repository 的 RequireSchemaWriter 已 RequireCheckoutSource，save/discard try 内又重复，无中间 callback | 待核串行／reentry 与 ToShared 分支区别，保每入口完整 lineage 拒绝 |
 | M009：FrozenState ownership bool 的 false 分支 | 16个true调用已逐一核：3个public先复制、13个内部producer完成写入才转移；Dictionary后续Index仅span读取并复制key编码。未找到可写泄漏／转移后写入 | 已裁决保留：当前仅3个未用分支，M007已收窄数组出口；为删bool增加工厂并迁移16处没有足够当前收益。出现ownership误用／新创建来源／构造合同分叉时重访，不计额外实施轮 |
@@ -56,7 +58,9 @@
 
 第 6 轮证据：`.artifacts/maintenance/20261015/round6-build.log`、`round6-tests.log`、`round6-history-build.trx`；351 项全部通过，新增 5 个 case 已按 TRX 核执行／通过。单次读取由实际调用链证明，没有运行时 I/O instrumentation 或性能／普通包资格。
 
-下一步：第 7 轮处理 M006，再处理 M008；最后 M001 用全部已提交产品源码制作新 G 并运行普通包消费者。三条未处理线索仍有可推进动作，Goal 保持 active。
+第 7 轮证据：`.artifacts/maintenance/20261015/round7-build.log`、`round7-serialization.trx`、`round7-static-body.trx` 及 tests 日志；133＋71 项全通过。`round7-product-metadata.json` 记录实际产品 DLL SHA 与六个 type definitions，旧 codec／委托定义及 IVT 类型引用均不存在。未授 DLL 大小／速度或新包资格。
+
+下一步：第 8 轮处理 M008；最后 M001 用全部已提交产品源码制作新 G 并运行普通包消费者。两条未处理线索仍有可推进动作，Goal 保持 active。
 
 ### M003 设计审阅边界
 
