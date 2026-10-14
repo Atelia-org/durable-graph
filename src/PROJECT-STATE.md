@@ -18,7 +18,7 @@
 
 ## 当前焦点
 
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B 已限定验收，证据见 [B 记录](../docs/design-branches/0092-type-namespace-refactoring/implementation-b.md)。当前实施 [C 固定员工收尾](../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)：七个内部 CLR 名／登记／绑定映射与两个文件 namespace，保持 SchemaId、V1、FieldId、固定编号及 Family／ABI5；单独对比生成材料并验证真旧 G 写入到新 G 冷开、续写、再冷开及完整旧帧保持。公开候选 D、程序集／文件组织 E 仍另判。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／[C](../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)已限定验收：普通内核、固定员工与执行环境命名进入既有 Persistence，旧阶段 CLR namespace 已退出；生成／布局／固定编号与公开 API 保持，当前新 G 从空库的 Split／Meta 保存、冷开和续写通过。包兼容边界见[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)：实验存档可 reset 重生成，不设旧包兼容门槛。下一步 D 公开候选及 Generator 入口须先冻结当片映射，E 程序集／文件组织仍另判。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 

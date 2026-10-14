@@ -1,6 +1,6 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A、B 已限定验收；C 固定员工命名已实施，生成材料与真实旧／新包存档验收中。公开候选仍另片。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C 已限定验收；C 的员工命名、生成材料与当前新包故事通过。公开候选仍另片。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
 > 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)。
 
@@ -71,7 +71,7 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 | `P0CatalogRecord` → `SchemaCatalogRecord`；`P0DescriptorRecord` → `LayoutDescriptorRecord`；`P0FieldRecord` → `LayoutSlotRecord`；`P0TypeExprRecord` → `TypeExprRecord`；`P0HeadLocator` → `ObjectHeadLocator` | [员工声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)；descriptor 也描述容器，slot 也服务元素/key/value/Nullable child；head locator 是固定地址状态，不能替代 FrameAddress |
 | `P0EmployeeDefinitions` → `BootstrapDefinitions`；`P0FixedBindings` → `BootstrapBindings`；`P0BuiltinLayouts` → `BuiltinObjectLayouts` | [员工登记](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)、[固定表](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0FixedBindings.cs)、[builtin 布局](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BuiltinLayouts.cs)保有限员工/string 与 builtin-only structural 路由；不把 bootstrap 扩成任意定义发现服务 |
 
-员工带 `DurableType`，C 单列 CLR 名与 namespace 收尾，并验证生成结果和真实旧包冷读／续写。
+员工带 `DurableType`，C 单列 CLR 名与 namespace 收尾，并验证生成结果和当前新包从空库保存／冷开／续写。
 不要为让字符串整齐改持久 SchemaId：`P0C/P0D/P0F/P0T/P0H`、V1、FieldId、字段类型保持；
 相应 `Family_503043/503044/503046/503054/503048` 保持，因为 [FamilyName](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)取 SchemaId 的 UTF8 hex。
 
@@ -154,9 +154,13 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 |---|---|---|
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
-| C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；真旧 G 写入、新 G 冷开／续写／再冷开，完整旧帧地址／内容保持；shared/private/meta 与目录均覆盖。不能用同一 runtime 改 HistoryVersion 代替真旧包 |
+| C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
 | D：公开有限迁移 | 只选择 §6 中有明确收益的名称；Generator 入口也单独处理 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，源兼容变化有迁移表。如测试旧 DLL，明确其是否要求重编译；不自动承诺二进制兼容 |
 | E：组织判断 | 命名已稳定，再看真实引用与消费边界 | 分别提出文件归属与程序集方向；只有实证需要才增加项目、包或 namespace，不从这张名称表推导必须拆分 |
+
+2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
+命名分片采用当前包的新建库故事验收，不为旧包新增兼容壳或常驻迁移门禁。
+当前包内部的 Schema 升级、准确历史读取和打开 Store 生命周期内的完整帧纪律仍按现行合同验证。
 
 每次代码变更按 [仓库规则](../../../AGENTS.md#evidence-and-validation)运行根 `dotnet build DurableGraph.slnx` 和相关 tests；
 依赖模式按[存储指南](../../storage-dependency.md)显式选择，包交付用准确 package mode 与独立 DG 版本。
@@ -173,4 +177,4 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，公开候选仍另片。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B 已完成包交付限定验收；[C](implementation-c.md)正在取得独立资格，D 公开名称及 Generator 入口、E 后续组织仍另判。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)已完成包交付限定验收；当前无旧包存档兼容门槛，D 公开名称及 Generator 入口、E 后续组织仍另判。
