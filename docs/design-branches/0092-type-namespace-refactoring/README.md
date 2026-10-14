@@ -1,6 +1,6 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4 已限定验收；D5 检查点角色命名的源码与根验证通过，准确新 G 外部消费待验收。有限文件组织完成。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4／D5 已限定验收；D5 公开 CheckpointKind 的源码、根回归和准确新 G 普通消费／冷续写通过。有限文件组织完成。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
 > 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)／[D4](#d4-status)，当片见 [D5](#d5-status)。
 
@@ -116,7 +116,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 6. 公开候选与尚不宜机械处理的问题
 
-这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。D3 采用仓库资源 owner 名称；D4 将两项纯槽转换归回既有 Schema 类型。其余候选保独立判断，不因没有兼容负担而自动全改。
+这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。D3 采用仓库资源 owner 名称；D4 将两项纯槽转换归回既有 Schema 类型；D5 采用根空间的检查点角色名。其余候选保独立判断，不因没有兼容负担而自动全改。
 
 | 提案基线完整类型名 | 采用结果与限制 |
 |---|---|
@@ -149,14 +149,14 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 ## 8. 后续施工顺序与验收
 
 先冻结当片旧全名→新全名与配套成员表，再实施；下面是建议次序，不是全部候选自动获批的队列。
-保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D 保文件位置，E1／E2 只改同目录 basename，E3 按有限表并入既有目录且保多类型文件。不得用 rename 掩盖合并 owner、删校验或改行为。
+保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D4 保文件位置，D5 只提取一个公开 enum，E1／E2 只改同目录 basename，E3 按有限表并入既有目录且保多类型文件。不得用 rename 掩盖合并 owner、删校验或改行为。
 
 | 片 | 有限范围 | 最小可观察验收 |
 |---|---|---|
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
-| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称；[D4](#d4-status)归位两个纯槽 static 方法 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
+| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称；[D4](#d4-status)归位两个纯槽 static 方法；[D5](#d5-status)采用根空间 CheckpointKind | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
 | E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名，[E3](#e3-status)将旧阶段目录的 16 份源码并入 Persistence 根并迁移导航；多类型文件共置 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
@@ -176,9 +176,9 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名，D4 将两项纯槽转换归回 Schema。本轮有限组织与 D3／D4 范围完成，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名，D4 将两项纯槽转换归回 Schema，D5 采用根空间 CheckpointKind。本轮有限组织与 D3／D4／D5 范围完成，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)／[D4](#d4-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)／[D4](#d4-status)／[D5](#d5-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
 
 <a id="e1-status"></a>
 ## 10. E1：文件名对应现行类型
@@ -430,4 +430,24 @@ Family 的 seed／continue／verify 为三个独立 PID：新库保存真实初�
 主线程按 D4 同一准确 S pin 的 package-mode 命令串行 Rebuild、两个测试项目：零警告／错误，Persistence 893 项、Runtime／Generator／Build 1628 项通过，失败／跳过为零。
 根 solution 外的 ListDeltaReplay 另以专用配置显式 restore package mode，并用 `--artifacts-path .artifacts/db092-d5/replay-build` 隔离所有项目输出，compile 零警告／错误；未运行性能实验。
 源码 receipt 为 `.artifacts/db092-d5/source/result.json`，SHA256 `CFF96BD975BCB82D7A26EF02565819535618370392140A36D2534F9461653685`；独立源码凭据为 `review/source-review.json`，根日志及 API 清单保存在同片目录。
-当前停点：上述源码／根范围通过，准确新 G 的外部消费仍待验收；不能将前片包结果作为本片证据。
+准确新包由源码／合同提交 `2f99e1fbb54b2edf82d6b7e42e11f96f877f8ef0` 单次 Prepare 生产；189 个生产输入在前后及当前 Git 对照中保持，六个 S 原包及四个 DG 包的身份、来源、实际 DLL 字节均核验。
+
+| 包证据 | 准确来源 |
+|---|---|
+| DG G | `0.0.0-db092-d5-e2e.20261014144649.36716` |
+| Storage S／来源 | `0.1.3-dev.20261014.g758cebf`／`758cebf8ba82788ba91435d34fd484dff32095fd` |
+| 完整十包 feed | `.artifacts/db092-d5/package/feed` |
+| 独立消费者／cache／新库 | `W:/TEMP/dg-db092-d5-checkpoints-20261014T144805-39696` |
+
+一份非 friend 普通 PackageReference compilation，两个包引用，单个标量 Sample 类型同时充当 Event／State，直接强类型使用新 enum；实际新 G 的 SG 普通 `__DurableState` 与 Build Publish／CI Verify 通过，唯一 accepted history 文件保持。
+三个运行进程均 exit 0；Kind 的新 FQN、Persistence 程序集与 1／2 角色值直接观察，uint 底层类型由源码／API 清单核验。
+
+| 独立 PID | 实际观察 |
+|---|---|
+| seed 7260 | 空库保存 Event7 → State10 → Event8；Event-first 没有 State，Event8 保持原 State10；三个位置分别建 tag |
+| continue 39228 | 全关后冷签出 Event8 的准确 head，恢复 State10；保存 State11 → Event9 → State12，Event9 保 State11，再建三个 tag |
+| readonly 10292 | 冷开只读核六项准确角色／内容、tag、ReadCheckpoint 最近相反角色、GetPreviousState 与 EnumerateEvents；全部库文件前后 SHA 相同 |
+
+实际 assets、独立 cache、输出、编译输入及 generated／history 均核验；33 次加载映像（30 次包 DLL＋3 次消费者）逐一匹配所选字节。包内公开／protected API 1359 行亦只有同一六行类型 FQN 变化。
+包凭据 `.artifacts/db092-d5/package/consumer-result.json`，SHA256 `D040BB4EE2E8F4399897E0D3659D2A7B75B0B0936C368EBE7500ADB587108D8F`；主线程接受凭据为同片 `root-acceptance.json`，独立复核为 `review/final-review.json`。集成 diff 与链接检查无新增缺口，117 处历史问题保持原范围。
+当前停点：D5 的名称／namespace、源码、根回归、Replay 编译及上述准确新 G 普通消费完成。没有 Family、物理 Base/Delta kind、Upgrade、private promotion、Fork/Pair、旧包／旧数据兼容、Crash/Kill 或性能资格；前片结果不代授。后续候选与重访条件只维护在[路线图](../../DurableGraph-research-roadmap.md)。
