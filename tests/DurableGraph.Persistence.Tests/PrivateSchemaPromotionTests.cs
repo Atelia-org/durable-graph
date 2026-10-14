@@ -280,6 +280,219 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     }
 
     [Fact]
+    public void Synchronous_promotion_loads_each_independent_Base_catalog_once_and_merges_captured_layouts() {
+        using Frames frames = Frames.Create(_path);
+        DurableSchema sourceSchema = new("Promotion.Count.Source", 1, new DurableFieldInfo(1, TypeTag.Int32));
+        DurableSchema targetSchema = new("Promotion.Count.Target", 1, new DurableFieldInfo(1, TypeTag.Byte));
+        DurableSchema dirtySchema = new("Promotion.Count.Dirty", 1, new DurableFieldInfo(1, TypeTag.Boolean));
+        DurableSchema capturedSchema = new("Promotion.Count.Captured", 1, new DurableFieldInfo(1, TypeTag.Int64));
+        SchemaCatalogView source, target;
+        using (GraphRecordStore writer = new(frames)) {
+            source = AppendFreshCatalog(writer, sourceSchema, UnreachableList);
+            target = AppendFreshCatalog(writer, targetSchema);
+            Assert.NotEqual(source.Snapshot!.Address, target.Snapshot!.Address);
+            Assert.Null(source.Snapshot!.SourceGraph);
+            Assert.Null(target.Snapshot!.SourceGraph);
+            Assert.All(writer.ReadBatch(source.Snapshot!.OwnedBatch!.Value).Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            Assert.All(writer.ReadBatch(target.Snapshot!.OwnedBatch!.Value).Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+        }
+        using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
+        SchemaCatalogWorkspace workspace = new(static () => { }, source);
+        workspace.Set(dirtySchema);
+        int captures = 0;
+        PreparedSchemaCatalogWrite prepared = workspace.PrepareToSharedOwned(reader, source.Snapshot!.Address, target.Snapshot!.Address, () => {
+            captures++;
+            Assert.Equal(2, reader.ReadCacheStatistics.GraphDecodes);
+            Assert.Equal(2, reader.ReadCacheStatistics.DirectoryMaterializations);
+            return [ObjectLayout.ForDurable(capturedSchema)];
+        });
+
+        Assert.Equal(1, captures);
+        Assert.Equal(2, reader.ReadCacheStatistics.GraphDecodes);
+        Assert.Equal(2, reader.ReadCacheStatistics.DirectoryMaterializations);
+        Assert.Equal(0, reader.AppendedFrames);
+        Assert.Equal(target.Snapshot!.Address, prepared.Write!.SourceGraph);
+        foreach (DurableSchema schema in new[] { sourceSchema, targetSchema, dirtySchema, capturedSchema }) {
+            Assert.Equal(schema, prepared.View.Schemas[new(schema.Type, schema.Version)]);
+        }
+        Assert.Equal(UnreachableList, prepared.View.ResolveLayout(prepared.View.DescriptorId(UnreachableList)));
+        Assert.Same(source, workspace.Accepted);
+        Assert.Equal(1, workspace.DirtyCount);
+    }
+
+    [Fact]
+    public void Captured_same_key_conflict_rejects_after_one_callback_without_accepting_dirty_intent() {
+        using Frames frames = Frames.Create(_path);
+        DurableSchema sourceSchema = new("Promotion.Late.Source", 1, new DurableFieldInfo(1, TypeTag.Byte));
+        DurableSchema registered = new("Promotion.Late.Target", 1, new DurableFieldInfo(1, TypeTag.Int32));
+        DurableSchema captured = new(registered.Type, 1, new DurableFieldInfo(1, TypeTag.Int64));
+        DurableSchema dirty = new("Promotion.Late.Dirty", 1, new DurableFieldInfo(1, TypeTag.Byte));
+        SchemaCatalogView source, target;
+        using (GraphRecordStore writer = new(frames)) {
+            source = AppendFreshCatalog(writer, sourceSchema);
+            target = AppendFreshCatalog(writer, registered);
+        }
+        using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
+        SchemaCatalogWorkspace workspace = new(static () => { }, source);
+        workspace.Set(dirty);
+        int captures = 0;
+        PreparedSchemaCatalogWrite? delivered = null;
+        SchemaConflictException error = Assert.Throws<SchemaConflictException>(() => delivered = workspace.PrepareToSharedOwned(reader,
+            source.Snapshot!.Address, target.Snapshot!.Address, () => {
+                captures++;
+                return [ObjectLayout.ForDurable(captured)];
+            }));
+        Assert.Equal(registered, error.RegisteredSchema);
+        Assert.Equal(captured, error.ConflictingSchema);
+        Assert.Equal(1, captures);
+        Assert.Null(delivered);
+        Assert.Same(source, workspace.Accepted);
+        Assert.Equal(1, workspace.DirtyCount);
+        Assert.Equal(0, reader.AppendedFrames);
+        PreparedSchemaCatalogWrite corrected = workspace.PrepareToSharedOwned(reader, source.Snapshot!.Address,
+            target.Snapshot!.Address, () => { captures++; return [ObjectLayout.ForDurable(registered)]; });
+        Assert.Equal(2, captures);
+        Assert.Equal(dirty, corrected.View.Schemas[new(dirty.Type, 1)]);
+        Assert.Same(source, workspace.Accepted);
+        Assert.Equal(1, workspace.DirtyCount);
+    }
+
+    [Fact]
+    public void Promotion_imports_a_new_root_layout_first_encountered_by_business_Capture() {
+        using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
+        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        repository.CreateBranch("dev", main.Head);
+        using BranchCheckout dev = repository.CheckoutPrivate("dev");
+        DurableSchema envelope = dev.Models.ResolveCurrentModel(typeof(DB087EnvelopeRoot)).CurrentSchema;
+        SchemaCatalogView before = SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value);
+        Assert.False(before.Schemas.ContainsKey(new(envelope.Type, envelope.Version)));
+        DB087Widget ring = AssertRing(dev.State, 7);
+        DB087EnvelopeRoot root = new() { Link = ring, Numbers = ring.Numbers };
+
+        CheckpointAddress saved = dev.CommitStateToShared(root, NoRebase);
+        SchemaCatalogView merged = SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value);
+        Assert.Equal(envelope, merged.Schemas[new(envelope.Type, envelope.Version)]);
+        Assert.Equal(before.Snapshot!.Address, merged.Snapshot!.SourceGraph);
+        Assert.Same(root, dev.State);
+        Assert.Equal(saved, dev.Head);
+        AssertEnvelope(repository.ReadState(saved), 7);
+        Assert.Equal(0, dev.Catalog.DirtyCount);
+        Assert.True(dev.UsesPrivateSchemas);
+    }
+
+    [Fact]
+    public void Late_shared_conflict_from_the_captured_new_root_keeps_private_saving_usable() {
+        using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
+        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        repository.CreateBranch("dev", main.Head);
+        using BranchCheckout dev = repository.CheckoutPrivate("dev");
+        DurableSchema envelope = dev.Models.ResolveCurrentModel(typeof(DB087EnvelopeRoot)).CurrentSchema;
+        DurableSchema wrong = new(envelope.Type, envelope.Version, new DurableFieldInfo(1, TypeTag.Int64));
+        Assert.False(dev.Catalog.Accepted!.Schemas.ContainsKey(new(envelope.Type, envelope.Version)));
+        main.Catalog.Set(wrong);
+        main.CommitState(NoRebase);
+        SchemaCatalogView accepted = dev.Catalog.Accepted!;
+        NormalizedGraphState baseline = dev.Baseline!;
+        PublicationImage before = Snapshot(repository);
+        DB087Widget ring = AssertRing(dev.State, 7);
+        DB087EnvelopeRoot root = new() { Link = ring, Numbers = ring.Numbers };
+        CheckpointAddress? delivered = null;
+        SchemaConflictException error = Assert.Throws<SchemaConflictException>(() => delivered = dev.CommitStateToShared(root, NoRebase));
+        Assert.Equal(wrong, error.RegisteredSchema);
+        Assert.Equal(envelope, error.ConflictingSchema);
+        Assert.Null(delivered);
+        Assert.Same(accepted, dev.Catalog.Accepted);
+        Assert.Same(baseline, dev.Baseline);
+        AssertUnchanged(repository, before);
+
+        CheckpointAddress saved = dev.CommitState(root, NoRebase);
+        Assert.Same(root, dev.State);
+        AssertEnvelope(repository.ReadState(saved), 7);
+        AssertSameRef(before.Shared, ReadRef(repository, 2));
+    }
+
+    [Fact]
+    public void Promotion_Capture_keeps_public_and_resource_owner_reentry_guards_until_preparation_finishes() {
+        Action? duringCapture = null;
+        int captures = 0;
+        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => { captures++; duringCapture?.Invoke(); }),
+            schemaWriteMode: SchemaWriteMode.Shared);
+        using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Counter { Value = 1 }, NoRebase);
+        RepositoryResources resources = ResourcesOf(repository);
+        using RepositoryStorageFacade facade = new(resources);
+        bool nestedProducerCalled = false;
+        captures = 0;
+        duringCapture = () => {
+            Assert.Throws<InvalidOperationException>(() => checkout.CommitEventToShared(new Counter { Value = 99 }, NoRebase));
+            Assert.Throws<InvalidOperationException>(() => checkout.Catalog.Set(PrivateOnly));
+            Assert.Throws<InvalidOperationException>(() => repository.Dispose());
+            Assert.Throws<InvalidOperationException>(() => resources.Dispose());
+            Assert.Throws<InvalidOperationException>(() => facade.Dispose());
+            Assert.Throws<InvalidOperationException>(() => facade.PrepareFrom("other", StoredGraphKind.State,
+                () => { nestedProducerCalled = true; throw new IOException("Nested producer must not be called."); }));
+            Assert.False(nestedProducerCalled);
+        };
+        CheckpointAddress saved = checkout.CommitEventToShared(new Counter { Value = 2 }, NoRebase);
+        duringCapture = null;
+        Assert.Equal(1, captures);
+        Assert.Equal(saved, checkout.Head);
+        Assert.Null(checkout.State);
+        Assert.Equal(2, Assert.IsType<Counter>(repository.ReadEvent(saved)).Value);
+        Assert.False(resources.HasPendingSave);
+        Assert.False(repository.IsFaulted);
+    }
+
+    [Theory]
+    [InlineData("StoreDispose")]
+    [InlineData("OwnerFault")]
+    [InlineData("DataClose")]
+    [InlineData("VersionsClose")]
+    public void Event_only_promotion_rejects_stopped_Store_before_business_body_preparation_or_pending(string stop) {
+        Action? duringCapture = null;
+        int captures = 0, bodyPreparations = 0, afterPrepare = 0;
+        using Repository repository = Repository.CreateNew(_path,
+            CounterModels(1, () => { captures++; duringCapture?.Invoke(); }, () => bodyPreparations++),
+            schemaWriteMode: SchemaWriteMode.Shared);
+        using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Counter { Value = 1 }, NoRebase);
+        RepositoryResources resources = ResourcesOf(repository);
+        GraphRecordStore retained = repository.GraphStore;
+        PublicationImage before = Snapshot(repository);
+        SchemaCatalogView accepted = checkout.Catalog.Accepted!;
+        Assert.Null(checkout.State);
+        Assert.Null(checkout.Baseline);
+        captures = bodyPreparations = 0;
+        repository.OperationStageObserver = _ => afterPrepare++;
+        duringCapture = () => {
+            switch (stop) {
+                case "StoreDispose": retained.Dispose(); break;
+                case "OwnerFault": resources.MarkFaulted(); break;
+                case "DataClose": resources.Data.Dispose(); break;
+                case "VersionsClose": resources.Versions.Dispose(); break;
+                default: throw new ArgumentOutOfRangeException(nameof(stop));
+            }
+        };
+        CheckpointAddress? delivered = null;
+        Assert.ThrowsAny<InvalidOperationException>(() => delivered = checkout.CommitEventToShared(new Counter { Value = 2 }, NoRebase));
+        Assert.Null(delivered);
+        Assert.Equal(1, captures);
+        Assert.Equal(0, bodyPreparations);
+        Assert.Equal(0, afterPrepare);
+        Assert.Same(accepted, checkout.Catalog.Accepted);
+        Assert.Equal(before.Appended, retained.AppendedFrames);
+        Assert.Null(checkout.State);
+        if (stop == "StoreDispose") { Assert.False(resources.HasPendingSave); }
+        checkout.Dispose();
+        repository.Dispose();
+
+        using Repository cold = Repository.OpenReadOnlyExisting(_path, CounterModels(1));
+        AssertSameRef(before.Branches, ReadRef(cold, 1));
+        AssertSameRef(before.Shared, ReadRef(cold, 2));
+        Assert.Equal(before.Frames.Select(frame => frame.Address), ReadFrames(ResourcesOf(cold).Data).Select(frame => frame.Address));
+        AssertFramesPreserved(ResourcesOf(cold).Data, before.Frames);
+        Assert.Equal(1, Assert.IsType<Counter>(cold.ReadEvent(cold.GetHead("main"))).Value);
+    }
+
+    [Fact]
     public void Shared_raw_pending_requires_latest_shared_meta_source_and_the_exact_business_State_source() {
         using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
@@ -297,7 +510,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         PublicationImage before = Snapshot(repository);
         Assert.Throws<InvalidDataException>(() => facade.Prepare("dev", StoredGraphKind.State, validBusiness, privateCandidate.Write));
         AssertUnchanged(repository, before);
-        PreparedSchemaCatalogWrite target = catalog.PrepareToSharedOwned(facade.Store, headPin, facade.SharedSchemaRoot, []);
+        PreparedSchemaCatalogWrite target = catalog.PrepareToSharedOwned(facade.Store, headPin, facade.SharedSchemaRoot, static () => []);
         Assert.Equal(facade.SharedSchemaRoot, target.Write!.SourceGraph);
         Assert.NotEqual(main.StateRevisionAddress, dev.StateRevisionAddress);
         PreparedGraphWrite wrongBusiness = new(main.StateRevisionAddress, dev.StateId.Value, []);
@@ -392,9 +605,10 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     private static DurableSchema CounterSchema(int version) => new("Promotion.Counter", version, new DurableFieldInfo(1, TypeTag.Int32));
     // A real retained reader and current normalizer isolate RequiresRewrite;
     // this is not a claim about source-generator Upgrade history.
-    private static StateModelRegistry CounterModels(int version, Action? capture = null) {
+    private static StateModelRegistry CounterModels(int version, Action? capture = null, Action? prepareBody = null) {
         static void Visit(in int value, IStateReferenceVisitor visitor) { }
-        static PreparedBaseBody Base(in int value) {
+        PreparedBaseBody Base(in int value) {
+            prepareBody?.Invoke();
             ArrayBufferWriter<byte> bytes = new();
             BareValueWriter writer = new(bytes);
             writer.WriteVarInt32(value);
@@ -404,13 +618,23 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             static (ref BareValueReader reader, in int prior) => reader.ReadVarInt32(), Visit);
         StateModelRegistry models = new();
         models.Register(new StateModelBinding<Counter, int>(new(CounterSchema(version), Base,
-            static (in int prior, in int next) => new(prior != next, Base(next).Body)),
+            (in int prior, in int next) => new(prior != next, Base(next).Body)),
             version == 1 ? [Reader(1)] : [Reader(1), Reader(2)],
             static row => row.GetState<int>(), static () => new(),
             static (Counter domain, in int value, ObjectReadTable objects) => domain.Value = value,
             (domain, context) => { capture?.Invoke(); return domain.Value; }, Visit));
         return models;
     }
+    private static SchemaCatalogView AppendFreshCatalog(GraphRecordStore store, DurableSchema schema, ObjectLayout? extraLayout = null) {
+        SchemaCatalogWorkspace workspace = new(static () => { });
+        workspace.Set(schema);
+        if (extraLayout is not null) { workspace.Set(extraLayout); }
+        PreparedSchemaCatalogWrite prepared = workspace.Prepare();
+        StoredGraphRevision graph = store.Append(StoredGraphKind.Meta, null, null, prepared.Write!);
+        prepared.PrepareInstall(graph);
+        return prepared.View;
+    }
+
     private sealed record RefImage(RefRevision Revision, byte[] Payload);
     private sealed record FrameImage(FrameAddress Address, uint Tag, int MetaLength, bool IsTombstone, byte[] Payload);
     private sealed record PublicationImage(RefImage Branches, RefImage Shared, long Appended, FrameImage[] Frames);

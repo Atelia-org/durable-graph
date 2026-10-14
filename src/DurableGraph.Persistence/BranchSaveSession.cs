@@ -93,25 +93,26 @@ internal sealed class BranchSaveSession {
         PreparedBusinessWrite? business = null;
         try {
             (PreparedGraphWrite Business, PreparedGraphWrite? Catalog) Produce() {
-                FrameAddress? headSchemaRoot = null, latestSharedRoot = null;
                 if (toShared) {
                     // Freeze both actual roots inside the owner producer window. The
                     // complete merge must pass before invoking business Capture.
-                    headSchemaRoot = _repository.GetHead(_branch) is { } head
+                    FrameAddress? headSchemaRoot = _repository.GetHead(_branch) is { } head
                         ? _repository.Store.ReadMetadata(head).SchemaRoot
                             ?? throw new InvalidDataException("A shared promotion requires the current business head's exact Schema pin.")
                         : null;
-                    latestSharedRoot = _repository.SharedSchemaRoot;
-                    Catalog.ValidateToSharedOwned(_repository.Store, headSchemaRoot, latestSharedRoot);
-                } else if (!_privateCatalog && _repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
-                    Catalog.RebaseOwned(SchemaCatalogView.Load(_repository.Store, latest));
+                    FrameAddress? latestSharedRoot = _repository.SharedSchemaRoot;
+                    catalog = Catalog.PrepareToSharedOwned(_repository.Store, headSchemaRoot, latestSharedRoot, () => {
+                        capture = _business.CaptureOwned(root, kind);
+                        return capture.Graph.Objects.Select(static row => row.Layout);
+                    });
+                } else {
+                    if (!_privateCatalog && _repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
+                        Catalog.RebaseOwned(SchemaCatalogView.Load(_repository.Store, latest));
+                    }
+                    capture = _business.CaptureOwned(root, kind);
+                    catalog = Catalog.PrepareOwned(capture.Graph.Objects.Select(static row => row.Layout));
                 }
-                capture = _business.CaptureOwned(root, kind);
-                catalog = toShared
-                    ? Catalog.PrepareToSharedOwned(_repository.Store, headSchemaRoot, latestSharedRoot,
-                        capture.Graph.Objects.Select(static row => row.Layout))
-                    : Catalog.PrepareOwned(capture.Graph.Objects.Select(static row => row.Layout));
-                business = _business.PrepareOwned(capture, catalog.View, parameters);
+                business = _business.PrepareOwned(capture!, catalog.View, parameters);
                 return (business.Write, catalog.Write);
             }
             PendingRepositorySave pending = _privateCatalog && !toShared ? _repository.PreparePrivateFrom(_branch, kind, Produce)

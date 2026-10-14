@@ -67,14 +67,16 @@ internal sealed class SchemaCatalogWorkspace {
     // captured business object reaches. The owner derives and freezes both roots;
     // neither an external view nor this workspace's possibly older accepted view
     // can substitute for loading those actual graphs.
-    internal void ValidateToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot,
-        FrameAddress? latestSharedRoot) {
-        _ = CollectToSharedOwned(store, headSchemaRoot, latestSharedRoot, []);
-    }
-
     internal PreparedSchemaCatalogWrite PrepareToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot,
-        FrameAddress? latestSharedRoot, IEnumerable<ObjectLayout> capturedLayouts) {
-        var (target, schemas, layouts) = CollectToSharedOwned(store, headSchemaRoot, latestSharedRoot, capturedLayouts);
+        FrameAddress? latestSharedRoot, Func<IEnumerable<ObjectLayout>> captureLayouts) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(captureLayouts);
+        SchemaCatalogView? source = headSchemaRoot is { } head ? SchemaCatalogView.Load(store, head) : null;
+        SchemaCatalogView? target = latestSharedRoot is { } shared ? SchemaCatalogView.Load(store, shared) : null;
+        _ = CollectToShared(source, target, []);
+        IEnumerable<ObjectLayout> capturedLayouts = captureLayouts();
+        store.EnsureUsable();
+        var (schemas, layouts) = CollectToShared(source, target, capturedLayouts);
         // Only the latest shared graph supplies meta priors, retained rows and the
         // destination ID domain. Source descriptor numbers are never copied.
         Builder builder = new(target);
@@ -89,13 +91,10 @@ internal sealed class SchemaCatalogWorkspace {
         return builder.Finish(this);
     }
 
-    private (SchemaCatalogView? Target, IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas, ObjectLayout[] Layouts)
-        CollectToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot, FrameAddress? latestSharedRoot,
+    private (IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas, ObjectLayout[] Layouts)
+        CollectToShared(SchemaCatalogView? source, SchemaCatalogView? target,
             IEnumerable<ObjectLayout> capturedLayouts) {
-        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(capturedLayouts);
-        SchemaCatalogView? source = headSchemaRoot is { } head ? SchemaCatalogView.Load(store, head) : null;
-        SchemaCatalogView? target = latestSharedRoot is { } shared ? SchemaCatalogView.Load(store, shared) : null;
         ObjectLayout[] layouts = (source?.ObjectLayouts ?? []).Concat(_containers).Concat(capturedLayouts).Distinct().ToArray();
         foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
         IReadOnlyDictionary<SchemaKey, DurableSchema> schemas = SchemaCatalogSemantics.Collect(
@@ -106,7 +105,7 @@ internal sealed class SchemaCatalogWorkspace {
         IReadOnlyDictionary<SchemaKey, DurableSchema> merged = SchemaCatalogSemantics.Collect(
             (target?.Schemas.Values ?? []).Concat(schemas.Values), mergedLayouts);
         SchemaCatalogSemantics.ValidateDeclarations(merged.Values, mergedLayouts);
-        return (target, schemas, layouts);
+        return (schemas, layouts);
     }
 
     private void CheckAccepted(SchemaKey key, DurableSchema schema) {

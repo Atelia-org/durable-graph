@@ -369,7 +369,7 @@ internal sealed class GraphRecordStore : IDisposable {
     private static IReadOnlyDictionary<uint, FrameAddress> EmptyHeads() =>
         new FrozenSortedDictionary<uint, FrameAddress>(new SortedDictionary<uint, FrameAddress>());
 
-    private void EnsureUsable() {
+    internal void EnsureUsable() {
         ObjectDisposedException.ThrowIf(_disposed, this);
         try {
             _frames.EnsureUsable();
