@@ -6,7 +6,7 @@
 >
 > 职责：本文只保存 `TwoLegRotationProbe` 的 1-bit same/previous `RelativeFrameTicket` grammar。
 > 当前产品候选允许引用任意 earlier file，其地址 authority 是
-> [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md) 的
+> [`DB-014`](design-branches/0014-multi-segment-backward-file-distance/README.md) 的
 > `BackwardFileDistance + FrameTicketCode`。两种 grammar 互不兼容，本文不再是产品 wire 单一来源。
 
 ## 1. 类型边界
@@ -244,7 +244,7 @@ append 返回 ticket 后再把 candidate StateMap 中的 contextual bindings 安
 
 被替代的 literal-self 方案不仅有递归，还可能有多个稳定宽度；“迭代直到稳定”不能单独
 定义 canonical wire。其反例和重访条件记录于
-[`DB-008`](design-branches/0008-revision-contextual-self-address.md)。若未来一个逻辑
+[`DB-008`](design-branches/0008-revision-contextual-self-address/README.md)。若未来一个逻辑
 Revision 跨越多个 Frames，再重访 `Self` 的作用域，而不是现在为 Extent 冻结地址 union。
 
 ## 9. 最小测试向量

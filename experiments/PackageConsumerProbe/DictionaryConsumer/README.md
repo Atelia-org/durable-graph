@@ -1,6 +1,6 @@
 # Dictionary package consumer
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
 
 Each run creates a new shared FrameStore/VersionStore repository. The 32-entry container
 keeps enough unchanged content for the sparse edits to remain real Deltas with the fixed 12B
@@ -53,5 +53,5 @@ DictionaryUpgrade:True:HistoricalExact:True:DeletedKeyAndValueTypes:True:Indepen
 This is a package/functional witness. Focused product tests cover malformed wire bodies,
 unsupported comparer/key shapes, floating-point lookup collisions, empty-string canonicalization
 collisions, missing upgrade tools and upgrade-induced duplicate keys. Performance measurement and
-future compound key support are separate work. See [DB-054](../../../docs/design-branches/0054-dictionary-content-object-slice.md)
+future compound key support are separate work. See [DB-054](../../../docs/design-branches/0054-dictionary-content-object-slice/README.md)
 for the selected experimental BCL adapter boundary and acceptance evidence.

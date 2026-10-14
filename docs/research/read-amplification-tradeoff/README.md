@@ -5,7 +5,7 @@
 
 本页回答：选择的额外 payload 容忍度，与模型中的平均重建 payload 是什么关系？
 它是函数可视化，不是性能测量；初始显示 `L=5`。
-默认值选择与验收见 [DB-070](../../design-branches/0070-read-amplification-default.md)。
+默认值选择与验收见 [DB-070](../../design-branches/0070-read-amplification-default/README.md)。
 
 令 `L` 为 ReadAmplificationThreshold，`B` 为完整 Base payload，`d` 为小而稳定的 Delta payload。
 在对象大小稳定、长轨迹、预算不推迟 Base、周期内均匀取样的近似下：
@@ -26,4 +26,4 @@
 连续图可以取小数，产品阈值为整数。展示范围为 `L∈[2,21]`；
 该渐近公式在 `L=1` 发散，不能用来描述有限 `d` 下每次写 Base 的实际开销。
 
-实现背景：[DB-069](../../design-branches/0069-incremental-save-baseline.md)。
+实现背景：[DB-069](../../design-branches/0069-incremental-save-baseline/README.md)。

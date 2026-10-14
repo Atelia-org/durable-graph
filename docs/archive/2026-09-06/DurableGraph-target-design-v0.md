@@ -11,16 +11,16 @@
 
 2026-09-05 校准：用户选择所有受支持引用对象（含 string、数组、BCL 容器）统一引用身份，
 值成员嵌套布局、class base-first、对象头 TypeCodec。生成器/静态设施的当前草图见
-[DB-018](../../design-branches/0018-generated-graph-codec-shape.md)，产品进度见 [src/PROJECT-STATE.md](../../../src/PROJECT-STATE.md)。
-祖先 Schema/history 的 metadata 分片已由 [DB-019](../../design-branches/0019-schema-ancestry-implementation-slice.md)落地；
-typed 值槽位与 SZ/rank-2 元素循环已由 [DB-020](../../design-branches/0020-typed-slot-array-binding-slice.md)落地；
-[DB-021](../../design-branches/0021-generated-primitive-body-slice.md)已生成当前 bool/int/long class 的继承分段 body；
+[DB-018](../../design-branches/0018-generated-graph-codec-shape/0018-generated-graph-codec-shape.md)，产品进度见 [src/PROJECT-STATE.md](../../../src/PROJECT-STATE.md)。
+祖先 Schema/history 的 metadata 分片已由 [DB-019](../../design-branches/0019-schema-ancestry-implementation-slice/README.md)落地；
+typed 值槽位与 SZ/rank-2 元素循环已由 [DB-020](../../design-branches/0020-typed-slot-array-binding-slice/README.md)落地；
+[DB-021](../../design-branches/0021-generated-primitive-body-slice/README.md)已生成当前 bool/int/long class 的继承分段 body；
 按 stored Schema 的运行时 decoder 分派、SG 泛型 body、完整数组对象 codec 与图恢复仍是后续目标。
 
-后续校准：[DB-022](../../design-branches/0022-versioned-state-dto-capture.md)选择领域图先捕获 Versioned DTO，
+后续校准：[DB-022](../../design-branches/0022-versioned-state-dto-capture/README.md)选择领域图先捕获 Versioned DTO，
 后续比较、估算与编码消费捕获状态；已实现 scalar readonly Vn、current Capture、各版本 typed DTO Read/Write，
 取代 DB-021 直接领域 body。运行时历史 Schema 分派、DTO 升级、领域恢复与 StateStore 基线管线尚未实现。
-[DB-023](../../design-branches/0023-scalar-schema-dto-slice.md)进一步将 Schema/历史/DTO 贯通到 13 种标量，
+[DB-023](../../design-branches/0023-scalar-schema-dto-slice/README.md)进一步将 Schema/历史/DTO 贯通到 13 种标量，
 下一候选是 string 引用 Capture；string 仍不能作为 DTO 内联字段编码。
 
 ---
@@ -172,7 +172,7 @@ DurableGraph 更接近：
 统一 identity 的范围还包括受支持 string/数组/BCL 容器；这些对象不必继承有 ID 字段的基类，
 外层映射可以保存其身份。非空 string 内容相等不合并实例，引用成员只保存 ID，字符串记录自己保存内容。
 空字符串是明确例外：Capture 与读取均规范化为 string.Empty，不保留零长度实例之间的引用区别；
-null 仍与空串区分。规则见 [DB-025](../../design-branches/0025-string-object-decoding-slice.md)。
+null 仍与空串区分。规则见 [DB-025](../../design-branches/0025-string-object-decoding-slice/0025-string-object-decoding-slice.md)。
 
 ### 6.2 Durable Value
 
@@ -378,7 +378,7 @@ Source Generator 为每个 durable type 生成：
 
 2026-09-06 用户澄清：ObjectId 经 StateRevision 解释，允许回收复用，取代早稿“ID 永不复用”。
 同图共享/循环引用必须保持；不同 revision 中的相同数字不必表示同一对象。具体复用时机、
-候选隔离与内存/物理 GC 分离见 [DB-024](../../design-branches/0024-reference-capture-and-reusable-object-ids.md)，尚未实施。
+候选隔离与内存/物理 GC 分离见 [DB-024](../../design-branches/0024-reference-capture-and-reusable-object-ids/README.md)，尚未实施。
 用户随后选择首片采用 session 内单调分配，ID 回收与持久计数器另片推进；不恢复全历史永不复用约束。
 
 ### 10.2 Reachability

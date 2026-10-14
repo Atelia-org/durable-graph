@@ -1,4 +1,4 @@
-> 冻结归档：原稿来自 `77e4341`，2026-09-10。以下结论已被[修订后的 DB-055](../../design-branches/0055-composite-dictionary-key-design.md)替代；旧稿中的 Proposed 与推荐只描述当时的分析，不是当前施工依据。仅调整归档相对链接。
+> 冻结归档：原稿来自 `77e4341`，2026-09-10。以下结论已被[修订后的 DB-055](../../design-branches/0055-composite-dictionary-key-design/README.md)替代；旧稿中的 Proposed 与推荐只描述当时的分析，不是当前施工依据。仅调整归档相对链接。
 
 # DB-055：有限复合 Dictionary Key 的比较能力与功能边界
 
@@ -311,7 +311,7 @@ ValueTuple/record struct 继续保留明确后继，不为本片承诺其外观�
 
 ## 11. 证据入口
 
-- 本库：[DB-054](../../design-branches/0054-dictionary-content-object-slice.md)、[DictionaryObjectBinding](../../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs)、
+- 本库：[DB-054](../../design-branches/0054-dictionary-content-object-slice/README.md)、[DictionaryObjectBinding](../../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs)、
   [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[Dictionary snapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.Dictionaries.cs)、
   [生成形状检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[持久成员枚举](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)。
 - BCL Dictionary 允许选择 comparer，默认使用类型默认相等，要求键的 hash 依据在存入期间稳定；这支持“显式规则”与“普通 Default”必须分开的判断。

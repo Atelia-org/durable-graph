@@ -5,7 +5,7 @@
 > 状态：G0 已获用户裁决 / G1–G3 已实现并通过验收。仅闭合 string 引用 Capture 与内存候选分片。
 > 本文写于 2026-09-06；用户已启动 Goal 并明确采纳 G0 推荐方案。
 > P1 生成器到 P2 对象列表的内存子片；Goal 开工提交 `8816f0c`，最近产品提交 `0b9652c`。
-> 详细设计：[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)。
+> 详细设计：[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)。
 
 ## 1. 授权、事实与完成目标
 

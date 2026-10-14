@@ -217,7 +217,7 @@ also advance, including closures such as `Box<int>` whose physical fields did no
 
 For a complete package consumer, see the
 [generic history probe](../../experiments/PackageConsumerProbe/GenericConsumer/README.md).
-The implementation record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
+The implementation record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design/README.md#12-产品施工跟踪).
 
 ### Composable value upgrades
 
@@ -284,7 +284,7 @@ adjacent object Schemas. Cached plans contain no invocation Context or captured 
 These synchronous tools do not search version paths, repair missing historical layouts, read
 other objects, allocate IDs, or alter persistence formats. Legacy two-parameter owner methods must
 add `UpgradeContext` before declaring dependencies. The construction contract and acceptance
-evidence are recorded in [DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).
+evidence are recorded in [DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design/README.md#8-产品施工合同与验收映射).
 
 ### Retained non-generic generated helpers
 
@@ -449,7 +449,7 @@ Use `Checkout` to continue editing and committing. Sharing comparison uses persi
 without preparing object Base/Delta payloads; ordinary read validation may still encode canonical
 Dictionary keys. Independent restoration can reuse frozen
 DTOs and strings but allocates separate mutable graphs. Upgrade and validation still
-run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design.md)
+run independently for each view. See [DB-064](../../docs/design-branches/0064-shared-revision-decoding-design/README.md)
 for the internal sharing boundary; there is no public cache configuration or new wire format.
 `Fork(name, address)` publishes a named durable ref and returns an independent editable checkout,
 restoring only the selected position's nearest State, or no graph for a pure Event prefix. The source

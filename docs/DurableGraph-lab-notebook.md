@@ -8,13 +8,13 @@
 | 问题 | 证据入口与适用范围 |
 |---|---|
 | Schema/history、包交付与 legacy 读取升级 | [归档实验簿](archive/2026-09-06/DurableGraph-lab-notebook.md) EXP-001–010；包回归运行入口在 [PackageConsumer](../experiments/PackageConsumerProbe/README.md) |
-| sharing/cycles、logical diff、升级断边、两阶段物化 | 归档实验簿 EXP-011–014；[DB-006](design-branches/0006-flat-graph-delta-prototype.md)。这些是 fixture/probe 证据，不是产品通用图 API |
+| sharing/cycles、logical diff、升级断边、两阶段物化 | 归档实验簿 EXP-011–014；[DB-006](design-branches/0006-flat-graph-delta-prototype/README.md)。这些是 fixture/probe 证据，不是产品通用图 API |
 | 无无参构造器、private readonly 与占位对象填充 | [2026-09-07 机制验证](#2026-09-07无构造器分配与-readonly-实例字段写入)；局部 CLR 能力，不是产品 Restore |
-| DTO Capture、string 身份与读取 | [DB-022](design-branches/0022-versioned-state-dto-capture.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、[DB-025](design-branches/0025-string-object-decoding-slice.md)的验收部分 |
-| raw Base、wire v2 与 exact Revision 文件重开 | [DB-026 §8](design-branches/0026-raw-base-object-content-slice.md#8-实施合同与验收账本) |
-| 同版 DTO 融合 Delta 准备、历史/引用校验与包交付 | [DB-027 §6](design-branches/0027-generated-same-schema-delta-body-slice.md#6-本轮实施账本)；body codec，不含持久 prior 链 |
-| 持久 raw Delta、exact prior 与原始重建成本 H | [DB-028 §6](design-branches/0028-persisted-object-delta-chain-slice.md#6-实施账本)；object-first 冷重开，typed 解释元数据仍由 fixture 提供 |
-| 已准备内容到真实表示选择与可追加 Revision | [DB-029 §9](design-branches/0029-prepared-object-revision-planning-slice.md#9-实施合同与账本)；PrepareBase、完整 prepared rows、策略落盘/冷重开，typed 元数据与发布仍在边界之外 |
+| DTO Capture、string 身份与读取 | [DB-022](design-branches/0022-versioned-state-dto-capture/README.md)、[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)、[DB-025](design-branches/0025-string-object-decoding-slice/0025-string-object-decoding-slice.md)的验收部分 |
+| raw Base、wire v2 与 exact Revision 文件重开 | [DB-026 §8](design-branches/0026-raw-base-object-content-slice/README.md#8-实施合同与验收账本) |
+| 同版 DTO 融合 Delta 准备、历史/引用校验与包交付 | [DB-027 §6](design-branches/0027-generated-same-schema-delta-body-slice/README.md#6-本轮实施账本)；body codec，不含持久 prior 链 |
+| 持久 raw Delta、exact prior 与原始重建成本 H | [DB-028 §6](design-branches/0028-persisted-object-delta-chain-slice/README.md#6-实施账本)；object-first 冷重开，typed 解释元数据仍由 fixture 提供 |
+| 已准备内容到真实表示选择与可追加 Revision | [DB-029 §9](design-branches/0029-prepared-object-revision-planning-slice/README.md#9-实施合同与账本)；PrepareBase、完整 prepared rows、策略落盘/冷重开，typed 元数据与发布仍在边界之外 |
 | 地址/策略选择史及可重跑技术储备 | [DB 索引](design-branches/README.md)、[Probe 导航](../experiments/README.md)；TwoLeg 与合成 payload 结果不构成产品恢复或性能保证 |
 
 ## 历史卷

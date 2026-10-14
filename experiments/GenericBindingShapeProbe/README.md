@@ -3,7 +3,7 @@
 2026-09-08 的独立机制见证：比较并验证 DurableGraph 泛型 DTO 候选中的
 **领域类型参数 / 状态表示参数 / 静态操作类型参数**、运行期闭合及历史升级可书写性。
 这是手写 generated-like C# 的编译运行实验，不是产品 Source Generator 已支持泛型的声明。
-后续用户已选择统一 UpgradeContext 外观，见 [DB-039](../../docs/design-branches/0039-composable-value-upgrade-design.md)。
+后续用户已选择统一 UpgradeContext 外观，见 [DB-039](../../docs/design-branches/0039-composable-value-upgrade-design/README.md)。
 本 Probe 的值转换仍直接传委托，35 项历史结果不覆盖 Context 用户签名、依赖 key、子作用域或按对象调用信息。
 
 ## Typed ObjectId 独立补充见证
@@ -17,7 +17,7 @@ pwsh -NoProfile -File experiments/GenericBindingShapeProbe/Run-TypedObjectIdProb
 每项单独编译并在有超时的独立进程中加载；这是编译/加载形状见证，不运行产品 SG 或 StateStore。
 脚本还明确检查已观测的 TypeLoadException；后续 CLR 若接受这些类型，应复核证据而非视为产品回归。
 原始结果进入本目录忽略的 `obj/typed-object-id-*`；结论与适用边界见
-[DB-040](../../docs/design-branches/0040-typed-object-id-representation-research.md)。原 35 项 Probe 的合同保持独立。
+[DB-040](../../docs/design-branches/0040-typed-object-id-representation-research/README.md)。原 35 项 Probe 的合同保持独立。
 
 ## 运行
 

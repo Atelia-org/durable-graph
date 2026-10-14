@@ -111,7 +111,7 @@
   `Atelia.DurableGraph.StateStore` 与 `Atelia.DurableGraph.StateStore.Storage` 空壳；前者单向引用后者，只有
   Storage 直接引用当前 `RbfSegmentStore` source，正式 reopen 仍待后续切片。
 - **Decided**：MVP 固定使用 ReadAmplificationBaseBudgetPolicy；先以全部 post-live 对象的估算 DTO 输入，
-  输出稀疏 Base/Delta 写计划，不以前置实现序列化为条件。[DB-015](../../design-branches/0015-statestore-object-representation-policy.md)
+  输出稀疏 Base/Delta 写计划，不以前置实现序列化为条件。[DB-015](../../design-branches/0015-statestore-object-representation-policy/README.md)
   已落实为 StateStore 内部纯 selector，参数采用整数倍数与整数百分比；真实 codec、对象内容与提交接入保持后续切片。
 - **Open**：Schema runtime representation 与 canonical authority 的候选分叉记录在 `DB-001`，等待 exact codec/persistent format 实验裁决。
 - **Open**：哪些类型和 API 最终属于核心程序集，等待真实代码形状出现后再判断。
@@ -796,7 +796,7 @@
   真实 SG Capture/DTO/string bytes 写入文件并关闭重开；测试的显式 kind/Schema/roots 不是持久类型头。
 - **Observed**：根 build 零警告/错误，全套 559/559，零跳过；初始基线 536/536。
   独立最终代码审查无阻断，建议的 100 KiB body 缓冲后编码失败/lease 复用测试已补齐，覆盖轮转。
-  详细命令、分工与边界见 [DB-026 §8](../../design-branches/0026-raw-base-object-content-slice.md#8-实施合同与验收账本)。
+  详细命令、分工与边界见 [DB-026 §8](../../design-branches/0026-raw-base-object-content-slice/README.md#8-实施合同与验收账本)。
 - **Decided**：沿用 RBF 268,435,428-byte payload 上限及 EndAppend 检查，接受缓冲后超限失败，
   不新增第二套 wire 尺寸算法。未修改上游框架，不承诺真实 I/O fault 物理截断或 crash 恢复。
   policy、Generator/runtime 及包接线未改；仅测试项目新增 Storage 依赖，未重跑 package probe。
@@ -805,7 +805,7 @@
 
 - **Observed**：在 `171581e` 只读核验，SG DTO/string 已有独立 bytes 闭环，Storage 仍是
   membership-only；local heads 指向 containing Revision Frame，不能用独立 blob store 无缝替代。
-- **Tentative**：下一片推荐 [DB-026](../../design-branches/0026-raw-base-object-content-slice.md)，
+- **Tentative**：下一片推荐 [DB-026](../../design-branches/0026-raw-base-object-content-slice/README.md)，
   由完整 local Base records 统一产生 IDs 与内容，跨 Revision/Segment 重开后按 exact head 读取。
   保留 ObjectHeadMap Base/Delta；推荐收回仅 ID 的 ObjectVersion Delta 占位并升级 provisional wire，
   不兼容旧 v1。此为当时的显式原型迁移建议，后已由用户采纳并实施，见上条完成记录；对象 Delta/policy 方向保留。
@@ -817,14 +817,14 @@
 
 - **Decided**：用户选择 Capture/读取两端统一零长度 string 为 string.Empty，不保留其不同实例身份。
   非空仍按引用区分；不采用任何独立空串分配机制。此前非公开及公开 API 的
-  [分配见证](../../design-branches/0025-empty-string-allocation-witness.md)仅保留为未采用方向的研究证据。
+  [分配见证](../../design-branches/0025-string-object-decoding-slice/0025-empty-string-allocation-witness.md)仅保留为未采用方向的研究证据。
 - **Observed**：CaptureString 在候选/parent 身份查找前规范化；StringReadTable 同步解码完整独立 bodies，
   保持非空身份、允许不同空串 ID → Empty、拒绝零/重复条目 ID/损坏内容/尾随字节，失败不暴露半张表。
 - **Observed**：SG 为各 Vn 生成独立 ValidateStringReferences，只检查 exact Schema 的 String 槽；
   历史 String→UInt32 与旧 CLR 祖先消失仍有发布历史/真实执行见证。ReadVn 的 ID DTO body 保持不变。
 - **Observed**：根 build 零警告/错误，聚焦 70/70，全套 536/536、零跳过；真实单包消费者通过，
   产物 `experiments/PackageConsumerProbe/obj/run-20260906055311-34904`。独立审查无代码/测试阻断，
-  并修正旧文档对空串 ID 反向映射的无条件描述。完整验收入口见 [DB-025 §7](../../design-branches/0025-string-object-decoding-slice.md)。
+  并修正旧文档对空串 ID 反向映射的无条件描述。完整验收入口见 [DB-025 §7](../../design-branches/0025-string-object-decoding-slice/0025-string-object-decoding-slice.md)。
 - **Observed**：首轮发现测试框架将 MemberData 中孤立 D800 替换为 FFFD；改为 Fact 内部构造，
   保留原 golden 与码元断言后通过，产品编码未因此改变。
 - **Deferred**：完整目录与 exact body 配对仍由 typed 消费者组织；领域 Restore、通用图加载、
@@ -834,7 +834,7 @@
 
 - **Observed**：在 `327a425` 核验现有 Capture/ID DTO 与 string 内容 codec；ReadVn 尚不解析引用，
   string 读写入口为 internal，空内容解码明确返回 string.Empty；本轮未重新运行历史测试。
-- **Proposed**：主代理与独立设计子代理推荐 [DB-025](../../design-branches/0025-string-object-decoding-slice.md)：
+- **Proposed**：主代理与独立设计子代理推荐 [DB-025](../../design-branches/0025-string-object-decoding-slice/0025-string-object-decoding-slice.md)：
   保留 uint DTO，增加 string-only 解码表与 SG 各版引用槽校验，真实 typed 消费者从 bytes 验证引用保真。
   该表不证明完整异构目录唯一性；不提前引入 resolved DTO、领域 Restore 或通用 registry。
 - **Resolved later**：本次仅规划；后续用户选择空串统一 Empty，并完成 DB-025（见上条）。
@@ -878,7 +878,7 @@
 
 - **Decided**：用户明确 ObjectId 经 StateRevision 解释，允许回收后复用；修订目标文档中“永不复用”的过强约束。
   用户补充 struct 采用嵌套值布局，exact struct 版本变化沿 inline/base 依赖传播并要求 owner 升版。
-- **Draft**：[DB-024](../../design-branches/0024-reference-capture-and-reusable-object-ids.md)记录 string Capture → ID DTO → 对象列表、
+- **Draft**：[DB-024](../../design-branches/0024-reference-capture-and-reusable-object-ids/README.md)记录 string Capture → ID DTO → 对象列表、
   目标 revision 解析引用、候选隔离、隔成功发布复用与同候选复用的取舍；尚待讨论，不是实现成果。
 - **Observed**：只读检查 StateJournal SlabBitmap/SlotPool/SlotHandle，并查看 GcPool 组合合同。
   位图/低号分配可借鉴；24+8 handle、generation 回绕、mark 期间不得分配及 slot 移动不能原样当成持久 ID 语义。
@@ -891,7 +891,7 @@
 
 - **Decided**：在 DB-022 的 DTO 管线之后，先补齐已存在的标量字节原语消费者；
   string 引用 Capture 的身份生命周期、上下文与对象列表保留为下一候选。
-  合同见 [DB-023](../../design-branches/0023-scalar-schema-dto-slice.md)。
+  合同见 [DB-023](../../design-branches/0023-scalar-schema-dto-slice/README.md)。
 - **Observed**：TypeTag 保持原有 1–4，追加 5–14；Schema、两端 history 工具、legacy Snapshot、
   当前/历史 DTO 支持 byte/sbyte、short/ushort、uint/ulong、char、Half/float/double。
   新旧标量共 13 种，string DTO body 继续明确拒绝。历史语法未改，旧工具拒绝新 tag。
@@ -905,7 +905,7 @@
 
 ### 2026-09-05：Versioned DTO 取代直接领域 binary body
 
-- 用户选择捕获后的版本化状态作为保存比较/估算/编码输入。[DB-022](../../design-branches/0022-versioned-state-dto-capture.md)
+- 用户选择捕获后的版本化状态作为保存比较/估算/编码输入。[DB-022](../../design-branches/0022-versioned-state-dto-capture/README.md)
   已实现 readonly V1..Vcurrent DTO、current Capture、Write(in Vn)/ReadVn；DB-021 直接领域 Read/Write 已移除。
 - 各版 DTO 静态配对 GetSchema(n)，从已有 accepted history + current 定义再生成；字段按 exact 祖先声明链
   物理展平为 SegmentNFieldId，Schema 仍分段，不增加第二套历史 authority。
@@ -919,7 +919,7 @@
 
 ### 2026-09-05：实际 SG 静态标量 body 闭环
 
-- [DB-021](../../design-branches/0021-generated-primitive-body-slice.md)选用已有 SchemaOnly class 字段模型，
+- [DB-021](../../design-branches/0021-generated-primitive-body-slice/README.md)选用已有 SchemaOnly class 字段模型，
   额外 GenerateBinaryBody 整链启用，生成当前 bool/int/long 的 private 成员读写及 base-first 组合。
   显式启用保留 metadata-only 边界；已知成员直接调用 byte primitive，无 Type 查表或 slot 委托。
 - 同层按 FieldId 排序、跨层允许重复 ID，body 生成要求自身与所有祖先通过 metadata/history 校验。
@@ -941,7 +941,7 @@
 
 ### 2026-09-05：落地 typed slot 与数组元素 binding
 
-- **Decided**：按下一分片实施授权选择 [DB-020](../../design-branches/0020-typed-slot-array-binding-slice.md)，
+- **Decided**：按下一分片实施授权选择 [DB-020](../../design-branches/0020-typed-slot-array-binding-slice/README.md)，
   在现有 Serialization leaf 闭合值槽位/数组元素机制；先不同时引入 string 引用表与 SG 历史 body。
 - **Observed**：internal ValueSlotCodec<T> 持 typed ref 读写委托，13 种 primitive 复用字节原语；char 保留 UInt16 code unit。
   已闭合 slot 直接创建 SZ/rank-2 模板，实际数组只在入口精确验证/强转，元素循环直接传 ref。
@@ -955,7 +955,7 @@
 
 ### 2026-09-05：完成祖先 Schema/history 产品分片
 
-- 按用户规划并实施下一分片的授权，选择 [DB-019](../../design-branches/0019-schema-ancestry-implementation-slice.md)：
+- 按用户规划并实施下一分片的授权，选择 [DB-019](../../design-branches/0019-schema-ancestry-implementation-slice/README.md)：
   `SchemaOnly=true` 显式生成同编译继承链的 Schema/GetSchema 元数据，不生成 boxed Serializer、payload Snapshot 或 Upgrade。
 - DurableSchema 的 Fields 按声明层编号，BaseSchema 携带 immutable exact 祖先；内存 Store 先整链校验再登记。
   Generator/history/publisher 将 exact base 纳入 shape，并要求 accepted history 自身闭合，不能由当前候选补缺。
@@ -972,19 +972,19 @@
   同意 nominal 引用声明与 exact 对象头的区分，明确暂缓 BCL 集合支持。
 - **Observed**：当前 Schema/equality/history/publisher 都只包含本层 fields；生成器禁止领域继承。
   增强需同时覆盖直接 exact base、历史保存与跨层校验，不只是修改 DurableSchema。
-- **Draft**：[DB-018](../../design-branches/0018-generated-graph-codec-shape.md)新增三层版本传播见证及
+- **Draft**：[DB-018](../../design-branches/0018-generated-graph-codec-shape/0018-generated-graph-codec-shape.md)新增三层版本传播见证及
   SG 开放泛型 body + runtime typed binding 方案；局部 DynamicMethod 用于数组形状仍可选，完整 IL 后端未选定。
 - **Observed**：主审复跑内存 C# 见证，.NET 10.0.9 下 runtime 闭合 generic struct array，
   typed delegate 经 ref Reader/ref 元素读入 [17,29]、消费 8 bytes，无 Reflection.Emit。
   仅证明组合机制，没有新增产品实现或修改旧项目；
-  [完整复跑代码](../../design-branches/0018-runtime-binding-witness.md)已保存。
+  [完整复跑代码](../../design-branches/0018-generated-graph-codec-shape/0018-runtime-binding-witness.md)已保存。
 
 ### 2026-09-05：统一引用图与生成器形状
 
 - **Decided**：用户明确所有受支持引用对象按引用相等统一编号，包含 string、数组和 BCL 容器；
   string 成员写 ID、字符串对象 body 写内容，保留图内 ReferenceEquals 关系，取代旧字段 inline 值方案。
   struct 值嵌套、class base-first；引用对象头用可组合 TypeCodec 表达实际类型。
-- **Draft**：[DB-018](../../design-branches/0018-generated-graph-codec-shape.md)起草 typed
+- **Draft**：[DB-018](../../design-branches/0018-generated-graph-codec-shape/0018-generated-graph-codec-shape.md)起草 typed
   VisitReferences/Write/Read、引用收集/封闭表、对象边界分派、allocation prefix/填充及类型绑定；
   三路独立审查未发现阻断问题。继承分段及版本传播、泛型执行闭包、boxed 值等仍待定。
 - **Observed**：参考 StateJournal TypeCodec 当前只有有限类型的 postfix 解码，不包含新稿的
@@ -1003,7 +1003,7 @@
 - **Decided / Updated**：用户接受 codec-first；从支持的 CLR 基础类型开始。最初 string 字段 inline
   的提案随后由 DB-018 的统一引用身份取代，仍不做内容相等的 symbol 合并。
   Durable 相互/循环引用、SG 循环逐元素 ref accessor 的数组、按内容重建的 BCL 容器列为后续能力。
-- **Tentative**：[DB-017](../../design-branches/0017-object-codec-design-points.md)给出可逐项确认的草稿：
+- **Tentative**：[DB-017](../../design-branches/0017-object-codec-design-points/README.md)给出可逐项确认的草稿：
   类型名单、位/字符串语义、Base 布局、accessor、冻结/读失败，以及未来 identity、数组形状和 comparer。
   用户随后澄清 ref 主要用于 struct codec 共用字段/数组元素槽位；K4 改为分离 Write/Read 的 typed
   值 codec，共享遍历降为实现选项。inline 容器与独立 identity 不能从“按内容保存”自动推导。
@@ -1020,7 +1020,7 @@
 - **Observed**：策略已提交 `c8a98dc`；重新核对源码，历史 Snapshot 积累、partial Upgrade 声明与
   运行时升级链已进入主项目，业务转换函数体仍手写。现有 serializer 只产出 boxed 字段字典，
   Storage 仍为 membership-only；DurableGraph.Tests 本轮 147/147 通过。
-- **Decided**：三路独立分析及交叉质询后，[DB-016](../../design-branches/0016-next-product-object-content-slice.md)
+- **Decided**：三路独立分析及交叉质询后，[DB-016](../../design-branches/0016-next-product-object-content-slice/README.md)
   的 codec-first 方向随后获用户接受，类型范围转 DB-017 具体讨论。raw Base-only 存储是可交换次序的
   备选，审查保留 storage-first 偏好；ObjectVersion 内容仍是后续接入目标。
 - **Open**：生成代码的 Serialization 原语可见性和 consumer/package 引用是实际接线点；
@@ -1030,7 +1030,7 @@
 
 - **Decided**：采用用户选定的 DTO → plan 边界，MVP 不预设可替换策略或 Estimate/Write 序列化接口。
   输入覆盖全部 post-live 对象；Removes、真实 parent 和保存视图由调用方负责。
-- **Implemented**：[DB-015](../../design-branches/0015-statestore-object-representation-policy.md)经设计审查后，
+- **Implemented**：[DB-015](../../design-branches/0015-statestore-object-representation-policy/README.md)经设计审查后，
   用户批准实施；既有 StateStore 内提供纯 Plan、统一 long 估算和唯一只读 Writes。保持严格读阈值、
   完整 Base 计费、联合排序前缀与首候选超预算规则；没有新增程序集或策略替换接口。
 - **Decided**：用户将参数简化为整数 X 倍、Y%；用 Int128 计算阈值、比率交叉积和

@@ -1,6 +1,6 @@
 # BCL scalar package consumer
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
 
 Run from the repository root:
 
@@ -40,7 +40,7 @@ BclScalarUpgrade:True:DeletedInlineClr:True:ExplicitOwnerAndValueUpgrade:True:Hi
 The runner checks history counts `3 -> 5`, requires v9 for new history, runs packaged Publish and
 Verify, and checks accepted filenames, SHA256 hashes and bytes before and after each later build.
 This two-generation lane does not replace the separate fixed-v7 fixture required by
-[DB-057](../../../docs/design-branches/0057-bcl-scalar-value-slice.md).
+[DB-057](../../../docs/design-branches/0057-bcl-scalar-value-slice/README.md).
 It preserves List nominal element identity during Upgrade; it does not demonstrate changing a
 container's nominal key/value type, implicit unit conversion, ValueTuple or boxed value support.
 Artifacts stay under the ignored unique `experiments/PackageConsumerProbe/obj/bcl-scalar-*` directory.

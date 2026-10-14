@@ -2,7 +2,7 @@
 
 > 状态：目标 API 的应用检验，未实施；2026-09-27 按已选语义校准。
 > 本用例是潜在应用夹具，优先级低于用户已明确需要的 DramaBoard 与 LLM tool-loop。
-> 公共目标合同以[DB-083 主文](../0083-repository-checkpoint-api-user-stories.md)为准；下列 C# 是示意代码。
+> 公共目标合同以[DB-083 主文](0083-repository-checkpoint-api-user-stories.md)为准；下列 C# 是示意代码。
 
 ## 1. 本用例检验什么
 
@@ -84,7 +84,7 @@ Fork 正常成功的效果是新持久 ref 指向 start，并交付独立恢复�
 验收：修改 left 的可变图不改变 seed 或 right；两边保存后分别冷重开，得到各自结果。
 若应用保存了完整的确定性模拟状态，同一动作可用于检验重复性；这项证明属于模拟应用。
 `start` 是仅在本次打开的 repo 中有效的 `CheckpointAddress`，重开后须从 ref 重新 `GetHead`。
-不可变 tag 已纳入独立目标，见 [DB-084](../0084-eventjournal-immutable-tags-slice.md)；本例不假定产品已经有 tag，也不把底层 Revision 地址当作可跨重开的检查点书签。首片不提供可序列化的外部地址。
+不可变 tag 已纳入独立目标，见 [DB-084](../0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md)；本例不假定产品已经有 tag，也不把底层 Revision 地址当作可跨重开的检查点书签。首片不提供可序列化的外部地址。
 
 ## 4. 故事三：只读事件样本，再选择性展开上下文
 

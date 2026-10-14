@@ -1,6 +1,6 @@
 # Nullable package consumer
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
 
 DB-052 product delivery witness. Run from the repository root:
 
@@ -47,4 +47,4 @@ NullableUpgrade:True:LiftedOwnerAndElements:True:ForcedBaseThenDelta:True:Histor
 This is a functional and package-delivery witness, not a performance comparison. Product unit
 tests separately cover malformed nullable bodies, explicit provider failures, missing historical
 capabilities, schema conflicts and candidate Discard semantics. Implementation evidence belongs
-in [DB-052](../../../docs/design-branches/0052-nullable-value-slot-slice.md).
+in [DB-052](../../../docs/design-branches/0052-nullable-value-slot-slice/README.md).

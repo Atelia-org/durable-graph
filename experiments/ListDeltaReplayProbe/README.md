@@ -4,7 +4,7 @@ The product experiment compares Position, LocalResync, BoundedMyers and the defa
 under one List codec. Adaptive preserves a complete Local incumbent and permits only a strictly
 smaller, complete Myers challenger. It references product projects and the real source generator,
 and copies no matcher or codec. The construction contract is
-[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md).
+[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition/README.md).
 Acceptance and measured costs are recorded in [ADAPTIVE.md](ADAPTIVE.md).
 The first three-writer matrix and its historical default decision are recorded in [RESULTS.md](RESULTS.md).
 Two white-box adverse families and boundary controls are described in [WHITEBOX.md](WHITEBOX.md).
@@ -13,7 +13,7 @@ The executable uses the public default Repository/BranchCheckout for saves and h
 Runtime/Persistence test friendship supplies the stored-exact split DTO view, actual object-version
 payload accounting and closed List element operations for direct body measurement. This is not a
 package delivery test. The default two-root/meta-bootstrap route is described in
-[DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接).
+[DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接).
 
 Run from the repository root, with no competing builds or benchmark processes:
 
@@ -168,5 +168,5 @@ Flush variability and full-graph work can obscure matcher differences; preserve 
 This is a bounded synthetic study, not a universal workload ranking or a peak-memory profiler.
 
 Current research context lives in [PROJECT-STATE.md](PROJECT-STATE.md); product authority and acceptance
-remain in [DB-049](../../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md) and
-[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md).
+remain in [DB-049](../../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md) and
+[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition/README.md).

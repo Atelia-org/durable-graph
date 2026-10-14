@@ -1,6 +1,6 @@
 # Private container package consumer
 
-本目录承接 [DB-088 §6](../../../docs/design-branches/0088-development-schema-workflow.md#6-下一轮实施合同与停点)，使用普通 PackageReference 和公开 Repository 验证固定真实用户基线上 Point V1→V2 的 private Upgrade、完整 ToShared 与冷增量。**第二轮已用删除特例后的新 G 编译／执行通过；以下当前故事有独立新包资格，旧包资格保历史原义。**
+本目录承接 [DB-088 §6](../../../docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#6-下一轮实施合同与停点)，使用普通 PackageReference 和公开 Repository 验证固定真实用户基线上 Point V1→V2 的 private Upgrade、完整 ToShared 与冷增量。**第二轮已用删除特例后的新 G 编译／执行通过；以下当前故事有独立新包资格，旧包资格保历史原义。**
 
 A 为 `pc.point` V1（int X），B 为 V2（long X）；Root／Keeper 保 V1。两 Root 成环并共享含 absent/present 的 128 项 `List<Point?>`。先保存 Keeper，再保存 main/tag，因此用户 baseline 的准确 S 已包含不可达 Keeper。B 的一个 child provider 将 X 加 5,000,000,000，注册规则集开启 `AllowNullableLifting`，通过 `UseListElementUpgrades` 应用于 List；不另设 Nullable wrapper、Root 强制升版或容器 replacement。
 
@@ -35,7 +35,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 
 四次成功 Rebuild、七个独立 PID均 exit0；A三份V1 history、B继承完整V1后追加Point2成为四份，旧history保持。三存活 IDs1／2／3、两个Root head／H7保持；正常版本增长保Point descriptor15／35、List28／38和不可达Keeper7完整共存。List升级Base3500，冷Delta29，H3529且prior为准确Base batch。`promote-b` 成功完整导入目录，实际private head、业务Parent／source和ref1／ref2推进断言均执行通过；两个独立readonly阶段零写、全部旧完成帧保持。
 
-工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/private-container`；`result.json` SHA256 `0AD2E0BE0833481C89D594F343438F2EC5EE160F76B4B2012A8DE9195893566A`。工件根保共同 feed／source sidecar与 `independent-acceptance.json`。本轮无产品运行失败；生产代码未改，消费者仅补强上述推广断言。整体构建／回归及延期见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)。
+工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/private-container`；`result.json` SHA256 `0AD2E0BE0833481C89D594F343438F2EC5EE160F76B4B2012A8DE9195893566A`。工件根保共同 feed／source sidecar与 `independent-acceptance.json`。本轮无产品运行失败；生产代码未改，消费者仅补强上述推广断言。整体构建／回归及延期见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)。
 
 ## 历史资格：2026-10-13 DB-087 原入口（已被本故事替代）
 
@@ -59,4 +59,4 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | result.json | `6A9E645E6D37507A37C0DE0F07F4675E6E8567E46EDC673FF9E4EBDA2690519F` |
 | witness.json | `0BFAD5374EED6B446326AA5958F66DADB3D41944B5DCA0C83C988399D2635730` |
 
-此门禁只授实际 List／Nullable inline 组合；源码 Array／List／Dictionary 与失败窗口保各自资格。没有新 Upgrade、显式 Discard、Array／Dictionary 包、同 Open 双异形模型、Unknown／Kill／断电、性能或全类型矩阵资格；19 个暂停旧 lanes 仍不恢复。后续增量按 [DB-087 条件延期](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)的实际消费者或测量触发，不继续追加本案必经门禁。
+此门禁只授实际 List／Nullable inline 组合；源码 Array／List／Dictionary 与失败窗口保各自资格。没有新 Upgrade、显式 Discard、Array／Dictionary 包、同 Open 双异形模型、Unknown／Kill／断电、性能或全类型矩阵资格；19 个暂停旧 lanes 仍不恢复。后续增量按 [DB-087 条件延期](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)的实际消费者或测量触发，不继续追加本案必经门禁。

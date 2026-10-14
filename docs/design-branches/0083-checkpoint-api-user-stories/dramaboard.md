@@ -1,6 +1,6 @@
 # DramaBoard：Occurrence 提交、检查点与分支探索
 
-> 状态：Draft / API 用户故事，未实施。与 [DB-083 主文](../0083-repository-checkpoint-api-user-stories.md)共同评审；用语见[术语表](../../DurableGraph-glossary.md)。
+> 状态：Draft / API 用户故事，未实施。与 [DB-083 主文](0083-repository-checkpoint-api-user-stories.md)共同评审；用语见[术语表](../../DurableGraph-glossary.md)。
 > 下列 C# 是拟议调用示意，领域辅助函数不属于 DurableGraph API。当前源码符号及发布合同不因本文自动改变。
 
 ## 1. 已核实的应用事实
@@ -24,7 +24,7 @@ Repository 固定模型环境；同分支最多一个活动 BranchCheckout，不
 
 PreviousX 已选定为逻辑历史中最近的严格祖先对应项。`S0 → E1 → S1 → S2` 时 S2.PreviousEvent 仍为 E1；它不证明因果或已处理进度。下面故事按游戏自己的完成边界恢复，不根据 PreviousEvent 是否存在判断待办。
 
-首片地址是当前 Repository 签发的 opaque `CheckpointAddress`，仅同一打开实例有效；重开从持久分支 ref 重新取地址，首片不提供可序列化的外部地址。不可变 tag 已纳入目标，由上游 EventJournal 独立分片实现后接入，见 [DB-084](../0084-eventjournal-immutable-tags-slice.md)，不表示当前产品已有 tag API。
+首片地址是当前 Repository 签发的 opaque `CheckpointAddress`，仅同一打开实例有效；重开从持久分支 ref 重新取地址，首片不提供可序列化的外部地址。不可变 tag 已纳入目标，由上游 EventJournal 独立分片实现后接入，见 [DB-084](../0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md)，不表示当前产品已有 tag API。
 
 库允许无 State 的 Event 前缀，也允许 State 根更换实际类型。本文普通 tick、游戏恢复与 Occurrence 浏览以游戏已经建立 SimulationState 为前提；`Require<SimulationState>` 拒绝 null 或其他类型是应用协议。初始化故事见 §9，不把这个应用前提提升为仓库约束。
 

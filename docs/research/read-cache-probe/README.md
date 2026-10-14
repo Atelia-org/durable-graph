@@ -1,7 +1,7 @@
 # 读缓存隔离测量
 
-服务于 [DB-067](../../design-branches/0067-owned-revision-read-cache-design.md) 的早期缓存机制研究，不在 solution 内，不是产品实现。
-保留 [初稿](../read-cache.md)。DB-067 后续实施 append-only 普通 Store 与双数组二分表示；这里的脚本和记录冻结为树表示证据，不是新表示或生命周期接线的验收。新实现的可重跑测量从 [DB-067 §7](../../design-branches/0067-owned-revision-read-cache-design.md#7-实施顺序与验收) 进入。
+服务于 [DB-067](../../design-branches/0067-owned-revision-read-cache-design/README.md) 的早期缓存机制研究，不在 solution 内，不是产品实现。
+保留 [初稿](../read-cache.md)。DB-067 后续实施 append-only 普通 Store 与双数组二分表示；这里的脚本和记录冻结为树表示证据，不是新表示或生命周期接线的验收。新实现的可重跑测量从 [DB-067 §7](../../design-branches/0067-owned-revision-read-cache-design/README.md#7-实施顺序与验收) 进入。
 
 ## 重跑
 

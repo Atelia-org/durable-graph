@@ -166,9 +166,9 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 
 开发阶段先用 `CreateBranch(name, baselineCheckpoint)` 从固定用户快照建立分支，再用 `CheckoutPrivate(name)` 签出。在匹配历史 reader／Upgrade 的模型环境中，旧业务图恢复后保留存活对象身份、共享与循环，正常升版的布局保存为新 Base。私有保存只推进分支目录，不改 shared 根。两个操作分开：创建 ref 成功后，签出失败保留该名字及 baseline 指向；修正模型环境后可以重试。
 私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S，不借 latest shared 补缺。已有私有定义不可改写；同 key 内容不同的未定稿版本应在不同 baseline fork 试验，需要继承已接受草稿的数据再改型则递增版本。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
-开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow.md)。
+开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
 
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
 
 ### 3. 独立浏览与分支
 
@@ -298,7 +298,7 @@ session.CommitState(parameters: savePolicy);
 需要偏向冷读时将 `11` 改为 `3`。**覆盖只对该次调用生效**，包括 CreateBranch；后续省略参数或传 `null`
 都会重新使用库默认值，不继承上次覆盖。应用若要固定自己的策略，应共享一个参数值并在每次保存时显式传入。
 当前默认可能随原型演进调整；它选择了模型中约 25% 的额外 Base 摊销开销，尚非实测最优值。
-公式、选择依据和适用边界见 [DB-070](docs/design-branches/0070-read-amplification-default.md)，
+公式、选择依据和适用边界见 [DB-070](docs/design-branches/0070-read-amplification-default/README.md)，
 也可打开[交互函数图](docs/research/read-amplification-tradeoff/index.html)比较。
 
 ## 事件快照与失败恢复
@@ -386,7 +386,7 @@ baseline 建立新的 dev fork；需要继承上次已保存草稿数据再改�
 
 完整 ToShared 会导入全部声明；只交付一个定稿新版本时，从固定 baseline 建立干净的 final fork，
 执行 baseline→定稿的 Upgrade 和必要重放，再接纳 compiler history 与运行时 Shared。
-实际开发故事与特例删减边界见 [DB-088](docs/design-branches/0088-development-schema-workflow.md)。
+实际开发故事与特例删减边界见 [DB-088](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
 
 ## 当前能放进模型的内容
 
@@ -425,8 +425,8 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 
 当前外层 API 是**一个 Repository、每个分支至多一个活动 `BranchCheckout` 工作副本、单 writer**；每份已保存的 Event/State 图选一个非空 durable 根。
 State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CLR 类型也可承担任一角色。
-[DB-078-A](docs/design-branches/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史) 已交付自由 E/S 历史和跨类型 State 替换。
-[DB-083](docs/design-branches/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、named Fork 与不可变 tag 已接入。
+[DB-078-A](docs/design-branches/0078-editable-checkpoint-fork-slice/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史) 已交付自由 E/S 历史和跨类型 State 替换。
+[DB-083](docs/design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、named Fork 与不可变 tag 已接入。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
 正常打开由 FrameStore/VersionStore 恢复不完整尾部，只读打开不写不修；不承诺完整 OS crash/power-loss 保证。仓库使用共享 `data/` 与发布 `versions/`，不另建 repository.lock。
 当前运行时只支持新建的新存储格式库；模型程序集需要重编译，模型的 accepted history 与显式 Upgrade 继续保留。

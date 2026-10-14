@@ -1,6 +1,6 @@
 # Record class package consumer
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `GraphResources.States` 与 SCB1/raw State 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+> 当前 G 门禁暂停：此 lane 仍依赖 `GraphResources.States` 与 SCB1/raw State 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
 
 Run from the repository root:
 
@@ -10,7 +10,7 @@ Run from the repository root:
 ./experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1 -PackageSource <feed> -Version <version>
 ```
 
-This [DB-068](../../../docs/design-branches/0068-record-class-model-slice.md) witness uses
+This [DB-068](../../../docs/design-branches/0068-record-class-model-slice/README.md) witness uses
 `Host -> FactsLibrary -> BaseLibrary`, linked entirely by PackageReference. Both libraries
 ship SDK-generated `ref/` and `lib/` assets. The runner checks the actual NuGet selection;
 there are no ProjectReferences, manually installed analyzers, or reflection-based model binding.

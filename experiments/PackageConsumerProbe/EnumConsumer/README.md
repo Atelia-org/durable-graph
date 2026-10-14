@@ -1,6 +1,6 @@
 # Enum package consumer
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
 
 DB-053 delivery witness. Run from the repository root:
 
@@ -50,5 +50,5 @@ This is a package and functional witness, not a benchmark. The full scalar-width
 invalid declarations, changed underlying type without version advancement, missing upgrade
 capabilities and corrupted body/catalog cases belong to focused product tests. This consumer
 does not claim that Schema history records or validates enum constant names and assignments.
-See [DB-053](../../../docs/design-branches/0053-enum-inline-state-slice.md) for the contract and
+See [DB-053](../../../docs/design-branches/0053-enum-inline-state-slice/README.md) for the contract and
 recorded acceptance evidence.

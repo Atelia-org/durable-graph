@@ -5,7 +5,7 @@
 > 更新日期：2026-09-02
 >
 > Authority：当前产品候选的跨文件地址与 rollover 以
-> [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md) 为准。本文的 1-bit
+> [`DB-014`](design-branches/0014-multi-segment-backward-file-distance/README.md) 为准。本文的 1-bit
 > same/previous 地址、A/B/C bridge、two-file reconstruction closure、evacuation 与
 > `CanPrepareAndRotate` 不再是产品 hard law，只保留为 `TwoLegRotationProbe` 的可执行研究说明。
 
@@ -155,8 +155,8 @@ in-memory 首帧 C file registration；append 后只从 `MaterializeLive(C)` 取
 文件 retention/GC 仍是独立问题：文件被物理删除后，其内部数据自然不可访问；StateStore
 格式不承诺抵抗删文件，也不为此增加额外寻址或冗余机制。
 
-Revision locator 与 forwarding 裁决见 [`DB-009`](design-branches/0009-base-lineage-parent-locator.md)；
-shared prior-snapshot anchor 裁决见 [`DB-010`](design-branches/0010-base-lineage-anchor-scope.md)。
+Revision locator 与 forwarding 裁决见 [`DB-009`](design-branches/0009-base-lineage-parent-locator/README.md)；
+shared prior-snapshot anchor 裁决见 [`DB-010`](design-branches/0010-base-lineage-anchor-scope/README.md)。
 
 ## 6. ObjectVersionDict
 
@@ -183,7 +183,7 @@ offset。承载它的 Revision ticket 已由 RBF append/read context 提供，�
 序列化。OVD 中指向本 Revision 新 records 的 value 使用字段级 `BindSelf`，其他 value
 才使用 `RelativeFrameTicket`；两者读取后都立即 absolute-normalize。具体语法与淘汰
 self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-store-addressing-design.md)
-和 [`DB-008`](design-branches/0008-revision-contextual-self-address.md)。
+和 [`DB-008`](design-branches/0008-revision-contextual-self-address/README.md)。
 
 ## 7. 一个 BinaryFrame 对应一个 Revision
 
@@ -231,7 +231,7 @@ self-ticket fixed point 的依据见 [`state-store-addressing-design.md`](state-
 - CurrentFile 剩余的格式可寻址容量；
 - ObjectVersionDict、shared-anchor OVD lookup 与 TailMeta index 的实际成本。
 
-候选方向包括在普通 Save 中提前迁移少量 cold objects，把集中 evacuation 转化为渐进过程。该方向目前是待实验假说，不是已选算法；详见 [`DB-007`](design-branches/0007-adaptive-two-leg-rotation-policy.md)。
+候选方向包括在普通 Save 中提前迁移少量 cold objects，把集中 evacuation 转化为渐进过程。该方向目前是待实验假说，不是已选算法；详见 [`DB-007`](design-branches/0007-adaptive-two-leg-rotation-policy/README.md)。
 
 无论最终策略为何，下列条件不受 heuristic 支配：
 

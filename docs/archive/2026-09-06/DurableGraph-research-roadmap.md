@@ -35,10 +35,10 @@
 
 DB-024 的 string 引用 capture 与内存候选已封闭，下一步保持切片独立：
 
-- [DB-025](../../design-branches/0025-string-object-decoding-slice.md) 已实现并通过验收：
+- [DB-025](../../design-branches/0025-string-object-decoding-slice/0025-string-object-decoding-slice.md) 已实现并通过验收：
   保留 ID DTO，以 string 解码表 + SG 各版引用校验形成 typed 字节见证，领域 Restore 另片；
 - 用户已选择空串两端统一 string.Empty，非空保留身份；不再要求独立空串分配，不顺带实现通用循环图；
-- [DB-026](../../design-branches/0026-raw-base-object-content-slice.md) 已实现并通过验收：
+- [DB-026](../../design-branches/0026-raw-base-object-content-slice/README.md) 已实现并通过验收：
   同 Revision Frame 保存完整 local Base records，再由 exact Revision/ObjectId 跨文件重开读取。
   membership-only 模型已迁至完整内容与 wire v2，保留 ObjectHeadMap Base/Delta，
   只有 ID 的 ObjectVersion Delta 占位已移除，后续真实 Delta/prior 链以代码 TODO 保留。
@@ -48,7 +48,7 @@ DB-024 的 string 引用 capture 与内存候选已封闭，下一步保持切�
 MultiSegment probe 已完成其文件级 address/rollover 风险验证，产品 Storage 已吸收相应机制；它继续作为证据来源，
 不再充当当前产品路线图。
 
-[`DB-014`](../../design-branches/0014-multi-segment-backward-file-distance.md) 与
+[`DB-014`](../../design-branches/0014-multi-segment-backward-file-distance/README.md) 与
 [`MultiSegmentStateStoreProbe/PROJECT-STATE.md`（归档）](../../../experiments/ARCHIVE.md#multi-segment "原路径：experiments/MultiSegmentStateStoreProbe/PROJECT-STATE.md") 记录文件层证据边界；
 `state-store-base-design.md`、`state-store-base-derived.md`、`state-store-addressing-design.md`
 与 DB-007/011 仅保留 TwoLeg 技术储备和可复用局部结论，不作为当前 API 形状先行事实。

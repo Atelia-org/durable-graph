@@ -31,7 +31,7 @@ pwsh -NoProfile -File experiments/PackageConsumerProbe/Run-DevelopmentSchemaProb
 
 本故事将两个 V2 草稿限定为各自从固定 V1 baseline 开始。若后一个模型继承前一个 V2 草稿的数据，而非重新从 V1 开始，应用应递增版本；本实验不实现任意草稿间迁移、不承诺一套 Open 同时容纳同键异形模型，也不授进程 Kill、断电、H 或性能资格。新 G 已删除私有新根 API，wire 不改；历史验收资产保持原含义。
 
-当前产品合同见 [DB-087](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan)，已有独立包资产见 [SplitRepositoryConsumer](../SplitRepositoryConsumer/README.md) 和 [PrivateContainerConsumer](../PrivateContainerConsumer/README.md)。
+当前产品合同见 [DB-087](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan)，已有独立包资产见 [SplitRepositoryConsumer](../SplitRepositoryConsumer/README.md) 和 [PrivateContainerConsumer](../PrivateContainerConsumer/README.md)。
 
 ## DB-088 第二轮：删除特例后的新 G 验收
 
@@ -39,7 +39,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 
 六次成功 Rebuild、一次预期 DG0015，五 PID 全部 exit0；development history 始终只有 V1，release 只有 V1＋V2B且原 V1 字节不变。实际 refs、cold fresh owner、旧完成帧与独立 readonly 的全部文件集合／SHA 检查通过。完整高位 ID／source／prior／H 仍由[源码故事](../../../tests/DurableGraph.Tests/DevelopmentSchemaWorkflowGeneratorTests.cs)另证，本轮相关生成纵向四项也重新运行通过。
 
-新工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/development`；`result.json` SHA256 `6C2AA43375D4AEB9AAD6C9D93AEB1FEFABB9F195A2101E5711AB8771797F49BC`。工件根另有不可变 feed／source sidecar与 `independent-acceptance.json`。新 G 三故事及构建／回归共同停点见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)。
+新工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/development`；`result.json` SHA256 `6C2AA43375D4AEB9AAD6C9D93AEB1FEFABB9F195A2101E5711AB8771797F49BC`。工件根另有不可变 feed／source sidecar与 `independent-acceptance.json`。新 G 三故事及构建／回归共同停点见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)。
 
 ## 历史资格：2026-10-13 删除前实验
 

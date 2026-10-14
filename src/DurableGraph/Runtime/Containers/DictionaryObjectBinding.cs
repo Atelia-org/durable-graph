@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.Runtime;
 /// <summary>Experimental projection of exact BCL Dictionary contents and current comparison choices.</summary>
 /// <remarks>Default and application comparison behavior belongs to the current program; historical DTOs retain full key state.</remarks>
 // TODO: revisit named application roles or reference-content comparison only when required;
-// see docs/design-branches/0055-composite-dictionary-key-design.md section 10.
+// see docs/design-branches/0055-composite-dictionary-key-design/README.md section 10.
 public abstract class DictionaryObjectBinding : ObjectBinding {
     private protected DictionaryObjectBinding(Type domainType, DictionaryLayout layout, StateValueBinding key, StateValueBinding value,
         Func<DictionaryObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize, Func<object?>? getApplicationComparer)

@@ -1,6 +1,6 @@
 > 历史快照：2026-10-13；来源提交 `ecc80683f35e2f42795530d28c8974dfb43d95dd`。正文按原稿保存，仅重定位 Markdown 相对链接。
 > 文中的“当前”“下一片”及验收范围属于各施工片的当时语境；本文件冻结，不作为第二份待办。
-> 当前合同与后续施工见[活动 DB-087](../../design-branches/0087-meta-bootstrap-refactoring-route.md)；续工从[产品工作集](../../../src/PROJECT-STATE.md)开始。
+> 当前合同与后续施工见[活动 DB-087](../../design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)；续工从[产品工作集](../../../src/PROJECT-STATE.md)开始。
 
 # DB-087：meta 自举与共享／私有 Schema 视图的就地重构路线
 
@@ -384,7 +384,7 @@ P0／P1a 和 P1b 的有限停点保留 §10–19，P1c 前十片见 §20–29；
 
 第五片反例使用 S0 缺 Extra／S1 含 Extra、相同 stored Root V1，经当前 V2 Normalize 避开 exact-current 恒等。构造时与延迟查询两 lane 的 fresh 结果分别为 7／107；直接误用另一 S 的裸 binding 会保留错误 context，但实际 SourceModels guard 在 Normalize 前拒绝串用。这否定无条件跨 S 共享 lazy binding／仅正 exact 证书校验的方案，不是当前 reader 的产品失败；证书不记录负 lookup，也不分析任意闭包。
 
-[DB-077 §3](../../design-branches/0077-repository-model-environment-slice.md#3-固定配置之外的语义合同) 不承诺一般回调次数；旧 factory/comparer once 的测试只有一个 live Schema 权威，不能外推多个准确 S 的同 binding／次数。选定跨 S 隔离 factory/runtime memo；已显式注册的稳定能力引用和调用方稳定性合同保持，不克隆应用闭包。最小触发集合不扩成全部类型新矩阵。
+[DB-077 §3](../../design-branches/0077-repository-model-environment-slice/0077-repository-model-environment-slice.md#3-固定配置之外的语义合同) 不承诺一般回调次数；旧 factory/comparer once 的测试只有一个 live Schema 权威，不能外推多个准确 S 的同 binding／次数。选定跨 S 隔离 factory/runtime memo；已显式注册的稳定能力引用和调用方稳定性合同保持，不克隆应用闭包。最小触发集合不扩成全部类型新矩阵。
 
 内部 split `GetHead`／Commit 已将 `CheckpointAddress.RevisionAddress` 落到实际业务 graph，全部 history／ref／tag 句柄随第七片验收；实际对象 head 仅来自每行 Storage。State 槽准确环境与来源资格随第九片接线，物理缓存已验，typed keys 保原职责，不由裸 ID/address 授 typed 资格。双 ref、准确 views、初始化、shared/private、Schema-only 等已选政策保持，见 §7.1；不新增公开 API 或后端平台待办。
 

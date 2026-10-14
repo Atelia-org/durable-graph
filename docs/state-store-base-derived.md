@@ -5,7 +5,7 @@
 > 更新日期：2026-09-02
 >
 > 性质：本文不是独立设计 authority。A/B/C、two-file closure、evacuation 与相邻地址均只属于冻结的
-> TwoLeg 路线。当前产品候选见 [`DB-014`](design-branches/0014-multi-segment-backward-file-distance.md)；
+> TwoLeg 路线。当前产品候选见 [`DB-014`](design-branches/0014-multi-segment-backward-file-distance/README.md)；
 > 本文不得作为 MultiSegment 已实现行为或 wire 的证据。
 
 ## 1. A/B/C 模型
@@ -72,7 +72,7 @@ relative ticket 仍只跨 same/previous file：C→B 与 B→A 是两个独立 s
 这属于一般 `CanPrepareAndRotate`，不是 forwarding 机制。
 
 被拒绝的 direct forwarding 与 OVD-Self forwarding 方案、成本对比和可执行归档见
-[`DB-009`](design-branches/0009-base-lineage-parent-locator.md) 及 tag
+[`DB-009`](design-branches/0009-base-lineage-parent-locator/README.md) 及 tag
 `research/relay-vs-relay-free-20260829`。
 
 ### 3.1 文件 retention 的职责边界
@@ -158,7 +158,7 @@ invalid。decode 后两种 binding 都立即归一化成 `AbsoluteFrameAddress`�
 
 这样 Payload/TailMeta bytes 与最终 Frame length 不再互相递归，single-frame capacity
 preflight 只需计算一次 RBF layout。literal-self 的多 fixed-point 反例、候选对照和
-multi-frame 重访条件见 [`DB-008`](design-branches/0008-revision-contextual-self-address.md)。
+multi-frame 重访条件见 [`DB-008`](design-branches/0008-revision-contextual-self-address/README.md)。
 
 ## 8. 正确性与策略必须分层
 

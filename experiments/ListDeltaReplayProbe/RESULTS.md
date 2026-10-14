@@ -76,5 +76,5 @@ Position 留作同格式对照。算法不进入表示 ID，后续调整选择�
 所有元素微改再插入仍可能缺少 exact 锚点，正确回退不承诺高压缩率。
 更大规模/更多重复与真实业务轨迹是后续调参的依据，不把这组固定合成输入当作长期唯一排名。
 
-完整施工验证见 [DB-049](../../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice.md)，
+完整施工验证见 [DB-049](../../docs/design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md)，
 重跑和计量边界见 [README](README.md)。

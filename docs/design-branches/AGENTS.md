@@ -1,12 +1,12 @@
 # Design-branch document maintenance
 
 These rules supplement the repository guide for documents in this subtree.
-The rationale and historical migration plan are in [DB-090](0090-document-governance/README.md).
+The rationale and completed migration evidence are in [DB-090](0090-document-governance/README.md).
 
 ## Layout and reading entry
 
 - Before opening a new DB, search the index and the relevant existing problem. Reuse the problem when its question and acceptance boundary still apply; a small product change may only need a PROJECT-STATE entry.
-- New DBs use `NNNN-topic/README.md`, with the next unused stable DB number. Do not add new numbered documents, reviews, work orders, or measurement files directly to this directory. Existing flat files may remain; adding material to an old DB should first check its existing entry, then use a related subdirectory if a new file is necessary. Do not move old files merely to finish another task.
+- DBs use stable `NNNN-topic/README.md` directories; new problems take the next unused DB number. Keep reviews, work orders, results, and data with the relevant problem, not directly in this directory. Adding material to an old DB should first check its existing entry and add a file only when necessary. Do not rename a problem directory merely because its status changes.
 - Each problem has one reading entry, identified by the index. Its opening explains the question, the bounded conclusion and applicability, and where to find the governing contract and evidence. A small problem can live entirely in README; add detailed design, review, results, or data files only when independently useful. File names do not determine authority.
 - Shared material lives once, with links from every relevant problem. Do not copy a joint review into several DBs. Directory names do not encode changing status or date.
 - New index entries contain the DB/topic, its reading entry, and a short applicability or successor hint when needed. Detailed decisions and implementation evidence belong at the linked entry; future product work belongs in the roadmap.

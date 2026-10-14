@@ -1,6 +1,6 @@
 # Default bounded List Delta competition — DB-051
 
-2026-09-09. Implements [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md).
+2026-09-09. Implements [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition/README.md).
 The earlier [fallback research](FALLBACK.md), [white-box study](WHITEBOX.md) and [first matrix](RESULTS.md)
 retain their original writers, budgets and measured results. This is a new product-writer measurement.
 

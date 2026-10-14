@@ -50,7 +50,7 @@
 **TwoLegRotationProbe**（原目录 `experiments/TwoLegRotationProbe`，183 文件）
 
 - 双腿拓扑、evacuation、债务和轮转控制未选为产品路线；后继方向是
-  [DB-014](../docs/design-branches/0014-multi-segment-backward-file-distance.md) 的多历史 Segment。
+  [DB-014](../docs/design-branches/0014-multi-segment-backward-file-distance/README.md) 的多历史 Segment。
 - 仅在真实需求要求常数依赖文件数、在线旧文件退休、compaction/backup/rescue SLO 时恢复评估。
   原策略不完备，不把冻结 baseline 当作可直接采用的完整 cleaner。
 - 在归档 worktree 的根执行：`dotnet test experiments/TwoLegRotationProbe/TwoLegRotationProbe.slnx`。

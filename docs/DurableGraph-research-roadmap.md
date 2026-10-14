@@ -10,41 +10,41 @@
 当前能力与已完成分片的验收从 PROJECT-STATE/其账本进入；这里仅保留后续增量。
 
 2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/archive/firstboard-llm/docs/research/event-journal-state-store-draft.md)
-触发独立历史图、外部发布和分支需求。[DB-063](design-branches/0063-event-history-journal-slice.md) 已完成 EventHistory 外观。
-操作内解码复用与只读闭包共享的能力/验收从 [DB-064](design-branches/0064-shared-revision-decoding-design.md) 和 PROJECT-STATE 进入，不再列为待施工项。
+触发独立历史图、外部发布和分支需求。[DB-063](design-branches/0063-event-history-journal-slice/README.md) 已完成 EventHistory 外观。
+操作内解码复用与只读闭包共享的能力/验收从 [DB-064](design-branches/0064-shared-revision-decoding-design/README.md) 和 PROJECT-STATE 进入，不再列为待施工项。
 首轮 [API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 是接口评审，尚非真实接入故障或长轨迹测量；
-其近期默认调用、文档交付与恢复示例改进已由 [DB-065](design-branches/0065-event-history-consumer-contract-slice.md) 完成。
-第二轮 ReadPair 比较与 Transient 合同由 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md)
+其近期默认调用、文档交付与恢复示例改进已由 [DB-065](design-branches/0065-event-history-consumer-contract-slice/README.md) 完成。
+第二轮 ReadPair 比较与 Transient 合同由 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)
 承接，验收从该分片与 PROJECT-STATE 进入。后继仍与下游真实接入互相校准：
 
-第三轮真实模型反馈触发的 record class 与接口迁移已由 [DB-068](design-branches/0068-record-class-model-slice.md)
-完成；[DB-072](design-branches/0072-generator-immutable-leaf-classification-slice.md) 分类的最终类型证明与 Family 覆盖缺口
-已由 [DB-075](design-branches/0075-immutable-leaf-proof-and-family-refactor.md) 修复并验收。
+第三轮真实模型反馈触发的 record class 与接口迁移已由 [DB-068](design-branches/0068-record-class-model-slice/README.md)
+完成；[DB-072](design-branches/0072-generator-immutable-leaf-classification-slice/README.md) 分类的最终类型证明与 Family 覆盖缺口
+已由 [DB-075](design-branches/0075-immutable-leaf-proof-and-family-refactor/0075-immutable-leaf-proof-and-family-refactor.md) 修复并验收。
 既有能力与证据从 PROJECT-STATE/分片进入，不重开已完成工作。
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
-| [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前权威与新栈验收见 [DB-086](design-branches/0086-new-storage-implementation.md)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
-| [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-implementation.md) 保持 |
-| [DB-077 固定模型环境](design-branches/0077-repository-model-environment-slice.md) | 已实施，验收见[记录](design-branches/0077-model-environment-implementation.md)；固定 Open 模型与 durable current 恒等；公共基础迁移由 [078-A](design-branches/0078-a-repository-free-history-implementation.md) 承接。[旧专项评审](design-branches/0077-0078-api-dialectical-review.md)保留历史，不作为新公开合同 |
-| [DB-073 实例缓存](design-branches/0073-repository-scoped-weak-reference-cache.md) / [DB-074 方向清单](design-branches/0074-efficient-fork-deferred-directions.md) | Draft：均尚待进一步修订；不作为 DB-077–082 的并行工单或前置，缓存/更深优化取舍待分片实测后再处理 |
+| [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
+| [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前权威与新栈验收见 [DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-implementation.md)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
+| [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md) 保持 |
+| [DB-077 固定模型环境](design-branches/0077-repository-model-environment-slice/0077-repository-model-environment-slice.md) | 已实施，验收见[记录](design-branches/0077-repository-model-environment-slice/0077-model-environment-implementation.md)；固定 Open 模型与 durable current 恒等；公共基础迁移由 [078-A](design-branches/0078-editable-checkpoint-fork-slice/0078-a-repository-free-history-implementation.md) 承接。[旧专项评审](design-branches/0077-repository-model-environment-slice/0077-0078-api-dialectical-review.md)保留历史，不作为新公开合同 |
+| [DB-073 实例缓存](design-branches/0073-repository-scoped-weak-reference-cache/README.md) / [DB-074 方向清单](design-branches/0074-efficient-fork-deferred-directions/README.md) | Draft：均尚待进一步修订；不作为 DB-077–082 的并行工单或前置，缓存/更深优化取舍待分片实测后再处理 |
 | DramaBoard 后续实测 | 继续玩法和较长轨迹，使用真实业务字段做两代升级见证。第三轮单次未预热 Debug 数据不证明缓存瓶颈或可变模型更优；纯 fold 的新实例 Base 与 map Remove 仍属增量保存，不触发跨实例内容配对 |
-| 读取优化的后继 | 已交付读缓存的机制与预算证据从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md) 进入；默认容量调整、构建器替换、Normalize 复用和进一步共享比较优化均由真实工作负载触发，见 §4。不承诺跨图实例复用，不改变可写 Checkout 隔离 |
+| 读取优化的后继 | 已交付读缓存的机制与预算证据从 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md) 进入；默认容量调整、构建器替换、Normalize 复用和进一步共享比较优化均由真实工作负载触发，见 §4。不承诺跨图实例复用，不改变可写 Checkout 隔离 |
 
 ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不另建内容 Store；
 大附件/chunk、联合 Schema 视图与 Derived 仍未随之解决。以上方案不要求先实现 ValueTuple 或重排全部程序集。
 
-[DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice.md) 已合并持久记录、批次和 exact 依赖引用。
-[DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice.md) 已完成；功能与验收以该分片为入口。
-[DB-051](design-branches/0051-bounded-list-delta-competition.md) 已完成默认 Adaptive，§3.2 只保留实测触发的后续优化。
-[DB-052 可组合 Nullable 值槽](design-branches/0052-nullable-value-slot-slice.md) 已贯通字段、泛型、数组/List 的历史表示与显式升级。
-[DB-053 显式 enum 内联状态](design-branches/0053-enum-inline-state-slice.md) 已贯通单整数布局、组合与历史显式升级；
+[DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice/README.md) 已合并持久记录、批次和 exact 依赖引用。
+[DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice/README.md) 已完成；功能与验收以该分片为入口。
+[DB-051](design-branches/0051-bounded-list-delta-competition/README.md) 已完成默认 Adaptive，§3.2 只保留实测触发的后续优化。
+[DB-052 可组合 Nullable 值槽](design-branches/0052-nullable-value-slot-slice/README.md) 已贯通字段、泛型、数组/List 的历史表示与显式升级。
+[DB-053 显式 enum 内联状态](design-branches/0053-enum-inline-state-slice/README.md) 已贯通单整数布局、组合与历史显式升级；
 常量表不入 Schema 的已选合同维护在目标设计，验收以该分片为入口。
-[DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice.md) 已完成白名单范围的保存、键寻址 Delta 与历史双槽升级。
-有限复合值 Key 与当前 comparer 见 [DB-055](design-branches/0055-composite-dictionary-key-design.md) 的实现及验收记录；
+[DB-054 Dictionary 内容对象](design-branches/0054-dictionary-content-object-slice/README.md) 已完成白名单范围的保存、键寻址 Delta 与历史双槽升级。
+有限复合值 Key 与当前 comparer 见 [DB-055](design-branches/0055-composite-dictionary-key-design/README.md) 的实现及验收记录；
 领域比较采用当前业务代码，DTO 按全部持久字段独立配对。
-[DB-056 record struct](design-branches/0056-record-struct-state-slice.md) 已补齐 positional/readonly/generic 外观、
+[DB-056 record struct](design-branches/0056-record-struct-state-slice/README.md) 已补齐 positional/readonly/generic 外观、
 backing storage 显式分类及现有 InlineValue/历史链的组合。
 ValueTuple、同型多 Application 角色及引用内容比较仍各自独立，不预建通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
@@ -56,8 +56,8 @@ Transient 由用户在交付后处理，约束维护在[目标设计](DurableGra
 EventHistory 的正常同实例 State 提交与严格重开从 PROJECT-STATE/DB-063 查证；不再列为未完成能力。
 公开宿主的每分支单工作副本、自由历史、独立 Checkpoint 和 named Fork 从 PROJECT-STATE 查证；每份持久图仍有单个非空 durable 根。发布故障范围仍为正常关闭/进程中止和明确的 I/O 异常，更强保证另行排期。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
-可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射)。
-[DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice.md) 已通过整体验收；
+可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design/README.md#8-产品施工合同与验收映射)。
+[DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice/README.md) 已通过整体验收；
 完成证据集中维护在该分片，不再将数组组合列为待施工架构。
 完整表示的整数寻址不再作为新待办；其内部描述模型、协变和加载内存预算仍按各自边界推进。
 
@@ -68,15 +68,15 @@ B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象�
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
 跨程序集 nominal/动态组合、固定 inline 和基类状态投影已贯通，
-能力及验收从 PROJECT-STATE/[DB-061](design-branches/0061-cross-assembly-inheritance-slice.md) 进入。
+能力及验收从 PROJECT-STATE/[DB-061](design-branches/0061-cross-assembly-inheritance-slice/README.md) 进入。
 剩余的自动业务规则发现仍独立延后，不再将直接外部值字段或基类列为待实现。
-[DB-058 DateOnly / TimeOnly / DateTimeOffset](design-branches/0058-temporal-scalar-value-slice.md) 已贯通现有值/历史管线；
+[DB-058 DateOnly / TimeOnly / DateTimeOffset](design-branches/0058-temporal-scalar-value-slice/README.md) 已贯通现有值/历史管线；
 能力与验收从 PROJECT-STATE/分片记录进入。剩余 DateTime 的保存合同、ValueTuple 和跨程序集各自独立。
-[DB-057](design-branches/0057-bcl-scalar-value-slice.md) 的 Guid/decimal/TimeSpan 主体与 history v8 已实现，
+[DB-057](design-branches/0057-bcl-scalar-value-slice/README.md) 的 Guid/decimal/TimeSpan 主体与 history v8 已实现，
 能力与验收从 PROJECT-STATE/分片记录进入，不再列为待办。
 
 ValueTuple 并非不可实现，但 record 已提供复合值建模路径，Tuple 还需一次多 child exact 布局扩展；
-关键反例与后继调查保留在 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)。
+关键反例与后继调查保留在 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice/README.md#8-valuetuple-后继保留的问题)。
 
 List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分算法选型与设计)的实测条件重访。
 
@@ -84,9 +84,9 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 
 | 问题 | 现有依据与裁决边界 |
 |---|---|
-| 引用 ID 的泛型目标品牌 | 已选非泛型包装见 [DB-041](design-branches/0041-object-id-state-representation.md)。泛型化暂缓；确有目标级静态检查需求时重访 [DB-040](design-branches/0040-typed-object-id-representation-research.md) 的版本含义、phantom nominal 与历史表示依赖，以及 typed 物理字段的 CLR 加载边界 |
+| 引用 ID 的泛型目标品牌 | 已选非泛型包装见 [DB-041](design-branches/0041-object-id-state-representation/README.md)。泛型化暂缓；确有目标级静态检查需求时重访 [DB-040](design-branches/0040-typed-object-id-representation-research/README.md) 的版本含义、phantom nominal 与历史表示依赖，以及 typed 物理字段的 CLR 加载边界 |
 | 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
-| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)；新增容器继续按实际对象 payload 计量 |
+| 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice/README.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice/README.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 跨程序集与一般类型形状 | 基类/固定 inline 不再是组合阻碍；跨程序集业务规则扫描、完全无当前声明空库的历史能力生成与独立闭合历史账本分别按具体需求裁决，不与只读模板导入混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
@@ -94,17 +94,17 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 根替换、独立读取与 branch/Move 已有实现；A 扩至跨类型根，见其实施记录。每份持久图仍一个非空根；Event-first 的无 State 不等于持久 null 根，不扩为命名根目录或清空 State API |
 
-设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype.md)、
+设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype/README.md)、
 [旧路线图 R3/R4](archive/2026-09-06/DurableGraph-research-roadmap.md)、
-[运行时绑定见证](design-branches/0018-runtime-binding-witness.md)。
+[运行时绑定见证](design-branches/0018-generated-graph-codec-shape/0018-runtime-binding-witness.md)。
 这些实验选择不自动成为新 DTO 产品路径的 API 或强制前置项目。
 DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结论时也需重新检查 ID 新占用者边界。
 
 ### 3.1 版本化表示类型头的统一寻址
 
-完整闭合表示的持久整数 ID 边界与验收由 [DB-045](design-branches/0045-persisted-representation-id-slice.md) 维护；
+完整闭合表示的持久整数 ID 边界与验收由 [DB-045](design-branches/0045-persisted-representation-id-slice/README.md) 维护；
 统一闭合目录、Schema 记录直接作为 class 表示、base/inline 整数依赖由
-[DB-046](design-branches/0046-unified-schema-catalog-slice.md) 完成。
+[DB-046](design-branches/0046-unified-schema-catalog-slice/README.md) 完成。
 长期合同归入[目标设计](DurableGraph-target-design-v0.md#长期-schema-可读与显式演化)。
 前序替代方案及反例保留在 [DB-044](design-branches/0044-type-header-blind-review/README.md)，不再把是否登记完整表示 ID 当作未决问题。
 
@@ -113,7 +113,7 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 会增加维护面；应先明确能删除哪些机制，并保留手工 Schema/reader 的自然入口。
 闭合 Schema 不能反推出字段原来声明为 `T` 还是固定 `int`，需要 SG/history 提供模板材料。
 
-2026-09-09 的[下一片评估](design-branches/0047-list-content-object-slice.md#1-为什么选择这一片)确认：
+2026-09-09 的[下一片评估](design-branches/0047-list-content-object-slice/README.md#1-为什么选择这一片)确认：
 当前目录冷读直接恢复闭合 Schema，Match 负责对 retained code history 的验证及 DTO 操作数推导；
 构造后匹配的往返主要在 current binding 与 Upgrade 端点推导。未找到能整体删除一条机制且不增加等价验证路径的小切片，
 故暂不推进模板持久化，推荐先做 List。重访应明确净删除/替换的路径，不能仅以新编码更紧密作为绑定重构理由。
@@ -130,9 +130,9 @@ DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结�
 
 ### 3.2 List 差分算法选型与设计
 
-[DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md) 已完成静态比较、统一 codec 与三种 writer，
+[DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md) 已完成静态比较、统一 codec 与三种 writer，
 独立 Repository 的同领域历史重放及 [DB-050 回退研究](../experiments/ListDeltaReplayProbe/FALLBACK.md)也已完成。
-[DB-051](design-branches/0051-bounded-list-delta-competition.md) 已验收默认 Adaptive：完整 Local 基准、独立有界 Myers、
+[DB-051](design-branches/0051-bounded-list-delta-competition/README.md) 已验收默认 Adaptive：完整 Local 基准、独立有界 Myers、
 严格限长竞争。用户接受触发路径的额外时间与短期分配，不要求共享一份比较预算或只编码一次。
 当前能力与验收入口从 PROJECT-STATE 查阅；该片不保证每次触发都有收益，也不消除无停滞的重复值坏匹配。
 [实测](../experiments/ListDeltaReplayProbe/ADAPTIVE.md)保留完整基准的准备成本；若这成为真实消费者瓶颈，再按下面触发条件展开。
@@ -151,14 +151,14 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 3.3 RBF3 / FrameStore / VersionStore 迁移
 
-[DB-086](design-branches/0086-new-storage-refactoring-plan.md) 已形成实施指导方案并完成
-[三轮简化评审](design-branches/0086-new-storage-simplification-review.md)；R0–R5 已实施并验收。
-源码、真实包与进程停止证据只查[实施记录](design-branches/0086-new-storage-implementation.md)，不再沿用DB-085的T0–T7或已完成的R0–R5施工队列。
+[DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md) 已形成实施指导方案并完成
+[三轮简化评审](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-simplification-review.md)；R0–R5 已实施并验收。
+源码、真实包与进程停止证据只查[实施记录](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-implementation.md)，不再沿用DB-085的T0–T7或已完成的R0–R5施工队列。
 
 用户已选择只验收新建库，不保留旧storage数据或迁移器；取消全库重开确认、启动图审计和strict preflight。
 新打开消费上游恢复合同；必要内容/图因果/owner寿命仍检查。原反馈第3项控制数据确认撤出上游待办。
 单根发布、完整SchemaSnapshot、Revision/业务meta合帧与直接Bare的取舍和容量/I/O代价集中于DB-086。
-[DB-085](design-branches/0085-rbf3-framestore-versionstore-migration-feasibility.md)只保留准确历史基线和机制证据；上游XML建议已在`974fd47`提交。
+[DB-085](design-branches/0085-rbf3-framestore-versionstore-migration-feasibility/0085-rbf3-framestore-versionstore-migration-feasibility.md)只保留准确历史基线和机制证据；上游XML建议已在`974fd47`提交。
 共享物理分配不自动启动下面的Schema自举/分支版本视图。
 
 只有真实目录容量/登记写放大、合帧导航成本或大branch目录需求出现时，才重访增量目录、metadata读取或每branch ref。
@@ -170,11 +170,11 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 |---|---|
 | 跨重开的历史记录定位（反馈 001-D） | 出现独立于可移动 branch 的调试书签、RL 样本或叙事引用需求后，设计“持久 locator → 本次有效 GraphFrame”。须明确仓库作用域/错误仓库、记录保留和 orphan 可见性、branch Move 后定位、无效/不可读错误；诊断 RevisionAddress 不能直接转正。现有命名分支只在应用保持它不移动时固定历史点，不是不可变书签 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |
-| DateTime 的完整保存合同 | 真实模型需要 DateTime 时，选择是否限制 UTC/Unspecified、接受公开状态规范化，或保留更完整的 Local ambiguous-DST 信息；需跨时区/DST 见证。三者公开行为不同，不随 DB-058 开放。平台依据及候选见 [DB-058 §3.3](design-branches/0058-temporal-scalar-value-slice.md#33-为什么-datetime-留在另一个问题中) |
+| DateTime 的完整保存合同 | 真实模型需要 DateTime 时，选择是否限制 UTC/Unspecified、接受公开状态规范化，或保留更完整的 Local ambiguous-DST 信息；需跨时区/DST 见证。三者公开行为不同，不随 DB-058 开放。平台依据及候选见 [DB-058 §3.3](design-branches/0058-temporal-scalar-value-slice/README.md#33-为什么-datetime-留在另一个问题中) |
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
-| 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design.md#10-审阅结论与后续裁决) |
-| 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
-| Schema/meta 后续能力 | [DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)已完成；原分支重建、同 Open 双异形模型、Schema-only 与优化只按 §4.1 条件触发；多 writer、压缩/GC 另待真实需求 |
+| 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design/README.md#10-审阅结论与后续裁决) |
+| 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice/README.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
+| Schema/meta 后续能力 | [DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)已完成；原分支重建、同 Open 双异形模型、Schema-only 与优化只按 §4.1 条件触发；多 writer、压缩/GC 另待真实需求 |
 | Schema 目录分页或分段 | DB-087 已用 meta 对象版本增量保存；真实目录接近单帧上限或保存成本成为瓶颈时重访更细粒度机制。正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-086 采用 FS/VS 的 data-first 发布、outcome 与正常不完整尾恢复，DG 保留 expected head、必要内容与 fault 检查。实际访问坏完整内容报错；OS crash/power loss、设备失效与目录持久性保证仍待明确需求和独立实验，不能由普通进程关闭/重开推导 |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
@@ -184,7 +184,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
-| 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)、[DB-069](design-branches/0069-incremental-save-baseline.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
+| 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)、[DB-069](design-branches/0069-incremental-save-baseline/README.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default/README.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
 | 双图读取的后继优化 | 操作内 DTO/string 缓存、保守引用闭包和完整状态比较的现状从 PROJECT-STATE/DB-064/066 进入。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
 | 并发、分支与跨 Repository | 每 branch 单工作副本与 named Fork 从 PROJECT-STATE 查证，仓库操作仍串行。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
@@ -193,25 +193,25 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
 | UpgradeContext 的动态工具与生命周期扩展 | 当前查询已声明、已绑定的值工具；具体迁移确需执行中解析时，再裁决首个业务回调前失败保证。池化/异步或合法跨回调工具复用有消费者后，再设计生命周期；不提前添加服务定位器、租约或通用工具平台 |
 | 值规则的跨程序集与更广生成外观 | 本地 marker/provider 已可显式使用只读导入的外部 inline 历史端点，仍不扫描依赖库的业务方法或自动选择规则。实际需要跨库发现/复用规则或更广属性入口时，再扩展显式登记/诊断；Runtime 的 builtin/引用/闭合模式能力不自动扩张 SG 外观 |
-| 泛型闭合历史账本/独立版本 | 同一已接受目录内严格一致；[DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#view-contract) 允许显式 private 新 view 同键异形，不能跨 view 互换布局。要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，历史问题见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库) |
+| 泛型闭合历史账本/独立版本 | 同一已接受目录内严格一致；[DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#view-contract) 允许显式 private 新 view 同键异形，不能跨 view 互换布局。要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，历史问题见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design/README.md#33-必须明确的保证作用域两个空仓库) |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 
-[DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)原停点已完成：默认 meta 自举、旧权威退出、显式 Shared、完整私有视图与 ToShared。新根／容器替换及双异形独立包只保删除前资格；[DB-088](design-branches/0088-development-schema-workflow.md)承接真实 baseline 开发故事和特例退出后的验收。业务比较与受控 meta 变化进入共同 writer／PendingSave／发布 owner，长期联合发布约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。此处不再保本案必经工单。
+[DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)原停点已完成：默认 meta 自举、旧权威退出、显式 Shared、完整私有视图与 ToShared。新根／容器替换及双异形独立包只保删除前资格；[DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)承接真实 baseline 开发故事和特例退出后的验收。业务比较与受控 meta 变化进入共同 writer／PendingSave／发布 owner，长期联合发布约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。此处不再保本案必经工单。
 
-后续仅在真实需求出现时选择一项：[原分支重建／按操作选模型、业务 head 不动的 Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route.md#open-questions)。先说明消费者／身份合同或给测量，再形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
+后续仅在真实需求出现时选择一项：[原分支重建／按操作选模型、业务 head 不动的 Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)。先说明消费者／身份合同或给测量，再形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
 
-19个有效旧包 lanes 暂停当前 G并原地保资产，代表门禁不恢复未迁资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿](archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)；旧“下一片”不作为当前排期。
+19个有效旧包 lanes 暂停当前 G并原地保资产，代表门禁不恢复未迁资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿](archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)；旧“下一片”不作为当前排期。
 
 ### 4.2 开发 Schema 与正式定稿
 
-用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。开发故事、特例退出与源码／新包限定验收均已完成，见 [DB-088 §7](design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)，不重复本案完成停点。
+用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。开发故事、特例退出与源码／新包限定验收均已完成，见 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)，不重复本案完成停点。
 
 DB-088 已退出同 key 新根 bootstrap、Schema overrides 与完整 container replacements，保普通 private／ToShared／fault 规律；删除后的 Development、Split、PrivateContainer 三条新 G 普通包故事已通过，无剩余必经门禁。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
 
 ### 4.3 checkout 执行环境与 factory 查询入口
 
-[DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring.md)的有限实施与新 G 普通包验收已完成，长期约束归入[模型执行环境与 factory 行为](DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)；本案不再保必经工单。
+[DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring/0089-checkout-environment-and-factory-query-refactoring.md)的有限实施与新 G 普通包验收已完成，长期约束归入[模型执行环境与 factory 行为](DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)；本案不再保必经工单。
 
 仅在真实手写 factory 无法用现有绑定服务表达准确依赖，或消费者要求更强的自定义 reader 可恢复性保证时重访：先给具体输入／布局与拒绝见证，再选择最小接缝或证明机制。DB-081 的未执行 reader 验证边界保持，不自动增加保存读回、动态 refresh、callback 沙箱或跨 S 共享；原 owner 模型切换需求仍见 §4.1。
 

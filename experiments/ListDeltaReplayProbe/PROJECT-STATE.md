@@ -9,9 +9,9 @@ change measurements or workload semantics. Stored-exact DTOs and actual payload 
 real split store at each graph's selected S. The finite correctness witness is the README Count 8
 ordinary smoke: published E/S fingerprints, IDs/head/H, cold baseline and candidate Apply/frozen
 inputs. Historical performance results retain their own versions; no speed claim follows from this
-write-admission integration. Validation is indexed from the active [DB-087 slice](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#private-plan).
+write-admission integration. Validation is indexed from the active [DB-087 slice](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan).
 
-[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md) is implemented and accepted:
+[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition/README.md) is implemented and accepted:
 full Local incumbent plus byte-limited Myers competition, independent search budgets and Adaptive as
 product default. [ADAPTIVE.md](ADAPTIVE.md) records the original seed matrices, real whitebox writes,
 cutoffs and cost of completing Local first. Further optimization requires a measured consumer problem.
@@ -36,7 +36,7 @@ or older separate-store reports. Historical ADAPTIVE/RESULTS/WHITEBOX/FALLBACK s
 
 Output is ignored per-run JSON/CSV/Markdown plus independent repositories. Root product context is
 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md); design/acceptance authority is
-[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition.md).
+[DB-051](../../docs/design-branches/0051-bounded-list-delta-competition/README.md).
 
 Fallback mode instead uses captured pairs and raw body validation, with no publication or cumulative
 policy simulation. It shares kernels/body with the product, and the experimental candidates remain here.

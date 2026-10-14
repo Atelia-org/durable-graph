@@ -30,7 +30,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 [DB-071](design-branches/0071-assembly-namespace/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖边界：
 Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共用 Serialization。
-新底座方向按[DB-086](design-branches/0086-new-storage-refactoring-plan.md)采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
+新底座方向按[DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md)采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
 主 DurableGraph 程序集的根 namespace 保留领域/登记契约，Schema 放布局描述，Runtime 放执行绑定与状态操作。
 这些 namespace 不增加程序集边界，不要求 Schema 与 Runtime 在同程序集内形成单向依赖。
 组织迁移要求依赖闭包重编译，保留类型访问级别、Generated/Family/DTO、模型 ID/版本与持久格式；不引入旧包兼容壳。
@@ -45,7 +45,7 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   多维数组 rank 上界为 4；超过上界明确拒绝。受支持槽可递归作为数组元素，包括泛型/inline struct 与数组引用；
   数组引用要求 exact nominal 类型，协变的历史 ancestry witness 独立后继，不以当前 CLR 祖先替代。
   VectorArray、Rank-2、Rank-3、Rank-4 使用独立构造码，元素类型及每维长度仍须表达；
-  数组局部合同见 [DB-043](design-branches/0043-vector-array-object-slice.md)，完整表示整数寻址见 [DB-045](design-branches/0045-persisted-representation-id-slice.md)。
+  数组局部合同见 [DB-043](design-branches/0043-vector-array-object-slice/README.md)，完整表示整数寻址见 [DB-045](design-branches/0045-persisted-representation-id-slice/README.md)。
   可静态识别的不支持类型由 SG 拒绝，其余在 Capture/读取边界校验，不静默降级。
 - 首个 BCL 内容对象选择 exact `System.Collections.Generic.List<T>`，元素复用全部受支持槽，
   并允许 List、数组及用户泛型递归组合。List 子类、接口集合字段、任意 object 槽和其他 BCL 容器不随之开放。
@@ -61,38 +61,38 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   所有 source/current DTO 保留 canonical key 唯一和完整引用校验；当前业务 lookup 的冲突在实际领域字典构造时拒绝，
   不静默覆盖或合并。历史 DTO 可读取不代表当前业务规则必能接纳。框架已知标准策略可以继续提前校验；
   单个 snapshot 中同一闭合 Dictionary 类型的 Application 实例采用一份当前恢复规则；不承诺还原任意实例的不同自定义配置。
-  Default 和框架标准选择独立保留，具体分层合同见 [DB-055](design-branches/0055-composite-dictionary-key-design.md)。
+  Default 和框架标准选择独立保留，具体分层合同见 [DB-055](design-branches/0055-composite-dictionary-key-design/README.md)。
 - 显式 DurableType 的同编译、顶层 partial record struct 复用普通 struct 的 InlineValue 合同，支持 readonly/mutable、
   positional/body 与泛型。位置参数、自动属性及 field-backed 属性的真实存储须以 field-target DurableField/Transient 分类，
   不调用 getter/setter/构造器/初始化器。持久 Schema 不包含 record 关键字、backing 名或合成方法；同 FieldId/完整槽的外观变化不伪升版。
   record 合成 Equals 不识别 Transient 标注，框架不替用户改写业务比较；Key 仍须满足当前恢复阶段的比较边界。
-  值类型生成入口及误标诊断见 [DB-056](design-branches/0056-record-struct-state-slice.md)，不据此开放普通 class 的一般 property 序列化。
+  值类型生成入口及误标诊断见 [DB-056](design-branches/0056-record-struct-state-slice/README.md)，不据此开放普通 class 的一般 property 序列化。
 - 领域引用对象统一实现 IDurableObject，不要求继承框架基类；普通 class 与 record class 共用对象身份和 Schema 管线。
   祖先链除 object 外每层均须显式参与 Durable Schema/history，任意第三方基类适配不在当前目标内。
   record class 支持 positional/body、泛型与已标记继承，按实际声明字段归属分类/投影；不保存 record 外观或合成行为。
   引用相等决定对象身份，业务值相等不合并对象；with 新实例不继承原 ID，也不提供深复制或深不可变。
-  共同接口不授予任意 object/interface 持久槽或 boxed value 身份。具体迁移与验收见 [DB-068](design-branches/0068-record-class-model-slice.md)。
+  共同接口不授予任意 object/interface 持久槽或 boxed value 身份。具体迁移与验收见 [DB-068](design-branches/0068-record-class-model-slice/README.md)。
 - 支持 CLR `Nullable<T>`，T 为受支持标量、Durable inline struct 或显式登记 enum，包括泛型 struct；可作为字段、
   泛型实参和数组/List 元素。DTO 使用 unmanaged `NullableState<TState>`，absent 不访问内部状态或产生引用边。
   Nullable 无独立对象身份或业务版本，内部 exact 布局变化沿原 inline 规则传播到 owner；
-  不随之开放其他 CLR 值类型或 boxed value。包装合同见 [DB-052](design-branches/0052-nullable-value-slot-slice.md)。
+  不随之开放其他 CLR 值类型或 boxed value。包装合同见 [DB-052](design-branches/0052-nullable-value-slot-slice/README.md)。
 - Guid、decimal、TimeSpan 作为内建标量值组合到既有字段、泛型、Nullable 和容器，不要求用户 Schema 或独立对象身份。
   Guid 保存全部 128 bit；decimal 保存公开的系数、scale 与符号，包括正负零；TimeSpan 保存完整有符号 Ticks。
   decimal 数值相等不意味着持久状态相等，scale-only 修改也保存；领域 Dictionary 比较仍按其原规则，持久键按完整表示配对。
   采用公开稳定 API，不转文本、不依赖 CLR 私有内存布局，不自动把 long/TimeSpan 或 double/decimal 相互转换。
-  编码与验收见 [DB-057](design-branches/0057-bcl-scalar-value-slice.md)；其他 BCL 值另行选择。
+  编码与验收见 [DB-057](design-branches/0057-bcl-scalar-value-slice/README.md)；其他 BCL 值另行选择。
 - DateOnly 保存 DayNumber，TimeOnly 保存日内 Ticks；DateTimeOffset 完整保存 clock Ticks 与整分钟 UTC offset，
   不保存时区规则，不随本地时区转换，也不统一改为 UTC。三者作为内建标量直接组合到既有值/容器管线。
   DateTimeOffset 同瞬间不同 offset 是持久变化；领域 Dictionary 默认按同瞬间查找，持久 key 仍按完整 bytes 配对。
   日期、时刻、ticks 与带偏移时间戳之间的业务转换继续由显式 Upgrade 决定；DateTime 的 Local/DST 合同独立后继。
-  具体编码与验收见 [DB-058](design-branches/0058-temporal-scalar-value-slice.md)。
+  具体编码与验收见 [DB-058](design-branches/0058-temporal-scalar-value-slice/README.md)。
 - 用户 enum 显式标记 DurableType；支持同编译、顶层 public/internal 声明及八种 C# 整数底层类型，
   无需 partial。Schema 复用 InlineValue：独立 nominal 身份/版本，单一 FieldId=1 的底层整数槽；
   生成版本化 DTO 与外置静态投影，不把 enum 擦成普通整数身份，不新增持久格式或对象行。
   常量名称、别名、赋值表和 Flags 属性不进入 Schema/history；未命名数值与未定义 bits 原样保存恢复。
   底层整数类型变化必须升版；业务数值含义变化由作者显式升版和 Upgrade，框架不从常量表猜测迁移。
   版本传播、Nullable/泛型/容器组合及 owner 控制的值升级复用 inline 规则。
-  具体合同见 [DB-053](design-branches/0053-enum-inline-state-slice.md)。
+  具体合同见 [DB-053](design-branches/0053-enum-inline-state-slice/README.md)。
 - Upgrade 仅转换单个对象的字段，从旧 DTO 产生下一版 DTO；不读取其他对象，不拆分/合并对象，
   不创建带持久身份的新对象。创建下一版 DTO 值本身不属于这一禁令。已有引用槽可以保留、调整或
   清空，但必须满足输出类型与引用合法性；不提供遍历其他对象内容或分配新 ObjectId 的升级上下文。
@@ -124,19 +124,19 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 外部值的 internal 实现依赖不必作为 public 领域类型暴露。构建材料的执行合同版本独立于 history 格式，
 模板导出不代替运行时 Definition/reader/Upgrade 登记，也不把 CLR 名称或程序集来源加入持久身份。
 引用材料须自行闭合，再与本地 accepted history 校验；本地 current candidate 不能修补旧缺口，
-本地或另一库的同 ID 定义不能冒充原提供者。具体合同见 [DB-060](design-branches/0060-cross-assembly-inline-history-slice.md)。
+本地或另一库的同 ID 定义不能冒充原提供者。具体合同见 [DB-060](design-branches/0060-cross-assembly-inline-history-slice/README.md)。
 
 外部 Durable 基类由定义库的已绑定 Capture/Hydrate 投影完整基类状态；派生库只组合公开 DTO，
 不访问基类私有字段的 CLR 类型。Family class 统一按本声明字段和 immediate base 协作，
 完整 leaf DTO/body 仍按声明段展开，不为基类新增对象行或自动调用其 Upgrade。
 基类投影是单独显式能力；普通整对象入口仍要求 exact CLR 类型。具体合同见
-[DB-061](design-branches/0061-cross-assembly-inheritance-slice.md)。
+[DB-061](design-branches/0061-cross-assembly-inheritance-slice/README.md)。
 
 固定外部 base/inline 的 exact 布局变化仍要求受影响 owner 显式升版和 Upgrade，并重编译受影响消费者。
 程序集拆包也不授予任意 CLR 二进制兼容：
 保留消费者 DLL 仍需保持其使用的公共 CLR 类型和成员。缺少定义、reader 或升级能力时明确拒绝，
 不用当前源码代替历史代码，不用程序集名为相同 DefinitionId 提供额外身份隔离。
-具体边界及独立包见证见 [DB-059](design-branches/0059-cross-assembly-model-composition-slice.md)。
+具体边界及独立包见证见 [DB-059](design-branches/0059-cross-assembly-model-composition-slice/README.md)。
 
 ### 捕获状态与领域行为分离
 
@@ -153,15 +153,15 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   List 匹配需要反复试探元素相等性，另用同 exact 槽下无分配的静态 StateEquals；逐持久字段比较，
   不比较 struct padding、不调用领域 Equals，也不为试探生成临时 payload。匹配确定后，
   仅对实际需要 patch 的元素对调用融合 PrepareDelta，并复用其 bytes；两者必须具有相同的持久状态相等语义。
-  这不要求普通对象在 PrepareDelta 前额外扫描一遍完整状态。具体分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)。
+  这不要求普通对象在 PrepareDelta 前额外扫描一遍完整状态。具体分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md)。
 - MVP 同样提前 PrepareBase：复用强类型 Write 生成独立拥有的 Base body，以实际 body 长度计量，
   决策后直接复用选定 bytes。先接受全部 live Base 准备的 CPU/内存成本，优化留待 MVP 后测量；
   Frame 大小上限不代表候选集合的内存上限。Storage envelope 开销另按其格式计入。
 
-设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture.md)、
-[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、
-[DB-027](design-branches/0027-generated-same-schema-delta-body-slice.md)、
-[DB-029](design-branches/0029-prepared-object-revision-planning-slice.md)。
+设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture/README.md)、
+[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)、
+[DB-027](design-branches/0027-generated-same-schema-delta-body-slice/README.md)、
+[DB-029](design-branches/0029-prepared-object-revision-planning-slice/README.md)。
 
 ### 统一引用身份，值类型嵌套
 
@@ -198,15 +198,15 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   算法选择随操作快照冻结，重新配置不改变已有会话。搜索预算耗尽可退回位置匹配，不能牺牲精确恢复或 NoChange。
   默认 Adaptive 保留完整 Local Delta 基准，停滞时用独立有界 Myers 竞争，仅采用严格更短的完整 body；
   竞争者可在实际已写长度达到基准时停止。接受额外编码及短期分配，最终选择后复用 bytes。
-  该保证只针对相同 frozen pair 的 raw List Delta body；不是全局最优、整个文件尺寸或耗时/峰值内存保证，见 [DB-051](design-branches/0051-bounded-list-delta-competition.md)。
+  该保证只针对相同 frozen pair 的 raw List Delta body；不是全局最优、整个文件尺寸或耗时/峰值内存保证，见 [DB-051](design-branches/0051-bounded-list-delta-competition/README.md)。
   选择时优先保存耗时、分配与实际写入尺寸，冷读性能优化优先级最低；不为匹配实验扩张读链或缓存设计。
-  语法与算法分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice.md)，选型证据与后继条件见
+  语法与算法分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md)，选型证据与后继条件见
   [路线图](DurableGraph-research-roadmap.md#32-list-差分算法选型与设计)。
 
-设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape.md)、
-[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids.md)、
-[DB-025](design-branches/0025-string-object-decoding-slice.md)、
-[DB-034](design-branches/0034-durable-reference-graph-batch.md)。
+设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape/0018-generated-graph-codec-shape.md)、
+[DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)、
+[DB-025](design-branches/0025-string-object-decoding-slice/0025-string-object-decoding-slice.md)、
+[DB-034](design-branches/0034-durable-reference-graph-batch/README.md)。
 
 ### Schema 依赖与强类型代码
 
@@ -228,8 +228,8 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 - Upgrade 用户入口统一接收非泛型 UpgradeContext，优先考虑工具扩展的灵活性；Context 提供本次转换的只读信息，
   值转换能力由 owner 显式取得并调用，不逐个追加到历史方法的参数列表。
   当前采用预声明/预绑定能力，只在执行时查询已选工具；不由 Context 动态选择业务规则，也不扩张单对象操作边界。
-  最小调用信息与后续工具组合分别由 [DB-038](design-branches/0038-generic-schema-state-and-binding-design.md)
-  和 [DB-039](design-branches/0039-composable-value-upgrade-design.md) 承接；当前实现范围从 PROJECT-STATE 查证。
+  最小调用信息与后续工具组合分别由 [DB-038](design-branches/0038-generic-schema-state-and-binding-design/README.md)
+  和 [DB-039](design-branches/0039-composable-value-upgrade-design/README.md) 承接；当前实现范围从 PROJECT-STATE 查证。
 - 值工具按 provider 局部 key、显式规则集和两端声明段/FieldId 绑定；完整槽语义包括引用类别与 nominal 约束，
   不仅是 DTO CLR 类型。显式候选的布局、签名或子依赖失败必须拒绝，不能回退为透传；
   KeepExact 仅在作者明确启用、没有显式候选且完整槽等价时成立。
@@ -244,11 +244,11 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
   历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
   元数据缓存只是派生结果，后续登记的 exact base/inline 定义仍必须与缓存的完整依赖闭包一致。
-- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本；最初的 Repository 单调注册表已由[DB-087 准确视图](design-branches/0087-meta-bootstrap-refactoring-route.md#view-contract)的边界承接。
+- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本；最初的 Repository 单调注册表已由[DB-087 准确视图](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#view-contract)的边界承接。
   shared 与各已接受 private view 内均拒绝同 key 异形；从尚无该 key 的共同 baseline 独立 fork 后，可各自接纳同 key 异形草稿，不能互换解释旧 bytes。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
-  [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design.md#33-必须明确的保证作用域两个空仓库)。
+  [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design/README.md#33-必须明确的保证作用域两个空仓库)。
 - 引用对象的 Base 头表达实际 exact 类型/Schema，后续 Delta 沿同一 Schema 解释；版本变化从新 Base 开始。
   读取先在 stored Schema 下完整重建，再升级；仍存活的升级对象下次显式保存必须 Base，即使业务值未变。
   TypeCodec 表达受支持类型经数组、内建 List 或用户泛型构造的组合；
@@ -258,11 +258,11 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 - DynamicMethod 是可评估的工具，不是已经选择全面翻新旧 IL 后端的承诺；若有多个生成后端，
   它们必须共享 Schema 解释，不能各自发明持久语义。
 
-设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape.md)、
-[DB-019](design-branches/0019-schema-ancestry-implementation-slice.md)、
-[DB-020](design-branches/0020-typed-slot-array-binding-slice.md)。
+设计来源：[DB-018](design-branches/0018-generated-graph-codec-shape/0018-generated-graph-codec-shape.md)、
+[DB-019](design-branches/0019-schema-ancestry-implementation-slice/README.md)、
+[DB-020](design-branches/0020-typed-slot-array-binding-slice/README.md)。
 
-复合值的细化合同及证据见 [DB-037](design-branches/0037-inline-struct-state-slice.md)。
+复合值的细化合同及证据见 [DB-037](design-branches/0037-inline-struct-state-slice/README.md)。
 
 ### 模型执行环境与 factory 行为
 
@@ -275,17 +275,17 @@ checkout 保起始执行环境：有 State 取最近 State.S；Shared 无 State 
 
 factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protected 核心实现接缝。完整依赖查验和多跳 Upgrade 的准确中间布局解析保留，缺失／冲突或缺少能力仍可拒绝。外部派生 context 可 override 并自行暴露查询；访问范围减少默认误用，不构成 callback 沙箱或外部状态深冻结。
 
-成功 Capture／Commit 不是任意自定义 reader body 的完整执行证明；稳定行为合同不取消准确来源／布局检查，也不允许跨 S 合并环境或自动启用热恢复材料。具体裁决与限定验收见 [DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring.md)。
+成功 Capture／Commit 不是任意自定义 reader body 的完整执行证明；稳定行为合同不取消准确来源／布局检查，也不允许跨 S 合并环境或自动启用热恢复材料。具体裁决与限定验收见 [DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring/0089-checkout-environment-and-factory-query-refactoring.md)。
 
 ### 对象表示与存储职责
 
 - MVP 固定 ReadAmplificationBaseBudgetPolicy。整数 X 倍通过对象级冷读放大产生 Base 动机，
   整数 Y% 控制可选 Base 的软预算；它不是所有写入的硬峰值保证。
-  精确比较、预算和强制/可选分类以 [DB-015](design-branches/0015-statestore-object-representation-policy.md)
+  精确比较、预算和强制/可选分类以 [DB-015](design-branches/0015-statestore-object-representation-policy/README.md)
   与对应代码为准，后续执行层不能自行改变策略语义。没有合法 Delta 的更新显式强制 Base，
   不伪造 Delta 估算；它与 Insert 一样属于必需写入，不消耗可选 Base 预算。
   默认选择采用可解释的稳态摊销容忍度，不假定存在无工作负载依赖的天然最优阈值；
-  当前参数与调优指导见[根 README](../README.md#调整保存策略)，分析依据见 [DB-070](design-branches/0070-read-amplification-default.md)。
+  当前参数与调优指导见[根 README](../README.md#调整保存策略)，分析依据见 [DB-070](design-branches/0070-read-amplification-default/README.md)。
 - 策略消费完整 post-live 对象集合的估算，产生稀疏表示计划。真实 Revision Parent、对象变化分类、
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 直接使用 FrameStore 的 opaque FrameAddress；DG links 固定编码为 12B，不解释文件位置或距离。
@@ -301,12 +301,12 @@ factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protecte
   排除 ObjectId key、共享 membership/Frame/对齐。H 与原 Frame 实编码累计一致，是成本代理而非总物理 I/O。
   冷恢复完整验证后，可随同 Store 生命周期的已提交 DTO 基线保留对象 head/H；热保存按实际对象记录增量推进。
   元数据仅在确认发布后随 State 基线安装，Event 快照不推进 State；独立 raw 输入仍须验证历史链。
-  具体边界与证据见 [DB-069](design-branches/0069-incremental-save-baseline.md)。
+  具体边界与证据见 [DB-069](design-branches/0069-incremental-save-baseline/README.md)。
 
-当前地址方向见 [DB-086](design-branches/0086-new-storage-refactoring-plan.md)；
-[DB-014](design-branches/0014-multi-segment-backward-file-distance.md) 保留已被替换的物理距离方案；
-内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice.md)、
-[DB-028](design-branches/0028-persisted-object-delta-chain-slice.md)。
+当前地址方向见 [DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md)；
+[DB-014](design-branches/0014-multi-segment-backward-file-distance/README.md) 保留已被替换的物理距离方案；
+内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice/README.md)、
+[DB-028](design-branches/0028-persisted-object-delta-chain-slice/README.md)。
 
 ## 3. 保留的长期产品目标
 
@@ -323,14 +323,14 @@ factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protecte
 已接受 descriptor 不重绑定，等价完整表示在所选目录内复用；引用目标版本仍由目标自己的 Base 决定。
 Schema 编辑仅准备受控意图，meta 先于引用它的业务内容追加，再由同一 pending／发布 owner 共同接受。
 Discard 保手工修改意图但不接受候选定义；Event 可接受 meta／Head，但不推进 State 基线。没有独立 SchemaStore 发布或第二份表示 ID 权威。
-当前合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#bootstrap-contract)；
-[DB-045](design-branches/0045-persisted-representation-id-slice.md)／[DB-046](design-branches/0046-unified-schema-catalog-slice.md) 保整数寻址／统一记录的历史来由。用户 class 的 Schema 节点
+当前合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#bootstrap-contract)；
+[DB-045](design-branches/0045-persisted-representation-id-slice/README.md)／[DB-046](design-branches/0046-unified-schema-catalog-slice/README.md) 保整数寻址／统一记录的历史来由。用户 class 的 Schema 节点
 也是对象 descriptor；inline Schema 与容器描述进入同一 meta 图，base/inline exact 依赖按节点 ID 引用。
 inline 记录只描述嵌套值，不能被 Base 当作独立对象表示；普通引用槽只约束无版本 nominal 类型，
 目标版本不成为引用方的 exact 依赖。`SchemaKey` 是由完整名义类型与定义版本派生的查询、冲突索引，
 同一已接受目录的声明索引内同 key 异形仍须拒绝，不能靠新编号绕过；独立 baseline fork 可新增各自尚未接纳的草稿定义，保旧 view 含义。
 候选的完整缺失闭包随业务共同发布后才取得接受资格，不因 bytes 已追加或分配了编号而提前接受。
-[DB-047](design-branches/0047-list-content-object-slice.md) 的 List 扩展复用同一编号空间，
+[DB-047](design-branches/0047-list-content-object-slice/README.md) 的 List 扩展复用同一编号空间，
 以明确内建构造和内容 codec 解释，无需用户 Schema；其元素若为用户 inline 值，仍须登记完整 exact 依赖。
 Count 与 Capacity 均不属于 ListLayout；前者属于对象内容，后者不持久化。引用 List 的 owner 只约束 nominal 类型，
 不锁定该列表的历史元素布局。内建资格由框架显式定义，不能用同名用户类或程序集归属冒充。
@@ -346,7 +346,7 @@ reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source �
 可达对象的 Allocate/Hydrate。历史 Schema 文件不能自动补回被删除族的这些能力。
 可以保留仅承载生成代码和 Upgrade 的迁移壳；退出可达闭包不免除 source 验证。
 新 Revision 已 Remove 某族，只能免除读取该新 Revision 所需的该族能力，不能解除仍支持旧 Revision 的责任。
-技术见证见 [DB-036](design-branches/0036-working-session-and-history-capabilities.md#4-并行小线明确历史恢复能力合同)。
+技术见证见 [DB-036](design-branches/0036-working-session-and-history-capabilities/README.md#4-并行小线明确历史恢复能力合同)。
 读取升级本身不隐式写回 Store；升级失败不修改权威状态。历史数据成为可编辑领域图、
 当前版本 DTO 比较基线及后续重写的具体衔接，由专门切片收敛。
 
@@ -366,7 +366,7 @@ reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source �
 每份 Revision 的完整 source/current 引用及查找合法性仍各自验证，业务 Upgrade 仍各自执行。
 共享普通 CLR 实例还须证明 current 状态相同且所有引用目标可共享；仅有相同布局、未触发重写或 readonly 字段不足以证明。
 不同 ObjectVersion 不因内容相等而合并，空串继续沿全库 string.Empty 例外；非空 string 不做内容 intern。
-本轮算法与验收边界见 [DB-064](design-branches/0064-shared-revision-decoding-design.md)，缓存和比较策略不进入持久类型身份或 wire。
+本轮算法与验收边界见 [DB-064](design-branches/0064-shared-revision-decoding-design/README.md)，缓存和比较策略不进入持久类型身份或 wire。
 
 比较忽略 transient，引用按身份比较，Artifact 引用按 exact address 比较；值和集合的 durable
 equality 必须明确，不能仅凭非密码学 hash 判相等。同版 DTO 的 Half/float/double 持久状态比较采用按位相等：
@@ -386,7 +386,7 @@ Artifact 引用不把完整内容并入 State 对象可达闭包，恢复时不�
 地址采用内容 hash、append 地址或其他组合，属于待裁决机制。
 
 真实事件/快照消费者已选择具备自由 E/S 业务历史、branch 与不可变 tag 的
-[EventHistory 路线](design-branches/0063-event-history-journal-slice.md)。
+[EventHistory 路线](design-branches/0063-event-history-journal-slice/README.md)。
 它可以覆盖上述部分历史内容职责，先屏蔽独立 ArtifactStore 的建设；四类逻辑职责不要求四个独立存储实现。
 这不是对附件分块/外部大对象能力的完成声明，也不改变尚待实现的联合 Schema 视图边界。
 
@@ -401,13 +401,13 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 超出底座正常恢复的离线救援先关闭资源并丢弃缓存，再以fresh owner恢复使用。
 日常打开不提供全库健康或全历史重新确认；只加载必要根/Schema目录，对本次访问内容保持正确性检查。
 完整 SchemaSnapshot 与一个带业务TailMeta的Revision图帧共用FS，VS一个仓库根发布Schema/branch目录；
-两种Parent、全局Schema单调性与业务outcome仍保留。具体方案见[DB-086](design-branches/0086-new-storage-refactoring-plan.md)，产品实现状态只查工作集。
+两种Parent、全局Schema单调性与业务outcome仍保留。具体方案见[DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md)，产品实现状态只查工作集。
 raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
-缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design.md)。
+缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)。
 
-公共使用模型见 [DB-083 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md)。
+公共使用模型见 [DB-083 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md)。
 当前公共基础为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`，
-具体交付范围见 [DB-078-A 实施记录](design-branches/0078-a-repository-free-history-implementation.md)。
+具体交付范围见 [DB-078-A 实施记录](design-branches/0078-editable-checkpoint-fork-slice/0078-a-repository-free-history-implementation.md)。
 模型与执行视图寿命遵循[模型执行环境与 factory 行为](#模型执行环境与-factory-行为)；durable exact-current Normalize 保持值与身份恒等，实际根按每次 CLR 类型和持久 Schema 选择。
 工作副本同时拥有精确业务 Head、可选 State 根及其冻结当前 DTO 比较基线、领域实例到 ObjectId 的绑定与分配状态；
 普通调用方不分别设置这些材料。仅受控加载和成功 State 提交推进其对应关系，Capture/Prepare/Accept 自身不等于持久 Commit。
@@ -444,11 +444,11 @@ ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅�
 完整 guard 内先占位、恢复并构造工作副本，再发布 ref；普通恢复失败不留新 ref，未交付占位只由本次持有者清理。
 发布后失败不删除 ref、不透明重试，仍依据 outcome/fault 重开检查；正常返回后子分支可独立续写。
 图内 alias/cycle、ObjectId 与完整保存来源保持，不同恢复不共享 mutable 实例；调用方主动传入的外部别名仍自行负责。
-实际交付和失败验证见 [DB-078-C 记录](design-branches/0078-c-branch-checkout-fork-implementation.md)。
+实际交付和失败验证见 [DB-078-C 记录](design-branches/0078-editable-checkpoint-fork-slice/0078-c-branch-checkout-fork-implementation.md)。
 
 历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与图帧位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
-不可变tag的持久权威归上游发布底座，DG只创建和解析绑定；新方向由VersionStore承担，旧实现证据保留在[DB-084](design-branches/0084-eventjournal-immutable-tags-slice.md)。
+不可变tag的持久权威归上游发布底座，DG只创建和解析绑定；新方向由VersionStore承担，旧实现证据保留在[DB-084](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md)。
 tag 与 branch 名称空间独立、同名一律拒绝；可定位 Event-first 历史，重开解析签发当前打开的地址，不物化图或修改分支。
 不另立持久权威，也不把tag名当作跨仓库外部地址；发布outcome与资源fault分开解释，故障后fresh重开并按名字检查。
 旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
@@ -467,7 +467,7 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 无下界的默认 NewestFirst 按需回溯，OldestFirst 可先缓冲所需事件地址；不物化沿途 State。
 每次 MoveNext 检查可用性，交付前释放操作 guard 与底层 lease，循环体可 ReadEvent 或进行其他串行操作。
 后续提交/Move 不改变所选历史。ReadFrames 保持全逻辑链元数据读取，切片结果不节省其成本；旧 ReadEvents 已移除。
-既有实现与验证见[DB-078-B记录](design-branches/0078-b-checkpoint-history-query-implementation.md)；新方向取消启动全物理审计，合帧导航的整帧CRC读取成本见DB-086。
+既有实现与验证见[DB-078-B记录](design-branches/0078-editable-checkpoint-fork-slice/0078-b-checkpoint-history-query-implementation.md)；新方向取消启动全物理审计，合帧导航的整帧CRC读取成本见DB-086。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
@@ -479,10 +479,10 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 本案选择 Schema descriptor 与存活目录复用对象序列化／版本保存，业务比较与受控 meta 编辑汇入共同发布 owner。
 业务图 pin 准确 Schema 根；shared 目录与分支 rewind 分责，private 采用完整冻结 view，不以 latest shared 补缺。
 已接受定义不可改写；private 从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。
-各草稿可从同一已发布 baseline 独立 fork；若要继承已接受草稿的数据继续改型，则递增版本，不在同一目录重定义同 key。容器元素升级使用已有规则集及 Nullable lifting，不另设目录替换入口。最终只交付一个版本时从原 baseline 建立干净 final fork，而非从完整 ToShared 中过滤开发历史；具体路线见 [DB-088](design-branches/0088-development-schema-workflow.md)。
+各草稿可从同一已发布 baseline 独立 fork；若要继承已接受草稿的数据继续改型，则递增版本，不在同一目录重定义同 key。容器元素升级使用已有规则集及 Nullable lifting，不另设目录替换入口。最终只交付一个版本时从原 baseline 建立干净 final fork，而非从完整 ToShared 中过滤开发历史；具体路线见 [DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
 将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
 单次显式 Shared 提交与工作副本的默认归属分责；不得借此原地更换冻结执行环境。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
-具体实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route.md#current-status)；原分支重建、同 Open 双异形模型、Schema-only 与优化的重访条件见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+具体实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)；原分支重建、同 Open 双异形模型、Schema-only 与优化的重访条件见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
 只有已发布的 exact head/manifest 引用的 candidate 才取得权威。文件存在、时间戳或最新编号
 都不够。被引用数据应先完成规定的 durability barrier，再发布；具体 process/OS crash、
@@ -508,21 +508,21 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 不另建 Fork 专属恢复算法。Checkpoint 的独立两图与 ReadPair 均先完成全部准备、实例分配和引用表验证，再开始 Hydrate；
 只有 ReadPair 的可信闭包规划允许 mutable 复用，普通 allocator 返回同一实例不能获得豁免。
 只读交付不导入保存身份；可编辑恢复保留完整 source 基线及独立 CaptureSession。
-内部准备材料不自行授予跨操作复用资格；边界与证据见 [DB-079](design-branches/0079-shared-graph-restoration-core-implementation.md)。
+内部准备材料不自行授予跨操作复用资格；边界与证据见 [DB-079](design-branches/0079-shared-graph-restoration-core-slice/0079-shared-graph-restoration-core-implementation.md)。
 
 Checkout/Fork 的最近 State 材料复用以精确 State/revision/root、同 Store 寿命、固定模型环境与完整 live Schema 证书为条件；
 工厂与 Upgrade 计划的预闭合依赖也须传递，不能只核对 source/current 两端。每次请求独立确定 Head，无 State 时完全绕过材料槽。
 完整冷恢复与工作副本构造成功后才具备入槽资格，Fork 所有候选构造先于 ref 发布，成功后仅安装引用；失败不替换，fault/Dispose 释放。
-领域 mutable 实例和保存身份每次独立，工作副本保留完整保存来源；单槽不是字节或总堆上限。见 [DB-080 记录](design-branches/0080-prepared-checkpoint-reuse-implementation.md)。
+领域 mutable 实例和保存身份每次独立，工作副本保留完整保存来源；单槽不是字节或总堆上限。见 [DB-080 记录](design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md)。
 
 提交侧 owned DTO 与 factory 闭合证书不自动证明冷 reader body 的完整依赖；已读过同一 reader 的其他值也不是充分证明。
 未来热准入必须对应新 State 的实际持久链与完整来源，不能继承已不相关的历史 Upgrade 依赖。
-现有合同不足时保留正常提交与冷恢复，不为优化放宽验证；反例与停点见 [DB-081 实验](design-branches/0081-hot-commit-restoration-material-experiment.md)。
+现有合同不足时保留正常提交与冷恢复，不为优化放宽验证；反例与停点见 [DB-081 实验](design-branches/0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md)。
 
 不可变叶实例复用须限定在同一份已认证 State 材料：仅首次完整成功恢复的合格叶可入表，所有命中实例先于任何新分配登记，
 命中不再 Hydrate。首次叶恢复的标准 Schema 依赖随证书复核，新的 revision 不继承旧表；缓存引用随槽释放，
 工作副本只保留正常保存来源和独立身份状态。省去回调不等于完整 Fork 获益，默认启用须有总成本证据；
-当前候选与默认关闭裁决见 [DB-082 实验](design-branches/0082-prepared-immutable-leaf-reuse-implementation.md)。
+当前候选与默认关闭裁决见 [DB-082 实验](design-branches/0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md)。
 
 分配领域实例时不执行实例构造器、基类实例构造器或实例字段初始化表达式；因此 `_cache = new()`
 等 Transient 初始化也不会执行。交付后的 Transient 重建由用户代码负责，属于宿主阶段。MVP 不提供自动 Transient hook，
@@ -532,7 +532,7 @@ Checkout/Fork 的最近 State 材料复用以精确 State/revision/root、同 St
 ReadPair 的只读约束包含会影响观察结果的 Transient 写入；视图专属 owner、查询上下文和缓存须置于
 各自的图外 view/index，不写入可能共享的节点。需要原位重建 Transient 的历史浏览可分别调用
 ReadState/ReadEvent，取得独立领域图并初始化；无需 writer，但持久字段仍是历史快照，续写须使用 Checkout。
-不承诺对 string 或应用自有全局对象进行通用深拷贝。使用示例与验收见 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice.md)。
+不承诺对 string 或应用自有全局对象进行通用深拷贝。使用示例与验收见 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)。
 
 字典由框架分配并填入原实例，应用只提供需要的当前 comparer，不接管共享引用或事后替换字典。
 比较依赖必须在插入时就绪并保持稳定：key 自身已填好的值、完整 string 与引用身份可用，
@@ -558,8 +558,8 @@ DynamicMethod 保留为有具体需要时的备选，不为该能力引入第二
 不能填充已登记的占位对象，无法直接闭合一般循环引用；特殊构造器调用还会带入基类构造链及
 字段初始化表达式，增加恢复语义。现有 Probe 与 .NET 10 机制验证见
 [无构造器分配与 readonly 写入证据](DurableGraph-lab-notebook.md#2026-09-07无构造器分配与-readonly-实例字段写入)。
-标量/string 的 SG Hydrate 与升级续写实现范围见 [DB-033](design-branches/0033-upgrade-restore-resave-batch.md)；
-一般对象互引与循环恢复的证据见 [DB-034](design-branches/0034-durable-reference-graph-batch.md)。
+标量/string 的 SG Hydrate 与升级续写实现范围见 [DB-033](design-branches/0033-upgrade-restore-resave-batch/README.md)；
+一般对象互引与循环恢复的证据见 [DB-034](design-branches/0034-durable-reference-graph-batch/README.md)。
 
 Transient 指索引、缓存、反向查找等非持久内存状态；排除这些字段的持久化仍是产品职责。
 建议宿主重建保持便宜、确定、幂等；昂贵的 LLM 摘要或 embedding 属于 Derived builder 的目标场景，

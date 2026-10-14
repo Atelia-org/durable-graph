@@ -3,7 +3,7 @@
 > 产品包回归框架；各 lane 的当前状态不同。基础生成/Capture 与当前公开 Repository、split 包门禁按各自范围运行；旧读取/诊断 lanes 暂停，见下方清单。根 solution 不代替实际包交付边界；产品进度见 [src/PROJECT-STATE.md](../../src/PROJECT-STATE.md)。
 
 
-当前暂停的旧 lanes 在 §36 之前已有 getter 可访问性或默认 owner 模式前提失效；退出记录依次见 [旧 typed 恢复束 §36](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)、[SCB1/旧 Schema 权威与 owner 模式 §37](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)、[旧 raw Storage 束 §38](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。§38 从 `8243898` 退出十一 raw 类型及旧 GraphMetadata/TailMeta 路径；共用 ObjectVersion records/payload、地址、body 与当前 split 读取保留。本片不为旧 lanes 重建 adapter，源码/tests 清零不等于全仓调用清零。
+当前暂停的旧 lanes 在 §36 之前已有 getter 可访问性或默认 owner 模式前提失效；退出记录依次见 [旧 typed 恢复束 §36](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)、[SCB1/旧 Schema 权威与 owner 模式 §37](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#37-p1d-第八片旧schema权威与owner模式退出)、[旧 raw Storage 束 §38](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#38-p1d-第九片旧raw-storage束退出)。§38 从 `8243898` 退出十一 raw 类型及旧 GraphMetadata/TailMeta 路径；共用 ObjectVersion records/payload、地址、body 与当前 split 读取保留。本片不为旧 lanes 重建 adapter，源码/tests 清零不等于全仓调用清零。
 
 以下静态清单只统计仍直接消费旧 raw Store/chain 的 **23 个 C# 文件、19 个暂停目录**；它不是全部已删除 reader/Schema 符号的兼容清单。目录下 Model/Library/history 文件不计入这个 raw 直接消费数，业务资产仍保留。各 lane 针对当前 G 不能运行；下文相应命令与旧验收仅保留匹配历史包版本的意义。
 
@@ -24,7 +24,7 @@
 
 [PrivateContainerConsumer](PrivateContainerConsumer/README.md)与 `Run-PrivateContainerProbe.ps1` 原已验同键同版新根／Nullable inline List 替换，原版本与六 PID 结果保其删除前资格。DB-088 将活动故事改为真实 baseline 上 Point V1→V2／Nullable lifting／List 元素 Upgrade，保 root／List 身份、Keeper 完整目录及冷增量；新 G 普通包七 PID 已通过，含成功 ToShared；不复用旧冲突／missing-pair 预期。19 暂停 lanes 不因此复活，原始证据只在各消费者 README 维护。
 
-[DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md) 与 `Run-DevelopmentSchemaProbe.ps1` 已验 [DB-088](../../docs/design-branches/0088-development-schema-workflow.md) 的有限开发流程：普通包从固定 V1/tag ref-only 分叉并 `CheckoutPrivate`，两个异形 V2 用实际 MSBuild Off，定稿 B 才 Publish／Verify 与完整 ToShared；六次成功 Rebuild／一次预期 DG0015／五 PID。精确 live ID／prior／H 由源码故事另证；不依赖新根 overrides；删除后已与迁移后的 Split／PrivateContainer 一起通过新 G 普通包门禁；来源与限定验收见 [DB-088 §7](../../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)。不扩为主／次版本或迁移链压缩。
+[DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md) 与 `Run-DevelopmentSchemaProbe.ps1` 已验 [DB-088](../../docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md) 的有限开发流程：普通包从固定 V1/tag ref-only 分叉并 `CheckoutPrivate`，两个异形 V2 用实际 MSBuild Off，定稿 B 才 Publish／Verify 与完整 ToShared；六次成功 Rebuild／一次预期 DG0015／五 PID。精确 live ID／prior／H 由源码故事另证；不依赖新根 overrides；删除后已与迁移后的 Split／PrivateContainer 一起通过新 G 普通包门禁；来源与限定验收见 [DB-088 §7](../../docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)。不扩为主／次版本或迁移链压缩。
 
 Storage dependencies are the six pinned Binary/FrameStore/VersionStore closure packages in
 [StorageDependency.props](../../eng/StorageDependency.props). The shared
@@ -370,7 +370,7 @@ while all stages preserve single-owner changes, State ancestry, NoChange and oth
 The runner preserves accepted history hashes and requires v9 for new history. It packs an isolated
 dependency feed by default, or reuses one through `-PackageSource <feed> -Version <version>`.
 Run instructions, stage details and limitations live in the consumer README; the implementation
-record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design.md#12-产品施工跟踪).
+record is [DB-038 §12](../../docs/design-branches/0038-generic-schema-state-and-binding-design/README.md#12-产品施工跟踪).
 
 ## Composable value upgrades
 
@@ -396,7 +396,7 @@ It preserves accepted history hashes across builds; it does not change any persi
 The runner packs an isolated ten-package feed by default; use `-PackageSource <feed> -Version <version>`
 to reuse a matching feed. Exact stage markers and boundaries live in the consumer README;
 construction and acceptance evidence are recorded in
-[DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design.md#8-产品施工合同与验收映射).
+[DB-039 §8](../../docs/design-branches/0039-composable-value-upgrade-design/README.md#8-产品施工合同与验收映射).
 
 ## Composable arrays and array-owned upgrades
 

@@ -6,7 +6,7 @@
 
 项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
 
-[DB-089 §8.2](../../../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring.md#82-新-g-门禁)新增同 owner 的生命周期观察：私有 List 保存 202 后，热 State 保原实例与 root ID，独立 ReadState 保值／共享／环且 root、child、List 实例独立；Dispose 后在同 Repository 再 CheckoutPrivate，核同一 State 地址、root ID 和 202。只读结果不再编辑或保存，重新签出不提交；原提交序列及后续全关冷开、ToShared 和 Shared 增量保存保持。continue 输出 `PrivateHotStateRetained`、`PrivateIndependentRead`、`PrivateSameOwnerCheckout` 三个门禁；下面 DB-088 的历史包结果不替代新增观察的新 G 资格。
+[DB-089 §8.2](../../../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring/0089-checkout-environment-and-factory-query-refactoring.md#82-新-g-门禁)新增同 owner 的生命周期观察：私有 List 保存 202 后，热 State 保原实例与 root ID，独立 ReadState 保值／共享／环且 root、child、List 实例独立；Dispose 后在同 Repository 再 CheckoutPrivate，核同一 State 地址、root ID 和 202。只读结果不再编辑或保存，重新签出不提交；原提交序列及后续全关冷开、ToShared 和 Shared 增量保存保持。continue 输出 `PrivateHotStateRetained`、`PrivateIndependentRead`、`PrivateSameOwnerCheckout` 三个门禁；下面 DB-088 的历史包结果不替代新增观察的新 G 资格。
 
 ## DB-089 C：protected 查询与同 owner 生命周期的有限验收
 
@@ -22,7 +22,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 
 实测 baseline private 的 Event Head.S 与较旧 State.S、全关冷 List Delta、普通 Widget ToShared 的完整不可达 Event 声明、两 ref 发布、旧完整帧及 readonly 保持。List H `202→226→250→274`，每 Delta24；Widget1／3仍H9且head不变。Shared冷 writer 是 continue PID内全关后新owner，verify为独立readonly PID；没有进程故障或性能资格。
 
-工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/split`；`result.json` SHA256 `D789A980C17EBFB53C2F1F908A7688A4EBF04E3E65B6B1C21FE528E1BC7CB85E`。工件根保共同 feed／source sidecar与 `independent-acceptance.json`，完整停点见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)。
+工件 `W:/TEMP/dg-db088-round2-20261013-141026-16448/split`；`result.json` SHA256 `D789A980C17EBFB53C2F1F908A7688A4EBF04E3E65B6B1C21FE528E1BC7CB85E`。工件根保共同 feed／source sidecar与 `independent-acceptance.json`，完整停点见 [DB-088 §7](../../../docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)。
 
 由 [Run-SplitRepositoryProbe.ps1](../Run-SplitRepositoryProbe.ps1) 完成全部阶段。读取[依赖指南](../../../docs/storage-dependency.md)后，在仓根传入经过 Prepare 核验的完整六包 feed：
 
@@ -49,7 +49,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 <a id="2026-10-13-限定验收"></a>
 ## 历史资格：2026-10-13 DB-087 P1 限定验收
 
-主线程实跑并独立核 source／包／加载／history 工件，另有只读独立复核，有限 PASS；[DB-087 P1 停点](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，当片后继 P2 尚未实施，只改消费者／runner／observer和文档，生产代码／API不变；后继准入与同形私有见证另见[写准入](#p2-admission-package-evidence)／[私有新根](#p2-private-package-evidence)，不回改本节历史资格。
+主线程实跑并独立核 source／包／加载／history 工件，另有只读独立复核，有限 PASS；[DB-087 P1 停点](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#public-package-gate)成立，当片后继 P2 尚未实施，只改消费者／runner／observer和文档，生产代码／API不变；后继准入与同形私有见证另见[写准入](#p2-admission-package-evidence)／[私有新根](#p2-private-package-evidence)，不回改本节历史资格。
 
 | 证据 | 结果 |
 |---|---|

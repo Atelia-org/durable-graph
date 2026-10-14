@@ -3,7 +3,7 @@
 > 归档日期：2026-09-07；原文来自提交 `5fdc371`。
 > 以下 Proposed 指当时提案状态，现已被替代，不能作为实施输入。
 > 原因：重复 Delta 类型声明没有必要；临时内联绕过了已有真实需求的持久 Schema 注册与冲突检查。
-> 后继：[DB-031 修订讨论稿](../../design-branches/0031-persisted-object-type-envelope-slice.md)。
+> 后继：[DB-031 修订讨论稿](../../design-branches/0031-persisted-object-type-envelope-slice/README.md)。
 
 ---
 
@@ -15,8 +15,8 @@
 
 ## 1. 问题与最小成功判据
 
-[DB-030](../../design-branches/0030-captured-object-preparation-slice.md) 已统一从异构 frozen DTO 图准备内容，
-[DB-029](../../design-branches/0029-prepared-object-revision-planning-slice.md) 接通策略与可追加 Revision。
+[DB-030](../../design-branches/0030-captured-object-preparation-slice/README.md) 已统一从异构 frozen DTO 图准备内容，
+[DB-029](../../design-branches/0029-prepared-object-revision-planning-slice/README.md) 接通策略与可追加 Revision。
 但真实冷读仍依赖测试的 `metadata[(FrameAddress, ObjectId)]`，其中保存 kind、exact Schema
 及 codec 标记。盘上字节即使能用某个 reader 解码，也不能据此知道它声明的类型和版本。
 

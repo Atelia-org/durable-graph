@@ -1,6 +1,6 @@
 # Composite Dictionary package consumer
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
 
 Each run creates a new shared FrameStore/VersionStore repository. The 32-entry container
 keeps enough unchanged content for the sparse edits to remain real Deltas with the fixed 12B
@@ -60,4 +60,4 @@ CompositeDictionaryUpgrade:True:DeletedGenericAndNestedTypes:True:ExplicitDouble
 Malformed payloads, absent/mismatched comparer configuration, zero-width keys and callback
 failure boundaries are covered by focused product tests. This witness does not promise historical
 business comparer preservation or comparison based on not-yet-hydrated reference contents.
-See [DB-055](../../../docs/design-branches/0055-composite-dictionary-key-design.md) for the contract.
+See [DB-055](../../../docs/design-branches/0055-composite-dictionary-key-design/README.md) for the contract.

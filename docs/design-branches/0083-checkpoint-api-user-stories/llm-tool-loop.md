@@ -1,7 +1,7 @@
 # LLM tool-loop：从使用场景推导 Checkpoint API
 
 > 状态：目标 API 的应用检验，**未实施**；2026-09-27 按已选语义校准。
-> 统一目标合同见[主文](../0083-repository-checkpoint-api-user-stories.md)。
+> 统一目标合同见[主文](0083-repository-checkpoint-api-user-stories.md)。
 > 以下为 C# 伪代码；`AgentLogic`、消息和运行状态类型均由假想应用定义，不代表任何厂商 API。
 
 ## 1. 应用需要保存什么
@@ -45,7 +45,7 @@ AgentState {
 - 同一 getter 稳定返回同一份已交付图；eager/lazy 是内部选择，所指历史位置始终由传入 address 决定。
 - 一次 Checkpoint 内两图的可变对象隔离；各图内部的别名和循环保持。
 - 普通读出图允许应用修改，修改不自动保存；保存通过工作副本的 `CommitState(nextRoot)` 显式完成。
-- 首片地址只在签发它的打开 Repository 内有效，不提供可序列化的外部地址。重开后通过持久分支 ref 的 `GetHead(name)` 重新取地址；不可变 tag 已选定为独立目标，见 [DB-084](../0084-eventjournal-immutable-tags-slice.md)，本例不假定已有 tag API。
+- 首片地址只在签发它的打开 Repository 内有效，不提供可序列化的外部地址。重开后通过持久分支 ref 的 `GetHead(name)` 重新取地址；不可变 tag 已选定为独立目标，见 [DB-084](../0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md)，本例不假定已有 tag API。
 
 工作副本初次签出的 `State` 来自最近 StateCheckpoint；若尚无 State 则为 null。Event 提交不会隐式安装或替换 State。
 下面运行故事以应用已经建立 AgentState 为前提，应用转换时应拒绝 null 或不支持的阶段类型。初始化输入也可由 `CreateBranchFromEvent(name, initialEvent)` 先保存，随后由应用显式创建完整 AgentState 并调用 `CommitState(state)`；库不自动执行初始化消息。

@@ -2,7 +2,7 @@
 
 本 Probe 验证 DB-087 内部 split Repository 的有限进程中止窗口：默认模式检查真实生成的 Widget、共享 List、新增 Schema 的六个保存停点；`-InitializationOnly` 检查直接工厂两次成功 CreateRef 后的停点。两模式都由 controller 外部终止 writer，再由独立 verifier 冷验证。
 
-这是源码模式的有限进程中止见证。默认公开工厂仍走旧路线；不授 PackageReference、OS crash、断电、设备故障或完整 P1d 门禁资格。正常关闭重开、异常抛出与 writer 的 Dispose 都不能代替这里的外部 Kill。活动状态与后续门禁见 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route.md)。
+这是源码模式的有限进程中止见证。默认公开工厂仍走旧路线；不授 PackageReference、OS crash、断电、设备故障或完整 P1d 门禁资格。正常关闭重开、异常抛出与 writer 的 Dispose 都不能代替这里的外部 Kill。活动状态与后续门禁见 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
 
 先由统一构建者显式构建一次，controller 默认且始终不构建：
 

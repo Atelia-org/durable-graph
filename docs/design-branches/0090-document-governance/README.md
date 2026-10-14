@@ -1,8 +1,8 @@
 # DB-090：设计记录治理与随任务维护
 
 > 2026-10-14；结论：新 DB 按问题聚合，指定一个阅读入口，维护绑定任务事件。
-> 本轮试行新布局与维护规则，补充搜索入口并校准 DB-086 的历史适用性；既有平铺文件搬迁与旧索引整体压缩尚未实施。
-> 执行入口：[局部 AGENTS](../AGENTS.md)；发现依据的入口：[设计索引](../README.md)。这份记录不产生产品施工授权。
+> 状态：2026-10-14，本次治理已实施。历史材料按问题归组，总索引收窄为导航，维护规则由局部 AGENTS 承载；实际验收见[结果记录](results.md)。
+> 执行入口：[局部 AGENTS](../AGENTS.md)；发现依据的入口：[设计索引](../README.md)。本案是文档治理，不产生产品施工授权。
 
 ## 1. 问题、边界与验收
 
@@ -28,11 +28,11 @@
 | 真实材料 | 暴露的问题与不能丢的语义 |
 |---|---|
 | [DB-071 organization-review](../0071-assembly-namespace/0071-assembly-namespace-organization-review.md) | 文件名是 review，实际承载已采纳方向并被目标设计引用；不能按名字降为纯过程材料 |
-| [DB-081 实验](../0081-hot-commit-restoration-material-experiment.md) | 实验完成形成否定结论，热准入未实施；反例和重启条件仍有价值 |
-| [DB-082 结果](../0082-prepared-immutable-leaf-reuse-implementation.md)及 [CSV](../0082-prepared-immutable-leaf-reuse-measurements.csv) | 候选已实现，但总成本收益未成立，默认关闭；验收通过不等于启用 |
-| [DB-086 实施](../0086-new-storage-implementation.md)与 [DB-087](../0087-meta-bootstrap-refactoring-route.md#current-status) | 086 当片验收有效，单根／SCB1／合帧已由 087 替代；底座正常恢复等选择仍保留，不能整篇判作失效 |
-| [DB-087 历史资格](../0087-meta-bootstrap-refactoring-route.md#private-plan) | P0/P1 归档不含后来 P2；完整原 P2 另在 Git `d8c0ecb` 的 §9。泛称“完整归档”可能丢掉一个时期的证据 |
-| [077/078 共同评审](../0077-0078-api-dialectical-review.md) | 一份材料服务两个问题，应多处链接、只存一份 |
+| [DB-081 实验](../0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) | 实验完成形成否定结论，热准入未实施；反例和重启条件仍有价值 |
+| [DB-082 结果](../0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md)及 [CSV](../0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-measurements.csv) | 候选已实现，但总成本收益未成立，默认关闭；验收通过不等于启用 |
+| [DB-086 实施](../0086-new-storage-refactoring-plan/0086-new-storage-implementation.md)与 [DB-087](../0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status) | 086 当片验收有效，单根／SCB1／合帧已由 087 替代；底座正常恢复等选择仍保留，不能整篇判作失效 |
+| [DB-087 历史资格](../0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan) | P0/P1 归档不含后来 P2；完整原 P2 另在 Git `d8c0ecb` 的 §9。泛称“完整归档”可能丢掉一个时期的证据 |
+| [077/078 共同评审](../0077-repository-model-environment-slice/0077-0078-api-dialectical-review.md) | 一份材料服务两个问题，应多处链接、只存一份 |
 
 外链负担是已存在的：排除 design-branches 与 archive 后，仓内 31 个 Markdown 文件、102 行引用 DB-087 文件名。
 它保留大量旧章节 anchor，迁移不能只验证目标文件存在。这个计数不包含仓外书签，也不是全库断链清单。
@@ -57,7 +57,9 @@ docs/design-branches/
     review.md                       # 有保留价值的质疑、裁决和理由
     results.md                      # 最终结果、来源、范围与未覆盖项
     measurements.csv                # 可复算的数据
-  0086-new-storage-*.md              # 既有平铺文件暂留
+  0086-new-storage-refactoring-plan/
+    README.md                       # 同一问题的阅读入口
+    0086-new-storage-*.md            # 保留原合同、裁决与验收
 ```
 
 不要先创建四件套。小问题一份 README 就够；长合同或独立结果需要单独引用时再分文件。
@@ -86,7 +88,7 @@ docs/design-branches/
 | simplify | 顶层索引只列 DB／主题／主入口和必要后继提示；已选与已实施的详细区别在入口和实际证据查 |
 | merge | 共同材料只保一份；当前能力、长期约束、未完事项各归既有 home |
 | keep | 反对意见、否定实验、默认开关、适用基线及后继；单一 done 标签会丢掉真实边界 |
-| defer | 全量迁移、机器 frontmatter、自动生成索引、定期巡检或全库 CI；等真实消费和重复验证成本出现再选 |
+| defer | 机器 frontmatter、自动生成索引、定期巡检或全库 CI；等真实消费和重复验证成本出现再选 |
 
 ## 4. Coding Agent 随任务维护
 
@@ -110,67 +112,47 @@ docs/design-branches/
 
 ## 5. 实际检索路线
 
-查当前行为从 PROJECT／源码／测试进入；查未完成事项从 roadmap 进入；查某项理由或历史验收从设计索引进入。
-未知编号先用主题找索引，确定问题后缩小范围：
+查当前行为从 PROJECT／源码／测试进入；查未完成事项从 roadmap 进入；查理由或历史验收从设计索引进入。
+未知编号先用主题找索引，确定问题后缩小到目录：
 
 ```powershell
-rg -n 'DB-086|FrameStore' docs/design-branches/README.md
-rg --files docs/design-branches -g '0086*'
-rg -n '恢复|验收' docs/design-branches -g '0086-*.md'
-
-# 新布局直接以问题目录作为范围
+rg -n 'FrameStore|Schema|Fork' docs/design-branches/README.md
+rg --files docs/design-branches/0086-new-storage-refactoring-plan
+rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 rg -n '维护|迁移' docs/design-branches/0090-document-governance
 
-# 查历史应明确选择范围；不全局隐藏否定证据或旧记录
+# 历史问题明确选择冻结范围
 rg -n 'P1d' docs/archive/2026-10-13
 ```
 
-旧布局的第二条命令返回 086 的三份文件，已能限制候选范围；新布局允许附件使用简短名字。
-不设置 `.rgignore` 隐藏所有 review、实施或历史正文：负面证据和被取代原因同样是合法搜索目标。
+不设置 `.rgignore` 隐藏 review、实施或历史正文：否定证据和被取代原因同样是合法搜索目标。
+原命令中的平铺路径属于原版本；恢复原上下文时使用对应 Git 修订，实际文档导航使用上面的目录。
 
-## 6. 既有材料怎样整理
+## 6. 已实施范围与历史读取
 
-分两种独立任务推进，不要求先迁完整个目录才能进行产品开发。
+按批准范围先独立验收 DB-071，再迁其余材料。111 个原平铺文件全部归组，顶层只保 README 与 AGENTS；
+70 个单文直接作为问题 README，18 个多材料／详细合同问题新增短入口，DB-044 保持既有结构，DB-083 聚合已有故事附件。
+总索引只列 90 个编号／主题入口及少量必要的后继提示。路径、anchor、CSV、原论证及历史命令的验收集中见[结果记录](results.md)。
 
-**导航整理：** 逐组明确主入口和必要适用性提示；旧索引最终收窄为问题导航表，不复制机制与验收长摘要。
-本轮只改导航标题、加检索路线与 090 入口，并修正已核实的 086 后继提示；旧表格其余部分仍保留。
-这是立即降低误读的措施，不能声称已消除 112 个平铺文件。
+正文只重定位实际 Markdown／HTML 链接；单文补来源与适用性 notice，不机械拆分混合稿，不改测试数字或原授权。
+未来若压缩旧稿，仍须先提取有效决定和未完成问题，再冻结准确全文并说明覆盖时期。
+默认更新仓内消费者，不建立一整套转发壳；已知无法同步的消费者才按需保转发，fragment 必须指向正确版本的实际证据。
+日期 archive 只保存冻结稿，问题入口保后继与阅读范围，不按一个状态把整组迁出。
 
-**物理整理：** 先以一个实际需要整理的多文档 DB 验证成本，再按问题独立迁移。
-推荐 DB-071：五份材料边界可辨，已有设计／验收／Goal 关系，且外链量低于 087。
-在单独的整理包中，可全部移入 `0071-assembly-namespace/`，先保持原文件名，
-新增短 README 只链接已采纳主设计、工单、验收、历史 Goal 和下游交接，不再复制正文。
-这一步减少顶层五份文件，但总文档数可能增加一个入口；收益不以总文件数下降证明。
-本案没有执行这个迁移，也没有逐条验证 071 的迁移闭包。
+部分历史源码／工具在整理前已退出当前树；其链接按原记录基线解读，不无差别指向新实现。
+文档的原平铺全文可在 Git `8ef9fca` 查询；更早源码或包证据按各记录中的实际修订恢复。
+DB-087 原 P2 仍取 `d8c0ecb` 的原路径 §9，不能用只覆盖 P0/P1 的日期归档替代。
 
-每个迁移包必须满足：
+## 7. 当前停点与后续维护
 
-1. 先列该问题所有材料与可搜索的仓内入链，区分生效合同、冻结证据和执行入口。
-2. 纯移动保持正文语义，调整 Markdown 相对链接。原 Goal、命令和验收的历史路径保持原含义；需要重跑时另给明确的新入口，不伪改原授权。
-3. 压缩则先冻结准确全文，写日期／来源 revision／覆盖范围；有效决定和未完成问题已有去处。归档不含某时期时给正确 Git 恢复入口。
-4. 更新仓内消费者并核变化 anchor 的实际内容与版本去向。只留空 anchor、或让历史验收跳到当前合同，都不算完成。
-5. 看集成 diff，检查受影响链接及 anchor，运行 `git diff --check`。纯文档移动不要求产品 build/tests。
+本次目录治理与索引收窄已完成，没有剩余必经迁移包。三个独立视角的设计审查、交叉质询、
+DB-071 试点及最终独立验收结果均归入[结果记录](results.md)。目录不是检索加速的必要条件，一个阅读入口不等于集中全部合同。
 
-默认修仓内引用，不创建一整套转发壳。只有明确存在且无法同步的旧入口消费者才按需留转发；
-转发不再维护结论，并必须处理实际需要的 fragment。未调查的仓外书签不构成默认兼容层需求。
-不按状态把整组搬入 archive；日期 archive 继续只保存冻结稿，问题入口保后继与阅读范围。
+后续在真实任务收尾执行局部规则，不开定期全库治理工程：
 
-## 7. 试行停点与重访条件
+- 新增材料仍需不断改总索引：检查入口是否选错，或是否让索引承担细节。
+- README 开始追加每轮步骤与测试数字：替换为最终结果，详情只保一处并链接。
+- 结论变化使旧记录的适用性改变：补限定后继通知，冻结论证保原含义。
+- 大量受影响链接重复核验且出现误漏：按实际需要保一个机械检查工具；不让它推断批准、实现或证据强度。
 
-本轮落点是本问题目录、局部 AGENTS、根 AGENTS 导航和索引的有限调整。
-三个独立视角先检验需求、最小组织与语义损失，再交叉质询；据实际文件、引用和当前源码裁决。
-收窄的结论包括：目录不是检索加速的必要条件；一个入口不等于集中全部合同；
-脚本有潜在价值，但本轮主要风险是适用性，不需要为了几份文档建新工具。
-
-本轮文档验收：独立复核无阻断；主线程检查四份新增／修改 Markdown 的 148 个本地链接、5 个 fragment，
-并实跑旧编号过滤与新目录搜索。链接、anchor 和空白检查通过；被改名的索引标题未发现仓内入链。
-没有移动历史正文或改变产品代码，未运行产品 build/tests；未来迁移闭包与检索耗时未验证。
-
-后续直接在遇到真实任务时检验以下现象，不开定期治理工程：
-
-- 新增同一问题材料仍需不断改顶层索引：检查入口是否选错，或是否让索引承担细节。
-- README 开始追加每轮步骤与测试数字：在该包收尾替换为最终结果，详情保一次并链接。
-- 旧平铺组继续增加附件，或定向搜索持续漏材料：独立整理该 DB，首个有界试点优先 071。
-- 大量受影响链接反复手工验证且出现误漏：抽出只验机械链接／anchor 的小工具；是否集成门禁由实际使用成本再决定。
-
-旧目录总体迁移与索引整体压缩仍是本治理试行的后续范围；它们不进入产品路线图，不自动成为每次产品任务的前置。
+文档维护不自动成为产品任务的额外施工阶段；只有本次知识变化影响对应 home 时才同步。
