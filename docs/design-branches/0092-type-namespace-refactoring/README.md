@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1 已限定验收；D1 的公开内容操作名称、根回归与准确新包消费通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2 已限定验收；公开内容操作和 Generator 入口采用现行职责名，根回归、生成合同与准确新包消费通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)，当片见 [D1](implementation-d1.md)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)，当片见 [D2](implementation-d2.md)。
 
 建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
 保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
@@ -105,14 +105,12 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 `BinaryVersionModel/BinaryFieldModel` 只用于普通直接生成路径，Family 也生成 binary body，名字有区分力不足的线索。
 暂不定名：先确认对普通 `__DurableState` 路径的统一称呼，再考虑 `DirectStateVersionPlan/DirectStateFieldPlan`；不是第一片必改项。
 
-Generator 入口 `Atelia.DurableGraph.Generator.DurableSchemaGenerator` 实际还生成 DTO/body、Capture/Hydrate、reader/model/definition、Upgrade、exports，
-建议以后单片改为 `DurableGraphGenerator`，保唯一 `[Generator]`，不改 hint 或生成宿主。
-入口 FQN 变化可能留下不同 compiler-generated 输出目录；[targets](../../../src/DurableGraph/build/Atelia.DurableGraph.targets)通配扫描并要求每种 manifest 恰好一份，
-需验证干净构建和已有 obj 的升级情形。D2 先限为入口类型改名：当前 17 份 partial 声明与 3 处测试直接构造点，唯一 `[Generator]`、hints、生成宿主和算法保持。
-已有消费者生成路径含入口 FQN；当前 targets 递归扫描 manifest，旧／新目录并存会触发现有的“必须恰好一份”拒绝。
-当前 SDK 生成目录只见 `MakeDir`，已有消费者的 `FileListAbsolute` 未登记 SG hints，不能预先承诺 `dotnet clean`／Rebuild 会清掉旧输出。
-D2 最小验收为原始 generated texts／hints／diagnostics／history 等价、干净新包消费，以及带旧目录的构建和显式清理已确认归属的生成输出后重建；此处是静态风险与后续验收计划，尚未执行 D2。
-没有兼容负担，优先一次性清理派生输出，不添加旧入口壳或长期清扫 target；若实测只需改善现有错误提示，单列文案范围，不隐含改变扫描规则。
+[D2](implementation-d2.md)已将入口 `Atelia.DurableGraph.Generator.DurableSchemaGenerator` 改为 `DurableGraphGenerator`：实际职责覆盖 DTO/body、Capture/Hydrate、reader/model/definition、Upgrade 和 exports。
+17 份 partial 声明与 3 处测试构造点同步，保唯一 `[Generator]`、hints、生成宿主和算法；文件路径暂保。
+原始生成文本／hints／history 等价，diagnostics 仅三条隐藏记录的 generated Location.Path 随入口 FQN 改变。
+准确新包的普通／Family 消费实测：旧／新输出目录并存触发[targets](../../../src/DurableGraph/build/Atelia.DurableGraph.targets)现有的“必须恰好一份”拒绝，`dotnet clean` 仍保留生成文件。
+确认属于当前消费者后显式清理派生生成输出，再强制重编译，Publish／Verify／run 均恢复，history 保持。
+两条错误只更新清理／重编译提示，扫描和数量约束保持；没有旧入口壳、双 Generator 或常驻清扫 target。
 
 CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaHistoryTool`、Shared 的 `TypePattern` 名称与构建期职责相符，保留。
 
@@ -159,7 +157,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
-| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；Generator 入口另作 D2 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳 |
+| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
 | E：组织判断 | 命名已稳定，再看真实引用与消费边界 | 分别提出文件归属与程序集方向；只有实证需要才增加项目、包或 namespace，不从这张名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
@@ -179,6 +177,6 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。D2 Generator 入口、其余公开候选与 E 后续组织仍另判。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。后续 E 可先处理文件名与现行类型的直接对应，具体下一片和其余公开候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。

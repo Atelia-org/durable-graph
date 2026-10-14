@@ -18,7 +18,7 @@
 
 ## 当前焦点
 
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／[D1](../docs/design-branches/0092-type-namespace-refactoring/implementation-d1.md)已限定验收：普通内核／固定员工／执行环境采用现行职责名；公开内容操作使用 `StatePreparationBinding<T>` 与 `StringBodyPreparer`，运行时、普通／Family SG、手写绑定与新包外部模型消费均通过。证据只维护在分片记录。按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。接下来优先单片核对 Generator 入口 D2 及生成输出目录风险，具体范围见 DB-092 §5；其他公开候选与 E 程序集／文件组织仍分别判断，后续方向见[路线图](../docs/DurableGraph-research-roadmap.md)。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／[D1](../docs/design-branches/0092-type-namespace-refactoring/implementation-d1.md)／[D2](../docs/design-branches/0092-type-namespace-refactoring/implementation-d2.md)已限定验收：普通内核／固定员工／执行环境采用现行职责名；公开内容操作使用 `StatePreparationBinding<T>` 与 `StringBodyPreparer`，Generator 入口为 `DurableGraphGenerator`。生成合同与准确新包消费保持，旧生成输出按报错路径显式清理后强制重编译；history 保留，详见分片证据和[构建指引](../README.md)。按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。下一片可先做 E1 的直接文件名对应；其他公开候选、Persistence 文件归属与程序集调整仍分别判断，具体范围见[路线图](../docs/DurableGraph-research-roadmap.md)。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 
