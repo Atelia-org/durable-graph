@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.VersionStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 

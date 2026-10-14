@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -35,10 +35,10 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         Assert.Equal(ObjectLayout.ForArray(layout), decoded.Layout);
         Assert.Equal(1u, decoded.Layout.Array!.CodecVersion);
         ModelExecutionEnvironment models = NoSchemas();
-        ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout, models).Read(new(1), new SingleBody(decoded.Body));
+        ObjectStateRecord row = BootstrapBindings.Reader(decoded.Layout, models).Read(new(1), new SingleBody(decoded.Body));
         Assert.Equal(new ArrayShape(lengths), row.GetArrayState<NullableState<int>>().Shape);
         Assert.Equal(values, row.GetArrayState<NullableState<int>>().Elements.ToArray());
-        ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, models);
+        ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, models);
         Assert.Equal(raw.Body, prepared.Preparation!.PrepareBase(prepared).Body);
         Assert.Throws<ArgumentOutOfRangeException>(() => new ArrayLayout(layout.Constructor, layout.ElementSlot, codecVersion: 2));
     }
@@ -48,8 +48,8 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         ArrayLayout vector = new(TypeExprKind.VectorArray, new(1, TypeTag.Int32), codecVersion: 1);
         ArrayLayout matrix = new(TypeExprKind.Rank2Array, new(1, TypeTag.Int32), codecVersion: 1);
         byte[] raw = [1, 0]; // Vector { 0 }, or matrix dimensions [1, 0] and no elements.
-        ObjectStateRecord one = P0FixedBindings.Reader(ObjectLayout.ForArray(vector), NoSchemas()).Read(new(2), new SingleBody(raw));
-        ObjectStateRecord zero = P0FixedBindings.Reader(ObjectLayout.ForArray(matrix), NoSchemas()).Read(new(2), new SingleBody(raw));
+        ObjectStateRecord one = BootstrapBindings.Reader(ObjectLayout.ForArray(vector), NoSchemas()).Read(new(2), new SingleBody(raw));
+        ObjectStateRecord zero = BootstrapBindings.Reader(ObjectLayout.ForArray(matrix), NoSchemas()).Read(new(2), new SingleBody(raw));
         Assert.Equal(new[] { 0 }, one.GetArrayState<int>().Elements.ToArray());
         Assert.Equal(new ArrayShape(1, 0), zero.GetArrayState<int>().Shape);
         Assert.Empty(zero.GetArrayState<int>().Elements.ToArray());
@@ -246,7 +246,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         ObjectLayout layout = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, new(1, TypeTag.Int32), codecVersion: 1));
         byte[] body = TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody([1, 0]));
         var decoded = TypedBaseBodyCodec.Decode(body, null);
-        Assert.Equal(new[] { 0 }, P0FixedBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body)).GetArrayState<int>().Elements.ToArray());
+        Assert.Equal(new[] { 0 }, BootstrapBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body)).GetArrayState<int>().Elements.ToArray());
         FrameAddress meta = WriteMeta(prepared.View.RootId, prepared.View.Rows, ObjectVersionRecord.CreateBase(100, body));
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
@@ -267,9 +267,9 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         rows[id] = new(id, rows[id].Schema!, state);
     }
     private FrameAddress WriteMeta(ObjectId root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows, ObjectVersionRecord? extra = null) {
-        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
+        ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
         IEnumerable<ObjectVersionRecord> records = rows.Values.Select(row => {
-            ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, employees);
+            ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, employees);
             PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(prepared.StringContent)
                 : prepared.Preparation!.PrepareBase(prepared);
             return ObjectVersionRecord.CreateBase(prepared.Id.Value, TypedBaseBodyCodec.Encode(prepared.Layout, raw));

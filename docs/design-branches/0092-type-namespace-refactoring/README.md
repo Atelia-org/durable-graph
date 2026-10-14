@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A、B 已完成限定验收；B 普通内部命名通过源码／测试与新包门禁。员工及公开候选仍分片处理。
+> 2026-10-14；提案源码基线 `246b888`。状态：A、B 已限定验收；C 固定员工命名已实施，生成材料与真实旧／新包存档验收中。公开候选仍另片。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)。
 
 建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
 保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
@@ -29,7 +29,7 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 | `.Schema` | 保留不可变描述与 exact layout | [DurableSchema](../../../src/DurableGraph/Schema/DurableSchema.cs)、[ObjectLayout](../../../src/DurableGraph/Schema/ObjectLayout.cs)不因名称含 State 就成为业务 State 图 |
 | `.Runtime` | 保留执行绑定、捕获、静态状态操作和容器能力 | [ObjectBinding](../../../src/DurableGraph/Runtime/Binding/ObjectBinding.cs)、[StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)含实际 CLR 工厂与执行能力；本轮不按子目录再分公开 namespace |
 | `.Persistence` | 保留持久化集成；接纳去阶段名后的默认内核 | [GraphResources](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)是资源与共同发布 owner；[DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)和工作区连接准确存储视图与 Runtime |
-| `.Persistence.MetaBootstrapP0` | B 已移出普通内核；固定员工及绑定表暂留，C 再收尾 | 基线 16 份 C# 中 B 迁移 14 份；当前 [StoredGraphKind](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)承载 Event、State、Meta 与分支保存；P0 不再作为普通产品分层 |
+| `.Persistence.MetaBootstrapP0` | B／C 已退出该 CLR namespace；历史文件路径暂保 | 基线 16 份 C# 中 B 迁移 14 份，C 收尾员工与固定绑定两份；当前 [StoredGraphKind](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)承载 Event、State、Meta 与分支保存；P0 不再作为产品分层 |
 | `.Serialization`／`.Storage` | 保留；类型按下表逐项判断 | [PreparedBaseBody](../../../src/DurableGraph.Serialization/PreparedBaseBody.cs)、[ObjectVersionPayloadCodec](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)仍是共同字节契约 |
 | `.Generator`／`.Build`／`.SchemaHistory` | 保留工具阶段和 source-linked 文本协议 | [Generator 项目](../../../src/DurableGraph.Generator/DurableGraph.Generator.csproj)、[Build 项目](../../../src/DurableGraph.Build/DurableGraph.Build.csproj)的目标框架与运行方式不同；[Shared 协议](../../../src/Shared/SchemaHistoryReferenceProtocol.cs)不是新运行时包 |
 
@@ -39,8 +39,8 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 
 ## 3. 默认持久化内核：推荐映射
 
-本节左侧是提案基线 `Atelia.DurableGraph.Persistence.MetaBootstrapP0` 中的旧名，均为 `internal`；右侧普通内核已由 B 采用并进入现有 `.Persistence`。
-固定员工／登记／固定表的 CLR 映射仍属 C，未实施。表保旧名便于迁移检索，不能做全局 `P0` 文本替换。
+本节左侧是提案基线 `Atelia.DurableGraph.Persistence.MetaBootstrapP0` 中的旧名，均为 `internal`；右侧普通内核由 B、固定员工／登记／固定表由 C 采用，进入现有 `.Persistence`。
+C 的生成与存档资格另见其记录。表保旧名便于迁移检索，不能做全局 `P0` 文本替换。
 
 ### 3.1 保存、来源和物理图
 
@@ -71,7 +71,7 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 | `P0CatalogRecord` → `SchemaCatalogRecord`；`P0DescriptorRecord` → `LayoutDescriptorRecord`；`P0FieldRecord` → `LayoutSlotRecord`；`P0TypeExprRecord` → `TypeExprRecord`；`P0HeadLocator` → `ObjectHeadLocator` | [员工声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)；descriptor 也描述容器，slot 也服务元素/key/value/Nullable child；head locator 是固定地址状态，不能替代 FrameAddress |
 | `P0EmployeeDefinitions` → `BootstrapDefinitions`；`P0FixedBindings` → `BootstrapBindings`；`P0BuiltinLayouts` → `BuiltinObjectLayouts` | [员工登记](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)、[固定表](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0FixedBindings.cs)、[builtin 布局](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BuiltinLayouts.cs)保有限员工/string 与 builtin-only structural 路由；不把 bootstrap 扩成任意定义发现服务 |
 
-员工带 `DurableType`，单列一片改 CLR 名与 namespace，验证生成结果和冷读，再收完阶段空间。
+员工带 `DurableType`，C 单列 CLR 名与 namespace 收尾，并验证生成结果和真实旧包冷读／续写。
 不要为让字符串整齐改持久 SchemaId：`P0C/P0D/P0F/P0T/P0H`、V1、FieldId、字段类型保持；
 相应 `Family_503043/503044/503046/503054/503048` 保持，因为 [FamilyName](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)取 SchemaId 的 UTF8 hex。
 
@@ -171,6 +171,6 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，员工／公开候选仍待各自分片。
+原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，公开候选仍另片。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B 已完成包交付限定验收；C 员工、D 公开名称及 Generator 入口、E 后续组织仍独立处理。
+原有 117 处历史引用缺口未扩入本案。B 已完成包交付限定验收；[C](implementation-c.md)正在取得独立资格，D 公开名称及 Generator 入口、E 后续组织仍另判。

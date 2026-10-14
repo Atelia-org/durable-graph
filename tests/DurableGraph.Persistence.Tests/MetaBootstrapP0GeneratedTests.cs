@@ -1,5 +1,5 @@
 using Atelia.Binary;
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
@@ -44,7 +44,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             ObjectLayout widgetLayout = models.CreateEnvironment().ResolveCurrentModel(typeof(DB087Widget)).CurrentLayout;
             Assert.Equal(save.Catalog.View.DescriptorId(widgetLayout), descriptor);
             ObjectStateRecord descriptorRow = save.Catalog.View.Rows[descriptor];
-            Assert.Equal(P0FixedBindings.CreateEnvironment().ResolveCurrentModel(typeof(P0DescriptorRecord)).CurrentLayout, descriptorRow.Layout);
+            Assert.Equal(BootstrapBindings.CreateEnvironment().ResolveCurrentModel(typeof(LayoutDescriptorRecord)).CurrentLayout, descriptorRow.Layout);
             var locator = ObjectHeadDirectoryCodec.ToState(rootChain.Entries[0].ContainingBatch);
             Assert.Equal(rootChain.Entries[0].ContainingBatch, ObjectHeadDirectoryCodec.FromState(in locator));
         }

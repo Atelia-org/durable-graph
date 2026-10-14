@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Schema;
 
 namespace Atelia.DurableGraph.Persistence.Tests;

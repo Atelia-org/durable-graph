@@ -10,7 +10,7 @@ using Atelia.VersionStore;
 using MetaBootstrapCrash;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
-using persistence::Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using DataStore = Atelia.FrameStore.FrameStore;
 using PublicationStore = Atelia.VersionStore.VersionStore;
 

@@ -2,7 +2,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.Rbf;
 
 namespace Atelia.DurableGraph.Persistence.Tests;

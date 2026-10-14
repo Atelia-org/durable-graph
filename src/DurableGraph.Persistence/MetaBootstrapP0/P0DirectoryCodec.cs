@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using System.Buffers.Binary;
 using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
@@ -16,8 +16,8 @@ internal static class ObjectHeadDirectoryCodec {
     internal static DictionaryLayout Layout { get; } = CreateLayout();
 
     private static DictionaryLayout CreateLayout() {
-        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
-        return new(new(1, TypeTag.UInt32), employees.ResolveCurrentValue(typeof(P0HeadLocator)).Slot);
+        ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
+        return new(new(1, TypeTag.UInt32), employees.ResolveCurrentValue(typeof(ObjectHeadLocator)).Slot);
     }
 
     internal static PreparedBaseBody PrepareBase(IReadOnlyDictionary<uint, FrameAddress> current) =>

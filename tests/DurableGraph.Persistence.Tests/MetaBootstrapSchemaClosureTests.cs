@@ -1,6 +1,6 @@
 using System.Buffers;
 using Atelia.Binary;
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -370,7 +370,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForList(list), raw);
         var decoded = TypedBaseBodyCodec.Decode(body, null);
         Assert.Equal(ObjectLayout.ForList(list), decoded.Layout);
-        ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout).Read(new(71), new SingleBody(decoded.Body));
+        ObjectStateRecord row = BootstrapBindings.Reader(decoded.Layout).Read(new(71), new SingleBody(decoded.Body));
         Assert.Equal(values, row.GetListState<int>().Elements.ToArray());
 
         ObjectLayout withUserValue = NullableList(Point(TypeTag.Int32));
@@ -388,11 +388,11 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         SchemaCatalogView meta = Prepare().View;
         FrameAddress graph;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
+            ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
             ObjectVersionRecord[] records = EncodeRows(meta.Rows, employees);
             StoredGraphRevision schema = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, meta.RootId, records));
-            ObjectLayout layout = P0FixedBindings.Layout(typeof(P0CatalogRecord));
-            ObjectStateRecord employee = P0FixedBindings.WithPreparation(new(new(1), layout.Schema!, new CatalogDto(default)), employees);
+            ObjectLayout layout = BootstrapBindings.Layout(typeof(SchemaCatalogRecord));
+            ObjectStateRecord employee = BootstrapBindings.WithPreparation(new(new(1), layout.Schema!, new CatalogDto(default)), employees);
             byte[] body = TypedBaseBodyCodec.Encode(layout, employee.Preparation!.PrepareBase(employee));
             graph = repository.Store.Append(StoredGraphKind.State, null, schema.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
@@ -401,7 +401,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         // Omitting selected makes this specifically a fixed-route role check,
         // rather than an incidental failure to find an employee descriptor in S.
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, graph, P0FixedBindings.CreateEnvironment()));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, graph, BootstrapBindings.CreateEnvironment()));
     }
 
     private static DurableSchema Point(TypeTag tag) => new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, tag));
@@ -427,13 +427,13 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
 
     private static ObjectId AddArguments(Dictionary<ObjectId, ObjectStateRecord> rows, ObjectId[] items) {
         ObjectId id = new(rows.Keys.Max().Value + 1);
-        rows.Add(id, new(id, P0FixedBindings.Layout(typeof(List<P0TypeExprRecord>)).List!, new FrozenListState<ObjectId>(items)));
+        rows.Add(id, new(id, BootstrapBindings.Layout(typeof(List<TypeExprRecord>)).List!, new FrozenListState<ObjectId>(items)));
         return id;
     }
 
     private static ObjectId AddType(Dictionary<ObjectId, ObjectStateRecord> rows, TypeDto dto) {
         ObjectId id = new(rows.Keys.Max().Value + 1);
-        rows.Add(id, new(id, P0FixedBindings.Layout(typeof(P0TypeExprRecord)).Schema!, dto));
+        rows.Add(id, new(id, BootstrapBindings.Layout(typeof(TypeExprRecord)).Schema!, dto));
         return id;
     }
 
@@ -449,7 +449,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
 
     private FrameAddress WriteMeta(ObjectId root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows) {
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
+        ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
         StoredGraphRevision graph = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, root, EncodeRows(rows, employees)));
         repository.Data.ConfirmDurable();
         return graph.Address;
@@ -457,7 +457,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
 
     private static ObjectVersionRecord[] EncodeRows(IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
         ModelExecutionEnvironment employees) => rows.Values.Select(row => {
-            ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, employees);
+            ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, employees);
             PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String
                 ? StringPayloadCodec.PrepareBase(prepared.StringContent) : prepared.Preparation!.PrepareBase(prepared);
             return ObjectVersionRecord.CreateBase(row.Id.Value, TypedBaseBodyCodec.Encode(row.Layout, raw));

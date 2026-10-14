@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using System.Collections.Frozen;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -30,9 +30,9 @@ internal sealed class SchemaCatalogView {
         RootId = rootId;
         Rows = new FrozenSortedDictionary<ObjectId, ObjectStateRecord>(new(rows.ToDictionary()));
         Snapshot = snapshot;
-        CatalogDto root = Require(rootId, typeof(P0CatalogRecord)).GetState<CatalogDto>();
+        CatalogDto root = Require(rootId, typeof(SchemaCatalogRecord)).GetState<CatalogDto>();
         DescriptorListId = root.Segment0Field1;
-        ObjectStateRecord list = Require(DescriptorListId, typeof(List<P0DescriptorRecord>));
+        ObjectStateRecord list = Require(DescriptorListId, typeof(List<LayoutDescriptorRecord>));
         DescriptorIds = new FrozenList<ObjectId>(list.GetListState<ObjectId>().Elements.ToArray());
         DescriptorListH = descriptorListH;
         _declared = [];
@@ -40,7 +40,7 @@ internal sealed class SchemaCatalogView {
             if (id.IsNull || !_declared.Add(id)) { throw new InvalidDataException("Catalog declarations must be nonzero and unique."); }
         }
         foreach (ObjectId id in DescriptorIds) {
-            DescriptorDto node = Require(id, typeof(P0DescriptorRecord)).GetState<DescriptorDto>();
+            DescriptorDto node = Require(id, typeof(LayoutDescriptorRecord)).GetState<DescriptorDto>();
             ObjectLayout? layout;
             if (node.Segment0Field1 is 1 or 3) {
                 DurableSchema schema = Schema(id, 1);
@@ -62,21 +62,21 @@ internal sealed class SchemaCatalogView {
                     layout = Factory(() => ObjectLayout.ForArray(new(type.Kind, element, node.Segment0Field6)));
                     if (layout.Type != type) { throw new InvalidDataException("An Array descriptor's type and exact element slot disagree."); }
                 }
-                if (P0FixedBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
+                if (BootstrapBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
             } else if (node.Segment0Field1 == 5) {
                 if (node.Segment0Field3 != 0 || !node.Segment0Field5.IsNull || !node.Segment0Field7.IsNull) {
                     throw new InvalidDataException("Wrong Dictionary descriptor variant.");
                 }
                 TypeExpr type = Expression(node.Segment0Field2, 1);
                 if (!type.IsDictionary) { throw new InvalidDataException("A Dictionary descriptor requires a closed Dictionary type."); }
-                ObjectId[] fields = Require(node.Segment0Field4, typeof(List<P0FieldRecord>)).GetListState<ObjectId>().Elements.ToArray();
+                ObjectId[] fields = Require(node.Segment0Field4, typeof(List<LayoutSlotRecord>)).GetListState<ObjectId>().Elements.ToArray();
                 if (fields.Length != 2) { throw new InvalidDataException("A Dictionary descriptor requires exactly two ordered slots."); }
                 DurableFieldInfo key = Field(fields[0], 0, 1), value = Field(fields[1], 0, 1);
                 // The factory canonicalizes field IDs, so authenticate their roles before construction.
                 if (key.FieldId != 1 || value.FieldId != 2) { throw new InvalidDataException("Dictionary slots must be ordered key one then value two."); }
                 layout = Factory(() => ObjectLayout.ForDictionary(new(key, value, node.Segment0Field6)));
                 if (layout.Type != type) { throw new InvalidDataException("A Dictionary descriptor's type and exact slots disagree."); }
-                if (P0FixedBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
+                if (BootstrapBindings.IsBuiltin(layout)) { throw new InvalidDataException("A fixed builtin layout cannot acquire a dynamic descriptor."); }
             } else { throw new InvalidDataException("Unknown descriptor variant."); }
             if (layout is not null) {
                 if (!_ids.TryAdd(layout, id)) { throw new InvalidDataException("Duplicate complete object descriptor layout."); }
@@ -104,7 +104,7 @@ internal sealed class SchemaCatalogView {
     internal ObjectId DescriptorId(ObjectLayout layout) => _ids.TryGetValue(layout, out ObjectId id) ? id
         : throw new InvalidDataException("The selected catalog lacks this complete object layout.");
     internal void Require(ObjectLayout layout) {
-        if (!P0FixedBindings.IsBuiltin(layout)) { _ = DescriptorId(layout); }
+        if (!BootstrapBindings.IsBuiltin(layout)) { _ = DescriptorId(layout); }
     }
     internal ObjectLayout ResolveLayout(ObjectId id) => _layouts.TryGetValue(id, out ObjectLayout? layout) ? layout
         : throw new InvalidDataException("This meta ObjectId is not a declared object descriptor.");
@@ -115,10 +115,10 @@ internal sealed class SchemaCatalogView {
         DecodedGraphRows decoded = StoredGraphDecoder.Read(store, graph);
         if (decoded.Snapshot.Kind != StoredGraphKind.Meta) { throw new InvalidDataException("A Schema root must select a meta graph."); }
         if (!decoded.Rows.TryGetValue(decoded.Snapshot.RootId, out ObjectStateRecord? rootRow) ||
-            !P0FixedBindings.Layout(typeof(P0CatalogRecord)).Equals(rootRow.Layout)) { throw new InvalidDataException("Wrong catalog root layout."); }
+            !BootstrapBindings.Layout(typeof(SchemaCatalogRecord)).Equals(rootRow.Layout)) { throw new InvalidDataException("Wrong catalog root layout."); }
         CatalogDto root = rootRow.GetState<CatalogDto>();
         if (root.Segment0Field1.IsNull || !decoded.Rows.TryGetValue(root.Segment0Field1, out ObjectStateRecord? list) ||
-            !P0FixedBindings.Layout(typeof(List<P0DescriptorRecord>)).Equals(list.Layout) ||
+            !BootstrapBindings.Layout(typeof(List<LayoutDescriptorRecord>)).Equals(list.Layout) ||
             !decoded.Storage.TryGetValue(root.Segment0Field1, out ObjectStorageInfo storage)) {
             throw new InvalidDataException("Missing or wrongly typed catalog declaration list.");
         }
@@ -127,7 +127,7 @@ internal sealed class SchemaCatalogView {
     }
 
     private ObjectStateRecord Require(ObjectId id, Type type) {
-        if (id.IsNull || !Rows.TryGetValue(id, out ObjectStateRecord? row) || !P0FixedBindings.Layout(type).Equals(row.Layout)) {
+        if (id.IsNull || !Rows.TryGetValue(id, out ObjectStateRecord? row) || !BootstrapBindings.Layout(type).Equals(row.Layout)) {
             throw new InvalidDataException("Missing or wrongly typed employee node.");
         }
         return row;
@@ -151,11 +151,11 @@ internal sealed class SchemaCatalogView {
         }
         Enter(id);
         try {
-            DescriptorDto dto = Require(id, typeof(P0DescriptorRecord)).GetState<DescriptorDto>();
+            DescriptorDto dto = Require(id, typeof(LayoutDescriptorRecord)).GetState<DescriptorDto>();
             if (dto.Segment0Field1 is not (1 or 3) || !dto.Segment0Field5.IsNull || dto.Segment0Field6 != 0 ||
                 dto.Segment0Field1 == 3 && !dto.Segment0Field7.IsNull) { throw new InvalidDataException("Wrong exact Schema variant."); }
             TypeExpr type = Expression(dto.Segment0Field2, 1);
-            ObjectId[] fields = Require(dto.Segment0Field4, typeof(List<P0FieldRecord>)).GetListState<ObjectId>().Elements.ToArray();
+            ObjectId[] fields = Require(dto.Segment0Field4, typeof(List<LayoutSlotRecord>)).GetListState<ObjectId>().Elements.ToArray();
             DurableFieldInfo[] values = fields.Select(field => Field(field, depth, 1)).ToArray();
             DurableSchema? ancestor = dto.Segment0Field7.IsNull ? null : Schema(dto.Segment0Field7, depth + 1);
             if (ancestor is not null && ancestor.Kind != SchemaKind.ReferenceObject) { throw new InvalidDataException("A base dependency must be a reference Schema."); }
@@ -184,7 +184,7 @@ internal sealed class SchemaCatalogView {
         }
         Enter(id);
         try {
-            FieldDto dto = Require(id, typeof(P0FieldRecord)).GetState<FieldDto>();
+            FieldDto dto = Require(id, typeof(LayoutSlotRecord)).GetState<FieldDto>();
             TypeTag tag = (TypeTag)dto.Segment0Field2;
             DurableFieldInfo field;
             if (tag == TypeTag.ObjectReference) {
@@ -218,10 +218,10 @@ internal sealed class SchemaCatalogView {
         }
         Enter(id);
         try {
-            TypeDto dto = Require(id, typeof(P0TypeExprRecord)).GetState<TypeDto>();
+            TypeDto dto = Require(id, typeof(TypeExprRecord)).GetState<TypeDto>();
             TypeExprKind kind = (TypeExprKind)dto.Segment0Field1;
             ObjectId[] operands = dto.Segment0Field4.IsNull ? [] :
-                Require(dto.Segment0Field4, typeof(List<P0TypeExprRecord>)).GetListState<ObjectId>().Elements.ToArray();
+                Require(dto.Segment0Field4, typeof(List<TypeExprRecord>)).GetListState<ObjectId>().Elements.ToArray();
             if (operands.Length > TypeExpr.MaximumArity) { throw new InvalidDataException("TypeExpr exceeds arity 32."); }
             if (kind != TypeExprKind.Named && !dto.Segment0Field3.IsNull || kind != TypeExprKind.Builtin && dto.Segment0Field2 != 0) {
                 throw new InvalidDataException("Wrong TypeExpr variant operands.");

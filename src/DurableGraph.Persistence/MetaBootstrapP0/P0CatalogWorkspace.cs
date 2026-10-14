@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -38,7 +38,7 @@ internal sealed class SchemaCatalogWorkspace {
         _ensureEditingAllowed();
         if (layout.Schema is { } schema) { Set(schema); return; }
         ValidateLayout(layout);
-        if (!P0FixedBindings.IsBuiltin(layout)) { _containers.Add(layout); }
+        if (!BootstrapBindings.IsBuiltin(layout)) { _containers.Add(layout); }
     }
 
     internal PreparedSchemaCatalogWrite Prepare() {
@@ -57,7 +57,7 @@ internal sealed class SchemaCatalogWorkspace {
         foreach (DurableSchema schema in closure.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
             _ = builder.AddSchema(schema);
         }
-        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !P0FixedBindings.IsBuiltin(value))) {
+        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !BootstrapBindings.IsBuiltin(value))) {
             builder.AddContainer(layout);
         }
         return builder.Finish(this);
@@ -81,7 +81,7 @@ internal sealed class SchemaCatalogWorkspace {
         foreach (DurableSchema schema in schemas.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
             _ = builder.AddSchema(schema);
         }
-        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !P0FixedBindings.IsBuiltin(value))) {
+        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !BootstrapBindings.IsBuiltin(value))) {
             builder.AddContainer(layout);
         }
         // Keep the original workspace unchanged until the common pending save is
@@ -125,7 +125,7 @@ internal sealed class SchemaCatalogWorkspace {
     }
 
     private static void ValidateLayout(ObjectLayout layout) {
-        if (P0FixedBindings.IsBuiltin(layout)) { return; }
+        if (BootstrapBindings.IsBuiltin(layout)) { return; }
         if (layout.Schema is { } schema) { Validate(schema); return; }
         if (layout.Kind is not (ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary)) {
             throw new NotSupportedException("This slice supports business reference objects and exact Lists, Arrays and Dictionaries.");
@@ -157,7 +157,7 @@ internal sealed class SchemaCatalogWorkspace {
     }
 
     private sealed class Builder {
-        private readonly ModelExecutionEnvironment _models = P0FixedBindings.CreateEnvironment();
+        private readonly ModelExecutionEnvironment _models = BootstrapBindings.CreateEnvironment();
         private readonly SchemaCatalogView? _source;
         private readonly Dictionary<ObjectId, ObjectStateRecord> _rows;
         private readonly List<ObjectId> _declared;
@@ -185,7 +185,7 @@ internal sealed class SchemaCatalogWorkspace {
                 foreach (DurableSchema schema in source.Schemas.Values) {
                     _schemaIds.Add(schema, source.SchemaNodeId(schema));
                 }
-            } else { Add(new(_root, Schema(typeof(P0CatalogRecord)), new CatalogDto(_list))); }
+            } else { Add(new(_root, Schema(typeof(SchemaCatalogRecord)), new CatalogDto(_list))); }
         }
 
         internal ObjectId AddSchema(DurableSchema schema) {
@@ -194,9 +194,9 @@ internal sealed class SchemaCatalogWorkspace {
             ObjectId type = Type(schema.Type);
             ObjectId[] fields = schema.Fields.Select(Field).ToArray();
             ObjectId list = Allocate();
-            Add(new(list, List(typeof(List<P0FieldRecord>)), new FrozenListState<ObjectId>(fields)));
+            Add(new(list, List(typeof(List<LayoutSlotRecord>)), new FrozenListState<ObjectId>(fields)));
             ObjectId id = Allocate();
-            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(
+            Add(new(id, Schema(typeof(LayoutDescriptorRecord)), new DescriptorDto(
                 schema.Kind == SchemaKind.ReferenceObject ? (byte)1 : (byte)3,
                 type, schema.Version, list, default, 0, ancestor)));
             _schemaIds.Add(schema, id);
@@ -221,7 +221,7 @@ internal sealed class SchemaCatalogWorkspace {
             if (layout.Dictionary is { } dictionary) {
                 ObjectId[] values = [Field(dictionary.KeySlot), Field(dictionary.ValueSlot)];
                 fields = Allocate();
-                Add(new(fields, List(typeof(List<P0FieldRecord>)), new FrozenListState<ObjectId>(values)));
+                Add(new(fields, List(typeof(List<LayoutSlotRecord>)), new FrozenListState<ObjectId>(values)));
                 kind = 5;
                 codec = dictionary.CodecVersion;
             } else {
@@ -230,7 +230,7 @@ internal sealed class SchemaCatalogWorkspace {
                 codec = layout.List?.CodecVersion ?? layout.Array!.CodecVersion;
             }
             ObjectId id = Allocate();
-            Add(new(id, Schema(typeof(P0DescriptorRecord)), new DescriptorDto(kind, type, 0, fields, element, codec, default)));
+            Add(new(id, Schema(typeof(LayoutDescriptorRecord)), new DescriptorDto(kind, type, 0, fields, element, codec, default)));
             _containers.Add(layout, id);
             Declare(id);
             return id;
@@ -243,10 +243,10 @@ internal sealed class SchemaCatalogWorkspace {
             if (type.Arguments.Length != 0) {
                 ObjectId[] values = type.Arguments.Select(Type).ToArray();
                 arguments = Allocate();
-                Add(new(arguments, List(typeof(List<P0TypeExprRecord>)), new FrozenListState<ObjectId>(values)));
+                Add(new(arguments, List(typeof(List<TypeExprRecord>)), new FrozenListState<ObjectId>(values)));
             }
             ObjectId id = Allocate();
-            Add(new(id, Schema(typeof(P0TypeExprRecord)), new TypeDto((byte)type.Kind, (byte)type.BuiltinTag, name, arguments)));
+            Add(new(id, Schema(typeof(TypeExprRecord)), new TypeDto((byte)type.Kind, (byte)type.BuiltinTag, name, arguments)));
             _typeIds.Add(type, id);
             return id;
         }
@@ -257,7 +257,7 @@ internal sealed class SchemaCatalogWorkspace {
             ObjectId inline = field.InlineSchema is { } schema ? AddSchema(schema) : default;
             ObjectId nullable = field.NullableLayout is { } child ? Field(child.ElementSlot) : default;
             ObjectId id = Allocate();
-            Add(new(id, Schema(typeof(P0FieldRecord)), new FieldDto(field.FieldId, (byte)field.TypeTag, target, inline, nullable)));
+            Add(new(id, Schema(typeof(LayoutSlotRecord)), new FieldDto(field.FieldId, (byte)field.TypeTag, target, inline, nullable)));
             _fieldIds.Add(field, id);
             return id;
         }
@@ -276,18 +276,18 @@ internal sealed class SchemaCatalogWorkspace {
         private ListLayout List(Type type) => _models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding)
             ? binding!.CurrentLayout.List! : throw new InvalidDataException("Missing fixed List binding.");
         private void Add(ObjectStateRecord row) {
-            ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, _models);
+            ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, _models);
             _rows.Add(row.Id, prepared);
             _new.Add(prepared);
         }
 
         internal PreparedSchemaCatalogWrite Finish(SchemaCatalogWorkspace owner) {
             if (_source is not null && _added.Count == 0) { return new(owner, _source, null, 0, []); }
-            ObjectStateRecord list = P0FixedBindings.WithPreparation(new ObjectStateRecord(_list,
-                List(typeof(List<P0DescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())), _models);
+            ObjectStateRecord list = BootstrapBindings.WithPreparation(new ObjectStateRecord(_list,
+                List(typeof(List<LayoutDescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())), _models);
             _rows[_list] = list;
             StateReferenceValidator validator = new(_rows);
-            foreach (ObjectStateRecord row in _rows.Values) { P0FixedBindings.Reader(row.Layout, _models).VisitReferences(row, validator); }
+            foreach (ObjectStateRecord row in _rows.Values) { BootstrapBindings.Reader(row.Layout, _models).VisitReferences(row, validator); }
             List<ObjectVersionRecord> records = [];
             List<ObjectId> encodedIds = [];
             foreach (ObjectStateRecord row in _new) {

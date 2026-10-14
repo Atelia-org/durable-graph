@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Reflection;
 using Atelia.Data;
 using Atelia.DurableGraph.Storage;
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.VersionStore;
 using DataStore = Atelia.FrameStore.FrameStore;
 using PublicationStore = Atelia.VersionStore.VersionStore;

@@ -10,7 +10,7 @@ using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using BootstrapSchemaClosure;
 using persistence::Atelia.DurableGraph.Persistence;
-using persistence::Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 
 internal static class Program {
     private sealed record BusinessIds(uint Root, uint Samples, uint Optional, uint Nested, uint Inner, uint ArrayOptional, uint Points,
@@ -31,7 +31,7 @@ internal static class Program {
         }
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(witnessPath)!, lane + ".evidence.json"),
             JsonSerializer.Serialize(new {
-                Lane = lane, ProcessId = Environment.ProcessId, EmployeeAssembly = AssemblyEvidence(typeof(P0CatalogRecord).Assembly),
+                Lane = lane, ProcessId = Environment.ProcessId, EmployeeAssembly = AssemblyEvidence(typeof(SchemaCatalogRecord).Assembly),
                 PersistenceAssembly = AssemblyEvidence(typeof(RepositoryStorageFacade).Assembly), RuntimeAssembly = AssemblyEvidence(typeof(DurableSchema).Assembly),
                 HostAssembly = AssemblyEvidence(typeof(Host).Assembly), TypedBodyAbi = TypedBaseBodyCodec.FormatVersion,
             }, new JsonSerializerOptions { WriteIndented = true }));

@@ -1,7 +1,7 @@
 # 默认 meta 自举持久路径
 
-本目录是当前产品核心；历史文件名暂保，普通内核类型已按 [DB-092 B](../../../docs/design-branches/0092-type-namespace-refactoring/README.md)
-进入 `Atelia.DurableGraph.Persistence`，固定员工与固定绑定表的旧 CLR 名／namespace 留待 C 片。
+本目录是当前产品核心；历史文件名暂保，普通内核、固定员工与绑定表类型按 [DB-092 B／C](../../../docs/design-branches/0092-type-namespace-refactoring/README.md)
+进入 `Atelia.DurableGraph.Persistence`。固定员工的持久 SchemaId 与 Family 宿主保持，C 的生成与存档资格见[实施记录](../../../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)。
 内部 wire 标识保持。完整合同与限定资格只维护在
 [DB-087](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
 开发 Schema 与查询后继见 DB-088/089，不从旧逐片“下一步”恢复排期。

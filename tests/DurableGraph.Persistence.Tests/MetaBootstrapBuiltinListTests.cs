@@ -1,6 +1,6 @@
 using System.Buffers;
 using Atelia.Binary;
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -30,9 +30,9 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         Assert.Equal(ObjectLayout.ForList(list), decoded.Layout);
         Assert.Equal(2u, decoded.Layout.List!.CodecVersion); // ABI5 fixes the version; no current default fills it in.
         ModelExecutionEnvironment models = NoSchemas();
-        ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout, models).Read(new(71), new SingleBody(decoded.Body));
+        ObjectStateRecord row = BootstrapBindings.Reader(decoded.Layout, models).Read(new(71), new SingleBody(decoded.Body));
         Assert.Equal(values, row.GetListState<NullableState<long>>().Elements.ToArray());
-        ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, models);
+        ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, models);
         Assert.Equal(row.Layout, prepared.Layout);
         Assert.Equal(raw.Body, prepared.Preparation!.PrepareBase(prepared).Body);
         Assert.Throws<ArgumentOutOfRangeException>(() => new ListLayout(list.ElementSlot, codecVersion: 1));
@@ -55,9 +55,9 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         Assert.Equal(expected, decoded.Layout);
         Assert.Equal(nested, decoded.Layout.List!.ElementSlot.TargetType);
         Assert.Null(decoded.Layout.List.ElementSlot.ValueSchema);
-        ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body));
+        ObjectStateRecord row = BootstrapBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body));
         Assert.Empty(row.GetListState<ObjectId>().Elements.ToArray());
-        Assert.NotNull(P0FixedBindings.WithPreparation(row, NoSchemas()).Preparation);
+        Assert.NotNull(BootstrapBindings.WithPreparation(row, NoSchemas()).Preparation);
         Assert.Equal(nested, TypedBaseBodyCodec.Decode(Structural(nested), null).Layout.Type);
     }
 
@@ -115,7 +115,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         Assert.Equal(2, reader.Store.ReadGraph(bad).ObjectHeads.Count);
         ObjectVersionChain inner = reader.Store.ReadObjectChain(bad, 2);
         var decoded = TypedBaseBodyCodec.Decode(inner.Entries[0].Record.Body, null);
-        Assert.Equal(new long[] { 17, -29 }, P0FixedBindings.Reader(decoded.Layout, NoSchemas())
+        Assert.Equal(new long[] { 17, -29 }, BootstrapBindings.Reader(decoded.Layout, NoSchemas())
             .Read(new(2), new SingleBody(decoded.Body)).GetListState<long>().Elements.ToArray());
         Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, bad, NoSchemas()));
         Assert.Equal(0, reader.Store.AppendedFrames);
@@ -129,7 +129,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         PreparedBaseBody raw = ListStateBody<long, Int64StateOps>.PrepareBase(new([47L]), list);
         ObjectVersionRecord extra = Base(100, list, raw);
         var decoded = TypedBaseBodyCodec.Decode(extra.Body, null);
-        Assert.Equal(new[] { 47L }, P0FixedBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body))
+        Assert.Equal(new[] { 47L }, BootstrapBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body))
             .GetListState<long>().Elements.ToArray());
         FrameAddress meta;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
@@ -145,15 +145,15 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
     public void A_builtin_List_cannot_acquire_a_dynamic_descriptor_even_from_valid_employee_bodies() {
         SchemaCatalogWorkspace owner = new(static () => { });
         SchemaCatalogView view = owner.Prepare().View;
-        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
+        ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId field = new(10), descriptor = new(11);
-        rows.Add(field, P0FixedBindings.WithPreparation(new(field, employees.ResolveCurrentModel(typeof(P0FieldRecord)).CurrentSchema,
+        rows.Add(field, BootstrapBindings.WithPreparation(new(field, employees.ResolveCurrentModel(typeof(LayoutSlotRecord)).CurrentSchema,
             new FieldDto(1, (byte)TypeTag.Int64, default, default, default)), employees));
-        rows.Add(descriptor, P0FixedBindings.WithPreparation(new(descriptor, employees.ResolveCurrentModel(typeof(P0DescriptorRecord)).CurrentSchema,
+        rows.Add(descriptor, BootstrapBindings.WithPreparation(new(descriptor, employees.ResolveCurrentModel(typeof(LayoutDescriptorRecord)).CurrentSchema,
             new DescriptorDto(2, default, 0, default, field, 2, default)), employees));
         ObjectStateRecord declarations = rows[view.DescriptorListId];
-        rows[declarations.Id] = P0FixedBindings.WithPreparation(new(declarations.Id, declarations.Layout.List!,
+        rows[declarations.Id] = BootstrapBindings.WithPreparation(new(declarations.Id, declarations.Layout.List!,
             new FrozenListState<ObjectId>([descriptor])), employees);
         ObjectVersionRecord[] records = rows.Values.Select(row => {
             PreparedBaseBody raw = row.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(row.StringContent)
@@ -186,7 +186,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         for (int index = 1; index < depth; index++) { expected = TypeExpr.List(expected); }
         Assert.Equal(expected, decoded.Layout.Type);
         Assert.Equal(2u, decoded.Layout.List!.CodecVersion);
-        Assert.Empty(P0FixedBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body))
+        Assert.Empty(BootstrapBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body))
             .GetListState<ObjectId>().Elements.ToArray());
     }
 

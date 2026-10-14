@@ -1,20 +1,20 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>P0's finite employee table and builtin-only operation bindings; neither uses a SchemaStore.</summary>
-internal static class P0FixedBindings {
+/// <summary>Finite bootstrap employee table and builtin-only operation bindings; neither queries a persisted Schema catalog.</summary>
+internal static class BootstrapBindings {
     internal static ModelExecutionEnvironment CreateEnvironment() {
         StateModelRegistry definitions = new();
-        P0EmployeeDefinitions.Register(definitions);
+        BootstrapDefinitions.Register(definitions);
         return definitions.CreateEnvironment();
     }
 
     private static readonly Type[] Types = [
-        typeof(string), typeof(P0CatalogRecord), typeof(P0DescriptorRecord), typeof(P0FieldRecord),
-        typeof(List<P0DescriptorRecord>), typeof(List<P0FieldRecord>), typeof(P0TypeExprRecord),
-        typeof(List<P0TypeExprRecord>),
+        typeof(string), typeof(SchemaCatalogRecord), typeof(LayoutDescriptorRecord), typeof(LayoutSlotRecord),
+        typeof(List<LayoutDescriptorRecord>), typeof(List<LayoutSlotRecord>), typeof(TypeExprRecord),
+        typeof(List<TypeExprRecord>),
     ];
     // CLR initialization serializes this finite closure. Only immutable layouts escape;
     // no shared lazy resolver or context-capturing operation binding survives here.

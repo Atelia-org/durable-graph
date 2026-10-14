@@ -1,4 +1,4 @@
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -32,7 +32,7 @@ public sealed class MetaBootstrapP0DescriptorTests : IDisposable {
         ObjectId id = Assert.Single(prepared.View.DescriptorIds);
         ObjectStateRecord source = prepared.View.Rows[id];
         DescriptorDto dto = source.GetState<DescriptorDto>();
-        ObjectStateRecord bad = P0FixedBindings.WithPreparation(new(id, source.Schema!,
+        ObjectStateRecord bad = BootstrapBindings.WithPreparation(new(id, source.Schema!,
             new DescriptorDto(255, dto.Segment0Field2, dto.Segment0Field3, dto.Segment0Field4,
                 dto.Segment0Field5, dto.Segment0Field6, dto.Segment0Field7)));
         byte[] body = TypedBaseBodyCodec.Encode(bad.Layout, bad.Preparation!.PrepareBase(bad));

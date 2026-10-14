@@ -1,5 +1,5 @@
 using Atelia.Binary;
-using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -25,7 +25,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32), codecVersion: 1);
         FrozenDictionaryState<ObjectId, int> state = new(comparer, [new(new(100), 10), new(new(101), 20)]);
         PreparedBaseBody raw = DictionaryStateBody<ObjectId, int, StringIdStateOps, Int32StateOps>.PrepareBase(state, layout);
-        var standalone = (DictionaryStateReader)P0FixedBindings.Reader(ObjectLayout.ForDictionary(layout), NoSchemas());
+        var standalone = (DictionaryStateReader)BootstrapBindings.Reader(ObjectLayout.ForDictionary(layout), NoSchemas());
         ObjectStateRecord dictionary = standalone.Read(new(10), new SingleBody(raw.Body.ToArray()));
         Dictionary<ObjectId, ObjectStateRecord> exact = new() {
             [new(10)] = dictionary, [new(100)] = new(new(100), first), [new(101)] = new(new(101), second),
@@ -75,8 +75,8 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         var decoded = TypedBaseBodyCodec.Decode(bytes, null);
         Assert.Equal(ObjectLayout.ForDictionary(layout), decoded.Layout);
         Assert.Equal(1u, decoded.Layout.Dictionary!.CodecVersion);
-        ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body));
-        ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, NoSchemas());
+        ObjectStateRecord row = BootstrapBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body));
+        ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, NoSchemas());
         Assert.Equal(raw.Body, prepared.Preparation!.PrepareBase(prepared).Body);
         FrameAddress s0, s1;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
@@ -265,7 +265,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         ObjectLayout layout = ObjectLayout.ForDictionary(new(new(1, TypeTag.Int32), new(2, TypeTag.Int32), codecVersion: 1));
         byte[] body = TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody([0, 0]));
         var decoded = TypedBaseBodyCodec.Decode(body, null);
-        Assert.Equal(0, P0FixedBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body)).GetDictionaryState<int, int>().Count);
+        Assert.Equal(0, BootstrapBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body)).GetDictionaryState<int, int>().Count);
         FrameAddress meta = WriteMeta(prepared.View.RootId, prepared.View.Rows, ObjectVersionRecord.CreateBase(100, body));
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
@@ -277,7 +277,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         byte[] bytes = TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(layout), new PreparedBaseBody([0, 0]));
         var decoded = TypedBaseBodyCodec.Decode(bytes, null);
         Assert.Equal(ObjectLayout.ForDictionary(layout), decoded.Layout);
-        Assert.Throws<InvalidDataException>(() => P0FixedBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body)));
+        Assert.Throws<InvalidDataException>(() => BootstrapBindings.Reader(decoded.Layout, NoSchemas()).Read(new(1), new SingleBody(decoded.Body)));
     }
 
     private static IEnumerable<ObjectVersionRecord> LookupRows(SchemaCatalogView view, DictionaryLayout layout, PreparedBaseBody raw, string first, string second) => [
@@ -316,9 +316,9 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
     private static void Replace<TState>(Dictionary<ObjectId, ObjectStateRecord> rows, ObjectId id, TState state) where TState : unmanaged =>
         rows[id] = new(id, rows[id].Schema!, state);
     private FrameAddress WriteMeta(ObjectId root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows, ObjectVersionRecord? extra = null) {
-        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
+        ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
         IEnumerable<ObjectVersionRecord> records = rows.Values.Select(row => {
-            ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, employees);
+            ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, employees);
             PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(prepared.StringContent)
                 : prepared.Preparation!.PrepareBase(prepared);
             return ObjectVersionRecord.CreateBase(prepared.Id.Value, TypedBaseBodyCodec.Encode(prepared.Layout, raw));
