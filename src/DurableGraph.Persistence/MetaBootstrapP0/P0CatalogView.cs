@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Collections.Frozen;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -8,10 +9,10 @@ using DescriptorDto = Atelia.DurableGraph.Generated.Family_503044.V1;
 using FieldDto = Atelia.DurableGraph.Generated.Family_503046.V1;
 using TypeDto = Atelia.DurableGraph.Generated.Family_503054.V1;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Owned DTO-to-factory projection; nominal references do not follow Schema construction edges.</summary>
-internal sealed class P0CatalogView {
+internal sealed class SchemaCatalogView {
     private readonly Dictionary<ObjectLayout, ObjectId> _ids = [];
     private readonly Dictionary<ObjectId, ObjectLayout> _layouts = [];
     private readonly Dictionary<SchemaKey, DurableSchema> _schemas = [];
@@ -24,8 +25,8 @@ internal sealed class P0CatalogView {
     private readonly HashSet<ObjectId> _active = [];
     private readonly HashSet<ObjectId> _declared;
 
-    internal P0CatalogView(ObjectId rootId, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
-        P0GraphSnapshot? snapshot = null, long descriptorListH = 0) {
+    internal SchemaCatalogView(ObjectId rootId, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
+        StoredGraphRevision? snapshot = null, long descriptorListH = 0) {
         RootId = rootId;
         Rows = new FrozenSortedDictionary<ObjectId, ObjectStateRecord>(new(rows.ToDictionary()));
         Snapshot = snapshot;
@@ -82,7 +83,7 @@ internal sealed class P0CatalogView {
                 _layouts.Add(id, layout);
             }
         }
-        P0CatalogSemantics.ValidateDeclarations(_schemas.Values, _layouts.Values);
+        SchemaCatalogSemantics.ValidateDeclarations(_schemas.Values, _layouts.Values);
         Schemas = _schemas.ToFrozenDictionary();
     }
 
@@ -93,10 +94,10 @@ internal sealed class P0CatalogView {
     internal IReadOnlyDictionary<ObjectId, ObjectStateRecord> Rows { get; }
     internal IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas { get; }
     internal IEnumerable<ObjectLayout> ObjectLayouts => _layouts.Select(static pair => pair.Value);
-    internal P0GraphSnapshot? Snapshot { get; private set; }
+    internal StoredGraphRevision? Snapshot { get; private set; }
     internal long DescriptorListH { get; }
 
-    internal void AttachSnapshot(P0GraphSnapshot snapshot) {
+    internal void AttachSnapshot(StoredGraphRevision snapshot) {
         if (Snapshot is not null || snapshot.RootId != RootId) { throw new InvalidOperationException("A candidate can acquire only its own snapshot once."); }
         Snapshot = snapshot;
     }
@@ -110,9 +111,9 @@ internal sealed class P0CatalogView {
     internal ObjectId SchemaNodeId(DurableSchema schema) => _schemaIds.TryGetValue(new(schema.Type, schema.Version), out ObjectId id) &&
         _schemas[new(schema.Type, schema.Version)].Equals(schema) ? id : throw new InvalidDataException("Missing complete declared Schema.");
 
-    internal static P0CatalogView Load(P0GraphStore store, FrameAddress graph) {
-        P0DecodedRows decoded = P0TypedReader.Read(store, graph);
-        if (decoded.Snapshot.Kind != P0GraphKind.Meta) { throw new InvalidDataException("A Schema root must select a meta graph."); }
+    internal static SchemaCatalogView Load(GraphRecordStore store, FrameAddress graph) {
+        DecodedGraphRows decoded = StoredGraphDecoder.Read(store, graph);
+        if (decoded.Snapshot.Kind != StoredGraphKind.Meta) { throw new InvalidDataException("A Schema root must select a meta graph."); }
         if (!decoded.Rows.TryGetValue(decoded.Snapshot.RootId, out ObjectStateRecord? rootRow) ||
             !P0FixedBindings.Layout(typeof(P0CatalogRecord)).Equals(rootRow.Layout)) { throw new InvalidDataException("Wrong catalog root layout."); }
         CatalogDto root = rootRow.GetState<CatalogDto>();
@@ -142,10 +143,10 @@ internal sealed class P0CatalogView {
     }
 
     private DurableSchema Schema(ObjectId id, int depth) {
-        if (depth > P0CatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
+        if (depth > SchemaCatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
         if (!_declared.Contains(id)) { throw new InvalidDataException("An exact Schema dependency must be declared by the catalog root."); }
         if (_schemaMemo.TryGetValue(id, out DurableSchema? known)) {
-            if (depth + _schemaHeights[known] - 1 > P0CatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
+            if (depth + _schemaHeights[known] - 1 > SchemaCatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
             return known;
         }
         Enter(id);
@@ -160,13 +161,13 @@ internal sealed class P0CatalogView {
             if (ancestor is not null && ancestor.Kind != SchemaKind.ReferenceObject) { throw new InvalidDataException("A base dependency must be a reference Schema."); }
             SchemaKind kind = dto.Segment0Field1 == 1 ? SchemaKind.ReferenceObject : SchemaKind.InlineValue;
             DurableSchema schema = Factory(() => new DurableSchema(type, dto.Segment0Field3, values, ancestor, kind));
-            Factory(() => { P0CatalogWorkspace.Validate(schema); return schema; });
+            Factory(() => { SchemaCatalogWorkspace.Validate(schema); return schema; });
             int height = 1;
             if (ancestor is not null) { height = Math.Max(height, 1 + _schemaHeights[ancestor]); }
             foreach (DurableFieldInfo field in values) {
                 if (field.ValueSchema is { } inline) { height = Math.Max(height, 1 + _schemaHeights[inline]); }
             }
-            if (height > P0CatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
+            if (height > SchemaCatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
             _schemaMemo.Add(id, schema);
             _schemaHeights.TryAdd(schema, height);
             return schema;
@@ -174,9 +175,9 @@ internal sealed class P0CatalogView {
     }
 
     private DurableFieldInfo Field(ObjectId id, int schemaDepth, int fieldDepth) {
-        if (fieldDepth > P0CatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Field construction exceeds depth 256."); }
+        if (fieldDepth > SchemaCatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Field construction exceeds depth 256."); }
         if (_fieldMemo.TryGetValue(id, out DurableFieldInfo known)) {
-            if (known.ValueSchema is { } inline && schemaDepth + _schemaHeights[inline] > P0CatalogSemantics.MaximumExactDepth) {
+            if (known.ValueSchema is { } inline && schemaDepth + _schemaHeights[inline] > SchemaCatalogSemantics.MaximumExactDepth) {
                 throw new InvalidDataException("Exact Schema dependencies exceed depth 256.");
             }
             return known;

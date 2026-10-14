@@ -53,7 +53,7 @@ internal static class Program {
     private static void InitWriter(string repositoryPath, string window, string readyPath) {
         uint target = window == "AfterFirstCreateRef" ? 1u : 2u;
         List<uint> completed = [];
-        using Repository unexpected = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared, afterCreateRef: localId => {
+        using Repository unexpected = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared, afterCreateRef: localId => {
             completed.Add(localId);
             Need(localId == (uint)completed.Count, "The factory must complete refs1/2 in order.");
             if (localId != target) { return; }
@@ -89,7 +89,7 @@ internal static class Program {
                 "A successful factory's formal ref file changed after external Kill.");
         }
         if (complete) {
-            using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())) {
+            using (Repository reader = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
                 GraphResources resources = Resources(reader);
                 Need(reader.IsReadOnly && reader.ListBranches().Count == 0 && reader.SharedSchemaRoot is null,
                     "Two completed factory refs must open as an empty readonly DG repository.");
@@ -134,13 +134,13 @@ internal static class Program {
             InitialUserDataFrames = 0, FileBytesPreserved = true, ReadOnlyFilesUnchanged = true, LocksReleased = true,
             SingleDelta = complete, ExactPrior = complete, IdsPreserved = complete, HVerified = complete,
             SeedState = seedState, Schema = schema, ContinuationState = continuationState, Objects = objects,
-            TypedBodyAbi = P0TypedBodyCodec.FormatVersion });
+            TypedBodyAbi = TypedBaseBodyCodec.FormatVersion });
     }
 
     private static void RejectIncompleteFactory(string repositoryPath, bool readOnly) {
         try {
-            using Repository unexpected = readOnly ? Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())
-                : Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
+            using Repository unexpected = readOnly ? Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())
+                : Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
         } catch (InvalidOperationException error) {
             Need(error.Message.Contains("[VersionStore.RefNotFound]", StringComparison.Ordinal), "Fresh DG rejected for a cause other than missing ref2.");
             return;
@@ -163,7 +163,7 @@ internal static class Program {
         ObjectEvidence[] initial;
         FrameEvidence[] seedFrames;
         uint listId;
-        using (Repository seed = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             Need(seed.ListBranches().Count == 0 && seed.SharedSchemaRoot is null, "Writable DG must see the complete empty initialization.");
             using BranchCheckout main = seed.CreateBranch("main", HostModel.Ring());
@@ -173,17 +173,17 @@ internal static class Program {
             initial = Objects(main);
             listId = ListId(main);
             Need(initial.Length == 3, "Seed must contain the Widget ring and shared List.");
-            P0GraphSnapshot graph = seed.MetaBootstrapStore.ReadGraph(state);
+            StoredGraphRevision graph = seed.GraphStore.ReadGraph(state);
             Need(RequiredSchema(graph) == schema, "Seed storage pin must match its actual shared root.");
-            CheckCatalog(P0CatalogView.Load(seed.MetaBootstrapStore, schema), extra: false);
+            CheckCatalog(SchemaCatalogView.Load(seed.GraphStore, schema), extra: false);
             CheckStorage(seed, graph, initial);
-            Need(graph.Objects[listId] != state, "The List head must be its actual batch rather than the graph address.");
+            Need(graph.ObjectHeads[listId] != state, "The List head must be its actual batch rather than the graph address.");
             GraphResources resources = Resources(seed);
             seedFrames = Inventory(resources).Select(frame => CaptureFrame(resources, frame)).ToArray();
         }
         FrameAddress next;
         ObjectEvidence[] updated;
-        using (Repository reopened = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             reopened.PreparedStateReuseEnabled = false;
             using BranchCheckout cold = reopened.Checkout("main");
             Widget root = HostModel.Check(cold.State, 7);
@@ -191,10 +191,10 @@ internal static class Program {
             ObjectEvidence list = initial.Single(row => row.Id == listId);
             root.Numbers[7] = 201;
             next = cold.CommitState().RevisionAddress;
-            P0GraphSnapshot graph = reopened.MetaBootstrapStore.ReadGraph(next);
+            StoredGraphRevision graph = reopened.GraphStore.ReadGraph(next);
             Need(graph.SourceGraph == state && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
                 "Cold continuation must preserve the selected content source and Schema pin.");
-            P0Batch batch = reopened.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value);
+            ObjectVersionBatch batch = reopened.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
             Need(batch.SourceGraph == state && batch.SchemaRoot == schema && batch.Records.Count == 1, "Cold continuation must write exactly one actual record.");
             ObjectVersionRecord delta = batch.Records[0];
             Need(delta.ObjectId == listId && delta.Kind == ObjectVersionKind.Delta && delta.PriorAddress == Decode(list.Head),
@@ -212,11 +212,11 @@ internal static class Program {
             HostModel.Check(reopened.ReadState(reopened.GetHead("main")), 201);
             HostModel.Check(reopened.ReadState(reopened.ResolveTag("initial")), 7);
         }
-        using (Repository final = Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())) {
+        using (Repository final = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
             Need(final.GetHead("main").RevisionAddress == next && final.SharedSchemaRoot == schema, "Fresh continuation roots disagree.");
             HostModel.Check(final.ReadState(final.GetHead("main")), 201);
             HostModel.Check(final.ReadState(final.ResolveTag("initial")), 7);
-            P0GraphSnapshot graph = final.MetaBootstrapStore.ReadGraph(next);
+            StoredGraphRevision graph = final.GraphStore.ReadGraph(next);
             CheckStorage(final, graph, updated);
             CheckFrames(Resources(final), seedFrames);
         }
@@ -225,14 +225,14 @@ internal static class Program {
 
     private static void Seed(string repositoryPath, string resultPath) {
         object evidence;
-        using (Repository repository = Repository.CreateMetaBootstrapNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             repository.PreparedStateReuseEnabled = false;
             using BranchCheckout main = repository.CreateBranch("main", HostModel.Ring());
             repository.CreateTag("initial", main.Head);
-            P0GraphSnapshot state = repository.MetaBootstrapStore.ReadGraph(main.Head.RevisionAddress);
+            StoredGraphRevision state = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
             FrameAddress schema = RequiredSchema(state);
             Need(schema == repository.SharedSchemaRoot, "Seed State and shared Schema pins disagree.");
-            P0CatalogView catalog = P0CatalogView.Load(repository.MetaBootstrapStore, schema);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(repository.GraphStore, schema);
             CheckCatalog(catalog, extra: false);
             HostModel.Check(main.State, 7);
             ObjectEvidence[] objects = Objects(main);
@@ -240,7 +240,7 @@ internal static class Program {
             CheckStorage(repository, state, objects);
             evidence = new { Protocol, Lane = "seed", Passed = true, ProcessId = Environment.ProcessId,
                 State = Encode(state.Address), Schema = Encode(schema), RootId = state.RootId.Value,
-                ListId = ListId(main), Objects = objects, TypedBodyAbi = P0TypedBodyCodec.FormatVersion };
+                ListId = ListId(main), Objects = objects, TypedBodyAbi = TypedBaseBodyCodec.FormatVersion };
         }
         WriteJson(resultPath, evidence);
     }
@@ -248,16 +248,16 @@ internal static class Program {
     private static void Writer(string repositoryPath, string window, string readyPath) {
         // These scopes intentionally never complete: the controller must kill this
         // process after READY. There is no exception/finally path used as a crash.
-        using Repository repository = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
         repository.PreparedStateReuseEnabled = false;
         using BranchCheckout main = repository.Checkout("main");
         Widget root = HostModel.Check(main.State, 7);
         GraphResources resources = Resources(repository);
-        P0GraphStore store = resources.MetaBootstrapStore;
-        P0GraphSnapshot old = repository.MetaBootstrapStore.ReadGraph(main.Head.RevisionAddress);
+        GraphRecordStore store = resources.GraphStore;
+        StoredGraphRevision old = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
         FrameAddress oldSchema = RequiredSchema(old);
         Need(oldSchema == repository.SharedSchemaRoot, "Writer starts from a mixed root pair.");
-        CheckCatalog(P0CatalogView.Load(repository.MetaBootstrapStore, oldSchema), extra: false);
+        CheckCatalog(SchemaCatalogView.Load(repository.GraphStore, oldSchema), extra: false);
         ObjectEvidence[] objects = Objects(main);
         CheckStorage(repository, old, objects);
         uint listId = ListId(main);
@@ -266,17 +266,17 @@ internal static class Program {
         FrameEvidence[] oldFrames = oldFrameInfo.Select(frame => CaptureFrame(resources, frame)).ToArray();
         ReadyEvidence? prepared = null;
         int cuEnds = 0, beforeCuFlushCalls = 0;
-        repository.MetaBootstrapCheckpoint = checkpoint => {
-            if (checkpoint == P0SaveCheckpoint.AfterMetaAppend && window == "AfterMetaAppend") {
+        repository.SaveStageObserver = checkpoint => {
+            if (checkpoint == RepositorySaveStage.AfterMetaAppend && window == "AfterMetaAppend") {
                 Wait(Capture("DG.AfterMetaAppend"), readyPath);
             }
-            if (checkpoint == P0SaveCheckpoint.AfterBusinessAppend) {
+            if (checkpoint == RepositorySaveStage.AfterBusinessAppend) {
                 // All data reads occur after Append returned. VS callbacks only use
                 // this prepared evidence and never inspect DG/FS with a CU lease live.
                 prepared = Capture("DG.AfterBusinessAppend");
                 if (window == "AfterBusinessAppend") { Wait(prepared, readyPath); }
             }
-            if (checkpoint == P0SaveCheckpoint.BeforeInstall && window == "BeforeInstall") {
+            if (checkpoint == RepositorySaveStage.BeforeInstall && window == "BeforeInstall") {
                 Wait(Prepared("DG.BeforeInstall"), readyPath);
             }
         };
@@ -303,10 +303,10 @@ internal static class Program {
             FrameInfo[] added = Inventory(resources).Where(frame => !previousFrames.Contains(frame.Address)).ToArray();
             FrameEvidence[] frames = added.Select(frame => CaptureFrame(resources, frame)).ToArray();
             string? meta = null, business = null;
-            foreach (FrameInfo frame in added.Where(frame => frame.Tag == P0GraphWire.GraphTag)) {
-                P0GraphMetadata graph = store.ReadMetadata(frame.Address);
-                if (graph.Kind == P0GraphKind.Meta) { Need(meta is null, "More than one candidate meta graph."); meta = Encode(frame.Address); }
-                else if (graph.Kind == P0GraphKind.State) {
+            foreach (FrameInfo frame in added.Where(frame => frame.Tag == GraphFrameCodec.GraphTag)) {
+                GraphEnvelope graph = store.ReadMetadata(frame.Address);
+                if (graph.Kind == StoredGraphKind.Meta) { Need(meta is null, "More than one candidate meta graph."); meta = Encode(frame.Address); }
+                else if (graph.Kind == StoredGraphKind.State) {
                     Need(business is null, "More than one candidate business graph."); business = Encode(frame.Address);
                 } else { throw new InvalidDataException("Unexpected Event in this State crash mutation."); }
             }
@@ -335,7 +335,7 @@ internal static class Program {
         FrameAddress continued;
         ObjectEvidence[] selectedObjects;
         Dictionary<string, string> beforeReadOnly = SnapshotFiles(repositoryPath);
-        using (Repository repository = Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())) {
+        using (Repository repository = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
             GraphResources resources = Resources(repository);
             // Necessary refs only. READY expectations do not substitute for actual
@@ -350,25 +350,25 @@ internal static class Program {
                 "Actual ref2 must select the matching exact Schema graph; a mixed pair is rejected.");
             Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,
                 "DG owner and actual publication refs disagree.");
-            P0GraphSnapshot selected = repository.MetaBootstrapStore.ReadGraph(expectedState);
-            Need(selected.Kind == P0GraphKind.State && RequiredSchema(selected) == expectedSchema && selected.RootId.Value == ready.RootId,
+            StoredGraphRevision selected = repository.GraphStore.ReadGraph(expectedState);
+            Need(selected.Kind == StoredGraphKind.State && RequiredSchema(selected) == expectedSchema && selected.RootId.Value == ready.RootId,
                 "Selected business role, root or exact Schema pin disagrees.");
-            CheckCatalog(P0CatalogView.Load(repository.MetaBootstrapStore, expectedSchema), expectNew);
+            CheckCatalog(SchemaCatalogView.Load(repository.GraphStore, expectedSchema), expectNew);
             // Known completed candidate addresses are content evidence, not a startup
             // audit. Fresh Open may recover incomplete tails, but never these frames.
             CheckFrames(resources, ready.OldFrames);
             CheckFrames(resources, ready.CapturedFrames);
-            P0GraphSnapshot metaCandidate = repository.MetaBootstrapStore.ReadGraph(candidateMeta);
-            Need(metaCandidate.Kind == P0GraphKind.Meta && metaCandidate.SourceGraph == oldSchema,
+            StoredGraphRevision metaCandidate = repository.GraphStore.ReadGraph(candidateMeta);
+            Need(metaCandidate.Kind == StoredGraphKind.Meta && metaCandidate.SourceGraph == oldSchema,
                 "Candidate meta must derive from the original exact shared catalog.");
-            P0CatalogView candidateCatalog = P0CatalogView.Load(repository.MetaBootstrapStore, candidateMeta);
+            SchemaCatalogView candidateCatalog = SchemaCatalogView.Load(repository.GraphStore, candidateMeta);
             CheckCatalog(candidateCatalog, extra: true);
-            P0CatalogView originalCatalog = P0CatalogView.Load(repository.MetaBootstrapStore, oldSchema);
+            SchemaCatalogView originalCatalog = SchemaCatalogView.Load(repository.GraphStore, oldSchema);
             DurableSchema widgetSchema = originalCatalog.Schemas[new(TypeExpr.Named("CrashWidget"), 1)];
             Need(originalCatalog.SchemaNodeId(widgetSchema) == candidateCatalog.SchemaNodeId(widgetSchema),
                 "Retained Widget descriptor identity changed in the new catalog.");
             if (candidateBusiness is { } business) {
-                P0GraphSnapshot candidate = repository.MetaBootstrapStore.ReadGraph(business);
+                StoredGraphRevision candidate = repository.GraphStore.ReadGraph(business);
                 Need(candidate.SourceGraph == oldState && RequiredSchema(candidate) == candidateMeta,
                     "Candidate business must preserve its actual content source and new Schema pin.");
             }
@@ -385,12 +385,12 @@ internal static class Program {
         Need(beforeReadOnly.Count == afterReadOnly.Count && beforeReadOnly.All(pair => afterReadOnly.TryGetValue(pair.Key, out string? hash) && hash == pair.Value),
             "Readonly root, typed and completed-frame verification changed repository files.");
 
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             repository.PreparedStateReuseEnabled = false;
             GraphResources resources = Resources(repository);
             Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,
                 "Writable cold Open changed the selected pair.");
-            P0GraphSnapshot selected = repository.MetaBootstrapStore.ReadGraph(expectedState);
+            StoredGraphRevision selected = repository.GraphStore.ReadGraph(expectedState);
             using BranchCheckout checkout = repository.Checkout("main");
             Widget root = HostModel.Check(checkout.State, expectNew ? 201 : 7);
             selectedObjects = Objects(checkout);
@@ -404,16 +404,16 @@ internal static class Program {
             ObjectEvidence list = selectedObjects.Single(row => row.Id == ready.ListId);
             root.Numbers[8] = 202;
             continued = checkout.CommitState().RevisionAddress;
-            P0GraphSnapshot next = repository.MetaBootstrapStore.ReadGraph(continued);
+            StoredGraphRevision next = repository.GraphStore.ReadGraph(continued);
             Need(next.SourceGraph == expectedState && RequiredSchema(next) == expectedSchema && next.OwnedBatch is not null,
                 "Continuation must derive from the actual selected State and exact Schema.");
-            P0Batch batch = repository.MetaBootstrapStore.ReadBatch(next.OwnedBatch!.Value);
+            ObjectVersionBatch batch = repository.GraphStore.ReadBatch(next.OwnedBatch!.Value);
             Need(batch.SourceGraph == expectedState && batch.SchemaRoot == expectedSchema && batch.Records.Count == 1,
                 "Continuation must write one actual object record with the correct batch context.");
             ObjectVersionRecord delta = batch.Records[0];
             Need(delta.ObjectId == ready.ListId && delta.Kind == ObjectVersionKind.Delta && delta.PriorAddress == Decode(list.Head),
                 "Continuation must be the single List Delta against its exact selected prior.");
-            Need(next.Objects[ready.ListId] == next.OwnedBatch && next.Objects[ready.ListId] != continued,
+            Need(next.ObjectHeads[ready.ListId] == next.OwnedBatch && next.ObjectHeads[ready.ListId] != continued,
                 "Object head must be the actual batch address, not the graph location.");
             ObjectEvidence[] updated = Objects(checkout);
             Need(updated.Select(row => row.Id).SequenceEqual(selectedObjects.Select(row => row.Id)), "Continuation changed complete IDs.");
@@ -434,7 +434,7 @@ internal static class Program {
         }
         // A second independent owner verifies that the accepted continuation, selected
         // exact catalog and completed candidates survive ordinary resource closure too.
-        using (Repository final = Repository.OpenMetaBootstrapReadOnlyExisting(repositoryPath, HostModel.Models())) {
+        using (Repository final = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
             Need(final.GetHead("main").RevisionAddress == continued && final.SharedSchemaRoot == expectedSchema,
                 "Fresh continuation roots changed.");
             HostModel.Check(final.ReadState(final.GetHead("main")), expectNew ? 201 : 7, 202);
@@ -448,10 +448,10 @@ internal static class Program {
             ContinuationState = Encode(continued), SingleDelta = true, ExactPrior = true, IdsPreserved = true, HVerified = true,
             CompletedFramesPreserved = true, ReadOnlyFilesUnchanged = true, NoNonNoneRecovery = true,
             Objects = selectedObjects, OrphanMeta = !expectNew ? ready.CandidateMeta : null,
-            OrphanBusiness = !expectNew ? ready.CandidateBusiness : null, TypedBodyAbi = P0TypedBodyCodec.FormatVersion });
+            OrphanBusiness = !expectNew ? ready.CandidateBusiness : null, TypedBodyAbi = TypedBaseBodyCodec.FormatVersion });
     }
 
-    private static void CheckCatalog(P0CatalogView catalog, bool extra) {
+    private static void CheckCatalog(SchemaCatalogView catalog, bool extra) {
         Need(catalog.Schemas.TryGetValue(new(Extra.Type, Extra.Version), out DurableSchema? schema) == extra,
             "Exact cold meta catalog Extra presence disagrees.");
         if (extra) { Need(Extra.Equals(schema), "Extra's complete definition disagrees."); }
@@ -462,15 +462,15 @@ internal static class Program {
         (checkout.Baseline ?? throw new InvalidDataException("Missing complete saving baseline.")).Objects.OrderBy(pair => pair.Key)
             .Select(pair => new ObjectEvidence(pair.Key.Value, Encode(pair.Value.Storage!.Value.Head), pair.Value.Storage.Value.ReconstructionPayloadBytes)).ToArray();
     private static uint ListId(BranchCheckout checkout) => checkout.Baseline!.Objects.Single(pair => pair.Value.Current.Kind == ObjectStateKind.List).Key.Value;
-    private static void CheckStorage(Repository repository, P0GraphSnapshot graph, ObjectEvidence[] objects) {
-        Need(graph.Objects.Keys.Order().SequenceEqual(objects.Select(row => row.Id)), "Complete directory membership changed.");
+    private static void CheckStorage(Repository repository, StoredGraphRevision graph, ObjectEvidence[] objects) {
+        Need(graph.ObjectHeads.Keys.Order().SequenceEqual(objects.Select(row => row.Id)), "Complete directory membership changed.");
         foreach (ObjectEvidence row in objects) {
             FrameAddress head = Decode(row.Head);
-            Need(graph.Objects[row.Id] == head && repository.MetaBootstrapStore.ReadObjectChain(graph.Address, row.Id).ReconstructionPayloadBytes == row.H,
+            Need(graph.ObjectHeads[row.Id] == head && repository.GraphStore.ReadObjectChain(graph.Address, row.Id).ReconstructionPayloadBytes == row.H,
                 "Cold owned head/H disagrees with the actual selected chain.");
         }
     }
-    private static FrameAddress RequiredSchema(P0GraphSnapshot graph) => graph.SchemaRoot ?? throw new InvalidDataException("Business graph needs an exact Schema pin.");
+    private static FrameAddress RequiredSchema(StoredGraphRevision graph) => graph.SchemaRoot ?? throw new InvalidDataException("Business graph needs an exact Schema pin.");
     private static GraphResources Resources(Repository repository) =>
         (GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
     private static FrameInfo[] Inventory(GraphResources resources) {

@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -8,21 +9,21 @@ using DescriptorDto = Atelia.DurableGraph.Generated.Family_503044.V1;
 using FieldDto = Atelia.DurableGraph.Generated.Family_503046.V1;
 using TypeDto = Atelia.DurableGraph.Generated.Family_503054.V1;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Dirty state contains explicit final requests, never their derived dependency closure.</summary>
-internal sealed class P0CatalogWorkspace {
+internal sealed class SchemaCatalogWorkspace {
     private readonly Action _ensureEditingAllowed;
     private readonly Dictionary<SchemaKey, DurableSchema> _schemas = [];
     private readonly HashSet<ObjectLayout> _containers = [];
-    private P0CatalogView? _accepted;
+    private SchemaCatalogView? _accepted;
 
-    internal P0CatalogWorkspace(Action ensureEditingAllowed, P0CatalogView? accepted = null) {
+    internal SchemaCatalogWorkspace(Action ensureEditingAllowed, SchemaCatalogView? accepted = null) {
         _ensureEditingAllowed = ensureEditingAllowed;
         _accepted = accepted;
     }
 
-    internal P0CatalogView? Accepted => _accepted;
+    internal SchemaCatalogView? Accepted => _accepted;
     internal int DirtyCount => _schemas.Count + _containers.Count;
 
     internal void Set(DurableSchema schema) {
@@ -40,17 +41,17 @@ internal sealed class P0CatalogWorkspace {
         if (!P0FixedBindings.IsBuiltin(layout)) { _containers.Add(layout); }
     }
 
-    internal P0PreparedCatalog Prepare() {
+    internal PreparedSchemaCatalogWrite Prepare() {
         _ensureEditingAllowed();
         return PrepareOwned([]);
     }
 
-    internal P0PreparedCatalog PrepareOwned(IEnumerable<ObjectLayout> capturedLayouts) {
+    internal PreparedSchemaCatalogWrite PrepareOwned(IEnumerable<ObjectLayout> capturedLayouts) {
         ObjectLayout[] layouts = _containers.Concat(capturedLayouts).Distinct().ToArray();
         foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
-        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = P0CatalogSemantics.Collect(_schemas.Values, layouts);
+        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = SchemaCatalogSemantics.Collect(_schemas.Values, layouts);
         foreach ((SchemaKey key, DurableSchema schema) in closure) { CheckAccepted(key, schema); }
-        P0CatalogSemantics.ValidateDeclarations((_accepted?.Schemas.Values ?? []).Concat(closure.Values),
+        SchemaCatalogSemantics.ValidateDeclarations((_accepted?.Schemas.Values ?? []).Concat(closure.Values),
             (_accepted?.ObjectLayouts ?? []).Concat(layouts));
         Builder builder = new(_accepted);
         foreach (DurableSchema schema in closure.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
@@ -66,12 +67,12 @@ internal sealed class P0CatalogWorkspace {
     // captured business object reaches. The owner derives and freezes both roots;
     // neither an external view nor this workspace's possibly older accepted view
     // can substitute for loading those actual graphs.
-    internal void ValidateToSharedOwned(P0GraphStore store, FrameAddress? headSchemaRoot,
+    internal void ValidateToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot,
         FrameAddress? latestSharedRoot) {
         _ = CollectToSharedOwned(store, headSchemaRoot, latestSharedRoot, []);
     }
 
-    internal P0PreparedCatalog PrepareToSharedOwned(P0GraphStore store, FrameAddress? headSchemaRoot,
+    internal PreparedSchemaCatalogWrite PrepareToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot,
         FrameAddress? latestSharedRoot, IEnumerable<ObjectLayout> capturedLayouts) {
         var (target, schemas, layouts) = CollectToSharedOwned(store, headSchemaRoot, latestSharedRoot, capturedLayouts);
         // Only the latest shared graph supplies meta priors, retained rows and the
@@ -88,23 +89,23 @@ internal sealed class P0CatalogWorkspace {
         return builder.Finish(this);
     }
 
-    private (P0CatalogView? Target, IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas, ObjectLayout[] Layouts)
-        CollectToSharedOwned(P0GraphStore store, FrameAddress? headSchemaRoot, FrameAddress? latestSharedRoot,
+    private (SchemaCatalogView? Target, IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas, ObjectLayout[] Layouts)
+        CollectToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot, FrameAddress? latestSharedRoot,
             IEnumerable<ObjectLayout> capturedLayouts) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(capturedLayouts);
-        P0CatalogView? source = headSchemaRoot is { } head ? P0CatalogView.Load(store, head) : null;
-        P0CatalogView? target = latestSharedRoot is { } shared ? P0CatalogView.Load(store, shared) : null;
+        SchemaCatalogView? source = headSchemaRoot is { } head ? SchemaCatalogView.Load(store, head) : null;
+        SchemaCatalogView? target = latestSharedRoot is { } shared ? SchemaCatalogView.Load(store, shared) : null;
         ObjectLayout[] layouts = (source?.ObjectLayouts ?? []).Concat(_containers).Concat(capturedLayouts).Distinct().ToArray();
         foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
-        IReadOnlyDictionary<SchemaKey, DurableSchema> schemas = P0CatalogSemantics.Collect(
+        IReadOnlyDictionary<SchemaKey, DurableSchema> schemas = SchemaCatalogSemantics.Collect(
             (source?.Schemas.Values ?? []).Concat(_schemas.Values), layouts);
         // Collect checks complete same-key equality across both views and every
         // exact base/inline/container dependency, before any IDs or bodies exist.
         ObjectLayout[] mergedLayouts = (target?.ObjectLayouts ?? []).Concat(layouts).Distinct().ToArray();
-        IReadOnlyDictionary<SchemaKey, DurableSchema> merged = P0CatalogSemantics.Collect(
+        IReadOnlyDictionary<SchemaKey, DurableSchema> merged = SchemaCatalogSemantics.Collect(
             (target?.Schemas.Values ?? []).Concat(schemas.Values), mergedLayouts);
-        P0CatalogSemantics.ValidateDeclarations(merged.Values, mergedLayouts);
+        SchemaCatalogSemantics.ValidateDeclarations(merged.Values, mergedLayouts);
         return (target, schemas, layouts);
     }
 
@@ -131,7 +132,7 @@ internal sealed class P0CatalogWorkspace {
         }
     }
 
-    internal void RebaseOwned(P0CatalogView accepted) {
+    internal void RebaseOwned(SchemaCatalogView accepted) {
         foreach (DurableSchema dirty in _schemas.Values) {
             if (accepted.Schemas.TryGetValue(new(dirty.Type, dirty.Version), out DurableSchema? prior) && !prior.Equals(dirty)) {
                 throw new SchemaConflictException(prior, dirty);
@@ -140,24 +141,24 @@ internal sealed class P0CatalogWorkspace {
         _accepted = accepted;
     }
 
-    internal void PrepareInstall(P0PreparedCatalog candidate, P0GraphSnapshot graph) {
-        if (graph.Kind != P0GraphKind.Meta || graph.SourceOwner is null || graph.RootId != candidate.View.RootId ||
-            graph.Objects.Count != candidate.View.Rows.Count || candidate.View.Rows.Keys.Any(id => !graph.Objects.ContainsKey(id.Value))) {
+    internal void PrepareInstall(PreparedSchemaCatalogWrite candidate, StoredGraphRevision graph) {
+        if (graph.Kind != StoredGraphKind.Meta || graph.SourceOwner is null || graph.RootId != candidate.View.RootId ||
+            graph.ObjectHeads.Count != candidate.View.Rows.Count || candidate.View.Rows.Keys.Any(id => !graph.ObjectHeads.ContainsKey(id.Value))) {
             throw new InvalidDataException("Catalog installation must use its actual complete meta graph.");
         }
         if (candidate.View.Snapshot is null) { candidate.View.AttachSnapshot(graph); }
         if (candidate.View.Snapshot!.Address != graph.Address) { throw new InvalidOperationException("Catalog installation must use its actual graph."); }
     }
 
-    internal void Accept(P0PreparedCatalog candidate) {
+    internal void Accept(PreparedSchemaCatalogWrite candidate) {
         _accepted = candidate.View;
         _schemas.Clear();
         _containers.Clear();
     }
 
     private sealed class Builder {
-        private readonly StateModelSnapshot _models = P0FixedBindings.CreateSnapshot();
-        private readonly P0CatalogView? _source;
+        private readonly ModelExecutionEnvironment _models = P0FixedBindings.CreateEnvironment();
+        private readonly SchemaCatalogView? _source;
         private readonly Dictionary<ObjectId, ObjectStateRecord> _rows;
         private readonly List<ObjectId> _declared;
         private readonly List<ObjectId> _added = [];
@@ -170,7 +171,7 @@ internal sealed class P0CatalogWorkspace {
         private ulong _next;
         private readonly ObjectId _root, _list;
 
-        internal Builder(P0CatalogView? source) {
+        internal Builder(SchemaCatalogView? source) {
             _source = source;
             _rows = source?.Rows.ToDictionary() ?? [];
             _declared = source?.DescriptorIds.ToList() ?? [];
@@ -280,7 +281,7 @@ internal sealed class P0CatalogWorkspace {
             _new.Add(prepared);
         }
 
-        internal P0PreparedCatalog Finish(P0CatalogWorkspace owner) {
+        internal PreparedSchemaCatalogWrite Finish(SchemaCatalogWorkspace owner) {
             if (_source is not null && _added.Count == 0) { return new(owner, _source, null, 0, []); }
             ObjectStateRecord list = P0FixedBindings.WithPreparation(new ObjectStateRecord(_list,
                 List(typeof(List<P0DescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())), _models);
@@ -292,43 +293,43 @@ internal sealed class P0CatalogWorkspace {
             foreach (ObjectStateRecord row in _new) {
                 PreparedBaseBody raw = row.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(row.StringContent)
                     : row.Preparation!.PrepareBase(row);
-                records.Add(ObjectVersionRecord.CreateBase(row.Id.Value, P0TypedBodyCodec.Encode(row.Layout, raw)));
+                records.Add(ObjectVersionRecord.CreateBase(row.Id.Value, TypedBaseBodyCodec.Encode(row.Layout, raw)));
                 encodedIds.Add(row.Id);
             }
-            byte[] encodedBase = P0TypedBodyCodec.Encode(list.Layout, list.Preparation!.PrepareBase(list));
+            byte[] encodedBase = TypedBaseBodyCodec.Encode(list.Layout, list.Preparation!.PrepareBase(list));
             encodedIds.Add(list.Id);
             long b = ObjectVersionPayloadSize.GetBasePayloadBytes(encodedBase.Length), h = b;
             if (_source is null) { records.Add(ObjectVersionRecord.CreateBase(_list.Value, encodedBase)); }
             else {
                 PreparedDeltaBody delta = ListStateBody<ObjectId, ObjectIdStateOps>.PrepareAppendDelta(
                     _source.DescriptorIds.Count, _added.ToArray(), list.Layout.List!);
-                var prior = _source.Snapshot!.Objects[_list.Value];
+                var prior = _source.Snapshot!.ObjectHeads[_list.Value];
                 long d = ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior);
                 if (b <= d || _source.DescriptorListH + d > 5L * b) { records.Add(ObjectVersionRecord.CreateBase(_list.Value, encodedBase)); }
                 else { records.Add(ObjectVersionRecord.CreateDelta(_list.Value, prior, delta.Body)); h = _source.DescriptorListH + d; }
             }
-            P0CatalogView view = new(_root, _rows, descriptorListH: h);
+            SchemaCatalogView view = new(_root, _rows, descriptorListH: h);
             return new(owner, view, new(_source?.Snapshot?.Address, _root, records), _added.Count, encodedIds, _source?.DescriptorIds);
         }
     }
 }
 
-internal sealed class P0PreparedCatalog(P0CatalogWorkspace owner, P0CatalogView view,
-    P0PreparedGraphWrite? write, int addedDescriptors, IEnumerable<ObjectId> encodedIds,
+internal sealed class PreparedSchemaCatalogWrite(SchemaCatalogWorkspace owner, SchemaCatalogView view,
+    PreparedGraphWrite? write, int addedDescriptors, IEnumerable<ObjectId> encodedIds,
     IEnumerable<ObjectId>? acceptedDescriptors = null) {
-    private P0GraphSnapshot? _installation;
-    internal P0CatalogView View { get; } = view;
-    internal P0PreparedGraphWrite? Write { get; } = write;
+    private StoredGraphRevision? _installation;
+    internal SchemaCatalogView View { get; } = view;
+    internal PreparedGraphWrite? Write { get; } = write;
     internal int AddedDescriptors { get; } = addedDescriptors;
     internal IReadOnlyList<ObjectId> EncodedIds { get; } = new FrozenList<ObjectId>(encodedIds);
     internal int EncodedRows => EncodedIds.Count;
     internal int EncodedAcceptedDescriptors => EncodedIds.Intersect(acceptedDescriptors ?? []).Count();
-    internal void PrepareInstall(P0GraphSnapshot graph) {
+    internal void PrepareInstall(StoredGraphRevision graph) {
         if (_installation is not null) { throw new InvalidOperationException("This catalog installation is already prepared."); }
         owner.PrepareInstall(this, graph);
         _installation = graph;
     }
-    internal void Install(P0GraphSnapshot graph) {
+    internal void Install(StoredGraphRevision graph) {
         if (!ReferenceEquals(_installation, graph)) { throw new InvalidOperationException("Prepare the catalog installation before publication."); }
         owner.Accept(this);
         _installation = null;

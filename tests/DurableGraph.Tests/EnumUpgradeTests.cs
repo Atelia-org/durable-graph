@@ -16,7 +16,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using AncestryHistoryDirectory history = new();
         Assembly assembly = EnumUpgradeAssembly(history, underlying);
         Assert.Null(assembly.GetType("OldMode"));
-        StateBindingContext snapshot = EnumHistoryRegistry(assembly).Snapshot();
+        StateBindingContext snapshot = EnumHistoryRegistry(assembly).CreateEnvironment();
         StateModelBinding model = snapshot.ResolveCurrentModel(assembly.GetType("World")!);
         ObjectStateRecord source = EnumUpgradeSource(assembly);
         // Stored-exact decoding preserves the old width and never calls business code.
@@ -40,7 +40,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void EnumMissingOrWrongProviderCannotUseKeepExactOrHideBehindAbsentNullable(bool optional, bool wrongProvider) {
         using AncestryHistoryDirectory history = new();
         Assembly assembly = EnumUpgradeAssembly(history, "byte", wrongProvider ? "wrong" : "missing");
-        StateBindingContext snapshot = EnumHistoryRegistry(assembly).Snapshot();
+        StateBindingContext snapshot = EnumHistoryRegistry(assembly).CreateEnvironment();
         StateModelBinding model = snapshot.ResolveCurrentModel(assembly.GetType(optional ? "Optional" : "World")!);
         ObjectStateRecord source = EnumUpgradeSource(assembly, optional);
         Assert.Throws<InvalidDataException>(() => model.Normalize(source));
@@ -53,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void EnumAbsentNullableBindsToolButDoesNotInvokeValueCallback(bool present) {
         using AncestryHistoryDirectory history = new();
         Assembly assembly = EnumUpgradeAssembly(history, "byte");
-        StateModelBinding model = EnumHistoryRegistry(assembly).Snapshot().ResolveCurrentModel(assembly.GetType("Optional")!);
+        StateModelBinding model = EnumHistoryRegistry(assembly).CreateEnvironment().ResolveCurrentModel(assembly.GetType("Optional")!);
         object prior = assembly.GetType("Host")!.GetMethod("Optional")!.Invoke(null, [present])!;
         DurableSchema mode = EnumUpgradeMode(1);
         DurableSchema old = new("Optional", 1, DurableFieldInfo.Nullable(1, new(1, TypeTag.InlineValue, inlineSchema: mode)));
@@ -75,7 +75,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type rules = assembly.GetType("Rules")!;
         registry.UseArrayElementUpgrades(rules);
         registry.UseListElementUpgrades(rules);
-        StateBindingContext snapshot = registry.Snapshot();
+        StateBindingContext snapshot = registry.CreateEnvironment();
         ObjectStateRecord source = EnumUpgradeCollection(assembly, array, 0);
         Type domain = assembly.GetType("CurrentMode")!;
         Type collection = array ? domain.MakeArrayType() : typeof(List<>).MakeGenericType(domain);
@@ -98,30 +98,30 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory otherFiles = new();
         // Independent repositories can contain the same key with different complete definitions.
         // Standalone meta views publish no business refs and do not amend an accepted shared catalog.
-        P0CatalogView original = StoreView(files.Path, EnumUpgradeMode(1));
-        P0CatalogView conflicting = StoreView(otherFiles.Path,
+        SchemaCatalogView original = StoreView(files.Path, EnumUpgradeMode(1));
+        SchemaCatalogView conflicting = StoreView(otherFiles.Path,
             new("Mode", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.SByte)));
         Assert.NotSame(original.Snapshot!.SourceOwner, conflicting.Snapshot!.SourceOwner);
 
-        static P0CatalogView StoreView(string path, DurableSchema oldMode) {
+        static SchemaCatalogView StoreView(string path, DurableSchema oldMode) {
             FrameAddress address;
-            using (P0Repository repository = P0Repository.CreateNew(path)) {
-                P0CatalogWorkspace workspace = new(repository.EnsureEditingAllowed);
+            using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(path)) {
+                SchemaCatalogWorkspace workspace = new(repository.EnsureEditingAllowed);
                 workspace.Set(oldMode);
                 workspace.Set(EnumUpgradeMode(2));
-                P0PreparedCatalog prepared = workspace.Prepare();
-                address = repository.Store.Append(P0GraphKind.Meta, null, null, prepared.Write!).Address;
+                PreparedSchemaCatalogWrite prepared = workspace.Prepare();
+                address = repository.Store.Append(StoredGraphKind.Meta, null, null, prepared.Write!).Address;
                 Assert.Null(repository.SharedSchemaRoot);
                 repository.Data.ConfirmDurable();
             }
-            using P0Repository reopened = P0Repository.OpenReadOnlyExisting(path);
+            using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(path);
             Assert.Null(reopened.SharedSchemaRoot);
-            return P0CatalogView.Load(reopened.Store, address);
+            return SchemaCatalogView.Load(reopened.Store, address);
         }
         Assert.Equal(EnumUpgradeMode(1), original.Schemas[new(TypeExpr.Named("Mode"), 1)]);
         Assert.Equal(TypeTag.SByte, Assert.Single(conflicting.Schemas[new(TypeExpr.Named("Mode"), 1)].Fields).TypeTag);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        StateBindingContext snapshot = configuration.CreateSnapshot(schemaLookup: key => original.Schemas.GetValueOrDefault(key));
+        StateBindingContext snapshot = configuration.CreateEnvironment(schemaLookup: key => original.Schemas.GetValueOrDefault(key));
         Type domain = assembly.GetType("CurrentMode")!;
         Type collection = array ? domain.MakeArrayType() : typeof(List<>).MakeGenericType(domain);
         Assert.True(snapshot.TryGetCurrentObjectBinding(collection, out ObjectBinding? binding));
@@ -132,7 +132,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Empty(EnumUpgradeCalls(assembly));
 
         // Separate immutable S does not rebind the old plan. Empty inputs still preflight exact history.
-        StateBindingContext other = configuration.CreateSnapshot(schemaLookup: key => conflicting.Schemas.GetValueOrDefault(key));
+        StateBindingContext other = configuration.CreateEnvironment(schemaLookup: key => conflicting.Schemas.GetValueOrDefault(key));
         Assert.True(other.TryGetCurrentObjectBinding(collection, out ObjectBinding? wrong));
         InvalidDataException error = Assert.Throws<InvalidDataException>(() => wrong!.Normalize(source));
         Assert.IsType<SchemaConflictException>(error.InnerException);

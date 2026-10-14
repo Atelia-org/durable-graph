@@ -21,25 +21,25 @@ public sealed class SplitExactDecodingTests : IDisposable {
     [Fact]
     public void Cold_full_membership_reconstructs_Delta_and_owns_strings_after_resources_close() {
         FrameAddress first, changed;
-        using (var writer = P0Repository.CreateNew(_path)) {
-            P0PreparedCatalog catalog = Catalog(NodeSchema);
-            P0GraphSnapshot initial = Publish(writer, new(null, new(1), [
+        using (var writer = RepositoryStorageFacade.CreateNew(_path)) {
+            PreparedSchemaCatalogWrite catalog = Catalog(NodeSchema);
+            StoredGraphRevision initial = Publish(writer, new(null, new(1), [
                 Node(catalog.View, 1, 4, 3), Node(catalog.View, 2, 5, 3),
                 Text(3, "same"), Text(4, "same"), Text(5, ""), Text(6, ""),
             ]), catalog);
             first = initial.Address;
             changed = Publish(writer, new(first, new(1), [
-                ObjectVersionRecord.CreateDelta(1, initial.Objects[1], new byte[] { 1, 9 }),
+                ObjectVersionRecord.CreateDelta(1, initial.ObjectHeads[1], new byte[] { 1, 9 }),
             ])).Address;
         }
         DecodedRevision decoded;
-        using (var reader = P0Repository.OpenReadOnlyExisting(_path)) {
+        using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
             long before = DataBytes(reader.Data);
             var configuration = Nodes().FreezeConfiguration();
-            DecodedRevision original = DecodedRevision.ReadSplit(reader.Store, first, configuration);
-            decoded = DecodedRevision.ReadSplit(reader.Store, changed, configuration, original.BindingEnvironment);
+            DecodedRevision original = DecodedRevision.ReadStoredGraph(reader.Store, first, configuration);
+            decoded = DecodedRevision.ReadStoredGraph(reader.Store, changed, configuration, original.BindingEnvironment);
             Assert.Equal(new NodeState(4, new(3)), original.GetRequired(new(1)).GetState<NodeState>());
-            P0ObjectChain chain = reader.Store.ReadObjectChain(changed, 1);
+            ObjectVersionChain chain = reader.Store.ReadObjectChain(changed, 1);
             Assert.Equal(2, chain.Entries.Count);
             Assert.Equal(original.ObjectHeads[new(1)], chain.Entries[1].Record.PriorAddress);
             Assert.Equal(new byte[] { 1, 9 }, chain.Entries[1].Record.Body.ToArray());
@@ -71,19 +71,19 @@ public sealed class SplitExactDecodingTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void Retained_owner_revalidates_removed_or_wrong_kind_string_in_each_complete_view(bool wrongKind) {
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(NodeSchema, NumberSchema);
-        P0GraphSnapshot initial = Publish(repository, new(null, new(1), [Node(catalog.View, 1, 4, 2), Text(2, "value")]), catalog);
-        P0GraphSnapshot invalid = Publish(repository, new(initial.Address, new(1),
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(NodeSchema, NumberSchema);
+        StoredGraphRevision initial = Publish(repository, new(null, new(1), [Node(catalog.View, 1, 4, 2), Text(2, "value")]), catalog);
+        StoredGraphRevision invalid = Publish(repository, new(initial.Address, new(1),
             wrongKind ? [Durable(catalog.View, 2, NumberSchema, [7])] : [], wrongKind ? [] : [2]));
         var configuration = Nodes(NumberSchema).FreezeConfiguration();
-        DecodedRevision previous = DecodedRevision.ReadSplit(repository.Store, initial.Address, configuration);
-        Assert.Equal(initial.Objects[1], invalid.Objects[1]);
+        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration);
+        Assert.Equal(initial.ObjectHeads[1], invalid.ObjectHeads[1]);
         Assert.Equal("value", previous.Strings.ResolveString(new(2)));
         DecodedRevision? result = null;
-        Assert.Throws<InvalidDataException>(() => result = DecodedRevision.ReadSplit(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => result = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
         Assert.Null(result);
-        Assert.Equal("value", DecodedRevision.ReadSplit(repository.Store, initial.Address, configuration, previous.BindingEnvironment).Strings.ResolveString(new(2)));
+        Assert.Equal("value", DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration, previous.BindingEnvironment).Strings.ResolveString(new(2)));
         Assert.False(repository.IsFaulted);
     }
 
@@ -93,10 +93,10 @@ public sealed class SplitExactDecodingTests : IDisposable {
         DurableSchema derived = new("Exact.Derived", 1, [], target);
         DurableSchema other = new("Exact.Other", 1, new DurableFieldInfo(1, TypeTag.Byte));
         DurableSchema owner = new("Exact.Owner", 1, DurableFieldInfo.Reference(1, target.Type));
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(owner, derived, other);
-        P0GraphSnapshot initial = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, owner, [2]), Durable(catalog.View, 2, derived, [7])]), catalog);
-        P0GraphSnapshot invalid = Publish(repository, new(initial.Address, new(1), [Durable(catalog.View, 2, other, [8])]));
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(owner, derived, other);
+        StoredGraphRevision initial = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, owner, [2]), Durable(catalog.View, 2, derived, [7])]), catalog);
+        StoredGraphRevision invalid = Publish(repository, new(initial.Address, new(1), [Durable(catalog.View, 2, other, [8])]));
         StateModelRegistry models = new();
         RegisterExact(models, owner, schema => new StateReaderBinding<ObjectId>(schema,
             static (ref BareValueReader reader) => new(reader.ReadVarUInt32()),
@@ -105,11 +105,11 @@ public sealed class SplitExactDecodingTests : IDisposable {
         RegisterExact(models, derived, schema => ByteReader(schema));
         RegisterExact(models, other, schema => ByteReader(schema));
         var configuration = models.FreezeConfiguration();
-        DecodedRevision previous = DecodedRevision.ReadSplit(repository.Store, initial.Address, configuration);
+        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration);
         Assert.Equal(new ObjectId(2), previous.GetRequired(new(1)).GetState<ObjectId>());
-        Assert.Equal(initial.Objects[1], invalid.Objects[1]);
+        Assert.Equal(initial.ObjectHeads[1], invalid.ObjectHeads[1]);
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadSplit(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
         Assert.Null(decoded);
         Assert.Equal((byte)7, previous.GetRequired(new(2)).GetState<byte>());
     }
@@ -132,13 +132,13 @@ public sealed class SplitExactDecodingTests : IDisposable {
             _ => new("Exact.Leaf", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema:
                 new("Exact.Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.SByte)))),
         };
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(stored);
-        P0GraphSnapshot graph = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, stored, [7])]), catalog);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(stored);
+        StoredGraphRevision graph = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, stored, [7])]), catalog);
         int matchingCalls = 0;
         StateModelRegistry matching = new();
         RegisterExact(matching, stored, schema => ByteReader(schema, () => matchingCalls++));
-        DecodedRevision positive = DecodedRevision.ReadSplit(repository.Store, graph.Address, matching);
+        DecodedRevision positive = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, matching);
         Assert.Equal((byte)7, positive.GetRequired(new(1)).GetState<byte>());
         Assert.Equal(stored, positive.GetRequired(new(1)).Schema);
         Assert.Equal(1, matchingCalls);
@@ -146,7 +146,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         StateModelRegistry models = new();
         RegisterExact(models, wrong, _ => ByteReader(wrong, () => calls++));
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadSplit(repository.Store, graph.Address, models));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, models));
         Assert.Null(decoded);
         Assert.Equal(0, calls);
     }
@@ -157,14 +157,14 @@ public sealed class SplitExactDecodingTests : IDisposable {
     [InlineData(2)] // Only an earlier version's reader.
     public void Missing_definition_or_body_capability_does_not_fall_back(int missing) {
         DurableSchema stored = missing == 2 ? new("Exact.Number", 2, new DurableFieldInfo(1, TypeTag.Byte)) : NumberSchema;
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(stored);
-        P0GraphSnapshot graph = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, stored, [7])]), catalog);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(stored);
+        StoredGraphRevision graph = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, stored, [7])]), catalog);
         int calls = 0;
         StateModelRegistry models = new();
         if (missing == 1) { models.Register(Definition(NumberSchema)); }
         if (missing == 2) { models.Register(Definition(NumberSchema, schema => ByteReader(schema, () => calls++))); }
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(repository.Store, graph.Address, models));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, models));
         Assert.Equal(0, calls);
         Assert.False(repository.IsFaulted);
     }
@@ -172,9 +172,9 @@ public sealed class SplitExactDecodingTests : IDisposable {
     [Fact]
     public void Late_missing_historical_reader_cannot_publish_rows_or_borrow_callback_registration() {
         DurableSchema other = new("Exact.Other", 1, new DurableFieldInfo(1, TypeTag.Byte));
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(NumberSchema, other);
-        P0GraphSnapshot graph = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, NumberSchema, [7]), Durable(catalog.View, 2, other, [8])]), catalog);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(NumberSchema, other);
+        StoredGraphRevision graph = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, NumberSchema, [7]), Durable(catalog.View, 2, other, [8])]), catalog);
         StateModelRegistry registry = new();
         int calls = 0;
         StateDefinitionBinding late = Definition(other, _ => ByteReader(other));
@@ -183,10 +183,10 @@ public sealed class SplitExactDecodingTests : IDisposable {
             if (calls == 1) { registry.Register(late); }
         })));
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadSplit(repository.Store, graph.Address, registry));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, registry));
         Assert.Null(decoded);
         Assert.Equal(1, calls); // Pure earlier callbacks may run, but code registration is frozen for this operation.
-        DecodedRevision retry = DecodedRevision.ReadSplit(repository.Store, graph.Address, registry);
+        DecodedRevision retry = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, registry);
         Assert.Equal((byte)8, retry.GetRequired(new(2)).GetState<byte>());
         Assert.Equal(2, calls);
         Assert.False(repository.IsFaulted);
@@ -199,18 +199,18 @@ public sealed class SplitExactDecodingTests : IDisposable {
     [InlineData(3)] // String Delta.
     [InlineData(4)] // Trailing string payload.
     public void Late_malformed_body_or_string_Delta_never_delivers_a_partial_view(int malformed) {
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(NodeSchema);
-        P0GraphSnapshot initial = Publish(repository, new(null, new(1), [Node(catalog.View, 1, 4, 0),
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(NodeSchema);
+        StoredGraphRevision initial = Publish(repository, new(null, new(1), [Node(catalog.View, 1, 4, 0),
             malformed is 3 or 4 ? Text(2, "text") : Node(catalog.View, 2, 5, 0)]), catalog);
         ObjectVersionRecord bad = malformed switch {
             0 => Durable(catalog.View, 2, NodeSchema, [5, 0, 99]),
-            1 => ObjectVersionRecord.CreateDelta(2, initial.Objects[2], new byte[] { 1 }),
-            2 => ObjectVersionRecord.CreateDelta(2, initial.Objects[2], new byte[] { 1, 9, 99 }),
-            3 => ObjectVersionRecord.CreateDelta(2, initial.Objects[2], Array.Empty<byte>()),
-            _ => ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.String, new([0, 1]))),
+            1 => ObjectVersionRecord.CreateDelta(2, initial.ObjectHeads[2], new byte[] { 1 }),
+            2 => ObjectVersionRecord.CreateDelta(2, initial.ObjectHeads[2], new byte[] { 1, 9, 99 }),
+            3 => ObjectVersionRecord.CreateDelta(2, initial.ObjectHeads[2], Array.Empty<byte>()),
+            _ => ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, new([0, 1]))),
         };
-        P0GraphSnapshot invalid = Publish(repository, new(initial.Address, new(1), [bad]));
+        StoredGraphRevision invalid = Publish(repository, new(initial.Address, new(1), [bad]));
         int reads = 0;
         int applies = 0;
         StateModelRegistry models = Nodes(onRead: () => reads++, onApply: () => applies++);
@@ -218,9 +218,9 @@ public sealed class SplitExactDecodingTests : IDisposable {
         for (int attempt = 0; attempt < 2; attempt++) {
             DecodedRevision? decoded = null;
             if (malformed == 1) {
-                Assert.Throws<EndOfStreamException>(() => decoded = DecodedRevision.ReadSplit(repository.Store, invalid.Address, models));
+                Assert.Throws<EndOfStreamException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, models));
             } else {
-                Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadSplit(repository.Store, invalid.Address, models));
+                Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, models));
             }
             Assert.Null(decoded);
         }
@@ -235,20 +235,20 @@ public sealed class SplitExactDecodingTests : IDisposable {
     [InlineData(true)]
     public void Completed_dynamic_header_cannot_use_unknown_or_inline_descriptor_as_object_kind(bool inline) {
         DurableSchema value = new("Exact.Value", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte));
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(NumberSchema, value);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(NumberSchema, value);
         uint id = inline ? catalog.View.SchemaNodeId(value).Value : uint.MaxValue;
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter bytes = new(buffer);
-        bytes.WriteByte(P0TypedBodyCodec.FormatVersion);
+        bytes.WriteByte(TypedBaseBodyCodec.FormatVersion);
         bytes.WriteByte(1);
         bytes.WriteVarUInt32(id);
         bytes.WriteByte(7);
-        P0GraphSnapshot graph = Publish(repository, new(null, new(1), [ObjectVersionRecord.CreateBase(1, buffer.WrittenSpan)]), catalog);
+        StoredGraphRevision graph = Publish(repository, new(null, new(1), [ObjectVersionRecord.CreateBase(1, buffer.WrittenSpan)]), catalog);
         int calls = 0;
         StateModelRegistry models = new();
         RegisterExact(models, NumberSchema, _ => ByteReader(NumberSchema, () => calls++));
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(repository.Store, graph.Address, models));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, models));
         Assert.Equal(0, calls);
         Assert.False(repository.IsFaulted);
     }
@@ -262,24 +262,24 @@ public sealed class SplitExactDecodingTests : IDisposable {
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32), codecVersion: 1);
         FrozenDictionaryState<ObjectId, int> state = new(comparer, [new(new(2), 10), new(new(3), 20)]);
         PreparedBaseBody body = DictionaryStateBody<ObjectId, int, StringIdStateOps, Int32StateOps>.PrepareBase(state, layout);
-        using var repository = P0Repository.CreateNew(_path);
-        P0PreparedCatalog catalog = Catalog(NumberSchema);
-        P0GraphSnapshot initial = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, NumberSchema, [7]),
-            Text(2, firstKey), Text(3, "right"), ObjectVersionRecord.CreateBase(10, P0TypedBodyCodec.Encode(ObjectLayout.ForDictionary(layout), body))]), catalog);
-        P0GraphSnapshot invalid = Publish(repository, new(initial.Address, new(1), [Text(3, replacement)]));
-        Assert.Equal(initial.Objects[10], invalid.Objects[10]);
-        Assert.Equal(initial.Objects[2], invalid.Objects[2]);
-        Assert.NotEqual(initial.Objects[3], invalid.Objects[3]);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        PreparedSchemaCatalogWrite catalog = Catalog(NumberSchema);
+        StoredGraphRevision initial = Publish(repository, new(null, new(1), [Durable(catalog.View, 1, NumberSchema, [7]),
+            Text(2, firstKey), Text(3, "right"), ObjectVersionRecord.CreateBase(10, TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(layout), body))]), catalog);
+        StoredGraphRevision invalid = Publish(repository, new(initial.Address, new(1), [Text(3, replacement)]));
+        Assert.Equal(initial.ObjectHeads[10], invalid.ObjectHeads[10]);
+        Assert.Equal(initial.ObjectHeads[2], invalid.ObjectHeads[2]);
+        Assert.NotEqual(initial.ObjectHeads[3], invalid.ObjectHeads[3]);
         StateModelRegistry models = new();
         RegisterExact(models, NumberSchema, _ => ByteReader(NumberSchema));
         var configuration = models.FreezeConfiguration();
-        DecodedRevision previous = DecodedRevision.ReadSplit(repository.Store, initial.Address, configuration);
+        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration);
         Assert.Equal(2, previous.GetRequired(new(10)).GetDictionaryState<ObjectId, int>().Count);
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadSplit(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
         Assert.Null(decoded);
         Assert.Equal("right", previous.Strings.ResolveString(new(3)));
-        Assert.Equal("right", DecodedRevision.ReadSplit(repository.Store, initial.Address, configuration, previous.BindingEnvironment).Strings.ResolveString(new(3)));
+        Assert.Equal("right", DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration, previous.BindingEnvironment).Strings.ResolveString(new(3)));
         Assert.False(repository.IsFaulted);
     }
 
@@ -319,22 +319,22 @@ public sealed class SplitExactDecodingTests : IDisposable {
         registry.Register(Definition(schema, reader));
     }
 
-    private static P0PreparedCatalog Catalog(params DurableSchema[] schemas) {
-        P0CatalogWorkspace workspace = new(static () => { });
+    private static PreparedSchemaCatalogWrite Catalog(params DurableSchema[] schemas) {
+        SchemaCatalogWorkspace workspace = new(static () => { });
         foreach (DurableSchema schema in schemas) { workspace.Set(schema); }
         return workspace.Prepare();
     }
 
-    private static P0GraphSnapshot Publish(P0Repository repository, P0PreparedGraphWrite write, P0PreparedCatalog? catalog = null) {
-        using P0PendingSave pending = repository.Prepare("main", P0GraphKind.State, write, catalog?.Write);
+    private static StoredGraphRevision Publish(RepositoryStorageFacade repository, PreparedGraphWrite write, PreparedSchemaCatalogWrite? catalog = null) {
+        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, write, catalog?.Write);
         return repository.Commit(pending).Business;
     }
 
-    private static ObjectVersionRecord Durable(P0CatalogView catalog, uint id, DurableSchema schema, ReadOnlySpan<byte> body) =>
-        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(body), catalog));
-    private static ObjectVersionRecord Node(P0CatalogView catalog, uint id, byte value, byte text) => Durable(catalog, id, NodeSchema, [value, text]);
+    private static ObjectVersionRecord Durable(SchemaCatalogView catalog, uint id, DurableSchema schema, ReadOnlySpan<byte> body) =>
+        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(body), catalog));
+    private static ObjectVersionRecord Node(SchemaCatalogView catalog, uint id, byte value, byte text) => Durable(catalog, id, NodeSchema, [value, text]);
     private static ObjectVersionRecord Text(uint id, string value) => ObjectVersionRecord.CreateBase(id,
-        P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
 
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);
 }

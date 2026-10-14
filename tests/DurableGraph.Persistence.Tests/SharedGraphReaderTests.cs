@@ -14,14 +14,14 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 /// <summary>White-box optimization witnesses; public ReadPair does not guarantee cross-graph identity.</summary>
 public sealed class SharedGraphReaderTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-shared-reader-{Guid.NewGuid():N}");
-    private readonly P0Repository _repository;
-    private readonly P0PreparedCatalog _initialCatalog;
+    private readonly RepositoryStorageFacade _repository;
+    private readonly PreparedSchemaCatalogWrite _initialCatalog;
     private readonly Dictionary<FrameAddress, string> _branches = [];
-    private P0GraphStore Store => _repository.Store;
+    private GraphRecordStore Store => _repository.Store;
     private int _nextBranch;
     public SharedGraphReaderTests() {
-        _repository = P0Repository.CreateNew(_root);
-        P0CatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
+        _repository = RepositoryStorageFacade.CreateNew(_root);
+        SchemaCatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
         catalog.Set(SharedReadModel.Schema);
         _initialCatalog = catalog.Prepare();
     }
@@ -136,7 +136,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
         FrameAddress first = Seed((1, new(2, 2, 0, 10)), (2, originalChild));
         State nextChild = equalBytes ? originalChild : originalChild with { Value = 30 };
         FrameAddress second = Append(first, [Write(2, nextChild)]);
-        Assert.Equal(Store.ReadGraph(first).Objects[1], Store.ReadGraph(second).Objects[1]);
+        Assert.Equal(Store.ReadGraph(first).ObjectHeads[1], Store.ReadGraph(second).ObjectHeads[1]);
         GraphReadStatistics stats = new();
 
         var pair = ReadPair(
@@ -317,26 +317,26 @@ public sealed class SharedGraphReaderTests : IDisposable {
 
     private FrameAddress Seed(params (uint Id, State State)[] rows) => Append(null, rows.Select(row => Write(row.Id, row.State)));
     private FrameAddress Reuse(FrameAddress previous, params uint[] ids) => Append(previous, [],
-        Store.ReadGraph(previous).Objects.Keys.Except(ids));
+        Store.ReadGraph(previous).ObjectHeads.Keys.Except(ids));
     private FrameAddress Append(FrameAddress? previous, IEnumerable<ObjectVersionRecord> records, IEnumerable<uint>? removed = null) {
         ObjectVersionRecord[] rows = records.ToArray();
         string branch = previous is { } source ? _branches[source] : $"source-{_nextBranch++}";
         ObjectId root = previous is { } prior ? Store.ReadGraph(prior).RootId : new(rows.Min(row => row.ObjectId));
         bool initializeMeta = _repository.SharedSchemaRoot is null;
-        using P0PendingSave pending = _repository.Prepare(branch, P0GraphKind.State, new(previous, root, rows, removed),
+        using PendingRepositorySave pending = _repository.Prepare(branch, StoredGraphKind.State, new(previous, root, rows, removed),
             initializeMeta ? _initialCatalog.Write : null);
-        P0GraphSnapshot graph = _repository.Commit(pending,
+        StoredGraphRevision graph = _repository.Commit(pending,
             initializeMeta ? _initialCatalog.Install : null,
             prepareMeta: initializeMeta ? _initialCatalog.PrepareInstall : null).Business;
         _branches.Add(graph.Address, branch);
         return graph.Address;
     }
     private ObjectVersionRecord Write(uint id, State state) => ObjectVersionRecord.CreateBase(id,
-        P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(state), _initialCatalog.View));
+        TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(state), _initialCatalog.View));
     private static ObjectVersionRecord String(uint id, string value) => ObjectVersionRecord.CreateBase(id,
-        P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
     private Node Read(FrameAddress address, ObjectId root, StateModelRegistry models) {
-        DecodedRevision decoded = DecodedRevision.ReadSplit(Store, address, models);
+        DecodedRevision decoded = DecodedRevision.ReadStoredGraph(Store, address, models);
         return GraphReader.ReadRoot<Node>(decoded, root, new(decoded.SourceModels!));
     }
     // Same-S reuse must come from the actual first reader. This diagnostic does not
@@ -344,9 +344,9 @@ public sealed class SharedGraphReaderTests : IDisposable {
     private (Node First, Node Second) ReadPair(FrameAddress first, ObjectId firstRoot,
         FrameAddress second, ObjectId secondRoot, StateModelRegistry models, GraphReadStatistics? statistics = null) {
         StateModelRegistry.FrozenConfiguration configuration = models.FreezeConfiguration();
-        DecodedRevision a = DecodedRevision.ReadSplit(Store, first, configuration);
+        DecodedRevision a = DecodedRevision.ReadStoredGraph(Store, first, configuration);
         bool sameSchema = Store.ReadMetadata(first).SchemaRoot == Store.ReadMetadata(second).SchemaRoot;
-        DecodedRevision b = DecodedRevision.ReadSplit(Store, second, configuration, sameSchema ? a.BindingEnvironment : null);
+        DecodedRevision b = DecodedRevision.ReadStoredGraph(Store, second, configuration, sameSchema ? a.BindingEnvironment : null);
         if (sameSchema) { Assert.Same(a.BindingEnvironment, b.BindingEnvironment); }
         else { Assert.NotSame(a.BindingEnvironment, b.BindingEnvironment); }
         var pair = GraphReader.ReadPair(a, new(a.SourceModels!, statistics), firstRoot,

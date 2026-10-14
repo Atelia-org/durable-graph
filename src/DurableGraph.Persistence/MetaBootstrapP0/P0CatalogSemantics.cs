@@ -1,8 +1,8 @@
 using Atelia.DurableGraph.Schema;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
-internal static class P0CatalogSemantics {
+internal static class SchemaCatalogSemantics {
     internal const int MaximumExactDepth = 256;
 
     internal static IReadOnlyDictionary<SchemaKey, DurableSchema> Collect(
@@ -26,7 +26,7 @@ internal static class P0CatalogSemantics {
                 if (depth + priorHeight - 1 > MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
                 return priorHeight;
             }
-            P0CatalogWorkspace.Validate(schema);
+            SchemaCatalogWorkspace.Validate(schema);
             SchemaKey key = new(schema.Type, schema.Version);
             if (schemas.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) { throw new SchemaConflictException(prior, schema); }
             schemas[key] = schema;

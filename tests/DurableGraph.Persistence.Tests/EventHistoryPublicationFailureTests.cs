@@ -30,15 +30,15 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterPublication)]
-    [InlineData((int)P0SaveCheckpoint.BeforeInstall)]
+    [InlineData((int)RepositorySaveStage.AfterPublication)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall)]
     public void PublishedEventFailureReopensAsPendingWithoutAdvancingStateBaseline(int point) {
         FrameAddress state;
         using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             state = session.StateRevisionAddress!.Value;
-            repository.MetaBootstrapCheckpoint = checkpoint => {
-                if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("Event published but completion interrupted");
+            repository.SaveStageObserver = checkpoint => {
+                if (checkpoint == (RepositorySaveStage)point) throw new IOException("Event published but completion interrupted");
             };
             var failure = Assert.Throws<GraphCommitException>(() => session.CommitEvent(new Node { Value = 8 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, failure.Outcome);

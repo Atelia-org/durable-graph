@@ -11,9 +11,9 @@ public sealed class NominalReferenceSchemaWireTests {
         Assert.ThrowsAny<ArgumentException>(() => new DurableFieldInfo(1, TypeTag.UInt32, "A"));
         DurableSchema self = new("A", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "A"));
         Assert.Null(self.BaseSchema);
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(self);
-        P0CatalogView prepared = workspace.Prepare().View;
+        SchemaCatalogView prepared = workspace.Prepare().View;
         Assert.Equal(self, Assert.Single(prepared.Schemas).Value);
         Assert.Null(prepared.Schemas[new("A", 1)].BaseSchema);
     }

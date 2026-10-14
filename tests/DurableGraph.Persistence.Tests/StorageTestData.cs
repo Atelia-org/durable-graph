@@ -70,12 +70,12 @@ internal static class StorageTestData {
 
     internal static byte[] ReadSelectedSchemaPayload(string root) {
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(root);
-        using FrameRead frame = resources.Data.ReadFrame(resources.SharedMetaBootstrapRoot!.Value).Unwrap();
+        using FrameRead frame = resources.Data.ReadFrame(resources.SharedSchemaRoot!.Value).Unwrap();
         return frame.Payload.ToArray();
     }
 
     // A graph frame and its owned object batch have different addresses in the split format.
-    internal static IReadOnlyList<ObjectVersionRecord> LocalRecords(P0GraphStore store, FrameAddress graph) =>
+    internal static IReadOnlyList<ObjectVersionRecord> LocalRecords(GraphRecordStore store, FrameAddress graph) =>
         store.ReadGraph(graph).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 
 }

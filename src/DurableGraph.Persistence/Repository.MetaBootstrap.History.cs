@@ -6,25 +6,25 @@ namespace Atelia.DurableGraph;
 
 public sealed partial class Repository {
     // Metadata navigation selects business history without reading live directories or typed bodies.
-    private HistoryGraphRecord ReadHistoryCore(FrameAddress address) => _resources.ReadMetaBootstrapHistory(address);
+    private HistoryGraphRecord ReadHistoryCore(FrameAddress address) => _resources.ReadHistory(address);
 
     // Callers own the complete operation's busy guard. Each selected graph gets its exact S environment.
-    private IDurableObject ReadMetaBootstrapRootCore(CheckpointAddress frame) {
-        DecodedRevision source = DecodedRevision.ReadSplit(_splitRepository!.Store, frame.Address, _splitConfiguration!);
+    private IDurableObject ReadGraphRootCore(CheckpointAddress frame) {
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(_storageFacade!.Store, frame.Address, _modelConfiguration!);
         return GraphReader.ReadRoot<IDurableObject>(source, frame.RootId, new(source.SourceModels!));
     }
 
-    private Checkpoint ReadMetaBootstrapCheckpointCore(CheckpointAddress address) {
+    private Checkpoint ReadHistoryCheckpointCore(CheckpointAddress address) {
         GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
         CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
         IDurableObject root;
         IDurableObject? previous;
         if (previousAddress is null) {
-            root = ReadMetaBootstrapRootCore(address);
+            root = ReadGraphRootCore(address);
             previous = null;
         } else {
-            DecodedRevision first = DecodedRevision.ReadSplit(_splitRepository!.Store, address.Address, _splitConfiguration!);
-            DecodedRevision second = DecodedRevision.ReadSplit(_splitRepository.Store, previousAddress.Address, _splitConfiguration!);
+            DecodedRevision first = DecodedRevision.ReadStoredGraph(_storageFacade!.Store, address.Address, _modelConfiguration!);
+            DecodedRevision second = DecodedRevision.ReadStoredGraph(_storageFacade.Store, previousAddress.Address, _modelConfiguration!);
             (root, previous) = GraphReader.ReadIndependent(first, new(first.SourceModels!), address.RootId,
                 second, new(second.SourceModels!), previousAddress.RootId);
         }
@@ -33,40 +33,40 @@ public sealed partial class Repository {
             : new StateCheckpoint(address, root, previous, previousAddress);
     }
 
-    private (IDurableObject First, IDurableObject Second) ReadMetaBootstrapPairCore(
+    private (IDurableObject First, IDurableObject Second) ReadGraphPairCore(
         CheckpointAddress firstAddress, CheckpointAddress secondAddress) {
-        var store = _splitRepository!.Store;
-        DecodedRevision first = DecodedRevision.ReadSplit(store, firstAddress.Address, _splitConfiguration!);
-        DecodedRevision.SplitBindingEnvironment? environment = first.BindingEnvironment;
+        var store = _storageFacade!.Store;
+        DecodedRevision first = DecodedRevision.ReadStoredGraph(store, firstAddress.Address, _modelConfiguration!);
+        DecodedRevision.SchemaViewBindingEnvironment? environment = first.BindingEnvironment;
         if (store.ReadMetadata(secondAddress.Address).SchemaRoot != environment?.SelectedSchemaView.Snapshot?.Address) {
             environment = null;
         }
-        // ReadSplit verifies the actual Store, frozen configuration and graph's exact S on reuse.
-        DecodedRevision second = DecodedRevision.ReadSplit(store, secondAddress.Address, _splitConfiguration!, environment);
+        // ReadStoredGraph verifies the actual Store, frozen configuration and graph's exact S on reuse.
+        DecodedRevision second = DecodedRevision.ReadStoredGraph(store, secondAddress.Address, _modelConfiguration!, environment);
         return GraphReader.ReadPair(first, new(first.SourceModels!), firstAddress.RootId,
             second, new(second.SourceModels!), secondAddress.RootId);
     }
 
     private void MutateBranchCore(string branchName, FrameAddress head) {
         // Complete the candidate before user publication hooks and any VS output.
-        GraphResources.MetaBootstrapBranchUpdate update = _resources.PrepareMetaBootstrapBranchRoot(branchName, head);
-        MutateRefCore((out PublicationOutcome outcome) => _resources.PublishMetaBootstrapBranchRoot(update, out outcome));
+        GraphResources.PreparedBranchRootUpdate update = _resources.PrepareBranchRoot(branchName, head);
+        MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranchRoot(update, out outcome));
     }
 
-    private FrameAddress ResolveTagCore(string name) => _resources.ResolveMetaBootstrapTag(name);
+    private FrameAddress ResolveTagCore(string name) => _resources.ResolveStoredTag(name);
 
-    private void CreateMetaBootstrapTagCore(string name, FrameAddress address) {
-        _resources.EnsureMetaBootstrapEditingAllowed();
+    private void CreateTagCore(string name, FrameAddress address) {
+        _resources.EnsureEditingAllowed();
         PublicationOutcome outcome = PublicationOutcome.NotAttempted;
-        try { Checkpoint?.Invoke(CommitCheckpoint.BeforePublication); }
+        try { OperationStageObserver?.Invoke(RepositoryOperationStage.BeforePublication); }
         catch (Exception error) { throw new GraphCommitException(GraphCommitOutcome.NotPublished, null, error); }
-        try { _resources.CreateMetaBootstrapTag(name, address, out outcome); }
+        try { _resources.CreateStoredTag(name, address, out outcome); }
         catch (Exception error) {
             // Pre-I/O validation and an ordinary VS rejection retain their original error.
             if (outcome == PublicationOutcome.NotAttempted && !_resources.IsFaulted) { throw; }
             throw new GraphCommitException(MapOutcome(outcome), null, error);
         }
-        try { Checkpoint?.Invoke(CommitCheckpoint.AfterPublication); }
+        try { OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPublication); }
         catch (Exception error) {
             _resources.MarkFaulted();
             throw new GraphCommitException(GraphCommitOutcome.Published, null, error);

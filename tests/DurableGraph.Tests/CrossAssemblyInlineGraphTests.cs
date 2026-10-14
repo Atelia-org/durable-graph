@@ -24,7 +24,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var seed = host.GetMethod("Seed")!.CreateDelegate<Func<IDurableObject>>();
         var mutate = host.GetMethod("MutateValue")!.CreateDelegate<Action<IDurableObject>>();
         IDurableObject world = seed();
-        var snapshot = registry.Snapshot();
+        var snapshot = registry.CreateEnvironment();
         var binding = snapshot.ResolveCurrentModel(world.GetType());
         CaptureSession capture = new();
         using (CaptureContext first = capture.BeginCapture(snapshot)) {
@@ -48,8 +48,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverseRegistration);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        var initial = DecodedRevision.ReadSplit(states, addresses[0], registry);
+        var states = segments.GraphStore;
+        var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], registry);
         ObjectStateRecord root = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.World");
         ObjectStateRecord node = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.Node");
         foreach (int index in new[] { 1, 4, 5 }) {
@@ -62,7 +62,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var inlineChange = Assert.Single(DefaultRecords(states, addresses[3]));
         Assert.Equal(root.Id.Value, inlineChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, inlineChange.Kind);
-        Assert.Equal(initial.Objects.Count, DecodedRevision.ReadSplit(states, addresses[^1], registry).Objects.Count);
+        Assert.Equal(initial.Objects.Count, DecodedRevision.ReadStoredGraph(states, addresses[^1], registry).Objects.Count);
     }
 
     private const string CrossInlineValues = """

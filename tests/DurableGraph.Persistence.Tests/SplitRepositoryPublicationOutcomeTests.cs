@@ -30,14 +30,14 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     [Fact]
     public void BeforeOutputNotPublishedKeepsTheOwnerHealthyAndRequiresAnExplicitRetry() {
         SeedResult seed = Seed();
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Assert.NotNull(repository.PreparedStateEntry);
             GraphResources resources = ResourcesOf(repository);
-            P0GraphStore store = repository.MetaBootstrapStore;
-            NormalizedRevision baseline = main.Baseline!;
+            GraphRecordStore store = repository.GraphStore;
+            NormalizedGraphState baseline = main.Baseline!;
             CheckpointAddress oldHead = main.Head;
-            P0CatalogView accepted = main.Catalog.Accepted!;
+            SchemaCatalogView accepted = main.Catalog.Accepted!;
             RefBytesSnapshot oldBranches = resources.Versions.ReadRef(1).Unwrap();
             RefBytesSnapshot oldShared = resources.Versions.ReadRef(2).Unwrap();
             FrameImage[] oldFrames = ReadFrames(resources.Data);
@@ -47,8 +47,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             root.Numbers[7] = 201;
             IOException failure = new("Before any output");
             int attempts = 0;
-            repository.MetaBootstrapCheckpoint = point => {
-                if (point == P0SaveCheckpoint.BeforeAppend) { attempts++; throw failure; }
+            repository.SaveStageObserver = point => {
+                if (point == RepositorySaveStage.BeforeAppend) { attempts++; throw failure; }
             };
             CheckpointAddress? delivered = null;
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => delivered = main.CommitState());
@@ -75,9 +75,9 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
 
             // No automatic retry occurred. Removing the injection is an explicit
             // second save of the preserved application mutation and manual intent.
-            repository.MetaBootstrapCheckpoint = null;
+            repository.SaveStageObserver = null;
             CheckpointAddress saved = main.CommitState();
-            P0GraphSnapshot graph = store.ReadGraph(saved.RevisionAddress);
+            StoredGraphRevision graph = store.ReadGraph(saved.RevisionAddress);
             Assert.Equal(seed.State, graph.SourceGraph);
             Assert.NotEqual(seed.Schema, graph.SchemaRoot);
             Assert.Equal(repository.SharedSchemaRoot, graph.SchemaRoot);
@@ -91,29 +91,29 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         SeedResult seed = Seed();
         FrameAddress candidate = default;
         FrameImage[] captured = [];
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Assert.NotNull(repository.PreparedStateEntry); // Actual cold checkout populated the State slot.
             GraphResources resources = ResourcesOf(repository);
-            P0GraphStore store = repository.MetaBootstrapStore; // Borrow before Repository becomes busy.
+            GraphRecordStore store = repository.GraphStore; // Borrow before Repository becomes busy.
             store.ReadGraph(seed.State);
             Assert.True(store.ReadCacheStatistics.ResidentChargeBytes > 0);
             Assert.True(store.ReadCacheStatistics.EntryCount > 0);
-            NormalizedRevision baseline = main.Baseline!;
+            NormalizedGraphState baseline = main.Baseline!;
             CheckpointAddress oldHead = main.Head;
-            P0CatalogView accepted = main.Catalog.Accepted!;
+            SchemaCatalogView accepted = main.Catalog.Accepted!;
             HashSet<FrameAddress> oldAddresses = seed.Frames.Select(frame => frame.Address).ToHashSet();
             IOException failure = new("Actual split publication " + stage);
             int hookCalls = 0;
-            repository.MetaBootstrapCheckpoint = point => {
-                if (point == P0SaveCheckpoint.AfterBusinessAppend) {
+            repository.SaveStageObserver = point => {
+                if (point == RepositorySaveStage.AfterBusinessAppend) {
                     // The actual DG append has returned. No FS reads take place
                     // inside a VS hook while a CU builder remains on its stack.
                     captured = ReadFrames(resources.Data).Where(frame => !oldAddresses.Contains(frame.Address)).ToArray();
-                    candidate = captured.Single(frame => frame.Tag == P0GraphWire.GraphTag &&
-                        store.ReadMetadata(frame.Address).Kind == P0GraphKind.State).Address;
+                    candidate = captured.Single(frame => frame.Tag == GraphFrameCodec.GraphTag &&
+                        store.ReadMetadata(frame.Address).Kind == StoredGraphKind.State).Address;
                 }
-                if (stage == "BeforeInstall" && point == P0SaveCheckpoint.BeforeInstall) { hookCalls++; throw failure; }
+                if (stage == "BeforeInstall" && point == RepositorySaveStage.BeforeInstall) { hookCalls++; throw failure; }
             };
             if (stage != "BeforeInstall") {
                 InstallPublicationFault(resources.Versions, stage, () => {
@@ -150,7 +150,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
             Assert.Throws<ObjectDisposedException>(() => store.ReadGraph(seed.State));
             Assert.Throws<ObjectDisposedException>(() => store.ReadDirectory(seed.Directory));
-            Assert.Throws<ObjectDisposedException>(() => store.Append(P0GraphKind.State, seed.State, seed.Schema,
+            Assert.Throws<ObjectDisposedException>(() => store.Append(StoredGraphKind.State, seed.State, seed.Schema,
                 new(seed.State, seed.RootId, [])));
             Assert.Equal(completedOutput, store.AppendedFrames); // Fault rejection neither retries nor writes.
         }
@@ -159,9 +159,9 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
 
     private void VerifySelectedAndContinue(SeedResult seed, bool visible, FrameAddress? candidate, FrameImage[] capturedFrames) {
         FrameAddress continued;
-        using (Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             GraphResources resources = ResourcesOf(reopened);
-            P0GraphStore store = reopened.MetaBootstrapStore;
+            GraphRecordStore store = reopened.GraphStore;
             IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Versions.ReadRef(1).Unwrap(), "P0R1"u8);
             IReadOnlyDictionary<string, FrameAddress> shared = ReadRoot(resources.Versions.ReadRef(2).Unwrap(), "P0S1"u8);
             FrameAddress selectedState = branches["branch/main"], selectedSchema = shared["schema"];
@@ -177,10 +177,10 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
                 Assert.Equal(seed.State, selectedState);
                 Assert.Equal(seed.Schema, selectedSchema);
             }
-            P0GraphSnapshot selected = store.ReadGraph(selectedState);
+            StoredGraphRevision selected = store.ReadGraph(selectedState);
             Assert.Equal(selectedSchema, selected.SchemaRoot);
-            P0CatalogView original = P0CatalogView.Load(store, seed.Schema);
-            P0CatalogView catalog = P0CatalogView.Load(store, selectedSchema);
+            SchemaCatalogView original = SchemaCatalogView.Load(store, seed.Schema);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(store, selectedSchema);
             Assert.False(original.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             Assert.Equal(visible, catalog.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             if (visible) { Assert.Equal(Extra, catalog.Schemas[new(Extra.Type, Extra.Version)]); }
@@ -189,13 +189,13 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             AssertFramesPreserved(resources.Data, seed.Frames);
             AssertFramesPreserved(resources.Data, capturedFrames); // Complete candidates remain even when unselected.
             if (candidate is { } completedCandidate) {
-                P0GraphSnapshot completed = store.ReadGraph(completedCandidate);
+                StoredGraphRevision completed = store.ReadGraph(completedCandidate);
                 Assert.Equal(seed.State, completed.SourceGraph);
                 Assert.NotEqual(seed.Schema, completed.SchemaRoot);
-                P0GraphSnapshot meta = store.ReadGraph(completed.SchemaRoot!.Value);
-                Assert.Equal(P0GraphKind.Meta, meta.Kind);
+                StoredGraphRevision meta = store.ReadGraph(completed.SchemaRoot!.Value);
+                Assert.Equal(StoredGraphKind.Meta, meta.Kind);
                 Assert.Equal(seed.Schema, meta.SourceGraph);
-                Assert.Equal(Extra, P0CatalogView.Load(store, meta.Address).Schemas[new(Extra.Type, Extra.Version)]);
+                Assert.Equal(Extra, SchemaCatalogView.Load(store, meta.Address).Schemas[new(Extra.Type, Extra.Version)]);
                 if (!visible) { Assert.NotEqual(selectedState, completedCandidate); }
             }
             AssertRing(reopened.ReadState(reopened.ResolveTag("initial")), 7);
@@ -206,7 +206,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.Equal(seed.Storage.Keys.OrderBy(id => id.Value), cold.Baseline!.Objects.Keys.OrderBy(id => id.Value));
             foreach ((ObjectId id, ObjectStorageInfo oldStorage) in seed.Storage) {
                 ObjectStorageInfo actual = cold.Baseline.Objects[id].Storage!.Value;
-                Assert.Equal(actual.Head, selected.Objects[id.Value]);
+                Assert.Equal(actual.Head, selected.ObjectHeads[id.Value]);
                 Assert.Equal(actual.ReconstructionPayloadBytes, store.ReadObjectChain(selectedState, id.Value).ReconstructionPayloadBytes);
                 if (!visible || id != seed.ListId) { Assert.Equal(oldStorage, actual); }
             }
@@ -214,10 +214,10 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             root.Numbers[8] = 202;
             CheckpointAddress saved = cold.CommitState();
             continued = saved.RevisionAddress;
-            P0GraphSnapshot next = store.ReadGraph(continued);
+            StoredGraphRevision next = store.ReadGraph(continued);
             Assert.Equal(selectedState, next.SourceGraph);
             Assert.Equal(selectedSchema, next.SchemaRoot);
-            P0Batch batch = store.ReadBatch(next.OwnedBatch!.Value);
+            ObjectVersionBatch batch = store.ReadBatch(next.OwnedBatch!.Value);
             Assert.Equal(selectedState, batch.SourceGraph);
             Assert.Equal(selectedSchema, batch.SchemaRoot);
             ObjectVersionRecord delta = Assert.Single(batch.Records);
@@ -232,7 +232,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             AssertFramesPreserved(resources.Data, seed.Frames);
             AssertFramesPreserved(resources.Data, capturedFrames);
         }
-        using Repository final = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models());
+        using Repository final = Repository.OpenStorageReadOnlyExisting(_path, Models());
         Assert.Equal(continued, final.GetHead("main").RevisionAddress);
         AssertRing(final.ReadState(final.GetHead("main")), visible ? 201 : 7, 202);
         AssertRing(final.ReadState(final.ResolveTag("initial")), 7);
@@ -241,10 +241,10 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     }
 
     private SeedResult Seed() {
-        using Repository repository = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = repository.CreateBranch("main", Ring());
         repository.CreateTag("initial", main.Head);
-        P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(main.Head.RevisionAddress);
+        StoredGraphRevision graph = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
         Dictionary<ObjectId, ObjectStorageInfo> storage = main.Baseline!.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);
         Assert.Equal(3, storage.Count);
         Assert.Equal(repository.SharedSchemaRoot, graph.SchemaRoot);

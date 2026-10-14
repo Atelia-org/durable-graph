@@ -24,12 +24,12 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     public void Replacing_an_unpublished_root_recomputes_its_exact_dependencies_without_poisoning_the_new_candidate() {
         DurableSchema pointA = Point(TypeTag.Int32), pointB = Point(TypeTag.Int64);
         DurableSchema rootA = InlineOwner("Owner", pointA), rootB = InlineOwner("Owner", pointB);
-        P0CatalogWorkspace owner = new(static () => { });
+        SchemaCatalogWorkspace owner = new(static () => { });
         owner.Set(rootA);
-        P0PreparedCatalog discarded = owner.Prepare();
+        PreparedSchemaCatalogWrite discarded = owner.Prepare();
         Assert.Equal(pointA, discarded.View.Schemas[new(pointA.Type, 1)]);
         owner.Set(rootB);
-        P0PreparedCatalog corrected = owner.Prepare();
+        PreparedSchemaCatalogWrite corrected = owner.Prepare();
         Assert.Equal(2, corrected.View.Schemas.Count);
         Assert.Equal(rootB, corrected.View.Schemas[new(rootB.Type, 1)]);
         Assert.Equal(pointB, corrected.View.Schemas[new(pointB.Type, 1)]);
@@ -43,14 +43,14 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         DurableSchema pointA = Point(TypeTag.Int32), pointB = Point(TypeTag.Int64);
         DurableSchema rootA = InlineOwner("Owner", pointA), rootB = InlineOwner("Owner", pointB);
         DurableSchema other = InlineOwner("OtherOwner", pointA);
-        P0CatalogWorkspace owner = new(static () => { });
+        SchemaCatalogWorkspace owner = new(static () => { });
         owner.Set(rootA);
         _ = owner.Prepare(); // Abandoning an unaccepted candidate does not clear logical roots.
         owner.Set(other);
         Assert.Throws<SchemaConflictException>(() => { owner.Set(rootB); _ = owner.Prepare(); });
         Assert.Null(owner.Accepted);
         owner.Set(rootA);
-        P0CatalogView corrected = owner.Prepare().View;
+        SchemaCatalogView corrected = owner.Prepare().View;
         Assert.Equal(3, corrected.Schemas.Count);
         Assert.Equal(other, corrected.Schemas[new(other.Type, 1)]);
         Assert.Equal(pointA, corrected.Schemas[new(pointA.Type, 1)]);
@@ -59,10 +59,10 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     [Fact]
     public void Discarded_capture_layouts_do_not_become_permanent_dirty_roots() {
         ObjectLayout listA = NullableList(Point(TypeTag.Int32)), listB = NullableList(Point(TypeTag.Int64));
-        P0CatalogWorkspace owner = new(static () => { });
-        P0PreparedCatalog abandoned = owner.PrepareOwned([listA]);
+        SchemaCatalogWorkspace owner = new(static () => { });
+        PreparedSchemaCatalogWrite abandoned = owner.PrepareOwned([listA]);
         Assert.Equal(0, owner.DirtyCount);
-        P0PreparedCatalog next = owner.PrepareOwned([listB]);
+        PreparedSchemaCatalogWrite next = owner.PrepareOwned([listB]);
         Assert.Equal(0, owner.DirtyCount);
         Assert.Null(owner.Accepted);
         Assert.Equal(listB, next.View.ResolveLayout(next.View.DescriptorId(listB)));
@@ -77,13 +77,13 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         TypeExpr nominal = TypeExpr.List(TypeExpr.Nullable(pointA.Type));
         DurableSchema root = new("ListOwner", 1, DurableFieldInfo.Reference(1, nominal));
         ObjectLayout listA = NullableList(pointA), listB = NullableList(pointB);
-        P0CatalogWorkspace catalog = new(static () => { });
+        SchemaCatalogWorkspace catalog = new(static () => { });
         catalog.Set(root);
         catalog.Set(listA);
-        P0PreparedCatalog initial = catalog.Prepare();
-        using var repository = P0Repository.CreateNew(_path);
-        byte[] rootBody = P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(root), new PreparedBaseBody([0]), initial.View);
-        using (var pending = repository.Prepare("main", P0GraphKind.State,
+        PreparedSchemaCatalogWrite initial = catalog.Prepare();
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        byte[] rootBody = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(root), new PreparedBaseBody([0]), initial.View);
+        using (var pending = repository.Prepare("main", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, rootBody)]), initial.Write)) {
             repository.Commit(pending, initial.Install, prepareMeta: initial.PrepareInstall);
         }
@@ -104,7 +104,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     [InlineData("typeOperand")]
     public void Cold_meta_read_rejects_construction_cycles_in_valid_employee_reference_roles(string edge) {
         DurableSchema root = new("Owner", 1, new DurableFieldInfo(1, TypeTag.Int32));
-        P0CatalogView view = Prepare(root).View;
+        SchemaCatalogView view = Prepare(root).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId descriptor = view.DescriptorId(ObjectLayout.ForDurable(root));
         DescriptorDto d = rows[descriptor].GetState<DescriptorDto>();
@@ -127,7 +127,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     [InlineData("nullableToString")]
     public void Cold_meta_read_rejects_wrong_typed_roles_or_exact_dependency_kinds(string error) {
         DurableSchema root = new("Owner", 1, new DurableFieldInfo(1, TypeTag.Int32));
-        P0CatalogView view = Prepare(root).View;
+        SchemaCatalogView view = Prepare(root).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId descriptor = view.DescriptorId(ObjectLayout.ForDurable(root));
         DescriptorDto d = rows[descriptor].GetState<DescriptorDto>();
@@ -153,7 +153,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         DurableSchema root = error == "listTypeWithBuiltinTag"
             ? new("Owner", 1, DurableFieldInfo.Reference(1, TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32))))
             : new("Owner", 1, new DurableFieldInfo(1, TypeTag.Int32));
-        P0CatalogView view = Prepare(root, point).View;
+        SchemaCatalogView view = Prepare(root, point).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId descriptor = view.DescriptorId(ObjectLayout.ForDurable(root));
         DescriptorDto d = rows[descriptor].GetState<DescriptorDto>();
@@ -179,7 +179,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     public void Live_but_undeclared_schema_nodes_cannot_supply_exact_dependencies(string dependency) {
         DurableSchema exact = dependency == "base" ? new("Parent", 1) : Point(TypeTag.Int32);
         DurableSchema root = dependency == "base" ? new("Owner", 1, [], exact) : InlineOwner("Owner", exact);
-        P0CatalogView view = Prepare(root).View;
+        SchemaCatalogView view = Prepare(root).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         CatalogDto catalog = rows[view.RootId].GetState<CatalogDto>();
         ObjectStateRecord list = rows[catalog.Segment0Field1];
@@ -192,7 +192,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     [Fact]
     public void A_known_inline_family_cannot_be_reinterpreted_as_a_nominal_reference_target() {
         DurableSchema point = Point(TypeTag.Int32), root = InlineOwner("Owner", point);
-        P0CatalogView view = Prepare(root).View;
+        SchemaCatalogView view = Prepare(root).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId field = RootField(rows, view.DescriptorId(ObjectLayout.ForDurable(root)));
         ObjectId type = rows[InlineDescriptor(view)].GetState<DescriptorDto>().Segment0Field2;
@@ -205,7 +205,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         TypeExpr box = TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32));
         DurableSchema declaration = new(box, 1);
         DurableSchema owner = new("Owner", 1, DurableFieldInfo.Reference(1, box));
-        P0CatalogView view = Prepare(declaration, owner).View;
+        SchemaCatalogView view = Prepare(declaration, owner).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId field = RootField(rows, view.DescriptorId(ObjectLayout.ForDurable(owner)));
         TypeDto original = rows[rows[field].GetState<FieldDto>().Segment0Field3].GetState<TypeDto>();
@@ -222,7 +222,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     public void Type_expression_depth_is_bounded_before_unchecked_recursive_projection(int depth, bool valid) {
         DurableSchema owner = new("Owner", 1,
             DurableFieldInfo.Reference(1, TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32))));
-        P0CatalogView view = Prepare(owner).View;
+        SchemaCatalogView view = Prepare(owner).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId field = RootField(rows, view.DescriptorId(ObjectLayout.ForDurable(owner)));
         TypeDto initialList = rows[rows[field].GetState<FieldDto>().Segment0Field3].GetState<TypeDto>();
@@ -233,7 +233,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         }
         Replace(rows, field, new FieldDto(1, (byte)TypeTag.ObjectReference, type, default, default));
         if (!valid) { AssertBadProjection(view.RootId, rows); return; }
-        P0CatalogView loaded = new(view.RootId, rows);
+        SchemaCatalogView loaded = new(view.RootId, rows);
         TypeExpr expected = TypeExpr.Builtin(TypeTag.Int32);
         for (int index = 1; index < depth; index++) { expected = TypeExpr.List(expected); }
         Assert.Equal(expected, Assert.Single(loaded.Schemas[new(owner.Type, 1)].Fields).TargetType);
@@ -244,7 +244,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     [InlineData(12, false)]
     public void Shared_type_operands_count_the_expanded_tree_rather_than_only_distinct_employee_nodes(int levels, bool valid) {
         DurableSchema owner = new("Owner", 1, new DurableFieldInfo(1, TypeTag.Int32));
-        P0CatalogView view = Prepare(owner).View;
+        SchemaCatalogView view = Prepare(owner).View;
         Dictionary<ObjectId, ObjectStateRecord> rows = view.Rows.ToDictionary();
         ObjectId name = new(rows.Keys.Max().Value + 1);
         rows.Add(name, new ObjectStateRecord(name, "Nest"));
@@ -260,7 +260,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         Replace(rows, descriptor, new DescriptorDto(d.Segment0Field1, type, d.Segment0Field3,
             d.Segment0Field4, d.Segment0Field5, d.Segment0Field6, d.Segment0Field7));
         if (!valid) { AssertBadProjection(view.RootId, rows); return; }
-        P0CatalogView loaded = new(view.RootId, rows);
+        SchemaCatalogView loaded = new(view.RootId, rows);
         TypeExpr expected = TypeExpr.Builtin(TypeTag.Int32);
         for (int index = 0; index < levels; index++) { expected = TypeExpr.Named("Nest", expected, expected); }
         Assert.Equal(expected, Assert.Single(loaded.Schemas).Key.Type);
@@ -272,15 +272,15 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     public void Exact_schema_depth_retains_the_existing_256_level_contract(int depth, bool valid) {
         DurableSchema root = new("Ancestor0", 1);
         for (int index = 1; index < depth; index++) { root = new DurableSchema($"Ancestor{index}", 1, [], root); }
-        P0CatalogWorkspace owner = new(static () => { });
+        SchemaCatalogWorkspace owner = new(static () => { });
         if (!valid) {
             Assert.Throws<InvalidDataException>(() => { owner.Set(root); _ = owner.Prepare(); });
             Assert.Null(owner.Accepted);
             return;
         }
         owner.Set(root);
-        P0CatalogView prepared = owner.Prepare().View;
-        P0CatalogView loaded = new(prepared.RootId, prepared.Rows);
+        SchemaCatalogView prepared = owner.Prepare().View;
+        SchemaCatalogView loaded = new(prepared.RootId, prepared.Rows);
         Assert.Equal(depth, loaded.Schemas.Count);
         Assert.Equal(root, loaded.Schemas[new(root.Type, 1)]);
     }
@@ -295,21 +295,21 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
                 new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: inline));
         }
         ObjectLayout list = ObjectLayout.ForList(new(new(1, TypeTag.InlineValue, inlineSchema: inline)));
-        P0CatalogWorkspace owner = new(static () => { });
+        SchemaCatalogWorkspace owner = new(static () => { });
         if (!valid) {
             Assert.Throws<InvalidDataException>(() => { owner.Set(list); _ = owner.Prepare(); });
             Assert.Null(owner.Accepted);
             return;
         }
         owner.Set(list);
-        P0CatalogView prepared = owner.Prepare().View;
+        SchemaCatalogView prepared = owner.Prepare().View;
         Dictionary<ObjectId, ObjectStateRecord> rows = prepared.Rows.ToDictionary();
         // Forward dependencies are valid. Reverse declaration order exercises
         // the bounded projection rather than only already-memoized ancestors.
         ObjectStateRecord declarations = rows[prepared.DescriptorListId];
         rows[declarations.Id] = new(declarations.Id, declarations.Layout.List!,
             new FrozenListState<ObjectId>(prepared.DescriptorIds.Reverse().ToArray()));
-        P0CatalogView loaded = new(prepared.RootId, rows);
+        SchemaCatalogView loaded = new(prepared.RootId, rows);
         Assert.Equal(depth, loaded.Schemas.Count);
         Assert.Equal(inline, loaded.Schemas[new(inline.Type, 1)]);
         Assert.Equal(list, loaded.ResolveLayout(loaded.DescriptorId(list)));
@@ -320,10 +320,10 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         DurableSchema a = new("A", 1, DurableFieldInfo.Reference(1, TypeExpr.Named("B")));
         DurableSchema b = new("B", 1, DurableFieldInfo.Reference(1, TypeExpr.Named("A")),
             DurableFieldInfo.Reference(2, TypeExpr.Named("AbsentBusinessModel")));
-        P0CatalogView prepared = Prepare(a, b).View;
+        SchemaCatalogView prepared = Prepare(a, b).View;
         FrameAddress graph = WriteMeta(prepared.RootId, prepared.Rows);
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        P0CatalogView loaded = P0CatalogView.Load(reader.Store, graph);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        SchemaCatalogView loaded = SchemaCatalogView.Load(reader.Store, graph);
         Assert.Equal(2, loaded.Schemas.Count);
         Assert.Equal(a, loaded.Schemas[new(a.Type, 1)]);
         Assert.Equal(b, loaded.Schemas[new(b.Type, 1)]);
@@ -332,34 +332,34 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
 
     [Fact]
     public void A_null_declaration_list_is_a_cold_catalog_error_after_valid_employee_body_decoding() {
-        P0CatalogView prepared = Prepare().View;
+        SchemaCatalogView prepared = Prepare().View;
         Dictionary<ObjectId, ObjectStateRecord> rows = prepared.Rows.ToDictionary();
         Replace(rows, prepared.RootId, new CatalogDto(default));
         FrameAddress graph = WriteMeta(prepared.RootId, rows);
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        P0DecodedRows decoded = P0TypedReader.Read(reader.Store, graph);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        DecodedGraphRows decoded = StoredGraphDecoder.Read(reader.Store, graph);
         Assert.True(decoded.Rows[prepared.RootId].GetState<CatalogDto>().Segment0Field1.IsNull);
-        Assert.Throws<InvalidDataException>(() => P0CatalogView.Load(reader.Store, graph));
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, graph));
     }
 
     [Fact]
     public void Inline_schema_is_declared_and_queryable_but_cannot_be_a_dynamic_object_header() {
         DurableSchema point = Point(TypeTag.Int32);
-        P0CatalogView prepared = Prepare(point).View;
+        SchemaCatalogView prepared = Prepare(point).View;
         ObjectId id = InlineDescriptor(prepared);
         Assert.Contains(id, prepared.DescriptorIds);
         Assert.Equal(point, prepared.Schemas[new(point.Type, 1)]);
         Assert.Throws<InvalidDataException>(() => prepared.ResolveLayout(id));
         byte[] body = Header(5, 1, id.Value);
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(body, prepared));
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Decode(body, prepared));
     }
 
     [Fact]
     public void Fixed_route_rejects_user_layouts_and_the_previous_typed_header_version() {
         DurableSchema user = new("UserLayout", 1, new DurableFieldInfo(1, TypeTag.Int32));
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(user), new PreparedBaseBody([0])));
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(Header(1, 0, 1), null));
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(Header(5, 0, uint.MaxValue), null));
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(user), new PreparedBaseBody([0])));
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Decode(Header(1, 0, 1), null));
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Decode(Header(5, 0, uint.MaxValue), null));
     }
 
     [Fact]
@@ -367,41 +367,41 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         ListLayout list = new(new(1, TypeTag.Int32));
         int[] values = [int.MinValue, -17, 0, 29, int.MaxValue];
         PreparedBaseBody raw = ListStateBody<int, Int32StateOps>.PrepareBase(new(values), list);
-        byte[] body = P0TypedBodyCodec.Encode(ObjectLayout.ForList(list), raw);
-        var decoded = P0TypedBodyCodec.Decode(body, null);
+        byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForList(list), raw);
+        var decoded = TypedBaseBodyCodec.Decode(body, null);
         Assert.Equal(ObjectLayout.ForList(list), decoded.Layout);
         ObjectStateRecord row = P0FixedBindings.Reader(decoded.Layout).Read(new(71), new SingleBody(decoded.Body));
         Assert.Equal(values, row.GetListState<int>().Elements.ToArray());
 
         ObjectLayout withUserValue = NullableList(Point(TypeTag.Int32));
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Encode(withUserValue, new PreparedBaseBody([0])));
-        P0CatalogWorkspace catalog = new(static () => { });
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Encode(withUserValue, new PreparedBaseBody([0])));
+        SchemaCatalogWorkspace catalog = new(static () => { });
         catalog.Set(withUserValue);
-        P0CatalogView view = catalog.Prepare().View;
-        byte[] dynamicBody = P0TypedBodyCodec.Encode(withUserValue, new PreparedBaseBody([0]), view);
-        Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(dynamicBody, null));
-        Assert.Equal(withUserValue, P0TypedBodyCodec.Decode(dynamicBody, view).Layout);
+        SchemaCatalogView view = catalog.Prepare().View;
+        byte[] dynamicBody = TypedBaseBodyCodec.Encode(withUserValue, new PreparedBaseBody([0]), view);
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Decode(dynamicBody, null));
+        Assert.Equal(withUserValue, TypedBaseBodyCodec.Decode(dynamicBody, view).Layout);
     }
 
     [Fact]
     public void Employee_object_headers_cannot_escape_into_business_even_with_matching_employee_code_capabilities() {
-        P0CatalogView meta = Prepare().View;
+        SchemaCatalogView meta = Prepare().View;
         FrameAddress graph;
-        using (var repository = P0Repository.CreateNew(_path)) {
-            StateModelSnapshot employees = P0FixedBindings.CreateSnapshot();
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
+            ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
             ObjectVersionRecord[] records = EncodeRows(meta.Rows, employees);
-            P0GraphSnapshot schema = repository.Store.Append(P0GraphKind.Meta, null, null, new(null, meta.RootId, records));
+            StoredGraphRevision schema = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, meta.RootId, records));
             ObjectLayout layout = P0FixedBindings.Layout(typeof(P0CatalogRecord));
             ObjectStateRecord employee = P0FixedBindings.WithPreparation(new(new(1), layout.Schema!, new CatalogDto(default)), employees);
-            byte[] body = P0TypedBodyCodec.Encode(layout, employee.Preparation!.PrepareBase(employee));
-            graph = repository.Store.Append(P0GraphKind.State, null, schema.Address,
+            byte[] body = TypedBaseBodyCodec.Encode(layout, employee.Preparation!.PrepareBase(employee));
+            graph = repository.Store.Append(StoredGraphKind.State, null, schema.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
             repository.Data.ConfirmDurable();
         }
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         // Omitting selected makes this specifically a fixed-route role check,
         // rather than an incidental failure to find an employee descriptor in S.
-        Assert.Throws<InvalidDataException>(() => P0TypedReader.Read(reader.Store, graph, P0FixedBindings.CreateSnapshot()));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, graph, P0FixedBindings.CreateEnvironment()));
     }
 
     private static DurableSchema Point(TypeTag tag) => new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, tag));
@@ -410,13 +410,13 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     private static ObjectLayout NullableList(DurableSchema point) => ObjectLayout.ForList(new(
         DurableFieldInfo.Nullable(1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point))));
 
-    private static P0PreparedCatalog Prepare(params DurableSchema[] roots) {
-        P0CatalogWorkspace owner = new(static () => { });
+    private static PreparedSchemaCatalogWrite Prepare(params DurableSchema[] roots) {
+        SchemaCatalogWorkspace owner = new(static () => { });
         foreach (DurableSchema schema in roots) { owner.Set(schema); }
         return owner.Prepare();
     }
 
-    private static ObjectId InlineDescriptor(P0CatalogView view) =>
+    private static ObjectId InlineDescriptor(SchemaCatalogView view) =>
         Assert.Single(view.DescriptorIds, id => view.Rows[id].GetState<DescriptorDto>().Segment0Field1 == 3);
 
     private static ObjectId RootField(IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows, ObjectId descriptor) =>
@@ -439,28 +439,28 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
 
     private void AssertBadCold(ObjectId root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows) {
         FrameAddress graph = WriteMeta(root, rows);
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        Assert.Equal(rows.Count, reader.Store.ReadGraph(graph).Objects.Count);
-        Assert.Throws<InvalidDataException>(() => P0CatalogView.Load(reader.Store, graph));
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        Assert.Equal(rows.Count, reader.Store.ReadGraph(graph).ObjectHeads.Count);
+        Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, graph));
     }
 
     private static void AssertBadProjection(ObjectId root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows) =>
-        Assert.Throws<InvalidDataException>(() => new P0CatalogView(root, rows));
+        Assert.Throws<InvalidDataException>(() => new SchemaCatalogView(root, rows));
 
     private FrameAddress WriteMeta(ObjectId root, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows) {
-        using var repository = P0Repository.CreateNew(_path);
-        StateModelSnapshot employees = P0FixedBindings.CreateSnapshot();
-        P0GraphSnapshot graph = repository.Store.Append(P0GraphKind.Meta, null, null, new(null, root, EncodeRows(rows, employees)));
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
+        StoredGraphRevision graph = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, root, EncodeRows(rows, employees)));
         repository.Data.ConfirmDurable();
         return graph.Address;
     }
 
     private static ObjectVersionRecord[] EncodeRows(IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
-        StateModelSnapshot employees) => rows.Values.Select(row => {
+        ModelExecutionEnvironment employees) => rows.Values.Select(row => {
             ObjectStateRecord prepared = P0FixedBindings.WithPreparation(row, employees);
             PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String
                 ? StringPayloadCodec.PrepareBase(prepared.StringContent) : prepared.Preparation!.PrepareBase(prepared);
-            return ObjectVersionRecord.CreateBase(row.Id.Value, P0TypedBodyCodec.Encode(row.Layout, raw));
+            return ObjectVersionRecord.CreateBase(row.Id.Value, TypedBaseBodyCodec.Encode(row.Layout, raw));
         }).ToArray();
 
     private static byte[] Header(byte version, byte route, uint id) {

@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("StateModels.Host")!;
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        StateModelBinding model = models.Snapshot().ResolveCurrentModel(host.Assembly.GetType("StateModels.Item")!);
+        StateModelBinding model = models.CreateEnvironment().ResolveCurrentModel(host.Assembly.GetType("StateModels.Item")!);
         var state = host.GetMethod("State")!.CreateDelegate<Func<int, int, object>>();
         ObjectStateRecord old = new(new(23), new DurableSchema("state.model", 1, new DurableFieldInfo(1, TypeTag.Int32)), state(1, 5));
         ObjectStateRecord normalized = model.Normalize(old);

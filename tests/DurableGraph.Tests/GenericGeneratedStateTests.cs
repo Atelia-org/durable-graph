@@ -198,7 +198,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly=EmitAndLoad(second.OutputCompilation);
         Type host=assembly.GetType("Host")!;
         StateModelRegistry models=host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        StateModelBinding model=models.Snapshot().ResolveCurrentModel(assembly.GetType("World")!);
+        StateModelBinding model=models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("World")!);
         ObjectStateRecord prior=new(new(19),new DurableSchema("World",1,new DurableFieldInfo(1,TypeTag.Int32)),
             host.GetMethod("Prior")!.CreateDelegate<Func<object>>()());
         ObjectStateRecord current=model.Normalize(prior);
@@ -259,7 +259,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly=EmitAndLoad(second.OutputCompilation);
         Type host=assembly.GetType("Host")!;
         StateModelRegistry models=host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        StateModelBinding model=models.Snapshot().ResolveCurrentModel(assembly.GetType("World")!);
+        StateModelBinding model=models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("World")!);
         ObjectStateRecord source=new(new(31),new DurableSchema("World",1,new DurableFieldInfo(1,TypeTag.Int32)),
             host.GetMethod("Prior")!.CreateDelegate<Func<object>>()());
         Assert.Equal(16L,StateModelField(model.Normalize(source),"Segment0Field1"));

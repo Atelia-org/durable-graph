@@ -135,12 +135,12 @@ public sealed class StateModelRegistry : IStateModelRegistration {
 
     /// <summary>Registers one stable ruleset; repeated registration of that instance is harmless.</summary>
     public void Register(StateValueUpgradeRuleSet ruleSet) =>
-        StateModelSnapshot.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
+        ModelExecutionEnvironment.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
 
     public void Register(StateDefinitionBinding definition) {
         ArgumentNullException.ThrowIfNull(definition);
         foreach (StateModelBinding model in _models.Values) { ValidateOwnership(definition, model); }
-        StateModelSnapshot.RegisterDefinition(_definitions, definition);
+        ModelExecutionEnvironment.RegisterDefinition(_definitions, definition);
     }
 
     /// <summary>Registers one stable model atomically; repeated registration of that instance is harmless.</summary>
@@ -192,12 +192,12 @@ public sealed class StateModelRegistry : IStateModelRegistration {
 
         // Each exact view receives fresh mutable closure indexes. Registered capabilities
         // and delegate/comparer references retain the existing configuration-freezing contract.
-        internal StateModelSnapshot CreateSnapshot(Func<SchemaKey, DurableSchema?>? schemaLookup = null) =>
-            _configuration.Snapshot(schemaLookup: schemaLookup);
+        internal ModelExecutionEnvironment CreateEnvironment(Func<SchemaKey, DurableSchema?>? schemaLookup = null) =>
+            _configuration.CreateEnvironment(schemaLookup: schemaLookup);
     }
 
     // Freeze every index before any reader, Upgrade, Capture or Hydrate callback runs.
-    internal StateModelSnapshot Snapshot(Func<SchemaKey, DurableSchema?>? schemaLookup = null) => new(
+    internal ModelExecutionEnvironment CreateEnvironment(Func<SchemaKey, DurableSchema?>? schemaLookup = null) => new(
         new Dictionary<TypeExpr, StateModelBinding>(_models),
         new Dictionary<Type, StateModelBinding>(_types),
         new Dictionary<SchemaKey, StateReaderBinding>(_readers),

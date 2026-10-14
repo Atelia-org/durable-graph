@@ -37,7 +37,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
         {
-            var states = segments.MetaBootstrapStore;
+            var states = segments.GraphStore;
             var initial = states.ReadGraph(first);
             Assert.All(DefaultRecords(states, initial.Address), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             Assert.Empty(DefaultRecords(states, unchanged));
@@ -46,7 +46,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ObjectVersionKind.Delta, vectorDelta.Kind);
             Assert.NotEqual(worldId.Value, vectorDelta.ObjectId);
             Assert.Equal(2, states.ReadObjectChain(vectorChange, vectorDelta.ObjectId).Entries.Count);
-            Assert.Equal(initial.Objects.Keys.Order(), states.ReadGraph(compositeChange).Objects.Keys.Order());
+            Assert.Equal(initial.ObjectHeads.Keys.Order(), states.ReadGraph(compositeChange).ObjectHeads.Keys.Order());
             Assert.All(DefaultRecords(states, compositeChange), row => Assert.NotEqual(worldId.Value, row.ObjectId));
             Assert.NotEmpty(DefaultRecords(states, compositeChange));
             Assert.Empty(DefaultRemoved(states, compositeChange));
@@ -59,19 +59,19 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             var replacement = states.ReadGraph(replaced);
             uint retired = Assert.Single(DefaultRemoved(states, replacement.Address));
-            Assert.Contains(retired, initial.Objects.Keys);
+            Assert.Contains(retired, initial.ObjectHeads.Keys);
             ObjectVersionRecord newArray = Assert.Single(DefaultRecords(states, replacement.Address), row => row.Kind == ObjectVersionKind.Base);
-            Assert.True(newArray.ObjectId > initial.Objects.Keys.Max());
+            Assert.True(newArray.ObjectId > initial.ObjectHeads.Keys.Max());
             Assert.Equal(2, DefaultRecords(states, replacement.Address).Count); // World reference slot and the new array.
             Assert.Equal(2, DefaultRemoved(states, removed).Count); // Cyclic Node[] plus its sole Node.
-            Assert.All(DefaultRemoved(states, removed), id => Assert.Contains(id, initial.Objects.Keys));
-            Assert.Contains(retired, states.ReadGraph(first).Objects.Keys);
-            Assert.DoesNotContain(retired, states.ReadGraph(removed).Objects.Keys);
+            Assert.All(DefaultRemoved(states, removed), id => Assert.Contains(id, initial.ObjectHeads.Keys));
+            Assert.Contains(retired, states.ReadGraph(first).ObjectHeads.Keys);
+            Assert.DoesNotContain(retired, states.ReadGraph(removed).ObjectHeads.Keys);
 
-            fixture.Check(P0BusinessWorkspace.ReadRoot(states, first, fixture.Models()), 0, false, false);
-            fixture.Check(P0BusinessWorkspace.ReadRoot(states, vectorChange, fixture.Models()), 1, false, false);
-            fixture.Check(P0BusinessWorkspace.ReadRoot(states, compositeChange, fixture.Models()), 2, false, false);
-            fixture.Check(P0BusinessWorkspace.ReadRoot(states, removed, fixture.Models()), 2, true, true);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, first, fixture.Models()), 0, false, false);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, vectorChange, fixture.Models()), 1, false, false);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, compositeChange, fixture.Models()), 2, false, false);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, removed, fixture.Models()), 2, true, true);
         }
 
         FrameAddress reopened;
@@ -85,7 +85,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(world, fixture.World(session));
         }
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
-            var states = segments.MetaBootstrapStore;
+            var states = segments.GraphStore;
             Assert.Equal(removed, states.ReadGraph(reopened).SourceGraph);
             Assert.Empty(DefaultRecords(states, reopened));
             Assert.Empty(DefaultRemoved(states, reopened));
@@ -112,32 +112,32 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         using GraphResources segments = GraphResources.OpenExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
+        var states = segments.GraphStore;
         ObjectVersionRecord delta = Assert.Single(DefaultRecords(states, sparse));
         ObjectVersionRecord replacementBase = Assert.Single(DefaultRecords(states, dense));
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         Assert.Equal(ObjectVersionKind.Base, replacementBase.Kind);
         Assert.Equal(delta.ObjectId, replacementBase.ObjectId);
-        Assert.Contains(delta.ObjectId, states.ReadGraph(first).Objects.Keys);
+        Assert.Contains(delta.ObjectId, states.ReadGraph(first).ObjectHeads.Keys);
         Assert.Empty(DefaultRemoved(states, dense));
         Assert.Equal(2, states.ReadObjectChain(sparse, delta.ObjectId).Entries.Count);
         var baseChain = states.ReadObjectChain(dense, delta.ObjectId);
         Assert.Single(baseChain.Entries);
 
-        var decoded = P0TypedBodyCodec.Decode(replacementBase.Body, null);
+        var decoded = TypedBaseBodyCodec.Decode(replacementBase.Body, null);
         Assert.Equal(ObjectStateKind.Array, decoded.Layout.Kind);
         // Structural builtin Array header: ABI, route, then the exact closed TypeExpr.
         Atelia.Binary.BareValueReader header = new(replacementBase.Body);
-        Assert.Equal(P0TypedBodyCodec.FormatVersion, header.ReadByte());
+        Assert.Equal(TypedBaseBodyCodec.FormatVersion, header.ReadByte());
         Assert.Equal(2, header.ReadByte());
         Assert.Equal(decoded.Layout.Type, TypeExprWireCodec.Read(ref header));
         Assert.Equal(header.ConsumedCount, replacementBase.Body.Length - decoded.Body.Length);
         long actualH = baseChain.ReconstructionPayloadBytes;
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(replacementBase.Body.Length), actualH);
         Assert.True(actualH > ObjectVersionPayloadSize.GetBasePayloadBytes(decoded.Body.Length));
-        fixture.Check(P0BusinessWorkspace.ReadRoot(states, first, fixture.Models()), 0, false, false);
-        fixture.Check(P0BusinessWorkspace.ReadRoot(states, sparse, fixture.Models()), 1, false, false);
-        fixture.CheckFilled(P0BusinessWorkspace.ReadRoot(states, dense, fixture.Models()), 9);
+        fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, first, fixture.Models()), 0, false, false);
+        fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, sparse, fixture.Models()), 1, false, false);
+        fixture.CheckFilled(BusinessPersistenceAdapter.ReadRoot(states, dense, fixture.Models()), 9);
     }
 
     [Fact]
@@ -147,8 +147,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         object world = fixture.NewWorld();
         bool mutated = false;
         using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
+            repository.OperationStageObserver = checkpoint => {
+                if (checkpoint != RepositoryOperationStage.AfterPrepare) { return; }
                 fixture.Change(world, 1);
                 fixture.Change(world, 2);
                 fixture.Replace(world);
@@ -184,7 +184,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(world, 0, false, false);
         }
         using GraphResources segments = GraphResources.OpenExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
+        var states = segments.GraphStore;
         var revision = states.ReadGraph(recovered);
         Assert.Equal(first, revision.SourceGraph);
         Assert.Empty(DefaultRecords(states, revision.Address));

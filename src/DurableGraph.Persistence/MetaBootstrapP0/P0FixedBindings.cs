@@ -5,10 +5,10 @@ namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 
 /// <summary>P0's finite employee table and builtin-only operation bindings; neither uses a SchemaStore.</summary>
 internal static class P0FixedBindings {
-    internal static StateModelSnapshot CreateSnapshot() {
+    internal static ModelExecutionEnvironment CreateEnvironment() {
         StateModelRegistry definitions = new();
         P0EmployeeDefinitions.Register(definitions);
-        return definitions.Snapshot();
+        return definitions.CreateEnvironment();
     }
 
     private static readonly Type[] Types = [
@@ -21,15 +21,15 @@ internal static class P0FixedBindings {
     private static readonly ObjectLayout[] Layouts = CreateLayouts();
 
     private static ObjectLayout[] CreateLayouts() {
-        StateModelSnapshot models = CreateSnapshot();
+        ModelExecutionEnvironment models = CreateEnvironment();
         ObjectLayout[] layouts = Types.Select(type => Binding(models, type).CurrentLayout).ToArray();
-        if (layouts.Any(static layout => layout.List is { } list && list.CodecVersion != P0BuiltinLayouts.ListCodecVersion)) {
+        if (layouts.Any(static layout => layout.List is { } list && list.CodecVersion != BuiltinObjectLayouts.ListCodecVersion)) {
             throw new InvalidOperationException("The fixed employee List codec no longer matches typed ABI 5.");
         }
         return layouts;
     }
 
-    private static ObjectBinding Binding(StateModelSnapshot models, Type type) =>
+    private static ObjectBinding Binding(ModelExecutionEnvironment models, Type type) =>
         models.TryGetCurrentObjectBinding(type, out ObjectBinding? binding) ? binding! :
         throw new InvalidDataException("Missing fixed employee binding.");
 
@@ -46,7 +46,7 @@ internal static class P0FixedBindings {
         return false;
     }
 
-    internal static bool IsBuiltin(ObjectLayout layout) => P0BuiltinLayouts.IsBuiltin(layout);
+    internal static bool IsBuiltin(ObjectLayout layout) => BuiltinObjectLayouts.IsBuiltin(layout);
 
     internal static bool IsEmployee(ObjectLayout layout) => !IsBuiltin(layout) && TryCode(layout, out _);
 
@@ -58,14 +58,14 @@ internal static class P0FixedBindings {
         return index >= 0 ? Layouts[index] : throw new InvalidDataException("Unknown fixed employee CLR type.");
     }
 
-    internal static ObjectReaderBinding Reader(ObjectLayout layout, StateModelSnapshot? models = null) {
+    internal static ObjectReaderBinding Reader(ObjectLayout layout, ModelExecutionEnvironment? models = null) {
         if (!IsBuiltin(layout)) { _ = Code(layout); }
-        return (models ?? CreateSnapshot()).ResolveObjectReader(layout);
+        return (models ?? CreateEnvironment()).ResolveObjectReader(layout);
     }
 
-    internal static ObjectStateRecord WithPreparation(ObjectStateRecord row, StateModelSnapshot? models = null) {
+    internal static ObjectStateRecord WithPreparation(ObjectStateRecord row, ModelExecutionEnvironment? models = null) {
         if (!IsBuiltin(row.Layout)) { _ = Code(row.Layout); }
-        models ??= CreateSnapshot();
+        models ??= CreateEnvironment();
         return Binding(models, models.GetDomainType(row.Layout.Type)).Normalize(row);
     }
 }

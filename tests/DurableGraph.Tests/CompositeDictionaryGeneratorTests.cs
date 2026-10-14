@@ -45,7 +45,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void CompositeDictionaryCaptureAndDiffNeverInvokeDomainEqualityAndKeepAllKeyFields() {
         Type host = CompileCompositeDictionaryHost();
         object[] fixture = host.GetMethod("Fixture")!.CreateDelegate<Func<object[]>>()();
-        StateModelSnapshot models = ((StateModelRegistry)fixture[0]).Snapshot();
+        ModelExecutionEnvironment models = ((StateModelRegistry)fixture[0]).CreateEnvironment();
         IDurableObject world = (IDurableObject)fixture[1];
         StateModelBinding model = models.ResolveCurrentModel(world.GetType());
         var calls = (Func<int>)fixture[6];
@@ -107,9 +107,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        DecodedRevision first = DecodedRevision.ReadSplit(states, addresses[0], models);
-        StateModelSnapshot snapshot = first.SourceModels!;
+        var states = segments.GraphStore;
+        DecodedRevision first = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
+        ModelExecutionEnvironment snapshot = first.SourceModels!;
         ObjectStateRecord primary = Assert.Single(first.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.InlineSchema?.Type == TypeExpr.Named("GKey", TypeExpr.Builtin(TypeTag.Int32)));
         StateValueBinding key = snapshot.ResolveStoredValue(primary.Layout.Dictionary!.KeySlot);
@@ -117,7 +117,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .MakeGenericMethod(key.StateType, key.StateOpsType);
         ObjectId originalName = default;
         for (int index = 0; index < addresses.Length; index++) {
-            DecodedRevision decoded = DecodedRevision.ReadSplit(states, addresses[index], models);
+            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(states, addresses[index], models);
             ObjectStateRecord row = decoded.GetRequired(primary.Id);
             Assert.Equal(DictionaryComparerKind.CurrentDefault, ((IFrozenDictionaryState)row.Content).ComparerKind);
             var entries = (Dictionary<int, (ObjectId Name, long Timestamp, int Value)>)read.Invoke(null, [row])!;

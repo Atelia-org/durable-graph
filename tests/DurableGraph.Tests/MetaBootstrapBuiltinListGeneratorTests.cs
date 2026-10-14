@@ -25,43 +25,43 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint rootId;
         uint[] ids;
         IDurableObject original = create();
-        using (P0Repository repository = P0Repository.CreateNew(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot();
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment();
             object[] initial = objects(original);
             for (int i = 0; i < initial.Length; i++) {
                 Assert.True(snapshot.TryGetCurrentObjectBinding(initial[i].GetType(), out ObjectBinding? binding));
                 Assert.Equal(expected[i], binding!.CurrentLayout);
             }
-            P0Session session = new(repository, "main", registered);
-            using P0SessionSave save = session.Prepare(original); // No manual Schema or container Set.
+            BranchSaveSession session = new(repository, "main", registered);
+            using PreparedBranchSave save = session.Prepare(original); // No manual Schema or container Set.
             AssertBootstrapBuiltinListCatalog(save.Catalog.View, expected);
             Assert.Equal(4, save.Business.Write.Records.Count);
             Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            P0SaveResult result = save.Commit();
+            RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             schemaRoot = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
-            Assert.Equal(4, result.Business.Objects.Count); // Root and three Lists; shared inner is one object.
+            Assert.Equal(4, result.Business.ObjectHeads.Count); // Root and three Lists; shared inner is one object.
             Assert.Equal(0, session.Catalog.DirtyCount);
         }
 
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
             // Fresh resources, complete meta read before supplying any business model registry.
-            P0CatalogView meta = P0CatalogView.Load(repository.Store, schemaRoot);
+            SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot);
             AssertBootstrapBuiltinListCatalog(meta, expected);
             Assert.Equal(0, repository.Store.AppendedFrames);
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
-            P0DecodedRows decoded = P0TypedReader.Read(repository.Store, s0, snapshot, meta);
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
+            DecodedGraphRows decoded = StoredGraphDecoder.Read(repository.Store, s0, snapshot, meta);
             Assert.Equal(4, decoded.Rows.Count);
             ids = expected.Select(layout => Assert.Single(decoded.Rows.Values, row => row.Layout.Equals(layout)).Id.Value).ToArray();
             Assert.Equal(rootId, ids[0]);
-            P0GraphSnapshot graph = repository.Store.ReadGraph(s0);
+            StoredGraphRevision graph = repository.Store.ReadGraph(s0);
             for (int i = 1; i < expected.Length; i++) {
                 AssertBootstrapBuiltinListBaseWithoutCatalog(repository, graph, ids[i], expected[i]);
             }
-            IDurableObject read = P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered);
+            IDurableObject read = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered);
             Assert.NotSame(original, read);
             check(read, 0); // Exact List types, wide Int64 values, Nullable markers and shared inner references.
             Assert.Equal(s0, repository.GetHead("main"));
@@ -69,16 +69,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
 
-        using (P0Repository repository = P0Repository.OpenExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry registered = models();
-            P0Session session = new(repository, "main", registered);
+            BranchSaveSession session = new(repository, "main", registered);
             IDurableObject restored = session.State!;
             check(restored, 0);
             object[] restoredObjects = objects(restored);
-            P0GraphSnapshot prior = session.StateSource!;
+            StoredGraphRevision prior = session.StateSource!;
             change(restored);
             check(restored, 1);
-            using (P0SessionSave save = session.Prepare(restored, parameters: new(1_000_000, 1))) {
+            using (PreparedBranchSave save = session.Prepare(restored, parameters: new(1_000_000, 1))) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Equal(0, save.Catalog.AddedDescriptors);
@@ -89,62 +89,62 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == rootId);
                 foreach (ObjectVersionRecord delta in save.Business.Write.Records) {
                     Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                    Assert.Equal(prior.Objects[delta.ObjectId], delta.PriorAddress);
+                    Assert.Equal(prior.ObjectHeads[delta.ObjectId], delta.PriorAddress);
                 }
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s1 = result.Business.Address;
                 Assert.Equal(schemaRoot, result.Meta!.Address);
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
                 Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
-                Assert.Equal(prior.Objects[rootId], result.Business.Objects[rootId]); // Owner's ID slots did not change.
+                Assert.Equal(prior.ObjectHeads[rootId], result.Business.ObjectHeads[rootId]); // Owner's ID slots did not change.
                 Assert.Equal(s0, result.Business.SourceGraph);
                 Assert.Equal(s1, session.StateSource!.Address);
                 object[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(restoredObjects[i], after[i]); }
                 foreach (uint id in ids.Skip(1)) {
-                    Assert.NotEqual(prior.Objects[id], result.Business.Objects[id]);
-                    P0ObjectChain chain = repository.Store.ReadObjectChain(s1, id);
+                    Assert.NotEqual(prior.ObjectHeads[id], result.Business.ObjectHeads[id]);
+                    ObjectVersionChain chain = repository.Store.ReadObjectChain(s1, id);
                     Assert.Equal(2, chain.Entries.Count);
                     Assert.Equal(ObjectVersionKind.Delta, chain.Entries[^1].Record.Kind);
                 }
             }
 
-            P0GraphSnapshot accepted = session.StateSource!;
+            StoredGraphRevision accepted = session.StateSource!;
             long frames = repository.Store.AppendedFrames;
-            using (P0SessionSave unchanged = session.Prepare(restored)) {
+            using (PreparedBranchSave unchanged = session.Prepare(restored)) {
                 Assert.Null(unchanged.Catalog.Write);
                 Assert.Empty(unchanged.Catalog.EncodedIds);
                 Assert.Empty(unchanged.Business.Write.Records);
                 Assert.Empty(unchanged.Business.Write.RemovedIds);
                 Assert.Equal(s1, unchanged.Business.Write.SourceGraph);
-                P0SaveResult result = unchanged.Commit();
+                RepositorySaveResult result = unchanged.Commit();
                 s2 = result.Business.Address;
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
                 Assert.Equal(s1, result.Business.SourceGraph);
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
-                foreach (uint id in ids) { Assert.Equal(accepted.Objects[id], result.Business.Objects[id]); }
+                foreach (uint id in ids) { Assert.Equal(accepted.ObjectHeads[id], result.Business.ObjectHeads[id]); }
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered), 0);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s1, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered), 0);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s1, registered), 1);
         }
 
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView meta = P0CatalogView.Load(repository.Store, schemaRoot);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot);
             AssertBootstrapBuiltinListCatalog(meta, expected);
             Assert.Equal(s2, repository.GetStateHead("main"));
             Assert.Equal(schemaRoot, repository.Store.ReadGraph(s0).SchemaRoot);
             Assert.Equal(schemaRoot, repository.Store.ReadGraph(s1).SchemaRoot);
             StateModelRegistry registered = models();
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered), 0);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s1, registered), 1);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s2, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered), 0);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s1, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, registered), 1);
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
     }
 
-    private static void AssertBootstrapBuiltinListCatalog(P0CatalogView meta, ObjectLayout[] expected) {
+    private static void AssertBootstrapBuiltinListCatalog(SchemaCatalogView meta, ObjectLayout[] expected) {
         DurableSchema root = expected[0].Schema!;
         Assert.Equal(root, Assert.Single(meta.Schemas).Value);
         Assert.Equal(meta.DescriptorId(expected[0]), Assert.Single(meta.DescriptorIds));
@@ -153,14 +153,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
     }
 
-    private static void AssertBootstrapBuiltinListBaseWithoutCatalog(P0Repository repository, P0GraphSnapshot graph,
+    private static void AssertBootstrapBuiltinListBaseWithoutCatalog(RepositoryStorageFacade repository, StoredGraphRevision graph,
         uint id, ObjectLayout expected) {
-        P0ObjectChain chain = repository.Store.ReadObjectChain(graph.Address, id);
-        P0ChainEntry first = Assert.Single(chain.Entries);
+        ObjectVersionChain chain = repository.Store.ReadObjectChain(graph.Address, id);
+        ObjectVersionChainEntry first = Assert.Single(chain.Entries);
         Assert.Equal((byte)5, first.Record.Body[0]); // ABI5 retains structural Lists; this is a fresh current-format witness.
-        var decoded = P0TypedBodyCodec.Decode(first.Record.Body, catalog: null);
+        var decoded = TypedBaseBodyCodec.Decode(first.Record.Body, catalog: null);
         Assert.Equal(expected, decoded.Layout); // Resolve the structural layout without hardcoding its route or construction bytes.
-        StateModelSnapshot empty = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment empty = new StateModelRegistry().CreateEnvironment();
         ObjectReaderBinding reader = empty.ResolveObjectReader(decoded.Layout);
         ObjectStateRecord row = reader.Read(new(id), new StateModelBodySource(decoded.Body));
         Assert.Equal(new ObjectId(id), row.Id);

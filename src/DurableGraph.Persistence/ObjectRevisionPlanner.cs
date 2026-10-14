@@ -6,7 +6,7 @@ namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Classifies captured objects and plans their writes from authenticated storage accounting.</summary>
 /// <remarks>Does not own a Store, Schema view, live directory or publication.</remarks>
-internal static class ObjectRevisionPlanner {
+internal static class ObjectWritePlanner {
     // The caller establishes the captured baseline and exact prior before classification,
     // and provides its actual owned typed Base header and body.
     internal static PreparedObject ClassifyCaptured(PreparedCapturedObject row,

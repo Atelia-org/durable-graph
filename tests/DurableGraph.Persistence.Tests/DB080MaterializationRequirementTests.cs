@@ -56,9 +56,9 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
         main.Catalog.Set(wrongDependency); // The key is absent from S0; a later S may declare it.
         CheckpointAddress catalogEvent = main.CommitEvent(main.State!);
         var configuration = (StateModelRegistry.FrozenConfiguration)typeof(Repository)
-            .GetField("_splitConfiguration", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
-        var wrongEnvironment = DecodedRevision.SplitBindingEnvironment.Load(repository.MetaBootstrapStore,
-            configuration, repository.MetaBootstrapStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+            .GetField("_modelConfiguration", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
+        var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
+            configuration, repository.GraphStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
         Assert.Throws<InvalidDataException>(() => prepared.Requirements.Validate(wrongEnvironment.Models));
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;

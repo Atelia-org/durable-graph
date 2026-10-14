@@ -51,46 +51,46 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint[] ids;
         IDurableObject original = create();
         Assert.Equal(new[] { 7, 3 }, counters());
-        using (P0Repository repository = P0Repository.CreateNew(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry registered = models(false);
-            StateModelSnapshot snapshot = registered.Snapshot();
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment();
             object[] initial = objects(original);
             for (int i = 0; i < initial.Length; i++) {
                 Assert.True(snapshot.TryGetCurrentObjectBinding(initial[i].GetType(), out ObjectBinding? binding));
                 Assert.Equal(layouts[i], binding!.CurrentLayout);
             }
             check(original, 0, false);
-            P0Session session = new(repository, "main", registered);
-            using P0SessionSave save = session.Prepare(original); // No manual base, hidden inline or List registration.
+            BranchSaveSession session = new(repository, "main", registered);
+            using PreparedBranchSave save = session.Prepare(original); // No manual base, hidden inline or List registration.
             AssertBootstrapCrossAssemblyInheritanceCatalog(save.Catalog.View, expected.Schemas, expected.List);
             Assert.Equal(3, save.Business.Write.Records.Count);
             Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            P0SaveResult result = save.Commit();
+            RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             metaRoot = result.Meta!.Address;
-            P0DecodedRows rows = P0TypedReader.Read(repository.Store, s0, snapshot, session.Catalog.Accepted);
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, s0, snapshot, session.Catalog.Accepted);
             ids = layouts.Select(layout => Assert.Single(rows.Rows.Values, row => row.Layout.Equals(layout)).Id.Value).ToArray();
             Assert.Equal(result.Business.RootId.Value, ids[0]);
-            Assert.Equal(3, result.Business.Objects.Count); // Only two actual leaves and their shared List.
+            Assert.Equal(3, result.Business.ObjectHeads.Count); // Only two actual leaves and their shared List.
             AssertBootstrapCrossAssemblyInheritanceDtos(rows, ids, 0);
         }
         reset(); // Cold Allocate/Hydrate must execute neither constructors nor transient initializers.
 
         Dictionary<string, string> before = BootstrapContainerUpgradeFileHashes(files.Path);
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView catalog = P0CatalogView.Load(repository.Store, metaRoot); // No business model registration input.
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, metaRoot); // No business model registration input.
             AssertBootstrapCrossAssemblyInheritanceCatalog(catalog, expected.Schemas, expected.List);
             Assert.NotSame(expected.Schemas[0], catalog.Schemas[new(expected.Schemas[0].Type, 1)]);
             StateModelRegistry registered = models(true); // Reverse the three independent definition registrations.
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
-            P0DecodedRows rows = P0TypedReader.Read(repository.Store, s0, snapshot, catalog);
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, s0, snapshot, catalog);
             Assert.Equal(3, rows.Rows.Count);
             AssertBootstrapCrossAssemblyInheritanceDtos(rows, ids, 0);
             for (int i = 0; i < ids.Length; i++) {
                 Assert.Equal(layouts[i], rows.Rows[new(ids[i])].Layout);
                 AssertBootstrapClosureDynamicDescriptor(repository, rows.Snapshot, ids[i], layouts[i]);
             }
-            IDurableObject restored = P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered);
+            IDurableObject restored = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered);
             Assert.NotSame(original, restored);
             Assert.Equal(appAssembly, restored.GetType().Assembly);
             Assert.Equal(middleAssembly, objects(restored)[1].GetType().Assembly);
@@ -102,16 +102,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         AssertBootstrapContainerUpgradeFilesUnchanged(before, files.Path);
 
-        using (P0Repository repository = P0Repository.OpenExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry registered = models(true);
-            P0Session session = new(repository, "main", registered);
+            BranchSaveSession session = new(repository, "main", registered);
             IDurableObject restored = session.State!;
             check(restored, 0, true);
             object[] identities = objects(restored);
-            P0GraphSnapshot source = session.StateSource!;
+            StoredGraphRevision source = session.StateSource!;
             change(restored);
             check(restored, 1, true);
-            using (P0SessionSave save = session.Prepare(restored)) { // The established fixture already has stable Guid/int padding.
+            using (PreparedBranchSave save = session.Prepare(restored)) { // The established fixture already has stable Guid/int padding.
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Equal(0, save.Catalog.AddedDescriptors);
@@ -120,59 +120,59 @@ public sealed partial class DurableSchemaGeneratorTests {
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
                 Assert.Equal(ids[0], delta.ObjectId);
                 Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                Assert.Equal(source.Objects[ids[0]], delta.PriorAddress);
+                Assert.Equal(source.ObjectHeads[ids[0]], delta.PriorAddress);
                 // Eleven flattened fields have one two-byte bitmap: base field 5 and leaf field 1.
                 Assert.Equal(new byte[] { 0x10, 0x04, 22, 90 }, delta.Body.ToArray());
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s1 = result.Business.Address;
                 Assert.Equal(metaRoot, result.Meta!.Address);
                 Assert.Equal(metaRoot, result.Business.SchemaRoot);
                 Assert.Equal(s1, session.StateSource!.Address);
-                Assert.NotEqual(source.Objects[ids[0]], result.Business.Objects[ids[0]]);
-                foreach (uint id in ids.Skip(1)) { Assert.Equal(source.Objects[id], result.Business.Objects[id]); }
+                Assert.NotEqual(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
+                foreach (uint id in ids.Skip(1)) { Assert.Equal(source.ObjectHeads[id], result.Business.ObjectHeads[id]); }
                 object[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(identities[i], after[i]); }
-                P0ObjectChain chain = repository.Store.ReadObjectChain(s1, ids[0]);
+                ObjectVersionChain chain = repository.Store.ReadObjectChain(s1, ids[0]);
                 Assert.Equal(2, chain.Entries.Count);
                 Assert.Equal(ObjectVersionKind.Base, chain.Entries[0].Record.Kind);
                 Assert.Equal(ObjectVersionKind.Delta, chain.Entries[1].Record.Kind);
-                Assert.Equal(source.Objects[ids[0]], chain.Entries[1].Record.PriorAddress);
-                P0CatalogView catalog = session.Catalog.Accepted!;
-                AssertBootstrapCrossAssemblyInheritanceDtos(P0TypedReader.Read(repository.Store, s1,
-                    registered.Snapshot(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key)), catalog), ids, 1);
+                Assert.Equal(source.ObjectHeads[ids[0]], chain.Entries[1].Record.PriorAddress);
+                SchemaCatalogView catalog = session.Catalog.Accepted!;
+                AssertBootstrapCrossAssemblyInheritanceDtos(StoredGraphDecoder.Read(repository.Store, s1,
+                    registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key)), catalog), ids, 1);
             }
-            P0GraphSnapshot accepted = session.StateSource!;
+            StoredGraphRevision accepted = session.StateSource!;
             long frames = repository.Store.AppendedFrames;
-            using (P0SessionSave save = session.Prepare(restored)) {
+            using (PreparedBranchSave save = session.Prepare(restored)) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Empty(save.Business.Write.Records);
                 Assert.Empty(save.Business.Write.RemovedIds);
                 Assert.Equal(s1, save.Business.Write.SourceGraph);
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s2 = result.Business.Address;
                 Assert.Equal(metaRoot, result.Meta!.Address);
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
-                foreach (uint id in ids) { Assert.Equal(accepted.Objects[id], result.Business.Objects[id]); }
+                foreach (uint id in ids) { Assert.Equal(accepted.ObjectHeads[id], result.Business.ObjectHeads[id]); }
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);
             Assert.Equal(new[] { 0, 0 }, counters());
         }
 
         before = BootstrapContainerUpgradeFileHashes(files.Path);
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView catalog = P0CatalogView.Load(repository.Store, metaRoot);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, metaRoot);
             AssertBootstrapCrossAssemblyInheritanceCatalog(catalog, expected.Schemas, expected.List);
             Assert.Equal(s2, repository.GetHead("main"));
             Assert.Equal(s2, repository.GetStateHead("main"));
             Assert.Equal(metaRoot, repository.SharedSchemaRoot);
             StateModelRegistry registered = models(false);
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
             foreach ((FrameAddress graph, int stage) in new[] { (s0, 0), (s1, 1), (s2, 1) }) {
                 Assert.Equal(metaRoot, repository.Store.ReadGraph(graph).SchemaRoot);
-                AssertBootstrapCrossAssemblyInheritanceDtos(P0TypedReader.Read(repository.Store, graph, snapshot, catalog), ids, stage);
-                check(P0BusinessWorkspace.ReadRoot(repository.Store, graph, registered), stage, true);
+                AssertBootstrapCrossAssemblyInheritanceDtos(StoredGraphDecoder.Read(repository.Store, graph, snapshot, catalog), ids, stage);
+                check(BusinessPersistenceAdapter.ReadRoot(repository.Store, graph, registered), stage, true);
             }
             Assert.Equal(new[] { 0, 0 }, counters());
             Assert.Equal(0, repository.Store.AppendedFrames);
@@ -180,7 +180,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertBootstrapContainerUpgradeFilesUnchanged(before, files.Path);
     }
 
-    private static void AssertBootstrapCrossAssemblyInheritanceDtos(P0DecodedRows decoded, uint[] ids, int stage) {
+    private static void AssertBootstrapCrossAssemblyInheritanceDtos(DecodedGraphRows decoded, uint[] ids, int stage) {
         Assert.Equal(3, decoded.Rows.Count);
         for (int i = 0; i < 2; i++) {
             ObjectStateRecord row = decoded.Rows[new(ids[i])];
@@ -209,7 +209,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(new[] { new ObjectId(ids[0]), new ObjectId(ids[1]), new ObjectId(ids[0]) }, list.Elements.ToArray());
     }
 
-    private static void AssertBootstrapCrossAssemblyInheritanceCatalog(P0CatalogView catalog, DurableSchema[] expected, ListLayout list) {
+    private static void AssertBootstrapCrossAssemblyInheritanceCatalog(SchemaCatalogView catalog, DurableSchema[] expected, ListLayout list) {
         Assert.Equal(7, catalog.Schemas.Count);
         Assert.Equal(8, catalog.DescriptorIds.Count);
         foreach (DurableSchema schema in expected) {

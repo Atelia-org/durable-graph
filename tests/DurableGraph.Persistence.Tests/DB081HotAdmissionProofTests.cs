@@ -248,8 +248,8 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     private static readonly DurableSchema WrongDependency = new(Dependency.SchemaId, 1, SchemaKind.InlineValue,
         new DurableFieldInfo(1, TypeTag.Int64));
     private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CheckpointAddress address) {
-        P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(address.Address);
-        return graph.OwnedBatch is { } batch ? repository.MetaBootstrapStore.ReadBatch(batch).Records : [];
+        StoredGraphRevision graph = repository.GraphStore.ReadGraph(address.Address);
+        return graph.OwnedBatch is { } batch ? repository.GraphStore.ReadBatch(batch).Records : [];
     }
     private enum DependencyMode { BaseAlways, DeltaAlways, BaseForSeven }
     private sealed class Root : IDurableObject { internal int Value; }

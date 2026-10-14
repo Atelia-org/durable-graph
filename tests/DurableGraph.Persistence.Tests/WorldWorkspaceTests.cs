@@ -12,24 +12,24 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-workspace-{Guid.NewGuid():N}");
-    private readonly P0Repository _repository;
-    private P0GraphStore Store => _repository.Store;
+    private readonly RepositoryStorageFacade _repository;
+    private GraphRecordStore Store => _repository.Store;
     private const ulong InitialSequence = 0xFEDC_BA98_7654_3210UL;
     private static readonly DurableSchema Old = Schema("World", 1);
     private static readonly DurableSchema Current = Schema("World", 2);
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
 
-    public SplitBusinessWorkspaceTests() => _repository = P0Repository.CreateNew(_root);
+    public SplitBusinessWorkspaceTests() => _repository = RepositoryStorageFacade.CreateNew(_root);
 
     [Fact]
     public void ThreeJointInstallsRetainWorldAndUseFrozenCandidateRatherThanLaterMutation() {
         World world = new() { Value = 1, Text = new string('x', 1) };
         StateModelRegistry models = Registry(Model());
-        P0Session session = new(_repository, "main", models);
+        BranchSaveSession session = new(_repository, "main", models);
         Assert.Null(session.StateSource);
         Assert.True(session.RootId.IsNull);
         FrameAddress first;
-        using (P0SessionSave pending = session.Prepare(world, parameters: NoRebase)) {
+        using (PreparedBranchSave pending = session.Prepare(world, parameters: NoRebase)) {
             Assert.Throws<InvalidOperationException>(() => session.Prepare(world));
             Assert.Throws<InvalidOperationException>(() => Candidate(pending).Install());
             world.Value = 2;
@@ -40,7 +40,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         Assert.Equal(first, session.StateSource!.Address);
         Assert.Equal((byte)1, Read(first, session.RootId, models).Value);
         Assert.Equal(InitialSequence, Read(first, session.RootId, models).Sequence);
-        using (P0SessionSave second = session.Prepare(world, parameters: NoRebase)) {
+        using (PreparedBranchSave second = session.Prepare(world, parameters: NoRebase)) {
             Assert.Equal(first, second.Business.Write.SourceGraph);
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(second.Business.Write.Records).Kind);
             FrameAddress address = second.Commit().Business.Address;
@@ -48,13 +48,13 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         }
         world.Value = 3;
         world.Sequence--;
-        using (P0SessionSave third = session.Prepare(world, parameters: NoRebase)) {
+        using (PreparedBranchSave third = session.Prepare(world, parameters: NoRebase)) {
             FrameAddress address = third.Commit().Business.Address;
             Assert.Equal((byte)3, Read(address, session.RootId, models).Value);
             Assert.Equal(InitialSequence - 1, Read(address, session.RootId, models).Sequence);
         }
         Assert.Same(world, session.State);
-        using P0SessionSave unchanged = session.Prepare(world, parameters: NoRebase);
+        using PreparedBranchSave unchanged = session.Prepare(world, parameters: NoRebase);
         Assert.Empty(unchanged.Business.Write.Records);
         Assert.Empty(unchanged.Business.Write.RemovedIds);
     }
@@ -63,21 +63,21 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     public void RemovedInstanceReentryUsesFreshIdAndDiscardedCandidateBurnsIds() {
         string original = new('x', 1);
         World world = new() { Text = original };
-        P0Session session = new(_repository, "main", Registry(Model()));
-        using (P0SessionSave first = session.Prepare(world, parameters: NoRebase)) { first.Commit(); }
-        uint oldId = Store.ReadGraph(session.StateSource!.Address).Objects.Keys.Max();
+        BranchSaveSession session = new(_repository, "main", Registry(Model()));
+        using (PreparedBranchSave first = session.Prepare(world, parameters: NoRebase)) { first.Commit(); }
+        uint oldId = Store.ReadGraph(session.StateSource!.Address).ObjectHeads.Keys.Max();
         world.Text = null;
-        using (P0SessionSave remove = session.Prepare(world, parameters: NoRebase)) {
+        using (PreparedBranchSave remove = session.Prepare(world, parameters: NoRebase)) {
             Assert.Contains(oldId, remove.Business.Write.RemovedIds);
-            Assert.DoesNotContain(oldId, remove.Commit().Business.Objects.Keys);
+            Assert.DoesNotContain(oldId, remove.Commit().Business.ObjectHeads.Keys);
         }
         world.Text = original;
         uint burned;
-        using (P0SessionSave abandoned = session.Prepare(world, parameters: NoRebase)) {
+        using (PreparedBranchSave abandoned = session.Prepare(world, parameters: NoRebase)) {
             burned = abandoned.Business.Write.Records.Max(row => row.ObjectId);
             Assert.True(burned > oldId);
         }
-        using P0SessionSave readded = session.Prepare(world, parameters: NoRebase);
+        using PreparedBranchSave readded = session.Prepare(world, parameters: NoRebase);
         uint newId = readded.Business.Write.Records.Max(row => row.ObjectId);
         Assert.True(newId > burned);
         Assert.Equal(ObjectVersionKind.Base, readded.Business.Write.Records.Single(row => row.ObjectId == newId).Kind);
@@ -91,10 +91,10 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         bool fail = false;
         World world = new() { Value = 1 };
         StateModelRegistry models = Registry(Model(beforePrepare: () => { if (fail) throw new InvalidOperationException("body failed"); }));
-        P0Session session = new(_repository, "main", models);
-        using (P0SessionSave seed = session.Prepare(world, parameters: NoRebase)) { seed.Commit(); }
-        P0GraphSnapshot first = session.StateSource!;
-        NormalizedRevision baseline = session.Baseline!;
+        BranchSaveSession session = new(_repository, "main", models);
+        using (PreparedBranchSave seed = session.Prepare(world, parameters: NoRebase)) { seed.Commit(); }
+        StoredGraphRevision first = session.StateSource!;
+        NormalizedGraphState baseline = session.Baseline!;
         world.Text = new string('y', 1);
         long frames = Store.AppendedFrames;
         fail = true;
@@ -105,7 +105,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         Assert.False(_repository.HasPending);
         Assert.False(_repository.IsFaulted);
         fail = false;
-        using P0SessionSave retry = session.Prepare(world, parameters: NoRebase);
+        using PreparedBranchSave retry = session.Prepare(world, parameters: NoRebase);
         Assert.Equal(first.Address, retry.Business.Write.SourceGraph);
         Assert.Contains(retry.Business.Write.Records, row => row.ObjectId == 3); // ID 2 belonged only to the failed candidate.
         retry.Commit();
@@ -115,42 +115,42 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     public void UpgradeRewriteAndCompleteSourceMembershipSurviveDiscardAndEventThenClearOnState() {
         FrameAddress old = Seed(Old, new(5, 100, 0), Text(100, "orphan after upgrade"));
         StateModelRegistry models = Registry(Model(upgrade: state => state with { TextId = new ObjectId(0) }));
-        P0Session session = new(_repository, "main", models);
+        BranchSaveSession session = new(_repository, "main", models);
         World instance = Assert.IsType<World>(session.State);
-        NormalizedRevision source = session.Baseline!;
+        NormalizedGraphState source = session.Baseline!;
         Assert.Contains(new ObjectId(100), source.Objects.Keys);
         Assert.True(source.Objects[session.RootId].RequiresRewrite);
         long frames = Store.AppendedFrames;
-        using (P0SessionSave abandoned = session.Prepare(instance, parameters: NoRebase)) {
+        using (PreparedBranchSave abandoned = session.Prepare(instance, parameters: NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(abandoned.Business.Write.Records).Kind);
             Assert.Equal(new uint[] { 100 }, abandoned.Business.Write.RemovedIds);
         }
         Assert.Equal(frames, Store.AppendedFrames);
         Assert.Same(source, session.Baseline);
-        using (P0SessionSave snapshot = session.Prepare(instance, P0GraphKind.Event, NoRebase)) {
+        using (PreparedBranchSave snapshot = session.Prepare(instance, StoredGraphKind.Event, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(snapshot.Business.Write.Records).Kind);
-            P0GraphSnapshot eventGraph = snapshot.Commit().Business;
+            StoredGraphRevision eventGraph = snapshot.Commit().Business;
             Assert.Equal(old, eventGraph.SourceGraph);
-            Assert.Equal(new uint[] { 1 }, eventGraph.Objects.Keys);
+            Assert.Equal(new uint[] { 1 }, eventGraph.ObjectHeads.Keys);
         }
         Assert.Same(source, session.Baseline);
         Assert.True(session.Baseline!.Objects[session.RootId].RequiresRewrite);
-        using (P0SessionSave retry = session.Prepare(instance, parameters: NoRebase)) {
+        using (PreparedBranchSave retry = session.Prepare(instance, parameters: NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Business.Write.Records).Kind);
-            P0GraphSnapshot installed = retry.Commit().Business;
-            Assert.Equal(new uint[] { 1 }, installed.Objects.Keys);
+            StoredGraphRevision installed = retry.Commit().Business;
+            Assert.Equal(new uint[] { 1 }, installed.ObjectHeads.Keys);
         }
         Assert.False(session.Baseline!.Objects[session.RootId].RequiresRewrite);
         Assert.Same(instance, session.State);
-        using (P0SessionSave unchanged = session.Prepare(instance, parameters: NoRebase)) {
+        using (PreparedBranchSave unchanged = session.Prepare(instance, parameters: NoRebase)) {
             Assert.Empty(unchanged.Business.Write.Records);
             Assert.Empty(unchanged.Business.Write.RemovedIds);
         }
         instance.Value++;
-        using P0SessionSave changed = session.Prepare(instance, parameters: NoRebase);
+        using PreparedBranchSave changed = session.Prepare(instance, parameters: NoRebase);
         ObjectVersionRecord delta = Assert.Single(changed.Business.Write.Records);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-        Assert.Equal(session.StateSource!.Objects[session.RootId.Value], delta.PriorAddress);
+        Assert.Equal(session.StateSource!.ObjectHeads[session.RootId.Value], delta.PriorAddress);
         changed.Commit();
         Assert.Equal((byte)5, Read(old, new(1), models).Value);
     }
@@ -158,18 +158,18 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     [Fact]
     public void EmptyAliasesCollapseOnlyOnConfirmedStateAndThenRemainStable() {
         FrameAddress old = Seed(Current, new(5, 9, 0), Text(3, ""), Text(9, ""));
-        P0Session session = new(_repository, "main", Registry(Model()));
-        NormalizedRevision source = session.Baseline!;
-        using (P0SessionSave abandoned = session.Prepare(session.State!, parameters: NoRebase)) {
+        BranchSaveSession session = new(_repository, "main", Registry(Model()));
+        NormalizedGraphState source = session.Baseline!;
+        using (PreparedBranchSave abandoned = session.Prepare(session.State!, parameters: NoRebase)) {
             Assert.Equal(new uint[] { 9 }, abandoned.Business.Write.RemovedIds);
         }
         Assert.Same(source, session.Baseline);
-        Assert.Equal(new uint[] { 1, 3, 9 }, Store.ReadGraph(old).Objects.Keys);
-        using (P0SessionSave first = session.Prepare(session.State!, parameters: NoRebase)) {
+        Assert.Equal(new uint[] { 1, 3, 9 }, Store.ReadGraph(old).ObjectHeads.Keys);
+        using (PreparedBranchSave first = session.Prepare(session.State!, parameters: NoRebase)) {
             Assert.Equal(new uint[] { 9 }, first.Business.Write.RemovedIds);
-            Assert.Equal(new uint[] { 1, 3 }, first.Commit().Business.Objects.Keys);
+            Assert.Equal(new uint[] { 1, 3 }, first.Commit().Business.ObjectHeads.Keys);
         }
-        using P0SessionSave second = session.Prepare(session.State!, parameters: NoRebase);
+        using PreparedBranchSave second = session.Prepare(session.State!, parameters: NoRebase);
         Assert.Empty(second.Business.Write.Records);
         Assert.Empty(second.Business.Write.RemovedIds);
         Assert.Same(string.Empty, Assert.IsType<World>(session.State).Text);
@@ -178,7 +178,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     [Fact]
     public void RecursivePreparationLeavesNeitherWorkspaceNorOwnerOccupied() {
         bool recurse = true;
-        P0Session? session = null;
+        BranchSaveSession? session = null;
         World world = new();
         StateModelRegistry models = Registry(Model(beforePrepare: () => { if (recurse) session!.Prepare(world); }));
         session = new(_repository, "main", models);
@@ -186,7 +186,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         Assert.False(_repository.HasPending);
         Assert.False(_repository.IsFaulted);
         recurse = false;
-        using P0SessionSave retry = session.Prepare(world);
+        using PreparedBranchSave retry = session.Prepare(world);
         Assert.True(retry.Business.Write.RootId.Value > 1);
         retry.Commit();
     }
@@ -209,12 +209,12 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         Node child = new() { Value = 7 }; child.Next = child;
         Node root = new() { Next = child };
         StateModelRegistry models = Registry(model);
-        P0Session session = new(_repository, "main", models);
+        BranchSaveSession session = new(_repository, "main", models);
         FrameAddress first;
-        using (P0SessionSave seed = session.Prepare(root, parameters: NoRebase)) { first = seed.Commit().Business.Address; }
+        using (PreparedBranchSave seed = session.Prepare(root, parameters: NoRebase)) { first = seed.Commit().Business.Address; }
         child.Value = 8;
         FrameAddress changed;
-        using (P0SessionSave pending = session.Prepare(root, parameters: NoRebase)) {
+        using (PreparedBranchSave pending = session.Prepare(root, parameters: NoRebase)) {
             ObjectVersionRecord write = Assert.Single(pending.Business.Write.Records);
             Assert.Equal(2u, write.ObjectId);
             Assert.Equal(ObjectVersionKind.Base, write.Kind); // The complete two-slot body is cheaper than a prior pointer.
@@ -225,31 +225,31 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         Assert.Same(child, child.Next);
         Assert.Equal(0, restores);
         root.Next = null;
-        using (P0SessionSave pending = session.Prepare(root, parameters: NoRebase)) {
+        using (PreparedBranchSave pending = session.Prepare(root, parameters: NoRebase)) {
             Assert.Equal(new uint[] { 2 }, pending.Business.Write.RemovedIds);
-            Assert.Equal(new uint[] { 1 }, pending.Commit().Business.Objects.Keys);
+            Assert.Equal(new uint[] { 1 }, pending.Commit().Business.ObjectHeads.Keys);
         }
         root.Next = child;
-        using (P0SessionSave pending = session.Prepare(root, parameters: NoRebase)) {
+        using (PreparedBranchSave pending = session.Prepare(root, parameters: NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, pending.Business.Write.Records.Single(row => row.ObjectId == 3).Kind);
             pending.Commit();
         }
         Assert.Same(child, root.Next);
-        Assert.Equal((byte)7, DecodedRevision.ReadSplit(Store, first, models).GetRequired(new(2)).GetState<NodeState>().Value);
-        NodeState updated = DecodedRevision.ReadSplit(Store, changed, models).GetRequired(new(2)).GetState<NodeState>();
+        Assert.Equal((byte)7, DecodedRevision.ReadStoredGraph(Store, first, models).GetRequired(new(2)).GetState<NodeState>().Value);
+        NodeState updated = DecodedRevision.ReadStoredGraph(Store, changed, models).GetRequired(new(2)).GetState<NodeState>();
         Assert.Equal((byte)8, updated.Value);
         Assert.Equal(new ObjectId(2), updated.NextId);
     }
 
-    private static BusinessSaveCandidate Candidate(P0SessionSave save) => (BusinessSaveCandidate)typeof(P0PreparedBusiness)
+    private static BusinessSaveCandidate Candidate(PreparedBranchSave save) => (BusinessSaveCandidate)typeof(PreparedBusinessWrite)
         .GetField("_candidate", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(save.Business)!;
 
     private State Read(FrameAddress address, ObjectId id, StateModelRegistry models) =>
-        DecodedRevision.ReadSplit(Store, address, models).GetRequired(id).GetState<State>();
-    private State Read(FrameAddress address, ObjectId id, StateModelSnapshot models) {
-        P0GraphSnapshot graph = Store.ReadGraph(address);
-        P0CatalogView catalog = P0CatalogView.Load(Store, graph.SchemaRoot!.Value);
-        return P0TypedReader.Read(Store, address, models, catalog).Rows[id].GetState<State>();
+        DecodedRevision.ReadStoredGraph(Store, address, models).GetRequired(id).GetState<State>();
+    private State Read(FrameAddress address, ObjectId id, ModelExecutionEnvironment models) {
+        StoredGraphRevision graph = Store.ReadGraph(address);
+        SchemaCatalogView catalog = SchemaCatalogView.Load(Store, graph.SchemaRoot!.Value);
+        return StoredGraphDecoder.Read(Store, address, models, catalog).Rows[id].GetState<State>();
     }
 
     private sealed class Node : IDurableObject {
@@ -325,17 +325,17 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     // This fixture writes real employee metadata and typed records to seed otherwise
     // legal historical IDs (including distinct empty-string aliases). No legacy wire is used.
     private FrameAddress Seed(DurableSchema schema, State state, params ObjectVersionRecord[] strings) {
-        P0CatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
+        SchemaCatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
         catalog.Set(schema);
-        P0PreparedCatalog prepared = catalog.Prepare();
+        PreparedSchemaCatalogWrite prepared = catalog.Prepare();
         ObjectVersionRecord root = ObjectVersionRecord.CreateBase(1,
-            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), prepared.View));
-        using P0PendingSave pending = _repository.Prepare("main", P0GraphKind.State,
+            TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), prepared.View));
+        using PendingRepositorySave pending = _repository.Prepare("main", StoredGraphKind.State,
             new(null, new(1), new[] { root }.Concat(strings)), prepared.Write);
         return _repository.Commit(pending).Business.Address;
     }
     private static ObjectVersionRecord Text(uint id, string value) => ObjectVersionRecord.CreateBase(id,
-        P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);

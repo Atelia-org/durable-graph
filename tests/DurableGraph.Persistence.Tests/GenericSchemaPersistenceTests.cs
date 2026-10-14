@@ -11,11 +11,11 @@ public sealed class GenericSchemaPersistenceTests {
         DurableSchema point = new("Point", 1, SchemaKind.InlineValue);
         DurableSchema owner = new("Owner", 1, DurableFieldInfo.Reference(1,
             TypeExpr.Named("Box", TypeExpr.Named("Point"), TypeExpr.Builtin(TypeTag.Int32))));
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(owner);
         workspace.Set(point);
-        P0CatalogView prepared = workspace.Prepare().View;
-        P0CatalogView projected = new(prepared.RootId, prepared.Rows.ToDictionary());
+        SchemaCatalogView prepared = workspace.Prepare().View;
+        SchemaCatalogView projected = new(prepared.RootId, prepared.Rows.ToDictionary());
         Assert.Equal(2, projected.Schemas.Count);
         Assert.Equal(owner, projected.Schemas[new("Owner", 1)]);
         Assert.Equal(point, projected.Schemas[new("Point", 1)]);

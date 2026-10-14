@@ -1,14 +1,14 @@
 using Atelia.FrameStore;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
 // One owner-bound operation. Discard never appends or accepts either producer.
-internal sealed class P0PendingSave : IDisposable {
+internal sealed class PendingRepositorySave : IDisposable {
     private enum PendingState { Prepared, Committing, Finished }
     private PendingState _state;
 
-    internal P0PendingSave(GraphResources owner, GraphResources.MetaBootstrapPublicationBaseline baseline,
-        string branch, P0GraphKind kind, P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog,
+    internal PendingRepositorySave(GraphResources owner, GraphResources.PublicationBaseline baseline,
+        string branch, StoredGraphKind kind, PreparedGraphWrite business, PreparedGraphWrite? catalog,
         bool privateCatalog, FrameAddress? catalogSource) {
         Owner = owner;
         Baseline = baseline;
@@ -21,11 +21,11 @@ internal sealed class P0PendingSave : IDisposable {
     }
 
     internal GraphResources Owner { get; }
-    internal GraphResources.MetaBootstrapPublicationBaseline Baseline { get; }
+    internal GraphResources.PublicationBaseline Baseline { get; }
     internal string Branch { get; }
-    internal P0GraphKind Kind { get; }
-    internal P0PreparedGraphWrite Business { get; }
-    internal P0PreparedGraphWrite? Catalog { get; }
+    internal StoredGraphKind Kind { get; }
+    internal PreparedGraphWrite Business { get; }
+    internal PreparedGraphWrite? Catalog { get; }
     internal bool PrivateCatalog { get; }
     internal FrameAddress? CatalogSource { get; }
     internal bool IsPrepared => _state == PendingState.Prepared;
@@ -40,6 +40,6 @@ internal sealed class P0PendingSave : IDisposable {
     public void Dispose() {
         if (_state == PendingState.Finished) { return; }
         if (_state == PendingState.Committing) { throw new InvalidOperationException("An active P0 commit cannot be discarded."); }
-        Owner.DiscardMetaBootstrap(this);
+        Owner.DiscardSave(this);
     }
 }

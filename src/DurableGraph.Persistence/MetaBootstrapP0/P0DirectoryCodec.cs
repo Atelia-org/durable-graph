@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 using System.Buffers.Binary;
 using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
@@ -8,14 +9,14 @@ using Atelia.FrameStore;
 using Locator = Atelia.DurableGraph.Generated.Family_503048.V1;
 using LocatorOps = Atelia.DurableGraph.Generated.Family_503048.BodyV1;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>The ordinary Dictionary body, with a real generated inline locator value.</summary>
-internal static class P0DirectoryCodec {
+internal static class ObjectHeadDirectoryCodec {
     internal static DictionaryLayout Layout { get; } = CreateLayout();
 
     private static DictionaryLayout CreateLayout() {
-        StateModelSnapshot employees = P0FixedBindings.CreateSnapshot();
+        ModelExecutionEnvironment employees = P0FixedBindings.CreateEnvironment();
         return new(new(1, TypeTag.UInt32), employees.ResolveCurrentValue(typeof(P0HeadLocator)).Slot);
     }
 

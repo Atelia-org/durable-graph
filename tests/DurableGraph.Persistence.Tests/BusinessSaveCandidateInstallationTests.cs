@@ -10,36 +10,36 @@ public sealed partial class SplitBusinessWorkspaceTests {
     [Fact]
     public void DifferentRealCandidateInstallationIsRejectedWithTheSameStoreModelsAndNumericIds() {
         StateModelRegistry registry = Registry(Model());
-        StateModelSnapshot models = registry.Snapshot();
+        ModelExecutionEnvironment models = registry.CreateEnvironment();
         World rootA = new() { Value = 17, Text = "from-A" };
         World rootB = new() { Value = 42, Text = "from-B" };
-        P0BusinessWorkspace workspaceA = new(Store, models, null);
-        P0BusinessWorkspace workspaceB = new(Store, models, null);
-        P0CatalogWorkspace catalogOwner = new(_repository.EnsureEditingAllowed);
+        BusinessPersistenceAdapter workspaceA = new(Store, models, null);
+        BusinessPersistenceAdapter workspaceB = new(Store, models, null);
+        SchemaCatalogWorkspace catalogOwner = new(_repository.EnsureEditingAllowed);
         catalogOwner.Set(Current);
-        P0PreparedCatalog metadata = catalogOwner.Prepare();
-        P0GraphSnapshot schema = Store.Append(P0GraphKind.Meta, null, null, metadata.Write!);
-        P0CatalogView catalog = P0CatalogView.Load(Store, schema.Address);
+        PreparedSchemaCatalogWrite metadata = catalogOwner.Prepare();
+        StoredGraphRevision schema = Store.Append(StoredGraphKind.Meta, null, null, metadata.Write!);
+        SchemaCatalogView catalog = SchemaCatalogView.Load(Store, schema.Address);
 
-        using BusinessSaveCandidate candidateA = workspaceA.CaptureOwned(rootA, P0GraphKind.State);
-        using P0PreparedBusiness preparedA = workspaceA.PrepareOwned(candidateA, catalog, NoRebase);
-        P0GraphSnapshot graphA = Store.Append(P0GraphKind.State, null, schema.Address, preparedA.Write);
+        using BusinessSaveCandidate candidateA = workspaceA.CaptureOwned(rootA, StoredGraphKind.State);
+        using PreparedBusinessWrite preparedA = workspaceA.PrepareOwned(candidateA, catalog, NoRebase);
+        StoredGraphRevision graphA = Store.Append(StoredGraphKind.State, null, schema.Address, preparedA.Write);
         Assert.Equal((byte)17, Read(graphA.Address, candidateA.RootId, registry).Value);
         preparedA.PrepareInstall(graphA);
         preparedA.Install(graphA);
-        NormalizedRevision installationA = workspaceA.Baseline!;
+        NormalizedGraphState installationA = workspaceA.Baseline!;
         Assert.Same(rootA, workspaceA.State);
 
-        using BusinessSaveCandidate candidateB = workspaceB.CaptureOwned(rootB, P0GraphKind.State);
-        using P0PreparedBusiness preparedB = workspaceB.PrepareOwned(candidateB, catalog, NoRebase);
-        P0GraphSnapshot graphB = Store.Append(P0GraphKind.State, null, schema.Address, preparedB.Write);
-        NormalizedRevision nextB = candidateB.NextBaseline;
-        NormalizedRevision installationB = nextB.WithSplitGraph(Store, graphB, preparedB.Write.Records, catalog);
+        using BusinessSaveCandidate candidateB = workspaceB.CaptureOwned(rootB, StoredGraphKind.State);
+        using PreparedBusinessWrite preparedB = workspaceB.PrepareOwned(candidateB, catalog, NoRebase);
+        StoredGraphRevision graphB = Store.Append(StoredGraphKind.State, null, schema.Address, preparedB.Write);
+        NormalizedGraphState nextB = candidateB.NextBaseline;
+        NormalizedGraphState installationB = nextB.PrepareGraphInstallation(Store, graphB, preparedB.Write.Records, catalog);
         Assert.Equal((byte)42, Read(graphB.Address, candidateB.RootId, registry).Value);
         Assert.NotEqual(graphA.Address, graphB.Address);
         Assert.Equal(candidateA.RootId, candidateB.RootId);
         Assert.Equal(installationA.Objects.Keys.Order(), installationB.Objects.Keys.Order());
-        Assert.Same(installationA.SplitStore, installationB.SplitStore);
+        Assert.Same(installationA.GraphStore, installationB.GraphStore);
         Assert.Same(installationA.SourceModels, installationB.SourceModels);
         Assert.Same(installationA.SelectedSchemaView, installationB.SelectedSchemaView);
         Assert.NotSame(installationA.CurrentDtos, installationB.CurrentDtos);

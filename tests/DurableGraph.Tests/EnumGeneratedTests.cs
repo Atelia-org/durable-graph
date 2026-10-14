@@ -79,7 +79,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!.Invoke(null, [models]);
         DurableSchema mode = new("Mode",1,SchemaKind.InlineValue,new DurableFieldInfo(1,TypeTag.Byte));
         DurableSchema old = new("World",1,new DurableFieldInfo(1,TypeTag.InlineValue,inlineSchema:mode));
-        ObjectStateRecord decoded = models.Snapshot().ResolveReader(old).Read(new(1),new StateModelBodySource([253]));
+        ObjectStateRecord decoded = models.CreateEnvironment().ResolveReader(old).Read(new(1),new StateModelBodySource([253]));
         object value = StateModelField(decoded,"Segment0Field1")!;
         Assert.Equal((byte)253,value.GetType().GetField("Segment0Field1")!.GetValue(value));
         GeneratorTestRun pure = RunGenerator("""
@@ -107,7 +107,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly=EmitAndLoad(run.OutputCompilation);
         StateModelRegistry models=new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!.Invoke(null,[models]);
-        StateModelSnapshot snapshot=models.Snapshot();
+        ModelExecutionEnvironment snapshot=models.CreateEnvironment();
         Type mode=assembly.GetType("Mode")!, other=assembly.GetType("Other")!, box=assembly.GetType("Box`1")!;
         StateValueBinding modeValue=snapshot.ResolveCurrentValue(mode), otherValue=snapshot.ResolveCurrentValue(other);
         Assert.NotEqual(modeValue.StateType,otherValue.StateType);

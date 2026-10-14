@@ -50,16 +50,16 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             Assert.Same(values, session.World.Alias);
         }
         using (GraphResources file = GraphResources.OpenExisting(_root)) {
-            P0GraphStore states = file.MetaBootstrapStore;
+            GraphRecordStore states = file.GraphStore;
             Assert.Empty(Records(states, reordered));
-            P0GraphSnapshot original = states.ReadGraph(revisions[0].Address);
-            P0GraphSnapshot permutation = states.ReadGraph(reordered);
+            StoredGraphRevision original = states.ReadGraph(revisions[0].Address);
+            StoredGraphRevision permutation = states.ReadGraph(reordered);
             Assert.Equal(original.DirectoryRoot, permutation.DirectoryRoot);
-            Assert.Equal(original.Objects, permutation.Objects);
-            ObjectId mapId = Assert.Single(DecodedRevision.ReadSplit(states, revisions[0].Address, Models()).Objects,
+            Assert.Equal(original.ObjectHeads, permutation.ObjectHeads);
+            ObjectId mapId = Assert.Single(DecodedRevision.ReadStoredGraph(states, revisions[0].Address, Models()).Objects,
                 row => row.Kind == ObjectStateKind.Dictionary).Id;
             foreach ((FrameAddress address, Dictionary<string, int> expected) in revisions) {
-                DecodedRevision exact = DecodedRevision.ReadSplit(states, address, Models());
+                DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, address, Models());
                 FrozenDictionaryState<ObjectId, int> frozen = exact.GetRequired(mapId).GetDictionaryState<ObjectId, int>();
                 Dictionary<string, int> actual = frozen.Entries.ToArray().ToDictionary(
                     entry => exact.GetRequired(entry.Key).StringContent, entry => entry.Value);
@@ -79,7 +79,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             unchanged = session.Commit(NoRebase);
         }
         using (GraphResources file = GraphResources.OpenExisting(_root)) {
-            P0GraphStore states = file.MetaBootstrapStore;
+            GraphRecordStore states = file.GraphStore;
             Assert.Empty(Records(states, unchanged));
         }
     }
@@ -113,9 +113,9 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             removed = session.Commit(NoRebase);
         }
         using GraphResources file = GraphResources.OpenExisting(_root);
-        P0GraphStore states = file.MetaBootstrapStore;
+        GraphRecordStore states = file.GraphStore;
         Assert.Single(Records(states, childOnly));
-        Assert.Equal(2, states.ReadGraph(childOnly).Objects.Keys.Except(states.ReadGraph(removed).Objects.Keys).Count());
+        Assert.Equal(2, states.ReadGraph(childOnly).ObjectHeads.Keys.Except(states.ReadGraph(removed).ObjectHeads.Keys).Count());
     }
 
     [Fact]
@@ -164,10 +164,10 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     [InlineData(DictionaryComparerKind.ReferenceIdentity, "", "")]
     public void ExactReadRejectsLookupKeyCollisionEvenInUnreachableDictionary(
         DictionaryComparerKind comparer, string first, string second) {
-        using P0Repository repository = P0Repository.CreateNew(_root);
-        P0CatalogWorkspace workspace = new(repository.EnsureEditingAllowed);
+        using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root);
+        SchemaCatalogWorkspace workspace = new(repository.EnsureEditingAllowed);
         workspace.Set(Schema);
-        P0PreparedCatalog catalog = workspace.Prepare();
+        PreparedSchemaCatalogWrite catalog = workspace.Prepare();
         DictionaryLayout layout = new(new(1, TypeTag.String), new(2, TypeTag.Int32));
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);
@@ -177,14 +177,14 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         writer.WriteVarUInt32(4); writer.WriteVarInt32(20);
         State empty = default;
         ObjectVersionRecord[] rows = [ObjectVersionRecord.CreateBase(1,
-            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(Schema), Base(in empty), catalog.View)),
-            ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.ForDictionary(layout), new(bytes.WrittenSpan), catalog.View)),
+            TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(Schema), Base(in empty), catalog.View)),
+            ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(layout), new(bytes.WrittenSpan), catalog.View)),
             Text(3, first), Text(4, second)];
-        using P0PendingSave pending = repository.Prepare("main", P0GraphKind.State, new(null, new(1), rows), catalog.Write);
+        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, new(null, new(1), rows), catalog.Write);
         FrameAddress address = repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(repository.Store, address, Models()));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, address, Models()));
         int normalizations = 0;
-        Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.LoadState(repository.Store, address,
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.LoadState(repository.Store, address,
             Models(() => normalizations++)));
         Assert.Equal(0, normalizations);
     }
@@ -195,7 +195,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         // unchanged-layout map must pass lookup equality before the directory is returned.
         byte[] stringBody = StringPayloadCodec.PrepareBase("same").Body.ToArray();
         StringReadTable strings = StringReadTable.Decode([(new ObjectId(3), stringBody.AsMemory()), (new ObjectId(4), stringBody.AsMemory())]);
-        StateModelSnapshot snapshot = Models().Snapshot();
+        ModelExecutionEnvironment snapshot = Models().CreateEnvironment();
         Assert.True(snapshot.TryGetCurrentObjectBinding(typeof(Dictionary<string, int>), out ObjectBinding? binding));
         DictionaryLayout layout = ((DictionaryObjectBinding)binding!).DictionaryLayout;
         State detached = default;
@@ -206,7 +206,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
                 [new(new(3), 1), new(new(4), 2)]), null),
             Row(new ObjectId(3), strings.ResolveString(new(3))), Row(new ObjectId(4), strings.ResolveString(new(4)))];
         DecodedRevision source = new(default, rows, strings);
-        Assert.Throws<InvalidDataException>(() => NormalizedRevision.Create(source, snapshot));
+        Assert.Throws<InvalidDataException>(() => NormalizedGraphState.Create(source, snapshot));
 
         static ObjectStateRecord Row(params object?[] arguments) =>
             (ObjectStateRecord)Activator.CreateInstance(typeof(ObjectStateRecord), BindingFlags.Instance | BindingFlags.NonPublic,
@@ -283,9 +283,9 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         public int GetHashCode(string value) { Calls++; return StringComparer.Ordinal.GetHashCode(value); }
     }
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
     private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
-    private static IReadOnlyList<ObjectVersionRecord> Records(P0GraphStore store, FrameAddress address) =>
+    private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 
     public void Dispose() {

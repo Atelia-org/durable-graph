@@ -34,28 +34,28 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using RawBaseDirectory directory = new();
         FrameAddress first, second, third, repeated, missingString, wrongKind, malformed, selectedSchema;
-        using (P0Repository repository = P0Repository.CreateNew(directory.Path)) {
-            P0CatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(directory.Path)) {
+            SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
             catalog.Set(schema);
-            P0PreparedCatalog prepared = catalog.Prepare();
+            PreparedSchemaCatalogWrite prepared = catalog.Prepare();
             ObjectVersionRecord Text((ObjectId Id, byte[] Body) row) => ObjectVersionRecord.CreateBase(row.Id.Value,
-                P0TypedBodyCodec.Encode(ObjectLayout.String, new(row.Body)));
+                TypedBaseBodyCodec.Encode(ObjectLayout.String, new(row.Body)));
             ObjectVersionRecord Owner(byte[] body) => ObjectVersionRecord.CreateBase(ownerId,
-                P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(body), prepared.View));
-            using (P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
+                TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(body), prepared.View));
+            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
                 new(null, input.Owner, input.Strings.Where(row => row.Id.Value != aliasId).Select(Text).Append(Owner(input.Base))), prepared.Write)) {
                 first = repository.Commit(pending, prepared.Install, prepareMeta: prepared.PrepareInstall).Business.Address;
             }
             selectedSchema = repository.SharedSchemaRoot!.Value;
-            P0GraphSnapshot initial = repository.Store.ReadGraph(first);
-            ObjectVersionRecord[] edits = [ObjectVersionRecord.CreateDelta(ownerId, initial.Objects[ownerId], input.First.Body),
+            StoredGraphRevision initial = repository.Store.ReadGraph(first);
+            ObjectVersionRecord[] edits = [ObjectVersionRecord.CreateDelta(ownerId, initial.ObjectHeads[ownerId], input.First.Body),
                 Text(input.Strings.Single(row => row.Id.Value == aliasId))];
-            using (P0PendingSave pending = repository.Prepare("main", P0GraphKind.State, new(first, input.Owner, edits))) {
+            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, new(first, input.Owner, edits))) {
                 second = repository.Commit(pending).Business.Address;
             }
-            P0GraphSnapshot middle = repository.Store.ReadGraph(second);
-            using (P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
-                new(second, input.Owner, [ObjectVersionRecord.CreateDelta(ownerId, middle.Objects[ownerId], input.Second.Body)]))) {
+            StoredGraphRevision middle = repository.Store.ReadGraph(second);
+            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+                new(second, input.Owner, [ObjectVersionRecord.CreateDelta(ownerId, middle.ObjectHeads[ownerId], input.Second.Body)]))) {
                 third = repository.Commit(pending).Business.Address;
             }
             Assert.Equal(third, repository.GetHead("main"));
@@ -63,15 +63,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(selectedSchema, repository.Store.ReadGraph(third).SchemaRoot);
 
             // Canonical, completed experimental siblings use the real writer; none is published as a branch.
-            repeated = repository.Store.Append(P0GraphKind.State, first, selectedSchema, new(first, input.Owner, edits)).Address;
+            repeated = repository.Store.Append(StoredGraphKind.State, first, selectedSchema, new(first, input.Owner, edits)).Address;
             Assert.Equal(input.First.Body.ToArray(), repository.Store.ReadObjectChain(repeated, ownerId).Entries[^1].Record.Body.ToArray());
-            missingString = repository.Store.Append(P0GraphKind.State, third, selectedSchema, new(third, input.Owner, [], [nameId])).Address;
-            wrongKind = repository.Store.Append(P0GraphKind.State, third, selectedSchema,
+            missingString = repository.Store.Append(StoredGraphKind.State, third, selectedSchema, new(third, input.Owner, [], [nameId])).Address;
+            wrongKind = repository.Store.Append(StoredGraphKind.State, third, selectedSchema,
                 new(third, input.Owner, [ObjectVersionRecord.CreateBase(nameId,
-                    P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(expected[2]), prepared.View))])).Address;
-            malformed = repository.Store.Append(P0GraphKind.State, third, selectedSchema,
+                    TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(expected[2]), prepared.View))])).Address;
+            malformed = repository.Store.Append(StoredGraphKind.State, third, selectedSchema,
                 new(third, input.Owner, [ObjectVersionRecord.CreateDelta(ownerId,
-                    repository.Store.ReadGraph(third).Objects[ownerId], new byte[] { 8, 8, 0 })])).Address;
+                    repository.Store.ReadGraph(third).ObjectHeads[ownerId], new byte[] { 8, 8, 0 })])).Address;
             Assert.Equal(third, repository.GetHead("main"));
             repository.Data.ConfirmDurable();
         }
@@ -79,26 +79,26 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<string, byte[]> bytes = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
             .ToDictionary(path => Path.GetRelativePath(directory.Path, path), File.ReadAllBytes);
         DecodedRevision[] owned;
-        using (P0Repository reopened = P0Repository.OpenReadOnlyExisting(directory.Path)) {
+        using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path)) {
             Assert.Equal(third, reopened.GetHead("main"));
             Assert.Equal(selectedSchema, reopened.SharedSchemaRoot);
-            owned = new[] { first, second, third, repeated }.Select(address => DecodedRevision.ReadSplit(reopened.Store, address, models())).ToArray();
+            owned = new[] { first, second, third, repeated }.Select(address => DecodedRevision.ReadStoredGraph(reopened.Store, address, models())).ToArray();
             for (int i = 0; i < owned.Length; i++) Assert.Equal(expected[i == 3 ? 1 : i], check(owned[i]));
-            P0ObjectChain chain = reopened.Store.ReadObjectChain(third, ownerId);
+            ObjectVersionChain chain = reopened.Store.ReadObjectChain(third, ownerId);
             Assert.Equal(new[] { first, second, third }.Select(address => reopened.Store.ReadGraph(address).OwnedBatch!.Value),
                 chain.Entries.Select(entry => entry.ContainingBatch));
             Assert.Equal(chain.Entries.Sum(entry => (long)entry.PayloadBytes), chain.ReconstructionPayloadBytes);
-            Assert.Equal(reopened.Store.ReadGraph(third).Objects[ownerId], chain.Head);
-            Assert.Equal(reopened.Store.ReadGraph(second).Objects[ownerId], chain.Entries[2].Record.PriorAddress);
+            Assert.Equal(reopened.Store.ReadGraph(third).ObjectHeads[ownerId], chain.Head);
+            Assert.Equal(reopened.Store.ReadGraph(second).ObjectHeads[ownerId], chain.Entries[2].Record.PriorAddress);
             Assert.True(chain.ReconstructionPayloadBytes > reopened.Store.ReadObjectChain(first, ownerId).ReconstructionPayloadBytes);
             foreach (FrameAddress invalid in new[] { missingString, wrongKind, malformed }) {
                 DecodedRevision? delivered = null;
-                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadSplit(reopened.Store, invalid, models()));
+                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(reopened.Store, invalid, models()));
                 Assert.Null(delivered);
                 Assert.Equal(expected[2], check(owned[2]));
             }
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reopened.Store, third, new StateModelRegistry()));
-            Assert.Equal(expected[0], check(DecodedRevision.ReadSplit(reopened.Store, first, models())));
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, third, new StateModelRegistry()));
+            Assert.Equal(expected[0], check(DecodedRevision.ReadStoredGraph(reopened.Store, first, models())));
         }
         Assert.Equal(expected[2], check(owned[2])); // DTOs and decoded string identity survive all backing lifetimes.
         Assert.Equal(bytes.Keys.Order(), Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
@@ -109,16 +109,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory alternate = new();
         DurableSchema wrongAncestor = new(schema.BaseSchema!.Type, schema.BaseSchema.Version, []);
         DurableSchema wrongSchema = new(schema.Type, schema.Version, schema.Fields.ToArray(), wrongAncestor);
-        using P0Repository wrongRepository = P0Repository.CreateNew(alternate.Path);
-        P0CatalogWorkspace wrongCatalog = new(wrongRepository.EnsureEditingAllowed);
+        using RepositoryStorageFacade wrongRepository = RepositoryStorageFacade.CreateNew(alternate.Path);
+        SchemaCatalogWorkspace wrongCatalog = new(wrongRepository.EnsureEditingAllowed);
         wrongCatalog.Set(wrongSchema);
-        P0PreparedCatalog wrong = wrongCatalog.Prepare();
+        PreparedSchemaCatalogWrite wrong = wrongCatalog.Prepare();
         ObjectVersionRecord[] alternateRows = input.Strings.Select(row => ObjectVersionRecord.CreateBase(row.Id.Value,
-            P0TypedBodyCodec.Encode(ObjectLayout.String, new(row.Body)))).Append(ObjectVersionRecord.CreateBase(ownerId,
-                P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(wrongSchema), new(expected[2]), wrong.View))).ToArray();
-        using P0PendingSave wrongPending = wrongRepository.Prepare("main", P0GraphKind.State, new(null, input.Owner, alternateRows), wrong.Write);
+            TypedBaseBodyCodec.Encode(ObjectLayout.String, new(row.Body)))).Append(ObjectVersionRecord.CreateBase(ownerId,
+                TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(wrongSchema), new(expected[2]), wrong.View))).ToArray();
+        using PendingRepositorySave wrongPending = wrongRepository.Prepare("main", StoredGraphKind.State, new(null, input.Owner, alternateRows), wrong.Write);
         FrameAddress wrongGraph = wrongRepository.Commit(wrongPending, wrong.Install, prepareMeta: wrong.PrepareInstall).Business.Address;
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(wrongRepository.Store, wrongGraph, models()));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(wrongRepository.Store, wrongGraph, models()));
     }
 
     [Fact]
@@ -168,23 +168,23 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([1, 4], delta2.Body.ToArray());
         using RawBaseDirectory directory = new();
         FrameAddress first, second, third, schemaRoot;
-        using (P0Repository repository = P0Repository.CreateNew(directory.Path)) {
-            P0CatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(directory.Path)) {
+            SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
             catalog.Set(oldSchema);
             catalog.Set(newSchema);
-            P0PreparedCatalog prepared = catalog.Prepare();
-            using (P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
+            PreparedSchemaCatalogWrite prepared = catalog.Prepare();
+            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1,
-                    P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(oldSchema), new(body), prepared.View))]), prepared.Write)) {
+                    TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(oldSchema), new(body), prepared.View))]), prepared.Write)) {
                 first = repository.Commit(pending, prepared.Install, prepareMeta: prepared.PrepareInstall).Business.Address;
             }
             schemaRoot = repository.SharedSchemaRoot!.Value;
-            using (P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
-                new(first, new(1), [ObjectVersionRecord.CreateDelta(1, repository.Store.ReadGraph(first).Objects[1], delta1.Body)]))) {
+            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+                new(first, new(1), [ObjectVersionRecord.CreateDelta(1, repository.Store.ReadGraph(first).ObjectHeads[1], delta1.Body)]))) {
                 second = repository.Commit(pending).Business.Address;
             }
-            using (P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
-                new(second, new(1), [ObjectVersionRecord.CreateDelta(1, repository.Store.ReadGraph(second).Objects[1], delta2.Body)]))) {
+            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+                new(second, new(1), [ObjectVersionRecord.CreateDelta(1, repository.Store.ReadGraph(second).ObjectHeads[1], delta2.Body)]))) {
                 third = repository.Commit(pending).Business.Address;
             }
             Assert.Equal(third, repository.GetStateHead("main"));
@@ -193,17 +193,17 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<string, byte[]> bytes = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
             .ToDictionary(path => Path.GetRelativePath(directory.Path, path), File.ReadAllBytes);
         DecodedRevision retained;
-        using (P0Repository reopened = P0Repository.OpenReadOnlyExisting(directory.Path)) {
-            P0CatalogView catalog = P0CatalogView.Load(reopened.Store, schemaRoot);
+        using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path)) {
+            SchemaCatalogView catalog = SchemaCatalogView.Load(reopened.Store, schemaRoot);
             Assert.Equal(oldSchema, catalog.Schemas[new(oldSchema.Type, oldSchema.Version)]);
-            DecodedRevision middle = DecodedRevision.ReadSplit(reopened.Store, second, models());
-            retained = DecodedRevision.ReadSplit(reopened.Store, third, models());
+            DecodedRevision middle = DecodedRevision.ReadStoredGraph(reopened.Store, second, models());
+            retained = DecodedRevision.ReadStoredGraph(reopened.Store, third, models());
             Assert.Equal(oldSchema, retained.GetRequired(new(1)).Schema);
             Assert.Equal(TypeTag.Int32, Assert.Single(retained.GetRequired(new(1)).Schema!.BaseSchema!.Fields).TypeTag);
             Assert.Equal(1, ReadStoredInt(middle));
             Assert.Equal(2, ReadStoredInt(retained));
             Assert.Equal(3, reopened.Store.ReadObjectChain(third, 1).Entries.Count);
-            NormalizedRevision normalized = NormalizedRevision.Create(retained, retained.SourceModels!);
+            NormalizedGraphState normalized = NormalizedGraphState.Create(retained, retained.SourceModels!);
             Assert.True(normalized.Objects[new(1)].RequiresRewrite);
             Assert.Equal(newSchema, normalized.Objects[new(1)].Current.Schema);
         }
@@ -213,20 +213,20 @@ public sealed partial class DurableSchemaGeneratorTests {
             .Select(path => Path.GetRelativePath(directory.Path, path)).Order());
 
         FrameAddress rewritten;
-        using (P0Repository reopened = P0Repository.OpenExisting(directory.Path)) {
-            P0Session session = new(reopened, "main", models());
+        using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenExisting(directory.Path)) {
+            BranchSaveSession session = new(reopened, "main", models());
             Assert.Equal(third, session.StateSource!.Address);
             Assert.True(session.Baseline!.Objects[new(1)].RequiresRewrite);
-            using P0SessionSave save = session.Prepare(session.State!);
+            using PreparedBranchSave save = session.Prepare(session.State!);
             ObjectVersionRecord record = Assert.Single(save.Business.Write.Records);
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
             rewritten = save.Commit().Business.Address;
             Assert.False(session.Baseline!.Objects[new(1)].RequiresRewrite);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
         }
-        using P0Repository fresh = P0Repository.OpenReadOnlyExisting(directory.Path);
-        DecodedRevision old = DecodedRevision.ReadSplit(fresh.Store, third, models());
-        DecodedRevision updated = DecodedRevision.ReadSplit(fresh.Store, rewritten, models());
+        using RepositoryStorageFacade fresh = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path);
+        DecodedRevision old = DecodedRevision.ReadStoredGraph(fresh.Store, third, models());
+        DecodedRevision updated = DecodedRevision.ReadStoredGraph(fresh.Store, rewritten, models());
         Assert.Equal(oldSchema, old.GetRequired(new(1)).Schema);
         Assert.Equal(newSchema, updated.GetRequired(new(1)).Schema);
         object upgraded = updated.GetRequired(new(1)).Content;

@@ -12,7 +12,7 @@ public sealed class TemporalScalarCatalogTests {
     [InlineData(typeof(TimeOnly), TypeTag.TimeOnly, 23, typeof(TimeOnlyStateOps))]
     [InlineData(typeof(DateTimeOffset), TypeTag.DateTimeOffset, 24, typeof(DateTimeOffsetStateOps))]
     public void TemporalLeavesBindCurrentAndStoredWithoutUserDefinitions(Type domain, TypeTag tag, byte code, Type ops) {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         TypeExpr nominal = TypeExpr.Builtin(tag);
         Assert.Equal(code, (byte)tag);
         Assert.Equal(nominal, snapshot.GetTypeExpr(domain));
@@ -43,7 +43,7 @@ public sealed class TemporalScalarCatalogTests {
     [InlineData(TypeTag.DateTimeOffset, 24)]
     public void ContainerCatalogUsesLeafTagsWithoutAdditionalMetadataNodes(TypeTag tag, byte code) {
         Assert.Equal(code, (byte)tag);
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         List<ObjectLayout> layouts = [];
         for (byte rank = 4; rank <= 7; rank++) {
             layouts.Add(ObjectLayout.ForArray(new((TypeExprKind)rank, new(1, tag))));
@@ -51,7 +51,7 @@ public sealed class TemporalScalarCatalogTests {
         layouts.Add(ObjectLayout.ForList(new(new(1, tag))));
         layouts.Add(ObjectLayout.ForDictionary(new(new(1, tag), new(2, tag))));
         foreach (ObjectLayout layout in layouts) { workspace.Set(layout); }
-        P0CatalogView view = workspace.Prepare().View;
+        SchemaCatalogView view = workspace.Prepare().View;
         Assert.Empty(view.Schemas);
         Assert.Empty(view.DescriptorIds);
         foreach (ObjectLayout layout in layouts) { view.Require(layout); }
@@ -61,9 +61,9 @@ public sealed class TemporalScalarCatalogTests {
     public void TemporalFieldsShareOneOwnerSchemaRecord() {
         DurableSchema schema = new("C", 1, new DurableFieldInfo(1, TypeTag.DateOnly),
             new DurableFieldInfo(2, TypeTag.TimeOnly), new DurableFieldInfo(3, TypeTag.DateTimeOffset));
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(schema);
-        P0CatalogView view = workspace.Prepare().View;
+        SchemaCatalogView view = workspace.Prepare().View;
         Assert.Equal(schema, Assert.Single(view.Schemas).Value);
         Assert.Single(view.DescriptorIds);
         view.Require(ObjectLayout.ForDurable(schema));

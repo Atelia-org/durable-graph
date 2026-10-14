@@ -17,7 +17,7 @@ public sealed class BclScalarCatalogTests {
         AssertNominal(TypeExpr.List(type), [8, 1, code]);
         AssertNominal(TypeExpr.Nullable(type), [9, 1, code]);
         AssertNominal(TypeExpr.Dictionary(type, type), [10, 1, code, 1, code]);
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         List<ObjectLayout> layouts = [];
         for (byte rank = 4; rank <= 7; rank++) {
             AssertNominal(rank == 4 ? TypeExpr.VectorArray(type) : TypeExpr.MultiDimArray(type, rank - 3), [rank, 1, code]);
@@ -25,7 +25,7 @@ public sealed class BclScalarCatalogTests {
             layouts.Add(layout);
             workspace.Set(layout);
         }
-        P0CatalogView view = workspace.Prepare().View;
+        SchemaCatalogView view = workspace.Prepare().View;
         Assert.Empty(view.Schemas);
         Assert.Empty(view.DescriptorIds);
         foreach (ObjectLayout layout in layouts) { view.Require(layout); }
@@ -35,9 +35,9 @@ public sealed class BclScalarCatalogTests {
     public void BuiltinFieldsNeedNoAdditionalSchemaNodes() {
         DurableSchema schema = new("C", 1, new DurableFieldInfo(1, TypeTag.Guid),
             new DurableFieldInfo(2, TypeTag.Decimal), new DurableFieldInfo(3, TypeTag.TimeSpan));
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(schema);
-        P0CatalogView view = workspace.Prepare().View;
+        SchemaCatalogView view = workspace.Prepare().View;
         Assert.Equal(schema, Assert.Single(view.Schemas).Value);
         Assert.Single(view.DescriptorIds);
         view.Require(ObjectLayout.ForDurable(schema));

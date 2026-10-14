@@ -1,10 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using Atelia.DurableGraph.Schema;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Pure structural layouts selected by typed ABI 5, without a Schema view or CLR model.</summary>
-internal static class P0BuiltinLayouts {
+internal static class BuiltinObjectLayouts {
     // ABI 5 explicitly selects these codecs. A future reader/default must not reinterpret its bytes.
     internal const uint ListCodecVersion = 2;
     internal const uint ArrayCodecVersion = 1;

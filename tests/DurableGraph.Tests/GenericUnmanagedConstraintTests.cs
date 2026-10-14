@@ -29,7 +29,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!
             .Invoke(null, [registry]);
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Type managed = assembly.GetType("Managed")!;
         Type boxDefinition = assembly.GetType("Box`1")!;
         Type inlineDefinition = assembly.GetType("Inline`1")!;

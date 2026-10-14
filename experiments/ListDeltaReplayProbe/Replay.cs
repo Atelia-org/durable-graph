@@ -83,7 +83,7 @@ internal static class Replay {
         // supplied to readers; historical materialization is deliberately outside Commit timing.
         List<StepResult> steps = [];
         using (Repository reader = Repository.OpenReadOnlyExisting(directory, Models())) {
-            P0GraphStore store = reader.MetaBootstrapStore;
+            GraphRecordStore store = reader.GraphStore;
             // Reissue handles from the reopened owner's published history; Saved addresses are diagnostics.
             IReadOnlyList<CheckpointAddress> history = reader.ReadFrames("main");
             if (history.Count != saved.Count * 2 - 1) { throw new InvalidOperationException("Published E/S history length differs from the trace."); }
@@ -106,7 +106,7 @@ internal static class Replay {
                 World<T> loaded = (World<T>)reader.ReadState(checkpoint);
                 if (workload.Fingerprint(loaded) != entry.Fingerprint) { throw new InvalidOperationException("Historical domain graph differs from edit script."); }
                 // Direct Diff consumes stored-exact states decoded against this graph's actual selected S.
-                DecodedRevision decoded = DecodedRevision.ReadSplit(store, checkpoint.RevisionAddress, Models());
+                DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, checkpoint.RevisionAddress, Models());
                 if (!decoded.SourceModels!.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? binding)) {
                     throw new InvalidOperationException("No current List binding.");
                 }
@@ -116,18 +116,18 @@ internal static class Replay {
                 ObjectStateRecord current = decoded.Objects.Single(row => row.Kind == ObjectStateKind.List && row.Layout.Equals(listBinding.CurrentLayout));
                 if (index != 0 && current.Id != listId) { throw new InvalidOperationException("List identity changed across resize/edit."); }
                 listId = current.Id;
-                P0GraphSnapshot graph = store.ReadGraph(entry.Address);
+                StoredGraphRevision graph = store.ReadGraph(entry.Address);
                 FrameAddress? expectedParent = index == 0 ? null : history[index * 2 - 1].RevisionAddress;
                 FrameAddress? expectedSource = index == 0 ? null : saved[index - 1].Address;
-                if (graph.Kind != P0GraphKind.State || graph.RootId != entry.RootId ||
+                if (graph.Kind != StoredGraphKind.State || graph.RootId != entry.RootId ||
                     graph.Parent != expectedParent || graph.SourceGraph != expectedSource ||
-                    !graph.Objects.Keys.Order().SequenceEqual(entry.Storage.Keys.Select(id => id.Value).Order()) ||
+                    !graph.ObjectHeads.Keys.Order().SequenceEqual(entry.Storage.Keys.Select(id => id.Value).Order()) ||
                     !decoded.Objects.Select(row => row.Id).SequenceEqual(entry.Storage.Keys.Order())) {
                     throw new InvalidOperationException("Stored State roots, parents or complete live IDs differ from the installed baseline.");
                 }
                 foreach ((ObjectId id, ObjectStorageInfo expected) in entry.Storage) {
-                    P0ObjectChain chain = store.ReadObjectChain(entry.Address, id.Value);
-                    if (graph.Objects[id.Value] != expected.Head || decoded.ObjectHeads[id] != expected.Head ||
+                    ObjectVersionChain chain = store.ReadObjectChain(entry.Address, id.Value);
+                    if (graph.ObjectHeads[id.Value] != expected.Head || decoded.ObjectHeads[id] != expected.Head ||
                         decoded.ObjectStorage[id] != expected || chain.Head != expected.Head ||
                         chain.ReconstructionPayloadBytes != expected.ReconstructionPayloadBytes) {
                         throw new InvalidOperationException("Stored object head/H differs from the installed baseline.");
@@ -138,7 +138,7 @@ internal static class Replay {
                 string listKind = "NoChange";
                 IReadOnlyList<ObjectVersionRecord> records = graph.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
                 foreach (ObjectVersionRecord row in records) {
-                    P0ChainEntry actual = store.ReadObjectChain(entry.Address, row.ObjectId).Entries[^1];
+                    ObjectVersionChainEntry actual = store.ReadObjectChain(entry.Address, row.ObjectId).Entries[^1];
                     if (actual.ContainingBatch != graph.OwnedBatch || actual.Record.Kind != row.Kind || actual.Record.PriorAddress != row.PriorAddress) {
                         throw new InvalidOperationException("State payload accounting selected a different object version.");
                     }

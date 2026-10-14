@@ -21,7 +21,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 092 | [类型名、命名空间与后续组织重构](0092-type-namespace-refactoring/README.md)；A 内部分析命名已实施，其余分片推进 |
+| 092 | [类型名、命名空间与后续组织重构](0092-type-namespace-refactoring/README.md)；A 已验收，B 源码／测试已验，包门禁待验 |
 | 091 | [淘汰材料删除、继任与验证](0091-retired-material-cleanup/README.md) |
 | 090 | [文档治理、问题目录与随任务维护](0090-document-governance/README.md) |
 | 089 | [checkout 环境寿命与 factory 查询](0089-checkout-environment-and-factory-query-refactoring/README.md) |

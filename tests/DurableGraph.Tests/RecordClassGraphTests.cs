@@ -18,9 +18,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("Run")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        DecodedRevision first = DecodedRevision.ReadSplit(states, addresses[0], models);
-        DecodedRevision final = DecodedRevision.ReadSplit(states, addresses[3], models);
+        var states = segments.GraphStore;
+        DecodedRevision first = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
+        DecodedRevision final = DecodedRevision.ReadStoredGraph(states, addresses[3], models);
         ObjectStateRecord[] oldFacts = first.Objects.Where(row => row.Schema?.Type == TypeExpr.Named("Damage")).ToArray();
         ObjectStateRecord[] newFacts = final.Objects.Where(row => row.Schema?.Type == TypeExpr.Named("Damage")).ToArray();
         Assert.Equal(2, oldFacts.Length); // Two equal records, not one equality-interned record.
@@ -38,16 +38,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Empty(DefaultRemoved(states, addresses[4]));
     }
 
-    private static void AssertRecordTypedDeltaCost(P0GraphStore store, FrameAddress priorGraph,
+    private static void AssertRecordTypedDeltaCost(GraphRecordStore store, FrameAddress priorGraph,
         FrameAddress currentGraph, ObjectId id, StateModelRegistry models, Type domainType) {
-        DecodedRevision decoded = DecodedRevision.ReadSplit(store, currentGraph, models);
+        DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, currentGraph, models);
         ObjectStateRecord stored = decoded.GetRequired(id);
         StateModelBinding model = decoded.SourceModels!.ResolveCurrentModel(domainType);
         Assert.Equal(stored.Layout, model.CurrentLayout); // Ordinary same-layout update, not an Upgrade rewrite.
         ObjectStateRecord current = model.Normalize(stored); // Exact current DTO attaches preparation without an Upgrade callback.
         var rawBase = current.Preparation!.PrepareBase(current);
         Assert.Equal(12, rawBase.Body.Length);
-        byte[] typedBase = P0TypedBodyCodec.Encode(current.Layout, rawBase, decoded.SelectedSchemaView);
+        byte[] typedBase = TypedBaseBodyCodec.Encode(current.Layout, rawBase, decoded.SelectedSchemaView);
         Assert.True(typedBase.Length - rawBase.Body.Length >= 3); // ABI5 + dynamic route + descriptor metaObjectId.
         long b = ObjectVersionPayloadSize.GetBasePayloadBytes(typedBase.Length);
         var prior = store.ReadObjectChain(priorGraph, id.Value);

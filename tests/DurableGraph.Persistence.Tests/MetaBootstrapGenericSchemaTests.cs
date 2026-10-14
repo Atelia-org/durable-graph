@@ -21,21 +21,21 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         TypeExpr first = TypeExpr.Named("Generic.Pair", TypeExpr.Builtin(TypeTag.Int32), TypeExpr.Builtin(TypeTag.Int64));
         TypeExpr second = TypeExpr.Named("Generic.Pair", TypeExpr.Builtin(TypeTag.Int64), TypeExpr.Builtin(TypeTag.Int32));
         DurableSchema[] schemas = [Plain(first, 1), Plain(second, 1), Plain(first, 2)];
-        P0PreparedCatalog prepared = Prepare(schemas);
+        PreparedSchemaCatalogWrite prepared = Prepare(schemas);
         FrameAddress graph;
-        using (var repository = P0Repository.CreateNew(_path)) {
-            graph = repository.Store.Append(P0GraphKind.Meta, null, null, prepared.Write!).Address;
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
+            graph = repository.Store.Append(StoredGraphKind.Meta, null, null, prepared.Write!).Address;
             repository.Data.ConfirmDurable();
         }
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        P0CatalogView loaded = P0CatalogView.Load(reader.Store, graph); // No business registrations.
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        SchemaCatalogView loaded = SchemaCatalogView.Load(reader.Store, graph); // No business registrations.
         Assert.Equal(3, loaded.Schemas.Count);
         ObjectId[] ids = schemas.Select(schema => loaded.DescriptorId(ObjectLayout.ForDurable(schema))).ToArray();
         Assert.Equal(3, ids.Distinct().Count());
         foreach (DurableSchema schema in schemas) {
             Assert.Equal(schema, loaded.Schemas[new(schema.Type, schema.Version)]);
             ObjectLayout layout = ObjectLayout.ForDurable(schema);
-            var decoded = P0TypedBodyCodec.Decode(P0TypedBodyCodec.Encode(layout, new PreparedBaseBody([0]), loaded), loaded);
+            var decoded = TypedBaseBodyCodec.Decode(TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody([0]), loaded), loaded);
             Assert.Equal(layout, decoded.Layout);
             Assert.Equal(new byte[] { 0 }, decoded.Body);
         }
@@ -47,14 +47,14 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         DurableSchema box1 = Box(mode1, 1), box2 = Box(mode2, 2), nullableBox = Box(mode1, 1, nullable: true);
         DurableSchema references = new("Generic.References", 1,
             DurableFieldInfo.Reference(1, box1.Type), DurableFieldInfo.Reference(2, nullableBox.Type));
-        P0PreparedCatalog prepared = Prepare(box1, box2, nullableBox, references);
+        PreparedSchemaCatalogWrite prepared = Prepare(box1, box2, nullableBox, references);
         FrameAddress graph;
-        using (var repository = P0Repository.CreateNew(_path)) {
-            graph = repository.Store.Append(P0GraphKind.Meta, null, null, prepared.Write!).Address;
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
+            graph = repository.Store.Append(StoredGraphKind.Meta, null, null, prepared.Write!).Address;
             repository.Data.ConfirmDurable();
         }
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        P0CatalogView loaded = P0CatalogView.Load(reader.Store, graph);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        SchemaCatalogView loaded = SchemaCatalogView.Load(reader.Store, graph);
         Assert.Equal(6, loaded.Schemas.Count);
         Assert.Equal(box1.Type, box2.Type); // Nominal arguments do not contain the inline version.
         Assert.NotEqual(box1.Type, nullableBox.Type);
@@ -74,10 +74,10 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
     public void Changing_an_inline_version_requires_a_new_owner_version_while_old_business_keeps_its_original_schema_root() {
         DurableSchema mode1 = Mode(1, TypeTag.UInt16), mode2 = Mode(2, TypeTag.UInt16);
         DurableSchema box1 = Box(mode1, 1), incompatible = Box(mode2, 1), box2 = Box(mode2, 2);
-        P0CatalogWorkspace catalog = new(static () => { });
+        SchemaCatalogWorkspace catalog = new(static () => { });
         catalog.Set(box1);
-        using var repository = P0Repository.CreateNew(_path);
-        P0SaveResult first = Publish(repository, "main", catalog.Prepare(), box1, UnsignedBody(65535));
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        RepositorySaveResult first = Publish(repository, "main", catalog.Prepare(), box1, UnsignedBody(65535));
         FrameAddress originalSchema = first.Business.SchemaRoot!.Value;
         catalog.Set(mode2); // A new inline version itself is a valid independent definition.
         long frames = repository.Store.AppendedFrames;
@@ -85,16 +85,16 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         Assert.Equal(frames, repository.Store.AppendedFrames);
         Assert.Equal(originalSchema, repository.SharedSchemaRoot);
         catalog.Set(box2);
-        P0PreparedCatalog next = catalog.Prepare();
+        PreparedSchemaCatalogWrite next = catalog.Prepare();
         Assert.Equal(box1, next.View.Schemas[new(box1.Type, 1)]);
         Assert.Equal(box2, next.View.Schemas[new(box2.Type, 2)]);
-        P0SaveResult second = Publish(repository, "other", next, box2, UnsignedBody(65535));
+        RepositorySaveResult second = Publish(repository, "other", next, box2, UnsignedBody(65535));
         Assert.NotEqual(originalSchema, second.Business.SchemaRoot);
         Assert.Equal(originalSchema, repository.Store.ReadGraph(first.Business.Address).SchemaRoot);
         Assert.Equal(second.Business.SchemaRoot, repository.SharedSchemaRoot);
-        P0ObjectChain old = repository.Store.ReadObjectChain(first.Business.Address, 1);
-        P0CatalogView origin = P0CatalogView.Load(repository.Store, old.Entries[0].SchemaRoot!.Value);
-        Assert.Equal(ObjectLayout.ForDurable(box1), P0TypedBodyCodec.Decode(old.Entries[0].Record.Body, origin).Layout);
+        ObjectVersionChain old = repository.Store.ReadObjectChain(first.Business.Address, 1);
+        SchemaCatalogView origin = SchemaCatalogView.Load(repository.Store, old.Entries[0].SchemaRoot!.Value);
+        Assert.Equal(ObjectLayout.ForDurable(box1), TypedBaseBodyCodec.Decode(old.Entries[0].Record.Body, origin).Layout);
         Assert.False(origin.Schemas.ContainsKey(new(box2.Type, 2)));
     }
 
@@ -109,20 +109,20 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         Assert.Equal(source.Version, wrong.Version);
         Assert.NotEqual(source, wrong);
         FrameAddress graph, schema;
-        using (var repository = P0Repository.CreateNew(_path)) {
-            P0SaveResult saved = Publish(repository, "main", Prepare(source), source, UnsignedBody(65535));
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
+            RepositorySaveResult saved = Publish(repository, "main", Prepare(source), source, UnsignedBody(65535));
             graph = saved.Business.Address;
             schema = saved.Business.SchemaRoot!.Value;
         }
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        P0CatalogView selected = P0CatalogView.Load(reader.Store, schema);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        SchemaCatalogView selected = SchemaCatalogView.Load(reader.Store, schema);
         Assert.Equal(sourceMode, selected.Schemas[new(sourceMode.Type, 1)]); // Metadata is valid without a CLR enum claim.
         int wrongReads = 0;
         StateReaderBinding badReader = IntegerReader(wrong, () => wrongReads++);
-        Assert.Throws<InvalidDataException>(() => P0TypedReader.Read(reader.Store, graph, Readers(badReader), selected));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, graph, Readers(badReader), selected));
         Assert.Equal(0, wrongReads);
         int validReads = 0;
-        P0DecodedRows decoded = P0TypedReader.Read(reader.Store, graph, Readers(IntegerReader(source, () => validReads++)), selected);
+        DecodedGraphRows decoded = StoredGraphDecoder.Read(reader.Store, graph, Readers(IntegerReader(source, () => validReads++)), selected);
         Assert.Equal(1, validReads);
         Assert.Equal((ushort)65535, decoded.Rows[new(1)].GetState<ushort>());
     }
@@ -133,13 +133,13 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         // TypeExpr.Nullable intentionally defers the named declaration-kind check.
         TypeExpr closed = TypeExpr.Named("Generic.Phantom", TypeExpr.Nullable(reference.Type));
         DurableSchema owner = Plain(closed, 1);
-        P0CatalogWorkspace catalog = new(static () => { });
+        SchemaCatalogWorkspace catalog = new(static () => { });
         catalog.Set(reference);
         catalog.Set(owner);
         Assert.Throws<InvalidDataException>(() => catalog.Prepare());
         Assert.Null(catalog.Accepted);
         // A nullable argument of a declared inline value is valid even when phantom in the body.
-        P0PreparedCatalog valid = Prepare(Mode(1, TypeTag.UInt16), Plain(
+        PreparedSchemaCatalogWrite valid = Prepare(Mode(1, TypeTag.UInt16), Plain(
             TypeExpr.Named("Generic.Phantom", TypeExpr.Nullable(Mode(1, TypeTag.UInt16).Type)), 1));
         Assert.Equal(2, valid.View.Schemas.Count);
     }
@@ -149,19 +149,19 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         DurableSchema first = Plain(TypeExpr.Named("Generic.Phantom", TypeExpr.Builtin(TypeTag.Int32)), 1);
         DurableSchema second = Plain(TypeExpr.Named("Generic.Phantom", TypeExpr.Builtin(TypeTag.Int64)), 1);
         FrameAddress retained;
-        using (var repository = P0Repository.CreateNew(_path)) {
-            P0SaveResult original = Publish(repository, "main", Prepare(first), first, new PreparedBaseBody([0]));
-            P0PreparedCatalog other = Prepare(second);
-            P0GraphSnapshot otherView = repository.Store.Append(P0GraphKind.Meta, null, null, other.Write!);
-            retained = repository.Store.Append(P0GraphKind.State, original.Business.Address, otherView.Address,
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
+            RepositorySaveResult original = Publish(repository, "main", Prepare(first), first, new PreparedBaseBody([0]));
+            PreparedSchemaCatalogWrite other = Prepare(second);
+            StoredGraphRevision otherView = repository.Store.Append(StoredGraphKind.Meta, null, null, other.Write!);
+            retained = repository.Store.Append(StoredGraphKind.State, original.Business.Address, otherView.Address,
                 new(original.Business.Address, new(1), [])).Address;
             repository.Data.ConfirmDurable();
         }
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
-        P0GraphSnapshot graph = reader.Store.ReadGraph(retained);
-        P0ObjectChain originalChain = reader.Store.ReadObjectChain(retained, 1);
-        P0CatalogView origin = P0CatalogView.Load(reader.Store, originalChain.Entries[0].SchemaRoot!.Value);
-        P0CatalogView selected = P0CatalogView.Load(reader.Store, graph.SchemaRoot!.Value);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
+        StoredGraphRevision graph = reader.Store.ReadGraph(retained);
+        ObjectVersionChain originalChain = reader.Store.ReadObjectChain(retained, 1);
+        SchemaCatalogView origin = SchemaCatalogView.Load(reader.Store, originalChain.Entries[0].SchemaRoot!.Value);
+        SchemaCatalogView selected = SchemaCatalogView.Load(reader.Store, graph.SchemaRoot!.Value);
         Assert.Equal(first, origin.Schemas[new(first.Type, 1)]);
         Assert.Equal(second, selected.Schemas[new(second.Type, 1)]);
         Assert.Equal(origin.DescriptorId(ObjectLayout.ForDurable(first)), selected.DescriptorId(ObjectLayout.ForDurable(second)));
@@ -171,7 +171,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             (ref BareValueReader bytes) => { bodyReads++; return bytes.ReadVarInt32(); },
             static (ref BareValueReader bytes, in int prior) => bytes.ReadVarInt32(),
             static (in int value, IStateReferenceVisitor visitor) => { });
-        Assert.Throws<InvalidDataException>(() => P0TypedReader.Read(reader.Store, retained, Readers(binding), selected));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, retained, Readers(binding), selected));
         Assert.Equal(0, bodyReads);
     }
 
@@ -184,16 +184,16 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             nullable ? DurableFieldInfo.Nullable(1, inline) : inline);
     }
 
-    private static P0PreparedCatalog Prepare(params DurableSchema[] schemas) {
-        P0CatalogWorkspace catalog = new(static () => { });
+    private static PreparedSchemaCatalogWrite Prepare(params DurableSchema[] schemas) {
+        SchemaCatalogWorkspace catalog = new(static () => { });
         foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
         return catalog.Prepare();
     }
 
-    private static P0SaveResult Publish(P0Repository repository, string branch, P0PreparedCatalog catalog,
+    private static RepositorySaveResult Publish(RepositoryStorageFacade repository, string branch, PreparedSchemaCatalogWrite catalog,
         DurableSchema schema, PreparedBaseBody raw) {
-        byte[] body = P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), raw, catalog.View);
-        using P0PendingSave pending = repository.Prepare(branch, P0GraphKind.State,
+        byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), raw, catalog.View);
+        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)]), catalog.Write);
         return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall);
     }
@@ -218,7 +218,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             static (in uint value, IStateReferenceVisitor visitor) => { });
     }
 
-    private static StateModelSnapshot Readers(StateReaderBinding reader) {
+    private static ModelExecutionEnvironment Readers(StateReaderBinding reader) {
         StateReaderRegistry registry = new();
         registry.Register(reader);
         return new([], [], registry.Snapshot());

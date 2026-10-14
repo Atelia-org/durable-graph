@@ -22,7 +22,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         TypeExpr family = TypeExpr.Named("Pair", TypeExpr.Named("Point"));
         DurableSchema first = Point(1), second = Point(2);
         DurableSchema inconsistent = new(family, 1, Inline(1, first), Inline(2, second));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Assert.Throws<InvalidDataException>(() => snapshot.ResolveReader(inconsistent));
         Assert.Equal(0, factories);
         DurableSchema consistent = new(family, 1, Inline(1, first), Inline(2, first));
@@ -37,7 +37,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         StateModelRegistry registry = BasicRegistry();
         DurableSchema malicious = new(TypeExpr.Named("Box", TypeExpr.Named("Point")), 1,
             DurableFieldInfo.Reference(1, TypeExpr.Named("Point")));
-        Assert.Throws<InvalidDataException>(() => registry.Snapshot().BindSchema(malicious));
+        Assert.Throws<InvalidDataException>(() => registry.CreateEnvironment().BindSchema(malicious));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         DurableSchema owner = new(TypeExpr.Named("Pair", TypeExpr.Named("Point")), 1,
             Inline(1, first), Inline(2, conflicting));
 
-        InvalidDataException error = Assert.Throws<InvalidDataException>(() => registry.Snapshot().BindSchema(owner));
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => registry.CreateEnvironment().BindSchema(owner));
 
         Assert.Contains("field[1].inline", error.Message);
         Assert.Contains("field[2].inline", error.Message);
@@ -61,11 +61,11 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         TypeExpr family = TypeExpr.Named("Box", TypeExpr.Named("Point"));
         DurableSchema first = new(family, 1, Inline(1, Point(1)));
         DurableSchema second = new(family, 1, Inline(1, Point(2)));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         StateSchemaBinding bound = snapshot.BindSchema(first);
         Assert.Same(bound, snapshot.BindSchema(first));
         Assert.Throws<InvalidDataException>(() => snapshot.BindSchema(second));
-        Assert.Equal(second, registry.Snapshot().BindSchema(second).Schema);
+        Assert.Equal(second, registry.CreateEnvironment().BindSchema(second).Schema);
     }
 
     [Fact]
@@ -74,10 +74,10 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         DurableSchema first = Point(1);
         DurableSchema owner = new(TypeExpr.Named("Box", TypeExpr.Named("Point")), 1, Inline(1, first));
         DurableSchema conflicting = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-        P0CatalogView selected = LoadView("matching", first), other = LoadView("conflicting", conflicting);
+        SchemaCatalogView selected = LoadView("matching", first), other = LoadView("conflicting", conflicting);
         var code = registry.FreezeConfiguration();
         int lookups = 0;
-        StateModelSnapshot snapshot = code.CreateSnapshot(key => {
+        ModelExecutionEnvironment snapshot = code.CreateEnvironment(key => {
             lookups++;
             return selected.Schemas.GetValueOrDefault(key);
         });
@@ -92,7 +92,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         Assert.Same(boundOwner, snapshot.BindSchema(owner));
         Assert.Same(reader, snapshot.ResolveReader(owner));
         Assert.True(lookups > beforeHits); // Successful memo hits still perform the standard exact checks.
-        StateModelSnapshot rejected = code.CreateSnapshot(key => other.Schemas.GetValueOrDefault(key));
+        ModelExecutionEnvironment rejected = code.CreateEnvironment(key => other.Schemas.GetValueOrDefault(key));
         foreach (Action action in new Action[] {
             () => rejected.BindSchema(first), () => rejected.ResolveStoredValue(Inline(1, first)),
             () => rejected.BindSchema(owner), () => rejected.ResolveReader(owner),
@@ -104,20 +104,20 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         Assert.Equal(first, selected.Schemas[new(first.Type, first.Version)]);
         Assert.Equal(conflicting, other.Schemas[new(first.Type, first.Version)]);
 
-        P0CatalogView LoadView(string name, DurableSchema schema) {
+        SchemaCatalogView LoadView(string name, DurableSchema schema) {
             string path = Path.Combine(_directory, name);
             FrameAddress selectedRoot;
-            using (var writer = P0Repository.CreateNew(path)) {
-                P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+            using (var writer = RepositoryStorageFacade.CreateNew(path)) {
+                SchemaCatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
                 catalog.Set(schema);
-                P0PreparedCatalog candidate = catalog.Prepare();
-                using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                PreparedSchemaCatalogWrite candidate = catalog.Prepare();
+                using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State,
                     new(null, new(1), [ObjectVersionRecord.CreateBase(1,
-                        P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
                 selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
             }
-            using var reader = P0Repository.OpenReadOnlyExisting(path);
-            return P0CatalogView.Load(reader.Store, selectedRoot);
+            using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(path);
+            return SchemaCatalogView.Load(reader.Store, selectedRoot);
         }
     }
 
@@ -137,7 +137,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         registry.Register(new StateDefinitionBinding("Root", SchemaKind.ReferenceObject, 0, null,
             [new("Root", 1, SchemaKind.ReferenceObject, 0, [new(1, child.Type, 1)])]));
         DurableSchema root = new("Root", 1, Inline(1, child));
-        Assert.Same(root, registry.Snapshot().BindSchema(root).Schema);
+        Assert.Same(root, registry.CreateEnvironment().BindSchema(root).Schema);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
             longer = new("Prefix" + index, 1, SchemaKind.InlineValue, Inline(1, longer));
         }
         DurableSchema root = new("Root", 1, Inline(1, shared), Inline(2, longer));
-        InvalidDataException error = Assert.Throws<InvalidDataException>(() => new StateModelRegistry().Snapshot().BindSchema(root));
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => new StateModelRegistry().CreateEnvironment().BindSchema(root));
         Assert.Contains("depth", error.Message);
     }
 
@@ -161,10 +161,10 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         registry.Register(new StateDefinitionBinding("Phantom", SchemaKind.ReferenceObject, 1, null,
             [new("Phantom", 1, SchemaKind.ReferenceObject, 1, [])]));
         DurableSchema schema = new(TypeExpr.Named("Phantom", TypeExpr.Named("RetiredArgument")), 1);
-        StateSchemaBinding binding = registry.Snapshot().BindSchema(schema);
+        StateSchemaBinding binding = registry.CreateEnvironment().BindSchema(schema);
         Assert.Empty(binding.FieldSlots);
         Assert.Throws<InvalidDataException>(() => binding.GetValue(TypeExpr.Parameter(0)));
-        Assert.Throws<InvalidDataException>(() => registry.Snapshot().BindSchema(new(TypeExpr.Named("Phantom"), 1)));
+        Assert.Throws<InvalidDataException>(() => registry.CreateEnvironment().BindSchema(new(TypeExpr.Named("Phantom"), 1)));
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         DurableSchema ancestor = new(TypeExpr.Named("Base", node), 1, DurableFieldInfo.Reference(1, node));
         DurableSchema leaf = new(TypeExpr.Named("Derived", TypeExpr.Builtin(TypeTag.String), node), 1,
             [new(1, TypeTag.String)], ancestor);
-        StateSchemaBinding binding = registry.Snapshot().BindSchema(leaf);
+        StateSchemaBinding binding = registry.CreateEnvironment().BindSchema(leaf);
         StateValueBinding own = binding.GetValue(TypeExpr.Parameter(0));
         StateValueBinding inherited = binding.GetValue(TypeExpr.Parameter(1));
         Assert.Equal(typeof(ObjectId), own.StateType);
@@ -205,13 +205,13 @@ public sealed class GenericBindingCatalogTests : IDisposable {
                 DurableSchema schema = new(context.GetTypeExpr(type), 1, new DurableFieldInfo(1, TypeTag.Int32));
                 return Model<Box<int>>(schema, context.ResolveReader(schema));
             }, historicalReaderFactory: static (schema, _) => Reader(schema)));
-        StateModelSnapshot old = registry.Snapshot();
+        ModelExecutionEnvironment old = registry.CreateEnvironment();
         Assert.Throws<InvalidDataException>(() => old.ResolveCurrentModel(typeof(Box<int>)));
         Assert.Empty(old.Models);
         registry.Register(new StateDefinitionBinding("Needed", SchemaKind.InlineValue, 0, null,
             [new("Needed", 1, SchemaKind.InlineValue, 0, [])]));
         Assert.Throws<InvalidDataException>(() => old.ResolveCurrentModel(typeof(Box<int>)));
-        StateModelSnapshot next = registry.Snapshot();
+        ModelExecutionEnvironment next = registry.CreateEnvironment();
         StateModelBinding model = next.ResolveCurrentModel(typeof(Box<int>));
         Assert.Same(model, next.ResolveCurrentModel(typeof(Box<int>)));
         Assert.Equal(3, attempts);
@@ -224,7 +224,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         registry.Register(new StateDefinitionBinding("Box", SchemaKind.ReferenceObject, 1, typeof(Box<>),
             [new("Box", 1, SchemaKind.ReferenceObject, 1, [])],
             currentModelFactory: (_, _) => { bodyFactories++; throw new InvalidOperationException("No object body is needed for a reference slot."); }));
-        StateValueBinding value = registry.Snapshot().ResolveCurrentValue(typeof(Box<Box<int>>));
+        StateValueBinding value = registry.CreateEnvironment().ResolveCurrentValue(typeof(Box<Box<int>>));
         Assert.Equal(TypeExpr.Named("Box", TypeExpr.Named("Box", TypeExpr.Builtin(TypeTag.Int32))), value.Slot.TargetType);
         Assert.Equal(typeof(ObjectId), value.StateType);
         Assert.Equal(0, bodyFactories);
@@ -239,11 +239,11 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         StateModelRegistry first = new();
         first.Register(model);
         Assert.Throws<InvalidOperationException>(() => first.Register(wrong));
-        Assert.Same(model, first.Snapshot().Types[typeof(Legacy)]);
+        Assert.Same(model, first.CreateEnvironment().Types[typeof(Legacy)]);
         StateModelRegistry second = new();
         second.Register(wrong);
         Assert.Throws<InvalidOperationException>(() => second.Register(model));
-        Assert.Empty(second.Snapshot().Models);
+        Assert.Empty(second.CreateEnvironment().Models);
     }
 
     private static StateModelRegistry BasicRegistry() {

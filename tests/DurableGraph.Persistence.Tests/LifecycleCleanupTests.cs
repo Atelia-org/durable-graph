@@ -12,8 +12,8 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [Fact]
     public void PublicDisposeAttemptsBothActualBackingOwnersAndRetainsTheirErrorOrder() {
         using GraphResources resources = GraphResources.CreateNew(_root);
-        P0GraphStore retained = resources.MetaBootstrapStore;
-        P0GraphSnapshot graph = Seed(resources);
+        GraphRecordStore retained = resources.GraphStore;
+        StoredGraphRevision graph = Seed(resources);
         FrameAddress address = graph.Address;
         retained.ReadMetadata(address);
         retained.ReadDirectory(graph.DirectoryRoot);
@@ -30,13 +30,13 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(address));
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
-        Assert.Throws<ObjectDisposedException>(() => retained.Append(P0GraphKind.State, address, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
+        Assert.Throws<ObjectDisposedException>(() => retained.Append(StoredGraphKind.State, address, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
         Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
         resources.Dispose();
 
         using GraphResources fresh = GraphResources.OpenExisting(_root);
-        Assert.Equal(new byte[] { 10 }, Assert.Single(fresh.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records).Body.ToArray());
+        Assert.Equal(new byte[] { 10 }, Assert.Single(fresh.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records).Body.ToArray());
     }
 
     [Theory]
@@ -44,7 +44,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [InlineData(true)]
     public void SingleActualOwnerCloseErrorPreservesOriginalIdentityAndStack(bool versionOwner) {
         using GraphResources resources = GraphResources.CreateNew(_root);
-        P0GraphStore retained = resources.MetaBootstrapStore;
+        GraphRecordStore retained = resources.GraphStore;
         IOException injected = new("Single owner lock close failed.");
         object target = versionOwner ? resources.Versions : GetField(resources.Data, "_core");
         int attempts = 0;
@@ -66,7 +66,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [InlineData(true)]
     public void OpenCleanupHelperPreservesPrimaryWithActualResourcesAndOptionalCloseFailures(bool failCleanup) {
         using GraphResources resources = GraphResources.CreateNew(_root);
-        P0GraphStore retained = resources.MetaBootstrapStore;
+        GraphRecordStore retained = resources.GraphStore;
         IOException primary = CapturePrimary();
         IOException versionError = new("VersionStore cleanup failed.");
         IOException dataError = new("FrameStore cleanup failed.");
@@ -103,9 +103,9 @@ public sealed class LifecycleCleanupTests : IDisposable {
         }
     }
 
-    private static P0GraphSnapshot Seed(GraphResources resources) {
-        using P0Repository facade = new(resources);
-        using P0PendingSave pending = facade.Prepare("main", P0GraphKind.State,
+    private static StoredGraphRevision Seed(GraphResources resources) {
+        using RepositoryStorageFacade facade = new(resources);
+        using PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, [10])]));
         return facade.Commit(pending).Business;
     }

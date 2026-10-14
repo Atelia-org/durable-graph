@@ -96,7 +96,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         // No second RefRevision was delivered, yet its out evidence and both formal
         // files agree. Fresh DG can open the two complete roots without initialization repair.
         Dictionary<string, byte[]> complete = SnapshotTree(_path);
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models())) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, Models())) {
             Assert.Empty(reader.ListBranches());
             Assert.Null(reader.SharedSchemaRoot);
             AssertSentinel(ResourcesOf(reader).Data, sentinel);
@@ -116,7 +116,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         FrameAddress state0, schemaRoot;
         ObjectId listId;
         Dictionary<ObjectId, ObjectStorageInfo> storage;
-        using (Repository seed = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             state0 = main.Head.RevisionAddress;
@@ -125,12 +125,12 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
             storage = main.Baseline.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);
             Assert.Equal(3, storage.Count);
-            P0GraphSnapshot graph = seed.MetaBootstrapStore.ReadGraph(state0);
+            StoredGraphRevision graph = seed.GraphStore.ReadGraph(state0);
             Assert.Equal(schemaRoot, graph.SchemaRoot);
             foreach ((ObjectId id, ObjectStorageInfo info) in storage) {
-                Assert.Equal(info.Head, graph.Objects[id.Value]);
+                Assert.Equal(info.Head, graph.ObjectHeads[id.Value]);
                 Assert.Equal(info.ReconstructionPayloadBytes,
-                    seed.MetaBootstrapStore.ReadObjectChain(state0, id.Value).ReconstructionPayloadBytes);
+                    seed.GraphStore.ReadObjectChain(state0, id.Value).ReconstructionPayloadBytes);
             }
             Assert.NotEqual(state0, storage[listId].Head);
             AssertSentinel(ResourcesOf(seed).Data, sentinel);
@@ -138,7 +138,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
 
         FrameAddress state1;
         ObjectStorageInfo continuedStorage;
-        using (Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             reopened.PreparedStateReuseEnabled = false;
             Assert.Equal(state0, reopened.GetHead("main").RevisionAddress);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
@@ -152,11 +152,11 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             root.Numbers[7] = 200;
             CheckpointAddress next = cold.CommitState();
             state1 = next.RevisionAddress;
-            P0GraphSnapshot graph = reopened.MetaBootstrapStore.ReadGraph(state1);
+            StoredGraphRevision graph = reopened.GraphStore.ReadGraph(state1);
             Assert.Equal(state0, graph.SourceGraph);
             Assert.Equal(schemaRoot, graph.SchemaRoot);
             Assert.NotNull(graph.OwnedBatch);
-            P0Batch batch = reopened.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value);
+            ObjectVersionBatch batch = reopened.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
             Assert.Equal(state0, batch.SourceGraph);
             Assert.Equal(schemaRoot, batch.SchemaRoot);
             ObjectVersionRecord delta = Assert.Single(batch.Records);
@@ -164,28 +164,28 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(storage[listId].Head, delta.PriorAddress);
             continuedStorage = cold.Baseline!.Objects[listId].Storage!.Value;
-            Assert.Equal(graph.OwnedBatch.Value, graph.Objects[listId.Value]);
+            Assert.Equal(graph.OwnedBatch.Value, graph.ObjectHeads[listId.Value]);
             Assert.Equal(graph.OwnedBatch.Value, continuedStorage.Head);
             Assert.NotEqual(state1, continuedStorage.Head);
             Assert.NotNull(delta.EncodedPayloadBytes);
             Assert.Equal(storage[listId].ReconstructionPayloadBytes + delta.EncodedPayloadBytes!.Value,
                 continuedStorage.ReconstructionPayloadBytes);
             Assert.Equal(continuedStorage.ReconstructionPayloadBytes,
-                reopened.MetaBootstrapStore.ReadObjectChain(state1, listId.Value).ReconstructionPayloadBytes);
+                reopened.GraphStore.ReadObjectChain(state1, listId.Value).ReconstructionPayloadBytes);
             foreach ((ObjectId id, ObjectStorageInfo info) in storage.Where(pair => pair.Key != listId)) {
                 Assert.Equal(info, cold.Baseline.Objects[id].Storage);
-                Assert.Equal(info.Head, graph.Objects[id.Value]);
+                Assert.Equal(info.Head, graph.ObjectHeads[id.Value]);
             }
             AssertRing(reopened.ReadState(next), 200);
             AssertRing(reopened.ReadState(reopened.ResolveTag("initial")), 7);
             AssertSentinel(ResourcesOf(reopened).Data, sentinel);
         }
-        using Repository final = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models());
+        using Repository final = Repository.OpenStorageReadOnlyExisting(_path, Models());
         Assert.Equal(state1, final.GetHead("main").RevisionAddress);
         Assert.Equal(schemaRoot, final.SharedSchemaRoot);
         AssertRing(final.ReadState(final.GetHead("main")), 200);
         AssertRing(final.ReadState(final.ResolveTag("initial")), 7);
-        P0ObjectChain chain = final.MetaBootstrapStore.ReadObjectChain(state1, listId.Value);
+        ObjectVersionChain chain = final.GraphStore.ReadObjectChain(state1, listId.Value);
         Assert.Equal(continuedStorage.Head, chain.Head);
         Assert.Equal(continuedStorage.ReconstructionPayloadBytes, chain.ReconstructionPayloadBytes);
         AssertSentinel(ResourcesOf(final).Data, sentinel);
@@ -194,8 +194,8 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     private void RejectMissingSharedRoot(bool readOnly) {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => {
             using Repository unexpected = readOnly
-                ? Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models())
-                : Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+                ? Repository.OpenStorageReadOnlyExisting(_path, Models())
+                : Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         });
         Assert.Contains("[VersionStore.RefNotFound]", error.Message, StringComparison.Ordinal);
     }

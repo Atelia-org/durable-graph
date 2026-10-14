@@ -68,10 +68,10 @@ internal static class Program {
     private static StateModelBinding ResolveLeafBinding() => ResolveBinding(typeof(Leaf));
 
     private static StateModelBinding ResolveBinding(Type type) {
-        // StateModelRegistry.Snapshot is internal to the delivered Persistence package; the
+        // StateModelRegistry.CreateEnvironment is internal to the delivered Persistence package; the
         // consumer reads it through reflection and uses only the public StateBindingContext
         // surface. The probe adds no public query API and uses no friend access (C5).
-        MethodInfo snapshot = typeof(StateModelRegistry).GetMethod("Snapshot", BindingFlags.NonPublic | BindingFlags.Instance)
+        MethodInfo snapshot = typeof(StateModelRegistry).GetMethod("CreateEnvironment", BindingFlags.NonPublic | BindingFlags.Instance)
             ?? throw new InvalidOperationException("Missing internal StateModelRegistry.Snapshot method.");
         var context = (StateBindingContext)snapshot.Invoke(Models(), new object?[] { null })!;
         return context.ResolveCurrentModel(type);

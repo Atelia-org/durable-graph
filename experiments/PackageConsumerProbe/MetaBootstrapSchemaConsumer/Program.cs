@@ -32,38 +32,38 @@ internal static class Program {
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(witnessPath)!, lane + ".evidence.json"),
             JsonSerializer.Serialize(new {
                 Lane = lane, ProcessId = Environment.ProcessId, EmployeeAssembly = AssemblyEvidence(typeof(P0CatalogRecord).Assembly),
-                PersistenceAssembly = AssemblyEvidence(typeof(P0Repository).Assembly), RuntimeAssembly = AssemblyEvidence(typeof(DurableSchema).Assembly),
-                HostAssembly = AssemblyEvidence(typeof(Host).Assembly), TypedBodyAbi = P0TypedBodyCodec.FormatVersion,
+                PersistenceAssembly = AssemblyEvidence(typeof(RepositoryStorageFacade).Assembly), RuntimeAssembly = AssemblyEvidence(typeof(DurableSchema).Assembly),
+                HostAssembly = AssemblyEvidence(typeof(Host).Assembly), TypedBodyAbi = TypedBaseBodyCodec.FormatVersion,
             }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine("MetaBootstrapSchema:" + lane + ":Passed");
         return 0;
     }
 
     private static void Seed(string database, string witnessPath) {
-        using var repository = P0Repository.CreateNew(database);
+        using var repository = RepositoryStorageFacade.CreateNew(database);
         StateModelRegistry models = Host.Models();
-        var session = new P0Session(repository, "main", models);
+        var session = new BranchSaveSession(repository, "main", models);
         Need(session.Catalog.Accepted is null && session.Catalog.DirtyCount == 0, "Seed must not manually register catalog entries.");
         using var pending = session.Prepare(Host.Create());
         CheckCatalog(pending.Catalog.View);
         Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.All(row => row.Kind == ObjectVersionKind.Base), "First save must write Root, four Lists, two Arrays and two Dictionary Base rows.");
-        P0SaveResult saved = pending.Commit();
-        Need(saved.Business.Objects.Count == 9, "Inline/base/Nullable must not create rows; the shared inner List must create only one.");
+        RepositorySaveResult saved = pending.Commit();
+        Need(saved.Business.ObjectHeads.Count == 9, "Inline/base/Nullable must not create rows; the shared inner List must create only one.");
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
         Need(saved.Business.SchemaRoot == schema, "The business graph must pin its actual meta root.");
         BusinessIds ids = CheckRows(repository, saved.Business.Address, pending.Catalog.View, models);
         CheckFixedRowsWithoutCatalog(repository, saved.Business.Address, ids, 0);
         WriteWitness(witnessPath, new(Hex(saved.Business.Address), null, Hex(schema), ids,
-            saved.Business.Objects.ToDictionary(pair => pair.Key, pair => Hex(pair.Value))));
+            saved.Business.ObjectHeads.ToDictionary(pair => pair.Key, pair => Hex(pair.Value))));
     }
 
     private static void Read(string database, string witnessPath, bool continued) {
         Witness witness = ReadWitness(witnessPath);
-        using var repository = P0Repository.OpenReadOnlyExisting(database);
+        using var repository = RepositoryStorageFacade.OpenReadOnlyExisting(database);
         FrameAddress schema = Address(witness.Schema), s0 = Address(witness.State0);
         Need(repository.Store.ReadGraph(s0).SchemaRoot == schema, "The seed State must retain its exact Schema pin.");
         // This is intentionally before the first registration of any business model in this process.
-        P0CatalogView meta = P0CatalogView.Load(repository.Store, schema);
+        SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schema);
         CheckCatalog(meta);
         CheckFixedRowsWithoutCatalog(repository, s0, witness.Ids, 0);
         FrameAddress? s1 = continued ? Address(witness.State1 ?? throw new InvalidDataException("Missing continued State.")) : null;
@@ -71,18 +71,18 @@ internal static class Program {
         Need(repository.Store.AppendedFrames == 0, "Reading meta must not append.");
         StateModelRegistry models = Host.Models();
         Need(CheckRows(repository, s0, meta, models) == witness.Ids, "Cold seed rows must retain every object ID.");
-        Host.Check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, models), 0);
+        Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, models), 0);
         if (s1 is { } accepted) {
             Need(repository.GetHead("main") == accepted && repository.GetStateHead("main") == accepted, "Fresh published roots must select the continued State.");
-            P0GraphSnapshot graph = repository.Store.ReadGraph(accepted);
+            StoredGraphRevision graph = repository.Store.ReadGraph(accepted);
             Need(graph.SourceGraph == s0 && graph.SchemaRoot == schema, "The Delta State must retain its exact content source and Schema pin.");
             Need(CheckRows(repository, accepted, meta, models) == witness.Ids, "Cold continued rows must retain every object ID.");
-            Host.Check(P0BusinessWorkspace.ReadRoot(repository.Store, accepted, models), 1);
+            Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, accepted, models), 1);
             foreach (uint id in witness.Ids.All) {
-                P0ObjectChain chain = repository.Store.ReadObjectChain(accepted, id);
+                ObjectVersionChain chain = repository.Store.ReadObjectChain(accepted, id);
                 Need(chain.Entries.Count == 2 && chain.Entries[^1].Record.Kind == ObjectVersionKind.Delta, "Every changed object must persist Base plus one real Delta.");
                 Need(chain.Entries[^1].Record.PriorAddress == Address(witness.Heads[id]), "Fresh Delta prior must equal its exact seed head.");
-                Need(graph.Objects[id] != Address(witness.Heads[id]), "A changed object's accepted head must advance.");
+                Need(graph.ObjectHeads[id] != Address(witness.Heads[id]), "A changed object's accepted head must advance.");
             }
         } else { Need(repository.GetHead("main") == s0, "Fresh roots must select the seed State."); }
         Need(repository.SharedSchemaRoot == schema && repository.Store.AppendedFrames == 0, "Read-only lanes must keep the exact shared root.");
@@ -91,12 +91,12 @@ internal static class Program {
     private static void Continue(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         FrameAddress s0 = Address(witness.State0), schema = Address(witness.Schema);
-        using var repository = P0Repository.OpenExisting(database);
+        using var repository = RepositoryStorageFacade.OpenExisting(database);
         Need(repository.Store.ReadGraph(s0).SchemaRoot == schema, "Cold continuation must read the pinned seed Schema.");
-        P0CatalogView meta = P0CatalogView.Load(repository.Store, schema); // No business registration yet.
+        SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schema); // No business registration yet.
         CheckCatalog(meta);
         CheckFixedRowsWithoutCatalog(repository, s0, witness.Ids, 0);
-        var session = new P0Session(repository, "main", Host.Models());
+        var session = new BranchSaveSession(repository, "main", Host.Models());
         IDurableObject restored = session.State ?? throw new InvalidDataException("Missing restored State.");
         Host.Check(restored, 0);
         object[] instances = Host.Objects(restored);
@@ -107,25 +107,25 @@ internal static class Program {
         Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.Select(row => row.ObjectId).Order().SequenceEqual(witness.Ids.All.Order()), "Sparse changes must write exactly the nine existing objects.");
         foreach (ObjectVersionRecord row in pending.Business.Write.Records) {
             Need(row.Kind == ObjectVersionKind.Delta, "Every stored change must be a real Delta.");
-            Need(row.PriorAddress == session.StateSource!.Objects[row.ObjectId] && row.PriorAddress == Address(witness.Heads[row.ObjectId]), "Delta priors must match the restored seed heads.");
+            Need(row.PriorAddress == session.StateSource!.ObjectHeads[row.ObjectId] && row.PriorAddress == Address(witness.Heads[row.ObjectId]), "Delta priors must match the restored seed heads.");
         }
-        P0SaveResult saved = pending.Commit();
+        RepositorySaveResult saved = pending.Commit();
         Need(repository.SharedSchemaRoot == schema && saved.Business.SchemaRoot == schema, "Continuation must retain its accurate Schema pin.");
         object[] installed = Host.Objects(session.State!);
         for (int i = 0; i < instances.Length; i++) {
             Need(ReferenceEquals(instances[i], installed[i]), "Successful installation must retain every frozen candidate live identity.");
         }
         CheckFixedRowsWithoutCatalog(repository, saved.Business.Address, witness.Ids, 1);
-        Host.Check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, Host.Models()), 0);
-        Host.Check(P0BusinessWorkspace.ReadRoot(repository.Store, saved.Business.Address, Host.Models()), 1);
+        Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, Host.Models()), 0);
+        Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, saved.Business.Address, Host.Models()), 1);
         WriteWitness(witnessPath, witness with { State1 = Hex(saved.Business.Address) });
     }
 
-    private static BusinessIds CheckRows(P0Repository repository, FrameAddress graph, P0CatalogView meta,
+    private static BusinessIds CheckRows(RepositoryStorageFacade repository, FrameAddress graph, SchemaCatalogView meta,
         StateModelRegistry models) {
         var expected = Expected();
-        StateModelSnapshot snapshot = models.Snapshot(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
-        P0DecodedRows decoded = P0TypedReader.Read(repository.Store, graph, snapshot, meta);
+        ModelExecutionEnvironment snapshot = models.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
+        DecodedGraphRows decoded = StoredGraphDecoder.Read(repository.Store, graph, snapshot, meta);
         Need(decoded.Rows.Count == 9, "Business graph must contain exactly Root, four Lists, two Arrays and two Dictionaries.");
         uint Find(ObjectLayout layout) => decoded.Rows.Values.Single(row => row.Layout.Equals(layout)).Id.Value;
         BusinessIds ids = new(Find(ObjectLayout.ForDurable(expected.Root)), Find(ObjectLayout.ForList(expected.List)),
@@ -141,28 +141,28 @@ internal static class Program {
             ((IFrozenDictionaryState)decoded.Rows[new(ids.Entries)].Content).ComparerKind == DictionaryComparerKind.CurrentDefault,
             "Dictionary contents must retain their exact count and stored comparison policy.");
         foreach (uint id in new[] { ids.Root, ids.Samples, ids.Points, ids.Entries }) {
-            P0ObjectChain chain = repository.Store.ReadObjectChain(graph, id);
+            ObjectVersionChain chain = repository.Store.ReadObjectChain(graph, id);
             BareValueReader header = new(chain.Entries[0].Record.Body);
-            Need(header.ReadByte() == P0TypedBodyCodec.FormatVersion && header.ReadByte() == 1, "User Root/List/Array/Dictionary must use the current typed ABI's dynamic route.");
+            Need(header.ReadByte() == TypedBaseBodyCodec.FormatVersion && header.ReadByte() == 1, "User Root/List/Array/Dictionary must use the current typed ABI's dynamic route.");
             ObjectId descriptor = new(header.ReadVarUInt32());
             Need(descriptor == meta.DescriptorId(decoded.Rows[new(id)].Layout), "Base descriptor ObjectId must belong to the selected exact catalog.");
-            var body = P0TypedBodyCodec.Decode(chain.Entries[0].Record.Body, meta);
+            var body = TypedBaseBodyCodec.Decode(chain.Entries[0].Record.Body, meta);
             Need(body.Layout.Equals(decoded.Rows[new(id)].Layout), "Dynamic Base interpretation must use the selected exact catalog.");
             bool requiresCatalog = false;
-            try { _ = P0TypedBodyCodec.Decode(chain.Entries[0].Record.Body, catalog: null); }
+            try { _ = TypedBaseBodyCodec.Decode(chain.Entries[0].Record.Body, catalog: null); }
             catch (InvalidDataException) { requiresCatalog = true; }
             Need(requiresCatalog, "User Root/List/Array/Dictionary must require its source catalog.");
         }
         return ids;
     }
 
-    private static void CheckFixedRowsWithoutCatalog(P0Repository repository, FrameAddress graph, BusinessIds ids, int stage) {
+    private static void CheckFixedRowsWithoutCatalog(RepositoryStorageFacade repository, FrameAddress graph, BusinessIds ids, int stage) {
         var expected = Expected();
         // Neither header interpretation nor Base/Delta body reading receives a Schema view or user definitions.
-        StateModelSnapshot empty = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment empty = new StateModelRegistry().CreateEnvironment();
         ObjectStateRecord Read(uint id, ListLayout layout) {
-            P0ObjectChain chain = repository.Store.ReadObjectChain(graph, id);
-            var decoded = P0TypedBodyCodec.Decode(chain.Entries[0].Record.Body, catalog: null);
+            ObjectVersionChain chain = repository.Store.ReadObjectChain(graph, id);
+            var decoded = TypedBaseBodyCodec.Decode(chain.Entries[0].Record.Body, catalog: null);
             Need(decoded.Layout.Equals(ObjectLayout.ForList(layout)), "Fixed structural header must recover the exact closed List layout.");
             ObjectStateRecord row = empty.ResolveObjectReader(decoded.Layout).Read(new(id), new Bodies(chain, decoded.Body));
             Need(row.Id == new ObjectId(id) && row.Layout.Equals(decoded.Layout), "Fixed reader must decode the actual persisted Base/Delta chain.");
@@ -180,8 +180,8 @@ internal static class Program {
         FrozenListState<int> inner = Read(ids.Inner, expected.Inner).GetListState<int>();
         Need(inner.Count == 128, "Fixed inner List count mismatch.");
         for (int i = 0; i < inner.Count; i++) { Need(inner[i] == (stage == 1 && i == 17 ? 7777 : 1000 + i), "Fixed inner Int32 decoding mismatch."); }
-        P0ObjectChain arrayChain = repository.Store.ReadObjectChain(graph, ids.ArrayOptional);
-        var arrayBody = P0TypedBodyCodec.Decode(arrayChain.Entries[0].Record.Body, catalog: null);
+        ObjectVersionChain arrayChain = repository.Store.ReadObjectChain(graph, ids.ArrayOptional);
+        var arrayBody = TypedBaseBodyCodec.Decode(arrayChain.Entries[0].Record.Body, catalog: null);
         Need(arrayBody.Layout.Equals(ObjectLayout.ForArray(expected.ArrayOptional)), "Fixed Array header must recover the exact vector layout.");
         ObjectStateRecord arrayRow = empty.ResolveObjectReader(arrayBody.Layout).Read(new(ids.ArrayOptional), new Bodies(arrayChain, arrayBody.Body));
         Need(arrayRow.Id == new ObjectId(ids.ArrayOptional), "Fixed Array reader must retain the object identity.");
@@ -191,8 +191,8 @@ internal static class Program {
             int? value = Host.ExpectedArrayOptional(i, stage);
             Need(array[i].HasValue == value.HasValue && (!value.HasValue || array[i].Value == value.Value), "Fixed Nullable Int32 array decoding mismatch.");
         }
-        P0ObjectChain mappingChain = repository.Store.ReadObjectChain(graph, ids.Scalars);
-        var mappingBody = P0TypedBodyCodec.Decode(mappingChain.Entries[0].Record.Body, catalog: null);
+        ObjectVersionChain mappingChain = repository.Store.ReadObjectChain(graph, ids.Scalars);
+        var mappingBody = TypedBaseBodyCodec.Decode(mappingChain.Entries[0].Record.Body, catalog: null);
         Need(mappingBody.Layout.Equals(ObjectLayout.ForDictionary(expected.Scalars)), "Fixed Dictionary header must recover both exact slots and codec.");
         DictionaryStateReader mappingReader = (DictionaryStateReader)empty.ResolveObjectReader(mappingBody.Layout);
         ObjectStateRecord mappingRow = mappingReader.Read(new(ids.Scalars), new Bodies(mappingChain, mappingBody.Body));
@@ -208,12 +208,12 @@ internal static class Program {
         Need(actual.ContainsKey(5) == (stage == 0), "Fixed Dictionary must apply the actual key removal.");
     }
 
-    private sealed class Bodies(P0ObjectChain chain, byte[] first) : IStateBodySource {
+    private sealed class Bodies(ObjectVersionChain chain, byte[] first) : IStateBodySource {
         public int Count => chain.Entries.Count;
         public ReadOnlySpan<byte> GetBody(int index) => index == 0 ? first : chain.Entries[index].Record.Body;
     }
 
-    private static void CheckCatalog(P0CatalogView meta) {
+    private static void CheckCatalog(SchemaCatalogView meta) {
         var expected = Expected();
         Need(meta.Schemas.Count == 4 && meta.DescriptorIds.Count == 7, "Expected Root, Base, Point, Key and the three user-container descriptors.");
         foreach (ObjectLayout builtin in new[] { ObjectLayout.ForList(expected.Optional), ObjectLayout.ForList(expected.Nested),

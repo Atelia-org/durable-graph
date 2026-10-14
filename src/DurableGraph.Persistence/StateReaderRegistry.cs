@@ -14,9 +14,9 @@ public sealed class StateReaderRegistry : IStateReaderRegistration {
     private readonly Dictionary<Type, StateValueUpgradeRuleSet> _valueUpgradeRules = [];
 
     public void Register(StateValueUpgradeRuleSet ruleSet) =>
-        StateModelSnapshot.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
+        ModelExecutionEnvironment.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
 
-    public void Register(StateDefinitionBinding definition) => StateModelSnapshot.RegisterDefinition(_definitions, definition);
+    public void Register(StateDefinitionBinding definition) => ModelExecutionEnvironment.RegisterDefinition(_definitions, definition);
 
     /// <summary>
     /// Registers one stable binding. Repeating the same instance is harmless; another binding
@@ -36,7 +36,7 @@ public sealed class StateReaderRegistry : IStateReaderRegistration {
 
     internal Dictionary<SchemaKey, StateReaderBinding> Snapshot() => new(_bindings);
 
-    internal StateModelSnapshot Snapshot(Func<SchemaKey, DurableSchema?>? schemaLookup) =>
+    internal ModelExecutionEnvironment CreateEnvironment(Func<SchemaKey, DurableSchema?>? schemaLookup) =>
         new([], [], new(_bindings), new(_definitions, StringComparer.Ordinal),
             new(_valueUpgradeRules), schemaLookup: schemaLookup);
 }

@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            exact = Assert.Single(DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original,
+            exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original,
                 models).Objects, x => x.Schema?.SchemaId == "ExtWorld").Schema!;
         }
 
@@ -54,7 +54,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type currentHost = current.Load(app2).GetType("InlineHistoryApp.Host")!;
         var currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            var decoded = DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, currentModels);
+            var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, currentModels);
             var world = Assert.Single(decoded.Objects, x => x.Schema?.SchemaId == "ExtWorld");
             Assert.Equal(exact, world.Schema);
             Assert.Equal(1, world.Schema!.Fields[0].InlineSchema!.Version);
@@ -63,7 +63,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            var store = segments.MetaBootstrapStore;
+            var store = segments.GraphStore;
             Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
             Assert.All(DefaultRecords(store, addresses[0]), x => Assert.Equal(ObjectVersionKind.Base, x.Kind));
             foreach (int index in new[] { 1, 3 }) { Assert.Empty(DefaultRecords(store, addresses[index])); }

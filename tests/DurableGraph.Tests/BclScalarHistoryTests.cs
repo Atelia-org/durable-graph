@@ -106,7 +106,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(next);
         var assembly = EmitAndLoad(next.OutputCompilation);
         Assert.Null(assembly.GetType("OldMoney"));
-        StateReaderBinding reader = EnumHistoryRegistry(assembly).Snapshot().ResolveReader(prior.Schema!);
+        StateReaderBinding reader = EnumHistoryRegistry(assembly).CreateEnvironment().ResolveReader(prior.Schema!);
         ObjectStateRecord decoded = reader.Read(prior.Id, new StateModelBodySource(prior.Preparation!.PrepareBase(prior).Body.ToArray()));
         object money = StateModelField(decoded, "Segment0Field1")!;
         Assert.Equal(new Guid("00112233-4455-6677-8899-aabbccddeeff"), money.GetType().GetField("Segment0Field1")!.GetValue(money));

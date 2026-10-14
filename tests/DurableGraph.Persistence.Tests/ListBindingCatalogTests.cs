@@ -11,17 +11,17 @@ public sealed class ListBindingCatalogTests {
     [Fact]
     public void AlgorithmSelectionIsFrozenBeforeLazyBindingAndDoesNotAffectLayoutOrReader() {
         StateModelRegistry registry = new();
-        StateModelSnapshot initial = registry.Snapshot();
+        ModelExecutionEnvironment initial = registry.CreateEnvironment();
         registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.LocalResync);
-        StateModelSnapshot local = registry.Snapshot();
+        ModelExecutionEnvironment local = registry.CreateEnvironment();
         registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.Position);
-        StateModelSnapshot position = registry.Snapshot();
+        ModelExecutionEnvironment position = registry.CreateEnvironment();
         registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.BoundedMyers);
-        StateModelSnapshot myers = registry.Snapshot();
+        ModelExecutionEnvironment myers = registry.CreateEnvironment();
         Assert.Throws<ArgumentOutOfRangeException>(() => registry.UseListDeltaAlgorithm((ListDeltaAlgorithm)(-1)));
         Assert.Throws<ArgumentOutOfRangeException>(() => registry.UseListDeltaAlgorithm((ListDeltaAlgorithm)999));
 
-        ListObjectBinding Bind(StateModelSnapshot snapshot) {
+        ListObjectBinding Bind(ModelExecutionEnvironment snapshot) {
             Assert.True(snapshot.TryGetCurrentObjectBinding(typeof(List<int>), out ObjectBinding? binding));
             return Assert.IsAssignableFrom<ListObjectBinding>(binding);
         }
@@ -38,9 +38,9 @@ public sealed class ListBindingCatalogTests {
 
         // Cover the constructor's independent default as well as the registry field:
         // neither entry point may silently retain the previous Local default.
-        Assert.Equal(ListDeltaAlgorithm.Adaptive, Bind(new StateModelSnapshot([], [], [])).DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.Adaptive, Bind(new ModelExecutionEnvironment([], [], [])).DeltaAlgorithm);
         registry.UseListDeltaAlgorithm(ListDeltaAlgorithm.Adaptive);
-        Assert.Equal(ListDeltaAlgorithm.Adaptive, Bind(registry.Snapshot()).DeltaAlgorithm);
+        Assert.Equal(ListDeltaAlgorithm.Adaptive, Bind(registry.CreateEnvironment()).DeltaAlgorithm);
         Assert.Equal(ListDeltaAlgorithm.Position, Bind(position).DeltaAlgorithm);
 
         StateValueBinding element = initial.ResolveCurrentValue(typeof(int));
@@ -62,7 +62,7 @@ public sealed class ListBindingCatalogTests {
     [InlineData(typeof(List<string>[,,]))]
     [InlineData(typeof(List<List<int>[]>))]
     public void BuiltinCompositionsRoundTripAndBindObjectIdSlots(Type domain) {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         TypeExpr type = snapshot.GetTypeExpr(domain);
         Assert.Equal(domain, snapshot.GetDomainType(type));
         StateValueBinding slot = snapshot.ResolveCurrentValue(domain);
@@ -82,7 +82,7 @@ public sealed class ListBindingCatalogTests {
         registry.Register(new StateDefinitionBinding("Box", SchemaKind.ReferenceObject, 1, typeof(Box<>),
             [new("Box", 1, SchemaKind.ReferenceObject, 1, [])],
             currentModelFactory: (_, _) => { factories++; throw new InvalidOperationException("Unexpected closure."); }));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Type type = typeof(List<Box<List<int>>>);
         Assert.Equal(type, snapshot.GetDomainType(snapshot.GetTypeExpr(type)));
         Assert.True(snapshot.TryGetCurrentObjectBinding(type, out _));
@@ -91,7 +91,7 @@ public sealed class ListBindingCatalogTests {
 
     [Fact]
     public void UnsupportedElementsOpenTypesInterfacesAndSubclassesFailClosed() {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         Type[] unsupported = [typeof(List<>), typeof(List<object>), typeof(List<DateTime>),
             typeof(List<DayOfWeek>), typeof(IList<int>), typeof(DerivedList), typeof(List<DerivedList>)];
         foreach (Type type in unsupported) {
@@ -117,9 +117,9 @@ public sealed class ListBindingCatalogTests {
             DurableSchema exact = new("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
             ObjectLayout layout = ObjectLayout.ForList(new(new(1, TypeTag.InlineValue, inlineSchema: exact)));
             DurableSchema conflict = new("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-            P0CatalogView selected = LoadView("matching", exact), other = LoadView("conflicting", conflict);
+            SchemaCatalogView selected = LoadView("matching", exact), other = LoadView("conflicting", conflict);
             int lookups = 0;
-            StateModelSnapshot snapshot = registry.Snapshot(schemaLookup: key => {
+            ModelExecutionEnvironment snapshot = registry.CreateEnvironment(schemaLookup: key => {
                 lookups++;
                 return selected.Schemas.GetValueOrDefault(key);
             });
@@ -129,27 +129,27 @@ public sealed class ListBindingCatalogTests {
             Assert.True(lookups > beforeHit);
             Assert.Equal(layout, reader.Layout);
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(layout.Type));
-            StateModelSnapshot rejected = registry.Snapshot(schemaLookup: key => other.Schemas.GetValueOrDefault(key));
+            ModelExecutionEnvironment rejected = registry.CreateEnvironment(schemaLookup: key => other.Schemas.GetValueOrDefault(key));
             InvalidDataException error = Assert.Throws<InvalidDataException>(() => rejected.ResolveObjectReader(layout));
             Assert.IsType<SchemaConflictException>(error.InnerException);
             Assert.Same(reader, snapshot.ResolveObjectReader(layout));
             Assert.Equal(exact, selected.Schemas[new(exact.Type, exact.Version)]);
             Assert.Equal(conflict, other.Schemas[new(exact.Type, exact.Version)]);
 
-            P0CatalogView LoadView(string name, DurableSchema schema) {
+            SchemaCatalogView LoadView(string name, DurableSchema schema) {
                 string repositoryPath = Path.Combine(path, name);
                 FrameAddress selectedRoot;
-                using (var writer = P0Repository.CreateNew(repositoryPath)) {
-                    P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                using (var writer = RepositoryStorageFacade.CreateNew(repositoryPath)) {
+                    SchemaCatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
                     catalog.Set(schema);
-                    P0PreparedCatalog candidate = catalog.Prepare();
-                    using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                    PreparedSchemaCatalogWrite candidate = catalog.Prepare();
+                    using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State,
                         new(null, new(1), [ObjectVersionRecord.CreateBase(1,
-                            P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                            TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
                     selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
                 }
-                using var reopened = P0Repository.OpenReadOnlyExisting(repositoryPath);
-                return P0CatalogView.Load(reopened.Store, selectedRoot);
+                using var reopened = RepositoryStorageFacade.OpenReadOnlyExisting(repositoryPath);
+                return SchemaCatalogView.Load(reopened.Store, selectedRoot);
             }
         } finally { DeleteTestPath(path); }
     }
@@ -157,7 +157,7 @@ public sealed class ListBindingCatalogTests {
     [Fact]
     public void RuleSelectionIsIndependentExplicitAndFrozen() {
         StateModelRegistry registry = new();
-        StateModelSnapshot before = registry.Snapshot();
+        ModelExecutionEnvironment before = registry.CreateEnvironment();
         Assert.Throws<InvalidOperationException>(() => registry.UseListElementUpgrades(typeof(ListRules)));
         registry.Register(new StateValueUpgradeRuleSet(typeof(ListRules), []));
         registry.Register(new StateValueUpgradeRuleSet(typeof(ArrayRules), []));
@@ -165,7 +165,7 @@ public sealed class ListBindingCatalogTests {
         registry.UseListElementUpgrades(typeof(ListRules));
         registry.UseArrayElementUpgrades(typeof(ArrayRules));
         Assert.Throws<InvalidOperationException>(() => registry.UseListElementUpgrades(typeof(ArrayRules)));
-        StateModelSnapshot after = registry.Snapshot();
+        ModelExecutionEnvironment after = registry.CreateEnvironment();
         Assert.Null(before.ListElementUpgradeRuleSet);
         Assert.Equal(typeof(ListRules), after.ListElementUpgradeRuleSet);
         Assert.Equal(typeof(ArrayRules), after.ArrayElementUpgradeRuleSet);
@@ -178,7 +178,7 @@ public sealed class ListBindingCatalogTests {
             [new("Point", 1, SchemaKind.InlineValue, 0, [])]));
         registry.Register(new StateDefinitionBinding("Node", SchemaKind.ReferenceObject, 0, null,
             [new("Node", 1, SchemaKind.ReferenceObject, 0, [])]));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         TypeExpr[] invalid = [TypeExpr.Named("Point"), TypeExpr.Named("Missing"),
             TypeExpr.List(TypeExpr.Named("Missing")),
             TypeExpr.List(TypeExpr.Named("Point", TypeExpr.Builtin(TypeTag.Int32))),

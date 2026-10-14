@@ -17,7 +17,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         object[] fixture = host.GetMethod("FreezeFixture")!.CreateDelegate<Func<object[]>>()();
         var world = (IDurableObject)fixture[0];
-        StateModelSnapshot captureModels = models.Snapshot();
+        ModelExecutionEnvironment captureModels = models.CreateEnvironment();
         CaptureSession captureSession = new();
         CapturedGraph Capture() {
             using var context = captureSession.BeginCapture(captureModels);
@@ -39,8 +39,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        DecodedRevision initial = DecodedRevision.ReadSplit(states, addresses[0], models);
+        var states = segments.GraphStore;
+        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         ObjectStateRecord timestamps = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.DateTimeOffset &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.ScalarDefault);
@@ -90,7 +90,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var oldEntry = timestamps.GetDictionaryState<DateTimeOffset, DateTimeOffset>().Entries.ToArray().Single(p => p.Key == before);
         Assert.True(before.EqualsExact(oldEntry.Key));
         Assert.True(value.EqualsExact(oldEntry.Value));
-        DecodedRevision final = DecodedRevision.ReadSplit(states, addresses[^1], models);
+        DecodedRevision final = DecodedRevision.ReadStoredGraph(states, addresses[^1], models);
         foreach (ObjectStateRecord row in final.Objects.Where(row => row.Kind == ObjectStateKind.Dictionary)) {
             var slot = row.Layout.Dictionary!;
             Assert.Equal(slot.KeySlot.TypeTag == TypeTag.InlineValue || slot.ValueSlot.TypeTag == TypeTag.Int32

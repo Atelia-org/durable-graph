@@ -40,7 +40,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!
             .Invoke(null, [models]);
-        DurableSchema schema = models.Snapshot().ResolveCurrentModel(assembly.GetType("World")!).CurrentSchema;
+        DurableSchema schema = models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("World")!).CurrentSchema;
         Assert.Equal(TypeTag.Nullable, schema.Fields[0].TypeTag);
     }
 
@@ -149,7 +149,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly = EmitAndLoad(next.OutputCompilation);
         StateModelRegistry models = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!.Invoke(null, [models]);
-        StateModelBinding model = models.Snapshot().ResolveCurrentModel(assembly.GetType("World")!);
+        StateModelBinding model = models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("World")!);
         object prior = assembly.GetType("Host")!.GetMethod("Prior")!.Invoke(null, null)!;
         ObjectStateRecord upgraded = model.Normalize(new(new(7), new DurableSchema("World", 1, new DurableFieldInfo(1, TypeTag.Int32)), prior));
         NullableState<int> value = Assert.IsType<NullableState<int>>(StateModelField(upgraded, "Segment0Field1"));
@@ -182,7 +182,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!.Invoke(null, [models]);
         DurableSchema point = new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema old = new("World", 1, DurableFieldInfo.Nullable(1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point)));
-        StateReaderBinding reader = models.Snapshot().ResolveReader(old);
+        StateReaderBinding reader = models.CreateEnvironment().ResolveReader(old);
         Assert.Equal(old, reader.Schema);
         ObjectStateRecord decoded = reader.Read(new(1), new StateModelBodySource([1, 14]));
         object state = StateModelField(decoded, "Segment0Field1")!;

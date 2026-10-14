@@ -53,21 +53,21 @@ public sealed class DictionaryCatalogTests {
         }
         ObjectLayout layout = ObjectLayout.ForDictionary(new(
             new(1, TypeTag.InlineValue, inlineSchema: inline), new(2, TypeTag.InlineValue, inlineSchema: inline)));
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         if (!valid) {
             Assert.Throws<InvalidDataException>(() => { workspace.Set(layout); _ = workspace.Prepare(); });
             Assert.Null(workspace.Accepted);
             return;
         }
         workspace.Set(layout);
-        P0CatalogView prepared = workspace.Prepare().View;
+        SchemaCatalogView prepared = workspace.Prepare().View;
         Dictionary<ObjectId, ObjectStateRecord> rows = prepared.Rows.ToDictionary();
         ObjectStateRecord declarations = rows[prepared.DescriptorListId];
         rows[declarations.Id] = new(declarations.Id, declarations.Layout.List!,
             new FrozenListState<ObjectId>(prepared.DescriptorIds.Reverse().ToArray()));
         // This owned employee projection validates forward dependencies and memo identity;
         // it does not issue a persistence or execution provenance certificate.
-        P0CatalogView projected = new(prepared.RootId, rows);
+        SchemaCatalogView projected = new(prepared.RootId, rows);
         DictionaryLayout dictionary = projected.ResolveLayout(projected.DescriptorId(layout)).Dictionary!;
         Assert.Equal(depth, projected.Schemas.Count);
         Assert.Equal(inline, dictionary.KeySlot.InlineSchema);

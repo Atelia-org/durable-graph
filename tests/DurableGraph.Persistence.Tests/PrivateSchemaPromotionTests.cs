@@ -46,7 +46,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             main.Catalog.Set(other);
             main.Catalog.Set(envelopeSchema);
             main.CommitState(NoRebase);
-            P0CatalogView target = P0CatalogView.Load(repository.MetaBootstrapStore, repository.SharedSchemaRoot!.Value);
+            SchemaCatalogView target = SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value);
             Assert.Equal(privateDescriptor, target.SchemaNodeId(other)); // Equal numbers denote different complete layouts.
             sharedDescriptor = target.SchemaNodeId(envelopeSchema);
             Assert.NotEqual(privateDescriptor, sharedDescriptor);
@@ -61,14 +61,14 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             Assert.False(ordinary.Catalog.Accepted.Schemas.ContainsKey(new(PrivateOnly.Type, 1)));
             Assert.Equal(privateEvent, ordinary.Head.RevisionAddress);
             Assert.Equal(privateState, ordinary.StateRevisionAddress);
-            Assert.Equal(privatePin, repository.MetaBootstrapStore.ReadMetadata(ordinary.Head.RevisionAddress).SchemaRoot);
-            StateModelSnapshot models = ordinary.Models;
-            DecodedRevision.SplitBindingEnvironment environment = ordinary.BindingEnvironment!;
+            Assert.Equal(privatePin, repository.GraphStore.ReadMetadata(ordinary.Head.RevisionAddress).SchemaRoot);
+            ModelExecutionEnvironment models = ordinary.Models;
+            DecodedRevision.SchemaViewBindingEnvironment environment = ordinary.BindingEnvironment!;
             var storage = ordinary.Baseline!.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray();
-            P0GraphSnapshot previous = repository.MetaBootstrapStore.ReadGraph(privateState);
+            StoredGraphRevision previous = repository.GraphStore.ReadGraph(privateState);
             promoted = ordinary.CommitStateToShared(NoRebase).RevisionAddress;
-            P0GraphSnapshot saved = repository.MetaBootstrapStore.ReadGraph(promoted);
-            P0CatalogView merged = P0CatalogView.Load(repository.MetaBootstrapStore, saved.SchemaRoot!.Value);
+            StoredGraphRevision saved = repository.GraphStore.ReadGraph(promoted);
+            SchemaCatalogView merged = SchemaCatalogView.Load(repository.GraphStore, saved.SchemaRoot!.Value);
             Assert.Equal(repository.SharedSchemaRoot, saved.SchemaRoot);
             Assert.Equal(sharedPin, merged.Snapshot!.SourceGraph);
             Assert.Equal(PrivateOnly, merged.Schemas[new(PrivateOnly.Type, 1)]);
@@ -76,12 +76,12 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             DurableSchema envelope = ordinary.Models.ResolveCurrentModel(typeof(DB087EnvelopeRoot)).CurrentSchema;
             Assert.Equal(sharedDescriptor, merged.SchemaNodeId(envelope));
             Assert.Equal(previous.DirectoryRoot, saved.DirectoryRoot);
-            Assert.Equal(previous.Objects.ToArray(), saved.Objects.ToArray());
+            Assert.Equal(previous.ObjectHeads.ToArray(), saved.ObjectHeads.ToArray());
             Assert.Null(saved.OwnedBatch);
             Assert.Equal(privateEvent, saved.Parent);
             Assert.Equal(privateState, saved.SourceGraph);
             Assert.Equal(storage, ordinary.Baseline!.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray());
-            P0ObjectChain retained = repository.MetaBootstrapStore.ReadObjectChain(promoted, envelopeId.Value);
+            ObjectVersionChain retained = repository.GraphStore.ReadObjectChain(promoted, envelopeId.Value);
             Assert.Equal(oldEnvelopeHead, retained.Head);
             Assert.Equal(statePin, environment.SelectedSchemaView.Snapshot!.Address);
             Assert.NotEqual(saved.SchemaRoot, retained.Entries[0].SchemaRoot);
@@ -99,7 +99,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             AssertUnchanged(repository, beforeRejectedDefault);
             RefImage shared = ReadRef(repository, 2);
             FrameAddress reused = ordinary.CommitStateToShared(NoRebase).RevisionAddress;
-            P0GraphSnapshot unchanged = repository.MetaBootstrapStore.ReadGraph(reused);
+            StoredGraphRevision unchanged = repository.GraphStore.ReadGraph(reused);
             Assert.Equal(saved.SchemaRoot, unchanged.SchemaRoot);
             Assert.Equal(saved.DirectoryRoot, unchanged.DirectoryRoot);
             Assert.Null(unchanged.OwnedBatch);
@@ -109,9 +109,9 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             ObjectStorageInfo prior = ordinary.Baseline.Objects[list].Storage!.Value;
             root.Numbers[7] = 401;
             continued = ordinary.CommitStateToShared(root, NoRebase).RevisionAddress;
-            P0GraphSnapshot deltaGraph = repository.MetaBootstrapStore.ReadGraph(continued);
+            StoredGraphRevision deltaGraph = repository.GraphStore.ReadGraph(continued);
             Assert.Equal(reused, deltaGraph.SourceGraph);
-            P0Batch batch = repository.MetaBootstrapStore.ReadBatch(deltaGraph.OwnedBatch!.Value);
+            ObjectVersionBatch batch = repository.GraphStore.ReadBatch(deltaGraph.OwnedBatch!.Value);
             Assert.Equal(reused, batch.SourceGraph);
             Assert.Equal(saved.SchemaRoot, batch.SchemaRoot);
             ObjectVersionRecord delta = Assert.Single(batch.Records);
@@ -138,12 +138,12 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         ObjectLayout dynamicList = ObjectLayout.ForList(new(DurableFieldInfo.Reference(1, TypeExpr.Named("P0Widget"))));
         dev.Catalog.Set(dynamicList);
-        P0GraphSnapshot previous = repository.MetaBootstrapStore.ReadGraph(dev.CommitState(NoRebase).RevisionAddress);
-        P0CatalogView oldShared = P0CatalogView.Load(repository.MetaBootstrapStore, repository.SharedSchemaRoot!.Value);
+        StoredGraphRevision previous = repository.GraphStore.ReadGraph(dev.CommitState(NoRebase).RevisionAddress);
+        SchemaCatalogView oldShared = SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value);
         Assert.Throws<InvalidDataException>(() => oldShared.DescriptorId(dynamicList));
         PublicationImage before = Snapshot(repository);
-        P0GraphSnapshot saved = repository.MetaBootstrapStore.ReadGraph(dev.CommitStateToShared(NoRebase).RevisionAddress);
-        P0CatalogView merged = P0CatalogView.Load(repository.MetaBootstrapStore, saved.SchemaRoot!.Value);
+        StoredGraphRevision saved = repository.GraphStore.ReadGraph(dev.CommitStateToShared(NoRebase).RevisionAddress);
+        SchemaCatalogView merged = SchemaCatalogView.Load(repository.GraphStore, saved.SchemaRoot!.Value);
         Assert.Equal(oldShared.Schemas.Count, merged.Schemas.Count);
         Assert.Equal(oldShared.ObjectLayouts.Count() + 1, merged.ObjectLayouts.Count());
         Assert.Equal(dynamicList, merged.ResolveLayout(merged.DescriptorId(dynamicList)));
@@ -151,7 +151,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         Assert.NotEqual(before.Shared.Revision, ReadRef(repository, 2).Revision);
         Assert.Equal(repository.SharedSchemaRoot, saved.SchemaRoot);
         Assert.Equal(previous.DirectoryRoot, saved.DirectoryRoot);
-        Assert.Equal(previous.Objects.ToArray(), saved.Objects.ToArray());
+        Assert.Equal(previous.ObjectHeads.ToArray(), saved.ObjectHeads.ToArray());
         Assert.Null(saved.OwnedBatch);
         Assert.True(dev.UsesPrivateSchemas);
     }
@@ -171,20 +171,20 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         }
         using Repository cold = Repository.OpenExisting(_path, CounterModels(2));
         using BranchCheckout checkout = cold.CheckoutPrivate("dev");
-        NormalizedRevision baseline = checkout.Baseline!;
+        NormalizedGraphState baseline = checkout.Baseline!;
         ObjectId id = checkout.StateId!.Value;
         Assert.True(baseline.Objects[id].RequiresRewrite);
         Assert.Equal(original, baseline.Objects[id].Storage);
-        StateModelSnapshot models = checkout.Models;
-        DecodedRevision.SplitBindingEnvironment environment = checkout.BindingEnvironment!;
+        ModelExecutionEnvironment models = checkout.Models;
+        DecodedRevision.SchemaViewBindingEnvironment environment = checkout.BindingEnvironment!;
         checkout.Catalog.Set(PrivateOnly);
         eventAddress = checkout.CommitEventToShared(new Counter { Value = 20 }, NoRebase).RevisionAddress;
-        P0GraphSnapshot ev = cold.MetaBootstrapStore.ReadGraph(eventAddress);
+        StoredGraphRevision ev = cold.GraphStore.ReadGraph(eventAddress);
         Assert.Equal(source, ev.Parent);
         Assert.Equal(source, ev.SourceGraph);
         Assert.Equal(cold.SharedSchemaRoot, ev.SchemaRoot);
         Assert.NotEqual(sourcePin, ev.SchemaRoot);
-        Assert.Equal(PrivateOnly, P0CatalogView.Load(cold.MetaBootstrapStore, ev.SchemaRoot!.Value).Schemas[new(PrivateOnly.Type, 1)]);
+        Assert.Equal(PrivateOnly, SchemaCatalogView.Load(cold.GraphStore, ev.SchemaRoot!.Value).Schemas[new(PrivateOnly.Type, 1)]);
         Assert.Equal(0, checkout.Catalog.DirtyCount);
         Assert.Same(baseline, checkout.Baseline);
         Assert.True(checkout.Baseline!.Objects[id].RequiresRewrite);
@@ -198,10 +198,10 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         Assert.Same(models, checkout.Models);
         Assert.Same(environment, checkout.BindingEnvironment);
         FrameAddress state = checkout.CommitStateToShared(NoRebase).RevisionAddress;
-        P0GraphSnapshot saved = cold.MetaBootstrapStore.ReadGraph(state);
+        StoredGraphRevision saved = cold.GraphStore.ReadGraph(state);
         Assert.Equal(eventAddress, saved.Parent);
         Assert.Equal(source, saved.SourceGraph);
-        ObjectVersionRecord rewritten = Assert.Single(LocalRecords(cold.MetaBootstrapStore, state));
+        ObjectVersionRecord rewritten = Assert.Single(LocalRecords(cold.GraphStore, state));
         Assert.Equal(id.Value, rewritten.ObjectId);
         Assert.Equal(ObjectVersionKind.Base, rewritten.Kind);
         Assert.False(checkout.Baseline!.Objects[id].RequiresRewrite);
@@ -221,9 +221,9 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         dev.CommitState(NoRebase);
         DurableSchema wrong = new("Promotion.Corrected", 1, new DurableFieldInfo(1, TypeTag.Byte));
         DurableSchema correct = new(wrong.Type, 1, new DurableFieldInfo(1, TypeTag.Int64));
-        P0CatalogView accepted = dev.Catalog.Accepted!;
-        NormalizedRevision baseline = dev.Baseline!;
-        StateModelSnapshot models = dev.Models;
+        SchemaCatalogView accepted = dev.Catalog.Accepted!;
+        NormalizedGraphState baseline = dev.Baseline!;
+        ModelExecutionEnvironment models = dev.Models;
         PublicationImage before = Snapshot(repository);
         dev.Catalog.Set(wrong);
         dev.PrepareAndDiscard(dev.State!, parameters: NoRebase, toShared: true);
@@ -244,7 +244,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         dev.Catalog.Set(correct);
         dev.CommitStateToShared(NoRebase);
         Assert.Equal(1, captures);
-        P0CatalogView merged = P0CatalogView.Load(repository.MetaBootstrapStore, repository.SharedSchemaRoot!.Value);
+        SchemaCatalogView merged = SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value);
         Assert.Equal(PrivateOnly, merged.Schemas[new(PrivateOnly.Type, 1)]);
         Assert.Equal(correct, merged.Schemas[new(correct.Type, 1)]);
         Assert.Equal(0, dev.Catalog.DirtyCount);
@@ -267,7 +267,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         main.Catalog.Set(a);
         main.CommitState(NoRebase);
         PublicationImage before = Snapshot(repository);
-        NormalizedRevision baseline = dev.Baseline!;
+        NormalizedGraphState baseline = dev.Baseline!;
         captures = 0;
         Assert.Throws<SchemaConflictException>(() => dev.CommitStateToShared(NoRebase));
         Assert.Equal(0, captures);
@@ -289,30 +289,30 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         dev.CommitState(NoRebase);
         FrameAddress headPin = dev.Catalog.Accepted!.Snapshot!.Address;
         Assert.NotEqual(repository.SharedSchemaRoot, headPin);
-        using P0Repository facade = new(ResourcesOf(repository));
-        P0CatalogWorkspace catalog = new(facade.EnsureEditingAllowed, P0CatalogView.Load(facade.Store, headPin));
+        using RepositoryStorageFacade facade = new(ResourcesOf(repository));
+        SchemaCatalogWorkspace catalog = new(facade.EnsureEditingAllowed, SchemaCatalogView.Load(facade.Store, headPin));
         catalog.Set(new DurableSchema("Promotion.RawExtra", 1, new DurableFieldInfo(1, TypeTag.Byte)));
-        P0PreparedCatalog privateCandidate = catalog.Prepare();
-        P0PreparedGraphWrite validBusiness = new(dev.StateRevisionAddress, dev.StateId!.Value, []);
+        PreparedSchemaCatalogWrite privateCandidate = catalog.Prepare();
+        PreparedGraphWrite validBusiness = new(dev.StateRevisionAddress, dev.StateId!.Value, []);
         PublicationImage before = Snapshot(repository);
-        Assert.Throws<InvalidDataException>(() => facade.Prepare("dev", P0GraphKind.State, validBusiness, privateCandidate.Write));
+        Assert.Throws<InvalidDataException>(() => facade.Prepare("dev", StoredGraphKind.State, validBusiness, privateCandidate.Write));
         AssertUnchanged(repository, before);
-        P0PreparedCatalog target = catalog.PrepareToSharedOwned(facade.Store, headPin, facade.SharedSchemaRoot, []);
+        PreparedSchemaCatalogWrite target = catalog.PrepareToSharedOwned(facade.Store, headPin, facade.SharedSchemaRoot, []);
         Assert.Equal(facade.SharedSchemaRoot, target.Write!.SourceGraph);
         Assert.NotEqual(main.StateRevisionAddress, dev.StateRevisionAddress);
-        P0PreparedGraphWrite wrongBusiness = new(main.StateRevisionAddress, dev.StateId.Value, []);
-        Assert.Throws<InvalidDataException>(() => facade.Prepare("dev", P0GraphKind.State, wrongBusiness, target.Write));
+        PreparedGraphWrite wrongBusiness = new(main.StateRevisionAddress, dev.StateId.Value, []);
+        Assert.Throws<InvalidDataException>(() => facade.Prepare("dev", StoredGraphKind.State, wrongBusiness, target.Write));
         AssertUnchanged(repository, before);
-        using (P0PendingSave valid = facade.Prepare("dev", P0GraphKind.State, validBusiness, target.Write)) {
+        using (PendingRepositorySave valid = facade.Prepare("dev", StoredGraphKind.State, validBusiness, target.Write)) {
             Assert.Equal(facade.SharedSchemaRoot, valid.CatalogSource);
         }
         AssertUnchanged(repository, before);
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterMetaAppend, false)]
-    [InlineData((int)P0SaveCheckpoint.BeforePublication, false)]
-    [InlineData((int)P0SaveCheckpoint.AfterPublication, true)]
+    [InlineData((int)RepositorySaveStage.AfterMetaAppend, false)]
+    [InlineData((int)RepositorySaveStage.BeforePublication, false)]
+    [InlineData((int)RepositorySaveStage.AfterPublication, true)]
     public void Two_ref_promotion_failure_recovers_both_old_or_both_new_and_preserves_complete_frames(int stage, bool visible) {
         FrameAddress oldHead, oldShared, mainHead;
         FrameImage[] complete;
@@ -330,11 +330,11 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             complete = ReadFrames(ResourcesOf(repository).Data);
             shared = ReadRef(repository, 2);
             oldBranches = ReadRef(repository, 1);
-            NormalizedRevision baseline = dev.Baseline!;
+            NormalizedGraphState baseline = dev.Baseline!;
             DB087Widget root = AssertRing(dev.State, 7);
             root.Numbers[7] = 402;
             IOException injected = new("Promotion publication interrupted.");
-            repository.MetaBootstrapCheckpoint = checkpoint => { if (checkpoint == (P0SaveCheckpoint)stage) { throw injected; } };
+            repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)stage) { throw injected; } };
             CheckpointAddress? delivered = null;
             error = Assert.Throws<GraphCommitException>(() => delivered = dev.CommitStateToShared(root, NoRebase));
             Assert.Same(injected, error.InnerException);
@@ -349,15 +349,15 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         using BranchCheckout recovered = cold.CheckoutPrivate("dev");
         Assert.Equal(mainHead, cold.GetHead("main").RevisionAddress);
         Assert.Equal(visible ? error.CandidateRevisionAddress : oldHead, recovered.Head.RevisionAddress);
-        Assert.Equal(visible, P0CatalogView.Load(cold.MetaBootstrapStore, cold.SharedSchemaRoot!.Value).Schemas.ContainsKey(new(PrivateOnly.Type, 1)));
+        Assert.Equal(visible, SchemaCatalogView.Load(cold.GraphStore, cold.SharedSchemaRoot!.Value).Schemas.ContainsKey(new(PrivateOnly.Type, 1)));
         Assert.Equal(cold.SharedSchemaRoot == oldShared, !visible);
         if (!visible) {
             AssertSameRef(oldBranches, ReadRef(cold, 1));
             AssertSameRef(shared, ReadRef(cold, 2));
-        } else { Assert.Equal(cold.SharedSchemaRoot, cold.MetaBootstrapStore.ReadMetadata(recovered.Head.RevisionAddress).SchemaRoot); }
+        } else { Assert.Equal(cold.SharedSchemaRoot, cold.GraphStore.ReadMetadata(recovered.Head.RevisionAddress).SchemaRoot); }
         AssertRing(recovered.State, visible ? 402 : 7);
         AssertFramesPreserved(ResourcesOf(cold).Data, complete);
-        if (stage == (int)P0SaveCheckpoint.AfterMetaAppend) { Assert.Null(error.CandidateRevisionAddress); }
+        if (stage == (int)RepositorySaveStage.AfterMetaAppend) { Assert.Null(error.CandidateRevisionAddress); }
         else { Assert.NotNull(error.CandidateRevisionAddress); }
     }
 
@@ -427,7 +427,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         }).ToArray();
     }
     private static PublicationImage Snapshot(Repository repository) => new(ReadRef(repository, 1), ReadRef(repository, 2),
-        repository.MetaBootstrapStore.AppendedFrames, ReadFrames(ResourcesOf(repository).Data));
+        repository.GraphStore.AppendedFrames, ReadFrames(ResourcesOf(repository).Data));
     private static void AssertSameRef(RefImage before, RefImage after) {
         Assert.Equal(before.Revision, after.Revision);
         Assert.Equal(before.Payload, after.Payload);
@@ -445,11 +445,11 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     private static void AssertUnchanged(Repository repository, PublicationImage before) {
         AssertSameRef(before.Branches, ReadRef(repository, 1));
         AssertSameRef(before.Shared, ReadRef(repository, 2));
-        Assert.Equal(before.Appended, repository.MetaBootstrapStore.AppendedFrames);
+        Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
         FrameImage[] after = ReadFrames(ResourcesOf(repository).Data);
         Assert.Equal(before.Frames.Select(frame => frame.Address), after.Select(frame => frame.Address));
         foreach (FrameImage frame in before.Frames) { AssertFrame(frame, after.Single(item => item.Address == frame.Address)); }
-        Assert.False(ResourcesOf(repository).HasMetaBootstrapPending);
+        Assert.False(ResourcesOf(repository).HasPendingSave);
         Assert.False(repository.IsFaulted);
     }
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);

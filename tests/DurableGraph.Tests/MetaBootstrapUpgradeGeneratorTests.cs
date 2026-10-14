@@ -42,14 +42,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory files = new();
         FrameAddress s0, meta0, e1, e2, s1, s2, meta1;
         uint rootId;
-        using (P0Repository repository = P0Repository.CreateNew(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry oldModels = oldHost.Models();
-            P0Session session = new(repository, "main", oldModels);
+            BranchSaveSession session = new(repository, "main", oldModels);
             session.Catalog.Set(oldSchema); // The initial writer knows only actual V1.
             IDurableObject oldRoot = oldHost.Create();
             Assert.Equal(oldHost.ClrType, oldRoot.GetType());
-            using P0SessionSave save = session.Prepare(oldRoot);
-            P0SaveResult result = save.Commit();
+            using PreparedBranchSave save = session.Prepare(oldRoot);
+            RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             meta0 = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
@@ -59,27 +59,27 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         // All data/version resources have closed; the new assembly reads exact S0+meta0.
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
             InvalidDataException missing = Assert.Throws<InvalidDataException>(() =>
-                P0BusinessWorkspace.ReadRoot(repository.Store, s0, missingHost.Models()));
+                BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, missingHost.Models()));
             Assert.Contains("upgrade capability is missing", missing.Message);
             Assert.False(repository.IsFaulted);
-            IDurableObject upgraded = P0BusinessWorkspace.ReadRoot(repository.Store, s0, currentHost.Models());
+            IDurableObject upgraded = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, currentHost.Models());
             currentHost.Check(upgraded, 107);
             Assert.True(currentHost.UpgradeCalls() > 0);
             Assert.Equal(currentHost.ClrType, upgraded.GetType());
             Assert.Equal(s0, repository.GetHead("main"));
             Assert.Equal(meta0, repository.SharedSchemaRoot);
-            Assert.False(P0CatalogView.Load(repository.Store, meta0).Schemas.ContainsKey(currentKey));
+            Assert.False(SchemaCatalogView.Load(repository.Store, meta0).Schemas.ContainsKey(currentKey));
             Assert.Equal(0, repository.Store.AppendedFrames);
-            P0Session readonlySession = new(repository, "main", currentHost.Models());
+            BranchSaveSession readonlySession = new(repository, "main", currentHost.Models());
             Assert.Throws<InvalidOperationException>(() => readonlySession.Prepare(readonlySession.State!));
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
 
-        using (P0Repository repository = P0Repository.OpenExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry currentModels = currentHost.Models();
-            P0Session session = new(repository, "main", currentModels);
+            BranchSaveSession session = new(repository, "main", currentModels);
             IDurableObject root = session.State!;
             currentHost.Check(root, 107);
             Assert.Equal(s0, session.StateSource!.Address);
@@ -88,7 +88,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             // Capture registers current V2 automatically. Discard installs neither authority.
             long frames = repository.Store.AppendedFrames;
-            using (P0SessionSave discarded = session.Prepare(root, P0GraphKind.Event)) {
+            using (PreparedBranchSave discarded = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.NotNull(discarded.Catalog.Write);
                 Assert.Equal(currentSchema, discarded.Catalog.View.Schemas[currentKey]);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(discarded.Business.Write.Records).Kind);
@@ -103,10 +103,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(root, session.State);
             Assert.Equal(s0, session.StateSource.Address);
 
-            using (P0SessionSave eventSave = session.Prepare(root, P0GraphKind.Event)) {
+            using (PreparedBranchSave eventSave = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.Equal(s0, eventSave.Business.Write.SourceGraph);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(eventSave.Business.Write.Records).Kind);
-                P0SaveResult result = eventSave.Commit();
+                RepositorySaveResult result = eventSave.Commit();
                 e1 = result.Business.Address;
                 meta1 = result.Meta!.Address;
                 Assert.NotEqual(meta0, meta1);
@@ -119,26 +119,26 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(root, session.State);
 
             // Identical E2 still needs V2 Base relative to S0: E1 cannot consume rewrite.
-            using (P0SessionSave eventSave = session.Prepare(root, P0GraphKind.Event)) {
+            using (PreparedBranchSave eventSave = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.Null(eventSave.Catalog.Write);
                 Assert.Equal(s0, eventSave.Business.Write.SourceGraph);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(eventSave.Business.Write.Records).Kind);
-                P0SaveResult result = eventSave.Commit();
+                RepositorySaveResult result = eventSave.Commit();
                 e2 = result.Business.Address;
                 Assert.Equal(e1, result.Business.Parent);
                 Assert.Equal(s0, result.Business.SourceGraph);
                 AssertBootstrapStoredSchema(repository, result.Business, currentSchema, ObjectVersionKind.Base);
-                currentHost.Check(P0BusinessWorkspace.ReadRoot(repository.Store, e2, currentModels), 107);
+                currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, e2, currentModels), 107);
             }
             Assert.Equal(s0, session.StateSource.Address);
             Assert.Same(root, session.State);
 
             currentHost.Change(root, 108);
-            using (P0SessionSave stateSave = session.Prepare(root)) {
+            using (PreparedBranchSave stateSave = session.Prepare(root)) {
                 Assert.Null(stateSave.Catalog.Write);
                 Assert.Equal(s0, stateSave.Business.Write.SourceGraph);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(stateSave.Business.Write.Records).Kind);
-                P0SaveResult result = stateSave.Commit();
+                RepositorySaveResult result = stateSave.Commit();
                 s1 = result.Business.Address;
                 Assert.Equal(e2, result.Business.Parent);
                 AssertBootstrapStoredSchema(repository, result.Business, currentSchema, ObjectVersionKind.Base);
@@ -146,44 +146,44 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(s1, session.StateSource.Address);
 
             currentHost.Change(root, 109);
-            using (P0SessionSave stateSave = session.Prepare(root)) {
+            using (PreparedBranchSave stateSave = session.Prepare(root)) {
                 Assert.Null(stateSave.Catalog.Write);
                 Assert.Equal(s1, stateSave.Business.Write.SourceGraph);
                 ObjectVersionRecord delta = Assert.Single(stateSave.Business.Write.Records);
                 Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                Assert.Equal(session.StateSource.Objects[rootId], delta.PriorAddress);
-                P0SaveResult result = stateSave.Commit();
+                Assert.Equal(session.StateSource.ObjectHeads[rootId], delta.PriorAddress);
+                RepositorySaveResult result = stateSave.Commit();
                 s2 = result.Business.Address;
                 AssertBootstrapStoredSchema(repository, result.Business, currentSchema, ObjectVersionKind.Delta);
             }
             Assert.Equal(s2, session.StateSource.Address);
             Assert.Equal(meta1, repository.SharedSchemaRoot);
             Assert.Equal(meta0, repository.Store.ReadGraph(s0).SchemaRoot);
-            Assert.False(P0CatalogView.Load(repository.Store, meta0).Schemas.ContainsKey(currentKey));
-            currentHost.Check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, currentModels), 107);
-            currentHost.Check(P0BusinessWorkspace.ReadRoot(repository.Store, s2, currentModels), 109);
+            Assert.False(SchemaCatalogView.Load(repository.Store, meta0).Schemas.ContainsKey(currentKey));
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, currentModels), 107);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, currentModels), 109);
         }
 
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
             Assert.Equal(s2, repository.GetStateHead("main"));
             Assert.Equal(meta1, repository.SharedSchemaRoot);
-            currentHost.Check(P0BusinessWorkspace.ReadRoot(repository.Store, s2, currentHost.Models()), 109);
-            currentHost.Check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, currentHost.Models()), 107);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, currentHost.Models()), 109);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, currentHost.Models()), 107);
             AssertBootstrapStoredSchema(repository, repository.Store.ReadGraph(s0), oldSchema, ObjectVersionKind.Base);
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
     }
 
-    private static void AssertBootstrapStoredSchema(P0Repository repository, P0GraphSnapshot graph,
+    private static void AssertBootstrapStoredSchema(RepositoryStorageFacade repository, StoredGraphRevision graph,
         DurableSchema expected, ObjectVersionKind latestKind) {
-        P0ObjectChain chain = repository.Store.ReadObjectChain(graph.Address, graph.RootId.Value);
+        ObjectVersionChain chain = repository.Store.ReadObjectChain(graph.Address, graph.RootId.Value);
         Assert.Equal(latestKind, chain.Entries[^1].Record.Kind);
-        P0ChainEntry first = chain.Entries[0];
+        ObjectVersionChainEntry first = chain.Entries[0];
         BareValueReader header = new(first.Record.Body);
-        Assert.Equal(P0TypedBodyCodec.FormatVersion, header.ReadByte());
+        Assert.Equal(TypedBaseBodyCodec.FormatVersion, header.ReadByte());
         Assert.Equal((byte)1, header.ReadByte());
         ObjectId descriptor = new(header.ReadVarUInt32());
-        P0CatalogView catalog = P0CatalogView.Load(repository.Store, first.SchemaRoot!.Value);
+        SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, first.SchemaRoot!.Value);
         Assert.Equal(expected, catalog.ResolveLayout(descriptor).Schema);
         Assert.Equal(catalog.DescriptorId(ObjectLayout.ForDurable(expected)), descriptor);
     }
@@ -191,7 +191,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private sealed class BootstrapUpgradeHost(Type host) {
         public Type ClrType => host.Assembly.GetType("BootstrapUpgrade.Root")!;
         public Func<StateModelRegistry> Models { get; } = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>();
-        public DurableSchema Schema() => Models().Snapshot().ResolveCurrentModel(ClrType).CurrentSchema;
+        public DurableSchema Schema() => Models().CreateEnvironment().ResolveCurrentModel(ClrType).CurrentSchema;
         public Func<IDurableObject> Create { get; } = host.GetMethod("Create")!.CreateDelegate<Func<IDurableObject>>();
         public Action<IDurableObject, int> Change { get; } = host.GetMethod("Change")!.CreateDelegate<Action<IDurableObject, int>>();
         public Action<IDurableObject, int> Check { get; } = host.GetMethod("Check")!.CreateDelegate<Action<IDurableObject, int>>();

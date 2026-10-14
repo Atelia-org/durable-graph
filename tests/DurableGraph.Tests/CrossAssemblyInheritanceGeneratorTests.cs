@@ -34,7 +34,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var scope = new CrossAssemblyLoadScope(library, app);
         Type host = scope.Load(app).GetType("App.Host")!;
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        var snapshot = models.Snapshot();
+        var snapshot = models.CreateEnvironment();
         IDurableObject[] seeds = host.GetMethod("Seed")!.CreateDelegate<Func<IDurableObject[]>>()();
         var describe = host.GetMethod("Describe")!.CreateDelegate<Func<IDurableObject, string>>();
         foreach (IDurableObject seed in seeds) {
@@ -146,7 +146,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         foreach (GeneratorTestRun run in new[] { local, split }) {
             var assembly = scope.Load(run);
             Type host = assembly.GetType("App.Host")!;
-            var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()().Snapshot();
+            var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()().CreateEnvironment();
             IDurableObject seed = host.GetMethod("Seed")!.CreateDelegate<Func<IDurableObject>>()();
             var model = models.ResolveCurrentModel(seed.GetType());
             if (exact is not null) Assert.Equal(exact, model.CurrentSchema);
@@ -279,7 +279,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using var scope = new CrossAssemblyLoadScope(library, app);
         var assembly = scope.Load(app);
         Type host = assembly.GetType("Host")!;
-        var snapshot = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()().Snapshot();
+        var snapshot = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()().CreateEnvironment();
         IDurableObject seed = host.GetMethod("Seed")!.CreateDelegate<Func<IDurableObject>>()();
         var binding = snapshot.ResolveCurrentModel(seed.GetType());
         Assert.Equal(new[] { typeof(ObjectId), typeof(ObjectId) }, binding.GetType().GenericTypeArguments[1].GenericTypeArguments);

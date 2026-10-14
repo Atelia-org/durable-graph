@@ -17,7 +17,7 @@ public sealed class DictionaryBindingCatalogTests {
     [InlineData(typeof(Dictionary<string, int>[,,]))]
     [InlineData(typeof(List<Dictionary<string, int>>))]
     public void SupportedCompositionsRoundTripAndUseObjectIdSlots(Type domain) {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         TypeExpr nominal = snapshot.GetTypeExpr(domain);
         Assert.Equal(domain, snapshot.GetDomainType(nominal));
         StateValueBinding value = snapshot.ResolveCurrentValue(domain);
@@ -34,7 +34,7 @@ public sealed class DictionaryBindingCatalogTests {
     [Fact]
     public void KeyAndValueRulesAreIndependentExplicitAndFrozen() {
         StateModelRegistry registry = new();
-        StateModelSnapshot before = registry.Snapshot();
+        ModelExecutionEnvironment before = registry.CreateEnvironment();
         Assert.Throws<InvalidOperationException>(() => registry.UseDictionaryKeyUpgrades(typeof(KeyRules)));
         Assert.Throws<InvalidOperationException>(() => registry.UseDictionaryValueUpgrades(typeof(ValueRules)));
         registry.Register(new StateValueUpgradeRuleSet(typeof(KeyRules), []));
@@ -45,7 +45,7 @@ public sealed class DictionaryBindingCatalogTests {
         registry.UseDictionaryValueUpgrades(typeof(ValueRules));
         Assert.Throws<InvalidOperationException>(() => registry.UseDictionaryKeyUpgrades(typeof(ValueRules)));
         Assert.Throws<InvalidOperationException>(() => registry.UseDictionaryValueUpgrades(typeof(KeyRules)));
-        StateModelSnapshot after = registry.Snapshot();
+        ModelExecutionEnvironment after = registry.CreateEnvironment();
         Assert.Null(before.DictionaryKeyUpgradeRuleSet);
         Assert.Null(before.DictionaryValueUpgradeRuleSet);
         Assert.Equal(typeof(KeyRules), after.DictionaryKeyUpgradeRuleSet);
@@ -61,7 +61,7 @@ public sealed class DictionaryBindingCatalogTests {
         registry.Register(new StateDefinitionBinding("Box", SchemaKind.ReferenceObject, 1, typeof(Box<>),
             [new("Box", 1, SchemaKind.ReferenceObject, 1, [])],
             currentModelFactory: (_, _) => { factories++; throw new InvalidOperationException("Unexpected body closure."); }));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Type domain = typeof(Dictionary<Box<Dictionary<string, int>>, Box<List<int>>>);
         Assert.Equal(domain, snapshot.GetDomainType(snapshot.GetTypeExpr(domain)));
         Assert.True(snapshot.TryGetCurrentObjectBinding(domain, out _));
@@ -70,7 +70,7 @@ public sealed class DictionaryBindingCatalogTests {
 
     [Fact]
     public void UnsupportedClosuresInterfacesAndSubclassesFailClosed() {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         Type[] unsupported = [typeof(Dictionary<,>), typeof(Dictionary<int, object>),
             typeof(Dictionary<DateTime, int>), typeof(Dictionary<int, DayOfWeek>),
             typeof(IDictionary<int, int>), typeof(DerivedDictionary), typeof(List<DerivedDictionary>)];
@@ -104,10 +104,10 @@ public sealed class DictionaryBindingCatalogTests {
                 new(2, TypeTag.InlineValue, inlineSchema: value)));
             DurableSchema conflict = new(keyConflict ? "RetiredKey" : "RetiredValue", 1,
                 SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-            P0CatalogView selected = LoadView("matching", key, value), other = LoadView("conflicting",
+            SchemaCatalogView selected = LoadView("matching", key, value), other = LoadView("conflicting",
                 keyConflict ? conflict : key, keyConflict ? value : conflict);
             int lookups = 0;
-            StateModelSnapshot snapshot = registry.Snapshot(schemaLookup: lookup => {
+            ModelExecutionEnvironment snapshot = registry.CreateEnvironment(schemaLookup: lookup => {
                 lookups++;
                 return selected.Schemas.GetValueOrDefault(lookup);
             });
@@ -116,7 +116,7 @@ public sealed class DictionaryBindingCatalogTests {
             Assert.Same(reader, snapshot.ResolveObjectReader(layout));
             Assert.True(lookups > beforeHit);
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(layout.Type));
-            StateModelSnapshot rejected = registry.Snapshot(schemaLookup: lookup => other.Schemas.GetValueOrDefault(lookup));
+            ModelExecutionEnvironment rejected = registry.CreateEnvironment(schemaLookup: lookup => other.Schemas.GetValueOrDefault(lookup));
             InvalidDataException error = Assert.Throws<InvalidDataException>(() => rejected.ResolveObjectReader(layout));
             Assert.IsType<SchemaConflictException>(error.InnerException);
             Assert.Same(reader, snapshot.ResolveObjectReader(layout));
@@ -124,20 +124,20 @@ public sealed class DictionaryBindingCatalogTests {
             Assert.Equal(value, selected.Schemas[new(value.Type, value.Version)]);
             Assert.Equal(conflict, other.Schemas[new(conflict.Type, conflict.Version)]);
 
-            P0CatalogView LoadView(string name, params DurableSchema[] schemas) {
+            SchemaCatalogView LoadView(string name, params DurableSchema[] schemas) {
                 string repositoryPath = Path.Combine(path, name);
                 FrameAddress selectedRoot;
-                using (var writer = P0Repository.CreateNew(repositoryPath)) {
-                    P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                using (var writer = RepositoryStorageFacade.CreateNew(repositoryPath)) {
+                    SchemaCatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
                     foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
-                    P0PreparedCatalog candidate = catalog.Prepare();
-                    using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                    PreparedSchemaCatalogWrite candidate = catalog.Prepare();
+                    using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State,
                         new(null, new(1), [ObjectVersionRecord.CreateBase(1,
-                            P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                            TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
                     selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
                 }
-                using var reopened = P0Repository.OpenReadOnlyExisting(repositoryPath);
-                return P0CatalogView.Load(reopened.Store, selectedRoot);
+                using var reopened = RepositoryStorageFacade.OpenReadOnlyExisting(repositoryPath);
+                return SchemaCatalogView.Load(reopened.Store, selectedRoot);
             }
         } finally { DeleteTestPath(path); }
     }
@@ -147,7 +147,7 @@ public sealed class DictionaryBindingCatalogTests {
         StateModelRegistry registry = new();
         registry.Register(new StateDefinitionBinding("Point", SchemaKind.InlineValue, 0, null,
             [new("Point", 1, SchemaKind.InlineValue, 0, [])]));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         DurableFieldInfo integer = new(1, TypeTag.Int32);
         TypeExpr invalid = TypeExpr.Dictionary(TypeExpr.Builtin(TypeTag.String), TypeExpr.Named("Missing"));
         ObjectLayout badKey = ObjectLayout.ForDictionary(new(DurableFieldInfo.Reference(1, invalid), integer));

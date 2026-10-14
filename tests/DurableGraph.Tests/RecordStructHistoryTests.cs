@@ -103,7 +103,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(next);
         var assembly = EmitAndLoad(next.OutputCompilation);
         Assert.Null(assembly.GetType("OldPoint"));
-        StateReaderBinding reader = EnumHistoryRegistry(assembly).Snapshot().ResolveReader(old.Schema!);
+        StateReaderBinding reader = EnumHistoryRegistry(assembly).CreateEnvironment().ResolveReader(old.Schema!);
         ObjectStateRecord decoded = reader.Read(old.Id, new StateModelBodySource(old.Preparation!.PrepareBase(old).Body.ToArray()));
         object point = StateModelField(decoded, "Segment0Field1")!;
         Assert.Equal(17, point.GetType().GetField("Segment0Field1")!.GetValue(point));
@@ -128,7 +128,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun first = RunGenerator(source);
         AssertSchemaOnlyCompiles(first);
         var firstAssembly = EmitAndLoad(first.OutputCompilation);
-        StateModelSnapshot originalModels = EnumHistoryRegistry(firstAssembly).Snapshot();
+        ModelExecutionEnvironment originalModels = EnumHistoryRegistry(firstAssembly).CreateEnvironment();
         IDurableObject world = (IDurableObject)Activator.CreateInstance(firstAssembly.GetType("World")!)!;
         using CaptureContext capture = new CaptureSession().BeginCapture(originalModels);
         originalModels.ResolveCurrentModel(world.GetType()).AddRoot(capture, world);
@@ -141,7 +141,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun next = RunGenerator(changed, history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
         var currentAssembly = EmitAndLoad(next.OutputCompilation);
-        StateModelSnapshot current = EnumHistoryRegistry(currentAssembly).Snapshot();
+        ModelExecutionEnvironment current = EnumHistoryRegistry(currentAssembly).CreateEnvironment();
         Type mapType = currentAssembly.GetType("World")!.GetField("Map")!.FieldType;
         Assert.True(current.TryGetCurrentObjectBinding(mapType, out ObjectBinding? target));
         // Empty content does not excuse a missing record value Upgrade. World's reference Schema itself stayed v1.
@@ -151,7 +151,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static ObjectStateRecord CaptureRecordHistoryWorld(GeneratorTestRun run) {
         var assembly = EmitAndLoad(run.OutputCompilation);
-        StateModelSnapshot snapshot = EnumHistoryRegistry(assembly).Snapshot();
+        ModelExecutionEnvironment snapshot = EnumHistoryRegistry(assembly).CreateEnvironment();
         IDurableObject world = (IDurableObject)Activator.CreateInstance(assembly.GetType("World")!)!;
         CaptureSession session = new();
         using CaptureContext capture = session.BeginCapture(snapshot);

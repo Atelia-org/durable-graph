@@ -84,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             """);
         AssertSchemaOnlyCompiles(run);
         var assembly = EmitAndLoad(run.OutputCompilation);
-        var snapshot = EnumHistoryRegistry(assembly).Snapshot();
+        var snapshot = EnumHistoryRegistry(assembly).CreateEnvironment();
         var schema = snapshot.ResolveCurrentModel(assembly.GetType("Leaf")!).CurrentSchema;
         Assert.Single(schema.Fields);
         Assert.Single(schema.BaseSchema!.Fields);

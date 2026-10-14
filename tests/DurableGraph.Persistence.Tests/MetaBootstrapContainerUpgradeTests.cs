@@ -27,9 +27,9 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
     [InlineData("Dictionary", "absent")]
     public void Empty_and_all_absent_containers_still_bind_the_required_value_rule(string kind, string contents) {
         FrameAddress source = Seed(kind, contents);
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         _calls = new();
-        ContainerRoot positive = Assert.IsType<ContainerRoot>(P0BusinessWorkspace.ReadRoot(reader.Store, source, Models(kind)));
+        ContainerRoot positive = Assert.IsType<ContainerRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, source, Models(kind)));
         Assert.Equal(1, _calls.Allocations);
         Assert.Equal(0, _calls.Point);
         int count = contents == "empty" ? 0 : 2;
@@ -38,7 +38,7 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
         _calls = new();
         StateModelRegistry missing = Models(kind, missingValue: true);
         AssertStoredSource(reader, source, missing, kind);
-        Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.ReadRoot(reader.Store, source, missing));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, source, missing));
         Assert.Equal(0, _calls.Point);
         Assert.Equal(0, _calls.Key); // Dictionary key provider is valid, but value binding must finish first.
         Assert.Equal(0, _calls.Allocations);
@@ -49,9 +49,9 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
     [Fact]
     public void A_missing_Dictionary_value_rule_prevents_its_valid_key_callbacks_for_present_entries() {
         FrameAddress source = Seed("Dictionary", "present");
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         _calls = new();
-        ContainerRoot positive = Assert.IsType<ContainerRoot>(P0BusinessWorkspace.ReadRoot(reader.Store, source, Models("Dictionary")));
+        ContainerRoot positive = Assert.IsType<ContainerRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, source, Models("Dictionary")));
         Assert.Equal(2, _calls.Key);
         Assert.Equal(2, _calls.Point);
         Assert.Equal(1, _calls.Allocations);
@@ -61,7 +61,7 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
         _calls = new();
         StateModelRegistry missing = Models("Dictionary", missingValue: true);
         AssertStoredSource(reader, source, missing, "Dictionary");
-        Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.ReadRoot(reader.Store, source, missing));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, source, missing));
         Assert.Equal(0, _calls.Key);
         Assert.Equal(0, _calls.Point);
         Assert.Equal(0, _calls.Allocations);
@@ -73,14 +73,14 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
     [InlineData("Dictionary")]
     public void An_existing_conflicting_target_exact_definition_does_not_reinterpret_the_valid_source(string kind) {
         FrameAddress source = Seed(kind, "empty", conflictingTarget: true);
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         StateModelRegistry models = Models(kind);
         _calls = new();
         AssertStoredSource(reader, source, models, kind); // V1 body, descriptor and old reader are valid.
-        P0CatalogView view = P0CatalogView.Load(reader.Store, reader.SharedSchemaRoot!.Value);
+        SchemaCatalogView view = SchemaCatalogView.Load(reader.Store, reader.SharedSchemaRoot!.Value);
         Assert.Equal(TypeTag.Byte, Assert.Single(view.Schemas[new(PointId, 1)].Fields).TypeTag);
         Assert.Equal(TypeTag.UInt64, Assert.Single(view.Schemas[new(PointId, 2)].Fields).TypeTag);
-        InvalidDataException error = Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.ReadRoot(reader.Store, source, models));
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, source, models));
         Assert.IsType<SchemaConflictException>(error.InnerException);
         Assert.Equal(0, _calls.Key);
         Assert.Equal(0, _calls.Point);
@@ -92,12 +92,12 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
     [Fact]
     public void A_key_upgrade_canonical_collision_rejects_delivery_after_callbacks_without_mutating_stored_DTOs() {
         FrameAddress source = Seed("Dictionary", "present");
-        using var reader = P0Repository.OpenReadOnlyExisting(_path);
+        using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         StateModelRegistry models = Models("Dictionary");
         FrozenDictionaryState<byte, NullableState<byte>> before = AssertStoredSource(reader, source, models, "Dictionary")
             .Rows[new(2)].GetDictionaryState<byte, NullableState<byte>>();
         _calls = new() { CollapseKeys = true };
-        InvalidDataException error = Assert.Throws<InvalidDataException>(() => P0BusinessWorkspace.ReadRoot(reader.Store, source, models));
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, source, models));
         Assert.Contains("duplicate persistent keys", error.Message);
         Assert.Equal(2, _calls.Key);
         Assert.Equal(2, _calls.Point); // Conversion ran; this is not a promise to roll back callback effects.
@@ -119,20 +119,20 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
             _ => DictionaryStateBody<byte, NullableState<byte>, ByteStateOps, NullableStateOps<byte, ByteStateOps>>.PrepareBase(
                 new(DictionaryComparerKind.ScalarDefault, values.Select((value, index) => new DictionaryEntryState<byte, NullableState<byte>>((byte)(index + 1), value)).ToArray()), layout.Dictionary!),
         };
-        P0CatalogWorkspace catalog = new(static () => { });
+        SchemaCatalogWorkspace catalog = new(static () => { });
         catalog.Set(RootSchema(kind));
         if (conflictingTarget) { catalog.Set(new DurableSchema(PointId, 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.UInt64))); }
-        P0PreparedCatalog prepared = catalog.PrepareOwned([layout]);
-        using var repository = P0Repository.CreateNew(_path);
-        using P0PendingSave pending = repository.Prepare("main", P0GraphKind.State,
-            new(null, new(1), [ObjectVersionRecord.CreateBase(1, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(RootSchema(kind)), new PreparedBaseBody([2]), prepared.View)),
-                ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(layout, body, prepared.View))]), prepared.Write);
+        PreparedSchemaCatalogWrite prepared = catalog.PrepareOwned([layout]);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
+        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+            new(null, new(1), [ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(RootSchema(kind)), new PreparedBaseBody([2]), prepared.View)),
+                ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(layout, body, prepared.View))]), prepared.Write);
         return repository.Commit(pending, prepared.Install, prepareMeta: prepared.PrepareInstall).Business.Address;
     }
 
-    private static P0DecodedRows AssertStoredSource(P0Repository reader, FrameAddress source, StateModelRegistry models, string kind) {
-        P0CatalogView view = P0CatalogView.Load(reader.Store, reader.Store.ReadGraph(source).SchemaRoot!.Value);
-        P0DecodedRows rows = P0TypedReader.Read(reader.Store, source, models.Snapshot(schemaLookup: key => view.Schemas.GetValueOrDefault(key)), view);
+    private static DecodedGraphRows AssertStoredSource(RepositoryStorageFacade reader, FrameAddress source, StateModelRegistry models, string kind) {
+        SchemaCatalogView view = SchemaCatalogView.Load(reader.Store, reader.Store.ReadGraph(source).SchemaRoot!.Value);
+        DecodedGraphRows rows = StoredGraphDecoder.Read(reader.Store, source, models.CreateEnvironment(schemaLookup: key => view.Schemas.GetValueOrDefault(key)), view);
         Assert.Equal(OldLayout(kind), rows.Rows[new(2)].Layout);
         Assert.Equal(new ObjectId(2), rows.Rows[new(1)].GetState<ObjectId>());
         return rows;

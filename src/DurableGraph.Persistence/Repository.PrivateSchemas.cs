@@ -8,5 +8,5 @@ public sealed partial class Repository {
     /// Private saving publishes only the branch directory. Reopening requires this explicit entry again:
     /// branch names and addresses do not persist or infer the application's write destination.
     /// </remarks>
-    public BranchCheckout CheckoutPrivate(string branchName) => CheckoutMetaBootstrap(branchName, privateCatalog: true);
+    public BranchCheckout CheckoutPrivate(string branchName) => CheckoutCore(branchName, privateCatalog: true);
 }

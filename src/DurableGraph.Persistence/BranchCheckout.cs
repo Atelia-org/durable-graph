@@ -23,21 +23,21 @@ namespace Atelia.DurableGraph;
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
-    private readonly P0Session _splitSession;
+    private readonly BranchSaveSession _saveSession;
     internal bool UsesPrivateSchemas { get; }
-    internal P0Session SplitSession => _splitSession;
-    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => SplitSession.BindingEnvironment;
-    internal StateModelSnapshot Models => SplitSession.Models;
-    internal NormalizedRevision? Baseline => SplitSession.Baseline;
-    internal P0CatalogWorkspace Catalog => SplitSession.Catalog;
+    internal BranchSaveSession SaveSession => _saveSession;
+    internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => SaveSession.BindingEnvironment;
+    internal ModelExecutionEnvironment Models => SaveSession.Models;
+    internal NormalizedGraphState? Baseline => SaveSession.Baseline;
+    internal SchemaCatalogWorkspace Catalog => SaveSession.Catalog;
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
-    internal BranchCheckout(Repository repository, string branchName, P0Session session, CheckpointAddress? head,
+    internal BranchCheckout(Repository repository, string branchName, BranchSaveSession session, CheckpointAddress? head,
         bool usesPrivateSchemas = false) {
         _repository = repository;
         BranchName = branchName;
-        _splitSession = session;
+        _saveSession = session;
         UsesPrivateSchemas = usesPrivateSchemas;
         Head = head!; // Initial creation publishes before this checkout is delivered.
     }
@@ -45,11 +45,11 @@ public sealed class BranchCheckout : IDisposable {
     public string BranchName { get; }
     /// <summary>The current editable State root, or null before the history's first State.</summary>
     /// <remarks>Successful replacement installs the supplied instance; previously obtained CLR references do not follow it.</remarks>
-    public IDurableObject? State => _splitSession.State;
+    public IDurableObject? State => _saveSession.State;
     /// <summary>The committed State root identity, or null before the first State.</summary>
-    public ObjectId? StateId => State is null ? null : _splitSession.RootId;
+    public ObjectId? StateId => State is null ? null : _saveSession.RootId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
-    public FrameAddress? StateRevisionAddress => _splitSession.StateSource?.Address;
+    public FrameAddress? StateRevisionAddress => _saveSession.StateSource?.Address;
     public CheckpointAddress Head { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>
@@ -143,10 +143,10 @@ public sealed class BranchCheckout : IDisposable {
     }
 
     // A bounded discard witness; the GraphResources pending never escapes the repository operation.
-    internal void PrepareAndDiscard(IDurableObject root, P0GraphKind kind = P0GraphKind.State,
+    internal void PrepareAndDiscard(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
         ReadAmplificationBaseBudgetParameters? parameters = null, bool toShared = false) {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _repository.PrepareAndDiscardMetaBootstrap(this, root, kind, parameters, toShared);
+        _repository.PrepareAndDiscardSave(this, root, kind, parameters, toShared);
     }
 
     /// <summary>Releases this branch's editing occupancy without saving or removing its durable ref.</summary>

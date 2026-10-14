@@ -46,7 +46,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
         {
-            var states = segments.MetaBootstrapStore;
+            var states = segments.GraphStore;
             Assert.Empty(DefaultRecords(states, unchanged));
             ObjectVersionRecord resize = Assert.Single(DefaultRecords(states, appended));
             Assert.Equal(ObjectVersionKind.Delta, resize.Kind);
@@ -61,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     DefaultLayout(states, replaced, row.ObjectId).Kind == ObjectStateKind.List);
             Assert.NotEqual(resize.ObjectId, newList.ObjectId);
             Assert.Equal(2, DefaultRemoved(states, removed).Count); // List and cyclic Node island.
-            Assert.Equal(states.ReadGraph(first).Objects.Count - 2, states.ReadGraph(removed).Objects.Count);
+            Assert.Equal(states.ReadGraph(first).ObjectHeads.Count - 2, states.ReadGraph(removed).ObjectHeads.Count);
         }
         FrameAddress resumed;
         using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path, Method<Func<StateModelRegistry>>("Models")())) {
@@ -72,7 +72,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             resumed = commit(session);
         }
         using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
-            var states = segments.MetaBootstrapStore;
+            var states = segments.GraphStore;
             Assert.Empty(DefaultRecords(states, resumed));
             Assert.Empty(DefaultRemoved(states, resumed));
         }
@@ -90,8 +90,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         bool mutated = false;
         using (Repository repository = Repository.CreateNew(directory.Path, models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            repository.Checkpoint = checkpoint => {
-                if (checkpoint != CommitCheckpoint.AfterPrepare) { return; }
+            repository.OperationStageObserver = checkpoint => {
+                if (checkpoint != RepositoryOperationStage.AfterPrepare) { return; }
                 mutate(world);
                 mutated = true;
             };

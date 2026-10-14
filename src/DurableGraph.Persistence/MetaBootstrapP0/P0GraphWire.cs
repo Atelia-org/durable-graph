@@ -3,11 +3,11 @@ using Atelia.Binary;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
 // Default graph/batch/directory wire. Tests can encode malformed relations
 // and append the resulting well-framed bytes through the real borrowed FrameStore.
-internal static class P0GraphWire {
+internal static class GraphFrameCodec {
     internal const int MaxCollectionCount = 1_000_000;
     internal const uint BatchTag = 0x37424250; // PBB7
     internal const uint DirectoryTag = 0x37444250; // PBD7
@@ -38,7 +38,7 @@ internal static class P0GraphWire {
         return buffer.WrittenSpan.ToArray();
     }
 
-    internal static P0Batch DecodeBatch(ReadOnlySpan<byte> payload) {
+    internal static ObjectVersionBatch DecodeBatch(ReadOnlySpan<byte> payload) {
         var reader = new BareValueReader(payload);
         RequireMagic(ref reader, BatchMagic);
         FrameAddress? sourceGraph = ReadOptional(ref reader), schemaRoot = ReadOptional(ref reader);
@@ -68,7 +68,7 @@ internal static class P0GraphWire {
         return buffer.WrittenSpan.ToArray();
     }
 
-    internal static P0DirectoryVersion DecodeDirectory(ReadOnlySpan<byte> payload) {
+    internal static ObjectHeadDirectoryVersion DecodeDirectory(ReadOnlySpan<byte> payload) {
         var reader = new BareValueReader(payload);
         RequireMagic(ref reader, DirectoryMagic);
         FrameAddress? source = ReadOptional(ref reader);
@@ -77,11 +77,11 @@ internal static class P0GraphWire {
         return new(source, version.Kind, version.Prior, version.Body, version.EncodedPayloadBytes);
     }
 
-    internal static byte[] EncodeGraph(P0GraphKind kind, FrameAddress? parent, ObjectId rootId,
+    internal static byte[] EncodeGraph(StoredGraphKind kind, FrameAddress? parent, ObjectId rootId,
         FrameAddress directoryRoot, FrameAddress? schemaRoot, FrameAddress? ownedBatch) {
         ValidateKind(kind);
         if (rootId.IsNull) { throw new ArgumentException("Graph root must be nonzero.", nameof(rootId)); }
-        if (kind == P0GraphKind.Meta && schemaRoot is not null) { throw new ArgumentException("A fixed meta graph does not borrow a Schema root.", nameof(schemaRoot)); }
+        if (kind == StoredGraphKind.Meta && schemaRoot is not null) { throw new ArgumentException("A fixed meta graph does not borrow a Schema root.", nameof(schemaRoot)); }
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new BareValueWriter(buffer);
         writer.WriteRawBytes(GraphMagic);
@@ -94,17 +94,17 @@ internal static class P0GraphWire {
         return buffer.WrittenSpan.ToArray();
     }
 
-    internal static P0GraphMetadata DecodeGraph(ReadOnlySpan<byte> payload) {
+    internal static GraphEnvelope DecodeGraph(ReadOnlySpan<byte> payload) {
         var reader = new BareValueReader(payload);
         RequireMagic(ref reader, GraphMagic);
-        P0GraphKind kind = (P0GraphKind)reader.ReadByte();
+        StoredGraphKind kind = (StoredGraphKind)reader.ReadByte();
         ValidateKind(kind);
         FrameAddress? parent = ReadOptional(ref reader);
         ObjectId root = new(reader.ReadVarUInt32());
         if (root.IsNull) { throw new InvalidDataException("Graph root must be nonzero."); }
         FrameAddress directory = FrameAddressWireCodec.Read(ref reader);
         FrameAddress? schema = ReadOptional(ref reader), batch = ReadOptional(ref reader);
-        if (kind == P0GraphKind.Meta && schema is not null) { throw new InvalidDataException("A fixed meta graph cannot borrow a Schema root."); }
+        if (kind == StoredGraphKind.Meta && schema is not null) { throw new InvalidDataException("A fixed meta graph cannot borrow a Schema root."); }
         reader.EnsureFullyConsumed();
         return new(kind, parent, root, directory, schema, batch);
     }
@@ -121,8 +121,8 @@ internal static class P0GraphWire {
         if (!reader.ReadRawBytes(magic.Length).SequenceEqual(magic)) { throw new InvalidDataException("Unknown P0 frame format."); }
     }
 
-    private static void ValidateKind(P0GraphKind kind) {
-        if (kind is not P0GraphKind.Meta and not P0GraphKind.State and not P0GraphKind.Event) {
+    private static void ValidateKind(StoredGraphKind kind) {
+        if (kind is not StoredGraphKind.Meta and not StoredGraphKind.State and not StoredGraphKind.Event) {
             throw new InvalidDataException("Unknown P0 graph role.");
         }
     }

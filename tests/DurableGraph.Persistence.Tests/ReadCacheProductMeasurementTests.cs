@@ -34,12 +34,12 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                 using (Repository repository = open.Value) {
                     CheckpointAddress pending = repository.GetHead("main");
                     CheckpointAddress state = Assert.IsType<CheckpointAddress>(repository.GetPreviousState(pending));
-                    P0GraphStore store = repository.MetaBootstrapStore;
-                    P0GraphReadCacheStatistics beforeReads = store.ReadCacheStatistics;
+                    GraphRecordStore store = repository.GraphStore;
+                    GraphPhysicalReadStatistics beforeReads = store.ReadCacheStatistics;
                     var first = Measure(() => ((Node)repository.ReadState(state)));
-                    P0GraphReadCacheStatistics afterFirst = store.ReadCacheStatistics;
+                    GraphPhysicalReadStatistics afterFirst = store.ReadCacheStatistics;
                     var warm = Measure(() => ((Node)repository.ReadState(state)));
-                    P0GraphReadCacheStatistics afterRepeated = store.ReadCacheStatistics;
+                    GraphPhysicalReadStatistics afterRepeated = store.ReadCacheStatistics;
                     Assert.True(afterFirst.BatchDecodes > beforeReads.BatchDecodes);
                     Assert.True(afterFirst.DirectoryMaterializations > beforeReads.DirectoryMaterializations);
                     Assert.Equal(afterFirst.GraphDecodes, afterRepeated.GraphDecodes);
@@ -48,7 +48,7 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     Assert.Equal(afterFirst.DirectoryMaterializations, afterRepeated.DirectoryMaterializations);
                     Assert.True(afterRepeated.BatchHits > afterFirst.BatchHits);
                     Assert.True(afterRepeated.DirectoryHits > afterFirst.DirectoryHits);
-                    Assert.InRange(afterRepeated.ResidentChargeBytes, 1L, P0GraphStore.DefaultReadCacheBudgetBytes);
+                    Assert.InRange(afterRepeated.ResidentChargeBytes, 1L, GraphRecordStore.DefaultReadCacheBudgetBytes);
                     var pair = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
                     var pairWarm = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
                     Assert.Equal(expected, Checksum(first.Value));
@@ -79,19 +79,19 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     ulong nextExpected = Checksum(editableState);
 
                     Stamp afterPrepare = default, beforeAppend = default, afterAppend = default;
-                    repository.Checkpoint = checkpoint => {
-                        if (checkpoint == CommitCheckpoint.AfterPrepare) afterPrepare = Stamp.Now();
+                    repository.OperationStageObserver = checkpoint => {
+                        if (checkpoint == RepositoryOperationStage.AfterPrepare) afterPrepare = Stamp.Now();
 
                     };
-                    repository.MetaBootstrapCheckpoint = checkpoint => {
-                        if (checkpoint == P0SaveCheckpoint.BeforeAppend) beforeAppend = Stamp.Now();
-                        else if (checkpoint == P0SaveCheckpoint.AfterBusinessAppend) afterAppend = Stamp.Now();
+                    repository.SaveStageObserver = checkpoint => {
+                        if (checkpoint == RepositorySaveStage.BeforeAppend) beforeAppend = Stamp.Now();
+                        else if (checkpoint == RepositorySaveStage.AfterBusinessAppend) afterAppend = Stamp.Now();
                     };
                     Stamp start = Stamp.Now();
                     CheckpointAddress committed = session.CommitState(NoRebase);
                     Stamp end = Stamp.Now();
-                    repository.Checkpoint = null;
-                    repository.MetaBootstrapCheckpoint = null;
+                    repository.OperationStageObserver = null;
+                    repository.SaveStageObserver = null;
                     Assert.True(afterPrepare.Timestamp > 0 && beforeAppend.Timestamp > 0 && afterAppend.Timestamp > 0);
                     Assert.Equal(nextExpected, Checksum(((Node)repository.ReadState(committed))));
                     if (sample >= 0) Write(new { Kind = "product-write", Sample = sample,

@@ -67,8 +67,8 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Assert.Null(repository.SchemaWriteMode); // A previous owner's Shared choice is not inferred on cold open.
             using BranchCheckout main = repository.Checkout("main");
             DB087Widget root = AssertRing(main.State, 7);
-            NormalizedRevision baseline = main.Baseline!;
-            P0CatalogView accepted = main.Catalog.Accepted!;
+            NormalizedGraphState baseline = main.Baseline!;
+            SchemaCatalogView accepted = main.Catalog.Accepted!;
             CheckpointAddress head = main.Head;
             PublicationSnapshot before = Snapshot(repository);
 
@@ -91,7 +91,7 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Reject(() => main.CommitState(Ring()));
             Reject(() => main.CommitEvent(new DB087EnvelopeRoot { Link = root, Numbers = root.Numbers }));
             Reject(() => main.PrepareAndDiscard(root));
-            Reject(() => main.PrepareAndDiscard(root, P0GraphKind.Event));
+            Reject(() => main.PrepareAndDiscard(root, StoredGraphKind.Event));
             Reject(() => main.Catalog.Set(Extra));
             Reject(() => main.Catalog.Set(ObjectLayout.ForDurable(Extra)));
             Assert.Equal(7, baseline.Objects[listId].Current.GetListState<int>().Elements[7]);
@@ -109,13 +109,13 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             RefBytesSnapshot sharedBefore = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
             root.Numbers[7] = 201;
             continued = main.CommitState().RevisionAddress;
-            P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(continued);
+            StoredGraphRevision graph = repository.GraphStore.ReadGraph(continued);
             Assert.Equal(seed, graph.Parent);
             Assert.Equal(seed, graph.SourceGraph);
             Assert.Equal(schema, graph.SchemaRoot);
             Assert.Equal(rootId, graph.RootId);
-            Assert.Equal(3, graph.Objects.Count);
-            ObjectVersionRecord delta = Assert.Single(repository.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records);
+            Assert.Equal(3, graph.ObjectHeads.Count);
+            ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(originalList.Head, delta.PriorAddress);
@@ -201,9 +201,9 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Assert.Equal(schema, repository.SharedSchemaRoot);
             AssertSameRef(before.Shared, ResourcesOf(repository).Versions.ReadRef(2).Unwrap());
             AssertExactFrames(before.Frames, ReadFrames(ResourcesOf(repository).Data));
-            Assert.Equal(before.Appended, repository.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
             Assert.False(repository.IsFaulted);
-            Assert.False(ResourcesOf(repository).HasMetaBootstrapPending);
+            Assert.False(ResourcesOf(repository).HasPendingSave);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, Models());
         Assert.Equal(current, reader.ResolveTag("bookmark").RevisionAddress);
@@ -305,15 +305,15 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
     private static PublicationSnapshot Snapshot(Repository repository) {
         GraphResources resources = ResourcesOf(repository);
         return new(resources.Versions.ReadRef(1).Unwrap(), resources.Versions.ReadRef(2).Unwrap(),
-            ReadFrames(resources.Data), repository.MetaBootstrapStore.AppendedFrames);
+            ReadFrames(resources.Data), repository.GraphStore.AppendedFrames);
     }
     private static void AssertUnchanged(Repository repository, PublicationSnapshot before) {
         GraphResources resources = ResourcesOf(repository);
         AssertSameRef(before.Branches, resources.Versions.ReadRef(1).Unwrap());
         AssertSameRef(before.Shared, resources.Versions.ReadRef(2).Unwrap());
         AssertExactFrames(before.Frames, ReadFrames(resources.Data));
-        Assert.Equal(before.Appended, repository.MetaBootstrapStore.AppendedFrames);
-        Assert.False(resources.HasMetaBootstrapPending);
+        Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
+        Assert.False(resources.HasPendingSave);
         Assert.False(repository.IsFaulted);
     }
     private static void AssertSameRef(RefBytesSnapshot before, RefBytesSnapshot after) {

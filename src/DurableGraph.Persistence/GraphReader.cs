@@ -9,7 +9,7 @@ namespace Atelia.DurableGraph.Persistence;
 internal static class GraphReader {
     // Decoded fixtures remain readable without storage authority. Actual reads carry
     // the concrete reader's provenance, which saving validates separately.
-    internal static MaterializedGraph<T> Read<T>(DecodedRevision decoded, ObjectId rootId,
+    internal static EditableGraphRestoration<T> Read<T>(DecodedRevision decoded, ObjectId rootId,
         GraphReadContext context, bool requireExactRootType = false) where T : class, IDurableObject {
         PreparedGraphSelection selection = Prepare<T>(decoded, context, rootId, requireExactRootType);
         var (instances, _) = Materialize(context, selection);
@@ -29,7 +29,7 @@ internal static class GraphReader {
 
     // reusedLeaves is trusted only after validation of the installed entry owning this exact
     // selection. It never accepts caller-owned live graphs or a different selection's table.
-    internal static MaterializedGraph<IDurableObject> RestorePreparedState(GraphReadContext context,
+    internal static EditableGraphRestoration<IDurableObject> RestorePreparedState(GraphReadContext context,
         PreparedGraphSelection selection, out IReadOnlyDictionary<ObjectId, object>? immutableLeaves,
         bool collectImmutableLeaves = false, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         immutableLeaves = null;
@@ -155,9 +155,9 @@ internal static class GraphReader {
     // Only editable delivery retains a reverse identity map and complete source ID cursor.
     // All strings are imported in source-ID order, including those cut off by Upgrade;
     // canonical Empty therefore receives the smallest full-source ID, not the first reachable ID.
-    private static MaterializedGraph<T> DeliverEditable<T>(PreparedGraphSelection selection,
+    private static EditableGraphRestoration<T> DeliverEditable<T>(PreparedGraphSelection selection,
         Dictionary<ObjectId, object> instances) where T : class, IDurableObject {
-        NormalizedRevision normalized = selection.Normalized;
+        NormalizedGraphState normalized = selection.Normalized;
         Dictionary<object, ObjectId> bindings = new(ReferenceEqualityComparer.Instance);
         foreach ((ObjectId id, object instance) in instances) {
             if (normalized.Objects[id].Current.Kind != ObjectStateKind.String) { bindings.Add(instance, id); }
@@ -182,7 +182,7 @@ internal static class GraphReader {
         ObjectId rootId, bool requireExactRootType) where T : class, IDurableObject {
         // Fresh preparation normalizes every selected graph. Certified State hits
         // bypass this method and retain their exact reader-issued environment.
-        NormalizedRevision normalized = NormalizedRevision.Create(decoded, session.Models, session.Statistics);
+        NormalizedGraphState normalized = NormalizedGraphState.Create(decoded, session.Models, session.Statistics);
         if (!normalized.Objects.TryGetValue(rootId, out NormalizedObject? root) ||
             root.Model is not StateModelBinding rootModel || rootModel.DomainType.IsAbstract ||
             (requireExactRootType ? rootModel.DomainType != typeof(T) : !typeof(T).IsAssignableFrom(rootModel.DomainType))) {
@@ -304,12 +304,12 @@ internal static class GraphReader {
 }
 
 /// <summary>One independently restored graph and its complete source baseline for controlled editable import.</summary>
-internal sealed class MaterializedGraph<T> where T : class, IDurableObject {
+internal sealed class EditableGraphRestoration<T> where T : class, IDurableObject {
     private readonly ulong _nextId;
     private readonly IReadOnlyDictionary<object, ObjectId> _bindings;
 
-    internal MaterializedGraph(T root, ObjectId rootId, StateModelBinding rootModel,
-        NormalizedRevision baseline, ulong nextId, IReadOnlyDictionary<object, ObjectId> bindings) {
+    internal EditableGraphRestoration(T root, ObjectId rootId, StateModelBinding rootModel,
+        NormalizedGraphState baseline, ulong nextId, IReadOnlyDictionary<object, ObjectId> bindings) {
         Root = root;
         RootId = rootId;
         RootModel = rootModel;
@@ -321,6 +321,6 @@ internal sealed class MaterializedGraph<T> where T : class, IDurableObject {
     internal T Root { get; }
     internal ObjectId RootId { get; }
     internal StateModelBinding RootModel { get; }
-    internal NormalizedRevision Baseline { get; }
+    internal NormalizedGraphState Baseline { get; }
     internal CaptureSession CreateCaptureSession() => new(_nextId, _bindings);
 }

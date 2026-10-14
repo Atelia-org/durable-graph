@@ -48,7 +48,7 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             Assert.Equal(initial.DirectoryRoot, promoted.DirectoryRoot);
 
             DB087EnvelopeRoot envelope = new() { Link = child, Numbers = numbers };
-            NormalizedRevision prior = backend.Baseline;
+            NormalizedGraphState prior = backend.Baseline;
             ObjectId discardedId = backend.Discard(envelope);
             Assert.Same(prior, backend.Baseline);
             Assert.Same(child, backend.State);
@@ -201,8 +201,8 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         internal static Backend Open(string path) => new(path, null);
         internal IDurableObject State => _checkout.State!;
         internal ObjectId RootId => _checkout.StateId!.Value;
-        internal NormalizedRevision Baseline => _checkout.Baseline!;
-        internal long AppendedFrames => _repository.MetaBootstrapStore.AppendedFrames;
+        internal NormalizedGraphState Baseline => _checkout.Baseline!;
+        internal long AppendedFrames => _repository.GraphStore.AppendedFrames;
         internal Saved Save(IDurableObject root, bool isEvent = false) {
             CheckpointAddress committed = isEvent ? _checkout.CommitEvent(root) : _checkout.CommitState(root);
             Assert.Equal(committed, _repository.GetHead("main"));
@@ -212,7 +212,7 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             CheckpointAddress head = _checkout.Head;
             long frames = AppendedFrames;
             ObjectId rootId;
-            using (P0SessionSave save = _checkout.SplitSession.Prepare(root)) { rootId = save.Business.Write.RootId; }
+            using (PreparedBranchSave save = _checkout.SaveSession.Prepare(root)) { rootId = save.Business.Write.RootId; }
             Assert.Equal(head, _repository.GetHead("main"));
             Assert.Equal(frames, AppendedFrames);
             return rootId;
@@ -220,9 +220,9 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         internal Dictionary<ObjectId, ObjectStorageInfo> Storage() => Baseline.Objects
             .ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);
         internal void AssertStoredBaseline() {
-            P0GraphStore store = _repository.MetaBootstrapStore;
-            NormalizedRevision baseline = Baseline;
-            IReadOnlyDictionary<uint, FrameAddress> heads = store.ReadGraph(baseline.RevisionAddress).Objects;
+            GraphRecordStore store = _repository.GraphStore;
+            NormalizedGraphState baseline = Baseline;
+            IReadOnlyDictionary<uint, FrameAddress> heads = store.ReadGraph(baseline.RevisionAddress).ObjectHeads;
             Assert.Equal(baseline.Objects.Keys.Select(id => id.Value).Order(), heads.Keys.Order());
             foreach ((ObjectId id, NormalizedObject row) in baseline.Objects) {
                 ObjectStorageInfo info = row.Storage!.Value;
@@ -232,13 +232,13 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             }
         }
         internal IDurableObject Read(Saved saved) =>
-            P0BusinessWorkspace.ReadRoot(_repository.MetaBootstrapStore, saved.Address, Models());
+            BusinessPersistenceAdapter.ReadRoot(_repository.GraphStore, saved.Address, Models());
         private Saved ReadSaved(FrameAddress address) {
-            P0GraphStore store = _repository.MetaBootstrapStore;
-            P0GraphSnapshot graph = store.ReadGraph(address);
+            GraphRecordStore store = _repository.GraphStore;
+            StoredGraphRevision graph = store.ReadGraph(address);
             ObjectVersionRecord[] records = graph.OwnedBatch is { } batch ? store.ReadBatch(batch).Records.ToArray() : [];
             uint[] removed = graph.SourceGraph is { } source
-                ? store.ReadGraph(source).Objects.Keys.Except(graph.Objects.Keys).ToArray() : [];
+                ? store.ReadGraph(source).ObjectHeads.Keys.Except(graph.ObjectHeads.Keys).ToArray() : [];
             return new(address, graph.RootId, records, removed, graph.DirectoryRoot, graph.OwnedBatch);
         }
         public void Dispose() {

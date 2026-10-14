@@ -16,15 +16,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        DecodedRevision initial = DecodedRevision.ReadSplit(states, addresses[0], models);
+        var states = segments.GraphStore;
+        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         ObjectStateRecord primary = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.InlineSchema?.Type == TypeExpr.Named("record.Key", TypeExpr.Builtin(TypeTag.Int32)) &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.CurrentDefault);
         ObjectStateRecord application = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.Application);
         foreach (FrameAddress address in addresses) {
-            DecodedRevision decoded = DecodedRevision.ReadSplit(states, address, models);
+            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(states, address, models);
             Assert.Equal(DictionaryComparerKind.CurrentDefault, ((IFrozenDictionaryState)decoded.GetRequired(primary.Id).Content).ComparerKind);
             Assert.Equal(DictionaryComparerKind.Application, ((IFrozenDictionaryState)decoded.GetRequired(application.Id).Content).ComparerKind);
         }
@@ -51,7 +51,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     public void RecordStructKeyWhoseSynthesizedEqualityUsesTransientCannotHideCanonicalCollision() {
         Type host = CompileRecordGraphHost();
         object[] fixture = host.GetMethod("BadKeys")!.CreateDelegate<Func<object[]>>()();
-        StateModelSnapshot models = ((StateModelRegistry)fixture[0]).Snapshot();
+        ModelExecutionEnvironment models = ((StateModelRegistry)fixture[0]).CreateEnvironment();
         IDurableObject world = (IDurableObject)fixture[1];
         CaptureSession session = new();
         using CaptureContext context = session.BeginCapture(models);

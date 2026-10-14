@@ -30,8 +30,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = host.GetMethod("Models")!
             .CreateDelegate<Func<bool, StateModelRegistry>>()(reverseRegistration);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        var initial = DecodedRevision.ReadSplit(states, addresses[0], models);
+        var states = segments.GraphStore;
+        var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         ObjectStateRecord world = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.World");
         ObjectStateRecord special = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Special");
         ObjectStateRecord dropped = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Node");
@@ -46,7 +46,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(dropped.Id.Value, Assert.Single(DefaultRemoved(states, addresses[3])));
         Assert.NotEmpty(DefaultRecords(states, addresses[5]));
         Assert.All(DefaultRecords(states, addresses[5]), r => Assert.Equal(ObjectVersionKind.Delta, r.Kind));
-        var final = DecodedRevision.ReadSplit(states, addresses[^1], models);
+        var final = DecodedRevision.ReadStoredGraph(states, addresses[^1], models);
         Assert.DoesNotContain(final.Objects, r => r.Id == dropped.Id);
         Assert.Contains(final.Objects, r => r.Id == special.Id);
         Assert.Contains(final.Objects, r => r.Id == world.Id);

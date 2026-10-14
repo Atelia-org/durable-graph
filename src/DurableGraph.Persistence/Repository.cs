@@ -32,7 +32,7 @@ public sealed partial class Repository : IDisposable {
     private bool _disposed;
     private PreparedStateRestoration? _preparedState;
     private static readonly ReadAmplificationBaseBudgetParameters DefaultPolicy = new(5, 5);
-    internal Action<CommitCheckpoint>? Checkpoint { get; set; }
+    internal Action<RepositoryOperationStage>? OperationStageObserver { get; set; }
     internal bool PreparedStateReuseEnabled { get; set; } = true;
     internal bool ImmutableLeafReuseEnabled { get; set; }
     internal GraphReadStatistics? RestorationStatistics { get; set; }
@@ -54,23 +54,23 @@ public sealed partial class Repository : IDisposable {
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository CreateNew(string path, StateModelRegistry models,
         long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
-        OpenMetaBootstrap(path, models, create: true, readOnly: false, readCacheBudgetBytes,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        OpenStorage(path, models, create: true, readOnly: false, readCacheBudgetBytes,
             rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
     /// <summary>Opens the required repository roots with frozen code configuration and exact stored Schema views.</summary>
     /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities. Select a Schema write mode explicitly before saving business graphs. Without a mode, checkout restoration and ref-only operations remain available.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository OpenExisting(string path, StateModelRegistry models,
         long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
-        OpenMetaBootstrap(path, models, create: false, readOnly: false, readCacheBudgetBytes,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        OpenStorage(path, models, create: false, readOnly: false, readCacheBudgetBytes,
             rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
     /// <summary>Opens existing history without writing, using frozen code configuration and each graph's exact Schema view.</summary>
     /// <remarks>An empty or partial registry supports inspection; model capabilities are still required to materialize domain graphs. The cache budget controls owned physical reads.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository OpenReadOnlyExisting(string path, StateModelRegistry models,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, models, create: false, readOnly: true, readCacheBudgetBytes);
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
+        OpenStorage(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
     /// <summary>Publishes an initial State and returns a checkout retaining the supplied domain instances.</summary>
     /// <remarks>
@@ -81,7 +81,7 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public BranchCheckout CreateBranch(string branchName, IDurableObject initialState,
         ReadAmplificationBaseBudgetParameters? parameters = null) =>
-        CreateMetaBootstrapBranch(branchName, initialState, P0GraphKind.State, parameters);
+        CreateBranchCore(branchName, initialState, StoredGraphKind.State, parameters);
 
     /// <summary>Publishes an initial Event and returns a checkout with no State.</summary>
     /// <remarks>
@@ -91,7 +91,7 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public BranchCheckout CreateBranchFromEvent(string branchName, IDurableObject initialEvent,
         ReadAmplificationBaseBudgetParameters? parameters = null) =>
-        CreateMetaBootstrapBranch(branchName, initialEvent, P0GraphKind.Event, parameters);
+        CreateBranchCore(branchName, initialEvent, StoredGraphKind.Event, parameters);
 
     /// <summary>Restores the nearest State at the exact branch head, without materializing or replaying Events.</summary>
     /// <remarks>
@@ -103,7 +103,7 @@ public sealed partial class Repository : IDisposable {
     /// The checkout keeps this starting execution environment across commits. Re-checkout does not reload
     /// model registrations or select the latest shared catalog instead of the nearest State's Schema view.
     /// </remarks>
-    public BranchCheckout Checkout(string branchName) => CheckoutMetaBootstrap(branchName);
+    public BranchCheckout Checkout(string branchName) => CheckoutCore(branchName);
 
     /// <summary>Creates a durable named branch at source and returns its independently restored checkout.</summary>
     /// <param name="branchName">A new branch name; the returned checkout occupies only this branch.</param>
@@ -127,7 +127,7 @@ public sealed partial class Repository : IDisposable {
             ValidateNewName(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreMetaBootstrapCheckout(branchName, source, out PreparedStateRestoration? candidate);
+            BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate);
             MutateBranchCore(branchName, source.Address);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
@@ -140,7 +140,7 @@ public sealed partial class Repository : IDisposable {
 
     public IReadOnlyList<string> ListBranches() {
         RequireAvailable();
-        return _resources.ListMetaBootstrapBranches();
+        return _resources.ListBranches();
     }
     public CheckpointAddress GetHead(string branchName) { RequireAvailable(); return HeadCore(branchName); }
 
@@ -282,7 +282,7 @@ public sealed partial class Repository : IDisposable {
     /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public IDurableObject ReadEvent(CheckpointAddress frame) => ReadMetaBootstrap(frame, GraphFrameKind.Event);
+    public IDurableObject ReadEvent(CheckpointAddress frame) => ReadGraph(frame, GraphFrameKind.Event);
     /// <summary>Independently restores the actual domain root of a State snapshot.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
@@ -291,7 +291,7 @@ public sealed partial class Repository : IDisposable {
     /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public IDurableObject ReadState(CheckpointAddress frame) => ReadMetaBootstrap(frame, GraphFrameKind.State);
+    public IDurableObject ReadState(CheckpointAddress frame) => ReadGraph(frame, GraphFrameKind.State);
 
     /// <summary>Restores the selected graph and its nearest strict ancestor of the opposite role.</summary>
     /// <remarks>
@@ -307,7 +307,7 @@ public sealed partial class Repository : IDisposable {
         RequireAvailable();
         CheckFrame(address);
         _busy = true;
-        try { return ReadMetaBootstrapCheckpointCore(address); }
+        try { return ReadHistoryCheckpointCore(address); }
         finally { EndOperation(); }
     }
 
@@ -328,7 +328,7 @@ public sealed partial class Repository : IDisposable {
         CheckFrame(first);
         CheckFrame(second);
         _busy = true;
-        try { return ReadMetaBootstrapPairCore(first, second); }
+        try { return ReadGraphPairCore(first, second); }
         finally { EndOperation(); }
     }
 
@@ -368,7 +368,7 @@ public sealed partial class Repository : IDisposable {
         _busy = true;
         try {
             CheckFrame(address);
-            CreateMetaBootstrapTagCore(name, address.Address);
+            CreateTagCore(name, address.Address);
         } finally { EndOperation(); }
     }
 
@@ -395,7 +395,7 @@ public sealed partial class Repository : IDisposable {
         try {
             CheckFrame(expectedHead);
             CheckFrame(target);
-            FrameAddress head = MetaBootstrapHeadCore(branchName).Address;
+            FrameAddress head = StoredHeadCore(branchName).Address;
             if (_activeBranches.Contains(branchName)) { throw new InvalidOperationException("Close this branch's active checkout before moving it."); }
             if (head != expectedHead.Address) { throw new InvalidOperationException("Branch head no longer matches expectedHead."); }
             MutateBranchCore(branchName, target.Address);
@@ -407,9 +407,9 @@ public sealed partial class Repository : IDisposable {
     private void MutateRefCore(RootMutation mutation) {
         PublicationOutcome outcome = PublicationOutcome.NotAttempted;
         try {
-            Checkpoint?.Invoke(CommitCheckpoint.BeforePublication);
+            OperationStageObserver?.Invoke(RepositoryOperationStage.BeforePublication);
             mutation(out outcome);
-            Checkpoint?.Invoke(CommitCheckpoint.AfterPublication);
+            OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPublication);
         } catch (Exception error) {
             if (outcome != PublicationOutcome.NotAttempted) { _resources.MarkFaulted(); }
             throw new GraphCommitException(MapOutcome(outcome), null, error);
@@ -424,13 +424,13 @@ public sealed partial class Repository : IDisposable {
 
     internal CheckpointAddress Commit(BranchCheckout session, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
-        CommitMetaBootstrap(session, domainEvent, nextState, parameters);
+        CommitSave(session, domainEvent, nextState, parameters);
 
     internal CheckpointAddress CommitToShared(BranchCheckout session, IDurableObject? domainEvent,
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
-        CommitMetaBootstrap(session, domainEvent, nextState, parameters, toShared: true);
+        CommitSave(session, domainEvent, nextState, parameters, toShared: true);
 
-    private CheckpointAddress HeadCore(string branchName) => MetaBootstrapHeadCore(branchName);
+    private CheckpointAddress HeadCore(string branchName) => StoredHeadCore(branchName);
 
     private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, GraphFrameKind.State);
 
@@ -461,7 +461,7 @@ public sealed partial class Repository : IDisposable {
     }
     private void ValidateNewName(string name) {
         GraphResources.ValidateBranchName(name);
-        if (_splitRepository.GetHead(name) is not null) {
+        if (_storageFacade.GetHead(name) is not null) {
             throw new InvalidOperationException("Branch name already exists.");
         }
     }
@@ -484,11 +484,11 @@ public sealed partial class Repository : IDisposable {
             throw new InvalidOperationException("Business saves require an explicit Schema write mode when opening the repository.");
         }
         if (checkout is not null) {
-            RequireMetaBootstrapCheckout(checkout);
-            if (!checkout.UsesPrivateSchemas && _splitRepository.Store.ReadMetadata(checkout.Head.Address).SchemaRoot is { } selected) {
-                P0CatalogView source = P0CatalogView.Load(_splitRepository.Store, selected);
-                P0CatalogView? shared = _splitRepository.SharedSchemaRoot is { } latest
-                    ? P0CatalogView.Load(_splitRepository.Store, latest) : null;
+            RequireCheckoutSource(checkout);
+            if (!checkout.UsesPrivateSchemas && _storageFacade.Store.ReadMetadata(checkout.Head.Address).SchemaRoot is { } selected) {
+                SchemaCatalogView source = SchemaCatalogView.Load(_storageFacade.Store, selected);
+                SchemaCatalogView? shared = _storageFacade.SharedSchemaRoot is { } latest
+                    ? SchemaCatalogView.Load(_storageFacade.Store, latest) : null;
                 // A Shared save cannot silently drop declarations from a private view.
                 // Only an already-contained complete view may return to this destination.
                 foreach (var (key, schema) in source.Schemas) {

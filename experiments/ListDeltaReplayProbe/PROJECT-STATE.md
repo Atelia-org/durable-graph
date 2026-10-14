@@ -26,7 +26,7 @@ warmup/initial binding recorded separately. Under DB-063, an initial step publis
 edit step publishes an independent marker Event followed by State through BranchCheckout.
 Whole-step timing includes both publications; installed root/live IDs/head/H snapshots and all
 diagnostics stay outside timing. A fresh read-only Repository signs its own history handles and
-ReadState verifies complete fingerprints/aliases/cycles. ReadSplit uses the graph's exact selected S;
+ReadState verifies complete fingerprints/aliases/cycles. ReadStoredGraph uses the graph's exact selected S;
 actual State OwnedBatch records and object-chain payload/H replace the old raw revision wire.
 No OwnedBatch means no local writes. Cold Checkout also preserves the complete saved baseline.
 Measurement.Version = 4 identifies the split-store measurement route. Shared data
@@ -35,7 +35,8 @@ VS files. Version 4 is not cost/performance-comparable with version 3's DB-086 c
 or older separate-store reports. Historical ADAPTIVE/RESULTS/WHITEBOX/FALLBACK stay frozen.
 
 Output is ignored per-run JSON/CSV/Markdown plus independent repositories. Root product context is
-[src/PROJECT-STATE.md](../../src/PROJECT-STATE.md); design/acceptance authority is
+[src/PROJECT-STATE.md](../../src/PROJECT-STATE.md); the internal read/source identifiers follow
+[DB-092 B](../../docs/design-branches/0092-type-namespace-refactoring/implementation-b.md), with no measurement-version or workload change. Design/acceptance authority is
 [DB-051](../../docs/design-branches/0051-bounded-list-delta-competition/README.md).
 
 Fallback mode instead uses captured pairs and raw body validation, with no publication or cumulative

@@ -53,9 +53,9 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             final = session.Commit(NoRebase);
         }
         using GraphResources file = OpenSchemas();
-        P0GraphStore states = file.MetaBootstrapStore;
+        GraphRecordStore states = file.GraphStore;
         foreach (FrameAddress address in new[] { seed, unchanged, changed, final }) {
-            ObjectStateRecord map = Assert.Single(DecodedRevision.ReadSplit(states, address, Models<string>()).Objects,
+            ObjectStateRecord map = Assert.Single(DecodedRevision.ReadStoredGraph(states, address, Models<string>()).Objects,
                 row => row.Kind == ObjectStateKind.Dictionary);
             Assert.Equal(DictionaryComparerKind.Application, map.GetDictionaryState<ObjectId, int>().ComparerKind);
         }
@@ -86,9 +86,9 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             unchanged = session.Commit(NoRebase);
         }
         using GraphResources file = OpenSchemas();
-        P0GraphStore states = file.MetaBootstrapStore;
+        GraphRecordStore states = file.GraphStore;
         foreach (FrameAddress address in new[] { seed, replaced, unchanged }) {
-            ObjectStateRecord map = Assert.Single(DecodedRevision.ReadSplit(states, address, Models<Key>()).Objects,
+            ObjectStateRecord map = Assert.Single(DecodedRevision.ReadStoredGraph(states, address, Models<Key>()).Objects,
                 row => row.Kind == ObjectStateKind.Dictionary);
             FrozenDictionaryState<KeyState, int> frozen = map.GetDictionaryState<KeyState, int>();
             Assert.Equal(DictionaryComparerKind.CurrentDefault, frozen.ComparerKind);
@@ -243,12 +243,12 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             worldId = repository.WorldId!.Value;
         }
         using GraphResources file = OpenSchemas();
-        P0GraphStore states = file.MetaBootstrapStore;
+        GraphRecordStore states = file.GraphStore;
         StateModelRegistry noRecipe = Models<string>();
-        DecodedRevision exact = DecodedRevision.ReadSplit(states, seed, noRecipe);
+        DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, seed, noRecipe);
         Assert.Equal(2, exact.Objects.Count);
         Assert.Equal(0, Assert.Single(exact.Objects, row => row.Kind == ObjectStateKind.Dictionary).GetDictionaryState<ObjectId, int>().Count);
-        NormalizedRevision.Create(exact, exact.SourceModels!);
+        NormalizedGraphState.Create(exact, exact.SourceModels!);
         Assert.Throws<InvalidDataException>(() => GraphReader.ReadRoot<World<string>>(exact, worldId, new(exact.SourceModels!)));
     }
 
@@ -267,12 +267,12 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             worldId = repository.WorldId!.Value;
         }
         using GraphResources file = OpenSchemas();
-        P0GraphStore states = file.MetaBootstrapStore;
-        DecodedRevision exact = DecodedRevision.ReadSplit(states, seed, models);
+        GraphRecordStore states = file.GraphStore;
+        DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, seed, models);
         Assert.Equal(2, Assert.Single(exact.Objects, row => row.Kind == ObjectStateKind.Dictionary).GetDictionaryState<ObjectId, int>().Count);
-        NormalizedRevision.Create(exact, exact.SourceModels!);
+        NormalizedGraphState.Create(exact, exact.SourceModels!);
         Assert.Throws<InvalidDataException>(() => GraphReader.ReadRoot<World<string>>(exact, worldId, new(exact.SourceModels!)));
-        Assert.Equal(4, DecodedRevision.ReadSplit(states, seed, Models<string>()).Objects.Count);
+        Assert.Equal(4, DecodedRevision.ReadStoredGraph(states, seed, Models<string>()).Objects.Count);
     }
 
     [Fact]
@@ -347,26 +347,26 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             worldId = repository.WorldId!.Value;
         }
         using GraphResources file = OpenSchemas();
-        P0GraphStore states = file.MetaBootstrapStore;
-        DecodedRevision initial = DecodedRevision.ReadSplit(states, seed, Models<string>());
+        GraphRecordStore states = file.GraphStore;
+        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, seed, Models<string>());
         ObjectStateRecord root = initial.GetRequired(worldId);
         ObjectId keyId = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.String).Id;
-        P0CatalogView selected = initial.SelectedSchemaView!;
+        SchemaCatalogView selected = initial.SelectedSchemaView!;
         RootState detached = default;
-        FrameAddress unreachable = states.Append(P0GraphKind.State, seed, initial.SelectedSchemaView!.Snapshot!.Address,
+        FrameAddress unreachable = states.Append(StoredGraphKind.State, seed, initial.SelectedSchemaView!.Snapshot!.Address,
             new(seed, worldId, [ObjectVersionRecord.CreateBase(worldId.Value,
-                P0TypedBodyCodec.Encode(root.Layout, RootBase(in detached), selected))])).Address;
+                TypedBaseBodyCodec.Encode(root.Layout, RootBase(in detached), selected))])).Address;
         int calls = 0;
         StateModelRegistry readers = Models<string>();
         readers.UseDictionaryComparerResolver(_ => { calls++; throw new ResolverFailure(); });
-        DecodedRevision exact = DecodedRevision.ReadSplit(states, unreachable, readers);
-        NormalizedRevision.Create(exact, exact.SourceModels!);
+        DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, unreachable, readers);
+        NormalizedGraphState.Create(exact, exact.SourceModels!);
         World<string> loaded = GraphReader.ReadRoot<World<string>>(exact, worldId, new(exact.SourceModels!));
         Assert.Null(loaded.First);
         Assert.Equal(0, calls);
-        FrameAddress corrupt = states.Append(P0GraphKind.State, unreachable, selected.Snapshot!.Address,
+        FrameAddress corrupt = states.Append(StoredGraphKind.State, unreachable, selected.Snapshot!.Address,
             new(unreachable, worldId, [], [keyId.Value])).Address;
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(states, corrupt, readers));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(states, corrupt, readers));
         Assert.Equal(0, calls);
     }
 
@@ -379,7 +379,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     private static StateModelRegistry Models<K>() where K : notnull {
         StateModelRegistry models = new();
         if (typeof(K) == typeof(Key)) { models.Register(KeyDefinition()); }
-        TypeExpr key = models.Snapshot().GetTypeExpr(typeof(K));
+        TypeExpr key = models.CreateEnvironment().GetTypeExpr(typeof(K));
         TypeExpr map = TypeExpr.Dictionary(key, TypeExpr.Builtin(TypeTag.Int32));
         TypeExpr containers = TypeExpr.List(TypeExpr.VectorArray(map));
         DurableSchema schema = new(TypeExpr.Named("CompositeConfigWorld", key), 1,
@@ -462,7 +462,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     }
     private sealed class ResolverFailure : Exception;
     private GraphResources OpenSchemas() => GraphResources.OpenExisting(_root);
-    private static IReadOnlyList<ObjectVersionRecord> Records(P0GraphStore store, FrameAddress address) =>
+    private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 
     public void Dispose() {

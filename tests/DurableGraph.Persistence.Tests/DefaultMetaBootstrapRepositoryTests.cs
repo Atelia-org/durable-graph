@@ -25,14 +25,14 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             using BranchCheckout main = repository.CreateBranch("main", root);
             initialState = main.Head.RevisionAddress;
             initialSchema = repository.SharedSchemaRoot!.Value;
-            P0GraphSnapshot first = repository.MetaBootstrapStore.ReadGraph(initialState);
-            Assert.Equal(P0GraphKind.State, first.Kind);
+            StoredGraphRevision first = repository.GraphStore.ReadGraph(initialState);
+            Assert.Equal(StoredGraphKind.State, first.Kind);
             Assert.Equal(initialSchema, first.SchemaRoot);
-            Assert.Equal(3, first.Objects.Count);
-            Assert.Single(P0CatalogView.Load(repository.MetaBootstrapStore, initialSchema).Schemas);
+            Assert.Equal(3, first.ObjectHeads.Count);
+            Assert.Single(SchemaCatalogView.Load(repository.GraphStore, initialSchema).Schemas);
             AssertPublished(repository, initialState, initialSchema);
             repository.CreateTag("initial", main.Head);
-            NormalizedRevision baseline = main.Baseline!;
+            NormalizedGraphState baseline = main.Baseline!;
             listId = Assert.Single(baseline.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
 
             // Capture discovers the second Schema through a real Event root; no catalog edit seam is used.
@@ -42,30 +42,30 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             eventAddress = publishedEvent.RevisionAddress;
             acceptedSchema = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(initialSchema, acceptedSchema);
-            Assert.Equal(2, P0CatalogView.Load(repository.MetaBootstrapStore, acceptedSchema).Schemas.Count);
+            Assert.Equal(2, SchemaCatalogView.Load(repository.GraphStore, acceptedSchema).Schemas.Count);
             Assert.Equal(acceptedSchema, main.Catalog.Accepted!.Snapshot!.Address);
             Assert.Same(baseline, main.Baseline);
             Assert.Equal(initialState, main.StateRevisionAddress);
             Assert.Same(root, main.State);
-            Assert.Equal(initialState, ResourcesOf(repository).GetMetaBootstrapStateHead("main"));
-            P0GraphSnapshot actualEvent = repository.MetaBootstrapStore.ReadGraph(eventAddress);
-            Assert.Equal(P0GraphKind.Event, actualEvent.Kind);
+            Assert.Equal(initialState, ResourcesOf(repository).GetBranchStateHead("main"));
+            StoredGraphRevision actualEvent = repository.GraphStore.ReadGraph(eventAddress);
+            Assert.Equal(StoredGraphKind.Event, actualEvent.Kind);
             Assert.Equal(initialState, actualEvent.Parent);
             Assert.Equal(initialState, actualEvent.SourceGraph);
             Assert.Equal(acceptedSchema, actualEvent.SchemaRoot);
-            Assert.Equal(4, actualEvent.Objects.Count);
+            Assert.Equal(4, actualEvent.ObjectHeads.Count);
             AssertPublished(repository, eventAddress, acceptedSchema);
             repository.CreateTag("event", publishedEvent);
 
             RefBytesSnapshot sharedBefore = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
             root.Numbers[7] = 201;
             savedState = main.CommitState().RevisionAddress;
-            P0GraphSnapshot saved = repository.MetaBootstrapStore.ReadGraph(savedState);
+            StoredGraphRevision saved = repository.GraphStore.ReadGraph(savedState);
             Assert.Equal(eventAddress, saved.Parent);
             Assert.Equal(initialState, saved.SourceGraph);
             Assert.Equal(acceptedSchema, saved.SchemaRoot);
-            Assert.Equal(3, saved.Objects.Count);
-            ObjectVersionRecord delta = Assert.Single(repository.MetaBootstrapStore.ReadBatch(saved.OwnedBatch!.Value).Records);
+            Assert.Equal(3, saved.ObjectHeads.Count);
+            ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(baseline.Objects[listId].Storage!.Value.Head, delta.PriorAddress);
@@ -77,7 +77,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             completed = ReadFrameImages(ResourcesOf(repository).Data);
             Assert.True(completed.Select(frame => FileId(frame.Address)).Distinct().Count() > 1);
             Assert.NotEmpty(Directory.GetFiles(Path.Combine(path, "data", "archive"), "*.rbf", SearchOption.AllDirectories));
-            Assert.Equal(0, repository.MetaBootstrapStore.ReadCacheStatistics.ResidentChargeBytes);
+            Assert.Equal(0, repository.GraphStore.ReadCacheStatistics.ResidentChargeBytes);
         }
 
         Dictionary<string, byte[]> archived = SnapshotArchives(path);
@@ -85,7 +85,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         // All previous resources/caches are closed; meta can load before business model registration.
         using (Repository metaOnly = Repository.OpenReadOnlyExisting(path, new(), readCacheBudgetBytes: 0)) {
             Assert.Equal(acceptedSchema, metaOnly.SharedSchemaRoot);
-            Assert.Equal(2, P0CatalogView.Load(metaOnly.MetaBootstrapStore, acceptedSchema).Schemas.Count);
+            Assert.Equal(2, SchemaCatalogView.Load(metaOnly.GraphStore, acceptedSchema).Schemas.Count);
         }
         using (Repository reader = Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: 0)) {
             AssertPublished(reader, savedState, acceptedSchema);
@@ -106,11 +106,11 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             RefBytesSnapshot sharedBefore = ResourcesOf(reopened).Versions.ReadRef(2).Unwrap();
             root.Numbers[8] = 202;
             continuedState = cold.CommitState().RevisionAddress;
-            P0GraphSnapshot continued = reopened.MetaBootstrapStore.ReadGraph(continuedState);
+            StoredGraphRevision continued = reopened.GraphStore.ReadGraph(continuedState);
             Assert.Equal(savedState, continued.Parent);
             Assert.Equal(savedState, continued.SourceGraph);
             Assert.Equal(acceptedSchema, continued.SchemaRoot);
-            ObjectVersionRecord delta = Assert.Single(reopened.MetaBootstrapStore.ReadBatch(continued.OwnedBatch!.Value).Records);
+            ObjectVersionRecord delta = Assert.Single(reopened.GraphStore.ReadBatch(continued.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(savedList.Head, delta.PriorAddress);
@@ -147,14 +147,14 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             saved = main.Head.RevisionAddress;
         }
         Dictionary<string, byte[]> images = SnapshotFiles(path);
-        P0GraphStore retained;
-        P0Batch owned;
+        GraphRecordStore retained;
+        ObjectVersionBatch owned;
         using (Repository reader = Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: budget)) {
-            retained = reader.MetaBootstrapStore;
+            retained = reader.GraphStore;
             DB087Widget first = AssertRing(reader.ReadState(reader.GetHead("main")), 7);
-            P0GraphReadCacheStatistics before = retained.ReadCacheStatistics;
+            GraphPhysicalReadStatistics before = retained.ReadCacheStatistics;
             DB087Widget second = AssertRing(reader.ReadState(reader.GetHead("main")), 7);
-            P0GraphReadCacheStatistics after = retained.ReadCacheStatistics;
+            GraphPhysicalReadStatistics after = retained.ReadCacheStatistics;
             Assert.NotSame(first, second);
             Assert.NotSame(first.Numbers, second.Numbers);
             if (budget == 0) {
@@ -173,7 +173,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
                 Assert.InRange(after.ResidentChargeBytes, 1, budget);
                 Assert.InRange(after.PeakResidentChargeBytes, 1, budget);
             }
-            P0GraphSnapshot graph = retained.ReadGraph(saved);
+            StoredGraphRevision graph = retained.ReadGraph(saved);
             owned = retained.ReadBatch(graph.OwnedBatch!.Value);
         }
         AssertFilesUnchanged(images, SnapshotFiles(path));

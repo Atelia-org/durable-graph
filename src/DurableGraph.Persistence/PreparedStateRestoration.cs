@@ -14,7 +14,7 @@ namespace Atelia.DurableGraph.Persistence;
 internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoint,
     PreparedGraphSelection Selection, StateBindingContext.ExactSchemaRequirementSet Requirements,
     IReadOnlyDictionary<ObjectId, object>? ImmutableLeaves = null, bool ImmutableLeavesCollected = false,
-    DecodedRevision.SplitBindingEnvironment? BindingEnvironment = null) {
+    DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment = null) {
     internal FrameAddress RevisionAddress => Selection.Normalized.RevisionAddress;
     internal ObjectId RootId => Selection.RootId;
     internal int SchemaRequirementCount => Requirements.Count;
@@ -23,23 +23,23 @@ internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoin
     internal bool Matches(CheckpointAddress state) => StateCheckpoint == state &&
         RevisionAddress == state.RevisionAddress && RootId == state.RootId;
 
-    internal void ValidateSplit(P0GraphStore store, StateModelRegistry.FrozenConfiguration configuration,
+    internal void ValidateStoredSource(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
         CheckpointAddress state, GraphReadContext context) {
         if (state.Kind != GraphFrameKind.State || !Matches(state) || BindingEnvironment is not { } environment ||
             !ReferenceEquals(Selection.Models, environment.Models) || !ReferenceEquals(context.Models, environment.Models)) {
             throw new InvalidDataException("Prepared State must retain its exact split model environment and selection.");
         }
-        P0GraphMetadata metadata = store.ReadMetadata(state.Address);
-        if (metadata.Kind != P0GraphKind.State || metadata.RootId != RootId || metadata.SchemaRoot is not { } schemaRoot) {
+        GraphEnvelope metadata = store.ReadMetadata(state.Address);
+        if (metadata.Kind != StoredGraphKind.State || metadata.RootId != RootId || metadata.SchemaRoot is not { } schemaRoot) {
             throw new InvalidDataException("Prepared State must select its actual State root and Schema pin.");
         }
         environment.RequireMatches(store, configuration, schemaRoot);
-        Selection.Normalized.RequireSplitSource(store, context.Models);
+        Selection.Normalized.RequireStoredSource(store, context.Models);
         ValidateRoot(context.Models);
         Requirements.Validate(context.Models);
     }
 
-    private void ValidateRoot(StateModelSnapshot models) {
+    private void ValidateRoot(ModelExecutionEnvironment models) {
         if (!Selection.Normalized.Objects.TryGetValue(RootId, out NormalizedObject? root) ||
             root.Model is not StateModelBinding rootModel || !ReferenceEquals(rootModel, Selection.RootModel) ||
             rootModel.DomainType.IsAbstract || !typeof(IDurableObject).IsAssignableFrom(rootModel.DomainType) ||

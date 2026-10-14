@@ -15,19 +15,19 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
     public void P0AdapterActualTypedBaseEqualityAndHotColdAccountingUseObjectHeadsAndPreserveEventBaseline() {
         FrameAddress committed;
         uint listId;
-        using (P0Repository repository = P0Repository.CreateNew(_path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
             StateModelRegistry models = Models();
-            P0Session session = new(repository, "main", models);
+            BranchSaveSession session = new(repository, "main", models);
             DB087Widget root = new() { Numbers = Enumerable.Repeat(0, 123).ToList() };
-            using (P0SessionSave save = session.Prepare(root)) { save.Commit(); }
-            P0GraphSnapshot source = session.StateSource!;
-            P0CatalogView catalog = session.Catalog.Accepted!;
-            P0DecodedRows rows = P0TypedReader.Read(repository.Store, source.Address, models.Snapshot(), catalog);
+            using (PreparedBranchSave save = session.Prepare(root)) { save.Commit(); }
+            StoredGraphRevision source = session.StateSource!;
+            SchemaCatalogView catalog = session.Catalog.Accepted!;
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, source.Address, models.CreateEnvironment(), catalog);
             listId = Assert.Single(rows.Rows.Values, row => row.Kind == ObjectStateKind.List).Id.Value;
-            P0ChainEntry first = Assert.Single(repository.Store.ReadObjectChain(source.Address, listId).Entries);
-            Assert.Equal(P0TypedBodyCodec.FormatVersion, first.Record.Body[0]);
+            ObjectVersionChainEntry first = Assert.Single(repository.Store.ReadObjectChain(source.Address, listId).Entries);
+            Assert.Equal(TypedBaseBodyCodec.FormatVersion, first.Record.Body[0]);
             Assert.Equal((byte)2, first.Record.Body[1]); // P0 structural TypeExpr head differs from the legacy head.
-            var decoded = P0TypedBodyCodec.Decode(first.Record.Body, catalog: null);
+            var decoded = TypedBaseBodyCodec.Decode(first.Record.Body, catalog: null);
             Assert.Equal(124, decoded.Body.Length); // Count plus 123 one-byte Int32 zero values.
             Assert.True(first.Record.Body.Length >= 128);
             int headBytes = first.Record.Body.Length - decoded.Body.Length;
@@ -36,17 +36,17 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             // The extra byte is the 127/128 body-length prefix boundary, in addition to all head bytes.
             AssertAccounting(repository, session);
             Assert.Equal(b, Accounting(session)[new(listId)]);
-            using (P0SessionSave unchanged = session.Prepare(root, parameters: new(1, 100))) {
+            using (PreparedBranchSave unchanged = session.Prepare(root, parameters: new(1, 100))) {
                 Assert.Empty(unchanged.Business.Write.Records); // Every H equals its own actual typed B.
             }
 
             root.Numbers[7] = 1; // Same encoded scalar width keeps current B exactly equal to the initial B.
             long d;
-            using (P0SessionSave save = session.Prepare(root)) {
+            using (PreparedBranchSave save = session.Prepare(root)) {
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
                 Assert.Equal(listId, delta.ObjectId);
                 Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                Assert.Equal(source.Objects[listId], delta.PriorAddress);
+                Assert.Equal(source.ObjectHeads[listId], delta.PriorAddress);
                 d = ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, delta.PriorAddress!.Value);
                 save.Commit();
             }
@@ -54,7 +54,7 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             Assert.Equal(b + d, Accounting(session)[new(listId)]);
             source = session.StateSource!;
             long frames = repository.Store.AppendedFrames;
-            using (P0SessionSave discarded = session.Prepare(root, parameters: new(1, 100))) {
+            using (PreparedBranchSave discarded = session.Prepare(root, parameters: new(1, 100))) {
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(discarded.Business.Write.Records).Kind);
             }
             Assert.Equal(frames, repository.Store.AppendedFrames);
@@ -62,7 +62,7 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             Assert.Equal(b + d, Accounting(session)[new(listId)]);
 
             FrameAddress eventGraph;
-            using (P0SessionSave save = session.Prepare(root, P0GraphKind.Event, new(1, 100))) {
+            using (PreparedBranchSave save = session.Prepare(root, StoredGraphKind.Event, new(1, 100))) {
                 ObjectVersionRecord optionalBase = Assert.Single(save.Business.Write.Records);
                 Assert.Equal(listId, optionalBase.ObjectId);
                 Assert.Equal(ObjectVersionKind.Base, optionalBase.Kind);
@@ -76,7 +76,7 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             Assert.Equal(b + d, Accounting(session)[new(listId)]); // Event Base cannot reset State H.
             AssertAccounting(repository, session);
 
-            using (P0SessionSave save = session.Prepare(root, parameters: new(1, 100))) {
+            using (PreparedBranchSave save = session.Prepare(root, parameters: new(1, 100))) {
                 ObjectVersionRecord optionalBase = Assert.Single(save.Business.Write.Records);
                 Assert.Equal(listId, optionalBase.ObjectId);
                 Assert.Equal(ObjectVersionKind.Base, optionalBase.Kind);
@@ -84,21 +84,21 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             }
             AssertAccounting(repository, session);
             Assert.Equal(b, Accounting(session)[new(listId)]); // Only confirmed State resets reconstruction accounting.
-            using (P0SessionSave unchanged = session.Prepare(root, parameters: new(1, 100))) {
+            using (PreparedBranchSave unchanged = session.Prepare(root, parameters: new(1, 100))) {
                 Assert.Empty(unchanged.Business.Write.Records);
             }
         }
 
-        using (P0Repository repository = P0Repository.OpenExisting(_path)) {
-            P0Session session = new(repository, "main", Models());
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(_path)) {
+            BranchSaveSession session = new(repository, "main", Models());
             Assert.Equal(committed, session.StateSource!.Address);
             AssertAccounting(repository, session); // Cold H comes from the actual chain, including this backend's head.
             DB087Widget root = Assert.IsType<DB087Widget>(session.State);
             Assert.Equal(1, root.Numbers[7]);
             long priorH = Accounting(session)[new(listId)];
-            FrameAddress priorHead = session.StateSource.Objects[listId];
+            FrameAddress priorHead = session.StateSource.ObjectHeads[listId];
             root.Numbers[8] = 1;
-            using (P0SessionSave save = session.Prepare(root)) {
+            using (PreparedBranchSave save = session.Prepare(root)) {
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
                 Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
                 Assert.Equal(priorHead, delta.PriorAddress);
@@ -110,27 +110,27 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
         }
     }
 
-    private static IReadOnlyDictionary<ObjectId, long> Accounting(P0Session session) {
+    private static IReadOnlyDictionary<ObjectId, long> Accounting(BranchSaveSession session) {
         return Baseline(session).Objects.ToDictionary(static pair => pair.Key,
             static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes);
     }
 
-    private static BusinessWorkspace Business(P0Session session) {
-        P0BusinessWorkspace adapter = Assert.IsType<P0BusinessWorkspace>(typeof(P0Session)
+    private static BusinessWorkspace Business(BranchSaveSession session) {
+        BusinessPersistenceAdapter adapter = Assert.IsType<BusinessPersistenceAdapter>(typeof(BranchSaveSession)
             .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(session));
-        return Assert.IsType<BusinessWorkspace>(typeof(P0BusinessWorkspace)
+        return Assert.IsType<BusinessWorkspace>(typeof(BusinessPersistenceAdapter)
             .GetField("_workspace", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(adapter));
     }
 
-    private static NormalizedRevision Baseline(P0Session session) => Assert.IsType<NormalizedRevision>(typeof(BusinessWorkspace)
+    private static NormalizedGraphState Baseline(BranchSaveSession session) => Assert.IsType<NormalizedGraphState>(typeof(BusinessWorkspace)
         .GetField("_baseline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Business(session)));
 
-    private static void AssertAccounting(P0Repository repository, P0Session session) {
-        P0GraphSnapshot source = session.StateSource!;
+    private static void AssertAccounting(RepositoryStorageFacade repository, BranchSaveSession session) {
+        StoredGraphRevision source = session.StateSource!;
         IReadOnlyDictionary<ObjectId, long> h = Accounting(session);
-        Assert.Equal(source.Objects.Keys.Order(), h.Keys.Select(id => id.Value).Order());
-        foreach ((uint id, FrameAddress head) in source.Objects) {
-            P0ObjectChain chain = repository.Store.ReadObjectChain(source.Address, id);
+        Assert.Equal(source.ObjectHeads.Keys.Order(), h.Keys.Select(id => id.Value).Order());
+        foreach ((uint id, FrameAddress head) in source.ObjectHeads) {
+            ObjectVersionChain chain = repository.Store.ReadObjectChain(source.Address, id);
             Assert.Equal(head, chain.Head);
             Assert.Equal(head, chain.Entries[^1].ContainingBatch);
             Assert.NotEqual(source.Address, head); // P0 graph frames are never object batch heads.

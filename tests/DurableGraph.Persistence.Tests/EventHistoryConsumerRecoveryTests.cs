@@ -7,16 +7,16 @@ public sealed partial class EventHistoryRepositoryTests {
     // Intentionally use omitted policies here and in the linked PendingRecovery source:
     // these tests execute the consumer recovery contract with the public default API.
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend, false)]
-    [InlineData((int)P0SaveCheckpoint.AfterPublication, true)]
-    [InlineData((int)P0SaveCheckpoint.BeforeInstall, true)]
+    [InlineData((int)RepositorySaveStage.AfterBusinessAppend, false)]
+    [InlineData((int)RepositorySaveStage.AfterPublication, true)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall, true)]
     public void ConsumerRecoveryUsesFreshPendingOrSkipsAlreadyPublishedState(int point, bool published) {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         using (Repository repository = CreateRepository()) {
             using var session = repository.CreateBranch("main", oldState);
             session.CommitEvent(oldEvent);
-            repository.MetaBootstrapCheckpoint = checkpoint => {
-                if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("State commit interrupted");
+            repository.SaveStageObserver = checkpoint => {
+                if (checkpoint == (RepositorySaveStage)point) throw new IOException("State commit interrupted");
             };
             var error = Assert.Throws<GraphCommitException>(() => PendingRecovery.Complete<Node>(repository, session,
                 _ => { }, (state, pending) => state.Value -= Assert.IsType<Node>(pending).Value));
@@ -83,8 +83,8 @@ public sealed partial class EventHistoryRepositoryTests {
             using var session = repository.Checkout("main");
             oldState = ((Node)session.State!);
             oldEvent = ((Node)repository.ReadEvent(session.Head));
-            if (failDuringPrepare) repository.Checkpoint = checkpoint => {
-                if (checkpoint == CommitCheckpoint.AfterPrepare) throw original;
+            if (failDuringPrepare) repository.OperationStageObserver = checkpoint => {
+                if (checkpoint == RepositoryOperationStage.AfterPrepare) throw original;
             };
             var thrown = Assert.Throws<InvalidOperationException>(() => PendingRecovery.Complete<Node>(repository, session,
                 _ => { }, (state, pending) => {

@@ -148,7 +148,7 @@ internal static class FallbackFixtures {
     }
 
     private sealed class CaptureBinding<T> {
-        private readonly StateModelSnapshot _snapshot;
+        private readonly ModelExecutionEnvironment _snapshot;
         private readonly StateModelBinding _model;
         private readonly ListObjectBinding _list;
 
@@ -157,7 +157,7 @@ internal static class FallbackFixtures {
 #pragma warning disable CS0436 // Intentionally register this probe's local SG definitions, visible alongside Persistence's through IVT.
             Atelia.DurableGraph.Generated.DurableDefinitions.Register(registry);
 #pragma warning restore CS0436
-            _snapshot = registry.Snapshot();
+            _snapshot = registry.CreateEnvironment();
             if (!_snapshot.TryGetCurrentModel(typeof(World<T>), out StateModelBinding? model) || model is null ||
                 !_snapshot.TryGetCurrentObjectBinding(typeof(List<T>), out ObjectBinding? list) || list is not ListObjectBinding listBinding) {
                 throw new InvalidOperationException("Fixture requires generated World and List element bindings.");

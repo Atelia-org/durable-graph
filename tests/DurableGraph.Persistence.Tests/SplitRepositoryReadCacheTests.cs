@@ -17,20 +17,20 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void PhysicalCacheModePreservesColdGeneratedHistoryTypedQualificationAndDeltaContinuation(bool cached) {
-        long budget = cached ? P0GraphStore.DefaultReadCacheBudgetBytes : 0;
+        long budget = cached ? GraphRecordStore.DefaultReadCacheBudgetBytes : 0;
         ObjectId rootId, listId;
         ObjectStorageInfo storage;
         FrameAddress savedAddress, schemaRoot;
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             DB087Widget root = Ring();
             using BranchCheckout main = seed.CreateBranch("main", root);
             rootId = main.StateId!.Value;
             listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
-            NormalizedRevision initialBaseline = main.Baseline!;
+            NormalizedGraphState initialBaseline = main.Baseline!;
             ObjectStorageInfo initialList = initialBaseline.Objects[listId].Storage!.Value;
-            StateModelSnapshot executionModels = main.Models;
-            DecodedRevision.SplitBindingEnvironment? executionEnvironment = main.BindingEnvironment;
+            ModelExecutionEnvironment executionModels = main.Models;
+            DecodedRevision.SchemaViewBindingEnvironment? executionEnvironment = main.BindingEnvironment;
             seed.CreateTag("state0", main.Head);
             main.Catalog.Set(Extra);
             root.Numbers[7] = 200;
@@ -47,25 +47,25 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             Assert.Same(executionModels, main.Models);
             Assert.Same(executionEnvironment, main.BindingEnvironment);
             storage = main.Baseline.Objects[listId].Storage!.Value;
-            P0GraphSnapshot stateGraph = seed.MetaBootstrapStore.ReadGraph(s1.RevisionAddress);
+            StoredGraphRevision stateGraph = seed.GraphStore.ReadGraph(s1.RevisionAddress);
             Assert.Equal(initialBaseline.RevisionAddress, stateGraph.SourceGraph);
             Assert.NotEqual(initialBaseline.SelectedSchemaView!.Snapshot!.Address, stateGraph.SchemaRoot);
             Assert.Equal(stateGraph.SchemaRoot, main.Baseline.SelectedSchemaView!.Snapshot!.Address);
             Assert.Same(executionModels, main.Baseline.SourceModels);
-            ObjectVersionRecord delta = Assert.Single(seed.MetaBootstrapStore.ReadBatch(stateGraph.OwnedBatch!.Value).Records);
+            ObjectVersionRecord delta = Assert.Single(seed.GraphStore.ReadBatch(stateGraph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(initialList.Head, delta.PriorAddress);
             Assert.Equal(initialList.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, initialList.Head),
                 storage.ReconstructionPayloadBytes);
-            long frames = seed.MetaBootstrapStore.AppendedFrames;
+            long frames = seed.GraphStore.AppendedFrames;
             CheckpointAddress unchanged = main.CommitState();
             savedAddress = unchanged.RevisionAddress;
             schemaRoot = seed.SharedSchemaRoot!.Value;
-            P0GraphSnapshot noChange = seed.MetaBootstrapStore.ReadGraph(savedAddress);
+            StoredGraphRevision noChange = seed.GraphStore.ReadGraph(savedAddress);
             Assert.Null(noChange.OwnedBatch);
             Assert.Equal(stateGraph.DirectoryRoot, noChange.DirectoryRoot);
-            Assert.Equal(frames + 1, seed.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(frames + 1, seed.GraphStore.AppendedFrames);
             Assert.Equal(storage, main.Baseline.Objects[listId].Storage);
             Assert.Null(seed.PreparedStateEntry); // Hot save is not preparation-slot admission.
 
@@ -78,7 +78,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             independent.Numbers[7] = -1;
             independent.Child!.Value = -2;
             AssertRing(main.State, 201); // Independent mutable edits cannot change the active checkout or stored DTOs.
-            NormalizedRevision savedBaseline = main.Baseline!;
+            NormalizedGraphState savedBaseline = main.Baseline!;
             main.Dispose();
             using BranchCheckout signedAgain = seed.Checkout("main");
             DB087Widget restored = AssertRing(signedAgain.State, 201);
@@ -94,27 +94,27 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             foreach ((ObjectId id, NormalizedObject row) in savedBaseline.Objects) {
                 Assert.Equal(row.Storage, signedAgain.Baseline.Objects[id].Storage);
             }
-            Assert.Equal(frames + 1, seed.MetaBootstrapStore.AppendedFrames); // Reading and reacquiring the branch do not append.
+            Assert.Equal(frames + 1, seed.GraphStore.AppendedFrames); // Reading and reacquiring the branch do not append.
             Assert.Null(seed.PreparedStateEntry);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         // All previous owners and caches are closed. Meta loads before any business registration.
-        using (Repository metaOnly = Repository.OpenMetaBootstrapReadOnlyExisting(_path, new(), readCacheBudgetBytes: budget)) {
+        using (Repository metaOnly = Repository.OpenStorageReadOnlyExisting(_path, new(), readCacheBudgetBytes: budget)) {
             Assert.Equal(schemaRoot, metaOnly.SharedSchemaRoot);
-            P0CatalogView catalog = P0CatalogView.Load(metaOnly.MetaBootstrapStore, schemaRoot);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(metaOnly.GraphStore, schemaRoot);
             Assert.Equal(Extra, catalog.Schemas[new(Extra.Type, Extra.Version)]);
         }
-        P0Batch? heldBatch = null;
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models(), readCacheBudgetBytes: budget)) {
+        ObjectVersionBatch? heldBatch = null;
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, Models(), readCacheBudgetBytes: budget)) {
             reader.PreparedStateReuseEnabled = false;
             CheckpointAddress current = reader.GetHead("main"), old = reader.ResolveTag("state0"), saved = reader.ResolveTag("state1");
             Assert.Equal(savedAddress, current.RevisionAddress);
             DB087Widget first = AssertRing(reader.ReadState(saved), 201);
-            P0GraphReadCacheStatistics before = reader.MetaBootstrapStore.ReadCacheStatistics;
+            GraphPhysicalReadStatistics before = reader.GraphStore.ReadCacheStatistics;
             DB087Widget second = AssertRing(reader.ReadState(saved), 201);
             Assert.NotSame(first, second);
             Assert.NotSame(first.Numbers, second.Numbers); // Physical memoization never materializes an editable or typed graph cache.
-            P0GraphReadCacheStatistics after = reader.MetaBootstrapStore.ReadCacheStatistics;
+            GraphPhysicalReadStatistics after = reader.GraphStore.ReadCacheStatistics;
             if (cached) { AssertPhysicalProductionEqual(before, after); Assert.True(after.BatchHits > before.BatchHits); }
             else {
                 Assert.True(after.BatchDecodes > before.BatchDecodes);
@@ -129,40 +129,40 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             AssertRing(pair.First, 7);
             AssertRing(pair.Second, 201);
             Assert.Null(reader.PreparedStateEntry);
-            P0GraphSnapshot savedGraph = reader.MetaBootstrapStore.ReadGraph(saved.RevisionAddress);
-            heldBatch = reader.MetaBootstrapStore.ReadBatch(savedGraph.OwnedBatch!.Value);
+            StoredGraphRevision savedGraph = reader.GraphStore.ReadGraph(saved.RevisionAddress);
+            heldBatch = reader.GraphStore.ReadBatch(savedGraph.OwnedBatch!.Value);
             Assert.Equal(storage.ReconstructionPayloadBytes,
-                reader.MetaBootstrapStore.ReadObjectChain(saved.RevisionAddress, listId.Value).ReconstructionPayloadBytes);
+                reader.GraphStore.ReadObjectChain(saved.RevisionAddress, listId.Value).ReconstructionPayloadBytes);
             // A low-level typed helper may read old layouts through an additive newer
             // catalog. Saving authority instead requires the reader-issued exact-S environment.
             StateModelRegistry.FrozenConfiguration configuration = Models().FreezeConfiguration();
-            DecodedRevision decoded = DecodedRevision.ReadSplit(reader.MetaBootstrapStore, saved.RevisionAddress, configuration);
-            Assert.NotEqual(schemaRoot, reader.MetaBootstrapStore.ReadMetadata(old.RevisionAddress).SchemaRoot);
-            P0DecodedRows compatibleLayout = P0TypedReader.Read(reader.MetaBootstrapStore, old.RevisionAddress,
+            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(reader.GraphStore, saved.RevisionAddress, configuration);
+            Assert.NotEqual(schemaRoot, reader.GraphStore.ReadMetadata(old.RevisionAddress).SchemaRoot);
+            DecodedGraphRows compatibleLayout = StoredGraphDecoder.Read(reader.GraphStore, old.RevisionAddress,
                 decoded.BindingEnvironment!.Models, decoded.BindingEnvironment.SelectedSchemaView);
             Assert.Equal(3, compatibleLayout.Rows.Count);
-            Assert.Equal(reader.MetaBootstrapStore.ReadMetadata(old.RevisionAddress).SchemaRoot, compatibleLayout.Snapshot.SchemaRoot);
-            P0GraphReadCacheStatistics beforeWrongEnvironment = reader.MetaBootstrapStore.ReadCacheStatistics;
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reader.MetaBootstrapStore, old.RevisionAddress,
+            Assert.Equal(reader.GraphStore.ReadMetadata(old.RevisionAddress).SchemaRoot, compatibleLayout.Snapshot.SchemaRoot);
+            GraphPhysicalReadStatistics beforeWrongEnvironment = reader.GraphStore.ReadCacheStatistics;
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reader.GraphStore, old.RevisionAddress,
                 configuration, decoded.BindingEnvironment));
-            DecodedRevision positiveReuse = DecodedRevision.ReadSplit(reader.MetaBootstrapStore, saved.RevisionAddress,
+            DecodedRevision positiveReuse = DecodedRevision.ReadStoredGraph(reader.GraphStore, saved.RevisionAddress,
                 configuration, decoded.BindingEnvironment);
             Assert.Same(decoded.BindingEnvironment, positiveReuse.BindingEnvironment);
             Assert.Equal(saved.RootId, positiveReuse.GetRequired(saved.RootId).Id);
-            if (cached) { AssertPhysicalProductionEqual(beforeWrongEnvironment, reader.MetaBootstrapStore.ReadCacheStatistics); }
+            if (cached) { AssertPhysicalProductionEqual(beforeWrongEnvironment, reader.GraphStore.ReadCacheStatistics); }
             int alternateAllocations = 0;
             StateModelRegistry alternate = AlternateModels(() => alternateAllocations++);
-            StateModelSnapshot positiveCode = alternate.FreezeConfiguration().CreateSnapshot();
+            ModelExecutionEnvironment positiveCode = alternate.FreezeConfiguration().CreateEnvironment();
             Assert.True(positiveCode.TryGetCurrentModel(typeof(AlternateWidget), out StateModelBinding? validAlternate));
             Assert.Equal(TypeTag.Int64, validAlternate!.CurrentSchema.Fields[0].TypeTag);
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reader.MetaBootstrapStore, saved.RevisionAddress, alternate));
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reader.GraphStore, saved.RevisionAddress, alternate));
             Assert.Equal(0, alternateAllocations); // The alternate complete same-key layout is rejected before materialization.
             AssertRing(reader.ReadState(saved), 201); // Neither ordinary typed failure clears or poisons correct physical values.
             Assert.False(reader.IsFaulted);
-            Assert.Equal(0, reader.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(0, reader.GraphStore.AppendedFrames);
         }
         AssertFilesEqual(files, SnapshotFiles());
-        using Repository reopened = Repository.OpenMetaBootstrapExisting(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenStorageExisting(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         reopened.PreparedStateReuseEnabled = false;
         Assert.Null(reopened.PreparedStateEntry);
         using BranchCheckout cold = reopened.Checkout("main");
@@ -171,12 +171,12 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
         Assert.Equal(rootId, cold.StateId);
         Assert.Equal(listId, Assert.Single(cold.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key);
         Assert.Equal(storage, cold.Baseline.Objects[listId].Storage);
-        P0GraphSnapshot oldSaved = reopened.MetaBootstrapStore.ReadGraph(reopened.ResolveTag("state1").RevisionAddress);
-        Assert.NotSame(heldBatch, reopened.MetaBootstrapStore.ReadBatch(oldSaved.OwnedBatch!.Value));
+        StoredGraphRevision oldSaved = reopened.GraphStore.ReadGraph(reopened.ResolveTag("state1").RevisionAddress);
+        Assert.NotSame(heldBatch, reopened.GraphStore.ReadBatch(oldSaved.OwnedBatch!.Value));
         coldRoot.Numbers[8] = 202;
         CheckpointAddress continued = cold.CommitState();
-        P0GraphSnapshot graph = reopened.MetaBootstrapStore.ReadGraph(continued.RevisionAddress);
-        ObjectVersionRecord actualDelta = Assert.Single(reopened.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records);
+        StoredGraphRevision graph = reopened.GraphStore.ReadGraph(continued.RevisionAddress);
+        ObjectVersionRecord actualDelta = Assert.Single(reopened.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
         Assert.Equal(ObjectVersionKind.Delta, actualDelta.Kind);
         Assert.Equal(listId.Value, actualDelta.ObjectId);
         Assert.Equal(storage.Head, actualDelta.PriorAddress);
@@ -250,7 +250,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
         internal AlternateWidget? Child;
     }
     private readonly record struct AlternateState(long Value, ObjectId Numbers, ObjectId Child);
-    private static void AssertPhysicalProductionEqual(P0GraphReadCacheStatistics expected, P0GraphReadCacheStatistics actual) {
+    private static void AssertPhysicalProductionEqual(GraphPhysicalReadStatistics expected, GraphPhysicalReadStatistics actual) {
         Assert.Equal(expected.GraphDecodes, actual.GraphDecodes);
         Assert.Equal(expected.BatchDecodes, actual.BatchDecodes);
         Assert.Equal(expected.DirectoryVersionDecodes, actual.DirectoryVersionDecodes);

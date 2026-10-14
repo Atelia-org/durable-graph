@@ -39,7 +39,7 @@ public sealed class GraphCommitException : IOException {
 }
 
 // Internal deterministic fault injection; never part of the host publication contract.
-internal enum CommitCheckpoint {
+internal enum RepositoryOperationStage {
     AfterPrepare, BeforeStateAppend, AfterStateAppend,
     BeforePublication, AfterPublication, BeforeInstall
 }

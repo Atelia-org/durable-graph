@@ -28,7 +28,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         Assert.Equal(1, assembly.GetType("R")!.GetField("Upgrades")!.GetValue(null));
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var store = segments.MetaBootstrapStore;
+        var store = segments.GraphStore;
         ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, addresses[0]));
         Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
         Assert.Null(rewrite.PriorAddress);
@@ -69,14 +69,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var store = segments.MetaBootstrapStore;
+        var store = segments.GraphStore;
         Assert.Empty(DefaultRecords(store, saved[0])); // Same layout needs neither Upgrade nor a replacement Base.
         ObjectVersionRecord changed = Assert.Single(DefaultRecords(store, saved[1]));
         AssertRecordTypedDeltaCost(store, saved[0], saved[1], new(changed.ObjectId), currentModels, currentAssembly.GetType("Leaf")!);
         Assert.Equal(Assert.Single(DefaultRecords(store, original)).ObjectId, changed.ObjectId);
         Assert.Empty(DefaultRecords(store, saved[2]));
-        DurableSchema before = EnumHistoryRegistry(priorAssembly).Snapshot().ResolveCurrentModel(priorAssembly.GetType("Leaf")!).CurrentSchema;
-        DurableSchema after = currentModels.Snapshot().ResolveCurrentModel(currentAssembly.GetType("Leaf")!).CurrentSchema;
+        DurableSchema before = EnumHistoryRegistry(priorAssembly).CreateEnvironment().ResolveCurrentModel(priorAssembly.GetType("Leaf")!).CurrentSchema;
+        DurableSchema after = currentModels.CreateEnvironment().ResolveCurrentModel(currentAssembly.GetType("Leaf")!).CurrentSchema;
         Assert.Equal(before, after);
         Assert.Null(after.BaseSchema!.BaseSchema);
     }
@@ -95,7 +95,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun advanced = RunGenerator(source.Replace("\"Base\",1", "\"Base\",2").Replace("\"Leaf\",1", "\"Leaf\",2"), history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(advanced);
         var assembly = EmitAndLoad(advanced.OutputCompilation);
-        DurableSchema current = EnumHistoryRegistry(assembly).Snapshot().ResolveCurrentModel(assembly.GetType("Leaf")!).CurrentSchema;
+        DurableSchema current = EnumHistoryRegistry(assembly).CreateEnvironment().ResolveCurrentModel(assembly.GetType("Leaf")!).CurrentSchema;
         Assert.Equal(2, current.Version);
         Assert.Equal(2, current.BaseSchema!.Version);
     }

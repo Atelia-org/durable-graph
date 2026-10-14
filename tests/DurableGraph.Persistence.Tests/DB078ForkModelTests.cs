@@ -85,7 +85,7 @@ public sealed partial class DB078HistoryTests {
             Assert.Equal(prefix.Address, firstB.Parent);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
+            GraphRecordStore states = resources.GraphStore;
             Assert.Null(states.ReadGraph(firstA.RevisionAddress).SourceGraph);
             Assert.Null(states.ReadGraph(firstB.RevisionAddress).SourceGraph);
             Assert.Equal(firstA.RevisionAddress, states.ReadGraph(replacementA.RevisionAddress).SourceGraph);

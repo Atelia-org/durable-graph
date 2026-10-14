@@ -13,7 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         var models = (StateModelRegistry)fixture[0];
         IDurableObject world = Assert.IsAssignableFrom<IDurableObject>(fixture[1]);
         Action edit = (Action)fixture[2], clear = (Action)fixture[3], restore = (Action)fixture[4];
-        StateModelSnapshot snapshot = models.Snapshot();
+        ModelExecutionEnvironment snapshot = models.CreateEnvironment();
         Assert.True(snapshot.TryGetCurrentModel(world.GetType(), out StateModelBinding? binding));
         Assert.NotNull(binding);
         var session = new CaptureSession();

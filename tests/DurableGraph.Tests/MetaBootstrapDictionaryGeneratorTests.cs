@@ -30,45 +30,45 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint rootId;
         uint[] ids;
         IDurableObject original = create();
-        using (P0Repository repository = P0Repository.CreateNew(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot();
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment();
             object[] initial = objects(original);
             for (int i = 0; i < initial.Length; i++) {
                 Assert.True(snapshot.TryGetCurrentObjectBinding(initial[i].GetType(), out ObjectBinding? binding));
                 Assert.Equal(layouts[i], binding!.CurrentLayout);
             }
-            P0Session session = new(repository, "main", registered);
-            using P0SessionSave save = session.Prepare(original);
+            BranchSaveSession session = new(repository, "main", registered);
+            using PreparedBranchSave save = session.Prepare(original);
             AssertBootstrapDictionaryCatalog(save.Catalog.View, expected.Root, expected.Key, expected.Point, expected.Scalars, expected.Entries);
             Assert.Equal(3, save.Business.Write.Records.Count);
             Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            P0SaveResult result = save.Commit();
+            RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             schemaRoot = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
-            Assert.Equal(3, result.Business.Objects.Count);
+            Assert.Equal(3, result.Business.ObjectHeads.Count);
         }
 
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView meta = P0CatalogView.Load(repository.Store, schemaRoot); // No business model input.
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot); // No business model input.
             AssertBootstrapDictionaryCatalog(meta, expected.Root, expected.Key, expected.Point, expected.Scalars, expected.Entries);
             Assert.Equal(0, repository.Store.AppendedFrames);
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
-            P0DecodedRows decoded = P0TypedReader.Read(repository.Store, s0, snapshot, meta);
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
+            DecodedGraphRows decoded = StoredGraphDecoder.Read(repository.Store, s0, snapshot, meta);
             Assert.Equal(3, decoded.Rows.Count);
             ids = layouts.Select(layout => Assert.Single(decoded.Rows.Values, row => row.Layout.Equals(layout)).Id.Value).ToArray();
             Assert.Equal(rootId, ids[0]);
-            P0GraphSnapshot graph = repository.Store.ReadGraph(s0);
+            StoredGraphRevision graph = repository.Store.ReadGraph(s0);
             AssertBootstrapScalarDictionaryWithoutCatalog(repository, graph, ids[1], expected.Scalars);
             AssertBootstrapClosureDynamicDescriptor(repository, graph, rootId, layouts[0]);
             AssertBootstrapClosureDynamicDescriptor(repository, graph, ids[2], layouts[2]);
-            P0ChainEntry userBase = Assert.Single(repository.Store.ReadObjectChain(s0, ids[2]).Entries);
-            var user = P0TypedBodyCodec.Decode(userBase.Record.Body, meta);
+            ObjectVersionChainEntry userBase = Assert.Single(repository.Store.ReadObjectChain(s0, ids[2]).Entries);
+            var user = TypedBaseBodyCodec.Decode(userBase.Record.Body, meta);
             Assert.Equal((byte)DictionaryComparerKind.CurrentDefault, user.Body[0]);
-            Assert.Throws<InvalidDataException>(() => P0TypedBodyCodec.Decode(userBase.Record.Body, catalog: null));
-            IDurableObject read = P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered);
+            Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Decode(userBase.Record.Body, catalog: null));
+            IDurableObject read = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered);
             Assert.NotSame(original, read);
             check(read, 0);
             Assert.Equal(s0, repository.GetHead("main"));
@@ -76,19 +76,19 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
 
-        using (P0Repository repository = P0Repository.OpenExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry registered = models();
-            P0Session session = new(repository, "main", registered);
+            BranchSaveSession session = new(repository, "main", registered);
             IDurableObject restored = session.State!;
             check(restored, 0);
             object[] restoredObjects = objects(restored);
-            P0GraphSnapshot prior = session.StateSource!;
-            P0CatalogView meta = session.Catalog.Accepted!;
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
-            P0DecodedRows oldRows = P0TypedReader.Read(repository.Store, s0, snapshot, meta);
+            StoredGraphRevision prior = session.StateSource!;
+            SchemaCatalogView meta = session.Catalog.Accepted!;
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
+            DecodedGraphRows oldRows = StoredGraphDecoder.Read(repository.Store, s0, snapshot, meta);
             change(restored); // Remove, Add, three value patches, then reverse insertion order.
             check(restored, 1);
-            using (P0SessionSave save = session.Prepare(restored, parameters: new(1_000_000, 1))) {
+            using (PreparedBranchSave save = session.Prepare(restored, parameters: new(1_000_000, 1))) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Equal(0, save.Catalog.AddedDescriptors);
@@ -98,65 +98,65 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal<uint>(ids.Skip(1).Order(), save.Business.Write.Records.Select(row => row.ObjectId));
                 foreach (ObjectVersionRecord delta in save.Business.Write.Records) {
                     Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                    Assert.Equal(prior.Objects[delta.ObjectId], delta.PriorAddress);
+                    Assert.Equal(prior.ObjectHeads[delta.ObjectId], delta.PriorAddress);
                     ObjectStateRecord old = oldRows.Rows[new(delta.ObjectId)];
                     InspectBootstrapDictionaryOperations(snapshot, old, delta.Body.ToArray(), old.Layout.Dictionary!);
                 }
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s1 = result.Business.Address;
                 Assert.Equal(schemaRoot, result.Meta!.Address);
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
                 Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
-                Assert.Equal(prior.Objects[rootId], result.Business.Objects[rootId]);
+                Assert.Equal(prior.ObjectHeads[rootId], result.Business.ObjectHeads[rootId]);
                 Assert.Equal(s0, result.Business.SourceGraph);
                 Assert.Equal(s1, session.StateSource!.Address);
                 object[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(restoredObjects[i], after[i]); }
                 foreach (uint id in ids.Skip(1)) {
-                    Assert.NotEqual(prior.Objects[id], result.Business.Objects[id]);
-                    P0ObjectChain chain = repository.Store.ReadObjectChain(s1, id);
+                    Assert.NotEqual(prior.ObjectHeads[id], result.Business.ObjectHeads[id]);
+                    ObjectVersionChain chain = repository.Store.ReadObjectChain(s1, id);
                     Assert.Equal(2, chain.Entries.Count);
                     Assert.Equal(ObjectVersionKind.Delta, chain.Entries[^1].Record.Kind);
                 }
             }
 
-            P0GraphSnapshot accepted = session.StateSource!;
+            StoredGraphRevision accepted = session.StateSource!;
             long frames = repository.Store.AppendedFrames;
             reverse(restored); // Enumeration changes alone must preserve both stored comparer modes and content.
             check(restored, 1);
-            using (P0SessionSave unchanged = session.Prepare(restored)) {
+            using (PreparedBranchSave unchanged = session.Prepare(restored)) {
                 Assert.Null(unchanged.Catalog.Write);
                 Assert.Empty(unchanged.Catalog.EncodedIds);
                 Assert.Empty(unchanged.Business.Write.Records);
                 Assert.Empty(unchanged.Business.Write.RemovedIds);
                 Assert.Equal(s1, unchanged.Business.Write.SourceGraph);
-                P0SaveResult result = unchanged.Commit();
+                RepositorySaveResult result = unchanged.Commit();
                 s2 = result.Business.Address;
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
                 Assert.Equal(s1, result.Business.SourceGraph);
-                foreach (uint id in ids) { Assert.Equal(accepted.Objects[id], result.Business.Objects[id]); }
+                foreach (uint id in ids) { Assert.Equal(accepted.ObjectHeads[id], result.Business.ObjectHeads[id]); }
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered), 0);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s1, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered), 0);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s1, registered), 1);
         }
 
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView meta = P0CatalogView.Load(repository.Store, schemaRoot);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot);
             AssertBootstrapDictionaryCatalog(meta, expected.Root, expected.Key, expected.Point, expected.Scalars, expected.Entries);
             Assert.Equal(s2, repository.GetStateHead("main"));
             Assert.Equal(schemaRoot, repository.Store.ReadGraph(s0).SchemaRoot);
             Assert.Equal(schemaRoot, repository.Store.ReadGraph(s1).SchemaRoot);
             StateModelRegistry registered = models();
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered), 0);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s1, registered), 1);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s2, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered), 0);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s1, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, registered), 1);
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
     }
 
-    private static void InspectBootstrapDictionaryOperations(StateModelSnapshot snapshot, ObjectStateRecord prior,
+    private static void InspectBootstrapDictionaryOperations(ModelExecutionEnvironment snapshot, ObjectStateRecord prior,
         byte[] body, DictionaryLayout layout) {
         StateValueBinding key = snapshot.ResolveStoredValue(layout.KeySlot), value = snapshot.ResolveStoredValue(layout.ValueSlot);
         typeof(DurableSchemaGeneratorTests).GetMethod(nameof(InspectBootstrapDictionaryOperationsTyped), BindingFlags.NonPublic | BindingFlags.Static)!
@@ -211,7 +211,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         reader.EnsureFullyConsumed();
     }
 
-    private static void AssertBootstrapDictionaryCatalog(P0CatalogView meta, DurableSchema root, DurableSchema key,
+    private static void AssertBootstrapDictionaryCatalog(SchemaCatalogView meta, DurableSchema root, DurableSchema key,
         DurableSchema point, DictionaryLayout scalars, DictionaryLayout entries) {
         Assert.Equal(3, meta.Schemas.Count);
         Assert.Equal(4, meta.DescriptorIds.Count);
@@ -224,13 +224,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Throws<InvalidDataException>(() => meta.ResolveLayout(meta.SchemaNodeId(point)));
     }
 
-    private static void AssertBootstrapScalarDictionaryWithoutCatalog(P0Repository repository, P0GraphSnapshot graph,
+    private static void AssertBootstrapScalarDictionaryWithoutCatalog(RepositoryStorageFacade repository, StoredGraphRevision graph,
         uint id, DictionaryLayout expected) {
-        P0ChainEntry first = Assert.Single(repository.Store.ReadObjectChain(graph.Address, id).Entries);
-        var decoded = P0TypedBodyCodec.Decode(first.Record.Body, catalog: null);
+        ObjectVersionChainEntry first = Assert.Single(repository.Store.ReadObjectChain(graph.Address, id).Entries);
+        var decoded = TypedBaseBodyCodec.Decode(first.Record.Body, catalog: null);
         Assert.Equal(ObjectLayout.ForDictionary(expected), decoded.Layout);
         Assert.Equal((byte)DictionaryComparerKind.ScalarDefault, decoded.Body[0]);
-        StateModelSnapshot empty = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment empty = new StateModelRegistry().CreateEnvironment();
         ObjectReaderBinding reader = empty.ResolveObjectReader(decoded.Layout);
         ObjectStateRecord row = reader.Read(new(id), new StateModelBodySource(decoded.Body));
         ((DictionaryStateReader)reader).ValidateLookupKeys(row, _ => throw new InvalidOperationException("Scalar keys require no reference lookup."));

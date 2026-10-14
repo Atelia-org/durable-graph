@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(rootId, originalEdges[originalEdges[rootId].Child].Child);
             repository.CreateTag("user-v1", main.Head);
             sharedV1 = repository.SharedSchemaRoot!.Value;
-            P0CatalogView catalog = P0CatalogView.Load(ReferenceGraphStore(repository), sharedV1);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(ReferenceGraphStore(repository), sharedV1);
             Assert.Equal(old.Schema(), Assert.Single(catalog.Schemas).Value);
             originalShared = PrivateReadRef(repository, 2);
             seedFrames = PrivateReadFrames(PrivateResources(repository).Data);
@@ -112,7 +112,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(b.Schema(), winner.Schema());
 
         using (Repository repository = Repository.OpenExisting(directory.Path, winner.Models())) {
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             draftFrames = PrivateReadFrames(PrivateResources(repository).Data);
             FrameAddress fixedSource = repository.ResolveTag("user-v1").RevisionAddress;
             Assert.Equal(baseline, fixedSource);
@@ -127,7 +127,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             finalSchema = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(sharedV1, finalSchema);
             DevelopmentAssertUpgrade(store, final, winner, baseline, baseline, finalSchema, rootId, originalEdges, originalStorage);
-            P0CatalogView published = P0CatalogView.Load(store, finalSchema);
+            SchemaCatalogView published = SchemaCatalogView.Load(store, finalSchema);
             Assert.Equal(2, published.Schemas.Count);
             Assert.Equal(old.Schema(), published.Schemas[new(old.Schema().Type, 1)]);
             Assert.Equal(winner.Schema(), published.Schemas[new(winner.Schema().Type, 2)]);
@@ -176,7 +176,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress baseline, ObjectId rootId, Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges,
         Dictionary<ObjectId, ObjectStorageInfo> sourceStorage, PrivateRefImage shared, out FrameAddress schema) {
         using Repository repository = Repository.OpenExisting(path, host.Models());
-        P0GraphStore store = ReferenceGraphStore(repository);
+        GraphRecordStore store = ReferenceGraphStore(repository);
         Assert.Equal(baseline, repository.ResolveTag("user-v1").RevisionAddress);
         long appended = store.AppendedFrames;
         repository.CreateBranch(name, repository.ResolveTag("user-v1"));
@@ -188,14 +188,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(sourceStorage.Keys.Order(), branch.Baseline!.Objects.Keys.Order());
         foreach ((ObjectId id, ObjectStorageInfo info) in sourceStorage) { Assert.Equal(info, branch.Baseline!.Objects[id].Storage); }
         Assert.Equal(2, branch.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
-        NormalizedRevision before = branch.Baseline!;
+        NormalizedGraphState before = branch.Baseline!;
         branch.PrepareAndDiscard(branch.State!);
         Assert.Same(before, branch.Baseline);
         FrameAddress eventAddress = branch.CommitEvent(branch.State!).RevisionAddress;
         Assert.Same(before, branch.Baseline);
         Assert.Equal(baseline, branch.StateRevisionAddress);
         Assert.Equal(2, branch.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
-        P0GraphSnapshot eventGraph = store.ReadGraph(eventAddress);
+        StoredGraphRevision eventGraph = store.ReadGraph(eventAddress);
         Assert.Equal(baseline, eventGraph.Parent);
         Assert.Equal(baseline, eventGraph.SourceGraph);
         schema = eventGraph.SchemaRoot!.Value;
@@ -226,23 +226,23 @@ public sealed partial class DurableSchemaGeneratorTests {
         return saved;
     }
 
-    private static void DevelopmentAssertUpgrade(P0GraphStore store, BranchCheckout branch, DevelopmentWorkflowHost host,
+    private static void DevelopmentAssertUpgrade(GraphRecordStore store, BranchCheckout branch, DevelopmentWorkflowHost host,
         FrameAddress source, FrameAddress parent, FrameAddress schema, ObjectId rootId,
         Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges, Dictionary<ObjectId, ObjectStorageInfo> storage) {
-        P0GraphSnapshot graph = store.ReadGraph(branch.Head.RevisionAddress);
+        StoredGraphRevision graph = store.ReadGraph(branch.Head.RevisionAddress);
         Assert.Equal(source, graph.SourceGraph);
         Assert.Equal(parent, graph.Parent);
         Assert.Equal(schema, graph.SchemaRoot);
         Assert.Equal(rootId, graph.RootId);
-        Assert.Equal(storage.Keys.Select(id => id.Value).Order(), graph.Objects.Keys.Order());
+        Assert.Equal(storage.Keys.Select(id => id.Value).Order(), graph.ObjectHeads.Keys.Order());
         ObjectVersionRecord[] records = DefaultRecords(store, graph.Address).ToArray();
         Assert.Equal(edges.Keys.Select(id => id.Value).Order(), records.Select(row => row.ObjectId).Order());
         Assert.Equal(2, records.Length);
         foreach (ObjectVersionRecord record in records) {
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
             Assert.Null(record.PriorAddress);
-            P0ObjectChain chain = store.ReadObjectChain(graph.Address, record.ObjectId);
-            P0ChainEntry entry = Assert.Single(chain.Entries);
+            ObjectVersionChain chain = store.ReadObjectChain(graph.Address, record.ObjectId);
+            ObjectVersionChainEntry entry = Assert.Single(chain.Entries);
             Assert.Equal(source, entry.SourceGraph);
             Assert.Equal(schema, entry.SchemaRoot);
             Assert.Equal(graph.OwnedBatch, chain.Head);
@@ -252,14 +252,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         ObjectId list = edges[rootId].List;
         Assert.Equal(storage[list], branch.Baseline!.Objects[list].Storage);
-        Assert.Equal(storage[list].Head, graph.Objects[list.Value]);
+        Assert.Equal(storage[list].Head, graph.ObjectHeads[list.Value]);
         Assert.All(branch.Baseline!.Objects.Values, row => Assert.False(row.RequiresRewrite));
         DevelopmentAssertIdentity(branch, host, rootId, edges);
     }
 
-    private static void DevelopmentAssertDelta(P0GraphStore store, BranchCheckout branch, FrameAddress source,
+    private static void DevelopmentAssertDelta(GraphRecordStore store, BranchCheckout branch, FrameAddress source,
         FrameAddress saved, FrameAddress schema, ObjectId list, ObjectStorageInfo prior) {
-        P0GraphSnapshot graph = store.ReadGraph(saved);
+        StoredGraphRevision graph = store.ReadGraph(saved);
         Assert.Equal(source, graph.Parent);
         Assert.Equal(source, graph.SourceGraph);
         Assert.Equal(schema, graph.SchemaRoot);
@@ -267,8 +267,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(list.Value, delta.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         Assert.Equal(prior.Head, delta.PriorAddress);
-        P0ObjectChain chain = store.ReadObjectChain(saved, list.Value);
-        P0ChainEntry entry = chain.Entries[^1];
+        ObjectVersionChain chain = store.ReadObjectChain(saved, list.Value);
+        ObjectVersionChainEntry entry = chain.Entries[^1];
         Assert.Equal(source, entry.SourceGraph);
         Assert.Equal(schema, entry.SchemaRoot);
         Assert.Equal(prior.Head, entry.Record.PriorAddress);
@@ -313,7 +313,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         internal Action<IDurableObject, long, long, int> Check { get; } = host.GetMethod("Check")!.CreateDelegate<Action<IDurableObject, long, long, int>>();
         internal Func<ObjectStateRecord, (long Value, ObjectId List, ObjectId Child)> Edges { get; } =
             host.GetMethod("Edges")!.CreateDelegate<Func<ObjectStateRecord, (long, ObjectId, ObjectId)>>();
-        internal DurableSchema Schema() => Models().Snapshot().ResolveCurrentModel(host.Assembly.GetType("DevelopmentWorkflow.Widget")!).CurrentSchema;
+        internal DurableSchema Schema() => Models().CreateEnvironment().ResolveCurrentModel(host.Assembly.GetType("DevelopmentWorkflow.Widget")!).CurrentSchema;
         internal static DevelopmentWorkflowHost Load(GeneratorTestRun run) {
             Type host = EmitAndLoad(run.OutputCompilation).GetType("DevelopmentWorkflow.Host")!;
             return new(host, (int)host.GetField("Offset")!.GetRawConstantValue()!);

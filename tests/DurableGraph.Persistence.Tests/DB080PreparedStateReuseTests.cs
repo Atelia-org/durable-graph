@@ -334,8 +334,8 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         var previous = repository.PreparedStateEntry;
         Assert.NotNull(previous);
         CheckpointAddress newer = main.CommitState(new Node { Value = 2 }, NoRebase);
-        repository.Checkpoint = point => {
-            if (point == (afterPublication ? CommitCheckpoint.AfterPublication : CommitCheckpoint.BeforePublication)) {
+        repository.OperationStageObserver = point => {
+            if (point == (afterPublication ? RepositoryOperationStage.AfterPublication : RepositoryOperationStage.BeforePublication)) {
                 throw new IOException("fork publication interruption");
             }
         };
@@ -344,7 +344,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         Assert.Null(delivered);
         Assert.Equal(afterPublication ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);
         Assert.Equal(afterPublication, repository.IsFaulted);
-        repository.Checkpoint = null;
+        repository.OperationStageObserver = null;
         if (afterPublication) {
             Assert.Null(repository.PreparedStateEntry);
             Assert.Throws<InvalidOperationException>(() => repository.Fork("blocked", newer));
@@ -386,12 +386,12 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             rootId = main.Head.RootId;
         }
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
-            P0GraphStore store = resources.MetaBootstrapStore;
-            P0GraphSnapshot source = store.ReadGraph(original);
-            uint childId = Assert.Single(source.Objects.Keys, id => id != rootId.Value);
-            FrameAddress invalid = store.Append(P0GraphKind.State, original, source.SchemaRoot,
+            GraphRecordStore store = resources.GraphStore;
+            StoredGraphRevision source = store.ReadGraph(original);
+            uint childId = Assert.Single(source.ObjectHeads.Keys, id => id != rootId.Value);
+            FrameAddress invalid = store.Append(StoredGraphKind.State, original, source.SchemaRoot,
                 new(original, rootId, [], [childId])).Address;
-            resources.PublishMetaBootstrapBranchRoot(resources.PrepareMetaBootstrapBranchRoot("invalid", invalid), out _);
+            resources.PublishBranchRoot(resources.PrepareBranchRoot("invalid", invalid), out _);
         }
         // Physical history/root checks permit opening; typed graph validation must still reject.
         using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);

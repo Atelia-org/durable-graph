@@ -74,7 +74,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelBinding Bind(Assembly assembly) {
             var models = new StateModelRegistry();
             assembly.GetType("BodyHost")!.GetMethod("Register")!.Invoke(null, [models]);
-            return models.Snapshot().ResolveCurrentModel(assembly.GetType("Item")!);
+            return models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("Item")!);
         }
         DurableSchema oldSchema = Bind(oldAssembly).CurrentSchema;
         DurableSchema newSchema = Bind(newAssembly).CurrentSchema;

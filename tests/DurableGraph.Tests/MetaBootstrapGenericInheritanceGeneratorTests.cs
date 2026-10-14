@@ -27,38 +27,38 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint[] ids;
         IDurableObject original = create();
         Assert.Equal(5, constructors()); // Root plus two Base and two Derived constructor calls.
-        using (P0Repository repository = P0Repository.CreateNew(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot();
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment();
             IDurableObject[] initial = objects(original);
             for (int i = 0; i < initial.Length; i++) {
                 Assert.Equal(expected[i], snapshot.ResolveCurrentModel(initial[i].GetType()).CurrentSchema);
             }
             check(original, 0);
-            P0Session session = new(repository, "main", registered);
-            using P0SessionSave save = session.Prepare(original); // Complete base/inline closure comes only from actual Capture.
+            BranchSaveSession session = new(repository, "main", registered);
+            using PreparedBranchSave save = session.Prepare(original); // Complete base/inline closure comes only from actual Capture.
             AssertBootstrapGenericInheritanceCatalog(save.Catalog.View, expected);
             Assert.Equal(3, save.Business.Write.Records.Count);
             Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            P0SaveResult result = save.Commit();
+            RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             metaRoot = result.Meta!.Address;
-            P0DecodedRows rows = P0TypedReader.Read(repository.Store, s0, snapshot, session.Catalog.Accepted);
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, s0, snapshot, session.Catalog.Accepted);
             ids = expected.Take(3).Select(schema => Assert.Single(rows.Rows.Values, row => row.Schema!.Equals(schema)).Id.Value).ToArray();
             Assert.Equal(result.Business.RootId.Value, ids[0]);
-            Assert.Equal(3, result.Business.Objects.Count); // Base and Pair declarations have no independent objects.
+            Assert.Equal(3, result.Business.ObjectHeads.Count); // Base and Pair declarations have no independent objects.
             AssertBootstrapGenericInheritanceDtos(rows, ids, 0);
         }
 
         Dictionary<string, string> before = BootstrapContainerUpgradeFileHashes(files.Path);
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
             // This cold metadata path takes no business CLR types or registered model input.
-            P0CatalogView catalog = P0CatalogView.Load(repository.Store, metaRoot);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, metaRoot);
             AssertBootstrapGenericInheritanceCatalog(catalog, expected);
             Assert.NotSame(expected[1], catalog.Schemas[new(expected[1].Type, 1)]);
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
-            P0DecodedRows rows = P0TypedReader.Read(repository.Store, s0, snapshot, catalog);
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, s0, snapshot, catalog);
             Assert.Equal(3, rows.Rows.Count);
             AssertBootstrapGenericInheritanceDtos(rows, ids, 0);
             for (int i = 0; i < ids.Length; i++) {
@@ -76,7 +76,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Throws<InvalidDataException>(() => catalog.DescriptorId(ObjectLayout.ForDurable(malformed)));
                 Assert.Throws<InvalidDataException>(() => snapshot.ResolveReader(malformed));
             }
-            IDurableObject restored = P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered);
+            IDurableObject restored = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered);
             Assert.NotSame(original, restored);
             IDurableObject[] restoredObjects = objects(restored);
             Assert.Equal(typeof(int), restoredObjects[1].GetType().GetGenericArguments()[0]);
@@ -91,16 +91,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         AssertBootstrapContainerUpgradeFilesUnchanged(before, files.Path);
 
-        using (P0Repository repository = P0Repository.OpenExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry registered = models();
-            P0Session session = new(repository, "main", registered);
+            BranchSaveSession session = new(repository, "main", registered);
             IDurableObject restored = session.State!;
             check(restored, 0);
             IDurableObject[] identities = objects(restored);
-            P0GraphSnapshot source = session.StateSource!;
+            StoredGraphRevision source = session.StateSource!;
             change(restored); // One complete leaf Delta must carry both inherited U and inline Pair<T> changes.
             check(restored, 1);
-            using (P0SessionSave save = session.Prepare(restored)) { // Default (5,5); padding makes the actual sparse Delta observable.
+            using (PreparedBranchSave save = session.Prepare(restored)) { // Default (5,5); padding makes the actual sparse Delta observable.
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Equal(0, save.Catalog.AddedDescriptors);
@@ -109,60 +109,60 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal<uint>(ids.Skip(1).Order(), save.Business.Write.Records.Select(row => row.ObjectId));
                 Assert.All(save.Business.Write.Records, row => {
                     Assert.Equal(ObjectVersionKind.Delta, row.Kind);
-                    Assert.Equal(source.Objects[row.ObjectId], row.PriorAddress);
+                    Assert.Equal(source.ObjectHeads[row.ObjectId], row.PriorAddress);
                 });
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s1 = result.Business.Address;
                 Assert.Equal(metaRoot, result.Meta!.Address);
                 Assert.Equal(metaRoot, result.Business.SchemaRoot);
-                Assert.Equal(source.Objects[ids[0]], result.Business.Objects[ids[0]]);
+                Assert.Equal(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
                 Assert.Equal(s1, session.StateSource!.Address);
                 IDurableObject[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(identities[i], after[i]); }
                 foreach (uint id in ids.Skip(1)) {
-                    P0ObjectChain chain = repository.Store.ReadObjectChain(s1, id);
+                    ObjectVersionChain chain = repository.Store.ReadObjectChain(s1, id);
                     Assert.Equal(2, chain.Entries.Count);
                     Assert.Equal(ObjectVersionKind.Base, chain.Entries[0].Record.Kind);
                     Assert.Equal(ObjectVersionKind.Delta, chain.Entries[1].Record.Kind);
-                    Assert.Equal(source.Objects[id], chain.Entries[1].Record.PriorAddress);
+                    Assert.Equal(source.ObjectHeads[id], chain.Entries[1].Record.PriorAddress);
                 }
-                P0CatalogView catalog = session.Catalog.Accepted!;
-                AssertBootstrapGenericInheritanceDtos(P0TypedReader.Read(repository.Store, s1,
-                    registered.Snapshot(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key)), catalog), ids, 1);
+                SchemaCatalogView catalog = session.Catalog.Accepted!;
+                AssertBootstrapGenericInheritanceDtos(StoredGraphDecoder.Read(repository.Store, s1,
+                    registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key)), catalog), ids, 1);
             }
 
-            P0GraphSnapshot accepted = session.StateSource!;
+            StoredGraphRevision accepted = session.StateSource!;
             long frames = repository.Store.AppendedFrames;
-            using (P0SessionSave save = session.Prepare(restored)) {
+            using (PreparedBranchSave save = session.Prepare(restored)) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Empty(save.Business.Write.Records);
                 Assert.Empty(save.Business.Write.RemovedIds);
                 Assert.Equal(s1, save.Business.Write.SourceGraph);
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s2 = result.Business.Address;
                 Assert.Equal(metaRoot, result.Meta!.Address);
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
-                foreach (uint id in ids) { Assert.Equal(accepted.Objects[id], result.Business.Objects[id]); }
+                foreach (uint id in ids) { Assert.Equal(accepted.ObjectHeads[id], result.Business.ObjectHeads[id]); }
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);
             Assert.Equal(5, constructors());
         }
 
         before = BootstrapContainerUpgradeFileHashes(files.Path);
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView catalog = P0CatalogView.Load(repository.Store, metaRoot);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, metaRoot);
             AssertBootstrapGenericInheritanceCatalog(catalog, expected);
             Assert.Equal(s2, repository.GetHead("main"));
             Assert.Equal(s2, repository.GetStateHead("main"));
             Assert.Equal(metaRoot, repository.SharedSchemaRoot);
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key));
             foreach ((FrameAddress graph, int stage) in new[] { (s0, 0), (s1, 1), (s2, 1) }) {
                 Assert.Equal(metaRoot, repository.Store.ReadGraph(graph).SchemaRoot);
-                AssertBootstrapGenericInheritanceDtos(P0TypedReader.Read(repository.Store, graph, snapshot, catalog), ids, stage);
-                check(P0BusinessWorkspace.ReadRoot(repository.Store, graph, registered), stage);
+                AssertBootstrapGenericInheritanceDtos(StoredGraphDecoder.Read(repository.Store, graph, snapshot, catalog), ids, stage);
+                check(BusinessPersistenceAdapter.ReadRoot(repository.Store, graph, registered), stage);
             }
             Assert.Equal(5, constructors());
             Assert.Equal(0, repository.Store.AppendedFrames);
@@ -170,7 +170,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertBootstrapContainerUpgradeFilesUnchanged(before, files.Path);
     }
 
-    private static void AssertBootstrapGenericInheritanceDtos(P0DecodedRows decoded, uint[] ids, int stage) {
+    private static void AssertBootstrapGenericInheritanceDtos(DecodedGraphRows decoded, uint[] ids, int stage) {
         for (int i = 1; i < ids.Length; i++) {
             ObjectStateRecord row = decoded.Rows[new(ids[i])];
             object inherited = StateModelField(row, "Segment0Field1")!;
@@ -192,7 +192,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
     }
 
-    private static void AssertBootstrapGenericInheritanceCatalog(P0CatalogView catalog, DurableSchema[] expected) {
+    private static void AssertBootstrapGenericInheritanceCatalog(SchemaCatalogView catalog, DurableSchema[] expected) {
         Assert.Equal(7, catalog.Schemas.Count);
         Assert.Equal(7, catalog.DescriptorIds.Count);
         foreach (DurableSchema schema in expected) {

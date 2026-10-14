@@ -11,10 +11,10 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class LoadedReferenceWorldTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-reference-world-{Guid.NewGuid():N}");
-    private readonly P0Repository _repository;
-    private P0GraphStore Store => _repository.Store;
+    private readonly RepositoryStorageFacade _repository;
+    private GraphRecordStore Store => _repository.Store;
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
-    public LoadedReferenceWorldTests() => _repository = P0Repository.CreateNew(_root);
+    public LoadedReferenceWorldTests() => _repository = RepositoryStorageFacade.CreateNew(_root);
 
     [Fact]
     public void StoredAndCurrentReferencesUseTheirOwnExactAncestry() {
@@ -38,13 +38,13 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         StateModelRegistry clearedOwner = Registry(
             Model<World>(ownerV2, () => new World(), ownerV1, upgrade: state => state with { NextId = new ObjectId(0) }),
             Model<Node>(currentTarget, () => { targetAllocations++; return new Node(); }, oldTarget));
-        P0BusinessWorkspace loaded = Load(source, clearedOwner);
+        BusinessPersistenceAdapter loaded = Load(source, clearedOwner);
         Assert.Null(((World)loaded.State!).Next);
         Assert.Equal(0, targetAllocations);
-        P0Session session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
-        using P0SessionSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
+        BranchSaveSession session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
+        using PreparedBranchSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(prepared.Business.Write.Records).Kind);
-        Assert.Equal(new uint[] { 1 }, prepared.Commit().Business.Objects.Keys);
+        Assert.Equal(new uint[] { 1 }, prepared.Commit().Business.ObjectHeads.Keys);
     }
 
     [Fact]
@@ -76,9 +76,9 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         if (orphanReference != 0) {
             Assert.Throws<InvalidDataException>(() => Load(source, models));
         } else {
-            P0BusinessWorkspace loaded = Load(source, models);
-            P0Session session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
-            using P0SessionSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
+            BusinessPersistenceAdapter loaded = Load(source, models);
+            BranchSaveSession session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
+            using PreparedBranchSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
             Assert.Equal(new uint[] { 9 }, prepared.Business.Write.RemovedIds);
         }
     }
@@ -90,10 +90,10 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void WrongKindFamilyOrMissingTargetIsRejectedBeforeAllocation(uint reference) {
         DurableSchema worldSchema = Schema("World", 1, "Expected");
         DurableSchema otherSchema = Schema("Other", 1, "Expected");
-        P0PreparedCatalog catalog = PrepareCatalog([worldSchema, otherSchema]);
+        PreparedSchemaCatalogWrite catalog = PrepareCatalog([worldSchema, otherSchema]);
         FrameAddress source = Publish(catalog,
             [Durable(catalog.View, 1, worldSchema, new(reference, 1)),
-             ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("text"), catalog.View)),
+             ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("text"), catalog.View)),
              Durable(catalog.View, 3, otherSchema, new(0, 3))]);
         int allocated = 0;
         StateModelRegistry models = Registry(Model<World>(worldSchema, () => { allocated++; return new World(); }),
@@ -114,7 +114,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         StateModelRegistry models = Registry(Model<World>(schema,
             () => ++allocations == 2 && nullAllocation ? null! : singleton,
             onHydrate: () => hydrations++));
-        P0BusinessWorkspace? delivered = null;
+        BusinessPersistenceAdapter? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = Load(source, models));
         Assert.Null(delivered);
         Assert.Equal(2, allocations);
@@ -143,7 +143,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         }));
         long stateTail = Tail();
         long schemaTail = DataBytes(_repository.Data);
-        P0BusinessWorkspace? delivered = null;
+        BusinessPersistenceAdapter? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = Load(source, models));
         Assert.Null(delivered);
         Assert.Equal(2, hydrations);
@@ -155,27 +155,27 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void ExactTypeCollisionLeavesAllCatalogIndexesUnchanged() {
         StateModelRegistry registry = Registry(Model<World>(Schema("First", 1, "First"), () => new World()));
         Assert.Throws<InvalidOperationException>(() => registry.Register(Model<World>(Schema("Second", 1, "Second"), () => new World())));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Assert.Single(snapshot.Models);
         Assert.Single(snapshot.Types);
         Assert.Single(snapshot.Readers);
         Assert.False(snapshot.Models.ContainsKey(TypeExpr.Named("Second")));
         StateModelBinding second = Model<Node>(Schema("Second", 1, "Second"), () => new Node());
         registry.Register(second);
-        Assert.Same(second, registry.Snapshot().Types[typeof(Node)]);
+        Assert.Same(second, registry.CreateEnvironment().Types[typeof(Node)]);
     }
 
     [Fact]
     public void UnchangedOwnerReferencesAreValidatedAgainstQueriedRevisionMembership() {
         DurableSchema schema = Schema("World", 1, "World");
         FrameAddress original = Seed((1, schema, new State(2, 1)), (2, schema, new State(0, 2)));
-        FrameAddress removed = Store.Append(P0GraphKind.State, original, Store.ReadGraph(original).SchemaRoot,
+        FrameAddress removed = Store.Append(StoredGraphKind.State, original, Store.ReadGraph(original).SchemaRoot,
             new(original, new(1), [], [2])).Address;
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));
         Assert.Throws<InvalidDataException>(() => Load(removed, models));
         Assert.Equal(0, allocations);
-        P0BusinessWorkspace oldView = Load(original, models);
+        BusinessPersistenceAdapter oldView = Load(original, models);
         Assert.Equal((byte)2, Assert.IsType<World>(((World)oldView.State!).Next).Value);
         Assert.Equal(2, allocations);
     }
@@ -195,14 +195,14 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             }));
         long schemaTail = DataBytes(_repository.Data);
         long stateTail = Tail();
-        P0Session session = new(_repository, "main", models);
+        BranchSaveSession session = new(_repository, "main", models);
         Assert.Throws<InvalidDataException>(() => session.Prepare(world, parameters: NoRebase));
         Assert.Equal(3, captures);
         Assert.Equal(schemaTail, DataBytes(_repository.Data));
         Assert.Equal(stateTail, Tail());
 
         lateChild.Value = 3;
-        using P0SessionSave repaired = session.Prepare(world, parameters: NoRebase);
+        using PreparedBranchSave repaired = session.Prepare(world, parameters: NoRebase);
         Assert.Equal(6, captures);
         Assert.Null(repaired.Business.Write.SourceGraph);
         Assert.Equal(3, repaired.Business.Write.Records.Count);
@@ -210,7 +210,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         Assert.Equal(stateTail, Tail()); // Joint preparation does not separately append Schema.
         FrameAddress address = repaired.Commit().Business.Address;
         Assert.True(Tail() > stateTail);
-        P0BusinessWorkspace loaded = Load(address, models);
+        BusinessPersistenceAdapter loaded = Load(address, models);
         Assert.Equal((byte)3, Assert.IsType<Node>(((World)loaded.State!).Next!.Next).Value);
     }
 
@@ -228,7 +228,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             Assert.Equal(count, allocations);
             hydrations++;
         }));
-        P0BusinessWorkspace loaded = Load(address, models);
+        BusinessPersistenceAdapter loaded = Load(address, models);
         Domain? cursor = ((World)loaded.State!);
         for (int id = 1; id <= count; id++) {
             Assert.NotNull(cursor);
@@ -286,23 +286,23 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         foreach (StateModelBinding model in models) registry.Register(model);
         return registry;
     }
-    private P0BusinessWorkspace Load(FrameAddress source, StateModelRegistry models) =>
-        P0BusinessWorkspace.LoadState(Store, source, models);
+    private BusinessPersistenceAdapter Load(FrameAddress source, StateModelRegistry models) =>
+        BusinessPersistenceAdapter.LoadState(Store, source, models);
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
-        P0PreparedCatalog catalog = PrepareCatalog(rows.Select(static row => row.Schema));
+        PreparedSchemaCatalogWrite catalog = PrepareCatalog(rows.Select(static row => row.Schema));
         return Publish(catalog, rows.Select(row => Durable(catalog.View, row.Id, row.Schema, row.State)));
     }
-    private P0PreparedCatalog PrepareCatalog(IEnumerable<DurableSchema> schemas) {
-        P0CatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
+    private PreparedSchemaCatalogWrite PrepareCatalog(IEnumerable<DurableSchema> schemas) {
+        SchemaCatalogWorkspace catalog = new(_repository.EnsureEditingAllowed);
         foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
         return catalog.Prepare();
     }
-    private FrameAddress Publish(P0PreparedCatalog catalog, IEnumerable<ObjectVersionRecord> records) {
-        using P0PendingSave pending = _repository.Prepare("main", P0GraphKind.State, new(null, new(1), records), catalog.Write);
+    private FrameAddress Publish(PreparedSchemaCatalogWrite catalog, IEnumerable<ObjectVersionRecord> records) {
+        using PendingRepositorySave pending = _repository.Prepare("main", StoredGraphKind.State, new(null, new(1), records), catalog.Write);
         return _repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
     }
-    private static ObjectVersionRecord Durable(P0CatalogView catalog, uint id, DurableSchema schema, State state) =>
-        ObjectVersionRecord.CreateBase(id, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), catalog));
+    private static ObjectVersionRecord Durable(SchemaCatalogView catalog, uint id, DurableSchema schema, State state) =>
+        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), catalog));
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);

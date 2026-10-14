@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A 片内部分析命名已实施并限定验收；其余映射仍按分片推进，未取得公开改名或包兼容资格。
+> 2026-10-14；提案源码基线 `246b888`。状态：A 已完成限定验收；B 普通内部命名已取得源码／测试资格，包门禁待验。员工及公开候选仍分片处理。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；A 片结果见 [实施记录](implementation-a.md)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)。
 
 建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
 保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
@@ -29,7 +29,7 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 | `.Schema` | 保留不可变描述与 exact layout | [DurableSchema](../../../src/DurableGraph/Schema/DurableSchema.cs)、[ObjectLayout](../../../src/DurableGraph/Schema/ObjectLayout.cs)不因名称含 State 就成为业务 State 图 |
 | `.Runtime` | 保留执行绑定、捕获、静态状态操作和容器能力 | [ObjectBinding](../../../src/DurableGraph/Runtime/Binding/ObjectBinding.cs)、[StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)含实际 CLR 工厂与执行能力；本轮不按子目录再分公开 namespace |
 | `.Persistence` | 保留持久化集成；接纳去阶段名后的默认内核 | [GraphResources](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)是资源与共同发布 owner；[DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)和工作区连接准确存储视图与 Runtime |
-| `.Persistence.MetaBootstrapP0` | 最终退出这个 CLR namespace；类型逐片进入现有 `.Persistence` | 16 份已跟踪 C# 文件同时承载 Event、State、Meta、物理图与分支保存，见 [P0GraphKind](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[P0Session](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)；P0 是施工阶段，不是当前产品分层 |
+| `.Persistence.MetaBootstrapP0` | B 已移出普通内核；固定员工及绑定表暂留，C 再收尾 | 基线 16 份 C# 中 B 迁移 14 份；当前 [StoredGraphKind](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)承载 Event、State、Meta 与分支保存；P0 不再作为普通产品分层 |
 | `.Serialization`／`.Storage` | 保留；类型按下表逐项判断 | [PreparedBaseBody](../../../src/DurableGraph.Serialization/PreparedBaseBody.cs)、[ObjectVersionPayloadCodec](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)仍是共同字节契约 |
 | `.Generator`／`.Build`／`.SchemaHistory` | 保留工具阶段和 source-linked 文本协议 | [Generator 项目](../../../src/DurableGraph.Generator/DurableGraph.Generator.csproj)、[Build 项目](../../../src/DurableGraph.Build/DurableGraph.Build.csproj)的目标框架与运行方式不同；[Shared 协议](../../../src/Shared/SchemaHistoryReferenceProtocol.cs)不是新运行时包 |
 
@@ -39,8 +39,8 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 
 ## 3. 默认持久化内核：推荐映射
 
-本节当前名称统一位于 `Atelia.DurableGraph.Persistence.MetaBootstrapP0`，均为 `internal`；目标统一位于已有 `.Persistence`。
-这是主线程的推荐拼写，不是多个别名方案。实施时按表逐个处理，不能做全局 `P0` 文本替换。
+本节左侧是提案基线 `Atelia.DurableGraph.Persistence.MetaBootstrapP0` 中的旧名，均为 `internal`；右侧普通内核已由 B 采用并进入现有 `.Persistence`。
+固定员工／登记／固定表的 CLR 映射仍属 C，未实施。表保旧名便于迁移检索，不能做全局 `P0` 文本替换。
 
 ### 3.1 保存、来源和物理图
 
@@ -59,8 +59,8 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 | `P0GraphReadCache` → `GraphPhysicalReadCache`；`P0GraphReadCacheStatistics` → `GraphPhysicalReadStatistics` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs)复用完成封套、batch、directory version 和完整 heads | 不缓存 typed DTO／模型执行结果／领域实例；命中仍不能替代图语义和准确 S 验证 |
 | `P0SaveCheckpoint` → `RepositorySaveStage` | [声明](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphContracts.cs)是共同保存 hook 的阶段；[Kill 见证](../../../experiments/MetaBootstrapCrashProbe/Program.cs)据此选择窗口 | 与公共 Checkpoint 历史位置不同；只改符号，保 hook 位置、枚举值和实验窗口含义 |
 
-`StoredGraphRevision.Objects` 实际是 head map，建议随该类型改为 `ObjectHeads`，收掉重复 `Heads` 入口并更新调用者。
-GraphResources 上指向默认路径的内部 `MetaBootstrap*` 成员也按实际职责去掉路径选择含义，例如 `MetaBootstrapStore` → `GraphStore`。
+基线 `P0GraphSnapshot.Objects/Heads` 实际是同一 head map，B 已统一为 `StoredGraphRevision.ObjectHeads` 并适配调用者。
+GraphResources 上指向默认路径的内部成员已按实际职责收回 backend 标签，例如 `MetaBootstrapStore` → `GraphStore`。
 自举本身仍是有效机制；说明固定解释依赖时可以继续使用 bootstrap，不能把所有出现该词的描述都当历史垃圾。
 
 ### 3.2 Schema catalog 与固定员工
@@ -77,7 +77,7 @@ GraphResources 上指向默认路径的内部 `MetaBootstrap*` 成员也按实�
 
 ## 4. Persistence 的其他内部名称
 
-本节当前／目标名均在 `Atelia.DurableGraph.Persistence`；nested 类型先保 nested，不借命名工作改文件或抽取结构。
+本节左侧为 B 基线，右侧已实施，均在 `Atelia.DurableGraph.Persistence`；nested 类型保 nested，文件及结构未抽取。
 
 | 当前名 → 推荐名 | 事实、传播范围与边界 |
 |---|---|
@@ -171,6 +171,6 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-提案调查与实际文档复核已完成；原始候选基于 `246b888`，A 已采用 §5 右侧名称，其余表仍是待实施映射。
-[A 片记录](implementation-a.md)集中维护源码边界、真实新旧 Generator/Build 等价、根构建和相关测试结果；不将其回填为 B／C／D 的资格。
-原有 117 处历史引用缺口未扩入本案。下一片为 B 普通内核与内部执行语义；员工、公开名称及 Generator 入口独立验收。
+原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，员工／公开候选仍待各自分片。
+[A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
+原有 117 处历史引用缺口未扩入本案。B 先完成包交付限定验收；C 员工、D 公开名称及 Generator 入口、E 后续组织仍独立处理。

@@ -31,13 +31,13 @@ public sealed partial class GraphResources : IDisposable {
     internal PublicationStore Versions => _versions;
 
     public static GraphResources CreateNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        CreateMetaBootstrapNew(path, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
+        CreateStorageNew(path, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
     public static GraphResources OpenExisting(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrapExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
-    public static GraphResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrapReadOnlyExisting(path, readCacheBudgetBytes);
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
+        OpenStorageExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
+    public static GraphResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
+        OpenStorageReadOnlyExisting(path, readCacheBudgetBytes);
 
     internal static void ValidateBranchName(string name) {
         if (name is null || name.Length is < 1 or > 128 || name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(".lock", StringComparison.Ordinal)) {
@@ -73,7 +73,7 @@ public sealed partial class GraphResources : IDisposable {
         _faulted = true;
         // Data can remain healthy after a DG delivery/install failure. A retained owned facade
         // must still reject both warmed reads and new appends until this owner is reopened.
-        _metaBootstrapStore.Dispose();
+        _graphStore.Dispose();
     }
 
     public void Dispose() {
@@ -82,7 +82,7 @@ public sealed partial class GraphResources : IDisposable {
         _disposed = true;
         _pending?.Finish();
         _pending = null;
-        CloseResources(null, _metaBootstrapStore, _versions, Data);
+        CloseResources(null, _graphStore, _versions, Data);
     }
 
     // Keep failure evidence while attempting every owned resource. Backing owners aggregate their

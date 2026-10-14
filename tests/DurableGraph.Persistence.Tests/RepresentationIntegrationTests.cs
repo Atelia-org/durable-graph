@@ -18,57 +18,57 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         ObjectLayout layout = ObjectLayout.ForDurable(WorldSchema);
         FrameAddress first, changed, rewritten, schemaRoot;
         ObjectId descriptor;
-        using (P0Repository repository = P0Repository.CreateNew(_root)) {
-            P0CatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root)) {
+            SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
             catalog.Set(layout);
-            P0PreparedCatalog prepared = catalog.Prepare();
+            PreparedSchemaCatalogWrite prepared = catalog.Prepare();
             descriptor = prepared.View.DescriptorId(layout);
-            P0GraphSnapshot initial = Save(repository, null, new(1), [
-                ObjectVersionRecord.CreateBase(1, P0TypedBodyCodec.Encode(layout, new PreparedBaseBody([2, 7]), prepared.View)),
-                ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("old"), prepared.View)),
+            StoredGraphRevision initial = Save(repository, null, new(1), [
+                ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody([2, 7]), prepared.View)),
+                ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("old"), prepared.View)),
             ], prepared.Write);
             first = initial.Address;
             schemaRoot = initial.SchemaRoot!.Value;
-            P0GraphSnapshot delta = Save(repository, first, new(1),
-                [ObjectVersionRecord.CreateDelta(1, initial.Objects[1], [9])]);
+            StoredGraphRevision delta = Save(repository, first, new(1),
+                [ObjectVersionRecord.CreateDelta(1, initial.ObjectHeads[1], [9])]);
             changed = delta.Address;
             rewritten = Save(repository, changed, new(1), [
-                ObjectVersionRecord.CreateBase(1, P0TypedBodyCodec.Encode(layout, new PreparedBaseBody([2, 11]), prepared.View)),
+                ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody([2, 11]), prepared.View)),
             ]).Address;
         }
 
-        using P0Repository reopened = P0Repository.OpenReadOnlyExisting(_root);
+        using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_root);
         long tail = DataBytes(reopened.Data);
         StateModelRegistry readers = WorldReaders();
-        Assert.Equal((byte)7, DecodedRevision.ReadSplit(reopened.Store, first, readers).GetRequired(new(1)).GetState<WorldState>().Value);
-        DecodedRevision deltaView = DecodedRevision.ReadSplit(reopened.Store, changed, readers);
+        Assert.Equal((byte)7, DecodedRevision.ReadStoredGraph(reopened.Store, first, readers).GetRequired(new(1)).GetState<WorldState>().Value);
+        DecodedRevision deltaView = DecodedRevision.ReadStoredGraph(reopened.Store, changed, readers);
         Assert.Equal(new WorldState(new(2), 9), deltaView.GetRequired(new(1)).GetState<WorldState>());
         Assert.Equal("old", deltaView.GetRequired(new(2)).StringContent);
-        DecodedRevision baseView = DecodedRevision.ReadSplit(reopened.Store, rewritten, readers);
+        DecodedRevision baseView = DecodedRevision.ReadStoredGraph(reopened.Store, rewritten, readers);
         Assert.Equal((byte)11, baseView.GetRequired(new(1)).GetState<WorldState>().Value);
 
-        P0CatalogView selected = P0CatalogView.Load(reopened.Store, schemaRoot);
+        SchemaCatalogView selected = SchemaCatalogView.Load(reopened.Store, schemaRoot);
         Assert.Equal(descriptor, selected.DescriptorId(layout));
         Assert.Equal(layout, selected.ResolveLayout(descriptor));
-        P0ObjectChain oldChain = reopened.Store.ReadObjectChain(changed, 1);
+        ObjectVersionChain oldChain = reopened.Store.ReadObjectChain(changed, 1);
         Assert.Equal(2, oldChain.Entries.Count);
-        Assert.Equal(reopened.Store.ReadGraph(first).Objects[1], oldChain.Entries[1].Record.PriorAddress);
+        Assert.Equal(reopened.Store.ReadGraph(first).ObjectHeads[1], oldChain.Entries[1].Record.PriorAddress);
         Assert.Equal(new byte[] { 9 }, oldChain.Entries[1].Record.Body.ToArray());
         Assert.Equal(oldChain.Head, deltaView.ObjectHeads[new(1)]);
-        Assert.Equal(reopened.Store.ReadGraph(first).Objects[2], deltaView.ObjectHeads[new(2)]);
+        Assert.Equal(reopened.Store.ReadGraph(first).ObjectHeads[2], deltaView.ObjectHeads[new(2)]);
         Assert.NotEqual(changed, deltaView.ObjectHeads[new(1)]);
         Assert.Equal(oldChain.Entries.Sum(static entry => (long)entry.PayloadBytes), deltaView.ObjectStorage[new(1)].ReconstructionPayloadBytes);
-        P0ObjectChain newChain = reopened.Store.ReadObjectChain(rewritten, 1);
+        ObjectVersionChain newChain = reopened.Store.ReadObjectChain(rewritten, 1);
         Assert.Single(newChain.Entries);
         Assert.Equal(newChain.Head, baseView.ObjectHeads[new(1)]);
         Assert.Equal((long)newChain.Entries[0].PayloadBytes, baseView.ObjectStorage[new(1)].ReconstructionPayloadBytes);
-        foreach (P0ChainEntry entry in new[] { oldChain.Entries[0], newChain.Entries[0] }) {
+        foreach (ObjectVersionChainEntry entry in new[] { oldChain.Entries[0], newChain.Entries[0] }) {
             Assert.Equal(schemaRoot, entry.SchemaRoot);
             BareValueReader header = new(entry.Record.Body);
-            Assert.Equal(P0TypedBodyCodec.FormatVersion, header.ReadByte());
+            Assert.Equal(TypedBaseBodyCodec.FormatVersion, header.ReadByte());
             Assert.Equal((byte)1, header.ReadByte());
             Assert.Equal(descriptor.Value, header.ReadVarUInt32());
-            Assert.Equal(layout, P0TypedBodyCodec.Decode(entry.Record.Body, selected).Layout);
+            Assert.Equal(layout, TypedBaseBodyCodec.Decode(entry.Record.Body, selected).Layout);
         }
         Assert.Equal(tail, DataBytes(reopened.Data));
     }
@@ -80,20 +80,20 @@ public sealed class RepresentationIntegrationTests : IDisposable {
     [InlineData(false, true)]
     public void ColdReadRejectsUnknownOrInlineMetaIdInOtherwiseValidBusinessFrames(bool invalidRoot, bool inlineDescriptor) {
         FrameAddress revision;
-        using (P0Repository repository = P0Repository.CreateNew(_root)) {
-            P0CatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root)) {
+            SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
             catalog.Set(WorldSchema);
             DurableSchema inline = new("Value", 1, SchemaKind.InlineValue);
             if (inlineDescriptor) { catalog.Set(inline); }
-            P0PreparedCatalog prepared = catalog.Prepare();
+            PreparedSchemaCatalogWrite prepared = catalog.Prepare();
             ObjectId invalid = inlineDescriptor ? prepared.View.SchemaNodeId(inline) : new(prepared.View.Rows.Keys.Max().Value + 1);
             ArrayBufferWriter<byte> buffer = new();
             BareValueWriter writer = new(buffer);
-            writer.WriteByte(P0TypedBodyCodec.FormatVersion);
+            writer.WriteByte(TypedBaseBodyCodec.FormatVersion);
             writer.WriteByte(1);
             writer.WriteVarUInt32(invalid.Value);
             writer.WriteRawBytes([0, 1]);
-            byte[] good = P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(WorldSchema), new PreparedBaseBody([0, 1]), prepared.View);
+            byte[] good = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(WorldSchema), new PreparedBaseBody([0, 1]), prepared.View);
             ObjectVersionRecord[] rows = invalidRoot
                 ? [ObjectVersionRecord.CreateBase(1, buffer.WrittenSpan)]
                 : [ObjectVersionRecord.CreateBase(1, good), ObjectVersionRecord.CreateBase(2, buffer.WrittenSpan)];
@@ -101,8 +101,8 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         }
 
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
-        using (P0Repository reopened = P0Repository.OpenReadOnlyExisting(_root)) {
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reopened.Store, revision, WorldReaders()));
+        using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_root)) {
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, revision, WorldReaders()));
         }
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
@@ -115,25 +115,25 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: point)));
         ObjectId descriptor;
         FrameAddress revision, schemaRoot;
-        using (P0Repository repository = P0Repository.CreateNew(_root)) {
-            P0CatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root)) {
+            SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
             catalog.Set(layout);
-            P0PreparedCatalog prepared = catalog.Prepare();
+            PreparedSchemaCatalogWrite prepared = catalog.Prepare();
             descriptor = prepared.View.DescriptorId(layout);
             ArrayBufferWriter<byte> buffer = new();
             BareValueWriter writer = new(buffer);
             writer.WriteVarUInt32(2);
             writer.WriteVarInt32(3);
             writer.WriteVarInt32(7);
-            byte[] body = P0TypedBodyCodec.Encode(layout, new PreparedBaseBody(buffer.WrittenSpan), prepared.View);
-            P0GraphSnapshot saved = Save(repository, null, new(12), [ObjectVersionRecord.CreateBase(12, body)], prepared.Write);
+            byte[] body = TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody(buffer.WrittenSpan), prepared.View);
+            StoredGraphRevision saved = Save(repository, null, new(12), [ObjectVersionRecord.CreateBase(12, body)], prepared.Write);
             revision = saved.Address;
             schemaRoot = saved.SchemaRoot!.Value;
         }
 
-        using P0Repository reopened = P0Repository.OpenReadOnlyExisting(_root);
+        using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_root);
         long tail = DataBytes(reopened.Data);
-        DecodedRevision retained = DecodedRevision.ReadSplit(reopened.Store, revision, RetiredPointReaders(includeCode: true));
+        DecodedRevision retained = DecodedRevision.ReadStoredGraph(reopened.Store, revision, RetiredPointReaders(includeCode: true));
         Assert.Equal(layout, retained.GetRequired(new(12)).Layout);
         Assert.Throws<InvalidDataException>(() => retained.SourceModels!.GetDomainType(layout.Type));
         FrozenArrayState<int> decoded = retained.GetRequired(new(12)).GetArrayState<int>();
@@ -143,9 +143,9 @@ public sealed class RepresentationIntegrationTests : IDisposable {
 
         // A fresh metadata-only configuration must fail even after a different
         // configuration successfully bound this descriptor on the same Store.
-        P0CatalogView selected = P0CatalogView.Load(reopened.Store, schemaRoot);
+        SchemaCatalogView selected = SchemaCatalogView.Load(reopened.Store, schemaRoot);
         Assert.Equal(layout, selected.ResolveLayout(descriptor));
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reopened.Store, revision, RetiredPointReaders(includeCode: false)));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, revision, RetiredPointReaders(includeCode: false)));
         Assert.Equal(tail, DataBytes(reopened.Data));
     }
 
@@ -171,9 +171,9 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         return readers;
     }
 
-    private static P0GraphSnapshot Save(P0Repository repository, FrameAddress? source,
-        ObjectId root, ObjectVersionRecord[] records, P0PreparedGraphWrite? catalog = null) {
-        using P0PendingSave pending = repository.Prepare("main", P0GraphKind.State, new(source, root, records), catalog);
+    private static StoredGraphRevision Save(RepositoryStorageFacade repository, FrameAddress? source,
+        ObjectId root, ObjectVersionRecord[] records, PreparedGraphWrite? catalog = null) {
+        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, new(source, root, records), catalog);
         return repository.Commit(pending).Business;
     }
 

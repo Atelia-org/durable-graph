@@ -16,7 +16,7 @@ public sealed class ArrayBindingCatalogTests {
     [InlineData(typeof(int[][]))]
     [InlineData(typeof(int[][,]))]
     public void ArrayTypesRoundTripAndUseAnObjectIdSlot(Type domain) {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         TypeExpr type = snapshot.GetTypeExpr(domain);
         Assert.Equal(domain, snapshot.GetDomainType(type));
         StateValueBinding slot = snapshot.ResolveCurrentValue(domain);
@@ -36,7 +36,7 @@ public sealed class ArrayBindingCatalogTests {
         registry.Register(new StateDefinitionBinding("Box", SchemaKind.ReferenceObject, 1, typeof(Box<>),
             [new("Box", 1, SchemaKind.ReferenceObject, 1, [])],
             currentModelFactory: (_, _) => { bodyFactories++; throw new InvalidOperationException("Unexpected class body closure."); }));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Type domain = typeof(Box<int[]>[][]);
         TypeExpr type = snapshot.GetTypeExpr(domain);
         Assert.Equal(domain, snapshot.GetDomainType(type));
@@ -48,7 +48,7 @@ public sealed class ArrayBindingCatalogTests {
 
     [Fact]
     public void UnsupportedArrayKindsAndElementsFailAtBinding() {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         Type[] unsupported = [typeof(int).MakeArrayType(1), typeof(int).MakeArrayType(5),
             typeof(object[]), typeof(DateTime[]), typeof(Box<>).MakeArrayType()];
         foreach (Type type in unsupported) {
@@ -71,9 +71,9 @@ public sealed class ArrayBindingCatalogTests {
             ObjectLayout layout = ObjectLayout.ForArray(new(TypeExprKind.VectorArray,
                 new(1, TypeTag.InlineValue, inlineSchema: exact)));
             DurableSchema conflict = new("RetiredPoint", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int64));
-            P0CatalogView selected = LoadView("matching", exact), other = LoadView("conflicting", conflict);
+            SchemaCatalogView selected = LoadView("matching", exact), other = LoadView("conflicting", conflict);
             int lookups = 0;
-            StateModelSnapshot snapshot = registry.Snapshot(schemaLookup: key => {
+            ModelExecutionEnvironment snapshot = registry.CreateEnvironment(schemaLookup: key => {
                 lookups++;
                 return selected.Schemas.GetValueOrDefault(key);
             });
@@ -84,27 +84,27 @@ public sealed class ArrayBindingCatalogTests {
             Assert.Equal(layout, reader.Layout);
             Assert.Throws<InvalidDataException>(() => snapshot.GetDomainType(layout.Type));
 
-            StateModelSnapshot rejected = registry.Snapshot(schemaLookup: key => other.Schemas.GetValueOrDefault(key));
+            ModelExecutionEnvironment rejected = registry.CreateEnvironment(schemaLookup: key => other.Schemas.GetValueOrDefault(key));
             InvalidDataException error = Assert.Throws<InvalidDataException>(() => rejected.ResolveObjectReader(layout));
             Assert.IsType<SchemaConflictException>(error.InnerException);
             Assert.Same(reader, snapshot.ResolveObjectReader(layout));
             Assert.Equal(exact, selected.Schemas[new(exact.Type, exact.Version)]);
             Assert.Equal(conflict, other.Schemas[new(exact.Type, exact.Version)]);
 
-            P0CatalogView LoadView(string name, DurableSchema schema) {
+            SchemaCatalogView LoadView(string name, DurableSchema schema) {
                 string path = Path.Combine(directory, name);
                 FrameAddress selectedRoot;
-                using (var writer = P0Repository.CreateNew(path)) {
-                    P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+                using (var writer = RepositoryStorageFacade.CreateNew(path)) {
+                    SchemaCatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
                     catalog.Set(schema);
-                    P0PreparedCatalog candidate = catalog.Prepare();
-                    using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State,
+                    PreparedSchemaCatalogWrite candidate = catalog.Prepare();
+                    using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State,
                         new(null, new(1), [ObjectVersionRecord.CreateBase(1,
-                            P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                            TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
                     selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
                 }
-                using var reopened = P0Repository.OpenReadOnlyExisting(path);
-                return P0CatalogView.Load(reopened.Store, selectedRoot);
+                using var reopened = RepositoryStorageFacade.OpenReadOnlyExisting(path);
+                return SchemaCatalogView.Load(reopened.Store, selectedRoot);
             }
         } finally { Directory.Delete(directory, recursive: true); }
     }
@@ -112,7 +112,7 @@ public sealed class ArrayBindingCatalogTests {
     [Fact]
     public void SelectedArrayRulesAreExplicitUniqueAndFrozenPerSnapshot() {
         StateModelRegistry registry = new();
-        StateModelSnapshot before = registry.Snapshot();
+        ModelExecutionEnvironment before = registry.CreateEnvironment();
         Assert.Throws<InvalidOperationException>(() => registry.UseArrayElementUpgrades(typeof(Rules)));
         StateValueUpgradeRuleSet rules = new(typeof(Rules), []);
         registry.Register(rules);
@@ -121,14 +121,14 @@ public sealed class ArrayBindingCatalogTests {
         registry.UseArrayElementUpgrades(typeof(Rules));
         Assert.Throws<InvalidOperationException>(() => registry.UseArrayElementUpgrades(typeof(OtherRules)));
         Assert.Null(before.ArrayElementUpgradeRuleSet);
-        StateModelSnapshot after = registry.Snapshot();
+        ModelExecutionEnvironment after = registry.CreateEnvironment();
         Assert.Equal(typeof(Rules), after.ArrayElementUpgradeRuleSet);
         Assert.Same(rules, after.GetValueUpgradeRuleSet(after.ArrayElementUpgradeRuleSet!));
     }
 
     [Fact]
     public void InvalidReferenceElementMetadataIsRejectedBeforeEvenAnEmptyArrayCanBeRead() {
-        StateModelSnapshot snapshot = RetainedArrayDeclarations();
+        ModelExecutionEnvironment snapshot = RetainedArrayDeclarations();
         TypeExpr scalar = TypeExpr.Builtin(TypeTag.Int32);
         TypeExpr[] invalid = [
             TypeExpr.Named("Point"), // An inline family cannot occupy an ObjectId element slot.
@@ -148,7 +148,7 @@ public sealed class ArrayBindingCatalogTests {
 
     [Fact]
     public void NominalArrayOperandsNeedRetainedMetadataButNotCurrentClrTypesOrObjectBodies() {
-        StateModelSnapshot snapshot = RetainedArrayDeclarations();
+        ModelExecutionEnvironment snapshot = RetainedArrayDeclarations();
         TypeExpr point = TypeExpr.Named("Point");
         TypeExpr[] valid = [TypeExpr.Named("Node"), TypeExpr.Named("Box", point),
             TypeExpr.VectorArray(point), TypeExpr.Named("Box", TypeExpr.MultiDimArray(point, 4)),
@@ -168,7 +168,7 @@ public sealed class ArrayBindingCatalogTests {
             static (ref BareValueReader reader) => throw new InvalidOperationException("Body must not be closed or executed."),
             static (ref BareValueReader reader, in int prior) => throw new InvalidOperationException("Body must not be executed."),
             static (in int state, IStateReferenceVisitor visitor) => { });
-        StateModelSnapshot snapshot = new([], [], new() { [new(schema.Type, schema.Version)] = legacy });
+        ModelExecutionEnvironment snapshot = new([], [], new() { [new(schema.Type, schema.Version)] = legacy });
         ObjectLayout layout = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, DurableFieldInfo.Reference(1, schema.Type)));
         Assert.Equal(layout, snapshot.ResolveObjectReader(layout).Layout);
         ObjectLayout wrongArity = ObjectLayout.ForArray(new(TypeExprKind.VectorArray,
@@ -176,7 +176,7 @@ public sealed class ArrayBindingCatalogTests {
         Assert.Throws<InvalidDataException>(() => snapshot.ResolveObjectReader(wrongArity));
     }
 
-    private static StateModelSnapshot RetainedArrayDeclarations() {
+    private static ModelExecutionEnvironment RetainedArrayDeclarations() {
         StateModelRegistry registry = new();
         registry.Register(new StateDefinitionBinding("Point", SchemaKind.InlineValue, 0, null,
             [new("Point", 1, SchemaKind.InlineValue, 0, [])]));
@@ -184,7 +184,7 @@ public sealed class ArrayBindingCatalogTests {
             [new("Node", 1, SchemaKind.ReferenceObject, 0, [])]));
         registry.Register(new StateDefinitionBinding("Box", SchemaKind.ReferenceObject, 1, null,
             [new("Box", 1, SchemaKind.ReferenceObject, 1, [])]));
-        return registry.Snapshot();
+        return registry.CreateEnvironment();
     }
 
     private sealed class Box<T> : IDurableObject;

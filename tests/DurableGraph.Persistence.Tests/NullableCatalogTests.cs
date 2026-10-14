@@ -15,7 +15,7 @@ public sealed class NullableCatalogTests {
     [InlineData(typeof(List<int?>))]
     [InlineData(typeof(List<double?[]>))]
     public void CurrentNominalCompositionsRoundTripAndUseExactNullableState(Type domain) {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         TypeExpr type = snapshot.GetTypeExpr(domain);
         Assert.Equal(domain, snapshot.GetDomainType(type));
         StateValueBinding binding = snapshot.ResolveCurrentValue(domain);
@@ -40,7 +40,7 @@ public sealed class NullableCatalogTests {
     [InlineData(typeof(DateTime?))]
     [InlineData(typeof(List<DateTime?>))]
     public void UnsupportedNullableChildrenFailClosed(Type domain) {
-        StateModelSnapshot snapshot = new StateModelRegistry().Snapshot();
+        ModelExecutionEnvironment snapshot = new StateModelRegistry().CreateEnvironment();
         Assert.Throws<InvalidDataException>(() => snapshot.GetTypeExpr(domain));
         Assert.Throws<InvalidDataException>(() => snapshot.ResolveCurrentValue(domain));
     }
@@ -65,11 +65,11 @@ public sealed class NullableCatalogTests {
         DurableSchema owner = new("O", 1, Slot(point));
         ObjectLayout list = ObjectLayout.ForList(new(Slot(point)));
         ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.Rank2Array, Slot(point)));
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(owner);
         workspace.Set(list);
         workspace.Set(array);
-        P0CatalogView view = workspace.Prepare().View;
+        SchemaCatalogView view = workspace.Prepare().View;
         Assert.Equal(2, view.Schemas.Count);
         Assert.Equal(4, view.DescriptorIds.Count); // Point, owner and two dynamic containers.
         DurableSchema projectedPoint = view.Schemas[new("P", 1)];
@@ -95,7 +95,7 @@ public sealed class NullableCatalogTests {
     [Fact]
     public void RetainedNullableValuesNeedNoDomainAndCacheTheirCompleteChildLayout() {
         StateModelRegistry registry = RetainedPoints();
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         StateValueBinding first = snapshot.ResolveStoredValue(Slot(Point(1)));
         StateValueBinding second = snapshot.ResolveStoredValue(Slot(Point(2)));
         Assert.Equal(typeof(NullableState<int>), first.StateType);
@@ -115,9 +115,9 @@ public sealed class NullableCatalogTests {
 
     [Fact]
     public void CachedNullableValuesAndEmptyContainerReadersRecheckChangedSchemaLookup() {
-        P0CatalogView selected = Project(Point(1));
+        SchemaCatalogView selected = Project(Point(1));
         StateModelRegistry.FrozenConfiguration configuration = RetainedPoints().FreezeConfiguration();
-        StateModelSnapshot snapshot = configuration.CreateSnapshot(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
+        ModelExecutionEnvironment snapshot = configuration.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
         DurableFieldInfo slot = Slot(Point(1));
         ObjectLayout list = ObjectLayout.ForList(new(slot));
         ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, slot));
@@ -139,7 +139,7 @@ public sealed class NullableCatalogTests {
         DurableSchema owner = new("O", 1, DurableFieldInfo.Reference(1,
             TypeExpr.List(TypeExpr.Nullable(TypeExpr.Named("P")))));
         DurableSchema wrongKind = new("P", 1);
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         foreach (DurableSchema schema in ownerFirst ? new[] { owner, wrongKind } : [wrongKind, owner]) {
             workspace.Set(schema);
         }
@@ -155,7 +155,7 @@ public sealed class NullableCatalogTests {
             inline = new DurableSchema($"NullableDepth{index}", 1, SchemaKind.InlineValue, Slot(inline));
         }
         ObjectLayout list = ObjectLayout.ForList(new(Slot(inline)));
-        P0CatalogWorkspace workspace = new(static () => { });
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(inline);
         workspace.Set(list);
         if (!valid) {
@@ -163,14 +163,14 @@ public sealed class NullableCatalogTests {
             Assert.Null(workspace.Accepted);
             return;
         }
-        P0CatalogView prepared = workspace.Prepare().View;
+        SchemaCatalogView prepared = workspace.Prepare().View;
         Dictionary<ObjectId, ObjectStateRecord> rows = prepared.Rows.ToDictionary();
         ObjectStateRecord declarations = rows[prepared.DescriptorListId];
         // Project the outer container first, so a child-first memo cannot mask
         // the complete Nullable(InlineValue) chain's depth.
         rows[declarations.Id] = new(declarations.Id, declarations.Layout.List!,
             new FrozenListState<ObjectId>(prepared.DescriptorIds.Reverse().ToArray()));
-        P0CatalogView projected = new(prepared.RootId, rows);
+        SchemaCatalogView projected = new(prepared.RootId, rows);
         Assert.Equal(depth, projected.Schemas.Count);
         Assert.Equal(inline, projected.Schemas[new(inline.Type, 1)]);
         Assert.Equal(list, projected.ResolveLayout(projected.DescriptorId(list)));
@@ -187,8 +187,8 @@ public sealed class NullableCatalogTests {
         Assert.Throws<InvalidDataException>(() => ReadType(tooDeep));
     }
 
-    private static P0CatalogView Project(DurableSchema schema) {
-        P0CatalogWorkspace workspace = new(static () => { });
+    private static SchemaCatalogView Project(DurableSchema schema) {
+        SchemaCatalogWorkspace workspace = new(static () => { });
         workspace.Set(schema);
         return workspace.Prepare().View;
     }

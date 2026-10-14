@@ -58,12 +58,12 @@ public sealed class SharedEventHistoryTests : IDisposable {
         }
 
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore store = resources.MetaBootstrapStore;
-            P0GraphSnapshot next = store.ReadGraph(saved);
+            GraphRecordStore store = resources.GraphStore;
+            StoredGraphRevision next = store.ReadGraph(saved);
             IReadOnlyList<ObjectVersionRecord> writes = StorageTestData.LocalRecords(store, saved);
             Assert.Equal(initial, next.SourceGraph);
             Assert.Equal(initial, store.ReadGraph(eventRevision).SourceGraph);
-            Assert.Equal(store.ReadGraph(initial).Objects.Keys.Order(), store.ReadGraph(saved).Objects.Keys.Order());
+            Assert.Equal(store.ReadGraph(initial).ObjectHeads.Keys.Order(), store.ReadGraph(saved).ObjectHeads.Keys.Order());
             if (editState) {
                 // Only the existing child and List changed; string IDs and World reference slots remain stable.
                 Assert.Equal(2, writes.Count);

@@ -16,7 +16,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         IDurableObject world = host.GetMethod("Create")!.CreateDelegate<Func<IDurableObject>>()();
         var set = host.GetMethod("Set")!.CreateDelegate<Action<IDurableObject, int>>();
-        StateModelSnapshot models = registry.Snapshot();
+        ModelExecutionEnvironment models = registry.CreateEnvironment();
         CaptureSession session = new();
         ObjectStateRecord Capture() {
             using var context = session.BeginCapture(models);

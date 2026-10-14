@@ -11,22 +11,22 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
 
     [Fact]
     public void PendingAndPreparingSavesRejectBranchAndTagInsertionWithoutConsumingTheirCandidates() {
-        using GraphResources resources = GraphResources.CreateMetaBootstrapNew(_path);
+        using GraphResources resources = GraphResources.CreateStorageNew(_path);
         Seed(resources);
-        FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
-        GraphResources.MetaBootstrapBranchUpdate branch = resources.PrepareMetaBootstrapBranchRoot("allowed", head);
+        FrameAddress head = resources.GetBranchHead("main")!.Value;
+        GraphResources.PreparedBranchRootUpdate branch = resources.PrepareBranchRoot("allowed", head);
         PublicationSnapshot before = Snapshot(resources);
 
-        using (P0PendingSave pending = resources.PrepareMetaBootstrap("main", P0GraphKind.State, Business(resources, 2))) {
-            Assert.True(resources.HasMetaBootstrapPending);
+        using (PendingRepositorySave pending = resources.PrepareSave("main", StoredGraphKind.State, Business(resources, 2))) {
+            Assert.True(resources.HasPendingSave);
             AssertBlocked(resources, branch, head, "pending-tag");
             Assert.True(pending.IsPrepared);
             AssertUnchanged(resources, before);
         }
-        Assert.False(resources.HasMetaBootstrapPending);
+        Assert.False(resources.HasPendingSave);
 
         bool reached = false;
-        using (P0PendingSave pending = resources.PrepareMetaBootstrapFrom("main", P0GraphKind.State, () => {
+        using (PendingRepositorySave pending = resources.PrepareSaveFrom("main", StoredGraphKind.State, () => {
             reached = true;
             AssertBlocked(resources, branch, head, "preparing-tag");
             AssertUnchanged(resources, before);
@@ -34,35 +34,35 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
         })) {
             Assert.True(reached);
             Assert.True(pending.IsPrepared);
-            Assert.True(resources.HasMetaBootstrapPending);
+            Assert.True(resources.HasPendingSave);
             AssertUnchanged(resources, before);
         }
-        Assert.False(resources.HasMetaBootstrapPending);
+        Assert.False(resources.HasPendingSave);
         AssertUnchanged(resources, before);
         AssertTagMissing(resources, "pending-tag");
         AssertTagMissing(resources, "preparing-tag");
 
         // The rejected publication never consumed this genuine owner-issued candidate.
-        resources.PublishMetaBootstrapBranchRoot(branch, out PublicationOutcome branchOutcome);
+        resources.PublishBranchRoot(branch, out PublicationOutcome branchOutcome);
         Assert.Equal(PublicationOutcome.Confirmed, branchOutcome);
-        Assert.Equal(head, resources.GetMetaBootstrapHead("allowed"));
-        resources.CreateMetaBootstrapTag("allowed-tag", head, out PublicationOutcome tagOutcome);
+        Assert.Equal(head, resources.GetBranchHead("allowed"));
+        resources.CreateStoredTag("allowed-tag", head, out PublicationOutcome tagOutcome);
         Assert.Equal(PublicationOutcome.Confirmed, tagOutcome);
-        Assert.Equal(head, resources.ResolveMetaBootstrapTag("allowed-tag"));
+        Assert.Equal(head, resources.ResolveStoredTag("allowed-tag"));
         AssertSharedAndFramesUnchanged(resources, before);
         Assert.False(resources.IsFaulted);
     }
 
     [Fact]
     public void CommittingSaveRejectsNestedBranchAndTagInsertionAndConfirmsOnlyItsOwnPublication() {
-        using GraphResources resources = GraphResources.CreateMetaBootstrapNew(_path);
+        using GraphResources resources = GraphResources.CreateStorageNew(_path);
         Seed(resources);
-        FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
-        GraphResources.MetaBootstrapBranchUpdate branch = resources.PrepareMetaBootstrapBranchRoot("nested-branch", head);
+        FrameAddress head = resources.GetBranchHead("main")!.Value;
+        GraphResources.PreparedBranchRootUpdate branch = resources.PrepareBranchRoot("nested-branch", head);
         PublicationSnapshot before = Snapshot(resources);
-        HashSet<P0SaveCheckpoint> seen = [];
-        resources.MetaBootstrapCheckpoint = point => {
-            if (point is not (P0SaveCheckpoint.AfterBusinessAppend or P0SaveCheckpoint.BeforePublication or P0SaveCheckpoint.AfterPublication)) {
+        HashSet<RepositorySaveStage> seen = [];
+        resources.SaveStageObserver = point => {
+            if (point is not (RepositorySaveStage.AfterBusinessAppend or RepositorySaveStage.BeforePublication or RepositorySaveStage.AfterPublication)) {
                 return;
             }
             Assert.True(seen.Add(point));
@@ -71,117 +71,117 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
             AssertUnchanged(resources, atCheckpoint);
         };
 
-        P0SaveResult saved;
-        using (P0PendingSave pending = resources.PrepareMetaBootstrap("main", P0GraphKind.State, Business(resources, 2))) {
-            saved = resources.CommitMetaBootstrap(pending);
+        RepositorySaveResult saved;
+        using (PendingRepositorySave pending = resources.PrepareSave("main", StoredGraphKind.State, Business(resources, 2))) {
+            saved = resources.CommitSave(pending);
         }
-        resources.MetaBootstrapCheckpoint = null;
+        resources.SaveStageObserver = null;
         Assert.Equal(3, seen.Count);
-        Assert.False(resources.HasMetaBootstrapPending);
+        Assert.False(resources.HasPendingSave);
         Assert.False(resources.IsFaulted);
-        Assert.Equal(saved.Business.Address, resources.GetMetaBootstrapHead("main"));
-        Assert.Null(resources.GetMetaBootstrapHead("nested-branch"));
-        foreach (P0SaveCheckpoint point in seen) { AssertTagMissing(resources, "committing-" + point); }
+        Assert.Equal(saved.Business.Address, resources.GetBranchHead("main"));
+        Assert.Null(resources.GetBranchHead("nested-branch"));
+        foreach (RepositorySaveStage point in seen) { AssertTagMissing(resources, "committing-" + point); }
         AssertSharedUnchanged(resources, before);
-        Assert.True(resources.MetaBootstrapStore.AppendedFrames > before.Frames);
+        Assert.True(resources.GraphStore.AppendedFrames > before.Frames);
 
-        long frames = resources.MetaBootstrapStore.AppendedFrames;
-        GraphResources.MetaBootstrapBranchUpdate fresh = resources.PrepareMetaBootstrapBranchRoot("after-commit", saved.Business.Address);
-        resources.PublishMetaBootstrapBranchRoot(fresh, out PublicationOutcome outcome);
+        long frames = resources.GraphStore.AppendedFrames;
+        GraphResources.PreparedBranchRootUpdate fresh = resources.PrepareBranchRoot("after-commit", saved.Business.Address);
+        resources.PublishBranchRoot(fresh, out PublicationOutcome outcome);
         Assert.Equal(PublicationOutcome.Confirmed, outcome);
-        Assert.Equal(saved.Business.Address, resources.GetMetaBootstrapHead("after-commit"));
-        Assert.Equal(frames, resources.MetaBootstrapStore.AppendedFrames);
+        Assert.Equal(saved.Business.Address, resources.GetBranchHead("after-commit"));
+        Assert.Equal(frames, resources.GraphStore.AppendedFrames);
         AssertSharedUnchanged(resources, before);
     }
 
     [Fact]
     public void ForeignOwnerAndStaleBaselineCandidatesRejectBeforePublicationAndLeaveBothOwnersHealthy() {
-        using GraphResources resources = GraphResources.CreateMetaBootstrapNew(_path);
-        using GraphResources foreign = GraphResources.CreateMetaBootstrapNew(_path + "-foreign");
+        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using GraphResources foreign = GraphResources.CreateStorageNew(_path + "-foreign");
         Seed(resources);
         Seed(foreign);
-        FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
-        GraphResources.MetaBootstrapBranchUpdate candidate = resources.PrepareMetaBootstrapBranchRoot("from-owner", head);
-        GraphResources.MetaBootstrapBranchUpdate stale = resources.PrepareMetaBootstrapBranchRoot("stale", head);
+        FrameAddress head = resources.GetBranchHead("main")!.Value;
+        GraphResources.PreparedBranchRootUpdate candidate = resources.PrepareBranchRoot("from-owner", head);
+        GraphResources.PreparedBranchRootUpdate stale = resources.PrepareBranchRoot("stale", head);
         PublicationSnapshot original = Snapshot(resources);
         PublicationSnapshot foreignBefore = Snapshot(foreign);
 
         PublicationOutcome foreignOutcome = PublicationOutcome.Confirmed;
-        Assert.Throws<InvalidOperationException>(() => foreign.PublishMetaBootstrapBranchRoot(candidate, out foreignOutcome));
+        Assert.Throws<InvalidOperationException>(() => foreign.PublishBranchRoot(candidate, out foreignOutcome));
         Assert.Equal(PublicationOutcome.NotAttempted, foreignOutcome);
         AssertUnchanged(foreign, foreignBefore);
         AssertUnchanged(resources, original);
         Assert.False(foreign.IsFaulted);
         Assert.False(resources.IsFaulted);
 
-        resources.PublishMetaBootstrapBranchRoot(candidate, out PublicationOutcome accepted);
+        resources.PublishBranchRoot(candidate, out PublicationOutcome accepted);
         Assert.Equal(PublicationOutcome.Confirmed, accepted);
-        Assert.Equal(head, resources.GetMetaBootstrapHead("from-owner"));
+        Assert.Equal(head, resources.GetBranchHead("from-owner"));
         PublicationSnapshot afterAccepted = Snapshot(resources);
         PublicationOutcome staleOutcome = PublicationOutcome.Confirmed;
-        Assert.Throws<InvalidOperationException>(() => resources.PublishMetaBootstrapBranchRoot(stale, out staleOutcome));
+        Assert.Throws<InvalidOperationException>(() => resources.PublishBranchRoot(stale, out staleOutcome));
         Assert.Equal(PublicationOutcome.NotAttempted, staleOutcome);
         AssertUnchanged(resources, afterAccepted);
-        Assert.Null(resources.GetMetaBootstrapHead("stale"));
+        Assert.Null(resources.GetBranchHead("stale"));
         Assert.False(resources.IsFaulted);
 
-        GraphResources.MetaBootstrapBranchUpdate renewed = resources.PrepareMetaBootstrapBranchRoot("stale", head);
-        resources.PublishMetaBootstrapBranchRoot(renewed, out PublicationOutcome renewedOutcome);
+        GraphResources.PreparedBranchRootUpdate renewed = resources.PrepareBranchRoot("stale", head);
+        resources.PublishBranchRoot(renewed, out PublicationOutcome renewedOutcome);
         Assert.Equal(PublicationOutcome.Confirmed, renewedOutcome);
-        Assert.Equal(head, resources.GetMetaBootstrapHead("stale"));
+        Assert.Equal(head, resources.GetBranchHead("stale"));
         AssertSharedAndFramesUnchanged(resources, original);
         AssertUnchanged(foreign, foreignBefore);
         Assert.False(resources.IsFaulted);
     }
 
-    private static void AssertBlocked(GraphResources resources, GraphResources.MetaBootstrapBranchUpdate candidate,
+    private static void AssertBlocked(GraphResources resources, GraphResources.PreparedBranchRootUpdate candidate,
         FrameAddress head, string tag) {
-        Assert.Throws<InvalidOperationException>(() => resources.PrepareMetaBootstrapBranchRoot("blocked-prepare", head));
+        Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot("blocked-prepare", head));
         PublicationOutcome branchOutcome = PublicationOutcome.Confirmed;
-        Assert.Throws<InvalidOperationException>(() => resources.PublishMetaBootstrapBranchRoot(candidate, out branchOutcome));
+        Assert.Throws<InvalidOperationException>(() => resources.PublishBranchRoot(candidate, out branchOutcome));
         Assert.Equal(PublicationOutcome.NotAttempted, branchOutcome);
         PublicationOutcome tagOutcome = PublicationOutcome.Confirmed;
-        Assert.Throws<InvalidOperationException>(() => resources.CreateMetaBootstrapTag(tag, head, out tagOutcome));
+        Assert.Throws<InvalidOperationException>(() => resources.CreateStoredTag(tag, head, out tagOutcome));
         Assert.Equal(PublicationOutcome.NotAttempted, tagOutcome);
-        Assert.Null(resources.GetMetaBootstrapHead("blocked-prepare"));
+        Assert.Null(resources.GetBranchHead("blocked-prepare"));
         Assert.False(resources.IsFaulted);
     }
 
     // Opaque records isolate these concrete publication guards from model callbacks.
     private static void Seed(GraphResources resources) {
-        using P0PendingSave pending = resources.PrepareMetaBootstrap("main", P0GraphKind.State,
+        using PendingRepositorySave pending = resources.PrepareSave("main", StoredGraphKind.State,
             Business(resources, 1), new(null, new(1), [ObjectVersionRecord.CreateBase(1, [1])]));
-        resources.CommitMetaBootstrap(pending);
+        resources.CommitSave(pending);
     }
-    private static P0PreparedGraphWrite Business(GraphResources resources, byte value) =>
-        new(resources.GetMetaBootstrapStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])]);
+    private static PreparedGraphWrite Business(GraphResources resources, byte value) =>
+        new(resources.GetBranchStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])]);
 
     private static PublicationSnapshot Snapshot(GraphResources resources) {
         var branches = resources.Versions.ReadRef(1).Unwrap();
         var shared = resources.Versions.ReadRef(2).Unwrap();
         return new(branches.Revision, branches.Payload.ToArray(), shared.Revision, shared.Payload.ToArray(),
-            resources.GetMetaBootstrapHead("main")!.Value, resources.SharedMetaBootstrapRoot!.Value,
-            resources.MetaBootstrapStore.AppendedFrames);
+            resources.GetBranchHead("main")!.Value, resources.SharedSchemaRoot!.Value,
+            resources.GraphStore.AppendedFrames);
     }
     private static void AssertUnchanged(GraphResources resources, PublicationSnapshot expected) {
         var branches = resources.Versions.ReadRef(1).Unwrap();
         Assert.Equal(expected.BranchRevision, branches.Revision);
         Assert.Equal(expected.BranchPayload, branches.Payload.ToArray());
-        Assert.Equal(expected.MainHead, resources.GetMetaBootstrapHead("main"));
+        Assert.Equal(expected.MainHead, resources.GetBranchHead("main"));
         AssertSharedAndFramesUnchanged(resources, expected);
     }
     private static void AssertSharedAndFramesUnchanged(GraphResources resources, PublicationSnapshot expected) {
         AssertSharedUnchanged(resources, expected);
-        Assert.Equal(expected.Frames, resources.MetaBootstrapStore.AppendedFrames);
+        Assert.Equal(expected.Frames, resources.GraphStore.AppendedFrames);
     }
     private static void AssertSharedUnchanged(GraphResources resources, PublicationSnapshot expected) {
         var shared = resources.Versions.ReadRef(2).Unwrap();
         Assert.Equal(expected.SharedRevision, shared.Revision);
         Assert.Equal(expected.SharedPayload, shared.Payload.ToArray());
-        Assert.Equal(expected.SharedRoot, resources.SharedMetaBootstrapRoot);
+        Assert.Equal(expected.SharedRoot, resources.SharedSchemaRoot);
     }
     private static void AssertTagMissing(GraphResources resources, string tag) =>
-        Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => resources.ResolveMetaBootstrapTag(tag)).Message);
+        Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => resources.ResolveStoredTag(tag)).Message);
 
     private sealed record PublicationSnapshot(RefRevision BranchRevision, byte[] BranchPayload,
         RefRevision SharedRevision, byte[] SharedPayload, FrameAddress MainHead, FrameAddress SharedRoot, long Frames);

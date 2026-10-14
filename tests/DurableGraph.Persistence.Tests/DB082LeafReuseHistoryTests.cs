@@ -54,7 +54,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
             hitRoot.Value = 29;
             saved = hit.CommitState(NoRebase);
-            P0GraphSnapshot revision = repository.MetaBootstrapStore.ReadGraph(saved.Address);
+            StoredGraphRevision revision = repository.GraphStore.ReadGraph(saved.Address);
             IReadOnlyList<ObjectVersionRecord> records = Records(repository, saved);
             Assert.Equal(original.Address, revision.SourceGraph);
             Assert.Equal(ObjectVersionKind.Base, records.Single(row => row.ObjectId == leafId.Value).Kind);
@@ -70,7 +70,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
             CheckpointAddress unchanged = hit.CommitState(NoRebase);
             Assert.Empty(Records(repository, unchanged));
-            Assert.Equal(saved.Address, repository.MetaBootstrapStore.ReadGraph(unchanged.Address).SourceGraph);
+            Assert.Equal(saved.Address, repository.GraphStore.ReadGraph(unchanged.Address).SourceGraph);
             Assert.Equal(savedLeafStorage, Baseline(hit).Objects[leafId].Storage);
             Assert.Equal(rootId, hit.StateId);
             Assert.Equal(leafId, LeafObjectId(hit));
@@ -162,9 +162,9 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         upgraded.Catalog.Set(new DurableSchema(IntermediateId, 5, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
         CheckpointAddress intermediateEvent = upgraded.CommitEvent(upgraded.State!, NoRebase);
-        var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_splitConfiguration");
-        var intermediateEnvironment = DecodedRevision.SplitBindingEnvironment.Load(repository.MetaBootstrapStore,
-            configuration, repository.MetaBootstrapStore.ReadMetadata(intermediateEvent.Address).SchemaRoot!.Value);
+        var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
+        var intermediateEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
+            configuration, repository.GraphStore.ReadMetadata(intermediateEvent.Address).SchemaRoot!.Value);
         InvalidDataException oldConflict = Assert.Throws<InvalidDataException>(() => oldEntry.Requirements.Validate(intermediateEnvironment.Models));
         Assert.Contains(IntermediateId, oldConflict.Message);
         Assert.True(oldEntry.SchemaRequirementCount > currentEntry.SchemaRequirementCount);
@@ -179,8 +179,8 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         upgraded.Catalog.Set(new DurableSchema(MaterializationId, 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
         CheckpointAddress materializationEvent = upgraded.CommitEvent(upgraded.State!, NoRebase);
-        var materializationEnvironment = DecodedRevision.SplitBindingEnvironment.Load(repository.MetaBootstrapStore,
-            configuration, repository.MetaBootstrapStore.ReadMetadata(materializationEvent.Address).SchemaRoot!.Value);
+        var materializationEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
+            configuration, repository.GraphStore.ReadMetadata(materializationEvent.Address).SchemaRoot!.Value);
         InvalidDataException certificateConflict = Assert.Throws<InvalidDataException>(() => currentEntry.Requirements.Validate(materializationEnvironment.Models));
         Assert.Contains(MaterializationId, certificateConflict.Message);
         CheckpointAddress incompatibleState = upgraded.CommitState(NoRebase);
@@ -269,15 +269,15 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = nameof(Leaf.Value))]
     private static extern ref int LeafValue(Leaf leaf);
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
-    private static NormalizedRevision Baseline(BranchCheckout branch) => branch.Baseline!;
+    private static NormalizedGraphState Baseline(BranchCheckout branch) => branch.Baseline!;
     private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CheckpointAddress address) {
-        P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(address.Address);
-        return graph.OwnedBatch is { } batch ? repository.MetaBootstrapStore.ReadBatch(batch).Records : [];
+        StoredGraphRevision graph = repository.GraphStore.ReadGraph(address.Address);
+        return graph.OwnedBatch is { } batch ? repository.GraphStore.ReadBatch(batch).Records : [];
     }
     private static ObjectId LeafObjectId(BranchCheckout branch) => Baseline(branch).Objects.Single(row => row.Value.Current.Schema?.SchemaId == LeafId).Key;
     private static void AssertStorage(Repository repository, BranchCheckout branch) {
         foreach ((ObjectId id, NormalizedObject row) in Baseline(branch).Objects) {
-            P0ObjectChain chain = repository.MetaBootstrapStore.ReadObjectChain(branch.StateRevisionAddress!.Value, id.Value);
+            ObjectVersionChain chain = repository.GraphStore.ReadObjectChain(branch.StateRevisionAddress!.Value, id.Value);
             Assert.Equal(new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes), row.Storage);
         }
     }

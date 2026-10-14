@@ -24,11 +24,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             using BranchCheckout branch = repository.CreateBranch("main", (IDurableObject)world, ReferenceGraphNoRebase);
             first = branch.Head.RevisionAddress;
             worldId = branch.StateId!.Value;
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Null(store.ReadGraph(first).SourceGraph);
             Assert.All(DefaultRecords(store, first), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             characterId = FindGraphObject(store, first, "reference.character");
-            allIds = store.ReadGraph(first).Objects.Keys.ToArray();
+            allIds = store.ReadGraph(first).ObjectHeads.Keys.ToArray();
             Assert.Equal(5, allIds.Length); // World, Character, Item, shared nonempty string, Empty.
             repository.CreateTag("initial", branch.Head);
             fixture.Change(world, 999); // The actual committed graph owns its prior values.
@@ -40,7 +40,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using BranchCheckout loaded = repository.Checkout("main");
             fixture.Check(loaded.State!, 7);
             CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Empty(DefaultRecords(store, unchanged.Address));
             Assert.Empty(DefaultRemoved(store, unchanged.Address));
             fixture.Change(loaded.State!, 8);
@@ -63,20 +63,20 @@ public sealed partial class DurableSchemaGeneratorTests {
             FrameAddress parent = loaded.StateRevisionAddress!.Value;
             fixture.Detach(loaded.State!);
             detached = loaded.CommitState(ReferenceGraphNoRebase).Address;
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(parent, store.ReadGraph(detached).SourceGraph);
             ObjectVersionRecord worldChange = Assert.Single(DefaultRecords(store, detached));
             Assert.Equal(worldId.Value, worldChange.ObjectId);
             Assert.Equal(allIds.Where(id => id != worldId.Value).Order(), DefaultRemoved(store, detached));
-            Assert.Equal<uint>([worldId.Value], store.ReadGraph(detached).Objects.Keys);
+            Assert.Equal<uint>([worldId.Value], store.ReadGraph(detached).ObjectHeads.Keys);
         }
         using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, fixture.Models())) {
             fixture.ResetConstructors();
             fixture.Check(repository.ReadState(repository.GetHead("main")), -1);
             fixture.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
             fixture.Check(repository.ReadState(repository.ResolveTag("changed")), 8);
-            P0GraphStore store = ReferenceGraphStore(repository);
-            Assert.Equal(allIds.Order(), store.ReadGraph(first).Objects.Keys.Order());
+            GraphRecordStore store = ReferenceGraphStore(repository);
+            Assert.Equal(allIds.Order(), store.ReadGraph(first).ObjectHeads.Keys.Order());
             Assert.Equal(2, store.ReadObjectChain(changed, characterId).Entries.Count);
             Assert.Single(store.ReadObjectChain(changed, worldId.Value).Entries);
             Assert.NotEqual(first, detached);
@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CheckpointAddress first = main.Head;
         fixture.ResetConstructors();
         using BranchCheckout loaded = repository.Fork("loaded", first);
-        P0GraphStore store = ReferenceGraphStore(repository);
+        GraphRecordStore store = ReferenceGraphStore(repository);
         long frames = store.AppendedFrames;
         object previous = replaceUnknown(loaded.State!);
         Assert.Throws<InvalidOperationException>(() => loaded.CommitState(ReferenceGraphNoRebase));
@@ -126,10 +126,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)fixture.Create(), ReferenceGraphNoRebase);
         CheckpointAddress first = main.Head;
         repository.CreateTag("initial", first);
-        P0GraphStore store = ReferenceGraphStore(repository);
+        GraphRecordStore store = ReferenceGraphStore(repository);
         uint previousCharacter = FindGraphObject(store, first.Address, "reference.character");
         uint previousItem = FindGraphObject(store, first.Address, "reference.item");
-        uint sourceMaximum = store.ReadGraph(first.Address).Objects.Keys.Max();
+        uint sourceMaximum = store.ReadGraph(first.Address).ObjectHeads.Keys.Max();
         fixture.ResetConstructors();
         using BranchCheckout loaded = repository.Fork("loaded", first);
         replaceKnown(loaded.State!, 42);
@@ -148,7 +148,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         fixture.ResetConstructors();
         fixture.Check(repository.ReadState(changed), 42);
         fixture.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
-        Assert.Equal(5, store.ReadGraph(changed.Address).Objects.Count);
+        Assert.Equal(5, store.ReadGraph(changed.Address).ObjectHeads.Count);
     }
 
     [Fact]
@@ -175,9 +175,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             using BranchCheckout main = repository.CreateBranch("main", (IDurableObject)old.Create(), ReferenceGraphNoRebase);
             first = main.Head.Address;
             worldId = main.StateId!.Value;
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             nodeId = FindGraphObject(store, first, "reference.history.node");
-            ids = store.ReadGraph(first).Objects.Keys.ToArray();
+            ids = store.ReadGraph(first).ObjectHeads.Keys.ToArray();
             repository.CreateTag("initial", main.Head);
             old.Change(main.State!, 8);
             second = main.CommitState(ReferenceGraphNoRebase).Address;
@@ -189,7 +189,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, current.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             current.ResetConstructors();
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(3, store.ReadObjectChain(third, nodeId).Entries.Count);
             using BranchCheckout loaded = repository.Checkout("main");
             current.Check(loaded.State!, 9);
@@ -202,7 +202,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(nodeId, record.ObjectId);
             Assert.Equal(ObjectVersionKind.Base, record.Kind);
             Assert.Equal(2, DefaultLayout(store, rewritten, nodeId).Schema!.Version);
-            Assert.Equal(ids.Order(), store.ReadGraph(rewritten).Objects.Keys.Order());
+            Assert.Equal(ids.Order(), store.ReadGraph(rewritten).ObjectHeads.Keys.Order());
             Assert.Single(store.ReadObjectChain(rewritten, nodeId).Entries);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, current.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
@@ -224,10 +224,10 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static readonly ReadAmplificationBaseBudgetParameters ReferenceGraphNoRebase = new(1000000, 1);
-    private static uint FindGraphObject(P0GraphStore store, FrameAddress graph, string schemaId) => Assert.Single(
-        store.ReadGraph(graph).Objects.Keys, id => DefaultLayout(store, graph, id).Schema?.SchemaId == schemaId);
-    private static P0GraphStore ReferenceGraphStore(Repository repository) =>
-        ((GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!).MetaBootstrapStore;
+    private static uint FindGraphObject(GraphRecordStore store, FrameAddress graph, string schemaId) => Assert.Single(
+        store.ReadGraph(graph).ObjectHeads.Keys, id => DefaultLayout(store, graph, id).Schema?.SchemaId == schemaId);
+    private static GraphRecordStore ReferenceGraphStore(Repository repository) =>
+        ((GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!).GraphStore;
 
     private sealed class ReferenceGraphFixture(Assembly assembly) {
         private readonly Type _host = assembly.GetType("FusedDelta.Host")!;

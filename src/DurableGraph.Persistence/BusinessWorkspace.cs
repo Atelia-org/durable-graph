@@ -5,21 +5,21 @@ namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>One editable graph, its complete normalized baseline and one actual Capture candidate.</summary>
 internal sealed class BusinessWorkspace {
-    private readonly StateModelSnapshot _models;
+    private readonly ModelExecutionEnvironment _models;
     private readonly CaptureSession _capture;
-    private NormalizedRevision? _baseline;
+    private NormalizedGraphState? _baseline;
     private BusinessSaveCandidate? _pending;
     private bool _staging;
 
-    internal BusinessWorkspace(StateModelSnapshot models, IDurableObject? root = null)
+    internal BusinessWorkspace(ModelExecutionEnvironment models, IDurableObject? root = null)
         : this(models, new(), null, root, default) {
         if (root is not null && !models.TryGetCurrentModel(root.GetType(), out _)) {
             throw new ArgumentException("Root must have its actual domain type registered.", nameof(root));
         }
     }
 
-    private BusinessWorkspace(StateModelSnapshot models, CaptureSession capture,
-        NormalizedRevision? baseline, IDurableObject? root, ObjectId rootId) {
+    private BusinessWorkspace(ModelExecutionEnvironment models, CaptureSession capture,
+        NormalizedGraphState? baseline, IDurableObject? root, ObjectId rootId) {
         ArgumentNullException.ThrowIfNull(models);
         _models = models;
         _capture = capture;
@@ -28,13 +28,13 @@ internal sealed class BusinessWorkspace {
         RootId = rootId;
     }
 
-    internal StateModelSnapshot Models => _models;
-    internal NormalizedRevision? Baseline => _baseline;
+    internal ModelExecutionEnvironment Models => _models;
+    internal NormalizedGraphState? Baseline => _baseline;
     internal IDurableObject? Root { get; private set; }
     internal ObjectId RootId { get; private set; }
 
     // Import the controlled loader's actual object identities and allocation cursor.
-    internal static BusinessWorkspace FromLoaded<T>(StateModelSnapshot models, MaterializedGraph<T> loaded)
+    internal static BusinessWorkspace FromLoaded<T>(ModelExecutionEnvironment models, EditableGraphRestoration<T> loaded)
         where T : class, IDurableObject =>
         new(models, loaded.CreateCaptureSession(), loaded.Baseline, loaded.Root, loaded.RootId);
 
@@ -68,7 +68,7 @@ internal sealed class BusinessWorkspace {
             : _capture.PrepareAgainst(candidate.Graph, _baseline.CurrentDtos);
     }
 
-    internal void CompletePreparation(BusinessSaveCandidate candidate, NormalizedRevision? next) {
+    internal void CompletePreparation(BusinessSaveCandidate candidate, NormalizedGraphState? next) {
         RequirePreparing(candidate);
         if (candidate.IsIndependentSnapshot != (next is null)) {
             throw new InvalidOperationException("Only an advancing State candidate prepares a replacement baseline.");
@@ -86,7 +86,7 @@ internal sealed class BusinessWorkspace {
         if (_staging) { throw new InvalidOperationException("The graph candidate is still being prepared."); }
     }
 
-    internal void Accept(BusinessSaveCandidate candidate, NormalizedRevision installation) {
+    internal void Accept(BusinessSaveCandidate candidate, NormalizedGraphState installation) {
         RequireReady(candidate);
         if (candidate.IsIndependentSnapshot) { throw new InvalidOperationException("Independent snapshots cannot advance State."); }
         // Transfer the actual sealed identity dictionary, without recapture or user callbacks.
@@ -126,8 +126,8 @@ internal sealed class BusinessWorkspace {
 internal sealed class BusinessSaveCandidate : IDisposable {
     private BusinessWorkspace? _owner;
     private readonly CaptureContext _context;
-    private NormalizedRevision? _next;
-    private NormalizedRevision? _installation;
+    private NormalizedGraphState? _next;
+    private NormalizedGraphState? _installation;
 
     internal BusinessSaveCandidate(BusinessWorkspace owner, CaptureContext context, CapturedGraph graph,
         IDurableObject root, ObjectId rootId, bool independentSnapshot) {
@@ -143,7 +143,7 @@ internal sealed class BusinessSaveCandidate : IDisposable {
     internal IDurableObject Root { get; }
     internal ObjectId RootId { get; }
     internal bool IsIndependentSnapshot { get; }
-    internal NormalizedRevision NextBaseline {
+    internal NormalizedGraphState NextBaseline {
         get {
             RequireReady();
             if (_installation is not null) { throw new InvalidOperationException("This graph installation is already prepared."); }
@@ -153,14 +153,14 @@ internal sealed class BusinessSaveCandidate : IDisposable {
 
     internal IReadOnlyList<PreparedCapturedObject> PrepareContents() => RequireOwner().PrepareContents(this);
 
-    internal void CompletePreparation(NormalizedRevision? next) {
+    internal void CompletePreparation(NormalizedGraphState? next) {
         RequireOwner().CompletePreparation(this, next);
         _next = next;
     }
 
     internal void RequireReady() => RequireOwner().RequireReady(this);
 
-    internal void PrepareInstallation(NormalizedRevision installation) {
+    internal void PrepareInstallation(NormalizedGraphState installation) {
         RequireReady();
         ArgumentNullException.ThrowIfNull(installation);
         if (IsIndependentSnapshot || _next is null) { throw new InvalidOperationException("Independent snapshots cannot advance State."); }
@@ -169,7 +169,7 @@ internal sealed class BusinessSaveCandidate : IDisposable {
         // environment. Another read/save's otherwise valid material cannot replace it.
         if (installation.RevisionAddress == default || !ReferenceEquals(installation.CurrentDtos, _next.CurrentDtos) ||
             !ReferenceEquals(installation.SourceModels, _next.SourceModels) ||
-            !ReferenceEquals(installation.SplitStore, _next.SplitStore)) {
+            !ReferenceEquals(installation.GraphStore, _next.GraphStore)) {
             throw new InvalidDataException("Installation must complete this actual candidate in its issuing backend and model environment.");
         }
         _installation = installation;
@@ -178,7 +178,7 @@ internal sealed class BusinessSaveCandidate : IDisposable {
     internal void Install() {
         BusinessWorkspace owner = RequireOwner();
         owner.RequireReady(this);
-        NormalizedRevision installation = _installation
+        NormalizedGraphState installation = _installation
             ?? throw new InvalidOperationException("Prepare the installation before publishing and installing it.");
         owner.Accept(this, installation);
         _owner = null;

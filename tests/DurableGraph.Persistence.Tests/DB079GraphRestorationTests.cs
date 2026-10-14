@@ -19,7 +19,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void PairCompletesBothAllocationTablesBeforeAnyHydration(bool failLastAllocation) {
-        using P0Repository repository = P0Repository.CreateNew(_root);
+        using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root);
         FrameAddress first = Seed(repository, (1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
         FrameAddress second = Seed(repository, (1, new(2, 2, 0, 30)), (2, new(1, 1, 0, 40)));
         int allocations = 0, hydrations = 0;
@@ -57,7 +57,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void EqualExactHeadWithoutEqualityProofDoesNotAuthorizeSingletonReuse(bool registerUnequalProof) {
-        using P0Repository repository = P0Repository.CreateNew(_root);
+        using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root);
         FrameAddress address = Seed(repository, (1, new(0, 0, 0, 10)));
         Node singleton = new();
         int allocations = 0, hydrations = 0;
@@ -196,23 +196,23 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Assert.Same(root, root.Next.Alias);
     }
 
-    private FrameAddress Seed(P0Repository repository, params (uint Id, State State)[] rows) {
-        P0CatalogView? accepted = repository.SharedSchemaRoot is { } schema ? P0CatalogView.Load(repository.Store, schema) : null;
-        P0CatalogWorkspace workspace = new(repository.EnsureEditingAllowed, accepted);
+    private FrameAddress Seed(RepositoryStorageFacade repository, params (uint Id, State State)[] rows) {
+        SchemaCatalogView? accepted = repository.SharedSchemaRoot is { } schema ? SchemaCatalogView.Load(repository.Store, schema) : null;
+        SchemaCatalogWorkspace workspace = new(repository.EnsureEditingAllowed, accepted);
         workspace.Set(SharedReadModel.Schema);
-        P0PreparedCatalog catalog = workspace.Prepare();
+        PreparedSchemaCatalogWrite catalog = workspace.Prepare();
         string branch = $"source-{_seedIndex++}";
         ObjectVersionRecord[] records = rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
-            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(row.State), catalog.View))).ToArray();
-        using P0PendingSave pending = repository.Prepare(branch, P0GraphKind.State,
+            TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(row.State), catalog.View))).ToArray();
+        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State,
             new(null, new(1), records), catalog.Write);
         return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
     }
-    private static (Node First, Node Second) ReadPair(P0Repository repository,
+    private static (Node First, Node Second) ReadPair(RepositoryStorageFacade repository,
         FrameAddress first, ObjectId firstRoot, FrameAddress second, ObjectId secondRoot, StateModelRegistry models) {
         StateModelRegistry.FrozenConfiguration configuration = models.FreezeConfiguration();
-        DecodedRevision a = DecodedRevision.ReadSplit(repository.Store, first, configuration);
-        DecodedRevision b = DecodedRevision.ReadSplit(repository.Store, second, configuration,
+        DecodedRevision a = DecodedRevision.ReadStoredGraph(repository.Store, first, configuration);
+        DecodedRevision b = DecodedRevision.ReadStoredGraph(repository.Store, second, configuration,
             repository.Store.ReadMetadata(first).SchemaRoot == repository.Store.ReadMetadata(second).SchemaRoot ? a.BindingEnvironment : null);
         var pair = GraphReader.ReadPair(a, new(a.SourceModels!), firstRoot, b, new(b.SourceModels!), secondRoot);
         return ((Node)pair.First, (Node)pair.Second);

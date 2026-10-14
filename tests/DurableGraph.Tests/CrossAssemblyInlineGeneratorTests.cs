@@ -222,7 +222,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = assembly.GetType("BodyHost")!;
             var models = new Persistence.StateModelRegistry();
             host.GetMethod("Register")!.Invoke(null, [models]);
-            DurableSchema schema = models.Snapshot().ResolveCurrentModel(assembly.GetType("Item")!).CurrentSchema;
+            DurableSchema schema = models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("Item")!).CurrentSchema;
             if (priorSchema is not null) Assert.Equal(priorSchema, schema);
             priorSchema = schema;
             Assert.Empty(assembly.GetType("Atelia.DurableGraph.Generated.Family_4974656D+V1")!.GetGenericArguments());

@@ -22,7 +22,7 @@ public sealed class CrossAssemblyNominalBindingTests {
         StateModelRegistry registry = new();
         if (modelFirst) { registry.Register(remote); registry.Register(owner); }
         else { registry.Register(owner); registry.Register(remote); }
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         DurableSchema schema = OwnerSchema(RemoteType, 2);
 
         StateSchemaBinding bound = snapshot.BindSchema(schema);
@@ -48,7 +48,7 @@ public sealed class CrossAssemblyNominalBindingTests {
             registry.Register(RemoteModel<RemoteGeneric<int>>(TypeExpr.Named("Remote", TypeExpr.Builtin(TypeTag.Int32))));
         }
         TypeExpr missing = TypeExpr.Named("Remote", TypeExpr.Builtin(TypeTag.Int64));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         Assert.Throws<InvalidDataException>(() => snapshot.BindSchema(OwnerSchema(missing, 2)));
         Assert.Throws<InvalidDataException>(() => snapshot.InferSchemaFromState(
             TypeExpr.Named("Owner", missing), 2, typeof(Owner2<ObjectId>)));
@@ -65,7 +65,7 @@ public sealed class CrossAssemblyNominalBindingTests {
         StateModelBinding model = RemoteModel<Remote>(RemoteType);
         // Production registration already rejects conflicting ownership. Also test the binding
         // boundary directly so a future catalog source cannot silently choose the model instead.
-        StateModelSnapshot snapshot = new(new() { [RemoteType] = model }, new() { [typeof(Remote)] = model }, [],
+        ModelExecutionEnvironment snapshot = new(new() { [RemoteType] = model }, new() { [typeof(Remote)] = model }, [],
             new() { ["Owner"] = OwnerDefinition(), ["Remote"] = invalid });
 
         Assert.Throws<InvalidDataException>(() => snapshot.BindSchema(OwnerSchema(RemoteType, 2)));
@@ -86,7 +86,7 @@ public sealed class CrossAssemblyNominalBindingTests {
             [new("Remote", 2, SchemaKind.ReferenceObject, 0, [])],
             currentModelFactory: (_, _) => { factories++; throw new InvalidOperationException("Unexpected current target body."); },
             historicalReaderFactory: (_, _) => { factories++; throw new InvalidOperationException("Unexpected historical target body."); }));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
 
         DurableSchema schema = OwnerSchema(RemoteType, 2);
         snapshot.BindSchema(schema);
@@ -101,7 +101,7 @@ public sealed class CrossAssemblyNominalBindingTests {
         StateModelRegistry registry = new();
         registry.Register(RemoteModel<Remote>(RemoteType));
         registry.Register(OwnerDefinition(explicitOutput ? nameof(FirstClosed) : nameof(FirstGeneric)));
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         DurableSchema source = OwnerSchema(RemoteType, 1), current = OwnerSchema(RemoteType, 3);
         using CaptureContext capture = new CaptureSession().BeginCapture();
         capture.AddRoot(new Remote(), source, static (_, _) => new Owner1());
@@ -120,7 +120,7 @@ public sealed class CrossAssemblyNominalBindingTests {
         StateModelRegistry registry = new();
         registry.Register(RemoteModel<Remote>(RemoteType));
         registry.Register(OwnerDefinition());
-        StateModelSnapshot snapshot = registry.Snapshot();
+        ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
         DurableSchema fakeInline = new(RemoteType, 2, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema owner = new(TypeExpr.Named("Owner", RemoteType), 2,
             new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: fakeInline));
@@ -138,18 +138,18 @@ public sealed class CrossAssemblyNominalBindingTests {
             DurableSchema owner = OwnerSchema(RemoteType, 2);
             DurableSchema remote = new(RemoteType, 1, new DurableFieldInfo(1, TypeTag.Byte));
             FrameAddress revision;
-            using (P0Repository writer = P0Repository.CreateNew(root)) {
-                P0CatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
+            using (RepositoryStorageFacade writer = RepositoryStorageFacade.CreateNew(root)) {
+                SchemaCatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
                 catalog.Set(owner);
                 catalog.Set(remote);
-                P0PreparedCatalog prepared = catalog.Prepare();
-                using P0PendingSave pending = writer.Prepare("main", P0GraphKind.State, new(null, new(1), [
-                    ObjectVersionRecord.CreateBase(1, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(owner), new PreparedBaseBody([2]), prepared.View)),
-                    ObjectVersionRecord.CreateBase(2, P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(remote), new PreparedBaseBody([37]), prepared.View)),
+                PreparedSchemaCatalogWrite prepared = catalog.Prepare();
+                using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State, new(null, new(1), [
+                    ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(owner), new PreparedBaseBody([2]), prepared.View)),
+                    ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(remote), new PreparedBaseBody([37]), prepared.View)),
                 ]), prepared.Write);
                 revision = writer.Commit(pending).Business.Address;
             }
-            using P0Repository file = P0Repository.OpenReadOnlyExisting(root);
+            using RepositoryStorageFacade file = RepositoryStorageFacade.OpenReadOnlyExisting(root);
             int ownerReads = 0, targetReads = 0;
             StateModelRegistry readers = new();
             readers.Register(new StateDefinitionBinding("Owner", SchemaKind.ReferenceObject, 1, null,
@@ -172,10 +172,10 @@ public sealed class CrossAssemblyNominalBindingTests {
                     static (in byte state, IStateReferenceVisitor visitor) => { })));
             long schemaTail = DataBytes(file.Data);
             if (omitOldTargetReader) {
-                Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(file.Store, revision, readers));
+                Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(file.Store, revision, readers));
                 Assert.Equal(0, targetReads);
             } else {
-                DecodedRevision decoded = DecodedRevision.ReadSplit(file.Store, revision, readers);
+                DecodedRevision decoded = DecodedRevision.ReadStoredGraph(file.Store, revision, readers);
                 Assert.Equal(new ObjectId(2), decoded.GetRequired(new ObjectId(1)).GetState<Owner2<ObjectId>>().Value);
                 Assert.Equal((byte)37, decoded.GetRequired(new ObjectId(2)).GetState<byte>());
                 Assert.Equal(1, targetReads);

@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             aState = main.Head.RevisionAddress;
             repository.CreateTag("a-initial", main.Head);
             sourceShared = repository.SharedSchemaRoot!.Value;
-            P0CatalogView catalog = P0CatalogView.Load(ReferenceGraphStore(repository), sourceShared);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(ReferenceGraphStore(repository), sourceShared);
             Assert.Equal(2, catalog.Schemas.Count);
             unusedDescriptor = catalog.SchemaNodeId(a.UnusedSchema());
             Assert.Equal(a.WidgetSchema(), catalog.Schemas[new(a.WidgetSchema().Type, 1)]);
@@ -50,33 +50,33 @@ public sealed partial class DurableSchemaGeneratorTests {
             bState = branch.Head.RevisionAddress;
             bRoot = branch.StateId!.Value;
             repository.CreateTag("b-initial", branch.Head);
-            P0GraphStore store = ReferenceGraphStore(repository);
-            P0GraphSnapshot graph = store.ReadGraph(bState);
+            GraphRecordStore store = ReferenceGraphStore(repository);
+            StoredGraphRevision graph = store.ReadGraph(bState);
             bSchema = graph.SchemaRoot!.Value;
             Assert.NotEqual(sourceShared, bSchema);
             Assert.Equal(aState, graph.Parent);
             Assert.Equal(aState, graph.SourceGraph);
             Assert.Equal(store.ReadGraph(aState).RootId, graph.RootId);
-            Assert.Equal(3, graph.Objects.Count);
+            Assert.Equal(3, graph.ObjectHeads.Count);
             Assert.Equal(2, DefaultRecords(store, bState).Count);
             Assert.All(DefaultRecords(store, bState), record => {
                 Assert.Equal(ObjectVersionKind.Base, record.Kind);
                 Assert.Null(record.PriorAddress);
-                Assert.Equal(graph.OwnedBatch, graph.Objects[record.ObjectId]);
+                Assert.Equal(graph.OwnedBatch, graph.ObjectHeads[record.ObjectId]);
                 Assert.Single(store.ReadObjectChain(bState, record.ObjectId).Entries);
             });
-            HashSet<FrameAddress> oldBusinessHeads = store.ReadGraph(aState).Objects.Values.ToHashSet();
-            Assert.Single(graph.Objects, row => oldBusinessHeads.Contains(row.Value));
-            Assert.Equal(2, graph.Objects.Keys.Count(id => DefaultLayout(store, bState, id).Schema?.Type == b.WidgetSchema().Type));
-            P0CatalogView privateView = P0CatalogView.Load(store, bSchema);
-            P0CatalogView originalView = P0CatalogView.Load(store, sourceShared);
+            HashSet<FrameAddress> oldBusinessHeads = store.ReadGraph(aState).ObjectHeads.Values.ToHashSet();
+            Assert.Single(graph.ObjectHeads, row => oldBusinessHeads.Contains(row.Value));
+            Assert.Equal(2, graph.ObjectHeads.Keys.Count(id => DefaultLayout(store, bState, id).Schema?.Type == b.WidgetSchema().Type));
+            SchemaCatalogView privateView = SchemaCatalogView.Load(store, bSchema);
+            SchemaCatalogView originalView = SchemaCatalogView.Load(store, sourceShared);
             Assert.Equal(3, privateView.Schemas.Count);
             Assert.Equal(b.WidgetSchema(), privateView.Schemas[new(b.WidgetSchema().Type, 2)]);
             Assert.Equal(a.WidgetSchema(), originalView.Schemas[new(a.WidgetSchema().Type, 1)]);
             Assert.NotEqual(originalView.SchemaNodeId(a.WidgetSchema()), privateView.SchemaNodeId(b.WidgetSchema()));
             Assert.Equal(a.UnusedSchema(), privateView.Schemas[new(a.UnusedSchema().Type, 1)]);
             Assert.Equal(unusedDescriptor, privateView.SchemaNodeId(a.UnusedSchema()));
-            P0GraphSnapshot meta = store.ReadGraph(bSchema);
+            StoredGraphRevision meta = store.ReadGraph(bSchema);
             Assert.Equal(sourceShared, meta.Parent);
             Assert.Equal(sourceShared, meta.SourceGraph);
             bList = Assert.Single(branch.Baseline!.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
@@ -111,10 +111,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(bSchema, branch.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
             Assert.Equal(bListStorage, branch.Baseline!.Objects[bList].Storage);
             Assert.False(branch.Catalog.Accepted!.Schemas.ContainsKey(new(a.LaterSchema().Type, 1)));
-            Assert.True(P0CatalogView.Load(ReferenceGraphStore(repository), latestShared).Schemas.ContainsKey(new(a.LaterSchema().Type, 1)));
-            NormalizedRevision baseline = branch.Baseline!;
+            Assert.True(SchemaCatalogView.Load(ReferenceGraphStore(repository), latestShared).Schemas.ContainsKey(new(a.LaterSchema().Type, 1)));
+            NormalizedGraphState baseline = branch.Baseline!;
             IDurableObject state = branch.State!;
-            P0CatalogView accepted = branch.Catalog.Accepted!;
+            SchemaCatalogView accepted = branch.Catalog.Accepted!;
             CheckpointAddress head = branch.Head;
             PrivatePublicationImage beforeDiscard = PrivatePublication(repository);
             branch.Catalog.Set(PrivateExtraSchema);
@@ -127,10 +127,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             PrivateAssertPublicationUnchanged(repository, beforeDiscard);
 
             eventAddress = branch.CommitEvent(state).RevisionAddress;
-            P0GraphSnapshot domainEvent = ReferenceGraphStore(repository).ReadGraph(eventAddress);
+            StoredGraphRevision domainEvent = ReferenceGraphStore(repository).ReadGraph(eventAddress);
             eventSchema = domainEvent.SchemaRoot!.Value;
             Assert.NotEqual(bSchema, eventSchema);
-            Assert.Equal(P0GraphKind.Event, domainEvent.Kind);
+            Assert.Equal(StoredGraphKind.Event, domainEvent.Kind);
             Assert.Equal(bState, domainEvent.Parent);
             Assert.Equal(bState, domainEvent.SourceGraph);
             Assert.Equal(eventSchema, branch.Catalog.Accepted!.Snapshot!.Address);
@@ -160,8 +160,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(unusedDescriptor, branch.Catalog.Accepted!.SchemaNodeId(a.UnusedSchema()));
             b.ChangeList(branch.State!, 7, 201);
             continued = branch.CommitState().RevisionAddress;
-            P0GraphStore store = ReferenceGraphStore(repository);
-            P0GraphSnapshot graph = store.ReadGraph(continued);
+            GraphRecordStore store = ReferenceGraphStore(repository);
+            StoredGraphRevision graph = store.ReadGraph(continued);
             Assert.Equal(eventAddress, graph.Parent);
             Assert.Equal(bState, graph.SourceGraph);
             Assert.Equal(eventSchema, graph.SchemaRoot);
@@ -170,13 +170,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(bList.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(bListStorage.Head, delta.PriorAddress);
-            P0ObjectChain chain = store.ReadObjectChain(continued, bList.Value);
+            ObjectVersionChain chain = store.ReadObjectChain(continued, bList.Value);
             Assert.Equal(bListStorage.ReconstructionPayloadBytes + chain.Entries[^1].PayloadBytes,
                 branch.Baseline!.Objects[bList].Storage!.Value.ReconstructionPayloadBytes);
             Assert.Equal(chain.ReconstructionPayloadBytes, branch.Baseline!.Objects[bList].Storage!.Value.ReconstructionPayloadBytes);
-            Assert.Equal(store.ReadGraph(bState).Objects.Keys, graph.Objects.Keys);
-            foreach (uint id in graph.Objects.Keys.Where(id => id != bList.Value)) {
-                Assert.Equal(store.ReadGraph(bState).Objects[id], graph.Objects[id]);
+            Assert.Equal(store.ReadGraph(bState).ObjectHeads.Keys, graph.ObjectHeads.Keys);
+            foreach (uint id in graph.ObjectHeads.Keys.Where(id => id != bList.Value)) {
+                Assert.Equal(store.ReadGraph(bState).ObjectHeads[id], graph.ObjectHeads[id]);
             }
             Assert.Equal(eventSchema, branch.Catalog.Accepted!.Snapshot!.Address);
             Assert.Equal(latestShared, repository.SharedSchemaRoot);
@@ -227,12 +227,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         internal IDurableObject CreateUnused() => _host.GetMethod("CreateUnused")!.CreateDelegate<Func<IDurableObject>>()();
         internal IDurableObject CreateLater() => _host.GetMethod("CreateLater")!.CreateDelegate<Func<IDurableObject>>()();
         internal DurableSchema[] CurrentSchemas() => _host.GetMethod("ExportSchemas")!
-            .CreateDelegate<Func<StateBindingContext, DurableSchema[]>>()(Models().Snapshot());
+            .CreateDelegate<Func<StateBindingContext, DurableSchema[]>>()(Models().CreateEnvironment());
         internal DurableSchema WidgetSchema() => Assert.Single(CurrentSchemas());
         internal DurableSchema UnusedSchema() => _host.GetMethod("UnusedSchema")!
-            .CreateDelegate<Func<StateBindingContext, DurableSchema>>()(Models().Snapshot());
+            .CreateDelegate<Func<StateBindingContext, DurableSchema>>()(Models().CreateEnvironment());
         internal DurableSchema LaterSchema() => _host.GetMethod("LaterSchema")!
-            .CreateDelegate<Func<StateBindingContext, DurableSchema>>()(Models().Snapshot());
+            .CreateDelegate<Func<StateBindingContext, DurableSchema>>()(Models().CreateEnvironment());
         internal void Check(object root, long value, int seven, int eight) =>
             _host.GetMethod("Check")!.CreateDelegate<Action<object, long, int, int>>()(root, value, seven, eight);
         internal void ChangeList(object root, int index, int value) =>
@@ -319,7 +319,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(before.Frames.Select(frame => frame.Address), after.Select(frame => frame.Address));
         PrivateAssertFrameImages(before.Frames, after);
         Assert.Equal(before.Appended, ReferenceGraphStore(repository).AppendedFrames);
-        Assert.False(PrivateResources(repository).HasMetaBootstrapPending);
+        Assert.False(PrivateResources(repository).HasPendingSave);
         Assert.False(repository.IsFaulted);
     }
     private static PrivateFrameImage[] PrivateReadFrames(Frames data) {

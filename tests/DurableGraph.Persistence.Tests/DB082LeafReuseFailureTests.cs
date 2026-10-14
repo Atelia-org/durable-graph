@@ -119,9 +119,9 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         main.Catalog.Set(new DurableSchema(Dependency.SchemaId, 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
         CheckpointAddress catalogEvent = main.CommitEvent(main.State!);
-        var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_splitConfiguration");
-        var wrongEnvironment = DecodedRevision.SplitBindingEnvironment.Load(repository.MetaBootstrapStore,
-            configuration, repository.MetaBootstrapStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+        var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
+        var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
+            configuration, repository.GraphStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
         InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => entry.Requirements.Validate(wrongEnvironment.Models));
         Assert.Contains(Dependency.SchemaId, conflict.Message);
         Assert.Equal(allocations, control.LeafAllocations);
@@ -179,8 +179,8 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         if (phase == "unknown") {
             InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("Unknown after actual root append"));
         }
-        repository.Checkpoint = point => {
-            if (phase != "unknown" && point == (phase == "before" ? CommitCheckpoint.BeforePublication : CommitCheckpoint.AfterPublication)) {
+        repository.OperationStageObserver = point => {
+            if (phase != "unknown" && point == (phase == "before" ? RepositoryOperationStage.BeforePublication : RepositoryOperationStage.AfterPublication)) {
                 throw new IOException("Publication interruption");
             }
         };
@@ -189,7 +189,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Equal(phase == "before" ? GraphCommitOutcome.NotPublished :
             phase == "after" ? GraphCommitOutcome.Published : GraphCommitOutcome.Unknown, error.Outcome);
         Assert.Equal((byte)7, deliveredLeaf.Value);
-        repository.Checkpoint = null;
+        repository.OperationStageObserver = null;
         if (phase == "before") {
             Assert.False(repository.IsFaulted);
             Assert.Same(previous, repository.PreparedStateEntry);
@@ -221,8 +221,8 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         } else if (finish == "dispose") {
             repository.Dispose();
         } else {
-            repository.Checkpoint = point => {
-                if (point == CommitCheckpoint.AfterPublication) { throw new IOException("fault"); }
+            repository.OperationStageObserver = point => {
+                if (point == RepositoryOperationStage.AfterPublication) { throw new IOException("fault"); }
             };
             Assert.Throws<GraphCommitException>(() => repository.Fork("fault", main.Head));
             Assert.True(repository.IsFaulted);

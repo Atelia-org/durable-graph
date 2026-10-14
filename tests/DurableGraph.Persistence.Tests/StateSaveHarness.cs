@@ -33,10 +33,10 @@ internal sealed class StateSaveHarness : IDisposable {
     internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
     internal ObjectId? WorldId => _stateHead?.RootId;
     internal bool IsFaulted => _repository.IsFaulted;
-    internal Action<CommitCheckpoint>? Checkpoint { get => _repository.Checkpoint; set => _repository.Checkpoint = value; }
-    internal Action<P0SaveCheckpoint>? MetaBootstrapCheckpoint {
-        get => _repository.MetaBootstrapCheckpoint;
-        set => _repository.MetaBootstrapCheckpoint = value;
+    internal Action<RepositoryOperationStage>? OperationStageObserver { get => _repository.OperationStageObserver; set => _repository.OperationStageObserver = value; }
+    internal Action<RepositorySaveStage>? SaveStageObserver {
+        get => _repository.SaveStageObserver;
+        set => _repository.SaveStageObserver = value;
     }
     internal StateSaveSession<T> Create<T>(T world) where T : class, IDurableObject {
         return new(this, world, null);
@@ -80,14 +80,14 @@ internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial
             return session.StateRevisionAddress!.Value;
         }
         if (session.Head.Kind == GraphFrameKind.State) {
-            Action<CommitCheckpoint>? checkpoint = repository.Checkpoint;
-            Action<P0SaveCheckpoint>? splitCheckpoint = repository.MetaBootstrapCheckpoint;
-            repository.Checkpoint = null;
-            repository.MetaBootstrapCheckpoint = null;
+            Action<RepositoryOperationStage>? checkpoint = repository.OperationStageObserver;
+            Action<RepositorySaveStage>? splitCheckpoint = repository.SaveStageObserver;
+            repository.OperationStageObserver = null;
+            repository.SaveStageObserver = null;
             try { session.CommitEvent(StateSaveHarness.NewMarker(), parameters); }
             finally {
-                repository.Checkpoint = checkpoint;
-                repository.MetaBootstrapCheckpoint = splitCheckpoint;
+                repository.OperationStageObserver = checkpoint;
+                repository.SaveStageObserver = splitCheckpoint;
             }
         }
         CheckpointAddress frame = session.CommitState(parameters);

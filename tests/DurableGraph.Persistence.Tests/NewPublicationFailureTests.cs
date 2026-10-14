@@ -20,8 +20,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(visible, reopened.ListBranches().Contains("main"));
-        P0GraphSnapshot appended = reopened.MetaBootstrapStore.ReadGraph(candidate);
-        P0CatalogView candidateCatalog = P0CatalogView.Load(reopened.MetaBootstrapStore, appended.SchemaRoot!.Value);
+        StoredGraphRevision appended = reopened.GraphStore.ReadGraph(candidate);
+        SchemaCatalogView candidateCatalog = SchemaCatalogView.Load(reopened.GraphStore, appended.SchemaRoot!.Value);
         Assert.Equal(Schema, candidateCatalog.Schemas[new(Schema.Type, Schema.Version)]);
         if (visible) {
             Assert.Equal(appended.SchemaRoot, reopened.SharedSchemaRoot);
@@ -34,20 +34,20 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterPublication)]
-    [InlineData((int)P0SaveCheckpoint.BeforeInstall)]
+    [InlineData((int)RepositorySaveStage.AfterPublication)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall)]
     public void DgOnlyFaultInvalidatesRetainedWarmFacadesEvenWhenDataOwnerIsUsable(int point) {
         using Repository repository = CreateRepository();
         using BranchCheckout main = repository.CreateBranch("main", new Node(), NoRebase);
         GraphResources resources = ResourcesOf(repository);
-        P0GraphStore retained = resources.MetaBootstrapStore;
+        GraphRecordStore retained = resources.GraphStore;
         FrameAddress old = main.Head.RevisionAddress;
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
         retained.ReadGraph(old);
-        P0CatalogView.Load(retained, schema);
+        SchemaCatalogView.Load(retained, schema);
         Assert.True(retained.ReadCacheStatistics.EntryCount > 0);
-        repository.MetaBootstrapCheckpoint = checkpoint => {
-            if (checkpoint == (P0SaveCheckpoint)point) { throw new IOException("Post publication installation interruption"); }
+        repository.SaveStageObserver = checkpoint => {
+            if (checkpoint == (RepositorySaveStage)point) { throw new IOException("Post publication installation interruption"); }
         };
         GraphCommitException error = Assert.Throws<GraphCommitException>(() => main.CommitState(NoRebase));
         Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
@@ -56,8 +56,8 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
         Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadGraph(old));
-        Assert.Throws<ObjectDisposedException>(() => P0CatalogView.Load(retained, schema));
-        Assert.Throws<ObjectDisposedException>(() => retained.Append(P0GraphKind.State, null, schema, new(null, new(1), [])));
+        Assert.Throws<ObjectDisposedException>(() => SchemaCatalogView.Load(retained, schema));
+        Assert.Throws<ObjectDisposedException>(() => retained.Append(StoredGraphKind.State, null, schema, new(null, new(1), [])));
         Assert.Throws<InvalidOperationException>(resources.RequireAvailable);
     }
 

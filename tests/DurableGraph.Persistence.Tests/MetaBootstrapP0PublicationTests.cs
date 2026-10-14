@@ -18,7 +18,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
         FrameAddress oldBusiness, oldMeta;
         long before;
         FrameAddress? candidate = null;
-        using (var repository = P0Repository.CreateNew(_path)) {
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             var first = Save(repository, 1);
             oldBusiness = first.Business.Address;
             oldMeta = repository.SharedSchemaRoot!.Value;
@@ -39,7 +39,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
         }
 
-        using var reopened = P0Repository.OpenExisting(_path);
+        using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.True(DataBytes(reopened.Data) > before); // Completed candidate data survives either publication result.
         FrameAddress business = reopened.GetHead("main")!.Value;
         FrameAddress meta = reopened.SharedSchemaRoot!.Value;
@@ -58,7 +58,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
     [Fact]
     public void Confirmed_install_failure_keeps_both_roots_and_invalidates_old_owner() {
         FrameAddress oldBusiness, oldMeta, candidate;
-        using (var repository = P0Repository.CreateNew(_path)) {
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             oldBusiness = Save(repository, 1).Business.Address;
             oldMeta = repository.SharedSchemaRoot!.Value;
             using var pending = Prepare(repository, 2);
@@ -71,7 +71,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             candidate = error.CandidateRevisionAddress!.Value;
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
         }
-        using var reopened = P0Repository.OpenExisting(_path);
+        using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.NotEqual(oldBusiness, candidate);
         Assert.Equal(candidate, reopened.GetHead("main"));
         Assert.NotEqual(oldMeta, reopened.SharedSchemaRoot);
@@ -79,23 +79,23 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterMetaAppend)]
-    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend)]
+    [InlineData((int)RepositorySaveStage.AfterMetaAppend)]
+    [InlineData((int)RepositorySaveStage.AfterBusinessAppend)]
     public void Completed_unpublished_meta_or_business_does_not_advance_either_ref(int checkpoint) {
         FrameAddress oldBusiness, oldMeta;
         long before;
-        using (var repository = P0Repository.CreateNew(_path)) {
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             oldBusiness = Save(repository, 1).Business.Address;
             oldMeta = repository.SharedSchemaRoot!.Value;
             before = DataBytes(repository.Data);
-            repository.Checkpoint = point => {
+            repository.SaveStageObserver = point => {
                 if ((int)point == checkpoint) { throw new IOException("Stop before publication"); }
             };
             using var pending = Prepare(repository, 2);
             var error = Assert.Throws<GraphCommitException>(() => repository.Commit(pending));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
         }
-        using var reopened = P0Repository.OpenExisting(_path);
+        using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.Equal(oldBusiness, reopened.GetHead("main"));
         Assert.Equal(oldMeta, reopened.SharedSchemaRoot);
         Assert.True(DataBytes(reopened.Data) > before);
@@ -106,10 +106,10 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
     [Fact]
     public void Event_installs_meta_and_branch_head_but_preserves_state_baseline() {
         FrameAddress state;
-        using (var repository = P0Repository.CreateNew(_path)) {
+        using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             state = Save(repository, 1).Business.Address;
             int metaInstalls = 0, stateInstalls = 0;
-            using var pending = Prepare(repository, 2, P0GraphKind.Event);
+            using var pending = Prepare(repository, 2, StoredGraphKind.Event);
             var result = repository.Commit(pending, _ => metaInstalls++, _ => stateInstalls++);
             Assert.Equal(1, metaInstalls);
             Assert.Equal(0, stateInstalls);
@@ -117,7 +117,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             Assert.Equal(state, repository.GetStateHead("main"));
             Assert.Equal(result.Meta!.Address, repository.SharedSchemaRoot);
         }
-        using var reopened = P0Repository.OpenExisting(_path);
+        using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.Equal(state, reopened.GetStateHead("main"));
         Assert.NotEqual(state, reopened.GetHead("main"));
         Assert.Equal((byte)2, reopened.Store.ReadObjectChain(reopened.SharedSchemaRoot!.Value, 1).Entries.Last().Record.Body[0]);
@@ -125,7 +125,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
 
     [Fact]
     public void Discard_is_pre_io_and_pending_is_single_use_and_owner_bound() {
-        using var repository = P0Repository.CreateNew(_path);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
         Save(repository, 1);
         long bytes = DataBytes(repository.Data);
         var discarded = Prepare(repository, 2);
@@ -134,7 +134,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
         Assert.Equal(bytes, DataBytes(repository.Data));
         Assert.Throws<InvalidOperationException>(() => repository.Commit(discarded));
         using var corrected = Prepare(repository, 3);
-        using (var other = P0Repository.CreateNew(Path.Combine(_path, "other"))) {
+        using (var other = RepositoryStorageFacade.CreateNew(Path.Combine(_path, "other"))) {
             Assert.Throws<InvalidOperationException>(() => other.Commit(corrected));
             Assert.False(other.IsFaulted);
         }
@@ -143,19 +143,19 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
         Assert.Equal((byte)3, repository.Store.ReadObjectChain(result.Business.Address, 1).Entries.Last().Record.Body[0]);
     }
 
-    private static P0SaveResult Save(P0Repository repository, byte value) {
+    private static RepositorySaveResult Save(RepositoryStorageFacade repository, byte value) {
         using var pending = Prepare(repository, value);
         return repository.Commit(pending);
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.BeforePublication)]
-    [InlineData((int)P0SaveCheckpoint.BeforeInstall)]
+    [InlineData((int)RepositorySaveStage.BeforePublication)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall)]
     public void Pending_stays_exclusive_through_publication_and_install(int checkpoint) {
-        using var repository = P0Repository.CreateNew(_path);
+        using var repository = RepositoryStorageFacade.CreateNew(_path);
         using var pending = Prepare(repository, 1);
         bool reached = false;
-        repository.Checkpoint = point => {
+        repository.SaveStageObserver = point => {
             if ((int)point != checkpoint) { return; }
             reached = true;
             Assert.Throws<InvalidOperationException>(() => repository.EnsureEditingAllowed());
@@ -170,10 +170,10 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
         Assert.False(repository.HasPending);
     }
 
-    private static P0PendingSave Prepare(P0Repository repository, byte value, P0GraphKind kind = P0GraphKind.State) =>
+    private static PendingRepositorySave Prepare(RepositoryStorageFacade repository, byte value, StoredGraphKind kind = StoredGraphKind.State) =>
         repository.Prepare("main", kind,
-            new P0PreparedGraphWrite(repository.GetStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])], []),
-            new P0PreparedGraphWrite(repository.SharedSchemaRoot, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []));
+            new PreparedGraphWrite(repository.GetStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])], []),
+            new PreparedGraphWrite(repository.SharedSchemaRoot, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []));
 
     public void Dispose() => SharedReadModel.DeleteFixture(_path, "dg-bootstrap-publication-");
 }

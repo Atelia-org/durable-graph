@@ -1,39 +1,39 @@
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 
-namespace Atelia.DurableGraph.Persistence.MetaBootstrapP0;
+namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>Thin typed driver. P0Repository owns the only pending-save lifecycle.</summary>
-internal sealed class P0Session {
-    private readonly P0Repository _repository;
+/// <summary>Thin typed driver. GraphResources owns the only pending-save lifecycle; RepositoryStorageFacade forwards it.</summary>
+internal sealed class BranchSaveSession {
+    private readonly RepositoryStorageFacade _repository;
     private readonly string _branch;
-    private readonly P0BusinessWorkspace _business;
+    private readonly BusinessPersistenceAdapter _business;
     private readonly bool _privateCatalog;
 
-    internal P0Session(P0Repository repository, string branch, StateModelRegistry models) {
+    internal BranchSaveSession(RepositoryStorageFacade repository, string branch, StateModelRegistry models) {
         _repository = repository;
         _branch = branch;
-        P0CatalogView? catalog = repository.SharedSchemaRoot is { } schema
-            ? P0CatalogView.Load(repository.Store, schema) : null;
+        SchemaCatalogView? catalog = repository.SharedSchemaRoot is { } schema
+            ? SchemaCatalogView.Load(repository.Store, schema) : null;
         Catalog = new(EnsureEditingAllowed, catalog);
         _business = repository.GetStateHead(branch) is { } state
-            ? P0BusinessWorkspace.LoadState(repository.Store, state, models)
+            ? BusinessPersistenceAdapter.LoadState(repository.Store, state, models)
             : new(repository.Store, models);
     }
 
-    internal P0Session(P0Repository repository, string branch,
+    internal BranchSaveSession(RepositoryStorageFacade repository, string branch,
         StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, bool privateCatalog = false)
         : this(repository, branch, configuration, ensureEditingAllowed, repository.GetStateHead(branch), privateCatalog,
             repository.GetHead(branch)) { }
 
     // The selected business head is owner-checked by Repository before restoring a historical Fork.
     // No target branch is published or consulted to choose the State being restored.
-    internal P0Session(P0Repository repository, string branch, FrameAddress selectedHead,
+    internal BranchSaveSession(RepositoryStorageFacade repository, string branch, FrameAddress selectedHead,
         StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, bool privateCatalog = false)
         : this(repository, branch, configuration, ensureEditingAllowed,
-            repository.Store.ResolveContentSource(P0GraphKind.State, selectedHead), privateCatalog, selectedHead) { }
+            repository.Store.ResolveContentSource(StoredGraphKind.State, selectedHead), privateCatalog, selectedHead) { }
 
-    private P0Session(P0Repository repository, string branch,
+    private BranchSaveSession(RepositoryStorageFacade repository, string branch,
         StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, FrameAddress? sourceState,
         bool privateCatalog, FrameAddress? selectedHead) {
         _repository = repository;
@@ -41,19 +41,19 @@ internal sealed class P0Session {
         _privateCatalog = privateCatalog;
         FrameAddress? catalogRoot = privateCatalog
             ? PrivateCatalogRoot(repository, selectedHead) : repository.SharedSchemaRoot;
-        P0CatalogView? catalog = catalogRoot is { } schema
-            ? P0CatalogView.Load(repository.Store, schema) : null;
+        SchemaCatalogView? catalog = catalogRoot is { } schema
+            ? SchemaCatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
         if (sourceState is { } state) {
-            _business = P0BusinessWorkspace.LoadState(repository.Store, state, configuration);
+            _business = BusinessPersistenceAdapter.LoadState(repository.Store, state, configuration);
         } else {
-            DecodedRevision.SplitBindingEnvironment? environment = catalogRoot is { } selected
-                ? DecodedRevision.SplitBindingEnvironment.Load(repository.Store, configuration, selected) : null;
-            _business = new(repository.Store, environment?.Models ?? configuration.CreateSnapshot(), environment);
+            DecodedRevision.SchemaViewBindingEnvironment? environment = catalogRoot is { } selected
+                ? DecodedRevision.SchemaViewBindingEnvironment.Load(repository.Store, configuration, selected) : null;
+            _business = new(repository.Store, environment?.Models ?? configuration.CreateEnvironment(), environment);
         }
     }
 
-    internal P0Session(P0Repository repository, string branch, P0BusinessWorkspace business,
+    internal BranchSaveSession(RepositoryStorageFacade repository, string branch, BusinessPersistenceAdapter business,
         Action ensureEditingAllowed, bool privateCatalog = false, FrameAddress? selectedHead = null) {
         if (business.Source is not { } source || !ReferenceEquals(source.SourceOwner, repository.Store)) {
             throw new InvalidDataException("A restored business workspace must belong to this exact repository Store.");
@@ -64,20 +64,20 @@ internal sealed class P0Session {
         _privateCatalog = privateCatalog;
         FrameAddress? catalogRoot = privateCatalog
             ? PrivateCatalogRoot(repository, selectedHead ?? repository.GetHead(branch)) : repository.SharedSchemaRoot;
-        P0CatalogView? catalog = catalogRoot is { } schema
-            ? P0CatalogView.Load(repository.Store, schema) : null;
+        SchemaCatalogView? catalog = catalogRoot is { } schema
+            ? SchemaCatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
     }
 
-    internal P0CatalogWorkspace Catalog { get; }
+    internal SchemaCatalogWorkspace Catalog { get; }
     internal IDurableObject? State => _business.State;
-    internal P0GraphSnapshot? StateSource => _business.Source;
-    internal StateModelSnapshot Models => _business.Models;
-    internal NormalizedRevision? Baseline => _business.Baseline;
+    internal StoredGraphRevision? StateSource => _business.Source;
+    internal ModelExecutionEnvironment Models => _business.Models;
+    internal NormalizedGraphState? Baseline => _business.Baseline;
     internal ObjectId RootId => _business.RootId;
-    internal DecodedRevision.SplitBindingEnvironment? BindingEnvironment => _business.BindingEnvironment;
+    internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => _business.BindingEnvironment;
 
-    private static FrameAddress PrivateCatalogRoot(P0Repository repository, FrameAddress? selectedHead) =>
+    private static FrameAddress PrivateCatalogRoot(RepositoryStorageFacade repository, FrameAddress? selectedHead) =>
         selectedHead is { } head && repository.Store.ReadMetadata(head).SchemaRoot is { } schema ? schema
             : throw new InvalidDataException("A private checkout requires the current business head's exact Schema pin.");
 
@@ -85,14 +85,14 @@ internal sealed class P0Session {
         _repository.EnsureEditingAllowed();
     }
 
-    internal P0SessionSave Prepare(IDurableObject root, P0GraphKind kind = P0GraphKind.State,
+    internal PreparedBranchSave Prepare(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
         ReadAmplificationBaseBudgetParameters? parameters = null, bool toShared = false) {
         EnsureEditingAllowed();
         BusinessSaveCandidate? capture = null;
-        P0PreparedCatalog? catalog = null;
-        P0PreparedBusiness? business = null;
+        PreparedSchemaCatalogWrite? catalog = null;
+        PreparedBusinessWrite? business = null;
         try {
-            (P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog) Produce() {
+            (PreparedGraphWrite Business, PreparedGraphWrite? Catalog) Produce() {
                 FrameAddress? headSchemaRoot = null, latestSharedRoot = null;
                 if (toShared) {
                     // Freeze both actual roots inside the owner producer window. The
@@ -104,7 +104,7 @@ internal sealed class P0Session {
                     latestSharedRoot = _repository.SharedSchemaRoot;
                     Catalog.ValidateToSharedOwned(_repository.Store, headSchemaRoot, latestSharedRoot);
                 } else if (!_privateCatalog && _repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
-                    Catalog.RebaseOwned(P0CatalogView.Load(_repository.Store, latest));
+                    Catalog.RebaseOwned(SchemaCatalogView.Load(_repository.Store, latest));
                 }
                 capture = _business.CaptureOwned(root, kind);
                 catalog = toShared
@@ -114,7 +114,7 @@ internal sealed class P0Session {
                 business = _business.PrepareOwned(capture, catalog.View, parameters);
                 return (business.Write, catalog.Write);
             }
-            P0PendingSave pending = _privateCatalog && !toShared ? _repository.PreparePrivateFrom(_branch, kind, Produce)
+            PendingRepositorySave pending = _privateCatalog && !toShared ? _repository.PreparePrivateFrom(_branch, kind, Produce)
                 : _repository.PrepareFrom(_branch, kind, Produce);
             return new(_repository, pending, catalog!, business!);
         } catch {
@@ -124,12 +124,12 @@ internal sealed class P0Session {
     }
 }
 
-internal sealed class P0SessionSave(P0Repository repository, P0PendingSave pending,
-    P0PreparedCatalog catalog, P0PreparedBusiness business) : IDisposable {
-    internal P0PreparedCatalog Catalog { get; } = catalog;
-    internal P0PreparedBusiness Business { get; } = business;
-    internal P0PendingSave Pending { get; } = pending;
-    internal P0SaveResult Commit(Action<P0GraphSnapshot>? prepareBusinessDelivery = null) {
+internal sealed class PreparedBranchSave(RepositoryStorageFacade repository, PendingRepositorySave pending,
+    PreparedSchemaCatalogWrite catalog, PreparedBusinessWrite business) : IDisposable {
+    internal PreparedSchemaCatalogWrite Catalog { get; } = catalog;
+    internal PreparedBusinessWrite Business { get; } = business;
+    internal PendingRepositorySave Pending { get; } = pending;
+    internal RepositorySaveResult Commit(Action<StoredGraphRevision>? prepareBusinessDelivery = null) {
         if (!Pending.IsPrepared) { throw new InvalidOperationException("The typed save is already committing or resolved."); }
         try { return repository.Commit(Pending, Catalog.Install, Business.Install, Catalog.PrepareInstall, Business.PrepareInstall, prepareBusinessDelivery); }
         finally { Business.Dispose(); }

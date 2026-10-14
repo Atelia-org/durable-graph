@@ -61,7 +61,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal((byte)1, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
+            GraphRecordStore states = resources.GraphStore;
             Assert.Null(states.ReadGraph(s0.RevisionAddress).SourceGraph);
             foreach (CheckpointAddress address in new[] { e1, e2, s1 }) {
                 Assert.Equal(s0.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
@@ -114,7 +114,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal((byte)20, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
+            GraphRecordStore states = resources.GraphStore;
             foreach (CheckpointAddress address in new[] { e0, e1, s0 }) {
                 Assert.Null(states.ReadGraph(address.RevisionAddress).SourceGraph);
                 Assert.All(StorageTestData.LocalRecords(states, address.RevisionAddress), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
@@ -148,14 +148,14 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(promoted.RootId, removed.RootId);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
-            var originalIds = states.ReadGraph(original.RevisionAddress).Objects.Keys.Order().ToArray();
+            GraphRecordStore states = resources.GraphStore;
+            var originalIds = states.ReadGraph(original.RevisionAddress).ObjectHeads.Keys.Order().ToArray();
             Assert.Contains(promoted.RootId.Value, originalIds);
-            Assert.Equal(originalIds, states.ReadGraph(promoted.RevisionAddress).Objects.Keys.Order());
+            Assert.Equal(originalIds, states.ReadGraph(promoted.RevisionAddress).ObjectHeads.Keys.Order());
             Assert.Empty(StorageTestData.LocalRecords(states, promoted.RevisionAddress));
             // A smaller full head map may encode removal by absence rather than a Delta Remove row.
-            Assert.Equal(new[] { promoted.RootId.Value }, states.ReadGraph(removed.RevisionAddress).Objects.Keys);
-            Assert.DoesNotContain(original.RootId.Value, states.ReadGraph(removed.RevisionAddress).Objects.Keys);
+            Assert.Equal(new[] { promoted.RootId.Value }, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
+            Assert.DoesNotContain(original.RootId.Value, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout cold = reopened.Checkout("main");
@@ -345,7 +345,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Null(siblingView.PreviousEventAddress);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
+            GraphRecordStore states = resources.GraphStore;
             foreach (CheckpointAddress address in new[] { otherState, mainEvent2, mainState }) {
                 Assert.Equal(root.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
             }

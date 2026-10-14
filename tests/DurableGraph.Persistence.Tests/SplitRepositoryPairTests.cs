@@ -20,32 +20,32 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     // contract continues to require read-only results without promising cross-view identity.
     [Fact]
     public void SameSchemaSharesStableGeneratedClosureAndChangedChildSplitsItsAncestors() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             SplitPairEnvelope root = Envelope();
             using BranchCheckout main = seed.CreateBranch("main", root);
             CheckpointAddress s0 = main.Head;
             seed.CreateTag("original", s0);
             CheckpointAddress s1 = main.CommitState();
             seed.CreateTag("stable", s1);
-            P0GraphSnapshot first = seed.MetaBootstrapStore.ReadGraph(s0.RevisionAddress);
-            P0GraphSnapshot stable = seed.MetaBootstrapStore.ReadGraph(s1.RevisionAddress);
-            Assert.Equal(7, first.Objects.Count); // Envelope, two Widgets, List, and three string IDs.
+            StoredGraphRevision first = seed.GraphStore.ReadGraph(s0.RevisionAddress);
+            StoredGraphRevision stable = seed.GraphStore.ReadGraph(s1.RevisionAddress);
+            Assert.Equal(7, first.ObjectHeads.Count); // Envelope, two Widgets, List, and three string IDs.
             Assert.Null(stable.OwnedBatch);
             Assert.Equal(first.DirectoryRoot, stable.DirectoryRoot);
             root.Widget!.Child!.Value = 20;
             CheckpointAddress s2 = main.CommitState();
             seed.CreateTag("changed", s2);
-            P0GraphSnapshot changed = seed.MetaBootstrapStore.ReadGraph(s2.RevisionAddress);
-            ObjectVersionRecord child = Assert.Single(seed.MetaBootstrapStore.ReadBatch(changed.OwnedBatch!.Value).Records);
-            Assert.NotEqual(first.Objects[child.ObjectId], changed.Objects[child.ObjectId]);
-            Assert.Equal(first.Objects[main.StateId!.Value.Value], changed.Objects[main.StateId.Value.Value]);
-            foreach ((uint id, FrameAddress head) in first.Objects) {
-                if (id != child.ObjectId) { Assert.Equal(head, changed.Objects[id]); }
+            StoredGraphRevision changed = seed.GraphStore.ReadGraph(s2.RevisionAddress);
+            ObjectVersionRecord child = Assert.Single(seed.GraphStore.ReadBatch(changed.OwnedBatch!.Value).Records);
+            Assert.NotEqual(first.ObjectHeads[child.ObjectId], changed.ObjectHeads[child.ObjectId]);
+            Assert.Equal(first.ObjectHeads[main.StateId!.Value.Value], changed.ObjectHeads[main.StateId.Value.Value]);
+            foreach ((uint id, FrameAddress head) in first.ObjectHeads) {
+                if (id != child.ObjectId) { Assert.Equal(head, changed.ObjectHeads[id]); }
             }
             Assert.Equal(first.SchemaRoot, changed.SchemaRoot);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, GeneratedModels())) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, GeneratedModels())) {
             CheckpointAddress original = reader.ResolveTag("original"), stable = reader.ResolveTag("stable"), changed = reader.ResolveTag("changed");
             SplitPairEnvelope independentlyDecodedFirst = AssertEnvelope(reader.ReadState(original), 2);
             SplitPairEnvelope independentlyDecodedSecond = AssertEnvelope(reader.ReadState(stable), 2);
@@ -74,32 +74,32 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             SplitPairEnvelope independent = AssertEnvelope(reader.ReadState(original), 2);
             Assert.NotSame(oldRoot, independent);
             Assert.NotSame(oldRoot.Widget.Numbers, independent.Widget!.Numbers);
-            Assert.Equal(0, reader.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(0, reader.GraphStore.AppendedFrames);
         }
         AssertFilesEqual(files, SnapshotFiles());
     }
 
     [Fact]
     public void DifferentSchemaHydrationClosuresKeepEqualCurrentDtosIndependentAndMatchSingleReads() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             seed.CreateTag("before", main.Head);
             main.Catalog.Set(Extra);
             CheckpointAddress next = main.CommitEvent(main.State!);
             seed.CreateTag("after", next);
-            P0GraphSnapshot first = seed.MetaBootstrapStore.ReadGraph(main.StateRevisionAddress!.Value);
-            P0GraphSnapshot second = seed.MetaBootstrapStore.ReadGraph(next.RevisionAddress);
+            StoredGraphRevision first = seed.GraphStore.ReadGraph(main.StateRevisionAddress!.Value);
+            StoredGraphRevision second = seed.GraphStore.ReadGraph(next.RevisionAddress);
             Assert.NotEqual(first.SchemaRoot, second.SchemaRoot);
-            Assert.Equal(first.Objects[first.RootId.Value], second.Objects[second.RootId.Value]);
+            Assert.Equal(first.ObjectHeads[first.RootId.Value], second.ObjectHeads[second.RootId.Value]);
             Assert.Null(second.OwnedBatch);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { HydrateFromSchema = true };
         StateModelRegistry registry = ProbeModels(1, counts);
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, registry)) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, registry)) {
             CheckpointAddress first = reader.ResolveTag("before"), second = reader.ResolveTag("after");
-            DecodedRevision oldDto = DecodedRevision.ReadSplit(reader.MetaBootstrapStore, first.RevisionAddress, registry);
-            DecodedRevision newDto = DecodedRevision.ReadSplit(reader.MetaBootstrapStore, second.RevisionAddress, registry);
+            DecodedRevision oldDto = DecodedRevision.ReadStoredGraph(reader.GraphStore, first.RevisionAddress, registry);
+            DecodedRevision newDto = DecodedRevision.ReadStoredGraph(reader.GraphStore, second.RevisionAddress, registry);
             Assert.Equal(7, oldDto.GetRequired(first.RootId).GetState<int>());
             Assert.Equal(oldDto.GetRequired(first.RootId).Schema, newDto.GetRequired(second.RootId).Schema);
             Assert.Equal(7, newDto.GetRequired(second.RootId).GetState<int>());
@@ -118,24 +118,24 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(107, Assert.IsType<ProbeRoot>(reverse.First).Value);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(reverse.Second).Value);
             Assert.False(reader.IsFaulted);
-            Assert.Equal(0, reader.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(0, reader.GraphStore.AppendedFrames);
         }
         AssertFilesEqual(files, SnapshotFiles());
     }
 
     [Fact]
     public void HistoricalRewriteIsNotSharedEvenWithinOneEnvironmentAndConfirmedBaseBecomesEligible() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             seed.CreateTag("old", main.Head);
         }
         Counts counts = new();
         StateModelRegistry registry = ProbeModels(2, counts);
         Dictionary<string, byte[]> files = SnapshotFiles();
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, registry)) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, registry)) {
             CheckpointAddress old = reader.ResolveTag("old");
-            DecodedRevision source = DecodedRevision.ReadSplit(reader.MetaBootstrapStore, old.RevisionAddress, registry);
-            NormalizedRevision normalized = NormalizedRevision.Create(source, source.SourceModels!);
+            DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.GraphStore, old.RevisionAddress, registry);
+            NormalizedGraphState normalized = NormalizedGraphState.Create(source, source.SourceModels!);
             Assert.Equal(ProbeV1, source.GetRequired(old.RootId).Schema);
             Assert.Equal(ProbeV2, normalized.Objects[old.RootId].Current.Schema);
             Assert.True(normalized.Objects[old.RootId].RequiresRewrite);
@@ -149,11 +149,11 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(2, counts.Hydrates);
         }
         AssertFilesEqual(files, SnapshotFiles());
-        using (Repository writer = Repository.OpenMetaBootstrapExisting(_path, registry, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository writer = Repository.OpenStorageExisting(_path, registry, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = writer.Checkout("main");
             CheckpointAddress current = main.CommitState();
-            P0GraphSnapshot graph = writer.MetaBootstrapStore.ReadGraph(current.RevisionAddress);
-            ObjectVersionRecord rewritten = Assert.Single(writer.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records);
+            StoredGraphRevision graph = writer.GraphStore.ReadGraph(current.RevisionAddress);
+            ObjectVersionRecord rewritten = Assert.Single(writer.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Base, rewritten.Kind);
             Assert.Equal(current.RootId.Value, rewritten.ObjectId);
             Assert.False(main.Baseline!.Objects[current.RootId].RequiresRewrite);
@@ -173,7 +173,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         SeedProbePair();
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { FailValue = 8 };
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, ProbeModels(1, counts))) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts))) {
             CheckpointAddress first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
             (IDurableObject First, IDurableObject Second)? delivered = null;
             Assert.Same(counts.Failure, Assert.Throws<InvalidDataException>(() => delivered = reader.ReadPair(first, second)));
@@ -196,7 +196,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         SeedProbePair();
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { Singleton = new ProbeRoot { Value = 100 } };
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, ProbeModels(1, counts))) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts))) {
             CheckpointAddress first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
             (IDurableObject First, IDurableObject Second)? delivered = null;
             Assert.Throws<InvalidDataException>(() => delivered = reader.ReadPair(first, second));
@@ -220,7 +220,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         CheckpointAddress stale = SeedProbePair();
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new();
-        Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, ProbeModels(1, counts));
+        Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts));
         try {
             CheckpointAddress first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
             Assert.Throws<ArgumentException>(() => reader.ReadPair(stale, second));
@@ -250,15 +250,15 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     }
 
     private CheckpointAddress SeedProbePair() {
-        using Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
         CheckpointAddress first = main.Head;
         seed.CreateTag("first", first);
         Assert.IsType<ProbeRoot>(main.State).Value = 8;
         CheckpointAddress second = main.CommitState();
         seed.CreateTag("second", second);
-        Assert.Equal(seed.MetaBootstrapStore.ReadGraph(first.RevisionAddress).SchemaRoot,
-            seed.MetaBootstrapStore.ReadGraph(second.RevisionAddress).SchemaRoot);
+        Assert.Equal(seed.GraphStore.ReadGraph(first.RevisionAddress).SchemaRoot,
+            seed.GraphStore.ReadGraph(second.RevisionAddress).SchemaRoot);
         return first;
     }
 

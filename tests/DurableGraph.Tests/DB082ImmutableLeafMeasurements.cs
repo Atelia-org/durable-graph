@@ -61,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             host.GetMethod("Create")!.CreateDelegate<Func<string, IDurableObject>>(),
             host.GetMethod("Check")!.CreateDelegate<Func<IDurableObject, string, long>>(),
             host.GetMethod("Mutate")!.CreateDelegate<Action<IDurableObject>>());
-        var snapshot = model.Models().Snapshot();
+        var snapshot = model.Models().CreateEnvironment();
         Assert.True(snapshot.ResolveCurrentModel(assembly.GetType("LeafMeasurement.Leaf")!).IsImmutableLeaf);
         Assert.False(snapshot.ResolveCurrentModel(assembly.GetType("LeafMeasurement.Owner")!).IsImmutableLeaf);
         return model;

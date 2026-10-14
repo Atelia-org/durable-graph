@@ -19,7 +19,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
     [Fact]
     public void MixedHistoryTagsHistoricalBranchesForkAndMovePreserveSourcesAndColdContinueDelta() {
         FrameAddress selected, forkSaved, shared;
-        using (Repository repository = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             DB087Widget root = Ring();
             using BranchCheckout main = repository.CreateBranch("main", root);
             CheckpointAddress s0 = main.Head;
@@ -40,7 +40,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             Assert.Equal(s0, repository.GetPreviousState(e1));
             Assert.Equal(s0, repository.GetPreviousState(e2));
 
-            long frames = repository.MetaBootstrapStore.AppendedFrames;
+            long frames = repository.GraphStore.AppendedFrames;
             repository.CreateTag("selected", e1);
             Assert.Equal(e1, repository.ResolveTag("selected"));
             Assert.Equal(e1, repository.CreateBranch("reference", e1));
@@ -54,7 +54,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             Assert.NotSame(root, forkRoot);
             Assert.NotSame(forkRoot, referenceRoot);
             Assert.NotSame(forkRoot.Numbers, referenceRoot.Numbers);
-            Assert.Equal(frames, repository.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(frames, repository.GraphStore.AppendedFrames);
             Assert.Equal(shared, repository.SharedSchemaRoot); // A historical branch does not roll back shared Schema.
 
             ObjectId listId = Assert.Single(fork.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
@@ -62,10 +62,10 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             forkRoot.Numbers[7] = 4;
             CheckpointAddress saved = fork.CommitState();
             forkSaved = saved.RevisionAddress;
-            P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(forkSaved);
+            StoredGraphRevision graph = repository.GraphStore.ReadGraph(forkSaved);
             Assert.Equal(e1.RevisionAddress, graph.Parent);
             Assert.Equal(s0.RevisionAddress, graph.SourceGraph);
-            ObjectVersionRecord delta = Assert.Single(repository.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records);
+            ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(prior.Head, delta.PriorAddress);
@@ -73,16 +73,16 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             AssertRing(main.State, 3);
             Assert.Equal(s2, main.Head);
             reference.Dispose();
-            frames = repository.MetaBootstrapStore.AppendedFrames;
+            frames = repository.GraphStore.AppendedFrames;
             repository.MoveBranch("reference", e1, s2);
             Assert.Equal(s2, repository.GetHead("reference"));
             repository.MoveBranch("reference", s2, e1);
             Assert.Equal(e1, repository.GetHead("reference"));
-            Assert.Equal(frames, repository.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(frames, repository.GraphStore.AppendedFrames);
             Assert.Equal(shared, repository.SharedSchemaRoot);
             Assert.Equal(e1, repository.ResolveTag("selected"));
         }
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress restoredTag = repository.ResolveTag("selected");
             Assert.Equal(selected, restoredTag.RevisionAddress);
             AssertRing(repository.ReadEvent(restoredTag), 11);
@@ -94,8 +94,8 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             ObjectStorageInfo prior = fork.Baseline.Objects[listId].Storage!.Value;
             root.Numbers[8] = 5;
             CheckpointAddress saved = fork.CommitState();
-            P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(saved.RevisionAddress);
-            ObjectVersionRecord delta = Assert.Single(repository.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records);
+            StoredGraphRevision graph = repository.GraphStore.ReadGraph(saved.RevisionAddress);
+            ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(prior.Head, delta.PriorAddress);
             Assert.Equal(prior.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior.Head),
@@ -110,16 +110,16 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
 
     [Fact]
     public void MetadataNavigationDoesNotDecodeBusinessOrFollowAnInvalidDirectoryRole() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             seed.CreateTag("valid", main.Head);
         }
         Counts counts = new() { ThrowBusinessCallbacks = true };
-        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenStorageExisting(_path, Models(counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress valid = repository.GetHead("main");
         GraphResources resources = ResourcesOf(repository);
-        FrameAddress bad = resources.Data.Append(P0GraphWire.GraphTag,
-            P0GraphWire.EncodeGraph(P0GraphKind.Event, valid.RevisionAddress, valid.RootId,
+        FrameAddress bad = resources.Data.Append(GraphFrameCodec.GraphTag,
+            GraphFrameCodec.EncodeGraph(StoredGraphKind.Event, valid.RevisionAddress, valid.RootId,
                 valid.RevisionAddress, repository.SharedSchemaRoot, null)).Unwrap();
         // A complete experimental graph envelope points to a graph frame in the directory slot.
         // This never rewrites a completed frame. The tag is published through the real VS data-first barrier.
@@ -135,7 +135,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         Assert.Equal(new[] { "main", "metadata" }, repository.ListBranches());
         Assert.Equal(0, counts.Factories);
         Assert.Equal(0, counts.Readers);
-        Assert.Throws<InvalidDataException>(() => repository.MetaBootstrapStore.ReadGraph(bad));
+        Assert.Throws<InvalidDataException>(() => repository.GraphStore.ReadGraph(bad));
         Assert.Throws<InvalidDataException>(() => repository.ReadEvent(selected));
         Assert.Equal(0, counts.Factories);
         Assert.Equal(0, counts.Readers);
@@ -148,18 +148,18 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
 
     [Fact]
     public void ReadCheckpointUsesEachGraphsAccurateSchemaAndReturnsIndependentMutableRoots() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             main.Catalog.Set(Extra);
             main.CommitEvent(main.State!);
         }
         Dictionary<string, byte[]> files = SnapshotFiles(_path);
         Counts counts = new();
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, ProbeModels(2, counts))) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(2, counts))) {
             CheckpointAddress head = reader.GetHead("main");
             CheckpointAddress previous = reader.GetPreviousState(head)!;
-            Assert.NotEqual(reader.MetaBootstrapStore.ReadMetadata(head.RevisionAddress).SchemaRoot,
-                reader.MetaBootstrapStore.ReadMetadata(previous.RevisionAddress).SchemaRoot);
+            Assert.NotEqual(reader.GraphStore.ReadMetadata(head.RevisionAddress).SchemaRoot,
+                reader.GraphStore.ReadMetadata(previous.RevisionAddress).SchemaRoot);
             EventCheckpoint result = Assert.IsType<EventCheckpoint>(reader.ReadCheckpoint(head));
             Assert.Equal(previous, result.PreviousStateAddress);
             ProbeRoot domainEvent = Assert.IsType<ProbeRoot>(result.Event);
@@ -179,7 +179,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
     [Fact]
     public void EventOnlyHistoricalForkNeedsNoEventModelAndFirstStateHasNoContentParent() {
         FrameAddress selected, shared;
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranchFromEvent("main", Ring(1));
             selected = main.Head.RevisionAddress;
             seed.CreateTag("prefix", main.Head);
@@ -187,26 +187,26 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             main.CommitEvent(Ring(2));
             shared = seed.SharedSchemaRoot!.Value;
         }
-        using (Repository noModels = Repository.OpenMetaBootstrapExisting(_path, new(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository noModels = Repository.OpenStorageExisting(_path, new(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress prefix = noModels.ResolveTag("prefix");
-            long frames = noModels.MetaBootstrapStore.AppendedFrames;
+            long frames = noModels.GraphStore.AppendedFrames;
             using BranchCheckout fork = noModels.Fork("empty", prefix);
             Assert.Null(fork.State);
             Assert.Null(fork.StateRevisionAddress);
             Assert.Null(fork.Baseline);
             Assert.Equal(prefix, fork.Head);
             Assert.Equal(shared, fork.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
-            Assert.Equal(frames, noModels.MetaBootstrapStore.AppendedFrames);
+            Assert.Equal(frames, noModels.GraphStore.AppendedFrames);
             Assert.Null(noModels.GetPreviousState(prefix));
         }
-        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout resumed = repository.Checkout("empty");
         Assert.Null(resumed.State);
         CheckpointAddress first = resumed.CommitState(Ring(3));
-        P0GraphSnapshot graph = repository.MetaBootstrapStore.ReadGraph(first.RevisionAddress);
+        StoredGraphRevision graph = repository.GraphStore.ReadGraph(first.RevisionAddress);
         Assert.Equal(selected, graph.Parent);
         Assert.Null(graph.SourceGraph);
-        Assert.All(repository.MetaBootstrapStore.ReadBatch(graph.OwnedBatch!.Value).Records,
+        Assert.All(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records,
             row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
         AssertRing(resumed.State, 3);
         Assert.Equal(shared, repository.SharedSchemaRoot);
@@ -214,16 +214,16 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
 
     [Fact]
     public void HistoricalForkRestoreFailurePublishesNothingAndReleasesItsNameForRetry() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             main.CommitEvent(new ProbeRoot { Value = 8 });
         }
         Counts counts = new() { FailAllocate = true };
-        using Repository repository = Repository.OpenMetaBootstrapExisting(_path, ProbeModels(1, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenStorageExisting(_path, ProbeModels(1, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress source = repository.GetHead("main");
         var branchRef = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
         var sharedRef = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
-        long frames = repository.MetaBootstrapStore.AppendedFrames;
+        long frames = repository.GraphStore.AppendedFrames;
         BranchCheckout? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = repository.Fork("retry", source));
         Assert.Null(delivered);
@@ -231,12 +231,12 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         Assert.Equal(new[] { "main" }, repository.ListBranches());
         Assert.Equal(branchRef.Revision, ResourcesOf(repository).Versions.ReadRef(1).Unwrap().Revision);
         Assert.Equal(sharedRef.Revision, ResourcesOf(repository).Versions.ReadRef(2).Unwrap().Revision);
-        Assert.Equal(frames, repository.MetaBootstrapStore.AppendedFrames);
+        Assert.Equal(frames, repository.GraphStore.AppendedFrames);
         counts.FailAllocate = false;
         using BranchCheckout retry = repository.Fork("retry", source);
         Assert.Equal(7, Assert.IsType<ProbeRoot>(retry.State).Value); // Historical Event's nearest State, not its Event root 8.
         Assert.Equal(source, retry.Head);
-        Assert.Equal(0, repository.MetaBootstrapStore.AppendedFrames);
+        Assert.Equal(0, repository.GraphStore.AppendedFrames);
         Assert.Equal(new[] { "main", "retry" }, repository.ListBranches());
     }
 
@@ -247,12 +247,12 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         FrameAddress source;
         RefRevision sharedRevision;
         byte[] sharedPayload;
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             source = main.Head.RevisionAddress;
         }
         Dictionary<string, byte[]> data = SnapshotFiles(Path.Combine(_path, "data"));
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             var branches = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
             RefRevision branchRevision = branches.Revision;
@@ -261,8 +261,8 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             sharedRevision = shared.Revision;
             sharedPayload = shared.Payload.ToArray();
             IOException injected = new("split ref-only fork window");
-            repository.Checkpoint = point => {
-                if (point == (published ? CommitCheckpoint.AfterPublication : CommitCheckpoint.BeforePublication)) { throw injected; }
+            repository.OperationStageObserver = point => {
+                if (point == (published ? RepositoryOperationStage.AfterPublication : RepositoryOperationStage.BeforePublication)) { throw injected; }
             };
             BranchCheckout? delivered = null;
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => delivered = repository.Fork("candidate", main.Head));
@@ -271,7 +271,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             Assert.Same(injected, error.InnerException);
             Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
             Assert.Equal(published, repository.IsFaulted);
-            repository.Checkpoint = null;
+            repository.OperationStageObserver = null;
             if (published) {
                 Assert.Throws<InvalidOperationException>(() => main.CommitState());
             } else {
@@ -281,11 +281,11 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
                 Assert.Equal(branchPayload, unchanged.Payload.ToArray());
                 using BranchCheckout retry = repository.Fork("candidate", main.Head);
                 AssertRing(retry.State, 0);
-                Assert.Equal(0, repository.MetaBootstrapStore.AppendedFrames);
+                Assert.Equal(0, repository.GraphStore.AppendedFrames);
             }
         }
         AssertFilesEqual(data, SnapshotFiles(Path.Combine(_path, "data")));
-        using Repository reopened = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models());
+        using Repository reopened = Repository.OpenStorageReadOnlyExisting(_path, Models());
         Assert.Equal(source, reopened.GetHead("candidate").RevisionAddress);
         var selected = ResourcesOf(reopened).Versions.ReadRef(2).Unwrap();
         Assert.Equal(sharedRevision, selected.Revision);
@@ -295,12 +295,12 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
 
     [Fact]
     public void ReadCheckpointRejectsAnAllocatorSharingOneMutableInstanceAcrossBothGraphsBeforeHydration() {
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
             main.CommitEvent(new ProbeRoot { Value = 8 });
         }
         Counts counts = new() { Singleton = new() { Value = 100 } };
-        using Repository repository = Repository.OpenMetaBootstrapReadOnlyExisting(_path, ProbeModels(1, counts));
+        using Repository repository = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts));
         Checkpoint? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = repository.ReadCheckpoint(repository.GetHead("main")));
         Assert.Null(delivered);
@@ -318,12 +318,12 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
     [Fact]
     public void HistoryRefsRejectWrongOwnersOccupancyAndReadonlyWritesAndIteratorsCheckLifetime() {
         CheckpointAddress old;
-        using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = seed.CreateBranch("main", Ring());
             old = main.CommitEvent(Ring(1));
             seed.CreateTag("event", old);
         }
-        using (Repository repository = Repository.OpenMetaBootstrapExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             CheckpointAddress current = repository.ResolveTag("event");
             Assert.Throws<ArgumentException>(() => repository.CreateBranch("foreign", old));
             Assert.Throws<ArgumentException>(() => repository.Fork("foreign", old));
@@ -341,7 +341,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             Assert.Equal(current, repository.GetHead("positive"));
         }
         Dictionary<string, byte[]> files = SnapshotFiles(_path);
-        using (Repository reader = Repository.OpenMetaBootstrapReadOnlyExisting(_path, Models())) {
+        using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, Models())) {
             CheckpointAddress current = reader.ResolveTag("event");
             Assert.Throws<InvalidOperationException>(() => reader.CreateBranch("blocked", current));
             Assert.Throws<InvalidOperationException>(() => reader.Fork("blocked", current));

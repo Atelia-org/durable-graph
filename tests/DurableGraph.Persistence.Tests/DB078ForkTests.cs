@@ -56,8 +56,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal((byte)8, Assert.IsType<Node>(repository.ReadState(otherHead)).Left!.Value);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
-            uint childId = Assert.Single(states.ReadGraph(initial.RevisionAddress).Objects.Keys, id => id != initial.RootId.Value);
+            GraphRecordStore states = resources.GraphStore;
+            uint childId = Assert.Single(states.ReadGraph(initial.RevisionAddress).ObjectHeads.Keys, id => id != initial.RootId.Value);
             ObjectVersionRecord firstWrite = Assert.Single(StorageTestData.LocalRecords(states, childOnly.RevisionAddress));
             Assert.Equal(childId, firstWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, firstWrite.Kind);
@@ -65,8 +65,8 @@ public sealed partial class EventHistoryRepositoryTests {
             ObjectVersionRecord nextWrite = Assert.Single(StorageTestData.LocalRecords(states, nextChildOnly.RevisionAddress));
             Assert.Equal(childId, nextWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, nextWrite.Kind);
-            Assert.Equal(states.ReadGraph(childOnly.RevisionAddress).Objects[childId], nextWrite.PriorAddress);
-            Assert.Equal(new[] { initial.RootId.Value }, states.ReadGraph(removed.RevisionAddress).Objects.Keys);
+            Assert.Equal(states.ReadGraph(childOnly.RevisionAddress).ObjectHeads[childId], nextWrite.PriorAddress);
+            Assert.Equal(new[] { initial.RootId.Value }, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
             Assert.Equal(initial.RevisionAddress, states.ReadGraph(otherHead.RevisionAddress).SourceGraph);
             Assert.Equal(initial.RevisionAddress, states.ReadGraph(mainHead.RevisionAddress).SourceGraph);
         }
@@ -185,14 +185,14 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)CommitCheckpoint.BeforePublication, false)]
-    [InlineData((int)CommitCheckpoint.AfterPublication, true)]
+    [InlineData((int)RepositoryOperationStage.BeforePublication, false)]
+    [InlineData((int)RepositoryOperationStage.AfterPublication, true)]
     public void ForkRefPublicationOutcomesPreserveHistoryAndFaultAllCheckoutsWhenNeeded(int point, bool published) {
         using (Repository repository = CreateRepository()) {
             using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             using BranchCheckout other = repository.Fork("other", main.Head);
             var before = ImmutableHistoryFiles();
-            repository.Checkpoint = checkpoint => { if (checkpoint == (CommitCheckpoint)point) throw new IOException("fork interruption"); };
+            repository.OperationStageObserver = checkpoint => { if (checkpoint == (RepositoryOperationStage)point) throw new IOException("fork interruption"); };
             BranchCheckout? delivered = null;
             GraphCommitException failure = Assert.Throws<GraphCommitException>(() => delivered = repository.Fork("child", main.Head));
             Assert.Null(delivered);
@@ -200,7 +200,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(published ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, failure.Outcome);
             Assert.Equal(published, repository.IsFaulted);
             AssertHistoryFiles(before);
-            repository.Checkpoint = null;
+            repository.OperationStageObserver = null;
             if (published) {
                 Assert.True(main.IsFaulted);
                 Assert.True(other.IsFaulted);

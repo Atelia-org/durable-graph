@@ -123,14 +123,14 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         if (phase == "allocate") duringAllocate = Reenter;
         if (phase == "hydrate") duringHydrate = Reenter;
-        repository.Checkpoint = point => {
-            if (phase == "before-publication" && point == CommitCheckpoint.BeforePublication ||
-                phase == "after-publication" && point == CommitCheckpoint.AfterPublication) Reenter();
+        repository.OperationStageObserver = point => {
+            if (phase == "before-publication" && point == RepositoryOperationStage.BeforePublication ||
+                phase == "after-publication" && point == RepositoryOperationStage.AfterPublication) Reenter();
         };
         using BranchCheckout child = repository.Fork("child", initial);
         Assert.True(callbackCount > 0);
         duringAllocate = duringHydrate = null;
-        repository.Checkpoint = null;
+        repository.OperationStageObserver = null;
         Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
         Assert.Throws<InvalidOperationException>(() => repository.Checkout("child"));
         Assert.DoesNotContain("nested", repository.ListBranches());

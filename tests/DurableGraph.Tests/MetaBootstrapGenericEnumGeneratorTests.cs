@@ -24,36 +24,36 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress s0, s1, s2, schemaRoot;
         uint rootId, intBoxId, enumBoxId;
         IDurableObject original = create();
-        using (P0Repository repository = P0Repository.CreateNew(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot();
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment();
             IDurableObject[] initial = objects(original);
             for (int i = 0; i < initial.Length; i++) {
                 Assert.Equal(expected[i], snapshot.ResolveCurrentModel(initial[i].GetType()).CurrentSchema);
             }
-            P0Session session = new(repository, "main", registered);
-            using P0SessionSave save = session.Prepare(original); // All exact dependencies come from Capture.
+            BranchSaveSession session = new(repository, "main", registered);
+            using PreparedBranchSave save = session.Prepare(original); // All exact dependencies come from Capture.
             AssertBootstrapGenericEnumCatalog(save.Catalog.View, expected);
             Assert.Equal(3, save.Business.Write.Records.Count);
             Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            P0SaveResult result = save.Commit();
+            RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             schemaRoot = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
-            Assert.Equal(3, result.Business.Objects.Count); // Inline, enum and Nullable never acquire object IDs.
+            Assert.Equal(3, result.Business.ObjectHeads.Count); // Inline, enum and Nullable never acquire object IDs.
             Assert.Equal(0, session.Catalog.DirtyCount);
         }
 
         // Close every FS/VS/DG resource before decoding meta, with no business registry input.
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView meta = P0CatalogView.Load(repository.Store, schemaRoot);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot);
             AssertBootstrapGenericEnumCatalog(meta, expected);
             Assert.NotSame(expected[0], meta.Schemas[new(expected[0].Type, 1)]);
             Assert.Equal(0, repository.Store.AppendedFrames);
 
             StateModelRegistry registered = models();
-            StateModelSnapshot snapshot = registered.Snapshot(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
-            P0DecodedRows decoded = P0TypedReader.Read(repository.Store, s0, snapshot, meta);
+            ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
+            DecodedGraphRows decoded = StoredGraphDecoder.Read(repository.Store, s0, snapshot, meta);
             Assert.Equal(3, decoded.Rows.Count);
             Assert.Equal(expected[0], decoded.Rows[new(rootId)].Schema);
             intBoxId = Assert.Single(decoded.Rows.Values, row => row.Schema?.Type.Equals(expected[1].Type) == true).Id.Value;
@@ -61,11 +61,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotEqual(intBoxId, enumBoxId);
             Assert.Equal(expected[1], decoded.Rows[new(intBoxId)].Schema);
             Assert.Equal(expected[2], decoded.Rows[new(enumBoxId)].Schema);
-            P0GraphSnapshot graph = repository.Store.ReadGraph(s0);
+            StoredGraphRevision graph = repository.Store.ReadGraph(s0);
             AssertBootstrapClosureDynamicDescriptor(repository, graph, rootId, ObjectLayout.ForDurable(expected[0]));
             AssertBootstrapClosureDynamicDescriptor(repository, graph, intBoxId, ObjectLayout.ForDurable(expected[1]));
             AssertBootstrapClosureDynamicDescriptor(repository, graph, enumBoxId, ObjectLayout.ForDurable(expected[2]));
-            IDurableObject read = P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered);
+            IDurableObject read = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered);
             Assert.NotSame(original, read);
             check(read, 0); // Two different closed CLR types, aliasing and both self/owner rings.
             Assert.Equal(s0, repository.GetHead("main"));
@@ -73,15 +73,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
 
-        using (P0Repository repository = P0Repository.OpenExisting(files.Path)) {
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry registered = models();
-            P0Session session = new(repository, "main", registered);
+            BranchSaveSession session = new(repository, "main", registered);
             IDurableObject restored = session.State!;
             check(restored, 0);
             IDurableObject[] restoredObjects = objects(restored);
             change(restored);
             check(restored, 1);
-            using (P0SessionSave save = session.Prepare(restored, parameters: new(1_000_000, 1))) {
+            using (PreparedBranchSave save = session.Prepare(restored, parameters: new(1_000_000, 1))) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Equal(0, save.Catalog.AddedDescriptors);
@@ -91,9 +91,9 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(new[] { rootId, intBoxId, enumBoxId }.Order(), save.Business.Write.Records.Select(row => row.ObjectId));
                 foreach (ObjectVersionRecord delta in save.Business.Write.Records) {
                     Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                    Assert.Equal(session.StateSource!.Objects[delta.ObjectId], delta.PriorAddress);
+                    Assert.Equal(session.StateSource!.ObjectHeads[delta.ObjectId], delta.PriorAddress);
                 }
-                P0SaveResult result = save.Commit();
+                RepositorySaveResult result = save.Commit();
                 s1 = result.Business.Address;
                 Assert.Equal(schemaRoot, result.Meta!.Address); // Selected meta is returned even when reused.
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
@@ -103,21 +103,21 @@ public sealed partial class DurableSchemaGeneratorTests {
                 IDurableObject[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(restoredObjects[i], after[i]); }
                 foreach (uint id in new[] { rootId, intBoxId, enumBoxId }) {
-                    P0ObjectChain chain = repository.Store.ReadObjectChain(s1, id);
+                    ObjectVersionChain chain = repository.Store.ReadObjectChain(s1, id);
                     Assert.Equal(2, chain.Entries.Count);
                     Assert.Equal(ObjectVersionKind.Delta, chain.Entries[^1].Record.Kind);
                 }
             }
 
             // Absent Nullable children must not cause phantom changes in generic state comparison.
-            P0GraphSnapshot accepted = session.StateSource!;
+            StoredGraphRevision accepted = session.StateSource!;
             long frames = repository.Store.AppendedFrames;
-            using (P0SessionSave unchanged = session.Prepare(restored)) {
+            using (PreparedBranchSave unchanged = session.Prepare(restored)) {
                 Assert.Null(unchanged.Catalog.Write);
                 Assert.Empty(unchanged.Catalog.EncodedIds);
                 Assert.Empty(unchanged.Business.Write.Records);
                 Assert.Empty(unchanged.Business.Write.RemovedIds);
-                P0SaveResult result = unchanged.Commit();
+                RepositorySaveResult result = unchanged.Commit();
                 s2 = result.Business.Address;
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
@@ -125,25 +125,25 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered), 0);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s2, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered), 0);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, registered), 1);
         }
 
-        using (P0Repository repository = P0Repository.OpenReadOnlyExisting(files.Path)) {
-            P0CatalogView meta = P0CatalogView.Load(repository.Store, schemaRoot);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
+            SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot);
             AssertBootstrapGenericEnumCatalog(meta, expected);
             Assert.Equal(s2, repository.GetStateHead("main"));
             Assert.Equal(schemaRoot, repository.Store.ReadGraph(s0).SchemaRoot);
             Assert.Equal(schemaRoot, repository.Store.ReadGraph(s1).SchemaRoot);
             StateModelRegistry registered = models();
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s0, registered), 0);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s1, registered), 1);
-            check(P0BusinessWorkspace.ReadRoot(repository.Store, s2, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, registered), 0);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s1, registered), 1);
+            check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, registered), 1);
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
     }
 
-    private static void AssertBootstrapGenericEnumCatalog(P0CatalogView meta, DurableSchema[] expected) {
+    private static void AssertBootstrapGenericEnumCatalog(SchemaCatalogView meta, DurableSchema[] expected) {
         Assert.Equal(6, meta.Schemas.Count);
         Assert.Equal(6, meta.DescriptorIds.Count);
         foreach (DurableSchema schema in expected) {

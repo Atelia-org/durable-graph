@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var oldModels = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            var revision = DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, oldModels);
+            var revision = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, oldModels);
             exactWorld = Assert.Single(revision.Objects, row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
 
@@ -57,7 +57,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool>>()(directory.Path));
         var models = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            var decoded = DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, models);
+            var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models);
             var world = Assert.Single(decoded.Objects, row => row.Schema?.SchemaId == "CrossWorld");
             Assert.Equal(exactWorld, world.Schema);
             Assert.Equal(1, world.Schema!.Version);
@@ -67,7 +67,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            var store = segments.MetaBootstrapStore;
+            var store = segments.GraphStore;
             Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
             Assert.All(DefaultRecords(store, addresses[0]), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             foreach (int index in new[] { 1, 3 }) {
@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, true);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            prior = Assert.Single(DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, models).Objects,
+            prior = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models).Objects,
                 row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
         // Generate valid retained history first, then explicitly omit its historical value
@@ -112,14 +112,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             var remoteAssembly = scope.Load(retired);
             var full = scope.Load(app).GetType("CrossHistoryApp.Host")!.GetMethod("Models")!
                 .CreateDelegate<Func<bool, StateModelRegistry>>()(false);
-            StateDefinitionBinding definition = full.Snapshot().GetDefinition("RemotePoint");
+            StateDefinitionBinding definition = full.CreateEnvironment().GetDefinition("RemotePoint");
             StateModelRegistry models = new();
             scope.Load(app).GetType("CrossHistoryApp.Catalog")!.GetMethod("Register")!
                 .CreateDelegate<Action<IStateModelRegistration>>()(models);
             models.Register(new StateDefinitionBinding(definition.DefinitionId, definition.Kind, definition.Arity,
                 definition.DomainTypeDefinition, definition.Templates, currentValueFactory: definition.CurrentValueFactory));
-            Assert.Equal(2, models.Snapshot().ResolveCurrentValue(remoteAssembly.GetType("CrossHistoryRemote.Point")!).Slot.InlineSchema!.Version);
-            Assert.Throws<InvalidDataException>(() => models.Snapshot().ResolveReader(prior));
+            Assert.Equal(2, models.CreateEnvironment().ResolveCurrentValue(remoteAssembly.GetType("CrossHistoryRemote.Point")!).Slot.InlineSchema!.Version);
+            Assert.Throws<InvalidDataException>(() => models.CreateEnvironment().ResolveReader(prior));
         }
         // Restoring the historical factory does not make a same-version changed owner legal.
         GeneratorTestRun changed = RunCrossAssemblyGenerator(CrossAssemblyHistoryRemote(2),

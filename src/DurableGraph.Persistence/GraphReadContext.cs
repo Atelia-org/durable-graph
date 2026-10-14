@@ -6,14 +6,14 @@ namespace Atelia.DurableGraph.Persistence;
 internal sealed class GraphReadContext {
     private readonly HashSet<object> _mutableInstances = new(ReferenceEqualityComparer.Instance);
 
-    internal GraphReadContext(StateModelSnapshot models, GraphReadStatistics? statistics = null) {
+    internal GraphReadContext(ModelExecutionEnvironment models, GraphReadStatistics? statistics = null) {
         ArgumentNullException.ThrowIfNull(models);
         Models = models;
         Statistics = statistics ?? new();
         MeasureMaterialization = statistics is not null;
     }
 
-    internal StateModelSnapshot Models { get; }
+    internal ModelExecutionEnvironment Models { get; }
     internal GraphReadStatistics Statistics { get; }
     internal bool MeasureMaterialization { get; }
 

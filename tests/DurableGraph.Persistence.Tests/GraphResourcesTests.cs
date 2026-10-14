@@ -16,25 +16,25 @@ public sealed class GraphResourcesTests : IDisposable {
         Assert.False(File.Exists(Path.Combine(_root, "repository.lock")));
         var before = Snapshot();
         using (GraphResources reader = GraphResources.OpenReadOnlyExisting(_root)) {
-            using P0Repository facade = new(reader);
+            using RepositoryStorageFacade facade = new(reader);
             Assert.True(reader.IsReadOnly);
             reader.RequireAvailable();
             AssertSchema(reader);
             Assert.Equal(address, facade.GetHead("main"));
-            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(P0BusinessWorkspace.ReadRoot(facade.Store, address, SharedReadModel.Models())).Value);
+            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(BusinessPersistenceAdapter.ReadRoot(facade.Store, address, SharedReadModel.Models())).Value);
             Assert.Throws<InvalidOperationException>(reader.RequireWritable);
             Assert.Throws<InvalidOperationException>(facade.EnsureEditingAllowed);
-            P0Session readonlySession = new(facade, "main", SharedReadModel.Models());
+            BranchSaveSession readonlySession = new(facade, "main", SharedReadModel.Models());
             Assert.Throws<InvalidOperationException>(() => readonlySession.Catalog.Set(Schema));
-            Assert.Throws<InvalidOperationException>(() => facade.Prepare("other", P0GraphKind.State,
+            Assert.Throws<InvalidOperationException>(() => facade.Prepare("other", StoredGraphKind.State,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, [10])])));
             using GraphResources second = GraphResources.OpenReadOnlyExisting(_root);
-            Assert.Equal(address, second.GetMetaBootstrapHead("main"));
+            Assert.Equal(address, second.GetBranchHead("main"));
             AssertSchema(second);
         }
         AssertUnchanged(before);
         using GraphResources reopened = GraphResources.OpenExisting(_root);
-        Assert.Equal(address, reopened.GetMetaBootstrapHead("main"));
+        Assert.Equal(address, reopened.GetBranchHead("main"));
         AssertSchema(reopened);
     }
 
@@ -70,22 +70,22 @@ public sealed class GraphResourcesTests : IDisposable {
         FrameAddress orphan;
         using (GraphResources resources = GraphResources.CreateNew(_root)) {
             SeedTyped(resources);
-            orphan = resources.Data.Append(P0GraphWire.GraphTag, [255], [255]).Unwrap();
+            orphan = resources.Data.Append(GraphFrameCodec.GraphTag, [255], [255]).Unwrap();
             resources.Data.ConfirmDurable();
         }
         using GraphResources reopened = GraphResources.OpenExisting(_root);
         AssertSchema(reopened);
-        Assert.Throws<InvalidDataException>(() => reopened.MetaBootstrapStore.ReadMetadata(orphan));
-        Assert.Throws<InvalidDataException>(() => reopened.ReadMetaBootstrapHistory(orphan));
+        Assert.Throws<InvalidDataException>(() => reopened.GraphStore.ReadMetadata(orphan));
+        Assert.Throws<InvalidDataException>(() => reopened.ReadHistory(orphan));
     }
 
     [Fact]
     public void OwnerFaultAndDisposeRejectWarmedFacadesButOwnedResultsRemainReadable() {
         using GraphResources resources = GraphResources.CreateNew(_root);
-        P0GraphStore retained = resources.MetaBootstrapStore;
-        P0GraphSnapshot graph = SeedRaw(resources);
+        GraphRecordStore retained = resources.GraphStore;
+        StoredGraphRevision graph = SeedRaw(resources);
         FrameAddress address = graph.Address;
-        P0Batch batch = retained.ReadBatch(graph.OwnedBatch!.Value);
+        ObjectVersionBatch batch = retained.ReadBatch(graph.OwnedBatch!.Value);
         IReadOnlyDictionary<uint, FrameAddress> heads = retained.ReadDirectory(graph.DirectoryRoot);
         Assert.Same(batch, retained.ReadBatch(graph.OwnedBatch.Value));
         Assert.Same(heads, retained.ReadDirectory(graph.DirectoryRoot));
@@ -99,13 +99,13 @@ public sealed class GraphResourcesTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(address));
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
-        Assert.Throws<ObjectDisposedException>(() => retained.Append(P0GraphKind.State, address, null,
+        Assert.Throws<ObjectDisposedException>(() => retained.Append(StoredGraphKind.State, address, null,
             new(address, new(7), [ObjectVersionRecord.CreateBase(7, [30])])));
         Assert.Equal(graph.OwnedBatch, heads[7]);
         Assert.Equal(new byte[] { 10, 20 }, Assert.Single(batch.Records).Body.ToArray());
         using GraphResources reopened = GraphResources.OpenReadOnlyExisting(_root);
-        Assert.NotSame(batch, reopened.MetaBootstrapStore.ReadBatch(graph.OwnedBatch.Value));
-        Assert.Equal(address, reopened.GetMetaBootstrapHead("main"));
+        Assert.NotSame(batch, reopened.GraphStore.ReadBatch(graph.OwnedBatch.Value));
+        Assert.Equal(address, reopened.GetBranchHead("main"));
     }
 
     [Theory]
@@ -113,9 +113,9 @@ public sealed class GraphResourcesTests : IDisposable {
     [InlineData(true)]
     public void ActualBackingClosureRejectsWarmCache(bool closeVersionStore) {
         using GraphResources resources = GraphResources.CreateNew(_root);
-        P0GraphStore retained = resources.MetaBootstrapStore;
-        P0GraphSnapshot graph = SeedRaw(resources);
-        P0Batch owned = retained.ReadBatch(graph.OwnedBatch!.Value);
+        GraphRecordStore retained = resources.GraphStore;
+        StoredGraphRevision graph = SeedRaw(resources);
+        ObjectVersionBatch owned = retained.ReadBatch(graph.OwnedBatch!.Value);
         retained.ReadDirectory(graph.DirectoryRoot);
         Assert.True(retained.ReadCacheStatistics.ResidentChargeBytes > 0);
         if (closeVersionStore) { resources.Versions.Dispose(); }
@@ -142,27 +142,27 @@ public sealed class GraphResourcesTests : IDisposable {
         using (GraphResources reopened = GraphResources.OpenExisting(_root)) {
             Assert.Contains(reopened.Data.RecoveryReports.Values, report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.Truncated);
             AssertSchema(reopened);
-            Assert.Equal(address, reopened.GetMetaBootstrapHead("main"));
-            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(P0BusinessWorkspace.ReadRoot(reopened.MetaBootstrapStore, address, SharedReadModel.Models())).Value);
+            Assert.Equal(address, reopened.GetBranchHead("main"));
+            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, address, SharedReadModel.Models())).Value);
         }
         Assert.Equal(complete, File.ReadAllBytes(active));
     }
 
-    private static P0GraphSnapshot SeedTyped(GraphResources resources) {
-        using P0Repository facade = new(resources);
-        P0Session session = new(facade, "main", SharedReadModel.Models());
+    private static StoredGraphRevision SeedTyped(GraphResources resources) {
+        using RepositoryStorageFacade facade = new(resources);
+        BranchSaveSession session = new(facade, "main", SharedReadModel.Models());
         session.Catalog.Set(Schema);
-        using P0SessionSave save = session.Prepare(new SharedReadModel.Node { Value = 7 });
+        using PreparedBranchSave save = session.Prepare(new SharedReadModel.Node { Value = 7 });
         return save.Commit().Business;
     }
-    private static P0GraphSnapshot SeedRaw(GraphResources resources) {
-        using P0Repository facade = new(resources);
-        using P0PendingSave pending = facade.Prepare("main", P0GraphKind.State,
+    private static StoredGraphRevision SeedRaw(GraphResources resources) {
+        using RepositoryStorageFacade facade = new(resources);
+        using PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
             new(null, new(7), [ObjectVersionRecord.CreateBase(7, [10, 20])]));
         return facade.Commit(pending).Business;
     }
     private static void AssertSchema(GraphResources resources) {
-        P0CatalogView catalog = P0CatalogView.Load(resources.MetaBootstrapStore, resources.SharedMetaBootstrapRoot!.Value);
+        SchemaCatalogView catalog = SchemaCatalogView.Load(resources.GraphStore, resources.SharedSchemaRoot!.Value);
         Assert.Equal(Schema, catalog.Schemas[new(Schema.Type, Schema.Version)]);
     }
     private Dictionary<string, byte[]> Snapshot() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)

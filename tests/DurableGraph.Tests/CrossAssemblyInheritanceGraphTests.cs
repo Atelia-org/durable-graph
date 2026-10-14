@@ -29,8 +29,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverse);
         using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var states = segments.MetaBootstrapStore;
-        var initial = DecodedRevision.ReadSplit(states, addresses[0], models);
+        var states = segments.GraphStore;
+        var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         var leaf = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Leaf");
         var other = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Other");
         Assert.Equal(3, initial.Objects.Count); // Two actual leaves and their shared List; no base/inline object rows.
@@ -53,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(goldens[index], delta.Body.ToArray());
         }
-        var final = DecodedRevision.ReadSplit(states, addresses[^1], models);
+        var final = DecodedRevision.ReadStoredGraph(states, addresses[^1], models);
         Assert.Equal(initial.Objects.Select(item => item.Id).OrderBy(id => id.Value), final.Objects.Select(item => item.Id).OrderBy(id => id.Value));
     }
 

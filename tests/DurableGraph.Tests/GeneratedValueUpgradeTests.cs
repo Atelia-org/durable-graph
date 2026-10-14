@@ -28,7 +28,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!
             .CreateDelegate<Action<IStateDefinitionRegistration>>()(registry);
-        StateBindingContext snapshot = registry.Snapshot();
+        StateBindingContext snapshot = registry.CreateEnvironment();
         Type pair = assembly.GetType("Pair`1")!.MakeGenericType(assembly.GetType("Point")!);
         StateModelBinding model = snapshot.ResolveCurrentModel(assembly.GetType("Box`1")!.MakeGenericType(pair));
         object prior = assembly.GetType("Host")!.GetMethod("Prior")!.CreateDelegate<Func<object>>()();
@@ -77,7 +77,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!
             .CreateDelegate<Action<IStateDefinitionRegistration>>()(registry);
-        var rules = registry.Snapshot().GetValueUpgradeRuleSet(assembly.GetType("Rules")!);
+        var rules = registry.CreateEnvironment().GetValueUpgradeRuleSet(assembly.GetType("Rules")!);
         Assert.Single(rules.Providers);
     }
 
@@ -91,7 +91,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!
             .CreateDelegate<Action<IStateDefinitionRegistration>>()(registry);
-        StateValueUpgradeRuleSet rules = registry.Snapshot().GetValueUpgradeRuleSet(assembly.GetType("Rules")!);
+        StateValueUpgradeRuleSet rules = registry.CreateEnvironment().GetValueUpgradeRuleSet(assembly.GetType("Rules")!);
         Assert.True(rules.AllowKeepExact);
         Assert.Empty(rules.Providers);
     }
@@ -138,7 +138,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!
             .CreateDelegate<Action<IStateDefinitionRegistration>>()(registry);
-        StateBindingContext snapshot = registry.Snapshot();
+        StateBindingContext snapshot = registry.CreateEnvironment();
         StateModelBinding model = snapshot.ResolveCurrentModel(assembly.GetType("World")!);
         object prior = assembly.GetType("Host")!.GetMethod("Prior")!.CreateDelegate<Func<object>>()();
         DurableSchema source = snapshot.InferSchemaFromState(model.CurrentSchema.Type, 1, prior.GetType());

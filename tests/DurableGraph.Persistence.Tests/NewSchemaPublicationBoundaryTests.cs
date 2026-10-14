@@ -9,19 +9,19 @@ public sealed partial class DB078HistoryTests {
         using (Repository repository = Create()) {
             using BranchCheckout main = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase);
             otherHead = repository.CreateBranch("other", main.Head).RevisionAddress;
-            P0GraphStore store = repository.MetaBootstrapStore;
+            GraphRecordStore store = repository.GraphStore;
             var key = new SchemaKey(BetaSchema.Type, BetaSchema.Version);
-            Assert.False(P0CatalogView.Load(store, repository.SharedSchemaRoot!.Value).Schemas.ContainsKey(key));
+            Assert.False(SchemaCatalogView.Load(store, repository.SharedSchemaRoot!.Value).Schemas.ContainsKey(key));
             CheckpointAddress next = main.CommitState(new Beta { Value = 2 }, NoRebase);
             published = next.RevisionAddress;
-            P0CatalogView catalog = P0CatalogView.Load(store, repository.SharedSchemaRoot!.Value);
+            SchemaCatalogView catalog = SchemaCatalogView.Load(store, repository.SharedSchemaRoot!.Value);
             Assert.Equal(BetaSchema, catalog.Schemas[key]);
             Assert.Equal(catalog.Snapshot!.Address, store.ReadGraph(published).SchemaRoot);
             Assert.Equal(otherHead, repository.GetHead("other").RevisionAddress);
             Assert.Equal(next, repository.GetHead("main"));
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(_root, Models());
-        Assert.Equal(BetaSchema, P0CatalogView.Load(reopened.MetaBootstrapStore, reopened.SharedSchemaRoot!.Value)
+        Assert.Equal(BetaSchema, SchemaCatalogView.Load(reopened.GraphStore, reopened.SharedSchemaRoot!.Value)
             .Schemas[new(BetaSchema.Type, BetaSchema.Version)]);
         Assert.Equal(otherHead, reopened.GetHead("other").RevisionAddress);
         Assert.Equal(published, reopened.GetHead("main").RevisionAddress);
@@ -37,7 +37,7 @@ public sealed partial class DB078HistoryTests {
             previous = main.Head.RevisionAddress;
             oldSchema = repository.SharedSchemaRoot!.Value;
             int graphCheckpoints = 0;
-            repository.Checkpoint = _ => graphCheckpoints++;
+            repository.OperationStageObserver = _ => graphCheckpoints++;
             InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("First joint End outcome unknown."));
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Unknown, error.Outcome);
@@ -52,10 +52,10 @@ public sealed partial class DB078HistoryTests {
         // Both graph candidates are complete; one CU End cannot expose either root.
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
-        Assert.False(P0CatalogView.Load(reopened.MetaBootstrapStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
-        P0GraphSnapshot orphan = reopened.MetaBootstrapStore.ReadGraph(candidate);
+        Assert.False(SchemaCatalogView.Load(reopened.GraphStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
+        StoredGraphRevision orphan = reopened.GraphStore.ReadGraph(candidate);
         Assert.NotEqual(oldSchema, orphan.SchemaRoot);
-        Assert.Equal(BetaSchema, P0CatalogView.Load(reopened.MetaBootstrapStore, orphan.SchemaRoot!.Value)
+        Assert.Equal(BetaSchema, SchemaCatalogView.Load(reopened.GraphStore, orphan.SchemaRoot!.Value)
             .Schemas[new(BetaSchema.Type, BetaSchema.Version)]);
         Assert.Equal(previous, reopened.GetHead("main").RevisionAddress);
         Assert.Equal((byte)1, Assert.IsType<Alpha>(reopened.ReadState(reopened.GetHead("main"))).Value);
@@ -69,8 +69,8 @@ public sealed partial class DB078HistoryTests {
             previous = main.Head.RevisionAddress;
             oldSchema = repository.SharedSchemaRoot!.Value;
             repository.CreateBranch("other", main.Head);
-            repository.MetaBootstrapCheckpoint = checkpoint => {
-                if (checkpoint == P0SaveCheckpoint.BeforePublication) { throw new IOException("Joint publication interrupted."); }
+            repository.SaveStageObserver = checkpoint => {
+                if (checkpoint == RepositorySaveStage.BeforePublication) { throw new IOException("Joint publication interrupted."); }
             };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
@@ -79,7 +79,7 @@ public sealed partial class DB078HistoryTests {
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
-        Assert.False(P0CatalogView.Load(reopened.MetaBootstrapStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
+        Assert.False(SchemaCatalogView.Load(reopened.GraphStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
         Assert.Equal(previous, reopened.GetHead("main").RevisionAddress);
         Assert.Equal(previous, reopened.GetHead("other").RevisionAddress);
         Assert.Equal((byte)1, Assert.IsType<Alpha>(reopened.ReadState(reopened.GetHead("main"))).Value);

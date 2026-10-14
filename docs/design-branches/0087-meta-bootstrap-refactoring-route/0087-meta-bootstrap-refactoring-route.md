@@ -151,7 +151,7 @@ Event-only 绕槽，失败不换槽，Fork 发布成功后才装槽；DB-081 热
 <a id="save-contract"></a>
 ## 5. 共同保存、发布与故障
 
-GraphResources 是唯一 backing／refs／pending／fault owner；P0Repository 只是实验外观。
+GraphResources 是唯一 backing／refs／pending／fault owner；RepositoryStorageFacade 是可借用／拥有资源的薄存储外观。
 Repository 操作串行、每 branch 最多一个活动 checkout；生命周期、占用、重入与 borrowed backing writer 不重叠纪律保持。
 公开 FS rotation 参数保原义，read-cache budget 单独透传；不把现第三位置的 rotation 偷换为 cache 配置。
 同 owner 的唯一 pending、具体基线引用和候选身份承载资格，不造通用参与者／token 平台。
@@ -216,12 +216,12 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 ## 7. 当前源码导航
 
 - 自举路由：[员工定义](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0EmployeeModels.cs)、[fixed bindings](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0FixedBindings.cs)、[builtin 完整布局](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BuiltinLayouts.cs)、[typed body／reader](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0TypedBodies.cs)。
-- meta 查询／编辑：[P0CatalogView](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogView.cs)、[P0CatalogWorkspace](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)，复用 [Schema 工厂](../../../src/DurableGraph/Schema/DurableSchema.cs)。
-- 持久核心：[P0GraphStore](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphStore.cs)、[wire](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphWire.cs)、[目录 codec](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0DirectoryCodec.cs)、[共用 payload](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)。
-- 业务 producer／候选：[BusinessWorkspace](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)、[P0BusinessWorkspace](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs)、[planner](../../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)、[NormalizedRevision](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)。
+- meta 查询／编辑：[SchemaCatalogView](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogView.cs)、[SchemaCatalogWorkspace](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)，复用 [Schema 工厂](../../../src/DurableGraph/Schema/DurableSchema.cs)。
+- 持久核心：[GraphRecordStore](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphStore.cs)、[wire](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphWire.cs)、[目录 codec](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0DirectoryCodec.cs)、[共用 payload](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)。
+- 业务 producer／候选：[BusinessWorkspace](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)、[BusinessPersistenceAdapter](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0BusinessWorkspace.cs)、[planner](../../../src/DurableGraph.Persistence/ObjectRevisionPlanner.cs)、[NormalizedGraphState](../../../src/DurableGraph.Persistence/NormalizedRevision.cs)。
 - owner／公开前端：[GraphResources](../../../src/DurableGraph.Persistence/GraphResources.cs)／[发布 partial](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)、[Repository](../../../src/DurableGraph.Persistence/Repository.cs)／[恢复 partial](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)／[history partial](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.History.cs)、[BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)。
-- baseline 私有恢复／冷续写：[具体入口](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[P0Session](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)；只新增具体 scope 与 owner 派生的 meta 来源，不建立 resolver／策略平台。
-- 环境／恢复／缓存：[StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[ReadSplit](../../../src/DurableGraph.Persistence/DecodedRevision.cs)、[GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)、[State 槽](../../../src/DurableGraph.Persistence/PreparedStateRestoration.cs)、[owned cache](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs)。
+- baseline 私有恢复／冷续写：[具体入口](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs)；只新增具体 scope 与 owner 派生的 meta 来源，不建立 resolver／策略平台。
+- 环境／恢复／缓存：[StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[ReadStoredGraph](../../../src/DurableGraph.Persistence/DecodedRevision.cs)、[GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)、[State 槽](../../../src/DurableGraph.Persistence/PreparedStateRestoration.cs)、[owned cache](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphReadCache.cs)。
 
 修改具体机制时先核相应 source／tests，再选[历史证据组](#evidence-index)，不按分片编号通读过去施工。
 内部命名、tags／位宽、co-location 和局部签名不因已存在而冻结；无新消费者不增加通用后端、codec 或限额平台。
@@ -278,7 +278,7 @@ DB-087 原约定的有限 P2 已在删除前完成。用户后续校准的开发
 - private 只发布 ref1，ref2 与 owner shared 基线保持。Event 接受 meta／Head，不推进 State、heads/H 或 rewrite；Discard 保已提交基线、待改意图及领域修改。
 - 普通 Shared 保存先检查整个 Head.S view 已被最新 shared 同形接纳，missing／异形在 Capture 前拒绝；不能把地址不同当成不相容，也不能只推广业务可达定义。
 
-源码落点为 [Repository 私有签出](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[P0Session](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs) 和 [P0CatalogWorkspace](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)。无新的 resolver／token／策略框架；meta 固定员工引导与对象版本核心保留。
+源码落点为 [Repository 私有签出](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0Session.cs) 和 [SchemaCatalogWorkspace](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0CatalogWorkspace.cs)。无新的 resolver／token／策略框架；meta 固定员工引导与对象版本核心保留。
 
 ### 单次完整目录 ToShared
 

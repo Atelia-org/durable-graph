@@ -253,7 +253,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         StateModelRegistry models = assembly.GetType("Host")!
             .GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        return models.Snapshot().ResolveCurrentModel(assembly.GetType(typeName)!);
+        return models.CreateEnvironment().ResolveCurrentModel(assembly.GetType(typeName)!);
     }
 
     internal static StateModelBinding ResolveSingleBinaryReferenceModelBinding(Assembly assembly) =>

@@ -22,15 +22,15 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         GraphResources.ValidateBranchName("main");
         GraphResources.ValidateBranchName("branch-name.1");
         FrameAddress head = Seed(resources);
-        var extra = resources.PrepareMetaBootstrapBranchRoot("branch-name.1", head);
-        resources.PublishMetaBootstrapBranchRoot(extra, out _);
+        var extra = resources.PrepareBranchRoot("branch-name.1", head);
+        resources.PublishBranchRoot(extra, out _);
         var branches = RootMapCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload[4..]).Unwrap();
         Assert.Equal(new[] { "branch/branch-name.1", "branch/main" }, branches.Keys.Order());
         Assert.All(branches.Values, address => Assert.Equal(head, address));
         var shared = RootMapCodec.Decode(resources.Versions.ReadRef(2).Unwrap().Payload[4..]).Unwrap();
         Assert.Equal("schema", Assert.Single(shared).Key);
-        Assert.Equal(resources.SharedMetaBootstrapRoot, shared["schema"]);
-        Assert.Equal(P0GraphKind.Meta, resources.MetaBootstrapStore.ReadMetadata(shared["schema"]).Kind);
+        Assert.Equal(resources.SharedSchemaRoot, shared["schema"]);
+        Assert.Equal(StoredGraphKind.Meta, resources.GraphStore.ReadMetadata(shared["schema"]).Kind);
     }
 
     [Theory]
@@ -54,7 +54,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             // VersionStore owns opaque bytes. These are complete valid VS publications
             // whose required DG root grammar is deliberately invalid; there is no pending tail.
-            FrameAddress selected = refId == 1 ? resources.GetMetaBootstrapHead("main")!.Value : resources.SharedMetaBootstrapRoot!.Value;
+            FrameAddress selected = refId == 1 ? resources.GetBranchHead("main")!.Value : resources.SharedSchemaRoot!.Value;
             string validKey = refId == 1 ? "branch/main" : "schema";
             string key = mutation is "magic" or "version" or "header-role" or "schema-extra" ? validKey : mutation;
             Dictionary<string, FrameAddress> roots = new(StringComparer.Ordinal) { [key] = selected };
@@ -83,7 +83,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         string extraName;
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             var initial = RootMapCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload[4..]).Unwrap();
-            FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
+            FrameAddress head = resources.GetBranchHead("main")!.Value;
             var shared = resources.Versions.ReadRef(2).Unwrap();
             sharedAccepted = shared.Revision;
             sharedPayload = shared.Payload.ToArray();
@@ -112,13 +112,13 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             var branchBefore = resources.Versions.ReadRef(1).Unwrap();
             Assert.Equal(accepted, branchBefore.Revision);
-            FrameAddress head = resources.GetMetaBootstrapHead("main")!.Value;
-            long appended = resources.MetaBootstrapStore.AppendedFrames;
-            Assert.Throws<InvalidOperationException>(() => resources.PrepareMetaBootstrapBranchRoot(extraName, head));
+            FrameAddress head = resources.GetBranchHead("main")!.Value;
+            long appended = resources.GraphStore.AppendedFrames;
+            Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot(extraName, head));
             Assert.False(resources.IsFaulted);
             resources.RequireAvailable();
-            Assert.Equal(appended, resources.MetaBootstrapStore.AppendedFrames);
-            Assert.Null(resources.GetMetaBootstrapHead(extraName));
+            Assert.Equal(appended, resources.GraphStore.AppendedFrames);
+            Assert.Null(resources.GetBranchHead(extraName));
             var current = resources.Versions.ReadRef(1).Unwrap();
             Assert.Equal(accepted, current.Revision);
             Assert.Equal(acceptedPayload, current.Payload.ToArray());
@@ -131,9 +131,9 @@ public sealed class RepositoryRootCodecTests : IDisposable {
 
     private static string Name(int index) => new string('a', 120) + index.ToString("D8", System.Globalization.CultureInfo.InvariantCulture);
     private static FrameAddress Seed(GraphResources resources) {
-        using P0Repository facade = new(resources);
-        P0Session session = new(facade, "main", SharedReadModel.Models());
-        using P0SessionSave save = session.Prepare(new Node { Value = 7 });
+        using RepositoryStorageFacade facade = new(resources);
+        BranchSaveSession session = new(facade, "main", SharedReadModel.Models());
+        using PreparedBranchSave save = session.Prepare(new Node { Value = 7 });
         return save.Commit().Business.Address;
     }
     private Dictionary<string, byte[]> Snapshot() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);

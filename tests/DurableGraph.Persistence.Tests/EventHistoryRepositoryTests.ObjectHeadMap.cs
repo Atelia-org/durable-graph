@@ -25,17 +25,17 @@ public sealed partial class EventHistoryRepositoryTests {
             hot = Save(session).RevisionAddress;
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
-            P0GraphSnapshot revision = states.ReadGraph(shrunk);
+            GraphRecordStore states = resources.GraphStore;
+            StoredGraphRevision revision = states.ReadGraph(shrunk);
             Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(revision.DirectoryRoot).Kind);
             Assert.Equal(first, revision.SourceGraph);
             ObjectVersionRecord root = Assert.Single(StorageTestData.LocalRecords(states, shrunk));
             Assert.Equal(rootId.Value, root.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, root.Kind);
-            Assert.Equal(states.ReadGraph(first).Objects[rootId.Value], root.PriorAddress);
-            Assert.Equal(2, revision.Objects.Count - StorageTestData.LocalRecords(states, shrunk).Count); // Retained child and shared string.
-            Assert.Equal(3, states.ReadGraph(shrunk).Objects.Count);
-            Assert.Equal(1003, states.ReadGraph(first).Objects.Count);
+            Assert.Equal(states.ReadGraph(first).ObjectHeads[rootId.Value], root.PriorAddress);
+            Assert.Equal(2, revision.ObjectHeads.Count - StorageTestData.LocalRecords(states, shrunk).Count); // Retained child and shared string.
+            Assert.Equal(3, states.ReadGraph(shrunk).ObjectHeads.Count);
+            Assert.Equal(1003, states.ReadGraph(first).ObjectHeads.Count);
             Assert.Equal(ObjectVersionKind.Delta, states.ReadDirectoryVersion(states.ReadGraph(hot).DirectoryRoot).Kind);
             Assert.Equal(shrunk, states.ReadGraph(hot).SourceGraph);
         }
@@ -61,9 +61,9 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.BeforePublication, GraphCommitOutcome.NotPublished)]
-    [InlineData((int)P0SaveCheckpoint.AfterPublication, GraphCommitOutcome.Published)]
-    [InlineData((int)P0SaveCheckpoint.BeforeInstall, GraphCommitOutcome.Published)]
+    [InlineData((int)RepositorySaveStage.BeforePublication, GraphCommitOutcome.NotPublished)]
+    [InlineData((int)RepositorySaveStage.AfterPublication, GraphCommitOutcome.Published)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall, GraphCommitOutcome.Published)]
     public void MapBaseRootReplacementKeepsPublicationAndInstallationFailureBoundaries(int point, GraphCommitOutcome outcome) {
         FrameAddress first, candidate;
         using (Repository repository = CreateRepository()) {
@@ -72,9 +72,9 @@ public sealed partial class EventHistoryRepositoryTests {
             first = session.StateRevisionAddress!.Value;
             session.CommitEvent(new Node { Value = 6 }, NoRebase);
             Node replacement = new() { Value = 7, Right = original.Right, Text = original.Text };
-            repository.MetaBootstrapCheckpoint = checkpoint => {
+            repository.SaveStageObserver = checkpoint => {
                 Assert.Same(original, ((Node)session.State!));
-                if (checkpoint == (P0SaveCheckpoint)point) { throw new IOException("interrupted map Base publication"); }
+                if (checkpoint == (RepositorySaveStage)point) { throw new IOException("interrupted map Base publication"); }
             };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(replacement, NoRebase));
             Assert.Equal(outcome, error.Outcome);
@@ -84,11 +84,11 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(first, session.StateRevisionAddress!.Value);
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore states = resources.MetaBootstrapStore;
+            GraphRecordStore states = resources.GraphStore;
             Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(states.ReadGraph(candidate).DirectoryRoot).Kind);
             Assert.Equal(first, states.ReadGraph(candidate).SourceGraph);
-            Assert.Equal(3, states.ReadGraph(candidate).Objects.Count);
-            Assert.Equal(1003, states.ReadGraph(first).Objects.Count);
+            Assert.Equal(3, states.ReadGraph(candidate).ObjectHeads.Count);
+            Assert.Equal(1003, states.ReadGraph(first).ObjectHeads.Count);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var recovered = reopened.Checkout("main");

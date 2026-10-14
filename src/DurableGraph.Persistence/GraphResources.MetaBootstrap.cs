@@ -13,13 +13,13 @@ public sealed partial class GraphResources {
     private const string BranchPrefix = "branch/", SchemaKey = "schema";
     private static ReadOnlySpan<byte> BranchMagic => "P0R1"u8;
     private static ReadOnlySpan<byte> SharedMagic => "P0S1"u8;
-    private MetaBootstrapPublicationBaseline _baseline = null!;
+    private PublicationBaseline _baseline = null!;
     private RefRevision _branchRevision, _sharedRevision;
-    private P0PendingSave? _pending;
+    private PendingRepositorySave? _pending;
     private bool _preparing, _committing;
 
     // This reference is the operation's exact baseline; it is never changed in place.
-    internal sealed class MetaBootstrapPublicationBaseline(Dictionary<string, FrameAddress> branches, FrameAddress? sharedRoot) {
+    internal sealed class PublicationBaseline(Dictionary<string, FrameAddress> branches, FrameAddress? sharedRoot) {
         internal Dictionary<string, FrameAddress> Branches { get; } = branches;
         internal FrameAddress? SharedRoot { get; } = sharedRoot;
     }
@@ -32,38 +32,38 @@ public sealed partial class GraphResources {
         _branchRevision = branches.Revision;
         _sharedRevision = shared.Revision;
         _baseline = new(DecodeBranches(branches.Payload), DecodeShared(shared.Payload));
-        _metaBootstrapStore = new(data, RequireMetaBootstrapAvailable, readCacheBudgetBytes);
+        _graphStore = new(data, RequireStorageAvailable, readCacheBudgetBytes);
         try {
-            if (_baseline.SharedRoot is { } schema && _metaBootstrapStore.ReadMetadata(schema).Kind != P0GraphKind.Meta) {
+            if (_baseline.SharedRoot is { } schema && _graphStore.ReadMetadata(schema).Kind != StoredGraphKind.Meta) {
                 throw new InvalidDataException("The shared root must select a P0 meta graph.");
             }
         } catch (Exception error) {
             // The outer factory closes VS/FS; release a facade created before root validation failed.
-            CloseResources(error, _metaBootstrapStore, null, null);
+            CloseResources(error, _graphStore, null, null);
             throw;
         }
     }
 
-    private readonly P0GraphStore _metaBootstrapStore;
-    internal P0GraphStore MetaBootstrapStore { get { RequireMetaBootstrapAvailable(); return _metaBootstrapStore; } }
-    internal Action<P0SaveCheckpoint>? MetaBootstrapCheckpoint { get; set; }
-    internal bool IsMetaBootstrapFaulted => _faulted || (!_disposed && !MetaBootstrapBackingUsable());
-    internal bool HasMetaBootstrapPending { get { RequireMetaBootstrapAvailable(); return _pending is not null; } }
-    internal FrameAddress? SharedMetaBootstrapRoot { get { RequireMetaBootstrapAvailable(); return _baseline.SharedRoot; } }
+    private readonly GraphRecordStore _graphStore;
+    internal GraphRecordStore GraphStore { get { RequireStorageAvailable(); return _graphStore; } }
+    internal Action<RepositorySaveStage>? SaveStageObserver { get; set; }
+    internal bool IsStorageFaulted => _faulted || (!_disposed && !StorageBackingUsable());
+    internal bool HasPendingSave { get { RequireStorageAvailable(); return _pending is not null; } }
+    internal FrameAddress? SharedSchemaRoot { get { RequireStorageAvailable(); return _baseline.SharedRoot; } }
 
-    internal static GraphResources CreateMetaBootstrapNew(string path,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+    internal static GraphResources CreateStorageNew(string path,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
         long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
-        OpenMetaBootstrap(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
-    internal static GraphResources OpenMetaBootstrapExisting(string path,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes,
+        OpenStorage(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
+    internal static GraphResources OpenStorageExisting(string path,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes,
         long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
-        OpenMetaBootstrap(path, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
-    internal static GraphResources OpenMetaBootstrapReadOnlyExisting(string path,
-        long readCacheBudgetBytes = P0GraphStore.DefaultReadCacheBudgetBytes) =>
-        OpenMetaBootstrap(path, create: false, readOnly: true, readCacheBudgetBytes);
+        OpenStorage(path, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
+    internal static GraphResources OpenStorageReadOnlyExisting(string path,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
+        OpenStorage(path, create: false, readOnly: true, readCacheBudgetBytes);
 
-    private static GraphResources OpenMetaBootstrap(string path, bool create, bool readOnly, long readCacheBudgetBytes,
+    private static GraphResources OpenStorage(string path, bool create, bool readOnly, long readCacheBudgetBytes,
         Action<uint>? afterCreateRef = null, long rotationThresholdBytes = DefaultRotationThresholdBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -99,48 +99,48 @@ public sealed partial class GraphResources {
         }
     }
 
-    internal FrameAddress? GetMetaBootstrapHead(string branch) {
-        RequireMetaBootstrapAvailable();
+    internal FrameAddress? GetBranchHead(string branch) {
+        RequireStorageAvailable();
         ValidateBranchName(branch);
         return _baseline.Branches.TryGetValue(branch, out FrameAddress head) ? head : null;
     }
 
-    internal FrameAddress? GetMetaBootstrapStateHead(string branch) =>
-        MetaBootstrapStore.ResolveContentSource(P0GraphKind.State, GetMetaBootstrapHead(branch));
+    internal FrameAddress? GetBranchStateHead(string branch) =>
+        GraphStore.ResolveContentSource(StoredGraphKind.State, GetBranchHead(branch));
 
-    internal IReadOnlyList<string> ListMetaBootstrapBranches() {
-        RequireMetaBootstrapAvailable();
+    internal IReadOnlyList<string> ListBranches() {
+        RequireStorageAvailable();
         return _baseline.Branches.Keys.Order(StringComparer.Ordinal).ToArray();
     }
 
     // Metadata navigation intentionally does not read a directory, batch or typed body.
-    internal HistoryGraphRecord ReadMetaBootstrapHistory(FrameAddress address) {
-        P0GraphMetadata metadata = MetaBootstrapStore.ReadMetadata(address);
+    internal HistoryGraphRecord ReadHistory(FrameAddress address) {
+        GraphEnvelope metadata = GraphStore.ReadMetadata(address);
         GraphFrameKind kind = metadata.Kind switch {
-            P0GraphKind.State => GraphFrameKind.State,
-            P0GraphKind.Event => GraphFrameKind.Event,
+            StoredGraphKind.State => GraphFrameKind.State,
+            StoredGraphKind.Event => GraphFrameKind.Event,
             _ => throw new InvalidDataException("A branch checkpoint must select a business State or Event."),
         };
         return new(address, metadata.Parent, kind, metadata.RootId);
     }
 
-    internal sealed record MetaBootstrapBranchUpdate(GraphResources Owner,
-        MetaBootstrapPublicationBaseline ExpectedBaseline, RefRevision ExpectedRevision,
-        MetaBootstrapPublicationBaseline NextBaseline, byte[] Payload);
+    internal sealed record PreparedBranchRootUpdate(GraphResources Owner,
+        PublicationBaseline ExpectedBaseline, RefRevision ExpectedRevision,
+        PublicationBaseline NextBaseline, byte[] Payload);
 
-    internal MetaBootstrapBranchUpdate PrepareMetaBootstrapBranchRoot(string branch, FrameAddress head) {
-        EnsureMetaBootstrapEditingAllowed();
+    internal PreparedBranchRootUpdate PrepareBranchRoot(string branch, FrameAddress head) {
+        EnsureEditingAllowed();
         ValidateBranchName(branch);
-        _ = ReadMetaBootstrapHistory(head);
+        _ = ReadHistory(head);
         var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) { [branch] = head };
-        MetaBootstrapPublicationBaseline next = new(branches, _baseline.SharedRoot);
+        PublicationBaseline next = new(branches, _baseline.SharedRoot);
         return new(this, _baseline, _branchRevision, next, EncodeBranches(branches));
     }
 
     // This operation updates only the branch ref. The shared Schema head and revision stay fixed.
-    internal void PublishMetaBootstrapBranchRoot(MetaBootstrapBranchUpdate candidate, out PublicationOutcome outcome) {
+    internal void PublishBranchRoot(PreparedBranchRootUpdate candidate, out PublicationOutcome outcome) {
         outcome = PublicationOutcome.NotAttempted;
-        EnsureMetaBootstrapEditingAllowed();
+        EnsureEditingAllowed();
         ArgumentNullException.ThrowIfNull(candidate);
         if (!ReferenceEquals(candidate.Owner, this) || !ReferenceEquals(candidate.ExpectedBaseline, _baseline) ||
             candidate.ExpectedRevision != _branchRevision) {
@@ -155,15 +155,15 @@ public sealed partial class GraphResources {
             _baseline = candidate.NextBaseline;
             _branchRevision = revision;
         } catch {
-            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !MetaBootstrapBackingUsable()) { MarkFaulted(); }
+            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable()) { MarkFaulted(); }
             throw;
         } finally { _committing = false; }
     }
 
-    internal void CreateMetaBootstrapTag(string name, FrameAddress address, out PublicationOutcome outcome) {
+    internal void CreateStoredTag(string name, FrameAddress address, out PublicationOutcome outcome) {
         outcome = PublicationOutcome.NotAttempted;
-        EnsureMetaBootstrapEditingAllowed();
-        _ = ReadMetaBootstrapHistory(address);
+        EnsureEditingAllowed();
+        _ = ReadHistory(address);
         byte[] payload = new byte[FrameAddress.EncodedSize];
         if (!address.TryWrite(payload)) { throw new InvalidDataException("Invalid graph tag address."); }
         bool publicationRejected = false;
@@ -173,85 +173,85 @@ public sealed partial class GraphResources {
             publicationRejected = published.IsFailure;
             published.Unwrap();
         } catch {
-            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !MetaBootstrapBackingUsable()) { MarkFaulted(); }
+            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable()) { MarkFaulted(); }
             throw;
         } finally { _committing = false; }
     }
 
-    internal FrameAddress ResolveMetaBootstrapTag(string name) {
-        RequireMetaBootstrapAvailable();
+    internal FrameAddress ResolveStoredTag(string name) {
+        RequireStorageAvailable();
         var payload = _versions.ResolveTag(name).Unwrap();
         if (payload.Bytes.Length != FrameAddress.EncodedSize || !FrameAddress.TryRead(payload.Bytes, out FrameAddress address)) {
             throw new InvalidDataException("Invalid graph address in tag payload.");
         }
-        _ = ReadMetaBootstrapHistory(address);
+        _ = ReadHistory(address);
         return address;
     }
 
-    internal void EnsureMetaBootstrapEditingAllowed() {
-        RequireMetaBootstrapAvailable();
+    internal void EnsureEditingAllowed() {
+        RequireStorageAvailable();
         if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
         if (_pending is not null || _preparing || _committing) { throw new InvalidOperationException("A P0 save is already being prepared or pending."); }
     }
 
-    internal P0PendingSave PrepareMetaBootstrap(string branch, P0GraphKind kind,
-        P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog = null) {
-        EnsureMetaBootstrapEditingAllowed();
-        return PrepareMetaBootstrapCore(branch, kind, business, catalog);
+    internal PendingRepositorySave PrepareSave(string branch, StoredGraphKind kind,
+        PreparedGraphWrite business, PreparedGraphWrite? catalog = null) {
+        EnsureEditingAllowed();
+        return PrepareSaveCore(branch, kind, business, catalog);
     }
 
-    internal P0PendingSave PrepareMetaBootstrapFrom(string branch, P0GraphKind kind,
-        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) =>
-        PrepareMetaBootstrapFromCore(branch, kind, produce, privateCatalog: false);
+    internal PendingRepositorySave PrepareSaveFrom(string branch, StoredGraphKind kind,
+        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) =>
+        PrepareSaveFromCore(branch, kind, produce, privateCatalog: false);
 
-    internal P0PendingSave PreparePrivateMetaBootstrapFrom(string branch, P0GraphKind kind,
-        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce) =>
-        PrepareMetaBootstrapFromCore(branch, kind, produce, privateCatalog: true);
+    internal PendingRepositorySave PreparePrivateSaveFrom(string branch, StoredGraphKind kind,
+        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) =>
+        PrepareSaveFromCore(branch, kind, produce, privateCatalog: true);
 
-    private P0PendingSave PrepareMetaBootstrapFromCore(string branch, P0GraphKind kind,
-        Func<(P0PreparedGraphWrite Business, P0PreparedGraphWrite? Catalog)> produce, bool privateCatalog) {
-        EnsureMetaBootstrapEditingAllowed();
+    private PendingRepositorySave PrepareSaveFromCore(string branch, StoredGraphKind kind,
+        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce, bool privateCatalog) {
+        EnsureEditingAllowed();
         ArgumentNullException.ThrowIfNull(produce);
         ValidateBranchName(branch);
-        if (kind is not P0GraphKind.State and not P0GraphKind.Event) { throw new ArgumentException("PrepareMetaBootstrap requires a business graph kind.", nameof(kind)); }
+        if (kind is not StoredGraphKind.State and not StoredGraphKind.Event) { throw new ArgumentException("PrepareMetaBootstrap requires a business graph kind.", nameof(kind)); }
         _preparing = true;
         try {
             var prepared = produce();
-            return PrepareMetaBootstrapCore(branch, kind, prepared.Business, prepared.Catalog, privateCatalog);
+            return PrepareSaveCore(branch, kind, prepared.Business, prepared.Catalog, privateCatalog);
         } finally { _preparing = false; }
     }
 
-    private P0PendingSave PrepareMetaBootstrapCore(string branch, P0GraphKind kind,
-        P0PreparedGraphWrite business, P0PreparedGraphWrite? catalog, bool privateCatalog = false) {
-        RequireMetaBootstrapAvailable();
+    private PendingRepositorySave PrepareSaveCore(string branch, StoredGraphKind kind,
+        PreparedGraphWrite business, PreparedGraphWrite? catalog, bool privateCatalog = false) {
+        RequireStorageAvailable();
         ValidateBranchName(branch);
         ArgumentNullException.ThrowIfNull(business);
-        if (kind is not P0GraphKind.State and not P0GraphKind.Event) { throw new ArgumentException("PrepareMetaBootstrap requires a business graph kind.", nameof(kind)); }
-        FrameAddress? parent = GetMetaBootstrapHead(branch);
-        if (business.SourceGraph != MetaBootstrapStore.ResolveContentSource(kind, parent)) {
+        if (kind is not StoredGraphKind.State and not StoredGraphKind.Event) { throw new ArgumentException("PrepareMetaBootstrap requires a business graph kind.", nameof(kind)); }
+        FrameAddress? parent = GetBranchHead(branch);
+        if (business.SourceGraph != GraphStore.ResolveContentSource(kind, parent)) {
             throw new InvalidDataException("The business candidate must use the branch's exact latest State source.");
         }
         // Select the actual owner-bound source, never a caller-supplied Schema address.
         FrameAddress? catalogSource = privateCatalog && parent is { } existing
-            ? MetaBootstrapStore.ReadMetadata(existing).SchemaRoot
+            ? GraphStore.ReadMetadata(existing).SchemaRoot
                 ?? throw new InvalidDataException("A private continuation requires its current business head's Schema pin.")
             : _baseline.SharedRoot;
-        if (catalogSource is { } source && MetaBootstrapStore.ReadMetadata(source).Kind != P0GraphKind.Meta) {
+        if (catalogSource is { } source && GraphStore.ReadMetadata(source).Kind != StoredGraphKind.Meta) {
             throw new InvalidDataException("The selected catalog source must be an actual meta graph.");
         }
         if (catalog is not null && catalog.SourceGraph != catalogSource) {
             throw new InvalidDataException("The catalog candidate must use the exact selected meta source.");
         }
-        var pending = new P0PendingSave(this, _baseline, branch, kind, business, catalog, privateCatalog, catalogSource);
+        var pending = new PendingRepositorySave(this, _baseline, branch, kind, business, catalog, privateCatalog, catalogSource);
         _pending = pending;
         return pending;
     }
 
-    internal P0SaveResult CommitMetaBootstrap(P0PendingSave pending,
-        Action<P0GraphSnapshot>? installMeta = null, Action<P0GraphSnapshot>? installState = null,
-        Action<P0GraphSnapshot>? prepareMeta = null, Action<P0GraphSnapshot>? prepareState = null,
-        Action<P0GraphSnapshot>? prepareBusinessDelivery = null) {
-        RequireMetaBootstrapAvailable();
+    internal RepositorySaveResult CommitSave(PendingRepositorySave pending,
+        Action<StoredGraphRevision>? installMeta = null, Action<StoredGraphRevision>? installState = null,
+        Action<StoredGraphRevision>? prepareMeta = null, Action<StoredGraphRevision>? prepareState = null,
+        Action<StoredGraphRevision>? prepareBusinessDelivery = null) {
+        RequireStorageAvailable();
         ArgumentNullException.ThrowIfNull(pending);
         if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
         if (_committing || !ReferenceEquals(pending.Owner, this) || !ReferenceEquals(_pending, pending) ||
@@ -262,43 +262,43 @@ public sealed partial class GraphResources {
         _committing = true;
         PublicationOutcome outcome = PublicationOutcome.NotAttempted;
         FrameAddress? candidate = null;
-        P0GraphStore store = MetaBootstrapStore;
+        GraphRecordStore store = GraphStore;
         long framesBefore = store.AppendedFrames;
         bool publishing = false, publicationRejected = false;
         try {
-            MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.BeforeAppend);
-            RequireMetaBootstrapAvailable();
-            P0GraphSnapshot? selectedMeta = pending.Catalog is not null
-                ? store.Append(P0GraphKind.Meta, pending.CatalogSource, null, pending.Catalog)
+            SaveStageObserver?.Invoke(RepositorySaveStage.BeforeAppend);
+            RequireStorageAvailable();
+            StoredGraphRevision? selectedMeta = pending.Catalog is not null
+                ? store.Append(StoredGraphKind.Meta, pending.CatalogSource, null, pending.Catalog)
                 : pending.CatalogSource is { } currentMeta ? store.ReadGraph(currentMeta) : null;
-            if (pending.Catalog is not null) { MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.AfterMetaAppend); }
-            RequireMetaBootstrapAvailable();
+            if (pending.Catalog is not null) { SaveStageObserver?.Invoke(RepositorySaveStage.AfterMetaAppend); }
+            RequireStorageAvailable();
             FrameAddress? schemaRoot = selectedMeta?.Address;
             FrameAddress? parent = _baseline.Branches.TryGetValue(pending.Branch, out FrameAddress oldHead) ? oldHead : null;
-            P0GraphSnapshot business = store.Append(pending.Kind, parent, schemaRoot, pending.Business);
+            StoredGraphRevision business = store.Append(pending.Kind, parent, schemaRoot, pending.Business);
             candidate = business.Address;
-            MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.AfterBusinessAppend);
-            RequireMetaBootstrapAvailable();
+            SaveStageObserver?.Invoke(RepositorySaveStage.AfterBusinessAppend);
+            RequireStorageAvailable();
             if (selectedMeta is not null) { prepareMeta?.Invoke(selectedMeta); }
-            if (pending.Kind == P0GraphKind.State) { prepareState?.Invoke(business); }
+            if (pending.Kind == StoredGraphKind.State) { prepareState?.Invoke(business); }
             prepareBusinessDelivery?.Invoke(business);
-            RequireMetaBootstrapAvailable();
+            RequireStorageAvailable();
 
             // Prepare all DG result/install material before crossing the publication boundary.
             var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) {
                 [pending.Branch] = business.Address
             };
             FrameAddress? sharedRoot = pending.PrivateCatalog ? _baseline.SharedRoot : schemaRoot;
-            var nextBaseline = new MetaBootstrapPublicationBaseline(branches, sharedRoot);
+            var nextBaseline = new PublicationBaseline(branches, sharedRoot);
             byte[] branchPayload = EncodeBranches(branches);
             byte[]? sharedPayload = pending.PrivateCatalog || pending.Catalog is null ? null : EncodeShared(schemaRoot);
             Dictionary<RefId, ReadOnlyMemory<byte>>? changes = sharedPayload is null ? null : new() {
                 [_branchRevision.RefId] = branchPayload,
                 [_sharedRevision.RefId] = sharedPayload
             };
-            var saved = new P0SaveResult(business, selectedMeta, sharedRoot);
-            MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.BeforePublication);
-            RequireMetaBootstrapAvailable();
+            var saved = new RepositorySaveResult(business, selectedMeta, sharedRoot);
+            SaveStageObserver?.Invoke(RepositorySaveStage.BeforePublication);
+            RequireStorageAvailable();
 
             publishing = true;
             RefRevision nextBranch, nextShared = _sharedRevision;
@@ -313,24 +313,24 @@ public sealed partial class GraphResources {
                 publicationRejected = published.IsFailure;
                 nextBranch = published.Unwrap();
             }
-            MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.AfterPublication);
-            RequireMetaBootstrapAvailable();
-            MetaBootstrapCheckpoint?.Invoke(P0SaveCheckpoint.BeforeInstall);
-            RequireMetaBootstrapAvailable();
+            SaveStageObserver?.Invoke(RepositorySaveStage.AfterPublication);
+            RequireStorageAvailable();
+            SaveStageObserver?.Invoke(RepositorySaveStage.BeforeInstall);
+            RequireStorageAvailable();
             _baseline = nextBaseline;
             _branchRevision = nextBranch;
             _sharedRevision = nextShared;
             // Even a reused exact meta graph can consume a producer's same-shape dirty set.
             if (selectedMeta is not null) { installMeta?.Invoke(selectedMeta); }
-            RequireMetaBootstrapAvailable();
-            if (pending.Kind == P0GraphKind.State) { installState?.Invoke(business); }
-            RequireMetaBootstrapAvailable();
+            RequireStorageAvailable();
+            if (pending.Kind == StoredGraphKind.State) { installState?.Invoke(business); }
+            RequireStorageAvailable();
             return saved;
         }
         catch (Exception error) {
             // A normal VS rejection proves no publication and may leave healthy orphan data.
             // Other output exceptions, or interrupted DG installation, invalidate old facades.
-            bool fault = outcome != PublicationOutcome.NotAttempted || !MetaBootstrapBackingUsable() ||
+            bool fault = outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable() ||
                 (publishing ? !publicationRejected : store.AppendedFrames != framesBefore);
             if (fault) { MarkFaulted(); }
             GraphCommitOutcome mapped = outcome switch {
@@ -347,7 +347,7 @@ public sealed partial class GraphResources {
         }
     }
 
-    internal void DiscardMetaBootstrap(P0PendingSave pending) {
+    internal void DiscardSave(PendingRepositorySave pending) {
         if (_committing || !ReferenceEquals(pending.Owner, this) || !ReferenceEquals(_pending, pending) || !pending.IsPrepared) {
             throw new InvalidOperationException("DiscardMetaBootstrap requires this owner's inactive, unused pending save.");
         }
@@ -355,15 +355,15 @@ public sealed partial class GraphResources {
         _pending = null;
     }
 
-    internal void RequireMetaBootstrapAvailable() {
+    internal void RequireStorageAvailable() {
         RequireAvailable();
     }
 
-    internal void RequireMetaBootstrapPreparationInactive() {
+    internal void RequirePreparationInactive() {
         if (_preparing) { throw new InvalidOperationException("An active metadata graph preparation cannot be disposed recursively."); }
     }
 
-    private bool MetaBootstrapBackingUsable() {
+    private bool StorageBackingUsable() {
         try { Data.EnsureUsable(); _versions.EnsureUsable(); return true; }
         catch (InvalidOperationException) { return false; }
     }

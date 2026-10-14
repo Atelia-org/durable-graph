@@ -23,7 +23,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         }
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             FrameAddress bad = damage == "metadata"
-                ? resources.Data.Append(P0GraphWire.GraphTag, [255]).Unwrap()
+                ? resources.Data.Append(GraphFrameCodec.GraphTag, [255]).Unwrap()
                 : TestAddress(uint.MaxValue);
             byte[] payload = damage switch {
                 "short-payload" => [0],
@@ -52,11 +52,11 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             ArrayBufferWriter<byte> bytes = new();
             BareValueWriter writer = new(bytes);
-            writer.WriteByte(P0TypedBodyCodec.FormatVersion);
+            writer.WriteByte(TypedBaseBodyCodec.FormatVersion);
             writer.WriteByte(1);
             writer.WriteVarUInt32(123456); // A missing descriptor in the actual pinned S.
             writer.WriteByte(7);
-            frame = resources.MetaBootstrapStore.Append(P0GraphKind.State, null, resources.SharedMetaBootstrapRoot,
+            frame = resources.GraphStore.Append(StoredGraphKind.State, null, resources.SharedSchemaRoot,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, bytes.WrittenSpan)])).Address;
             byte[] payload = new byte[FrameAddress.EncodedSize];
             frame.TryWrite(payload);

@@ -10,12 +10,12 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class IndependentGraphWorkspaceTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-independent-workspace-{Guid.NewGuid():N}");
-    private P0Repository _repository;
-    private P0GraphStore Store => _repository.Store;
+    private RepositoryStorageFacade _repository;
+    private GraphRecordStore Store => _repository.Store;
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
     private const ulong InitialSequence = 0xFEDC_BA98_7654_3210UL;
     private static readonly DurableSchema DomainSchema = new("IndependentDomain", 1);
-    public IndependentGraphWorkspaceTests() => _repository = P0Repository.CreateNew(_root);
+    public IndependentGraphWorkspaceTests() => _repository = RepositoryStorageFacade.CreateNew(_root);
 
     [Fact]
     public void SnapshotAndNextStateAreContentSiblingsAndColdSnapshotReadsOnlyItsClosure() {
@@ -26,24 +26,24 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Bob bob = new() { Value = 3 };
         World world = new() { Value = 1, Left = changed, Right = bob, Text = text };
         StateModelRegistry models = Models();
-        P0Session workspace = new(_repository, "main", models);
+        BranchSaveSession workspace = new(_repository, "main", models);
         FrameAddress s0 = Commit(workspace, world);
         ObjectId worldId = workspace.RootId;
         ObjectId changedId = FindId(s0, 2, models);
         ObjectId stableId = FindId(s0, 4, models);
         ObjectId bobId = FindId(s0, 3, models);
         ObjectId stringId = Assert.Single(Decode(s0, models).Objects, row => row.Kind == ObjectStateKind.String).Id;
-        P0GraphSnapshot source = Store.ReadGraph(s0);
+        StoredGraphRevision source = Store.ReadGraph(s0);
         changed.Value = 22;
         Event root = new() { Value = 100, Left = changed, Right = stable, Text = text };
         FrameAddress e1;
         ObjectId eventId;
-        using (P0SessionSave save = workspace.Prepare(root, P0GraphKind.Event, NoRebase)) {
+        using (PreparedBranchSave save = workspace.Prepare(root, StoredGraphKind.Event, NoRebase)) {
             eventId = save.Business.Write.RootId;
             Assert.Equal(s0, save.Business.Write.SourceGraph);
             ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records, row => row.ObjectId == changedId.Value);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-            Assert.Equal(source.Objects[changedId.Value], delta.PriorAddress);
+            Assert.Equal(source.ObjectHeads[changedId.Value], delta.PriorAddress);
             Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == stableId.Value || row.ObjectId == stringId.Value);
             e1 = save.Commit().Business.Address;
         }
@@ -51,30 +51,30 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Equal(worldId, workspace.RootId);
         Assert.Same(world, workspace.State);
         Assert.Same(bob, world.Right);
-        P0GraphSnapshot eventGraph = Store.ReadGraph(e1);
+        StoredGraphRevision eventGraph = Store.ReadGraph(e1);
         Assert.Equal(s0, eventGraph.SourceGraph);
-        Assert.Equal(source.Objects[stableId.Value], eventGraph.Objects[stableId.Value]);
-        Assert.Equal(source.Objects[stringId.Value], eventGraph.Objects[stringId.Value]);
-        Assert.DoesNotContain(worldId.Value, eventGraph.Objects.Keys);
-        Assert.DoesNotContain(bobId.Value, eventGraph.Objects.Keys);
+        Assert.Equal(source.ObjectHeads[stableId.Value], eventGraph.ObjectHeads[stableId.Value]);
+        Assert.Equal(source.ObjectHeads[stringId.Value], eventGraph.ObjectHeads[stringId.Value]);
+        Assert.DoesNotContain(worldId.Value, eventGraph.ObjectHeads.Keys);
+        Assert.DoesNotContain(bobId.Value, eventGraph.ObjectHeads.Keys);
 
         changed.Value = 23;
         FrameAddress s1 = Commit(workspace);
-        P0GraphSnapshot state = Store.ReadGraph(s1);
+        StoredGraphRevision state = Store.ReadGraph(s1);
         Assert.Equal(e1, state.Parent); // History order retains the Event.
         Assert.Equal(s0, state.SourceGraph); // Both contents compare with the last accepted State.
         ObjectVersionRecord stateDelta = Assert.Single(Records(s1));
         Assert.Equal(changedId.Value, stateDelta.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, stateDelta.Kind);
-        Assert.Equal(source.Objects[changedId.Value], stateDelta.PriorAddress);
-        Assert.Contains(bobId.Value, state.Objects.Keys);
-        Assert.DoesNotContain(eventId.Value, state.Objects.Keys);
+        Assert.Equal(source.ObjectHeads[changedId.Value], stateDelta.PriorAddress);
+        Assert.Contains(bobId.Value, state.ObjectHeads.Keys);
+        Assert.DoesNotContain(eventId.Value, state.ObjectHeads.Keys);
 
         ReopenReadOnly();
         Dictionary<string, int> callbacks = [];
         StateModelRegistry coldModels = Models(onRead: name => callbacks[name] = callbacks.GetValueOrDefault(name) + 1);
         Dictionary<string, byte[]> before = Files();
-        Event restored = Assert.IsType<Event>(P0BusinessWorkspace.ReadRoot(Store, e1, coldModels));
+        Event restored = Assert.IsType<Event>(BusinessPersistenceAdapter.ReadRoot(Store, e1, coldModels));
         Assert.Equal((byte)22, restored.Left!.Value);
         Assert.Same(restored.Left, restored.Left.Left);
         Assert.Same(restored.Right, restored.Left.Right);
@@ -85,7 +85,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.True(callbacks[nameof(Event)] > 0);
         Assert.True(callbacks[nameof(Node)] > 0);
         AssertFilesEqual(before);
-        World restoredState = Assert.IsType<World>(P0BusinessWorkspace.ReadRoot(Store, s1, coldModels));
+        World restoredState = Assert.IsType<World>(BusinessPersistenceAdapter.ReadRoot(Store, s1, coldModels));
         Assert.Equal((byte)23, restoredState.Left!.Value);
         Assert.IsType<Bob>(restoredState.Right);
         Assert.Same(restoredState.Left, restoredState.Left.Left);
@@ -97,26 +97,26 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Node child = new() { Value = 2 };
         World original = new() { Value = 1, Left = child };
         StateModelRegistry models = Models();
-        P0Session workspace = new(_repository, "main", models);
+        BranchSaveSession workspace = new(_repository, "main", models);
         FrameAddress first = Commit(workspace, original);
         ObjectId oldRootId = workspace.RootId;
         ObjectId childId = FindId(first, 2, models);
         World replacement = new() { Value = 10, Left = child };
-        using (P0SessionSave abandoned = workspace.Prepare(replacement, parameters: NoRebase)) {
+        using (PreparedBranchSave abandoned = workspace.Prepare(replacement, parameters: NoRebase)) {
             Assert.NotEqual(oldRootId, abandoned.Business.Write.RootId);
             Assert.Same(original, workspace.State);
             Assert.Equal(first, _repository.GetHead("main"));
         }
         Assert.Same(original, workspace.State);
         Assert.Equal(oldRootId, workspace.RootId);
-        _repository.Checkpoint = point => {
-            if (point != P0SaveCheckpoint.BeforePublication) { return; }
+        _repository.SaveStageObserver = point => {
+            if (point != RepositorySaveStage.BeforePublication) { return; }
             Assert.Same(original, workspace.State);
             Assert.Equal(first, workspace.StateSource!.Address);
             Assert.Equal(first, _repository.GetHead("main"));
         };
         FrameAddress published;
-        using (P0SessionSave save = workspace.Prepare(replacement, parameters: NoRebase)) {
+        using (PreparedBranchSave save = workspace.Prepare(replacement, parameters: NoRebase)) {
             Assert.Equal(first, save.Business.Write.SourceGraph);
             Assert.Contains(oldRootId.Value, save.Business.Write.RemovedIds);
             Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == childId.Value);
@@ -125,15 +125,15 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             Assert.Equal(save.Business.Write.RootId, workspace.RootId);
             Assert.Throws<InvalidOperationException>(() => save.Commit());
         }
-        _repository.Checkpoint = null;
+        _repository.SaveStageObserver = null;
         Assert.Same(replacement, workspace.State);
         Assert.Same(child, ((World)workspace.State!).Left);
         Assert.Equal((byte)10, Decode(published, models).GetRequired(workspace.RootId).GetState<State>().Value);
-        using P0SessionSave later = workspace.Prepare(workspace.State!, parameters: NoRebase);
+        using PreparedBranchSave later = workspace.Prepare(workspace.State!, parameters: NoRebase);
         ObjectVersionRecord delta = Assert.Single(later.Business.Write.Records);
         Assert.Equal(workspace.RootId.Value, delta.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-        Assert.Equal(Store.ReadGraph(published).Objects[workspace.RootId.Value], delta.PriorAddress);
+        Assert.Equal(Store.ReadGraph(published).ObjectHeads[workspace.RootId.Value], delta.PriorAddress);
     }
 
     [Fact]
@@ -145,13 +145,13 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             reenter?.Invoke();
             if (fail) throw new InvalidDataException("test capture failure");
         });
-        P0Session workspace = new(_repository, "main", models);
-        using (P0SessionSave firstEvent = workspace.Prepare(new Event { Left = world.Left }, P0GraphKind.Event, NoRebase)) {
+        BranchSaveSession workspace = new(_repository, "main", models);
+        using (PreparedBranchSave firstEvent = workspace.Prepare(new Event { Left = world.Left }, StoredGraphKind.Event, NoRebase)) {
             Assert.Null(firstEvent.Business.Write.SourceGraph);
             Assert.NotEmpty(firstEvent.Business.Write.Records);
             Assert.All(firstEvent.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             Assert.Throws<InvalidOperationException>(() => workspace.Prepare(world));
-            Assert.Throws<InvalidOperationException>(() => workspace.Prepare(new Event(), P0GraphKind.Event));
+            Assert.Throws<InvalidOperationException>(() => workspace.Prepare(new Event(), StoredGraphKind.Event));
         }
         Assert.Null(workspace.State);
         Assert.Null(workspace.StateSource);
@@ -159,21 +159,21 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         FrameAddress s0 = Commit(workspace, world);
         ObjectId oldRootId = workspace.RootId;
         Event root = new() { Left = world.Left };
-        using (P0SessionSave pending = workspace.Prepare(root, P0GraphKind.Event, NoRebase)) {
+        using (PreparedBranchSave pending = workspace.Prepare(root, StoredGraphKind.Event, NoRebase)) {
             Assert.Throws<InvalidOperationException>(() => workspace.Prepare(world));
             Assert.Throws<InvalidOperationException>(() => workspace.Prepare(new World()));
-            Assert.Throws<InvalidOperationException>(() => workspace.Prepare(root, P0GraphKind.Event));
+            Assert.Throws<InvalidOperationException>(() => workspace.Prepare(root, StoredGraphKind.Event));
         }
-        Assert.ThrowsAny<ArgumentException>(() => workspace.Prepare(new Unknown(), P0GraphKind.Event));
+        Assert.ThrowsAny<ArgumentException>(() => workspace.Prepare(new Unknown(), StoredGraphKind.Event));
         Assert.ThrowsAny<ArgumentException>(() => workspace.Prepare(new DerivedWorld()));
         long frames = Store.AppendedFrames;
         fail = true;
-        Assert.Throws<InvalidDataException>(() => workspace.Prepare(root, P0GraphKind.Event));
+        Assert.Throws<InvalidDataException>(() => workspace.Prepare(root, StoredGraphKind.Event));
         Assert.Throws<InvalidDataException>(() => workspace.Prepare(world));
         Assert.Throws<InvalidDataException>(() => workspace.Prepare(new World()));
         fail = false;
-        reenter = () => Assert.Throws<InvalidOperationException>(() => workspace.Prepare(root, P0GraphKind.Event));
-        using (P0SessionSave save = workspace.Prepare(root, P0GraphKind.Event)) {
+        reenter = () => Assert.Throws<InvalidOperationException>(() => workspace.Prepare(root, StoredGraphKind.Event));
+        using (PreparedBranchSave save = workspace.Prepare(root, StoredGraphKind.Event)) {
             Assert.Equal(s0, save.Business.Write.SourceGraph);
         }
         reenter = null;
@@ -181,29 +181,29 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Same(world, workspace.State);
         Assert.Equal(s0, workspace.StateSource!.Address);
         Assert.Equal(oldRootId, workspace.RootId);
-        using P0SessionSave unchanged = workspace.Prepare(world);
+        using PreparedBranchSave unchanged = workspace.Prepare(world);
         Assert.Empty(unchanged.Business.Write.Records);
         Assert.Empty(unchanged.Business.Write.RemovedIds);
     }
 
     [Fact]
     public void SnapshotOnlyInstancesDoNotEnterStateBindingsAndDiscardCanConsumeIds() {
-        P0Session workspace = new(_repository, "main", Models());
+        BranchSaveSession workspace = new(_repository, "main", Models());
         World world = new() { Value = 1 };
         Commit(workspace, world);
         Node eventOnly = new() { Value = 2 };
         Event root = new() { Left = eventOnly };
         uint lastSnapshotId;
-        using (P0SessionSave save = workspace.Prepare(root, P0GraphKind.Event, NoRebase)) {
+        using (PreparedBranchSave save = workspace.Prepare(root, StoredGraphKind.Event, NoRebase)) {
             lastSnapshotId = save.Business.Write.Records.Max(row => row.ObjectId);
             save.Commit();
         }
-        using (P0SessionSave abandoned = workspace.Prepare(root, P0GraphKind.Event, NoRebase)) {
+        using (PreparedBranchSave abandoned = workspace.Prepare(root, StoredGraphKind.Event, NoRebase)) {
             Assert.True(abandoned.Business.Write.RootId.Value > lastSnapshotId);
             lastSnapshotId = abandoned.Business.Write.Records.Max(row => row.ObjectId);
         }
         world.Left = eventOnly;
-        using P0SessionSave state = workspace.Prepare(world, parameters: NoRebase);
+        using PreparedBranchSave state = workspace.Prepare(world, parameters: NoRebase);
         ObjectVersionRecord inserted = Assert.Single(state.Business.Write.Records, row => row.Kind == ObjectVersionKind.Base);
         Assert.True(inserted.ObjectId > lastSnapshotId);
     }
@@ -213,18 +213,18 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Node child = new() { Value = 2 };
         World world = new() { Value = 1, Left = child };
         StateModelRegistry models = Models();
-        P0Session workspace = new(_repository, "main", models);
+        BranchSaveSession workspace = new(_repository, "main", models);
         FrameAddress s0 = Commit(workspace, world);
         ObjectId childId = FindId(s0, 2, models);
         child.Value = 3;
         FrameAddress s1 = Commit(workspace);
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(Records(s1)).Kind);
-        using P0SessionSave snapshot = workspace.Prepare(new Event { Left = child }, P0GraphKind.Event, new(1, 100));
+        using PreparedBranchSave snapshot = workspace.Prepare(new Event { Left = child }, StoredGraphKind.Event, new(1, 100));
         ObjectVersionRecord rebased = Assert.Single(snapshot.Business.Write.Records, row => row.ObjectId == childId.Value);
         Assert.Equal(ObjectVersionKind.Base, rebased.Kind);
         Assert.Equal(s1, snapshot.Business.Write.SourceGraph);
-        P0GraphSnapshot graph = snapshot.Commit().Business;
-        Assert.Equal(graph.OwnedBatch, graph.Objects[childId.Value]);
+        StoredGraphRevision graph = snapshot.Commit().Business;
+        Assert.Equal(graph.OwnedBatch, graph.ObjectHeads[childId.Value]);
         Assert.Equal(ObjectVersionKind.Base, Store.ReadObjectChain(graph.Address, childId.Value).Entries[0].Record.Kind);
         Assert.Equal(s1, workspace.StateSource!.Address);
     }
@@ -233,26 +233,26 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
     public void SavingUpgradedSnapshotDoesNotClearTheStateRewriteObligation() {
         World initial = new() { Value = 1, Left = new Node { Value = 2 } };
         StateModelRegistry oldModels = Models();
-        P0Session old = new(_repository, "main", oldModels);
+        BranchSaveSession old = new(_repository, "main", oldModels);
         FrameAddress s0 = Commit(old, initial);
         ObjectId childId = FindId(s0, 2, oldModels);
         StateModelRegistry models = Models(upgradeNode: true);
-        P0Session workspace = new(_repository, "main", models);
+        BranchSaveSession workspace = new(_repository, "main", models);
         Assert.Equal((byte)12, ((World)workspace.State!).Left!.Value);
-        using (P0SessionSave snapshot = workspace.Prepare(new Event { Left = ((World)workspace.State!).Left }, P0GraphKind.Event, NoRebase)) {
+        using (PreparedBranchSave snapshot = workspace.Prepare(new Event { Left = ((World)workspace.State!).Left }, StoredGraphKind.Event, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(snapshot.Business.Write.Records, row => row.ObjectId == childId.Value).Kind);
             snapshot.Commit();
         }
         Assert.Equal(s0, workspace.StateSource!.Address);
         FrameAddress s1;
-        using (P0SessionSave state = workspace.Prepare(workspace.State!, parameters: NoRebase)) {
+        using (PreparedBranchSave state = workspace.Prepare(workspace.State!, parameters: NoRebase)) {
             Assert.Equal(s0, state.Business.Write.SourceGraph);
             ObjectVersionRecord rewritten = Assert.Single(state.Business.Write.Records);
             Assert.Equal(ObjectVersionKind.Base, rewritten.Kind);
             Assert.Equal(childId.Value, rewritten.ObjectId);
             s1 = state.Commit().Business.Address;
         }
-        using P0SessionSave unchanged = workspace.Prepare(workspace.State!, parameters: NoRebase);
+        using PreparedBranchSave unchanged = workspace.Prepare(workspace.State!, parameters: NoRebase);
         Assert.Equal(s1, unchanged.Business.Write.SourceGraph);
         Assert.Empty(unchanged.Business.Write.Records);
     }
@@ -361,18 +361,18 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             (mask & 16) != 0 ? input.ReadVarUInt64() : prior.Sequence);
     }
 
-    private FrameAddress Commit(P0Session workspace, IDurableObject? root = null) {
-        using P0SessionSave save = workspace.Prepare(root ?? workspace.State!, parameters: NoRebase);
+    private FrameAddress Commit(BranchSaveSession workspace, IDurableObject? root = null) {
+        using PreparedBranchSave save = workspace.Prepare(root ?? workspace.State!, parameters: NoRebase);
         return save.Commit().Business.Address;
     }
-    private DecodedRevision Decode(FrameAddress address, StateModelRegistry models) => DecodedRevision.ReadSplit(Store, address, models);
+    private DecodedRevision Decode(FrameAddress address, StateModelRegistry models) => DecodedRevision.ReadStoredGraph(Store, address, models);
     private IReadOnlyList<ObjectVersionRecord> Records(FrameAddress address) =>
         Store.ReadGraph(address).OwnedBatch is { } batch ? Store.ReadBatch(batch).Records : [];
     private ObjectId FindId(FrameAddress address, byte value, StateModelRegistry models) =>
         Assert.Single(Decode(address, models).Objects, row => row.Kind == ObjectStateKind.Durable && row.GetState<State>().Value == value).Id;
     private void ReopenReadOnly() {
         _repository.Dispose();
-        _repository = P0Repository.OpenReadOnlyExisting(_root);
+        _repository = RepositoryStorageFacade.OpenReadOnlyExisting(_root);
     }
     private Dictionary<string, byte[]> Files() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(static path => path, static path => File.ReadAllBytes(path));

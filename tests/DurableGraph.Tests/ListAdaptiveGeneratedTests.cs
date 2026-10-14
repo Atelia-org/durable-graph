@@ -17,7 +17,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             object[] fixture = create(count);
             StateModelRegistry registry = (StateModelRegistry)fixture[0];
             IDurableObject world = Assert.IsAssignableFrom<IDurableObject>(fixture[1]);
-            StateModelSnapshot snapshot = registry.Snapshot();
+            ModelExecutionEnvironment snapshot = registry.CreateEnvironment();
             Assert.True(snapshot.TryGetCurrentModel(world.GetType(), out StateModelBinding? model));
             Assert.NotNull(model);
             Assert.True(snapshot.TryGetCurrentObjectBinding(fixture[2].GetType(), out ObjectBinding? binding));

@@ -2,7 +2,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Persistence;
 
-internal sealed partial class StateModelSnapshot {
+internal sealed partial class ModelExecutionEnvironment {
     private readonly Dictionary<Type, ListObjectBinding> _currentLists = [];
     private readonly Dictionary<ListLayout, ObjectReaderBinding> _listReaders = [];
     private readonly ListDeltaAlgorithm _listDeltaAlgorithm;

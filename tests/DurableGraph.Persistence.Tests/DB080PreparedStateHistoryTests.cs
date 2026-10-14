@@ -74,8 +74,8 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             Assert.NotSame(original, repository.PreparedStateEntry);
             // Eviction must not invalidate a live workspace's complete saving source.
             CheckpointAddress saved = first.CommitState(NoRebase);
-            Assert.Equal(address.RevisionAddress, Resources(repository).MetaBootstrapStore.ReadGraph(saved.RevisionAddress).SourceGraph);
-            Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(Resources(repository).MetaBootstrapStore, saved.RevisionAddress)).Kind);
+            Assert.Equal(address.RevisionAddress, Resources(repository).GraphStore.ReadGraph(saved.RevisionAddress).SourceGraph);
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(Resources(repository).GraphStore, saved.RevisionAddress)).Kind);
         }
 
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
@@ -83,12 +83,12 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // and UpgradePlan closed. Recollect on that same environment to exercise
         // cached dependency replay, without installing this diagnostic preparation.
         StateModelRegistry.FrozenConfiguration configuration =
-            Field<StateModelRegistry.FrozenConfiguration>(repository, "_splitConfiguration");
-        DecodedRevision.SplitBindingEnvironment environment = entry.BindingEnvironment!;
+            Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
+        DecodedRevision.SchemaViewBindingEnvironment environment = entry.BindingEnvironment!;
         int factoryValidations = counters.ExtraValidations;
         StateBindingContext.ExactSchemaRequirementSet recollected;
         using (var collection = environment.Models.BeginSchemaRequirementCollection()) {
-            DecodedRevision exact = DecodedRevision.ReadSplit(Resources(repository).MetaBootstrapStore,
+            DecodedRevision exact = DecodedRevision.ReadStoredGraph(Resources(repository).GraphStore,
                 entry.RevisionAddress, configuration, environment);
             PreparedGraphSelection replayed = GraphReader.PrepareState(exact, new(environment.Models), entry.RootId);
             Assert.Equal(entry.RevisionAddress, replayed.Normalized.RevisionAddress);
@@ -130,13 +130,13 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // Construct and publish a legitimate complete inherited State which explicitly
         // selects the new S. Only that selected view carries the dependency conflict.
         GraphResources resources = Resources(repository);
-        FrameAddress conflicting = resources.MetaBootstrapStore.Append(P0GraphKind.State,
-            address.RevisionAddress, resources.SharedMetaBootstrapRoot,
+        FrameAddress conflicting = resources.GraphStore.Append(StoredGraphKind.State,
+            address.RevisionAddress, resources.SharedSchemaRoot,
             new(address.RevisionAddress, address.RootId, [])).Address;
-        resources.PublishMetaBootstrapBranchRoot(
-            resources.PrepareMetaBootstrapBranchRoot("conflicting-source", conflicting), out _);
-        DecodedRevision.SplitBindingEnvironment wrongEnvironment = DecodedRevision.SplitBindingEnvironment.Load(
-            resources.MetaBootstrapStore, configuration, resources.SharedMetaBootstrapRoot!.Value);
+        resources.PublishBranchRoot(
+            resources.PrepareBranchRoot("conflicting-source", conflicting), out _);
+        DecodedRevision.SchemaViewBindingEnvironment wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(
+            resources.GraphStore, configuration, resources.SharedSchemaRoot!.Value);
         InvalidDataException certificateFailure = Assert.Throws<InvalidDataException>(() => recollected.Validate(wrongEnvironment.Models));
         Assert.Contains(conflictingId, certificateFailure.Message);
         Assert.Contains("v5", certificateFailure.Message);
@@ -181,13 +181,13 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         Assert.NotSame(first.State, second.State);
         Assert.Equal(enableReuse ? 1 : 0, repository.RestorationStatistics.PreparedStateHits);
         foreach (BranchCheckout branch in new[] { first, second }) {
-            NormalizedRevision source = branch.Baseline!;
+            NormalizedGraphState source = branch.Baseline!;
             Assert.Equal(new uint[] { 1, 3, 9, 100 }, source.Objects.Keys.Select(id => id.Value).Order());
-            Assert.Same(Resources(repository).MetaBootstrapStore, source.SplitStore);
+            Assert.Same(Resources(repository).GraphStore, source.GraphStore);
             Assert.Same(branch.Models, source.SourceModels);
             Assert.Same(branch.BindingEnvironment!.SelectedSchemaView, source.SelectedSchemaView);
             foreach ((ObjectId id, NormalizedObject row) in source.Objects) {
-                P0ObjectChain chain = Resources(repository).MetaBootstrapStore.ReadObjectChain(source.RevisionAddress, id.Value);
+                ObjectVersionChain chain = Resources(repository).GraphStore.ReadObjectChain(source.RevisionAddress, id.Value);
                 Assert.Equal(new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes), row.Storage);
             }
             Assert.True(source.Objects[new(1)].RequiresRewrite);
@@ -199,24 +199,24 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             branch.CommitEvent(root, NoRebase);
             Assert.Same(source, branch.Baseline!);
             FrameAddress rewritten = branch.CommitState(NoRebase).RevisionAddress;
-            P0GraphStore store = Resources(repository).MetaBootstrapStore;
-            P0GraphSnapshot revision = store.ReadGraph(rewritten);
+            GraphRecordStore store = Resources(repository).GraphStore;
+            StoredGraphRevision revision = store.ReadGraph(rewritten);
             Assert.Equal(address.RevisionAddress, revision.SourceGraph);
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(store, rewritten)).Kind);
-            Assert.Equal(new uint[] { 9, 100 }, source.Objects.Keys.Select(id => id.Value).Except(revision.Objects.Keys).Order());
-            Assert.Equal(new uint[] { 1, 3 }, revision.Objects.Keys.Order());
+            Assert.Equal(new uint[] { 9, 100 }, source.Objects.Keys.Select(id => id.Value).Except(revision.ObjectHeads.Keys).Order());
+            Assert.Equal(new uint[] { 1, 3 }, revision.ObjectHeads.Keys.Order());
             Assert.False(branch.Baseline!.Objects[new(1)].RequiresRewrite);
             root.Value++;
             root.Text = new string('n', 6);
             CheckpointAddress changedAddress = branch.CommitState(NoRebase);
-            P0GraphSnapshot changed = store.ReadGraph(changedAddress.RevisionAddress);
+            StoredGraphRevision changed = store.ReadGraph(changedAddress.RevisionAddress);
             Assert.Equal(rewritten, changed.SourceGraph);
             // Tiny varint bodies can legitimately choose Base even for a sparse Delta.
             // Saving semantics and cleared rewrite are independent of that cost decision.
             Assert.Contains(Records(store, changed.Address), row => row.ObjectId == 1);
             Assert.False(branch.Baseline!.Objects[new(1)].RequiresRewrite);
             Assert.Equal(ObjectVersionKind.Base, Records(store, changed.Address).Single(row => row.ObjectId == 101).Kind);
-            Assert.Equal(new uint[] { 1, 101 }, changed.Objects.Keys.Order());
+            Assert.Equal(new uint[] { 1, 101 }, changed.ObjectHeads.Keys.Order());
             Node restored = Assert.IsType<Node>(repository.ReadState(changedAddress));
             Assert.Equal(root.Value, restored.Value);
             Assert.Equal(root.Text, restored.Text);
@@ -227,19 +227,19 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout branch = repository.CreateBranch("main", new Node(), NoRebase);
         GraphResources resources = Resources(repository);
-        P0GraphStore store = resources.MetaBootstrapStore;
-        P0CatalogView catalog = P0CatalogView.Load(store, resources.SharedMetaBootstrapRoot!.Value);
+        GraphRecordStore store = resources.GraphStore;
+        SchemaCatalogView catalog = SchemaCatalogView.Load(store, resources.SharedSchemaRoot!.Value);
         ObjectVersionRecord Durable(uint id, State state) => ObjectVersionRecord.CreateBase(id,
-            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(state), catalog));
+            TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(state), catalog));
         ObjectVersionRecord Empty(uint id) => ObjectVersionRecord.CreateBase(id,
-            P0TypedBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(string.Empty), catalog));
+            TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(string.Empty), catalog));
         // Persist a legitimate complete graph with two historical Empty identities and
         // a high reachable ID which becomes unreachable only after normalization.
         FrameAddress prior = branch.Head.RevisionAddress;
-        FrameAddress revision = store.Append(P0GraphKind.State, prior, catalog.Snapshot!.Address,
+        FrameAddress revision = store.Append(StoredGraphKind.State, prior, catalog.Snapshot!.Address,
             new(branch.StateRevisionAddress, new(1),
                 [Durable(1, new State(100, 100, 9, 7)), Empty(3), Empty(9), Durable(100, new State(0, 0, 0, 8))])).Address;
-        resources.PublishMetaBootstrapBranchRoot(resources.PrepareMetaBootstrapBranchRoot("main", revision), out _);
+        resources.PublishBranchRoot(resources.PrepareBranchRoot("main", revision), out _);
     }
 
     private static StateModelRegistry HistoryModels(bool current, HistoryCounters counts, string? extraFactory = null) {
@@ -366,7 +366,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     private static MethodInfo Method(string name) => typeof(DB080PreparedStateHistoryTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
     private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
-    private static IReadOnlyList<ObjectVersionRecord> Records(P0GraphStore store, FrameAddress address) =>
+    private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>
         (stats.DecodedObjects, stats.NormalizedObjects, stats.PreparedGraphs, stats.AllocatedObjects, stats.HydratedObjects, stats.PreparedStateHits, stats.PreparedStateMisses);

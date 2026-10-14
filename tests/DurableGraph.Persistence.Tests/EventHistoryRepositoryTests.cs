@@ -48,7 +48,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Count());
         }
         using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
-            P0GraphStore store = resources.MetaBootstrapStore;
+            GraphRecordStore store = resources.GraphStore;
             Assert.Null(store.ReadGraph(first).SourceGraph);
             Assert.Equal(first, store.ReadGraph(eventAddress).SourceGraph);
             Assert.Equal(first, store.ReadGraph(second).SourceGraph);
@@ -57,7 +57,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.NotEqual(rootId.Value, write.ObjectId);
             Assert.Equal(second, store.ReadGraph(third).SourceGraph);
             uint childId = write.ObjectId;
-            Assert.Equal(store.ReadGraph(second).Objects[childId],
+            Assert.Equal(store.ReadGraph(second).ObjectHeads[childId],
                 Assert.Single(StorageTestData.LocalRecords(store, third)).PriorAddress);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
@@ -110,15 +110,15 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using BranchCheckout session = repository.CreateBranch("main", initial, NoRebase);
         ObjectId originalId = session.StateId!.Value;
         session.CommitEvent(new Node(), NoRebase);
-        repository.Checkpoint = checkpoint => {
-            if (checkpoint == CommitCheckpoint.AfterPrepare) replacement.Value = 3;
+        repository.OperationStageObserver = checkpoint => {
+            if (checkpoint == RepositoryOperationStage.AfterPrepare) replacement.Value = 3;
         };
-        repository.MetaBootstrapCheckpoint = checkpoint => {
-            if (checkpoint == P0SaveCheckpoint.BeforePublication) { Assert.Same(initial, ((Node)session.State!)); }
+        repository.SaveStageObserver = checkpoint => {
+            if (checkpoint == RepositorySaveStage.BeforePublication) { Assert.Same(initial, ((Node)session.State!)); }
         };
         var published = session.CommitState(replacement, NoRebase);
-        repository.Checkpoint = null;
-        repository.MetaBootstrapCheckpoint = null;
+        repository.OperationStageObserver = null;
+        repository.SaveStageObserver = null;
         Assert.Same(replacement, ((Node)session.State!));
         Assert.NotEqual(originalId, session.StateId!.Value);
         Assert.Equal((byte)2, ((Node)repository.ReadState(published)).Value);
@@ -144,14 +144,14 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Same(child, ((Node)session.State!).Left);
         }
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(_root);
-        P0GraphStore store = resources.MetaBootstrapStore;
+        GraphRecordStore store = resources.GraphStore;
         Assert.Empty(StorageTestData.LocalRecords(store, unchanged));
-        uint oldId = Assert.Single(store.ReadGraph(first).Objects.Keys, id => id != rootId.Value);
-        Assert.Equal(new[] { rootId.Value }, store.ReadGraph(removed).Objects.Keys);
+        uint oldId = Assert.Single(store.ReadGraph(first).ObjectHeads.Keys, id => id != rootId.Value);
+        Assert.Equal(new[] { rootId.Value }, store.ReadGraph(removed).ObjectHeads.Keys);
         ObjectVersionRecord fresh = Assert.Single(StorageTestData.LocalRecords(store, restored), row => row.ObjectId != rootId.Value);
         Assert.True(fresh.ObjectId > oldId);
         Assert.Equal(ObjectVersionKind.Base, fresh.Kind);
-        Assert.DoesNotContain(oldId, store.ReadGraph(restored).Objects.Keys);
+        Assert.DoesNotContain(oldId, store.ReadGraph(restored).ObjectHeads.Keys);
     }
 
     [Fact]
@@ -258,8 +258,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterBusinessAppend)]
-    [InlineData((int)P0SaveCheckpoint.BeforePublication)]
+    [InlineData((int)RepositorySaveStage.AfterBusinessAppend)]
+    [InlineData((int)RepositorySaveStage.BeforePublication)]
     public void KnownPrepublicationFailureDoesNotInstallCandidateAndColdCheckoutKeepsEventHead(int point) {
         FrameAddress first;
         using (Repository repository = CreateRepository()) {
@@ -267,7 +267,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             first = session.StateRevisionAddress!.Value;
             session.CommitEvent(new Node { Value = 7 }, NoRebase);
             ((Node)session.State!).Value = 2;
-            repository.MetaBootstrapCheckpoint = checkpoint => { if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("interrupted"); };
+            repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)point) throw new IOException("interrupted"); };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
             Assert.Equal(first, session.StateRevisionAddress!.Value);
@@ -281,15 +281,15 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     }
 
     [Theory]
-    [InlineData((int)P0SaveCheckpoint.AfterPublication)]
-    [InlineData((int)P0SaveCheckpoint.BeforeInstall)]
+    [InlineData((int)RepositorySaveStage.AfterPublication)]
+    [InlineData((int)RepositorySaveStage.BeforeInstall)]
     public void PublishedStateFailureFaultsWriterAndReopenKeepsPublishedStateHead(int point) {
         FrameAddress published;
         using (Repository repository = CreateRepository()) {
             using BranchCheckout session = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
             session.CommitEvent(new Node(), NoRebase);
             ((Node)session.State!).Value = 9;
-            repository.MetaBootstrapCheckpoint = checkpoint => { if (checkpoint == (P0SaveCheckpoint)point) throw new IOException("lost completion"); };
+            repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)point) throw new IOException("lost completion"); };
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
             published = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
@@ -306,16 +306,16 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     [Fact]
     public void InitialPublicationFailureDoesNotExposeEmptyBranchAndPublishedInitialStateCanResume() {
         using (Repository repository = CreateRepository()) {
-            repository.MetaBootstrapCheckpoint = checkpoint => {
-                if (checkpoint == P0SaveCheckpoint.BeforePublication) throw new IOException("not bound");
+            repository.SaveStageObserver = checkpoint => {
+                if (checkpoint == RepositorySaveStage.BeforePublication) throw new IOException("not bound");
             };
             var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node(), NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
         }
         using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
-            repository.MetaBootstrapCheckpoint = checkpoint => {
-                if (checkpoint == P0SaveCheckpoint.AfterPublication) throw new IOException("bound but not returned");
+            repository.SaveStageObserver = checkpoint => {
+                if (checkpoint == RepositorySaveStage.AfterPublication) throw new IOException("bound but not returned");
             };
             var error = Assert.Throws<GraphCommitException>(() => repository.CreateBranch("main", new Node { Value = 6 }, NoRebase));
             Assert.Equal(GraphCommitOutcome.Published, error.Outcome);
@@ -346,7 +346,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Same(same, ((Node)session.State!));
         }
         using GraphResources resources = GraphResources.OpenReadOnlyExisting(_root);
-        P0GraphStore store = resources.MetaBootstrapStore;
+        GraphRecordStore store = resources.GraphStore;
         Assert.Equal(original, store.ReadGraph(upgraded).SourceGraph);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(StorageTestData.LocalRecords(store, upgraded)).Kind);
         Assert.Empty(StorageTestData.LocalRecords(store, unchanged));

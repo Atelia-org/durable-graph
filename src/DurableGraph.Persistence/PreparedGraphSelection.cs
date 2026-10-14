@@ -9,5 +9,5 @@ namespace Atelia.DurableGraph.Persistence;
 /// and grants no permission to reuse preparation across operations by itself. Repository
 /// reuse additionally requires a successfully delivered State and its exact Schema certificate.
 /// </remarks>
-internal sealed record PreparedGraphSelection(NormalizedRevision Normalized, ObjectId RootId,
-    StateModelBinding RootModel, StateModelSnapshot Models, IReadOnlyList<ObjectId> Reachable);
+internal sealed record PreparedGraphSelection(NormalizedGraphState Normalized, ObjectId RootId,
+    StateModelBinding RootModel, ModelExecutionEnvironment Models, IReadOnlyList<ObjectId> Reachable);

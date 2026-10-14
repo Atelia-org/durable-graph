@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, FrameAddress>>()(directory.Path);
             StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
             using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
-            exact = Assert.Single(DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, models).Objects).Schema!;
+            exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models).Objects).Schema!;
         }
         GeneratorTestRun bases2 = RunCrossAssemblyGenerator(InheritanceHistoryBases(2), history: baseHistory.ReadAdditionalTexts(), forceDefinitions: "true");
         var baseImage2 = EmitCrossAssemblyReference(bases2);
@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type currentHost = current.Load(app2).GetType("InheritanceHistoryApp.Host")!;
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
         using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
-            var stored = Assert.Single(DecodedRevision.ReadSplit(segments.MetaBootstrapStore, original, currentModels).Objects);
+            var stored = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, currentModels).Objects);
             Assert.Equal(exact, stored.Schema);
             Assert.Equal(1, stored.Schema!.Version);
             Assert.Equal(1, stored.Schema.BaseSchema!.Version);
@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         using GraphResources finalSegments = GraphResources.OpenReadOnlyExisting(directory.Path);
-        var store = finalSegments.MetaBootstrapStore;
+        var store = finalSegments.GraphStore;
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(DefaultRecords(store, addresses[0])).Kind);
         foreach (int index in new[] { 1, 3 }) Assert.Empty(DefaultRecords(store, addresses[index]));
         ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, addresses[2]));

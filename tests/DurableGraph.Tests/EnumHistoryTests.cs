@@ -87,7 +87,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         AssertSchemaOnlyCompiles(accepted);
         Assembly assembly = EmitAndLoad(accepted.OutputCompilation);
         StateModelRegistry registry = EnumHistoryRegistry(assembly);
-        DurableSchema schema = registry.Snapshot().ResolveCurrentModel(assembly.GetType("World")!).CurrentSchema;
+        DurableSchema schema = registry.CreateEnvironment().ResolveCurrentModel(assembly.GetType("World")!).CurrentSchema;
         Assert.Equal(2, schema.BaseSchema!.Version);
         DurableSchema value = Assert.Single(schema.BaseSchema.Fields).InlineSchema!;
         Assert.Equal(2, value.Version);
@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         GeneratorTestRun next = RunGenerator(source.Replace("\"Mode\",1", "\"Mode\",2"), history.ReadAdditionalTexts());
         AssertSchemaOnlyCompiles(next);
         Assembly assembly = EmitAndLoad(next.OutputCompilation);
-        StateBindingContext snapshot = EnumHistoryRegistry(assembly).Snapshot();
+        StateBindingContext snapshot = EnumHistoryRegistry(assembly).CreateEnvironment();
         Assert.Equal(1, snapshot.ResolveCurrentModel(assembly.GetType("World")!).CurrentSchema.Version);
         Assert.True(snapshot.TryGetCurrentObjectBinding(assembly.GetType("Mode")!.MakeArrayType(), out ObjectBinding? array));
         Assert.Equal(2, Assert.IsAssignableFrom<ArrayObjectBinding>(array).ArrayLayout.ElementSlot.InlineSchema!.Version);
@@ -146,7 +146,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Null(assembly.GetType("OldMode"));
         DurableSchema mode = new("Mode", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, TypeTag.Byte));
         DurableSchema world = new("World", 1, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: mode));
-        StateReaderBinding reader = EnumHistoryRegistry(assembly).Snapshot().ResolveReader(world);
+        StateReaderBinding reader = EnumHistoryRegistry(assembly).CreateEnvironment().ResolveReader(world);
         // 255 was never a declared enum constant; retained reading uses only the old byte layout.
         ObjectStateRecord decoded = reader.Read(new(1), new StateModelBodySource([255]));
         object value = StateModelField(decoded, "Segment0Field1")!;

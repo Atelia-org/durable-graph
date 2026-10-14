@@ -66,18 +66,18 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(ids, branch.Baseline!.Objects.Keys.Select(id => id.Value).Order().ToArray());
             Assert.Equal(3, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
             firstPrivate = branch.CommitState().RevisionAddress;
-            P0GraphStore store = ReferenceGraphStore(repository);
-            P0GraphSnapshot saved = store.ReadGraph(firstPrivate);
+            GraphRecordStore store = ReferenceGraphStore(repository);
+            StoredGraphRevision saved = store.ReadGraph(firstPrivate);
             Assert.Equal(baseline, saved.Parent);
             Assert.Equal(baseline, saved.SourceGraph);
-            Assert.Equal(ids, saved.Objects.Keys.Order().ToArray());
+            Assert.Equal(ids, saved.ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(root, saved.RootId);
             Assert.Equal(3, DefaultRecords(store, firstPrivate).Count);
             Assert.All(DefaultRecords(store, firstPrivate), record => {
                 Assert.Equal(ObjectVersionKind.Base, record.Kind);
                 Assert.Null(record.PriorAddress);
             });
-            Assert.Equal(store.ReadGraph(baseline).Objects[root.Value], saved.Objects[root.Value]);
+            Assert.Equal(store.ReadGraph(baseline).ObjectHeads[root.Value], saved.ObjectHeads[root.Value]);
             AssertBootstrapContainerUpgradeCatalog(branch.Catalog.Accepted!, ExpectedBootstrapContainerUpgrade(1), ExpectedBootstrapContainerUpgrade(2));
             PrivateAssertSameRef(shared, PrivateReadRef(repository, 2));
             PrivateAssertFramesPreserved(PrivateResources(repository).Data, oldFrames);
@@ -90,14 +90,14 @@ public sealed partial class DurableSchemaGeneratorTests {
                 .ToDictionary(row => row.Key, row => row.Value.Storage!.Value);
             current.Change(branch.State!);
             FrameAddress next = branch.CommitState().RevisionAddress;
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(firstPrivate, store.ReadGraph(next).SourceGraph);
-            Assert.Equal(ids, store.ReadGraph(next).Objects.Keys.Order().ToArray());
+            Assert.Equal(ids, store.ReadGraph(next).ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(3, DefaultRecords(store, next).Count);
             Assert.All(DefaultRecords(store, next), record => {
                 Assert.Equal(ObjectVersionKind.Delta, record.Kind);
                 Assert.Equal(previous[new(record.ObjectId)].Head, record.PriorAddress);
-                P0ObjectChain chain = store.ReadObjectChain(next, record.ObjectId);
+                ObjectVersionChain chain = store.ReadObjectChain(next, record.ObjectId);
                 Assert.Equal(previous[new(record.ObjectId)].ReconstructionPayloadBytes + chain.Entries[^1].PayloadBytes,
                     branch.Baseline!.Objects[new(record.ObjectId)].Storage!.Value.ReconstructionPayloadBytes);
             });

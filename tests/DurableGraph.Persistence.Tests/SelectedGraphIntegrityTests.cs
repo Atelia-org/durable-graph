@@ -20,10 +20,10 @@ public sealed partial class EventHistoryRepositoryTests {
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
             // A complete Base graph with business parent S0 must still name S0 as its
             // content source. A new well-framed batch/directory falsely claims no source.
-            P0GraphStore store = resources.MetaBootstrapStore;
+            GraphRecordStore store = resources.GraphStore;
             FrameAddress invalid = AppendInvalidSource(resources, first, null, root,
-                state ? P0GraphKind.State : P0GraphKind.Event, StorageTestData.LocalRecords(store, first));
-            if (!orphan) { resources.PublishMetaBootstrapBranchRoot(resources.PrepareMetaBootstrapBranchRoot("main", invalid), out _); }
+                state ? StoredGraphKind.State : StoredGraphKind.Event, StorageTestData.LocalRecords(store, first));
+            if (!orphan) { resources.PublishBranchRoot(resources.PrepareBranchRoot("main", invalid), out _); }
             else { resources.Data.ConfirmDurable(); }
         }
         var before = SnapshotFiles();
@@ -61,10 +61,10 @@ public sealed partial class EventHistoryRepositoryTests {
             root = main.Head.RootId;
         }
         using (GraphResources resources = GraphResources.OpenExisting(_root)) {
-            P0GraphStore store = resources.MetaBootstrapStore;
-            FrameAddress invalid = AppendInvalidSource(resources, first, first, root, state ? P0GraphKind.State : P0GraphKind.Event,
+            GraphRecordStore store = resources.GraphStore;
+            FrameAddress invalid = AppendInvalidSource(resources, first, first, root, state ? StoredGraphKind.State : StoredGraphKind.Event,
                 StorageTestData.LocalRecords(store, first));
-            resources.PublishMetaBootstrapBranchRoot(resources.PrepareMetaBootstrapBranchRoot("main", invalid), out _);
+            resources.PublishBranchRoot(resources.PrepareBranchRoot("main", invalid), out _);
         }
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
             CheckpointAddress head = reader.GetHead("main"); // Metadata navigation does not replay the bad directory.
@@ -82,12 +82,12 @@ public sealed partial class EventHistoryRepositoryTests {
     }
 
     private static FrameAddress AppendInvalidSource(GraphResources resources, FrameAddress parent,
-        FrameAddress? source, ObjectId root, P0GraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
-        FrameAddress? schema = resources.SharedMetaBootstrapRoot;
-        FrameAddress batch = resources.Data.Append(P0GraphWire.BatchTag, P0GraphWire.EncodeBatch(source, schema, records)).Unwrap();
+        FrameAddress? source, ObjectId root, StoredGraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
+        FrameAddress? schema = resources.SharedSchemaRoot;
+        FrameAddress batch = resources.Data.Append(GraphFrameCodec.BatchTag, GraphFrameCodec.EncodeBatch(source, schema, records)).Unwrap();
         var heads = records.ToDictionary(row => row.ObjectId, _ => batch);
-        FrameAddress directory = resources.Data.Append(P0GraphWire.DirectoryTag,
-            P0GraphWire.EncodeDirectory(source, ObjectVersionKind.Base, null, P0DirectoryCodec.PrepareBase(heads).Body)).Unwrap();
-        return resources.Data.Append(P0GraphWire.GraphTag, P0GraphWire.EncodeGraph(kind, parent, root, directory, schema, batch)).Unwrap();
+        FrameAddress directory = resources.Data.Append(GraphFrameCodec.DirectoryTag,
+            GraphFrameCodec.EncodeDirectory(source, ObjectVersionKind.Base, null, ObjectHeadDirectoryCodec.PrepareBase(heads).Body)).Unwrap();
+        return resources.Data.Append(GraphFrameCodec.GraphTag, GraphFrameCodec.EncodeGraph(kind, parent, root, directory, schema, batch)).Unwrap();
     }
 }

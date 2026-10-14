@@ -203,7 +203,7 @@ public sealed class RepositoryTagTests : IDisposable {
         CheckpointAddress stateAddress = main.Head;
         using BranchCheckout other = repository.Fork("other", stateAddress);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
-        NormalizedRevision baseline = main.Baseline!, otherBaseline = other.Baseline!;
+        NormalizedGraphState baseline = main.Baseline!, otherBaseline = other.Baseline!;
         Node mainState = Assert.IsType<Node>(main.State), otherState = Assert.IsType<Node>(other.State);
         mainState.Value = 3;
         otherState.Value = 4;

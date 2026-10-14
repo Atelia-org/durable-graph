@@ -153,8 +153,8 @@ public sealed class DB078EventQueryTests : IDisposable {
         }
         if (iteratorState == 3) { Assert.False(iterator.MoveNext()); }
         if (fault) {
-            repository.MetaBootstrapCheckpoint = point => {
-                if (point == P0SaveCheckpoint.AfterBusinessAppend) { throw new IOException("Injected publication failure."); }
+            repository.SaveStageObserver = point => {
+                if (point == RepositorySaveStage.AfterBusinessAppend) { throw new IOException("Injected publication failure."); }
             };
             Assert.Throws<GraphCommitException>(() => branch.CommitEvent(new Node(), NoRebase));
             Assert.True(repository.IsFaulted);

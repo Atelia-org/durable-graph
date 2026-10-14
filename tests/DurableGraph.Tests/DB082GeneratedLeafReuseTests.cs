@@ -59,10 +59,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             CheckpointAddress saved = first.CommitState(DB082NoRebase);
             Assert.Equal(source.Address, saved.Parent);
             Assert.Equal(source.RootId, saved.RootId);
-            var store = DB082Resources(repository).MetaBootstrapStore;
+            var store = DB082Resources(repository).GraphStore;
             Assert.Single(DefaultRemoved(store, saved.RevisionAddress));
-            Assert.Equal(store.ReadGraph(source.RevisionAddress).Objects.Count - 1,
-                store.ReadGraph(saved.RevisionAddress).Objects.Count);
+            Assert.Equal(store.ReadGraph(source.RevisionAddress).ObjectHeads.Count - 1,
+                store.ReadGraph(saved.RevisionAddress).ObjectHeads.Count);
             fixture.Change(second.State!, 22);
             Assert.Equal(source.Address, second.CommitState(DB082NoRebase).Parent);
             Assert.Equal(source, main.Head);
@@ -83,7 +83,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Same(DB082Member(loaded.State!, "Left"), DB082Member(loaded.State!, "Alias"));
         if (family) Assert.Equal(2, Assert.IsAssignableFrom<IList>(DB082Member(loaded.State!, "Links")).Count);
         CheckpointAddress unchanged = loaded.CommitState(DB082NoRebase);
-        Assert.Empty(DefaultRecords(DB082Resources(reopened).MetaBootstrapStore, unchanged.RevisionAddress));
+        Assert.Empty(DefaultRecords(DB082Resources(reopened).GraphStore, unchanged.RevisionAddress));
         using BranchCheckout sibling = reopened.Checkout("second");
         Assert.Equal(22, DB082Value(sibling.State!));
         Assert.NotNull(DB082Member(sibling.State!, "Right"));
@@ -114,7 +114,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CheckpointAddress secondCommit = second.CommitState(DB082NoRebase);
         Assert.Equal(main.Head.Address, secondCommit.Parent);
         Assert.Equal(main.Head.RootId, secondCommit.RootId);
-        Assert.Empty(DefaultRecords(DB082Resources(repository).MetaBootstrapStore, secondCommit.RevisionAddress));
+        Assert.Empty(DefaultRecords(DB082Resources(repository).GraphStore, secondCommit.RevisionAddress));
         // New revision, identical object head: first restoration must still build a fresh table.
         statistics = DB082Observe(repository);
         using BranchCheckout newer = repository.Fork("newer", secondCommit);
@@ -230,7 +230,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         object oldLeaf = DB082Member(first.State!, "Left")!;
         PreparedStateRestoration originalEntry = repository.PreparedStateEntry!;
         CheckpointAddress next = main.CommitState(DB082NoRebase);
-        Assert.Empty(DefaultRecords(DB082Resources(repository).MetaBootstrapStore, next.RevisionAddress));
+        Assert.Empty(DefaultRecords(DB082Resources(repository).GraphStore, next.RevisionAddress));
         Assert.Same(originalEntry, repository.PreparedStateEntry);
         GraphReadStatistics statistics = DB082Observe(repository);
         using BranchCheckout nextFork = repository.Fork("next", next);
@@ -309,7 +309,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         T Method<T>(string name) where T : Delegate => host.GetMethod(name)!.CreateDelegate<T>();
         StateModelRegistry models = Method<Func<StateModelRegistry>>("Models")();
         Type owner = assembly.GetType("DB082Owner")!, leaf = assembly.GetType("DB082Leaf")!, empty = assembly.GetType("DB082Empty")!;
-        StateModelSnapshot snapshot = models.Snapshot();
+        ModelExecutionEnvironment snapshot = models.CreateEnvironment();
         Assert.False(snapshot.ResolveCurrentModel(owner).IsImmutableLeaf);
         Assert.True(snapshot.ResolveCurrentModel(leaf).IsImmutableLeaf);
         Assert.True(snapshot.ResolveCurrentModel(empty).IsImmutableLeaf);

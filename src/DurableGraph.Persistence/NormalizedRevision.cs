@@ -7,20 +7,20 @@ using Atelia.DurableGraph.Persistence.MetaBootstrapP0;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>One current DTO baseline, with complete source membership and migration provenance.</summary>
-internal sealed class NormalizedRevision {
+internal sealed class NormalizedGraphState {
     private readonly Dictionary<ObjectId, NormalizedObject> _objects;
     private readonly bool _isCandidate;
-    private readonly NormalizedRevision? _candidateSource;
+    private readonly NormalizedGraphState? _candidateSource;
 
-    private NormalizedRevision(FrameAddress address, Dictionary<ObjectId, NormalizedObject> objects, StringReadTable strings,
+    private NormalizedGraphState(FrameAddress address, Dictionary<ObjectId, NormalizedObject> objects, StringReadTable strings,
         IReadOnlyDictionary<ObjectId, ObjectStateRecord>? currentDtos = null,
-        P0GraphStore? splitStore = null, P0CatalogView? selectedSchemaView = null, StateModelSnapshot? sourceModels = null,
-        bool isCandidate = false, NormalizedRevision? candidateSource = null) {
+        GraphRecordStore? graphStore = null, SchemaCatalogView? selectedSchemaView = null, ModelExecutionEnvironment? sourceModels = null,
+        bool isCandidate = false, NormalizedGraphState? candidateSource = null) {
         RevisionAddress = address;
         _objects = objects;
         Strings = strings;
         CurrentDtos = currentDtos ?? objects.ToDictionary(static pair => pair.Key, static pair => pair.Value.Current);
-        SplitStore = splitStore;
+        GraphStore = graphStore;
         SelectedSchemaView = selectedSchemaView;
         SourceModels = sourceModels;
         _isCandidate = isCandidate;
@@ -31,22 +31,22 @@ internal sealed class NormalizedRevision {
     internal IReadOnlyDictionary<ObjectId, NormalizedObject> Objects => _objects;
     internal StringReadTable Strings { get; }
     internal IReadOnlyDictionary<ObjectId, ObjectStateRecord> CurrentDtos { get; }
-    internal P0GraphStore? SplitStore { get; }
-    internal P0CatalogView? SelectedSchemaView { get; }
-    internal StateModelSnapshot? SourceModels { get; }
+    internal GraphRecordStore? GraphStore { get; }
+    internal SchemaCatalogView? SelectedSchemaView { get; }
+    internal ModelExecutionEnvironment? SourceModels { get; }
 
     // Candidate DTOs are prepared before append. Unwritten objects retain their committed
     // storage facts; actual writes complete a separate installation before publication.
-    internal static NormalizedRevision FromSplitCandidate(CapturedGraph candidate, StateModelSnapshot models,
-        P0GraphStore store, NormalizedRevision? baseline) {
-        baseline?.RequireSplitSource(store, models);
+    internal static NormalizedGraphState FromCapturedCandidate(CapturedGraph candidate, ModelExecutionEnvironment models,
+        GraphRecordStore store, NormalizedGraphState? baseline) {
+        baseline?.RequireStoredSource(store, models);
         var (rows, strings) = CreateCandidate(candidate, models, baseline);
-        return new(default, rows, strings, splitStore: store,
+        return new(default, rows, strings, graphStore: store,
             selectedSchemaView: baseline?.SelectedSchemaView, sourceModels: models, isCandidate: true, candidateSource: baseline);
     }
 
     private static (Dictionary<ObjectId, NormalizedObject> Rows, StringReadTable Strings) CreateCandidate(
-        CapturedGraph candidate, StateModelSnapshot models, NormalizedRevision? baseline) {
+        CapturedGraph candidate, ModelExecutionEnvironment models, NormalizedGraphState? baseline) {
         Dictionary<ObjectId, NormalizedObject> rows = [];
         foreach (ObjectStateRecord row in candidate.Objects) {
             ObjectBinding model = ResolveModel(models, row.Layout);
@@ -60,27 +60,27 @@ internal sealed class NormalizedRevision {
         return (rows, strings);
     }
 
-    internal NormalizedRevision WithSplitGraph(P0GraphStore store, P0GraphSnapshot graph,
-        IReadOnlyList<ObjectVersionRecord> expectedRecords, P0CatalogView selected) {
-        if (!_isCandidate || RevisionAddress != default || !ReferenceEquals(SplitStore, store) ||
+    internal NormalizedGraphState PrepareGraphInstallation(GraphRecordStore store, StoredGraphRevision graph,
+        IReadOnlyList<ObjectVersionRecord> expectedRecords, SchemaCatalogView selected) {
+        if (!_isCandidate || RevisionAddress != default || !ReferenceEquals(GraphStore, store) ||
             !ReferenceEquals(graph.SourceOwner, store)) {
             throw new InvalidOperationException("Only this split Store's private candidate can prepare an installation.");
         }
-        P0GraphSnapshot actual = store.ReadGraph(graph.Address);
+        StoredGraphRevision actual = store.ReadGraph(graph.Address);
         if (actual.Metadata != graph.Metadata || actual.SourceGraph != _candidateSource?.RevisionAddress ||
-            !actual.Objects.SequenceEqual(graph.Objects) || selected.Snapshot is not { } schema ||
+            !actual.ObjectHeads.SequenceEqual(graph.ObjectHeads) || selected.Snapshot is not { } schema ||
             !ReferenceEquals(schema.SourceOwner, store) || schema.Address != actual.SchemaRoot) {
             throw new InvalidDataException("A split installation must use its actual graph, content Parent and completed Schema view.");
         }
         IReadOnlyList<ObjectVersionRecord> records = actual.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
         RequireSameWrites(expectedRecords, records);
         foreach (NormalizedObject row in _objects.Values) { selected.Require(row.Current.Layout); }
-        return CompleteInstallation(actual.Address, records, actual.Objects, store, selected);
+        return CompleteInstallation(actual.Address, records, actual.ObjectHeads, store, selected);
     }
 
     // Actual maps reach this private calculation only through the concrete source check above.
-    private NormalizedRevision CompleteInstallation(FrameAddress address, IReadOnlyList<ObjectVersionRecord> records,
-        IReadOnlyDictionary<uint, FrameAddress> heads, P0GraphStore splitStore, P0CatalogView selected) {
+    private NormalizedGraphState CompleteInstallation(FrameAddress address, IReadOnlyList<ObjectVersionRecord> records,
+        IReadOnlyDictionary<uint, FrameAddress> heads, GraphRecordStore graphStore, SchemaCatalogView selected) {
         if (heads.Count != _objects.Count || _objects.Keys.Any(id => !heads.ContainsKey(id.Value))) {
             throw new InvalidDataException("Installed membership must equal the complete captured candidate.");
         }
@@ -117,7 +117,7 @@ internal sealed class NormalizedRevision {
                 throw new InvalidDataException("A surviving rewritten object must install a new Base.");
             }
         }
-        return new(address, installed, Strings, CurrentDtos, splitStore, selected, SourceModels);
+        return new(address, installed, Strings, CurrentDtos, graphStore, selected, SourceModels);
     }
 
     private static void RequireSameWrites(IReadOnlyList<ObjectVersionRecord> expected, IReadOnlyList<ObjectVersionRecord> actual) {
@@ -130,17 +130,17 @@ internal sealed class NormalizedRevision {
         }
     }
 
-    internal P0GraphSnapshot RequireSplitSource(P0GraphStore store, StateModelSnapshot models) {
-        if (_isCandidate || !ReferenceEquals(SplitStore, store) || !ReferenceEquals(SourceModels, models) || SelectedSchemaView is not { } selected) {
+    internal StoredGraphRevision RequireStoredSource(GraphRecordStore store, ModelExecutionEnvironment models) {
+        if (_isCandidate || !ReferenceEquals(GraphStore, store) || !ReferenceEquals(SourceModels, models) || SelectedSchemaView is not { } selected) {
             throw new InvalidDataException("The normalized baseline must retain its exact split Store and frozen model environment.");
         }
-        P0GraphSnapshot actual = store.ReadGraph(RevisionAddress);
-        if (actual.Kind != P0GraphKind.State || selected.Snapshot is not { } schema || !ReferenceEquals(schema.SourceOwner, store) ||
-            schema.Address != actual.SchemaRoot || actual.Objects.Count != _objects.Count || _objects.Keys.Any(id => !actual.Objects.ContainsKey(id.Value))) {
+        StoredGraphRevision actual = store.ReadGraph(RevisionAddress);
+        if (actual.Kind != StoredGraphKind.State || selected.Snapshot is not { } schema || !ReferenceEquals(schema.SourceOwner, store) ||
+            schema.Address != actual.SchemaRoot || actual.ObjectHeads.Count != _objects.Count || _objects.Keys.Any(id => !actual.ObjectHeads.ContainsKey(id.Value))) {
             throw new InvalidDataException("Normalized source membership and selected Schema view must match the exact State.");
         }
         foreach ((ObjectId id, NormalizedObject row) in _objects) {
-            if (row.Storage is not { } storage || storage.Head != actual.Objects[id.Value] || row.SourceLayout.Kind != row.Current.Kind ||
+            if (row.Storage is not { } storage || storage.Head != actual.ObjectHeads[id.Value] || row.SourceLayout.Kind != row.Current.Kind ||
                 row.RequiresRewrite != !row.SourceLayout.Equals(row.Current.Layout) || !row.Model.CurrentLayout.Equals(row.Current.Layout) ||
                 (row.Current.Kind == ObjectStateKind.String && (row.SourceSchema is not null || row.RequiresRewrite))) {
                 throw new InvalidDataException("Every normalized source row must retain its exact head, layout and model, including removed members.");
@@ -150,9 +150,9 @@ internal sealed class NormalizedRevision {
         return actual;
     }
 
-    internal static NormalizedRevision Create(DecodedRevision source, StateModelSnapshot models,
+    internal static NormalizedGraphState Create(DecodedRevision source, ModelExecutionEnvironment models,
         GraphReadStatistics? statistics = null) {
-        if (source.SplitStore is not null && !ReferenceEquals(source.SourceModels, models)) {
+        if (source.GraphStore is not null && !ReferenceEquals(source.SourceModels, models)) {
             throw new InvalidDataException("A split decoded source must normalize in its issuing frozen model environment.");
         }
         Dictionary<ObjectId, NormalizedObject> normalized = [];
@@ -184,10 +184,10 @@ internal sealed class NormalizedRevision {
             }
         }
         return new(source.RevisionAddress, normalized, source.Strings, directory,
-            source.SplitStore, source.SelectedSchemaView, models);
+            source.GraphStore, source.SelectedSchemaView, models);
     }
 
-    private static ObjectBinding ResolveModel(StateModelSnapshot models, ObjectLayout layout) =>
+    private static ObjectBinding ResolveModel(ModelExecutionEnvironment models, ObjectLayout layout) =>
         models.TryGetCurrentObjectBinding(models.GetDomainType(layout.Type), out ObjectBinding? binding) ? binding! :
         throw new InvalidDataException($"No current object binding exists for {layout.Type}.");
 }

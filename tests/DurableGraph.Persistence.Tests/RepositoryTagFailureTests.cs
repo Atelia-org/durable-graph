@@ -23,8 +23,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             repository.CreateTag("stable", address);
             using BranchCheckout warm = repository.Fork("warm", address);
             Assert.NotNull(repository.PreparedStateEntry);
-            repository.Checkpoint = point => {
-                if (point == CommitCheckpoint.BeforePublication) { ResourcesOf(repository).Versions.Dispose(); }
+            repository.OperationStageObserver = point => {
+                if (point == RepositoryOperationStage.BeforePublication) { ResourcesOf(repository).Versions.Dispose(); }
             };
             // The real subsequent upstream CreateTag rejects its disposed owner before output;
             // VersionStore supplies NotAttempted despite the exception.
@@ -34,7 +34,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             Assert.IsType<ObjectDisposedException>(error.InnerException);
             Assert.True(repository.IsFaulted);
             Assert.Null(repository.PreparedStateEntry);
-            repository.Checkpoint = null;
+            repository.OperationStageObserver = null;
             AssertFaultedOperations(repository, main, address);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
@@ -57,8 +57,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             using BranchCheckout warm = repository.Fork("warm", address);
             PreparedStateRestoration entry = repository.PreparedStateEntry!;
             IOException injected = new("DG publication checkpoint");
-            repository.Checkpoint = point => {
-                if (point == (afterPublication ? CommitCheckpoint.AfterPublication : CommitCheckpoint.BeforePublication)) {
+            repository.OperationStageObserver = point => {
+                if (point == (afterPublication ? RepositoryOperationStage.AfterPublication : RepositoryOperationStage.BeforePublication)) {
                     throw injected;
                 }
             };
@@ -66,7 +66,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             Assert.Equal(afterPublication ? GraphCommitOutcome.Published : GraphCommitOutcome.NotPublished, error.Outcome);
             Assert.Null(error.CandidateRevisionAddress);
             Assert.Same(injected, error.InnerException);
-            repository.Checkpoint = null;
+            repository.OperationStageObserver = null;
             if (afterPublication) {
                 Assert.True(repository.IsFaulted);
                 Assert.Null(repository.PreparedStateEntry);

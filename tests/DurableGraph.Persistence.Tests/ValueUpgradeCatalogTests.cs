@@ -9,16 +9,16 @@ public sealed class ValueUpgradeCatalogTests {
     [Fact]
     public void RulesRegisteredLaterAreVisibleOnlyToLaterOperations() {
         StateModelRegistry registry = new();
-        StateModelSnapshot before = registry.Snapshot();
+        ModelExecutionEnvironment before = registry.CreateEnvironment();
         StateValueUpgradeRuleSet rules = new(typeof(Rules), [], allowKeepExact: true);
         registry.Register(rules);
-        StateModelSnapshot after = registry.Snapshot();
+        ModelExecutionEnvironment after = registry.CreateEnvironment();
         Assert.Throws<InvalidDataException>(() => before.GetValueUpgradeRuleSet(typeof(Rules)));
         Assert.Same(rules, after.GetValueUpgradeRuleSet(typeof(Rules)));
         registry.Register(rules);
         Assert.Throws<InvalidOperationException>(() => registry.Register(new StateValueUpgradeRuleSet(typeof(Rules), [])));
         Assert.Same(rules, after.GetValueUpgradeRuleSet(typeof(Rules)));
-        Assert.Same(rules, registry.Snapshot().GetValueUpgradeRuleSet(typeof(Rules)));
+        Assert.Same(rules, registry.CreateEnvironment().GetValueUpgradeRuleSet(typeof(Rules)));
     }
 
     [Fact]
@@ -28,8 +28,8 @@ public sealed class ValueUpgradeCatalogTests {
         StateValueUpgradeRuleSet reject = new(typeof(Rules), []);
         first.Register(keep);
         second.Register(reject);
-        Assert.Same(keep, first.Snapshot().GetValueUpgradeRuleSet(typeof(Rules)));
-        Assert.Same(reject, second.Snapshot().GetValueUpgradeRuleSet(typeof(Rules)));
+        Assert.Same(keep, first.CreateEnvironment().GetValueUpgradeRuleSet(typeof(Rules)));
+        Assert.Same(reject, second.CreateEnvironment().GetValueUpgradeRuleSet(typeof(Rules)));
     }
 
     [Fact]
@@ -49,13 +49,13 @@ public sealed class ValueUpgradeCatalogTests {
     [Fact]
     public void GeneratedRegistrationCanUseTheReaderOnlySinkWithoutRunningUpgrade() {
         StateReaderRegistry registry = new();
-        StateModelSnapshot before = registry.Snapshot(schemaLookup: null);
+        ModelExecutionEnvironment before = registry.CreateEnvironment(schemaLookup: null);
         StateValueUpgradeRuleSet rules = new(typeof(Rules), []);
         IStateDefinitionRegistration sink = registry;
         sink.Register(rules);
         sink.Register(rules);
         Assert.Throws<InvalidDataException>(() => before.GetValueUpgradeRuleSet(typeof(Rules)));
-        Assert.Same(rules, registry.Snapshot(schemaLookup: null).GetValueUpgradeRuleSet(typeof(Rules)));
+        Assert.Same(rules, registry.CreateEnvironment(schemaLookup: null).GetValueUpgradeRuleSet(typeof(Rules)));
         Assert.Throws<InvalidOperationException>(() => sink.Register(new StateValueUpgradeRuleSet(typeof(Rules), [])));
     }
 

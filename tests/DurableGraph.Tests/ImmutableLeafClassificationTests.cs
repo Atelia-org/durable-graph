@@ -258,7 +258,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly assembly = EmitAndLoad(run.OutputCompilation);
         StateModelRegistry models = assembly.GetType("Host")!
             .GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        Assert.False(models.Snapshot().ResolveCurrentModel(assembly.GetType("ContainerLeaf")!).IsImmutableLeaf);
+        Assert.False(models.CreateEnvironment().ResolveCurrentModel(assembly.GetType("ContainerLeaf")!).IsImmutableLeaf);
     }
 
     [Fact]
@@ -334,7 +334,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = assembly.GetType("Host")!
             .GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         Type closedWorld = assembly.GetType("World`1")!.MakeGenericType(typeof(int));
-        Assert.False(models.Snapshot().ResolveCurrentModel(closedWorld).IsImmutableLeaf);
+        Assert.False(models.CreateEnvironment().ResolveCurrentModel(closedWorld).IsImmutableLeaf);
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assembly appAssembly = scope.Load(app);
         StateModelRegistry models = appAssembly.GetType("Host")!
             .GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        Assert.False(models.Snapshot().ResolveCurrentModel(appAssembly.GetType("RemoteLeaf")!).IsImmutableLeaf);
+        Assert.False(models.CreateEnvironment().ResolveCurrentModel(appAssembly.GetType("RemoteLeaf")!).IsImmutableLeaf);
     }
 
     [Fact]

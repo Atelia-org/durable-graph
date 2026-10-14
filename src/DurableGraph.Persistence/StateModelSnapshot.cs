@@ -11,7 +11,7 @@ namespace Atelia.DurableGraph.Persistence;
 /// A read-only lookup binds one operation/workspace to its selected frozen Schema view;
 /// it does not consult a newer repository root or allocate persistent descriptor IDs.
 /// </remarks>
-internal sealed partial class StateModelSnapshot : StateBindingContext {
+internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
     private readonly Dictionary<TypeExpr, StateModelBinding> _models;
     private readonly Dictionary<Type, StateModelBinding> _types;
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers;
@@ -28,7 +28,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
     private readonly Dictionary<Type, bool> _managedValueTypes = [];
     private readonly Func<SchemaKey, DurableSchema?>? _schemaLookup;
 
-    internal StateModelSnapshot(Dictionary<TypeExpr, StateModelBinding> models,
+    internal ModelExecutionEnvironment(Dictionary<TypeExpr, StateModelBinding> models,
         Dictionary<Type, StateModelBinding> types, Dictionary<SchemaKey, StateReaderBinding> readers,
         Dictionary<string, StateDefinitionBinding>? definitions = null,
         Dictionary<Type, StateValueUpgradeRuleSet>? valueUpgradeRules = null,
@@ -411,7 +411,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
 
     private bool ContainsManagedReferences(Type type) {
         if (_managedValueTypes.TryGetValue(type, out bool result)) { return result; }
-        MethodInfo method = typeof(StateModelSnapshot).GetMethod(nameof(ContainsManagedReferencesTyped), BindingFlags.Static | BindingFlags.NonPublic)!
+        MethodInfo method = typeof(ModelExecutionEnvironment).GetMethod(nameof(ContainsManagedReferencesTyped), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(type);
         result = method.CreateDelegate<Func<bool>>()();
         _managedValueTypes.Add(type, result);

@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry registry = new();
         assembly.GetType("Atelia.DurableGraph.Generated.DurableDefinitions")!.GetMethod("Register")!.Invoke(null, [registry]);
         Type domain = assembly.GetType("Bits")!;
-        StateValueBinding binding = registry.Snapshot().ResolveCurrentValue(domain);
+        StateValueBinding binding = registry.CreateEnvironment().ResolveCurrentValue(domain);
         Assert.Equal(TypeExpr.Named("enum.body"), binding.Slot.InlineSchema!.Type);
         Assert.NotEqual(domain, binding.StateType);
         Assert.Single(binding.Slot.InlineSchema.Fields);

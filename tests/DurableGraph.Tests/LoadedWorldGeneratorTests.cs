@@ -30,13 +30,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.ChangeOld(root, 3);
             third = branch.CommitState(ReferenceGraphNoRebase).Address;
             repository.CreateTag("old-latest", branch.Head);
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, second)).Kind);
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, third)).Kind);
             Assert.Equal(3, store.ReadObjectChain(third, rootId.Value).Entries.Count);
-            DecodedRevision stored = DecodedRevision.ReadSplit(store, third, fixture.CurrentModels());
+            DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, third, fixture.CurrentModels());
             retiredId = Assert.Single(stored.Objects, row => row.Kind == ObjectStateKind.String && row.StringContent == "retired ancestor field").Id.Value;
-            sourceIds = store.ReadGraph(third).Objects.Keys.ToArray();
+            sourceIds = store.ReadGraph(third).ObjectHeads.Keys.ToArray();
             Assert.Equal(5, sourceIds.Length); // Root, retired string, two distinct equal strings and Empty.
             Assert.Equal(3, fixture.ReadStoredNumber(stored.GetRequired(rootId)));
             Assert.Equal(0, fixture.UpgradeCalls()); // Stored-exact reads do not Upgrade.
@@ -48,7 +48,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(loaded.State!, 3);
             Assert.Equal(1, fixture.UpgradeCalls()); // Upgrade runs after both historical Deltas.
             Assert.Equal(rootId, loaded.StateId);
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             rewritten = loaded.CommitState(ReferenceGraphNoRebase).Address;
             Assert.Equal(third, store.ReadGraph(rewritten).SourceGraph);
             Assert.Equal<uint>([retiredId], DefaultRemoved(store, rewritten));
@@ -57,7 +57,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(rootId.Value, rewrite.ObjectId);
             Assert.Equal(2, DefaultLayout(store, rewritten, rootId.Value).Schema!.Version);
             Assert.Single(store.ReadObjectChain(rewritten, rootId.Value).Entries);
-            Assert.Equal(sourceIds.Where(id => id != retiredId).Order(), store.ReadGraph(rewritten).Objects.Keys.Order());
+            Assert.Equal(sourceIds.Where(id => id != retiredId).Order(), store.ReadGraph(rewritten).ObjectHeads.Keys.Order());
             fixture.Change(loaded.State!, 99);
             fixture.Check(repository.ReadState(loaded.Head), 3);
         }
@@ -68,7 +68,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(loaded.State!, 3);
             Assert.Equal(upgrades, fixture.UpgradeCalls());
             Assert.Equal(rootId, loaded.StateId);
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             unchanged = loaded.CommitState(ReferenceGraphNoRebase).Address;
             Assert.Empty(DefaultRecords(store, unchanged));
             Assert.Empty(DefaultRemoved(store, unchanged));
@@ -85,11 +85,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(repository.ReadState(repository.GetHead("main")), 4);
             fixture.Check(repository.ReadState(repository.ResolveTag("initial")), 1);
             fixture.Check(repository.ReadState(repository.ResolveTag("old-latest")), 3);
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(new[] { store.ReadGraph(rewritten).OwnedBatch, store.ReadGraph(changed).OwnedBatch },
                 store.ReadObjectChain(changed, rootId.Value).Entries.Select(row => (FrameAddress?)row.ContainingBatch));
-            Assert.Contains(retiredId, store.ReadGraph(third).Objects.Keys);
-            DecodedRevision stored = DecodedRevision.ReadSplit(store, third, fixture.CurrentModels());
+            Assert.Contains(retiredId, store.ReadGraph(third).ObjectHeads.Keys);
+            DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, third, fixture.CurrentModels());
             Assert.Equal(3, fixture.ReadStoredNumber(stored.GetRequired(rootId)));
             Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
         }
@@ -108,8 +108,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = seed.Head.Address;
             rootId = seed.StateId!.Value.Value;
             repository.CreateTag("original", seed.Head);
-            P0GraphStore store = ReferenceGraphStore(repository);
-            DecodedRevision source = DecodedRevision.ReadSplit(store, original, fixture.CurrentModels());
+            GraphRecordStore store = ReferenceGraphStore(repository);
+            DecodedRevision source = DecodedRevision.ReadStoredGraph(store, original, fixture.CurrentModels());
             ObjectStateRecord[] names = source.Objects.Where(row => row.Kind == ObjectStateKind.String && row.StringContent == "same").ToArray();
             Assert.Equal(2, names.Length);
             nameId = names.Min(row => row.Id.Value);
@@ -122,7 +122,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using BranchCheckout loaded = repository.Checkout("main");
             fixture.CheckCurrent(loaded.State!, 3);
             Assert.Equal(0, fixture.UpgradeCalls());
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
             Assert.Empty(DefaultRecords(store, unchanged.Address));
             Assert.Empty(DefaultRemoved(store, unchanged.Address));
@@ -132,16 +132,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, merged));
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(rootId, delta.ObjectId);
-            Assert.Equal(new[] { rootId, nameId, emptyId }.Order(), store.ReadGraph(merged).Objects.Keys.Order());
-            Assert.Equal(store.ReadGraph(original).Objects[nameId], store.ReadGraph(merged).Objects[nameId]);
-            Assert.Equal(store.ReadGraph(original).Objects[emptyId], store.ReadGraph(merged).Objects[emptyId]);
+            Assert.Equal(new[] { rootId, nameId, emptyId }.Order(), store.ReadGraph(merged).ObjectHeads.Keys.Order());
+            Assert.Equal(store.ReadGraph(original).ObjectHeads[nameId], store.ReadGraph(merged).ObjectHeads[nameId]);
+            Assert.Equal(store.ReadGraph(original).ObjectHeads[emptyId], store.ReadGraph(merged).ObjectHeads[emptyId]);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             fixture.ResetConstructors();
             fixture.CheckCurrent(repository.ReadState(repository.ResolveTag("original")), 3);
             using BranchCheckout loaded = repository.Checkout("main");
             fixture.CheckMerged(loaded.State!, 3);
-            P0GraphStore store = ReferenceGraphStore(repository);
+            GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(2, store.ReadObjectChain(merged, rootId).Entries.Count);
             CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
             Assert.Empty(DefaultRecords(store, unchanged.Address));

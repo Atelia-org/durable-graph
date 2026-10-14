@@ -133,9 +133,9 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         checkout.Catalog.Set(new DurableSchema(RootSchema.SchemaId, 2, new DurableFieldInfo(1, TypeTag.Int32)));
         checkout.CommitEvent(new EventModel());
         Assert.Equal(7, ((RootModel)reader.ReadState(head)).Values!["key"]);
-        long frames = reader.MetaBootstrapStore.AppendedFrames;
+        long frames = reader.GraphStore.AppendedFrames;
         Assert.Throws<SchemaConflictException>(() => checkout.CommitState());
-        Assert.Equal(frames, reader.MetaBootstrapStore.AppendedFrames);
+        Assert.Equal(frames, reader.GraphStore.AppendedFrames);
         Assert.False(reader.IsFaulted);
     }
 

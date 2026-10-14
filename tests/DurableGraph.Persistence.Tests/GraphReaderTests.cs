@@ -10,24 +10,24 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed class GraphReaderTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"durable-graph-reader-{Guid.NewGuid():N}");
-    private readonly P0Repository _writer;
+    private readonly RepositoryStorageFacade _writer;
     private int _seedIndex;
     private static readonly DurableSchema ParentSchema = new("ReaderNode", 1);
     private static readonly DurableSchema FirstSchema = Schema("ReaderFirst");
     private static readonly DurableSchema SecondSchema = Schema("ReaderSecond");
 
-    public GraphReaderTests() => _writer = P0Repository.CreateNew(_root);
+    public GraphReaderTests() => _writer = RepositoryStorageFacade.CreateNew(_root);
 
     [Fact]
     public void PairRestoresInputOrderActualTypesAndEachGraphsAliasesAndCycles() {
         FrameAddress first = Seed((1, FirstSchema, new(2, 2, 10)), (2, SecondSchema, new(1, 1, 11)));
         FrameAddress second = Seed((1, FirstSchema, new(2, 2, 20)), (2, SecondSchema, new(1, 1, 21)));
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()), Model<SecondNode>(SecondSchema, () => new()));
-        using P0Repository reader = OpenReader();
+        using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision secondSource = DecodedRevision.ReadSplit(reader.Store, second, configuration);
-        DecodedRevision firstSource = DecodedRevision.ReadSplit(reader.Store, first, configuration, secondSource.BindingEnvironment);
+        DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, second, configuration);
+        DecodedRevision firstSource = DecodedRevision.ReadStoredGraph(reader.Store, first, configuration, secondSource.BindingEnvironment);
         Assert.Same(secondSource.BindingEnvironment, firstSource.BindingEnvironment);
 
         // Input roots can select durable subclasses; restoration uses their actual models.
@@ -49,11 +49,11 @@ public sealed class GraphReaderTests : IDisposable {
     public void SameSelectionTwiceIsLegalWithoutCrossGraphIdentityContract() {
         FrameAddress address = Seed((1, FirstSchema, new(1, 1, 4)));
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()));
-        using P0Repository reader = OpenReader();
+        using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision first = DecodedRevision.ReadSplit(reader.Store, address, configuration);
-        DecodedRevision second = DecodedRevision.ReadSplit(reader.Store, address, configuration, first.BindingEnvironment);
+        DecodedRevision first = DecodedRevision.ReadStoredGraph(reader.Store, address, configuration);
+        DecodedRevision second = DecodedRevision.ReadStoredGraph(reader.Store, address, configuration, first.BindingEnvironment);
         Assert.Same(first.BindingEnvironment, second.BindingEnvironment);
         var pair = GraphReader.ReadPair(first, new(first.SourceModels!), new(1), second, new(second.SourceModels!), new(1));
         FirstNode firstRoot = Assert.IsType<FirstNode>(pair.First);
@@ -76,11 +76,11 @@ public sealed class GraphReaderTests : IDisposable {
                 callbacks.Add("second");
                 throw new InvalidDataException("second hydration failed");
             }));
-        using P0Repository reader = OpenReader();
+        using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision firstSource = DecodedRevision.ReadSplit(reader.Store, first, configuration);
-        DecodedRevision secondSource = DecodedRevision.ReadSplit(reader.Store, second, configuration, firstSource.BindingEnvironment);
+        DecodedRevision firstSource = DecodedRevision.ReadStoredGraph(reader.Store, first, configuration);
+        DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, second, configuration, firstSource.BindingEnvironment);
         (IDurableObject First, IDurableObject Second)? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair(
@@ -96,9 +96,9 @@ public sealed class GraphReaderTests : IDisposable {
         FrameAddress address = Seed((1, FirstSchema, new(0, 0, 1)));
         int allocations = 0;
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => { allocations++; return new(); }));
-        using P0Repository reader = OpenReader();
+        using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
-        DecodedRevision source = DecodedRevision.ReadSplit(reader.Store, address, registry);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.Store, address, registry);
         Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(source, new(99), new(source.SourceModels!)));
         Assert.Throws<InvalidDataException>(() => GraphReader.Read<SecondNode>(source, new(1), new(source.SourceModels!)));
         Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(source, new(1), new(source.SourceModels!), requireExactRootType: true));
@@ -110,28 +110,28 @@ public sealed class GraphReaderTests : IDisposable {
     [Fact]
     public void IndependentMembershipDoesNotRunUnrelatedParentReadersOrModels() {
         FrameAddress parent = Seed((1, FirstSchema, new(0, 0, 1)), (9, SecondSchema, new(0, 0, 9)));
-        P0GraphSnapshot parentGraph = _writer.Store.ReadGraph(parent);
+        StoredGraphRevision parentGraph = _writer.Store.ReadGraph(parent);
         FrameAddress child;
         // The child has its own actual complete membership, retaining only first's
         // existing head. Directory reconstruction never invokes unrelated body readers.
-        using (P0PendingSave pending = _writer.Prepare("seed-0", P0GraphKind.State,
+        using (PendingRepositorySave pending = _writer.Prepare("seed-0", StoredGraphKind.State,
             new(parent, new(1), [], [9]))) {
             child = _writer.Commit(pending).Business.Address;
         }
-        Assert.Equal(new uint[] { 1 }, _writer.Store.ReadGraph(child).Objects.Keys);
-        Assert.Equal(parentGraph.Objects[1], _writer.Store.ReadGraph(child).Objects[1]);
+        Assert.Equal(new uint[] { 1 }, _writer.Store.ReadGraph(child).ObjectHeads.Keys);
+        Assert.Equal(parentGraph.ObjectHeads[1], _writer.Store.ReadGraph(child).ObjectHeads[1]);
         // No SecondNode reader/model is registered. Reading the complete parent fails;
         // the selected child only restores its own membership and retained old first head.
         int hydrations = 0;
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new(), () => hydrations++));
-        using P0Repository reader = OpenReader();
+        using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision source = DecodedRevision.ReadSplit(reader.Store, child, configuration);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.Store, child, configuration);
         FirstNode root = GraphReader.Read<FirstNode>(source, new(1), new(source.SourceModels!)).Root;
         Assert.Equal(1, root.Value);
         Assert.Equal(1, hydrations);
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadSplit(reader.Store, parent, configuration, source.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reader.Store, parent, configuration, source.BindingEnvironment));
         Assert.Equal(1, hydrations);
         Assert.Equal(tail, DataBytes(reader.Data));
     }
@@ -179,25 +179,25 @@ public sealed class GraphReaderTests : IDisposable {
     }
 
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
-        P0CatalogView? accepted = _writer.SharedSchemaRoot is { } root ? P0CatalogView.Load(_writer.Store, root) : null;
-        P0CatalogWorkspace catalog = new(_writer.EnsureEditingAllowed, accepted);
+        SchemaCatalogView? accepted = _writer.SharedSchemaRoot is { } root ? SchemaCatalogView.Load(_writer.Store, root) : null;
+        SchemaCatalogWorkspace catalog = new(_writer.EnsureEditingAllowed, accepted);
         // Both seeds use one real immutable catalog, including the nominal base closure.
         catalog.Set(FirstSchema);
         catalog.Set(SecondSchema);
-        P0PreparedCatalog meta = catalog.Prepare();
+        PreparedSchemaCatalogWrite meta = catalog.Prepare();
         ObjectVersionRecord[] records = rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
-            P0TypedBodyCodec.Encode(ObjectLayout.ForDurable(row.Schema), Base(row.State), meta.View))).ToArray();
+            TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(row.Schema), Base(row.State), meta.View))).ToArray();
         string branch = $"seed-{_seedIndex++}";
-        using P0PendingSave pending = _writer.Prepare(branch, P0GraphKind.State, new(null, new(1), records), meta.Write);
-        P0SaveResult saved = _writer.Commit(pending, meta.Install, prepareMeta: meta.PrepareInstall);
+        using PendingRepositorySave pending = _writer.Prepare(branch, StoredGraphKind.State, new(null, new(1), records), meta.Write);
+        RepositorySaveResult saved = _writer.Commit(pending, meta.Install, prepareMeta: meta.PrepareInstall);
         Assert.Equal(saved.Business.Address, _writer.GetHead(branch));
         Assert.Equal(saved.Business.SchemaRoot, _writer.SharedSchemaRoot);
         return saved.Business.Address;
     }
 
-    private P0Repository OpenReader() {
+    private RepositoryStorageFacade OpenReader() {
         _writer.Dispose();
-        return P0Repository.OpenReadOnlyExisting(_root);
+        return RepositoryStorageFacade.OpenReadOnlyExisting(_root);
     }
 
     private static PreparedBaseBody Base(State state) {
