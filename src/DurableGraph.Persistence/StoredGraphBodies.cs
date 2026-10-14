@@ -67,14 +67,14 @@ internal sealed class DecodedGraphRows {
 internal static class StoredGraphDecoder {
     internal static DecodedGraphRows Read(GraphRecordStore store, FrameAddress graph,
         ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) {
-        StoredGraphRevision snapshot = store.ReadGraph(graph);
+        IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(graph, out StoredGraphRevision snapshot);
         Dictionary<ObjectId, ObjectStateRecord> rows = [];
         Dictionary<ObjectId, ObjectStorageInfo> storage = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Reader)> readers = [];
         Dictionary<FrameAddress, SchemaCatalogView> origins = [];
         ModelExecutionEnvironment? employees = models is null ? BootstrapBindings.CreateEnvironment() : null;
-        foreach (uint id in snapshot.ObjectHeads.Keys) {
-            ObjectVersionChain chain = store.ReadObjectChain(graph, id);
+        foreach (ObjectVersionChain chain in chains) {
+            uint id = chain.ObjectId;
             SchemaCatalogView? origin = null;
             if (chain.Entries[0].SchemaRoot is { } sourceSchema) {
                 if (models is null) { throw new InvalidDataException("A meta graph cannot use a dynamic source view."); }

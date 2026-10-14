@@ -476,6 +476,53 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         }
     }
 
+    [Theory]
+    [InlineData("StoreDispose", 0L)]
+    [InlineData("OwnerFault", 0L)]
+    [InlineData("OwnerDispose", 0L)]
+    [InlineData("DataClose", 0L)]
+    [InlineData("VersionsClose", 0L)]
+    [InlineData("StoreDispose", GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    [InlineData("OwnerFault", GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    [InlineData("OwnerDispose", GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    [InlineData("DataClose", GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    [InlineData("VersionsClose", GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    public void BulkIteratorRejectsTheNextChainAfterResourcesStopAndKeepsTheDeliveredOwnedChain(string stop, long cacheBudget) {
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath(), readCacheBudgetBytes: cacheBudget);
+        GraphRecordStore retained = resources.GraphStore;
+        StoredGraphRevision written = retained.Append(StoredGraphKind.State, null, null,
+            new(null, new(1), [B(1, [10]), B(2, [20])]));
+        using IEnumerator<ObjectVersionChain> iterator = retained.ReadObjectChains(written.Address, out StoredGraphRevision snapshot).GetEnumerator();
+        Assert.True(iterator.MoveNext());
+        ObjectVersionChain first = iterator.Current;
+        Assert.Equal(1u, first.ObjectId);
+        Assert.Equal(written.Address, snapshot.Address);
+        if (cacheBudget != 0) { Assert.True(retained.ReadCacheStatistics.ResidentChargeBytes > 0); }
+
+        switch (stop) {
+            case "StoreDispose": retained.Dispose(); break;
+            case "OwnerFault": resources.MarkFaulted(); break;
+            case "OwnerDispose": resources.Dispose(); break;
+            case "DataClose": resources.Data.Dispose(); break;
+            case "VersionsClose": resources.Versions.Dispose(); break;
+            default: throw new InvalidOperationException(stop);
+        }
+        ObjectVersionChain? delivered = null;
+        Assert.ThrowsAny<InvalidOperationException>(() => {
+            if (iterator.MoveNext()) { delivered = iterator.Current; }
+        });
+        Assert.Null(delivered);
+        Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
+        Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
+        Assert.Equal(written.ObjectHeads[1], first.Head);
+        Assert.Equal(new byte[] { 10 }, Assert.Single(first.Entries).Record.Body.ToArray());
+        Assert.Equal(written.ObjectHeads[2], snapshot.ObjectHeads[2]);
+        if (stop == "StoreDispose") {
+            using FrameRead backing = resources.Data.ReadFrame(first.Head).Unwrap();
+            Assert.Equal(GraphFrameCodec.BatchTag, backing.Tag);
+        }
+    }
+
     private string NewPath() {
         string path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
         _paths.Add(path);

@@ -68,6 +68,35 @@ public sealed class SplitExactDecodingTests : IDisposable {
     }
 
     [Theory]
+    [InlineData(false, 0L)]
+    [InlineData(true, 0L)]
+    [InlineData(false, GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    [InlineData(true, GraphRecordStore.DefaultReadCacheBudgetBytes)]
+    public void First_body_stopping_the_owner_prevents_the_second_reader_and_partial_decoder_delivery(bool ownerFault, long cacheBudget) {
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path, readCacheBudgetBytes: cacheBudget);
+        using RepositoryStorageFacade repository = new(resources);
+        PreparedSchemaCatalogWrite catalog = Catalog(NumberSchema);
+        StoredGraphRevision graph = Publish(repository, new(null, new(1), [
+            Durable(catalog.View, 1, NumberSchema, [10]), Durable(catalog.View, 2, NumberSchema, [20]),
+        ]), catalog);
+        GraphRecordStore retained = repository.Store;
+        int reads = 0;
+        StateModelRegistry models = new();
+        RegisterExact(models, NumberSchema, schema => ByteReader(schema, () => {
+            reads++;
+            if (ownerFault) { resources.MarkFaulted(); }
+            else { retained.Dispose(); }
+        }));
+
+        DecodedRevision? decoded = null;
+        Assert.ThrowsAny<InvalidOperationException>(() => decoded = DecodedRevision.ReadStoredGraph(retained, graph.Address, models));
+        Assert.Equal(1, reads);
+        Assert.Null(decoded);
+        Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
+        Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Retained_owner_revalidates_removed_or_wrong_kind_string_in_each_complete_view(bool wrongKind) {

@@ -241,6 +241,23 @@ internal sealed class GraphRecordStore : IDisposable {
     internal ObjectVersionChain ReadObjectChain(FrameAddress graphAddress, uint objectId) {
         if (objectId == 0) { throw new ArgumentOutOfRangeException(nameof(objectId)); }
         StoredGraphRevision graph = ReadGraph(graphAddress);
+        return ReadObjectChainCore(graph, objectId);
+    }
+
+    // Qualify the complete selected graph before returning lazy per-object chains.
+    internal IEnumerable<ObjectVersionChain> ReadObjectChains(FrameAddress graphAddress, out StoredGraphRevision snapshot) {
+        snapshot = ReadGraph(graphAddress);
+        return EnumerateObjectChains(snapshot);
+    }
+
+    private IEnumerable<ObjectVersionChain> EnumerateObjectChains(StoredGraphRevision graph) {
+        foreach (uint objectId in graph.ObjectHeads.Keys) {
+            yield return ReadObjectChainCore(graph, objectId);
+        }
+    }
+
+    private ObjectVersionChain ReadObjectChainCore(StoredGraphRevision graph, uint objectId) {
+        EnsureUsable();
         if (!graph.ObjectHeads.TryGetValue(objectId, out FrameAddress head)) { throw new InvalidDataException("ObjectId is not live in the graph."); }
         FrameAddress address = head;
         var visited = new HashSet<FrameAddress>();

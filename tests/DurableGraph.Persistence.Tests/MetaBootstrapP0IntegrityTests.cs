@@ -88,6 +88,29 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             Assert.Equal(batch, store.ReadGraph(external).ObjectHeads[1]);
             Assert.Equal(batch, store.ReadGraph(retained).ObjectHeads[1]);
             Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(retained, 1));
+            for (int attempt = 0; attempt < 2; attempt++) {
+                Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(retained, out _).ToArray());
+            }
+        });
+    }
+
+    [Fact]
+    public void Bulk_chain_rejects_Event_as_retained_Delta_content_source_cold_and_warm() {
+        using Fixture fixture = CreateFixture();
+        StoredGraphRevision initial = fixture.State(null, [B(1, [10])]);
+        StoredGraphRevision domainEvent = fixture.Append(StoredGraphKind.Event, initial.Address, 1, []);
+        FrameAddress batch = fixture.Batch(domainEvent.Address, [D(1, initial.ObjectHeads[1], [20])]);
+        FrameAddress directory = fixture.BaseDirectory(initial.Address, Map((1u, batch)));
+        FrameAddress retained = fixture.Graph(StoredGraphKind.State, initial.Address, 1, directory, null);
+
+        fixture.Cold(store => {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(retained, out StoredGraphRevision snapshot);
+                Assert.Equal(batch, snapshot.ObjectHeads[1]); // The external head itself is a valid shallow declaration.
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() => chains.ToArray());
+                Assert.Contains("Content source", error.Message);
+            }
+            Assert.Equal(0, store.AppendedFrames);
         });
     }
 
@@ -106,16 +129,19 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             Assert.Equal(updated.Address, restored.SourceGraph);
             Assert.Equal(updated.DirectoryRoot, restored.DirectoryRoot);
             Assert.Null(restored.OwnedBatch);
-            ObjectVersionChain chain = store.ReadObjectChain(unchanged.Address, 1);
-            Assert.Equal(new[] { initial.OwnedBatch!.Value, updated.OwnedBatch!.Value },
-                chain.Entries.Select(static entry => entry.ContainingBatch).ToArray());
-            Assert.Null(chain.Entries[0].SourceGraph);
-            Assert.Equal(initial.Address, chain.Entries[1].SourceGraph);
-            Assert.Equal(new byte[] { 10 }, chain.Entries[0].Record.Body.ToArray());
-            Assert.Equal(new byte[] { 20 }, chain.Entries[1].Record.Body.ToArray());
-            Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(1) +
-                ObjectVersionPayloadSize.GetDeltaPayloadBytes(1, initial.ObjectHeads[1]),
-                chain.ReconstructionPayloadBytes);
+            foreach (ObjectVersionChain chain in new[] {
+                store.ReadObjectChain(unchanged.Address, 1), Assert.Single(store.ReadObjectChains(unchanged.Address, out _))
+            }) {
+                Assert.Equal(new[] { initial.OwnedBatch!.Value, updated.OwnedBatch!.Value },
+                    chain.Entries.Select(static entry => entry.ContainingBatch).ToArray());
+                Assert.Null(chain.Entries[0].SourceGraph);
+                Assert.Equal(initial.Address, chain.Entries[1].SourceGraph);
+                Assert.Equal(new byte[] { 10 }, chain.Entries[0].Record.Body.ToArray());
+                Assert.Equal(new byte[] { 20 }, chain.Entries[1].Record.Body.ToArray());
+                Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(1) +
+                    ObjectVersionPayloadSize.GetDeltaPayloadBytes(1, initial.ObjectHeads[1]),
+                    chain.ReconstructionPayloadBytes);
+            }
         });
     }
 
@@ -211,14 +237,18 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             Assert.Equal(bad, restored.Parent);
             Assert.Equal(bad, restored.SourceGraph);
             Assert.Equal(ObjectVersionKind.Base, store.ReadDirectoryVersion(resetDirectory).Kind);
-            ObjectVersionChain chain = store.ReadObjectChain(reset, 1);
-            ObjectVersionChainEntry only = Assert.Single(chain.Entries);
-            Assert.Equal(resetBatch, only.ContainingBatch);
-            Assert.Equal(bad, only.SourceGraph);
-            Assert.Empty(only.Record.Body.ToArray());
-            Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(0), chain.ReconstructionPayloadBytes);
+            foreach (ObjectVersionChain chain in new[] {
+                store.ReadObjectChain(reset, 1), Assert.Single(store.ReadObjectChains(reset, out _))
+            }) {
+                ObjectVersionChainEntry only = Assert.Single(chain.Entries);
+                Assert.Equal(resetBatch, only.ContainingBatch);
+                Assert.Equal(bad, only.SourceGraph);
+                Assert.Empty(only.Record.Body.ToArray());
+                Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(0), chain.ReconstructionPayloadBytes);
+            }
             // The same older dependency must remain invalid when actually needed.
             Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(extending, 1));
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(extending, out _).ToArray());
         });
     }
 
@@ -266,6 +296,10 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
                     ? Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(cycle.Selection, 1))
                     : Assert.Throws<InvalidDataException>(() => store.ReadDirectory(cycle.First));
                 Assert.Contains("cycle", error.Message, StringComparison.OrdinalIgnoreCase);
+                if (objectPrior) {
+                    InvalidDataException bulk = Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(cycle.Selection, out _).ToArray());
+                    Assert.Contains("cycle", bulk.Message, StringComparison.OrdinalIgnoreCase);
+                }
             }
             Assert.Equal(new byte[] { 10 }, Assert.Single(store.ReadObjectChain(positive.Address, 1).Entries).Record.Body.ToArray());
             Assert.Equal(0, store.AppendedFrames);
@@ -290,14 +324,17 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         FrameAddress graph = fixture.Graph(StoredGraphKind.State, null, 1, directory, batch);
         fixture.Cold(store => {
             for (int attempt = 0; attempt < 2; attempt++) {
-                ObjectVersionChain chain = store.ReadObjectChain(graph, 1);
-                ObjectVersionChainEntry entry = Assert.Single(chain.Entries);
-                Assert.Equal(batch, chain.Head);
-                Assert.Equal(new byte[] { 0x10 }, entry.Record.Body.ToArray());
-                Assert.Equal(4, entry.Record.EncodedPayloadBytes); // kind + two length bytes + body.
-                Assert.Equal(4, entry.PayloadBytes);
-                Assert.Equal(4, chain.ReconstructionPayloadBytes);
-                Assert.Equal(3, ObjectVersionPayloadSize.GetBasePayloadBytes(1)); // Canonical re-encoding is shorter.
+                foreach (ObjectVersionChain chain in new[] {
+                    store.ReadObjectChain(graph, 1), Assert.Single(store.ReadObjectChains(graph, out _))
+                }) {
+                    ObjectVersionChainEntry entry = Assert.Single(chain.Entries);
+                    Assert.Equal(batch, chain.Head);
+                    Assert.Equal(new byte[] { 0x10 }, entry.Record.Body.ToArray());
+                    Assert.Equal(4, entry.Record.EncodedPayloadBytes); // kind + two length bytes + body.
+                    Assert.Equal(4, entry.PayloadBytes);
+                    Assert.Equal(4, chain.ReconstructionPayloadBytes);
+                    Assert.Equal(3, ObjectVersionPayloadSize.GetBasePayloadBytes(1)); // Canonical re-encoding is shorter.
+                }
             }
             Assert.True(store.ReadCacheStatistics.BatchHits > 0);
             Assert.Equal(0, store.AppendedFrames);
