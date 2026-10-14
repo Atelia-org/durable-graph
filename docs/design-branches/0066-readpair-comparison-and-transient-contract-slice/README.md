@@ -3,6 +3,7 @@
 > 整理说明：2026-10-14 从 `docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：完整比较替代共享判定编码、缺 proof 保守退出及图外 Transient view 的历史合同与验收；不据当片结果外推性能或跨操作共享。
 > 本文原过程与测试数字保留当时基线；当前能力与焦点见 [PROJECT-STATE](../../../src/PROJECT-STATE.md)。
+> 名称后继：[DB-092 D1](../0092-type-namespace-refactoring/implementation-d1.md)将比较能力所在的 `CapturedStatePreparation<T>` 改为 `StatePreparationBinding<T>`，可选 proof 与错误传播合同保持；正文保留当片拼写。
 
 > 状态：Implemented / G0–G3 已完成，2026-09-11；实现与验收见 §8。
 > 核对基线：`79be2c2`，包含 DB-065 的公开 XML 交付和恢复示例。

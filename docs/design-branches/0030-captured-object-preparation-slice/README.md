@@ -2,6 +2,7 @@
 
 > 历史迁移（2026-10-14）：原路径 `docs/design-branches/0030-captured-object-preparation-slice.md`；来源修订 `8ef9fca`，正文保留原时期语义。
 > 适用范围：SG 对象级 binding 与 Runtime prepared 内容的已验收分片；当片不含 exact Parent baseline、持久类型或 Save/发布。 今日事实从 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 续接。
+> 名称后继：[DB-092 D1](../0092-type-namespace-refactoring/implementation-d1.md)将 `CapturedStatePreparation<T>` 改为 `StatePreparationBinding<T>`；本文保留当片名称与证据，不作为当前 API 拼写参考。
 
 > 状态：Chosen / Implemented — 用户已采纳，实施与验证见 §7。
 > 日期：2026-09-06；源码核对基线 `0755a56`，规划开始时工作区干净。

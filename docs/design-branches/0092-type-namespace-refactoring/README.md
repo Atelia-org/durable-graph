@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C 已限定验收；C 的员工命名、生成材料与当前新包故事通过。公开候选仍另片。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1 已限定验收；D1 的公开内容操作名称、根回归与准确新包消费通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)，当片见 [D1](implementation-d1.md)。
 
 建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
 保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
@@ -108,18 +108,22 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 Generator 入口 `Atelia.DurableGraph.Generator.DurableSchemaGenerator` 实际还生成 DTO/body、Capture/Hydrate、reader/model/definition、Upgrade、exports，
 建议以后单片改为 `DurableGraphGenerator`，保唯一 `[Generator]`，不改 hint 或生成宿主。
 入口 FQN 变化可能留下不同 compiler-generated 输出目录；[targets](../../../src/DurableGraph/build/Atelia.DurableGraph.targets)通配扫描并要求每种 manifest 恰好一份，
-需验证干净构建和已有 obj 的升级情形。若要调整输出清理机制，另定明确范围，不能借私有类型改名隐含扩大修改。
+需验证干净构建和已有 obj 的升级情形。D2 先限为入口类型改名：当前 17 份 partial 声明与 3 处测试直接构造点，唯一 `[Generator]`、hints、生成宿主和算法保持。
+已有消费者生成路径含入口 FQN；当前 targets 递归扫描 manifest，旧／新目录并存会触发现有的“必须恰好一份”拒绝。
+当前 SDK 生成目录只见 `MakeDir`，已有消费者的 `FileListAbsolute` 未登记 SG hints，不能预先承诺 `dotnet clean`／Rebuild 会清掉旧输出。
+D2 最小验收为原始 generated texts／hints／diagnostics／history 等价、干净新包消费，以及带旧目录的构建和显式清理已确认归属的生成输出后重建；此处是静态风险与后续验收计划，尚未执行 D2。
+没有兼容负担，优先一次性清理派生输出，不添加旧入口壳或长期清扫 target；若实测只需改善现有错误提示，单列文案范围，不隐含改变扫描规则。
 
 CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaHistoryTool`、Shared 的 `TypePattern` 名称与构建期职责相符，保留。
 
 ## 6. 公开候选与尚不宜机械处理的问题
 
-这些线索已证实，但不纳入内部命名第一片；具体采用需在公开迁移窗口再冻结映射。
+这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。其余候选保独立判断，不因没有兼容负担而自动全改。
 
-| 当前完整类型名 | 提议与限制 |
+| 提案基线完整类型名 | 采用结果与限制 |
 |---|---|
-| `Atelia.DurableGraph.Runtime.CapturedStatePreparation<T>` | 建议 `StatePreparationBinding<T>`，内部接口配为 `IStatePreparationBinding`。[声明](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)是稳定 Schema/DTO/body/equality 能力绑定，Normalize 后和 [Pair 比较](../../../src/DurableGraph.Persistence/GraphReader.cs)也使用；[SG](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)直接发出此名称。不是一次准备结果，不因改名移除 equality 或精确绑定检查 |
-| `Atelia.DurableGraph.Serialization.StringPayloadCodec` | 建议 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringPayloadCodec.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
+| `Atelia.DurableGraph.Runtime.CapturedStatePreparation<T>` | D1 已采用 `StatePreparationBinding<T>`，内部接口为 `IStatePreparationBinding`。[声明](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)是稳定 Schema/DTO/body/equality 能力绑定，Normalize 后和 [Pair 比较](../../../src/DurableGraph.Persistence/GraphReader.cs)也使用；[SG](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)直接发出新名称。不是一次准备结果，equality 与精确绑定检查保持 |
+| `Atelia.DurableGraph.Serialization.StringPayloadCodec` | D1 已采用 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringPayloadCodec.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
 | `Atelia.DurableGraph.Persistence.GraphResources` | `RepositoryResources` 更能表达唯一 FS/VS、branch/shared、pending、fault owner。现 XML 已说明具体 owner，保名也可；收益与 public consumer 迁移成本比较后决定，不强制随 façade 更名 |
 | `Atelia.DurableGraph.Persistence.GraphFrameKind` | 候选根空间 `Atelia.DurableGraph.CheckpointKind`，与 CheckpointAddress 的业务角色对应；[现 enum](../../../src/DurableGraph.Persistence/HistoryGraphRecord.cs)仅 Event/State。也可保现名，不与内部 StoredGraphKind 合并或加 Meta |
 | `Atelia.DurableGraph.Persistence.GraphCommitException/GraphCommitOutcome` | 候选根空间 `RepositoryPublicationException/RepositoryPublicationOutcome`；[现合同](../../../src/DurableGraph.Persistence/GraphCommitException.cs)已覆盖 graph、branch-ref 和 tag。现行为无缺陷；不为根空间整齐自动搬 public companion，不改 outcome/fault/候选地址含义 |
@@ -155,7 +159,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
-| D：公开有限迁移 | 只选择 §6 中有明确收益的名称；Generator 入口也单独处理 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，源兼容变化有迁移表。如测试旧 DLL，明确其是否要求重编译；不自动承诺二进制兼容 |
+| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；Generator 入口另作 D2 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳 |
 | E：组织判断 | 命名已稳定，再看真实引用与消费边界 | 分别提出文件归属与程序集方向；只有实证需要才增加项目、包或 namespace，不从这张名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
@@ -175,6 +179,6 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，公开候选仍另片。
+原始提案基于 `246b888`；A 采用 §5 映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)已完成包交付限定验收；当前无旧包存档兼容门槛，D 公开名称及 Generator 入口、E 后续组织仍另判。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。D2 Generator 入口、其余公开候选与 E 后续组织仍另判。

@@ -18,7 +18,7 @@
 
 ## 当前焦点
 
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／[C](../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)已限定验收：普通内核、固定员工与执行环境命名进入既有 Persistence，旧阶段 CLR namespace 已退出；生成／布局／固定编号与公开 API 保持，当前新 G 从空库的 Split／Meta 保存、冷开和续写通过。包兼容边界见[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)：实验存档可 reset 重生成，不设旧包兼容门槛。下一步 D 公开候选及 Generator 入口须先冻结当片映射，E 程序集／文件组织仍另判。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／[D1](../docs/design-branches/0092-type-namespace-refactoring/implementation-d1.md)已限定验收：普通内核／固定员工／执行环境采用现行职责名；公开内容操作使用 `StatePreparationBinding<T>` 与 `StringBodyPreparer`，运行时、普通／Family SG、手写绑定与新包外部模型消费均通过。证据只维护在分片记录。按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。接下来优先单片核对 Generator 入口 D2 及生成输出目录风险，具体范围见 DB-092 §5；其他公开候选与 E 程序集／文件组织仍分别判断，后续方向见[路线图](../docs/DurableGraph-research-roadmap.md)。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 
