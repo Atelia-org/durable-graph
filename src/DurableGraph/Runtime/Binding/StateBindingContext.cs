@@ -47,8 +47,8 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     public abstract Type GetDomainType(TypeExpr type);
     public abstract StateDefinitionBinding GetDefinition(string definitionId);
     /// <summary>Looks up one exact key in this environment's fixed Schema view.</summary>
-    /// <remarks>Supports exact layout resolution and validation. Do not use unrelated key presence as a durable business-value switch.</remarks>
-    public abstract bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema);
+    /// <remarks>Implementations supply exact layout resolution and validation to the core. Ordinary factory callers use the public binding services; unrelated key presence must not switch durable business values.</remarks>
+    protected abstract bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema);
 
     /// <summary>Checks a closed named identity without binding the referenced object's body.</summary>
     /// <remarks>

@@ -237,7 +237,7 @@ public sealed class ArrayUpgradeTests {
             Enumerable.Range(1, 3).Select(version => new StateSchemaTemplate("Point", version, SchemaKind.InlineValue, 0,
                 [new(1, TypeExpr.Builtin(version == 1 ? TypeTag.Int32 : TypeTag.Int64))],
                 stateTypeDefinition: version == 1 ? typeof(Point1) : version == 2 ? typeof(Point2) : typeof(Point3))));
-        public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
+        protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
         public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) => BuiltinStateValues.TryBindStored(slot, out StateValueBinding value) ? value :
             slot.InlineSchema!.SchemaId == "Envelope"
                 ? new(slot, slot.InlineSchema.Version == 1 ? typeof(Envelope1) : typeof(Envelope3), typeof(NoOps<Envelope3>))

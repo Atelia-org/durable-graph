@@ -371,7 +371,7 @@ public sealed class DictionaryUpgradeTests {
         private static Type StateType(string id, int version) => id == "Key"
             ? version == 1 ? typeof(Key1) : version == 2 ? typeof(Key2) : typeof(Key3)
             : version == 1 ? typeof(Point1) : version == 2 ? typeof(Point2) : typeof(Point3);
-        public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
+        protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
         public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) {
             if (slot.NullableLayout is { } nullable) {
                 Type optional = typeof(NullableState<>).MakeGenericType(ResolveStoredValue(nullable.ElementSlot).StateType);

@@ -113,7 +113,7 @@ internal sealed partial class StateModelSnapshot : StateBindingContext {
         return base.GetNamedDeclarationKind(nominal);
     }
 
-    public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) {
+    protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) {
         schema = _schemaLookup?.Invoke(new(type, version));
         return schema is not null;
     }

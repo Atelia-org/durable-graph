@@ -186,7 +186,7 @@ public sealed class DB080SchemaRequirementTests {
         public override TypeExpr GetTypeExpr(Type domainType) => throw new NotSupportedException();
         public override Type GetDomainType(TypeExpr type) => throw new NotSupportedException();
         public override StateDefinitionBinding GetDefinition(string definitionId) => Definitions[definitionId];
-        public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
+        protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
         private static StateReaderBinding Reader<T>(DurableSchema schema) where T : unmanaged => new StateReaderBinding<T>(schema,
             static (ref BareValueReader reader) => default,
             static (ref BareValueReader reader, in T prior) => prior,

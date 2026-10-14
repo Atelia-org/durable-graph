@@ -301,7 +301,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             }.Take(currentVersion),
             currentModelFactory: (type, context) => {
                 Assert.Equal(typeof(ProbeRoot), type);
-                bool extra = context.TryGetSchema(Extra.Type, Extra.Version, out _);
+                bool extra = SchemaLookupCounterexampleProbe.TryGetSchema(context, Extra.Type, Extra.Version, out _);
                 counts.Lookups.Add(extra);
                 int offset = counts.HydrateFromSchema && extra ? 100 : 0;
                 DurableSchema current = currentVersion == 1 ? ProbeV1 : ProbeV2;

@@ -55,15 +55,15 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         Assert.Equal(StoredRoot, Assert.Single(source1.Objects).Schema);
         Assert.Equal(7, source0.GetRequired(s0.RootId).GetState<int>());
         Assert.Equal(7, source1.GetRequired(s1.RootId).GetState<int>());
-        Assert.False(source0.SourceModels!.TryGetSchema(Extra.Type, Extra.Version, out _));
-        Assert.True(source1.SourceModels!.TryGetSchema(Extra.Type, Extra.Version, out DurableSchema? selectedExtra));
+        Assert.False(source0.SelectedSchemaView!.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
+        Assert.True(source1.SelectedSchemaView!.Schemas.TryGetValue(new(Extra.Type, Extra.Version), out DurableSchema? selectedExtra));
         Assert.Equal(Extra, selectedExtra);
         // Missing target V2 is permitted for derived current code; neither source persists it.
-        Assert.False(source0.SourceModels.TryGetSchema(CurrentRoot.Type, CurrentRoot.Version, out _));
-        Assert.False(source1.SourceModels.TryGetSchema(CurrentRoot.Type, CurrentRoot.Version, out _));
+        Assert.False(source0.SelectedSchemaView.Schemas.ContainsKey(new(CurrentRoot.Type, CurrentRoot.Version)));
+        Assert.False(source1.SelectedSchemaView.Schemas.ContainsKey(new(CurrentRoot.Type, CurrentRoot.Version)));
 
-        StateModelBinding binding0 = source0.SourceModels.ResolveCurrentModel(typeof(ProbeRoot));
-        StateModelBinding binding1 = source1.SourceModels.ResolveCurrentModel(typeof(ProbeRoot));
+        StateModelBinding binding0 = source0.SourceModels!.ResolveCurrentModel(typeof(ProbeRoot));
+        StateModelBinding binding1 = source1.SourceModels!.ResolveCurrentModel(typeof(ProbeRoot));
         Assert.Equal(2, counts.Factories);
         Assert.Equal(delayedLookup ? [] : new[] { false, true }, counts.FactoryLookups);
         Assert.Throws<InvalidDataException>(() => NormalizedRevision.Create(source1, source0.SourceModels));
@@ -240,8 +240,8 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => GraphReader.ReadRoot<ProbeRoot>(conflict, bad.RootId, new(conflict.SourceModels!)));
         Assert.Equal(normalizes, counts.Normalizes);
         // A newer positive lookup cannot make an older graph's missing target borrow the latest S.
-        Assert.False(old.SourceModels!.TryGetSchema(CurrentRoot.Type, CurrentRoot.Version, out _));
-        Assert.Equal(7, GraphReader.ReadRoot<ProbeRoot>(old, good.RootId, new(old.SourceModels)).Value);
+        Assert.False(old.SelectedSchemaView!.Schemas.ContainsKey(new(CurrentRoot.Type, CurrentRoot.Version)));
+        Assert.Equal(7, GraphReader.ReadRoot<ProbeRoot>(old, good.RootId, new(old.SourceModels!)).Value);
         Assert.Equal(good.Objects[good.RootId.Value], bad.Objects[bad.RootId.Value]);
         Assert.Equal(StoredRoot, Assert.Single(conflict.Objects).Schema);
     }
@@ -264,7 +264,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
     }
 
     private static bool LookupExtra(StateBindingContext context, List<bool> observations) {
-        bool present = context.TryGetSchema(Extra.Type, Extra.Version, out DurableSchema? schema);
+        bool present = SchemaLookupCounterexampleProbe.TryGetSchema(context, Extra.Type, Extra.Version, out DurableSchema? schema);
         if (present) { Assert.Equal(Extra, schema); }
         observations.Add(present);
         return present;

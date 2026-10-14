@@ -250,7 +250,7 @@ public sealed class CompositeDictionaryUpgradeTests {
                     stateTypeDefinition: id == "CompositeKey" ? version == 1 ? typeof(Key1) : typeof(Key2) : version == 1 ? typeof(Value1) : typeof(Value2));
             }));
         }
-        public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
+        protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
         public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) {
             if (BuiltinStateValues.TryBindStored(slot, out StateValueBinding builtin)) { return builtin; }
             DurableSchema schema = slot.InlineSchema!;

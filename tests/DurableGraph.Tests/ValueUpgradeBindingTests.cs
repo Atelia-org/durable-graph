@@ -393,7 +393,7 @@ public sealed class ValueUpgradeBindingTests {
         public override TypeExpr GetTypeExpr(Type domainType) => throw new NotSupportedException();
         public override Type GetDomainType(TypeExpr type) => throw new NotSupportedException();
         public override StateDefinitionBinding GetDefinition(string definitionId) => Definitions[definitionId];
-        public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
+        protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) => Registered.TryGetValue((type, version), out schema);
         public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) => BuiltinStateValues.TryBindStored(slot, out StateValueBinding value)
             ? value : new(slot, StateType(slot.InlineSchema!), typeof(NoOperations));
         public override StateReaderBinding ResolveReader(DurableSchema schema) {

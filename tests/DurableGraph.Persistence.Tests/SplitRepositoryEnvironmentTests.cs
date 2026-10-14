@@ -66,7 +66,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             StateModelSnapshot models0 = checkout.Models;
             DecodedRevision.SplitBindingEnvironment environment0 = checkout.BindingEnvironment!;
             FrameAddress schema0 = environment0.SelectedSchemaView.Snapshot!.Address;
-            Assert.False(models0.TryGetSchema(Extra.Type, Extra.Version, out _));
+            Assert.False(environment0.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             Assert.Empty(counts.NextLookups);
             listId = Assert.Single(baseline0.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
 
@@ -92,7 +92,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Same(environment0, checkout.BindingEnvironment);
             Assert.Equal(0, checkout.Catalog.DirtyCount);
             Assert.Equal(schema1, checkout.Catalog.Accepted!.Snapshot!.Address);
-            Assert.False(checkout.Models.TryGetSchema(Extra.Type, Extra.Version, out _));
+            Assert.False(checkout.BindingEnvironment!.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             Assert.Equal(schema0, repository.MetaBootstrapStore.ReadGraph(oldState).SchemaRoot);
             Assert.Equal(schema1, repository.MetaBootstrapStore.ReadGraph(event1.RevisionAddress).SchemaRoot);
 
@@ -100,7 +100,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             CheckpointAddress sideEvent;
             using (BranchCheckout side = repository.Checkout("side")) {
                 Assert.Equal(schema0, side.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
-                Assert.False(side.Models.TryGetSchema(Extra.Type, Extra.Version, out _));
+                Assert.False(side.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
                 AssertWidget(side.State, 0);
                 sideEvent = side.CommitEvent(side.State!);
                 Assert.Equal(schema1, repository.MetaBootstrapStore.ReadGraph(sideEvent.RevisionAddress).SchemaRoot);
@@ -109,7 +109,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
                 Assert.Equal(sideEvent, side.Head);
                 Assert.Equal(GraphFrameKind.Event, side.Head.Kind);
                 Assert.Equal(schema0, side.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
-                Assert.False(side.Models.TryGetSchema(Extra.Type, Extra.Version, out _));
+                Assert.False(side.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
                 AssertWidget(side.State, 0);
             }
             Assert.Empty(counts.NextLookups);
@@ -150,7 +150,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             AssertWidget(independent.Link, 0);
             Assert.NotSame(next, independent);
             Assert.Equal(new[] { false, true }, counts.NextLookups);
-            Assert.False(checkout.Models.TryGetSchema(Extra.Type, Extra.Version, out _));
+            Assert.False(checkout.BindingEnvironment!.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
         }
 
         Dictionary<string, byte[]> files = SnapshotFiles();
@@ -275,7 +275,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Null(eventOnly.StateRevisionAddress);
             Assert.Null(eventOnly.Baseline);
             Assert.Equal(atCreation, eventOnly.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
-            Assert.True(eventOnly.Models.TryGetSchema(Extra.Type, Extra.Version, out _));
+            Assert.True(eventOnly.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             Assert.Equal(new[] { true }, counts.NextLookups);
             CheckpointAddress before = eventOnly.Head;
             long frames = repository.MetaBootstrapStore.AppendedFrames;
@@ -388,7 +388,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
                 [new(1, TypeExpr.Builtin(TypeTag.Int32)), new(2, TypeExpr.Named("P0Widget"))])],
             currentModelFactory: (domainType, context) => {
                 Assert.Equal(typeof(NextRoot), domainType);
-                counts.NextLookups.Add(context.TryGetSchema(Extra.Type, Extra.Version, out _));
+                counts.NextLookups.Add(SchemaLookupCounterexampleProbe.TryGetSchema(context, Extra.Type, Extra.Version, out _));
                 return new StateModelBinding<NextRoot, NextState>(new(NextSchema, BaseNext,
                     static (in NextState prior, in NextState current) => new(prior != current, BaseNext(in current).Body)),
                     [context.ResolveReader(NextSchema)], static row => row.GetState<NextState>(), static () => new(),

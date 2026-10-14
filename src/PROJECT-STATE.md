@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-[DB-089 checkout 环境与 factory 查询收窄](../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring.md)的 A 合同与正控已完成：公开使用合同、同 owner 的真实 SG 图独立读回／再签出及 phantom 准确中间布局正控已通过源码门禁；限定证据见其 §11。当前产品仍是 public 查询入口。下一片 B 按 §6.1／§7 将两处生产签名收为 protected、迁移 Runtime override 和内部反例；之后 C 取得新 G 普通消费者编译／运行资格。没有需要另选的实质设计问题，未完成项入口见[路线图 §4.3](../docs/DurableGraph-research-roadmap.md#43-checkout-执行环境与-factory-查询入口)，不自动开启 refresh、保存读回或跨 S 共享。
+[DB-089 checkout 环境与 factory 查询收窄](../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring.md)的 A／B 已完成：公开合同、真实 SG／phantom 正控和 protected 查询／内部反例迁移通过完整源码门禁；准确核心查询、执行视图及隔离保持，限定证据见其 §11。下一片 C 按 §8.2 从当前源码制作新 G，验证非 friend 普通消费者的准确 CS0122、外部派生 override／自身调用成功和 Split 生命周期／冷开续写故事，再收束长期文档。没有需要另选的实质设计问题，未完成项入口见[路线图 §4.3](../docs/DurableGraph-research-roadmap.md#43-checkout-执行环境与-factory-查询入口)，不自动开启 refresh、保存读回或跨 S 共享。
 
 [DB-088 实施与限定验收](../docs/design-branches/0088-development-schema-workflow.md#7-实施结果与限定验收)已完成：新根 overrides／container replacements 与专用状态退出，必要源码回归已迁移；新 G 的 Development、Split、PrivateContainer 三条普通包故事通过，第三轮复核未发现缺口。本案无剩余必经施工；默认 Publish、主／次版本、V3/V4 迁移压缩与自动重放仍见[路线图 §4.2](../docs/DurableGraph-research-roadmap.md#42-开发-schema-与正式定稿)。
 
@@ -34,7 +34,7 @@ Open 省略归属时普通业务写入提前拒；CheckoutPrivate或单次 ToSha
 
 DB-087 原有限停点与 DB-088 后继删减均已完成；其他增量与条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。19个有效旧包 lanes 继续暂停，按需迁移。内部名称／wire 未冻结，P0 核心是当前产品路径。
 
-DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；DB-089 A 已显式重新 restore，root solution assets／DLL 当前为准确 pin 的 source mode 联调输出。DB-088 普通包工件仍保历史资格；后续 C 须按[依赖指南](../docs/storage-dependency.md)重新 restore package mode，不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
+DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿](../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)（`ecc8068`）。续工先核实际 HEAD／工作树；DB-089 A／B 均已显式 restore，root solution assets／DLL 当前为准确 pin 的 source mode 联调输出。DB-088 普通包工件仍保历史资格；后续 C 须按[依赖指南](../docs/storage-dependency.md)重新 restore package mode，不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
 
 [DB-086 新存储栈](../docs/design-branches/0086-new-storage-refactoring-plan.md) 的 R0–R5 保留当片实施和源码／真实包证据；其单根／SCB1／合帧现已由 DB-087 默认路线替代，不作为当前公开格式说明。
 按[简化评审](../docs/design-branches/0086-new-storage-simplification-review.md)选择共享 FS/VS、单仓库根、完整 SchemaSnapshot、合一图帧和直接 Bare cursor。

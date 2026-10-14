@@ -145,6 +145,6 @@ public class EnumDefinitionBindingTests {
         public override TypeExpr GetTypeExpr(Type type) => throw new NotSupportedException();
         public override Type GetDomainType(TypeExpr type) => throw new NotSupportedException();
         public override StateDefinitionBinding GetDefinition(string id) => id == definition.DefinitionId ? definition : throw new InvalidDataException();
-        public override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) { schema = null; return false; }
+        protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) { schema = null; return false; }
     }
 }
