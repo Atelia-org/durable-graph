@@ -205,7 +205,7 @@ public sealed partial class Repository {
         else { RequireSchemaWriter(checkout); }
         _busy = true;
         try {
-            RequireCheckoutSource(checkout);
+            if (toShared) { RequireCheckoutSource(checkout); }
             return PublishSave(checkout, domainEvent ?? nextState!,
                 domainEvent is null ? StoredGraphKind.State : StoredGraphKind.Event, parameters ?? DefaultPolicy, toShared);
         } finally { EndOperation(); }
@@ -228,7 +228,7 @@ public sealed partial class Repository {
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            RequireCheckoutSource(checkout);
+            if (toShared) { RequireCheckoutSource(checkout); }
             using PreparedBranchSave pending = checkout.SaveSession.Prepare(root, kind, parameters ?? DefaultPolicy, toShared);
             OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
         } finally { EndOperation(); }
