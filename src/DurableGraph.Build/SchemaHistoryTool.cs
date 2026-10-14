@@ -175,12 +175,7 @@ internal sealed partial class SchemaHistoryTool {
             foreach (TypePattern argument in pattern.Arguments) { RequireNullableKinds(argument); }
         }
 
-        Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         foreach (SchemaHistoryRecord record in records.Values) {
-            if (kinds.TryGetValue(record.SchemaId, out int kind) && kind != record.Kind * 64 + record.Arity) {
-                throw new SchemaHistoryException($"schema family '{record.SchemaId}' changes kind or arity across versions");
-            }
-            kinds[record.SchemaId] = record.Kind * 64 + record.Arity;
             if (record.Kind == 2 && record.BaseSchema is not null) {
                 throw new SchemaHistoryException($"inline schema '{record.SchemaId}' cannot have a base schema");
             }
@@ -189,13 +184,6 @@ internal sealed partial class SchemaHistoryTool {
             foreach (TypePattern pattern in patterns) {
                 if (!pattern.ParametersFit(record.Arity)) {
                     throw new SchemaHistoryException($"schema '{record.SchemaId}' has an unbound type parameter");
-                }
-                foreach (TypePattern named in pattern.NamedNodes()) {
-                    foreach (SchemaHistoryRecord target in records.Values) {
-                        if (target.SchemaId == named.DefinitionId && target.Arity != named.Arguments.Count) {
-                            throw new SchemaHistoryException($"schema '{record.SchemaId}' has a wrong-arity type pattern for '{target.SchemaId}'");
-                        }
-                    }
                 }
             }
 

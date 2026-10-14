@@ -11,12 +11,15 @@
 - 理解产品目标与已选约束：[目标设计](../docs/DurableGraph-target-design-v0.md)。
 - 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。
+- 当前循环维护的线索、裁决与续接：[维护状态](../maintenance/durable-graph.md)。
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
 
 默认搜索 src/tests 与活动回归；已淘汰设计和实验只在明确历史问题时查[Git 来源](../experiments/ARCHIVE.md)。
 
 ## 当前焦点
+
+2026-10-15 开始[循环维护](../maintenance/durable-graph.md)，按当前源码证据逐项选择有收益的安全重构。首轮已收敛 Build history 的重复 kind／arity 验证，完整 history 与依赖契约保持；验证和后续候选只维护在任务状态，不复开已完成命名分片。
 
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限源码组织与本轮候选已收敛；源码入口见[导航](DurableGraph.Persistence/README.md)。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。纯槽转换归 Schema 的 `DurableFieldInfo`，保编号与完整相等。
 公开历史角色 `CheckpointKind` 与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。

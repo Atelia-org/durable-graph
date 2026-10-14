@@ -80,6 +80,29 @@ public sealed class GenericTemplateHistoryTests {
         Assert.Equal(before, fixture.Accepted());
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void DeclaredNominalArityIsCheckedInsideTypeArgumentsWithoutWritingHistory(bool nested, bool targetFirst) {
+        using Fixture fixture = new();
+        string target = History("Box", arity: 1);
+        string pattern = nested ? "nT3V0ZXI=(nQm94())" : "nQm94()";
+        string owner = History("Owner", body: $"// field:1|15|{pattern}\n");
+        string[] records = targetFirst ? [target, owner] : [owner, target];
+
+        SchemaHistoryException publishError = Assert.Throws<SchemaHistoryException>(() => fixture.Publish(records));
+        Assert.Contains("arity", publishError.Message);
+        Assert.Empty(fixture.Accepted());
+
+        foreach (string record in records) fixture.Accept(record);
+        string[] before = fixture.Accepted();
+        SchemaHistoryException verifyError = Assert.Throws<SchemaHistoryException>(() => fixture.Verify(records));
+        Assert.Contains("arity", verifyError.Message);
+        Assert.Equal(before, fixture.Accepted());
+    }
+
     [Fact]
     public void PatternDepthIsBoundedWithoutATypeExpressionParserStackOverflow() {
         using Fixture fixture = new();
@@ -102,10 +125,14 @@ public sealed class GenericTemplateHistoryTests {
             return SchemaHistoryTextCodec.ParseHistory(file);
         }
         public void Publish(params string[] histories) {
+            new SchemaHistoryTool().Publish(WriteManifest(histories), DirectoryPath);
+        }
+        public void Verify(params string[] histories) => new SchemaHistoryTool().Verify(WriteManifest(histories), DirectoryPath);
+        private string WriteManifest(string[] histories) {
             string manifest = Path.Combine(_root, "manifest.g.cs");
             File.WriteAllText(manifest, "// durable-graph-schema-history-manifest:3\n" +
                 string.Concat(histories.Select(text => text.Replace("// durable-graph-schema-history:3\n", ""))), SchemaHistoryTextCodec.Utf8NoBom);
-            new SchemaHistoryTool().Publish(manifest, DirectoryPath);
+            return manifest;
         }
         public void Accept(string text) {
             SchemaHistoryRecord record = Parse(text);
