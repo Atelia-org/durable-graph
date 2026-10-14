@@ -20,7 +20,7 @@ internal static class DictionaryKeyPolicy {
         }
         if (!domainType.IsValueType && slot.TypeTag is TypeTag.String or TypeTag.ObjectReference) { return; }
         if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin) &&
-            builtin.Slot.TypeTag != TypeTag.String && slot == StateBindingContext.WithFieldId(builtin.Slot, slot.FieldId)) { return; }
+            builtin.Slot.TypeTag != TypeTag.String && slot == DurableFieldInfo.WithFieldId(builtin.Slot, slot.FieldId)) { return; }
         if (domainType.IsValueType && slot.TypeTag == TypeTag.InlineValue && !BuiltinStateValues.TryBindCurrent(domainType, out _)) { return; }
         throw new ArgumentException("Dictionary keys require a supported scalar, inline value, or reference representation.");
     }
@@ -89,7 +89,7 @@ internal static class DictionaryKeyPolicy {
 
     private static bool IsCurrentStandardScalar(Type domainType, DurableFieldInfo slot) =>
         domainType.IsEnum || (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin) &&
-            builtin.Slot.TypeTag != TypeTag.String && slot == StateBindingContext.WithFieldId(builtin.Slot, slot.FieldId));
+            builtin.Slot.TypeTag != TypeTag.String && slot == DurableFieldInfo.WithFieldId(builtin.Slot, slot.FieldId));
 
     internal static bool TryScalarTag(DurableFieldInfo slot, out TypeTag tag) {
         tag = slot.TypeTag;

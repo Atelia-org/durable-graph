@@ -29,7 +29,7 @@ public abstract class ListObjectBinding : ObjectBinding {
         if (!Enum.IsDefined(algorithm)) { throw new ArgumentOutOfRangeException(nameof(algorithm)); }
         if (!domainListType.IsGenericType || domainListType.GetGenericTypeDefinition() != typeof(List<>) ||
             domainListType.ContainsGenericParameters || domainListType.GetGenericArguments()[0] != element.DomainType ||
-            element.ProjectionType is null || layout.ElementSlot != StateBindingContext.WithFieldId(element.Slot, 1)) {
+            element.ProjectionType is null || layout.ElementSlot != DurableFieldInfo.WithFieldId(element.Slot, 1)) {
             throw new ArgumentException("The current List type and element binding must match the complete List layout.");
         }
         return (ListObjectBinding)Activator.CreateInstance(

@@ -1,8 +1,7 @@
 namespace Atelia.DurableGraph.Schema;
 
-/// <summary>
-/// Describes one persisted field in a durable schema.
-/// </summary>
+/// <summary>Describes one complete persisted value slot with a positive identifier and exact value dependencies.</summary>
+/// <remarks>A slot can describe a declared Schema field or a container element, key or value.</remarks>
 public readonly record struct DurableFieldInfo {
     public DurableFieldInfo(int fieldId, TypeTag typeTag, string? targetSchemaId = null, DurableSchema? inlineSchema = null)
         : this(fieldId, typeTag, targetSchemaId is null ? null : TypeExpr.Named(targetSchemaId), inlineSchema) {
@@ -57,6 +56,11 @@ public readonly record struct DurableFieldInfo {
         NullableLayout = nullableLayout;
     }
 
+    /// <summary>Gets the positive identifier within the owning declaration or layout.</summary>
+    /// <remarks>
+    /// Schema fields use their declaration identifiers. Array and List elements and Nullable children use
+    /// identifier one; Dictionary keys and values use identifiers one and two.
+    /// </remarks>
     public int FieldId { get; }
 
     public TypeTag TypeTag { get; }
@@ -81,4 +85,22 @@ public readonly record struct DurableFieldInfo {
 
     public static DurableFieldInfo Nullable(int fieldId, DurableFieldInfo element) =>
         new(fieldId, TypeTag.Nullable, null, null, new NullableValueLayout(element));
+
+    /// <summary>Returns the complete slot with a different positive identifier.</summary>
+    /// <remarks>Preserves the exact target type, inline Schema and Nullable element layout.</remarks>
+    public static DurableFieldInfo WithFieldId(DurableFieldInfo slot, int fieldId) => slot.TypeTag switch {
+        TypeTag.ObjectReference => DurableFieldInfo.Reference(fieldId, slot.TargetType!),
+        TypeTag.InlineValue => new(fieldId, TypeTag.InlineValue, inlineSchema: slot.InlineSchema),
+        TypeTag.Nullable => DurableFieldInfo.Nullable(fieldId, slot.NullableLayout!.ElementSlot),
+        _ => new(fieldId, slot.TypeTag),
+    };
+
+    /// <summary>Projects the slot to its nominal type, ignoring its identifier and inline Schema version.</summary>
+    /// <remarks>The result does not establish equality of complete persisted value layouts.</remarks>
+    public static TypeExpr NominalType(DurableFieldInfo slot) => slot.TypeTag switch {
+        TypeTag.ObjectReference => slot.TargetType!,
+        TypeTag.InlineValue => slot.InlineSchema!.Type,
+        TypeTag.Nullable => TypeExpr.Nullable(NominalType(slot.NullableLayout!.ElementSlot)),
+        _ => TypeExpr.Builtin(slot.TypeTag),
+    };
 }

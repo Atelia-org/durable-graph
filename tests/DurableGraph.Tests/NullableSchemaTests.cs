@@ -21,8 +21,8 @@ public class NullableSchemaTests {
         Assert.Equal(first, same);
         Assert.Equal(first.GetHashCode(), same.GetHashCode());
         Assert.NotEqual(first, next);
-        Assert.Equal(TypeExpr.Nullable(Point), StateBindingContext.NominalType(first));
-        Assert.Equal(first.NullableLayout, StateBindingContext.WithFieldId(first, 8).NullableLayout);
+        Assert.Equal(TypeExpr.Nullable(Point), DurableFieldInfo.NominalType(first));
+        Assert.Equal(first.NullableLayout, DurableFieldInfo.WithFieldId(first, 8).NullableLayout);
         Assert.Equal(new DurableSchema("Owner", 1, first), new DurableSchema("Owner", 1, same));
         Assert.NotEqual(new DurableSchema("Owner", 1, first), new DurableSchema("Owner", 1, next));
     }

@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3 已限定验收；有限文件组织已完成，仓库资源 owner 采用 RepositoryResources，根构建、相关回归与准确新 G 的公开消费验证通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3 已限定验收；D4 两项纯槽转换已归回 Schema，源码、根构建及相关回归通过，准确新 G 消费待验收。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)，E3 见[文件组织结果](#e3-status)，当片见 [D3](#d3-status)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)，当片见 [D4](#d4-status)。
 
 已处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料，并完成有限文件组织。
 公共接入入口和已有 `Schema`／`Runtime` 分工保持；其余公开名称与程序集归属分别按现行职责收益判断，后续入口见[路线图](../../DurableGraph-research-roadmap.md)。
@@ -128,14 +128,13 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | `.Runtime.StringValueProjection/DurableValueProjection<T>/ObjectValueProjection<T>` | 可分别明确为 StringReferenceProjection/DurableReferenceProjection/ObjectReferenceProjection；[实现](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)在引用与 ObjectId 间转换。收益中等，先不全改；保通用 IValueProjection，不授 object/interface 通配能力，不因未发现调用就删 public helper |
 | `Atelia.DurableGraph.Schema.ObjectStateKind` | 可考虑 ObjectLayoutKind；[实际拥有者](../../../src/DurableGraph/Schema/ObjectLayout.cs)是布局，ObjectStateRecord 代理分类。收益较低，保现名可行，不借此统一所有 kind 数值／协议 |
 
-`Atelia.DurableGraph.Schema.DurableFieldInfo` 有更深的概念张力：除 Schema 字段外，还作为 Array/List/Dictionary/Nullable 的完整值槽，
-但结构仍带 FieldId。候选 `ValueSlot`／`ValueSlotLayout` 暂不冻结；纯改名是否仍清楚表达编号语义，需要结合 API 使用核对。
-本轮不拆成 field/element/key 多套公开类型，不移除 FieldId、改编号或重写相等。
+`Atelia.DurableGraph.Schema.DurableFieldInfo` 描述带正编号的完整持久值槽：普通字段用声明内 FieldId，Array/List/Nullable child 规范为 1，Dictionary key/value 规范为 1/2；它不是容器元素的索引。
+[D4](#d4-status)采用局部归位，保现名和 record 相等。`ValueSlot`／`ValueSlotLayout` 纯改名仍需解释编号，并不能代替完整布局；不拆多套公开槽类型、不移除 FieldId、不改编号。
 
-相关可观察的放置问题：四种 [Schema layout](../../../src/DurableGraph/Schema/DictionaryLayout.cs)为调用
-[StateBindingContext.WithFieldId/NominalType](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs)而依赖 Runtime。
-两项是纯槽转换，适合以后归回槽描述；它们目前是 public static 方法，抽取还涉及调用点和 API。
-单列后续职责整理，不把整个执行 context 搬到 Schema，也不据此立即拆程序集。
+四种 [Schema layout](../../../src/DurableGraph/Schema/DictionaryLayout.cs)原为调用
+`StateBindingContext.WithFieldId/NominalType` 而依赖 Runtime；D4 将两项同签名 public static 纯转换归回
+[DurableFieldInfo](../../../src/DurableGraph/Schema/DurableFieldInfo.cs)，直接迁移调用方，无旧入口壳。
+整个执行 context 保 Runtime 归属，不据此拆程序集；名义 TypeExpr 不包含 exact inline 版本，不能作为完整槽相等的证明。
 
 ## 7. 明确保留的名称与合同
 
@@ -353,3 +352,38 @@ dotnet build experiments/MetaBootstrapCrashProbe/MetaBootstrapCrashProbe.csproj 
 
 当前停点：D3 的唯一公开 owner 名称迁移与上述源码／准确新 G 消费范围完成。调用方按表迁移并重编译；不将 D1／D2 原包资格或旧 DB 的更广业务故事回填为本 G 证据。
 没有旧包／旧数据兼容门槛；本片不授 Kill／断电、性能或完整其他包故事资格。下一候选与重访条件只维护在[路线图](../../DurableGraph-research-roadmap.md)，不恢复全表改名或程序集整理工单。
+
+<a id="d4-status"></a>
+## 14. D4：完整值槽的纯转换归位
+
+2026-10-14；基线 `1d7006e30f193e917c3576cc3d1f6ac7f8c0f477`。问题：不可变 Schema layout 能否仅依赖槽描述进行编号规范化和名义类型投影？
+调查与独立审查均确认两项不读取执行环境。采用静态同签名归位，保 `DurableFieldInfo` 现名并补 XML：它同时表达字段和容器中的完整持久值槽，FieldId 是角色编号，参与相等。
+相比全局类型改名或改为 instance API，本片只纠正真实依赖和能力归属，保调用参数顺序与求值。
+
+| 旧入口 | 新入口 |
+|---|---|
+| `Atelia.DurableGraph.Runtime.StateBindingContext.WithFieldId(DurableFieldInfo slot, int fieldId)` | `Atelia.DurableGraph.Schema.DurableFieldInfo.WithFieldId(DurableFieldInfo slot, int fieldId)` |
+| `Atelia.DurableGraph.Runtime.StateBindingContext.NominalType(DurableFieldInfo slot)` | `Atelia.DurableGraph.Schema.DurableFieldInfo.NominalType(DurableFieldInfo slot)` |
+
+有限范围为两段 switch 原文迁移、已查明的显式及继承／未限定调用、四种 Schema layout 的 Runtime using，以及槽／编号／方法 XML。
+旧入口直接删除，调用方按表迁移重编译；`StateValueBinding.WithFieldId(int)` 保持，其内部转用新 owner。SG 发出的该实例调用、Generator/Build、文件名、namespace、程序集／PackageId、构造校验与消息、编号、相等、wire／Schema／history 均保持。
+名义类型投影忽略槽编号与 inline 版本；同 nominal 的两个 exact 槽仍可能不等，不放宽任何完整布局检查。
+
+最小验收：源码仅含上述有限变化，Schema 不再引用 DG Runtime；public/protected API 只有两个方法 owner 改变；根构建和 Runtime／Generator／Persistence 回归通过。
+准确新 G 的非 friend PackageReference 消费者直接使用新入口，核编号／容器规范化／精确 inline／nominal 边界，并从新库保存、跨进程冷开续写、再冷开只读。
+不设旧包／旧数据兼容门槛；不扩 API、恢复历史 runner 或授 crash／性能资格。后续候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+源码与根验证已完成：27 份 C# 更新 50 个调用（37 个显式 owner、13 个原 context 内／继承的未限定调用）；两方法原始字节相同，包含 Nullable 递归。独立复核从 Git 原 blob 核验，其他 581 个非 Markdown 跟踪文件原字节保持；Generator/Build、实验源码和所有构造消息保持。
+公开／protected API 清单 1359 行只有上述两个 METHOD 的声明 owner 改变；该清单不穷尽 custom attribute／nullable metadata，也不授二进制或 DLL／PDB 等价资格。
+
+主线程使用准确 S pin 的既有 package-mode assets 串行运行：
+
+```powershell
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+```
+
+根 Rebuild 零警告／错误；Persistence 893 项、Runtime／Generator／Build 1628 项全部通过，失败／跳过为零。集成 diff 与本地链接核验没有新增引用缺口；117 处历史问题未扩入本片。
+源码 receipt 为 `.artifacts/db092-d4/source/result.json`，SHA256 `E673875572712D4A32AD673BA9E4EB928087870606AE6D0E597EDEE617D612DB`；独立源码凭据在 `review/source-review.json`，主线程 API／根验证日志在同一切片目录。
+此处的源码和根资格不代授新包消费；准确 producer／新 G 与实际消费者结果待完成后记录。

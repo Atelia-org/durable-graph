@@ -12,7 +12,7 @@ public abstract class ListStateReader : ObjectReaderBinding {
     public static ListStateReader Create(ListLayout layout, StateValueBinding element) {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(element);
-        if (layout.ElementSlot != StateBindingContext.WithFieldId(element.Slot, 1)) {
+        if (layout.ElementSlot != DurableFieldInfo.WithFieldId(element.Slot, 1)) {
             throw new ArgumentException("The stored element binding must match the complete List element layout.");
         }
         return (ListStateReader)Activator.CreateInstance(

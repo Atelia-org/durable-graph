@@ -240,7 +240,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
     public override StateValueBinding ResolveStoredValue(DurableFieldInfo slot) {
         if (BuiltinStateValues.TryBindStored(slot, out StateValueBinding builtin)) { return builtin; }
         if (slot.TypeTag == TypeTag.Nullable) {
-            DurableFieldInfo nullableKey = WithFieldId(slot, 1);
+            DurableFieldInfo nullableKey = DurableFieldInfo.WithFieldId(slot, 1);
             if (slot.ValueSchema is { } dependency) { CheckRegistered(dependency); }
             if (_storedNullableValues.TryGetValue(nullableKey, out StateValueBinding? cached)) {
                 CheckClosureRequirements(cached);
@@ -280,7 +280,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
 
     public override TypeExpr GetTypeExpr(Type domainType) {
         RequireClosed(domainType);
-        if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) { return NominalType(builtin.Slot); }
+        if (BuiltinStateValues.TryBindCurrent(domainType, out StateValueBinding builtin)) { return DurableFieldInfo.NominalType(builtin.Slot); }
         if (Nullable.GetUnderlyingType(domainType) is { } underlying) { return TypeExpr.Nullable(GetTypeExpr(underlying)); }
         if (domainType.IsArray) {
             TypeExpr element = GetTypeExpr(domainType.GetElementType()!);

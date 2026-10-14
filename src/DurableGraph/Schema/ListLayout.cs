@@ -1,5 +1,3 @@
-using Atelia.DurableGraph.Runtime;
-
 namespace Atelia.DurableGraph.Schema;
 
 /// <summary>Exact List element representation. Count belongs to each frozen object state.</summary>
@@ -8,8 +6,8 @@ public sealed class ListLayout : IEquatable<ListLayout> {
         if (codecVersion != 2) { throw new ArgumentOutOfRangeException(nameof(codecVersion), "Unsupported List codec version."); }
         if (elementSlot.FieldId <= 0) { throw new ArgumentException("A List requires a complete element slot.", nameof(elementSlot)); }
         CodecVersion = codecVersion;
-        ElementSlot = StateBindingContext.WithFieldId(elementSlot, 1);
-        Type = TypeExpr.List(StateBindingContext.NominalType(ElementSlot));
+        ElementSlot = DurableFieldInfo.WithFieldId(elementSlot, 1);
+        Type = TypeExpr.List(DurableFieldInfo.NominalType(ElementSlot));
     }
 
     public uint CodecVersion { get; }

@@ -78,7 +78,7 @@ internal sealed partial class ModelExecutionEnvironment {
             CheckContainerElement(element.NullableLayout!.ElementSlot);
             return;
         }
-        CheckContainerNominalType(NominalType(element), element.TypeTag switch {
+        CheckContainerNominalType(DurableFieldInfo.NominalType(element), element.TypeTag switch {
             TypeTag.ObjectReference => SchemaKind.ReferenceObject,
             TypeTag.InlineValue => SchemaKind.InlineValue,
             _ => null,

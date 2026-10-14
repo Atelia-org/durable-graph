@@ -307,7 +307,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
 
     private static StateDefinitionBinding Definition(DurableSchema schema, Func<DurableSchema, StateReaderBinding>? reader = null) =>
         new(schema.SchemaId, schema.Kind, 0, null, [new(schema.SchemaId, schema.Version, schema.Kind, 0,
-            schema.Fields.Select(field => new StateFieldTemplate(field.FieldId, StateBindingContext.NominalType(field), field.ValueSchema?.Version)),
+            schema.Fields.Select(field => new StateFieldTemplate(field.FieldId, DurableFieldInfo.NominalType(field), field.ValueSchema?.Version)),
             schema.BaseSchema is { } ancestor ? new(ancestor.Type, ancestor.Version) : null)],
             historicalReaderFactory: reader is null ? null : (actual, _) => reader(actual));
 

@@ -25,7 +25,7 @@ public abstract class ArrayObjectBinding : ObjectBinding {
         if (!domainArrayType.IsArray || domainArrayType.GetArrayRank() != layout.Rank ||
             domainArrayType.IsSZArray != layout.IsVector ||
             domainArrayType.GetElementType() != element.DomainType || element.ProjectionType is null ||
-            layout.ElementSlot != StateBindingContext.WithFieldId(element.Slot, 1)) {
+            layout.ElementSlot != DurableFieldInfo.WithFieldId(element.Slot, 1)) {
             throw new ArgumentException("The current array type and element binding must match the complete array layout.");
         }
         return (ArrayObjectBinding)Activator.CreateInstance(

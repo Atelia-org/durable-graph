@@ -17,7 +17,7 @@ public sealed class ListTypeExprTests {
         Assert.Equal(list, TypeExpr.List(integer));
         Assert.Equal(list.GetHashCode(), TypeExpr.List(integer).GetHashCode());
         Assert.Equal(4, new HashSet<TypeExpr> { list, TypeExpr.Named("List", integer), TypeExpr.VectorArray(integer), TypeExpr.List(list) }.Count);
-        Assert.Equal(list, StateBindingContext.NominalType(DurableFieldInfo.Reference(7, list)));
+        Assert.Equal(list, DurableFieldInfo.NominalType(DurableFieldInfo.Reference(7, list)));
         Assert.Throws<ArgumentNullException>(() => TypeExpr.List(null!));
         Assert.Throws<ArgumentException>(() => DurableFieldInfo.Reference(1, TypeExpr.List(TypeExpr.Parameter(0))));
     }

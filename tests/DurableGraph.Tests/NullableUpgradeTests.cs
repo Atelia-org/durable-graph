@@ -19,9 +19,9 @@ public sealed class NullableUpgradeTests {
         DurableFieldInfo after = DurableFieldInfo.Nullable(1, new(1, TypeTag.DateTimeOffset));
         DurableSchema sourceSchema = new("TemporalOwner", 1, before), targetSchema = new("TemporalOwner", 2, after);
         StateDefinitionBinding owner = new("TemporalOwner", SchemaKind.ReferenceObject, 0, null, [
-            new("TemporalOwner", 1, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(before))],
+            new("TemporalOwner", 1, SchemaKind.ReferenceObject, 0, [new(1, DurableFieldInfo.NominalType(before))],
                 stateTypeDefinition: typeof(Owner1<NullableState<long>>)),
-            new("TemporalOwner", 2, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(after))],
+            new("TemporalOwner", 2, SchemaKind.ReferenceObject, 0, [new(1, DurableFieldInfo.NominalType(after))],
                 stateTypeDefinition: typeof(Owner2<NullableState<DateTimeOffset>>)),
         ], upgrades: [new("TemporalOwner", 1, Method(nameof(UpgradeOwner)), dependencies: [
             new("value", typeof(Rules), new("TemporalOwner", 1), new("TemporalOwner", 1)),
@@ -54,9 +54,9 @@ public sealed class NullableUpgradeTests {
         DurableFieldInfo after = DurableFieldInfo.Nullable(1, new(1, TypeTag.TimeSpan));
         DurableSchema sourceSchema = new("BclOwner", 1, before), targetSchema = new("BclOwner", 2, after);
         StateDefinitionBinding owner = new("BclOwner", SchemaKind.ReferenceObject, 0, null, [
-            new("BclOwner", 1, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(before))],
+            new("BclOwner", 1, SchemaKind.ReferenceObject, 0, [new(1, DurableFieldInfo.NominalType(before))],
                 stateTypeDefinition: typeof(Owner1<NullableState<long>>)),
-            new("BclOwner", 2, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(after))],
+            new("BclOwner", 2, SchemaKind.ReferenceObject, 0, [new(1, DurableFieldInfo.NominalType(after))],
                 stateTypeDefinition: typeof(Owner2<NullableState<TimeSpan>>)),
         ], upgrades: [new("BclOwner", 1, Method(nameof(UpgradeOwner)), dependencies: [
             new("value", typeof(Rules), new("BclOwner", 1), new("BclOwner", 1)),

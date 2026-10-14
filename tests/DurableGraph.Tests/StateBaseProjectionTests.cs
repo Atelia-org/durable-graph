@@ -139,7 +139,7 @@ public sealed class StateBaseProjectionTests {
                 if (field.ValueSchema is { } inline) { AddDefinition(inline); }
             }
             StateSchemaTemplate template = new(schema.SchemaId, schema.Version, schema.Kind, 0,
-                schema.Fields.Select(field => new StateFieldTemplate(field.FieldId, NominalType(field), field.ValueSchema?.Version)),
+                schema.Fields.Select(field => new StateFieldTemplate(field.FieldId, DurableFieldInfo.NominalType(field), field.ValueSchema?.Version)),
                 schema.BaseSchema is { } parent ? new(parent.Type, parent.Version) : null);
             Definitions[schema.SchemaId] = new(schema.SchemaId, schema.Kind, 0, null, [template]);
         }

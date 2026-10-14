@@ -220,7 +220,7 @@ public sealed class ValueUpgradeBindingTests {
         ])], allowKeepExact: true));
         DurableFieldInfo oldSlot = new(1, TypeTag.Int32), newSlot = oldSlot;
         for (int depth = 0; depth < 28; depth++) {
-            TypeExpr nominal = TypeExpr.Named("Nest", StateBindingContext.NominalType(oldSlot));
+            TypeExpr nominal = TypeExpr.Named("Nest", DurableFieldInfo.NominalType(oldSlot));
             oldSlot = Inline(new(nominal, 1, SchemaKind.InlineValue, oldSlot));
             newSlot = Inline(new(nominal, 2, SchemaKind.InlineValue, newSlot));
         }
@@ -292,7 +292,7 @@ public sealed class ValueUpgradeBindingTests {
     private static DurableSchema PointSchema(int version) => new("Point", version, SchemaKind.InlineValue, new DurableFieldInfo(1, version == 1 ? TypeTag.Int32 : TypeTag.Int64));
     private static DurableSchema PairSchema(int version, DurableSchema value) => new(TypeExpr.Named("Pair", value.Type), version, SchemaKind.InlineValue,
         Inline(value), new(2, TypeTag.InlineValue, inlineSchema: value));
-    private static DurableSchema BoxSchema(int version, DurableFieldInfo slot) => new(TypeExpr.Named("Box", StateBindingContext.NominalType(slot)), version,
+    private static DurableSchema BoxSchema(int version, DurableFieldInfo slot) => new(TypeExpr.Named("Box", DurableFieldInfo.NominalType(slot)), version,
         version == 1 ? [slot] : [slot, new(2, TypeTag.Int32)]);
 
     private static TestContext CreateContext(params StateUpgradeProvider[] providers) {
@@ -313,8 +313,8 @@ public sealed class ValueUpgradeBindingTests {
         TestContext context = CreateContext();
         context.Definitions.Add("Node", new("Node", SchemaKind.ReferenceObject, 0, null, [new("Node", 1, SchemaKind.ReferenceObject, 0, [])]));
         context.Definitions.Add("Semantic", new("Semantic", SchemaKind.ReferenceObject, 0, null, [
-            new("Semantic", 1, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(prior))], stateTypeDefinition: prior.TypeTag == TypeTag.UInt32 ? typeof(Box1<uint>) : typeof(Box1<ObjectId>)),
-            new("Semantic", 2, SchemaKind.ReferenceObject, 0, [new(1, StateBindingContext.NominalType(next))], stateTypeDefinition: next.TypeTag == TypeTag.UInt32 ? typeof(Box2<uint>) : typeof(Box2<ObjectId>)),
+            new("Semantic", 1, SchemaKind.ReferenceObject, 0, [new(1, DurableFieldInfo.NominalType(prior))], stateTypeDefinition: prior.TypeTag == TypeTag.UInt32 ? typeof(Box1<uint>) : typeof(Box1<ObjectId>)),
+            new("Semantic", 2, SchemaKind.ReferenceObject, 0, [new(1, DurableFieldInfo.NominalType(next))], stateTypeDefinition: next.TypeTag == TypeTag.UInt32 ? typeof(Box2<uint>) : typeof(Box2<ObjectId>)),
         ], upgrades: [new("Semantic", 1, Method(nameof(UpgradeBox)), dependencies: [Dependency("value", typeof(KeepRules), "Semantic")])]));
         return context;
     }

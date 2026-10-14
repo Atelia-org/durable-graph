@@ -125,7 +125,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
             DurableFieldInfo slot = actual.Fields[index];
             TypeExpr expression = Substitute(pattern.ValueType, symbolicArguments);
             TypeExpr nominal = Substitute(expression, rootArguments);
-            if (slot.FieldId != pattern.FieldId || NominalType(slot) != nominal) {
+            if (slot.FieldId != pattern.FieldId || DurableFieldInfo.NominalType(slot) != nominal) {
                 throw new InvalidDataException("A stored field does not match its retained type pattern.");
             }
             TypeExpr declaredValue = pattern.ValueType.IsNullable ? pattern.ValueType.ElementType! : pattern.ValueType;
@@ -152,7 +152,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
             // their inner variables through the callee's declaration scope.
             int? bindingVersion = expression.Kind == TypeExprKind.Parameter ? null : inlineVersion;
             var valueKey = (expression, bindingVersion);
-            DurableFieldInfo canonical = WithFieldId(slot, 1);
+            DurableFieldInfo canonical = DurableFieldInfo.WithFieldId(slot, 1);
             if (values.TryGetValue(valueKey, out DurableFieldInfo seen) && seen != canonical) {
                 throw new InvalidDataException("Repeated use of one value expression has inconsistent exact slot semantics.");
             }
@@ -280,20 +280,6 @@ public abstract partial class StateBindingContext : IStateModelResolver {
         }
         return TypeExpr.Named(expression.DefinitionId!, expression.Arguments.Select(argument => Substitute(argument, arguments)).ToArray());
     }
-
-    public static DurableFieldInfo WithFieldId(DurableFieldInfo slot, int fieldId) => slot.TypeTag switch {
-        TypeTag.ObjectReference => DurableFieldInfo.Reference(fieldId, slot.TargetType!),
-        TypeTag.InlineValue => new(fieldId, TypeTag.InlineValue, inlineSchema: slot.InlineSchema),
-        TypeTag.Nullable => DurableFieldInfo.Nullable(fieldId, slot.NullableLayout!.ElementSlot),
-        _ => new(fieldId, slot.TypeTag),
-    };
-
-    public static TypeExpr NominalType(DurableFieldInfo slot) => slot.TypeTag switch {
-        TypeTag.ObjectReference => slot.TargetType!,
-        TypeTag.InlineValue => slot.InlineSchema!.Type,
-        TypeTag.Nullable => TypeExpr.Nullable(NominalType(slot.NullableLayout!.ElementSlot)),
-        _ => TypeExpr.Builtin(slot.TypeTag),
-    };
 }
 
 /// <summary>Validated exact layout and its declaration-scoped free-value bindings.</summary>

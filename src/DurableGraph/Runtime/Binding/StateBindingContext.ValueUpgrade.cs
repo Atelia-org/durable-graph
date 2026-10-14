@@ -33,15 +33,15 @@ public abstract partial class StateBindingContext {
         }
         if (match is null) { throw new InvalidDataException($"Value dependency declaration '{selector.DeclarationId}' is absent from its exact endpoint."); }
         foreach (DurableFieldInfo field in match.Fields) {
-            if (field.FieldId == selector.FieldId) { return WithFieldId(field, 1); }
+            if (field.FieldId == selector.FieldId) { return DurableFieldInfo.WithFieldId(field, 1); }
         }
         throw new InvalidDataException($"Value dependency field {selector.FieldId} is absent from declaration '{selector.DeclarationId}'.");
     }
 
     private ValueUpgradePlan PrepareValueUpgrade(Type ruleSet, DurableFieldInfo source, DurableFieldInfo target, int depth) {
         if (depth > MaximumValueUpgradeDepth) { throw new InvalidDataException("Value upgrade dependency binding exceeded its depth bound."); }
-        source = WithFieldId(source, 1);
-        target = WithFieldId(target, 1);
+        source = DurableFieldInfo.WithFieldId(source, 1);
+        target = DurableFieldInfo.WithFieldId(target, 1);
         ValuePlanKey key = new(ruleSet, source, target);
         if (_valueUpgradePlans.TryGetValue(key, out ValueUpgradePlan? cached)) {
             if (depth + cached.Height - 1 > MaximumValueUpgradeDepth) { throw new InvalidDataException("Value upgrade dependency binding exceeded its depth bound."); }
@@ -102,8 +102,8 @@ public abstract partial class StateBindingContext {
         Dictionary<int, TypeExpr> variables = [];
         return provider.SourceInlineVersion == source.ValueSchema?.Version &&
             provider.TargetInlineVersion == target.ValueSchema?.Version &&
-            MatchValuePattern(provider.SourceType, NominalType(source), variables) &&
-            MatchValuePattern(provider.TargetType, NominalType(target), variables);
+            MatchValuePattern(provider.SourceType, DurableFieldInfo.NominalType(source), variables) &&
+            MatchValuePattern(provider.TargetType, DurableFieldInfo.NominalType(target), variables);
     }
 
     private static bool MatchValuePattern(TypeExpr pattern, TypeExpr actual, Dictionary<int, TypeExpr> variables) {

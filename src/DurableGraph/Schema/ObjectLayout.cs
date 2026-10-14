@@ -1,5 +1,3 @@
-using Atelia.DurableGraph.Runtime;
-
 namespace Atelia.DurableGraph.Schema;
 
 /// <summary>The exact immutable representation of one reference object, independent of its CLR instance.</summary>
@@ -61,8 +59,8 @@ public sealed class ArrayLayout : IEquatable<ArrayLayout> {
         if (elementSlot.FieldId <= 0) { throw new ArgumentException("An array requires a complete element slot.", nameof(elementSlot)); }
         Constructor = constructor;
         CodecVersion = codecVersion;
-        ElementSlot = StateBindingContext.WithFieldId(elementSlot, 1);
-        TypeExpr element = StateBindingContext.NominalType(ElementSlot);
+        ElementSlot = DurableFieldInfo.WithFieldId(elementSlot, 1);
+        TypeExpr element = DurableFieldInfo.NominalType(ElementSlot);
         Type = IsVector ? TypeExpr.VectorArray(element) : TypeExpr.MultiDimArray(element, Rank);
     }
 

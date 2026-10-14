@@ -61,8 +61,8 @@ public sealed class StateValueUpgradeProvider {
         TargetInlineVersion = targetInlineVersion;
         Method = method;
         Dependencies = StateUpgradeDependency.Freeze(dependencies);
-        ExpectedSource = expectedSource is { } source ? StateBindingContext.WithFieldId(source, 1) : null;
-        ExpectedTarget = expectedTarget is { } target ? StateBindingContext.WithFieldId(target, 1) : null;
+        ExpectedSource = expectedSource is { } source ? DurableFieldInfo.WithFieldId(source, 1) : null;
+        ExpectedTarget = expectedTarget is { } target ? DurableFieldInfo.WithFieldId(target, 1) : null;
     }
 
     public TypeExpr SourceType { get; }

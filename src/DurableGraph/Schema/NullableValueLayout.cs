@@ -1,5 +1,3 @@
-using Atelia.DurableGraph.Runtime;
-
 namespace Atelia.DurableGraph.Schema;
 
 /// <summary>The immutable exact child of a nullable value slot; it has no independent Schema or object identity.</summary>
@@ -9,7 +7,7 @@ public sealed class NullableValueLayout : IEquatable<NullableValueLayout> {
             TypeTag.ObjectReference or TypeTag.Nullable || !Enum.IsDefined(elementSlot.TypeTag)) {
             throw new ArgumentException("A nullable child must be a supported scalar or inline value.", nameof(elementSlot));
         }
-        ElementSlot = StateBindingContext.WithFieldId(elementSlot, 1);
+        ElementSlot = DurableFieldInfo.WithFieldId(elementSlot, 1);
     }
 
     /// <summary>Gets the exact child slot, canonically numbered one.</summary>

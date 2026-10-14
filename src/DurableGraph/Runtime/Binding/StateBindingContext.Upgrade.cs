@@ -197,7 +197,7 @@ public abstract partial class StateBindingContext {
             var baseSelections = RebaseSelections(GetTemplate(baseType.DefinitionId!, basePattern.Version), basePattern.Type.Arguments, selections);
             ancestor = BuildSchema(baseType, GetTemplate(baseType.DefinitionId!, basePattern.Version), baseSelections, depth + 1);
         }
-        DurableFieldInfo[] fields = template.Fields.Select(field => WithFieldId(
+        DurableFieldInfo[] fields = template.Fields.Select(field => DurableFieldInfo.WithFieldId(
             BuildSlot(field.ValueType, field.InlineVersion, owner.Arguments, selections, depth + 1), field.FieldId)).ToArray();
         DurableSchema result = new(owner, template.Version, fields, ancestor, template.Kind);
         CheckRegistered(result);
@@ -243,7 +243,7 @@ public abstract partial class StateBindingContext {
 
     private static void AddSelection(Dictionary<(TypeExpr Expression, int? Version), DurableFieldInfo> selections,
         (TypeExpr Expression, int? Version) key, DurableFieldInfo slot) {
-        DurableFieldInfo canonical = WithFieldId(slot, 1);
+        DurableFieldInfo canonical = DurableFieldInfo.WithFieldId(slot, 1);
         if (selections.TryGetValue(key, out DurableFieldInfo previous) && previous != canonical) {
             throw new InvalidDataException("The explicit DTO binds one value expression to conflicting exact layouts.");
         }

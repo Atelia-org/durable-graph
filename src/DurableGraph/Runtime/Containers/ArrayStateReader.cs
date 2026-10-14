@@ -12,7 +12,7 @@ public abstract class ArrayStateReader : ObjectReaderBinding {
     public static ArrayStateReader Create(ArrayLayout layout, StateValueBinding element) {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(element);
-        if (layout.ElementSlot != StateBindingContext.WithFieldId(element.Slot, 1)) {
+        if (layout.ElementSlot != DurableFieldInfo.WithFieldId(element.Slot, 1)) {
             throw new ArgumentException("The stored element binding must match the complete array element layout.");
         }
         return (ArrayStateReader)Activator.CreateInstance(

@@ -13,8 +13,8 @@ public abstract class DictionaryStateReader : ObjectReaderBinding {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(value);
-        if (layout.KeySlot != StateBindingContext.WithFieldId(key.Slot, 1) ||
-            layout.ValueSlot != StateBindingContext.WithFieldId(value.Slot, 2)) {
+        if (layout.KeySlot != DurableFieldInfo.WithFieldId(key.Slot, 1) ||
+            layout.ValueSlot != DurableFieldInfo.WithFieldId(value.Slot, 2)) {
             throw new ArgumentException("The key and value bindings must match the complete Dictionary layout.");
         }
         return (DictionaryStateReader)Activator.CreateInstance(typeof(DictionaryStateReader<,,,>)

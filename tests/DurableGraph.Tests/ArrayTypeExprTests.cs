@@ -101,8 +101,8 @@ public sealed class ArrayTypeExprTests {
         Assert.Equal(15, (int)field.TypeTag);
         Assert.Same(array, field.TargetType);
         Assert.Null(field.TargetSchemaId);
-        Assert.Equal(array, StateBindingContext.NominalType(field));
-        Assert.Equal(DurableFieldInfo.Reference(1, array), StateBindingContext.WithFieldId(field, 1));
+        Assert.Equal(array, DurableFieldInfo.NominalType(field));
+        Assert.Equal(DurableFieldInfo.Reference(1, array), DurableFieldInfo.WithFieldId(field, 1));
 
         Assert.Throws<ArgumentException>(() => DurableFieldInfo.Reference(1, TypeExpr.VectorArray(TypeExpr.Parameter(0))));
         Assert.Throws<ArgumentException>(() => DurableFieldInfo.Reference(1, TypeExpr.Builtin(TypeTag.String)));

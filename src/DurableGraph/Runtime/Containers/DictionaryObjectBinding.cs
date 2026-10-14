@@ -33,7 +33,7 @@ public abstract class DictionaryObjectBinding : ObjectBinding {
         if (!domainType.IsGenericType || domainType.GetGenericTypeDefinition() != typeof(Dictionary<,>) || domainType.ContainsGenericParameters ||
             domainType.GetGenericArguments()[0] != key.DomainType || domainType.GetGenericArguments()[1] != value.DomainType ||
             key.ProjectionType is null || value.ProjectionType is null ||
-            layout.KeySlot != StateBindingContext.WithFieldId(key.Slot, 1) || layout.ValueSlot != StateBindingContext.WithFieldId(value.Slot, 2)) {
+            layout.KeySlot != DurableFieldInfo.WithFieldId(key.Slot, 1) || layout.ValueSlot != DurableFieldInfo.WithFieldId(value.Slot, 2)) {
             throw new ArgumentException("The current Dictionary type and both bindings must match the complete layout.");
         }
         DictionaryKeyPolicy.RequireCurrentKey(key.DomainType!, layout.KeySlot);

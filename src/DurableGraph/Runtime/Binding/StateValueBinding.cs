@@ -45,5 +45,5 @@ public sealed class StateValueBinding {
     public Type? ProjectionType { get; }
 
     public StateValueBinding WithFieldId(int fieldId) => new(
-        StateBindingContext.WithFieldId(Slot, fieldId), StateType, StateOpsType, DomainType, ProjectionType);
+        DurableFieldInfo.WithFieldId(Slot, fieldId), StateType, StateOpsType, DomainType, ProjectionType);
 }

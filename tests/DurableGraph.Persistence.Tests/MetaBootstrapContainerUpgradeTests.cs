@@ -193,7 +193,7 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
         return kind switch {
             "Array" => ObjectLayout.ForArray(new(TypeExprKind.VectorArray, point)),
             "List" => ObjectLayout.ForList(new(point)),
-            _ => ObjectLayout.ForDictionary(new(Inline(KeyId, 1), StateBindingContext.WithFieldId(point, 2))),
+            _ => ObjectLayout.ForDictionary(new(Inline(KeyId, 1), DurableFieldInfo.WithFieldId(point, 2))),
         };
     }
     private static PreparedBaseBody RootBody(in ObjectId state) {
