@@ -211,7 +211,9 @@ DB-088 已退出同 key 新根 bootstrap、Schema overrides 与完整 container 
 
 ### 4.3 checkout 执行环境与 factory 查询入口
 
-用户已采纳稳定执行环境与接口防误用的收敛路线，施工合同集中于 [DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring.md)。A／B 的合同、源码正控及 protected 查询／内部反例迁移已完成，准确依赖查验／中间布局解析保持。剩余 C 从当前源码取得新 G 普通消费者编译／运行资格并收束长期文档；须重新 restore package mode，源码元数据不代替非 friend 编译门禁。保存／发布／缓存核心、DB-081 冷恢复边界保持；本表不重复测试清单或施工过程。
+[DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring.md)的有限实施与新 G 普通包验收已完成，长期约束归入[模型执行环境与 factory 行为](DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)；本案不再保必经工单。
+
+仅在真实手写 factory 无法用现有绑定服务表达准确依赖，或消费者要求更强的自定义 reader 可恢复性保证时重访：先给具体输入／布局与拒绝见证，再选择最小接缝或证明机制。DB-081 的未执行 reader 验证边界保持，不自动增加保存读回、动态 refresh、callback 沙箱或跨 S 共享；原 owner 模型切换需求仍见 §4.1。
 
 ## 5. 后续切片验收素材
 

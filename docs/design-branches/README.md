@@ -24,7 +24,7 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
-| [DB-089 checkout 环境与 factory 查询收窄](0089-checkout-environment-and-factory-query-refactoring.md) | Chosen / A／B 已完成；C 待实施 | 合同、真实 SG／phantom 正控与 protected 查询／内部反例迁移通过完整源码门禁；后续取得新 G 普通消费者编译／运行资格，不改保存／发布／缓存核心 |
+| [DB-089 checkout 环境与 factory 查询收窄](0089-checkout-environment-and-factory-query-refactoring.md) | Chosen / Implemented，有限 A／B／C 验收完成 | 稳定环境合同、protected 查询及内部反例／SG／phantom 正控保全；新 G 非 friend 编译边界与 Split 生命周期／冷开续写通过，长期约束归目标设计；不改保存／发布／缓存核心或扩大任意 reader 的可恢复性保证 |
 | [DB-088 开发 Schema 与定稿](0088-development-schema-workflow.md) | 特例退出、源码回归及三条新 G 普通包故事已完成 | 用户校准的固定 V1→独立 V2 草稿 fork→定稿 V2；保身份、源码实际 Base／Delta／source／H 与普通包 MSBuild／五 PID分层。普通 baseline／Upgrade 取代新根特例；当前来源与限定停点见 [§7](0088-development-schema-workflow.md#7-实施结果与限定验收)，不预建主／次版本 |
 | [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | 原有限 P1／P2 已完成；默认 meta 自举、完整 private／ToShared 保留，特例退出见 DB-088 | 活动稿保当前契约、[有限停点审计](0087-meta-bootstrap-refactoring-route.md#private-plan)与条件延期；旧保存／typed／Schema／raw 权威已退出。原包按 [V1→V2／推广](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)和[旧双异形环境](../../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)各自删除前资格解释，删减后的当前普通包资格见 DB-088；P2 原合同可在 Git `d8c0ecb` 的 DB-087 §9 恢复，旧过程见 [2026-10-13 完整稿](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md) |
 | [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | Implemented / R0–R5 已验收 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；[实施与验收](0086-new-storage-implementation.md)含源码、真实包及进程停止证据 |

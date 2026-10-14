@@ -286,6 +286,7 @@ internal static class Program {
             UnconfiguredSaveRejected = true, next.PrivateSeedState, next.PrivateState, next.PrivateSchema,
             PrivateObjects = next.PrivateObjects, PrivateUnusedDescriptor = next.PrivateUnusedDescriptorId,
             PrivateBaselineIdentities = true, PrivateEventAcceptsMetaOnly = true, PrivateFrozenCatalog = true, PrivateColdListDelta = true, PrivateSharedRootUnchanged = true, PrivateSharedSaveRejected = true,
+            PrivateHotStateRetained = true, PrivateIndependentRead = true, PrivateSameOwnerCheckout = true,
             next.PromotionEvent, next.PromotionSchema, next.SharedContinuationState, next.PromotedUnusedDescriptorId,
             CompletePromotion = true, PromotionRefsAdvanced = true, PromotionEventRetainsState = true,
             SharedColdOwnerListDelta = true, PromotionRetainedOrigins = true };
@@ -332,9 +333,25 @@ internal static class Program {
             Need(current.Head.RevisionAddress == catalogEvent && current.StateRevisionAddress == initial && current.StateId!.Value.Value == rootId,
                 "Cold explicit private checkout must import its own exact root identity and source.");
             root.Numbers[7] = 202;
-            next = current.CommitState().RevisionAddress;
-            Need(ReferenceEquals(root, current.State) && current.StateId!.Value.Value == rootId,
+            CheckpointAddress saved = current.CommitState();
+            next = saved.RevisionAddress;
+            Need(ReferenceEquals(root, Check(current.State, upgraded: true, atSeven: 202)) &&
+                current.StateId!.Value.Value == rootId && current.StateRevisionAddress == next,
                 "Confirmed private State must accept the original edited instances and identity.");
+
+            Widget independent = Check(repository.ReadState(saved), upgraded: true, atSeven: 202);
+            Need(!ReferenceEquals(root, independent) && !ReferenceEquals(root.Child, independent.Child) &&
+                !ReferenceEquals(root.Numbers, independent.Numbers),
+                "Same-owner independent State read must restore equal values in independent mutable instances.");
+            current.Dispose();
+            using BranchCheckout signedAgain = repository.CheckoutPrivate("private");
+            Widget restored = Check(signedAgain.State, upgraded: true, atSeven: 202);
+            Need(signedAgain.Head.RevisionAddress == next && signedAgain.StateRevisionAddress == next &&
+                signedAgain.StateId!.Value.Value == rootId && repository.GetHead("private").RevisionAddress == next &&
+                !ReferenceEquals(root, restored) && !ReferenceEquals(root.Child, restored.Child) &&
+                !ReferenceEquals(root.Numbers, restored.Numbers) && !ReferenceEquals(independent, restored) &&
+                !ReferenceEquals(independent.Child, restored.Child) && !ReferenceEquals(independent.Numbers, restored.Numbers),
+                "Same-owner private recheckout must retain the saved State and identity while restoring an independent graph.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(next);

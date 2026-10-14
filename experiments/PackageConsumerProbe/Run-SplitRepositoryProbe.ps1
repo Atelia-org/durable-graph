@@ -74,7 +74,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB087 finite non-friend public Repository accepted-history, Shared admission, baseline private fork, SG Event meta acceptance and cold-continuation, complete Event-to-Shared promotion and fresh-Shared-owner List Delta PackageReference gate; five PIDs with final independent-PID read-only verification, no fresh-PID-writer/same-key-reshape/process-crash/performance qualification'
+    Scope = 'DB089 protected raw-query compilation and finite non-friend public Repository accepted-history, Shared admission, baseline private fork, hot/independent/same-owner/cold SG recovery, complete Event-to-Shared promotion and fresh-Shared-owner List Delta PackageReference gate; five consumer PIDs with final independent-PID read-only verification, no fresh-PID-writer/same-key-reshape/process-crash/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot
@@ -102,6 +102,7 @@ $receipt = [ordered]@{
     Stages = @()
     Processes = @()
     Commands = @()
+    QueryCapability = $null
     Passed = $false
     Failure = $null
 }
@@ -114,15 +115,54 @@ function Save-Receipt {
 }
 
 function Invoke-LoggedDotNet {
-    param([Parameter(Mandatory)][string[]]$Arguments)
+    param([Parameter(Mandatory)][string[]]$Arguments, [switch]$ExpectQueryRejection, [string]$QuerySource, [int]$QueryLine)
     $script:splitCommandIndex++
     $log = Join-Path $workRoot ('dotnet-{0:D2}-{1}.log' -f $script:splitCommandIndex, $Arguments[0])
-    & dotnet @Arguments 2>&1 | Tee-Object -LiteralPath $log | Out-Host
-    $code = $LASTEXITCODE
-    $command = [ordered]@{ Arguments = $Arguments; ExitCode = $code; Output = $log; OutputSha256 = (Get-FileHash -LiteralPath $log -Algorithm SHA256).Hash }
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = (Get-Command dotnet -CommandType Application | Select-Object -First 1).Source
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $start.WorkingDirectory = $workRoot
+    foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
+    $process = [Diagnostics.Process]::Start($start)
+    $outputTask = $process.StandardOutput.ReadToEndAsync()
+    $errorTask = $process.StandardError.ReadToEndAsync()
+    $command = [ordered]@{ Arguments = $Arguments; ProcessId = $process.Id; StartedUtc = [DateTime]::UtcNow.ToString('O');
+        ExitCode = $null; ExpectedRejection = [bool]$ExpectQueryRejection; TimedOut = $false; Output = $log; OutputSha256 = $null; Passed = $false }
     $receipt.Commands += $command
     Save-Receipt
-    if ($code -ne 0) { throw "dotnet $($Arguments[0]) failed with exit $code; see $log." }
+    try {
+        $deadline = [DateTime]::UtcNow.AddSeconds($ProcessTimeoutSeconds)
+        while (-not $process.WaitForExit(100)) {
+            if ([DateTime]::UtcNow -ge $deadline) { $command.TimedOut = $true; throw "dotnet $($Arguments[0]) exceeded $ProcessTimeoutSeconds seconds." }
+        }
+    } finally {
+        if (!$process.HasExited) {
+            $process.Kill($true)
+            if (!$process.WaitForExit(30000)) { throw 'Timed-out dotnet could not be stopped.' }
+        }
+        $command.ExitCode = $process.ExitCode
+        $command['ExitedUtc'] = [DateTime]::UtcNow.ToString('O')
+        $output = [string]$outputTask.GetAwaiter().GetResult() + [string]$errorTask.GetAwaiter().GetResult()
+        [IO.File]::WriteAllText($log, $output, [Text.UTF8Encoding]::new($false))
+        $command.OutputSha256 = (Get-FileHash -LiteralPath $log -Algorithm SHA256).Hash
+        $process.Dispose()
+        Write-Host $output
+        Save-Receipt
+    }
+    if ($ExpectQueryRejection) {
+        $location = [Regex]::Escape([IO.Path]::GetFileName($QuerySource)) + '\(' + $QueryLine + ',\d+\):\s+error CS0122:'
+        $diagnostics = @([Regex]::Matches($output, '(?im)^.*\berror\s+[A-Z]+\d+:.*$') | ForEach-Object { $_.Value })
+        if ($command.ExitCode -eq 0 -or $diagnostics.Count -eq 0 -or
+            @($diagnostics | Where-Object { $_ -notmatch $location -or $_ -notmatch 'TryGetSchema' }).Count -ne 0) {
+            throw "Expected only CS0122 for the actual raw-query call at ${QuerySource}:$QueryLine; see $log."
+        }
+        $command['Diagnostic'] = [ordered]@{ Id = 'CS0122'; Source = $QuerySource; Line = $QueryLine; Matches = $diagnostics }
+    } elseif ($command.ExitCode -ne 0) { throw "dotnet $($Arguments[0]) failed with exit $($command.ExitCode); see $log." }
+    $command.Passed = $true
+    Save-Receipt
     return $command
 }
 
@@ -235,6 +275,96 @@ function Require-PreservedHistory {
     }
 }
 
+function Invoke-QueryCapabilityGate {
+    param([string]$Project, [string]$ConsumerRoot, [string[]]$Properties, $AcceptedHistory)
+    $gateRoot = Join-Path $workRoot 'query-capability'
+    [IO.Directory]::CreateDirectory($gateRoot) | Out-Null
+    $projectBytes = [IO.File]::ReadAllBytes($Project)
+    $projectText = [IO.File]::ReadAllText($Project)
+    $projectHash = (Get-FileHash -LiteralPath $Project -Algorithm SHA256).Hash
+    $negativeName = 'RawSchemaQueryRejection.cs'
+    $derivedName = 'DerivedSchemaQueryCapability.cs'
+    $negativeText = @'
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+
+internal static class RawSchemaQueryRejection {
+    internal static bool Probe(StateBindingContext context, TypeExpr type) =>
+        context.TryGetSchema(type, 1, out _);
+}
+'@
+    $derivedText = @'
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+
+internal abstract class DerivedSchemaQueryCapability : StateBindingContext {
+    protected override bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema) {
+        schema = null;
+        return false;
+    }
+    internal bool Probe(TypeExpr type) => this.TryGetSchema(type, 1, out _);
+}
+'@
+    $gate = [ordered]@{ ConsumerRoot = $ConsumerRoot; Project = $Project; OriginalProjectSha256 = $projectHash;
+        Negative = $null; Derived = $null; Restored = $null; HistoryUnchanged = $false; Passed = $false }
+    $receipt.QueryCapability = $gate
+    $buildArguments = @('build', $Project, '-c', 'Release', '--no-restore', '-t:Rebuild', '-m:1', '-nr:false', '-v:normal',
+        '-p:UseSharedCompilation=false', '-p:DurableGraphSchemaHistoryMode=Verify') + $Properties
+    try {
+        foreach ($probe in @(
+            [ordered]@{ Name = $negativeName; Text = $negativeText; Rejected = $true },
+            [ordered]@{ Name = $derivedName; Text = $derivedText; Rejected = $false })) {
+            $source = Join-Path $ConsumerRoot $probe.Name
+            $snapshot = Join-Path $gateRoot $probe.Name
+            [IO.File]::WriteAllText($source, $probe.Text, [Text.UTF8Encoding]::new($false))
+            Copy-Item -LiteralPath $source -Destination $snapshot
+            $withCompile = $projectText.Replace('</Project>', "  <ItemGroup><Compile Include='$($probe.Name)' /></ItemGroup>`n</Project>")
+            [IO.File]::WriteAllText($Project, $withCompile, [Text.UTF8Encoding]::new($false))
+            $projectSnapshot = Join-Path $gateRoot ($probe.Name + '.project.xml')
+            Copy-Item -LiteralPath $Project -Destination $projectSnapshot
+            if ($probe.Rejected) {
+                if (($negativeText -split '\r?\n')[5].Trim() -cne 'context.TryGetSchema(type, 1, out _);') { throw 'Raw-query rejection line drifted.' }
+                $command = Invoke-LoggedDotNet -Arguments $buildArguments -ExpectQueryRejection -QuerySource $source -QueryLine 6
+            } else { $command = Invoke-LoggedDotNet -Arguments $buildArguments }
+            $output = Get-Content -LiteralPath $command.Output -Raw
+            $compilerLines = @($output -split '\r?\n' | Where-Object { $_ -match '(?i)csc\.(dll|exe)' -and $_ -match [Regex]::Escape($probe.Name) })
+            if ($compilerLines.Count -eq 0 -or $output -notmatch '(?i)CoreCompile') { throw "Probe source did not enter actual C# compilation: $source" }
+            if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -cne (Get-FileHash -LiteralPath $snapshot -Algorithm SHA256).Hash -or
+                (Get-FileHash -LiteralPath $Project -Algorithm SHA256).Hash -cne (Get-FileHash -LiteralPath $projectSnapshot -Algorithm SHA256).Hash) {
+                throw 'A temporary capability compilation input changed during its build.'
+            }
+            $entry = [ordered]@{ CompiledSource = $source; SourceSnapshot = $snapshot; SourceSha256 = (Get-FileHash -LiteralPath $snapshot -Algorithm SHA256).Hash;
+                ProjectSnapshot = $projectSnapshot; ProjectSha256 = (Get-FileHash -LiteralPath $projectSnapshot -Algorithm SHA256).Hash;
+                ActualSourceCompilation = $true; CompilerInvocation = $compilerLines; Command = $command; ExpectedRejection = $probe.Rejected; Passed = $true }
+            if ($probe.Rejected) { $gate.Negative = $entry }
+            else {
+                $entry['CompilerConsumption'] = Require-ActualCompilerConsumption -Command $command -Mode 'Verify' -ConsumerRoot $ConsumerRoot
+                $gate.Derived = $entry
+            }
+            Remove-Item -LiteralPath $source
+            Require-PreservedHistory $AcceptedHistory
+            if (@(Get-HistoryImages).Count -ne $AcceptedHistory.Count) { throw 'The query capability compile probe changed accepted history.' }
+            Save-Receipt
+        }
+    } finally {
+        [IO.File]::WriteAllBytes($Project, $projectBytes)
+        foreach ($name in @($negativeName, $derivedName)) {
+            $path = Join-Path $ConsumerRoot $name
+            if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path }
+        }
+        Save-Receipt
+    }
+    if ((Get-FileHash -LiteralPath $Project -Algorithm SHA256).Hash -cne $projectHash) { throw 'The copied ordinary consumer project was not restored exactly.' }
+    $restored = Invoke-LoggedDotNet -Arguments $buildArguments
+    $gate.Restored = [ordered]@{ Command = $restored; ProjectSha256 = $projectHash;
+        CompilerConsumption = (Require-ActualCompilerConsumption -Command $restored -Mode 'Verify' -ConsumerRoot $ConsumerRoot); Passed = $true }
+    Require-PreservedHistory $AcceptedHistory
+    if (@(Get-HistoryImages).Count -ne $AcceptedHistory.Count) { throw 'The restored consumer build changed accepted history.' }
+    $gate.HistoryUnchanged = $true
+    $gate.Passed = $true
+    Save-Receipt
+}
+
 function Get-StoreImages {
     @((Get-ChildItem -LiteralPath $database -Recurse -File | Sort-Object FullName) | ForEach-Object {
         [ordered]@{ Path = [IO.Path]::GetRelativePath($database, $_.FullName); Length = $_.Length; Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
@@ -305,6 +435,7 @@ function Invoke-Consumer {
             'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'EventCandidateDiscardKeepsStateRewrite') }
             'continue' { @('UnconfiguredSaveRejected', 'SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
                 'PrivateBaselineIdentities', 'PrivateEventAcceptsMetaOnly', 'PrivateFrozenCatalog', 'PrivateColdListDelta', 'PrivateSharedRootUnchanged', 'PrivateSharedSaveRejected',
+                'PrivateHotStateRetained', 'PrivateIndependentRead', 'PrivateSameOwnerCheckout',
                 'CompletePromotion', 'PromotionRefsAdvanced', 'PromotionEventRetainsState', 'SharedColdOwnerListDelta', 'PromotionRetainedOrigins') }
             'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSPairIndependent', 'PrivateColdValues', 'PromotedSharedColdValues') }
         }
@@ -493,6 +624,14 @@ try {
                     if ($cacheHash -cne $packageHash) { throw "Restored compiler input differs from its actual package entry: $relative" }
                     $receipt.CompilerInputs += [ordered]@{ Package = 'Atelia.DurableGraph'; Entry = $relative; Path = $path; PackageEntrySha256 = $packageHash; Sha256 = $cacheHash }
                 }
+                Invoke-QueryCapabilityGate -Project $project -ConsumerRoot $consumerRoot -Properties $properties -AcceptedHistory $accepted
+                Require-FrozenCompilerInputs
+                $stage.AssemblySha256 = (Get-FileHash -LiteralPath $assembly -Algorithm SHA256).Hash
+                $stage.CandidateManifestSha256 = (Get-FileHash -LiteralPath $stage.CandidateManifest -Algorithm SHA256).Hash
+                $stage.ReferenceManifestSha256 = (Get-FileHash -LiteralPath $stage.ReferenceManifest -Algorithm SHA256).Hash
+                foreach ($binary in $binaries) {
+                    if ((Get-FileHash -LiteralPath $binary.Path -Algorithm SHA256).Hash -cne $binary.Sha256) { throw 'A capability build changed a selected runtime DLL.' }
+                }
                 Invoke-Consumer -Lane 'seed' -Stage $stage
             } else {
                 foreach ($lane in @('upgrade', 'rewrite', 'continue', 'verify')) { Invoke-Consumer -Lane $lane -Stage $stage }
@@ -501,6 +640,7 @@ try {
         }
     } finally { Pop-Location }
     if (@($receipt.Processes.ProcessId | Select-Object -Unique).Count -ne 5) { throw 'Expected five independently launched consumer processes.' }
+    if (!$receipt.QueryCapability.Passed) { throw 'The protected raw-query compilation gate did not complete.' }
     Require-PreservedHistory $priorHistory
     $receipt['Witness'] = $witness
     $receipt['WitnessSha256'] = (Get-FileHash -LiteralPath $witness -Algorithm SHA256).Hash

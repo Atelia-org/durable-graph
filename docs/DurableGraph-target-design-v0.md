@@ -264,6 +264,19 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 
 复合值的细化合同及证据见 [DB-037](design-branches/0037-inline-struct-state-slice.md)。
 
+### 模型执行环境与 factory 行为
+
+Open 固定模型／reader／Upgrade／策略注册，按需闭合能力；保留委托／comparer 引用，不复制其外部可变状态。
+checkout 保起始执行环境：有 State 取最近 State.S；Shared 无 State 取创建／恢复时 shared，空库可无 S；Private 无 State 取实际 Head.S，不借 latest shared。State 保存可推进持久 selected S 和比较基线，不原地更换 execution；Event 不安装 State 或消费其 rewrite。V2 程序恢复 V1 已执行显式 Upgrade，可以持续增量保存，无需每次提交后重签出。
+
+独立读取使用被读图自己的准确 S。重新 Checkout 重新恢复领域实例，不能重载代码注册；有 State 时不追到 Event 或 latest shared 的目录。登记变化须关闭全部 checkout 和 Repository 后重新 Open；未提交修改先明确保存当前配置支持的内容，或由应用保留／重建，Dispose 不保存或回滚。地址在新 owner 重新签发，旧 CLR 引用不跟随新签出。
+
+相同持久 DTO、ObjectId 等明确输入，在同一代码配置、准确源／目标布局及显式依赖成立时，转换和恢复的持久结果应稳定，不随无关目录条目、memo 命中或调用次数变化。Capture 提供 canonical current DTO，同布局恢复往返持久字段与引用关系；历史值变化由显式 Upgrade 定义。用户保持委托／比较器及其捕获状态稳定，应用初始化／副作用和视图专属 Transient 放在完整图交付之后。
+
+factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protected 核心实现接缝。完整依赖查验和多跳 Upgrade 的准确中间布局解析保留，缺失／冲突或缺少能力仍可拒绝。外部派生 context 可 override 并自行暴露查询；访问范围减少默认误用，不构成 callback 沙箱或外部状态深冻结。
+
+成功 Capture／Commit 不是任意自定义 reader body 的完整执行证明；稳定行为合同不取消准确来源／布局检查，也不允许跨 S 合并环境或自动启用热恢复材料。具体裁决与限定验收见 [DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring.md)。
+
 ### 对象表示与存储职责
 
 - MVP 固定 ReadAmplificationBaseBudgetPolicy。整数 X 倍通过对象级冷读放大产生 Base 动机，
@@ -395,7 +408,7 @@ raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读
 公共使用模型见 [DB-083 用户故事](design-branches/0083-repository-checkpoint-api-user-stories.md)。
 当前公共基础为根命名空间 `Atelia.DurableGraph` 下的 `Repository`、非泛型 `BranchCheckout` 与 `CheckpointAddress`，
 具体交付范围见 [DB-078-A 实施记录](design-branches/0078-a-repository-free-history-implementation.md)。
-模型环境由每次 Open 固定，durable exact-current Normalize 保持值与身份恒等；实际根按每次 CLR 类型和持久 Schema 选择。
+模型与执行视图寿命遵循[模型执行环境与 factory 行为](#模型执行环境与-factory-行为)；durable exact-current Normalize 保持值与身份恒等，实际根按每次 CLR 类型和持久 Schema 选择。
 工作副本同时拥有精确业务 Head、可选 State 根及其冻结当前 DTO 比较基线、领域实例到 ObjectId 的绑定与分配状态；
 普通调用方不分别设置这些材料。仅受控加载和成功 State 提交推进其对应关系，Capture/Prepare/Accept 自身不等于持久 Commit。
 

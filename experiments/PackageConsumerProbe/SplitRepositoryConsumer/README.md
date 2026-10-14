@@ -2,9 +2,19 @@
 
 此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入、真实 baseline 的私有 fork／冷续写与完整目录 Event ToShared。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以私有不可达声明验证完整推广与新 Shared owner 增量保存。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
 
-**DB-088 当前资格：**真实 baseline 与生成的 `PrivateUnused` Event 已通过删除特例后的新 G 普通包门禁；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。下面旧工件保留其原生产来源与新根故事；新资格见下一节。
+**DB-088 历史资格：**真实 baseline 与生成的 `PrivateUnused` Event 已通过删除特例后的新 G 普通包门禁；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。下面旧工件保留其原生产来源与新根故事；当前资格见 DB-089 C 小节。
 
 项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
+
+[DB-089 §8.2](../../../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring.md#82-新-g-门禁)新增同 owner 的生命周期观察：私有 List 保存 202 后，热 State 保原实例与 root ID，独立 ReadState 保值／共享／环且 root、child、List 实例独立；Dispose 后在同 Repository 再 CheckoutPrivate，核同一 State 地址、root ID 和 202。只读结果不再编辑或保存，重新签出不提交；原提交序列及后续全关冷开、ToShared 和 Shared 增量保存保持。continue 输出 `PrivateHotStateRetained`、`PrivateIndependentRead`、`PrivateSameOwnerCheckout` 三个门禁；下面 DB-088 的历史包结果不替代新增观察的新 G 资格。
+
+## DB-089 C：protected 查询与同 owner 生命周期的有限验收
+
+G `0.0.0-public-history-e2e.20261014041822.37600`，生产提交 `dee9008ee3b857fdd7860e5d9bb698e3beee69b4`；准确 Storage S `0.1.3-dev.20261011.g974fd47`／`974fd47abb73792f9d350af87ab91a53848952eb`。189 项生产输入匹配 HEAD；消费者／文档修改另记录，未声称整个工作树干净。十包来源与五个消费者 PID 的 50 份实际加载 DLL 经核验。
+
+六次 Rebuild 成功，一次预期编译拒绝准确命中实际 raw lookup 调用第 6 行的 CS0122；同一非 friend 包环境中，外部派生 context 的 protected override／自身调用以及移除探针后的正常 Rebuild 均通过。五进程故事通过，三个新增生命周期门禁均为 true；未增加提交，原 IDs、refs、source／prior／H、完成帧和后续全关冷开／ToShared／Shared 增量保存保持。
+
+工件 `W:/TEMP/dg-db089-c-20261014-041310-11152/result.json`，SHA256 `99C02824FE24E1200FE165BE2CD177882D3981A57C0D5E9167B1BC5940812F6E`；主线验收及修饰符核验见仓内忽略工件 `.artifacts/db089-c-20261014-041310/acceptance.json`、`metadata.json`。重跑使用下面既有 runner／准确 feed 配方。此资格限于普通包编译能力边界和本 Widget／List 故事，不证明 callback 沙箱、任意 reader 完整可恢复性、进程故障、断电或性能。
 
 ## DB-088 第二轮：删除特例后的新 G 验收
 
@@ -29,7 +39,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
 | `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
-| `continue`／V2 | 无配置默认保存拒且全文件零变，显式 Shared 冷单 List Delta；真实 baseline checkpoint→CheckoutPrivate；SG Event 接纳 State 不可达声明而不推进 State；Event Head 全关冷签出、私有 List Delta及 ref2 保持；随后无配置 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／准确旧 Base origin |
+| `continue`／V2 | 无配置默认保存拒且全文件零变，显式 Shared 冷单 List Delta；真实 baseline checkpoint→CheckoutPrivate；SG Event 接纳 State 不可达声明而不推进 State；Event Head 全关冷签出、私有 List Delta及 ref2 保持；List202热 State／独立读回／同 owner 再签出保持值与身份且不追加提交；随后无配置 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／准确旧 Base origin |
 | `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、旧 private State、推广 Event／Shared State、准确各图 S与完整 meta 声明；全部完成帧保持，完整文件集合／SHA不变 |
 
 每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。

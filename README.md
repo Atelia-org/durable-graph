@@ -161,7 +161,7 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 新增模型、reader、Upgrade 或策略应在 Open 前登记。运行中修改 registry 后，需要关闭全部工作副本和 Repository，再用新配置 Open、重新解析 head/tag 并签出。未提交修改先由应用明确保存当前配置支持的内容，或自行保留／重建；Dispose 不保存、不撤销修改，旧地址和 CLR 引用不会跟随新签出。
 
 对于相同持久输入和 ObjectId 等明确调用输入，在同一代码配置、准确源／目标布局及显式依赖成立时，Normalize/Upgrade 和恢复的持久结果应稳定；不能因无关 Schema 是否登记、memo 命中或调用次数而改变业务值。准确目录仍用于布局解析和验证，缺失／冲突或缺少 reader 能力可以使操作拒绝。配置冻结保留委托／比较器引用，不复制它们捕获的外部状态；调用者负责行为稳定。
-`StateBindingContext.TryGetSchema` 是供核心准确解析／验证使用的 protected 实现接缝；普通 factory 通过 `BindSchema`／`ResolveReader` 等公开服务闭合能力。外部派生 context 可以 override 并在自身方法内调用；访问范围收窄只减少默认查询能力，不能验证用户闭包的行为。
+`StateBindingContext.TryGetSchema` 是供核心准确解析／验证使用的 protected 实现接缝；普通 factory 通过 `BindSchema`／`ResolveReader` 等公开服务闭合能力。外部派生 context 可以 override 并在自身方法内调用；访问范围收窄只减少默认查询能力，不能验证用户闭包的行为。长期约束见[模型执行环境与 factory 行为](docs/DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)。
 Capture 必须提供 canonical current DTO，同布局保存／恢复正确往返持久字段和引用关系；历史值变化由显式 Upgrade 定义。exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 不修改输入 DTO；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化和视图专属 Transient 放在完整恢复交付之后。上述行为合同不证明任意自定义 reader 都能读回：Commit 成功不等于已执行 reader body 的全部验证。
 
 开发阶段先用 `CreateBranch(name, baselineCheckpoint)` 从固定用户快照建立分支，再用 `CheckoutPrivate(name)` 签出。在匹配历史 reader／Upgrade 的模型环境中，旧业务图恢复后保留存活对象身份、共享与循环，正常升版的布局保存为新 Base。私有保存只推进分支目录，不改 shared 根。两个操作分开：创建 ref 成功后，签出失败保留该名字及 baseline 指向；修正模型环境后可以重试。
