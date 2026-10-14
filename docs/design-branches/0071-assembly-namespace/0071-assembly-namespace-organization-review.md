@@ -29,17 +29,17 @@
 
 下表统计仓库物理 `.cs` 文件，排除 `bin/obj`；不把 partial 声明或生成类型当作独立文件。
 七个项目共 159 个文件，另有 `src/Shared` 两个链接源码文件。
-程序集名默认是项目名前加 `Atelia.`，来自 [Directory.Build.props](../../Directory.Build.props)。
+程序集名默认是项目名前加 `Atelia.`，来自 [Directory.Build.props](../../../Directory.Build.props)。
 
 | 项目 | 文件数 | 实际 namespace | 职责与判断 |
 |---|---:|---|---|
-| [DurableGraph](../../src/DurableGraph/DurableGraph.csproj) | 64 | `Atelia.DurableGraph` | 领域标记、Schema、绑定、Capture、容器状态操作；职责相连，根目录/namespace 过于集中 |
-| [DurableGraph.StateStore](../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 43 | `Atelia.DurableGraph.StateStore` | 产品持久化入口、代码目录、typed 读取、保存规划、Schema 持久化；上层整合边界成立，名称偏窄 |
-| [DurableGraph.StateStore.Storage](../../src/DurableGraph.Storage/DurableGraph.Storage.csproj) | 19 | `Atelia.DurableGraph.StateStore.Storage` | raw Revision、对象版本链、map、缓存；不解释 Schema/typed body、不发布 head |
-| [DurableGraph.StateStore.Serialization](../../src/DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 10 | `Atelia.DurableGraph.StateStore.Serialization` | 字节读写、string codec、owned body；Runtime/Storage 的共同底层 |
-| [DurableGraph.Generator](../../src/DurableGraph.Generator/DurableGraph.Generator.csproj) | 18 | `Atelia.DurableGraph.Generator` | 编译器加载的 `netstandard2.0` analyzer；另链接 Shared 两文件 |
-| [DurableGraph.Build](../../src/DurableGraph.Build/DurableGraph.Build.csproj) | 4 | `Atelia.DurableGraph.Build` | `net10.0` 私有 console tool，history publish/verify；另链接 Shared 两文件 |
-| [DurableGraph.Cli](../../src/DurableGraph.Cli/DurableGraph.Cli.csproj) | 1 | 顶层程序，无 namespace | 当前 `Program.cs` 仅 `return 0`；占位宿主，尚无命令功能 |
+| [DurableGraph](../../../src/DurableGraph/DurableGraph.csproj) | 64 | `Atelia.DurableGraph` | 领域标记、Schema、绑定、Capture、容器状态操作；职责相连，根目录/namespace 过于集中 |
+| [DurableGraph.StateStore](../../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 43 | `Atelia.DurableGraph.StateStore` | 产品持久化入口、代码目录、typed 读取、保存规划、Schema 持久化；上层整合边界成立，名称偏窄 |
+| [DurableGraph.StateStore.Storage](../../../src/DurableGraph.Storage/DurableGraph.Storage.csproj) | 19 | `Atelia.DurableGraph.StateStore.Storage` | raw Revision、对象版本链、map、缓存；不解释 Schema/typed body、不发布 head |
+| [DurableGraph.StateStore.Serialization](../../../src/DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 10 | `Atelia.DurableGraph.StateStore.Serialization` | 字节读写、string codec、owned body；Runtime/Storage 的共同底层 |
+| [DurableGraph.Generator](../../../src/DurableGraph.Generator/DurableGraph.Generator.csproj) | 18 | `Atelia.DurableGraph.Generator` | 编译器加载的 `netstandard2.0` analyzer；另链接 Shared 两文件 |
+| [DurableGraph.Build](../../../src/DurableGraph.Build/DurableGraph.Build.csproj) | 4 | `Atelia.DurableGraph.Build` | `net10.0` 私有 console tool，history publish/verify；另链接 Shared 两文件 |
+| [DurableGraph.Cli](../../../src/DurableGraph.Cli/DurableGraph.Cli.csproj) | 1 | 顶层程序，无 namespace | 当前 `Program.cs` 仅 `return 0`；占位宿主，尚无命令功能 |
 
 编译期普通程序集依赖如下；箭头为“依赖”，省略外部库之间的依赖：
 
@@ -56,7 +56,7 @@ flowchart TD
 
 Runtime 还具有 Generator analyzer 引用，以及不引用输出程序集的 Build 项目引用。
 主包把 Generator 放到 `analyzers/dotnet/cs`，把 Build 的 DLL/deps/runtimeconfig 放到 `tools/net10.0`；
-[MSBuild targets](../../src/DurableGraph/build/Atelia.DurableGraph.targets) 通过 `dotnet` 执行后者。
+[MSBuild targets](../../../src/DurableGraph/build/Atelia.DurableGraph.targets) 通过 `dotnet` 执行后者。
 它们不是 Runtime 的普通运行时程序集依赖，七个项目也不等于用户必须直接引用七个包。
 本轮核对的是项目与打包脚本，未重新 pack 或检查本轮生成的 nupkg。
 
@@ -64,12 +64,12 @@ Runtime 还具有 Generator analyzer 引用，以及不引用输出程序集的 
 
 ### 3.1 Runtime、raw Storage 与字节底层
 
-[ObjectVersionChain](../../src/DurableGraph.Storage/ObjectVersionChain.cs) 明确只认证记录/prior 链，
-不认证 Schema、图引用或 body 语义；[StateRevisionStore](../../src/DurableGraph.Storage/StateRevisionStore.cs) 不选择和发布 head。
+[ObjectVersionChain](../../../src/DurableGraph.Storage/ObjectVersionChain.cs) 明确只认证记录/prior 链，
+不认证 Schema、图引用或 body 语义；[StateRevisionStore](../../../src/DurableGraph.Storage/StateRevisionStore.cs) 不选择和发布 head。
 这是一条现有实现已经执行的语义边界，值得保留。
 
-[IStateOps](../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 的公开签名直接使用 `BinaryPayloadReader/Writer`、`PreparedDeltaBody`，
-生成代码和 Capture 也使用 [prepared body](../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)。
+[IStateOps](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 的公开签名直接使用 `BinaryPayloadReader/Writer`、`PreparedDeltaBody`，
+生成代码和 Capture 也使用 [prepared body](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)。
 这些类型是 Runtime 和 Storage 的共享字节契约，把 Serialization 合并进 Runtime 会让 raw Storage 新增对整个高层 Runtime 的依赖；
 反过来把 Runtime 合并进 Serialization 则消除共同底层的含义。独立的十文件项目虽小，仍有当前消费者。
 
@@ -77,9 +77,9 @@ Storage 故意使用底层数值 ID，不要求它为了命名整齐改用 Runti
 
 ### 3.2 EventHistory 暂不独立成程序集
 
-[EventHistoryRepository](../../src/DurableGraph.Persistence/Repository.cs) 直接拥有内部 `HistoryJournal`、`GraphResources`，
+[EventHistoryRepository](../../../src/DurableGraph.Persistence/Repository.cs) 直接拥有内部 `HistoryJournal`、`GraphResources`，
 创建/恢复 `WorldWorkspace`，并在提交顺序中调用准备和安装操作。
-[EventHistorySession](../../src/DurableGraph.Persistence/BranchCheckout.cs) 的工作区也是 internal。
+[EventHistorySession](../../../src/DurableGraph.Persistence/BranchCheckout.cs) 的工作区也是 internal。
 它们有清晰的概念分工，但当前并没有一个已被第二种发布宿主消费的独立公共工作区合同。
 
 现在拆 EventHistory，需要扩大 internal 的可见性、增加友元，或设计新交接 API。
@@ -87,7 +87,7 @@ Storage 故意使用底层数值 ID，不要求它为了命名整齐改用 Runti
 先用 `History/`、`Reading/`、`Saving/`、`Catalog/`、`Binding/` 目录表达职责即可。
 
 `StateModelRegistry` 虽名为模型注册器，也不宜按名机械搬回 Runtime：
-[Snapshot](../../src/DurableGraph.Persistence/StateModelRegistry.cs) 依赖同程序集的 [StateModelSnapshot](../../src/DurableGraph.Persistence/StateModelSnapshot.cs)，
+[Snapshot](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 依赖同程序集的 [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)，
 后者连接实时 `SchemaStore` 权威，并承载闭合绑定缓存。
 Runtime 的 `IStateModelRegistration`/`StateBindingContext` 与上层实现之间已有分工；移动实现需要另行设计。
 
@@ -95,10 +95,10 @@ Runtime 的 `IStateModelRegistration`/`StateBindingContext` 与上层实现之�
 
 Generator 由 Roslyn 发现、运行；Build 是 MSBuild 启动的独立 .NET 10 进程。
 合并它们会跨越当前目标框架和加载方式，也不能仅因都涉及 Schema history 就推导出共同运行时程序集。
-[Shared](../../src/Shared) 的两个协议文件分别链接编译，避免复制维护；其类型为内部实现，暂无独立第三方消费者。
+[Shared](../../../src/Shared) 的两个协议文件分别链接编译，避免复制维护；其类型为内部实现，暂无独立第三方消费者。
 不为消除两条 `Compile Link` 再增加一个协议包。
 
-Generator 中的 [OperationsProbeGenerator](../../src/DurableGraph.Generator/DurableGraphOperationsProbeGenerator.cs)
+Generator 中的 [OperationsProbeGenerator](../../../src/DurableGraph.Generator/DurableGraphOperationsProbeGenerator.cs)
 没有 `[Generator]` 注册，只由测试显式运行，不是产品自动图操作能力。
 是否将该见证源码移到测试归属、是否显式禁止占位 CLI 打包，可作为独立小型整洁项；不是本轮拆包的依据。
 
@@ -139,11 +139,11 @@ Runtime 程序集内部可先收敛为三个 namespace，不继续按每种容�
 
 ## 5. 下游证据与兼容边界
 
-[README](../../README.md) 的普通模型主要使用 `Atelia.DurableGraph`；完整持久化示例直接引用 Runtime 与 StateStore 两个包。
-真实兄弟消费者 [FirstBoard.csproj](../../../drama-board/src/FirstBoard/FirstBoard.csproj) 也是这两个包，
-[FirstBoardOccurrenceHistory](../../../drama-board/src/FirstBoard/Persistence/FirstBoardOccurrenceHistory.cs)
+[README](../../../README.md) 的普通模型主要使用 `Atelia.DurableGraph`；完整持久化示例直接引用 Runtime 与 StateStore 两个包。
+真实兄弟消费者 [FirstBoard.csproj](../../../../drama-board/src/FirstBoard/FirstBoard.csproj) 也是这两个包，
+[FirstBoardOccurrenceHistory](../../../../drama-board/src/FirstBoard/Persistence/FirstBoardOccurrenceHistory.cs)
 集中使用 Repository/Session，业务文件无需知道 raw Storage。
-[Kernel 注册 facade](../../../drama-board/src/Kernel/KernelDurableModels.cs) 接受根 namespace 的 `IStateModelRegistration`，
+[Kernel 注册 facade](../../../../drama-board/src/Kernel/KernelDurableModels.cs) 接受根 namespace 的 `IStateModelRegistration`，
 然后调用本程序集的 `Generated.DurableDefinitions.Register`。
 
 没有发现当前下游因 namespace 数量而受阻的证据。已有反馈主要是模型形状与 EventHistory 使用合同；
@@ -158,9 +158,9 @@ Runtime 程序集内部可先收敛为三个 namespace，不继续按每种容�
 
 关键源码：
 
-- [SG 核心标记常量](../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 和 [真实程序集检查](../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)：后者要求属性来自 `Atelia.DurableGraph`，marker 位于同一程序集；不能为迁移方便削弱此检查。
-- [生成 body](../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)、[生成 model](../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、[跨库 helper 检查](../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExportHelpers.cs)：均直接使用框架类型的全限定名，含 Serialization 类型。
-- [TypeExprWireCodec](../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) 写 kind/DefinitionId/实参；[Schema history writer](../../src/DurableGraph.Build/SchemaHistoryTool.cs) 写 ID/版本/字段与类型表达，而不是 CLR 程序集限定名。
+- [SG 核心标记常量](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 和 [真实程序集检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)：后者要求属性来自 `Atelia.DurableGraph`，marker 位于同一程序集；不能为迁移方便削弱此检查。
+- [生成 body](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)、[生成 model](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、[跨库 helper 检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExportHelpers.cs)：均直接使用框架类型的全限定名，含 Serialization 类型。
+- [TypeExprWireCodec](../../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) 写 kind/DefinitionId/实参；[Schema history writer](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) 写 ID/版本/字段与类型表达，而不是 CLR 程序集限定名。
 - `InternalsVisibleTo`、主包 `build/` 和 `tools/` 路径、探针的包清单与脚本也有固定程序集/包名称，需要与项目移动一起核对。
 
 审计阶段没有执行跨版本包实验，因此这里给出的是兼容目标及源码依据；后续实际证明见[验收记录 G3](0071-assembly-namespace-validation.md#g3跨-runtime-包与真实业务副本)。

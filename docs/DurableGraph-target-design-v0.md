@@ -28,7 +28,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 ### 程序集与命名空间边界
 
-[DB-071](design-branches/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖边界：
+[DB-071](design-branches/0071-assembly-namespace/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖边界：
 Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共用 Serialization。
 新底座方向按[DB-086](design-branches/0086-new-storage-refactoring-plan.md)采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
 主 DurableGraph 程序集的根 namespace 保留领域/登记契约，Schema 放布局描述，Runtime 放执行绑定与状态操作。

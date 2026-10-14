@@ -36,11 +36,11 @@ build 0 warning/error；测试 2,668/2,668（163 Serialization、202 Storage、7
 包列表/SHA-256/资产与 nuspec 分别保存在 `obj/db071-baseline/old-package-hashes.json`、
 `old-package-assets.json`；完整日志 `old-pack-eventhistory.log`。
 
-[编译清单工具](../../experiments/PackageConsumerProbe/OrganizationApiInventory/README.md) 对显式旧 DLL 闭包捕获
+[编译清单工具](../../../experiments/PackageConsumerProbe/OrganizationApiInventory/README.md) 对显式旧 DLL 闭包捕获
 349 个含编译器类型的类型、4,112 条成员/签名记录；核心源类型确认为 146 = 21 根 + 13 Schema + 112 Runtime。
 `obj/db071-baseline/api/old/` 保留真实类型名、规范映射及 DLL 来源/hash，`assemblies/` 保留旧 Debug 闭包。
 
-[跨包 runner](../../experiments/PackageConsumerProbe/Run-OrganizationMigrationProbe.ps1) 的 `-Stage Seed`
+[跨包 runner](../../../experiments/PackageConsumerProbe/Run-OrganizationMigrationProbe.ps1) 的 `-Stage Seed`
 使用上述真实旧包/旧生成器，`-WorkRoot obj/db071-organization`，成功建立完整 S 分支与 pending E 分支。
 其 `legacy/` 有独立还原缓存、包及 generator provenance、两份 accepted history；
 `legacy-frames.json` 保存 18 个完整 Schema/State/Journal 帧的文件、原始 offset/length/tag/hash。
@@ -151,7 +151,7 @@ G4 完成时成果停在本地待提交：保留原有改动；当时没有 comm
 
 ## 下游试用与提交收尾
 
-2026-09-12，DramaBoard 提供[正式工作树试用反馈](../../../drama-board/docs/feedback/durablegraph/004-db071-namespace-adaptation.md)，
+2026-09-12，DramaBoard 提供[正式工作树试用反馈](../../../../drama-board/docs/feedback/durablegraph/004-db071-namespace-adaptation.md)，
 报告同一试用包的 solution 构建零警告/错误，11 个测试程序集共 527 项通过、零失败/跳过。
 64 份 accepted history 保持；九个输出 DLL 与 feed 包资产 SHA-256 一致。
 它还独立验证旧程序创建的 Continue/Reverse、S1/pending E2 存档由新程序冷开、续写、仅 fold pending，

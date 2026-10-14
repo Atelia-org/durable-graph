@@ -55,7 +55,7 @@ rg -n '维护|迁移' docs/design-branches/0090-document-governance
 | [DB-074 高效 fork 暂缓方向](0074-efficient-fork-deferred-directions.md) | Draft / 尚待进一步修订 | 保留方向材料；待 DB-076 技术路径采纳后重新整理，不代表当前排期或已裁定边界 |
 | [DB-073 Repository 作用域的 ImmutableLeaf 实例缓存](0073-repository-scoped-weak-reference-cache.md) | Draft / 尚待进一步修订，未实施 | 保留上轮缓存分析；先审阅 DB-076 高效 fork 路线，再重定本片问题与范围，不作为当前施工输入 |
 | [DB-072 Generator 侧 ImmutableLeaf 分类与生成侧见证](0072-generator-immutable-leaf-classification-slice.md) | Implemented | 公共 bool 通道与二进制路径分类（历史记录）；其他生成器误判与 Family 全 false 已由 DB-075 修复，能力现状以 DB-075/PROJECT-STATE 为准 |
-| [DB-071 程序集与命名空间组织](0071-assembly-namespace-organization-review.md) | Implemented | 保留七项目依赖图，落实 Serialization/Storage/Persistence 与根/Schema/Runtime 分组；[工单](0071-assembly-namespace-implementation-work-order.md) 的签名、产品测试、真实包、旧包续写及隔离下游证据见[验收记录](0071-assembly-namespace-validation.md) |
+| [DB-071 程序集与命名空间组织](0071-assembly-namespace/0071-assembly-namespace-organization-review.md) | Implemented | 保留七项目依赖图，落实 Serialization/Storage/Persistence 与根/Schema/Runtime 分组；[工单](0071-assembly-namespace/0071-assembly-namespace-implementation-work-order.md) 的签名、产品测试、真实包、旧包续写及隔离下游证据见[验收记录](0071-assembly-namespace/0071-assembly-namespace-validation.md) |
 | [DB-070 读取放大阈值的默认选择](0070-read-amplification-default.md) | Implemented / 已验收 | EventHistory 默认 `{5,5}`；稳态摊销依据、`3/5/11` 调优示例与交互函数图；测试基准独立保持 `{3,5}`，源码回归与 README 原文真包验收通过 |
 | [DB-069 热保存基线的增量重建计量](0069-incremental-save-baseline.md) | Implemented / 已验收 | 已验证 head/H 随 DTO 基线增量推进，消除受控保存的旧对象链重复读取；精确 payload、发布与冷读验证保持；独立审阅、前后测量、源码回归及真实包通过 |
 | [DB-068 record class 领域模型与统一引用资格](0068-record-class-model-slice.md) | Implemented / G0–G3 | 移除 DurableBase、统一 marker、record backing/继承及完整历史；真包三代、真实旧包迁移和源码回归；不扩张任意外部基类、深不可变或格式 |

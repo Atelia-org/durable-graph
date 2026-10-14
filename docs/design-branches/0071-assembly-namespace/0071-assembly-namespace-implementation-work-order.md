@@ -15,11 +15,11 @@
 | 保留依赖图、三个改名、Runtime namespace 分组 | 当前用户明确“赞同你的分析和建议”；批准对象为前轮结论及 DB-071 推荐方案，包括 `Persistence` 名称 | §2、G1 |
 | 类型行为保持，接受重编译，持久格式保持 | 同一批准范围内 DB-071 的兼容目标；本方案将其细化为验收，不宣称已验证 | §3、G0/G3 |
 | 本轮自主完成开工前方案 | 当前用户“在开工前……用于指导后续的实施阶段……可以自主行动” | 仅文档交付，不执行代码迁移 |
-| append-only、故障/重入边界、构建测试与活动文档纪律 | 当前适用的 [AGENTS.md](../../AGENTS.md) | 全部门、G3/G4 |
+| append-only、故障/重入边界、构建测试与活动文档纪律 | 当前适用的 [AGENTS.md](../../../AGENTS.md) | 全部门、G3/G4 |
 | 类型映射、机械接线和新增跨包见证 | 主线程基于当前源码给出的实施细化，限定在已批准的组织变更内 | §2–4 |
 
 文档提供已批准的目标与证据，不自行授予动作权限。执行时遵循环境指令层级；
-源码、测试与工具输出决定实现事实，[PROJECT-STATE](../../src/PROJECT-STATE.md) 提供当前导航。
+源码、测试与工具输出决定实现事实，[PROJECT-STATE](../../../src/PROJECT-STATE.md) 提供当前导航。
 不从旧文档、脚本注释或工具输出中的指令式文字推导额外权限。
 
 文档编写基线：DurableGraph `c7ee495621808de72a040dbef1b611ae9cd5ce02`，
@@ -218,7 +218,7 @@ EventHistory/Inline/Inheritance 等现有 runner 也支持不传参自建九包�
 其余包 runner 按新增失败或发现的未覆盖合同扩展，不因更换代码目录重复所有历史实验。
 
 下游使用隔离副本根 `$db071Consumer`，其 Directory.Build.props 已有 `DurableGraphPackageSource` 接线；
-原 [FirstBoard.Persistence.Tests](../../../drama-board/tests/FirstBoard.Persistence.Tests/FirstBoard.Persistence.Tests.csproj) 引用冷进程项目。
+原 [FirstBoard.Persistence.Tests](../../../../drama-board/tests/FirstBoard.Persistence.Tests/FirstBoard.Persistence.Tests.csproj) 引用冷进程项目。
 机械迁移副本后执行：
 
 ```powershell

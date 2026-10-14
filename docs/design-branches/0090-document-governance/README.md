@@ -27,7 +27,7 @@
 
 | 真实材料 | 暴露的问题与不能丢的语义 |
 |---|---|
-| [DB-071 organization-review](../0071-assembly-namespace-organization-review.md) | 文件名是 review，实际承载已采纳方向并被目标设计引用；不能按名字降为纯过程材料 |
+| [DB-071 organization-review](../0071-assembly-namespace/0071-assembly-namespace-organization-review.md) | 文件名是 review，实际承载已采纳方向并被目标设计引用；不能按名字降为纯过程材料 |
 | [DB-081 实验](../0081-hot-commit-restoration-material-experiment.md) | 实验完成形成否定结论，热准入未实施；反例和重启条件仍有价值 |
 | [DB-082 结果](../0082-prepared-immutable-leaf-reuse-implementation.md)及 [CSV](../0082-prepared-immutable-leaf-reuse-measurements.csv) | 候选已实现，但总成本收益未成立，默认关闭；验收通过不等于启用 |
 | [DB-086 实施](../0086-new-storage-implementation.md)与 [DB-087](../0087-meta-bootstrap-refactoring-route.md#current-status) | 086 当片验收有效，单根／SCB1／合帧已由 087 替代；底座正常恢复等选择仍保留，不能整篇判作失效 |

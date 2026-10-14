@@ -13,7 +13,7 @@ Version       = 0.0.0-db071.20260912.1
 该 feed 包含四个 DG 包和五个 Atelia 依赖包；此次试用一起消费这个闭包。
 初次试用时 DurableGraph HEAD 为 `c7ee495`，迁移尚未提交；该旧 HEAD 不包含新组织。
 试用时 DramaBoard 的 `Prepare-DurableGraph.ps1` 仍取 `1c6083c`，不能用它准备上述新包。
-试用已按命令行覆盖来源/版本完成，反馈见[下游记录](../../../drama-board/docs/feedback/durablegraph/004-db071-namespace-adaptation.md)。
+试用已按命令行覆盖来源/版本完成，反馈见[下游记录](../../../../drama-board/docs/feedback/durablegraph/004-db071-namespace-adaptation.md)。
 下一步由下游把准备脚本、默认版本、CI checkout 和来源说明统一固定到收录本迁移的真实提交，并验证默认构建路径。
 本地试用 feed 可继续用于复现；它不是远程已发布包。
 

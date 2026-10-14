@@ -94,9 +94,9 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 包模式使用完整本地 feed 和独立配置，不回退旧包，不推定 sibling HEAD 行为。
 源码只用于 build/test，pack 必须消费准确存储包并使用独立 DG 版本；流程集中于[依赖指南](../docs/storage-dependency.md)。
 
-[DB-071：程序集与命名空间组织](../docs/design-branches/0071-assembly-namespace-organization-review.md) 已实施：
+[DB-071：程序集与命名空间组织](../docs/design-branches/0071-assembly-namespace/0071-assembly-namespace-organization-review.md) 已实施：
 七项目依赖保持；底层包为 Serialization/Storage，上层为 Persistence，主程序集内分根/Schema/Runtime。
-签名、产品回归、真实包、旧包续写和隔离 DramaBoard 证据集中在[验收记录](../docs/design-branches/0071-assembly-namespace-validation.md)。
+签名、产品回归、真实包、旧包续写和隔离 DramaBoard 证据集中在[验收记录](../docs/design-branches/0071-assembly-namespace/0071-assembly-namespace-validation.md)。
 [DramaBoard 试用反馈](../../drama-board/docs/feedback/durablegraph/004-db071-namespace-adaptation.md) 未发现适配或持久化问题，
 报告 527 项测试及真实旧包存档续写通过；用户已批准本库提交，正式 pin 由下游固定到本次提交。
 后续回到真实业务长轨迹与保存成本反馈，不自动开启新能力。
