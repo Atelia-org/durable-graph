@@ -209,6 +209,10 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 DB-088 已退出同 key 新根 bootstrap、Schema overrides 与完整 container replacements，保普通 private／ToShared／fault 规律；删除后的 Development、Split、PrivateContainer 三条新 G 普通包故事已通过，无剩余必经门禁。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
 
+### 4.3 checkout 执行环境与 factory 查询入口
+
+用户已采纳稳定执行环境与接口防误用的收敛路线，施工合同集中于 [DB-089](design-branches/0089-checkout-environment-and-factory-query-refactoring.md)，当前仅编制方案、尚未实施。下一片明确重新 Checkout／重新 Open 的使用配方，将 raw lookup 收为 protected，保准确依赖查验／中间布局解析和内部反例，再以真实 SG 往返及新 G 普通消费者编译／运行验收。保存／发布／缓存核心、DB-081 冷恢复边界保持；本表不重复测试清单或施工过程。
+
 ## 5. 后续切片验收素材
 
 每轮只挑与问题有关的见证，不重复搬运全部历史闸门：
