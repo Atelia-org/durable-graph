@@ -18,7 +18,7 @@
 
 ## 当前焦点
 
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A 内部分析／Family 命名已验收；B 普通内核已进入现有 Persistence，执行环境与来源命名已采用，源码／测试资格见 [B 记录](../docs/design-branches/0092-type-namespace-refactoring/implementation-b.md)，包门禁待验。员工／公开候选另片；程序集／文件组织待命名稳定后另判。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A 内部分析／Family 命名与 B 普通内核、执行环境和来源命名已限定验收。B 进入既有 Persistence，根测试与同一新 G 的 Split／Meta Schema／ImmutableLeaf 包门禁通过，公开 API 清单保持；证据与限度见 [B 记录](../docs/design-branches/0092-type-namespace-refactoring/implementation-b.md)。下一片员工 C 须单独验证固定模型与准确存档；公开候选 D、程序集／文件组织 E 仍另判。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 
