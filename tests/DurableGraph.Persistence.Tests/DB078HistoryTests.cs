@@ -60,7 +60,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Length);
             Assert.Equal((byte)1, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             Assert.Null(states.ReadGraph(s0.RevisionAddress).SourceGraph);
             foreach (CheckpointAddress address in new[] { e1, e2, s1 }) {
@@ -113,7 +113,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal((byte)7, Assert.IsType<Message>(repository.ReadEvent(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().First())).Value);
             Assert.Equal((byte)20, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             foreach (CheckpointAddress address in new[] { e0, e1, s0 }) {
                 Assert.Null(states.ReadGraph(address.RevisionAddress).SourceGraph);
@@ -147,7 +147,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             removed = checkout.CommitState(NoRebase);
             Assert.Equal(promoted.RootId, removed.RootId);
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             var originalIds = states.ReadGraph(original.RevisionAddress).ObjectHeads.Keys.Order().ToArray();
             Assert.Contains(promoted.RootId.Value, originalIds);
@@ -344,7 +344,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Null(siblingView.PreviousEvent);
             Assert.Null(siblingView.PreviousEventAddress);
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             foreach (CheckpointAddress address in new[] { otherState, mainEvent2, mainState }) {
                 Assert.Equal(root.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);

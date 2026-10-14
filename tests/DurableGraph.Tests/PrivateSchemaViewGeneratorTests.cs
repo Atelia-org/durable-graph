@@ -299,8 +299,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     private sealed record PrivateFrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool Tombstone, byte[] Bytes);
     private sealed record PrivateRefImage(RefRevision Revision, byte[] Bytes);
     private sealed record PrivatePublicationImage(PrivateRefImage Branches, PrivateRefImage Shared, PrivateFrameImage[] Frames, long Appended);
-    private static GraphResources PrivateResources(Repository repository) =>
-        (GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
+    private static RepositoryResources PrivateResources(Repository repository) =>
+        (RepositoryResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
     private static PrivateRefImage PrivateReadRef(Repository repository, uint id) {
         RefBytesSnapshot actual = PrivateResources(repository).Versions.ReadRef(id).Unwrap();
         return new(actual.Revision, actual.Payload.ToArray());

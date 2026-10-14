@@ -11,10 +11,10 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
 
     [Fact]
     public void PendingAndPreparingSavesRejectBranchAndTagInsertionWithoutConsumingTheirCandidates() {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         Seed(resources);
         FrameAddress head = resources.GetBranchHead("main")!.Value;
-        GraphResources.PreparedBranchRootUpdate branch = resources.PrepareBranchRoot("allowed", head);
+        RepositoryResources.PreparedBranchRootUpdate branch = resources.PrepareBranchRoot("allowed", head);
         PublicationSnapshot before = Snapshot(resources);
 
         using (PendingRepositorySave pending = resources.PrepareSave("main", StoredGraphKind.State, Business(resources, 2))) {
@@ -55,10 +55,10 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
 
     [Fact]
     public void CommittingSaveRejectsNestedBranchAndTagInsertionAndConfirmsOnlyItsOwnPublication() {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         Seed(resources);
         FrameAddress head = resources.GetBranchHead("main")!.Value;
-        GraphResources.PreparedBranchRootUpdate branch = resources.PrepareBranchRoot("nested-branch", head);
+        RepositoryResources.PreparedBranchRootUpdate branch = resources.PrepareBranchRoot("nested-branch", head);
         PublicationSnapshot before = Snapshot(resources);
         HashSet<RepositorySaveStage> seen = [];
         resources.SaveStageObserver = point => {
@@ -86,7 +86,7 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
         Assert.True(resources.GraphStore.AppendedFrames > before.Frames);
 
         long frames = resources.GraphStore.AppendedFrames;
-        GraphResources.PreparedBranchRootUpdate fresh = resources.PrepareBranchRoot("after-commit", saved.Business.Address);
+        RepositoryResources.PreparedBranchRootUpdate fresh = resources.PrepareBranchRoot("after-commit", saved.Business.Address);
         resources.PublishBranchRoot(fresh, out PublicationOutcome outcome);
         Assert.Equal(PublicationOutcome.Confirmed, outcome);
         Assert.Equal(saved.Business.Address, resources.GetBranchHead("after-commit"));
@@ -96,13 +96,13 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
 
     [Fact]
     public void ForeignOwnerAndStaleBaselineCandidatesRejectBeforePublicationAndLeaveBothOwnersHealthy() {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
-        using GraphResources foreign = GraphResources.CreateStorageNew(_path + "-foreign");
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
+        using RepositoryResources foreign = RepositoryResources.CreateStorageNew(_path + "-foreign");
         Seed(resources);
         Seed(foreign);
         FrameAddress head = resources.GetBranchHead("main")!.Value;
-        GraphResources.PreparedBranchRootUpdate candidate = resources.PrepareBranchRoot("from-owner", head);
-        GraphResources.PreparedBranchRootUpdate stale = resources.PrepareBranchRoot("stale", head);
+        RepositoryResources.PreparedBranchRootUpdate candidate = resources.PrepareBranchRoot("from-owner", head);
+        RepositoryResources.PreparedBranchRootUpdate stale = resources.PrepareBranchRoot("stale", head);
         PublicationSnapshot original = Snapshot(resources);
         PublicationSnapshot foreignBefore = Snapshot(foreign);
 
@@ -125,7 +125,7 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
         Assert.Null(resources.GetBranchHead("stale"));
         Assert.False(resources.IsFaulted);
 
-        GraphResources.PreparedBranchRootUpdate renewed = resources.PrepareBranchRoot("stale", head);
+        RepositoryResources.PreparedBranchRootUpdate renewed = resources.PrepareBranchRoot("stale", head);
         resources.PublishBranchRoot(renewed, out PublicationOutcome renewedOutcome);
         Assert.Equal(PublicationOutcome.Confirmed, renewedOutcome);
         Assert.Equal(head, resources.GetBranchHead("stale"));
@@ -134,7 +134,7 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
         Assert.False(resources.IsFaulted);
     }
 
-    private static void AssertBlocked(GraphResources resources, GraphResources.PreparedBranchRootUpdate candidate,
+    private static void AssertBlocked(RepositoryResources resources, RepositoryResources.PreparedBranchRootUpdate candidate,
         FrameAddress head, string tag) {
         Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot("blocked-prepare", head));
         PublicationOutcome branchOutcome = PublicationOutcome.Confirmed;
@@ -148,39 +148,39 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
     }
 
     // Opaque records isolate these concrete publication guards from model callbacks.
-    private static void Seed(GraphResources resources) {
+    private static void Seed(RepositoryResources resources) {
         using PendingRepositorySave pending = resources.PrepareSave("main", StoredGraphKind.State,
             Business(resources, 1), new(null, new(1), [ObjectVersionRecord.CreateBase(1, [1])]));
         resources.CommitSave(pending);
     }
-    private static PreparedGraphWrite Business(GraphResources resources, byte value) =>
+    private static PreparedGraphWrite Business(RepositoryResources resources, byte value) =>
         new(resources.GetBranchStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])]);
 
-    private static PublicationSnapshot Snapshot(GraphResources resources) {
+    private static PublicationSnapshot Snapshot(RepositoryResources resources) {
         var branches = resources.Versions.ReadRef(1).Unwrap();
         var shared = resources.Versions.ReadRef(2).Unwrap();
         return new(branches.Revision, branches.Payload.ToArray(), shared.Revision, shared.Payload.ToArray(),
             resources.GetBranchHead("main")!.Value, resources.SharedSchemaRoot!.Value,
             resources.GraphStore.AppendedFrames);
     }
-    private static void AssertUnchanged(GraphResources resources, PublicationSnapshot expected) {
+    private static void AssertUnchanged(RepositoryResources resources, PublicationSnapshot expected) {
         var branches = resources.Versions.ReadRef(1).Unwrap();
         Assert.Equal(expected.BranchRevision, branches.Revision);
         Assert.Equal(expected.BranchPayload, branches.Payload.ToArray());
         Assert.Equal(expected.MainHead, resources.GetBranchHead("main"));
         AssertSharedAndFramesUnchanged(resources, expected);
     }
-    private static void AssertSharedAndFramesUnchanged(GraphResources resources, PublicationSnapshot expected) {
+    private static void AssertSharedAndFramesUnchanged(RepositoryResources resources, PublicationSnapshot expected) {
         AssertSharedUnchanged(resources, expected);
         Assert.Equal(expected.Frames, resources.GraphStore.AppendedFrames);
     }
-    private static void AssertSharedUnchanged(GraphResources resources, PublicationSnapshot expected) {
+    private static void AssertSharedUnchanged(RepositoryResources resources, PublicationSnapshot expected) {
         var shared = resources.Versions.ReadRef(2).Unwrap();
         Assert.Equal(expected.SharedRevision, shared.Revision);
         Assert.Equal(expected.SharedPayload, shared.Payload.ToArray());
         Assert.Equal(expected.SharedRoot, resources.SharedSchemaRoot);
     }
-    private static void AssertTagMissing(GraphResources resources, string tag) =>
+    private static void AssertTagMissing(RepositoryResources resources, string tag) =>
         Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => resources.ResolveStoredTag(tag)).Message);
 
     private sealed record PublicationSnapshot(RefRevision BranchRevision, byte[] BranchPayload,

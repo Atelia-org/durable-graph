@@ -35,7 +35,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         AssertFilesEqual(damagedFiles, SnapshotFiles()); // Failed read-only admission repairs nothing and releases its resources.
 
         using (Repository recovered = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            GraphResources resources = ResourcesOf(recovered);
+            RepositoryResources resources = ResourcesOf(recovered);
             var report = Assert.Single(resources.Data.RecoveryReports);
             Assert.Equal(fileId, report.Key);
             AssertTruncated(report.Value, completeLength);
@@ -121,7 +121,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         AssertFilesEqual(damagedFiles, SnapshotFiles()); // DG's required-root readonly open did not audit/ref-repair the unrelated control file.
 
         using (Repository writer = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            GraphResources resources = ResourcesOf(writer);
+            RepositoryResources resources = ResourcesOf(writer);
             IReadOnlyList<VersionStoreRecoveryReport> reports = resources.Versions.RecoveryReports;
             Assert.Empty(reports);
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));

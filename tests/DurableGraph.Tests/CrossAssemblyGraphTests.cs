@@ -29,7 +29,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverseRegistration);
         StateModelRegistry models = host.GetMethod("Models")!
             .CreateDelegate<Func<bool, StateModelRegistry>>()(reverseRegistration);
-        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
         var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         ObjectStateRecord world = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.World");

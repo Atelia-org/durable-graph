@@ -4,16 +4,16 @@ using PublicationStore = Atelia.VersionStore.VersionStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
-// Thin storage facade. GraphResources owns backing resources, roots and the save lifecycle.
+// Thin storage facade. RepositoryResources owns backing resources, roots and the save lifecycle.
 internal sealed class RepositoryStorageFacade : IDisposable {
-    private readonly GraphResources _resources;
+    private readonly RepositoryResources _resources;
     private readonly bool _ownsResources;
     private bool _disposed;
 
     // An explicitly borrowed facade does not close or finish its owner's pending save.
-    internal RepositoryStorageFacade(GraphResources resources) : this(resources, ownsResources: false) { }
+    internal RepositoryStorageFacade(RepositoryResources resources) : this(resources, ownsResources: false) { }
 
-    private RepositoryStorageFacade(GraphResources resources, bool ownsResources) {
+    private RepositoryStorageFacade(RepositoryResources resources, bool ownsResources) {
         ArgumentNullException.ThrowIfNull(resources);
         resources.RequireStorageAvailable();
         _resources = resources;
@@ -32,11 +32,11 @@ internal sealed class RepositoryStorageFacade : IDisposable {
     internal FrameAddress? SharedSchemaRoot { get { RequireAvailable(); return _resources.SharedSchemaRoot; } }
 
     internal static RepositoryStorageFacade CreateNew(string path) =>
-        new(GraphResources.CreateStorageNew(path), ownsResources: true);
+        new(RepositoryResources.CreateStorageNew(path), ownsResources: true);
     internal static RepositoryStorageFacade OpenExisting(string path) =>
-        new(GraphResources.OpenStorageExisting(path), ownsResources: true);
+        new(RepositoryResources.OpenStorageExisting(path), ownsResources: true);
     internal static RepositoryStorageFacade OpenReadOnlyExisting(string path) =>
-        new(GraphResources.OpenStorageReadOnlyExisting(path), ownsResources: true);
+        new(RepositoryResources.OpenStorageReadOnlyExisting(path), ownsResources: true);
 
     internal FrameAddress? GetHead(string branch) { RequireAvailable(); return _resources.GetBranchHead(branch); }
     internal FrameAddress? GetStateHead(string branch) { RequireAvailable(); return _resources.GetBranchStateHead(branch); }

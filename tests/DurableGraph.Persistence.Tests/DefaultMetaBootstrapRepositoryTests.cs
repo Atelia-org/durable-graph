@@ -188,11 +188,11 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     public void PublicFactoryNegativeBudgetsRejectBeforeCreatingOrOpeningBackingResources() {
         string path = NewPath();
         Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateNew(path, Models(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
-        Assert.Throws<ArgumentOutOfRangeException>(() => GraphResources.CreateNew(path, readCacheBudgetBytes: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RepositoryResources.CreateNew(path, readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenExisting(path, Models(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
-        Assert.Throws<ArgumentOutOfRangeException>(() => GraphResources.OpenExisting(path, readCacheBudgetBytes: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RepositoryResources.OpenExisting(path, readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: -1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => GraphResources.OpenReadOnlyExisting(path, readCacheBudgetBytes: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => RepositoryResources.OpenReadOnlyExisting(path, readCacheBudgetBytes: -1));
         Assert.False(Directory.Exists(path));
     }
 
@@ -219,7 +219,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         return root;
     }
     private static void AssertPublished(Repository repository, FrameAddress head, FrameAddress schema) {
-        GraphResources resources = ResourcesOf(repository);
+        RepositoryResources resources = ResourcesOf(repository);
         RefBytesSnapshot branch = resources.Versions.ReadRef(1).Unwrap(), shared = resources.Versions.ReadRef(2).Unwrap();
         Assert.True(branch.Payload.StartsWith("P0R1"u8));
         Assert.True(shared.Payload.StartsWith("P0S1"u8));

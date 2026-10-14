@@ -6,6 +6,8 @@
 
 [DB-092 B](../../docs/design-branches/0092-type-namespace-refactoring/implementation-b.md)只适配本 host 的内部类型／成员名称并验证编译，协议及窗口保持；没有重跑 Kill 矩阵，不给旧结果追加本次源码的进程中止资格。
 
+[DB-092 D3](../../docs/design-branches/0092-type-namespace-refactoring/README.md#d3-status)将具体资源 owner 改为 `RepositoryResources`，本 host 同步类型引用；本片只补编译验证，Kill 矩阵结果仍保其原来源与范围。
+
 先由统一构建者显式构建一次，controller 默认且始终不构建：
 
 ```powershell

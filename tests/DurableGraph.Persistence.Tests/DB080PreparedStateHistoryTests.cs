@@ -129,7 +129,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         int hydrated = counters.Hydrates, upgrades = _upgradeCallbacks;
         // Construct and publish a legitimate complete inherited State which explicitly
         // selects the new S. Only that selected view carries the dependency conflict.
-        GraphResources resources = Resources(repository);
+        RepositoryResources resources = Resources(repository);
         FrameAddress conflicting = resources.GraphStore.Append(StoredGraphKind.State,
             address.RevisionAddress, resources.SharedSchemaRoot,
             new(address.RevisionAddress, address.RootId, [])).Address;
@@ -226,7 +226,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     private void SeedCompleteHistoricalSource() {
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout branch = repository.CreateBranch("main", new Node(), NoRebase);
-        GraphResources resources = Resources(repository);
+        RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
         SchemaCatalogView catalog = SchemaCatalogView.Load(store, resources.SharedSchemaRoot!.Value);
         ObjectVersionRecord Durable(uint id, State state) => ObjectVersionRecord.CreateBase(id,
@@ -365,7 +365,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     }
     private static MethodInfo Method(string name) => typeof(DB080PreparedStateHistoryTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
-    private static GraphResources Resources(Repository repository) => Field<GraphResources>(repository, "_resources");
+    private static RepositoryResources Resources(Repository repository) => Field<RepositoryResources>(repository, "_resources");
     private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>

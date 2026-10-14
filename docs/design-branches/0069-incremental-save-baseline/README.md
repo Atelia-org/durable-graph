@@ -14,7 +14,7 @@
 ## 当前实现与验证入口
 
 - [NormalizedGraphState](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs) 的 `RequireStoredSource`、`PrepareGraphInstallation` 与实际记录安装计量。
-- [共同 workspace／候选](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)、[P0 producer／安装准备](../../../src/DurableGraph.Persistence/BusinessPersistenceAdapter.cs)、[唯一发布 owner](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)。
+- [共同 workspace／候选](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)、[P0 producer／安装准备](../../../src/DurableGraph.Persistence/BusinessPersistenceAdapter.cs)、[唯一发布 owner](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)。
 - [混合新／保留 head/H、完整 source 与冷续写](../../../tests/DurableGraph.Persistence.Tests/P0NormalizedBusinessBaselineTests.cs)、[真实 B/D/H、Event／Discard 与确认 Base](../../../tests/DurableGraph.Persistence.Tests/BusinessPlanningAccountingTests.cs)、[候选安装材料归属](../../../tests/DurableGraph.Persistence.Tests/BusinessSaveCandidateInstallationTests.cs)。
 
 这些接缝免除受控保存中旧对象链的重复计量，不承诺完整 Commit 与历史长度无关、总 O(k) 或完整 Fork 普遍加速。目录回放、完整 live Base 准备与其他成本只按真实工作负载证据再评估，未完成工作维护在[路线图](../../DurableGraph-research-roadmap.md)。

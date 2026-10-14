@@ -21,7 +21,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void FactoryConstructionAndDelayedNormalizeObserveTheirExactSelectedSchema(bool delayedLookup) {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         using RepositoryStorageFacade repository = new(resources);
         StateModelRegistry writes = new();
         writes.Register(Model(StoredRoot, [Reader(StoredRoot)], static row => row.GetState<int>()));
@@ -110,7 +110,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
     public void FrozenConfigurationCopiesRegistrationsAndPoliciesWhileExactSchemaReuseRemainsOwnerLocal() {
         FrameAddress first, second, schema;
         ObjectId rootId;
-        using (GraphResources resources = GraphResources.CreateStorageNew(_path)) {
+        using (RepositoryResources resources = RepositoryResources.CreateStorageNew(_path)) {
             using RepositoryStorageFacade repository = new(resources);
             StateModelRegistry models = new();
             models.Register(MapModel(ReaderId(MapRootSchema)));
@@ -144,7 +144,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         reads.UseDictionaryComparer<string, int>(StringComparer.OrdinalIgnoreCase);
         StateModelRegistry.FrozenConfiguration changed = reads.FreezeConfiguration();
         Dictionary<string, byte[]> before = SnapshotFiles(_path);
-        using (GraphResources resources = GraphResources.OpenStorageReadOnlyExisting(_path)) {
+        using (RepositoryResources resources = RepositoryResources.OpenStorageReadOnlyExisting(_path)) {
             GraphRecordStore store = resources.GraphStore;
             DecodedRevision source1 = DecodedRevision.ReadStoredGraph(store, first, frozen);
             Assert.NotNull(source1.BindingEnvironment);
@@ -201,8 +201,8 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         // Clone only while all resources are closed. Equal actual addresses cannot transfer environment ownership.
         string otherPath = _path + "-other";
         CopyClosedRepository(_path, otherPath);
-        using GraphResources firstOwner = GraphResources.OpenStorageReadOnlyExisting(_path);
-        using GraphResources otherOwner = GraphResources.OpenStorageReadOnlyExisting(otherPath);
+        using RepositoryResources firstOwner = RepositoryResources.OpenStorageReadOnlyExisting(_path);
+        using RepositoryResources otherOwner = RepositoryResources.OpenStorageReadOnlyExisting(otherPath);
         DecodedRevision owned = DecodedRevision.ReadStoredGraph(firstOwner.GraphStore, first, frozen);
         Assert.Equal(7, GraphReader.ReadRoot<MapRoot>(owned, rootId, new(owned.SourceModels!)).Values!["key"]);
         int factories = counts.Factories, comparers = counts.Comparers;
@@ -221,7 +221,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
 
     [Fact]
     public void ExactSelectedTargetConflictRejectsBeforeHistoricalNormalizeWhileTheOldSchemaStillReads() {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         using RepositoryStorageFacade repository = new(resources);
         StateModelRegistry writes = new();
         writes.Register(Model(StoredRoot, [Reader(StoredRoot)], static row => row.GetState<int>()));

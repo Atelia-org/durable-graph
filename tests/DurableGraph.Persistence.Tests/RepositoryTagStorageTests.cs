@@ -21,7 +21,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
             using BranchCheckout main = seed.CreateBranch("main", new Node());
             seed.CreateTag("good", main.Head);
         }
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             FrameAddress bad = damage == "metadata"
                 ? resources.Data.Append(GraphFrameCodec.GraphTag, [255]).Unwrap()
                 : TestAddress(uint.MaxValue);
@@ -49,7 +49,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
             using BranchCheckout main = seed.CreateBranch("main", new Node());
         }
         FrameAddress frame;
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             ArrayBufferWriter<byte> bytes = new();
             BareValueWriter writer = new(bytes);
             writer.WriteByte(TypedBaseBodyCodec.FormatVersion);

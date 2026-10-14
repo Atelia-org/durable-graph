@@ -21,7 +21,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         ObjectId rootId, childId, listId;
         FrameAddress listHead0, rootHead0, childHead0;
         long h0;
-        using (GraphResources resources = GraphResources.CreateStorageNew(_path)) {
+        using (RepositoryResources resources = RepositoryResources.CreateStorageNew(_path)) {
             using RepositoryStorageFacade facade = new(resources);
             Assert.Same(resources.Data, facade.Data);
             Assert.Same(resources.Versions, facade.Versions);
@@ -83,7 +83,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         }
 
         Dictionary<string, byte[]> beforeReadOnly = SnapshotFiles();
-        using (GraphResources resources = GraphResources.OpenStorageReadOnlyExisting(_path)) {
+        using (RepositoryResources resources = RepositoryResources.OpenStorageReadOnlyExisting(_path)) {
             using RepositoryStorageFacade facade = new(resources);
             Assert.True(resources.IsReadOnly);
             // No business model has been created or registered in this open before meta projection.
@@ -100,7 +100,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         }
         AssertFilesEqual(beforeReadOnly);
 
-        using (GraphResources resources = GraphResources.OpenStorageExisting(_path)) {
+        using (RepositoryResources resources = RepositoryResources.OpenStorageExisting(_path)) {
             using RepositoryStorageFacade facade = new(resources);
             BranchSaveSession session = new(facade, "main", Models());
             DB087Widget root = AssertRing(session.State, 0); // E1's content is not editable State.
@@ -143,7 +143,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             }
             Assert.Equal(before + 1, facade.Store.AppendedFrames);
         }
-        using (GraphResources resources = GraphResources.OpenStorageReadOnlyExisting(_path)) {
+        using (RepositoryResources resources = RepositoryResources.OpenStorageReadOnlyExisting(_path)) {
             using RepositoryStorageFacade facade = new(resources);
             Assert.Equal(state2, facade.GetHead("main"));
             Assert.Equal(state2, facade.GetStateHead("main"));
@@ -161,7 +161,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
     [InlineData("DataClose")]
     [InlineData("VersionsClose")]
     public void SplitResourcesClosureRejectsRetainedFacadesStoresAndPendingButPreservesOwnedResults(string stop) {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         using RepositoryStorageFacade facade = new(resources);
         using (PendingRepositorySave seed = PrepareRaw(facade, 1)) { facade.Commit(seed); }
         FrameAddress address = facade.GetHead("main")!.Value;
@@ -200,7 +200,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
 
     [Fact]
     public void OneResourcesOwnerSharesPendingAcrossBorrowedFacadesAndRejectsForeignPending() {
-        using GraphResources resources = GraphResources.CreateStorageNew(_path);
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         using RepositoryStorageFacade first = new(resources);
         using RepositoryStorageFacade second = new(resources);
         Assert.Same(resources.Data, first.Data);
@@ -211,7 +211,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         Assert.Same(resources, pending.Owner);
         Assert.True(second.HasPending);
         Assert.Throws<InvalidOperationException>(() => PrepareRaw(second, 2));
-        using (GraphResources foreignResources = GraphResources.CreateStorageNew(Path.Combine(_path, "other"))) {
+        using (RepositoryResources foreignResources = RepositoryResources.CreateStorageNew(Path.Combine(_path, "other"))) {
             using RepositoryStorageFacade foreign = new(foreignResources);
             Assert.Throws<InvalidOperationException>(() => foreignResources.CommitSave(pending));
             Assert.False(foreignResources.IsFaulted);

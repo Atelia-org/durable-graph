@@ -47,7 +47,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal(5, repository.ReadFrames("main").Count());
             Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Count());
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
             Assert.Null(store.ReadGraph(first).SourceGraph);
             Assert.Equal(first, store.ReadGraph(eventAddress).SourceGraph);
@@ -143,7 +143,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             restored = Save(session).RevisionAddress;
             Assert.Same(child, ((Node)session.State!).Left);
         }
-        using GraphResources resources = GraphResources.OpenReadOnlyExisting(_root);
+        using RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root);
         GraphRecordStore store = resources.GraphStore;
         Assert.Empty(StorageTestData.LocalRecords(store, unchanged));
         uint oldId = Assert.Single(store.ReadGraph(first).ObjectHeads.Keys, id => id != rootId.Value);
@@ -345,7 +345,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             changed = Save(session).RevisionAddress;
             Assert.Same(same, ((Node)session.State!));
         }
-        using GraphResources resources = GraphResources.OpenReadOnlyExisting(_root);
+        using RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root);
         GraphRecordStore store = resources.GraphStore;
         Assert.Equal(original, store.ReadGraph(upgraded).SourceGraph);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(StorageTestData.LocalRecords(store, upgraded)).Kind);

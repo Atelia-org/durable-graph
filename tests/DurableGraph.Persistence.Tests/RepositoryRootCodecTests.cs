@@ -11,7 +11,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
 
     [Fact]
     public void RequiredBranchAndSharedRefsUseDistinctHeadersAndSelectedKeyGrammar() {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using RepositoryResources resources = RepositoryResources.CreateNew(_root);
         Assert.Equal(2u, resources.Versions.ReservedRefIdUpperBound);
         var initialBranches = resources.Versions.ReadRef(1).Unwrap();
         var initialShared = resources.Versions.ReadRef(2).Unwrap();
@@ -19,8 +19,8 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         Assert.Equal("P0S1"u8.ToArray(), initialShared.Payload[..4].ToArray());
         Assert.Empty(RootMapCodec.Decode(initialBranches.Payload[4..]).Unwrap());
         Assert.Empty(RootMapCodec.Decode(initialShared.Payload[4..]).Unwrap());
-        GraphResources.ValidateBranchName("main");
-        GraphResources.ValidateBranchName("branch-name.1");
+        RepositoryResources.ValidateBranchName("main");
+        RepositoryResources.ValidateBranchName("branch-name.1");
         FrameAddress head = Seed(resources);
         var extra = resources.PrepareBranchRoot("branch-name.1", head);
         resources.PublishBranchRoot(extra, out _);
@@ -50,8 +50,8 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     [InlineData(2u, "branch/main")]
     [InlineData(2u, "schema-extra")]
     public void PersistedUnknownOrInvalidRootKeyRejectsOpenWithoutMutation(uint refId, string mutation) {
-        using (GraphResources resources = GraphResources.CreateNew(_root)) { Seed(resources); }
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.CreateNew(_root)) { Seed(resources); }
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             // VersionStore owns opaque bytes. These are complete valid VS publications
             // whose required DG root grammar is deliberately invalid; there is no pending tail.
             FrameAddress selected = refId == 1 ? resources.GetBranchHead("main")!.Value : resources.SharedSchemaRoot!.Value;
@@ -68,20 +68,20 @@ public sealed class RepositoryRootCodecTests : IDisposable {
             resources.Versions.PublishRef(resources.Versions.ReadRef(refId).Unwrap().Revision.RefId, payload, out _).Unwrap();
         }
         var before = Snapshot();
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenReadOnlyExisting(_root));
+        Assert.Throws<InvalidDataException>(() => RepositoryResources.OpenReadOnlyExisting(_root));
         AssertSnapshot(before);
-        Assert.Throws<InvalidDataException>(() => GraphResources.OpenExisting(_root));
+        Assert.Throws<InvalidDataException>(() => RepositoryResources.OpenExisting(_root));
         AssertSnapshot(before);
     }
 
     [Fact]
     public void RealColdRootCapacityRefusalPreservesPublishedRootAndHealthyOwner() {
-        using (GraphResources resources = GraphResources.CreateNew(_root)) { Seed(resources); }
+        using (RepositoryResources resources = RepositoryResources.CreateNew(_root)) { Seed(resources); }
         RefRevision accepted;
         RefRevision sharedAccepted;
         byte[] acceptedPayload, sharedPayload;
         string extraName;
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             var initial = RootMapCodec.Decode(resources.Versions.ReadRef(1).Unwrap().Payload[4..]).Unwrap();
             FrameAddress head = resources.GetBranchHead("main")!.Value;
             var shared = resources.Versions.ReadRef(2).Unwrap();
@@ -96,7 +96,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
             }
             acceptedPayload = [.. "P0R1"u8, .. RootMapCodec.Encode(Candidate(low)).Unwrap()];
             extraName = Name(low);
-            GraphResources.ValidateBranchName(extraName);
+            RepositoryResources.ValidateBranchName(extraName);
             Assert.True(acceptedPayload.Length <= PublicationStore.MaxRootPayloadLength);
             var refused = RootMapCodec.Encode(Candidate(low + 1));
             Assert.True(refused.IsFailure || refused.Value!.Length + 4 > PublicationStore.MaxRootPayloadLength);
@@ -109,7 +109,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
             }
         }
         var before = Snapshot();
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             var branchBefore = resources.Versions.ReadRef(1).Unwrap();
             Assert.Equal(accepted, branchBefore.Revision);
             FrameAddress head = resources.GetBranchHead("main")!.Value;
@@ -130,7 +130,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     }
 
     private static string Name(int index) => new string('a', 120) + index.ToString("D8", System.Globalization.CultureInfo.InvariantCulture);
-    private static FrameAddress Seed(GraphResources resources) {
+    private static FrameAddress Seed(RepositoryResources resources) {
         using RepositoryStorageFacade facade = new(resources);
         BranchSaveSession session = new(facade, "main", SharedReadModel.Models());
         using PreparedBranchSave save = session.Prepare(new Node { Value = 7 });

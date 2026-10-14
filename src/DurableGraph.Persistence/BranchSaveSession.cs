@@ -3,7 +3,7 @@ using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>Thin typed driver. GraphResources owns the only pending-save lifecycle; RepositoryStorageFacade forwards it.</summary>
+/// <summary>Thin typed driver. RepositoryResources owns the only pending-save lifecycle; RepositoryStorageFacade forwards it.</summary>
 internal sealed class BranchSaveSession {
     private readonly RepositoryStorageFacade _repository;
     private readonly string _branch;

@@ -57,7 +57,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using (var repository = Repository.OpenReadOnlyExisting(path, Models())) {
             Assert.Equal((byte)30, ((Node)repository.ReadState(repository.GetHead("main"))).Value);
         }
-        using GraphResources resources = GraphResources.OpenReadOnlyExisting(path);
+        using RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(path);
         GraphRecordStore store = resources.GraphStore;
         return addresses.Select(address => StorageTestData.LocalRecords(store, address).Select(row => row.Kind).ToArray()).ToArray();
     }

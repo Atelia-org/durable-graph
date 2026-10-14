@@ -44,7 +44,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(originalWorld, world(session));
             Assert.Same(originalNumbers, numbers(originalWorld));
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path))
         {
             var states = segments.GraphStore;
             Assert.Empty(DefaultRecords(states, unchanged));
@@ -71,7 +71,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotSame(originalNumbers, numbers(world(session)));
             resumed = commit(session);
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+        using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var states = segments.GraphStore;
             Assert.Empty(DefaultRecords(states, resumed));
             Assert.Empty(DefaultRemoved(states, resumed));

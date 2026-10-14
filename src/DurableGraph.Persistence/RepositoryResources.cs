@@ -6,14 +6,14 @@ using PublicationStore = Atelia.VersionStore.VersionStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>Owns a matching data FrameStore, VersionStore and durable graph reads/publication.</summary>
+/// <summary>Owns one repository's matching data FrameStore, VersionStore, publication roots and save lifecycle.</summary>
 /// <remarks>
 /// Operations are serial. Facades and borrowed Data remain valid only while this owner is usable.
 /// Normal backing-store recovery runs before DG caches are constructed. Complete frames are never
 /// rewritten by DG. Data-only users can explicitly call Data.ConfirmDurable; Repository publication
 /// uses VersionStore's data-first barrier. Dispose and reopen after an uncertain owned operation.
 /// </remarks>
-public sealed partial class GraphResources : IDisposable {
+public sealed partial class RepositoryResources : IDisposable {
     internal const long DefaultRotationThresholdBytes = 64L * 1024 * 1024 * 1024;
     private readonly PublicationStore _versions;
     private bool _faulted;
@@ -30,13 +30,13 @@ public sealed partial class GraphResources : IDisposable {
     }
     internal PublicationStore Versions => _versions;
 
-    public static GraphResources CreateNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
+    public static RepositoryResources CreateNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
         CreateStorageNew(path, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
-    public static GraphResources OpenExisting(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
+    public static RepositoryResources OpenExisting(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
         OpenStorageExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
-    public static GraphResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
+    public static RepositoryResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
         OpenStorageReadOnlyExisting(path, readCacheBudgetBytes);
 
     internal static void ValidateBranchName(string name) {
@@ -52,7 +52,7 @@ public sealed partial class GraphResources : IDisposable {
 
     internal void EnsureBackingUsable() {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_faulted) { throw new InvalidOperationException("Graph resources are faulted; dispose and reopen before further operations."); }
+        if (_faulted) { throw new InvalidOperationException("Repository resources are faulted; dispose and reopen before further operations."); }
         try {
             Data.EnsureUsable();
             _versions.EnsureUsable();
@@ -66,7 +66,7 @@ public sealed partial class GraphResources : IDisposable {
 
     internal void RequireWritable() {
         RequireAvailable();
-        if (IsReadOnly) { throw new InvalidOperationException("Graph resources are read-only."); }
+        if (IsReadOnly) { throw new InvalidOperationException("Repository resources are read-only."); }
     }
 
     internal void MarkFaulted() {

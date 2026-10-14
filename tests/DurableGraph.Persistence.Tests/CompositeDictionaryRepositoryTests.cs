@@ -52,7 +52,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Assert.Equal(900, session.World.First!["key-070"]);
             final = session.Commit(NoRebase);
         }
-        using GraphResources file = OpenSchemas();
+        using RepositoryResources file = OpenSchemas();
         GraphRecordStore states = file.GraphStore;
         foreach (FrameAddress address in new[] { seed, unchanged, changed, final }) {
             ObjectStateRecord map = Assert.Single(DecodedRevision.ReadStoredGraph(states, address, Models<string>()).Objects,
@@ -85,7 +85,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Assert.Equal(7777, Assert.Single(session.World.First.Keys, key => key.Id == 7).Timestamp);
             unchanged = session.Commit(NoRebase);
         }
-        using GraphResources file = OpenSchemas();
+        using RepositoryResources file = OpenSchemas();
         GraphRecordStore states = file.GraphStore;
         foreach (FrameAddress address in new[] { seed, replaced, unchanged }) {
             ObjectStateRecord map = Assert.Single(DecodedRevision.ReadStoredGraph(states, address, Models<Key>()).Objects,
@@ -242,7 +242,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
-        using GraphResources file = OpenSchemas();
+        using RepositoryResources file = OpenSchemas();
         GraphRecordStore states = file.GraphStore;
         StateModelRegistry noRecipe = Models<string>();
         DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, seed, noRecipe);
@@ -266,7 +266,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
-        using GraphResources file = OpenSchemas();
+        using RepositoryResources file = OpenSchemas();
         GraphRecordStore states = file.GraphStore;
         DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, seed, models);
         Assert.Equal(2, Assert.Single(exact.Objects, row => row.Kind == ObjectStateKind.Dictionary).GetDictionaryState<ObjectId, int>().Count);
@@ -346,7 +346,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             seed = session.Commit(NoRebase);
             worldId = repository.WorldId!.Value;
         }
-        using GraphResources file = OpenSchemas();
+        using RepositoryResources file = OpenSchemas();
         GraphRecordStore states = file.GraphStore;
         DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, seed, Models<string>());
         ObjectStateRecord root = initial.GetRequired(worldId);
@@ -461,7 +461,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         public int GetHashCode(Key value) => HashCode.Combine(value.Id, value.Transient);
     }
     private sealed class ResolverFailure : Exception;
-    private GraphResources OpenSchemas() => GraphResources.OpenExisting(_root);
+    private RepositoryResources OpenSchemas() => RepositoryResources.OpenExisting(_root);
     private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 

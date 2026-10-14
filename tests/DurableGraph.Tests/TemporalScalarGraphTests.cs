@@ -38,7 +38,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
-        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
         DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         ObjectStateRecord timestamps = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&

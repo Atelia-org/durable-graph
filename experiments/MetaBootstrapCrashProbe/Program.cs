@@ -90,7 +90,7 @@ internal static class Program {
         }
         if (complete) {
             using (Repository reader = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
-                GraphResources resources = Resources(reader);
+                RepositoryResources resources = Resources(reader);
                 Need(reader.IsReadOnly && reader.ListBranches().Count == 0 && reader.SharedSchemaRoot is null,
                     "Two completed factory refs must open as an empty readonly DG repository.");
                 CheckEmptyInitializationRoots(resources.Versions, complete: true);
@@ -178,7 +178,7 @@ internal static class Program {
             CheckCatalog(SchemaCatalogView.Load(seed.GraphStore, schema), extra: false);
             CheckStorage(seed, graph, initial);
             Need(graph.ObjectHeads[listId] != state, "The List head must be its actual batch rather than the graph address.");
-            GraphResources resources = Resources(seed);
+            RepositoryResources resources = Resources(seed);
             seedFrames = Inventory(resources).Select(frame => CaptureFrame(resources, frame)).ToArray();
         }
         FrameAddress next;
@@ -252,7 +252,7 @@ internal static class Program {
         repository.PreparedStateReuseEnabled = false;
         using BranchCheckout main = repository.Checkout("main");
         Widget root = HostModel.Check(main.State, 7);
-        GraphResources resources = Resources(repository);
+        RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
         StoredGraphRevision old = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
         FrameAddress oldSchema = RequiredSchema(old);
@@ -337,7 +337,7 @@ internal static class Program {
         Dictionary<string, string> beforeReadOnly = SnapshotFiles(repositoryPath);
         using (Repository repository = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
-            GraphResources resources = Resources(repository);
+            RepositoryResources resources = Resources(repository);
             // Necessary refs only. READY expectations do not substitute for actual
             // formal root reads, joint publication qualification or graph pins.
             RefBytesSnapshot branches = resources.Versions.ReadRef(1).Unwrap();
@@ -387,7 +387,7 @@ internal static class Program {
 
         using (Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
             repository.PreparedStateReuseEnabled = false;
-            GraphResources resources = Resources(repository);
+            RepositoryResources resources = Resources(repository);
             Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,
                 "Writable cold Open changed the selected pair.");
             StoredGraphRevision selected = repository.GraphStore.ReadGraph(expectedState);
@@ -471,19 +471,19 @@ internal static class Program {
         }
     }
     private static FrameAddress RequiredSchema(StoredGraphRevision graph) => graph.SchemaRoot ?? throw new InvalidDataException("Business graph needs an exact Schema pin.");
-    private static GraphResources Resources(Repository repository) =>
-        (GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
-    private static FrameInfo[] Inventory(GraphResources resources) {
+    private static RepositoryResources Resources(Repository repository) =>
+        (RepositoryResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
+    private static FrameInfo[] Inventory(RepositoryResources resources) {
         List<FrameInfo> frames = [];
         resources.Data.Inventory(frames.Add).Unwrap();
         return frames.ToArray();
     }
-    private static FrameEvidence CaptureFrame(GraphResources resources, FrameInfo info) {
+    private static FrameEvidence CaptureFrame(RepositoryResources resources, FrameInfo info) {
         using FrameRead frame = resources.Data.ReadFrame(info.Address).Unwrap();
         Need(!frame.IsTombstone && frame.Tag == info.Tag, "Candidate frame role changed during capture.");
         return new(Encode(info.Address), frame.Tag, Hash(frame.Payload), Hash(frame.TailMeta));
     }
-    private static void CheckFrames(GraphResources resources, IEnumerable<FrameEvidence> frames) {
+    private static void CheckFrames(RepositoryResources resources, IEnumerable<FrameEvidence> frames) {
         foreach (FrameEvidence evidence in frames) {
             using FrameRead frame = resources.Data.ReadFrame(Decode(evidence.Address)).Unwrap();
             Need(!frame.IsTombstone && frame.Tag == evidence.Tag && Hash(frame.Payload) == evidence.PayloadSha256 && Hash(frame.TailMeta) == evidence.TailMetaSha256,

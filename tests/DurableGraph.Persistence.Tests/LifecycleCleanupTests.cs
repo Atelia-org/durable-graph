@@ -11,7 +11,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
 
     [Fact]
     public void PublicDisposeAttemptsBothActualBackingOwnersAndRetainsTheirErrorOrder() {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using RepositoryResources resources = RepositoryResources.CreateNew(_root);
         GraphRecordStore retained = resources.GraphStore;
         StoredGraphRevision graph = Seed(resources);
         FrameAddress address = graph.Address;
@@ -35,7 +35,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
         resources.Dispose();
 
-        using GraphResources fresh = GraphResources.OpenExisting(_root);
+        using RepositoryResources fresh = RepositoryResources.OpenExisting(_root);
         Assert.Equal(new byte[] { 10 }, Assert.Single(fresh.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records).Body.ToArray());
     }
 
@@ -43,7 +43,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void SingleActualOwnerCloseErrorPreservesOriginalIdentityAndStack(bool versionOwner) {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using RepositoryResources resources = RepositoryResources.CreateNew(_root);
         GraphRecordStore retained = resources.GraphStore;
         IOException injected = new("Single owner lock close failed.");
         object target = versionOwner ? resources.Versions : GetField(resources.Data, "_core");
@@ -57,7 +57,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(TestAddress()));
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
         Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
-        using GraphResources fresh = GraphResources.OpenExisting(_root);
+        using RepositoryResources fresh = RepositoryResources.OpenExisting(_root);
         fresh.RequireAvailable();
     }
 
@@ -65,7 +65,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void OpenCleanupHelperPreservesPrimaryWithActualResourcesAndOptionalCloseFailures(bool failCleanup) {
-        using GraphResources resources = GraphResources.CreateNew(_root);
+        using RepositoryResources resources = RepositoryResources.CreateNew(_root);
         GraphRecordStore retained = resources.GraphStore;
         IOException primary = CapturePrimary();
         IOException versionError = new("VersionStore cleanup failed.");
@@ -78,7 +78,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
                 originalVersionLock = ReplaceOwnerLock(resources.Versions, versionError, () => attempted.Add("versions"));
                 originalDataLock = ReplaceOwnerLock(GetField(resources.Data, "_core"), dataError, () => attempted.Add("data"));
             }
-            MethodInfo cleanup = typeof(GraphResources).GetMethod("CloseResources", BindingFlags.Static | BindingFlags.NonPublic)!;
+            MethodInfo cleanup = typeof(RepositoryResources).GetMethod("CloseResources", BindingFlags.Static | BindingFlags.NonPublic)!;
             // Open invokes this same helper. Reflection adds only its normal invocation envelope.
             TargetInvocationException invocation = Assert.Throws<TargetInvocationException>(() => cleanup.Invoke(null,
                 [primary, retained, resources.Versions, resources.Data]));
@@ -95,7 +95,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
             Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
             Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
             resources.Dispose();
-            using GraphResources fresh = GraphResources.OpenExisting(_root);
+            using RepositoryResources fresh = RepositoryResources.OpenExisting(_root);
             fresh.RequireAvailable();
         } finally {
             originalVersionLock?.Dispose();
@@ -103,7 +103,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         }
     }
 
-    private static StoredGraphRevision Seed(GraphResources resources) {
+    private static StoredGraphRevision Seed(RepositoryResources resources) {
         using RepositoryStorageFacade facade = new(resources);
         using PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, [10])]));

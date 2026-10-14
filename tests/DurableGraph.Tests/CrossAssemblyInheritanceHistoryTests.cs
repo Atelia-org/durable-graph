@@ -31,7 +31,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = scope.Load(app1).GetType("InheritanceHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, FrameAddress>>()(directory.Path);
             StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
-            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
             exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models).Objects).Schema!;
         }
         GeneratorTestRun bases2 = RunCrossAssemblyGenerator(InheritanceHistoryBases(2), history: baseHistory.ReadAdditionalTexts(), forceDefinitions: "true");
@@ -54,7 +54,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Null(current.Load(bases2).GetType("InheritanceHistoryBases.LegacyHidden"));
         Type currentHost = current.Load(app2).GetType("InheritanceHistoryApp.Host")!;
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
-        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+        using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
             var stored = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, currentModels).Objects);
             Assert.Equal(exact, stored.Schema);
             Assert.Equal(1, stored.Schema!.Version);
@@ -64,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(0, currentHost.GetMethod("Callbacks")!.CreateDelegate<Func<int>>()());
         }
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
-        using GraphResources finalSegments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources finalSegments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var store = finalSegments.GraphStore;
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(DefaultRecords(store, addresses[0])).Kind);
         foreach (int index in new[] { 1, 3 }) Assert.Empty(DefaultRecords(store, addresses[index]));

@@ -24,7 +24,7 @@ public sealed partial class EventHistoryRepositoryTests {
             world.Right!.Value = 9;
             hot = Save(session).RevisionAddress;
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             StoredGraphRevision revision = states.ReadGraph(shrunk);
             Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(revision.DirectoryRoot).Kind);
@@ -83,7 +83,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Same(original, ((Node)session.State!));
             Assert.Equal(first, session.StateRevisionAddress!.Value);
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(states.ReadGraph(candidate).DirectoryRoot).Kind);
             Assert.Equal(first, states.ReadGraph(candidate).SourceGraph);

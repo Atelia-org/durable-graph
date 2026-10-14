@@ -57,7 +57,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
             Assert.Equal(GraphFrameKind.State, resumed.Head.Kind);
         }
 
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
             StoredGraphRevision next = store.ReadGraph(saved);
             IReadOnlyList<ObjectVersionRecord> writes = StorageTestData.LocalRecords(store, saved);

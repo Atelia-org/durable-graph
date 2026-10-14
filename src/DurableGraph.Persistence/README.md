@@ -22,7 +22,7 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 | 对象 batch、目录、图与准确来源 | [GraphRecordStore](GraphRecordStore.cs)、[GraphFrameCodec](GraphFrameCodec.cs)、[StoredGraphDecoder／TypedBaseBodyCodec](StoredGraphBodies.cs) |
 | 存储图、对象链与共同保存材料 | [GraphPersistenceContracts](GraphPersistenceContracts.cs)、[PendingRepositorySave](PendingRepositorySave.cs) |
 | 业务准备、真实 B/D/H 与安装 | [BusinessPersistenceAdapter](BusinessPersistenceAdapter.cs)、[BranchSaveSession](BranchSaveSession.cs) |
-| 两根与发布/fault/资源 owner | [GraphResources](GraphResources.MetaBootstrap.cs) |
+| 两根与发布/fault/资源 owner | [RepositoryResources](RepositoryResources.MetaBootstrap.cs) |
 | owned 物理缓存 | [GraphPhysicalReadCache](GraphPhysicalReadCache.cs)、[缓存合同](../../docs/design-branches/0067-owned-revision-read-cache-design/README.md) |
 
 准入、private 与 ToShared 规则从 DB-087 当前合同进入；实际普通包门禁见

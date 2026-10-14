@@ -385,7 +385,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             original = main.Head.RevisionAddress;
             rootId = main.Head.RootId;
         }
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
             StoredGraphRevision source = store.ReadGraph(original);
             uint childId = Assert.Single(source.ObjectHeads.Keys, id => id != rootId.Value);

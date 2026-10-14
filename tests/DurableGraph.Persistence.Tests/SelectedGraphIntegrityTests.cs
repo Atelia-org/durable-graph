@@ -17,7 +17,7 @@ public sealed partial class EventHistoryRepositoryTests {
             first = main.Head.RevisionAddress;
             root = main.Head.RootId;
         }
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             // A complete Base graph with business parent S0 must still name S0 as its
             // content source. A new well-framed batch/directory falsely claims no source.
             GraphRecordStore store = resources.GraphStore;
@@ -60,7 +60,7 @@ public sealed partial class EventHistoryRepositoryTests {
             first = main.Head.RevisionAddress;
             root = main.Head.RootId;
         }
-        using (GraphResources resources = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
             FrameAddress invalid = AppendInvalidSource(resources, first, first, root, state ? StoredGraphKind.State : StoredGraphKind.Event,
                 StorageTestData.LocalRecords(store, first));
@@ -81,7 +81,7 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal(new[] { "main" }, writer.ListBranches());
     }
 
-    private static FrameAddress AppendInvalidSource(GraphResources resources, FrameAddress parent,
+    private static FrameAddress AppendInvalidSource(RepositoryResources resources, FrameAddress parent,
         FrameAddress? source, ObjectId root, StoredGraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
         FrameAddress? schema = resources.SharedSchemaRoot;
         FrameAddress batch = resources.Data.Append(GraphFrameCodec.BatchTag, GraphFrameCodec.EncodeBatch(source, schema, records)).Unwrap();

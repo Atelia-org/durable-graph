@@ -27,7 +27,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = assembly.GetType("Host")!.GetMethod("LoadAndSave")!
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         Assert.Equal(1, assembly.GetType("R")!.GetField("Upgrades")!.GetValue(null));
-        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var store = segments.GraphStore;
         ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, addresses[0]));
         Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
@@ -68,7 +68,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] saved = currentHost.GetMethod("LoadAndSave")!
             .CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var store = segments.GraphStore;
         Assert.Empty(DefaultRecords(store, saved[0])); // Same layout needs neither Upgrade nor a replacement Base.
         ObjectVersionRecord changed = Assert.Single(DefaultRecords(store, saved[1]));

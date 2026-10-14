@@ -39,8 +39,8 @@ internal static class StorageTestData {
         writer.WriteRawBytes(bytes);
     }
 
-    internal static GraphResources ResourcesOf(Repository repository) =>
-        (GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
+    internal static RepositoryResources ResourcesOf(Repository repository) =>
+        (RepositoryResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
 
     internal static void InstallPublicationFault(PublicationStore versions, string stage, Action action, bool tag = false) {
         FieldInfo field = typeof(PublicationStore).GetField("_testHooks", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -69,7 +69,7 @@ internal static class StorageTestData {
     }
 
     internal static byte[] ReadSelectedSchemaPayload(string root) {
-        using GraphResources resources = GraphResources.OpenReadOnlyExisting(root);
+        using RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(root);
         using FrameRead frame = resources.Data.ReadFrame(resources.SharedSchemaRoot!.Value).Unwrap();
         return frame.Payload.ToArray();
     }

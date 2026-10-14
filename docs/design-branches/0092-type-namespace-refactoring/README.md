@@ -2,7 +2,7 @@
 
 > 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3 已限定验收；本轮有限文件组织已完成，旧 P0 源码目录退出，根构建、相关回归与链接检查通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)，当片见 [E3](#e3-status)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)，E3 见[文件组织结果](#e3-status)，当片见 [D3](#d3-status)。
 
 已处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料，并完成有限文件组织。
 公共接入入口和已有 `Schema`／`Runtime` 分工保持；其余公开名称与程序集归属分别按现行职责收益判断，后续入口见[路线图](../../DurableGraph-research-roadmap.md)。
@@ -28,7 +28,7 @@ Persistence 外观、meta/Storage、Generator/Build/CLI，以及独立提出最�
 | `Atelia.DurableGraph` | 保留公共仓库／工作副本／检查点和模型作者入口 | [Repository](../../../src/DurableGraph.Persistence/Repository.cs)、[BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、[登记接口](../../../src/DurableGraph/IStateModelRegistration.cs)刻意共用接入空间，所在程序集可以不同 |
 | `.Schema` | 保留不可变描述与 exact layout | [DurableSchema](../../../src/DurableGraph/Schema/DurableSchema.cs)、[ObjectLayout](../../../src/DurableGraph/Schema/ObjectLayout.cs)不因名称含 State 就成为业务 State 图 |
 | `.Runtime` | 保留执行绑定、捕获、静态状态操作和容器能力 | [ObjectBinding](../../../src/DurableGraph/Runtime/Binding/ObjectBinding.cs)、[StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)含实际 CLR 工厂与执行能力；本轮不按子目录再分公开 namespace |
-| `.Persistence` | 保留持久化集成；接纳去阶段名后的默认内核 | [GraphResources](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)是资源与共同发布 owner；[DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)和工作区连接准确存储视图与 Runtime |
+| `.Persistence` | 保留持久化集成；接纳去阶段名后的默认内核 | [RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)是资源与共同发布 owner；[DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)和工作区连接准确存储视图与 Runtime |
 | `.Persistence.MetaBootstrapP0` | B／C 已退出该 CLR namespace；[E3](#e3-status)将 16 份源码并入 Persistence 根 | B 迁移 14 份，C 收尾员工与固定绑定两份；当前 [StoredGraphKind](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)承载 Event、State、Meta 与分支保存；P0 不再作为产品分层或源码目录 |
 | `.Serialization`／`.Storage` | 保留；类型按下表逐项判断 | [PreparedBaseBody](../../../src/DurableGraph.Serialization/PreparedBaseBody.cs)、[ObjectVersionPayloadCodec](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)仍是共同字节契约 |
 | `.Generator`／`.Build`／`.SchemaHistory` | 保留工具阶段和 source-linked 文本协议 | [Generator 项目](../../../src/DurableGraph.Generator/DurableGraph.Generator.csproj)、[Build 项目](../../../src/DurableGraph.Build/DurableGraph.Build.csproj)的目标框架与运行方式不同；[Shared 协议](../../../src/Shared/SchemaHistoryReferenceProtocol.cs)不是新运行时包 |
@@ -46,7 +46,7 @@ C 的生成与存档资格另见其记录。表保旧名便于迁移检索，不
 
 | 当前名 → 推荐名 | 职责与证据 | 必须保留的区别 |
 |---|---|---|
-| `P0Repository` → `RepositoryStorageFacade` | [声明](../../../src/DurableGraph.Persistence/RepositoryStorageFacade.cs)转发 Store、head、prepare/commit；默认借用，Create/Open 工厂也可拥有 GraphResources | façade 不是第二个发布 owner；不命名为 Borrowed 或 RepositoryCore，不顺便删壳 |
+| `P0Repository` → `RepositoryStorageFacade` | [声明](../../../src/DurableGraph.Persistence/RepositoryStorageFacade.cs)转发 Store、head、prepare/commit；默认借用，Create/Open 工厂也可拥有 RepositoryResources | façade 不是第二个发布 owner；不命名为 Borrowed 或 RepositoryCore，不顺便删壳 |
 | `P0Session` → `BranchSaveSession`；`P0SessionSave` → `PreparedBranchSave` | [声明](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)保存分支 State 工作区与 catalog 意图，准备一次共同保存 | 前者有寿命内状态，后者有一次准备／提交／释放寿命；不替代公开 BranchCheckout |
 | `P0BusinessWorkspace` → `BusinessPersistenceAdapter`；`P0PreparedBusiness` → `PreparedBusinessWrite` | [声明](../../../src/DurableGraph.Persistence/BusinessPersistenceAdapter.cs)包装 BusinessWorkspace，补 Store/source/S、typed Base、规划与实际安装 | 与共同 [BusinessWorkspace](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)的 Capture/身份职责不同，不能直接去前缀造成同名 |
 | `P0PendingSave` → `PendingRepositorySave`；`P0SaveResult` → `RepositorySaveResult` | [pending](../../../src/DurableGraph.Persistence/PendingRepositorySave.cs)、[结果](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)承载业务／可选 meta／共同发布材料 | Prepare、Append、发布结果、Confirmed 后安装仍分开；名字不授发布资格 |
@@ -60,7 +60,7 @@ C 的生成与存档资格另见其记录。表保旧名便于迁移检索，不
 | `P0SaveCheckpoint` → `RepositorySaveStage` | [声明](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)是共同保存 hook 的阶段；[Kill 见证](../../../experiments/MetaBootstrapCrashProbe/Program.cs)据此选择窗口 | 与公共 Checkpoint 历史位置不同；只改符号，保 hook 位置、枚举值和实验窗口含义 |
 
 基线 `P0GraphSnapshot.Objects/Heads` 实际是同一 head map，B 已统一为 `StoredGraphRevision.ObjectHeads` 并适配调用者。
-GraphResources 上指向默认路径的内部成员已按实际职责收回 backend 标签，例如 `MetaBootstrapStore` → `GraphStore`。
+B 基线 GraphResources（现 RepositoryResources）上指向默认路径的内部成员已按实际职责收回 backend 标签，例如 `MetaBootstrapStore` → `GraphStore`。
 自举本身仍是有效机制；说明固定解释依赖时可以继续使用 bootstrap，不能把所有出现该词的描述都当历史垃圾。
 
 ### 3.2 Schema catalog 与固定员工
@@ -116,13 +116,13 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 6. 公开候选与尚不宜机械处理的问题
 
-这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。其余候选保独立判断，不因没有兼容负担而自动全改。
+这些线索已证实，但不纳入内部命名第一片；D1 只采用下表前两项，内部接口随改，具体映射与验收见[当片合同](implementation-d1.md)。D3 采用仓库资源 owner 名称；其余候选保独立判断，不因没有兼容负担而自动全改。
 
 | 提案基线完整类型名 | 采用结果与限制 |
 |---|---|
 | `Atelia.DurableGraph.Runtime.CapturedStatePreparation<T>` | D1 已采用 `StatePreparationBinding<T>`，内部接口为 `IStatePreparationBinding`。[声明](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)是稳定 Schema/DTO/body/equality 能力绑定，Normalize 后和 [Pair 比较](../../../src/DurableGraph.Persistence/GraphReader.cs)也使用；[SG](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs)直接发出新名称。不是一次准备结果，equality 与精确绑定检查保持 |
 | `Atelia.DurableGraph.Serialization.StringPayloadCodec` | D1 已采用 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringBodyPreparer.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
-| `Atelia.DurableGraph.Persistence.GraphResources` | `RepositoryResources` 更能表达唯一 FS/VS、branch/shared、pending、fault owner。现 XML 已说明具体 owner，保名也可；收益与 public consumer 迁移成本比较后决定，不强制随 façade 更名 |
+| `Atelia.DurableGraph.Persistence.GraphResources` | [D3](#d3-status)采用 `Atelia.DurableGraph.Persistence.RepositoryResources`；实际拥有仓库级 FS/VS、branch/shared 基线、唯一 pending 和 fault。namespace 与公开成员保持，直接迁移并重编译，不与薄 facade 合并 |
 | `Atelia.DurableGraph.Persistence.GraphFrameKind` | 候选根空间 `Atelia.DurableGraph.CheckpointKind`，与 CheckpointAddress 的业务角色对应；[现 enum](../../../src/DurableGraph.Persistence/HistoryGraphRecord.cs)仅 Event/State。也可保现名，不与内部 StoredGraphKind 合并或加 Meta |
 | `Atelia.DurableGraph.Persistence.GraphCommitException/GraphCommitOutcome` | 候选根空间 `RepositoryPublicationException/RepositoryPublicationOutcome`；[现合同](../../../src/DurableGraph.Persistence/GraphCommitException.cs)已覆盖 graph、branch-ref 和 tag。现行为无缺陷；不为根空间整齐自动搬 public companion，不改 outcome/fault/候选地址含义 |
 | `.Runtime.StringValueProjection/DurableValueProjection<T>/ObjectValueProjection<T>` | 可分别明确为 StringReferenceProjection/DurableReferenceProjection/ObjectReferenceProjection；[实现](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)在引用与 ObjectId 间转换。收益中等，先不全改；保通用 IValueProjection，不授 object/interface 通配能力，不因未发现调用就删 public helper |
@@ -157,7 +157,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | A：Generator 分析材料 | §5 私有分析／Family／模板名与 Build 内部 codec，暂保 generator 入口 | 新旧 generated texts/hints、diagnostics 和 history 完整字节相同；覆盖普通路径、非泛型 Family、真实泛型、record、enum、Nullable、Upgrade、外部 fixed base/inline、forced definitions；根 build 与相关 SG/Build tests |
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
-| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
+| D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口；[D3](#d3-status)采用仓库资源 owner 名称 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
 | E：组织判断 | [E1](#e1-status)对应 Generator／公开内容操作文件名，[E2](#e2-status)对应 Persistence 的 6 个文件名，[E3](#e3-status)将旧阶段目录的 16 份源码并入 Persistence 根并迁移导航；多类型文件共置 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
@@ -287,3 +287,46 @@ dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.
 根 Rebuild 零警告／错误；Persistence 893 项全部通过，失败／跳过为零。集成 diff 和本地链接检查通过，没有新增历史引用缺口。
 完整路径表与移动 receipt 位于 `.artifacts/db092-e3/source/`，`result.json` SHA256 `029601F73F2A4823EFFCB4E4C231FFCFC7E04D19D4ABCD157EB184A90B1D2118`；主线程字节验收为 `.artifacts/db092-e3/root-source-acceptance.json`，构建／测试日志在同一切片工件目录。
 本片没有制作新 G 或重跑包消费者／存档故事，不声明 DLL／PDB 字节等价，也不重授 C／D1／D2 的准确包资格。有限文件组织已完成；余下名称与程序集选择从[路线图](../../DurableGraph-research-roadmap.md)进入，不把本片升级为全项目目录整理。
+
+<a id="d3-status"></a>
+## 13. D3：仓库资源 owner 命名
+
+2026-10-14；基线 `54445915476797bce2bf77897e77904d3ffcda2b`。问题：具体资源 owner 的名称能否明确其仓库级发布与寿命职责？
+源码中的 owner 创建匹配的 FS/VS、持有 branch/shared 发布基线与唯一 pending，并统一 fault/dispose；RepositoryStorageFacade 只是可借用或拥有该资源的薄外观。
+现有 XML 已能解释职责，但 GraphResources 容易被理解为单图的读取资源。采用 RepositoryResources，保现有 `.Persistence` 归属和唯一 owner，不增加另一层。
+
+| 传播项 | 本片有限映射 |
+|---|---|
+| 公开完整类型名 | `Atelia.DurableGraph.Persistence.GraphResources` → `Atelia.DurableGraph.Persistence.RepositoryResources` |
+| 两份文件名 | `GraphResources.cs`／`GraphResources.MetaBootstrap.cs` → `RepositoryResources.cs`／`RepositoryResources.MetaBootstrap.cs` |
+| 源码接缝 | 类型、构造器、返回／参数、nested owner 类型引用；配套注释、owner XML summary 与两条资源健康／只读消息采用仓库职责名 |
+| 文档 | 当前 owner 用语与两份源码链接同步；历史结论、包 receipt 和旧测试宿主名称保其原义 |
+
+成员、访问级别、namespace、程序集／PackageId、项目与构建配置保持；不连带 GraphFrameKind、publication companion、helper 或 wire／Schema／history。
+调用方直接迁移并重编译，不保兼容壳。公开资源仅提供三种 Create/Open 工厂、借用 Data、健康／只读状态与 Dispose；不能从外部注入 Repository 或直接使用 internal facade，不为验收扩 API。
+
+最小验收：当前 C# 仅含有限标识符／注释及两条批准消息差异；公开 API 在唯一类型名反向映射后相同；根构建及 Persistence／Runtime／Generator 相关回归通过。
+准确新 G 的非 friend PackageReference 消费者直接编译使用新 owner，验证 Data 的确认、读取、只读拒写及 owner 关闭后借用资源失效；全关后再以公开 Repository 在同库保存、跨进程冷开续写与只读历史读取。
+internal 薄外观借用／pending／fault 寿命沿用现存回归，不以包消费者反射绕过边界。只验新建存储库，不设旧包或旧数据兼容门槛。
+
+源码实施与主线程验证已通过：58 份 C# 的 317 个标识符、4 处名称注释、1 处 owner XML summary、2 条批准消息与两份 basename 同步；其他 549 个非文档跟踪文件保持原字节。
+Roslyn token／literal 核验无失败或新解析错误；完整源码字节对照只含批准映射。公开／protected API 清单 1359 行在唯一类型名反向映射后相同，不授二进制兼容或全部 attribute／nullable annotation 等价资格。
+当前 owner 用语已同步，修复 8 份文档的 19 个源码目标链接；历史正文与旧测试宿主名保持。集成 diff 和本地链接检查通过，原有 117 处历史引用缺口没有新增。
+
+主线程以准确 S pin 的 package-mode assets 串行运行：
+
+```powershell
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+```
+
+根 Rebuild 零警告／错误；Persistence 893 项、Runtime／Generator／Build 1628 项全部通过，失败／跳过为零。
+根 solution 外的 MetaBootstrapCrashProbe 使用准确 S 源码，以独立输出编译通过，零警告／错误；没有重跑 Kill 矩阵或授本次源码进程中止资格：
+
+```powershell
+dotnet build experiments/MetaBootstrapCrashProbe/MetaBootstrapCrashProbe.csproj -c Release -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage -p:UseArtifactsOutput=true -p:ArtifactsPath=E:/repos/Atelia-org/durable-graph/.artifacts/db092-d3/crash-host -m:1 -nr:false
+```
+
+源码 receipt 为 `.artifacts/db092-d3/source/result.json`，SHA256 `26B54356253A13EA558015D4DD5BE6B994C84FC370B0C00931715DD99D8AE412`；主线程字节／API 凭据与实际构建／测试日志位于 `.artifacts/db092-d3/`。
+当前停点：源码及相关回归已验收，准确新 G 的公开包消费尚待完成；不将 D1／D2 的原包资格回填为 D3 证据。

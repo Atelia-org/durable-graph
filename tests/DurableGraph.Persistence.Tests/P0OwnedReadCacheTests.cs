@@ -439,7 +439,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     [InlineData("DataClose")]
     [InlineData("VersionsClose")]
     public void WarmBorrowedReadsRejectClosedOrFaultedResourcesAndReleaseResidency(string stop) {
-        using GraphResources resources = GraphResources.CreateStorageNew(NewPath());
+        using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath());
         using RepositoryStorageFacade facade = new(resources);
         using (PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
             new(null, new(1), [B(1, [10])]), new(null, new(1), [B(1, [0])]))) { facade.Commit(pending); }

@@ -117,7 +117,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         Counts counts = new() { ThrowBusinessCallbacks = true };
         using Repository repository = Repository.OpenStorageExisting(_path, Models(counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         CheckpointAddress valid = repository.GetHead("main");
-        GraphResources resources = ResourcesOf(repository);
+        RepositoryResources resources = ResourcesOf(repository);
         FrameAddress bad = resources.Data.Append(GraphFrameCodec.GraphTag,
             GraphFrameCodec.EncodeGraph(StoredGraphKind.Event, valid.RevisionAddress, valid.RootId,
                 valid.RevisionAddress, repository.SharedSchemaRoot, null)).Unwrap();

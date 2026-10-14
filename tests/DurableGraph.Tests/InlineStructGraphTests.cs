@@ -36,7 +36,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(originalWorld, 8, -1, false);
         }
 
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path))
         {
             var store = segments.GraphStore;
             var initial = store.ReadGraph(first);
@@ -72,7 +72,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             reopenedNoChange = fixture.Commit(loaded);
             Assert.Same(world, fixture.World(loaded));
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+        using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var store = segments.GraphStore;
             Assert.Equal(removed, store.ReadGraph(reopenedNoChange).SourceGraph);
             Assert.Empty(DefaultRecords(store, reopenedNoChange));
@@ -99,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(child, fixture.Child(world));
             fixture.Check(world, 7, 11, false);
         }
-        using GraphResources segments = GraphResources.OpenExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var store = segments.GraphStore;
         Assert.Equal(first, store.ReadGraph(retry).SourceGraph);
         Assert.Empty(DefaultRecords(store, retry));
@@ -140,7 +140,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)fixture.NewWorld());
             first = checkout.StateRevisionAddress!.Value;
         }
-        using GraphResources resources = GraphResources.OpenExisting(directory.Path);
+        using RepositoryResources resources = RepositoryResources.OpenExisting(directory.Path);
         GraphRecordStore store = resources.GraphStore;
         StoredGraphRevision initial = store.ReadGraph(first);
         SchemaCatalogView catalog = SchemaCatalogView.Load(store, initial.SchemaRoot!.Value);

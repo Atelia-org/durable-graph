@@ -49,7 +49,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             Assert.Same(values, session.World.Values);
             Assert.Same(values, session.World.Alias);
         }
-        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore states = file.GraphStore;
             Assert.Empty(Records(states, reordered));
             StoredGraphRevision original = states.ReadGraph(revisions[0].Address);
@@ -78,7 +78,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             Assert.Same(session.World.Values, session.World.Alias);
             unchanged = session.Commit(NoRebase);
         }
-        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore states = file.GraphStore;
             Assert.Empty(Records(states, unchanged));
         }
@@ -112,7 +112,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             loaded.Links = null;
             removed = session.Commit(NoRebase);
         }
-        using GraphResources file = GraphResources.OpenExisting(_root);
+        using RepositoryResources file = RepositoryResources.OpenExisting(_root);
         GraphRecordStore states = file.GraphStore;
         Assert.Single(Records(states, childOnly));
         Assert.Equal(2, states.ReadGraph(childOnly).ObjectHeads.Keys.Except(states.ReadGraph(removed).ObjectHeads.Keys).Count());

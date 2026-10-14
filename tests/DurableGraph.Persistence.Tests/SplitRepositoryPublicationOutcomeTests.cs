@@ -33,7 +33,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Assert.NotNull(repository.PreparedStateEntry);
-            GraphResources resources = ResourcesOf(repository);
+            RepositoryResources resources = ResourcesOf(repository);
             GraphRecordStore store = repository.GraphStore;
             NormalizedGraphState baseline = main.Baseline!;
             CheckpointAddress oldHead = main.Head;
@@ -94,7 +94,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             using BranchCheckout main = repository.Checkout("main");
             Assert.NotNull(repository.PreparedStateEntry); // Actual cold checkout populated the State slot.
-            GraphResources resources = ResourcesOf(repository);
+            RepositoryResources resources = ResourcesOf(repository);
             GraphRecordStore store = repository.GraphStore; // Borrow before Repository becomes busy.
             store.ReadGraph(seed.State);
             Assert.True(store.ReadCacheStatistics.ResidentChargeBytes > 0);
@@ -160,7 +160,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     private void VerifySelectedAndContinue(SeedResult seed, bool visible, FrameAddress? candidate, FrameImage[] capturedFrames) {
         FrameAddress continued;
         using (Repository reopened = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            GraphResources resources = ResourcesOf(reopened);
+            RepositoryResources resources = ResourcesOf(reopened);
             GraphRecordStore store = reopened.GraphStore;
             IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Versions.ReadRef(1).Unwrap(), "P0R1"u8);
             IReadOnlyDictionary<string, FrameAddress> shared = ReadRoot(resources.Versions.ReadRef(2).Unwrap(), "P0S1"u8);

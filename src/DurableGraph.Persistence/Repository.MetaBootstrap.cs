@@ -9,7 +9,7 @@ public sealed partial class Repository {
     private readonly StateModelRegistry.FrozenConfiguration _modelConfiguration;
     private readonly RepositoryStorageFacade _storageFacade;
 
-    private Repository(GraphResources resources, StateModelRegistry.FrozenConfiguration configuration,
+    private Repository(RepositoryResources resources, StateModelRegistry.FrozenConfiguration configuration,
         SchemaWriteMode? schemaWriteMode) {
         _resources = resources;
         _modelConfiguration = configuration;
@@ -19,11 +19,11 @@ public sealed partial class Repository {
 
     internal static Repository CreateStorageNew(string path, StateModelRegistry models,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) =>
         OpenStorage(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes, schemaWriteMode);
     internal static Repository OpenStorageExisting(string path, StateModelRegistry models,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) =>
+        long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) =>
         OpenStorage(path, models, create: false, readOnly: false, readCacheBudgetBytes,
             rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
     internal static Repository OpenStorageReadOnlyExisting(string path, StateModelRegistry models,
@@ -32,17 +32,17 @@ public sealed partial class Repository {
 
     private static Repository OpenStorage(string path, StateModelRegistry models, bool create, bool readOnly,
         long readCacheBudgetBytes, Action<uint>? afterCreateRef = null,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) {
+        long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes, SchemaWriteMode? schemaWriteMode = null) {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         if (schemaWriteMode is { } mode && mode != global::Atelia.DurableGraph.SchemaWriteMode.Shared) {
             throw new ArgumentOutOfRangeException(nameof(schemaWriteMode), schemaWriteMode, "Unknown Schema write mode.");
         }
-        GraphResources? resources = null;
+        RepositoryResources? resources = null;
         try {
-            resources = create ? GraphResources.CreateStorageNew(path, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes) : readOnly
-                ? GraphResources.OpenStorageReadOnlyExisting(path, readCacheBudgetBytes)
-                : GraphResources.OpenStorageExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
+            resources = create ? RepositoryResources.CreateStorageNew(path, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes) : readOnly
+                ? RepositoryResources.OpenStorageReadOnlyExisting(path, readCacheBudgetBytes)
+                : RepositoryResources.OpenStorageExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
             return new(resources, models.FreezeConfiguration(), schemaWriteMode);
         } catch (Exception primary) {
             try { resources?.Dispose(); }
@@ -70,7 +70,7 @@ public sealed partial class Repository {
         bool delivered = false;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            GraphResources.ValidateBranchName(branchName);
+            RepositoryResources.ValidateBranchName(branchName);
             if (_storageFacade!.GetHead(branchName) is not null) { throw new InvalidOperationException("Branch name already exists."); }
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }

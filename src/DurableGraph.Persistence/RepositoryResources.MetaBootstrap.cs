@@ -8,7 +8,7 @@ using PublicationStore = Atelia.VersionStore.VersionStore;
 namespace Atelia.DurableGraph.Persistence;
 
 // Concrete metadata-graph owner used by the public factories and bounded internal probes.
-public sealed partial class GraphResources {
+public sealed partial class RepositoryResources {
     private const uint BranchRef = 1, SharedRef = 2;
     private const string BranchPrefix = "branch/", SchemaKey = "schema";
     private static ReadOnlySpan<byte> BranchMagic => "P0R1"u8;
@@ -24,7 +24,7 @@ public sealed partial class GraphResources {
         internal FrameAddress? SharedRoot { get; } = sharedRoot;
     }
 
-    private GraphResources(DataStore data, PublicationStore versions,
+    private RepositoryResources(DataStore data, PublicationStore versions,
         RefBytesSnapshot branches, RefBytesSnapshot shared, long readCacheBudgetBytes) {
         Data = data;
         IsReadOnly = versions.IsReadOnly;
@@ -51,19 +51,19 @@ public sealed partial class GraphResources {
     internal bool HasPendingSave { get { RequireStorageAvailable(); return _pending is not null; } }
     internal FrameAddress? SharedSchemaRoot { get { RequireStorageAvailable(); return _baseline.SharedRoot; } }
 
-    internal static GraphResources CreateStorageNew(string path,
+    internal static RepositoryResources CreateStorageNew(string path,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
         long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
         OpenStorage(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
-    internal static GraphResources OpenStorageExisting(string path,
+    internal static RepositoryResources OpenStorageExisting(string path,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes,
         long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
         OpenStorage(path, create: false, readOnly: false, readCacheBudgetBytes, rotationThresholdBytes: rotationThresholdBytes);
-    internal static GraphResources OpenStorageReadOnlyExisting(string path,
+    internal static RepositoryResources OpenStorageReadOnlyExisting(string path,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
         OpenStorage(path, create: false, readOnly: true, readCacheBudgetBytes);
 
-    private static GraphResources OpenStorage(string path, bool create, bool readOnly, long readCacheBudgetBytes,
+    private static RepositoryResources OpenStorage(string path, bool create, bool readOnly, long readCacheBudgetBytes,
         Action<uint>? afterCreateRef = null, long rotationThresholdBytes = DefaultRotationThresholdBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -124,7 +124,7 @@ public sealed partial class GraphResources {
         return new(address, metadata.Parent, kind, metadata.RootId);
     }
 
-    internal sealed record PreparedBranchRootUpdate(GraphResources Owner,
+    internal sealed record PreparedBranchRootUpdate(RepositoryResources Owner,
         PublicationBaseline ExpectedBaseline, RefRevision ExpectedRevision,
         PublicationBaseline NextBaseline, byte[] Payload);
 

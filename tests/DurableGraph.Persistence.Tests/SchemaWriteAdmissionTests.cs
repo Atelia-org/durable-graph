@@ -303,12 +303,12 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
     private sealed record FrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool IsTombstone, byte[] PayloadAndMeta);
     private sealed record PublicationSnapshot(RefBytesSnapshot Branches, RefBytesSnapshot Shared, FrameImage[] Frames, long Appended);
     private static PublicationSnapshot Snapshot(Repository repository) {
-        GraphResources resources = ResourcesOf(repository);
+        RepositoryResources resources = ResourcesOf(repository);
         return new(resources.Versions.ReadRef(1).Unwrap(), resources.Versions.ReadRef(2).Unwrap(),
             ReadFrames(resources.Data), repository.GraphStore.AppendedFrames);
     }
     private static void AssertUnchanged(Repository repository, PublicationSnapshot before) {
-        GraphResources resources = ResourcesOf(repository);
+        RepositoryResources resources = ResourcesOf(repository);
         AssertSameRef(before.Branches, resources.Versions.ReadRef(1).Unwrap());
         AssertSameRef(before.Shared, resources.Versions.ReadRef(2).Unwrap());
         AssertExactFrames(before.Frames, ReadFrames(resources.Data));

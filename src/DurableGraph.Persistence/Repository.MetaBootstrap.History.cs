@@ -49,7 +49,7 @@ public sealed partial class Repository {
 
     private void MutateBranchCore(string branchName, FrameAddress head) {
         // Complete the candidate before user publication hooks and any VS output.
-        GraphResources.PreparedBranchRootUpdate update = _resources.PrepareBranchRoot(branchName, head);
+        RepositoryResources.PreparedBranchRootUpdate update = _resources.PrepareBranchRoot(branchName, head);
         MutateRefCore((out PublicationOutcome outcome) => _resources.PublishBranchRoot(update, out outcome));
     }
 

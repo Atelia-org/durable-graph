@@ -227,7 +227,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static uint FindGraphObject(GraphRecordStore store, FrameAddress graph, string schemaId) => Assert.Single(
         store.ReadGraph(graph).ObjectHeads.Keys, id => DefaultLayout(store, graph, id).Schema?.SchemaId == schemaId);
     private static GraphRecordStore ReferenceGraphStore(Repository repository) =>
-        ((GraphResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!).GraphStore;
+        ((RepositoryResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!).GraphStore;
 
     private sealed class ReferenceGraphFixture(Assembly assembly) {
         private readonly Type _host = assembly.GetType("FusedDelta.Host")!;

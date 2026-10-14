@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Check(originalWorld, 2, true, true);
         }
 
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path))
+        using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path))
         {
             var states = segments.GraphStore;
             var initial = states.ReadGraph(first);
@@ -84,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             reopened = fixture.Commit(session);
             Assert.Same(world, fixture.World(session));
         }
-        using (GraphResources segments = GraphResources.OpenExisting(directory.Path)) {
+        using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var states = segments.GraphStore;
             Assert.Equal(removed, states.ReadGraph(reopened).SourceGraph);
             Assert.Empty(DefaultRecords(states, reopened));
@@ -111,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(array, fixture.Vector(world));
         }
 
-        using GraphResources segments = GraphResources.OpenExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var states = segments.GraphStore;
         ObjectVersionRecord delta = Assert.Single(DefaultRecords(states, sparse));
         ObjectVersionRecord replacementBase = Assert.Single(DefaultRecords(states, dense));
@@ -183,7 +183,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             recovered = fixture.Commit(session);
             fixture.Check(world, 0, false, false);
         }
-        using GraphResources segments = GraphResources.OpenExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var states = segments.GraphStore;
         var revision = states.ReadGraph(recovered);
         Assert.Equal(first, revision.SourceGraph);

@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = oldScope.Load(app1).GetType("CrossHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var oldModels = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
             var revision = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, oldModels);
             exactWorld = Assert.Single(revision.Objects, row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
@@ -56,7 +56,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.True(currentHost.GetMethod("MissingListRuleFailsWithoutPublishing")!
             .CreateDelegate<Func<string, bool>>()(directory.Path));
         var models = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+        using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
             var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models);
             var world = Assert.Single(decoded.Objects, row => row.Schema?.SchemaId == "CrossWorld");
             Assert.Equal(exactWorld, world.Schema);
@@ -66,7 +66,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
-        using (GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path)) {
+        using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
             var store = segments.GraphStore;
             Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
             Assert.All(DefaultRecords(store, addresses[0]), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
@@ -96,7 +96,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Type host = oldScope.Load(app1).GetType("CrossHistoryApp.Host")!;
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, true);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
-            using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+            using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
             prior = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models).Objects,
                 row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }

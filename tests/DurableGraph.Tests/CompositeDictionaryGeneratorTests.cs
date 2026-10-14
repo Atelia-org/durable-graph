@@ -106,7 +106,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("SaveAndLoad")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
         DecodedRevision first = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         ModelExecutionEnvironment snapshot = first.SourceModels!;

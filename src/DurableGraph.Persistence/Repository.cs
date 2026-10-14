@@ -25,7 +25,7 @@ namespace Atelia.DurableGraph;
 /// Without an explicit choice, business capture is rejected.
 /// </remarks>
 public sealed partial class Repository : IDisposable {
-    private readonly GraphResources _resources;
+    private readonly RepositoryResources _resources;
     private readonly object _identity = new();
     private readonly HashSet<string> _activeBranches = new(StringComparer.Ordinal);
     private bool _busy;
@@ -53,7 +53,7 @@ public sealed partial class Repository : IDisposable {
     /// <remarks>Configuration is captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens. Rotation controls FrameStore file allocation; the separate cache budget controls owned physical reads. Select a Schema write mode explicitly before saving business graphs; a missing mode permits inspection and ref-only operations.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository CreateNew(string path, StateModelRegistry models,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
+        long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
         OpenStorage(path, models, create: true, readOnly: false, readCacheBudgetBytes,
             rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
@@ -61,7 +61,7 @@ public sealed partial class Repository : IDisposable {
     /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities. Select a Schema write mode explicitly before saving business graphs. Without a mode, checkout restoration and ref-only operations remain available.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository OpenExisting(string path, StateModelRegistry models,
-        long rotationThresholdBytes = GraphResources.DefaultRotationThresholdBytes,
+        long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, SchemaWriteMode? schemaWriteMode = null) =>
         OpenStorage(path, models, create: false, readOnly: false, readCacheBudgetBytes,
             rotationThresholdBytes: rotationThresholdBytes, schemaWriteMode: schemaWriteMode);
@@ -228,7 +228,7 @@ public sealed partial class Repository : IDisposable {
                     ? bufferedIndex >= 0 ? buffered[bufferedIndex--] : null
                     : ReadNextEventCore(endInclusive, afterExclusive, ref cursor, visited);
             } finally { EndOperation(); }
-            // GraphResources.ReadHistory has already disposed its frame/lease. No repository guard
+            // RepositoryResources.ReadHistory has already disposed its frame/lease. No repository guard
             // survives the yield, including when the caller stops before completing the range.
             if (next is null) { yield break; }
             yield return next;
@@ -460,7 +460,7 @@ public sealed partial class Repository : IDisposable {
         if (kind is not null && frame.Kind != kind) { throw new ArgumentException("Frame has the wrong Event/State role.", nameof(frame)); }
     }
     private void ValidateNewName(string name) {
-        GraphResources.ValidateBranchName(name);
+        RepositoryResources.ValidateBranchName(name);
         if (_storageFacade.GetHead(name) is not null) {
             throw new InvalidOperationException("Branch name already exists.");
         }

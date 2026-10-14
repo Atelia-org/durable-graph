@@ -281,7 +281,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static object? DB082Member(object root, string member) => root.GetType().GetField(member)!.GetValue(root);
     private static int DB082Value(object root) => (int)DB082Member(root, "Value")!;
-    private static GraphResources DB082Resources(Repository repository) => (GraphResources)typeof(Repository)
+    private static RepositoryResources DB082Resources(Repository repository) => (RepositoryResources)typeof(Repository)
         .GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
 
     private static void DB082CheckGraph(object root, bool family) {

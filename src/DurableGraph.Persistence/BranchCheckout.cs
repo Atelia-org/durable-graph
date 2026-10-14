@@ -142,7 +142,7 @@ public sealed class BranchCheckout : IDisposable {
         return _repository.CommitToShared(this, domainEvent, null, parameters);
     }
 
-    // A bounded discard witness; the GraphResources pending never escapes the repository operation.
+    // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.
     internal void PrepareAndDiscard(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
         ReadAmplificationBaseBudgetParameters? parameters = null, bool toShared = false) {
         ObjectDisposedException.ThrowIf(_disposed, this);

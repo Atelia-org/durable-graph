@@ -41,7 +41,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress missingString;
         FrameAddress wrongKind;
         FrameAddress schemaRoot;
-        using (GraphResources resources = GraphResources.CreateNew(directory.Path, rotationThreshold))
+        using (RepositoryResources resources = RepositoryResources.CreateNew(directory.Path, rotationThreshold))
         using (RepositoryStorageFacade repository = new(resources)) {
             GraphRecordStore store = repository.Store;
             SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);

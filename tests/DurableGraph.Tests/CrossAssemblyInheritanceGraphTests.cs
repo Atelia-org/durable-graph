@@ -28,7 +28,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress[] addresses = host.GetMethod("Exercise")!
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverse);
-        using GraphResources segments = GraphResources.OpenReadOnlyExisting(directory.Path);
+        using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
         var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
         var leaf = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Leaf");

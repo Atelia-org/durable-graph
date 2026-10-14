@@ -55,7 +55,7 @@ public sealed partial class EventHistoryRepositoryTests {
             mainHead = main.CommitState(NoRebase);
             Assert.Equal((byte)8, Assert.IsType<Node>(repository.ReadState(otherHead)).Left!.Value);
         }
-        using (GraphResources resources = GraphResources.OpenReadOnlyExisting(_root)) {
+        using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             uint childId = Assert.Single(states.ReadGraph(initial.RevisionAddress).ObjectHeads.Keys, id => id != initial.RootId.Value);
             ObjectVersionRecord firstWrite = Assert.Single(StorageTestData.LocalRecords(states, childOnly.RevisionAddress));

@@ -57,7 +57,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         const long rotationThreshold = 128;
         FrameAddress first, second, third, newBase, schemaRoot, missingString, wrongKind, malformed, mismatchedBase;
-        using (GraphResources resources = GraphResources.CreateNew(directory.Path, rotationThreshold))
+        using (RepositoryResources resources = RepositoryResources.CreateNew(directory.Path, rotationThreshold))
         using (RepositoryStorageFacade repository = new(resources)) {
             GraphRecordStore store = repository.Store;
             SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);

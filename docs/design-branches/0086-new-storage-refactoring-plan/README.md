@@ -15,7 +15,7 @@
 
 ## 当前实现与验证入口
 
-- [GraphResources](../../../src/DurableGraph.Persistence/GraphResources.cs)：owner／backing 检查、故障时清 facade、按 Store→VS→FS 关闭；[实际打开与发布](../../../src/DurableGraph.Persistence/GraphResources.MetaBootstrap.cs)：必要根读取后构建缓存。
+- [RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.cs)：owner／backing 检查、故障时清 facade、按 Store→VS→FS 关闭；[实际打开与发布](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)：必要根读取后构建缓存。
 - [GraphRecordStore](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)与 [DB-067](../0067-owned-revision-read-cache-design/README.md)：借用寿命、命中资格、必要图关系及缓存释放。
 - [正常不完整 data 尾恢复与未选 ref 惰性打开回归](../../../tests/DurableGraph.Persistence.Tests/SplitRepositoryBackingRecoveryTests.cs)、[owner／backing 关闭与 fault 回归](../../../tests/DurableGraph.Persistence.Tests/GraphResourcesSplitOwnerTests.cs)、[暖缓存失效回归](../../../tests/DurableGraph.Persistence.Tests/P0OwnedReadCacheTests.cs)。
 - 准确上游版本、来源与源码／包模式操作只查[依赖指南](../../storage-dependency.md)和 [pin](../../../eng/StorageDependency.props)。

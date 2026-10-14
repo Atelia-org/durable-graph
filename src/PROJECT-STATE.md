@@ -18,6 +18,8 @@
 
 ## 当前焦点
 
+[DB-092 D3](../docs/design-branches/0092-type-namespace-refactoring/README.md#d3-status)正在实施唯一资源 owner 的公开改名：`GraphResources` → `RepositoryResources`，两份文件名及调用／当前文档同步；成员、namespace、发布与寿命行为保持。根验证及准确新 G 的直接公开资源消费完成后更新停点。
+
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／[D1](../docs/design-branches/0092-type-namespace-refactoring/implementation-d1.md)／[D2](../docs/design-branches/0092-type-namespace-refactoring/implementation-d2.md)及 E1／E2／[E3](../docs/design-branches/0092-type-namespace-refactoring/README.md#e3-status)已限定验收：普通内核／固定员工／执行环境采用现行职责名；公开内容操作使用 `StatePreparationBinding<T>` 与 `StringBodyPreparer`，Generator 入口为 `DurableGraphGenerator`。本轮有限文件组织完成，旧 P0 源码目录的 16 份现行源码并入 Persistence 根，多类型文件共置；按[源码导航](DurableGraph.Persistence/README.md)定位。源码字节与编译接线保持，根构建、相关回归与链接检查通过。生成合同与准确新包消费证据仍从 D1／D2 进入；旧生成输出的显式清理／重编译见[构建指引](../README.md)。
 
 按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。后续公开候选仍逐项核职责收益，槽／编号语义与程序集调整分别裁决，具体入口和重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。
@@ -263,14 +265,14 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
-- GraphResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 VersionStore，保管最新分支目录／shared 两根与唯一 pending；只读不写盘、不修尾。
+- RepositoryResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 VersionStore，保管最新分支目录／shared 两根与唯一 pending；只读不写盘、不修尾。
   GraphReader.ReadPair 各自 Decode/Normalize/验证后，在同 ID/head、current model/完整布局、未重写且有完整状态相等 proof 的候选中，
   沿反向引用剔除依赖非候选者；剩余只读闭包共享 Allocate/Hydrate，稳定环可整体复用，changed-child 会使 owner 分裂。
   共享还要求同 reader-issued 环境；string 在既有 same-ID/head 候选内按引用快路／Ordinal 完整内容证明，不 intern 不同 ID 的等值非空串。只读结果不导入可编辑基线。
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   共同 workspace／候选在 State 确认后才安装原实例／新根；独立 Event 使用最近 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State rewrite。
   Event 完整目录按 source − candidate 产生 Removes，保实际 local Base/Delta 与内容来源 external heads；后继 State 仍相对最近 State。
-- Repository 拥有 GraphResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
+- Repository 拥有 RepositoryResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
   CreateBranch(initialState) / CreateBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
   业务 Parent 指向提交前精确 Head；业务内容来源取该 Parent 自身或祖先中最近 State，无 State 时为 null，旧称 Revision Parent。
@@ -376,7 +378,7 @@ DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference �
 | 可组合值 Upgrade / 规则集 / Context 子作用域 | [DB-039](../docs/design-branches/0039-composable-value-upgrade-design/README.md)、[值绑定](DurableGraph/Runtime/Binding/StateBindingContext.ValueUpgrade.cs)、[SG 属性](DurableGraph.Generator/DurableGraphGenerator.ValueUpgrades.cs)、[模型资产](../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) |
 | 泛型/历史绑定/UpgradeContext | [DB-038](../docs/design-branches/0038-generic-schema-state-and-binding-design/README.md)、[绑定上下文](DurableGraph/Runtime/Binding/StateBindingContext.cs)、[生成模板](DurableGraph.Generator/DurableGraphGenerator.GenericState.cs)、[泛型模型资产](../experiments/PackageConsumerProbe/GenericConsumer/README.md) |
 | inline struct/嵌套 DTO/Schema DAG | [DB-037](../docs/design-branches/0037-inline-struct-state-slice/README.md)、[生成值 helper](DurableGraph.Generator/DurableGraphGenerator.InlineState.cs)、[真实生成图](../tests/DurableGraph.Tests/InlineStructGraphTests.cs)、[inline 模型资产](../experiments/PackageConsumerProbe/InlineStructConsumer/README.md) |
-| 独立图工作区、资源与读取 | [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice/README.md)、[工作区](DurableGraph.Persistence/BusinessWorkspace.cs)、[资源](DurableGraph.Persistence/GraphResources.cs)、[读取](DurableGraph.Persistence/GraphReader.cs) |
+| 独立图工作区、资源与读取 | [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice/README.md)、[工作区](DurableGraph.Persistence/BusinessWorkspace.cs)、[资源](DurableGraph.Persistence/RepositoryResources.cs)、[读取](DurableGraph.Persistence/GraphReader.cs) |
 | EventHistory、分支发布与恢复 | [DB-063](../docs/design-branches/0063-event-history-journal-slice/README.md)、[Repository](DurableGraph.Persistence/Repository.cs)、[工作副本](DurableGraph.Persistence/BranchCheckout.cs)、[集成测试](../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs) |
 | 操作内 exact 解码复用与只读闭包共享 | [DB-064](../docs/design-branches/0064-shared-revision-decoding-design/README.md)、[恢复上下文](DurableGraph.Persistence/GraphReadContext.cs)、[引用闭包](DurableGraph.Persistence/GraphReader.cs)、[共享测试](../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、[Checkout 与续写](../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) |
 | 领域引用图/首次准备 | [DB-034](../docs/design-branches/0034-durable-reference-graph-batch/README.md)、[真实生成图冷读](../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs)、[双视图与失败测试](../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs) |

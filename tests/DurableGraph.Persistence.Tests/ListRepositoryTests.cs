@@ -37,7 +37,7 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.Same(values, session.World.Values);
         }
         registered = ReadSelectedSchemaPayload(_root);
-        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = file.GraphStore;
             ObjectVersionRecord delta = Assert.Single(Records(store, adaptive));
             listId = new(delta.ObjectId);
@@ -73,7 +73,7 @@ public sealed class ListRepositoryTests : IDisposable {
             Assert.Same(session.World.Values, session.World.Alias);
         }
         Assert.Equal(registered, ReadSelectedSchemaPayload(_root));
-        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = file.GraphStore;
             Assert.Equal(seed, store.ReadGraph(adaptive).SourceGraph);
             Assert.Equal(adaptive, store.ReadGraph(myers).SourceGraph);
@@ -133,7 +133,7 @@ public sealed class ListRepositoryTests : IDisposable {
             world.Values.Capacity += 100;
             unchanged = session.Commit(NoRebase);
         }
-        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = file.GraphStore;
             ObjectVersionRecord listChange = Assert.Single(Records(store, resize));
             Assert.Equal(ObjectVersionKind.Delta, listChange.Kind);
@@ -193,7 +193,7 @@ public sealed class ListRepositoryTests : IDisposable {
             session.World.Values.Add(66);
             retry = session.Commit(NoRebase);
         }
-        using (GraphResources file = GraphResources.OpenExisting(_root)) {
+        using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = file.GraphStore;
             Assert.Equal(seed, store.ReadGraph(frozen).SourceGraph);
             Assert.Equal(frozen, store.ReadGraph(failedCandidate).SourceGraph);
@@ -228,7 +228,7 @@ public sealed class ListRepositoryTests : IDisposable {
             world.Links = null;
             changed = session.Commit(NoRebase);
         }
-        using GraphResources file = GraphResources.OpenExisting(_root);
+        using RepositoryResources file = RepositoryResources.OpenExisting(_root);
         GraphRecordStore store = file.GraphStore;
         IReadOnlyDictionary<uint, FrameAddress> priorHeads = store.ReadGraph(seed).ObjectHeads;
         Assert.Equal(4, priorHeads.Keys.Except(store.ReadGraph(changed).ObjectHeads.Keys).Count());

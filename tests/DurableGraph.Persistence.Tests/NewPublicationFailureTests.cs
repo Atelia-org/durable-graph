@@ -39,7 +39,7 @@ public sealed partial class EventHistoryRepositoryTests {
     public void DgOnlyFaultInvalidatesRetainedWarmFacadesEvenWhenDataOwnerIsUsable(int point) {
         using Repository repository = CreateRepository();
         using BranchCheckout main = repository.CreateBranch("main", new Node(), NoRebase);
-        GraphResources resources = ResourcesOf(repository);
+        RepositoryResources resources = ResourcesOf(repository);
         GraphRecordStore retained = resources.GraphStore;
         FrameAddress old = main.Head.RevisionAddress;
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
