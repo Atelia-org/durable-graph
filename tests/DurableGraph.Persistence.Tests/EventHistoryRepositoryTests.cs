@@ -38,7 +38,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.IsType<Node>(repository.ReadEvent(session.Head));
             child.Value = 3;
             second = session.CommitState(NoRebase).RevisionAddress;
-            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+            Assert.Equal(CheckpointKind.State, session.Head.Kind);
             Assert.Same(child, ((Node)session.State!).Right);
             session.CommitEvent(new Node { Value = 9 }, NoRebase);
             child.Value = 4;
@@ -160,7 +160,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using (BranchCheckout session = repository.CreateBranch("main", new Node(), NoRebase)) {
             var first = session.Head;
             CheckpointAddress nextState = session.CommitState(NoRebase);
-            Assert.Equal(GraphFrameKind.State, nextState.Kind);
+            Assert.Equal(CheckpointKind.State, nextState.Kind);
             Assert.Throws<ArgumentException>(() => repository.ReadEvent(nextState));
             Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
             Assert.Equal(first, repository.CreateBranch("other", first));
@@ -169,12 +169,12 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => repository.MoveBranch("main", first, first));
             session.CommitEvent(new Node(), NoRebase);
             CheckpointAddress nextEvent = session.CommitEvent(new Node(), NoRebase);
-            Assert.Equal(GraphFrameKind.Event, nextEvent.Kind);
+            Assert.Equal(CheckpointKind.Event, nextEvent.Kind);
             Assert.Throws<ArgumentException>(() => repository.ReadState(nextEvent));
             session.CommitState(NoRebase);
         }
         using BranchCheckout resumed = repository.Checkout("main");
-        Assert.Equal(GraphFrameKind.State, resumed.Head.Kind);
+        Assert.Equal(CheckpointKind.State, resumed.Head.Kind);
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             fork.CommitState(NoRebase);
         }
         using (BranchCheckout fork = repository.Checkout("from-state")) {
-            Assert.Equal(GraphFrameKind.State, fork.Head.Kind);
+            Assert.Equal(CheckpointKind.State, fork.Head.Kind);
             Assert.Equal((byte)1, ((Node)fork.State!).Value);
             Save(fork);
         }
@@ -271,7 +271,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             GraphCommitException error = Assert.Throws<GraphCommitException>(() => session.CommitState(NoRebase));
             Assert.Equal(GraphCommitOutcome.NotPublished, error.Outcome);
             Assert.Equal(first, session.StateRevisionAddress!.Value);
-            Assert.Equal(GraphFrameKind.Event, session.Head.Kind);
+            Assert.Equal(CheckpointKind.Event, session.Head.Kind);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("main");
@@ -300,7 +300,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using BranchCheckout recovered = reopened.Checkout("main");
         Assert.Equal(published, recovered.StateRevisionAddress!.Value);
         Assert.Equal((byte)9, ((Node)recovered.State!).Value);
-        Assert.Equal(GraphFrameKind.State, recovered.Head.Kind);
+        Assert.Equal(CheckpointKind.State, recovered.Head.Kind);
     }
 
     [Fact]

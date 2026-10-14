@@ -126,7 +126,7 @@ public sealed partial class Repository {
         out PreparedStateRestoration? candidate, bool privateCatalog = false) {
         candidate = null;
         var store = _storageFacade.Store;
-        if (head.Kind == GraphFrameKind.Event) { store.ValidateMetadataRelations(head.Address); }
+        if (head.Kind == CheckpointKind.Event) { store.ValidateMetadataRelations(head.Address); }
         CheckpointAddress? state = NearestStateCore(head);
         // An Event-only prefix never consults a resident State or its model environment.
         if (state is null) { return NewCheckout(branchName, head, privateCatalog); }
@@ -234,7 +234,7 @@ public sealed partial class Repository {
         } finally { EndOperation(); }
     }
 
-    private IDurableObject ReadGraph(CheckpointAddress frame, GraphFrameKind kind) {
+    private IDurableObject ReadGraph(CheckpointAddress frame, CheckpointKind kind) {
         RequireAvailable();
         CheckFrame(frame, kind);
         _busy = true;

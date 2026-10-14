@@ -68,7 +68,7 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
             CheckpointAddress head = reader.GetHead("main"); // Metadata navigation does not replay the bad directory.
-            Assert.Equal(state ? GraphFrameKind.State : GraphFrameKind.Event, head.Kind);
+            Assert.Equal(state ? CheckpointKind.State : CheckpointKind.Event, head.Kind);
             if (state) { Assert.Throws<InvalidDataException>(() => reader.ReadState(head)); }
             else { Assert.Throws<InvalidDataException>(() => reader.ReadEvent(head)); }
             Assert.False(reader.IsFaulted);

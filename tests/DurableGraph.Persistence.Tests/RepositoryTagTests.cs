@@ -36,7 +36,7 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.Equal(old.Address, selected.Address);
             Assert.Equal(old.RevisionAddress, selected.RevisionAddress);
             Assert.Equal(old.RootId, selected.RootId);
-            Assert.Equal(eventFirst ? GraphFrameKind.Event : GraphFrameKind.State, selected.Kind);
+            Assert.Equal(eventFirst ? CheckpointKind.Event : CheckpointKind.State, selected.Kind);
             Assert.Equal((byte)1, Assert.IsType<Node>(eventFirst ? reopened.ReadEvent(selected) : reopened.ReadState(selected)).Value);
             CheckpointAddress sourceHead = reopened.GetHead("main");
             Assert.NotEqual(selected, sourceHead);
@@ -181,7 +181,7 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.NotEqual(old, current);
             Assert.Equal(old.Address, current.Address);
             Assert.Equal(readOnly.GetHead("main"), current);
-            Assert.Equal(eventFirst ? GraphFrameKind.Event : GraphFrameKind.State, current.Kind);
+            Assert.Equal(eventFirst ? CheckpointKind.Event : CheckpointKind.State, current.Kind);
             Assert.Throws<InvalidOperationException>(() => readOnly.CreateTag("blocked", current));
             AssertOrdinaryFailure("TagNotFound", () => readOnly.ResolveTag("missing"));
             Assert.False(readOnly.IsFaulted);

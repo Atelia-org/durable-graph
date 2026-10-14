@@ -70,7 +70,7 @@ internal static class Replay {
                 // Keep installed identity/head/H diagnostics outside both save measurements.
                 FrameAddress address = session.StateRevisionAddress!.Value;
                 ObjectId rootId = session.StateId!.Value;
-                if (session.Head.Kind != GraphFrameKind.State || session.Head.RevisionAddress != address || session.Head.RootId != rootId) {
+                if (session.Head.Kind != CheckpointKind.State || session.Head.RevisionAddress != address || session.Head.RootId != rootId) {
                     throw new InvalidOperationException("Committed State and checkout baseline differ.");
                 }
                 Dictionary<ObjectId, ObjectStorageInfo> storage = session.Baseline!.Objects.ToDictionary(
@@ -93,13 +93,13 @@ internal static class Replay {
             for (int index = 0; index < saved.Count; index++) {
                 Saved entry = saved[index];
                 CheckpointAddress checkpoint = history[index * 2];
-                if (checkpoint.Kind != GraphFrameKind.State || checkpoint.RevisionAddress != entry.Address ||
+                if (checkpoint.Kind != CheckpointKind.State || checkpoint.RevisionAddress != entry.Address ||
                     checkpoint.RootId != entry.RootId || entry.RootId != saved[0].RootId) {
                     throw new InvalidOperationException("Published State address or root identity differs from the saved trace.");
                 }
                 if (index != 0) {
                     CheckpointAddress marker = history[index * 2 - 1];
-                    if (marker.Kind != GraphFrameKind.Event || reader.ReadEvent(marker) is not ReplayEvent) {
+                    if (marker.Kind != CheckpointKind.Event || reader.ReadEvent(marker) is not ReplayEvent) {
                         throw new InvalidOperationException("An edit's independent marker Event is missing.");
                     }
                 }

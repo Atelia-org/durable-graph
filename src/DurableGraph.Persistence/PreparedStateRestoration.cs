@@ -25,7 +25,7 @@ internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoin
 
     internal void ValidateStoredSource(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
         CheckpointAddress state, GraphReadContext context) {
-        if (state.Kind != GraphFrameKind.State || !Matches(state) || BindingEnvironment is not { } environment ||
+        if (state.Kind != CheckpointKind.State || !Matches(state) || BindingEnvironment is not { } environment ||
             !ReferenceEquals(Selection.Models, environment.Models) || !ReferenceEquals(context.Models, environment.Models)) {
             throw new InvalidDataException("Prepared State must retain its exact split model environment and selection.");
         }

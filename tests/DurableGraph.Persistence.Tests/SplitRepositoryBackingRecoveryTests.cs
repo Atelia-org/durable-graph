@@ -174,7 +174,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         Assert.Equal(seed.SchemaRoot, repository.SharedSchemaRoot);
         CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
         Assert.Equal(seed.History, frames.Select(frame => frame.RevisionAddress));
-        Assert.Equal(new[] { GraphFrameKind.State, GraphFrameKind.Event, GraphFrameKind.State }, frames.Select(frame => frame.Kind));
+        Assert.Equal(new[] { CheckpointKind.State, CheckpointKind.Event, CheckpointKind.State }, frames.Select(frame => frame.Kind));
         AssertRing(repository.ReadState(frames[0]), 7);
         AssertRing(repository.ReadEvent(frames[1]), 200);
         AssertRing(repository.ReadState(frames[2]), 201);

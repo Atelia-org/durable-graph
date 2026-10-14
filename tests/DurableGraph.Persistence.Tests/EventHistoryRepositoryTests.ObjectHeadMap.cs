@@ -20,7 +20,7 @@ public sealed partial class EventHistoryRepositoryTests {
             shrunk = session.CommitState(NoRebase).RevisionAddress;
             Assert.Same(world, ((Node)session.State!));
             Assert.Equal(shrunk, session.StateRevisionAddress!.Value);
-            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+            Assert.Equal(CheckpointKind.State, session.Head.Kind);
             world.Right!.Value = 9;
             hot = Save(session).RevisionAddress;
         }
@@ -96,7 +96,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(candidate, recovered.StateRevisionAddress!.Value);
             Assert.Equal((byte)7, ((Node)recovered.State!).Value);
             Assert.Null(((Node)recovered.State!).Left);
-            Assert.Equal(GraphFrameKind.State, recovered.Head.Kind);
+            Assert.Equal(CheckpointKind.State, recovered.Head.Kind);
         } else {
             Assert.Equal(first, recovered.StateRevisionAddress!.Value);
             Assert.NotNull(((Node)recovered.State!).Left);

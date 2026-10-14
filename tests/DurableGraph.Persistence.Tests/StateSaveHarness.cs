@@ -19,7 +19,7 @@ internal sealed class StateSaveHarness : IDisposable {
         _repository = repository;
         if (hasHead) {
             CheckpointAddress head = repository.GetHead("main");
-            _stateHead = head.Kind == GraphFrameKind.State ? head : repository.GetPreviousState(head);
+            _stateHead = head.Kind == CheckpointKind.State ? head : repository.GetPreviousState(head);
         }
     }
     internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
@@ -79,7 +79,7 @@ internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial
             session = repository.Initialize(initial, parameters);
             return session.StateRevisionAddress!.Value;
         }
-        if (session.Head.Kind == GraphFrameKind.State) {
+        if (session.Head.Kind == CheckpointKind.State) {
             Action<RepositoryOperationStage>? checkpoint = repository.OperationStageObserver;
             Action<RepositorySaveStage>? splitCheckpoint = repository.SaveStageObserver;
             repository.OperationStageObserver = null;

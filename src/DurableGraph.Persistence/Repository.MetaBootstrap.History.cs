@@ -15,7 +15,7 @@ public sealed partial class Repository {
     }
 
     private Checkpoint ReadHistoryCheckpointCore(CheckpointAddress address) {
-        GraphFrameKind previousKind = address.Kind == GraphFrameKind.Event ? GraphFrameKind.State : GraphFrameKind.Event;
+        CheckpointKind previousKind = address.Kind == CheckpointKind.Event ? CheckpointKind.State : CheckpointKind.Event;
         CheckpointAddress? previousAddress = PreviousCore(address, previousKind);
         IDurableObject root;
         IDurableObject? previous;
@@ -28,7 +28,7 @@ public sealed partial class Repository {
             (root, previous) = GraphReader.ReadIndependent(first, new(first.SourceModels!), address.RootId,
                 second, new(second.SourceModels!), previousAddress.RootId);
         }
-        return address.Kind == GraphFrameKind.Event
+        return address.Kind == CheckpointKind.Event
             ? new EventCheckpoint(address, root, previous, previousAddress)
             : new StateCheckpoint(address, root, previous, previousAddress);
     }

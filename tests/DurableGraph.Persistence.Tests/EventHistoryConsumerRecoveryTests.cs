@@ -30,7 +30,7 @@ public sealed partial class EventHistoryRepositoryTests {
             using var session = repository.Checkout("main");
             Assert.NotSame(oldState, ((Node)session.State!));
             Assert.Equal(published ? (byte)7 : (byte)10, ((Node)session.State!).Value);
-            if (published) Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+            if (published) Assert.Equal(CheckpointKind.State, session.Head.Kind);
             else {
                 Assert.NotSame(oldEvent, repository.ReadEvent(session.Head));
                 Assert.Equal((byte)3, ((Node)repository.ReadEvent(session.Head)).Value);
@@ -53,7 +53,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(1, rebuilds); // Even a State head needs its application Transient rebuilt.
             Assert.Equal(published ? 0 : 1, applications);
             Assert.Equal((byte)7, ((Node)session.State!).Value);
-            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+            Assert.Equal(CheckpointKind.State, session.Head.Kind);
             if (published) {
                 Assert.Equal(head, session.Head.RevisionAddress);
             }
@@ -63,7 +63,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using Repository verification = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var verified = verification.Checkout("main");
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
-        Assert.Equal(GraphFrameKind.State, verified.Head.Kind);
+        Assert.Equal(CheckpointKind.State, verified.Head.Kind);
         Assert.Equal(3, verification.ReadFrames("main").Count());
         Assert.Single(verification.EnumerateEvents(verification.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
     }
@@ -113,13 +113,13 @@ public sealed partial class EventHistoryRepositoryTests {
             }));
             Assert.Equal(1, applications);
             Assert.Equal((byte)7, ((Node)session.State!).Value);
-            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+            Assert.Equal(CheckpointKind.State, session.Head.Kind);
             Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
             Assert.Equal(3, repository.ReadFrames("main").Count());
         }
         using Repository verification = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using var verified = verification.Checkout("main");
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
-        Assert.Equal(GraphFrameKind.State, verified.Head.Kind);
+        Assert.Equal(CheckpointKind.State, verified.Head.Kind);
     }
 }

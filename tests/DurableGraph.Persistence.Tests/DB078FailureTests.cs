@@ -63,7 +63,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using BranchCheckout recovered = reopened.Checkout("main");
         if (published) {
             Assert.Equal((byte)9, Assert.IsType<Node>(recovered.State).Value);
-            Assert.Equal(GraphFrameKind.State, recovered.Head.Kind);
+            Assert.Equal(CheckpointKind.State, recovered.Head.Kind);
         } else {
             Assert.Null(recovered.State);
             Assert.Equal((byte)7, Assert.IsType<Node>(reopened.ReadEvent(recovered.Head)).Value);
@@ -87,7 +87,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout recovered = reopened.Checkout("main");
         Assert.Equal((byte)9, Assert.IsType<Node>(recovered.State).Value);
-        Assert.Equal(GraphFrameKind.State, recovered.Head.Kind);
+        Assert.Equal(CheckpointKind.State, recovered.Head.Kind);
         recovered.CommitState(new Node { Value = 11 }, NoRebase);
         Assert.Equal((byte)11, Assert.IsType<Node>(recovered.State).Value);
     }

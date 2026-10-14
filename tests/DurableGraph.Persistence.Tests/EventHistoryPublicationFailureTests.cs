@@ -51,7 +51,7 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal((byte)1, ((Node)resumed.State!).Value);
         Assert.Equal((byte)8, ((Node)reopened.ReadEvent(resumed.Head)).Value);
         resumed.CommitState(NoRebase);
-        Assert.Equal(GraphFrameKind.State, resumed.Head.Kind);
+        Assert.Equal(CheckpointKind.State, resumed.Head.Kind);
     }
 
 }

@@ -54,7 +54,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
             Assert.Equal(2, pending.Links.Count);
             Assert.Same(pending.Links[0], pending.Links[1]);
             saved = resumed.CommitState(NoRebase).RevisionAddress;
-            Assert.Equal(GraphFrameKind.State, resumed.Head.Kind);
+            Assert.Equal(CheckpointKind.State, resumed.Head.Kind);
         }
 
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {

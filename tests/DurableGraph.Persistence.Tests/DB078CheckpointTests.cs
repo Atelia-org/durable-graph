@@ -204,7 +204,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         };
         Assert.Equal(address, repository.ReadCheckpoint(address).Address);
         duringAllocate = null;
-        Assert.Equal(GraphFrameKind.State, branch.CommitState(NoRebase).Kind);
+        Assert.Equal(CheckpointKind.State, branch.CommitState(NoRebase).Kind);
     }
 
     [Fact]

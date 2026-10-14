@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4 已限定验收；有限文件组织完成，D4 两项纯槽转换归回 Schema，根回归和准确新 G 的直接调用／冷续写通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3／D4 已限定验收；D5 检查点角色命名的源码与根验证通过，准确新 G 外部消费待验收。有限文件组织完成。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)，当片见 [D4](#d4-status)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)／[D3](#d3-status)／[D4](#d4-status)，当片见 [D5](#d5-status)。
 
 已处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料，并完成有限文件组织。
 公共接入入口和已有 `Schema`／`Runtime` 分工保持；其余公开名称与程序集归属分别按现行职责收益判断，后续入口见[路线图](../../DurableGraph-research-roadmap.md)。
@@ -123,7 +123,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | `Atelia.DurableGraph.Runtime.CapturedStatePreparation<T>` | D1 已采用 `StatePreparationBinding<T>`，内部接口为 `IStatePreparationBinding`。[声明](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)是稳定 Schema/DTO/body/equality 能力绑定，Normalize 后和 [Pair 比较](../../../src/DurableGraph.Persistence/GraphReader.cs)也使用；[SG](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs)直接发出新名称。不是一次准备结果，equality 与精确绑定检查保持 |
 | `Atelia.DurableGraph.Serialization.StringPayloadCodec` | D1 已采用 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringBodyPreparer.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
 | `Atelia.DurableGraph.Persistence.GraphResources` | [D3](#d3-status)采用 `Atelia.DurableGraph.Persistence.RepositoryResources`；实际拥有仓库级 FS/VS、branch/shared 基线、唯一 pending 和 fault。namespace 与公开成员保持，直接迁移并重编译，不与薄 facade 合并 |
-| `Atelia.DurableGraph.Persistence.GraphFrameKind` | 候选根空间 `Atelia.DurableGraph.CheckpointKind`，与 CheckpointAddress 的业务角色对应；[现 enum](../../../src/DurableGraph.Persistence/HistoryGraphRecord.cs)仅 Event/State。也可保现名，不与内部 StoredGraphKind 合并或加 Meta |
+| `Atelia.DurableGraph.Persistence.GraphFrameKind` | [D5](#d5-status)采用根空间 `Atelia.DurableGraph.CheckpointKind`，与 CheckpointAddress 的业务角色对应；[enum](../../../src/DurableGraph.Persistence/CheckpointKind.cs)仅 Event/State，仍在 Persistence 程序集。不与内部 StoredGraphKind 合并或加 Meta |
 | `Atelia.DurableGraph.Persistence.GraphCommitException/GraphCommitOutcome` | 候选根空间 `RepositoryPublicationException/RepositoryPublicationOutcome`；[现合同](../../../src/DurableGraph.Persistence/GraphCommitException.cs)已覆盖 graph、branch-ref 和 tag。现行为无缺陷；不为根空间整齐自动搬 public companion，不改 outcome/fault/候选地址含义 |
 | `.Runtime.StringValueProjection/DurableValueProjection<T>/ObjectValueProjection<T>` | 可分别明确为 StringReferenceProjection/DurableReferenceProjection/ObjectReferenceProjection；[实现](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)在引用与 ObjectId 间转换。收益中等，先不全改；保通用 IValueProjection，不授 object/interface 通配能力，不因未发现调用就删 public helper |
 | `Atelia.DurableGraph.Schema.ObjectStateKind` | 可考虑 ObjectLayoutKind；[实际拥有者](../../../src/DurableGraph/Schema/ObjectLayout.cs)是布局，ObjectStateRecord 代理分类。收益较低，保现名可行，不借此统一所有 kind 数值／协议 |
@@ -409,3 +409,25 @@ Family 的 seed／continue／verify 为三个独立 PID：新库保存真实初�
 最终包凭据为 `.artifacts/db092-d4/package/qualification-result.json`，SHA256 `A16BFE2788C86E4CF7C3B44228496106E520EB5C601EB5D11A312F9094D60C3E`；原 consumer receipt 与 `log-recovery-result.json` 分别保运行与补日志来源。主线程接受凭据为同片的 `root-pack-acceptance.json`、`root-consumer-acceptance.json`、API 清单与实际根验证日志。
 
 当前停点：D4 的公开方法归属、源码、根回归与上述准确新 G 有限消费完成，类型名保留。正常续写证明新 head／内容保持，没有检查物理 Base/Delta kind；手工 V2 槽反例不授持久 Upgrade 资格，也不授旧数据兼容、dirty SG、dual-view、Crash/Kill 或性能资格。后续入口只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+<a id="d5-status"></a>
+## 15. D5：检查点角色名称与公开归属
+
+2026-10-14；基线 `839d85981f2bc5d95da83b99b3b3a6fe77f9ca8c`。问题：公开 Kind 能否直接表达 Checkpoint 的业务角色，消除物理帧分类的暗示？
+调查与独立质疑均支持 `Atelia.DurableGraph.Persistence.GraphFrameKind` → `Atelia.DurableGraph.CheckpointKind`，与根空间的 `CheckpointAddress.Kind` 对齐。
+保现名虽可工作，却继续混淆公开历史角色与物理存储分类。此处仅调整名称与 namespace；程序集仍为 Persistence。
+
+有限范围：将公开 enum 从 `HistoryGraphRecord.cs` 提取为同项目目录 `CheckpointKind.cs`，迁移现行源码／测试／实验的标识符引用，补 enum 与 Kind 的 XML 并更新当前导航。
+`HistoryGraphRecord` 留在原 namespace；公开 enum 的 `uint`、Event=1／State=2 保持。内部 `StoredGraphKind`（byte，含 Meta）及其唯一业务角色投影的分支、校验、错误消息保持。
+不改 codec／wire、Schema／history、公开成员与访问级别、生成器、项目／包配置、地址／owner／fault／寿命规则；旧入口直接退出，消费者迁移后重编译。
+
+最小验收：只有以上有限源码变化；公开／protected API 按唯一完整类型名逆映射后相同；根 Rebuild 与 Persistence、Runtime／Generator／Build 回归通过。
+单份准确新 G 的非 friend PackageReference 消费者强类型使用新 enum，消费真实 SG／Build Publish 与 CI Verify；从空库保存 Event-first 与 State/Event，跨进程冷签出续写，再冷开只读核历史、tag、Checkpoint 与内容。
+没有旧包或旧数据兼容门槛，不扩大为其他包故事、Crash/Kill 或性能资格。后续候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+源码与根验证完成：31 份既有 C# 迁移 73 个标识符，新增一份 enum 文件；独立复核从 Git 原 blob 核完整有限变化，577 份其他非 Markdown 文件原字节保持。
+公开／protected API 清单 1359 行仅六行含此类型，按唯一完整 FQN 逆映射后全等；不穷尽 attribute／nullable metadata，不授二进制兼容或 DLL／PDB 等价。
+主线程按 D4 同一准确 S pin 的 package-mode 命令串行 Rebuild、两个测试项目：零警告／错误，Persistence 893 项、Runtime／Generator／Build 1628 项通过，失败／跳过为零。
+根 solution 外的 ListDeltaReplay 另以专用配置显式 restore package mode，并用 `--artifacts-path .artifacts/db092-d5/replay-build` 隔离所有项目输出，compile 零警告／错误；未运行性能实验。
+源码 receipt 为 `.artifacts/db092-d5/source/result.json`，SHA256 `CFF96BD975BCB82D7A26EF02565819535618370392140A36D2534F9461653685`；独立源码凭据为 `review/source-review.json`，根日志及 API 清单保存在同片目录。
+当前停点：上述源码／根范围通过，准确新 G 的外部消费仍待验收；不能将前片包结果作为本片证据。

@@ -170,8 +170,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
         using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
         CheckpointAddress e = checkout.Head;
         CheckpointAddress s = checkout.CommitState(new Message { Value = 2 }, NoRebase);
-        Assert.Equal(GraphFrameKind.Event, e.Kind);
-        Assert.Equal(GraphFrameKind.State, s.Kind);
+        Assert.Equal(CheckpointKind.Event, e.Kind);
+        Assert.Equal(CheckpointKind.State, s.Kind);
         Assert.Throws<ArgumentException>(() => repository.ReadState(e));
         Assert.Throws<ArgumentException>(() => repository.ReadEvent(s));
         var pair = repository.ReadPair(s, e);
@@ -227,12 +227,12 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(e2.RevisionAddress, checkout.Head.RevisionAddress);
             Assert.Equal((byte)4, Assert.IsType<Alpha>(checkout.State).Value);
             Assert.ThrowsAny<Exception>(() => repository.ReadEvent(checkout.Head));
-            Assert.Equal(GraphFrameKind.State, checkout.CommitState(NoRebase).Kind);
+            Assert.Equal(CheckpointKind.State, checkout.CommitState(NoRebase).Kind);
         }
         using Repository missing = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         Assert.ThrowsAny<Exception>(() => missing.Checkout("main"));
         Assert.False(missing.IsFaulted);
-        Assert.Equal(GraphFrameKind.State, missing.GetHead("main").Kind);
+        Assert.Equal(CheckpointKind.State, missing.GetHead("main").Kind);
     }
 
     [Fact]

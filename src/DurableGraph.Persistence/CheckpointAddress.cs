@@ -25,8 +25,8 @@ public sealed class CheckpointAddress : IEquatable<CheckpointAddress> {
     internal object Owner { get; }
     internal FrameAddress Address { get; }
     internal FrameAddress? Parent { get; }
-    /// <summary>The graph's State/Event role, independently of its domain root's CLR type.</summary>
-    public GraphFrameKind Kind { get; }
+    /// <summary>The checkpoint's State/Event role, independently of its domain root's CLR type.</summary>
+    public CheckpointKind Kind { get; }
     /// <summary>The underlying graph frame address for diagnostics, not a cross-reopen bookmark.</summary>
     public StateFrameAddress RevisionAddress { get; }
     /// <summary>The root's object identity interpreted within this graph.</summary>

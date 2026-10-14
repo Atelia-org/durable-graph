@@ -116,9 +116,9 @@ public sealed partial class RepositoryResources {
     // Metadata navigation intentionally does not read a directory, batch or typed body.
     internal HistoryGraphRecord ReadHistory(FrameAddress address) {
         GraphEnvelope metadata = GraphStore.ReadMetadata(address);
-        GraphFrameKind kind = metadata.Kind switch {
-            StoredGraphKind.State => GraphFrameKind.State,
-            StoredGraphKind.Event => GraphFrameKind.Event,
+        CheckpointKind kind = metadata.Kind switch {
+            StoredGraphKind.State => CheckpointKind.State,
+            StoredGraphKind.Event => CheckpointKind.Event,
             _ => throw new InvalidDataException("A branch checkpoint must select a business State or Event."),
         };
         return new(address, metadata.Parent, kind, metadata.RootId);

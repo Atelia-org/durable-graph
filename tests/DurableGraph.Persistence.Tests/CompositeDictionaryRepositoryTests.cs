@@ -184,7 +184,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             ((World<string>)session.State!).First = new(new StringProxy(StringComparer.Ordinal));
             session.CommitState(NoRebase);
             Assert.NotEqual(seed, session.StateRevisionAddress!.Value);
-            Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+            Assert.Equal(CheckpointKind.State, session.Head.Kind);
         }
     }
 

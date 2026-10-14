@@ -12,7 +12,7 @@ internal static class PendingRecovery {
         Action<TState> rebuildTransient, Action<TState, IDurableObject> apply) where TState : class, IDurableObject {
         TState state = (TState)(session.State ?? throw new InvalidOperationException("This application requires an initial State."));
         rebuildTransient(state);
-        if (session.Head.Kind != GraphFrameKind.Event) { return false; }
+        if (session.Head.Kind != CheckpointKind.Event) { return false; }
         IDurableObject pending = repository.ReadEvent(session.Head);
         apply(state, pending);
         session.CommitState();

@@ -55,7 +55,7 @@ internal static class Program {
         using var repository = Repository.OpenReadOnlyExisting(path, new StateModelRegistry());
         CheckpointAddress firstEvent = repository.ResolveTag("event-start");
         CheckpointAddress firstState = repository.ResolveTag("state-baseline");
-        Require(firstEvent.Kind == GraphFrameKind.Event && firstState.Kind == GraphFrameKind.State &&
+        Require(firstEvent.Kind == CheckpointKind.Event && firstState.Kind == CheckpointKind.State &&
             firstEvent.RootId.Value != 0 && firstState.RootId.Value != 0, "Tag metadata was not resolved without models.");
         Require(repository.GetPreviousState(firstEvent) is null, "Event-first tag unexpectedly has a State.");
         Require(repository.ResolveTag("event-start") == firstEvent, "Repeated tag resolution changed its position.");

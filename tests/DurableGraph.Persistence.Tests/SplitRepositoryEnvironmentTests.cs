@@ -107,7 +107,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             }
             using (BranchCheckout side = repository.Checkout("side")) {
                 Assert.Equal(sideEvent, side.Head);
-                Assert.Equal(GraphFrameKind.Event, side.Head.Kind);
+                Assert.Equal(CheckpointKind.Event, side.Head.Kind);
                 Assert.Equal(schema0, side.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
                 Assert.False(side.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
                 AssertWidget(side.State, 0);

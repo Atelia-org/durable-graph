@@ -29,7 +29,7 @@ public sealed class DB078EventQueryTests : IDisposable {
         }
         using Repository empty = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
         var frames = empty.ReadFrames("main");
-        CheckpointAddress[] expected = frames.Where(frame => frame.Kind == GraphFrameKind.Event).ToArray();
+        CheckpointAddress[] expected = frames.Where(frame => frame.Kind == CheckpointKind.Event).ToArray();
         Assert.Equal(3, expected.Length);
         Assert.Equal(expected.Reverse(), empty.EnumerateEvents(empty.GetHead("main")));
         Assert.Equal(expected, empty.EnumerateEvents(empty.GetHead("main"), HistoryOrder.OldestFirst));

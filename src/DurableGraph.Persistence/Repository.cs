@@ -214,7 +214,7 @@ public sealed partial class Repository : IDisposable {
                         var probeVisited = new HashSet<FrameAddress>();
                         while (probe is not null && probe != afterExclusive) {
                             if (!probeVisited.Add(probe.Address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
-                            if (probe.Kind == GraphFrameKind.Event) { buffered?.Add(probe); }
+                            if (probe.Kind == CheckpointKind.Event) { buffered?.Add(probe); }
                             probe = probe.Parent is { } parent ? Issue(ReadHistoryCore(parent)) : null;
                         }
                         if (afterExclusive is not null && probe is null) {
@@ -241,7 +241,7 @@ public sealed partial class Repository : IDisposable {
             if (!visited.Add(address)) { throw new InvalidDataException("Graph business history contains a cycle."); }
             CheckpointAddress frame = address == endInclusive.Address ? endInclusive : Issue(ReadHistoryCore(address));
             cursor = frame.Parent;
-            if (frame.Kind == GraphFrameKind.Event) { return frame; }
+            if (frame.Kind == CheckpointKind.Event) { return frame; }
         }
         return null;
     }
@@ -270,7 +270,7 @@ public sealed partial class Repository : IDisposable {
     /// <summary>Finds the nearest strict ancestor State of an Event, or null in an Event-only prefix.</summary>
     public CheckpointAddress? GetPreviousState(CheckpointAddress eventFrame) {
         RequireAvailable();
-        CheckFrame(eventFrame, GraphFrameKind.Event);
+        CheckFrame(eventFrame, CheckpointKind.Event);
         return PreviousStateCore(eventFrame);
     }
 
@@ -282,7 +282,7 @@ public sealed partial class Repository : IDisposable {
     /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public IDurableObject ReadEvent(CheckpointAddress frame) => ReadGraph(frame, GraphFrameKind.Event);
+    public IDurableObject ReadEvent(CheckpointAddress frame) => ReadGraph(frame, CheckpointKind.Event);
     /// <summary>Independently restores the actual domain root of a State snapshot.</summary>
     /// <remarks>
     /// Each call restores its own mutable domain instances. Application code may initialize their
@@ -291,7 +291,7 @@ public sealed partial class Repository : IDisposable {
     /// use Checkout to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
-    public IDurableObject ReadState(CheckpointAddress frame) => ReadGraph(frame, GraphFrameKind.State);
+    public IDurableObject ReadState(CheckpointAddress frame) => ReadGraph(frame, CheckpointKind.State);
 
     /// <summary>Restores the selected graph and its nearest strict ancestor of the opposite role.</summary>
     /// <remarks>
@@ -432,9 +432,9 @@ public sealed partial class Repository : IDisposable {
 
     private CheckpointAddress HeadCore(string branchName) => StoredHeadCore(branchName);
 
-    private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, GraphFrameKind.State);
+    private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, CheckpointKind.State);
 
-    private CheckpointAddress? PreviousCore(CheckpointAddress frame, GraphFrameKind kind) {
+    private CheckpointAddress? PreviousCore(CheckpointAddress frame, CheckpointKind kind) {
         var visited = new HashSet<FrameAddress> { frame.Address };
         while (frame.Parent is { } parent) {
             if (!visited.Add(parent)) { throw new InvalidDataException("Graph business history contains a cycle."); }
@@ -446,7 +446,7 @@ public sealed partial class Repository : IDisposable {
 
     private CheckpointAddress? NearestStateCore(CheckpointAddress frame) {
         var visited = new HashSet<FrameAddress> { frame.Address };
-        while (frame.Kind != GraphFrameKind.State) {
+        while (frame.Kind != CheckpointKind.State) {
             if (frame.Parent is not { } parent) { return null; }
             if (!visited.Add(parent)) { throw new InvalidDataException("Graph business history contains a cycle."); }
             frame = Issue(ReadHistoryCore(parent));
@@ -454,7 +454,7 @@ public sealed partial class Repository : IDisposable {
         return frame;
     }
     private CheckpointAddress Issue(HistoryGraphRecord record) => new(_identity, record);
-    private void CheckFrame(CheckpointAddress frame, GraphFrameKind? kind = null) {
+    private void CheckFrame(CheckpointAddress frame, CheckpointKind? kind = null) {
         ArgumentNullException.ThrowIfNull(frame);
         if (!ReferenceEquals(frame.Owner, _identity)) { throw new ArgumentException("Frame was issued by another repository instance.", nameof(frame)); }
         if (kind is not null && frame.Kind != kind) { throw new ArgumentException("Frame has the wrong Event/State role.", nameof(frame)); }

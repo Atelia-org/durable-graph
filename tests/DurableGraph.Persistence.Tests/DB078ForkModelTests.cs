@@ -44,7 +44,7 @@ public sealed partial class DB078HistoryTests {
         using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
         using BranchCheckout cold = reopened.Checkout("child");
         Assert.Equal((byte)1, Assert.IsType<Alpha>(cold.State).Value);
-        Assert.Equal(GraphFrameKind.State, cold.Head.Kind);
+        Assert.Equal(CheckpointKind.State, cold.Head.Kind);
     }
 
     [Fact]

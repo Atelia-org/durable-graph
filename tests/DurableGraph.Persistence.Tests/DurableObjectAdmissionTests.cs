@@ -60,7 +60,7 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Throws<ArgumentException>(() => session.CommitEvent(boxed, TestSavePolicies.Baseline));
         Assert.Throws<ArgumentException>(() => session.CommitEvent(new UnregisteredMarker(), TestSavePolicies.Baseline));
         Assert.Same(initial, session.Head);
-        Assert.Equal(GraphFrameKind.State, session.Head.Kind);
+        Assert.Equal(CheckpointKind.State, session.Head.Kind);
         Assert.False(session.IsFaulted);
         session.CommitEvent(new Node { Value = 7 }, TestSavePolicies.Baseline);
         Assert.Equal((byte)7, ((Node)repository.ReadEvent(session.Head)).Value);

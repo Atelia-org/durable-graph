@@ -58,7 +58,7 @@ public sealed class FixtureGraphSession<T> : IDisposable where T : class, IDurab
         if (_session is null) {
             _session = _repository.Initialize(_initial, parameters);
         } else {
-            if (_session.Head.Kind == GraphFrameKind.State) { _session.CommitEvent(new FixtureMarker(), parameters); }
+            if (_session.Head.Kind == CheckpointKind.State) { _session.CommitEvent(new FixtureMarker(), parameters); }
             _session.CommitState(parameters);
         }
         FrameAddress address = _session.StateRevisionAddress!.Value;

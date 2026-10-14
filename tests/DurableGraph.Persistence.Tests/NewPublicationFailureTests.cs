@@ -26,7 +26,7 @@ public sealed partial class EventHistoryRepositoryTests {
         if (visible) {
             Assert.Equal(appended.SchemaRoot, reopened.SharedSchemaRoot);
             using BranchCheckout main = reopened.Checkout("main");
-            Assert.Equal(GraphFrameKind.State, main.Head.Kind);
+            Assert.Equal(CheckpointKind.State, main.Head.Kind);
             Assert.Equal(candidate, main.Head.RevisionAddress);
         } else {
             Assert.Null(reopened.SharedSchemaRoot); // The first CU End cannot publish only meta or only business.

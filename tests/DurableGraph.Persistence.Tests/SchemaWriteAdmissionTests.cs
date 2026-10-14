@@ -40,7 +40,7 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
         using BranchCheckout eventOnly = shared.CreateBranchFromEvent("event-only", Ring());
         AssertRing(main.State, 7);
         Assert.Null(eventOnly.State);
-        Assert.Equal(GraphFrameKind.Event, eventOnly.Head.Kind);
+        Assert.Equal(CheckpointKind.Event, eventOnly.Head.Kind);
     }
 
     [Fact]
