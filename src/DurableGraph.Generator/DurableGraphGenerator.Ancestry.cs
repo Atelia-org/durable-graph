@@ -157,15 +157,9 @@ public sealed partial class DurableGraphGenerator {
     // Accepted history is checked by itself. Current candidates must never repair a missing historical ancestor.
     private static bool ValidateHistoryClosure(SourceProductionContext context, List<SchemaTemplate> history) {
         bool valid = ValidateTemplateNominalShapes(context, history);
-        Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         Dictionary<string, int> heights = new(StringComparer.Ordinal);
         foreach (SchemaTemplate entry in history) {
-            if (kinds.TryGetValue(entry.SchemaId, out int kind) && kind != (entry.Kind * 64 + entry.Arity)) {
-                ReportInvalidHistoryAncestry(context, entry, "a Schema family cannot change kind or arity");
-                valid = false;
-            }
-            kinds[entry.SchemaId] = entry.Kind * 64 + entry.Arity;
-            if (!ValidatePatternReferences(context, entry, history)) valid = false;
+            if (!ValidatePatternParameters(context, entry)) valid = false;
             if (!ValidateExactDependency(context, entry, history, new HashSet<string>(StringComparer.Ordinal), heights, 0, out _)) valid = false;
         }
         return valid;

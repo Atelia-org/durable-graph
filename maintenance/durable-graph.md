@@ -4,7 +4,7 @@
 
 - 目标：逐轮消除有证据的技术债或实施有真实收益的安全重构，直至已知线索均有妥善处理的结论。范围覆盖当前产品源码、测试、构建与活动实验；不把路线图中的条件延期当作自动实施授权。
 - 用户指定本文件为任务状态入口；使用 `convergent-maintenance`，复杂实施按需 `bounded-delegation`，设计问题优先 `dialectical-simplification`。
-- Goal 持续执行，无固定轮数上限；2026-10-15 启动，已完成 **3 轮**。只有完成复核、验收和收尾的维护结果才计一轮。
+- Goal 持续执行，无固定轮数上限；2026-10-15 启动，已完成 **4 轮**。只有完成复核、验收和收尾的维护结果才计一轮。
 - 草稿窗口：不承担旧数据或 API 兼容；仍保完整帧 append-only、正常 FS/VS 恢复、准确来源、发布 outcome、fault/reentry/lifetime 检查。保留他人工作，不推送或发布。
 - 产品事实与导航：[PROJECT-STATE](../src/PROJECT-STATE.md)；长期约束和条件延期分别归目标设计与路线图，不在此复制。
 
@@ -14,7 +14,9 @@
 
 首轮模块调查和三轮实施均已验收，结果与证据分别查下表及验收段。第 3 轮 M010 在单次 decoder 中立即完整读图、私有惰性读取各链；32 行见证证明所选图解码／目录物化各一次，保完整 rows/head/实际 H。独立三方设计质疑与源码／测试复核通过，根 build 零警告错误、Persistence 912 与 Runtime／Generator 1632 项通过。
 
-当前无未验收代码；下一轮从已确认候选继续，先收拢 Generator 的重复 nominal 规则（M004）。基线与已完成轮的验证均使用准确存储 pin 的 package-mode assets，未依赖 sibling HEAD。
+第 4 轮 M004 已验收：nominal 规则只有一份，按记录／字段累计失败且保首次 kind/arity；参数与 exact 检查继续独立执行。根 build 零警告错误，Generator/history 942 项（含新增14）通过，源码及新用例经独立复核。基线与已完成轮均使用准确存储 pin 的 package-mode assets。
+
+下一轮实施已完成三方设计质疑的 M003：在同一 producer 内实际加载两份 catalog，一次同步调用完成 precheck→Capture→postcheck→Builder；保 callback 后 Store 自身及 owner/backing 可用性检查。无跨操作缓存、plan或任意view认证入口。
 
 ## 线索与裁决
 
@@ -22,13 +24,13 @@
 |---|---|---|
 | M001：PrivateContainer gate 重复写死存储 pin | `Run-PrivateContainerProbe.ps1:376` 另写版本／修订；`Prepare-Storage.ps1` 已按 props 验证六包与 provenance；最近 pin 升级须额外同步 runner | 待核对：先确定有限 gate 是否有独立锁定来源的需要，再决定删除重复判断或保留。不先扩通用 pin 框架 |
 | M002：Build kind／arity 重复验证 | `SchemaHistoryTool.ValidateClosure` 首遍已覆盖两段重复规则；删除 packed family 表及每节点全 records arity 扫描 | 已处理／第 1 轮：根 build 零警告错误，history／Build 353 项通过（含新增 4 种 direct/nested 与声明顺序反例，Publish 零输出、Verify 保原 history bytes）。源码独立复核通过 |
-| M003：ToShared 操作内 catalog 重载 | 子调查发现 `BranchSaveSession.Prepare` 的 Validate／Prepare 均 CollectToShared，重复读取 Head.S 与 latest shared | 待复核及设计质疑：Capture 前预检必须保留；不以旧记录或缓存命中代替准确 view 核验 |
-| M004：SG kind／arity 同形重复 | `Ancestry.ValidateHistoryClosure`／`TemplateHistory.ValidatePatternReferences` 在 ValidateTemplateNominalShapes 后再建 family 表、逐 named 全表扫描；主线程已读对应源码。DG0019 当前无数量／精确位置合同 | 下轮裁决／实施：去两段重复，但不能首检失败就跳过独立 exact错误；考虑 nominal首检累计冲突，保 kind／arity Error拒绝、参数与 missing/cycle/depth诊断。不建诊断去重框架；补独立冲突正反例 |
+| M003：ToShared 操作内 catalog 重载 | Validate／Prepare 均实际 Load Head.S 与 latest shared，共4次；M010并未消除此物化重复 | 三方质疑及主线程已选同步 wrapper（下述）；第5轮待实施，保两次完整Collect、callback后Store自身guard、失败不安装 |
+| M004：SG kind／arity 同形重复 | packed表和逐named全表扫描已退出；单一 nominal 索引保首值、累计record/field冲突，参数／exact独立 | 已处理／第4轮：根build零警告错误，942项通过。14个实际RunGenerator用例含排序前后direct/nested正反例、单phase单诊断、独立family/field/cycle；不建诊断去重框架 |
 | M005：Build manifest 读两次 | ParseManifest 解析候选后丢弃 reference hash，LoadAvailable 再读取；主线程已核全部生产／测试调用。可同次解析 out hash，移除二次读取 | 已确认待实施：保 owned BOM／CRLF与refs canonicalLF原hash规则，补组合正控；未证明实际并发错误或实测加速，不加锁或快照框架 |
 | M006：仅测试消费的旧 codec 留在产品程序集 | Serialization 的 internal ValueSlotCodec／ArrayElementCodec 消费者仅 Serialization.Tests；Runtime/SG 使用静态 IStateOps | 待复核消费者闭包：可移测试 helper、保机制见证并删除无用 IVT；不恢复旧 runtime 路由 |
 | M007：FrozenState 可收窄 owned buffer 出口 | 原三个 backing-array getter 已删；Array/List 和活动 ListDeltaReplayProbe 两处 friend 读取使用已有 span | 已处理／第 2 轮：根与活动实验 build 零警告错误，根四个测试项目 2,694 项全部通过（含隔离、畸形 Delta、浮点、Upgrade）。源码无旧 getter；仅普通 C# 边界收窄，不声称抵御 Unsafe |
 | M008：默认保存重复 checkout 来源核验 | Repository 的 RequireSchemaWriter 已 RequireCheckoutSource，save/discard try 内又重复，无中间 callback | 待核串行／reentry 与 ToShared 分支区别，保每入口完整 lineage 拒绝 |
-| M009：FrozenState ownership bool 的 false 分支 | 三个 internal constructor 的 16 个调用均显式 true；public constructor 先复制，其他 producer 交付新建数组 | 待核转移后无写入：与 M007 分开，不能新增会改变 `new(array)` 复制语义的构造器重载 |
+| M009：FrozenState ownership bool 的 false 分支 | 16个true调用已逐一核：3个public先复制、13个内部producer完成写入才转移；Dictionary后续Index仅span读取并复制key编码。未找到可写泄漏／转移后写入 | 已裁决保留：当前仅3个未用分支，M007已收窄数组出口；为删bool增加工厂并迁移16处没有足够当前收益。出现ownership误用／新创建来源／构造合同分叉时重访，不计额外实施轮 |
 | M010：逐对象链读取再次完整 ReadGraph | 原 decoder 每行再次完整 ReadGraph；现改 Store eager wrapper＋private lazy core，由实际完整 snapshot驱动 | 已处理／第 3 轮：根 build零警告错误，相关 2,544 项通过（新增19）。counter见证及bulk prior/role/cycle/H/Basecutoff、资源停止、真实reader callback反例通过；不将手工 snapshot 当验证证书 |
 
 已有 TODO 多为等待实测的缓冲/继承/字典性能项；不凭 TODO 本身重开优化。已返回的候选按表逐项复核，不继续积累新线索而搁置当前可处理项。
@@ -44,8 +46,11 @@
 本地提交：`c3b85b0`。
 
 第 3 轮证据：`.artifacts/maintenance/20261015/round3-build.log`、`round3-persistence.trx`、`round3-runtime-generator.trx`（912＋1632，failed／skip＝0）、对应 tests日志。源码及测试独立复核、主线程完整diff与19个新用例的实际TRX结果核验通过。未制作新 G、不授性能／普通包资格。
+本地提交：`d522626`。
 
-下一步：第 4 轮处理 M004，再选择 M005／M006／M001 的局部规则收拢；M003 在 M010 后保首遍完整冲突拒绝再审复用方案，M008／M009 仍独立待核。七条未处理线索均有可推进动作，Goal 保持 active；不把此三轮停点作为总体收敛。
+第 4 轮证据：`.artifacts/maintenance/20261015/round4-build.log`、`round4-tests.log`、`round4-generator-history.trx`；942项全通过，新增14项已按实际TRX逐项核通过。没有计时／普通包资格。
+
+下一步：第5轮实施M003并验证两份实际view各加载一次、前后冲突与fault/reentry；随后逐项处理 M005／M006／M001／M008。五条未处理线索仍有可推进动作，Goal保持active。
 
 ### M003 设计审阅边界
 
@@ -53,7 +58,11 @@
 
 必须保留：owner producer 窗口内从实际 Head.S 与 latest shared 各自加载；完整源目录（含不可达声明）同 key 异形在业务 Capture 前拒绝；Capture 新布局仍合并／验证；meta priors 与 ID 域只取 latest shared；Discard／失败不安装 accepted/dirty；同库串行，callback 重入拒绝、fault/lifetime 保持。没有长期 cache 或新的公开 API／wire 需求。
 
-候选 A：保现状两遍重载；候选 B：本操作首次加载并预检后，仅复用这些精确 views，capture 后再核完整新增布局；候选 C：额外 promotion plan 缓存闭包。仍排队，先处理更底层的 M010；尚无最终设计裁决。
+已裁决（独立三角色＋形状交叉质询，主线程源证据裁决）：采用操作内复用。单一同步 `PrepareToSharedOwned(store, headRoot, sharedRoot, Func<IEnumerable<ObjectLayout>> captureLayouts)` 内实际Load两view→完整preCollect→caller Capture→完整postCollect→Builder(target)；view helper保持private，不接受任意view，不返回延迟delegate。业务root、Capture、abort、业务Prepare仍由typeddriver拥有。
+
+保原 Capture 后的精确可用性边界：直接调用Store现有 `EnsureUsable`（只将其改internal），覆盖Store自身Dispose及owner/backing故障，不新增guard类型。仅取owner的Store getter会漏Store自身已Dispose的提前拒绝；不以最终零append检查替代这项原边界。
+
+最小验收：独立Base-only真实meta catalogs、cache0下同步方法两次GraphDecode/DirectoryMaterialization（两根各一次），callback恰一次；既有完整Head导入、不可达/dirty冲突零Capture、Discard、Event与State来源、ID重映射、两ref失败保持。新增Capture才引入新合法layout／同key异形冲突；callback重入及Store/owner/backing停止须在业务bodyPrepare或pending/append前拒绝。不承诺整体保存加速。
 
 ### M010 设计审阅边界
 

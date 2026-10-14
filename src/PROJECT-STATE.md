@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-15 开始[循环维护](../maintenance/durable-graph.md)，按当前源码证据逐项选择有收益的安全重构。Build history 重复 kind／arity 验证已退出，Frozen 容器内部读取收窄为只读 span；单次完整 decoder 复用本次已验证图的私有链遍历，保逐链与 typed全图验证。完整 history、来源、寿命和复制隔离契约保持。验证和后续候选只维护在任务状态，不复开已完成命名分片。
+2026-10-15 开始[循环维护](../maintenance/durable-graph.md)，按当前源码证据逐项选择有收益的安全重构。Build／Generator 的重复 kind／arity 验证已退出，Generator仍报告独立错误；Frozen 容器读取使用只读 span，单次decoder复用本次已验证图的私有链遍历。完整history、来源、逐链及typed全图验证、寿命和复制隔离保持。验证和候选只维护在任务状态，不复开已完成命名分片。
 
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限源码组织与本轮候选已收敛；源码入口见[导航](DurableGraph.Persistence/README.md)。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。纯槽转换归 Schema 的 `DurableFieldInfo`，保编号与完整相等。
 公开历史角色 `CheckpointKind` 与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。

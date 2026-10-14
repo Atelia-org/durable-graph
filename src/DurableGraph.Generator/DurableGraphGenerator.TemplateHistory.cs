@@ -223,7 +223,7 @@ public sealed partial class DurableGraphGenerator {
         return ValidateHistoryClosure(context, available) && valid;
     }
 
-    private static bool ValidatePatternReferences(SourceProductionContext context, SchemaTemplate shape, List<SchemaTemplate> available) {
+    private static bool ValidatePatternParameters(SourceProductionContext context, SchemaTemplate shape) {
         List<TypePattern> patterns = new();
         if (shape.BaseSchema.HasValue) patterns.Add(shape.BaseSchema.Value.Type);
         foreach (SchemaTemplateField field in shape.Fields) patterns.Add(field.ValuePattern);
@@ -231,34 +231,33 @@ public sealed partial class DurableGraphGenerator {
             if (!pattern.ParametersFit(shape.Arity)) {
                 ReportInvalidHistoryAncestry(context, shape, "a type parameter lies outside its declaration's arity"); return false;
             }
-            foreach (TypePattern named in pattern.NamedNodes()) {
-                foreach (SchemaTemplate target in available) {
-                    if (target.SchemaId == named.DefinitionId && target.Arity != named.Arguments.Count) {
-                        ReportInvalidHistoryAncestry(context, shape, "a named type pattern has incompatible arity"); return false;
-                    }
-                }
-            }
         }
         return true;
     }
 
     private static bool ValidateTemplateNominalShapes(SourceProductionContext context, List<SchemaTemplate> records) {
+        bool valid = true;
         Dictionary<string, int> arities = new(StringComparer.Ordinal);
         Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         foreach (SchemaTemplate shape in records) {
-            if (!Require(arities, shape.SchemaId, shape.Arity) || !Require(kinds, shape.SchemaId, shape.Kind)) {
-                ReportInvalidHistoryAncestry(context, shape, "a Schema family has conflicting kind or arity"); return false;
+            bool arityMatches = Require(arities, shape.SchemaId, shape.Arity);
+            bool kindMatches = Require(kinds, shape.SchemaId, shape.Kind);
+            if (!arityMatches || !kindMatches) {
+                ReportInvalidHistoryAncestry(context, shape, "a Schema family has conflicting kind or arity");
+                valid = false;
             }
             if (shape.BaseSchema.HasValue && !Check(shape.BaseSchema.Value.Type, 1)) {
-                ReportInvalidHistoryAncestry(context, shape, "a base type pattern has conflicting kind or arity"); return false;
+                ReportInvalidHistoryAncestry(context, shape, "a base type pattern has conflicting kind or arity");
+                valid = false;
             }
             foreach (SchemaTemplateField field in shape.Fields) {
                 if (!Check(field.ValuePattern, field.TypeTagValue == 15 ? 1 : field.TypeTagValue == 16 ? 2 : 0)) {
-                    ReportInvalidHistoryAncestry(context, shape, "a field type pattern has conflicting kind or arity"); return false;
+                    ReportInvalidHistoryAncestry(context, shape, "a field type pattern has conflicting kind or arity");
+                    valid = false;
                 }
             }
         }
-        return true;
+        return valid;
 
         bool Check(TypePattern pattern, int rootKind) {
             if (!CheckNullable(pattern)) return false;
@@ -277,8 +276,8 @@ public sealed partial class DurableGraphGenerator {
         }
 
         bool Require(Dictionary<string, int> values, string id, int value) {
-            if (values.TryGetValue(id, out int previous) && previous != value) return false;
-            values[id] = value;
+            if (values.TryGetValue(id, out int previous)) return previous == value;
+            values.Add(id, value);
             return true;
         }
     }
