@@ -5,10 +5,13 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 `Atelia.FrameStore`、`Atelia.VersionStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
-当前 pin 为 `0.1.3-dev.20261014.g758cebf`，来源为
-`758cebf8ba82788ba91435d34fd484dff32095fd`（上游 XML 文档修正）。**这是未公开发布的本地候选**，不能假定 nuget.org 已有该版本。
+当前 pin 为 `0.1.3-dev.20261014.g3de8fb0`，来源为
+`3de8fb050d81d35ee1c36d1b978024cbc42cb455`（上游维护更新，API 与 wire format 不变）。**这是未公开发布的本地候选**，不能假定 nuget.org 已有该版本。
 当前源码联调采用下面的显式 source mode；包验收使用准确来源的完整本地 feed 和任务 NuGet.Config。
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在仓库配置中保存本机路径。
+
+本次 pin 已通过上游四个隔离包消费者，以及 DG 独立缓存下的包模式 Release Rebuild（0 warnings/errors）和根 solution 的 2,690 项测试。
+六包缓存与当前 solution 的 19 份输出 DLL 均与候选 feed 字节一致；验证工件保留在 `.artifacts/storage-pin-upgrade/20261014-3de8fb0/`。
 
 ## 显式源码联调
 
@@ -35,7 +38,7 @@ Storage 依赖 FrameStore，Persistence 依赖 VersionStore；必要的 Data/Pri
 
 ```powershell
 $storage = '/repos/Atelia-org/atelia-storage'
-$storageVersion = '0.1.3-dev.20261014.g758cebf'
+$storageVersion = '0.1.3-dev.20261014.g3de8fb0'
 $storageFeed = Join-Path $storage "artifacts/feeds/$storageVersion"
 & "$storage/eng/Pack.ps1" -Version $storageVersion -OutputDirectory $storageFeed
 ```
@@ -65,7 +68,7 @@ $selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
 <configuration>
   <packageSources>
     <clear />
-    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261014.g758cebf" />
+    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261014.g3de8fb0" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
   <packageSourceMapping>

@@ -156,7 +156,7 @@ try {
         Write-Host "Downloading $($package.Id)/$($package.Version) from nuget.org"
         try { Invoke-WebRequest -Uri $url -OutFile $path }
         catch {
-            throw "Cannot download pinned $($package.Id)/$version from nuget.org. The DB-086 dev candidate has not been publicly published. Use -StoragePackageSource with a verified upstream Pack feed, or build/test with UseStorageSources=true and StorageSourceRoot. See docs/storage-dependency.md. Download error: $($_.Exception.Message)"
+            throw "Cannot download pinned $($package.Id)/$version from nuget.org. The pinned version may not have been publicly published. Use -StoragePackageSource with a verified upstream Pack feed, or build/test with UseStorageSources=true and StorageSourceRoot. See docs/storage-dependency.md. Download error: $($_.Exception.Message)"
         }
         Assert-StoragePackage $path $package $true
         [pscustomobject]@{
