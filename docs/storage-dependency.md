@@ -5,8 +5,8 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 `Atelia.FrameStore`、`Atelia.VersionStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
-当前 pin 为 `0.1.3-dev.20261011.g974fd47`，来源为
-`974fd47abb73792f9d350af87ab91a53848952eb`。**这是未公开发布的本地候选**，不能假定 nuget.org 已有该版本。
+当前 pin 为 `0.1.3-dev.20261014.g758cebf`，来源为
+`758cebf8ba82788ba91435d34fd484dff32095fd`（上游 XML 文档修正）。**这是未公开发布的本地候选**，不能假定 nuget.org 已有该版本。
 当前源码联调采用下面的显式 source mode；包验收使用准确来源的完整本地 feed 和任务 NuGet.Config。
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在仓库配置中保存本机路径。
 
@@ -35,8 +35,8 @@ Storage 依赖 FrameStore，Persistence 依赖 VersionStore；必要的 Data/Pri
 
 ```powershell
 $storage = '/repos/Atelia-org/atelia-storage'
-$storageVersion = '0.1.3-dev.20261011.g974fd47'
-$storageFeed = Join-Path $storage 'artifacts/db086-feed'
+$storageVersion = '0.1.3-dev.20261014.g758cebf'
+$storageFeed = Join-Path $storage "artifacts/feeds/$storageVersion"
 & "$storage/eng/Pack.ps1" -Version $storageVersion -OutputDirectory $storageFeed
 ```
 
@@ -65,7 +65,7 @@ $selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
 <configuration>
   <packageSources>
     <clear />
-    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/db086-feed" />
+    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261014.g758cebf" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
   <packageSourceMapping>
@@ -89,7 +89,7 @@ $selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
 
 ```powershell
 dotnet restore DurableGraph.slnx --disable-parallel --configfile .artifacts/storage-dev/NuGet.Config -p:UseStorageSources=false
-dotnet build DurableGraph.slnx -c Release --no-restore -m:1 -nr:false -p:UseStorageSources=false
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
 dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
 ```
 
@@ -97,6 +97,8 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 开发版本必须保存对应 Pack manifest；覆盖版本不会自动改变源码身份。
 包 restore 要使用完整任务配置：仅传 `RestoreSources` 不能绕过继承的 package source mapping。
 严谨包验收另指定任务独立的 `RestorePackagesPath`，核对 restore assets、nuspec 和实际加载程序集；源码测试不能替代这一步。
+刷新 pin 后首次包构建使用 `Rebuild`：本地包归一化时间戳后，新旧 DLL 可能长度和时间戳相同，
+增量复制会保留旧输出。仅检查 assets 的版本不足以确认实际消费，验收还须核对输出 DLL 与所选包的字节。
 
 ## DurableGraph 包与独立 probes
 
