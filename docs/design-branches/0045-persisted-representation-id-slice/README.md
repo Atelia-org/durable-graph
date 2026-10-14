@@ -9,7 +9,7 @@
 前序比较：[DB-044](../0044-type-header-blind-review/README.md)；当前实现：[PROJECT-STATE](../../../src/PROJECT-STATE.md)。
 
 后续修订：初次验收时保留的 Base v1–v3 兼容已决定移除，当前合同见 [§7](#7-后续清理移除旧-base-读取兼容)；下文初次施工与验收记录保留历史含义。
-目录内部的双批次和 SchemaKey 转接其后由 [DB-046](../0046-unified-schema-catalog-slice/README.md) 替换；下面相关链接转向后继记录，初次格式与故障窗口仍是历史证据。
+目录内部的双批次和 SchemaKey 转接其后由 [DB-046（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0046-unified-schema-catalog-slice/README.md") 替换；下面相关链接转向后继记录，初次格式与故障窗口仍是历史证据。
 
 ## 1. 本片只回答什么
 
@@ -92,7 +92,7 @@ descriptor 复用今天的 class SchemaKey / 数组 codec、构造码和元素�
 非法 ID、跳号、重复/重绑定 ID、同表示重复绑定不同 ID、缺依赖、未知格式、坏尾和溢长均拒绝；不按字典枚举顺序恢复编号。
 定义 kind/arity 的声明一致性覆盖 Schema 和数组表示登记，恢复时亦统一检查。
 参考 [SchemaStore](../../../src/DurableGraph.Persistence/SchemaStore.cs)；原 SchemaBatchWireCodec、RepresentationBatchWireCodec、
-RepresentationDescriptorCodec 的后继为 [DB-046 统一目录](../0046-unified-schema-catalog-slice/README.md)。
+RepresentationDescriptorCodec 的后继为 [DB-046 统一目录（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0046-unified-schema-catalog-slice/README.md")。
 
 ## 5. Base 与读写贯通
 

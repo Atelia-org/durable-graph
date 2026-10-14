@@ -114,7 +114,7 @@ DB-087 的 append-only、共同 writer、准确 origin／selected／execution S�
 
 **完成验收：**生产源码中公开新根入口与专用状态已退出，活动执行代码不再依赖 overrides／container replacements；实验中的异形 V2 草稿可各自从固定 V1 baseline 接纳，已有同分支定义保持不可变，不增加“仅限 V1→V2”的产品限制。原用户存活身份、共享／循环、真实 Base／Delta／source／prior／H、Event／Discard rewrite、完整目录和 ref1／ref2／fault／旧帧规律经对应测试证实，新 G 普通包的冷恢复与发布故事通过，活动文档一致。
 
-此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九个暂停 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。
+此次不修改默认 Publish、不增加主／次版本或草稿迁移压缩、自动重放、选择性 ToShared、typed cache、wire／程序集改造，也不恢复十九类已退出执行的 lanes。只有具体消费者反例、必需 Upgrade 缺口或会改变上述产品语义的选择才重新讨论；一般 fixture／observer／helper 尾修由实施者自行处理。
 
 <a id="7-第一轮结果与第二轮入口"></a>
 ## 7. 实施结果与限定验收

@@ -4,7 +4,7 @@
 
 **DB-088 历史资格：**真实 baseline 与生成的 `PrivateUnused` Event 已通过删除特例后的新 G 普通包门禁；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。下面旧工件保留其原生产来源与新根故事；当前资格见 DB-089 C 小节。
 
-项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档](../../../docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)，不将当前源码回写为旧证据。
+项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档（Git 历史）](../../../docs/design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history")，不将当前源码回写为旧证据。
 
 [DB-089 §8.2](../../../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring/0089-checkout-environment-and-factory-query-refactoring.md#82-新-g-门禁)新增同 owner 的生命周期观察：私有 List 保存 202 后，热 State 保原实例与 root ID，独立 ReadState 保值／共享／环且 root、child、List 实例独立；Dispose 后在同 Repository 再 CheckoutPrivate，核同一 State 地址、root ID 和 202。只读结果不再编辑或保存，重新签出不提交；原提交序列及后续全关冷开、ToShared 和 Shared 增量保存保持。continue 输出 `PrivateHotStateRetained`、`PrivateIndependentRead`、`PrivateSameOwnerCheckout` 三个门禁；下面 DB-088 的历史包结果不替代新增观察的新 G 资格。
 
@@ -44,7 +44,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 
 每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
-公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、ToShared 后的跨 PID writer 续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19个暂停 lane不因本例通过恢复资格。
+公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、ToShared 后的跨 PID writer 续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
 
 <a id="2026-10-13-限定验收"></a>
 ## 历史资格：2026-10-13 DB-087 P1 限定验收

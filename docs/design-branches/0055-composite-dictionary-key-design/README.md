@@ -6,7 +6,7 @@
 
 > 状态：**已实施 / G0–G3 验收完成**，2026-09-10。
 > 用户已授权实施本文；模式、API 与包装按下述合同落地，完成情况以 §11 的实现验收记录为准。
-> 实施前代码基线：`821e602`（DB-054 白名单）。旧推荐来自 `77e4341`，已[冻结归档](../../archive/2026-09-10/0055-composite-dictionary-key-design-v1.md)。
+> 实施前代码基线：`821e602`（DB-054 白名单）。旧推荐来自 `77e4341`，已[冻结归档（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-09-10/0055-composite-dictionary-key-design-v1.md")。
 > 问题：允许普通/generic struct 的领域相等性忽略部分持久字段，同时完整保存 Key，能否复用既有 Delta 并保持普通 Dictionary 的易用性？
 > 最小见证：Key 的三个字段均持久，Equals 忽略 Timestamp；普通 new()、同值查询、连续 Commit、冷重开均工作；旧 Key CLR 删除后仍能读历史 DTO，当前规则冲突则明确拒绝交付 World。
 

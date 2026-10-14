@@ -59,4 +59,4 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | result.json | `6A9E645E6D37507A37C0DE0F07F4675E6E8567E46EDC673FF9E4EBDA2690519F` |
 | witness.json | `0BFAD5374EED6B446326AA5958F66DADB3D41944B5DCA0C83C988399D2635730` |
 
-此门禁只授实际 List／Nullable inline 组合；源码 Array／List／Dictionary 与失败窗口保各自资格。没有新 Upgrade、显式 Discard、Array／Dictionary 包、同 Open 双异形模型、Unknown／Kill／断电、性能或全类型矩阵资格；19 个暂停旧 lanes 仍不恢复。后续增量按 [DB-087 条件延期](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)的实际消费者或测量触发，不继续追加本案必经门禁。
+此门禁只授实际 List／Nullable inline 组合；源码 Array／List／Dictionary 与失败窗口保各自资格。没有新 Upgrade、显式 Discard、Array／Dictionary 包、同 Open 双异形模型、Unknown／Kill／断电、性能或全类型矩阵资格；19 类已退出执行的 lanes 不获原运行故事资格。后续增量按 [DB-087 条件延期](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)的实际消费者或测量触发，不继续追加本案必经门禁。

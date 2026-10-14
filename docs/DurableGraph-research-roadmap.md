@@ -3,7 +3,6 @@
 > 本文只维护尚未完成的能力、待裁决问题及延后条件，不维护完成历史或充当实施授权。
 > 当前能力、焦点和证据入口：[src/PROJECT-STATE.md](../src/PROJECT-STATE.md)。
 > 已选约束及完整产品目标：[目标设计](DurableGraph-target-design-v0.md)。
-> 旧阶段安排与 R1–R7 详情：[2026-09-06 归档](archive/2026-09-06/DurableGraph-research-roadmap.md)。
 
 ## 1. 下一个分片如何选择
 
@@ -25,7 +24,7 @@
 | 分片 | 要解决的增量 |
 |---|---|
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
-| [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前权威与新栈验收见 [DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-implementation.md)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
+| [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前发布合同与活动资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
 | [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md) 保持 |
 | [DB-077 固定模型环境](design-branches/0077-repository-model-environment-slice/0077-repository-model-environment-slice.md) | 已实施，验收见[记录](design-branches/0077-repository-model-environment-slice/0077-model-environment-implementation.md)；固定 Open 模型与 durable current 恒等；公共基础迁移由 [078-A](design-branches/0078-editable-checkpoint-fork-slice/0078-a-repository-free-history-implementation.md) 承接。[旧专项评审](design-branches/0077-repository-model-environment-slice/0077-0078-api-dialectical-review.md)保留历史，不作为新公开合同 |
 | [DB-073 实例缓存](design-branches/0073-repository-scoped-weak-reference-cache/README.md) / [DB-074 方向清单](design-branches/0074-efficient-fork-deferred-directions/README.md) | Draft：均尚待进一步修订；不作为 DB-077–082 的并行工单或前置，缓存/更深优化取舍待分片实测后再处理 |
@@ -35,7 +34,6 @@
 ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不另建内容 Store；
 大附件/chunk、联合 Schema 视图与 Derived 仍未随之解决。以上方案不要求先实现 ValueTuple 或重排全部程序集。
 
-[DB-046 统一闭合 Schema 目录](design-branches/0046-unified-schema-catalog-slice/README.md) 已合并持久记录、批次和 exact 依赖引用。
 [DB-047 List<T> 内容对象](design-branches/0047-list-content-object-slice/README.md) 已完成；功能与验收以该分片为入口。
 [DB-051](design-branches/0051-bounded-list-delta-competition/README.md) 已完成默认 Adaptive，§3.2 只保留实测触发的后续优化。
 [DB-052 可组合 Nullable 值槽](design-branches/0052-nullable-value-slot-slice/README.md) 已贯通字段、泛型、数组/List 的历史表示与显式升级。
@@ -94,17 +92,13 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
 | 根与持久目录扩展 | 根替换、独立读取与 branch/Move 已有实现；A 扩至跨类型根，见其实施记录。每份持久图仍一个非空根；Event-first 的无 State 不等于持久 null 根，不扩为命名根目录或清空 State API |
 
-设计证据：[DB-006](design-branches/0006-flat-graph-delta-prototype/README.md)、
-[旧路线图 R3/R4](archive/2026-09-06/DurableGraph-research-roadmap.md)、
-[运行时绑定见证](design-branches/0018-generated-graph-codec-shape/0018-runtime-binding-witness.md)。
-这些实验选择不自动成为新 DTO 产品路径的 API 或强制前置项目。
-DB-009/010 的旧 no-reuse 前提不能沿用；借用 Base 共享 prior 等结论时也需重新检查 ID 新占用者边界。
+当前图与 Upgrade 的合同从[目标设计](DurableGraph-target-design-v0.md)和真实产品测试进入；
+旧 fixture 接口和施工顺序不作为前置。
 
 ### 3.1 版本化表示类型头的统一寻址
 
 完整闭合表示的持久整数 ID 边界与验收由 [DB-045](design-branches/0045-persisted-representation-id-slice/README.md) 维护；
 统一闭合目录、Schema 记录直接作为 class 表示、base/inline 整数依赖由
-[DB-046](design-branches/0046-unified-schema-catalog-slice/README.md) 完成。
 长期合同归入[目标设计](DurableGraph-target-design-v0.md#长期-schema-可读与显式演化)。
 前序替代方案及反例保留在 [DB-044](design-branches/0044-type-header-blind-review/README.md)，不再把是否登记完整表示 ID 当作未决问题。
 
@@ -151,24 +145,17 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 3.3 RBF3 / FrameStore / VersionStore 迁移
 
-[DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md) 已形成实施指导方案并完成
-[三轮简化评审](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-simplification-review.md)；R0–R5 已实施并验收。
-源码、真实包与进程停止证据只查[实施记录](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-implementation.md)，不再沿用DB-085的T0–T7或已完成的R0–R5施工队列。
+底座迁移与 meta 自举已完成；当前两根、员工目录与共同保存合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)，正常 backing 恢复与寿命见 [DB-086](design-branches/0086-new-storage-refactoring-plan/README.md)。准确 pin 与源码/包工作流见[依赖指南](storage-dependency.md)。
 
-用户已选择只验收新建库，不保留旧storage数据或迁移器；取消全库重开确认、启动图审计和strict preflight。
-新打开消费上游恢复合同；必要内容/图因果/owner寿命仍检查。原反馈第3项控制数据确认撤出上游待办。
-单根发布、完整SchemaSnapshot、Revision/业务meta合帧与直接Bare的取舍和容量/I/O代价集中于DB-086。
-[DB-085](design-branches/0085-rbf3-framestore-versionstore-migration-feasibility/0085-rbf3-framestore-versionstore-migration-feasibility.md)只保留准确历史基线和机制证据；上游XML建议已在`974fd47`提交。
-共享物理分配不自动启动下面的Schema自举/分支版本视图。
+只验收新建存储库，不保旧格式兼容或迁移器。打开只读必要根，保内容/因果/owner 检查，不做全库重开确认或启动审计。
+历史 T0–T7、R0–R5 和旧单根/合帧方案已退出，按明确历史问题从 [Git 来源](design-branches/0091-retired-material-cleanup/README.md#git-history)查证。
 
-只有真实目录容量/登记写放大、合帧导航成本或大branch目录需求出现时，才重访增量目录、metadata读取或每branch ref。
-不为这些将来可能性预留runtime双模式、持久时钟或通用backend。
+只有实际目录容量、登记/目录保存成本、metadata 读取或大分支目录成本提供新证据时再开小片；这些问题不预留双模式或通用 backend。进一步能力仍按 §4.1 的真实消费者条件选择。
 
 ## 4. 明确延后及重访条件
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
-| 跨重开的历史记录定位（反馈 001-D） | 出现独立于可移动 branch 的调试书签、RL 样本或叙事引用需求后，设计“持久 locator → 本次有效 GraphFrame”。须明确仓库作用域/错误仓库、记录保留和 orphan 可见性、branch Move 后定位、无效/不可读错误；诊断 RevisionAddress 不能直接转正。现有命名分支只在应用保持它不移动时固定历史点，不是不可变书签 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |
 | DateTime 的完整保存合同 | 真实模型需要 DateTime 时，选择是否限制 UTC/Unspecified、接受公开状态规范化，或保留更完整的 Local ambiguous-DST 信息；需跨时区/DST 见证。三者公开行为不同，不随 DB-058 开放。平台依据及候选见 [DB-058 §3.3](design-branches/0058-temporal-scalar-value-slice/README.md#33-为什么-datetime-留在另一个问题中) |
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
@@ -183,7 +170,6 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 多根产品 API | DB-062/063 以各自单根 Revision 满足 Event/State 独立读写；同 Revision 任意根列表、命名根与按根过滤解码仍延后 |
 | boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
-| TwoLeg / incremental cleaner | 多历史 Segment 无法满足实际有界 dependency file count、在线退休、backup/rescue 或 compaction SLO 时重访，见其 [技术储备（归档）](../experiments/ARCHIVE.md#two-leg "原路径：experiments/TwoLegRotationProbe/PROJECT-STATE.md") |
 | 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)、[DB-069](design-branches/0069-incremental-save-baseline/README.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default/README.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
 | 双图读取的后继优化 | 操作内 DTO/string 缓存、保守引用闭包和完整状态比较的现状从 PROJECT-STATE/DB-064/066 进入。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
@@ -201,7 +187,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 后续仅在真实需求出现时选择一项：[原分支重建／按操作选模型、业务 head 不动的 Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)。先说明消费者／身份合同或给测量，再形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
 
-19个有效旧包 lanes 暂停当前 G并原地保资产，代表门禁不恢复未迁资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿](archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)；旧“下一片”不作为当前排期。
+旧包执行 lanes 已退出，保留模型仅作[编译资产](../experiments/PackageConsumerProbe/README.md#model-fixtures)；代表门禁不授其原运行故事资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")；旧“下一片”不作为当前排期。
 
 ### 4.2 开发 Schema 与正式定稿
 
@@ -227,9 +213,7 @@ DB-088 已退出同 key 新根 bootstrap、Schema overrides 与完整 container 
 - 持久发布：在明确故障阶段注入错误并 reopen，证明 Revision Parent 或 exact candidate 的可裁决结果，
   不能仅用 Append 正常返回或内存 Accept 宣称 durability。
 
-历史 logical graph、TwoLeg 和 MultiSegment 的材料由
-[设计索引](design-branches/README.md)与[实验笔记入口](DurableGraph-lab-notebook.md)按需访问。
-它们保留可复用状态律和反例；产品继续开发不默认重跑全部实验，也不照搬 fixture API。
+按实际问题选产品回归及[活动实验](../experiments/README.md)；已退出机制只在明确历史问题时查 Git。
 
 ## 6. 维护方式
 

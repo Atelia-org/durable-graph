@@ -123,7 +123,7 @@ Schema 依赖须体现在 exact layouts、声明的 Upgrade 依赖，或经过�
 证据入口：[GenericBindingCatalogTests](../../../tests/DurableGraph.Persistence.Tests/GenericBindingCatalogTests.cs)、
 [SharedEventHistoryTests](../../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs)、
 [GeneratedStateModelTests](../../../tests/DurableGraph.Tests/GeneratedStateModelTests.cs)、
-[EventHistoryConsumer](../../../experiments/PackageConsumerProbe/EventHistoryConsumer/Program.cs)。
+[EventHistoryConsumer（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/EventHistoryConsumer/Program.cs")。
 同 repo 切换坏 allocator/好 registry 的测试改为固定环境的故障测试或另开 repo；
 真实包的精简/完整目录切换改为分别打开，不能为旧测试保留逐操作覆盖参数。
 低层测试若仍在测试独立 snapshot，则保持其自身范围，不误改为 repo 寿命测试。

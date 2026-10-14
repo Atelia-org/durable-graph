@@ -1,77 +1,9 @@
-# Cross-assembly model consumer
+# CrossAssembly 模型编译资产
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+保留 DomainLibrary 与 AppModel 的公开登记、跨库引用、generic/inline 模型和独立 history；旧纯执行 Host 已删除。
 
-This DB-059 regression uses three independently compiled assemblies:
+旧 raw/typed 存储执行束及 runner 已删除。此目录现用于模型与 Source Generator 编译，不是当前公开 Repository 回归门禁；模型编译不能证明保存、冷恢复、故障或性能行为。原执行故事与验收可从 Git `6dbaf0e:experiments/PackageConsumerProbe/CrossAssemblyConsumer` 恢复。
 
-`DomainLibrary nupkg → AppModel nupkg → Host`
+使用[包实验入口](../README.md)所述的准确 DG 版本和完整 feed。项目保持 PackageReference；后续 history 阶段必须沿用该 fixture 的独立 accepted-history 目录，不能直接跳至高版本。
 
-All dependencies use `PackageReference`. Neither model project links the other's sources or
-history, imports an analyzer manually, uses friend access, or suppresses generated-name diagnostics.
-Both model projects publish their own history; the pure Host declares no durable types and owns no history.
-
-Run from the repository root:
-
-```powershell
-./experiments/PackageConsumerProbe/Run-CrossAssemblyProbe.ps1
-# Reuse a freshly packed runtime feed (aliases: FeedPath / PackageVersion):
-./experiments/PackageConsumerProbe/Run-CrossAssemblyProbe.ps1 -PackageSource <feed> -Version <version>
-```
-
-The script creates isolated feeds, package caches, history and database under the probe's ignored `obj`.
-It builds two DomainLibrary packages and one AppModel package. After V1 saves the graph, it replaces
-only the library DLL with the V2 package's DLL in a separate runtime directory. It checks the library
-assembly identity is unchanged, its bytes changed, and the AppModel and Host DLL hashes remain identical.
-This tests compatible library replacement; it does not claim arbitrary CLR API removal is binary compatible.
-
-## Minimal library and host pattern
-
-Libraries with ordinary non-generic class/struct declarations can opt into complete generated definitions:
-
-```xml
-<DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
-```
-
-The V1 DomainLibrary has only those ordinary declarations, making the packaged compiler property
-necessary. Each library wraps its internal generated aggregator in its own public catalog:
-
-```csharp
-public static void Register(IStateModelRegistration models) =>
-    Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
-```
-
-Host registers both catalogs before opening a session:
-
-```csharp
-var models = new StateModelRegistry();
-DomainCatalog.Register(models);
-AppCatalog.Register(models);
-using var repository = Repository.CreateNew(path, models, options);
-using var session = repository.CreateBranch("main", World.Create(), policy);
-// Later: Repository.OpenExisting(path, models, options), then repository.Checkout("main").
-```
-
-Each library can similarly expose `RegisterReaders(IStateReaderRegistration)` for stored-exact inspection.
-The probe keeps generated DTO names inside the owning library; its test facades project only the values
-needed by Host assertions. This is ordinary consumer code, not a new framework discovery protocol.
-
-Default package builds publish each project's current `.dgschema`; the script follows with
-`-p:DurableGraphSchemaHistoryMode=Verify`. All previously accepted filenames, SHA256 hashes and complete
-bytes are checked before and after later publication. Domain history grows from two to four files;
-AppModel retains exactly one World v1 file. No external history is copied into the app.
-
-## What the two generations prove
-
-- World v1 has two references to one external Node. The Node refers to itself. Cold reads preserve both identities.
-- Changing only Node produces one Node Delta and leaves World unchanged; cold recapture produces NoChange.
-- V2 keeps public `Node`, `Value`, `Next`, factory and catalog signatures, but removes the old private-layout
-  inline CLR declaration. Retained Node v1 DTO reading remains possible, without executing Upgrade.
-- An explicit Node v1→v2 Upgrade changes its inline count from int to long and adds 1000 as a business rule.
-  Only Node rewrites Base. NoChange and ordinary Delta follow; another cold reopen does not repeat Upgrade.
-- AppModel and Host are not recompiled for V2. Missing a public CLR type they actually use would be a different,
-  unsupported binary compatibility change. The deleted old inline type never appears in their API signatures.
-
-DB-059 also supports external nominal references in existing containers and dynamic generic parameters.
-Direct fixed external struct fields, fixed external inline roots, and inheritance from external durable bases
-remain rejected until a separate exact-template import contract is designed. The broader composition and
-failure matrix is covered by the product tests; this package lane stays focused on delivery and history ownership.
+编译顺序：先按 `HistoryVersion=1` 构建并 pack DomainLibrary，再构建 AppModel（`DomainLibraryPackageVersion` 指向该包）；DomainLibrary 的 V2 沿用它自己的 history，并使用新包版本。

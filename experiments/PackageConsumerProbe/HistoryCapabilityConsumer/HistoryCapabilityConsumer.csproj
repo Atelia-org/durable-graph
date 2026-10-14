@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -10,14 +9,9 @@
     <DefineConstants Condition="'$(ReadersOnly)' == 'true'">$(DefineConstants);READERS_ONLY</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
     <Compile Include="World.cs" />
     <Compile Include="Legacy.V1.cs" Condition="'$(HistoryVersion)' == '1'" />
     <Compile Include="Legacy.V2.cs" Condition="'$(HistoryVersion)' == '2'" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
-    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="../ProbeArtifacts.cs" Link="ProbeArtifacts.cs" />
   </ItemGroup>
 </Project>

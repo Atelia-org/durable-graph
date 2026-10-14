@@ -1,23 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CharacterHistorySeed Condition="'$(CharacterHistorySeed)' == ''">true</CharacterHistorySeed>
+    <RestoreVersion Condition="'$(RestoreVersion)' == ''">1</RestoreVersion>
     <DefineConstants Condition="'$(CharacterHistorySeed)' == 'true'">$(DefineConstants);CHARACTER_HISTORY_V1</DefineConstants>
     <DefineConstants Condition="'$(RestoreVersion)' == '1'">$(DefineConstants);RESTORE_V1</DefineConstants>
     <DefineConstants Condition="'$(RestoreVersion)' == '2'">$(DefineConstants);RESTORE_V2</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
+    <Compile Include="Model.cs" />
     <Compile Include="World.V1.cs" Condition="'$(RestoreVersion)' == '1'" />
     <Compile Include="World.V2.cs" Condition="'$(RestoreVersion)' == '2'" />
     <Compile Include="GraphWorld.cs" Condition="'$(RestoreVersion)' == '2'" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
-    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="../ProbeArtifacts.cs" Link="ProbeArtifacts.cs" />
   </ItemGroup>
 </Project>

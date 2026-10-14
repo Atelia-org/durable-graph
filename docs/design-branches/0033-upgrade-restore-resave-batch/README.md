@@ -60,7 +60,7 @@ readonly 字段的类型也限于本批已支持类型；手写 readonly 循环�
 | [CaptureSession](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)、[CaptureContext](../../../src/DurableGraph/Runtime/Capture/CaptureContext.cs) | Current 是内存来源；Prepare 要求稳定 preparation/Schema；无持久导入，不接受把 DecodedRevision 直接装成 Current |
 | [CapturedRevisionPlanner](../../../src/DurableGraph.Persistence/CapturedRevisionPlanner.cs) | 要求 previous 完整覆盖 Parent，并拒绝 survivor 跨 Schema；要新增受控迁移分支，不能整体移除校验 |
 | [PreparedObject](../../../src/DurableGraph.Persistence/PreparedObject.cs) | 已有 BaseOnlyUpdate，可消费合法迁移，不必重写策略 |
-| [NormalizedGraphMaterializationProbe](../../../tests/DurableGraph.Tests/NormalizedGraphMaterializationProbe.cs) | 可复用先分配后填充的思想；不是新 DTO 产品入口 |
+| [NormalizedGraphMaterializationProbe（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:tests/DurableGraph.Tests/NormalizedGraphMaterializationProbe.cs") | 可复用先分配后填充的思想；不是新 DTO 产品入口 |
 | [生成冷读集成](../../../tests/DurableGraph.Tests/DecodedRevisionGeneratorTests.cs) | 现成真实 RBF/history 测试基础，可扩成升级续写闭环 |
 
 代码事实优先于本文预估的类型名称；下一轮先读完整 PROJECT-STATE，再读本文和表内涉及的文件。

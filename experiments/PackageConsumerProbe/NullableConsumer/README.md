@@ -1,50 +1,9 @@
-# Nullable package consumer
+# Nullable 模型编译资产
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+保留 nullable struct、共享 List、vector/rank-four Array、present 值内的引用环与显式 lifting Upgrade。
 
-DB-052 product delivery witness. Run from the repository root:
+旧 raw/typed 存储执行束及 runner 已删除。此目录现用于模型与 Source Generator 编译，不是当前公开 Repository 回归门禁；模型编译不能证明保存、冷恢复、故障或性能行为。原执行故事与验收可从 Git `6dbaf0e:experiments/PackageConsumerProbe/NullableConsumer` 恢复。
 
-```powershell
-./experiments/PackageConsumerProbe/Run-NullableProbe.ps1
-```
+使用[包实验入口](../README.md)所述的准确 DG 版本和完整 feed。项目保持 PackageReference；后续 history 阶段必须沿用该 fixture 的独立 accepted-history 目录，不能直接跳至高版本。
 
-The runner packs ten local dependency packages into an isolated feed and cache. The consumer
-references only the public DurableGraph and Persistence packages; generated code and history arrive
-through packaged build assets. To reuse an existing matching feed, pass both `-PackageSource`
-and `-Version`. All artifacts stay beneath the runner's unique ignored `obj/nullable-*` directory.
-
-V1 writes a World with a `Point?` field, an `int?` field, a shared `List<Point?>`, a vector and a
-rank-four array of nullable Points. Present Points retain the same Node, whose back-reference
-and self-reference form a cycle. A List element edit creates an actual Delta; unchanged saving
-creates no local object versions. Saved Base and Delta content survives clearing the
-original domain values and collections before reading it back.
-
-The 32-element List keeps its Base larger than a one-element Delta even with the new fixed
-12-byte prior address. The probe retains its physical Delta assertions and uses a fresh new-format
-repository; its accepted V1 model history remains unchanged when compiling V2.
-
-V2 deletes the `LegacyPoint` CLR declaration and introduces `CurrentPoint` with the same durable
-family at V2. World advances to V2 because its inline nullable child changed. An explicit World
-Upgrade requests the nullable value tool; explicitly configured array/List element rule sets use
-the same opted-in nullable lifting. The child conversion adds 1000 to each present Point and
-preserves its reference ID. Absent values do not invoke business conversion. The expected 35
-calls belong to four independent owners: one World field, 31 List elements, two vector elements
-and one rank-four element. The shared List is upgraded once despite its two incoming references.
-
-The consumer exact-decodes the old Base/Delta revision before business Upgrade, forces four
-upgraded owners to Base, resumes ordinary Delta, and cold-reopens without repeating upgrades.
-Clearing every nullable value removes the now-unreachable Node and its string while retaining
-the World, shared List and arrays; the historical revision remains readable.
-
-The runner checks immutable history hashes, publication followed by packaged Verify mode,
-canonical history v9, and exact file counts **3 -> 5**. Required stage outputs are:
-
-```text
-NullableSeed:True:SharedCycles:True:VectorAndRank4:True:FrozenPreparation:True:HistoricalDelta:True
-NullableUpgrade:True:LiftedOwnerAndElements:True:ForcedBaseThenDelta:True:HistoricalExact:True:DeletedDomainStruct:True:ColdReopen:True:ClearRemovesIsland:True
-```
-
-This is a functional and package-delivery witness, not a performance comparison. Product unit
-tests separately cover malformed nullable bodies, explicit provider failures, missing historical
-capabilities, schema conflicts and candidate Discard semantics. Implementation evidence belongs
-in [DB-052](../../../docs/design-branches/0052-nullable-value-slot-slice/README.md).
+编译顺序：`HistoryVersion=1` → `2`。

@@ -185,7 +185,7 @@ static bool Probe(StateBindingContext context, TypeExpr type) =>
 
 临时编译片段在忽略的隔离任务目录，不污染模型 history 或正式消费者源文件。可在现有 runner 增加窄步骤，复用 receipt／输入来源／超时／退出记录，不建设通用负例框架。禁止 ProjectReference、手工 Analyzer／Import 或测试 friend 身份代替普通包接入。
 
-Development 可作为额外防回归故事复用，但不是再建一份生命周期故事的前置；19 个暂停旧 lanes 不因此恢复。没有新证据要求额外广测时，完成上述门禁即收束。
+Development 可作为额外防回归故事复用，但不是再建一份生命周期故事的前置；19 类已退出执行的 lanes 不因此恢复。没有新证据要求额外广测时，完成上述门禁即收束。
 
 ## 9. 保留的限制与条件延期
 

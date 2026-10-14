@@ -98,7 +98,7 @@ Generator 由 Roslyn 发现、运行；Build 是 MSBuild 启动的独立 .NET 10
 [Shared](../../../src/Shared) 的两个协议文件分别链接编译，避免复制维护；其类型为内部实现，暂无独立第三方消费者。
 不为消除两条 `Compile Link` 再增加一个协议包。
 
-Generator 中的 [OperationsProbeGenerator](../../../src/DurableGraph.Generator/DurableGraphOperationsProbeGenerator.cs)
+Generator 中的 [OperationsProbeGenerator（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:src/DurableGraph.Generator/DurableGraphOperationsProbeGenerator.cs")
 没有 `[Generator]` 注册，只由测试显式运行，不是产品自动图操作能力。
 是否将该见证源码移到测试归属、是否显式禁止占位 CLI 打包，可作为独立小型整洁项；不是本轮拆包的依据。
 

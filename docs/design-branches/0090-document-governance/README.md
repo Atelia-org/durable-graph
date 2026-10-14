@@ -4,6 +4,8 @@
 > 状态：2026-10-14，本次治理已实施。历史材料按问题归组，总索引收窄为导航，维护规则由局部 AGENTS 承载；实际验收见[结果记录](results.md)。
 > 执行入口：[局部 AGENTS](../AGENTS.md)；发现依据的入口：[设计索引](../README.md)。本案是文档治理，不产生产品施工授权。
 
+后续 [DB-091](../0091-retired-material-cleanup/README.md)经当前源码和独立复核退出淘汰材料；本案迁移数字描述当片，不要求永远保留全部历史副本。
+
 ## 1. 问题、边界与验收
 
 要回答的问题：怎样让 Coding Agent 找到某个问题的决定与证据，并让后续工作保持这个结构？
@@ -30,7 +32,7 @@
 | [DB-071 organization-review](../0071-assembly-namespace/0071-assembly-namespace-organization-review.md) | 文件名是 review，实际承载已采纳方向并被目标设计引用；不能按名字降为纯过程材料 |
 | [DB-081 实验](../0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) | 实验完成形成否定结论，热准入未实施；反例和重启条件仍有价值 |
 | [DB-082 结果](../0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md)及 [CSV](../0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-measurements.csv) | 候选已实现，但总成本收益未成立，默认关闭；验收通过不等于启用 |
-| [DB-086 实施](../0086-new-storage-refactoring-plan/0086-new-storage-implementation.md)与 [DB-087](../0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status) | 086 当片验收有效，单根／SCB1／合帧已由 087 替代；底座正常恢复等选择仍保留，不能整篇判作失效 |
+| [DB-086 实施（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0086-new-storage-refactoring-plan/0086-new-storage-implementation.md")与 [DB-087](../0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status) | 086 当片验收有效，单根／SCB1／合帧已由 087 替代；底座正常恢复等选择仍保留，不能整篇判作失效 |
 | [DB-087 历史资格](../0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan) | P0/P1 归档不含后来 P2；完整原 P2 另在 Git `d8c0ecb` 的 §9。泛称“完整归档”可能丢掉一个时期的证据 |
 | [077/078 共同评审](../0077-repository-model-environment-slice/0077-0078-api-dialectical-review.md) | 一份材料服务两个问题，应多处链接、只存一份 |
 

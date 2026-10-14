@@ -26,7 +26,8 @@
 范围是“标量 + string 的领域 roots → ID 化 Versioned DTO → 封闭候选”，
 以及单会话、单在途候选的 accept/discard 内存见证。string 作为独立内容条目，引用槽不 inline 内容。
 不在首片实现字符串对象解码/领域 Restore、Durable 对象互引/循环、ID 回收池或完整 Save。
-实施交接见 [工作单](../../WORK-ORDER-REFERENCE-CAPTURE.md)；[Goal 文本](../../GOAL-REFERENCE-CAPTURE.md)已启动，G0 已获用户裁决。
+G0 裁决与首片结果保留在本文 §3.1–3.2；当前实现见 [CaptureSession](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)，
+回归见 [会话测试](../../../tests/DurableGraph.Tests/ReferenceCaptureSessionTests.cs)和[生成器测试](../../../tests/DurableGraph.Tests/ReferenceCaptureGeneratorTests.cs)。
 
 - 一个 CaptureSession 从非零 uint 域单调分配；0 表示 null。分配过的号在该 session 内不再发放。
   实施建议：失败/discard 允许消耗号码，高水位不回退；这免去首片的号段回滚与回收状态。
@@ -216,8 +217,10 @@ G0 推荐方案按用户决定落地：Runtime 的 CaptureSession/Context/Captur
 已修复审查时实际发现的只读集合漏洞：Array.AsReadOnly 可经 ICollection.SyncRoot 暴露底层数组，
 当前使用私有只实现 IReadOnlyList/IEnumerable 的数组包装，两种集合都有反旁路测试。
 
-根 build 0 warnings/errors；ReferenceCapture 聚焦 37/37；全套 503/503、零跳过；真实单包消费者通过。
-独立只读审查覆盖身份/隔离/历史/包边界，无剩余阻塞。完整验收及包产物入口见[工作单 §5](../../WORK-ORDER-REFERENCE-CAPTURE.md)。
+历史结果（2026-09-06；从 Git `6dbaf0e` 的首片工作单 §5 提取）：根 build 0 warnings/errors；ReferenceCapture 聚焦 37/37；
+全套 503/503、零跳过；独立只读审查覆盖身份/隔离/历史/包边界，无剩余阻塞。真实单包消费者通过，准确输出
+`BinaryBody:012154:True:ReferenceCapture:True`，当次忽略产物位于
+`experiments/PackageConsumerProbe/obj/run-20260906024101-5228`。当前回归由上述会话和生成器测试维护，历史包结果不授予当前包资格。
 这些结果不证明字符串对象解码、领域恢复、ID 回收或持久 Save；后续边界仍按第 7/8 节分别排期。
 
 ## 4. 回收与复用时机：延期素材，首片不实施

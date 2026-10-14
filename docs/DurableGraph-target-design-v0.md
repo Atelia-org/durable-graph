@@ -3,7 +3,7 @@
 > 本文维护长期目标与已选设计约束，不描述完成情况，不冻结 API 或持久格式。
 > 产品现状：[src/PROJECT-STATE.md](../src/PROJECT-STATE.md)。
 > 尚未完成及待裁决事项：[路线图](DurableGraph-research-roadmap.md)。
-> 早期完整草稿：[2026-09-06 归档](archive/2026-09-06/DurableGraph-target-design-v0.md)。
+> 早期完整草稿：[2026-09-06 归档（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-09-06/DurableGraph-target-design-v0.md")。
 
 ## 1. 要解决的问题
 
@@ -30,7 +30,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 [DB-071](design-branches/0071-assembly-namespace/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖边界：
 Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共用 Serialization。
-新底座方向按[DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md)采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
+新底座方向按[DB-086（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md")采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
 主 DurableGraph 程序集的根 namespace 保留领域/登记契约，Schema 放布局描述，Runtime 放执行绑定与状态操作。
 这些 namespace 不增加程序集边界，不要求 Schema 与 Runtime 在同程序集内形成单向依赖。
 组织迁移要求依赖闭包重编译，保留类型访问级别、Generated/Family/DTO、模型 ID/版本与持久格式；不引入旧包兼容壳。
@@ -290,23 +290,23 @@ factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protecte
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 直接使用 FrameStore 的 opaque FrameAddress；DG links 固定编码为 12B，不解释文件位置或距离。
   物理分配与轮转由底座承担，不因此强制冷对象 Base。对象内容 Delta 与 ObjectHeadMap 的 membership Delta 是不同层次。
-- 普通 State 在对象内容决策之后选择目录表示：仅当目录 Base 的精确字节成本严格小于 Delta 的 Remove 列表时切换，
-  否则保留 Delta。保留精确 Parent、本地对象记录与旧 head；不增加公开参数或新的 wire 格式，见[实现与验收](research/object-head-map-base-feasibility.md)。
+- 存活目录使用员工 Dictionary body 与对象版本。已有来源时，无变化沿用原目录；有变化比较完整 Base/Delta payload，
+  当 `B ≤ D` 或 `H + D > 目录阈值 × B` 时写 Base，否则写 Delta；初始目录写 Base。
+  这独立于对象表示的可选 Base 预算，实际实现见 [P0GraphStore](../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphStore.cs)。
 - Storage 不解释 CLR 字段、Schema 升级或可达性。Append 产生 candidate address，
   外层拥有最终发布 head；raw body 读取不等价于类型或完整图验证。
-- 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing Revision 的
-  exact Parent Revision 中该 ObjectId 的对象 head 对照。
+- 对象 Delta 显式引用同 ObjectId 的 prior record，并与其 containing batch 的
+  准确内容来源图中该 ObjectId 的对象 head 对照。
   新 Base 截断对象内容重建链；这不等于截断 membership 读取、历史查询或允许删除旧文件。
 - B/D/H 采用统一对象 payload 口径，包含对象独有 kind/prior/length/body 及 Base 的类型引用；
   排除 ObjectId key、共享 membership/Frame/对齐。H 与原 Frame 实编码累计一致，是成本代理而非总物理 I/O。
   冷恢复完整验证后，可随同 Store 生命周期的已提交 DTO 基线保留对象 head/H；热保存按实际对象记录增量推进。
-  元数据仅在确认发布后随 State 基线安装，Event 快照不推进 State；独立 raw 输入仍须验证历史链。
+  元数据仅在确认发布后随 State 基线安装，Event 快照不推进 State；每次图读取仍须验证来源与历史链。
   具体边界与证据见 [DB-069](design-branches/0069-incremental-save-baseline/README.md)。
 
-当前地址方向见 [DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md)；
-[DB-014](design-branches/0014-multi-segment-backward-file-distance/README.md) 保留已被替换的物理距离方案；
-内容边界来源：[DB-026](design-branches/0026-raw-base-object-content-slice/README.md)、
-[DB-028](design-branches/0028-persisted-object-delta-chain-slice/README.md)。
+地址与正常恢复见 [DB-086](design-branches/0086-new-storage-refactoring-plan/README.md)，
+当前对象版本与 typed 来源见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
+轮转不保证总磁盘、依赖文件数或冷读成本上限；物理 GC/在线 cleaning 尚未实现。
 
 ## 3. 保留的长期产品目标
 
@@ -324,7 +324,7 @@ factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protecte
 Schema 编辑仅准备受控意图，meta 先于引用它的业务内容追加，再由同一 pending／发布 owner 共同接受。
 Discard 保手工修改意图但不接受候选定义；Event 可接受 meta／Head，但不推进 State 基线。没有独立 SchemaStore 发布或第二份表示 ID 权威。
 当前合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#bootstrap-contract)；
-[DB-045](design-branches/0045-persisted-representation-id-slice/README.md)／[DB-046](design-branches/0046-unified-schema-catalog-slice/README.md) 保整数寻址／统一记录的历史来由。用户 class 的 Schema 节点
+用户 class 的 Schema 节点
 也是对象 descriptor；inline Schema 与容器描述进入同一 meta 图，base/inline exact 依赖按节点 ID 引用。
 inline 记录只描述嵌套值，不能被 Base 当作独立对象表示；普通引用槽只约束无版本 nominal 类型，
 目标版本不成为引用方的 exact 依赖。`SchemaKey` 是由完整名义类型与定义版本派生的查询、冲突索引，
@@ -400,9 +400,10 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 已选新存储方向消费底座正常尾恢复，包括VS惰性打开；只读不写不修，不在live Store下手工救援。
 超出底座正常恢复的离线救援先关闭资源并丢弃缓存，再以fresh owner恢复使用。
 日常打开不提供全库健康或全历史重新确认；只加载必要根/Schema目录，对本次访问内容保持正确性检查。
-完整 SchemaSnapshot 与一个带业务TailMeta的Revision图帧共用FS，VS一个仓库根发布Schema/branch目录；
-两种Parent、全局Schema单调性与业务outcome仍保留。具体方案见[DB-086](design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md)，产品实现状态只查工作集。
-raw Revision 与完整 head map 可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
+meta 员工对象、对象 batch、存活 Dictionary 目录和图入口共用 FS；VS 的分支目录根与 shared meta 根由同一 owner 发布。
+新增 shared 时两根通过同一 CU 确认，private 只推进分支目录；图 pin 准确 S，不借 latest 补解释。
+业务 Parent、内容来源、outcome/fault 与完整 view 校验保持，当前合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)，正常恢复与寿命见 [DB-086](design-branches/0086-new-storage-refactoring-plan/README.md)。
+owned 完成帧与完整目录可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
 缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)。
 
 公共使用模型见 [DB-083 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md)。
@@ -432,7 +433,7 @@ CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担
 不在发布后重新 Capture 或选择模型。预先可知的 null/未注册直接根在捕获和追加前拒绝；
 深层模型或回调失败依实际阶段裁决，不承诺所有失败都无物理写入。完整来源、同 ID 的 exact 布局和 Upgrade rewrite 义务继续保持。
 
-VS仓库根是唯一当前发布前沿，图追加与head发布分开，业务祖先由图帧自己的Parent决定。
+VS 的分支目录根与 shared meta 根构成当前发布选择，图追加与 head 发布分开，业务祖先由图帧自己的 Parent 决定。
 提交在串行driver内检查工作副本所有权、expected branch head、最近State的exact基线后发布，不要求上游提供CAS平台，
 防重入、fault 和 publication outcome 不因自由历史放宽。每 branch 至多一个活动工作副本，不同 branch 可同时编辑，
 仓库操作仍串行。同 branch 重复 Checkout 在恢复前拒绝；Move 只要求目标 branch 没有活动工作副本。
@@ -467,7 +468,7 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 无下界的默认 NewestFirst 按需回溯，OldestFirst 可先缓冲所需事件地址；不物化沿途 State。
 每次 MoveNext 检查可用性，交付前释放操作 guard 与底层 lease，循环体可 ReadEvent 或进行其他串行操作。
 后续提交/Move 不改变所选历史。ReadFrames 保持全逻辑链元数据读取，切片结果不节省其成本；旧 ReadEvents 已移除。
-既有实现与验证见[DB-078-B记录](design-branches/0078-editable-checkpoint-fork-slice/0078-b-checkpoint-history-query-implementation.md)；新方向取消启动全物理审计，合帧导航的整帧CRC读取成本见DB-086。
+既有实现与验证见[DB-078-B记录](design-branches/0078-editable-checkpoint-fork-slice/0078-b-checkpoint-history-query-implementation.md)；不做启动全物理审计，当前图导航与必要帧校验见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#view-contract)。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
@@ -475,7 +476,7 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 
 统一 Commit/Ref 应共同选择 StateStore、SchemaStore、ArtifactStore 的 exact 视图，支持整体推进、
 回滚与分叉；不能让旧 State 视图意外配上最新 Schema/Artifact 视图。整体回滚不要求删除已追加的
-物理记录。MVP 的 Repository 内单调 Schema 注册表是阶段性简化，不将其全局可见性冻结为长期合同。
+物理记录。同一已接受 Schema view 内同 key 必须保完整布局，不提供跨 view 的全局布局账本。
 本案选择 Schema descriptor 与存活目录复用对象序列化／版本保存，业务比较与受控 meta 编辑汇入共同发布 owner。
 业务图 pin 准确 Schema 根；shared 目录与分支 rewind 分责，private 采用完整冻结 view，不以 latest shared 补缺。
 已接受定义不可改写；private 从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。

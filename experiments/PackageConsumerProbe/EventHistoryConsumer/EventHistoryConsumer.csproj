@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -10,14 +9,8 @@
     <DefineConstants>$(DefineConstants);HISTORY_V$(HistoryVersion)</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
     <Compile Include="Model.cs" />
     <Compile Include="SharedReadModel.cs" />
-    <Compile Include="SharedReadProbe.cs" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
-    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="../ProbeArtifacts.cs" Link="ProbeArtifacts.cs" />
   </ItemGroup>
 </Project>

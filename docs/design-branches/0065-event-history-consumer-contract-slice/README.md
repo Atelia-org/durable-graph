@@ -179,7 +179,7 @@ Windows .NET 验证串行执行。
   PublishedStateFailureFaultsWriterAndReopenMustNotReplayPendingEvent。
 - [EventHistoryPublicationFailureTests](../../../tests/DurableGraph.Persistence.Tests/EventHistoryPublicationFailureTests.cs)：
   PublishedEventFailureReopensAsPendingWithoutAdvancingStateBaseline、真实 Ref Create/Init/Bind 故障与 CAS 失败。
-- [当前真实包 runner](../../../experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1)：独立 feed、history Publish/Verify、两代模型；
+- [当前真实包 runner（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1")：独立 feed、history Publish/Verify、两代模型；
   新推荐示例不替换其 DB-063/064 机制证据。
 
 实施后运行根 `dotnet build DurableGraph.slnx`、相关 StateStore 恢复测试、新示例与既有 EventHistory 真实包路径，

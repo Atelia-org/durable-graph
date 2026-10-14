@@ -1,85 +1,9 @@
-# Cross-assembly inheritance package consumer
+# InheritanceLibrary 模型编译资产
 
-> 当前 G 门禁暂停：此 lane 仍依赖 `RevisionDecoder` 与 SCB1/raw Store 诊断；`Schemas/States` 已收为 internal，默认 owner 不授旧模式。后继迁移范围见 [DB-087 §36](../../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#36-p1d-第七片旧typed恢复束退出)。下文保留匹配历史包版本的验收记录，不能作为当前门禁。
+保留 BaseLibrary → MiddleLibrary → AppModel 的两条跨库继承边、hidden readonly generic/Nullable 状态、各库 history 与 leaf Upgrade；旧纯执行 Host 已删除。
 
-Run from the repository root:
+旧 raw/typed 存储执行束及 runner 已删除。此目录现用于模型与 Source Generator 编译，不是当前公开 Repository 回归门禁；模型编译不能证明保存、冷恢复、故障或性能行为。原执行故事与验收可从 Git `6dbaf0e:experiments/PackageConsumerProbe/InheritanceLibraryConsumer` 恢复。
 
-```powershell
-./experiments/PackageConsumerProbe/Run-InheritanceLibraryProbe.ps1
-# Or reuse a matching feed with the nine Runtime/StateStore dependency packages:
-./experiments/PackageConsumerProbe/Run-InheritanceLibraryProbe.ps1 -PackageSource <feed> -Version <version>
-```
+使用[包实验入口](../README.md)所述的准确 DG 版本和完整 feed。项目保持 PackageReference；后续 history 阶段必须沿用该 fixture 的独立 accepted-history 目录，不能直接跳至高版本。
 
-This [DB-061](../../../docs/design-branches/0061-cross-assembly-inheritance-slice/README.md) consumer
-uses four independent projects: `Host -> AppModel -> MiddleLibrary -> BaseLibrary`.
-Only PackageReference connects them. The three model packages include SDK-produced `ref/`
-compile assets and `lib/` runtime assets; the runner verifies NuGet's selected asset paths.
-The pack-content target includes the reference DLL and does not copy history, import build
-scripts, or add generator/analyzer references. No friend assemblies or ProjectReference are used.
-
-`Leaf : Middle<int> : LegacyBase<int>` crosses two library boundaries. Base is abstract and
-stores private readonly `InternalPair<T>`, `InternalPoint?`, and Guid fields. Middle adds its
-own private readonly fields. The leaf cannot name those internal implementation types.
-Each layer reuses FieldId 1; the generated complete leaf DTO and body preserve declaration
-segments. The Host constructs two leaves with no parameterless constructor, then creates
-base-declared cyclic references, aliases and a polymorphic `List<Base<int>>` containing both.
-Only the two leaves and the List have object rows; base and inline states do not acquire IDs.
-
-The seed process independently changes an ancestor field, a leaf field and a child object.
-Each save must write exactly the changed leaf as Delta. Cold loading preserves private readonly
-state and identity, runs no constructors, and permits an empty NoChange commit.
-
-Generation two deletes `LegacyBase<T>`, `InternalPair<T>` and `InternalPoint`, replacing them
-with new CLR names under the same Schema IDs and incremented versions. Pair's stamp and Point's
-value widen from int to long. Base, Middle and Leaf explicitly advance their owner versions.
-All affected consumers are rebuilt; this example does not claim binary compatibility after a
-base CLR type is removed. Nominal identity and stored reference IDs remain unchanged.
-
-The leaf's explicit Upgrade converts its entire flattened DTO, adding 1000 once to the hidden
-stamp and optional point. Base and Middle each register their own owner rule, but neither runs
-for a Leaf object. Historical exact decoding runs no Upgrade; editable loading invokes precisely
-two leaf edges. Both upgraded leaves require Base, while their unchanged polymorphic List does
-not. NoChange, ordinary Delta and another cold reopen follow without repeating upgrades or
-running constructors. The old revision remains exact-readable after the current head advances.
-
-Model catalogs expose stable handwritten facades:
-
-```csharp
-var models = new StateModelRegistry();
-AppCatalog.Register(models);
-MiddleCatalog.Register(models);
-BaseCatalog.Register(models);
-using var repository = Repository.OpenExisting(directory, models);
-using var session = repository.Checkout("main");
-var leaf = (Leaf)session.State!;
-leaf.Ancestor++;
-session.CommitEvent(leaf);
-session.CommitState(new ReadAmplificationBaseBudgetParameters(8, 10));
-```
-
-Each library calls its own internal `Generated.DurableDefinitions`; `RegisterReaders` provides
-retained exact decoding separately. Host registration is explicit and completes before opening
-the graph. Compile-time imported templates do not automatically register runtime factories or
-business rules. BaseLibrary forces Family generation with `DurableGraphGenerateDefinitions=true`;
-external inheritance automatically selects Family for downstream models.
-
-The runner performs Publish, Clean, Verify and Pack in dependency order for each generation.
-History counts are BaseLibrary `3 -> 6`, MiddleLibrary `1 -> 2`, AppModel `1 -> 2`; the pure Host
-owns no history. It compares accepted filenames, SHA-256 hashes and full bytes, and rejects any
-history file with a foreign declared Schema ID. Artifacts and `independent-history.json` remain
-in a unique ignored `obj/inheritance-library-*` directory; no prior artifacts are deleted.
-
-Expected markers:
-
-- `InheritanceLibrarySeed:True:TwoExternalBaseEdges:True:HiddenReadonlyGenericNullable:True:PolymorphicCycles:True:AncestorAndLeafDelta:True:ColdNoChange:True`
-- `InheritanceLibraryUpgrade:True:DeletedBaseAndInlineClr:True:HistoricalExact:True:LeafOnlyUpgrade:True:RequiredBases:True:NoChangeThenDelta:True:ColdReopen:True`
-- `InheritanceLibraryPackaging:True:ReferenceAssemblies:True:TwoExternalBaseEdges:True:IndependentHistoryUnchanged:True:NoImportedHistoryPublication:True`
-
-Failure cases such as missing exports, wrong exact ancestors, ungranted base projections and
-missing owner Upgrade edges belong to the product test suite. This lane verifies successful
-real package delivery, rather than defining alternate recovery or rule-discovery behavior.
-
-Packing may emit NU5131 because the generated nuspec has no legacy `<references>` group.
-This example supports PackageReference only; the runner independently verifies compile `ref/`
-and runtime `lib/` selection. It does not validate `packages.config` consumers. MSBuild pack does
-not directly support that nuspec group; see [NuGet's assembly-selection guidance](https://learn.microsoft.com/en-us/nuget/create-packages/select-assemblies-referenced-by-projects).
+编译顺序：每代按 BaseLibrary → MiddleLibrary → AppModel 顺序构建/pack，各库保独立 history；`HistoryVersion=1` → `2`，每代 `ModelPackageVersion` 使用新版本。

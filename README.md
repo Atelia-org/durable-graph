@@ -214,8 +214,7 @@ before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence �
 不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
 需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `ReadState` / `ReadEvent`，不需要开启 writer；
 持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `Checkout`。
-可执行的[图外视图示例](experiments/PackageConsumerProbe/EventHistoryConsumer/README.md#per-view-transient-context)
-展示了两份世界各建索引、共享候选 Actor 不携带视图上下文的用法。
+图外视图与共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)。
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
@@ -397,7 +396,7 @@ baseline 建立新的 dev fork；需要继承上次已保存草稿数据再改�
 record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分类真实 backing field；
 派生 positional 参数若复用基类属性，只在实际声明存储的基类标记。C# 的 `with` 和相等性保持原行为，
 不自动深复制引用成员或按内容比较容器。框架按引用身份保存，两个等值但不同实例的 record 不会合并。
-可运行的泛型 record 继承、事件恢复与两代升级见[真实包示例](experiments/PackageConsumerProbe/RecordClassConsumer/README.md)。
+泛型 record 继承与历史形状可参考[保留模型资产](experiments/PackageConsumerProbe/RecordClassConsumer/README.md)。
 
 | 内容 | 当前边界 |
 |---|---|
@@ -405,7 +404,7 @@ record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分�
 | 领域类型 | 显式 Durable class、record class、struct、record struct、enum；支持泛型、继承、private/readonly 字段及跨程序集组合 |
 | 值组合 | inline struct 嵌套布局、Nullable；record 自动属性的存储使用 `[field: DurableField(...)]` / `[field: Transient]` |
 | 引用与数组 | string、已登记的实际派生实例、共享/循环；零下界 `T[]` 和 rank 2–4 多维数组、交错数组 |
-| 容器 | exact BCL `List<T>` 和实验性 `Dictionary<TKey,TValue>`；按内容保存。复合 Key 与当前 comparer 的边界见[真实字典示例](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
+| 容器 | exact BCL `List<T>` 和实验性 `Dictionary<TKey,TValue>`；按内容保存。复合 Key 与当前 comparer 的边界见[字典模型资产](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | 尚不支持 | ValueTuple、DateTime、任意外部基类、CLR 嵌套类型/ref struct、任意 object/interface 字段、boxed value 身份、数组协变、非零下界及非 SZ rank-1 数组、其他未适配 BCL 容器 |
 
 支持的类型可以在字段、泛型参数和容器元素中组合。仍需遵守各类型限制；例如 Dictionary 根 Nullable Key 不支持，
@@ -421,7 +420,7 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 
 每个模型库保有自己的 history，并以公开 facade 包住该库 internal 的 `Generated.DurableDefinitions.Register`。
 宿主在 CreateNew/OpenExisting/OpenReadOnlyExisting 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
-跨库接法见 [跨库继承示例](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
+跨库接法见 [跨库继承模型资产](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
 
 当前外层 API 是**一个 Repository、每个分支至多一个活动 `BranchCheckout` 工作副本、单 writer**；每份已保存的 Event/State 图选一个非空 durable 根。
 State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CLR 类型也可承担任一角色。
@@ -473,7 +472,7 @@ Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirecto
 
 | 需求 | 入口 |
 |---|---|
-| 更详细的生成 API、泛型/组合值升级 | [Runtime 包说明](src/DurableGraph/PACKAGE.md) |
+| 包内容与交付边界 | [Runtime 包说明](src/DurableGraph/PACKAGE.md) |
 | 跨库引用、固定值、继承 | [模型库](experiments/PackageConsumerProbe/CrossAssemblyConsumer/README.md)、[inline 库](experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md)、[继承库](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md) |
 | 泛型/嵌套值/容器迁移 | [泛型三代](experiments/PackageConsumerProbe/GenericConsumer/README.md)、[值升级](experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md)、[数组](experiments/PackageConsumerProbe/ArrayConsumer/README.md)、[List](experiments/PackageConsumerProbe/ListConsumer/README.md)、[复合字典](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | 实际能力、术语、未实现事项 | [PROJECT-STATE](src/PROJECT-STATE.md)、[术语表](docs/DurableGraph-glossary.md)、[路线图](docs/DurableGraph-research-roadmap.md) |

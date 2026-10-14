@@ -1,7 +1,4 @@
 using Atelia.DurableGraph;
-using Atelia.DurableGraph.Persistence;
-using Atelia.DurableGraph.Storage;
-using Atelia.FrameStore;
 
 namespace StateStorePackageConsumerProbe;
 
@@ -28,61 +25,4 @@ public sealed partial class World : IDurableObject {
         next = new(old.Segment0Field1 + 100, old.Segment0Field2, 73, old.Segment0Field4, default, default);
     }
 
-    internal static void Exercise(string directory) {
-        const long options = 1024 * 1024;
-        FrameAddress oldRevision, upgradedRevision, unchangedRevision, finalRevision;
-        ObjectId worldId;
-        StateModelRegistry models = new();
-        __DurableState.RegisterModel(models);
-        __DurableState.RegisterModel(models);
-        ReadAmplificationBaseBudgetParameters policy = new(int.MaxValue, 1);
-        using (var repository = Repository.OpenExisting(directory, models, options))
-        using (var session = repository.Checkout("main")) {
-            oldRevision = session.StateRevisionAddress!.Value;
-            worldId = session.StateId!.Value;
-            Require(((World)session.State!)._fixtureId == Guid.Empty && ((World)session.State!)._fixtureGroup == Guid.Empty,
-                "V1 Upgrade did not supply the new stable fields' defaults.");
-            Require(_upgradeCalls == 1 && ((World)session.State!)._score == 109 && ((World)session.State!)._name == "A" &&
-                ((World)session.State!)._generation == 73 && ((World)session.State!)._createdAtTicks == 638_625_600_000_000_000 &&
-                ((World)session.State!)._cache == 0 && _constructorCalls == 0, "Upgrade/readonly/constructor-free restoration failed.");
-            World original = ((World)session.State!);
-            World marker = new(0, "Event");
-            session.CommitEvent(marker, policy);
-            upgradedRevision = session.CommitState(policy).RevisionAddress;
-            Require(ReferenceEquals(((World)session.State!), original) && _upgradeCalls == 1, "Saving rebuilt or re-upgraded State.");
-            session.CommitEvent(marker, policy);
-            unchangedRevision = session.CommitState(policy).RevisionAddress;
-            session.CommitEvent(marker, policy);
-            original._score = 110;
-            finalRevision = session.CommitState(policy).RevisionAddress;
-        }
-        using (var repository = Repository.OpenReadOnlyExisting(directory, models)) {
-            World final = ((World)repository.ReadState(repository.GetHead("main")));
-            Require(final._score == 110 && final._generation == 73 && final._name == "A" &&
-                final._createdAtTicks == 638_625_600_000_000_000 && final._cache == 0 &&
-                _constructorCalls == 1 && _upgradeCalls == 1, "Cold reopening failed to restore current Base plus Delta.");
-            var historical = repository.ReadFrames("main").Single(frame => frame.RevisionAddress == oldRevision);
-            Require(((World)repository.ReadState(historical))._score == 109 && _upgradeCalls == 2,
-                "Original historical revision was not preserved.");
-        }
-        using GraphResources resources = GraphResources.OpenReadOnlyExisting(directory);
-        StateRevisionStore store = resources.States;
-        StateReaderRegistry readers = new();
-        __DurableState.RegisterReaders(readers);
-        var old = RevisionDecoder.Read(store, resources.Schemas, oldRevision, readers)
-            .GetRequired(worldId).GetState<__DurableState.V1>();
-        Require(old.Segment0Field1 == 9 && old.Segment0Field4 == 638_625_600_000_000_000 &&
-            store.Read(oldRevision).ParentRevisionAddress is not null,
-            "The old exact V1 content and State ancestry were not preserved.");
-        StateRevision upgraded = store.Read(upgradedRevision);
-        Require(upgraded.ParentRevisionAddress == oldRevision && upgraded.LocalObjects.Count == 1 &&
-            upgraded.LocalObjects[0].Kind == ObjectVersionKind.Base, "Upgrade must force a current Base even after Event save.");
-        Require(store.Read(unchangedRevision).LocalObjects.Count == 0, "Unchanged State requires no object write.");
-        Require(store.Read(finalRevision).LocalObjects.Single().Kind == ObjectVersionKind.Delta &&
-            store.ReadObjectVersionChain(finalRevision, worldId.Value).Records.Count == 2, "Expected ordinary Delta after forced Base.");
-    }
-
-    private static void Require(bool condition, string message) {
-        if (!condition) { throw new InvalidOperationException(message); }
-    }
 }

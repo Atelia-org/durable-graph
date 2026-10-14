@@ -15,6 +15,26 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static readonly CSharpParseOptions ParseOptions =
         CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp14);
 
+    [Fact]
+    public void ProductGeneratorSupportsSelfReferences() {
+        GeneratorTestRun run = RunGenerator("""
+            using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Schema;
+            using Atelia.DurableGraph.Runtime;
+
+            namespace Samples;
+
+            [DurableType("samples.self-reference", 1)]
+            public sealed partial class Node : IDurableObject {
+                [DurableField(1)] private Node? _next;
+            }
+            """);
+
+        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
+        Assert.DoesNotContain(run.OutputCompilation.GetDiagnostics(), IsError);
+        Assert.Contains(run.GeneratedSources, source => source.HintName == "DurableStates.g.cs");
+    }
+
     [Theory]
     [MemberData(nameof(InvalidSources))]
     public void InvalidDurableDeclarationsFailWithPreciseDiagnostic(

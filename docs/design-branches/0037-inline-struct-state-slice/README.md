@@ -239,7 +239,7 @@ history/manifest v2 在 version 后写 kind 行，inline field 写 exact key；S
 | G1 Store | [持久 Schema 测试](../../../tests/DurableGraph.Persistence.Tests/InlineSchemaStoreTests.cs) | 混合 v1/v2 重开、base+inline DAG、原子预检、对象头/typed reader/发布 head 指向 inline 的拒绝 |
 | G1/G2 SG | [生成器测试](../../../tests/DurableGraph.Tests/InlineStructGeneratorTests.cs)、[body 测试](../../../tests/DurableGraph.Tests/InlineStructBodyTests.cs) | standalone 标注、支持形状、历史宿主消失、深度/升版、静态 nested Delta golden、浮点按位、坏位图/空子变化/截断/尾随拒绝、真实 SG ref 恢复 |
 | G3 | [真实生成图测试](../../../tests/DurableGraph.Tests/InlineStructGraphTests.cs) | 同实例连续 Commit、nested owner Delta、child-only、共享/循环/string 身份、Remove、失败基线、候选隔离、stored 深层缺失/错误 kind ID 拒绝 |
-| G4 | [真实 PackageReference 消费者](../../../experiments/PackageConsumerProbe/InlineStructConsumer)、[运行脚本](../../../experiments/PackageConsumerProbe/Run-InlineStructProbe.ps1) | 四阶段全部通过；history 5→10→11→13，旧 hash 不变；精确值/owner/派生升版强制 Base；nominal child 独升；删除 Point/Links CLR 后 exact read 和完整 owner Upgrade 链均成功 |
+| G4 | [真实 PackageReference 消费者](../../../experiments/PackageConsumerProbe/InlineStructConsumer)、[运行脚本（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-InlineStructProbe.ps1") | 四阶段全部通过；history 5→10→11→13，旧 hash 不变；精确值/owner/派生升版强制 Base；nominal child 独升；删除 Point/Links CLR 后 exact read 和完整 owner Upgrade 链均成功 |
 | 独立审阅 | Runtime/Build/Store 与 SG metadata/body 分开审查 | 未留 P1/P2；主代理检视集成 diff，保留 class 原 Apply 两参数形状；新增 kind 范围和 v2 manifest 的旧断言按真实新合同更新 |
 
 最终生成形状：class 的 `__DurableState.Vn` 保持原入口；inline DTO/body 放在编译内共享

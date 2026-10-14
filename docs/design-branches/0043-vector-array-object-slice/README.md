@@ -314,7 +314,7 @@ closed-only/无 inline/无 jagged 的初稿限制。用户要求统一 object �
 
 | 波次 | 实现入口 | 验收入口与当前状态 |
 |---|---|---|
-| G0 类型/格式 | [TypeExpr](../../../src/DurableGraph/Schema/TypeExpr.cs)、[共享 TypePattern](../../../src/Shared/SchemaHistoryTypePattern.cs)、[SchemaBatchWireCodec（其后由 DB-046 替换）](../0046-unified-schema-catalog-slice/README.md)、[BaseObjectBodyCodec](../../../src/DurableGraph.Persistence/BaseObjectBodyCodec.cs) | [ArrayTypeExprTests](../../../tests/DurableGraph.Tests/ArrayTypeExprTests.cs)、[ArrayTemplateHistoryTests](../../../tests/DurableGraph.Tests/ArrayTemplateHistoryTests.cs)、[ArrayWireFormatTests](../../../tests/DurableGraph.Persistence.Tests/ArrayWireFormatTests.cs)；已通过 |
+| G0 类型/格式 | [TypeExpr](../../../src/DurableGraph/Schema/TypeExpr.cs)、[共享 TypePattern](../../../src/Shared/SchemaHistoryTypePattern.cs)、[SchemaBatchWireCodec（其后由 DB-046 替换）（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0046-unified-schema-catalog-slice/README.md")、[BaseObjectBodyCodec](../../../src/DurableGraph.Persistence/BaseObjectBodyCodec.cs) | [ArrayTypeExprTests](../../../tests/DurableGraph.Tests/ArrayTypeExprTests.cs)、[ArrayTemplateHistoryTests](../../../tests/DurableGraph.Tests/ArrayTemplateHistoryTests.cs)、[ArrayWireFormatTests](../../../tests/DurableGraph.Persistence.Tests/ArrayWireFormatTests.cs)；已通过 |
 | G1 统一引用对象 | [ObjectBinding](../../../src/DurableGraph/Runtime/Binding/ObjectBinding.cs)、[ObjectLayout](../../../src/DurableGraph/Schema/ObjectLayout.cs)、[CaptureContext](../../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[ObjectReadTable](../../../src/DurableGraph/Runtime/Capture/ObjectReadTable.cs) | [ArrayGraphTests](../../../tests/DurableGraph.Tests/ArrayGraphTests.cs) 与现有 string/class 回归；已通过 |
 | G2 数组核心 | [FrozenArrayState](../../../src/DurableGraph/Runtime/Containers/FrozenArrayState.cs)、[ArrayObjectBinding](../../../src/DurableGraph/Runtime/Containers/ArrayObjectBinding.cs)、[ArrayStateReader](../../../src/DurableGraph/Runtime/Containers/ArrayStateReader.cs) | [ArrayBodyTests](../../../tests/DurableGraph.Tests/ArrayBodyTests.cs)；已通过 |
 | G3 SG/持久图 | [SG generic projection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[StateModelSnapshot.Arrays](../../../src/DurableGraph.Persistence/StateModelSnapshot.Arrays.cs)、[RevisionDecoder](../../../src/DurableGraph.Persistence/RevisionDecoder.cs)、[WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) | [ArrayBindingCatalogTests](../../../tests/DurableGraph.Persistence.Tests/ArrayBindingCatalogTests.cs) 及 G5 包消费者；已通过 |
@@ -330,11 +330,11 @@ closed-only/无 inline/无 jagged 的初稿限制。用户要求统一 object �
 `dotnet test DurableGraph.slnx --no-restore --no-build` 全部通过：Runtime/Generator 636、StateStore 353、
 Serialization 103、Storage 155，共 1247 项，零跳过。
 
-- [Run-ArrayProbe](../../../experiments/PackageConsumerProbe/Run-ArrayProbe.ps1) 从当前源码打包，两代真实 NuGet
+- [Run-ArrayProbe（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-ArrayProbe.ps1") 从当前源码打包，两代真实 NuGet
   消费者分别 Publish/Verify，history 数量 4→5，旧文件哈希不变。覆盖四 rank、泛型/交错/共享/循环、
   一次数组 owner Upgrade、强制 Base 后恢复 Delta、旧 Revision exact 读取和冷重开。
-- 原 [Generic](../../../experiments/PackageConsumerProbe/Run-GenericProbe.ps1) 与
-  [ValueUpgrade](../../../experiments/PackageConsumerProbe/Run-ValueUpgradeProbe.ps1) 包回归通过，保留删除旧 inline
+- 原 [Generic（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-GenericProbe.ps1") 与
+  [ValueUpgrade（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-ValueUpgradeProbe.ps1") 包回归通过，保留删除旧 inline
   领域类型后的历史能力与相邻 owner Context。
 - [基础包消费回归](../../../experiments/PackageConsumerProbe/Run-Probe.ps1) 从当前源码重新打包并通过，
   包含普通非泛型生成、运行时 API 和 history 发布/校验的既有交付边界。

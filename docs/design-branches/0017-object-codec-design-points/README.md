@@ -8,7 +8,7 @@
 >
 > 创建日期：2026-09-05；代码基线：`c8a98dc`。
 >
-> 承接 [DB-016](../0016-next-product-object-content-slice/README.md)。本文是讨论清单，不是全功能施工授权。
+> 承接 [DB-016（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0016-next-product-object-content-slice/README.md")。本文是讨论清单，不是全功能施工授权。
 
 当前阅读入口：[DB-018](../0018-generated-graph-codec-shape/0018-generated-graph-codec-shape.md)。K4 的槽位独立 codec 与第 12 节旧实现证据继续有效；
 后续 string 语义、TypeCodec 对象头、base-first 继承和统一引用编号以新稿为准。

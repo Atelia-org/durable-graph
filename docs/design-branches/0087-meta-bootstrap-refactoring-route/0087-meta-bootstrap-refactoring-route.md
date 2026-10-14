@@ -4,7 +4,7 @@
 > 默认公开路径已接 meta 自举，旧保存／typed reader／Schema 权威／raw Storage 束已退出。
 > 旧权威退出及有限 P1／P2 原停点保删除前资格；DB-088 已承接开发流程与特例删减，删除后的源码及新包资格分别维护。
 > 包验收限真实 Widget／Root 与 List 代表故事，不增加 ProcessCrashOnly、断电或性能资格；内部 API／wire 未冻结。
-> [压缩前全文](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)冻结自 `ecc80683f35e2f42795530d28c8974dfb43d95dd`，保留原分片的来源、过程、运行记录与限制。
+> [压缩前全文（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")冻结自 `ecc80683f35e2f42795530d28c8974dfb43d95dd`，保留原分片的来源、过程、运行记录与限制。
 
 <a id="current-status"></a>
 ## 1. 当前结论与范围
@@ -25,7 +25,7 @@ SchemaStore／SCB1、RepresentationId、旧 Base header、WorldWorkspace／Loade
 删除前基线已通过[公开 accepted-history 包门禁](#public-package-gate)与[P2 双异形独立环境包门禁](#private-plan)，原约定范围已完成。DB-088 的特例退出属于后继需求，删除后的源码回归与三条新 G 普通包故事已独立通过，见 [DB-088 §7](../0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)；其他增量只按[条件延期](#open-questions)中的真实消费者或测量选择。
 
 2026-10-13 完工后用户校准了开发故事：从固定 shared baseline 建立多个保身份的 V2 草稿 fork，继承旧草稿改形则升版本，最终只接纳一个定稿版本。开发流程与同 key 新根特例退出集中在 [DB-088](../0088-development-schema-workflow/0088-development-schema-workflow.md)；本文既有验收保删除前资格，当前 private 路径为 baseline ref-only 分支与 `CheckoutPrivate`，不再提供新根 overrides／container replacements。
-十九个有效旧 PackageConsumer lanes 暂停当前 G，源资产与历史证据原地保留；选择性迁移不是该门禁前置，也不自动恢复未迁 lane 的资格。
+十九类旧 PackageConsumer 已退出执行程序和 runner，只保[模型/history 编译资产](../../../experiments/PackageConsumerProbe/README.md#model-fixtures)；不授原运行故事当前包资格。
 当前能力只在 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 维护，未实施导航见[路线图 §4.1](../../DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
 <a id="bootstrap-contract"></a>
@@ -252,7 +252,7 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 - 明确 pack source provenance；含未提交源码的产物不得说成 clean HEAD 包，source build 不能代包运行。
 
 验收采用具体故事、独立关闭／重开和公开行为／实际 backing 证据，不重复所有 family／provider／comparer／rank 矩阵。
-十九个有效暂停 lanes 不是前置；包门禁也不授未迁 lanes 当前资格，不新增进程 Kill／断电／性能结论。
+已退出的十九类旧执行 lanes 不是前置；代表包门禁不授其原故事当前资格，不新增进程 Kill／断电／性能结论。
 P1 在上述有限范围内已完成；不将代表故事扩展为全部类型组合、任意 Pair 实例身份承诺或 P2 资格。
 
 <a id="private-plan"></a>
@@ -296,7 +296,7 @@ DB-087 原约定的有限 P2 已在删除前完成。用户后续校准的开发
 
 `CreatePrivateBranch(initialState, schemaOverrides, ..., containerReplacements)`、新根专用 bootstrap lookup／配置及 Builder 声明替换已退出；未保适配入口。普通新增版本／容器声明仍 append，旧完整 Schema／布局保持。同 key 新根 no-op、合流与 removal-only 不再是产品规律。
 
-历史提交 `6641672`、`733820e`、`d92a3b1`、`936eb34` 的来源、测试计数、旧包 hashes 与六 PID 双异形故事只解释删除前代码。完整原 P2 行为、计数及限制保于 Git 修订 `d8c0ecb` 的本文 §9（`git show d8c0ecb:docs/design-branches/0087-meta-bootstrap-refactoring-route.md`）；更早 P0/P1 过程见 [冻结全文](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)，该归档不含后来 P2 记录。历史来源不授当前资格。旧消费者证据在各 README 保原来源与 successor，不能回填新代码结果。
+历史提交 `6641672`、`733820e`、`d92a3b1`、`936eb34` 的来源、测试计数、旧包 hashes 与六 PID 双异形故事只解释删除前代码。完整原 P2 行为、计数及限制保于 Git 修订 `d8c0ecb` 的本文 §9（`git show d8c0ecb:docs/design-branches/0087-meta-bootstrap-refactoring-route.md`）；更早 P0/P1 过程见 [冻结全文（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")，该归档不含后来 P2 记录。历史来源不授当前资格。已退出消费者的原证据在 `6dbaf0e`，当前 README 只说明保留资产，不能回填新代码结果。
 
 DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictionary 共用对象版本，唯一 pending／writer／CU，准确来源／Event／Discard／故障，默认公开恢复与旧权威退出，以及当时 private／ToShared 代表故事。当前删减不修改 ABI5、员工 DTO V1、底座恢复、缓存或故障协议。没有增加 ProcessCrashOnly、OS crash、断电、性能或全部容器组合资格。
 
@@ -319,7 +319,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 ## 11. 分组证据与冻结历史入口
 
 下列入口保旧链接可定位性，**不把旧“下一片／默认未切／未实施”当当前排期**。
-逐次 counts／日志／hash、旧 ABI、夹具校准、施工双后端和退休源码的 `git show` 指令仅在[冻结全文](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md)维护。
+逐次 counts／日志／hash、旧 ABI、夹具校准、施工双后端与退出源码的历史查证入口为[冻结全文（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")维护。
 当前资格必须带 source／内部 friend 包／普通公开包／ProcessCrashOnly 的实际边界，不把历史总数累计为本轮运行。
 
 <a id="10-p0-实施证据与方案修订"></a>
@@ -331,7 +331,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="16-p1b-第五片dictionary-双槽与-source-lookup"></a>
 ### 自举闭包与类型路由
 
-[归档 §10–16](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订)记录真实 meta／Widget／容器冷读、固定／动态路由及 Schema 工厂／引用／variant／limits拒绝；[Dictionary source lookup](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#16-p1b-第五片dictionary-双槽与-source-lookup)补前置检查。
+[归档 §10–16（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#10-p0-实施证据与方案修订")记录真实 meta／Widget／容器冷读、固定／动态路由及 Schema 工厂／引用／variant／limits拒绝；[Dictionary source lookup（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#16-p1b-第五片dictionary-双槽与-source-lookup")补前置检查。
 各 ABI／包只保当片资格，旧基础包不自动证明最新 G 或全 BCL组合。
 
 <a id="17-p1b-第六片真实-history-容器-upgrade"></a>
@@ -341,7 +341,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="25-p1c-第六片repositorycheckout-执行环境"></a>
 ### Upgrade 与准确环境
 
-[容器／generic provider／跨程序集代表 §17–19](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#17-p1b-第六片真实-history-容器-upgrade)保真实 accepted history及各自范围；[环境 §24–25](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#24-p1c-第五片冻结配置与准确-s-绑定)否定无条件跨 S lazy共享，保 hot执行S寿命和 readonly零写。
+[容器／generic provider／跨程序集代表 §17–19（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#17-p1b-第六片真实-history-容器-upgrade")保真实 accepted history及各自范围；[环境 §24–25（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#24-p1c-第五片冻结配置与准确-s-绑定")否定无条件跨 S lazy共享，保 hot执行S寿命和 readonly零写。
 能力预绑定／同 key完整冲突与各层 callback边界仍有效，不据代表故事穷举 provider／跨库组合。
 
 <a id="20-p1c-首片共同业务规划内核"></a>
@@ -351,7 +351,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="26-p1c-第七片history-元数据与-ref-操作"></a>
 ### 保存、owner 与历史
 
-[归档 §20–23](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核)保真实 typed B/D/H、候选身份／重入／安装准备失败与完整来源；[§26](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#26-p1c-第七片history-元数据与-ref-操作)保 selected-head Fork／ref-only／历史选择。
+[归档 §20–23（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#20-p1c-首片共同业务规划内核")保真实 typed B/D/H、候选身份／重入／安装准备失败与完整来源；[§26（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#26-p1c-第七片history-元数据与-ref-操作")保 selected-head Fork／ref-only／历史选择。
 其两 adapter／owner仅属施工阶段，现用路径已收为一份。
 
 <a id="27-p1c-第八片split-readpair"></a>
@@ -359,7 +359,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="29-p1c-第十片owned-物理缓存"></a>
 ### Pair、State 槽与 owned缓存
 
-[归档 §27–29](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair)保准确双侧恢复、字符串 proof、独立物化、完整证书／失败保旧槽及 raw/frame/map预算与生命周期规律。
+[归档 §27–29（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#27-p1c-第八片split-readpair")保准确双侧恢复、字符串 proof、独立物化、完整证书／失败保旧槽及 raw/frame/map预算与生命周期规律。
 不授 typed cache／保存来源、默认启用 leaf 或总堆／性能资格。
 
 <a id="30-p1d-首片初始化与正常恢复"></a>
@@ -367,7 +367,7 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="32-p1d-第三片直接初始化-kill-与实际返回-outcome"></a>
 ### 初始化、故障与进程窗口
 
-[归档 §30–32](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复)分开记录必要 backing恢复、lower CreateRef联验、真实DG保存／直接factory Kill和实际返回outcome；入口为 [MetaBootstrapCrashProbe](../../../experiments/MetaBootstrapCrashProbe/README.md)。
+[归档 §30–32（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#30-p1d-首片初始化与正常恢复")分开记录必要 backing恢复、lower CreateRef联验、真实DG保存／直接factory Kill和实际返回outcome；入口为 [MetaBootstrapCrashProbe](../../../experiments/MetaBootstrapCrashProbe/README.md)。
 有限 source ProcessCrashOnly不外推断电、包或未测试窗口，BeforeInstall hook不冒充Install本体故障。
 
 <a id="33-p1d-第四片准确包与-accepted-history"></a>
@@ -382,6 +382,6 @@ DB-087 原停点证明：完整 Schema 逻辑内容／descriptor／存活 Dictio
 <a id="retired-raw-storage-source"></a>
 ### 包、默认接线与旧权威退出
 
-[内部 friend 包 §33](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history)和[普通公开包／默认接线 §34](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接)保原资格；当前[公开 accepted-history 门禁](../../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)已通过，两者不互相代替。
-[退旧 §35–38](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出)将有效规律迁真实新路径，保实际计量／来源／CRC／no-admit／清理／锁／容量；最新源码回归与活动Replay只保其运行用途，不授新包或性能。
-退休源码与本地Git恢复见[保存](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-save-source)／[typed reader](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-typed-reader-source)／[Schema权威](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-schema-authority-source)／[raw Storage](../../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-raw-storage-source)；不假定本地历史已发布远程。
+[内部 friend 包 §33（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history")和[普通公开包／默认接线 §34（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#34-p1d-第五片公开默认接线与回归移接")保原资格；当前[公开 accepted-history 门禁](../../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md#2026-10-13-限定验收)已通过，两者不互相代替。
+[退旧 §35–38（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#35-p1d-第六片旧保存高层退出")将有效规律迁真实新路径，保实际计量／来源／CRC／no-admit／清理／锁／容量；最新源码回归与活动Replay只保其运行用途，不授新包或性能。
+退休源码与本地Git恢复见[保存（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-save-source")／[typed reader（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-typed-reader-source")／[Schema权威（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-schema-authority-source")／[raw Storage（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#retired-raw-storage-source")；不假定本地历史已发布远程。

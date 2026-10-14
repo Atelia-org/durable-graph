@@ -7,7 +7,7 @@
 > 状态：**Implemented / G0–G3 已通过验收**，2026-09-09。
 > 问题：在既有统一对象路径上，能否完整保存、恢复和升级一个可变长度的 BCL 内容对象，而不依赖其内部字段布局？
 > 最小成功见证：同一 `List<Point>` 实例连续增删改并 Commit，冷重开保留内容和共享身份；Point 升版后列表只升级一次、强制 Base，随后恢复普通 Delta。
-> 前置事实：[DB-043](../0043-vector-array-object-slice/README.md) 的可组合数组和 [DB-046](../0046-unified-schema-catalog-slice/README.md) 的统一闭合目录已实现。
+> 前置事实：[DB-043](../0043-vector-array-object-slice/README.md) 的可组合数组和 [DB-046（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0046-unified-schema-catalog-slice/README.md") 的统一闭合目录已实现。
 
 ## 1. 为什么选择这一片
 
@@ -190,7 +190,7 @@ G0 采用上文 TypeExpr=8、目录 kind=4、history/manifest v5 及位置 Delta
 | 递归类型生成、历史 v5 与旧 history 保留 | [ListTemplateHistoryTests](../../../tests/DurableGraph.Tests/ListTemplateHistoryTests.cs)、[ListGeneratedStateTests](../../../tests/DurableGraph.Tests/ListGeneratedStateTests.cs) | 已验证 |
 | List owner Upgrade、空内容预绑定、Context/完整依赖复核 | [ListUpgrade](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.ListUpgrade.cs)、[ListUpgradeTests](../../../tests/DurableGraph.Tests/ListUpgradeTests.cs) | 已验证 |
 | 当前/历史绑定、统一目录、注册与 Repository 接入 | [ListBindingCatalogTests](../../../tests/DurableGraph.Persistence.Tests/ListBindingCatalogTests.cs)、[ListCatalogTests](../../../tests/DurableGraph.Persistence.Tests/ListCatalogTests.cs)、[ListRepositoryTests](../../../tests/DurableGraph.Persistence.Tests/ListRepositoryTests.cs) | 已验证 |
-| 真包跨版本、组合图、共享升级与持久续写 | [ListConsumer](../../../experiments/PackageConsumerProbe/ListConsumer/README.md)、[Run-ListProbe](../../../experiments/PackageConsumerProbe/Run-ListProbe.ps1) | 两代通过 |
+| 真包跨版本、组合图、共享升级与持久续写 | [ListConsumer](../../../experiments/PackageConsumerProbe/ListConsumer/README.md)、[Run-ListProbe（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-ListProbe.ps1") | 两代通过 |
 | 跨模块集成、独立审查、最终构建/各测试项目与文档 | 主线程与独立只读 reviewer | 已验收 |
 
 共同接口按 §3–5；UpgradeContext 使用独立 nullable ListCount，不复用 ArrayShape。

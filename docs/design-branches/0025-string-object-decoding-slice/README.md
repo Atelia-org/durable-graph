@@ -11,5 +11,5 @@
 1. [string 对象解码与引用校验主文](0025-string-object-decoding-slice.md)：合同、Empty 裁决及 §7 当片实施验收。
 2. [独立空字符串分配见证](0025-empty-string-allocation-witness.md)：本机机制证据和后续核验修正；产品未采用其独立分配机制。
 
-前置引用 Capture 见 [DB-024](../0024-reference-capture-and-reusable-object-ids/README.md)；当时内容存储接续见 [DB-026](../0026-raw-base-object-content-slice/README.md)。
+前置引用 Capture 见 [DB-024](../0024-reference-capture-and-reusable-object-ids/README.md)；当时内容存储接续见 [DB-026（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0026-raw-base-object-content-slice/README.md")。
 当前能力从 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 续接，剩余问题在[路线图](../../DurableGraph-research-roadmap.md)维护。

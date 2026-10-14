@@ -13,7 +13,7 @@
 > 当前阅读入口。取代 DB-017 中“string 字段 inline 值”和“容器身份尚未选择”的提案；
 > 历史上图 codec 为设计草图；祖先 Schema/history 的元数据分片已进入产品实现，边界见 [DB-019](../0019-schema-ancestry-implementation-slice/README.md)。
 > 随后 [DB-020](../0020-typed-slot-array-binding-slice/README.md)落地 internal 值槽位和 SZ/rank-2 元素循环；
-> [DB-021](../0021-generated-primitive-body-slice/README.md)落地实际 SG bool/int/long class body 与继承分段；本文的 struct/泛型 body 仍为草图；
+> [DB-021（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0021-generated-primitive-body-slice/README.md")落地实际 SG bool/int/long class body 与继承分段；本文的 struct/泛型 body 仍为草图；
 > 字符串引用 context 与 root-capture 详见 [DB-024](../0024-reference-capture-and-reusable-object-ids/README.md)。
 
 2026-09-05 后续方向：用户已选择领域图 → Versioned DTO 捕获 → 比较/估算/编码。

@@ -129,7 +129,7 @@ current 恒等消除这项差异，避免永久维护“保存 current”和“�
 [DB-077](../0077-repository-model-environment-slice/0077-repository-model-environment-slice.md) 的专项复核进一步将 durable exact-current 分支收束为库内快路，
 历史委托不再处理 current；保留标准 context/live Schema 验证，容器路径不随之广域短路。
 
-当前确有同 repo 切换精简/完整目录的[真包见证](../../../experiments/PackageConsumerProbe/EventHistoryConsumer/Program.cs)，
+当前确有同 repo 切换精简/完整目录的[真包见证（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/EventHistoryConsumer/Program.cs")，
 但未发现同一类型需要两套相冲解释的真实消费者。可改用固定完整目录验证事件局部恢复，
 另用精简目录打开验证 Event 读取不要求 State 能力；目录完整不等于 eagerly 恢复所有类型。
 同 repo 多模型解释/热替换待真实用例出现再设计显式 context。

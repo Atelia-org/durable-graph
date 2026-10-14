@@ -18,9 +18,10 @@ public abstract partial class Legacy : IDurableObject {
     private static void UpgradeStateV1ToV2(in __DurableState.V1 old, out __DurableState.V2 next) {
         UpgradeCalls++;
         LastHistoricalValue = old.Segment0Field1;
-        Program.Require(old.Segment0Field3 == 638_625_600_000_000_000,
-            "Historical content changed Legacy's creation timestamp.");
-        Program.Require(!old.Segment0Field2.IsNull, "The old Legacy self-reference was not decoded.");
+        if (old.Segment0Field3 != 638_625_600_000_000_000) {
+            throw new InvalidOperationException("Historical content changed Legacy's creation timestamp.");
+        }
+        if (old.Segment0Field2.IsNull) { throw new InvalidOperationException("The old Legacy self-reference was not decoded."); }
         next = new(new ObjectId(ProduceInvalidReference ? uint.MaxValue : 0));
     }
 #endif

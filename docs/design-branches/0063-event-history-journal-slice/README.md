@@ -217,7 +217,7 @@ EventFrame/StateFrame 在本文是外观角色；落盘均复用 EventJournal �
 |---|---|
 | G0 严格打开、信封与来源 | [HistoryJournal](../../../src/DurableGraph.Persistence/HistoryJournal.cs)、[GraphEnvelopeCodec](../../../src/DurableGraph.Persistence/GraphEnvelopeCodec.cs)、[GraphFrame](../../../src/DurableGraph.Persistence/CheckpointAddress.cs)；[信封 tests](../../../tests/DurableGraph.Persistence.Tests/GraphEnvelopeCodecTests.cs)、[资源与屏障 tests](../../../tests/DurableGraph.Persistence.Tests/HistoryJournalTests.cs) |
 | G1–G3 交错提交、独立读取、Resume、分支与中断 | [Repository](../../../src/DurableGraph.Persistence/Repository.cs)、[Session](../../../src/DurableGraph.Persistence/BranchCheckout.cs)；[外观集成](../../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)、[真实 ref-op 故障注入](../../../tests/DurableGraph.Persistence.Tests/EventHistoryPublicationFailureTests.cs) |
-| G4 独立包消费及历史能力 | [EventHistoryConsumer](../../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md)、[Run-EventHistoryProbe](../../../experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1)；[全部包实验入口](../../../experiments/PackageConsumerProbe/README.md)、[应用快速上手](../../../README.md) |
+| G4 独立包消费及历史能力 | [EventHistoryConsumer](../../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md)、[Run-EventHistoryProbe（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-EventHistoryProbe.ps1")；[全部包实验入口](../../../experiments/PackageConsumerProbe/README.md)、[应用快速上手](../../../README.md) |
 
 - 根 `dotnet build DurableGraph.slnx --no-restore -v:q` 通过，零警告/错误。
 - `DurableGraph.StateStore.Tests` 672 项、`DurableGraph.Tests` 1519 项通过；合计 2191，零失败/跳过。

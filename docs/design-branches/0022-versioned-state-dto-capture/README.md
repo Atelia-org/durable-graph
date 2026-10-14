@@ -6,7 +6,7 @@
 > 状态：Chosen / Implemented — 2026-09-05；基线 `8fb4d05`。
 >
 > 用户已选择捕获后的版本化状态作为保存管线输入，并授权本片设计实施。
-> 取代 [DB-021](../0021-generated-primitive-body-slice/README.md)直接读写领域实例的 body 接口。
+> 取代 [DB-021（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0021-generated-primitive-body-slice/README.md")直接读写领域实例的 body 接口。
 
 后续范围扩充见 [DB-023](../0023-scalar-schema-dto-slice/README.md)：13 种标量贯通 Schema/history/DTO，
 本文的 bool/int/long 清单记录首片范围；DTO 所有权及接口合同保持。

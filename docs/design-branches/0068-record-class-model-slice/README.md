@@ -246,7 +246,7 @@ SG 在 source/metadata/nominal 参数入口核对真实 attribute/marker symbol�
 | G0 接口与准入 | [IDurableObject](../../../src/DurableGraph/IDurableObject.cs)、[Runtime 准入回归](../../../tests/DurableGraph.Persistence.Tests/DurableObjectAdmissionTests.cs)、[SG 合同回归](../../../tests/DurableGraph.Tests/DurableObjectContractGeneratorTests.cs) | 已实现；StateStore 721 项通过，新包实际不导出 DurableBase |
 | G1 声明与投影 | [record 声明矩阵](../../../tests/DurableGraph.Tests/RecordClassGeneratorTests.cs)、[图/投影回归](../../../tests/DurableGraph.Tests/RecordClassGraphTests.cs) | 已实现；构造/accessor 绕过、继承存储、身份与业务比较隔离已验证 |
 | G2 完整历史 | [history 回归](../../../tests/DurableGraph.Tests/RecordClassHistoryTests.cs)、[真包跨库三代见证](../../../experiments/PackageConsumerProbe/RecordClassConsumer/README.md) | 已通过同版转换、基类升版约束、两/三参隐式 Upgrade 与显式泛型 Upgrade |
-| G3 包交付 | [RecordClass runner](../../../experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1)、[真实旧包迁移](../../../experiments/PackageConsumerProbe/Run-DurableBaseMigrationProbe.ps1) | 三代新包、旧包迁移、既有 EventHistory/恢复消费者、README 原文执行均通过 |
+| G3 包交付 | [RecordClass runner（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/Run-RecordClassProbe.ps1")、[真实旧包迁移](../../../experiments/PackageConsumerProbe/Run-DurableBaseMigrationProbe.ps1) | 三代新包、旧包迁移、既有 EventHistory/恢复消费者、README 原文执行均通过 |
 
 实现中补齐了 `GenericUpgrades` 的另一处生成壳：隐式 owner Upgrade 适配器对 record 也须发出
 `partial record class`。既有方法名仍为 `UpgradeStateV1ToV2`，没有新增第二套隐式命名。

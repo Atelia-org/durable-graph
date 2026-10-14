@@ -197,7 +197,7 @@ Runtime、SG、公开合同/真实包示例分工实现，主线程负责 GraphR
 | 容器完整比较且不编码 | 三种 binding；上述 tests 用抛错槽 writer 验证 shape、零长度维度、Count、ComparerKind、key/value 和顺序 |
 | SG 自动登记及完整表示 | [GeneratedComparisonRegistrationTests](../../../tests/DurableGraph.Tests/GeneratedComparisonRegistrationTests.cs)；普通/Family 分别 Capture 并调用已登记 proof，冷重开 ReadPair 证明实际共享；覆盖继承、inline/generic 引用、特殊浮点、decimal、offset、Nullable |
 | 读取仅依赖比较，错误不重试 | [SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)；保存后用抛错 preparer 读取，缺 proof 与循环依赖、比较异常计数，以及同版 Normalize 改值/改边 |
-| 两种 Transient 用法与包交付 | [SharedReadProbe](../../../experiments/PackageConsumerProbe/EventHistoryConsumer/SharedReadProbe.cs)；两个 WorldView 查询各自上下文，独立只读打开后原位初始化；[XML gate](../../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) 检查两种 ReadPair remarks |
+| 两种 Transient 用法与包交付 | [SharedReadProbe（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/EventHistoryConsumer/SharedReadProbe.cs")；两个 WorldView 查询各自上下文，独立只读打开后原位初始化；[XML gate](../../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) 检查两种 ReadPair remarks |
 
 串行验证（2026-09-11），日志存放于未跟踪的 `artifacts/db066-validation/`：
 

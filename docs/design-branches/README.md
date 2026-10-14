@@ -5,7 +5,7 @@
 
 每个 DB 有一个稳定问题目录及 README 入口。简单单文直接作为 README；多材料在入口给阅读顺序。
 文件名、目录位置和历史 Chosen 标签不能证明今日实现；否定实验、候选默认关闭和部分后继以入口限定范围解释。
-早期 Probe 的代码恢复见[实验归档](../../experiments/ARCHIVE.md)，冻结长稿见[日期归档](../archive/README.md)。
+退出材料的来源统一见 [Git 历史](0091-retired-material-cleanup/README.md#git-history)。已退出 DB 的编号不复用。
 
 ## 按问题找材料
 
@@ -21,12 +21,12 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
+| 091 | [淘汰材料删除、继任与验证](0091-retired-material-cleanup/README.md) |
 | 090 | [文档治理、问题目录与随任务维护](0090-document-governance/README.md) |
 | 089 | [checkout 环境寿命与 factory 查询](0089-checkout-environment-and-factory-query-refactoring/README.md) |
 | 088 | [开发 Schema 草稿 fork 与定稿](0088-development-schema-workflow/README.md) |
 | 087 | [meta 自举与共享私有 Schema 视图](0087-meta-bootstrap-refactoring-route/README.md)；P2 原文另有 Git 来源 |
-| 086 | [新存储栈替换与正常恢复](0086-new-storage-refactoring-plan/README.md)；格式有 DB-087 后继；正常恢复约束保留 |
-| 085 | [RBF3 Binary FrameStore VersionStore 可行性](0085-rbf3-framestore-versionstore-migration-feasibility/README.md) |
+| 086 | [正常 backing 恢复与资源寿命](0086-new-storage-refactoring-plan/README.md) |
 | 084 | [不可变 tag 与跨重开定位](0084-eventjournal-immutable-tags-slice/README.md) |
 | 083 | [Repository 与 Checkpoint 用户故事](0083-checkpoint-api-user-stories/README.md) |
 | 082 | [单图准备材料 ImmutableLeaf 复用](0082-prepared-immutable-leaf-reuse-slice/README.md)；候选已实现，默认关闭 |
@@ -65,7 +65,6 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 | 049 | [List 区间 Delta、StateEquals 与 matcher 对照](0049-list-range-delta-and-matcher-trial-slice/README.md) |
 | 048 | [List 差分算法、区间复用与编辑原语调研](0048-list-delta-algorithm-research/README.md) |
 | 047 | [List&lt;T&gt; 内容对象、共享身份与历史 Upgrade](0047-list-content-object-slice/README.md) |
-| 046 | [统一闭合 Schema 目录与 exact 整数寻址](0046-unified-schema-catalog-slice/README.md) |
 | 045 | [持久 RepresentationId 与 Base ID 类型头](0045-persisted-representation-id-slice/README.md) |
 | 044 | [类型头与 Schema 寻址的匿名方案盲评](0044-type-header-blind-review/README.md)；盲评历史；已选后继 DB-045 |
 | 043 | [可组合数组、rank 与统一引用对象路径](0043-vector-array-object-slice/README.md) |
@@ -80,32 +79,18 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 | 034 | [领域引用图 Capture、循环 Restore 与首次保存](0034-durable-reference-graph-batch/README.md) |
 | 033 | [DTO Upgrade、领域 Restore 与增量续写闭环](0033-upgrade-restore-resave-batch/README.md) |
 | 032 | [完整 exact-version 对象目录冷读与引用验证](0032-exact-revision-decoding-slice/README.md) |
-| 031 | [持久 Schema 注册与 Base exact 类型引用](0031-persisted-object-type-envelope-slice/README.md) |
 | 030 | [异构 Capture 图统一准备对象内容](0030-captured-object-preparation-slice/README.md) |
 | 029 | [prepared 内容到可追加 Revision](0029-prepared-object-revision-planning-slice/README.md) |
-| 028 | [持久对象 Delta、exact prior 与重建链](0028-persisted-object-delta-chain-slice/README.md) |
 | 027 | [同 exact Schema DTO 比较与字段 Delta body](0027-generated-same-schema-delta-body-slice/README.md) |
-| 026 | [同 Revision Frame raw Base 内容存取](0026-raw-base-object-content-slice/README.md) |
 | 025 | [string 解码、引用槽校验与 Empty 规范化](0025-string-object-decoding-slice/README.md) |
 | 024 | [引用 Capture、revision 身份与 ObjectId 复用](0024-reference-capture-and-reusable-object-ids/README.md) |
 | 023 | [13 种标量 Schema/history/DTO 贯通](0023-scalar-schema-dto-slice/README.md) |
 | 022 | [Versioned DTO、Capture 与 binary body](0022-versioned-state-dto-capture/README.md) |
-| 021 | [生成 primitive class body 与继承分段](0021-generated-primitive-body-slice/README.md) |
 | 020 | [typed 值槽位与数组元素 binding](0020-typed-slot-array-binding-slice/README.md) |
 | 019 | [祖先 Schema/history 与 exact 依赖](0019-schema-ancestry-implementation-slice/README.md) |
 | 018 | [统一引用身份、TypeCodec 与 Serializer 形状](0018-generated-graph-codec-shape/README.md)；混合历史草稿；见 DTO／泛型后继 |
 | 017 | [对象 codec 设计要点与 Robird 证据](0017-object-codec-design-points/README.md) |
-| 016 | [codec-first 对象内容纵切选择](0016-next-product-object-content-slice/README.md) |
 | 015 | [对象表示估算 DTO 与 Base/Delta plan](0015-statestore-object-representation-policy/README.md) |
-| 014 | [多历史 Segment 与 BackwardFileDistance](0014-multi-segment-backward-file-distance/README.md) |
-| 013 | [Hot/Cold 双层 State segments](0013-tiered-state-segments/README.md) |
-| 012 | [TwoLeg 多策略 Benchmark Arena](0012-two-leg-strategy-benchmark-arena/README.md) |
-| 011 | [TwoLeg Save 规划与容量准入](0011-two-phase-save-planning-and-capacity/README.md) |
-| 010 | [Base lineage shared prior anchor](0010-base-lineage-anchor-scope/README.md) |
-| 009 | [Base lineage parent locator 与 Relay](0009-base-lineage-parent-locator/README.md) |
-| 008 | [Revision contextual self address](0008-revision-contextual-self-address/README.md) |
-| 007 | [TwoLeg 自适应轮转与 Rebase/Deltify](0007-adaptive-two-leg-rotation-policy/README.md) |
-| 006 | [Flat Graph Delta 与冻结 baseline](0006-flat-graph-delta-prototype/README.md) |
 | 005 | [Durable 继承与 FieldId 分段](0005-durable-inheritance-flattening/README.md) |
 | 004 | [Snapshot History 创作与发布](0004-snapshot-history-authoring-and-publishing/README.md) |
 | 003 | [Snapshot 值形状与 Upgrade 签名](0003-snapshot-value-shape-and-upgrade-signature/README.md) |
