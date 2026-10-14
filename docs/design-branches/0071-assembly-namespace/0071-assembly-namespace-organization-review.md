@@ -69,7 +69,7 @@ Runtime 还具有 Generator analyzer 引用，以及不引用输出程序集的 
 这是一条现有实现已经执行的语义边界，值得保留。
 
 [IStateOps](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 的公开签名直接使用 `BinaryPayloadReader/Writer`、`PreparedDeltaBody`，
-生成代码和 Capture 也使用 [prepared body](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)。
+生成代码和 Capture 也使用 [prepared body](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)。
 这些类型是 Runtime 和 Storage 的共享字节契约，把 Serialization 合并进 Runtime 会让 raw Storage 新增对整个高层 Runtime 的依赖；
 反过来把 Runtime 合并进 Serialization 则消除共同底层的含义。独立的十文件项目虽小，仍有当前消费者。
 
@@ -158,8 +158,8 @@ Runtime 程序集内部可先收敛为三个 namespace，不继续按每种容�
 
 关键源码：
 
-- [SG 核心标记常量](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 和 [真实程序集检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)：后者要求属性来自 `Atelia.DurableGraph`，marker 位于同一程序集；不能为迁移方便削弱此检查。
-- [生成 body](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)、[生成 model](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、[跨库 helper 检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExportHelpers.cs)：均直接使用框架类型的全限定名，含 Serialization 类型。
+- [SG 核心标记常量](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 和 [真实程序集检查](../../../src/DurableGraph.Generator/DurableGraphGenerator.CrossAssembly.cs)：后者要求属性来自 `Atelia.DurableGraph`，marker 位于同一程序集；不能为迁移方便削弱此检查。
+- [生成 body](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs)、[生成 model](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs)、[跨库 helper 检查](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExportHelpers.cs)：均直接使用框架类型的全限定名，含 Serialization 类型。
 - [TypeExprWireCodec](../../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) 写 kind/DefinitionId/实参；[Schema history writer](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) 写 ID/版本/字段与类型表达，而不是 CLR 程序集限定名。
 - `InternalsVisibleTo`、主包 `build/` 和 `tools/` 路径、探针的包清单与脚本也有固定程序集/包名称，需要与项目移动一起核对。
 

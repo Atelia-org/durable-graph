@@ -396,12 +396,12 @@ inline/base 才进入 exact 布局递归，检查环/最大路径；TypeExpr 本
 | 现有落点 | 需要调整的职责 |
 |---|---|
 | [DurableSchema / DurableFieldInfo](../../../src/DurableGraph/Schema/DurableSchema.cs) | 闭合族 TypeExpr 与完整 exact 布局；原 nominal 字符串扩大为类型表达；区分定义模式/闭合实例 |
-| [SchemaHistoryTool](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SG history](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) | arity/参数模式、历史闭包、模板版本和当前固定依赖；源代码历史不要求枚举全部 closures |
-| [SG body](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)、[inline helper](../../../src/DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs) | 共享 family DTO/开放 body、自由值表达式参数、静态 helper、当前领域桥接 |
+| [SchemaHistoryTool](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SG history](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs) | arity/参数模式、历史闭包、模板版本和当前固定依赖；源代码历史不要求枚举全部 closures |
+| [SG body](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs)、[inline helper](../../../src/DurableGraph.Generator/DurableGraphGenerator.InlineState.cs) | 共享 family DTO/开放 body、自由值表达式参数、静态 helper、当前领域桥接 |
 | [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[StateReaderBinding](../../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) | 从逐个完整 model/reader 目录扩为模板目录 + snapshot 内按需闭合，保留非泛型入口 |
 | [SchemaKey](../../../src/DurableGraph.Persistence/SchemaKey.cs)、[SchemaStore](../../../src/DurableGraph.Persistence/SchemaStore.cs) | key 的构造类型表达、闭合布局同 key 一致性；不能仍只按 DefinitionId 索引模型 |
 | [TypedObjectVersionReader](../../../src/DurableGraph.Persistence/TypedObjectVersionReader.cs)、[RevisionDecoder](../../../src/DurableGraph.Persistence/RevisionDecoder.cs) | 在读取完整 stored Schema 后解析 exact reader，再执行 body；不由 current CLR 类型选择历史表示 |
-| [StateModel 生成](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、Normalize | 单对象相邻边选择、参数化/闭合 provider、旧新 Schema 匹配、统一 Context adapter；仍 live 升级对象强制 Base |
+| [StateModel 生成](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs)、Normalize | 单对象相邻边选择、参数化/闭合 provider、旧新 Schema 匹配、统一 Context adapter；仍 live 升级对象强制 Base |
 
 格式变动应显式版本化：history/manifest 与 SchemaBatch 需新的 arity/类型模式/闭合 key 表达；
 Base 类型头需携带新的闭合 SchemaKey。读取保留当前已接受的旧格式，映射为零实参定义；不回写历史材料。

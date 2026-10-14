@@ -84,8 +84,8 @@ null key 一律拒绝，nullable reference 注解不授予 null key 支持。
 这套字段集合不自动等于 Durable 持久字段集合。见 [C# record struct 比较规则](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/structs#16533-equality-members)。
 ValueTuple 同样逐分量使用默认比较器，不能仅凭外壳名称放行任意分量，见 [ValueTuple.Equals](https://learn.microsoft.com/en-us/dotnet/api/system.valuetuple-2.equals?view=net-10.0)。
 
-当前 SG 的 [形状检查](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) 拒绝 IsRecord，
-[成员枚举](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 跳过隐式字段。
+当前 SG 的 [形状检查](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs) 拒绝 IsRecord，
+[成员枚举](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 跳过隐式字段。
 支持位置式 record struct 因而还须明确主构造参数/自动属性的持久成员标注、FieldId 与历史映射；
 不能只移除 IsRecord 检查，也不意味着要为其执行用户构造器或 getter/setter。
 已有普通 inline struct 路径则可作为较小改造的候选。

@@ -25,7 +25,7 @@
 
 1. [StateReaderBinding](../../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) 接受任意 `ReadBase` / `ApplyDelta` 委托。它们可以通过同一 binding context 执行标准 Schema 检查，甚至按正在读取的值选择依赖。
 2. [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 的闭合证书记录 factory **实际执行**的检查；解析 reader 或再次验证 factory 证书不会执行 reader body。
-3. [普通生成 reader](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs) 与 [Family reader](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs) 都使用同一公开 reader 类型，没有传递完整的读写对应与依赖闭合证明。知道生成源码做什么，不等于 Runtime 已有识别并验证该能力的协议。
+3. [普通生成 reader](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs) 与 [Family reader](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs) 都使用同一公开 reader 类型，没有传递完整的读写对应与依赖闭合证明。知道生成源码做什么，不等于 Runtime 已有识别并验证该能力的协议。
 4. [StateValueBinding](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 的动态值操作仍可来自自定义 `IStateOps`；仅信任容器外壳不能证明元素操作。每份产品 State 必须有 durable 根，因此内建 string 的已知实现也不足以形成有用的完整图资格。
 
 最小反例是 `ReadBase` 正常读出 DTO 后，经同 context 执行 `BindSchema(D)`。D 不在根布局、Capture 或 factory 的闭合路径中。

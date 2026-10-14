@@ -29,7 +29,7 @@
 | 相同 stored 值 7，仅改变 S 中无关 Extra 声明，手写 Normalize 可恢复为 7／107 | [SplitModelEnvironmentTests](../../../tests/DurableGraph.Persistence.Tests/SplitModelEnvironmentTests.cs) | 分别覆盖工厂捕获查询与转换时延迟查询；跨 S 复用旧 binding 会误释 |
 | 相同 current DTO，仅 Hydrate 闭包不同也能得到 7／107 | [SplitRepositoryPairTests](../../../tests/DurableGraph.Persistence.Tests/SplitRepositoryPairTests.cs)、[History 回归](../../../tests/DurableGraph.Persistence.Tests/SplitRepositoryHistoryTests.cs) | 不是只有 Upgrade 会敏感；Pair 不能因 DTO 相同就跨环境共享 |
 | 生产 raw lookup 的调用目前只有完整依赖查验与多跳 Upgrade 中间布局选择两处 | [StateBindingContext](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs)、[Upgrade planner](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) | 两处都保留，不将公开入口收窄变成解析能力删减 |
-| 普通 SG 调用标准 Normalize；业务 UpgradeContext 无任意目录查询入口 | [GenericProjection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、[UpgradeContext](../../../src/DurableGraph/UpgradeContext.cs) | 尚未发现正常 SG 因无关目录增长改变领域值的反例；不据此否认准确目录解析依赖 |
+| 普通 SG 调用标准 Normalize；业务 UpgradeContext 无任意目录查询入口 | [GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)、[UpgradeContext](../../../src/DurableGraph/UpgradeContext.cs) | 尚未发现正常 SG 因无关目录增长改变领域值的反例；不据此否认准确目录解析依赖 |
 | Capture／Commit 成功仍不证明未执行的 reader body 依赖检查 | [DB081HotAdmissionProofTests](../../../tests/DurableGraph.Persistence.Tests/DB081HotAdmissionProofTests.cs) | 不宣称本片解决 Commit 成功后冷恢复可能拒绝的既有自定义 reader 边界 |
 
 前一审阅轮用已有 Release 输出运行了环境、Pair／History 相关 13 项测试，全部通过；这不是本案实施后的验收。本方案编制没有重新构建、运行这些测试或普通包故事。

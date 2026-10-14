@@ -30,14 +30,14 @@ DB-058 后，常用标量、record、泛型、Nullable、数组/List/Dictionary 
 
 ## 2. 实施前事实与切入点
 
-- [字段识别](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)的 `TryGetNominalReference` / `TryGetInlineValue`
-  都要求目标与 owner 同程序集；[HasDurableTypeShape](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)
+- [字段识别](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs)的 `TryGetNominalReference` / `TryGetInlineValue`
+  都要求目标与 owner 同程序集；[HasDurableTypeShape](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs)
   还要求 source syntax / partial，不能直接拿来验证 metadata 类型。
-- [TryGetTypePattern](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)在最后的 named 分支统一拒绝外部类型；
+- [TryGetTypePattern](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs)在最后的 named 分支统一拒绝外部类型；
   但这个函数也用于仅需 nominal 的泛型参数，限制比实际执行能力更宽。
-- [Family 当前投影](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)通过
+- [Family 当前投影](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)通过
   `ResolveCurrentValue(typeof(...))` 取得状态、操作和投影类型，再闭合静态泛型代码；
-  [历史工厂](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)从完整槽绑定取得同类操作数。
+  [历史工厂](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs)从完整槽绑定取得同类操作数。
   这些动态表示参数不要求生成代码点名外部 DTO。
 - [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)及
   [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)已有显式登记与跨 Type 闭合；

@@ -78,10 +78,10 @@ public enum CharacterMode : byte {
 | 接缝 | 实施前事实 | 本片变更 |
 |---|---|---|
 | [DurableTypeAttribute](../../../src/DurableGraph/DurableTypeAttribute.cs) | 仅 class/struct | 增加 Enum 目标 |
-| [SG 入口](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)、[声明验证](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) | 仅 TypeDeclarationSyntax，要求 partial，按实例字段生成模型 | 接受 EnumDeclarationSyntax；单独构建合成字段模型，不枚举常量为持久字段，不注入 enum 成员 |
-| [Family factory](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)、[领域投影](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | current factory 查领域类型内的 __DurableCreateCurrent；已知 inline 字段引用领域内 projection | enum 使用外置强类型 projection/current factory；统一 helper 名称选择的局部接缝，不能给 enum 发出 partial 类型 |
+| [SG 入口](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs)、[声明验证](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs) | 仅 TypeDeclarationSyntax，要求 partial，按实例字段生成模型 | 接受 EnumDeclarationSyntax；单独构建合成字段模型，不枚举常量为持久字段，不注入 enum 成员 |
+| [Family factory](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs)、[领域投影](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) | current factory 查领域类型内的 __DurableCreateCurrent；已知 inline 字段引用领域内 projection | enum 使用外置强类型 projection/current factory；统一 helper 名称选择的局部接缝，不能给 enum 发出 partial 类型 |
 | [StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs) | 明确拒绝 domainTypeDefinition.IsEnum | 仅为已显式登记、arity 0、单整数当前模板的 inline enum 放行；绑定阶段核对真实底层类型与当前 exact 模板 |
-| [模板/history](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)、[构建工具](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) | 已有 inline kind、底层标量字段和版本传播 | 复用现有语法；让涉及 enum 的生成使用 Family 路径，保留历史单字段 reader |
+| [模板/history](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs)、[构建工具](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) | 已有 inline kind、底层标量字段和版本传播 | 复用现有语法；让涉及 enum 的生成使用 Family 路径，保留历史单字段 reader |
 
 Capture 将 enum 强类型转成底层整数，再构造该版本 DTO；Hydrate 将 DTO 整数强类型转回当前 enum。
 不需要 DynamicMethod、反射访问枚举内部字段、Convert 装箱或每元素 Type 查表。

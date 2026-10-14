@@ -42,11 +42,11 @@
   已能承载无引用 unmanaged 值；这里没有这三种 CLR 类型的分支。
 - [BinaryPayloadWriter](../../../src/DurableGraph.Serialization/BinaryPayloadWriter.cs) /
   [Reader](../../../src/DurableGraph.Serialization/BinaryPayloadReader.cs) 尚无这三种方法；有符号整数采用 canonical ZigZag varint。
-- [Generator](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 的识别/类型名/tag，
-  [普通 body](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs) 与
-  [Family body](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs) 都需要接入。
+- [Generator](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 的识别/类型名/tag，
+  [普通 body](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs) 与
+  [Family body](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericState.cs) 都需要接入。
   仅新增 Runtime 绑定不能使 SG 接受字段，也不能保证两条生成路径的 decimal 相等性一致。
-- [history 解析/模板](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) 与
+- [history 解析/模板](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) 与
   [Build 工具](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) 有连续 tag 上界和格式能力判定；
   新标量可能出现在直接字段，也可能只出现在 Nullable、容器、泛型/base 的 nominal 实参里。
 - [StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 需要闭合 CLR ↔ nominal ↔ stored 槽双向映射；

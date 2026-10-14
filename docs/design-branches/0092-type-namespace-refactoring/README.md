@@ -1,8 +1,8 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2 已限定验收；公开内容操作和 Generator 入口采用现行职责名，根回归、生成合同与准确新包消费通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1 已限定验收；现行职责名已有对应文件名，E1 的源码字节、根构建、相关测试与链接检查通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
-> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)，当片见 [D2](implementation-d2.md)。
+> 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)，当片见 [E1](#e1-status)。
 
 建议先处理默认持久化内核的历史阶段名、模型执行环境的误称，以及 Generator 的 Family 分析材料。
 保留公共接入入口和已有 `Schema`／`Runtime` 分工；公开名称变化另作有限迁移，程序集和文件组织留到命名稳定之后判断。
@@ -73,7 +73,7 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 
 员工带 `DurableType`，C 单列 CLR 名与 namespace 收尾，并验证生成结果和当前新包从空库保存／冷开／续写。
 不要为让字符串整齐改持久 SchemaId：`P0C/P0D/P0F/P0T/P0H`、V1、FieldId、字段类型保持；
-相应 `Family_503043/503044/503046/503054/503048` 保持，因为 [FamilyName](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)取 SchemaId 的 UTF8 hex。
+相应 `Family_503043/503044/503046/503054/503048` 保持，因为 [FamilyName](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericState.cs)取 SchemaId 的 UTF8 hex。
 
 ## 4. Persistence 的其他内部名称
 
@@ -97,16 +97,16 @@ GraphResources 上指向默认路径的内部成员已按实际职责收回 back
 
 | 当前名 → 推荐名 | 证据与取舍 |
 |---|---|
-| Generator 私有 `GenericLayout/GenericField` → `FamilyLayout/FamilyField` | [声明](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)、[路径选择](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)、[Family 汇聚](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)：非泛型 enum/record/Nullable、显式 Upgrade、外部模板和 forced definitions 也走此路径。表示 Family 路径的配套方法同步命名；真正描述 CLR 泛型或类型参数列表的 Generic 词保留 |
-| Generator 私有 `DurableTypeModel/DurableFieldModel` → `DurableTypeAnalysis/DurableFieldAnalysis` | [声明](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)是 Roslyn 符号与字段分析，含 enum 的无 CLR 字段合成项；不用只含实际声明意味的 FieldDeclaration，也不混称 Runtime 的执行 Model |
-| Generator 私有 `SchemaHistoryModel/SchemaHistoryFieldModel` → `SchemaTemplate/SchemaTemplateField` | [声明](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)、[current＋accepted＋referenced](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)均使用同一模板形状，history 只是来源之一；不合并 Runtime 的 StateSchemaTemplate |
+| Generator 私有 `GenericLayout/GenericField` → `FamilyLayout/FamilyField` | [声明](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericState.cs)、[路径选择](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs)、[Family 汇聚](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs)：非泛型 enum/record/Nullable、显式 Upgrade、外部模板和 forced definitions 也走此路径。表示 Family 路径的配套方法同步命名；真正描述 CLR 泛型或类型参数列表的 Generic 词保留 |
+| Generator 私有 `DurableTypeModel/DurableFieldModel` → `DurableTypeAnalysis/DurableFieldAnalysis` | [声明](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs)是 Roslyn 符号与字段分析，含 enum 的无 CLR 字段合成项；不用只含实际声明意味的 FieldDeclaration，也不混称 Runtime 的执行 Model |
+| Generator 私有 `SchemaHistoryModel/SchemaHistoryFieldModel` → `SchemaTemplate/SchemaTemplateField` | [声明](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs)、[current＋accepted＋referenced](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs)均使用同一模板形状，history 只是来源之一；不合并 Runtime 的 StateSchemaTemplate |
 | Build 内部 `SchemaHistoryDocument` → `SchemaHistoryTextCodec` | [声明](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)是读取、解析、canonical render 和 SHA 文件命名的静态类，没有 Document 实例；发布／校验与闭包仍由 SchemaHistoryTool 承担 |
 
 `BinaryVersionModel/BinaryFieldModel` 只用于普通直接生成路径，Family 也生成 binary body，名字有区分力不足的线索。
 暂不定名：先确认对普通 `__DurableState` 路径的统一称呼，再考虑 `DirectStateVersionPlan/DirectStateFieldPlan`；不是第一片必改项。
 
 [D2](implementation-d2.md)已将入口 `Atelia.DurableGraph.Generator.DurableSchemaGenerator` 改为 `DurableGraphGenerator`：实际职责覆盖 DTO/body、Capture/Hydrate、reader/model/definition、Upgrade 和 exports。
-17 份 partial 声明与 3 处测试构造点同步，保唯一 `[Generator]`、hints、生成宿主和算法；文件路径暂保。
+17 份 partial 声明与 3 处测试构造点同步，保唯一 `[Generator]`、hints、生成宿主和算法；D2 未移动文件，后继 [E1](#e1-status)对应现行文件名。
 原始生成文本／hints／history 等价，diagnostics 仅三条隐藏记录的 generated Location.Path 随入口 FQN 改变。
 准确新包的普通／Family 消费实测：旧／新输出目录并存触发[targets](../../../src/DurableGraph/build/Atelia.DurableGraph.targets)现有的“必须恰好一份”拒绝，`dotnet clean` 仍保留生成文件。
 确认属于当前消费者后显式清理派生生成输出，再强制重编译，Publish／Verify／run 均恢复，history 保持。
@@ -120,8 +120,8 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 | 提案基线完整类型名 | 采用结果与限制 |
 |---|---|
-| `Atelia.DurableGraph.Runtime.CapturedStatePreparation<T>` | D1 已采用 `StatePreparationBinding<T>`，内部接口为 `IStatePreparationBinding`。[声明](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)是稳定 Schema/DTO/body/equality 能力绑定，Normalize 后和 [Pair 比较](../../../src/DurableGraph.Persistence/GraphReader.cs)也使用；[SG](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)直接发出新名称。不是一次准备结果，equality 与精确绑定检查保持 |
-| `Atelia.DurableGraph.Serialization.StringPayloadCodec` | D1 已采用 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringPayloadCodec.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
+| `Atelia.DurableGraph.Runtime.CapturedStatePreparation<T>` | D1 已采用 `StatePreparationBinding<T>`，内部接口为 `IStatePreparationBinding`。[声明](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)是稳定 Schema/DTO/body/equality 能力绑定，Normalize 后和 [Pair 比较](../../../src/DurableGraph.Persistence/GraphReader.cs)也使用；[SG](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs)直接发出新名称。不是一次准备结果，equality 与精确绑定检查保持 |
+| `Atelia.DurableGraph.Serialization.StringPayloadCodec` | D1 已采用 `StringBodyPreparer`；[唯一操作](../../../src/DurableGraph.Serialization/StringBodyPreparer.cs)返回 raw PreparedBaseBody，不含 typed 头或 ObjectVersion payload。不为 Codec 的读写对称性增加 reader |
 | `Atelia.DurableGraph.Persistence.GraphResources` | `RepositoryResources` 更能表达唯一 FS/VS、branch/shared、pending、fault owner。现 XML 已说明具体 owner，保名也可；收益与 public consumer 迁移成本比较后决定，不强制随 façade 更名 |
 | `Atelia.DurableGraph.Persistence.GraphFrameKind` | 候选根空间 `Atelia.DurableGraph.CheckpointKind`，与 CheckpointAddress 的业务角色对应；[现 enum](../../../src/DurableGraph.Persistence/HistoryGraphRecord.cs)仅 Event/State。也可保现名，不与内部 StoredGraphKind 合并或加 Meta |
 | `Atelia.DurableGraph.Persistence.GraphCommitException/GraphCommitOutcome` | 候选根空间 `RepositoryPublicationException/RepositoryPublicationOutcome`；[现合同](../../../src/DurableGraph.Persistence/GraphCommitException.cs)已覆盖 graph、branch-ref 和 tag。现行为无缺陷；不为根空间整齐自动搬 public companion，不改 outcome/fault/候选地址含义 |
@@ -150,7 +150,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 ## 8. 后续施工顺序与验收
 
 先冻结当片旧全名→新全名与配套成员表，再实施；下面是建议次序，不是全部候选自动获批的队列。
-保持程序集／PackageId／ProjectReference／IVT／目标框架、文件位置和访问级别；不得用 rename 掩盖合并 owner、删校验或改行为。
+保持程序集／PackageId／ProjectReference／IVT／目标框架和访问级别；A–D 保文件位置，E1 只改同目录 basename。不得用 rename 掩盖合并 owner、删校验或改行为。
 
 | 片 | 有限范围 | 最小可观察验收 |
 |---|---|---|
@@ -158,7 +158,7 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 | B：默认内核与执行语义 | §3.1、catalog 普通内核及 §4；固定员工 CLR 名暂留，允许一片内显式引用旧员工 namespace，不建兼容类型 | 根 build、相关 Persistence/Runtime tests；核完整来源、head/H、Remove、准确 S、唯一 pending、Event/State 安装与 fault/lifetime；源码只有批准映射差异，当前活动包故事与 crash 见证按直接受影响入口适配 |
 | C：固定员工收尾 | §3.2 员工 CLR 名／namespace／登记，收完 MetaBootstrapP0 | 对比 V1 layout、固定 binding 编号、Family DTO/body 与 history；当前新 G 从空库保存、冷开／续写／再冷开，shared/private/meta 与目录均覆盖；根 build 与相关 tests。不设旧包存档兼容门槛 |
 | D：公开有限迁移 | [D1](implementation-d1.md)采用状态内容操作绑定与 string body 准备两项；[D2](implementation-d2.md)已完成 Generator 入口 | 同步 emitted FQN、手写绑定、外部模型库与消费者；准确新 runtime/SG PackageReference 编译与运行，变化有迁移表，调用方直接迁移并重编译，不建兼容壳；入口另核 dirty 生成输出清理恢复 |
-| E：组织判断 | 命名已稳定，再看真实引用与消费边界 | 分别提出文件归属与程序集方向；只有实证需要才增加项目、包或 namespace，不从这张名称表推导必须拆分 |
+| E：组织判断 | [E1](#e1-status)先对应已稳定的类型与文件名；目录与多类型文件另判 | 文件移动核 Git 原始字节、显式路径、根 build／相关 tests 和 incoming links；只有实证需要才增加项目、包或 namespace，不从名称表推导必须拆分 |
 
 2026-10-14 用户明确：当前没有需要兼容的旧数据，实验存档可 reset 后重生成。
 命名分片采用当前包的新建库故事验收，不为旧包新增兼容壳或常驻迁移门禁。
@@ -170,13 +170,45 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 实施时额外核对以下容易逃过 IDE Rename 的接缝：
 
-- [SG metadata identity](../../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)与 [export 验证](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)：`global::`、GetTypeByMetadataName、准确 Generated helper 和 marker 所属程序集都是真实合同；不能只改拼接文本，或放宽为仅名称匹配。
+- [SG metadata identity](../../../src/DurableGraph.Generator/DurableGraphGenerator.CrossAssembly.cs)与 [export 验证](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs)：`global::`、GetTypeByMetadataName、准确 Generated helper 和 marker 所属程序集都是真实合同；不能只改拼接文本，或放宽为仅名称匹配。
 - [持久 wire](../../../src/DurableGraph.Persistence/MetaBootstrapP0/P0GraphWire.cs)：PBB7/PBD7/PBG7、P0B1/P0D1/P0G1，发布根 P0R1/P0S1，typed ABI5、graph kind 值、完整 FrameAddress 编码保持。P0 字符串仍可作为协议历史标识存续。
 - 生成 hints、export 合同 1/2、history 模板 v9、accepted `.dgschema` 文件名和字节保持；员工与用户 SchemaId／FieldId 不变。
 - source rename 不等于可见性调整；namespace 迁移不改变 IVT 的程序集身份，也不改变 owner/lifetime、正常 backing 恢复或离线救援纪律。
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1 对应其文件名，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。后续 E 可先处理文件名与现行类型的直接对应，具体下一片和其余公开候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)已完成有限文件名对应，具体下一片和其余公开候选只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+
+<a id="e1-status"></a>
+## 10. E1：文件名对应现行类型
+
+2026-10-14；基线 `de8a0eb`。问题：Coding Agent 和 IDE 能否直接按现行类型名定位文件，同时保持源码和编译接线？
+本片只移动同目录中的 19 个源文件和 1 个测试文件，C# 原始字节、类型／成员、namespace、程序集／包、生成入口与协议保持。
+最小验收是 20 对文件与 Git 基线完整字节相同，编译配置／脚本没有失效路径，根构建与相关测试通过，incoming links 没有新增缺口。
+
+| 所在目录 | 旧 basename → 新 basename |
+|---|---|
+| `src/DurableGraph.Generator/` | `DurableSchemaGenerator*.cs` → `DurableGraphGenerator*.cs`，共 17 份，suffix 保持 |
+| `src/DurableGraph/Runtime/Capture/` | `CapturedStatePreparation.cs` → `StatePreparationBinding.cs` |
+| `src/DurableGraph.Serialization/` | `StringPayloadCodec.cs` → `StringBodyPreparer.cs` |
+| `tests/DurableGraph.Serialization.Tests/Serialization/` | `StringPayloadCodecTests.cs` → `StringBodyPreparerTests.cs` |
+
+Generator 的有限 suffix 为主文件，以及 Ancestry、CrossAssembly、Enums、GeneratedState、GenericFactories、GenericProjection、GenericState、GenericUpgrades、ImmutableLeaf、InlineState、Records、SchemaExportHelpers、SchemaExports、StateModel、TemplateHistory、ValueUpgrades。
+现有 `DurableSchemaGeneratorTests` partial 测试宿主保持；Persistence 目录和多类型文件不在本片。
+
+实施者、独立复核者和主线程分别核 20 对 Git 原始字节相同；主线程另核 587 个其他非文档跟踪文件原字节保持。相关项目采用 SDK 默认编译收集，没有发现旧 basename 的显式 Compile／脚本硬编码或 CallerFilePath 依赖。
+更新 30 份文档中的 129 个当前源码链接；历史裸路径、Git 来源和冻结 receipt 保其历史意义。当前焦点、索引和路线图另按实施结果同步，未改历史结论。
+
+使用现有准确 S pin 的 package-mode assets，主线程运行：
+
+```powershell
+dotnet build DurableGraph.slnx -c Release --no-restore -t:Rebuild -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+dotnet test tests/DurableGraph.Serialization.Tests/DurableGraph.Serialization.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false
+```
+
+根 Rebuild 零警告／错误；Runtime／Generator／Build 1628 项及 Serialization 133 项全部通过，失败／跳过为零。集成 diff 和本地链接检查通过，没有新增历史引用缺口。
+完整路径表与移动 receipt 位于 `.artifacts/db092-e1/source/`，`result.json` SHA256 `F9B056030A9422E24D5936F866BC9575987A6EC9B9461FBA0CD5EA09AD6121A9`；主线程字节验收为 `.artifacts/db092-e1/root-source-acceptance.json`，构建／测试日志在同一切片工件目录。
+本片没有制作新 G 或重跑包消费者／存档故事，不把 D2 原 G 的资格回填为 E1 新包证据；文件路径会改变调试来源，不声明 DLL／PDB 字节相等。后续范围只维护在[路线图](../../DurableGraph-research-roadmap.md)。

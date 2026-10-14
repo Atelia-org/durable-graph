@@ -27,8 +27,8 @@
 
 事实入口：
 
-- [分类器](../../../src/DurableGraph.Generator/DurableSchemaGenerator.ImmutableLeaf.cs)、[二进制发射](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs)、[Family 工厂](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)。
-- [编译级分流](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)、[模板路由](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)。
+- [分类器](../../../src/DurableGraph.Generator/DurableGraphGenerator.ImmutableLeaf.cs)、[二进制发射](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs)、[Family 工厂](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)。
+- [编译级分流](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs)、[模板路由](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs)。
 - [binding 通道](../../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs)、[NuGet 打包](../../../src/DurableGraph/DurableGraph.csproj)、[构建 targets](../../../src/DurableGraph/build/Atelia.DurableGraph.targets)。
 - [现有分类测试](../../../tests/DurableGraph.Tests/ImmutableLeafClassificationTests.cs)、[通道测试](../../../tests/DurableGraph.Tests/ImmutableLeafBindingTests.cs)。
 

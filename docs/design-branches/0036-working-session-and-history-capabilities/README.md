@@ -133,7 +133,7 @@ publication carrier 候选为单独的短 RBF 发布日志，或小 head 文件�
 | 将历史 Revision 恢复为当前可编辑 World | 上述能力 + 全部 source 行到当前 DTO 的 Normalize/Upgrade；全部 current 引用合法；可达对象可 Allocate/Hydrate |
 
 [StateReaderBinding](../../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) 不依赖领域 CLR Type，
-但[生成入口](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)依附当前被标记类。
+但[生成入口](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs)依附当前被标记类。
 删除整个模型族的类，仅留 `.dgschema` 不会自动生成该族 reader；
 [StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 与 NormalizedRevision
 也仍要求每个 source-live durable 族有 current model。

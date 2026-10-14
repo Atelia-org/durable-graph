@@ -16,7 +16,7 @@
 [BindSchema/Match](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 核对的是持久布局与保留的代码历史，
 同时推导 DTO 的 exact 值操作数，承担 kind/arity、字段、base/inline、重复参数及泛型作用域一致性。
 [Upgrade 推导](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) 和
-[当前模型生成](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) 确有构造后再匹配的往返，
+[当前模型生成](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) 确有构造后再匹配的往返，
 但持久化模板本身不能删除这些证明义务，也不能替代手工 Schema/reader 入口。
 尚未找到净简化的完整替换路径，因此本片不扩大这项重构。
 
@@ -158,7 +158,7 @@ List 自己是内容 Upgrade 的 owner，不由入边字段各自转换：
 [数组当前投影](../../../src/DurableGraph/Runtime/Containers/ArrayObjectBinding.cs)、[历史 reader/body](../../../src/DurableGraph/Runtime/Containers/ArrayStateReader.cs)、
 [数组升级](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.ArrayUpgrade.cs)、[对象引用验证](../../../src/DurableGraph/Runtime/Binding/StateReferenceVisitor.cs)、
 [绑定快照](../../../src/DurableGraph.Persistence/StateModelSnapshot.Arrays.cs)、[SchemaCatalog](../../../src/DurableGraph.Persistence/SchemaCatalogWireCodec.cs)、
-[SG 类型模式](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs)、[Shared 模式](../../../src/Shared/SchemaHistoryTypePattern.cs)。
+[SG 类型模式](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs)、[Shared 模式](../../../src/Shared/SchemaHistoryTypePattern.cs)。
 实施时审查全部 IsArray 分支：只有“内建引用构造”的判断应扩为 List，维数/shape/数组规则选择保持数组专用。
 
 ## 7. 验收矩阵

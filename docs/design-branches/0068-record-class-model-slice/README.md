@@ -190,9 +190,9 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
   [StateDefinitionBinding](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)、[StateBaseProjection](../../../src/DurableGraph/Runtime/Binding/StateBaseProjection.cs)。
 - [CaptureContext](../../../src/DurableGraph/Runtime/Capture/CaptureContext.cs)、[ObjectReadTable](../../../src/DurableGraph/Runtime/Capture/ObjectReadTable.cs)、
   [BuiltinStateValues](../../../src/DurableGraph/Runtime/State/BuiltinStateValues.cs)、[StateModelSnapshot](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs)。
-- [Ancestry](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[CrossAssembly](../../../src/DurableGraph.Generator/DurableSchemaGenerator.CrossAssembly.cs)、
-  [Records](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、[GenericProjection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)、
-  [GeneratedState](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs)。祖先终点须统一，不能只改诊断入口。
+- [Ancestry](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs)、[CrossAssembly](../../../src/DurableGraph.Generator/DurableGraphGenerator.CrossAssembly.cs)、
+  [Records](../../../src/DurableGraph.Generator/DurableGraphGenerator.Records.cs)、[GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)、
+  [GeneratedState](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs)。祖先终点须统一，不能只改诊断入口。
 - [EventHistoryRepository](../../../src/DurableGraph.Persistence/Repository.cs)、[EventHistorySession](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、
   [GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)、[WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs)。
 - [RecordStructGeneratorTests](../../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs)、

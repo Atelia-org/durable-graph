@@ -207,7 +207,7 @@ DTO upgrade/Restore、一般引用、struct、数组对象、BCL 或性能设施
 
 最终入口与证据：
 
-- [CapturedStatePreparation](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs) 实现对象级 typed 桥接，
+- [CapturedStatePreparation](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs) 实现对象级 typed 桥接，
   [CaptureSession.Prepare](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs) 完整预检后准备内容，
   [PreparedCapturedGraph](../../../src/DurableGraph/Runtime/Capture/PreparedCapturedGraph.cs) 保存来源及只读 rows。
 - [CaptureContext](../../../src/DurableGraph/Runtime/Capture/CaptureContext.cs) 保留 capture-only overload，检查重复根 binding，

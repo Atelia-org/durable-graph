@@ -175,7 +175,7 @@ exact 匹配无法推断业务上的元素身份；允许回退且必须纳入�
 
 [IStateOps](../../../src/DurableGraph/Runtime/Binding/StateValueBinding.cs) 没有 equality/hash。
 [PreparedDeltaBody](../../../src/DurableGraph.Serialization/PreparedDeltaBody.cs) 是有 owned bytes 的对象；
-[生成的 struct PrepareDelta](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs) 还会创建缓冲、递归准备子 Delta。
+[生成的 struct PrepareDelta](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericState.cs) 还会创建缓冲、递归准备子 Delta。
 将它反复用作任意两位置的 equality oracle，会产生大量弃用编码，不能当作理想 Myers 的廉价比较。
 
 调研得到两个可行方向；后续方案已选择静态逐字段 StateEquals，以下保留原比较依据：

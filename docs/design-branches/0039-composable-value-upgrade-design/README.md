@@ -227,7 +227,7 @@ M 个叶子规则，加上各模板一次性的依赖声明。开放 Pair 组合
 本片只增加声明的值依赖/规则集、Context 工具获取、开放值 provider 组合及其验证。
 DB-038 的 Context 入参、TypeExpr/wire 和通用/闭合 owner 规则保持；不再借此重开类型格式。
 
-DB-038 的 [SG Upgrade](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericUpgrades.cs) 已接受
+DB-038 的 [SG Upgrade](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericUpgrades.cs) 已接受
 显式三参数方法并适配旧非泛型二参数方法；其 DTO 符号在当前生成轮尚未存在，采用发出强类型调用后由编译器校验的办法。
 本片沿用这条原则：先读取显式 family/version/槽选择的元数据与 history，
 发出 expected typed adapter，再让最终编译器检查用户方法，不能依赖初轮不完整的 DTO Roslyn 符号推断全部绑定。
@@ -319,7 +319,7 @@ SG adapter/运行时预绑定 → 调用作用域 → 真实包跨版恢复。�
 
 | 要求 | 实施责任/接缝 | 集成验收 | 状态 |
 |---|---|---|---|
-| G0 用户属性、局部 key、typed adapter、旧二参工具诊断 | [SG](../../../src/DurableGraph.Generator/DurableSchemaGenerator.ValueUpgrades.cs) / [metadata](../../../src/DurableGraph/Runtime/Binding/StateValueUpgradeProvider.cs) | [真实 SG 编译与调用](../../../tests/DurableGraph.Tests/GeneratedValueUpgradeTests.cs)、错误签名/孤立依赖/别名/外部 marker；纯历史与纯规则登记 | 已验证 |
+| G0 用户属性、局部 key、typed adapter、旧二参工具诊断 | [SG](../../../src/DurableGraph.Generator/DurableGraphGenerator.ValueUpgrades.cs) / [metadata](../../../src/DurableGraph/Runtime/Binding/StateValueUpgradeProvider.cs) | [真实 SG 编译与调用](../../../tests/DurableGraph.Tests/GeneratedValueUpgradeTests.cs)、错误签名/孤立依赖/别名/外部 marker；纯历史与纯规则登记 | 已验证 |
 | G1 候选与完整槽匹配、递归依赖、KeepExact | [值绑定](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.ValueUpgrade.cs)；StateStore 冻结目录 | [值绑定反例](../../../tests/DurableGraph.Tests/ValueUpgradeBindingTests.cs)、[snapshot 隔离](../../../tests/DurableGraph.Persistence.Tests/ValueUpgradeCatalogTests.cs) | 已验证 |
 | G2 子作用域与整链预绑定 | [Context](../../../src/DurableGraph/UpgradeContext.cs) / [owner 计划](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.Upgrade.cs) | 嵌套 Box→Pair→Point、两个对象/多跳、未知 key/类型、抛错不回退、28 层共享依赖 DAG | 已验证 |
 | G3 历史包闭环 | [真实包消费者](../../../experiments/PackageConsumerProbe/ValueUpgradeConsumer/README.md) | 三代历史/四次构建、删除旧 inline 领域类型、强制 Base 与稳定续写 | 已验证 |

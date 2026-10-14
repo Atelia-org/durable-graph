@@ -91,7 +91,7 @@ BoxCodec<TDomainValue, TValueState>
 ## 5. DB-037 提供的产品接缝
 
 2026-09-07，非泛型 inline struct 已由 [DB-037](../0037-inline-struct-state-slice/README.md) 接通产品。
-[生成值 helper](../../../src/DurableGraph.Generator/DurableSchemaGenerator.InlineState.cs) 将 exact 版本 DTO/body
+[生成值 helper](../../../src/DurableGraph.Generator/DurableGraphGenerator.InlineState.cs) 将 exact 版本 DTO/body
 与当前领域 struct 的 Capture/ref Hydrate 分开，已验证删除领域值声明后仍生成历史 DTO 并保留 owner 升级链。
 SchemaKind 与 InlineSchema 只表达当前非泛型 exact 布局，不是一般 TypeExpr。
 后续泛型可复用静态值操作的组合方式，但仍须显式建立领域参数与状态表示参数的对应关系，

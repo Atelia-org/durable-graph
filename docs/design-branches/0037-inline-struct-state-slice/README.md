@@ -35,11 +35,11 @@ struct 无独立对象行，历史按旧布局读，新模型按显式 Upgrade �
 
 | 当前实现 | 本片所需增量 |
 |---|---|
-| [DurableTypeAttribute](../../../src/DurableGraph/DurableTypeAttribute.cs) 只允许 class；[SG](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 拒绝 struct 字段 | 增加显式标记的 struct 类型路径，与 class 的 DurableBase 继承规则区分 |
+| [DurableTypeAttribute](../../../src/DurableGraph/DurableTypeAttribute.cs) 只允许 class；[SG](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 拒绝 struct 字段 | 增加显式标记的 struct 类型路径，与 class 的 DurableBase 继承规则区分 |
 | [DurableFieldInfo](../../../src/DurableGraph/Schema/DurableFieldInfo.cs) 只有 tag 与 nominal target；[DurableSchema](../../../src/DurableGraph/Schema/DurableSchema.cs) 只有 exact BaseSchema | 增加最小 Schema kind、exact inline 字段依赖及完整依赖校验 |
-| [Ancestry](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)、[Build history](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SchemaStore](../../../src/DurableGraph.Persistence/SchemaStore.cs) 只解析 exact 祖先链 | 扩为 base + inline 依赖 DAG，nominal 边不进入此闭包 |
-| [GeneratedState](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GeneratedState.cs) 原语/ID DTO、Base/Delta、refs visitor | 嵌套 DTO 及递归静态 body/Capture/VisitReferences |
-| [StateModel 生成](../../../src/DurableGraph.Generator/DurableSchemaGenerator.StateModel.cs) class Normalize/Allocate/Hydrate | owner Upgrade 保持；增加当前值的 ref 恢复 helper |
+| [Ancestry](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs)、[Build history](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)、[SchemaStore](../../../src/DurableGraph.Persistence/SchemaStore.cs) 只解析 exact 祖先链 | 扩为 base + inline 依赖 DAG，nominal 边不进入此闭包 |
+| [GeneratedState](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs) 原语/ID DTO、Base/Delta、refs visitor | 嵌套 DTO 及递归静态 body/Capture/VisitReferences |
+| [StateModel 生成](../../../src/DurableGraph.Generator/DurableGraphGenerator.StateModel.cs) class Normalize/Allocate/Hydrate | owner Upgrade 保持；增加当前值的 ref 恢复 helper |
 | [StateReaderBinding](../../../src/DurableGraph/Runtime/Binding/StateReaderBinding.cs) 与准备管线要求 unmanaged DTO | 嵌套 DTO 的叶子仍为标量/UInt32 ID，保持该约束，不把领域引用复制进去 |
 
 推荐支持：同一编译中的顶层、非泛型、非 record 的 `partial struct`，包括 `readonly partial struct`。

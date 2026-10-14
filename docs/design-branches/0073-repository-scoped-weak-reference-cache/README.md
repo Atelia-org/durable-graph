@@ -55,7 +55,7 @@ DB-072/073/074 是同一方向的设计材料，不能互相充当独立收益�
 若第二次直接复用第一次的实例，就返回错误值。
 
 [DB-066](../0066-readpair-comparison-and-transient-contract-slice/README.md) 与
-[CapturedStatePreparation](../../../src/DurableGraph/Runtime/Capture/CapturedStatePreparation.cs)
+[CapturedStatePreparation](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)
 约束完整相等比较等 preparation 回调，不能据此宣称所有 Normalize/Upgrade 都可跳过。
 即使保留 Normalize，只凭原 key 复用仍然错误。因此保留完整 Prepare，并比较旧 entry 与本次 current DTO。
 
@@ -63,7 +63,7 @@ DB-072/073/074 是同一方向的设计材料，不能互相充当独立收益�
 
 [StateModelRegistry.Snapshot](../../../src/DurableGraph.Persistence/StateModelRegistry.cs) 每次复制目录；
 [StateModelSnapshot.TryGetCurrentModel](../../../src/DurableGraph.Persistence/StateModelSnapshot.cs) 只在本 snapshot 内缓存工厂产物。
-[Family 工厂](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) 每次创建新的 preparation/binding，
+[Family 工厂](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) 每次创建新的 preparation/binding，
 Normalize 与 source reader 委托还引用本次 context。
 
 因此，README 推荐的 definitions/强制 Family 注册，两次独立读取得到不同 binding，exact key 将 miss。

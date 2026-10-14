@@ -79,12 +79,12 @@ record 是领域 C# 外观，不新增持久 SchemaKind。它仍是 InlineValue�
 
 | 实施前基线事实 | 源码入口 | 本片局部变更 |
 |---|---|---|
-| `HasDurableTypeShape` 对全部 `IsRecord` 拒绝 | [Ancestry](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) | 仅接纳满足其他条件的 record struct，record class 仍拒绝；同步 DG0001 文案 |
-| `GetDirectFields` 过滤全部 `IsImplicitlyDeclared` | [Generator](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) | 对 record 纳入并校验真实 backing storage，保留字段 symbol / 所属属性 / 源位置 |
+| `HasDurableTypeShape` 对全部 `IsRecord` 拒绝 | [Ancestry](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs) | 仅接纳满足其他条件的 record struct，record class 仍拒绝；同步 DG0001 文案 |
+| `GetDirectFields` 过滤全部 `IsImplicitlyDeclared` | [Generator](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) | 对 record 纳入并校验真实 backing storage，保留字段 symbol / 所属属性 / 源位置 |
 | 当前字段模型已保存 IFieldSymbol；history 仅保存 FieldId 与槽 | 同上 `DurableFieldModel`、`ToSchemaHistoryFields`、`HaveSameFields` | 不引入第二套属性 Schema；成员来源仅供当前投影与诊断使用 |
-| Family 捕获按 `value.field` 生成，readonly 写入使用 UnsafeAccessor | [GenericProjection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | backing field 的读写统一走强类型字段 accessor；显式字段继续原直接读/普通或 readonly 写 |
-| Family 入口已有 enum 等当前形状触发 | [TemplateHistory](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) | 有当前 record 时选现有 Family；生成壳发出 `partial record struct` |
-| 普通/generic struct 已有历史 reader、值升级和 Dictionary 能力 | [GenericFactories](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs)、[DB-055](../0055-composite-dictionary-key-design/README.md) | 组合验收；不新增 record 专用 Runtime reader / comparer / Upgrade 路由 |
+| Family 捕获按 `value.field` 生成，readonly 写入使用 UnsafeAccessor | [GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) | backing field 的读写统一走强类型字段 accessor；显式字段继续原直接读/普通或 readonly 写 |
+| Family 入口已有 enum 等当前形状触发 | [TemplateHistory](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) | 有当前 record 时选现有 Family；生成壳发出 `partial record struct` |
+| 普通/generic struct 已有历史 reader、值升级和 Dictionary 能力 | [GenericFactories](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs)、[DB-055](../0055-composite-dictionary-key-design/README.md) | 组合验收；不新增 record 专用 Runtime reader / comparer / Upgrade 路由 |
 
 包含当前 record 的编译走已有 Family 路径，避免向传统 InlineState/Schema/StateModel 生成分支
 各复制一套 backing-field 处理。代价是同编译其他纯非泛型模型也会使用 Family 生成入口；
@@ -230,8 +230,8 @@ G0 以 DG0021 报告未知 storage / 未绑定到字段的分类标签，沿用 
 
 | 要求 | 负责路径 | 验收 | 状态 |
 |---|---|---|---|
-| G0 分类与诊断 | [Records helper](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Records.cs)、Generator/Ancestry/TemplateHistory | [形状与误标 tests](../../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs) | 已验证 |
-| G1 当前投影 | [GenericProjection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | [静态 body/副作用隔离 tests](../../../tests/DurableGraph.Tests/RecordStateProjectionTests.cs) | 已验证 |
+| G0 分类与诊断 | [Records helper](../../../src/DurableGraph.Generator/DurableGraphGenerator.Records.cs)、Generator/Ancestry/TemplateHistory | [形状与误标 tests](../../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs) | 已验证 |
+| G1 当前投影 | [GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) | [静态 body/副作用隔离 tests](../../../tests/DurableGraph.Tests/RecordStateProjectionTests.cs) | 已验证 |
 | G2 图与历史 | 复用原 Runtime/StateStore，未新增 record 专用 reader 或 Upgrade | [图与 keyed Delta tests](../../../tests/DurableGraph.Tests/RecordStructGraphTests.cs)、[history tests](../../../tests/DurableGraph.Tests/RecordStructHistoryTests.cs) | 已验证 |
 | G3 包与收口 | [真实包消费者](../../../experiments/PackageConsumerProbe/RecordConsumer/README.md)、独立审阅 | 两代删除旧 CLR、显式双槽升级、Base/Delta 续写 | 已验证 |
 

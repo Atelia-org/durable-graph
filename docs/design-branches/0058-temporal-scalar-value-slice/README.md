@@ -39,7 +39,7 @@
 - [DictionaryKeyPolicy](../../../src/DurableGraph/Runtime/Containers/DictionaryKeyPolicy.cs) 已把标准领域查找与完整 key bytes 配对分开；
   [DB-057](../0057-bcl-scalar-value-slice/README.md) 已验证数值相等但 decimal 表示不同的键替换。
 - [Shared TypePattern](../../../src/Shared/SchemaHistoryTypePattern.cs)、[Build history](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)
-  与 [SG history](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) 当前新写 v8，旧版本有递归能力门槛。
+  与 [SG history](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) 当前新写 v8，旧版本有递归能力门槛。
 - ValueTuple 接缝不是序列化循环本身：[DurableFieldInfo.ValueSchema](../../../src/DurableGraph/Schema/DurableFieldInfo.cs)
   目前只提取一个 inline 依赖；[StateFieldTemplate/StateParameterTemplate](../../../src/DurableGraph/Runtime/Binding/StateDefinitionBinding.cs)
   只带一个 `InlineVersion`。具体多 child 反例保留在 [DB-057 §8](../0057-bcl-scalar-value-slice/README.md#8-valuetuple-后继保留的问题)。

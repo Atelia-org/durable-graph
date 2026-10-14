@@ -73,7 +73,7 @@ Schema 校验与 history publisher/parser。不能让新增类型能编译但其
 - string 内容仍按 UTF-16 code units 保留；用户后续明确将图内 ReferenceEquals 纳入恢复保证。
   相同源实例必须恢复共享，不同源实例不能因内容相等被合并；字符串对象 body 才 inline 写内容。
 
-inline 并不等于必须选 UTF-8。现有 [StringPayloadCodec](../../../src/DurableGraph.Serialization/StringPayloadCodec.cs)
+inline 并不等于必须选 UTF-8。现有 [StringPayloadCodec](../../../src/DurableGraph.Serialization/StringBodyPreparer.cs)
 在 strict UTF-8 与 UTF-16LE 中选较短者，平局选 UTF-16LE，并保留孤立代理项。
 推荐首片沿用，避免第二套字符串语义。
 
@@ -260,8 +260,8 @@ ObjectVersion 持久内容、Delta、H 恢复及 Save 接入仍按真实消费�
 
 当前事实依据：[primitive writer](../../../src/DurableGraph.Serialization/BinaryPayloadWriter.cs)、
 [primitive tests](../../../tests/DurableGraph.Serialization.Tests/Serialization/BinaryPayloadPrimitiveTests.cs)、
-[string tests](../../../tests/DurableGraph.Serialization.Tests/Serialization/StringPayloadCodecTests.cs)、
-[生成器](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs)、
+[string tests](../../../tests/DurableGraph.Serialization.Tests/Serialization/StringBodyPreparerTests.cs)、
+[生成器](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs)、
 [历史解析器](../../../src/DurableGraph.Build/SchemaHistoryTool.cs)。
 
 ## 12. Robird 旧实现：本轮吸纳的经验

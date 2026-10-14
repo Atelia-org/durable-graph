@@ -32,20 +32,20 @@
 
 这些是基线源码事实，不是新方案的运行结果：
 
-- [ValidateCurrentDependency](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs)
+- [ValidateCurrentDependency](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs)
   要求 base 存在于本编译的 `DurableTypeModel` 列表；[现有负例](../../../tests/DurableGraph.Tests/CrossAssemblyGeneratorTests.cs)
   对外部普通/泛型 base 断言 DG0019。
-- [GenericDomainFields / current projection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs)
+- [GenericDomainFields / current projection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)
   递归全部祖先 CLR 字段，以本地 `types.Single` 查声明，调用声明层 internal 读写器；
   factory 还会为继承的动态字段发出 `typeof(field.DomainType)`。仅放宽 DG0019 不能使这条路径跨库。
-- [FlattenGenericFields / MakeGenericLayout](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)
+- [FlattenGenericFields / MakeGenericLayout](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericState.cs)
   已依据 exact history 进行 base-first 展开、类型参数替换和状态参数去重。
   每段独立 FieldId、完整 leaf DTO、静态 Base/Delta body 可以继续使用。
 - [StateModelBinding<TDomain,TState>](../../../src/DurableGraph/Runtime/Binding/StateModelBinding.cs)
   已保存强类型 Capture/Hydrate 委托，但对象入口要求 exact CLR 类型。
   [StateBindingContext](../../../src/DurableGraph/Runtime/Binding/StateBindingContext.cs) 已能解析基类 current model，
   `BindSchema(...).GetValue(...)` 能从完整槽取得 state/ops，无需领域字段 CLR Type。
-- [DB-060 导入导出](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)
+- [DB-060 导入导出](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs)
   当前仅接受 InlineValue 模板；导入根及递归边未覆盖 BaseSchema。
   [Build reference 校验](../../../src/DurableGraph.Build/SchemaHistoryTool.References.cs) 的归属与闭包框架可复用，
   [ParseReference](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) 的 inline 限制需扩展。
@@ -269,8 +269,8 @@ model 构造器末尾 `supportsBaseProjection=false`、Family 显式启用；整
 | 要求 | 实施所有者/位置 | 验收 | 状态 |
 |---|---|---|---|
 | typed projection 与显式能力 | [StateBaseProjection](../../../src/DurableGraph/Runtime/Binding/StateBaseProjection.cs)、StateModelBinding | [8 项 Runtime 测试](../../../tests/DurableGraph.Tests/StateBaseProjectionTests.cs)：未授予、错类型/Schema、null、晚登记冲突、整对象 exact | 已验证 |
-| Family own + immediate base、泛型映射 | [GenericProjection](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) | [Generator 专项](../../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGeneratorTests.cs)：metadata/ref hidden inline/Nullable、参数合流/重排/具体化/双 ObjectId；local/split golden | 已验证 |
-| class 导出与 base 只读依赖 | [SchemaExports](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs)、[helper 核验](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExportHelpers.cs) | 同上专项：真实类型/构造器/ref 签名、额外约束、ref-like 拒绝、historical-only | 已验证 |
+| Family own + immediate base、泛型映射 | [GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) | [Generator 专项](../../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGeneratorTests.cs)：metadata/ref hidden inline/Nullable、参数合流/重排/具体化/双 ObjectId；local/split golden | 已验证 |
+| class 导出与 base 只读依赖 | [SchemaExports](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs)、[helper 核验](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExportHelpers.cs) | 同上专项：真实类型/构造器/ref 签名、额外约束、ref-like 拒绝、historical-only | 已验证 |
 | reference 合同与自有 history 发布 | Shared protocol、SchemaHistoryTool | [31 项 Build 测试](../../../tests/DurableGraph.Tests/CrossAssemblyInheritanceBuildTests.cs)：contract2、accepted 先验闭包、零候选、归属/版本/kind/arity/深度拒绝 | 已验证 |
 | 图/历史升级 | [图测试](../../../tests/DurableGraph.Tests/CrossAssemblyInheritanceGraphTests.cs)、[历史测试](../../../tests/DurableGraph.Tests/CrossAssemblyInheritanceHistoryTests.cs) | 4 项：引用循环、readonly、跨字节 Delta、旧 CLR 删除、leaf-only Upgrade、Base/NoChange/Delta、缺能力不发布 | 已验证 |
 | 真实多库包与回归 | [InheritanceLibraryConsumer](../../../experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md) | 两代独立 history、ref/lib；既有 CrossAssembly/InlineLibrary/Generic/ValueUpgrade | 已验证 |

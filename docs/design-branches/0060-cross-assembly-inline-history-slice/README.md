@@ -35,17 +35,17 @@ DB-059 后，`RemotePoint[]`、`List<RemotePoint>`、本地泛型值 `LocalBox<R
 
 以下是源码调查，不是新方案已经运行的证明：
 
-- [TryGetInlineValue](../../../src/DurableGraph.Generator/DurableSchemaGenerator.cs) 仍要求同程序集及 source shape；
+- [TryGetInlineValue](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 仍要求同程序集及 source shape；
   [DB-059 负例](../../../tests/DurableGraph.Tests/CrossAssemblyGeneratorTests.cs) 明确拒绝外部 Point、Nullable Point 和固定外部泛型值。
-- [ValidateCurrentDependency](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Ancestry.cs) 在本地 `DurableTypeModel` 中寻找全部 inline/base；
+- [ValidateCurrentDependency](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs) 在本地 `DurableTypeModel` 中寻找全部 inline/base；
   仅去掉第一道检查仍会失败。历史 DAG 检查也要求找到完整固定依赖。
-- [MakeGenericLayout / HasDynamicInlineLayout](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericState.cs)
+- [MakeGenericLayout / HasDynamicInlineLayout](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericState.cs)
   查询 exact 子模板，决定直接使用 `Family.Vn` 还是动态状态参数。Base/Delta/Visit/StateEquals 共用同一生成算法。
-- [Family 工厂](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericFactories.cs) 已公开 DTO、body 和 Definition；
-  [当前投影](../../../src/DurableGraph.Generator/DurableSchemaGenerator.GenericProjection.cs) 已公开值 `__DurableProjection`，
-  enum 使用[外置投影](../../../src/DurableGraph.Generator/DurableSchemaGenerator.Enums.cs)。本片不需要另一套序列化执行接口。
+- [Family 工厂](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericFactories.cs) 已公开 DTO、body 和 Definition；
+  [当前投影](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs) 已公开值 `__DurableProjection`，
+  enum 使用[外置投影](../../../src/DurableGraph.Generator/DurableGraphGenerator.Enums.cs)。本片不需要另一套序列化执行接口。
 - `GenerateGenericStates` 当前把 `available` 同时用于查询模板和生成全部 Family；导入材料后必须分离这两个集合。
-- [SG history](../../../src/DurableGraph.Generator/DurableSchemaGenerator.TemplateHistory.cs) 和
+- [SG history](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) 和
   [Build Publish/Verify](../../../src/DurableGraph.Build/SchemaHistoryTool.cs) 目前都从本项目 history 校验 exact 闭包；
   Build 通过[生成的候选 manifest](../../../src/DurableGraph/build/Atelia.DurableGraph.targets)工作，不执行目标程序集。
 - Runtime 已能按已登记外部 Definition 绑定完整值槽、历史 reader 和当前 projection；
@@ -266,7 +266,7 @@ DB-059 的 nominal-only 目标升级、App/Host DLL 不变见证必须继续通�
 
 | 要求 | 当前状态 | 负责人/落点 | 验收 |
 |---|---|---|---|
-| G0 metadata/ref assembly 与公开 helper | 已验证 | [导出标记](../../../src/DurableGraph/DurableSchemaExportAttribute.cs)、[SG 导入导出](../../../src/DurableGraph.Generator/DurableSchemaGenerator.SchemaExports.cs) | [SG tests](../../../tests/DurableGraph.Tests/CrossAssemblyInlineGeneratorTests.cs)：真实 metadata-only/ref assembly、public helper 与 internal 实现依赖 |
+| G0 metadata/ref assembly 与公开 helper | 已验证 | [导出标记](../../../src/DurableGraph/DurableSchemaExportAttribute.cs)、[SG 导入导出](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs) | [SG tests](../../../tests/DurableGraph.Tests/CrossAssemblyInlineGeneratorTests.cs)：真实 metadata-only/ref assembly、public helper 与 internal 实现依赖 |
 | G1 严格只读闭包与 own-only 发布 | 已验证 | [共享协议](../../../src/Shared/SchemaHistoryReferenceProtocol.cs)、[Build 依赖](../../../src/DurableGraph.Build/SchemaHistoryTool.References.cs)、包 targets | [Build tests](../../../tests/DurableGraph.Tests/CrossAssemblyInlineBuildTests.cs)：canonical/摘要/归属、零候选、两阶段 history、禁止引用借本地补缺 |
 | G2 固定外部槽、历史/规则入口 | 已验证 | SG 字段/模板/生成 | SG tests：普通/record/enum/Nullable/generic、仅历史/仅规则、旧 DTO arity、placement Schema/history/Base/Delta 精确对比 |
 | G3 图与两代包 | 已验证 | [图 tests](../../../tests/DurableGraph.Tests/CrossAssemblyInlineGraphTests.cs)、[历史 tests](../../../tests/DurableGraph.Tests/CrossAssemblyInlineHistoryTests.cs)、[真实包](../../../experiments/PackageConsumerProbe/InlineLibraryConsumer/README.md) | 冻结/共享/循环、删除旧 CLR、空值/空 List 的能力预检、Base→NoChange→Delta、三库各自 history 与 ref/lib 资产；五条相关旧包回归通过 |
