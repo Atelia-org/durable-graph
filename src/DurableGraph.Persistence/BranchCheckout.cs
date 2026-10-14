@@ -11,6 +11,12 @@ namespace Atelia.DurableGraph;
 /// business handlers; the application interprets its own processing progress. At most one checkout per branch
 /// may be active; different branches may have live checkouts together, with serial repository operations.
 /// Dispose explicitly to release the branch. Losing this object does not automatically release occupancy.
+/// The execution environment stays fixed from creation or restoration, with models closed on demand.
+/// An existing State selects its own exact Schema view. State commits advance the persisted view and saving
+/// baseline without replacing that execution environment; normal editing needs no checkout refresh.
+/// With a committed State, re-checkout restores new domain instances from that nearest State's Schema view.
+/// Without State, shared creation uses the current shared view and private restoration uses the actual Head's view.
+/// Registry changes require closing the repository and opening it again; re-checkout alone does not load them.
 /// Restoration and in-memory editing do not select a Schema write destination. Ordinary checkouts require an
 /// Open-level Schema write mode; CheckoutPrivate explicitly selects a private destination.
 /// ToShared commits explicitly select shared for one operation. Other commits without a selection reject before capture.
@@ -73,6 +79,7 @@ public sealed class BranchCheckout : IDisposable {
     /// Requires an existing State; otherwise rejects before capture or append. A preceding Event is not required.
     /// Normal return retains the current domain instances. Publication can succeed before installation or delivery
     /// fails; inspect outcome and IsFaulted separately and recover using a newly opened repository.
+    /// The new persisted Schema view does not replace this checkout's original execution environment.
     /// </remarks>
     public CheckpointAddress CommitState(ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);

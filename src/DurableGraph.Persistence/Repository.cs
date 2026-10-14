@@ -15,8 +15,11 @@ namespace Atelia.DurableGraph;
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
 /// Keep per-view owner/context/cache outside paired graphs. Use Checkout to continue editing and committing.
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
+/// Close all checkouts and this repository before reopening to load new registrations. First save supported
+/// pending domain changes or preserve/rebuild them in the application; Dispose does not save or roll them back.
 /// Successful closures may be reused within an exact Schema environment; callbacks and equality/hash policies
-/// must remain semantically stable. Freezing configuration does not freeze the live Schema authority.
+/// must remain semantically stable. Freezing retains delegate/comparer references, not their external mutable state.
+/// Independent graph reads use each graph's exact Schema view, not an active checkout's execution environment.
 /// Default Shared business saves require an explicit Schema write mode selected when opening. Private branch entry
 /// points select their own write destination, and ToShared commits select shared for one operation.
 /// Without an explicit choice, business capture is rejected.
@@ -97,6 +100,8 @@ public sealed partial class Repository : IDisposable {
     /// An existing State's missing model or restoration failure propagates; there is no older-State fallback.
     /// Restoration runs decoding, Upgrade and materialization, but no business handler. Constructors and field
     /// initializers do not run; application code rebuilds Transient state and interprets its own event progress.
+    /// The checkout keeps this starting execution environment across commits. Re-checkout does not reload
+    /// model registrations or select the latest shared catalog instead of the nearest State's Schema view.
     /// </remarks>
     public BranchCheckout Checkout(string branchName) => CheckoutMetaBootstrap(branchName);
 

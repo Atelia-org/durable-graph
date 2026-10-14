@@ -77,6 +77,16 @@ public sealed class StateSchemaTemplate {
 }
 
 /// <summary>Stable generated factories and retained history for one explicitly registered definition.</summary>
+/// <remarks>
+/// Factories close capabilities from declarations, exact layouts and the supplied context's resolution services.
+/// Their callbacks must preserve stable persistent results for equal inputs, fixed code and explicit layouts
+/// when required dependencies are valid; unrelated Schema presence or memo/call counts must not select business values.
+/// Capture provides canonical current DTOs; same-layout restoration round-trips persistent fields and references.
+/// Historical field changes belong to explicit upgrades. Do not modify input DTOs; application initialization
+/// and per-view Transient state belong after complete graph delivery, outside Allocate/Hydrate.
+/// Freezing the registration catalog does not copy delegate captures; their behavior must remain stable.
+/// These caller obligations do not prove that Capture or Commit executed every custom reader validation.
+/// </remarks>
 public sealed class StateDefinitionBinding {
     public StateDefinitionBinding(string definitionId, SchemaKind kind, int arity, Type? domainTypeDefinition,
         IEnumerable<StateSchemaTemplate> templates,

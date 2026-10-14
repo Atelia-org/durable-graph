@@ -18,26 +18,46 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
     [InlineData(true)]
     public void PhysicalCacheModePreservesColdGeneratedHistoryTypedQualificationAndDeltaContinuation(bool cached) {
         long budget = cached ? P0GraphStore.DefaultReadCacheBudgetBytes : 0;
-        ObjectId listId;
+        ObjectId rootId, listId;
         ObjectStorageInfo storage;
         FrameAddress savedAddress, schemaRoot;
         using (Repository seed = Repository.CreateMetaBootstrapNew(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
             seed.PreparedStateReuseEnabled = false;
             DB087Widget root = Ring();
             using BranchCheckout main = seed.CreateBranch("main", root);
+            rootId = main.StateId!.Value;
+            listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
+            NormalizedRevision initialBaseline = main.Baseline!;
+            ObjectStorageInfo initialList = initialBaseline.Objects[listId].Storage!.Value;
+            StateModelSnapshot executionModels = main.Models;
+            DecodedRevision.SplitBindingEnvironment? executionEnvironment = main.BindingEnvironment;
             seed.CreateTag("state0", main.Head);
             main.Catalog.Set(Extra);
             root.Numbers[7] = 200;
             seed.CreateTag("event", main.CommitEvent(root));
+            Assert.Same(initialBaseline, main.Baseline);
+            Assert.Same(executionModels, main.Models);
+            Assert.Same(executionEnvironment, main.BindingEnvironment);
+            Assert.Same(root, AssertRing(main.State, 200));
             root.Numbers[7] = 201;
             CheckpointAddress s1 = main.CommitState();
             seed.CreateTag("state1", s1);
-            listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
+            Assert.Equal(rootId, main.StateId);
+            Assert.Equal(listId, Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key);
+            Assert.Same(executionModels, main.Models);
+            Assert.Same(executionEnvironment, main.BindingEnvironment);
             storage = main.Baseline.Objects[listId].Storage!.Value;
             P0GraphSnapshot stateGraph = seed.MetaBootstrapStore.ReadGraph(s1.RevisionAddress);
+            Assert.Equal(initialBaseline.RevisionAddress, stateGraph.SourceGraph);
+            Assert.NotEqual(initialBaseline.SelectedSchemaView!.Snapshot!.Address, stateGraph.SchemaRoot);
+            Assert.Equal(stateGraph.SchemaRoot, main.Baseline.SelectedSchemaView!.Snapshot!.Address);
+            Assert.Same(executionModels, main.Baseline.SourceModels);
             ObjectVersionRecord delta = Assert.Single(seed.MetaBootstrapStore.ReadBatch(stateGraph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(listId.Value, delta.ObjectId);
+            Assert.Equal(initialList.Head, delta.PriorAddress);
+            Assert.Equal(initialList.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, initialList.Head),
+                storage.ReconstructionPayloadBytes);
             long frames = seed.MetaBootstrapStore.AppendedFrames;
             CheckpointAddress unchanged = main.CommitState();
             savedAddress = unchanged.RevisionAddress;
@@ -48,6 +68,34 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             Assert.Equal(frames + 1, seed.MetaBootstrapStore.AppendedFrames);
             Assert.Equal(storage, main.Baseline.Objects[listId].Storage);
             Assert.Null(seed.PreparedStateEntry); // Hot save is not preparation-slot admission.
+
+            // A new read uses the saved S, while this checkout keeps its original execution environment.
+            DB087Widget independent = AssertRing(seed.ReadState(unchanged), 201);
+            Assert.Same(root, AssertRing(main.State, 201));
+            Assert.NotSame(root, independent);
+            Assert.NotSame(root.Child, independent.Child);
+            Assert.NotSame(root.Numbers, independent.Numbers);
+            independent.Numbers[7] = -1;
+            independent.Child!.Value = -2;
+            AssertRing(main.State, 201); // Independent mutable edits cannot change the active checkout or stored DTOs.
+            NormalizedRevision savedBaseline = main.Baseline!;
+            main.Dispose();
+            using BranchCheckout signedAgain = seed.Checkout("main");
+            DB087Widget restored = AssertRing(signedAgain.State, 201);
+            Assert.NotSame(root, restored);
+            Assert.NotSame(root.Child, restored.Child);
+            Assert.NotSame(root.Numbers, restored.Numbers);
+            Assert.NotSame(independent, restored);
+            Assert.NotSame(independent.Numbers, restored.Numbers);
+            Assert.Equal(savedAddress, signedAgain.StateRevisionAddress);
+            Assert.Equal(rootId, signedAgain.StateId);
+            Assert.Equal(listId, Assert.Single(signedAgain.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key);
+            Assert.Equal(schemaRoot, signedAgain.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
+            foreach ((ObjectId id, NormalizedObject row) in savedBaseline.Objects) {
+                Assert.Equal(row.Storage, signedAgain.Baseline.Objects[id].Storage);
+            }
+            Assert.Equal(frames + 1, seed.MetaBootstrapStore.AppendedFrames); // Reading and reacquiring the branch do not append.
+            Assert.Null(seed.PreparedStateEntry);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         // All previous owners and caches are closed. Meta loads before any business registration.
@@ -120,6 +168,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
         using BranchCheckout cold = reopened.Checkout("main");
         DB087Widget coldRoot = AssertRing(cold.State, 201);
         Assert.Equal(savedAddress, cold.StateRevisionAddress);
+        Assert.Equal(rootId, cold.StateId);
         Assert.Equal(listId, Assert.Single(cold.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key);
         Assert.Equal(storage, cold.Baseline.Objects[listId].Storage);
         P0GraphSnapshot oldSaved = reopened.MetaBootstrapStore.ReadGraph(reopened.ResolveTag("state1").RevisionAddress);

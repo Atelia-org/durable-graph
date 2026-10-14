@@ -155,10 +155,13 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
 普通工作副本的默认保存还须显式选择 `schemaWriteMode: SchemaWriteMode.Shared`；RW Open 省略时可以读取、签出及发布 ref/tag，默认业务提交提前拒绝。下述 ToShared 入口另为单次提交显式选择归属。
 `IsReadOnly == false` 只表示底座可写，不表示已选择 Schema 写入归属。选择仅属于本次打开，冷开后需再次明确选择。
-读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，普通 checkout 无 State 取创建时 shared；提交不原地换已有模型／preparation。普通模型与 Family 按需闭合，同环境可复用，不保证任意跨视图回调等价。
-历史 Normalize/Upgrade 必须由固定输入与环境决定结果且不修改输入；Capture 必须提供 canonical current DTO。
-exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 的结果必须稳定，
-不能让调用次数决定业务结果；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化放在恢复交付之后。
+读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，普通 checkout 无 State 取创建时 shared；普通模型与 Family 按需闭合。State 提交可以推进持久 Schema 视图和保存基线，仍保留工作副本的执行环境；Event 不安装 State。V2 程序签出 V1 数据时已执行显式 Upgrade，得到 V2 内存对象，可以连续增量保存，无需每次提交后重新签出。
+独立 `ReadState` / `ReadEvent` 按被读图自己的准确 Schema 视图恢复。Dispose 后重新 Checkout 取得新的领域实例；有 State 时仍选择最近 State 的视图，不追到最新 shared 或 Event 的目录，也不重载代码配置。
+
+新增模型、reader、Upgrade 或策略应在 Open 前登记。运行中修改 registry 后，需要关闭全部工作副本和 Repository，再用新配置 Open、重新解析 head/tag 并签出。未提交修改先由应用明确保存当前配置支持的内容，或自行保留／重建；Dispose 不保存、不撤销修改，旧地址和 CLR 引用不会跟随新签出。
+
+对于相同持久输入和 ObjectId 等明确调用输入，在同一代码配置、准确源／目标布局及显式依赖成立时，Normalize/Upgrade 和恢复的持久结果应稳定；不能因无关 Schema 是否登记、memo 命中或调用次数而改变业务值。准确目录仍用于布局解析和验证，缺失／冲突或缺少 reader 能力可以使操作拒绝。配置冻结保留委托／比较器引用，不复制它们捕获的外部状态；调用者负责行为稳定。
+Capture 必须提供 canonical current DTO，同布局保存／恢复正确往返持久字段和引用关系；历史值变化由显式 Upgrade 定义。exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 不修改输入 DTO；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化和视图专属 Transient 放在完整恢复交付之后。上述行为合同不证明任意自定义 reader 都能读回：Commit 成功不等于已执行 reader body 的全部验证。
 
 开发阶段先用 `CreateBranch(name, baselineCheckpoint)` 从固定用户快照建立分支，再用 `CheckoutPrivate(name)` 签出。在匹配历史 reader／Upgrade 的模型环境中，旧业务图恢复后保留存活对象身份、共享与循环，正常升版的布局保存为新 Base。私有保存只推进分支目录，不改 shared 根。两个操作分开：创建 ref 成功后，签出失败保留该名字及 baseline 指向；修正模型环境后可以重试。
 私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S，不借 latest shared 补缺。已有私有定义不可改写；同 key 内容不同的未定稿版本应在不同 baseline fork 试验，需要继承已接受草稿的数据再改型则递增版本。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。

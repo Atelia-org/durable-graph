@@ -147,6 +147,42 @@ public sealed class GenericUpgradeBindingTests {
     }
 
     [Fact]
+    public void RegisteredPhantomMiddleClosesGenericFirstEdgeWithoutAnExplicitClosedProvider() {
+        Invocations.Clear();
+        TypeExpr owner = TypeExpr.Named("Phantom", TypeExpr.Named("Point"));
+        StateSchemaTemplate[] templates = [
+            new("Phantom", 1, SchemaKind.ReferenceObject, 1, [], stateTypeDefinition: typeof(Phantom1)),
+            new("Phantom", 2, SchemaKind.ReferenceObject, 1, [new(1, Parameter)],
+                stateTypeDefinition: typeof(Phantom2<>), stateParameters: [new(Parameter)]),
+            new("Phantom", 3, SchemaKind.ReferenceObject, 1, [new(1, Parameter)],
+                stateTypeDefinition: typeof(Phantom3<>), stateParameters: [new(Parameter)]),
+        ];
+        StateDefinitionBinding definition = new("Phantom", SchemaKind.ReferenceObject, 1, null, templates,
+            upgrades: [new("Phantom", 1, Method(nameof(PhantomFirst))), new("Phantom", 2, Method(nameof(PhantomLast)), owner)]);
+        DurableSchema source = new(owner, 1);
+        DurableSchema middle = new(owner, 2, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: PointSchema(1)));
+        DurableSchema target = new(owner, 3, new DurableFieldInfo(1, TypeTag.InlineValue, inlineSchema: PointSchema(2)));
+        ObjectStateRecord row = new(new ObjectId(4), source, new Phantom1());
+
+        var missing = new TestContext(definition, PointDefinition());
+        Assert.Throws<InvalidDataException>(() => missing.Normalize<Phantom3<Point2>>(row, target));
+        Assert.Empty(Invocations);
+
+        // The initial DTO has no operand from which to infer Point's historical version.
+        // A separate context has the same capabilities and only the exact middle layout added.
+        var registered = new TestContext(definition, PointDefinition());
+        registered.Registered.Add((owner, 2), middle);
+        Phantom3<Point2> restored = registered.Normalize<Phantom3<Point2>>(row, target);
+        Assert.Equal(new Point2(0), restored.Value);
+        Assert.Equal(2, Invocations.Count);
+        Assert.Equal(source, Invocations[0].SourceObjectSchema);
+        Assert.Equal(middle, Invocations[0].TargetObjectSchema);
+        Assert.Equal(middle, Invocations[1].SourceObjectSchema);
+        Assert.Equal(target, Invocations[1].TargetObjectSchema);
+        Assert.All(Invocations, invocation => Assert.Equal(row.Id, invocation.ObjectId));
+    }
+
+    [Fact]
     public void NominalOperandsRetainStringAndDurableSemanticsEvenWhenBothUseObjectId() {
         var context = BoxContext();
         context.Definitions.Add("Node", new("Node", SchemaKind.ReferenceObject, 0, null, [new("Node", 1, SchemaKind.ReferenceObject, 0, [])]));

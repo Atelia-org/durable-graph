@@ -1,7 +1,7 @@
 # DB-089：checkout 执行环境寿命与 factory 查询入口收窄
 
-> 状态：2026-10-14，**Chosen / 待实施**。用户采纳多视角审阅结论，本轮只编制施工方案；尚未修改产品接口、迁移测试或取得新包资格。
-> 编制基线：`c42be6d`，生产源码仍为 DB-088 的 `ca5598b`。后续施工先核实际 HEAD／工作树，不将本文的目标签名当成当前 API。
+> 状态：2026-10-14，**Chosen / A 合同与正控已完成；B／C 待实施**。本轮仅授权分片 A，当前产品查询签名仍为 public；接口收窄、反例迁移与新 G 资格留给后续分片。
+> 编制基线：`c42be6d`，当时生产源码为 DB-088 的 `ca5598b`；A 施工起点与结果见 §11。后续施工先核实际 HEAD／工作树，不将本文的目标签名当成当前 API。
 > 前置：DB-087 有限自举停点与 DB-088 开发 Schema 删减均已完成。本案保持其保存／恢复／发布合同，只收窄默认 factory 能力并说明生命周期。
 
 ## 1. 问题、选择与最小验收
@@ -124,13 +124,13 @@ protected override bool TryGetSchema(TypeExpr type, int version,
 
 ### 6.2 普通 SG 的正向故事
 
-复用 [SplitRepositoryReadCacheTests](../../tests/DurableGraph.Persistence.Tests/SplitRepositoryReadCacheTests.cs) 的 Widget、共享 List 和环：Event 接纳无关 Extra，原 checkout 保存新 State 并继续增量，冷开恢复／续写已具 cache off／on 证据。按实际覆盖补同一 owner 的热 State→独立 ReadState→Dispose 后再签出比较，不另复制完整场景。
+复用 [SplitRepositoryReadCacheTests](../../tests/DurableGraph.Persistence.Tests/SplitRepositoryReadCacheTests.cs) 的 Widget、共享 List 和环：Event 接纳无关 Extra，原 checkout 保存新 State 并继续增量，冷开恢复／续写已具 cache off／on 证据。A 已在原场景补齐同一 owner 的热 State→独立 ReadState→Dispose 后再签出比较，不另复制完整场景；运行结果见 §11。
 
 验收持久字段、root／List 的原 ObjectId、共享／环、独立可变实例、实际内容 source／prior／H、升级 Base 与后续 Delta；不要求跨恢复 CLR 实例相同、Transient 值相同或 factory 调用次数固定。V1→V2 正向沿用已有真实 SG Upgrade 故事，不让计数型手写 NextRoot 代替普通业务模型。
 
 ### 6.3 中间布局与公开能力
 
-[ValueUpgradeBindingTests](../../tests/DurableGraph.Tests/ValueUpgradeBindingTests.cs) 已有 registered-middle 一般正控；[GenericUpgradeBindingTests](../../tests/DurableGraph.Tests/GenericUpgradeBindingTests.cs) 已有 phantom 缺失／closed owner 解歧义／同 key 冲突拒绝。缺的是 phantom 首边仅靠匹配的已登记中间布局闭合的正控。
+[ValueUpgradeBindingTests](../../tests/DurableGraph.Tests/ValueUpgradeBindingTests.cs) 已有 registered-middle 一般正控；[GenericUpgradeBindingTests](../../tests/DurableGraph.Tests/GenericUpgradeBindingTests.cs) 已有 phantom 缺失／closed owner 解歧义／同 key 冲突拒绝。A 补入 phantom 首边仅靠匹配的已登记中间布局闭合的正控，第二边保原 closed provider；运行结果见 §11。
 
 复用既有 Phantom 模板／provider，在两个独立 context 下比较：无 V2、无 closed 首边时先于任何 callback 拒绝；另一 context 只新增 Phantom<Point> V2 的 Point V1 槽，执行相同 V1→V3，预期 Point2(0)、两次 callback、第一 Target／第二 Source 等于准确登记 V2、ObjectId 保持。此为 Runtime 解析见证，不授所有 SG／持久组合资格。
 
@@ -140,11 +140,11 @@ protected override bool TryGetSchema(TypeExpr type, int version,
 
 | 分片 | 可并行边界 | 主线验收／停点 |
 |---|---|---|
-| A：合同与正控 | 文档／公开 XML；既有 SG 正向回归和 phantom 缺项各有文件所有权 | 先确认现有覆盖并补真正缺口；明确结果稳定与解析拒绝的区别 |
+| A：合同与正控 | 文档／公开 XML；既有 SG 正向回归和 phantom 缺项各有文件所有权 | 已完成源码门禁；运行验收及资格边界见 §11 |
 | B：接口删减与测试迁移 | 主线持生产两处签名；Runtime fixture 与 Persistence 探针／反例分包 | protected 的产品改动、所有引用迁移、完整保存／恢复回归可执行；无 public 替代查询或来源换线 |
 | C：新 G 普通包与文档收束 | 复用现有包 helper／runner；独立审阅具体 receipt、实际程序集和源码来源 | 编译能力门禁与 Split 故事通过；不拿旧 G 或 source build 替代新 API 资格 |
 
-A／B 可以在明确目标签名后同轮集成，源码检查通过后进入 C。按实际工作量拆轮，不预设更多施工平台。主线独立检查 diff、接口元数据／编译诊断、关键反例与 receipt；subagent 成功报告不代替验收。
+A／B 可以在明确目标签名后同轮集成；本轮用户选择先完成 A，下一片从 B 的两处生产签名和全量引用迁移开始。B 源码检查通过后进入 C。按实际工作量拆轮，不预设更多施工平台。主线独立检查 diff、接口元数据／编译诊断、关键反例与 receipt；subagent 成功报告不代替验收。
 
 若迁移必须更换执行 S、放开公开查询、删掉中间解析或新增保存读回步骤，已超出本片合同，应停止该扩张并重新审议。测试文件／脚本的具体落点可自主调整，无需为常规施工选择重新请示。
 
@@ -203,4 +203,20 @@ Development 可作为额外防回归故事复用，但不是再建一份生命�
 
 本文是本片唯一详细施工合同；结果证据在完成时用一节紧凑记录链接工件，不追加逐轮过程。已有 DB-087／088 保其完成含义，若当前契约引用需要校准则只补后继链接／准确说明，不改写冻结归档或旧包结果。
 
-当前无需要用户再选的实质产品语义问题：选 protected、保核心查询及稳定 checkout。待现场确认的仅是现有测试覆盖、窄探针落点与 runner 接线成本；若事实否定最小迁移路线，再按 §7 的扩张边界报告。
+当前无需要用户再选的实质产品语义问题：选 protected、保核心查询及稳定 checkout。A 已核现有正控覆盖，后续现场确认窄探针落点与 runner 接线成本；若事实否定最小迁移路线，再按 §7 的扩张边界报告。
+
+## 11. 分片结果与续工入口
+
+### A：合同与正控
+
+本轮起点 `4def447`，完成合同与正控。README、术语表和四处公开 XML 明确稳定持久结果、准确解析仍可拒绝、持续保存与重新 Checkout／Open 的区别；有 State 和无 State 的视图选择分别说明。四个生产文件只有 XML 注释变化，raw lookup 仍为 public，B／C 未执行。
+
+- Runtime 新增 `RegisteredPhantomMiddleClosesGenericFirstEdgeWithoutAnExplicitClosedProvider`：两个独立 context 只有准确 V2 登记不同，覆盖缺失在 callback 前拒绝与登记后 Point2(0)、两次 callback、准确相邻布局和 ObjectId。仅证明 Runtime 解析能力。
+- Persistence 复用原 cache off／on Widget／List 场景，补热 State 独立读回和同 owner Dispose／再签出，核 mutable 隔离、root／List ID、State 地址、执行 models／SourceModels 保持、持久 S 推进、真实 source／prior／H，保提交序列及全关冷开续写。空库创建的原 execution environment 为 null，Same 断言证明保持该初始形状；不把它扩大为非空 S0 冻结资格。
+- V1→V2 的升级 Base、完整身份和后续 List Delta 复用 `GeneratedDevelopmentForksKeepUserIdentitiesAndPublishOnlyCleanWinningVersion` 与 `GeneratedPrivateUpgradeForksCompleteBaselineViewAndColdEventStateContinuesWithoutLatestFallback`；不在同版 Widget 场景另造升级模型。DB-081／环境隔离／Pair 的既有反例保持。
+
+主线核准确上游 `974fd47abb73792f9d350af87ab91a53848952eb`、工作树干净后显式 restore source mode；DG Release solution build 零警告／错误，完整四项目测试 **2736 通过、0 失败、0 跳过**（Persistence 893、Serialization 133、Storage 36、Runtime／SG 1674）。TRX 核新增 phantom、两种 cache 模式、上述真实 SG 升版以及既有 DB-081／环境／History／Pair 见证全部通过；四处生产文件去除 XML 注释后与起点完全一致。独立审查修正了无条件“重签出取最近 State”的措辞，没有暴露设计困难。最终注释校正后又通过 solution build，运行代码／测试没有再变化。
+
+工件位于 `.artifacts/db089-a-20261014-114131/`：restore／build／build-final／test logs、四份 TRX 与 `acceptance.json`；后者记录 TRX hash、正控实际名称、反例覆盖及仅 XML 变化核验。本轮未 pack，不授新 API 的普通包资格。
+
+后续路线没有实质调整：B 保两处核心查询和准确来源，按 §6.1 迁移当前仍为 11 个的 Runtime override／Persistence 窄探针；C 保新 G 的真实 CS0122／外部派生成功及 Split 故事门禁。A 的 source 证据不替代 B 的接口元数据／迁移验收或 C 的普通包资格。

@@ -16,7 +16,14 @@ public interface IStateModelResolver {
 }
 
 /// <summary>Cold-path closure services for generated factories in one immutable code catalog.</summary>
-/// <remarks>Memoized bindings belong to this snapshot. No method registers application capabilities or allocates object IDs.</remarks>
+/// <remarks>
+/// Memoized bindings belong to this snapshot. No method registers application capabilities or allocates object IDs.
+/// Use these services to close and validate exact dependencies. For equal persistent inputs and explicit
+/// invocation facts, fixed code and source/target layouts must yield stable persistent results whenever the
+/// required dependencies are valid. Unrelated catalog entries, memo hits and call counts must not change them.
+/// Exact dependency resolution may still reject missing capabilities or conflicting complete layouts.
+/// Delegates retain their captured state; the caller is responsible for its semantic stability.
+/// </remarks>
 public abstract partial class StateBindingContext : IStateModelResolver {
     private readonly Dictionary<(TypeExpr Type, int Version), StateSchemaBinding> _schemaBindings = [];
 
@@ -39,6 +46,8 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     public abstract TypeExpr GetTypeExpr(Type domainType);
     public abstract Type GetDomainType(TypeExpr type);
     public abstract StateDefinitionBinding GetDefinition(string definitionId);
+    /// <summary>Looks up one exact key in this environment's fixed Schema view.</summary>
+    /// <remarks>Supports exact layout resolution and validation. Do not use unrelated key presence as a durable business-value switch.</remarks>
     public abstract bool TryGetSchema(TypeExpr type, int version, out DurableSchema? schema);
 
     /// <summary>Checks a closed named identity without binding the referenced object's body.</summary>
