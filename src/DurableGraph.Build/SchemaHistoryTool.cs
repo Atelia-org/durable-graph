@@ -12,13 +12,13 @@ internal sealed partial class SchemaHistoryTool {
         string manifestPath,
         string schemaHistoryDirectory,
         string? referenceManifestPath = null) {
-        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath);
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath, out string? expectedHash);
 
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
             : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
         Dictionary<SchemaHistoryKey, SchemaHistoryRecord> available = LoadAvailable(
-            manifestPath, referenceManifestPath, candidates, existing);
+            expectedHash, referenceManifestPath, candidates, existing);
         if (candidates.Count == 0 && !Directory.Exists(schemaHistoryDirectory)) {
             return new SchemaHistoryResult("published 0 schema-history record(s); 0 already exact");
         }
@@ -71,11 +71,11 @@ internal sealed partial class SchemaHistoryTool {
         string manifestPath,
         string schemaHistoryDirectory,
         string? referenceManifestPath = null) {
-        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath);
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath, out string? expectedHash);
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
             : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
-        LoadAvailable(manifestPath, referenceManifestPath, candidates, existing);
+        LoadAvailable(expectedHash, referenceManifestPath, candidates, existing);
 
         foreach (SchemaHistoryRecord candidate in candidates) {
             if (!existing.TryGetValue(candidate.Key, out ExistingSchemaHistoryRecord? historical)) {
@@ -301,12 +301,12 @@ internal static class SchemaHistoryTextCodec {
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true);
 
-    public static IReadOnlyList<SchemaHistoryRecord> ParseManifest(string path) {
-        return ParseManifestText(path, ReadUtf8(path, allowByteOrderMark: true));
+    public static IReadOnlyList<SchemaHistoryRecord> ParseManifest(string path, out string? expectedHash) {
+        return ParseManifestText(path, ReadUtf8(path, allowByteOrderMark: true), out expectedHash);
     }
 
-    internal static IReadOnlyList<SchemaHistoryRecord> ParseManifestText(string path, string text) {
-        text = StripReferenceHash(path, text, out _);
+    internal static IReadOnlyList<SchemaHistoryRecord> ParseManifestText(string path, string text, out string? expectedHash) {
+        text = StripReferenceHash(path, text, out expectedHash);
         IReadOnlyList<SchemaHistoryRecord> records = Parse(
             path,
             text,
@@ -330,7 +330,7 @@ internal static class SchemaHistoryTextCodec {
         return records;
     }
 
-    internal static string StripReferenceHash(string path, string text, out string? hash) {
+    private static string StripReferenceHash(string path, string text, out string? hash) {
         const string prefix = "// references-sha256:";
         hash = null;
         int marker = text.IndexOf(prefix, StringComparison.Ordinal);
@@ -345,8 +345,6 @@ internal static class SchemaHistoryTextCodec {
         hash = suffix;
         return text.Substring(0, marker);
     }
-
-    internal static string ReadManifestText(string path) => ReadUtf8(path, allowByteOrderMark: true);
 
     internal static SchemaHistoryRecord ParseReference(SchemaHistoryReferenceEntry entry) {
         string path = entry.Owner + ":" + entry.SchemaId;

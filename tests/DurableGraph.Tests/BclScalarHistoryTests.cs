@@ -129,7 +129,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         internal IReadOnlyList<SchemaHistoryRecord> ParseManifest(string text) {
             string path = Path.Combine(_root, "manifest.g.cs");
             File.WriteAllText(path, text.Replace("// durable-graph-schema-history:", "// durable-graph-schema-history-manifest:"), new UTF8Encoding(false));
-            return SchemaHistoryTextCodec.ParseManifest(path);
+            return SchemaHistoryTextCodec.ParseManifest(path, out _);
         }
         public void Dispose() => Directory.Delete(_root, recursive: true);
     }

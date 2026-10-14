@@ -162,7 +162,7 @@ public sealed class SchemaAncestryHistoryTests {
             "// arity:0\n", $"// arity:0\n// base:{entry}\n", StringComparison.Ordinal);
         string path = fixture.Write("invalid.g.cs", text);
 
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseManifest(path));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseManifest(path, out _));
     }
 
     [Theory]
@@ -172,7 +172,7 @@ public sealed class SchemaAncestryHistoryTests {
         using Fixture fixture = new();
         string text = Manifest(Record("Leaf", 1)).Replace("// field:1|2\n", body, StringComparison.Ordinal);
 
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseManifest(fixture.Write("invalid.g.cs", text)));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseManifest(fixture.Write("invalid.g.cs", text), out _));
     }
 
     private static SchemaHistoryRecord Record(string id, int version, SchemaHistoryKey? baseSchema = null, int fieldType = 2) {

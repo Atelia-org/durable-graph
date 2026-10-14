@@ -191,7 +191,7 @@ public sealed class CrossAssemblyInheritanceBuildTests {
             return path;
         }
         public string Accept(string manifest) {
-            SchemaHistoryRecord record = Assert.Single(SchemaHistoryTextCodec.ParseManifestText("accepted", manifest));
+            SchemaHistoryRecord record = Assert.Single(SchemaHistoryTextCodec.ParseManifestText("accepted", manifest, out _));
             string content = SchemaHistoryTextCodec.RenderHistory(record);
             Directory.CreateDirectory(History);
             string path = Path.Combine(History, SchemaHistoryTextCodec.GetHistoryFileName(record, content));

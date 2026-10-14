@@ -5,11 +5,10 @@ namespace Atelia.DurableGraph.Build;
 
 internal sealed partial class SchemaHistoryTool {
     private static Dictionary<SchemaHistoryKey, SchemaHistoryRecord> LoadAvailable(
-        string manifestPath,
+        string? expectedHash,
         string? referenceManifestPath,
         IReadOnlyList<SchemaHistoryRecord> candidates,
         IReadOnlyDictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing) {
-        SchemaHistoryTextCodec.StripReferenceHash(manifestPath, SchemaHistoryTextCodec.ReadManifestText(manifestPath), out string? expectedHash);
         IReadOnlyList<SchemaHistoryReferenceEntry> references = Array.Empty<SchemaHistoryReferenceEntry>();
         if (referenceManifestPath is null) {
             if (expectedHash is not null) throw new SchemaHistoryException("manifest requires its matching --reference-manifest input");

@@ -32,6 +32,37 @@ public sealed class CrossAssemblyInlineBuildTests {
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void OwnedManifestAllowsBomAndCrLfWithoutChangingReferenceHash(bool withBom, bool withCrLf) {
+        using Files files = new();
+        string referenced = References(Entry("A", "a", 1, Inline("a", 1)));
+        string owned = WithHash(Owner("world", 1, Field("a", 1)), referenced);
+        if (withCrLf) owned = owned.Replace("\n", "\r\n", StringComparison.Ordinal);
+        string manifest = Path.Combine(files.Root, "candidate.cs");
+        File.WriteAllText(manifest, owned, new UTF8Encoding(withBom));
+        string refs = files.Write("references.cs", referenced);
+        byte[] referenceBytes = File.ReadAllBytes(refs);
+
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifest, out string? expectedHash);
+        Assert.Equal("world", Assert.Single(candidates).SchemaId);
+        Assert.Equal(Hash(referenced), expectedHash);
+
+        SchemaHistoryTool tool = new();
+        Assert.Equal("published 1 schema-history record(s); 0 already exact", tool.Publish(manifest, files.History, refs).Message);
+        string history = Assert.Single(Directory.GetFiles(files.History));
+        byte[] acceptedBytes = File.ReadAllBytes(history);
+        Assert.Equal("world", SchemaHistoryTextCodec.ParseHistory(history).SchemaId);
+
+        Assert.Equal("verified 1 current manifest candidate(s) against 1 schema-history record(s)", tool.Verify(manifest, files.History, refs).Message);
+        Assert.Equal(acceptedBytes, File.ReadAllBytes(history));
+        Assert.Equal(referenceBytes, File.ReadAllBytes(refs));
+        Assert.Single(Directory.GetFiles(files.History));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void NoOwnedCandidatesStillValidateReferenceClosure(bool verify) {
@@ -84,6 +115,7 @@ public sealed class CrossAssemblyInlineBuildTests {
     [InlineData("unsorted")]
     [InlineData("truncated")]
     [InlineData("crlf")]
+    [InlineData("bom")]
     [InlineData("unknown-protocol")]
     [InlineData("unknown-contract")]
     [InlineData("leading-zero")]
@@ -106,6 +138,7 @@ public sealed class CrossAssemblyInlineBuildTests {
             "unsorted" => References(Entry("B", "b", 1, Inline("b", 1)), entry),
             "truncated" => References(entry)[..^1],
             "crlf" => References(entry).Replace("\n", "\r\n", StringComparison.Ordinal),
+            "bom" => "\uFEFF" + References(entry),
             "unknown-protocol" => References(entry).Replace("references:1", "references:2", StringComparison.Ordinal),
             "unknown-contract" => ReferenceHeader + entry.Replace("|1|1|", "|1|3|", StringComparison.Ordinal),
             "leading-zero" => ReferenceHeader + entry.Replace("|1|1|", "|01|1|", StringComparison.Ordinal),
@@ -236,7 +269,7 @@ public sealed class CrossAssemblyInlineBuildTests {
             return path;
         }
         public string Accept(string manifest) {
-            SchemaHistoryRecord record = Assert.Single(SchemaHistoryTextCodec.ParseManifestText("accepted", manifest));
+            SchemaHistoryRecord record = Assert.Single(SchemaHistoryTextCodec.ParseManifestText("accepted", manifest, out _));
             string content = SchemaHistoryTextCodec.RenderHistory(record);
             Directory.CreateDirectory(History);
             string path = Path.Combine(History, SchemaHistoryTextCodec.GetHistoryFileName(record, content));
