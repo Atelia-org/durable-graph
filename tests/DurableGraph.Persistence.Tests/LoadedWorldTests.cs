@@ -385,7 +385,7 @@ public sealed class LoadedWorldTests : IDisposable {
         Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) where TWorld : World {
         DurableSchema currentSchema = current ?? Current;
         DurableSchema oldSchema = old ?? Old;
-        CapturedStatePreparation<State> preparation = new(currentSchema,
+        StatePreparationBinding<State> preparation = new(currentSchema,
             (in State state) => { beforePrepare?.Invoke(); return Base(state); },
             static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding<State> Reader(DurableSchema schema) => new(schema,
@@ -437,7 +437,7 @@ public sealed class LoadedWorldTests : IDisposable {
     private static ObjectVersionRecord Durable(uint id, DurableSchema schema, State state, SchemaCatalogView catalog) =>
         ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), Base(state), catalog));
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
 
     private World ReadWorld(FrameAddress address, StateModelRegistry models) {
         DecodedRevision source = DecodedRevision.ReadStoredGraph(Store, address, models);

@@ -135,7 +135,7 @@ public sealed class CompositeDictionaryUpgradeTests {
         using CaptureContext capture = new CaptureSession().BeginCapture();
         ObjectStateRecord recaptured = current.Capture(stored.Id, domain, capture);
         Assert.Equal(DictionaryComparerKind.CurrentDefault, recaptured.GetDictionaryState<NumericState, int>().ComparerKind);
-        Assert.False(((ICapturedStatePreparation)current).PrepareDelta(normalized, recaptured).HasChanges);
+        Assert.False(((IStatePreparationBinding)current).PrepareDelta(normalized, recaptured).HasChanges);
         Assert.Empty(Calls);
     }
 

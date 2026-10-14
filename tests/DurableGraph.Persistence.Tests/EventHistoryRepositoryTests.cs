@@ -445,7 +445,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Action<byte>? onReadValue = null, Action<Node>? onHydrate = null, Func<Node>? allocate = null,
         Action? onNormalize = null) {
         DurableSchema current = upgrade ? new(Schema.SchemaId, 2, Schema.Fields.ToArray()) : Schema;
-        CapturedStatePreparation<State> preparation = new(current,
+        StatePreparationBinding<State> preparation = new(current,
             static (in State state) => Base(state),
             static (in State prior, in State next) => Delta(prior, next));
         State Read(ref BareValueReader input) {

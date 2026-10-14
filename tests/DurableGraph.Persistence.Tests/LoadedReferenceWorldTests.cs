@@ -93,7 +93,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         PreparedSchemaCatalogWrite catalog = PrepareCatalog([worldSchema, otherSchema]);
         FrameAddress source = Publish(catalog,
             [Durable(catalog.View, 1, worldSchema, new(reference, 1)),
-             ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("text"), catalog.View)),
+             ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("text"), catalog.View)),
              Durable(catalog.View, 3, otherSchema, new(0, 3))]);
         int allocated = 0;
         StateModelRegistry models = Registry(Model<World>(worldSchema, () => { allocated++; return new World(); }),
@@ -256,7 +256,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
 
     private static StateModelBinding Model<T>(DurableSchema current, Func<T> allocate, DurableSchema? old = null,
         Func<State, State>? upgrade = null, Action? onHydrate = null, Action<T>? onCapture = null) where T : Domain {
-        CapturedStatePreparation<State> preparation = new(current,
+        StatePreparationBinding<State> preparation = new(current,
             static (in State state) => Base(state),
             static (in State prior, in State next) => new(prior != next, Base(next).Body));
         static void Visit(DurableSchema schema, in State state, IStateReferenceVisitor visitor) =>

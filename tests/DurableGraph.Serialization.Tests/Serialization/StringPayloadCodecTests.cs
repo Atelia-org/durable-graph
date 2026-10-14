@@ -4,7 +4,7 @@ using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Serialization.Tests;
 
-public class StringPayloadCodecTests {
+public class StringBodyPreparerTests {
     public static TheoryData<string, byte[]> GoldenStrings => new() {
         { string.Empty, [0x00] },
         { "A", [0x03, 0x41] },
@@ -16,7 +16,7 @@ public class StringPayloadCodecTests {
     [Theory]
     [MemberData(nameof(GoldenStrings))]
     public void Prepared_content_uses_default_shortest_encoding(string value, byte[] expected) {
-        Assert.Equal(expected, StringPayloadCodec.PrepareBase(value).Body.ToArray());
+        Assert.Equal(expected, StringBodyPreparer.PrepareBase(value).Body.ToArray());
         Assert.Equal(value, Read(expected));
     }
 
@@ -32,9 +32,9 @@ public class StringPayloadCodecTests {
     [Fact]
     public void Supplemental_and_unpaired_characters_keep_exact_code_units() {
         foreach (string value in new[] { "A🌟𐐷你", new string(['\uD800']), $"AAAAAAAAAA{new string(['\uD800'])}" }) {
-            Assert.Equal(value, Read(StringPayloadCodec.PrepareBase(value).Body.ToArray()));
+            Assert.Equal(value, Read(StringBodyPreparer.PrepareBase(value).Body.ToArray()));
         }
-        Assert.Equal(new byte[] { 0x02, 0x00, 0xD8 }, StringPayloadCodec.PrepareBase(new string(['\uD800'])).Body.ToArray());
+        Assert.Equal(new byte[] { 0x02, 0x00, 0xD8 }, StringBodyPreparer.PrepareBase(new string(['\uD800'])).Body.ToArray());
     }
 
     [Theory]

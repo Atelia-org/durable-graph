@@ -57,7 +57,7 @@ public sealed class ListBodyTests {
         ListLayout layout = new(element.Slot);
         ListObjectBinding binding = ListObjectBinding.Create(listType, layout, element);
         ObjectStateRecord captured = binding.Capture(new(1), domain, new CaptureSession().BeginCapture());
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)binding;
+        IStatePreparationBinding preparation = (IStatePreparationBinding)binding;
         PreparedBaseBody body = preparation.PrepareBase(captured);
         domain.Clear(); // Frozen content does not retain the mutable list.
         ObjectStateRecord decoded = ListStateReader.Create(layout, new(element.Slot, element.StateType, element.StateOpsType))

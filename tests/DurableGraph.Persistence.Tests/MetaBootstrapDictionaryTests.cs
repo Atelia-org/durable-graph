@@ -283,11 +283,11 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
     private static IEnumerable<ObjectVersionRecord> LookupRows(SchemaCatalogView view, DictionaryLayout layout, PreparedBaseBody raw, string first, string second) => [
         ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(OldRoot), new PreparedBaseBody([7]), view)),
         ObjectVersionRecord.CreateBase(10, TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(layout), raw)),
-        ObjectVersionRecord.CreateBase(100, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(first))),
-        ObjectVersionRecord.CreateBase(101, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(second))),
+        ObjectVersionRecord.CreateBase(100, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(first))),
+        ObjectVersionRecord.CreateBase(101, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(second))),
     ];
     private static StateModelRegistry RootModels(Action normalize) {
-        CapturedStatePreparation<byte> preparation = new(CurrentRoot,
+        StatePreparationBinding<byte> preparation = new(CurrentRoot,
             static (in byte value) => new([value]), static (in byte prior, in byte next) => new(prior != next, [next]));
         StateReaderBinding<byte> Reader(DurableSchema schema) => new(schema,
             static (ref BareValueReader reader) => reader.ReadByte(),
@@ -319,7 +319,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
         IEnumerable<ObjectVersionRecord> records = rows.Values.Select(row => {
             ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, employees);
-            PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(prepared.StringContent)
+            PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String ? StringBodyPreparer.PrepareBase(prepared.StringContent)
                 : prepared.Preparation!.PrepareBase(prepared);
             return ObjectVersionRecord.CreateBase(prepared.Id.Value, TypedBaseBodyCodec.Encode(prepared.Layout, raw));
         });

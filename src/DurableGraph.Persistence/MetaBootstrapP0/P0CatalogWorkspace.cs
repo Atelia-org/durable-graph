@@ -291,7 +291,7 @@ internal sealed class SchemaCatalogWorkspace {
             List<ObjectVersionRecord> records = [];
             List<ObjectId> encodedIds = [];
             foreach (ObjectStateRecord row in _new) {
-                PreparedBaseBody raw = row.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(row.StringContent)
+                PreparedBaseBody raw = row.Kind == ObjectStateKind.String ? StringBodyPreparer.PrepareBase(row.StringContent)
                     : row.Preparation!.PrepareBase(row);
                 records.Add(ObjectVersionRecord.CreateBase(row.Id.Value, TypedBaseBodyCodec.Encode(row.Layout, raw)));
                 encodedIds.Add(row.Id);

@@ -391,7 +391,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
         void Visit(in Dto state, IStateReferenceVisitor visitor) {
             if (childSchema is not null) visitor.VisitDurable(state.Child, childSchema);
         }
-        CapturedStatePreparation<Dto> preparation = new(schema, Base,
+        StatePreparationBinding<Dto> preparation = new(schema, Base,
             (in Dto prior, in Dto next) => new(prior != next, Base(next).Body));
         return new StateModelBinding<T, Dto>(preparation,
             [new StateReaderBinding<Dto>(schema, Read, (ref BareValueReader reader, in Dto prior) => Read(ref reader), Visit)],

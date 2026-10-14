@@ -387,7 +387,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         void Visit(in RootState state, IStateReferenceVisitor visitor) {
             visitor.VisitObject(state.First, map); visitor.VisitObject(state.Second, map); visitor.VisitObject(state.Containers, containers);
         }
-        CapturedStatePreparation<RootState> preparation = new(schema, RootBase, RootDelta);
+        StatePreparationBinding<RootState> preparation = new(schema, RootBase, RootDelta);
         StateReaderBinding<RootState> reader = new(schema, ReadRoot, ApplyRoot, Visit);
         models.Register(new StateModelBinding<World<K>, RootState>(preparation, [reader], row => row.GetState<RootState>(),
             static () => new(), static (World<K> target, in RootState state, ObjectReadTable objects) => {

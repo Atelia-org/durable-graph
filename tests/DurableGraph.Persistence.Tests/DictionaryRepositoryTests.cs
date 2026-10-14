@@ -193,7 +193,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     public void CurrentValidationRejectsLookupCollisionInUnreachableNormalizedDictionary() {
         // Enter the internal current-validation boundary directly. Even an unreachable
         // unchanged-layout map must pass lookup equality before the directory is returned.
-        byte[] stringBody = StringPayloadCodec.PrepareBase("same").Body.ToArray();
+        byte[] stringBody = StringBodyPreparer.PrepareBase("same").Body.ToArray();
         StringReadTable strings = StringReadTable.Decode([(new ObjectId(3), stringBody.AsMemory()), (new ObjectId(4), stringBody.AsMemory())]);
         ModelExecutionEnvironment snapshot = Models().CreateEnvironment();
         Assert.True(snapshot.TryGetCurrentObjectBinding(typeof(Dictionary<string, int>), out ObjectBinding? binding));
@@ -223,7 +223,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
     private readonly record struct State(ObjectId Values, ObjectId Alias, ObjectId Links, ObjectId KeyAlias, byte Value);
 
     private static StateModelRegistry Models(Action? onNormalize = null) {
-        CapturedStatePreparation<State> prepare = new(Schema, Base, Delta);
+        StatePreparationBinding<State> prepare = new(Schema, Base, Delta);
         StateReaderBinding<State> reader = new(Schema, Read, Apply, Visit);
         StateModelBinding<World, State> model = new(prepare, [reader], row => { onNormalize?.Invoke(); return row.GetState<State>(); }, static () => new(),
             static (World world, in State state, ObjectReadTable objects) => {
@@ -283,7 +283,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         public int GetHashCode(string value) { Calls++; return StringComparer.Ordinal.GetHashCode(value); }
     }
     private static ObjectVersionRecord Text(uint id, string value) =>
-        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
     private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
     private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
         store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];

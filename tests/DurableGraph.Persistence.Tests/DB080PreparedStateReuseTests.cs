@@ -485,7 +485,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         DurableSchema schema = new("Db080Other", 1, new DurableFieldInfo(1, TypeTag.Byte));
         static PreparedBaseBody Base(in byte value) => new(new byte[] { value });
         static void Visit(in byte _, IStateReferenceVisitor __) { }
-        CapturedStatePreparation<byte> preparation = new(schema, Base,
+        StatePreparationBinding<byte> preparation = new(schema, Base,
             static (in byte previous, in byte current) => new(previous != current, Base(current).Body));
         return new StateModelBinding<Other, byte>(preparation,
             [new StateReaderBinding<byte>(schema, static (ref BareValueReader input) => input.ReadByte(),

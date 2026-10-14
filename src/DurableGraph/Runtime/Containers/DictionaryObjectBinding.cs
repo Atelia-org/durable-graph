@@ -47,7 +47,7 @@ public abstract class DictionaryObjectBinding : ObjectBinding {
 }
 
 internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDomain, V, VProjection, VOps>
-    : DictionaryObjectBinding, ICapturedStatePreparation
+    : DictionaryObjectBinding, IStatePreparationBinding
     where KDomain : notnull where K : unmanaged where V : unmanaged
     where KProjection : IValueProjection<KDomain, K> where KOps : IStateOps<K>
     where VProjection : IValueProjection<VDomain, V> where VOps : IStateOps<V> {
@@ -82,7 +82,7 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
         }
         if (NormalizeState is null) { throw new InvalidDataException("The historical Dictionary requires explicit key/value upgrade capabilities."); }
         ObjectStateRecord result = NormalizeState(this, source);
-        ((ICapturedStatePreparation)this).Validate(result);
+        ((IStatePreparationBinding)this).Validate(result);
         IFrozenDictionaryState oldState = (IFrozenDictionaryState)source.Content;
         FrozenDictionaryState<K, V> newState = result.GetDictionaryState<K, V>();
         if (result.Id != source.Id || newState.Count != oldState.Count || newState.ComparerKind != oldState.ComparerKind) {
@@ -100,17 +100,17 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
     }
 
     internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) {
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         DictionaryStateBody<K, V, KOps, VOps>.VisitReferences(current.GetDictionaryState<K, V>(), visitor, DictionaryLayout);
     }
 
     internal override void ValidateLookupKeys(ObjectStateRecord state, Func<ObjectId, ObjectStateRecord> resolve) {
-        ((ICapturedStatePreparation)this).Validate(state);
+        ((IStatePreparationBinding)this).Validate(state);
         DictionaryStateBody<K, V, KOps, VOps>.ValidateLookupKeys(state.GetDictionaryState<K, V>(), DictionaryLayout, resolve);
     }
 
     internal override object Allocate(ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         FrozenDictionaryState<K, V> state = current.GetDictionaryState<K, V>();
         IEqualityComparer<KDomain>? application = state.ComparerKind == DictionaryComparerKind.Application ? ResolveApplicationComparer(current.Id) : null;
         return new Dictionary<KDomain, VDomain>(state.Count, DictionaryKeyPolicy.CreateComparer(state.ComparerKind, DictionaryLayout.KeySlot, application));
@@ -118,7 +118,7 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
 
     internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) {
         Dictionary<KDomain, VDomain> dictionary = RequireDomain(domain);
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         FrozenDictionaryState<K, V> state = current.GetDictionaryState<K, V>();
         if (dictionary.Count != 0 || DictionaryKeyPolicy.Identify(dictionary.Comparer, DictionaryLayout.KeySlot) != state.ComparerKind) {
             throw new InvalidDataException("Dictionary hydration requires an empty instance with the recorded comparison policy.");
@@ -134,7 +134,7 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
         }
     }
 
-    void ICapturedStatePreparation.Validate(ObjectStateRecord item) {
+    void IStatePreparationBinding.Validate(ObjectStateRecord item) {
         if (!CurrentLayout.Equals(item.Layout) || item.Content is not FrozenDictionaryState<K, V> state) {
             throw new InvalidOperationException("Preparation requires the exact Dictionary layout and state.");
         }
@@ -143,9 +143,9 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
         DictionaryKeyPolicy.RequireStoredPolicy(state.ComparerKind, DictionaryLayout.KeySlot);
     }
 
-    bool ICapturedStatePreparation.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
-        ((ICapturedStatePreparation)this).Validate(left);
-        ((ICapturedStatePreparation)this).Validate(right);
+    bool IStatePreparationBinding.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
+        ((IStatePreparationBinding)this).Validate(left);
+        ((IStatePreparationBinding)this).Validate(right);
         FrozenDictionaryState<K, V> leftState = left.GetDictionaryState<K, V>();
         FrozenDictionaryState<K, V> rightState = right.GetDictionaryState<K, V>();
         if (leftState.ComparerKind != rightState.ComparerKind || leftState.Count != rightState.Count) { return false; }
@@ -163,14 +163,14 @@ internal sealed class DictionaryObjectBinding<KDomain, K, KProjection, KOps, VDo
         return true;
     }
 
-    PreparedBaseBody ICapturedStatePreparation.PrepareBase(ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(current);
+    PreparedBaseBody IStatePreparationBinding.PrepareBase(ObjectStateRecord current) {
+        ((IStatePreparationBinding)this).Validate(current);
         return DictionaryStateBody<K, V, KOps, VOps>.PrepareBase(current.GetDictionaryState<K, V>(), DictionaryLayout);
     }
 
-    PreparedDeltaBody ICapturedStatePreparation.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(previous);
-        ((ICapturedStatePreparation)this).Validate(current);
+    PreparedDeltaBody IStatePreparationBinding.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
+        ((IStatePreparationBinding)this).Validate(previous);
+        ((IStatePreparationBinding)this).Validate(current);
         return DictionaryStateBody<K, V, KOps, VOps>.PrepareDelta(previous.GetDictionaryState<K, V>(), current.GetDictionaryState<K, V>(), DictionaryLayout);
     }
 

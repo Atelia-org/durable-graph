@@ -72,7 +72,7 @@ internal sealed class FixtureMarker : IDurableObject {
     private static readonly DurableSchema Schema = new("DurableGraph.Tests.FixtureMarker", 1,
         new DurableFieldInfo(1, TypeTag.Byte));
     private static readonly StateModelBinding Model = new StateModelBinding<FixtureMarker, byte>(
-        new CapturedStatePreparation<byte>(Schema,
+        new StatePreparationBinding<byte>(Schema,
             static (in byte value) => new PreparedBaseBody(new byte[] { value }),
             static (in byte prior, in byte next) => new PreparedDeltaBody(prior != next, new byte[] { next })),
         [new StateReaderBinding<byte>(Schema,

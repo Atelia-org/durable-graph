@@ -250,7 +250,7 @@ public sealed partial class DurableSchemaGenerator {
                 output.Append("        var baseProjection = context.BindBaseProjection<").Append(ancestor.Domain).Append(", ")
                     .Append(ancestor.Dto).AppendLine(">(schema.BaseSchema!);");
             }
-            output.Append("        var preparation = new ").Append(RuntimeName).Append("CapturedStatePreparation<").Append(dto).AppendLine(">(schema,");
+            output.Append("        var preparation = new ").Append(RuntimeName).Append("StatePreparationBinding<").Append(dto).AppendLine(">(schema,");
             output.Append("            (in ").Append(dto).Append(" state) => ").Append(body).AppendLine(".PrepareBase(in state, schema),");
             output.Append("            (in ").Append(dto).Append(" prior, in ").Append(dto).Append(" current) => ").Append(body).AppendLine(".PrepareDelta(in prior, in current, schema),");
             output.Append("            (in ").Append(dto).Append(" left, in ").Append(dto).Append(" right) => ").Append(body).AppendLine(".StateEquals(in left, in right, schema));");

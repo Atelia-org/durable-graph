@@ -52,7 +52,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         static ObjectVersionRecord Durable(SchemaCatalogView catalog, uint id, DurableSchema schema, byte[] body) =>
             ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(body), catalog));
         static ObjectVersionRecord Text(uint id, string value) =>
-            ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+            ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
 
         using RawBaseDirectory directory = new();
         const long rotationThreshold = 128;

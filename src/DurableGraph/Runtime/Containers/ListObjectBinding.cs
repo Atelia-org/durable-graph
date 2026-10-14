@@ -40,7 +40,7 @@ public abstract class ListObjectBinding : ObjectBinding {
     internal abstract ObjectStateRecord CreateStateRecord(ObjectId id, object frozen);
 }
 
-internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : ListObjectBinding, ICapturedStatePreparation
+internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : ListObjectBinding, IStatePreparationBinding
     where TState : unmanaged where TProjection : IValueProjection<TDomain, TState> where TOps : IStateOps<TState> {
     public ListObjectBinding(Type domainType, ListLayout layout, StateValueBinding element,
         Func<ListObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize, ListDeltaAlgorithm algorithm)
@@ -66,7 +66,7 @@ internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : Li
         }
         if (NormalizeState is null) { throw new InvalidDataException("The historical List requires an explicit element upgrade capability."); }
         ObjectStateRecord result = NormalizeState(this, source);
-        ((ICapturedStatePreparation)this).Validate(result);
+        ((IStatePreparationBinding)this).Validate(result);
         if (result.Id != source.Id || result.GetListState<TState>().Count != ((IFrozenListState)source.Content).Count) {
             throw new InvalidDataException("List normalization must preserve object identity and count.");
         }
@@ -81,18 +81,18 @@ internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : Li
     }
 
     internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) {
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         ListStateBody<TState, TOps>.VisitReferences(current.GetListState<TState>(), visitor, ListLayout);
     }
 
     internal override object Allocate(ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         return new List<TDomain>(current.GetListState<TState>().Count);
     }
 
     internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) {
         List<TDomain> list = RequireDomain(domain);
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         if (list.Count != 0) { throw new InvalidDataException("List hydration requires an empty allocated instance."); }
         foreach (ref readonly TState element in current.GetListState<TState>().Elements) {
             TDomain value = default!;
@@ -101,15 +101,15 @@ internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : Li
         }
     }
 
-    void ICapturedStatePreparation.Validate(ObjectStateRecord item) {
+    void IStatePreparationBinding.Validate(ObjectStateRecord item) {
         if (!CurrentLayout.Equals(item.Layout) || item.Content is not FrozenListState<TState>) {
             throw new InvalidOperationException("The preparation binding requires its exact List layout and state.");
         }
     }
 
-    bool ICapturedStatePreparation.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
-        ((ICapturedStatePreparation)this).Validate(left);
-        ((ICapturedStatePreparation)this).Validate(right);
+    bool IStatePreparationBinding.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
+        ((IStatePreparationBinding)this).Validate(left);
+        ((IStatePreparationBinding)this).Validate(right);
         FrozenListState<TState> leftState = left.GetListState<TState>();
         FrozenListState<TState> rightState = right.GetListState<TState>();
         if (leftState.Count != rightState.Count) { return false; }
@@ -119,14 +119,14 @@ internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : Li
         return true;
     }
 
-    PreparedBaseBody ICapturedStatePreparation.PrepareBase(ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(current);
+    PreparedBaseBody IStatePreparationBinding.PrepareBase(ObjectStateRecord current) {
+        ((IStatePreparationBinding)this).Validate(current);
         return ListStateBody<TState, TOps>.PrepareBase(current.GetListState<TState>(), ListLayout);
     }
 
-    PreparedDeltaBody ICapturedStatePreparation.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(previous);
-        ((ICapturedStatePreparation)this).Validate(current);
+    PreparedDeltaBody IStatePreparationBinding.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
+        ((IStatePreparationBinding)this).Validate(previous);
+        ((IStatePreparationBinding)this).Validate(current);
         return ListStateBody<TState, TOps>.PrepareDelta(previous.GetListState<TState>(), current.GetListState<TState>(), ListLayout, DeltaAlgorithm);
     }
 

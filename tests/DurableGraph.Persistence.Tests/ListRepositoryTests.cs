@@ -277,7 +277,7 @@ public sealed class ListRepositoryTests : IDisposable {
     }
     private readonly record struct State(ObjectId Values, ObjectId Alias, ObjectId Links, byte Value);
     private static StateModelRegistry Models(ListDeltaAlgorithm? algorithm = null) {
-        CapturedStatePreparation<State> prepare = new(Schema, Base, Delta);
+        StatePreparationBinding<State> prepare = new(Schema, Base, Delta);
         StateReaderBinding<State> reader = new(Schema, Read, Apply, Visit);
         StateModelBinding<World, State> model = new(prepare, [reader], row => row.GetState<State>(), static () => new(),
             static (World world, in State state, ObjectReadTable objects) => {

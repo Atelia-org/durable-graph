@@ -104,7 +104,7 @@ public sealed class StateBaseProjectionTests {
     private static DurableSchema SimpleSchema() => new("projection-base", 1, new DurableFieldInfo(1, TypeTag.Int32));
 
     private static StateModelBinding<Base, int> Model(DurableSchema schema, bool supportsBaseProjection = false) {
-        CapturedStatePreparation<int> preparation = new(schema,
+        StatePreparationBinding<int> preparation = new(schema,
             static (in int state) => throw new NotSupportedException(),
             static (in int prior, in int next) => throw new NotSupportedException());
         StateReaderBinding<int> reader = new(schema,

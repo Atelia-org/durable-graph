@@ -38,7 +38,7 @@ public sealed class CaptureContext : IDisposable {
         TDomain? value,
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture,
-        CapturedStatePreparation<TState> preparation)
+        StatePreparationBinding<TState> preparation)
         where TDomain : class, IDurableObject
         where TState : unmanaged {
         try {
@@ -55,7 +55,7 @@ public sealed class CaptureContext : IDisposable {
         TDomain? value,
         DurableSchema schema,
         Func<TDomain, CaptureContext, TState> capture,
-        CapturedStatePreparation<TState>? preparation)
+        StatePreparationBinding<TState>? preparation)
         where TDomain : class, IDurableObject
         where TState : unmanaged {
         try {
@@ -235,13 +235,13 @@ public sealed class CaptureContext : IDisposable {
 
     private sealed class RootCapture<TDomain, TState>(
         ObjectId id, TDomain source, DurableSchema schema, Func<TDomain, CaptureContext, TState> capture,
-        CapturedStatePreparation<TState>? preparation)
+        StatePreparationBinding<TState>? preparation)
         : RootCapture(id)
         where TDomain : class, IDurableObject
         where TState : unmanaged {
         public DurableSchema Schema { get; } = schema;
         public Func<TDomain, CaptureContext, TState> Capture { get; } = capture;
-        public CapturedStatePreparation<TState>? Preparation { get; } = preparation;
+        public StatePreparationBinding<TState>? Preparation { get; } = preparation;
 
         public override ObjectStateRecord Invoke(CaptureContext context) =>
             new(Id, Schema, Capture(source, context), Preparation);

@@ -45,7 +45,7 @@ public sealed class ArrayBodyTests {
         ArrayLayout layout = new(TypeExprKind.VectorArray, element.Slot);
         ArrayObjectBinding binding = ArrayObjectBinding.Create(domain.GetType(), layout, element);
         ObjectStateRecord captured = binding.Capture(new(1), domain, new CaptureSession().BeginCapture());
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)binding;
+        IStatePreparationBinding preparation = (IStatePreparationBinding)binding;
         PreparedBaseBody body = preparation.PrepareBase(captured);
         StateValueBinding storedElement = new(element.Slot, element.StateType, element.StateOpsType);
         ObjectStateRecord decoded = ArrayStateReader.Create(layout, storedElement).Read(new(1), new Bodies(body.Body.ToArray()));
@@ -62,7 +62,7 @@ public sealed class ArrayBodyTests {
         ArrayObjectBinding binding = IntBinding(domain.GetType());
         CaptureContext context = new CaptureSession().BeginCapture();
         ObjectStateRecord captured = binding.Capture(new(1), domain, context);
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)binding;
+        IStatePreparationBinding preparation = (IStatePreparationBinding)binding;
         PreparedBaseBody body = preparation.PrepareBase(captured);
         ArrayStateReader reader = ArrayStateReader.Create(binding.ArrayLayout, binding.ElementBinding);
         ObjectStateRecord decoded = reader.Read(new(1), new Bodies(body.Body.ToArray()));
@@ -114,7 +114,7 @@ public sealed class ArrayBodyTests {
     public void MalformedDeltaFailsWithoutChangingPrior(Type exceptionType, byte[] delta) {
         ArrayObjectBinding binding = IntBinding(typeof(int[]));
         ObjectStateRecord prior = binding.Capture(new(1), new[] { 1, 2, 3 }, new CaptureSession().BeginCapture());
-        PreparedBaseBody body = ((ICapturedStatePreparation)binding).PrepareBase(prior);
+        PreparedBaseBody body = ((IStatePreparationBinding)binding).PrepareBase(prior);
         ArrayStateReader reader = ArrayStateReader.Create(binding.ArrayLayout, binding.ElementBinding);
         Assert.Throws(exceptionType, () => reader.Read(new(1), new Bodies(body.Body.ToArray(), delta)));
         Assert.Throws(exceptionType, () => ApplyIntDelta(delta, prior.GetArrayState<int>(), binding.ArrayLayout));
@@ -132,7 +132,7 @@ public sealed class ArrayBodyTests {
         ArrayObjectBinding binding = IntBinding(typeof(int[,]));
         ObjectStateRecord first = binding.Capture(new(1), new int[2, 3], new CaptureSession().BeginCapture());
         ObjectStateRecord second = binding.Capture(new(1), new int[3, 2], new CaptureSession().BeginCapture());
-        Assert.Throws<InvalidOperationException>(() => ((ICapturedStatePreparation)binding).PrepareDelta(first, second));
+        Assert.Throws<InvalidOperationException>(() => ((IStatePreparationBinding)binding).PrepareDelta(first, second));
         Assert.Throws<InvalidDataException>(() => ArrayShape.FromArray(Array.CreateInstance(typeof(int), [2], [1])));
         Assert.Throws<InvalidDataException>(() => ArrayShape.FromArray(Array.CreateInstance(typeof(int), [2, 2], [0, 1])));
         Assert.Throws<InvalidDataException>(() => ArrayShape.FromArray(new int[1, 1, 1, 1, 1]));

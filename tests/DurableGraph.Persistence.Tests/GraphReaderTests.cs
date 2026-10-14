@@ -155,7 +155,7 @@ public sealed class GraphReaderTests : IDisposable {
             visitor.VisitDurable(state.Next, ParentSchema.SchemaId);
             visitor.VisitDurable(state.Alias, ParentSchema.SchemaId);
         }
-        CapturedStatePreparation<State> preparation = new(schema,
+        StatePreparationBinding<State> preparation = new(schema,
             static (in State state) => Base(state),
             static (in State prior, in State next) => new(prior != next, Base(next).Body));
         StateReaderBinding reader = new StateReaderBinding<State>(schema,

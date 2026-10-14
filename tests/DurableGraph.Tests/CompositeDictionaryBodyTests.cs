@@ -119,7 +119,7 @@ public sealed class CompositeDictionaryBodyTests {
         Assert.Equal(10, restored[new(1, 999)]);
         ObjectStateRecord recaptured = binding.Capture(new(42), restored, new CaptureSession().BeginCapture());
         Assert.Equal(DictionaryComparerKind.CurrentDefault, recaptured.GetDictionaryState<KeyState, int>().ComparerKind);
-        Assert.False(((ICapturedStatePreparation)binding).PrepareDelta(row, recaptured).HasChanges);
+        Assert.False(((IStatePreparationBinding)binding).PrepareDelta(row, recaptured).HasChanges);
     }
 
     [Theory]
@@ -165,7 +165,7 @@ public sealed class CompositeDictionaryBodyTests {
         Assert.Equal(10, domain[new(1, 0)]);
         ObjectStateRecord captured = binding.Capture(new(9), domain, new CaptureSession().BeginCapture());
         Assert.Equal(DictionaryComparerKind.Application, captured.GetDictionaryState<KeyState, int>().ComparerKind);
-        Assert.False(((ICapturedStatePreparation)binding).PrepareDelta(source, captured).HasChanges);
+        Assert.False(((IStatePreparationBinding)binding).PrepareDelta(source, captured).HasChanges);
     }
 
     [Fact]

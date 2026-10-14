@@ -66,8 +66,8 @@ public sealed partial class Character : BinaryBase {
         source._total = 1001;
         _ = __DurableState.PrepareBaseBody(in captured);
         if (!prepared.Body.SequenceEqual(new byte[] { 0x01, 0x21, 0x54 }) ||
-            !StringPayloadCodec.PrepareBase("A").Body.SequenceEqual(new byte[] { 0x03, 0x41 }) ||
-            !StringPayloadCodec.PrepareBase(string.Empty).Body.SequenceEqual(new byte[] { 0x00 })) {
+            !StringBodyPreparer.PrepareBase("A").Body.SequenceEqual(new byte[] { 0x03, 0x41 }) ||
+            !StringBodyPreparer.PrepareBase(string.Empty).Body.SequenceEqual(new byte[] { 0x00 })) {
             throw new InvalidOperationException("Packaged Base preparation lost canonical bytes or frozen content.");
         }
 

@@ -195,7 +195,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
     public void DurableCycleChildOnlyUpdatesPreserveInstancesAndRetiredChildGetsNewId() {
         DurableSchema schema = new("Node", 1, new DurableFieldInfo(1, TypeTag.ObjectReference, "Node"), new DurableFieldInfo(2, TypeTag.Byte));
         int restores = 0;
-        CapturedStatePreparation<NodeState> preparation = new(schema,
+        StatePreparationBinding<NodeState> preparation = new(schema,
             static (in NodeState state) => NodeBase(state),
             static (in NodeState prior, in NodeState next) => new(prior != next, NodeBase(next).Body));
         StateReaderBinding<NodeState> reader = new(schema,
@@ -289,7 +289,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         Action? onRead = null, DurableSchema? current = null, DurableSchema? old = null) where TWorld : World {
         DurableSchema currentSchema = current ?? Current;
         DurableSchema oldSchema = old ?? Old;
-        CapturedStatePreparation<State> preparation = new(currentSchema,
+        StatePreparationBinding<State> preparation = new(currentSchema,
             (in State state) => { beforePrepare?.Invoke(); return Base(state); },
             static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding<State> Reader(DurableSchema schema) => new(schema,
@@ -335,7 +335,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         return _repository.Commit(pending).Business.Address;
     }
     private static ObjectVersionRecord Text(uint id, string value) => ObjectVersionRecord.CreateBase(id,
-        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
     private static PreparedBaseBody Base(State state) {
         ArrayBufferWriter<byte> bytes = new();
         BareValueWriter writer = new(bytes);

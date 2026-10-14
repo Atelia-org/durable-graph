@@ -232,7 +232,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         ObjectVersionRecord Durable(uint id, State state) => ObjectVersionRecord.CreateBase(id,
             TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(state), catalog));
         ObjectVersionRecord Empty(uint id) => ObjectVersionRecord.CreateBase(id,
-            TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(string.Empty), catalog));
+            TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(string.Empty), catalog));
         // Persist a legitimate complete graph with two historical Empty identities and
         // a high reachable ID which becomes unreachable only after normalization.
         FrameAddress prior = branch.Head.RevisionAddress;

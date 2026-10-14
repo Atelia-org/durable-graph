@@ -289,7 +289,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Action<string>? onRead, bool upgrade = false) where T : Domain {
         DurableSchema original = Schema(name);
         DurableSchema current = upgrade ? Schema(name, 2) : original;
-        CapturedStatePreparation<State> preparation = new(current,
+        StatePreparationBinding<State> preparation = new(current,
             static (in State state) => Base(state), static (in State prior, in State next) => Delta(prior, next));
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema,
             (ref BareValueReader input) => { onRead?.Invoke(name); return Read(ref input); },

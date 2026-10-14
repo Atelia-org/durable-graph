@@ -270,7 +270,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         ModelExecutionEnvironment employees = BootstrapBindings.CreateEnvironment();
         IEnumerable<ObjectVersionRecord> records = rows.Values.Select(row => {
             ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, employees);
-            PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(prepared.StringContent)
+            PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String ? StringBodyPreparer.PrepareBase(prepared.StringContent)
                 : prepared.Preparation!.PrepareBase(prepared);
             return ObjectVersionRecord.CreateBase(prepared.Id.Value, TypedBaseBodyCodec.Encode(prepared.Layout, raw));
         });

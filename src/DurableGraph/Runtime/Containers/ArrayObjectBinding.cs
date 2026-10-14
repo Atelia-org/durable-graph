@@ -36,7 +36,7 @@ public abstract class ArrayObjectBinding : ObjectBinding {
     internal abstract ObjectStateRecord CreateStateRecord(ObjectId id, object frozen);
 }
 
-internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : ArrayObjectBinding, ICapturedStatePreparation
+internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : ArrayObjectBinding, IStatePreparationBinding
     where TState : unmanaged where TProjection : IValueProjection<TDomain, TState> where TOps : IStateOps<TState> {
     public ArrayObjectBinding(Type domainType, ArrayLayout layout, StateValueBinding element,
         Func<ArrayObjectBinding, ObjectStateRecord, ObjectStateRecord>? normalize)
@@ -108,7 +108,7 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
         }
         // Even an unchanged layout revalidates the snapshot's exact dependencies.
         ObjectStateRecord result = NormalizeState(this, source);
-        ((ICapturedStatePreparation)this).Validate(result);
+        ((IStatePreparationBinding)this).Validate(result);
         if (result.Id != source.Id || !result.GetArrayState<TState>().Shape.Equals(
                 ((IFrozenArrayState)source.Content).Shape)) {
             throw new InvalidDataException("Array normalization must preserve object identity and shape.");
@@ -124,12 +124,12 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
     }
 
     internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) {
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         ArrayStateBody<TState, TOps>.VisitReferences(current.GetArrayState<TState>(), visitor, ArrayLayout);
     }
 
     internal override object Allocate(ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         ArrayShape shape = current.GetArrayState<TState>().Shape;
         return shape.Rank switch {
             1 => new TDomain[shape[0]],
@@ -142,7 +142,7 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
 
     internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) {
         RequireDomain(domain);
-        ((ICapturedStatePreparation)this).Validate(current);
+        ((IStatePreparationBinding)this).Validate(current);
         FrozenArrayState<TState> state = current.GetArrayState<TState>();
         ArrayShape shape = state.Shape;
         if (!shape.Equals(ArrayShape.FromArray((Array)domain))) {
@@ -195,15 +195,15 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
         }
     }
 
-    void ICapturedStatePreparation.Validate(ObjectStateRecord item) {
+    void IStatePreparationBinding.Validate(ObjectStateRecord item) {
         if (!CurrentLayout.Equals(item.Layout) || item.GetArrayState<TState>().Shape.Rank != ArrayLayout.Rank) {
             throw new InvalidOperationException("The preparation binding requires its exact array layout and state.");
         }
     }
 
-    bool ICapturedStatePreparation.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
-        ((ICapturedStatePreparation)this).Validate(left);
-        ((ICapturedStatePreparation)this).Validate(right);
+    bool IStatePreparationBinding.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
+        ((IStatePreparationBinding)this).Validate(left);
+        ((IStatePreparationBinding)this).Validate(right);
         FrozenArrayState<TState> leftState = left.GetArrayState<TState>();
         FrozenArrayState<TState> rightState = right.GetArrayState<TState>();
         if (!leftState.Shape.Equals(rightState.Shape)) { return false; }
@@ -213,14 +213,14 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
         return true;
     }
 
-    PreparedBaseBody ICapturedStatePreparation.PrepareBase(ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(current);
+    PreparedBaseBody IStatePreparationBinding.PrepareBase(ObjectStateRecord current) {
+        ((IStatePreparationBinding)this).Validate(current);
         return ArrayStateBody<TState, TOps>.PrepareBase(current.GetArrayState<TState>(), ArrayLayout);
     }
 
-    PreparedDeltaBody ICapturedStatePreparation.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
-        ((ICapturedStatePreparation)this).Validate(previous);
-        ((ICapturedStatePreparation)this).Validate(current);
+    PreparedDeltaBody IStatePreparationBinding.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
+        ((IStatePreparationBinding)this).Validate(previous);
+        ((IStatePreparationBinding)this).Validate(current);
         return ArrayStateBody<TState, TOps>.PrepareDelta(previous.GetArrayState<TState>(), current.GetArrayState<TState>(), ArrayLayout);
     }
 

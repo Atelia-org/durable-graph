@@ -83,7 +83,7 @@ public sealed class CaptureSession {
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
             PreparedBaseBody body = current.Kind == ObjectStateKind.String
-                ? StringPayloadCodec.PrepareBase(current.StringContent)
+                ? StringBodyPreparer.PrepareBase(current.StringContent)
                 : current.Preparation!.PrepareBase(current);
             PreparedDeltaBody? delta = prior is not null && current.Kind != ObjectStateKind.String
                 ? current.Preparation!.PrepareDelta(prior, current)
@@ -188,7 +188,7 @@ public sealed class CaptureSession {
             }
             return;
         }
-        ICapturedStatePreparation preparation = current.Preparation
+        IStatePreparationBinding preparation = current.Preparation
             ?? throw new InvalidOperationException("The captured object has no preparation binding.");
         preparation.Validate(current);
         if (prior is not null) {

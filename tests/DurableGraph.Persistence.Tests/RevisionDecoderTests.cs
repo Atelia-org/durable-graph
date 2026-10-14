@@ -334,7 +334,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(body), catalog));
     private static ObjectVersionRecord Node(SchemaCatalogView catalog, uint id, byte value, byte text) => Durable(catalog, id, NodeSchema, [value, text]);
     private static ObjectVersionRecord Text(uint id, string value) => ObjectVersionRecord.CreateBase(id,
-        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
 
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);
 }

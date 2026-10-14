@@ -459,7 +459,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         ModelExecutionEnvironment employees) => rows.Values.Select(row => {
             ObjectStateRecord prepared = BootstrapBindings.WithPreparation(row, employees);
             PreparedBaseBody raw = prepared.Kind == ObjectStateKind.String
-                ? StringPayloadCodec.PrepareBase(prepared.StringContent) : prepared.Preparation!.PrepareBase(prepared);
+                ? StringBodyPreparer.PrepareBase(prepared.StringContent) : prepared.Preparation!.PrepareBase(prepared);
             return ObjectVersionRecord.CreateBase(row.Id.Value, TypedBaseBodyCodec.Encode(row.Layout, raw));
         }).ToArray();
 

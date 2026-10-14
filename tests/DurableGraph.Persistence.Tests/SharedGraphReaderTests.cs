@@ -334,7 +334,7 @@ public sealed class SharedGraphReaderTests : IDisposable {
     private ObjectVersionRecord Write(uint id, State state) => ObjectVersionRecord.CreateBase(id,
         TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(state), _initialCatalog.View));
     private static ObjectVersionRecord String(uint id, string value) => ObjectVersionRecord.CreateBase(id,
-        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase(value)));
+        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
     private Node Read(FrameAddress address, ObjectId root, StateModelRegistry models) {
         DecodedRevision decoded = DecodedRevision.ReadStoredGraph(Store, address, models);
         return GraphReader.ReadRoot<Node>(decoded, root, new(decoded.SourceModels!));
@@ -386,7 +386,7 @@ internal static class SharedReadModel {
         bool includeEquality = true, StateEquality<State>? equality = null,
         StateBasePreparer<State>? prepareBase = null, StateDeltaPreparer<State>? prepareDelta = null) {
         DurableSchema current = currentVersion == 1 ? Schema : new(Schema.SchemaId, currentVersion, Schema.Fields.ToArray());
-        CapturedStatePreparation<State> preparation = new(current, prepareBase ?? Base,
+        StatePreparationBinding<State> preparation = new(current, prepareBase ?? Base,
             prepareDelta ?? (static (in State prior, in State next) => new(prior != next, Base(next).Body)),
             includeEquality ? equality ?? (static (in State left, in State right) => left == right) : null);
         StateReaderBinding Reader(DurableSchema schema) => new StateReaderBinding<State>(schema, Read,

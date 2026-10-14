@@ -71,7 +71,7 @@ public abstract class StateModelBinding : ObjectBinding {
         return Allocate();
     }
     internal abstract ObjectId AddRoot(CaptureContext context, IDurableObject domain);
-    internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation);
+    internal abstract bool MatchesCapture(DurableSchema schema, Delegate capture, IStatePreparationBinding? preparation);
 
     private sealed class ReaderList(StateReaderBinding[] readers) : IReadOnlyList<StateReaderBinding> {
         public int Count => readers.Length;
@@ -84,7 +84,7 @@ public abstract class StateModelBinding : ObjectBinding {
 /// <summary>Strongly typed normalization, capture and restoration for one current model.</summary>
 public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     where TDomain : class, IDurableObject where TState : unmanaged {
-    private readonly CapturedStatePreparation<TState> _preparation;
+    private readonly StatePreparationBinding<TState> _preparation;
     private readonly Func<ObjectStateRecord, TState> _normalize;
     private readonly Func<TDomain> _allocate;
     private readonly StateHydrator<TDomain, TState> _hydrate;
@@ -100,7 +100,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     /// side effects belong after materialization, not in this historical conversion callback.
     /// </remarks>
     public StateModelBinding(
-        CapturedStatePreparation<TState> preparation,
+        StatePreparationBinding<TState> preparation,
         IEnumerable<StateReaderBinding> readers,
         Func<ObjectStateRecord, TState> normalize,
         Func<TDomain> allocate,
@@ -140,7 +140,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
 
     internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) {
         ArgumentNullException.ThrowIfNull(visitor);
-        ((ICapturedStatePreparation)_preparation).Validate(current);
+        ((IStatePreparationBinding)_preparation).Validate(current);
         TState state = current.GetState<TState>();
         _visitReferences(in state, visitor);
     }
@@ -154,7 +154,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
     internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) {
         RequireDomain(domain);
         ArgumentNullException.ThrowIfNull(objects);
-        ((ICapturedStatePreparation)_preparation).Validate(current);
+        ((IStatePreparationBinding)_preparation).Validate(current);
         TState state = current.GetState<TState>();
         _hydrate((TDomain)domain, in state, objects);
     }
@@ -169,7 +169,7 @@ public sealed class StateModelBinding<TDomain, TState> : StateModelBinding
         return new ObjectStateRecord(id, CurrentSchema, _capture((TDomain)domain, context), _preparation);
     }
 
-    internal override bool MatchesCapture(DurableSchema schema, Delegate capture, ICapturedStatePreparation? preparation) =>
+    internal override bool MatchesCapture(DurableSchema schema, Delegate capture, IStatePreparationBinding? preparation) =>
         CurrentSchema.Equals(schema) && _capture.Equals(capture) && ReferenceEquals(_preparation, preparation);
 
     private static void RequireDomain(object? domain) {

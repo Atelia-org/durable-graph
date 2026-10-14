@@ -8,7 +8,7 @@ namespace Atelia.DurableGraph.Tests;
 public sealed class CapturedGraphPreparationTests {
     private static readonly DurableSchema Schema = new("preparation.test", 1,
         new DurableFieldInfo(1, TypeTag.Int32), new DurableFieldInfo(2, TypeTag.String));
-    private static readonly CapturedStatePreparation<State> Binding = new(Schema, Base, Delta);
+    private static readonly StatePreparationBinding<State> Binding = new(Schema, Base, Delta);
 
     private sealed class Domain : IDurableObject {
         public int Value;
@@ -89,7 +89,7 @@ public sealed class CapturedGraphPreparationTests {
         Assert.Equal(new byte[] { 0 }, prepared.Objects[0].DeltaBody!.Body.ToArray());
         Assert.Equal(new byte[] { 4, 2 }, prepared.Objects[0].BaseBody.Body.ToArray());
         Assert.Same(string.Empty, prepared.Objects[1].Current.StringContent);
-        Assert.Equal(StringPayloadCodec.PrepareBase(string.Empty).Body.ToArray(), prepared.Objects[1].BaseBody.Body.ToArray());
+        Assert.Equal(StringBodyPreparer.PrepareBase(string.Empty).Body.ToArray(), prepared.Objects[1].BaseBody.Body.ToArray());
         session.Accept(candidate);
     }
 
@@ -126,7 +126,7 @@ public sealed class CapturedGraphPreparationTests {
     [Fact]
     public void MissingBindingFailsBeforeAnyEncodingButCaptureOnlyStillAccepts() {
         int calls = 0;
-        var binding = new CapturedStatePreparation<State>(Schema,
+        var binding = new StatePreparationBinding<State>(Schema,
             (in State state) => { calls++; return Base(in state); }, Delta);
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
@@ -162,7 +162,7 @@ public sealed class CapturedGraphPreparationTests {
                 context.AddRoot(domain, Schema, Capture);
             }
             else {
-                context.AddRoot(domain, Schema, Capture, new CapturedStatePreparation<State>(Schema, Base, Delta));
+                context.AddRoot(domain, Schema, Capture, new StatePreparationBinding<State>(Schema, Base, Delta));
             }
         });
         using CaptureContext next = session.BeginCapture();
@@ -170,9 +170,9 @@ public sealed class CapturedGraphPreparationTests {
 
     [Fact]
     public void ConstructorAndRegistrationRejectMissingOperationsAndWrongDescriptor() {
-        Assert.Throws<ArgumentNullException>(() => new CapturedStatePreparation<State>(null!, Base, Delta));
-        Assert.Throws<ArgumentNullException>(() => new CapturedStatePreparation<State>(Schema, null!, Delta));
-        Assert.Throws<ArgumentNullException>(() => new CapturedStatePreparation<State>(Schema, Base, null!));
+        Assert.Throws<ArgumentNullException>(() => new StatePreparationBinding<State>(null!, Base, Delta));
+        Assert.Throws<ArgumentNullException>(() => new StatePreparationBinding<State>(Schema, null!, Delta));
+        Assert.Throws<ArgumentNullException>(() => new StatePreparationBinding<State>(Schema, Base, null!));
         DurableSchema different = new(Schema.SchemaId, Schema.Version, new DurableFieldInfo(1, TypeTag.UInt32));
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
@@ -198,7 +198,7 @@ public sealed class CapturedGraphPreparationTests {
         CapturedGraph previous = CaptureGraph(session, domain);
         session.Accept(previous);
         using CaptureContext context = session.BeginCapture();
-        context.AddRoot(domain, Schema, Capture, new CapturedStatePreparation<State>(Schema, Base, Delta));
+        context.AddRoot(domain, Schema, Capture, new StatePreparationBinding<State>(Schema, Base, Delta));
         CapturedGraph candidate = context.Seal();
         Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
         Assert.Same(previous, session.Current);
@@ -208,7 +208,7 @@ public sealed class CapturedGraphPreparationTests {
     public void DeltaFailureAfterBaseSuccessPreservesBaselineAndCanRetry() {
         bool fail = true;
         int baseCalls = 0;
-        var binding = new CapturedStatePreparation<State>(Schema,
+        var binding = new StatePreparationBinding<State>(Schema,
             (in State state) => { baseCalls++; return Base(in state); },
             (in State prior, in State current) => fail ? throw new ApplicationException("delta") : Delta(in prior, in current));
         CaptureSession session = new();
@@ -240,7 +240,7 @@ public sealed class CapturedGraphPreparationTests {
     [InlineData(6)] // Same derived fields, different exact ancestor.
     public void FullPreflightRejectsPriorMismatchBeforeFirstBody(int mismatch) {
         int calls = 0;
-        var binding = new CapturedStatePreparation<State>(Schema,
+        var binding = new StatePreparationBinding<State>(Schema,
             (in State state) => { calls++; return Base(in state); }, Delta);
         DurableSchema priorSchema = mismatch switch {
             2 => new(Schema.SchemaId, Schema.Version, new DurableFieldInfo(1, TypeTag.UInt32)),
@@ -248,7 +248,7 @@ public sealed class CapturedGraphPreparationTests {
             6 => new(Schema.SchemaId, 1, Schema.Fields.ToArray(), new DurableSchema("ancestor", 1)),
             _ => Schema,
         };
-        ICapturedStatePreparation? priorBinding = mismatch switch {
+        IStatePreparationBinding? priorBinding = mismatch switch {
             0 => null,
             1 => Binding,
             _ => binding,
@@ -297,7 +297,7 @@ public sealed class CapturedGraphPreparationTests {
     [Fact]
     public void LateFailureKeepsCandidateAndCurrentAndRetryDoesNotBurnIds() {
         bool fail = true;
-        var binding = new CapturedStatePreparation<State>(Schema,
+        var binding = new StatePreparationBinding<State>(Schema,
             (in State state) => state.Value == 2 && fail ? throw new ApplicationException("late") : Base(in state), Delta);
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
@@ -327,7 +327,7 @@ public sealed class CapturedGraphPreparationTests {
         CaptureContext context = session.BeginCapture();
         CapturedGraph? candidate = null;
         bool reenter = true;
-        var binding = new CapturedStatePreparation<State>(Schema, (in State state) => {
+        var binding = new StatePreparationBinding<State>(Schema, (in State state) => {
             if (reenter) {
                 old.Dispose(); // A resolved context is detached and remains harmless.
                 Assert.Throws<InvalidOperationException>(() => session.Accept(candidate!));
@@ -365,7 +365,7 @@ public sealed class CapturedGraphPreparationTests {
     [InlineData(true)]
     public void NullCallbackResultFailsWithoutResolvingCandidate(bool delta) {
         bool returnNull = false;
-        var binding = new CapturedStatePreparation<State>(Schema,
+        var binding = new StatePreparationBinding<State>(Schema,
             (in State state) => returnNull && !delta ? null! : Base(in state),
             (in State prior, in State current) => returnNull && delta ? null! : Delta(in prior, in current));
         CaptureSession session = new();

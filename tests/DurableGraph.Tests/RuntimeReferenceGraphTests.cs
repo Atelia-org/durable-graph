@@ -164,7 +164,7 @@ public sealed class RuntimeReferenceGraphTests {
             new DurableFieldInfo(1, TypeTag.Byte),
             new DurableFieldInfo(2, TypeTag.ObjectReference, schemaId),
             new DurableFieldInfo(3, TypeTag.ObjectReference, aliasNominal ?? schemaId));
-        CapturedStatePreparation<NodeState> preparation = new(schema,
+        StatePreparationBinding<NodeState> preparation = new(schema,
             static (in NodeState state) => throw new NotSupportedException("Capture tests do not prepare payloads."),
             static (in NodeState prior, in NodeState next) => throw new NotSupportedException("Capture tests do not prepare payloads."));
         void Visit(in NodeState state, IStateReferenceVisitor visitor) {

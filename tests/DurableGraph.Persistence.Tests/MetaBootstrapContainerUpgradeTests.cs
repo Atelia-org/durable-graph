@@ -153,7 +153,7 @@ public sealed class MetaBootstrapContainerUpgradeTests : IDisposable {
                 break;
         }
         DurableSchema root = RootSchema(kind);
-        CapturedStatePreparation<ObjectId> preparation = new(root, RootBody,
+        StatePreparationBinding<ObjectId> preparation = new(root, RootBody,
             static (in ObjectId prior, in ObjectId next) => new(prior != next, RootBody(in next).Body));
         void Visit(in ObjectId state, IStateReferenceVisitor visitor) => visitor.VisitObject(state, OldLayout(kind).Type);
         StateReaderBinding<ObjectId> reader = new(root,

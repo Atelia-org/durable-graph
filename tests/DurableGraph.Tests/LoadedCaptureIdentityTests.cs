@@ -11,7 +11,7 @@ public sealed class LoadedCaptureIdentityTests {
 
     private readonly record struct State(ObjectId Text);
     private static readonly DurableSchema Schema = new("loaded.identity", 1, new DurableFieldInfo(1, TypeTag.String));
-    private static readonly CapturedStatePreparation<State> Preparation = new(Schema,
+    private static readonly StatePreparationBinding<State> Preparation = new(Schema,
         static (in State state) => new PreparedBaseBody([(byte)state.Text.Value]),
         static (in State prior, in State current) => new PreparedDeltaBody(prior != current, [(byte)current.Text.Value]));
 

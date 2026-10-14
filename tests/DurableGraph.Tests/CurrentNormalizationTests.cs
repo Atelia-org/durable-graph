@@ -74,7 +74,7 @@ public sealed class CurrentNormalizationTests {
     }
 
     private static StateModelBinding<Node, Current> Model(Func<ObjectStateRecord, Current> normalize) => new(
-        new CapturedStatePreparation<Current>(CurrentSchema,
+        new StatePreparationBinding<Current>(CurrentSchema,
             static (in Current _) => throw new NotSupportedException("Normalization does not prepare bodies."),
             static (in Current _, in Current _) => throw new NotSupportedException("Normalization does not prepare bodies.")),
         [new StateReaderBinding<Prior>(PriorSchema,

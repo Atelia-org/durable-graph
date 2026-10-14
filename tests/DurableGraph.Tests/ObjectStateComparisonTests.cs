@@ -15,10 +15,10 @@ public sealed class ObjectStateComparisonTests {
         ObjectStateRecord left = new(new(1), Schema, 3);
         ObjectStateRecord equal = new(new(2), Schema, 3);
         ObjectStateRecord changed = new(new(1), Schema, 4);
-        ICapturedStatePreparation absent = Preparation();
+        IStatePreparationBinding absent = Preparation();
         Assert.False(absent.ProvesSameState(left, left));
         Assert.False(absent.ProvesSameState(left, equal));
-        ICapturedStatePreparation present = Preparation((in int a, in int b) => a == b);
+        IStatePreparationBinding present = Preparation((in int a, in int b) => a == b);
         Assert.True(present.ProvesSameState(left, equal)); // Identity is an outer GraphReader responsibility.
         Assert.False(present.ProvesSameState(left, changed));
     }
@@ -30,7 +30,7 @@ public sealed class ObjectStateComparisonTests {
     [InlineData(true, true)]
     public void TypedProofValidatesBothExactSchemasAndDtosEvenWithoutCapability(bool hasProof, bool invalidLeft) {
         int calls = 0;
-        ICapturedStatePreparation preparation = Preparation(hasProof ? (in int a, in int b) => { calls++; return a == b; } : null);
+        IStatePreparationBinding preparation = Preparation(hasProof ? (in int a, in int b) => { calls++; return a == b; } : null);
         ObjectStateRecord valid = new(new(1), Schema, 3);
         ObjectStateRecord[] invalid = [
             new(new(1), new DurableSchema("comparison.owner", 1, new DurableFieldInfo(1, TypeTag.Int64)), 3),
@@ -47,7 +47,7 @@ public sealed class ObjectStateComparisonTests {
     public void TypedProofPropagatesTheOriginalCallbackError() {
         NotSupportedException failure = new("A registered comparison failed; it is not missing.");
         int calls = 0;
-        ICapturedStatePreparation preparation = Preparation((in int a, in int b) => { calls++; throw failure; });
+        IStatePreparationBinding preparation = Preparation((in int a, in int b) => { calls++; throw failure; });
         ObjectStateRecord value = new(new(1), Schema, 3);
         Assert.Same(failure, Assert.Throws<NotSupportedException>(() => preparation.ProvesSameState(value, value)));
         Assert.Equal(1, calls);
@@ -56,7 +56,7 @@ public sealed class ObjectStateComparisonTests {
     [Fact]
     public void ArrayProofUsesEveryDimensionAndEveryElementWithoutEncoding() {
         ArrayLayout layout = new(TypeExprKind.Rank2Array, IntSlot.Slot);
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)ArrayObjectBinding.Create(typeof(int[,]), layout, IntSlot);
+        IStatePreparationBinding preparation = (IStatePreparationBinding)ArrayObjectBinding.Create(typeof(int[,]), layout, IntSlot);
         ObjectStateRecord Row(ArrayShape shape, params int[] values) => new(new(1), layout, new FrozenArrayState<int>(shape, values));
         ObjectStateRecord left = Row(new(2, 3), 1, 2, 3, 4, 5, 6);
         Assert.True(preparation.ProvesSameState(left, Row(new(2, 3), 1, 2, 3, 4, 5, 6)));
@@ -70,7 +70,7 @@ public sealed class ObjectStateComparisonTests {
     [Fact]
     public void ListProofUsesCountAndOrderedElementsWithoutEncoding() {
         ListLayout layout = new(IntSlot.Slot);
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)ListObjectBinding.Create(typeof(List<int>), layout, IntSlot);
+        IStatePreparationBinding preparation = (IStatePreparationBinding)ListObjectBinding.Create(typeof(List<int>), layout, IntSlot);
         ObjectStateRecord Row(params int[] values) => new(new(1), layout, new FrozenListState<int>(values));
         Assert.True(preparation.ProvesSameState(Row(1, 2, 3), Row(1, 2, 3)));
         Assert.True(preparation.ProvesSameState(Row(), Row()));
@@ -82,7 +82,7 @@ public sealed class ObjectStateComparisonTests {
     [Fact]
     public void DictionaryProofUsesMetadataAndEveryKeyAndValueWithoutEncoding() {
         DictionaryLayout layout = new(IntSlot.Slot, IntSlot.WithFieldId(2).Slot);
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)DictionaryObjectBinding.Create(
+        IStatePreparationBinding preparation = (IStatePreparationBinding)DictionaryObjectBinding.Create(
             typeof(Dictionary<int, int>), layout, IntSlot, IntSlot);
         // Construct already-owned records directly: normal capture/read separately validates canonical keys using its writer.
         ObjectStateRecord Row(DictionaryComparerKind kind, params DictionaryEntryState<int, int>[] values) =>
@@ -106,14 +106,14 @@ public sealed class ObjectStateComparisonTests {
         ArrayLayout arrayLayout = new(TypeExprKind.VectorArray, IntSlot.Slot);
         ListLayout listLayout = new(IntSlot.Slot);
         DictionaryLayout dictionaryLayout = new(IntSlot.Slot, IntSlot.WithFieldId(2).Slot);
-        (ICapturedStatePreparation Preparation, ObjectStateRecord Valid, ObjectStateRecord Invalid)[] cases = [
-            ((ICapturedStatePreparation)ArrayObjectBinding.Create(typeof(int[]), arrayLayout, IntSlot),
+        (IStatePreparationBinding Preparation, ObjectStateRecord Valid, ObjectStateRecord Invalid)[] cases = [
+            ((IStatePreparationBinding)ArrayObjectBinding.Create(typeof(int[]), arrayLayout, IntSlot),
                 new(new(1), arrayLayout, new FrozenArrayState<int>(new(0), [])),
                 new(new(1), arrayLayout, new FrozenArrayState<long>(new(1), [1]))),
-            ((ICapturedStatePreparation)ListObjectBinding.Create(typeof(List<int>), listLayout, IntSlot),
+            ((IStatePreparationBinding)ListObjectBinding.Create(typeof(List<int>), listLayout, IntSlot),
                 new(new(1), listLayout, new FrozenListState<int>([])),
                 new(new(1), listLayout, new FrozenListState<long>([1]))),
-            ((ICapturedStatePreparation)DictionaryObjectBinding.Create(typeof(Dictionary<int, int>), dictionaryLayout, IntSlot, IntSlot),
+            ((IStatePreparationBinding)DictionaryObjectBinding.Create(typeof(Dictionary<int, int>), dictionaryLayout, IntSlot, IntSlot),
                 new(new(1), dictionaryLayout, new FrozenDictionaryState<int, int>(DictionaryComparerKind.ScalarDefault, [])),
                 new(new(1), dictionaryLayout, new FrozenDictionaryState<int, long>(DictionaryComparerKind.ScalarDefault, [new(1, 1)]))),
         ];
@@ -123,7 +123,7 @@ public sealed class ObjectStateComparisonTests {
         }
     }
 
-    private static ICapturedStatePreparation Preparation(StateEquality<int>? equality = null) => new CapturedStatePreparation<int>(Schema,
+    private static IStatePreparationBinding Preparation(StateEquality<int>? equality = null) => new StatePreparationBinding<int>(Schema,
         (in int state) => throw new InvalidOperationException("Comparison must not prepare Base."),
         (in int prior, in int current) => throw new InvalidOperationException("Comparison must not prepare Delta."), equality);
 

@@ -63,7 +63,7 @@ public sealed class DictionaryBodyTests {
         DictionaryObjectBinding binding = DictionaryObjectBinding.Create(typeof(Dictionary<int, int>), Layout, key, value);
         ObjectStateRecord captured = binding.Capture(new(1), new Dictionary<int, int> { [1] = 10 }, new CaptureSession().BeginCapture());
         CountingKeyOps.Writes = 0;
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)binding;
+        IStatePreparationBinding preparation = (IStatePreparationBinding)binding;
         preparation.Validate(captured);
         Assert.Equal(0, CountingKeyOps.Writes);
         preparation.PrepareBase(captured);
@@ -158,7 +158,7 @@ public sealed class DictionaryBodyTests {
         DictionaryLayout layout = new(key.Slot, value.Slot);
         DictionaryObjectBinding binding = DictionaryObjectBinding.Create(domainType, layout, key, value);
         ObjectStateRecord captured = binding.Capture(new(1), domain, new CaptureSession().BeginCapture());
-        ICapturedStatePreparation preparation = (ICapturedStatePreparation)binding;
+        IStatePreparationBinding preparation = (IStatePreparationBinding)binding;
         byte[] body = preparation.PrepareBase(captured).Body.ToArray();
         domain.Clear();
         ObjectStateRecord decoded = DictionaryStateReader.Create(layout, new(key.Slot, key.StateType, key.StateOpsType), value)

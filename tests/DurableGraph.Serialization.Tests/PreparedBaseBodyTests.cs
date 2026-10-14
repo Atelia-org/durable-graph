@@ -30,10 +30,10 @@ public sealed class PreparedBaseBodyTests {
     [InlineData("\u00E9", "02E900")]
     [InlineData("\u4E2D", "022D4E")]
     public void StringPreparationUsesCanonicalContentAndOwnedReusableBytes(string value, string expectedHex) {
-        PreparedBaseBody prepared = StringPayloadCodec.PrepareBase(value);
+        PreparedBaseBody prepared = StringBodyPreparer.PrepareBase(value);
         byte[] copy = prepared.Body.ToArray();
         Array.Clear(copy);
-        _ = StringPayloadCodec.PrepareBase("later preparation");
+        _ = StringBodyPreparer.PrepareBase("later preparation");
 
         Assert.Equal(Convert.FromHexString(expectedHex), prepared.Body.ToArray());
         BareValueReader reader = new(prepared.Body);
@@ -45,8 +45,8 @@ public sealed class PreparedBaseBodyTests {
 
     [Fact]
     public void StringPreparationPreservesUnpairedSurrogatesAndRejectsNull() {
-        PreparedBaseBody prepared = StringPayloadCodec.PrepareBase(new string('\uD800', 1));
+        PreparedBaseBody prepared = StringBodyPreparer.PrepareBase(new string('\uD800', 1));
         Assert.Equal<byte>([0x02, 0x00, 0xD8], prepared.Body.ToArray());
-        Assert.Throws<ArgumentNullException>(() => StringPayloadCodec.PrepareBase(null!));
+        Assert.Throws<ArgumentNullException>(() => StringBodyPreparer.PrepareBase(null!));
     }
 }

@@ -9,7 +9,7 @@ namespace Atelia.DurableGraph.Runtime;
 public sealed class ObjectStateRecord {
     private readonly object _content;
 
-    internal ObjectStateRecord(ObjectId id, DurableSchema schema, object state, ICapturedStatePreparation? preparation = null) {
+    internal ObjectStateRecord(ObjectId id, DurableSchema schema, object state, IStatePreparationBinding? preparation = null) {
         ArgumentNullException.ThrowIfNull(schema);
         schema.RequireReferenceObject();
         Id = id;
@@ -25,7 +25,7 @@ public sealed class ObjectStateRecord {
         _content = content.Length == 0 ? string.Empty : content;
     }
 
-    internal ObjectStateRecord(ObjectId id, ArrayLayout layout, object state, ICapturedStatePreparation? preparation = null) {
+    internal ObjectStateRecord(ObjectId id, ArrayLayout layout, object state, IStatePreparationBinding? preparation = null) {
         ArgumentNullException.ThrowIfNull(state);
         Id = id;
         Layout = ObjectLayout.ForArray(layout);
@@ -34,7 +34,7 @@ public sealed class ObjectStateRecord {
     }
 
     public ObjectId Id { get; }
-    internal ObjectStateRecord(ObjectId id, ListLayout layout, object state, ICapturedStatePreparation? preparation = null) {
+    internal ObjectStateRecord(ObjectId id, ListLayout layout, object state, IStatePreparationBinding? preparation = null) {
         ArgumentNullException.ThrowIfNull(state);
         Id = id;
         Layout = ObjectLayout.ForList(layout);
@@ -43,7 +43,7 @@ public sealed class ObjectStateRecord {
     }
 
     public ObjectLayout Layout { get; }
-    internal ObjectStateRecord(ObjectId id, DictionaryLayout layout, object state, ICapturedStatePreparation? preparation = null) {
+    internal ObjectStateRecord(ObjectId id, DictionaryLayout layout, object state, IStatePreparationBinding? preparation = null) {
         ArgumentNullException.ThrowIfNull(state);
         Id = id;
         Layout = ObjectLayout.ForDictionary(layout);
@@ -53,7 +53,7 @@ public sealed class ObjectStateRecord {
     public ObjectStateKind Kind => Layout.Kind;
     public DurableSchema? Schema => Layout.Schema;
     internal object Content => _content;
-    internal ICapturedStatePreparation? Preparation { get; }
+    internal IStatePreparationBinding? Preparation { get; }
 
     /// <summary>Returns a copy of the exact DTO, never the stored box.</summary>
     public TState GetState<TState>() where TState : unmanaged {

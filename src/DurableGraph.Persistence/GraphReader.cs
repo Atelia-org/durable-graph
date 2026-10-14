@@ -252,8 +252,8 @@ internal static class GraphReader {
             return ReferenceEquals(first.Current.StringContent, second.Current.StringContent) ||
                 StringComparer.Ordinal.Equals(first.Current.StringContent, second.Current.StringContent);
         }
-        ICapturedStatePreparation? firstPreparation = first.Current.Preparation;
-        ICapturedStatePreparation? secondPreparation = second.Current.Preparation;
+        IStatePreparationBinding? firstPreparation = first.Current.Preparation;
+        IStatePreparationBinding? secondPreparation = second.Current.Preparation;
         if (firstPreparation is null || !ReferenceEquals(firstPreparation, secondPreparation)) { return false; }
         // Keep the explicit complete-value proof for read-only sharing. Exact-current durable
         // normalization is identity, but removing this comparison requires a separate proof.

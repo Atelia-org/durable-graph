@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         CapturedGraph first = Capture();
         ObjectStateRecord prior = Primary(first);
-        ICapturedStatePreparation preparation = prior.Preparation!;
+        IStatePreparationBinding preparation = prior.Preparation!;
         byte[] frozenBase = preparation.PrepareBase(prior).Body.ToArray();
         ((Action)fixture[3])(); // Change only the ignored, non-persistent Debug field.
         ObjectStateRecord transient = Primary(Capture());

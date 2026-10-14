@@ -40,7 +40,7 @@ public sealed partial class EventHistoryRepositoryTests {
 
     [Fact]
     public void InterfaceCannotBeRegisteredAsConcreteObjectModel() {
-        CapturedStatePreparation<State> preparation = new(Schema,
+        StatePreparationBinding<State> preparation = new(Schema,
             static (in State state) => Base(state),
             static (in State prior, in State next) => Delta(prior, next));
         // An interface satisfies the C# class constraint, but object binding still

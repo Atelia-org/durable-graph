@@ -113,7 +113,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
                 PreparedSchemaCatalogWrite candidate = catalog.Prepare();
                 using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State,
                     new(null, new(1), [ObjectVersionRecord.CreateBase(1,
-                        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("catalog carrier")))]), candidate.Write);
+                        TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("catalog carrier")))]), candidate.Write);
                 selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;
             }
             using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(path);
@@ -273,7 +273,7 @@ public sealed class GenericBindingCatalogTests : IDisposable {
         static (in int state, IStateReferenceVisitor visitor) => { });
 
     private static StateModelBinding<T, int> Model<T>(DurableSchema schema, StateReaderBinding reader) where T : class, IDurableObject, new() => new(
-        new CapturedStatePreparation<int>(schema, static (in int state) => new([]),
+        new StatePreparationBinding<int>(schema, static (in int state) => new([]),
             static (in int prior, in int next) => new(false, [])), [reader],
         static row => row.GetState<int>(), static () => new T(),
         static (T target, in int state, ObjectReadTable objects) => { },

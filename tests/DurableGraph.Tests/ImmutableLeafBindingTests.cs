@@ -21,7 +21,7 @@ public sealed class ImmutableLeafBindingTests {
     private static DurableSchema SimpleSchema() => new("immutable-leaf-binding", 1, new DurableFieldInfo(1, TypeTag.Int32));
 
     private static StateModelBinding<Leaf, int> Model(DurableSchema schema, bool isImmutableLeaf = false) {
-        CapturedStatePreparation<int> preparation = new(schema,
+        StatePreparationBinding<int> preparation = new(schema,
             static (in int state) => throw new NotSupportedException(),
             static (in int prior, in int next) => throw new NotSupportedException());
         StateReaderBinding<int> reader = new(schema,

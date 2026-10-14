@@ -224,7 +224,7 @@ public sealed class CrossAssemblyNominalBindingTests {
     private static StateModelBinding RemoteModel<TDomain>(TypeExpr nominal) where TDomain : class, IDurableObject {
         // Deliberately newer, with a field unrelated to the owner's ObjectId slot.
         DurableSchema schema = new(nominal, 2, new DurableFieldInfo(1, TypeTag.Int32));
-        CapturedStatePreparation<int> preparation = new(schema,
+        StatePreparationBinding<int> preparation = new(schema,
             static (in int state) => throw new InvalidOperationException("No target preparation."),
             static (in int prior, in int current) => throw new InvalidOperationException("No target preparation."));
         return new StateModelBinding<TDomain, int>(preparation, [Reader<int>(schema)],

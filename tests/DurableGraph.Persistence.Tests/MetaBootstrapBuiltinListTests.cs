@@ -156,7 +156,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         rows[declarations.Id] = BootstrapBindings.WithPreparation(new(declarations.Id, declarations.Layout.List!,
             new FrozenListState<ObjectId>([descriptor])), employees);
         ObjectVersionRecord[] records = rows.Values.Select(row => {
-            PreparedBaseBody raw = row.Kind == ObjectStateKind.String ? StringPayloadCodec.PrepareBase(row.StringContent)
+            PreparedBaseBody raw = row.Kind == ObjectStateKind.String ? StringBodyPreparer.PrepareBase(row.StringContent)
                 : row.Preparation!.PrepareBase(row);
             return ObjectVersionRecord.CreateBase(row.Id.Value, TypedBaseBodyCodec.Encode(row.Layout, raw));
         }).ToArray();

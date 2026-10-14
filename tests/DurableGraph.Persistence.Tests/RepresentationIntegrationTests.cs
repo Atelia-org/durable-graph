@@ -25,7 +25,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
             descriptor = prepared.View.DescriptorId(layout);
             StoredGraphRevision initial = Save(repository, null, new(1), [
                 ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(layout, new PreparedBaseBody([2, 7]), prepared.View)),
-                ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("old"), prepared.View)),
+                ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("old"), prepared.View)),
             ], prepared.Write);
             first = initial.Address;
             schemaRoot = initial.SchemaRoot!.Value;

@@ -15,7 +15,7 @@ public sealed class MetaBootstrapP0DescriptorTests : IDisposable {
     public void Cold_meta_projection_rejects_reserved_business_schema_name() {
         PreparedSchemaCatalogWrite prepared = Prepare();
         ObjectStateRecord name = prepared.View.Rows.Values.Single(static row => row.Kind == ObjectStateKind.String);
-        byte[] badName = TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("P0C"));
+        byte[] badName = TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("P0C"));
         ObjectVersionRecord[] records = prepared.Write!.Records.Select(row => row.ObjectId == name.Id.Value
             ? ObjectVersionRecord.CreateBase(row.ObjectId, badName) : row).ToArray();
         FrameAddress graph;

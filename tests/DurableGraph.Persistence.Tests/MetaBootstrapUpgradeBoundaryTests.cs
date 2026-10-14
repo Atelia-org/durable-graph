@@ -327,7 +327,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(Old), Base(new(5, new(textId), 0)), meta.View))];
         if (textId != 0) {
             records.Add(ObjectVersionRecord.CreateBase(textId,
-                TypedBaseBodyCodec.Encode(ObjectLayout.String, StringPayloadCodec.PrepareBase("old source string"))));
+                TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("old source string"))));
         }
         using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
             new(null, new(1), records), meta.Write);
@@ -347,7 +347,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
 
     private static StateModelBinding Model(DurableSchema current, DurableSchema old, Action? onRead = null,
         Action? onUpgrade = null, Action? onCapture = null, bool cutText = false) {
-        CapturedStatePreparation<BoundaryState> preparation = new(current,
+        StatePreparationBinding<BoundaryState> preparation = new(current,
             static (in BoundaryState state) => Base(state),
             static (in BoundaryState prior, in BoundaryState next) => new(prior != next, Base(next).Body));
         StateReaderBinding<BoundaryState> Reader(DurableSchema schema) => new(schema,

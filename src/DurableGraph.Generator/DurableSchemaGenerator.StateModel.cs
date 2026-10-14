@@ -39,7 +39,7 @@ public sealed partial class DurableSchemaGenerator {
         string indent, bool hasDomainBase, ImmutableLeafCandidate? candidate) {
         BinaryVersionModel current = versions[versions.Count - 1];
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
-        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.Runtime.CapturedStatePreparation<")
+        source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.Runtime.StatePreparationBinding<")
             .Append(current.Name).Append("> Preparation = new(").Append(current.Name)
             .AppendLine(".Schema, PrepareBaseBody, PrepareDeltaBody, StateEquals);");
         source.Append(indent).Append("private static readonly global::System.Func<").Append(domain)
