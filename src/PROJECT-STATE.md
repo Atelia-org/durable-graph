@@ -18,7 +18,7 @@
 
 ## 当前焦点
 
-[DB-092 命名重构提案](../docs/design-branches/0092-type-namespace-refactoring/README.md)已完成分模块调查与方案整合，建议先收回默认内核的阶段名、执行环境误称及 Generator 的 Family 分析名。代码和公开合同尚未改名；程序集／文件组织待命名稳定后另判，不把候选表视作已批准施工队列。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A 片内部分析／Family 命名已完成，限定验收见[实施记录](../docs/design-branches/0092-type-namespace-refactoring/implementation-a.md)。下一片收回默认内核阶段名与执行环境误称；员工／公开候选另片，程序集／文件组织待命名稳定后另判。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
 

@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
-    private static bool ValidateUpgradeRegistrations(SourceProductionContext context, List<DurableTypeModel> types,
+    private static bool ValidateUpgradeRegistrations(SourceProductionContext context, List<DurableTypeAnalysis> types,
         Compilation compilation, out bool hasRegistrations) {
         hasRegistrations = false;
         bool valid = true;
@@ -37,10 +37,10 @@ public sealed partial class DurableSchemaGenerator {
         return valid;
     }
 
-    private static void AppendGenericUpgradeProviders(StringBuilder output, DurableTypeModel? domain,
-        List<GenericLayout> versions, Compilation compilation, SourceProductionContext context) {
+    private static void AppendFamilyUpgradeProviders(StringBuilder output, DurableTypeAnalysis? domain,
+        List<FamilyLayout> versions, Compilation compilation, SourceProductionContext context) {
         if (!domain.HasValue || domain.Value.IsInline) return;
-        DurableTypeModel owner = domain.Value;
+        DurableTypeAnalysis owner = domain.Value;
         List<(IMethodSymbol Method, int Version, TypePattern? ClosedOwner, bool Implicit)> methods = new();
         foreach (INamedTypeSymbol host in EnumerateSourceTypes(compilation.Assembly.GlobalNamespace)) {
             foreach (IMethodSymbol method in host.GetMembers().OfType<IMethodSymbol>()) {
@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGenerator {
                     ReportInvalidGeneratedState(context, owner.Symbol, "DurableUpgrade methods require an accessible static method in a top-level non-generic static class", GetSourceLocation(method));
                     continue;
                 }
-                if (!ValidateGenericUpgradeSignature(context, owner, method, fromVersion, allowLegacy: false)) continue;
+                if (!ValidateFamilyUpgradeSignature(context, owner, method, fromVersion, allowLegacy: false)) continue;
                 methods.Add((method, fromVersion, closed, false));
             }
         }
@@ -67,13 +67,13 @@ public sealed partial class DurableSchemaGenerator {
                 ReportInvalidGeneratedState(context, owner.Symbol, "Generic domain upgrades use DurableUpgrade methods in a non-generic static host; each implicit edge requires one method");
                 continue;
             }
-            if (ValidateGenericUpgradeSignature(context, owner, method, fromVersion, allowLegacy: true)) methods.Add((method, fromVersion, null, true));
+            if (ValidateFamilyUpgradeSignature(context, owner, method, fromVersion, allowLegacy: true)) methods.Add((method, fromVersion, null, true));
         }
         if (methods.Count == 0) return;
         output.Append(", upgrades: new ").Append(RuntimeName).AppendLine("StateUpgradeProvider[] {");
         for (int index = 0; index < methods.Count; index++) {
             var entry = methods[index];
-            string adapter = AppendGenericUpgradeAdapter(context, owner, entry.Method, entry.Version, index, entry.Implicit);
+            string adapter = AppendFamilyUpgradeAdapter(context, owner, entry.Method, entry.Version, index, entry.Implicit);
             output.Append("        new(").Append(Literal(owner.SchemaId)).Append(", ").Append(entry.Version).Append(", typeof(")
                 .Append(adapter).Append(").GetMethod(").Append(Literal(entry.Implicit ? "__DurableUpgradeAdapter" + Number(entry.Version) : "Invoke"))
                 .Append(", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!");
@@ -87,7 +87,7 @@ public sealed partial class DurableSchemaGenerator {
         output.Append("    }");
     }
 
-    private static bool ValidateGenericUpgradeSignature(SourceProductionContext context, DurableTypeModel owner,
+    private static bool ValidateFamilyUpgradeSignature(SourceProductionContext context, DurableTypeAnalysis owner,
         IMethodSymbol method, int fromVersion, bool allowLegacy) {
         if (method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(context.CancellationToken) is MethodDeclarationSyntax declaration &&
             declaration.ParameterList.Parameters.Any(parameter => parameter.Type?.ToString().Contains("__DurableState") == true)) {
@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGenerator {
     // Initial generator symbols cannot resolve DTOs emitted during this pass. Preserve the
     // user's local type aliases in an isolated source and emit a typed forwarder; the final
     // compiler checks the invocation before the runtime ever inspects the method metadata.
-    private static string AppendGenericUpgradeAdapter(SourceProductionContext context, DurableTypeModel owner,
+    private static string AppendFamilyUpgradeAdapter(SourceProductionContext context, DurableTypeAnalysis owner,
         IMethodSymbol method, int fromVersion, int index, bool implicitMethod) {
         MethodDeclarationSyntax syntax = (MethodDeclarationSyntax)method.DeclaringSyntaxReferences[0].GetSyntax(context.CancellationToken);
         CompilationUnitSyntax root = (CompilationUnitSyntax)syntax.SyntaxTree.GetRoot(context.CancellationToken);

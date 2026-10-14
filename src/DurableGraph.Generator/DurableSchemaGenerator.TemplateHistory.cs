@@ -179,29 +179,29 @@ public sealed partial class DurableSchemaGenerator {
         }
     }
 
-    private static bool UsesGenericTemplates(List<DurableTypeModel> types, List<SchemaHistoryModel> history) {
-        foreach (DurableTypeModel type in types) if (type.IsEnum || type.Symbol.IsRecord || UsesGenericTemplate(CurrentShape(type))) return true;
-        if (types.Count > 0) foreach (SchemaHistoryModel shape in history) {
+    private static bool UsesFamilyTemplates(List<DurableTypeAnalysis> types, List<SchemaTemplate> history) {
+        foreach (DurableTypeAnalysis type in types) if (type.IsEnum || type.Symbol.IsRecord || UsesFamilyTemplate(CurrentShape(type))) return true;
+        if (types.Count > 0) foreach (SchemaTemplate shape in history) {
             if (shape.Kind == 2 && !types.Exists(type => type.SchemaId == shape.SchemaId)) return true;
         }
-        foreach (SchemaHistoryModel shape in history) if (UsesGenericTemplate(shape)) return true;
+        foreach (SchemaTemplate shape in history) if (UsesFamilyTemplate(shape)) return true;
         return false;
     }
 
-    private static bool UsesGenericTemplate(SchemaHistoryModel shape) {
+    private static bool UsesFamilyTemplate(SchemaTemplate shape) {
         if (shape.Arity != 0 || (shape.BaseSchema.HasValue && shape.BaseSchema.Value.Type.Arguments.Count != 0)) return true;
-        foreach (SchemaHistoryFieldModel field in shape.Fields) {
+        foreach (SchemaTemplateField field in shape.Fields) {
             if (field.ValuePattern.ContainsParameter || field.ValuePattern.Arguments.Count != 0) return true;
         }
         return false;
     }
 
-    private static bool ValidateGenericTemplateHistory(SourceProductionContext context, List<DurableTypeModel> types, List<SchemaHistoryModel> history) {
+    private static bool ValidateFamilyTemplateHistory(SourceProductionContext context, List<DurableTypeAnalysis> types, List<SchemaTemplate> history) {
         bool valid = true;
-        List<SchemaHistoryModel> available = new(history);
-        foreach (DurableTypeModel type in types) {
-            SchemaHistoryModel current = CurrentShape(type);
-            foreach (SchemaHistoryModel old in history) {
+        List<SchemaTemplate> available = new(history);
+        foreach (DurableTypeAnalysis type in types) {
+            SchemaTemplate current = CurrentShape(type);
+            foreach (SchemaTemplate old in history) {
                 if (old.SchemaId != current.SchemaId) continue;
                 if (old.Kind != current.Kind || old.Arity != current.Arity ||
                     (old.Version == current.Version && !HaveSameShape(old, current))) {
@@ -223,16 +223,16 @@ public sealed partial class DurableSchemaGenerator {
         return ValidateHistoryClosure(context, available) && valid;
     }
 
-    private static bool ValidatePatternReferences(SourceProductionContext context, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
+    private static bool ValidatePatternReferences(SourceProductionContext context, SchemaTemplate shape, List<SchemaTemplate> available) {
         List<TypePattern> patterns = new();
         if (shape.BaseSchema.HasValue) patterns.Add(shape.BaseSchema.Value.Type);
-        foreach (SchemaHistoryFieldModel field in shape.Fields) patterns.Add(field.ValuePattern);
+        foreach (SchemaTemplateField field in shape.Fields) patterns.Add(field.ValuePattern);
         foreach (TypePattern pattern in patterns) {
             if (!pattern.ParametersFit(shape.Arity)) {
                 ReportInvalidHistoryAncestry(context, shape, "a type parameter lies outside its declaration's arity"); return false;
             }
             foreach (TypePattern named in pattern.NamedNodes()) {
-                foreach (SchemaHistoryModel target in available) {
+                foreach (SchemaTemplate target in available) {
                     if (target.SchemaId == named.DefinitionId && target.Arity != named.Arguments.Count) {
                         ReportInvalidHistoryAncestry(context, shape, "a named type pattern has incompatible arity"); return false;
                     }
@@ -242,17 +242,17 @@ public sealed partial class DurableSchemaGenerator {
         return true;
     }
 
-    private static bool ValidateTemplateNominalShapes(SourceProductionContext context, List<SchemaHistoryModel> records) {
+    private static bool ValidateTemplateNominalShapes(SourceProductionContext context, List<SchemaTemplate> records) {
         Dictionary<string, int> arities = new(StringComparer.Ordinal);
         Dictionary<string, int> kinds = new(StringComparer.Ordinal);
-        foreach (SchemaHistoryModel shape in records) {
+        foreach (SchemaTemplate shape in records) {
             if (!Require(arities, shape.SchemaId, shape.Arity) || !Require(kinds, shape.SchemaId, shape.Kind)) {
                 ReportInvalidHistoryAncestry(context, shape, "a Schema family has conflicting kind or arity"); return false;
             }
             if (shape.BaseSchema.HasValue && !Check(shape.BaseSchema.Value.Type, 1)) {
                 ReportInvalidHistoryAncestry(context, shape, "a base type pattern has conflicting kind or arity"); return false;
             }
-            foreach (SchemaHistoryFieldModel field in shape.Fields) {
+            foreach (SchemaTemplateField field in shape.Fields) {
                 if (!Check(field.ValuePattern, field.TypeTagValue == 15 ? 1 : field.TypeTagValue == 16 ? 2 : 0)) {
                     ReportInvalidHistoryAncestry(context, shape, "a field type pattern has conflicting kind or arity"); return false;
                 }
@@ -283,7 +283,7 @@ public sealed partial class DurableSchemaGenerator {
         }
     }
 
-    private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaHistoryModel model, out string? error) {
+    private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaTemplate model, out string? error) {
         model = default;
         bool allowTemporalScalars = lines[0] == "// durable-graph-schema-history:9";
         bool allowBclScalars = allowTemporalScalars || lines[0] == "// durable-graph-schema-history:8";
@@ -308,7 +308,7 @@ public sealed partial class DurableSchemaGenerator {
             baseSchema = new SchemaReference(pattern.DefinitionId!, baseVersion, pattern);
         }
         if (kind == 2 && baseSchema.HasValue) return false;
-        List<SchemaHistoryFieldModel> fields = new();
+        List<SchemaTemplateField> fields = new();
         int previous = 0;
         while (cursor < lines.Length - 1) {
             string line = lines[cursor++];
@@ -335,9 +335,9 @@ public sealed partial class DurableSchemaGenerator {
                     inline = new SchemaReference(child.DefinitionId!, inlineVersion, child);
                 }
             }
-            fields.Add(new SchemaHistoryFieldModel(fieldId, tag, tag == 15 ? pattern.DefinitionId : null, inline, pattern));
+            fields.Add(new SchemaTemplateField(fieldId, tag, tag == 15 ? pattern.DefinitionId : null, inline, pattern));
         }
-        model = new SchemaHistoryModel(path, id!, version, fields, baseSchema, kind, arity);
+        model = new SchemaTemplate(path, id!, version, fields, baseSchema, kind, arity);
         error = null;
         return true;
     }

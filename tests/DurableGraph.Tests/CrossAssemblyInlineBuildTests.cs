@@ -24,7 +24,7 @@ public sealed class CrossAssemblyInlineBuildTests {
         string[] paths = Directory.GetFiles(files.History);
         Assert.Single(paths);
         byte[] before = File.ReadAllBytes(paths[0]);
-        Assert.Equal("world", SchemaHistoryDocument.ParseHistory(paths[0]).SchemaId);
+        Assert.Equal("world", SchemaHistoryTextCodec.ParseHistory(paths[0]).SchemaId);
         SchemaHistoryResult result = Run(verify, tool, manifest, files.History, refs);
         Assert.Contains(verify ? "against 1 schema-history" : "0 schema-history", result.Message);
         Assert.Equal(before, File.ReadAllBytes(paths[0]));
@@ -236,10 +236,10 @@ public sealed class CrossAssemblyInlineBuildTests {
             return path;
         }
         public string Accept(string manifest) {
-            SchemaHistoryRecord record = Assert.Single(SchemaHistoryDocument.ParseManifestText("accepted", manifest));
-            string content = SchemaHistoryDocument.RenderHistory(record);
+            SchemaHistoryRecord record = Assert.Single(SchemaHistoryTextCodec.ParseManifestText("accepted", manifest));
+            string content = SchemaHistoryTextCodec.RenderHistory(record);
             Directory.CreateDirectory(History);
-            string path = Path.Combine(History, SchemaHistoryDocument.GetHistoryFileName(record, content));
+            string path = Path.Combine(History, SchemaHistoryTextCodec.GetHistoryFileName(record, content));
             File.WriteAllText(path, content, new UTF8Encoding(false));
             return path;
         }

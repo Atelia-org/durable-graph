@@ -34,8 +34,8 @@ public sealed partial class DurableSchemaGenerator {
         SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, compilation.Assembly) &&
         GetAttribute(type.GetAttributes(), ValueRuleSetAttributeName) is not null;
 
-    private static bool ValidateValueUpgradeRegistrations(SourceProductionContext context, List<DurableTypeModel> types,
-        List<SchemaHistoryModel> history, Compilation compilation, out bool hasRegistrations) {
+    private static bool ValidateValueUpgradeRegistrations(SourceProductionContext context, List<DurableTypeAnalysis> types,
+        List<SchemaTemplate> history, Compilation compilation, out bool hasRegistrations) {
         hasRegistrations = false;
         bool valid = true;
         foreach (SyntaxTree tree in compilation.SyntaxTrees) {
@@ -105,12 +105,12 @@ public sealed partial class DurableSchemaGenerator {
         return valid;
     }
 
-    private static bool TryGetInlineVersion(string id, int version, List<DurableTypeModel> types,
-        List<SchemaHistoryModel> history, out int arity) {
-        foreach (DurableTypeModel type in types) {
+    private static bool TryGetInlineVersion(string id, int version, List<DurableTypeAnalysis> types,
+        List<SchemaTemplate> history, out int arity) {
+        foreach (DurableTypeAnalysis type in types) {
             if (type.SchemaId == id && type.Version == version && type.IsInline) { arity = type.Arity; return true; }
         }
-        foreach (SchemaHistoryModel shape in history) {
+        foreach (SchemaTemplate shape in history) {
             if (shape.SchemaId == id && shape.Version == version && shape.Kind == 2) { arity = shape.Arity; return true; }
         }
         arity = 0;
@@ -136,8 +136,8 @@ public sealed partial class DurableSchemaGenerator {
         output.Append(" }");
     }
 
-    private static void AppendValueUpgradeRuleSets(StringBuilder output, List<DurableTypeModel> types,
-        List<SchemaHistoryModel> history, Compilation compilation, SourceProductionContext context) {
+    private static void AppendValueUpgradeRuleSets(StringBuilder output, List<DurableTypeAnalysis> types,
+        List<SchemaTemplate> history, Compilation compilation, SourceProductionContext context) {
         IMethodSymbol[] providers = GetValueUpgradeMethods(compilation).ToArray();
         foreach (INamedTypeSymbol rules in GetValueRuleSets(compilation)) {
             AttributeData attribute = GetAttribute(rules.GetAttributes(), ValueRuleSetAttributeName)!;

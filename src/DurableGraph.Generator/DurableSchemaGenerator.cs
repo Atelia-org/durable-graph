@@ -219,15 +219,15 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         INamedTypeSymbol? listType = GetBclListType(compilation);
         INamedTypeSymbol? dictionaryType = GetBclDictionaryType(compilation);
         List<INamedTypeSymbol> types = GetDistinctSortedTypes(candidateTypes);
-        List<DurableTypeModel> validTypes = new(types.Count);
-        List<SchemaHistoryModel> history = ParseSchemaHistory(
+        List<DurableTypeAnalysis> validTypes = new(types.Count);
+        List<SchemaTemplate> history = ParseSchemaHistory(
             context,
             schemaHistoryFiles,
             out bool historyParsedSuccessfully);
 
         foreach (INamedTypeSymbol type in types) {
             context.CancellationToken.ThrowIfCancellationRequested();
-            DurableTypeModel? model = CreateTypeModel(context, type, halfType, listType, dictionaryType, compilation);
+            DurableTypeAnalysis? model = AnalyzeDurableType(context, type, halfType, listType, dictionaryType, compilation);
 
             if (model.HasValue) {
                 validTypes.Add(model.Value);
@@ -236,8 +236,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         validTypes = RemoveDuplicateSchemaIds(context, validTypes);
         validTypes = ValidateSchemaChains(context, validTypes, compilation);
-        if (!TryImportSchemaReferences(context, compilation, validTypes, history, out List<SchemaHistoryModel> references, out string? referenceManifest)) return;
-        List<SchemaHistoryModel> availableHistory = new(history);
+        if (!TryImportSchemaReferences(context, compilation, validTypes, history, out List<SchemaTemplate> references, out string? referenceManifest)) return;
+        List<SchemaTemplate> availableHistory = new(history);
         availableHistory.AddRange(references);
 
         if (!ValidateHistoryClosure(context, availableHistory)) {
@@ -261,25 +261,25 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         }
 
         if (validTypes.Count > 0 || (types.Count == 0 && hasValueUpgradeRegistrations)) {
-            if (references.Count > 0 || forceDefinitions || hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesGenericTemplates(validTypes, history)) {
-                if (ValidateGenericTemplateHistory(context, validTypes, availableHistory)) {
-                    GenerateGenericStates(context, validTypes, history, historyParsedSuccessfully, compilation, references);
+            if (references.Count > 0 || forceDefinitions || hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesFamilyTemplates(validTypes, history)) {
+                if (ValidateFamilyTemplateHistory(context, validTypes, availableHistory)) {
+                    GenerateFamilyStates(context, validTypes, history, historyParsedSuccessfully, compilation, references);
                 }
                 return;
             }
-            List<DurableTypeModel> schemaTypes = GenerateSchemas(context, validTypes, history);
+            List<DurableTypeAnalysis> schemaTypes = GenerateSchemas(context, validTypes, history);
             GenerateStates(context, validTypes, schemaTypes, history, historyParsedSuccessfully, halfType);
         }
     }
 
-    private static List<DurableTypeModel> RemoveDuplicateSchemaIds(
+    private static List<DurableTypeAnalysis> RemoveDuplicateSchemaIds(
         SourceProductionContext context,
-        List<DurableTypeModel> types) {
-        List<DurableTypeModel> result = new(types.Count);
+        List<DurableTypeAnalysis> types) {
+        List<DurableTypeAnalysis> result = new(types.Count);
 
         for (int index = 0; index < types.Count; index++) {
-            DurableTypeModel current = types[index];
-            DurableTypeModel? conflicting = null;
+            DurableTypeAnalysis current = types[index];
+            DurableTypeAnalysis? conflicting = null;
 
             for (int candidateIndex = 0;
                 candidateIndex < types.Count;
@@ -333,17 +333,17 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return result;
     }
 
-    private static List<SchemaHistoryModel> ParseSchemaHistory(
+    private static List<SchemaTemplate> ParseSchemaHistory(
         SourceProductionContext context,
         ImmutableArray<SchemaHistoryText> files,
         out bool valid) {
         valid = true;
-        List<SchemaHistoryModel> history = new(files.Length);
+        List<SchemaTemplate> history = new(files.Length);
 
         foreach (SchemaHistoryText file in files) {
             context.CancellationToken.ThrowIfCancellationRequested();
 
-            if (TryParseSchemaHistory(file, out SchemaHistoryModel model, out string? error)) {
+            if (TryParseSchemaHistory(file, out SchemaTemplate model, out string? error)) {
                 history.Add(model);
             } else {
                 valid = false;
@@ -371,8 +371,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         });
 
         for (int index = 1; index < history.Count; index++) {
-            SchemaHistoryModel previous = history[index - 1];
-            SchemaHistoryModel current = history[index];
+            SchemaTemplate previous = history[index - 1];
+            SchemaTemplate current = history[index];
 
             if (StringComparer.Ordinal.Equals(previous.SchemaId, current.SchemaId) &&
                 previous.Version == current.Version &&
@@ -391,7 +391,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
     private static bool TryParseSchemaHistory(
         SchemaHistoryText file,
-        out SchemaHistoryModel model,
+        out SchemaTemplate model,
         out string? error) {
         model = default;
 
@@ -439,7 +439,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             return false;
         }
 
-        List<SchemaHistoryFieldModel> fields = new(lines.Length - 5);
+        List<SchemaTemplateField> fields = new(lines.Length - 5);
         int previousFieldId = 0;
         SchemaReference? baseSchema = null;
         int firstFieldLine = 4;
@@ -497,13 +497,13 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 return false;
             }
 
-            fields.Add(new SchemaHistoryFieldModel(fieldId, typeTagValue,
+            fields.Add(new SchemaTemplateField(fieldId, typeTagValue,
                 typeTagValue == 16 ? null : targetSchemaId,
                 typeTagValue == 16 ? new SchemaReference(targetSchemaId!, inlineVersion) : null));
             previousFieldId = fieldId;
         }
 
-        model = new SchemaHistoryModel(
+        model = new SchemaTemplate(
             file.Path,
             schemaId!,
             version,
@@ -566,13 +566,13 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                 new LinePosition(0, 0)));
     }
 
-    private static List<SchemaHistoryModel> FindHistory(
-        List<SchemaHistoryModel> history,
+    private static List<SchemaTemplate> FindHistory(
+        List<SchemaTemplate> history,
         string schemaId,
         int version) {
-        List<SchemaHistoryModel> result = new();
+        List<SchemaTemplate> result = new();
 
-        foreach (SchemaHistoryModel candidate in history) {
+        foreach (SchemaTemplate candidate in history) {
             if (StringComparer.Ordinal.Equals(candidate.SchemaId, schemaId) &&
                 candidate.Version == version) {
                 result.Add(candidate);
@@ -582,7 +582,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return result;
     }
 
-    private static bool AllHaveSameShape(List<SchemaHistoryModel> history) {
+    private static bool AllHaveSameShape(List<SchemaTemplate> history) {
         for (int index = 1; index < history.Count; index++) {
             if (!HaveSameShape(history[0], history[index])) {
                 return false;
@@ -593,8 +593,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     }
 
     private static bool HaveSameFields(
-        List<SchemaHistoryFieldModel> left,
-        List<SchemaHistoryFieldModel> right) {
+        List<SchemaTemplateField> left,
+        List<SchemaTemplateField> right) {
         if (left.Count != right.Count) {
             return false;
         }
@@ -612,12 +612,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return true;
     }
 
-    private static List<SchemaHistoryFieldModel> ToSchemaHistoryFields(
-        List<DurableFieldModel> fields) {
-        List<SchemaHistoryFieldModel> result = new(fields.Count);
+    private static List<SchemaTemplateField> ToSchemaTemplateFields(
+        List<DurableFieldAnalysis> fields) {
+        List<SchemaTemplateField> result = new(fields.Count);
 
-        foreach (DurableFieldModel field in fields) {
-            result.Add(new SchemaHistoryFieldModel(
+        foreach (DurableFieldAnalysis field in fields) {
+            result.Add(new SchemaTemplateField(
                 field.FieldId,
                 field.TypeTagValue, field.TargetSchemaId, field.InlineSchema, field.ValuePattern));
         }
@@ -625,7 +625,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return result;
     }
 
-    private static DurableTypeModel? CreateTypeModel(
+    private static DurableTypeAnalysis? AnalyzeDurableType(
         SourceProductionContext context,
         INamedTypeSymbol type,
         INamedTypeSymbol? halfType,
@@ -672,7 +672,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             version = candidateVersion;
         }
 
-        if (type.TypeKind == TypeKind.Enum) return CreateEnumModel(context, type, schemaId, version, hasErrors, listType, dictionaryType);
+        if (type.TypeKind == TypeKind.Enum) return AnalyzeDurableEnum(context, type, schemaId, version, hasErrors, listType, dictionaryType);
 
         ImmutableArray<ISymbol> schemaMembers = type.GetMembers("Schema");
         if (StringComparer.Ordinal.Equals(type.Name, "Schema") ||
@@ -689,7 +689,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         hasErrors |= ReportSchemaSupportNameCollisions(context, type);
 
         List<IFieldSymbol> fields = GetDirectFields(type);
-        List<DurableFieldModel> durableFields = new();
+        List<DurableFieldAnalysis> durableFields = new();
         if (type.IsRecord) hasErrors |= ReportRecordStorageErrors(context, type, fields, compilation);
 
         foreach (IFieldSymbol field in fields) {
@@ -784,7 +784,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             }
             if (inlineSchema.HasValue) inlineSchema = new SchemaReference(inlineSchema.Value.SchemaId, inlineSchema.Value.Version, valuePattern!.IsNullable ? valuePattern.ElementType : valuePattern);
 
-            durableFields.Add(new DurableFieldModel(
+            durableFields.Add(new DurableFieldAnalysis(
                 field,
                 fieldId,
                 typeTag!,
@@ -800,7 +800,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
             return null;
         }
 
-        return new DurableTypeModel(type, schemaId!, version, durableFields, listType, dictionaryType);
+        return new DurableTypeAnalysis(type, schemaId!, version, durableFields, listType, dictionaryType);
     }
 
     private static bool HasSupportedTypeShape(
@@ -846,7 +846,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
     private static bool ReportDuplicateFieldIds(
         SourceProductionContext context,
         string typeName,
-        List<DurableFieldModel> fields) {
+        List<DurableFieldAnalysis> fields) {
         bool foundDuplicate = false;
 
         for (int start = 0; start < fields.Count;) {
@@ -979,8 +979,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return false;
     }
 
-    private static string RenderSchemaHistoryManifest(List<DurableTypeModel> types) {
-        List<DurableTypeModel> sortedTypes = new(types);
+    private static string RenderSchemaHistoryManifest(List<DurableTypeAnalysis> types) {
+        List<DurableTypeAnalysis> sortedTypes = new(types);
         sortedTypes.Sort(static (left, right) => {
             int schemaComparison = StringComparer.Ordinal.Compare(
                 left.SchemaId,
@@ -1001,7 +1001,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         StringBuilder source = new();
         source.AppendLine(SchemaHistoryManifestHeader);
 
-        foreach (DurableTypeModel type in sortedTypes) {
+        foreach (DurableTypeAnalysis type in sortedTypes) {
             source.AppendLine("// schema-begin");
             source.Append("// schema-id-base64:")
                 .AppendLine(Convert.ToBase64String(StrictUtf8.GetBytes(type.SchemaId)));
@@ -1017,7 +1017,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
                     .AppendLine(baseSchema.Value.Version.ToString(CultureInfo.InvariantCulture));
             }
 
-            foreach (DurableFieldModel field in type.Fields) {
+            foreach (DurableFieldAnalysis field in type.Fields) {
                 source.Append("// field:")
                     .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                     .Append('|')
@@ -1152,8 +1152,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         return Location.None;
     }
 
-    private readonly struct DurableFieldModel {
-        public DurableFieldModel(
+    private readonly struct DurableFieldAnalysis {
+        public DurableFieldAnalysis(
             IFieldSymbol? symbol,
             int fieldId,
             string typeTag,
@@ -1186,12 +1186,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public TypePattern ValuePattern { get; }
     }
 
-    private readonly struct DurableTypeModel {
-        public DurableTypeModel(
+    private readonly struct DurableTypeAnalysis {
+        public DurableTypeAnalysis(
             INamedTypeSymbol symbol,
             string schemaId,
             int version,
-            List<DurableFieldModel> fields, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
+            List<DurableFieldAnalysis> fields, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
             ListType = listType;
             DictionaryType = dictionaryType;
             Symbol = symbol;
@@ -1208,7 +1208,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         public int Version { get; }
 
-        public List<DurableFieldModel> Fields { get; }
+        public List<DurableFieldAnalysis> Fields { get; }
         public bool IsEnum => Symbol.TypeKind == TypeKind.Enum;
         public bool IsInline => Symbol.TypeKind is TypeKind.Struct or TypeKind.Enum;
         public int Arity => Symbol.Arity;
@@ -1225,8 +1225,8 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public string? Content { get; }
     }
 
-    private readonly struct SchemaHistoryFieldModel {
-        public SchemaHistoryFieldModel(int fieldId, int typeTagValue, string? targetSchemaId = null, SchemaReference? inlineSchema = null, TypePattern? valuePattern = null) {
+    private readonly struct SchemaTemplateField {
+        public SchemaTemplateField(int fieldId, int typeTagValue, string? targetSchemaId = null, SchemaReference? inlineSchema = null, TypePattern? valuePattern = null) {
             InlineSchema = inlineSchema;
             FieldId = fieldId;
             TypeTagValue = typeTagValue;
@@ -1242,12 +1242,12 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
         public TypePattern ValuePattern { get; }
     }
 
-    private readonly struct SchemaHistoryModel {
-        public SchemaHistoryModel(
+    private readonly struct SchemaTemplate {
+        public SchemaTemplate(
             string path,
             string schemaId,
             int version,
-            List<SchemaHistoryFieldModel> fields,
+            List<SchemaTemplateField> fields,
             SchemaReference? baseSchema = null, int kind = 1, int arity = 0) {
             Kind = kind;
             Path = path;
@@ -1264,7 +1264,7 @@ public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
 
         public int Version { get; }
 
-        public List<SchemaHistoryFieldModel> Fields { get; }
+        public List<SchemaTemplateField> Fields { get; }
 
         public SchemaReference? BaseSchema { get; }
         public int Kind { get; }

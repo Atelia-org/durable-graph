@@ -29,7 +29,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         tool.Verify(history.WriteManifest(run), history.History);
         Assert.Equal(path, Assert.Single(Directory.GetFiles(history.History)));
         Assert.Equal(originalBytes, File.ReadAllBytes(path));
-        Assert.Equal(fileName, SchemaHistoryDocument.GetHistoryFileName(SchemaHistoryDocument.ParseHistory(path), original));
+        Assert.Equal(fileName, SchemaHistoryTextCodec.GetHistoryFileName(SchemaHistoryTextCodec.ParseHistory(path), original));
     }
 
     [Theory]
@@ -66,11 +66,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             "// field:4|15|nUGhhbnRvbQ==(b20)\n// field:5|18|q(b21)\n// field:6|15|d(b19,l(q(b20)))\n";
         string text = BclHistory("World", body, 8);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 8));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record, 8));
         Assert.Equal("nUGFyZW50(b19)", record.BaseType!.ToString());
         Assert.Equal(new[] { "b19", "b20", "b21", "nUGhhbnRvbQ==(b20)", "q(b21)", "d(b19,l(q(b20)))" },
             record.Fields.Select(field => field.ValuePattern.ToString()));
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.RenderHistory(record, 7));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.RenderHistory(record, 7));
         foreach (int gap in new[] { 0, 15, 16, 17, 18, 22 }) {
             Assert.Throws<SchemaHistoryException>(() => fixture.Parse(BclHistory("Bad", $"// field:1|15|l(b{gap})\n", 8)));
         }
@@ -124,12 +124,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         internal SchemaHistoryRecord Parse(string text) {
             string path = Path.Combine(_root, "input.dgschema");
             File.WriteAllText(path, text, new UTF8Encoding(false));
-            return SchemaHistoryDocument.ParseHistory(path);
+            return SchemaHistoryTextCodec.ParseHistory(path);
         }
         internal IReadOnlyList<SchemaHistoryRecord> ParseManifest(string text) {
             string path = Path.Combine(_root, "manifest.g.cs");
             File.WriteAllText(path, text.Replace("// durable-graph-schema-history:", "// durable-graph-schema-history-manifest:"), new UTF8Encoding(false));
-            return SchemaHistoryDocument.ParseManifest(path);
+            return SchemaHistoryTextCodec.ParseManifest(path);
         }
         public void Dispose() => Directory.Delete(_root, recursive: true);
     }

@@ -11,7 +11,7 @@ public sealed class ArrayTemplateHistoryTests {
         string text = History("// field:1|15|a1(p0)\n// field:2|15|a2(a3(a4(b2)))\n" +
             "// field:3|15|nQm94(a1(b4))\n// field:4|16|nUGFpcg==(a1(p0))|1\n// field:5|2\n");
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 4));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record, 4));
         Assert.Equal("a1(p0)", record.Fields[0].ValuePattern.ToString());
         Assert.Equal("a1(b2)", record.Fields[0].ValuePattern.Substitute([record.Fields[4].ValuePattern]).ToString());
         Assert.Equal("a2(a3(a4(b2)))", record.Fields[1].ValuePattern.ToString());
@@ -69,7 +69,7 @@ public sealed class ArrayTemplateHistoryTests {
         public SchemaHistoryRecord Parse(string text) {
             string path = Path.Combine(_root, "input.dgschema");
             File.WriteAllText(path, text, new UTF8Encoding(false));
-            return SchemaHistoryDocument.ParseHistory(path);
+            return SchemaHistoryTextCodec.ParseHistory(path);
         }
         public void Publish(params string[] records) {
             string path = Path.Combine(_root, "manifest.g.cs");

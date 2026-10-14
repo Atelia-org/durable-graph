@@ -77,12 +77,12 @@ public sealed partial class DurableSchemaGenerator {
         return hasErrors;
     }
 
-    private static List<DurableTypeModel> ValidateSchemaChains(
+    private static List<DurableTypeAnalysis> ValidateSchemaChains(
         SourceProductionContext context,
-        List<DurableTypeModel> types, Compilation compilation) {
-        List<DurableTypeModel> result = new(types.Count);
+        List<DurableTypeAnalysis> types, Compilation compilation) {
+        List<DurableTypeAnalysis> result = new(types.Count);
         Dictionary<ISymbol, int> heights = new(SymbolEqualityComparer.Default);
-        foreach (DurableTypeModel type in types) {
+        foreach (DurableTypeAnalysis type in types) {
             bool valid = ValidateCurrentDependency(type, types, compilation, new HashSet<ISymbol>(SymbolEqualityComparer.Default), heights, 0, out _);
             if (valid) {
                 result.Add(type);
@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGenerator {
         return result;
     }
 
-    private static bool ValidateCurrentDependency(DurableTypeModel type, List<DurableTypeModel> types, Compilation compilation,
+    private static bool ValidateCurrentDependency(DurableTypeAnalysis type, List<DurableTypeAnalysis> types, Compilation compilation,
         HashSet<ISymbol> path, Dictionary<ISymbol, int> heights, int depth, out int height) {
         height = 1;
         if (depth >= 256 || !path.Add(type.Symbol)) return false;
@@ -116,7 +116,7 @@ public sealed partial class DurableSchemaGenerator {
                 height = Math.Max(height, childHeight + 1);
             }
         }
-        foreach (DurableFieldModel field in type.Fields) {
+        foreach (DurableFieldAnalysis field in type.Fields) {
             if (!field.InlineSchema.HasValue) continue;
             INamedTypeSymbol target = (INamedTypeSymbol)(IsNullableValue(field.Symbol.Type) ? ((INamedTypeSymbol)field.Symbol.Type).TypeArguments[0] : field.Symbol.Type);
             int index = types.FindIndex(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, target.OriginalDefinition));
@@ -130,7 +130,7 @@ public sealed partial class DurableSchemaGenerator {
         return true;
     }
 
-    private static SchemaReference? GetCurrentBaseReference(DurableTypeModel model) {
+    private static SchemaReference? GetCurrentBaseReference(DurableTypeAnalysis model) {
         INamedTypeSymbol type = model.Symbol;
         if (model.IsInline || IsObjectBase(type.BaseType)) {
             return null;
@@ -150,16 +150,16 @@ public sealed partial class DurableSchemaGenerator {
                     left.Value.Version == right.Value.Version));
     }
 
-    private static bool HaveSameShape(SchemaHistoryModel left, SchemaHistoryModel right) {
+    private static bool HaveSameShape(SchemaTemplate left, SchemaTemplate right) {
         return left.Kind == right.Kind && left.Arity == right.Arity && SameReference(left.BaseSchema, right.BaseSchema) && HaveSameFields(left.Fields, right.Fields);
     }
 
     // Accepted history is checked by itself. Current candidates must never repair a missing historical ancestor.
-    private static bool ValidateHistoryClosure(SourceProductionContext context, List<SchemaHistoryModel> history) {
+    private static bool ValidateHistoryClosure(SourceProductionContext context, List<SchemaTemplate> history) {
         bool valid = ValidateTemplateNominalShapes(context, history);
         Dictionary<string, int> kinds = new(StringComparer.Ordinal);
         Dictionary<string, int> heights = new(StringComparer.Ordinal);
-        foreach (SchemaHistoryModel entry in history) {
+        foreach (SchemaTemplate entry in history) {
             if (kinds.TryGetValue(entry.SchemaId, out int kind) && kind != (entry.Kind * 64 + entry.Arity)) {
                 ReportInvalidHistoryAncestry(context, entry, "a Schema family cannot change kind or arity");
                 valid = false;
@@ -171,11 +171,11 @@ public sealed partial class DurableSchemaGenerator {
         return valid;
     }
 
-    private static string SchemaKey(SchemaHistoryModel shape) =>
+    private static string SchemaKey(SchemaTemplate shape) =>
         Convert.ToBase64String(StrictUtf8.GetBytes(shape.SchemaId)) + ":" + shape.Version.ToString(CultureInfo.InvariantCulture);
 
-    private static bool ValidateExactDependency(SourceProductionContext context, SchemaHistoryModel entry,
-        List<SchemaHistoryModel> available, HashSet<string> path, Dictionary<string, int> heights, int depth, out int height) {
+    private static bool ValidateExactDependency(SourceProductionContext context, SchemaTemplate entry,
+        List<SchemaTemplate> available, HashSet<string> path, Dictionary<string, int> heights, int depth, out int height) {
         height = 1;
         string key = SchemaKey(entry);
         if (depth >= 256 || !path.Add(key)) {
@@ -202,17 +202,17 @@ public sealed partial class DurableSchemaGenerator {
                 ReportInvalidHistoryAncestry(context, entry, "an ancestor repeats a schema ID");
                 return false;
             }
-            List<SchemaHistoryModel> ancestors = FindHistory(available, ancestor.Value.SchemaId, ancestor.Value.Version);
+            List<SchemaTemplate> ancestors = FindHistory(available, ancestor.Value.SchemaId, ancestor.Value.Version);
             if (ancestors.Count == 0) break; // The exact dependency check below reports the missing record.
             ancestor = ancestors[0].BaseSchema;
         }
         List<(SchemaReference Reference, int Kind)> dependencies = new();
         if (entry.BaseSchema.HasValue) dependencies.Add((entry.BaseSchema.Value, 1));
-        foreach (SchemaHistoryFieldModel field in entry.Fields) {
+        foreach (SchemaTemplateField field in entry.Fields) {
             if (field.InlineSchema.HasValue) dependencies.Add((field.InlineSchema.Value, 2));
         }
         foreach (var dependency in dependencies) {
-            List<SchemaHistoryModel> matches = FindHistory(available, dependency.Reference.SchemaId, dependency.Reference.Version);
+            List<SchemaTemplate> matches = FindHistory(available, dependency.Reference.SchemaId, dependency.Reference.Version);
             if (matches.Count == 0) {
                 ReportInvalidHistoryAncestry(context, entry,
                     (entry.Path.Length == 0 ? "current Schema is" : "accepted history is") +
@@ -236,41 +236,41 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void ReportInvalidHistoryAncestry(
-        SourceProductionContext context, SchemaHistoryModel entry, string message) {
+        SourceProductionContext context, SchemaTemplate entry, string message) {
         context.ReportDiagnostic(Diagnostic.Create(
             InvalidSchemaAncestry, CreateAdditionalFileLocation(entry.Path), entry.SchemaId, message));
     }
 
-    private static List<DurableTypeModel> GenerateSchemas(
+    private static List<DurableTypeAnalysis> GenerateSchemas(
         SourceProductionContext context,
-        List<DurableTypeModel> currentTypes,
-        List<SchemaHistoryModel> history) {
-        List<SchemaHistoryModel> available = new(history);
-        foreach (DurableTypeModel current in currentTypes) {
+        List<DurableTypeAnalysis> currentTypes,
+        List<SchemaTemplate> history) {
+        List<SchemaTemplate> available = new(history);
+        foreach (DurableTypeAnalysis current in currentTypes) {
             available.RemoveAll(entry => entry.SchemaId == current.SchemaId && entry.Version == current.Version);
             available.Add(CurrentShape(current));
         }
 
         // Exact accepted records and current candidates must agree before a cache can share their keys.
-        foreach (DurableTypeModel current in currentTypes) {
-            foreach (SchemaHistoryModel old in history) {
+        foreach (DurableTypeAnalysis current in currentTypes) {
+            foreach (SchemaTemplate old in history) {
                 if (old.SchemaId == current.SchemaId && old.Kind != (current.IsInline ? 2 : 1)) {
                     context.ReportDiagnostic(Diagnostic.Create(CurrentSchemaHistoryMismatch, GetSourceLocation(current.Symbol),
                         current.Symbol.ToDisplayString(QualifiedNameFormat), current.SchemaId, current.Version));
-                    return new List<DurableTypeModel>();
+                    return new List<DurableTypeAnalysis>();
                 }
             }
         }
-        if (!ValidateHistoryClosure(context, available)) return new List<DurableTypeModel>();
+        if (!ValidateHistoryClosure(context, available)) return new List<DurableTypeAnalysis>();
         StringBuilder source = new("// <auto-generated/>\n#nullable enable\n");
-        List<DurableTypeModel> validatedTypes = new();
+        List<DurableTypeAnalysis> validatedTypes = new();
         AppendSharedSchemaCache(source, available);
         bool emitted = false;
-        foreach (DurableTypeModel current in currentTypes) {
+        foreach (DurableTypeAnalysis current in currentTypes) {
             bool valid = true;
-            List<SchemaHistoryModel> versions = new();
+            List<SchemaTemplate> versions = new();
             for (int version = 1; version < current.Version; version++) {
-                List<SchemaHistoryModel> matches = FindHistory(history, current.SchemaId, version);
+                List<SchemaTemplate> matches = FindHistory(history, current.SchemaId, version);
                 if (matches.Count == 0) {
                     context.ReportDiagnostic(Diagnostic.Create(
                         MissingSchemaHistory, GetSourceLocation(current.Symbol),
@@ -287,8 +287,8 @@ public sealed partial class DurableSchemaGenerator {
                 versions.Add(matches[0]);
             }
 
-            SchemaHistoryModel currentShape = CurrentShape(current);
-            List<SchemaHistoryModel> currentMatches = FindHistory(history, current.SchemaId, current.Version);
+            SchemaTemplate currentShape = CurrentShape(current);
+            List<SchemaTemplate> currentMatches = FindHistory(history, current.SchemaId, current.Version);
             if (currentMatches.Count > 0 &&
                 (!AllHaveSameShape(currentMatches) || !HaveSameShape(currentMatches[0], currentShape))) {
                 context.ReportDiagnostic(Diagnostic.Create(
@@ -314,18 +314,18 @@ public sealed partial class DurableSchemaGenerator {
         return validatedTypes;
     }
 
-    private static SchemaHistoryModel CurrentShape(DurableTypeModel current) {
-        return new SchemaHistoryModel(
+    private static SchemaTemplate CurrentShape(DurableTypeAnalysis current) {
+        return new SchemaTemplate(
             string.Empty, current.SchemaId, current.Version,
-            ToSchemaHistoryFields(current.Fields), GetCurrentBaseReference(current), current.IsInline ? 2 : 1, current.Arity);
+            ToSchemaTemplateFields(current.Fields), GetCurrentBaseReference(current), current.IsInline ? 2 : 1, current.Arity);
     }
 
     private static void AppendSchemaType(
         StringBuilder source,
-        DurableTypeModel current,
-        List<SchemaHistoryModel> versions,
-        List<SchemaHistoryModel> history,
-        List<SchemaHistoryModel> available) {
+        DurableTypeAnalysis current,
+        List<SchemaTemplate> versions,
+        List<SchemaTemplate> history,
+        List<SchemaTemplate> available) {
         bool hasNamespace = !current.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) {
             source.Append("namespace ").Append(current.Symbol.ContainingNamespace.ToDisplayString(QualifiedNameFormat)).AppendLine(" {");
@@ -340,7 +340,7 @@ public sealed partial class DurableSchemaGenerator {
             .Append(current.Version.ToString(CultureInfo.InvariantCulture)).AppendLine(");");
         source.Append(member).Append("public ").Append(hiding)
             .AppendLine("static global::Atelia.DurableGraph.Schema.DurableSchema GetSchema(int version) => version switch {");
-        foreach (SchemaHistoryModel version in versions) {
+        foreach (SchemaTemplate version in versions) {
             string number = version.Version.ToString(CultureInfo.InvariantCulture);
             source.Append(member).Append("    ").Append(number).Append(" => ")
                 .Append(SchemaHistoryCacheName).Append(".V").Append(number).AppendLine(",");
@@ -349,7 +349,7 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(member).AppendLine("    _ => throw new global::System.ArgumentOutOfRangeException(nameof(version)),");
         source.Append(member).AppendLine("};");
         source.Append(member).Append("private static class ").Append(SchemaHistoryCacheName).AppendLine(" {");
-        foreach (SchemaHistoryModel version in versions) {
+        foreach (SchemaTemplate version in versions) {
             source.Append(member).Append("    internal static readonly global::Atelia.DurableGraph.Schema.DurableSchema V")
                 .Append(version.Version.ToString(CultureInfo.InvariantCulture)).Append(" = ");
             // Historical roots use only accepted records, even if a current candidate has the same key.
@@ -364,14 +364,14 @@ public sealed partial class DurableSchemaGenerator {
         }
     }
 
-    private static string SchemaCacheMember(SchemaHistoryModel shape) =>
+    private static string SchemaCacheMember(SchemaTemplate shape) =>
         "S_" + BitConverter.ToString(StrictUtf8.GetBytes(shape.SchemaId)).Replace("-", string.Empty) + "_V" + shape.Version.ToString(CultureInfo.InvariantCulture);
 
-    private static void AppendSharedSchemaCache(StringBuilder source, List<SchemaHistoryModel> available) {
+    private static void AppendSharedSchemaCache(StringBuilder source, List<SchemaTemplate> available) {
         source.AppendLine("namespace Atelia.DurableGraph.Generated {");
         source.AppendLine("internal static class __ExactSchemas {");
         HashSet<string> emitted = new(StringComparer.Ordinal);
-        foreach (SchemaHistoryModel shape in available) {
+        foreach (SchemaTemplate shape in available) {
             string member = SchemaCacheMember(shape);
             if (!emitted.Add(member)) continue;
             source.Append("    internal static global::Atelia.DurableGraph.Schema.DurableSchema ").Append(member).Append(" => Cache_").Append(member).AppendLine(".Value;");
@@ -385,17 +385,17 @@ public sealed partial class DurableSchemaGenerator {
         source.AppendLine("}");
     }
 
-    private static void AppendSchemaExpression(StringBuilder source, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
+    private static void AppendSchemaExpression(StringBuilder source, SchemaTemplate shape, List<SchemaTemplate> available) {
         source.Append("global::Atelia.DurableGraph.Generated.__ExactSchemas.").Append(SchemaCacheMember(shape));
     }
 
     private static void AppendSchemaConstruction(
-        StringBuilder source, SchemaHistoryModel shape, List<SchemaHistoryModel> available) {
+        StringBuilder source, SchemaTemplate shape, List<SchemaTemplate> available) {
         source.Append("new global::Atelia.DurableGraph.Schema.DurableSchema(")
             .Append(SymbolDisplay.FormatLiteral(shape.SchemaId, quote: true)).Append(", ")
             .Append(shape.Version.ToString(CultureInfo.InvariantCulture))
             .Append(", new global::Atelia.DurableGraph.Schema.DurableFieldInfo[] { ");
-        foreach (SchemaHistoryFieldModel field in shape.Fields) {
+        foreach (SchemaTemplateField field in shape.Fields) {
             source.Append("new global::Atelia.DurableGraph.Schema.DurableFieldInfo(")
                 .Append(field.FieldId.ToString(CultureInfo.InvariantCulture))
                 .Append(", (global::Atelia.DurableGraph.Schema.TypeTag)")

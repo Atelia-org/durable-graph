@@ -12,7 +12,7 @@ public sealed partial class DurableSchemaGenerator {
     // structure verification against the exact compiled type (DB-075 §5). Both the binary
     // and family generation paths share this single rule set.
     private static ImmutableLeafCandidate? TryBuildImmutableLeafCandidate(
-        DurableTypeModel type, List<DurableTypeModel> types, INamedTypeSymbol? halfType) {
+        DurableTypeAnalysis type, List<DurableTypeAnalysis> types, INamedTypeSymbol? halfType) {
         if (type.Symbol.IsGenericType || type.IsInline || type.IsEnum) return null;
         List<ImmutableLeafDeclaration> declarations = new();
         HashSet<INamedTypeSymbol> visited = new(SymbolEqualityComparer.Default);
@@ -21,7 +21,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool TryCollectReferenceTypeCandidate(
-        DurableTypeModel type, List<DurableTypeModel> types, INamedTypeSymbol? halfType,
+        DurableTypeAnalysis type, List<DurableTypeAnalysis> types, INamedTypeSymbol? halfType,
         HashSet<INamedTypeSymbol> visited, List<ImmutableLeafDeclaration> declarations) {
         if (!visited.Add(type.Symbol)) return true; // Defensive: class chains cannot cycle.
         if (!TryCollectDeclaration(type, types, halfType, visited, declarations, isStruct: false)) return false;
@@ -35,14 +35,14 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool TryCollectInlineStructCandidate(
-        DurableTypeModel structModel, List<DurableTypeModel> types, INamedTypeSymbol? halfType,
+        DurableTypeAnalysis structModel, List<DurableTypeAnalysis> types, INamedTypeSymbol? halfType,
         HashSet<INamedTypeSymbol> visited, List<ImmutableLeafDeclaration> declarations) {
         if (!visited.Add(structModel.Symbol)) return true; // CS0523 forbids value-type cycles.
         return TryCollectDeclaration(structModel, types, halfType, visited, declarations, isStruct: true);
     }
 
     private static bool TryCollectDeclaration(
-        DurableTypeModel type, List<DurableTypeModel> types, INamedTypeSymbol? halfType,
+        DurableTypeAnalysis type, List<DurableTypeAnalysis> types, INamedTypeSymbol? halfType,
         HashSet<INamedTypeSymbol> visited, List<ImmutableLeafDeclaration> declarations, bool isStruct) {
         // Primary-constructor parameters are not excluded syntactically: a parameter becomes
         // instance state only when the compiler materializes a capture field, which is
@@ -51,7 +51,7 @@ public sealed partial class DurableSchemaGenerator {
         // explicit readonly field initializer leaves no instance state behind.
         if (!AuditInstanceFields(type.Symbol)) return false;
         List<ImmutableLeafField> fields = new();
-        foreach (DurableFieldModel field in type.Fields) {
+        foreach (DurableFieldAnalysis field in type.Fields) {
             if (!TryBuildImmutableLeafFieldType(field, types, halfType, visited, declarations, out ImmutableLeafFieldType? fieldType)) return false;
             fields.Add(new ImmutableLeafField(field.Symbol.MetadataName, fieldType!));
         }
@@ -86,7 +86,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool TryBuildImmutableLeafFieldType(
-        DurableFieldModel field, List<DurableTypeModel> types, INamedTypeSymbol? halfType,
+        DurableFieldAnalysis field, List<DurableTypeAnalysis> types, INamedTypeSymbol? halfType,
         HashSet<INamedTypeSymbol> visited, List<ImmutableLeafDeclaration> declarations,
         out ImmutableLeafFieldType? fieldType) {
         fieldType = null;
@@ -114,7 +114,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool TryBuildInlineFieldType(
-        ITypeSymbol target, List<DurableTypeModel> types, INamedTypeSymbol? halfType,
+        ITypeSymbol target, List<DurableTypeAnalysis> types, INamedTypeSymbol? halfType,
         HashSet<INamedTypeSymbol> visited, List<ImmutableLeafDeclaration> declarations,
         out ImmutableLeafFieldType? fieldType) {
         fieldType = null;
@@ -122,7 +122,7 @@ public sealed partial class DurableSchemaGenerator {
         int index = types.FindIndex(candidate =>
             SymbolEqualityComparer.Default.Equals(candidate.Symbol, named.OriginalDefinition));
         if (index < 0) return false;
-        DurableTypeModel model = types[index];
+        DurableTypeAnalysis model = types[index];
         if (model.IsEnum) {
             // Enums cannot be extended by another partial declaration; the field type identity
             // check is their whole verification.

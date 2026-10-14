@@ -3,6 +3,7 @@
 > 文档整理：2026-10-14；来源为 Git `8ef9fca` 中的 `docs/design-branches/0060-cross-assembly-inline-history-slice.md`，正文保留当片合同与历史验收含义。
 > 阅读范围：固定外部值字段、只读历史导出与 ref/lib 两代包证据见 §9；不复制依赖库 history，外部 durable base 由 DB-061 承接，NU5131 限于见证模型包。
 > 当前能力与施工焦点见 [PROJECT-STATE](../../../src/PROJECT-STATE.md)；旧稿中的“下一步”不自动成为当前工作单。
+> 本文 Generator 内部名称保当片拼写；当前 Analysis／Family 名称映射见 [DB-092 A](../0092-type-namespace-refactoring/implementation-a.md)。
 
 > 状态：已实施，G0–G3 验收通过；用户于 2026-09-10 授权，结果见 §9。
 > 日期：2026-09-10；调查基线：`0068694`（DB-059 已实施）。

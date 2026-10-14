@@ -9,14 +9,14 @@ internal sealed partial class SchemaHistoryTool {
         string? referenceManifestPath,
         IReadOnlyList<SchemaHistoryRecord> candidates,
         IReadOnlyDictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing) {
-        SchemaHistoryDocument.StripReferenceHash(manifestPath, SchemaHistoryDocument.ReadManifestText(manifestPath), out string? expectedHash);
+        SchemaHistoryTextCodec.StripReferenceHash(manifestPath, SchemaHistoryTextCodec.ReadManifestText(manifestPath), out string? expectedHash);
         IReadOnlyList<SchemaHistoryReferenceEntry> references = Array.Empty<SchemaHistoryReferenceEntry>();
         if (referenceManifestPath is null) {
             if (expectedHash is not null) throw new SchemaHistoryException("manifest requires its matching --reference-manifest input");
         } else {
             try {
                 byte[] bytes = File.ReadAllBytes(referenceManifestPath);
-                string text = SchemaHistoryDocument.Utf8NoBom.GetString(bytes);
+                string text = SchemaHistoryTextCodec.Utf8NoBom.GetString(bytes);
                 references = SchemaHistoryReferenceProtocol.Parse(text);
                 if (expectedHash is not null && expectedHash != SchemaHistoryReferenceProtocol.ComputeHash(text)) {
                     throw new SchemaHistoryException("reference manifest SHA256 does not match the owned manifest");
@@ -36,7 +36,7 @@ internal sealed partial class SchemaHistoryTool {
             if (ownedIds.Contains(reference.SchemaId)) {
                 throw new SchemaHistoryException($"reference schema '{reference.SchemaId}' belongs to an owned definition; imports cannot supply owned history");
             }
-            SchemaHistoryRecord record = SchemaHistoryDocument.ParseReference(reference);
+            SchemaHistoryRecord record = SchemaHistoryTextCodec.ParseReference(reference);
             imported.Add(record.Key, record);
             available.Add(record.Key, record);
         }

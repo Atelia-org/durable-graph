@@ -3,6 +3,7 @@
 > 整理说明：2026-10-14 从 `docs/design-branches/0061-cross-assembly-inheritance-slice.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：已实施分片记录；typed base projection、Family 与两代真实包证据限本文基线，展开 DTO/body 与 State 格式当片保持。
 > 本文原过程与测试数字保留当时基线；当前能力与焦点见 [PROJECT-STATE](../../../src/PROJECT-STATE.md)。
+> 本文 Generator 内部名称保当片拼写；当前 Analysis／Family 名称映射见 [DB-092 A](../0092-type-namespace-refactoring/implementation-a.md)。
 
 > 状态：已实施，G0–G3 验收通过；用户于 2026-09-10 授权完整实施，施工账本见 §10。
 > 日期：2026-09-10；调查基线：`6123faa`（DB-060 已完成）。

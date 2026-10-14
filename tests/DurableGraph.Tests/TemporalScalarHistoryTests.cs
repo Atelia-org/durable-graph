@@ -29,7 +29,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         tool.Verify(history.WriteManifest(run), history.History);
         Assert.Equal(path, Assert.Single(Directory.GetFiles(history.History)));
         Assert.Equal(originalBytes, File.ReadAllBytes(path));
-        Assert.Equal(fileName, SchemaHistoryDocument.GetHistoryFileName(SchemaHistoryDocument.ParseHistory(path), original));
+        Assert.Equal(fileName, SchemaHistoryTextCodec.GetHistoryFileName(SchemaHistoryTextCodec.ParseHistory(path), original));
     }
 
     [Theory]
@@ -71,12 +71,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             "// field:4|15|nUGhhbnRvbQ==(b23)\n// field:5|18|q(b24)\n// field:6|15|d(b22,l(q(b24)))\n";
         string text = BclHistory("World", body, 9);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record));
         Assert.Equal("nUGFyZW50(b22)", record.BaseType!.ToString());
         Assert.Equal(new[] { "b22", "b23", "b24", "nUGhhbnRvbQ==(b23)", "q(b24)", "d(b22,l(q(b24)))" },
             record.Fields.Select(field => field.ValuePattern.ToString()));
         Assert.True(record.ShapeEquals(Assert.Single(fixture.ParseManifest(text))));
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.RenderHistory(record, 8));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.RenderHistory(record, 8));
         foreach (int gap in new[] { 0, 15, 16, 17, 18, 25, 255 }) {
             Assert.Throws<SchemaHistoryException>(() => fixture.Parse(BclHistory("Bad", $"// field:1|15|l(b{gap})\n", 9)));
         }
@@ -109,7 +109,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         if (version >= 8) fields.AddRange(["19", "20", "21", "15|nUGhhbnRvbQ==(b19)", "15|d(b20,a1(l(q(b21))))"]);
         string text = BclHistory("Old", string.Concat(fields.Select((field, index) => $"// field:{index + 1}|{field}\n")), version);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, version));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record, version));
         Assert.True(record.ShapeEquals(Assert.Single(fixture.ParseManifest(text))));
         GeneratorTestRun run = RunGenerator("class Plain {}", new InMemoryAdditionalText("old.dgschema", text));
         Assert.DoesNotContain(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");

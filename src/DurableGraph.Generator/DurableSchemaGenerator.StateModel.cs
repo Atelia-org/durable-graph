@@ -10,7 +10,7 @@ public sealed partial class DurableSchemaGenerator {
         "UpgradeStateV" + version.ToString(CultureInfo.InvariantCulture) + "ToV" +
         (version + 1).ToString(CultureInfo.InvariantCulture);
 
-    private static bool ValidateBinaryUpgradeMethods(SourceProductionContext context, DurableTypeModel type) {
+    private static bool ValidateBinaryUpgradeMethods(SourceProductionContext context, DurableTypeAnalysis type) {
         bool valid = true;
         for (int version = 1; version < type.Version; version++) {
             string name = BinaryUpgradeName(version);
@@ -35,7 +35,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendBinaryStateModel(
-        StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions,
+        StringBuilder source, DurableTypeAnalysis type, List<BinaryVersionModel> versions,
         string indent, bool hasDomainBase, ImmutableLeafCandidate? candidate) {
         BinaryVersionModel current = versions[versions.Count - 1];
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
@@ -75,7 +75,7 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(indent).AppendLine("}");
     }
 
-    private static void AppendBinaryUpgradeEdges(StringBuilder source, DurableTypeModel type, string indent) {
+    private static void AppendBinaryUpgradeEdges(StringBuilder source, DurableTypeAnalysis type, string indent) {
         // Validate each declared edge even when another missing edge makes its path unusable.
         // Generated DTO symbols do not yet exist during the initial Roslyn symbol inspection.
         for (int version = 1; version < type.Version; version++) {
@@ -95,7 +95,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendBinaryNormalize(
-        StringBuilder source, DurableTypeModel type, List<BinaryVersionModel> versions, string indent) {
+        StringBuilder source, DurableTypeAnalysis type, List<BinaryVersionModel> versions, string indent) {
         BinaryVersionModel current = versions[versions.Count - 1];
         source.Append(indent).Append("internal static ").Append(current.Name)
             .AppendLine(" Normalize(global::Atelia.DurableGraph.Runtime.ObjectStateRecord item) {");
@@ -128,14 +128,14 @@ public sealed partial class DurableSchemaGenerator {
         source.Append(indent).AppendLine("}");
     }
 
-    private static void AppendInlineHydrate(StringBuilder source, DurableTypeModel type, BinaryVersionModel current, string indent) =>
+    private static void AppendInlineHydrate(StringBuilder source, DurableTypeAnalysis type, BinaryVersionModel current, string indent) =>
         AppendBinaryHydrate(source, type, current, indent, false);
 
     private static void AppendBinaryHydrate(
-        StringBuilder source, DurableTypeModel type, BinaryVersionModel current, string indent, bool hasDomainBase) {
+        StringBuilder source, DurableTypeAnalysis type, BinaryVersionModel current, string indent, bool hasDomainBase) {
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
         for (int index = 0; index < type.Fields.Count; index++) {
-            DurableFieldModel field = type.Fields[index];
+            DurableFieldAnalysis field = type.Fields[index];
             if (!field.Symbol.IsReadOnly) continue;
             source.Append(indent).Append("[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = \"")
                 .Append(field.Symbol.Name).AppendLine("\")]");
@@ -153,7 +153,7 @@ public sealed partial class DurableSchemaGenerator {
         // Resolve this declaring segment before invoking its base helper or writing fields.
         // Each base helper does the same, so a bad reference cannot leave partial assignments.
         for (int index = 0; index < type.Fields.Count; index++) {
-            DurableFieldModel field = type.Fields[index];
+            DurableFieldAnalysis field = type.Fields[index];
             if (field.InlineSchema.HasValue) {
                 source.Append(indent).Append("    ").Append(field.FieldTypeName).Append(" inline")
                     .Append(index.ToString(CultureInfo.InvariantCulture)).AppendLine(" = default;");
@@ -184,7 +184,7 @@ public sealed partial class DurableSchemaGenerator {
             source.Append(indent).Append("    ").Append(baseState).AppendLine(".Hydrate(value, in baseState, objects);");
         }
         for (int index = 0; index < type.Fields.Count; index++) {
-            DurableFieldModel field = type.Fields[index];
+            DurableFieldAnalysis field = type.Fields[index];
             source.Append(indent).Append("    ");
             if (field.Symbol.IsReadOnly) {
                 source.Append("ReadonlyField").Append(index.ToString(CultureInfo.InvariantCulture)).Append(type.IsInline ? "(ref value)" : "(value)");

@@ -12,7 +12,7 @@ internal sealed partial class SchemaHistoryTool {
         string manifestPath,
         string schemaHistoryDirectory,
         string? referenceManifestPath = null) {
-        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryDocument.ParseManifest(manifestPath);
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath);
 
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
@@ -45,8 +45,8 @@ internal sealed partial class SchemaHistoryTool {
                 continue;
             }
 
-            string canonicalContent = SchemaHistoryDocument.RenderHistory(candidate);
-            string fileName = SchemaHistoryDocument.GetHistoryFileName(candidate, canonicalContent);
+            string canonicalContent = SchemaHistoryTextCodec.RenderHistory(candidate);
+            string fileName = SchemaHistoryTextCodec.GetHistoryFileName(candidate, canonicalContent);
             string destinationPath = Path.Combine(schemaHistoryDirectory, fileName);
 
             if (File.Exists(destinationPath)) {
@@ -71,7 +71,7 @@ internal sealed partial class SchemaHistoryTool {
         string manifestPath,
         string schemaHistoryDirectory,
         string? referenceManifestPath = null) {
-        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryDocument.ParseManifest(manifestPath);
+        IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath);
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
             : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();
@@ -109,9 +109,9 @@ internal sealed partial class SchemaHistoryTool {
         Array.Sort(paths, StringComparer.Ordinal);
 
         foreach (string path in paths) {
-            SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(path);
-            string canonicalContent = SchemaHistoryDocument.RenderHistory(record, record.SourceFormatVersion);
-            string expectedFileName = SchemaHistoryDocument.GetHistoryFileName(record, canonicalContent);
+            SchemaHistoryRecord record = SchemaHistoryTextCodec.ParseHistory(path);
+            string canonicalContent = SchemaHistoryTextCodec.RenderHistory(record, record.SourceFormatVersion);
+            string expectedFileName = SchemaHistoryTextCodec.GetHistoryFileName(record, canonicalContent);
             string actualFileName = Path.GetFileName(path);
 
             if (!StringComparer.Ordinal.Equals(actualFileName, expectedFileName)) {
@@ -274,7 +274,7 @@ internal sealed partial class SchemaHistoryTool {
             $".{fileName}.{Guid.NewGuid():N}.tmp");
 
         try {
-            byte[] bytes = SchemaHistoryDocument.Utf8NoBom.GetBytes(record.Content);
+            byte[] bytes = SchemaHistoryTextCodec.Utf8NoBom.GetBytes(record.Content);
 
             using (FileStream stream = new(
                 temporaryPath,
@@ -298,7 +298,7 @@ internal sealed partial class SchemaHistoryTool {
     private sealed record PendingSchemaHistoryRecord(string DestinationPath, string Content);
 }
 
-internal static class SchemaHistoryDocument {
+internal static class SchemaHistoryTextCodec {
     private const string ManifestHeader = "// durable-graph-schema-history-manifest:";
     private const string HistoryHeader = "// durable-graph-schema-history:";
     private const string SchemaBegin = "// schema-begin";

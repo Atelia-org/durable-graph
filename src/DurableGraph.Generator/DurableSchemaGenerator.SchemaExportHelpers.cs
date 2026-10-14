@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
-    private static bool ValidateExportExecutionHelpers(Compilation compilation, GenericLayout layout,
+    private static bool ValidateExportExecutionHelpers(Compilation compilation, FamilyLayout layout,
         INamedTypeSymbol? family, INamedTypeSymbol? dto, INamedTypeSymbol? body, Dictionary<string, List<SchemaExport>> exports) {
         if (family?.DeclaredAccessibility != Accessibility.Public || dto?.DeclaredAccessibility != Accessibility.Public ||
             body?.DeclaredAccessibility != Accessibility.Public || dto.TypeKind != TypeKind.Struct || body.TypeKind != TypeKind.Struct ||
@@ -24,14 +24,14 @@ public sealed partial class DurableSchemaGenerator {
                 !ops.ConstraintTypes.OfType<INamedTypeSymbol>().Any(constraint =>
                     Same(constraint.OriginalDefinition, stateOps) && Same(constraint.TypeArguments[0], state))) return false;
         }
-        ITypeSymbol? FieldType(GenericField field) {
+        ITypeSymbol? FieldType(FamilyField field) {
             if (field.DynamicIndex >= 0) return dto.TypeParameters[field.DynamicIndex];
             if (field.Field.InlineSchema is SchemaReference inline) {
                 if (!exports.TryGetValue(inline.SchemaId, out List<SchemaExport>? entries)) return null;
                 return entries[0].Owner.GetTypeByMetadataName("Atelia.DurableGraph.Generated." + FamilyName(inline.SchemaId))?
                     .GetTypeMembers("V" + Number(inline.Version), 0).SingleOrDefault();
             }
-            int tag = GenericFieldTag(field);
+            int tag = FamilyFieldTag(field);
             return IsBinaryReference(tag) ? compilation.GetTypeByMetadataName("Atelia.DurableGraph.ObjectId") : compilation.GetTypeByMetadataName("System." + GetTypeTagName(GetBinarySlotTypeTag(tag)));
         }
         ITypeSymbol?[] fieldTypes = layout.Fields.Select(FieldType).ToArray();

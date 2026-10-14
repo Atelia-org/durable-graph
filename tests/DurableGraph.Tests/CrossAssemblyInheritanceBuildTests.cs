@@ -23,7 +23,7 @@ public sealed class CrossAssemblyInheritanceBuildTests {
         SchemaHistoryTool tool = new();
         Assert.Contains("published 1", tool.Publish(manifest, files.History, refs).Message);
         Assert.Contains("against 1 schema-history", tool.Verify(manifest, files.History, refs).Message);
-        SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(Assert.Single(Directory.GetFiles(files.History)));
+        SchemaHistoryRecord record = SchemaHistoryTextCodec.ParseHistory(Assert.Single(Directory.GetFiles(files.History)));
         Assert.Equal($"n{B64("base")}({arguments})", record.BaseType!.ToString());
     }
 
@@ -52,7 +52,7 @@ public sealed class CrossAssemblyInheritanceBuildTests {
         Run(verify, tool, historyOnly, files.History, refs);
         Assert.Equal(oldBytes, File.ReadAllBytes(accepted));
         Assert.Equal(new[] { 1, 2 }, Directory.GetFiles(files.History)
-            .Select(path => SchemaHistoryDocument.ParseHistory(path))
+            .Select(path => SchemaHistoryTextCodec.ParseHistory(path))
             .Select(record => { Assert.Equal("world", record.SchemaId); return record.Version; }).Order());
     }
 
@@ -191,10 +191,10 @@ public sealed class CrossAssemblyInheritanceBuildTests {
             return path;
         }
         public string Accept(string manifest) {
-            SchemaHistoryRecord record = Assert.Single(SchemaHistoryDocument.ParseManifestText("accepted", manifest));
-            string content = SchemaHistoryDocument.RenderHistory(record);
+            SchemaHistoryRecord record = Assert.Single(SchemaHistoryTextCodec.ParseManifestText("accepted", manifest));
+            string content = SchemaHistoryTextCodec.RenderHistory(record);
             Directory.CreateDirectory(History);
-            string path = Path.Combine(History, SchemaHistoryDocument.GetHistoryFileName(record, content));
+            string path = Path.Combine(History, SchemaHistoryTextCodec.GetHistoryFileName(record, content));
             File.WriteAllText(path, content, new UTF8Encoding(false));
             return path;
         }

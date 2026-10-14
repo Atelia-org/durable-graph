@@ -82,9 +82,9 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static bool ReportRecordHelperCollisions(SourceProductionContext context, INamedTypeSymbol type,
-        string schemaId, List<DurableFieldModel> fields) {
+        string schemaId, List<DurableFieldAnalysis> fields) {
         List<string> names = new() { "__DurableCapture", "__DurableHydrate", "__DurableCreateCurrent", "__DurableCreateTyped", "__DurableProjection" };
-        foreach (DurableFieldModel field in fields) {
+        foreach (DurableFieldAnalysis field in fields) {
             string suffix = FamilyName(schemaId) + "_" + Number(field.FieldId);
             names.Add("__DurableRead_" + suffix);
             names.Add("__DurableWrite_" + suffix);

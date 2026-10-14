@@ -11,13 +11,13 @@ public sealed class InlineSchemaHistoryToolTests {
         const string golden = "// durable-graph-schema-history:2\n// schema-begin\n" +
             "// schema-id-base64:V29ybGQ=\n// version:1\n// kind:1\n" +
             "// field:7|16|UG9pbnQ=|2\n// schema-end\n";
-        Assert.Equal(golden, SchemaHistoryDocument.RenderHistory(record, 2));
-        SchemaHistoryRecord parsed = SchemaHistoryDocument.ParseHistory(fixture.Write("world.dgschema", golden));
+        Assert.Equal(golden, SchemaHistoryTextCodec.RenderHistory(record, 2));
+        SchemaHistoryRecord parsed = SchemaHistoryTextCodec.ParseHistory(fixture.Write("world.dgschema", golden));
         Assert.True(record.ShapeEquals(parsed));
         Assert.Null(Assert.Single(parsed.Fields).TargetSchemaId);
         Assert.Equal(new SchemaHistoryKey("Point", 2), Assert.Single(parsed.Fields).InlineSchema);
-        Assert.Equal(2, SchemaHistoryDocument.ParseHistory(fixture.Write("point.dgschema",
-            SchemaHistoryDocument.RenderHistory(Record("Point", 2, kind: 2)))).Kind);
+        Assert.Equal(2, SchemaHistoryTextCodec.ParseHistory(fixture.Write("point.dgschema",
+            SchemaHistoryTextCodec.RenderHistory(Record("Point", 2, kind: 2)))).Kind);
     }
 
     [Fact]
@@ -49,8 +49,8 @@ public sealed class InlineSchemaHistoryToolTests {
     [InlineData("")]
     public void VersionTwoRequiresOneCanonicalKnownKind(string kind) {
         using Fixture fixture = new();
-        string text = SchemaHistoryDocument.RenderHistory(Record("World"), 2).Replace("// kind:1\n", kind);
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text)));
+        string text = SchemaHistoryTextCodec.RenderHistory(Record("World"), 2).Replace("// kind:1\n", kind);
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseHistory(fixture.Write("bad.dgschema", text)));
     }
 
     [Theory]
@@ -68,18 +68,18 @@ public sealed class InlineSchemaHistoryToolTests {
     [InlineData("1|15|UG9pbnQ=|1")]
     public void InlineOperandMustHaveCanonicalExactIdentity(string field) {
         using Fixture fixture = new();
-        string text = SchemaHistoryDocument.RenderHistory(Record("World", fields: [new(1, 2)]), 2)
+        string text = SchemaHistoryTextCodec.RenderHistory(Record("World", fields: [new(1, 2)]), 2)
             .Replace("1|2", field);
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text)));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseHistory(fixture.Write("bad.dgschema", text)));
     }
 
     [Fact]
     public void VersionOneCannotSmuggleInlineTagOrKind() {
         using Fixture fixture = new();
-        string text = SchemaHistoryDocument.RenderHistory(Record("World", fields: [new(1, 16, InlineSchema: new("Point", 1))]), 2)
+        string text = SchemaHistoryTextCodec.RenderHistory(Record("World", fields: [new(1, 16, InlineSchema: new("Point", 1))]), 2)
             .Replace("history:2", "history:1");
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text)));
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(fixture.Write("bad.dgschema", text.Replace("// kind:1\n", ""))));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseHistory(fixture.Write("bad.dgschema", text)));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseHistory(fixture.Write("bad.dgschema", text.Replace("// kind:1\n", ""))));
     }
 
     [Theory]
@@ -197,18 +197,18 @@ public sealed class InlineSchemaHistoryToolTests {
         public string History => Path.Combine(_root, "history");
         public string Write(string name, string text) {
             string path = Path.Combine(_root, name);
-            File.WriteAllText(path, text, SchemaHistoryDocument.Utf8NoBom);
+            File.WriteAllText(path, text, SchemaHistoryTextCodec.Utf8NoBom);
             return path;
         }
         private string Manifest(SchemaHistoryRecord[] records) => Write("manifest.g.cs",
             "// durable-graph-schema-history-manifest:9\n" + string.Concat(records.Select(record =>
-                SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:9\n", ""))));
+                SchemaHistoryTextCodec.RenderHistory(record).Replace("// durable-graph-schema-history:9\n", ""))));
         public void Publish(params SchemaHistoryRecord[] records) => _tool.Publish(Manifest(records), History);
         public void Verify(params SchemaHistoryRecord[] records) => _tool.Verify(Manifest(records), History);
         public void Accept(SchemaHistoryRecord record, string? content = null) {
             Directory.CreateDirectory(History);
-            content ??= SchemaHistoryDocument.RenderHistory(record);
-            File.WriteAllText(Path.Combine(History, SchemaHistoryDocument.GetHistoryFileName(record, content)), content, SchemaHistoryDocument.Utf8NoBom);
+            content ??= SchemaHistoryTextCodec.RenderHistory(record);
+            File.WriteAllText(Path.Combine(History, SchemaHistoryTextCodec.GetHistoryFileName(record, content)), content, SchemaHistoryTextCodec.Utf8NoBom);
         }
         public string[] HistoryContents() => Directory.Exists(History)
             ? Directory.GetFiles(History).Order(StringComparer.Ordinal).Select(path => Path.GetFileName(path) + "\n" + File.ReadAllText(path)).ToArray()

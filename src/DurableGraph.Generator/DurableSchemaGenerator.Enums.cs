@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableSchemaGenerator {
-    private static DurableTypeModel? CreateEnumModel(SourceProductionContext context, INamedTypeSymbol type,
+    private static DurableTypeAnalysis? AnalyzeDurableEnum(SourceProductionContext context, INamedTypeSymbol type,
         string? schemaId, int version, bool hasErrors, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
         foreach (IFieldSymbol constant in GetDirectFields(type)) {
             if (!HasAttribute(constant.GetAttributes(), DurableFieldAttributeMetadataName) &&
@@ -15,8 +15,8 @@ public sealed partial class DurableSchemaGenerator {
         if (hasErrors || type.EnumUnderlyingType is null) return null;
         if (!TryGetTypeTag(type.EnumUnderlyingType, null, out string? tag, out int number, out string? name)) return null;
         // The schema describes one integer value; enum constants and the CLR's value__ field are not its layout.
-        return new DurableTypeModel(type, schemaId!, version,
-            new() { new DurableFieldModel(null, 1, tag!, number, name!) }, listType, dictionaryType);
+        return new DurableTypeAnalysis(type, schemaId!, version,
+            new() { new DurableFieldAnalysis(null, 1, tag!, number, name!) }, listType, dictionaryType);
     }
 
     private static string EnumProjectionHost(string schemaId) =>
@@ -28,7 +28,7 @@ public sealed partial class DurableSchemaGenerator {
         return EnumProjectionHost((string)attribute.ConstructorArguments[0].Value!) + ".Projection";
     }
 
-    private static void AppendEnumDomainProjection(StringBuilder output, DurableTypeModel type, GenericLayout layout) {
+    private static void AppendEnumDomainProjection(StringBuilder output, DurableTypeAnalysis type, FamilyLayout layout) {
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
         string dto = CurrentDto(type, layout);
         string body = CurrentBody(type, layout);

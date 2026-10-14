@@ -12,8 +12,8 @@ public sealed class SchemaAncestryHistoryTests {
             "// schema-id-base64:TGVhZg==\n// version:2\n// kind:1\n// base:5Z+657G7|3\n" +
             "// field:1|2\n// schema-end\n";
 
-        Assert.Equal(expected, SchemaHistoryDocument.RenderHistory(record, 2));
-        SchemaHistoryRecord parsed = SchemaHistoryDocument.ParseHistory(fixture.Write("record.dgschema", expected));
+        Assert.Equal(expected, SchemaHistoryTextCodec.RenderHistory(record, 2));
+        SchemaHistoryRecord parsed = SchemaHistoryTextCodec.ParseHistory(fixture.Write("record.dgschema", expected));
         Assert.Equal(record.Key, parsed.Key);
         Assert.True(record.ShapeEquals(parsed));
         Assert.Equal(new SchemaHistoryKey("基类", 3), parsed.BaseSchema);
@@ -24,7 +24,7 @@ public sealed class SchemaAncestryHistoryTests {
         Assert.Equal(
             "// durable-graph-schema-history:9\n// schema-begin\n// schema-id-base64:QmFzZQ==\n" +
             "// version:1\n// kind:1\n// arity:0\n// field:1|2\n// schema-end\n",
-            SchemaHistoryDocument.RenderHistory(Record("Base", 1)));
+            SchemaHistoryTextCodec.RenderHistory(Record("Base", 1)));
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class SchemaAncestryHistoryTests {
         Assert.Equal("published 0 schema-history record(s); 3 already exact", fixture.Publish(base2, middle2, leaf2).Message);
         Assert.Equal("verified 3 current manifest candidate(s) against 6 schema-history record(s)",
             fixture.Verify(leaf2, base2, middle2).Message);
-        SchemaHistoryRecord[] accepted = Directory.GetFiles(fixture.History).Select(SchemaHistoryDocument.ParseHistory).ToArray();
+        SchemaHistoryRecord[] accepted = Directory.GetFiles(fixture.History).Select(SchemaHistoryTextCodec.ParseHistory).ToArray();
         Assert.Equal(base1.Key, Assert.Single(accepted, row => row.Key == middle1.Key).BaseSchema);
         Assert.Equal(middle1.Key, Assert.Single(accepted, row => row.Key == leaf1.Key).BaseSchema);
     }
@@ -162,7 +162,7 @@ public sealed class SchemaAncestryHistoryTests {
             "// arity:0\n", $"// arity:0\n// base:{entry}\n", StringComparison.Ordinal);
         string path = fixture.Write("invalid.g.cs", text);
 
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseManifest(path));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseManifest(path));
     }
 
     [Theory]
@@ -172,7 +172,7 @@ public sealed class SchemaAncestryHistoryTests {
         using Fixture fixture = new();
         string text = Manifest(Record("Leaf", 1)).Replace("// field:1|2\n", body, StringComparison.Ordinal);
 
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseManifest(fixture.Write("invalid.g.cs", text)));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseManifest(fixture.Write("invalid.g.cs", text)));
     }
 
     private static SchemaHistoryRecord Record(string id, int version, SchemaHistoryKey? baseSchema = null, int fieldType = 2) {
@@ -182,7 +182,7 @@ public sealed class SchemaAncestryHistoryTests {
 
     private static string Manifest(params SchemaHistoryRecord[] records) {
         return "// durable-graph-schema-history-manifest:9\n" + string.Concat(records.Select(record =>
-            SchemaHistoryDocument.RenderHistory(record).Replace("// durable-graph-schema-history:9\n", "", StringComparison.Ordinal)));
+            SchemaHistoryTextCodec.RenderHistory(record).Replace("// durable-graph-schema-history:9\n", "", StringComparison.Ordinal)));
     }
 
     private sealed class Fixture : IDisposable {
@@ -195,7 +195,7 @@ public sealed class SchemaAncestryHistoryTests {
 
         public string Write(string name, string text) {
             string path = Path.Combine(_root, name);
-            File.WriteAllText(path, text, SchemaHistoryDocument.Utf8NoBom);
+            File.WriteAllText(path, text, SchemaHistoryTextCodec.Utf8NoBom);
             return path;
         }
 
@@ -205,8 +205,8 @@ public sealed class SchemaAncestryHistoryTests {
 
         public void WriteAccepted(SchemaHistoryRecord record) {
             Directory.CreateDirectory(History);
-            string content = SchemaHistoryDocument.RenderHistory(record);
-            File.WriteAllText(Path.Combine(History, SchemaHistoryDocument.GetHistoryFileName(record, content)), content, SchemaHistoryDocument.Utf8NoBom);
+            string content = SchemaHistoryTextCodec.RenderHistory(record);
+            File.WriteAllText(Path.Combine(History, SchemaHistoryTextCodec.GetHistoryFileName(record, content)), content, SchemaHistoryTextCodec.Utf8NoBom);
         }
 
         public string[] HistoryContents() => Directory.Exists(History)

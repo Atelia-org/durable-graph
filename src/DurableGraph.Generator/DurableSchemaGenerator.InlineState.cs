@@ -29,15 +29,15 @@ public sealed partial class DurableSchemaGenerator {
 
     private static bool IsBinaryFieldHasReferences(BinaryFieldModel field) => field.HasReferences;
 
-    private static bool InlineHasReferences(SchemaReference reference, List<SchemaHistoryModel> available) {
+    private static bool InlineHasReferences(SchemaReference reference, List<SchemaTemplate> available) {
         HashSet<string> visited = new(StringComparer.Ordinal);
         Stack<SchemaReference> pending = new();
         pending.Push(reference);
         while (pending.Count > 0) {
             SchemaReference next = pending.Pop();
             if (!visited.Add(InlineHelperName(next))) continue;
-            SchemaHistoryModel shape = FindHistory(available, next.SchemaId, next.Version)[0];
-            foreach (SchemaHistoryFieldModel field in shape.Fields) {
+            SchemaTemplate shape = FindHistory(available, next.SchemaId, next.Version)[0];
+            foreach (SchemaTemplateField field in shape.Fields) {
                 if (IsBinaryReference(field.TypeTagValue)) return true;
                 if (field.InlineSchema.HasValue) pending.Push(field.InlineSchema.Value);
             }
@@ -46,7 +46,7 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendInlineCaptureType(
-        StringBuilder source, DurableTypeModel type, BinaryVersionModel current) {
+        StringBuilder source, DurableTypeAnalysis type, BinaryVersionModel current) {
         bool hasNamespace = !type.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) source.Append("namespace ")
             .Append(type.Symbol.ContainingNamespace.ToDisplayString(QualifiedNameFormat)).AppendLine(" {");
@@ -61,11 +61,11 @@ public sealed partial class DurableSchemaGenerator {
     }
 
     private static void AppendRequiredInlineHelpers(
-        StringBuilder source, List<DurableTypeModel> types,
-        Dictionary<ISymbol, List<BinaryVersionModel>> layouts, List<SchemaHistoryModel> available) {
+        StringBuilder source, List<DurableTypeAnalysis> types,
+        Dictionary<ISymbol, List<BinaryVersionModel>> layouts, List<SchemaTemplate> available) {
         SortedDictionary<string, SchemaReference> required = new(StringComparer.Ordinal);
         Stack<SchemaReference> pending = new();
-        foreach (DurableTypeModel type in types) {
+        foreach (DurableTypeAnalysis type in types) {
             if (!layouts.TryGetValue(type.Symbol, out List<BinaryVersionModel>? versions)) continue;
             foreach (BinaryVersionModel version in versions) {
                 if (type.IsInline) pending.Push(new SchemaReference(type.SchemaId, version.Version));
@@ -79,15 +79,15 @@ public sealed partial class DurableSchemaGenerator {
             string name = InlineHelperName(reference);
             if (required.ContainsKey(name)) continue;
             required.Add(name, reference);
-            SchemaHistoryModel shape = FindHistory(available, reference.SchemaId, reference.Version)[0];
-            foreach (SchemaHistoryFieldModel field in shape.Fields) {
+            SchemaTemplate shape = FindHistory(available, reference.SchemaId, reference.Version)[0];
+            foreach (SchemaTemplateField field in shape.Fields) {
                 if (field.InlineSchema.HasValue) pending.Push(field.InlineSchema.Value);
             }
         }
         if (required.Count == 0) return;
         source.AppendLine("namespace Atelia.DurableGraph.Generated {");
         foreach (KeyValuePair<string, SchemaReference> pair in required) {
-            SchemaHistoryModel shape = FindHistory(available, pair.Value.SchemaId, pair.Value.Version)[0];
+            SchemaTemplate shape = FindHistory(available, pair.Value.SchemaId, pair.Value.Version)[0];
             List<BinaryFieldModel> fields = new();
             AppendBinaryFields(shape, available, fields, 0);
             BinaryVersionModel version = new(shape.Version, fields);

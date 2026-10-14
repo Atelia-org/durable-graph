@@ -3,7 +3,7 @@
 > 当片组织迁移已实施并验收；详细设计与旧包／下游证据保留各自基线。
 > 当前能力与后续方向从 [产品工作集](../../../src/PROJECT-STATE.md) 进入；本文只定位本片依据。
 
-后续当前类型／namespace 的命名复查见 [DB-092 提案](../0092-type-namespace-refactoring/README.md)，尚未实施；原正文关于旧 raw Storage／SchemaStore 的职责保当时含义，不能代替现行 meta 自举内核。
+后续当前类型／namespace 的命名复查见 [DB-092](../0092-type-namespace-refactoring/README.md)，A 内部分析命名已实施；原正文关于旧 raw Storage／SchemaStore 的职责保当时含义，不能代替现行 meta 自举内核。
 
 ## 材料与阅读顺序
 

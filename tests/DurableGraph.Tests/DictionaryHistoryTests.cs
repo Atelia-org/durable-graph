@@ -11,13 +11,13 @@ public sealed class DictionaryHistoryTests {
             "// field:2|15|a2(d(b4,d(b2,nUG9pbnQ=())))\n" +
             "// field:3|16|nUGFpcg==(d(p1,p0))|1\n// field:4|2\n// field:5|4\n", arity: 2);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 7));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record, 7));
         Assert.Equal("d(b4,l(q(b2)))", record.Fields[0].ValuePattern.Substitute(
             [record.Fields[4].ValuePattern, record.Fields[3].ValuePattern]).ToString());
         Assert.Equal("nUGFpcg==(d(b2,b4))", record.Fields[2].ValuePattern.Substitute(
             [record.Fields[4].ValuePattern, record.Fields[3].ValuePattern]).ToString());
         Assert.Equal("a2(d(b4,d(b2,nUG9pbnQ=())))", record.Fields[1].ValuePattern.ToString());
-        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.RenderHistory(record, 6));
+        Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.RenderHistory(record, 6));
     }
 
     [Theory]
@@ -108,12 +108,12 @@ public sealed class DictionaryHistoryTests {
         internal SchemaHistoryRecord Parse(string text) {
             string path = Path.Combine(_root, "input.dgschema");
             File.WriteAllText(path, text, new UTF8Encoding(false));
-            return SchemaHistoryDocument.ParseHistory(path);
+            return SchemaHistoryTextCodec.ParseHistory(path);
         }
         internal void Accept(string text) {
             SchemaHistoryRecord record = Parse(text);
             Directory.CreateDirectory(HistoryPath);
-            File.WriteAllText(Path.Combine(HistoryPath, SchemaHistoryDocument.GetHistoryFileName(record, text)), text, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(HistoryPath, SchemaHistoryTextCodec.GetHistoryFileName(record, text)), text, new UTF8Encoding(false));
         }
         internal void Publish(params string[] histories) {
             string path = Path.Combine(_root, "manifest.g.cs");

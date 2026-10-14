@@ -59,10 +59,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         try {
             string file = Path.Combine(directory, "a.dgschema");
             File.WriteAllText(file, NominalHistory, new UTF8Encoding(false));
-            SchemaHistoryRecord record = SchemaHistoryDocument.ParseHistory(file);
+            SchemaHistoryRecord record = SchemaHistoryTextCodec.ParseHistory(file);
             Assert.Equal(NominalHistory.Replace("history:1", "history:9").Replace("// version:1\n", "// version:1\n// kind:1\n// arity:0\n")
                     .Replace("|15|Qg==", "|15|nQg==()"),
-                SchemaHistoryDocument.RenderHistory(record));
+                SchemaHistoryTextCodec.RenderHistory(record));
             Assert.Equal("B", Assert.Single(record.Fields).TargetSchemaId);
             string manifest = Path.Combine(directory, "manifest.g.cs");
             File.WriteAllText(manifest, NominalHistory.Replace("// durable-graph-schema-history:1", "// durable-graph-schema-history-manifest:1"));
@@ -99,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string file = Path.GetTempFileName();
         try {
             File.WriteAllText(file, malformed, new UTF8Encoding(false));
-            Assert.Throws<SchemaHistoryException>(() => SchemaHistoryDocument.ParseHistory(file));
+            Assert.Throws<SchemaHistoryException>(() => SchemaHistoryTextCodec.ParseHistory(file));
         }
         finally { File.Delete(file); }
     }

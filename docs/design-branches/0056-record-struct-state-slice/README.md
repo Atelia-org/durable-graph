@@ -3,6 +3,7 @@
 > 文档整理：2026-10-14；来源为 Git `8ef9fca` 中的 `docs/design-branches/0056-record-struct-state-slice.md`，正文保留当片合同与历史验收含义。
 > 阅读范围：positional/readonly/generic 与 backing storage 分类的当片证据见 §8；复用既有 inline/Family，无新增持久格式，ValueTuple 未随片实现。
 > 当前能力与施工焦点见 [PROJECT-STATE](../../../src/PROJECT-STATE.md)；旧稿中的“下一步”不自动成为当前工作单。
+> 本文 Generator 内部名称保当片拼写；当前 Analysis／Family 名称映射见 [DB-092 A](../0092-type-namespace-refactoring/implementation-a.md)。
 
 > 状态：**已实施 / G0–G3 验收通过**。
 > 日期：2026-09-10。调研基线：`d4c9e47`（DB-055）。

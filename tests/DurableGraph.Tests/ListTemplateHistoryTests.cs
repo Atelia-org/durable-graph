@@ -10,7 +10,7 @@ public sealed class ListTemplateHistoryTests {
         string text = History("// field:1|15|l(p0)\n// field:2|15|a2(l(a1(b2)))\n" +
             "// field:3|16|nUGFpcg==(l(p0))|1\n// field:4|15|l(l(b4))\n// field:5|2\n");
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 5));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record, 5));
         Assert.Equal("l(b2)", record.Fields[0].ValuePattern.Substitute([record.Fields[4].ValuePattern]).ToString());
         Assert.Equal("nUGFpcg==(l(b2))", record.Fields[2].ValuePattern.Substitute([record.Fields[4].ValuePattern]).ToString());
         Assert.Equal("a2(l(a1(b2)))", record.Fields[1].ValuePattern.ToString());
@@ -78,12 +78,12 @@ public sealed class ListTemplateHistoryTests {
         public SchemaHistoryRecord Parse(string text) {
             string path = Path.Combine(_root, "input.dgschema");
             File.WriteAllText(path, text, new UTF8Encoding(false));
-            return SchemaHistoryDocument.ParseHistory(path);
+            return SchemaHistoryTextCodec.ParseHistory(path);
         }
         public void Accept(string text) {
             SchemaHistoryRecord record = Parse(text);
             Directory.CreateDirectory(AcceptedPath);
-            File.WriteAllText(Path.Combine(AcceptedPath, SchemaHistoryDocument.GetHistoryFileName(record, text)), text, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(AcceptedPath, SchemaHistoryTextCodec.GetHistoryFileName(record, text)), text, new UTF8Encoding(false));
         }
         public void Publish(string text) {
             string manifest = Path.Combine(_root, "manifest.g.cs");

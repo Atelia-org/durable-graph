@@ -10,7 +10,7 @@ public sealed class GenericTemplateHistoryTests {
         string text = History("Box", arity: 2,
             body: "// base:nQmFzZQ==(p1)|3\n// field:1|17|p0\n// field:2|15|nQm94(p1,p0)\n// field:3|16|nUGFpcg==(p0)|2\n");
         SchemaHistoryRecord parsed = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(parsed, 3));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(parsed, 3));
         Assert.Equal(2, parsed.Arity);
         Assert.Equal(new SchemaHistoryKey("Base", 3), parsed.BaseSchema);
         Assert.Equal("nQmFzZQ==(p1)", parsed.BaseType!.ToString());
@@ -98,19 +98,19 @@ public sealed class GenericTemplateHistoryTests {
         public Fixture() => Directory.CreateDirectory(_root);
         public SchemaHistoryRecord Parse(string text) {
             string file = Path.Combine(_root, "input.dgschema");
-            File.WriteAllText(file, text, SchemaHistoryDocument.Utf8NoBom);
-            return SchemaHistoryDocument.ParseHistory(file);
+            File.WriteAllText(file, text, SchemaHistoryTextCodec.Utf8NoBom);
+            return SchemaHistoryTextCodec.ParseHistory(file);
         }
         public void Publish(params string[] histories) {
             string manifest = Path.Combine(_root, "manifest.g.cs");
             File.WriteAllText(manifest, "// durable-graph-schema-history-manifest:3\n" +
-                string.Concat(histories.Select(text => text.Replace("// durable-graph-schema-history:3\n", ""))), SchemaHistoryDocument.Utf8NoBom);
+                string.Concat(histories.Select(text => text.Replace("// durable-graph-schema-history:3\n", ""))), SchemaHistoryTextCodec.Utf8NoBom);
             new SchemaHistoryTool().Publish(manifest, DirectoryPath);
         }
         public void Accept(string text) {
             SchemaHistoryRecord record = Parse(text);
             Directory.CreateDirectory(DirectoryPath);
-            File.WriteAllText(Path.Combine(DirectoryPath, SchemaHistoryDocument.GetHistoryFileName(record, text)), text, SchemaHistoryDocument.Utf8NoBom);
+            File.WriteAllText(Path.Combine(DirectoryPath, SchemaHistoryTextCodec.GetHistoryFileName(record, text)), text, SchemaHistoryTextCodec.Utf8NoBom);
         }
         public string[] Accepted() => Directory.Exists(DirectoryPath)
             ? Directory.GetFiles(DirectoryPath).Order(StringComparer.Ordinal).Select(path => Path.GetFileName(path) + File.ReadAllText(path)).ToArray() : [];

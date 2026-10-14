@@ -9,7 +9,7 @@ public sealed class NullableTemplateHistoryTests {
         using Fixture fixture = new();
         string text = History("Holder", "// field:1|18|q(b2)\n// field:2|18|q(p0)\n// field:3|18|q(nUG9pbnQ=())|2\n", arity: 1);
         SchemaHistoryRecord record = fixture.Parse(text);
-        Assert.Equal(text, SchemaHistoryDocument.RenderHistory(record, 6));
+        Assert.Equal(text, SchemaHistoryTextCodec.RenderHistory(record, 6));
         Assert.Equal(new SchemaHistoryKey("Point", 2), record.Fields[2].InlineSchema);
         Assert.Equal("q(b2)", record.Fields[1].ValuePattern.Substitute([record.Fields[0].ValuePattern.ElementType!]).ToString());
     }
@@ -90,12 +90,12 @@ public sealed class NullableTemplateHistoryTests {
         internal SchemaHistoryRecord Parse(string text) {
             string path = Path.Combine(_root, "input.dgschema");
             File.WriteAllText(path, text, new UTF8Encoding(false));
-            return SchemaHistoryDocument.ParseHistory(path);
+            return SchemaHistoryTextCodec.ParseHistory(path);
         }
         internal void Accept(string text) {
             SchemaHistoryRecord record = Parse(text);
             Directory.CreateDirectory(HistoryPath);
-            File.WriteAllText(Path.Combine(HistoryPath, SchemaHistoryDocument.GetHistoryFileName(record, text)), text, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(HistoryPath, SchemaHistoryTextCodec.GetHistoryFileName(record, text)), text, new UTF8Encoding(false));
         }
         internal void Publish(params string[] histories) {
             string path = Path.Combine(_root, "manifest.g.cs");

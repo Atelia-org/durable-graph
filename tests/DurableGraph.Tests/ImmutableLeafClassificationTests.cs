@@ -242,7 +242,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [InlineData("global::System.Collections.Generic.List<int>")]
     [InlineData("global::System.Collections.Generic.Dictionary<int, string>")]
     public void ContainerFieldExcludesImmutableLeaf(string fieldType) {
-        // Container field patterns carry type arguments, so UsesGenericTemplates routes these
+        // Container field patterns carry type arguments, so UsesFamilyTemplates routes these
         // models through the family path; the owner binding stays false while qualified
         // non-generic leaves in the same compilation can still claim the capability (DB-075).
         GeneratorTestRun run = RunGenerator($$"""
