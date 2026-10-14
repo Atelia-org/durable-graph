@@ -8,6 +8,19 @@
 正文不再随每片进度回填；需要重开问题时，在路线图登记并按需写新的分片，链接旧依据。
 这是阅读与维护职责的归档，不等于将未决方案否决或将建议批准。
 
+## 定位与新增
+
+先在本文按问题或关键词定位，再读取该 DB 的主要入口及需要的证据。新 DB 按问题建目录；
+简单问题只写一份 README，详情与结果按需分文件。见[维护规则](AGENTS.md)及[DB-090 治理方案](0090-document-governance/README.md)。
+旧平铺材料仍可按编号限制搜索；本轮未搬迁历史文件，也未整体压缩下列表格。
+
+```powershell
+rg -n 'DB-086|FrameStore' docs/design-branches/README.md
+rg --files docs/design-branches -g '0086*'
+rg -n '恢复|验收' docs/design-branches -g '0086-*.md'
+rg -n '维护|迁移' docs/design-branches/0090-document-governance
+```
+
 ## 如何读状态
 
 - **Open / Deferred**：原讨论尚未全部裁决或等待触发；不意味着其中没有已采用、已实现的部分。
@@ -17,17 +30,17 @@
 - **Rejected / Superseded**：保留否决原因或后继链接，不继续作为施工输入。
 - 本索引的“实施/适用范围”与原状态分开。源码和可执行证据决定实现事实，历史测试数字只属于当时基线。
 
-## 当前规划
+## 按 DB 定位依据
 
-DB-034–039 已实现；DB-041 已实现非泛型 ObjectId，DB-042 已收敛 Upgrade Schema 复核，DB-040 的泛型目标品牌暂缓。
-DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和 DB-049 区间差分均已完成；DB-048 保留调研依据：
+下面保留既有记录的范围与证据入口；它们不组成当前施工队列。最新能力和未完事项从工作集与路线图进入。
 
 | 文档 | 状态 | 实施范围 |
 |---|---|---|
+| [DB-090 文档治理与维护试行](0090-document-governance/README.md) | 新建维护约定试行；历史迁移未实施 | 按问题聚合、单一阅读入口、随任务维护；已有平铺记录和旧表格分批整理，不增加产品施工或全库审计 |
 | [DB-089 checkout 环境与 factory 查询收窄](0089-checkout-environment-and-factory-query-refactoring.md) | Chosen / Implemented，有限 A／B／C 验收完成 | 稳定环境合同、protected 查询及内部反例／SG／phantom 正控保全；新 G 非 friend 编译边界与 Split 生命周期／冷开续写通过，长期约束归目标设计；不改保存／发布／缓存核心或扩大任意 reader 的可恢复性保证 |
 | [DB-088 开发 Schema 与定稿](0088-development-schema-workflow.md) | 特例退出、源码回归及三条新 G 普通包故事已完成 | 用户校准的固定 V1→独立 V2 草稿 fork→定稿 V2；保身份、源码实际 Base／Delta／source／H 与普通包 MSBuild／五 PID分层。普通 baseline／Upgrade 取代新根特例；当前来源与限定停点见 [§7](0088-development-schema-workflow.md#7-实施结果与限定验收)，不预建主／次版本 |
 | [DB-087 meta 自举与共享／私有 Schema 视图](0087-meta-bootstrap-refactoring-route.md) | 原有限 P1／P2 已完成；默认 meta 自举、完整 private／ToShared 保留，特例退出见 DB-088 | 活动稿保当前契约、[有限停点审计](0087-meta-bootstrap-refactoring-route.md#private-plan)与条件延期；旧保存／typed／Schema／raw 权威已退出。原包按 [V1→V2／推广](../../experiments/PackageConsumerProbe/SplitRepositoryConsumer/README.md)和[旧双异形环境](../../experiments/PackageConsumerProbe/PrivateContainerConsumer/README.md)各自删除前资格解释，删减后的当前普通包资格见 DB-088；P2 原合同可在 Git `d8c0ecb` 的 DB-087 §9 恢复，旧过程见 [2026-10-13 完整稿](../archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md) |
-| [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | Implemented / R0–R5 已验收 | [裁决记录](0086-new-storage-simplification-review.md)；只新库、无启动审计/重开确认，完整SchemaSnapshot、合一图帧、直接Bare；[实施与验收](0086-new-storage-implementation.md)含源码、真实包及进程停止证据 |
+| [DB-086 新存储栈重构方案](0086-new-storage-refactoring-plan.md) | R0–R5 当片已验收；格式有后继 | [裁决](0086-new-storage-simplification-review.md)与[当片验收](0086-new-storage-implementation.md)保历史范围；单根／SCB1／合帧已由 [DB-087](0087-meta-bootstrap-refactoring-route.md#current-status) 替代，底座正常恢复等保留约束不随之取消 |
 | [DB-085 新 RBF3 / Binary / FrameStore / VersionStore 迁移](0085-rbf3-framestore-versionstore-migration-feasibility.md) | 可行性调研及四项 API 复核完成；历史前置范围由DB-086取代 | [初次验证](0085-storage-migration-probe-evidence.md)与[上游 API 复核](0085-upstream-api-refinement-review.md)；不再要求严格打开/全库确认等价或旧数据迁移 |
 | [DB-084 EventJournal 不可变 tag](0084-eventjournal-immutable-tags-slice.md) | 旧栈接入已实施；底座由 DB-086 替换 | [接入与验收](0084-durablegraph-tags-implementation.md)保留旧公开 pin、严格打开与发布证据；当前 tag 由 VS 承担，非外部可序列化地址 |
 | [DB-083 Repository / Checkpoint 用户故事](0083-repository-checkpoint-api-user-stories.md) | A/B/C 与 DG tag 已实施 | 非泛型工作副本、Event-first、跨类型 State、nearest PreviousEvent、固定历史查询、每分支工作副本/named Fork、同打开地址；跨重开 tag 单列 DB-084 |
@@ -146,6 +159,6 @@ DB-045 持久表示 ID、DB-046 统一闭合目录、DB-047 List 基础能力和
 
 ## 新增与结束文档
 
-新的设计文档继续使用稳定 DB 编号，写清问题、当前证据、决定或候选、范围及验收边界。
-完成后把能力变化写入 PROJECT，长期决定放目标设计，剩余问题放路线图；本文只增加分类和证据链接。
-不靠批量重标 Chosen 消除歧义，也不向历史文档追加每轮测试账本。历史矛盾在入口说明适用时点与后继，保留原始证据。
+新增、改结论、结题或重开时执行[本目录维护规则](AGENTS.md)。新的 DB 使用稳定问题目录；
+本文登记主要入口和必要的适用性提示，细节及最终证据由各问题承载。旧表格随独立整理包逐项收窄，
+不批量重标 Chosen，也不向历史文档追加每轮测试账本。
