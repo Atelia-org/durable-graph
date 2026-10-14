@@ -80,7 +80,7 @@ internal static class ArrayStateBody<TState, TOps> where TState : unmanaged wher
         BareValueWriter writer = new(buffer);
         bool changed = false;
         for (int index = 0; index < current.Shape.Count; index++) {
-            PreparedDeltaBody delta = TOps.PrepareDelta(in prior.OwnedElements[index], in current.OwnedElements[index], layout.ElementSlot);
+            PreparedDeltaBody delta = TOps.PrepareDelta(in prior.Elements[index], in current.Elements[index], layout.ElementSlot);
             if (!delta.HasChanges) { continue; }
             changed = true;
             writer.WriteVarUInt32((uint)index + 1);
@@ -92,7 +92,7 @@ internal static class ArrayStateBody<TState, TOps> where TState : unmanaged wher
 
     internal static FrozenArrayState<TState> ApplyDelta(ref BareValueReader reader, FrozenArrayState<TState> prior, ArrayLayout layout) {
         RequireShape(prior.Shape, layout);
-        TState[] elements = (TState[])prior.OwnedElements.Clone();
+        TState[] elements = prior.Elements.ToArray();
         uint previous = 0;
         while (true) {
             uint encoded = reader.ReadVarUInt32();

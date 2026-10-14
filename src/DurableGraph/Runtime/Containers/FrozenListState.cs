@@ -14,7 +14,6 @@ public sealed class FrozenListState<TState> : IFrozenListState where TState : un
     public int Count => _elements.Length;
     public ReadOnlySpan<TState> Elements => _elements;
     public TState this[int index] => _elements[index];
-    internal TState[] OwnedElements => _elements;
 }
 
 internal interface IFrozenListState {

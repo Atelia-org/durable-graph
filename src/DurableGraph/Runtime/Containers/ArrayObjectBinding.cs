@@ -149,7 +149,7 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
             throw new InvalidDataException("The allocated array does not match the frozen shape.");
         }
         if (shape.Count == 0) { return; }
-        TState[] elements = state.OwnedElements;
+        ReadOnlySpan<TState> elements = state.Elements;
         int index = 0;
         switch (shape.Rank) {
             case 1: {

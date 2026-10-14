@@ -102,7 +102,7 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         bool changed = prior.Count != current.Count;
         if (!changed) {
             for (int index = 0; index < current.Count; index++) {
-                if (!TOps.StateEquals(in prior.OwnedElements[index], in current.OwnedElements[index], layout.ElementSlot)) {
+                if (!TOps.StateEquals(in prior.Elements[index], in current.Elements[index], layout.ElementSlot)) {
                     changed = true;
                     break;
                 }
@@ -153,8 +153,8 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
             }
             bool rangeStarted = false;
             for (int index = 0; index < range.Count; index++) {
-                ref readonly TState oldValue = ref prior.OwnedElements[range.OldStart + index];
-                ref readonly TState newValue = ref current.OwnedElements[range.NewStart + index];
+                ref readonly TState oldValue = ref prior.Elements[range.OldStart + index];
+                ref readonly TState newValue = ref current.Elements[range.NewStart + index];
                 if (TOps.StateEquals(in oldValue, in newValue, layout.ElementSlot)) { continue; }
                 if (!rangeStarted) {
                     WriteSourceRange(ref writer, CopyAndPatch, range.OldStart, range.Count);
@@ -239,7 +239,7 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
                         throw new InvalidDataException("List patch indexes must be strictly increasing and within their source range.");
                     }
                     int index = (int)encoded - 1;
-                    elements[output + index] = TOps.ApplyDelta(ref reader, in prior.OwnedElements[(int)source + index], layout.ElementSlot);
+                    elements[output + index] = TOps.ApplyDelta(ref reader, in prior.Elements[(int)source + index], layout.ElementSlot);
                     previous = encoded;
                 }
             }

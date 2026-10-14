@@ -25,7 +25,6 @@ public sealed class FrozenDictionaryState<TKeyState, TValueState> : IFrozenDicti
     public int Count => _entries.Length;
     public ReadOnlySpan<DictionaryEntryState<TKeyState, TValueState>> Entries => _entries;
     public DictionaryEntryState<TKeyState, TValueState> this[int index] => _entries[index];
-    internal DictionaryEntryState<TKeyState, TValueState>[] OwnedEntries => _entries;
 }
 
 internal interface IFrozenDictionaryState {

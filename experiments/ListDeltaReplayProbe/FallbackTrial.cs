@@ -110,7 +110,7 @@ internal static class FallbackTrial {
                 (range.OldStart == -1 || range.OldStart >= 0 && range.OldStart <= prior.Count - range.Count), "Invalid plan.");
             if (range.OldStart >= 0) {
                 for (int index = 0; index < range.Count; index++) {
-                    if (TOps.StateEquals(in prior.OwnedElements[range.OldStart + index], in current.OwnedElements[range.NewStart + index], layout.ElementSlot)) { equalPairs++; }
+                    if (TOps.StateEquals(in prior.Elements[range.OldStart + index], in current.Elements[range.NewStart + index], layout.ElementSlot)) { equalPairs++; }
                 }
             }
             target += range.Count;

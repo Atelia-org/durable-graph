@@ -73,7 +73,6 @@ public sealed class FrozenArrayState<TState> : IFrozenArrayState where TState : 
     public ArrayShape Shape { get; }
     public ReadOnlySpan<TState> Elements => _elements;
     public TState this[int index] => _elements[index];
-    internal TState[] OwnedElements => _elements;
 }
 
 internal interface IFrozenArrayState {

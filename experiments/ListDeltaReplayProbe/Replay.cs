@@ -201,7 +201,7 @@ internal static class Replay {
         bool equal = prior.Count == current.Count;
         if (equal) {
             for (int index = 0; index < prior.Count; index++) {
-                if (!TOps.StateEquals(in prior.OwnedElements[index], in current.OwnedElements[index], layout.ElementSlot)) { equal = false; break; }
+                if (!TOps.StateEquals(in prior.Elements[index], in current.Elements[index], layout.ElementSlot)) { equal = false; break; }
             }
         }
         if (equal == delta.HasChanges || !ListStateBody<TState, TOps>.PrepareBase(applied, layout).Body.SequenceEqual(currentBefore) ||
