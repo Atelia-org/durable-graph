@@ -1,6 +1,6 @@
 # DB-092：类型名与命名空间重构提案
 
-> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3 已限定验收；本轮有限文件组织已完成，旧 P0 源码目录退出，根构建、相关回归与链接检查通过。
+> 2026-10-14；提案源码基线 `246b888`。状态：A／B／C／D1／D2／E1／E2／E3／D3 已限定验收；有限文件组织已完成，仓库资源 owner 采用 RepositoryResources，根构建、相关回归与准确新 G 的公开消费验证通过。
 > 问题：哪些现行名称已经不能准确表达职责，如何先整理它们，为以后判断程序集和文件归属提供清楚的概念边界？
 > 本文区分原提案与实际分片结果，不自行授权全部候选。当前名称、行为和包身份仍以源码为准；结果见 [A](implementation-a.md)／[B](implementation-b.md)／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[E1](#e1-status)／[E2](#e2-status)，E3 见[文件组织结果](#e3-status)，当片见 [D3](#d3-status)。
 
@@ -177,9 +177,9 @@ CLI 目前只有顶层 `return 0`，没有值得改名的产品类型。`SchemaH
 
 ## 9. 当前实施停点与限度
 
-原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录。本轮有限组织范围完成，余项另判。
+原始提案基于 `246b888`；A 采用 §5 内部映射，B 采用普通内核与 §4 映射，C 采用 §3.2 员工／登记／固定表映射，D1 采用 §6 前两项公开操作名称和内部接口，D2 完成 §5 Generator 入口，E1／E2 对应部分现行类型的文件名，E3 退出旧阶段源码目录，D3 采用唯一仓库资源 owner 的公开职责名。本轮有限组织与 D3 范围完成，余项另判。
 [A](implementation-a.md)维护新旧 Generator/Build 等价；[B](implementation-b.md)维护 namespace、owner/source、根测试、公开 API 和包门禁各自资格，结果不互相代授。
-原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)已完成包交付限定验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
+原有 117 处历史引用缺口未扩入本案。B／[C](implementation-c.md)／[D1](implementation-d1.md)／[D2](implementation-d2.md)／[D3](#d3-status)已完成各自准确包的限定消费验收；当前无旧包兼容门槛，调用方按迁移表重编译。[E1](#e1-status)／[E2](#e2-status)／[E3](#e3-status)取得源码组织、构建与相关回归的限定资格；后续公开候选与程序集问题只维护在[路线图](../../DurableGraph-research-roadmap.md)。
 
 <a id="e1-status"></a>
 ## 10. E1：文件名对应现行类型
@@ -329,4 +329,27 @@ dotnet build experiments/MetaBootstrapCrashProbe/MetaBootstrapCrashProbe.csproj 
 ```
 
 源码 receipt 为 `.artifacts/db092-d3/source/result.json`，SHA256 `26B54356253A13EA558015D4DD5BE6B994C84FC370B0C00931715DD99D8AE412`；主线程字节／API 凭据与实际构建／测试日志位于 `.artifacts/db092-d3/`。
-当前停点：源码及相关回归已验收，准确新 G 的公开包消费尚待完成；不将 D1／D2 的原包资格回填为 D3 证据。
+准确新包由源码／合同提交 `6c9735e7794bbe1d508ba462341e76728d4d1fb3` 生产，单次 Prepare；188 个生产输入在打包前后与当前源码一致。六个 S 原包字节及四个 DG 包的 nuspec、实际 SG／Build／props／targets均核对：
+
+| 包证据 | 准确来源 |
+|---|---|
+| DG G | `0.0.0-db092-d3-e2e.20261014114453.18688` |
+| Storage S／来源 | `0.1.3-dev.20261014.g758cebf`／`758cebf8ba82788ba91435d34fd484dff32095fd` |
+| 完整十包 feed | `.artifacts/db092-d3/package/feed` |
+| 独立消费者／cache／新库 | `W:/TEMP/dg-db092-d3-owner-20261014T114803-40020` |
+
+非 friend 消费者使用两个 PackageReference、一个 forced Family TagState V1 模型及强类型 `RepositoryResources`，没有 ProjectReference 或访问内部 facade。
+实际 packaged SG 编译与 Build Publish／CI Verify 通过；两种 history manifest 各恰好一份，唯一已接受 history 文件名／SHA 保持。四个独立进程按下表验证同一个新库：
+
+| 进程 | 实际观察 |
+|---|---|
+| create | 直接 CreateNew，Data.Append／ConfirmDurable／ReadFrame；owner 关闭后借出的 Data.EnsureUsable／ReadFrame 报 ObjectDisposedException，独立拥有的 FrameRead buffer 仍可用 |
+| seed | 直接 OpenExisting，原完整 frame／StoreId 保持，再追加确认；全关后公开 Repository 打开同库，创建初始 State=10/self-cycle 与 tag，保存为 11 |
+| continue | 新进程冷签出准确 11、保持根 ID/self-cycle，续写为 12，产生新 head 并读回 |
+| verify | 直接 OpenReadOnlyExisting，两个 raw frame 保持；Data.Append 报 InvalidOperationException且 owner 健康；全关后 Repository 只读验证当前 12／初始 tag 的 10，整个只读阶段文件 SHA 保持 |
+
+主线程核对实际 assets／独立 cache／输出与所选十包，四个 PID 的 39 次实际 Atelia 程序集加载均匹配包 DLL 字节；包内公开 API 1359 行亦通过唯一类型名逆映射。
+独立复核从实际源码、日志、consumer 和 receipt 验收，未发现阻断项。包凭据为 `.artifacts/db092-d3/package/consumer-result.json`，SHA256 `CA0190BF8DC2CB15B30432C45CBC20E88085C8D7D6FC6188A666115DEB4228FD`；主线程接受凭据为同片根目录的 `root-pack-acceptance.json`／`root-consumer-acceptance.json`。
+
+当前停点：D3 的唯一公开 owner 名称迁移与上述源码／准确新 G 消费范围完成。调用方按表迁移并重编译；不将 D1／D2 原包资格或旧 DB 的更广业务故事回填为本 G 证据。
+没有旧包／旧数据兼容门槛；本片不授 Kill／断电、性能或完整其他包故事资格。下一候选与重访条件只维护在[路线图](../../DurableGraph-research-roadmap.md)，不恢复全表改名或程序集整理工单。

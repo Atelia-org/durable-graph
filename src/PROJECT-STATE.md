@@ -18,9 +18,8 @@
 
 ## 当前焦点
 
-[DB-092 D3](../docs/design-branches/0092-type-namespace-refactoring/README.md#d3-status)正在实施唯一资源 owner 的公开改名：`GraphResources` → `RepositoryResources`，两份文件名及调用／当前文档同步；成员、namespace、发布与寿命行为保持。根验证及准确新 G 的直接公开资源消费完成后更新停点。
-
-[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／[D1](../docs/design-branches/0092-type-namespace-refactoring/implementation-d1.md)／[D2](../docs/design-branches/0092-type-namespace-refactoring/implementation-d2.md)及 E1／E2／[E3](../docs/design-branches/0092-type-namespace-refactoring/README.md#e3-status)已限定验收：普通内核／固定员工／执行环境采用现行职责名；公开内容操作使用 `StatePreparationBinding<T>` 与 `StringBodyPreparer`，Generator 入口为 `DurableGraphGenerator`。本轮有限文件组织完成，旧 P0 源码目录的 16 份现行源码并入 Persistence 根，多类型文件共置；按[源码导航](DurableGraph.Persistence/README.md)定位。源码字节与编译接线保持，根构建、相关回归与链接检查通过。生成合同与准确新包消费证据仍从 D1／D2 进入；旧生成输出的显式清理／重编译见[构建指引](../README.md)。
+[DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1／D2 及 E1／E2／E3 已限定验收，有限源码组织完成；现行名称与入口从[源码导航](DurableGraph.Persistence/README.md)进入。
+[D3](../docs/design-branches/0092-type-namespace-refactoring/README.md#d3-status)已将唯一仓库级资源 owner 改为 `RepositoryResources`；当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`。成员、namespace、发布与寿命保持；根构建、相关回归及准确新 G 的直接资源消费／同库冷续写通过。生成合同及旧生成输出清理从 D1／D2 和[构建指引](../README.md)进入，D3 的准确包来源与有限资格只查其记录。
 
 按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛。后续公开候选仍逐项核职责收益，槽／编号语义与程序集调整分别裁决，具体入口和重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。
 
