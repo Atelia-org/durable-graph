@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     // Family hosts also serve non-generic declarations; this path does not imply CLR genericity.
     private static void GenerateFamilyStates(SourceProductionContext context, List<DurableTypeAnalysis> types,
         List<SchemaTemplate> history, bool historyParsedSuccessfully, Compilation compilation, List<SchemaTemplate> references) {

@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private const string GeneratedStateTypeName = "__DurableState";
     private const string BinaryNamespace = "global::Atelia.Binary.";
     private const string PayloadNamespace = "global::Atelia.DurableGraph.Serialization.";

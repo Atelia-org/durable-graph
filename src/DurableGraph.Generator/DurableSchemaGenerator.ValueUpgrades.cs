@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private const string ValueRuleSetAttributeName = "Atelia.DurableGraph.ValueUpgradeRuleSetAttribute";
     private const string ValueProviderAttributeName = "Atelia.DurableGraph.DurableValueUpgradeAttribute";
     private const string UpgradeDependencyAttributeName = "Atelia.DurableGraph.UpgradeDependencyAttribute";

@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private sealed class FamilyDomainField {
         internal FamilyDomainField(DurableTypeAnalysis declaration, IFieldSymbol symbol, int index) {
             Declaration = declaration; Symbol = symbol; Index = index;

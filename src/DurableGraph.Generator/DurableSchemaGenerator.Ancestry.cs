@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private const string SchemaHistoryCacheName = "__DurableSchemaHistory";
 
     private static readonly DiagnosticDescriptor InvalidSchemaAncestry = new(

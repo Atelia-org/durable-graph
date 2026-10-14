@@ -370,6 +370,11 @@ dotnet build QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVer
 初次 Publish 后再 Clean/Verify，可同时验证 history 确实能作为下一次编译的输入。
 构建属性及诊断说明见 [Build 工具](src/DurableGraph.Build/README.md)。
 
+升级生成器包后，若报错提示 candidate／reference manifest 不是恰好一份，先检查报错中的
+`CompilerGeneratedFilesOutputPath`。确认其中 DurableGraph 生成器的输出子目录属于该项目后，
+删除这些派生输出，再以 `dotnet build -t:Rebuild` 强制重新编译。`dotnet clean` 可能留下旧生成目录；
+保留 `DurableGraphSchemaHistoryDirectory` 内的 `.dgschema`，无需删除 Schema history 或仓库数据。
+
 ### 开发尚未定稿的 Schema
 
 默认构建模式为 `Publish`，会冻结本次候选；实验性下一版本在定稿前可显式使用

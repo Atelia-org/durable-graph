@@ -13,7 +13,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Atelia.DurableGraph.Generator;
 
 [Generator(LanguageNames.CSharp)]
-public sealed partial class DurableSchemaGenerator : IIncrementalGenerator {
+public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
     private const string DurableTypeAttributeMetadataName =
         "Atelia.DurableGraph.DurableTypeAttribute";
     private const string DurableFieldAttributeMetadataName =

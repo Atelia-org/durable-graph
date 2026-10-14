@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private static readonly DiagnosticDescriptor InvalidRecordStorage = new(
         id: "DG0021",
         title: "Invalid record storage classification",

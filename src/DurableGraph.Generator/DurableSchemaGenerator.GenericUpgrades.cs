@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private static bool ValidateUpgradeRegistrations(SourceProductionContext context, List<DurableTypeAnalysis> types,
         Compilation compilation, out bool hasRegistrations) {
         hasRegistrations = false;

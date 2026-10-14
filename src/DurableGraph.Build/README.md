@@ -84,6 +84,9 @@ Publish and Verify count only owned records. External history is never copied or
 
 Existing direct tool calls without external records still accept the original two arguments;
 an explicit empty reference manifest is also accepted. Package builds require exactly one
-candidate and one reference file, including an empty reference file. Clean and rebuild if old
-generated files remain. The hash detects mismatched generation inputs; it does not detect a
+candidate and one reference file, including an empty reference file. If stale generator output
+remains after a package upgrade, inspect the reported `CompilerGeneratedFilesOutputPath` and
+remove this project's DurableGraph generator output beneath it. Keep Schema-history files,
+then force compilation with `dotnet build -t:Rebuild`; `dotnet clean` alone may leave generator
+output behind. The hash detects mismatched generation inputs; it does not detect a
 coordinated replacement of all history and generated inputs with a different self-consistent set.

@@ -44,9 +44,9 @@
     <Error Condition="'$(DurableGraphSchemaHistoryMode)' != 'Publish' and '$(DurableGraphSchemaHistoryMode)' != 'Verify'"
            Text="DurableGraphSchemaHistoryMode must be Publish, Verify, or Off; found '$(DurableGraphSchemaHistoryMode)'." />
     <Error Condition="'@(_DurableGraphSchemaHistoryManifest->Count())' != '1'"
-           Text="DurableGraph expected exactly one Schema-history candidate manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSchemaHistoryManifest->Count()). Clean the project and rebuild, and do not disable EmitCompilerGeneratedFiles." />
+           Text="DurableGraph expected exactly one Schema-history candidate manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSchemaHistoryManifest->Count()). Remove this project's stale DurableGraph generator output beneath that path, then force compilation (for example, dotnet build -t:Rebuild). Keep Schema-history files and do not disable EmitCompilerGeneratedFiles." />
     <Error Condition="'@(_DurableGraphSchemaHistoryReferences->Count())' != '1'"
-           Text="DurableGraph expected exactly one Schema-history reference manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSchemaHistoryReferences->Count()). Clean the project and rebuild." />
+           Text="DurableGraph expected exactly one Schema-history reference manifest under '$(CompilerGeneratedFilesOutputPath)' but found @(_DurableGraphSchemaHistoryReferences->Count()). Remove this project's stale DurableGraph generator output beneath that path, then force compilation (for example, dotnet build -t:Rebuild). Keep Schema-history files." />
     <Error Condition="!Exists('$(_DurableGraphBuildTool)')"
            Text="DurableGraph Schema-history tool was not found at '$(_DurableGraphBuildTool)'." />
 

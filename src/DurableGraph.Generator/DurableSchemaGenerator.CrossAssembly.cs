@@ -2,7 +2,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     // Nominal metadata admission is shared by reference and fixed-inline fields.
     // Fixed inline additionally requires validated exported history and public execution helpers.
     private static bool HasExternalDurableNominalShape(INamedTypeSymbol type, Compilation compilation) {

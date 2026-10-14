@@ -27,7 +27,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 .Concat(extraReferences ?? []),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            generators: [new DurableSchemaGenerator().AsSourceGenerator()],
+            generators: [new DurableGraphGenerator().AsSourceGenerator()],
             additionalTexts: history ?? [], parseOptions: ParseOptions,
             optionsProvider: new CrossAssemblyOptions(forceDefinitions));
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out _);

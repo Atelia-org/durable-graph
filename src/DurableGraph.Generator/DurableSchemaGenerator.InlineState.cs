@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     // The representation key contains only exact persisted identity, never a domain CLR name.
     // A future generic closure can supply its own representation key without changing value operations.
     private static string InlineHelperName(SchemaReference reference) {

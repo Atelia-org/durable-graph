@@ -417,7 +417,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable));
-        ISourceGenerator durableGenerator = new DurableSchemaGenerator().AsSourceGenerator();
+        ISourceGenerator durableGenerator = new DurableGraphGenerator().AsSourceGenerator();
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             generators: extraGenerators is null ? [durableGenerator] : [durableGenerator, .. extraGenerators],
             additionalTexts: additionalTexts,

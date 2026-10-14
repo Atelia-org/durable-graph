@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private static INamedTypeSymbol? GetBclListType(Compilation compilation) {
         // Resolve a metadata symbol from this compilation. A source-defined lookalike is not a builtin.
         INamedTypeSymbol? symbol = compilation.GetTypeByMetadataName("System.Collections.Generic.List`1");

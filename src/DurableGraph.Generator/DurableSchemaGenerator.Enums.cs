@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private static DurableTypeAnalysis? AnalyzeDurableEnum(SourceProductionContext context, INamedTypeSymbol type,
         string? schemaId, int version, bool hasErrors, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
         foreach (IFieldSymbol constant in GetDirectFields(type)) {

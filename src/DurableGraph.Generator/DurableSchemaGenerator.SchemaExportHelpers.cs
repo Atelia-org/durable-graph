@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private static bool ValidateExportExecutionHelpers(Compilation compilation, FamilyLayout layout,
         INamedTypeSymbol? family, INamedTypeSymbol? dto, INamedTypeSymbol? body, Dictionary<string, List<SchemaExport>> exports) {
         if (family?.DeclaredAccessibility != Accessibility.Public || dto?.DeclaredAccessibility != Accessibility.Public ||

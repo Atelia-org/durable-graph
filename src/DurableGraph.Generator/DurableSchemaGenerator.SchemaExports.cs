@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private const string SchemaExportAttributeName = "Atelia.DurableGraph.DurableSchemaExportAttribute";
     private static readonly DiagnosticDescriptor InvalidSchemaExport = new(
         "DG0023", "Invalid referenced durable schema material", "Referenced durable schema material is invalid: {0}",

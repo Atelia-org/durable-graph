@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     // DB-075: build an audited candidate closure for non-generic reference-object models.
     // The candidate is emission material only; the generated binding performs the final
     // structure verification against the exact compiled type (DB-075 §5). Both the binary

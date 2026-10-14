@@ -247,7 +247,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 """;
         CSharpCompilation input = RunGenerator("class Placeholder;").OutputCompilation.RemoveAllSyntaxTrees()
             .AddSyntaxTrees(CSharpSyntaxTree.ParseText(source, ParseOptions)).AddReferences(reference);
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(generators: [new DurableSchemaGenerator().AsSourceGenerator()], parseOptions: ParseOptions);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(generators: [new DurableGraphGenerator().AsSourceGenerator()], parseOptions: ParseOptions);
         driver = driver.RunGenerators(input);
         Assert.Contains(driver.GetRunResult().Diagnostics,
             diagnostic => diagnostic.Id == "DG0020" && diagnostic.GetMessage().Contains("same compilation"));

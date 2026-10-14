@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Generator;
 
-public sealed partial class DurableSchemaGenerator {
+public sealed partial class DurableGraphGenerator {
     private static string BinaryUpgradeName(int version) =>
         "UpgradeStateV" + version.ToString(CultureInfo.InvariantCulture) + "ToV" +
         (version + 1).ToString(CultureInfo.InvariantCulture);
