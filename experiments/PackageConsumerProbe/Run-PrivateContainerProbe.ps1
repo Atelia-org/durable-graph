@@ -373,9 +373,6 @@ try {
         throw 'This gate requires committed production inputs; independent consumer/runner changes are recorded separately.'
     }
     $storage = & (Join-Path $repositoryRoot 'eng/Prepare-Storage.ps1') -StoragePackageSource $StoragePackageSource
-    if ($storage.Version -cne '0.1.3-dev.20261014.g3de8fb0' -or $storage.Revision -cne '3de8fb050d81d35ee1c36d1b978024cbc42cb455' -or @($storage.Packages).Count -ne 6) {
-        throw 'This finite gate requires the exact six-package 3de8fb0 storage pin.'
-    }
     $createdFeed = !$PackageSource
     if ($createdFeed) {
         $PackageSource = Join-Path $workRoot 'feed'

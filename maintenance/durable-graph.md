@@ -4,7 +4,7 @@
 
 - 目标：逐轮消除有证据的技术债或实施有真实收益的安全重构，直至已知线索均有妥善处理的结论。范围覆盖当前产品源码、测试、构建与活动实验；不把路线图中的条件延期当作自动实施授权。
 - 用户指定本文件为任务状态入口；使用 `convergent-maintenance`，复杂实施按需 `bounded-delegation`，设计问题优先 `dialectical-simplification`。
-- Goal 持续执行，无固定轮数上限；2026-10-15 启动，已完成 **8 轮**。只有完成复核、验收和收尾的维护结果才计一轮。
+- 本次循环已收敛；2026-10-15 启动，已完成 **9 轮**。只有完成复核、验收和收尾的维护结果才计一轮；十条已知线索均有实施或保留裁决。
 - 草稿窗口：不承担旧数据或 API 兼容；仍保完整帧 append-only、正常 FS/VS 恢复、准确来源、发布 outcome、fault/reentry/lifetime 检查。保留他人工作，不推送或发布。
 - 产品事实与导航：[PROJECT-STATE](../src/PROJECT-STATE.md)；长期约束和条件延期分别归目标设计与路线图，不在此复制。
 
@@ -12,23 +12,15 @@
 
 初始核对：工作树干净，HEAD `0ac20ba`；此前 DB-092 有限命名重构已收尾。存储 pin 为 `0.1.3-dev.20261014.g3de8fb0`，实际构建须使用其完整本地 feed 或显式源码模式。
 
-首轮模块调查和三轮实施均已验收，结果与证据分别查下表及验收段。第 3 轮 M010 在单次 decoder 中立即完整读图、私有惰性读取各链；32 行见证证明所选图解码／目录物化各一次，保完整 rows/head/实际 H。独立三方设计质疑与源码／测试复核通过，根 build 零警告错误、Persistence 912 与 Runtime／Generator 1632 项通过。
+九项实施均已验收；M009 在逐一核对 16 个 ownership 调用后裁决保留，其他调查保留项见末段。产品变化只收窄重复验证／读取和无产品消费者的旧机制，保完整来源、声明／布局、逐链 H／typed refs、Capture 前后合并、寿命／故障和发布边界。当前产品工作集已同步，详细结果与证据各自只查下表及验收段。
 
-第 4 轮 M004 已验收：nominal 规则只有一份，按记录／字段累计失败且保首次 kind/arity；参数与 exact 检查继续独立执行。根 build 零警告错误，Generator/history 942 项（含新增14）通过，源码及新用例经独立复核。基线与已完成轮均使用准确存储 pin 的 package-mode assets。
-
-第 5 轮 M003 已验收：同一 producer 内实际加载两份 catalog，一次同步调用完成 precheck→Capture→postcheck→Builder；callback 后检查 Store 自身及 owner/backing 可用性。零 cache 的独立 Base catalog 见证各物化一次，完整前后语义合并仍各执行一次。9 个新反例／正控、921 项 Persistence 和 11 项真实生成模型集成测试通过；无跨操作缓存、plan 或任意 view 认证入口。
-
-第 6 轮 M005 已验收：owned manifest 同次解析 records 与 reference hash，Build 二次读取已退出；保 owned BOM／CRLF 接受边界和 reference 原文 canonical/hash 规则。根 build 零警告错误，history／Build 351 项（含新增 5 个编码正反例）全部通过；源码与新用例独立复核通过。
-
-第 7 轮 M006 已验收：两套 codec 精确迁入 Serialization.Tests/TestHelpers，仅改测试 namespace，Serialization 三个无用 IVT 已退出；保全部 primitive/ref 循环／泛型机制测试，DB-020 当前仅保测试见证。根 build 零警告错误，Serialization 133 与 SG 静态 body 71 项通过；独立源码复核、DLL metadata 无旧类型／IVT 和变更链接可达检查通过。
-
-第 8 轮 M008 已验收：默认 CommitSave／PrepareAndDiscardSave 复用 RequireSchemaWriter(checkout) 的完整来源核验，try 内仅为 ToShared 保留该检查。默认两次之间无用户 callback，错误／busy／owner 顺序保持。根 build 零警告错误，四个测试项目共 2,741 项全通过，独立来源／reentry 复核通过。手工 editing guard 两侧另有 owner admission，此轮保原拒绝顺序；该路径不是剩余必经施工，只在其 admission 合同改变时重访。
+最终源码集成回归为四项目 2,741 项全通过，根 build 零警告错误。产品提交 `831a279` 的新 G 与准确 S pin 在仓库外独立 feed/cache 中通过四次真实 Publish／Verify Rebuild 与七个冷消费者；主线程另核 source sidecars、包／缓存／加载 DLL hash、history 和只读文件快照。包验收后已重新 restore 正常任务配置并完成根构建；包资格只覆盖固定 List／Nullable inline、private 升版、冷增量和完整 ToShared 故事，不外推故障矩阵／全容器或性能。
 
 ## 线索与裁决
 
 | 线索 | 证据与当前判断 | 状态／下一步 |
 |---|---|---|
-| M001：PrivateContainer gate 重复写死存储 pin | `Run-PrivateContainerProbe.ps1:376` 另写版本／修订；`Prepare-Storage.ps1` 已按 props 验证六包与 provenance；最近 pin 升级须额外同步 runner | 待核对：先确定有限 gate 是否有独立锁定来源的需要，再决定删除重复判断或保留。不先扩通用 pin 框架 |
+| M001：PrivateContainer gate 重复写死存储 pin | Prepare-Storage 已按唯一 props 验证准确六包与 provenance，runner 的固定三行无独立权威；活动用户故事随选定 pin 实跑 | 已处理／第 9 轮：重复 pin 已删，脚本 AST／准确 feed Prepare／新 G 普通包门禁均通过；四次真实 Rebuild、七个独立进程 exit0，包与加载 DLL／source／history／readonly 字节独立核验通过，最终根 build 零警告错误 |
 | M002：Build kind／arity 重复验证 | `SchemaHistoryTool.ValidateClosure` 首遍已覆盖两段重复规则；删除 packed family 表及每节点全 records arity 扫描 | 已处理／第 1 轮：根 build 零警告错误，history／Build 353 项通过（含新增 4 种 direct/nested 与声明顺序反例，Publish 零输出、Verify 保原 history bytes）。源码独立复核通过 |
 | M003：ToShared 操作内 catalog 重载 | 单一同步 wrapper 实际 Load Head.S 与 latest shared 各一次；保完整 precheck／postcheck 和 target Builder | 已处理／第 5 轮：根 build 零警告错误，921＋11 项通过。counter、新 root layout 的 late 冲突、Event-only 四资源停止与 owner 重入均通过，失败不安装／不消费 dirty；不承诺完整保存加速 |
 | M004：SG kind／arity 同形重复 | packed表和逐named全表扫描已退出；单一 nominal 索引保首值、累计record/field冲突，参数／exact独立 | 已处理／第4轮：根build零警告错误，942项通过。14个实际RunGenerator用例含排序前后direct/nested正反例、单phase单诊断、独立family/field/cycle；不建诊断去重框架 |
@@ -64,7 +56,9 @@
 
 第 8 轮证据：`.artifacts/maintenance/20261015/round8-build.log`、四份 `round8-*-tests.log` 和 `round8-test-results/` 四份 TRX；Persistence 921、Runtime／Generator 1651、Serialization 133、Storage 36，逐份核 total＝passed、failed／skip＝0。这是当前已整合产品源码回归，尚未授新包资格或保存性能。
 
-下一步：第 9 轮处理唯一剩余 M001，用全部已提交产品源码制作新 G 并运行普通包消费者；验收前 Goal 保持 active。
+第 9 轮证据：`.artifacts/maintenance/20261015/round9-package-path.txt` 导航到 `W:\TEMP\dg-maintenance-private-container-20261015-d4d09629`；新 G 为 `0.0.0-private-container-e2e.20261014173624.9436`，产品来源 `831a279fc019fcb9419b4ec1def77d4b82a2bd88`，S／来源与本文件 pin 一致。外部 `result.json`、`run.log`、source sidecars、四次 Rebuild 日志及七份 evidence 保原始结果。主线程 `round9-accept-package.ps1` 与 `round9-independent-acceptance.json` 另核实际工件；result SHA256 `AB72F8763A82FD2F4711B9E7605DD0917F9BDCE60BACE61BC770658AD3941D12`，witness SHA256 `AA42566D2C786584E3F8974BF0749173B1E892ED509EC876F17E6D5426AE168B`。新包 Serialization metadata 也无旧 codec／IVT。根正常配置恢复与构建见 `round9-root-restore.log`、`round9-root-build.log`，0 warnings／errors；产品源码未再改变，不重复第 8 轮全套测试。未推送或公开发布包。
+
+完成审计：M001–M010 均已实施验收或有具体保留理由，调查排除项无剩余阻断；未把路线图条件延期、无当前消费者的性能优化或旧包故事当作本次必经工作。必要源码／包／链接检查全部通过，任务状态及产品工作集已收尾；本次循环没有下一轮必经施工。后续只在表列重访条件或新的实际消费者证据出现时另选增量。
 
 ### M003 设计审阅边界
 
@@ -96,3 +90,4 @@
 
 - `RepositoryResources.Dispose` 的 `_committing` hook 反例：未发现正常公共保存入口的触发；公开 Repository 的 busy guard 阻止 Dispose、独立公开 resources 未公开保存。当前保留，只有未来公开外部 owner／commit callback 才重访，不将内部 hook 当已证产品 bug。
 - CapturedGraph／PreparedCapturedGraph 的 FrozenList 小重复：跨程序集统一会扩大形状，当前不处理；出现更多消费者或规则漂移时再核。上述保留结论属于初次调查裁决，不额外计一轮。
+- `EnsureEditingAllowed(checkout)` 的来源检查跨 owner admission，M008 只去掉普通 save/discard 在无 callback 区间的重复。手工 editing 当前保原拒绝顺序；没有已证故障，不作为剩余必经施工，只在其 admission 合同改变时重访。
