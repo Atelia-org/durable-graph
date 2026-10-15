@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-正在实施 H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#candidate-delivery)：生成一份含固定 G、完整相对路径 NuGet.Config、README 同源 QuickStart 与当前第三方依赖的消费者目录。最小验收为严格 mapping 下旧命令准确 NU1100，以及候选搬迁后空 cache、本地唯一源、准确包资产和两进程 HP99/98；保留既有 Upgrade/Fork/Verify 回归。范围仅包准备脚本与接入文档，不改运行时/API/格式，不将公开 preview 作为前置。
+H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#candidate-delivery)已实施：`eng/Prepare-DurableGraphCandidate.ps1` 导出固定 G、完整相对路径配置、README 同源 QuickStart 与当前示例原包闭包；原文 runner 直接执行命令。干净来源的新 G 已通过搬迁、空 cache、本地唯一源和既有 Upgrade/Fork/Verify 限定验收，来源与证据只查[完成记录](../docs/storage-dependency.md#candidate-delivery-validation)。本片无剩余必经施工；公开 preview 保留为分发选择，不改运行时/API/格式。
 
 [DB-093：显式存储分类有效性](../docs/design-branches/0093-explicit-storage-classification/README.md)已实施并完成源码与新 G 普通包的限定验收。H01 等普通 class/struct 的不支持 backing 或无目标分类报 DG0024；真实 Transient 保排除，错误声明即使抑制诊断仍无 current 生成资格。未标隐式 storage、record 既有纪律、生成路线与持久布局保持。具体合同、包来源与结果只查 DB-093；[机制 Probe](../experiments/ExplicitStorageClassificationProbe/README.md)继续只承担符号/PE 观察。本片无剩余必经施工，后续由真实消费者反馈选增量。
 

@@ -98,7 +98,29 @@ Atelia nuspec 中的版本是最低范围，不强制任意应用只能解析到
 [原文接入 runner](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) 需要 PowerShell 7.3 或更新版本，接收 `-CandidateDirectory`，
 把完整目录搬到仓外新路径，在错误的祖先 NuGet 配置和全新缓存下直接执行 README 的 dotnet 命令。
 它同时保留旧 `--source` 命令的准确 `NU1100` 负例、HP99→98 冷进程正控，以及已有 Upgrade/Fork/Verify 回归。
-正式验收结果将在本轮脚本运行完成后补入此处；当前这段只规定门禁，不宣称尚未运行的结果。
+2026-10-15，以上入口已从干净提交 `3e1f41164d319fd1607ebdd2d2b572cc0089ba57` 生成并验收
+G `0.0.0-candidate.20261015.g3e1f411`；S 保持本文 pin。Windows / SDK 10.0.201 的结果为：
+
+- 根 Release Rebuild：0 warnings / 0 errors；本轮未修改产品 C#、公共 API 或持久格式。
+- 已有输出目录不被覆盖；缺失 Storage feed 失败后恢复调用者缓存环境且不产生消费者目录；G/S 同版提前拒绝。
+- 搬迁到仓外带空格目录，祖先源故意不可用：旧命令两项直接引用准确报 NU1100；新命令直接运行，HP99→98。
+- 新 cache 内实际解析十一包、没有 ProjectReference，仅搬迁后的本地包源；示例、配置和版本与 README 同源。
+- V2 升级得到 HP97 / Day1；只读浏览保持数据库字节；策略后 HP96，named Fork 冷重开为 96/95/94；四份 history 通过 Clean/Verify，原三份 V1 内容不变。
+- 独立只读复核确认十七个交付输入不变，十一份缓存原包、十一份运行时输出 DLL 和 Runtime 包中的 SG/Build/props/targets 与候选一致；六个 S 包与上游原 manifest 摘要一致。
+
+可直接交付的目录为 `.artifacts/candidates/0.0.0-candidate.20261015.g3e1f411/`，
+未在其中运行示例或写入 bin/obj/history/数据库。其 README 已记录来源与范围，可整体搬走。
+复跑（从 DurableGraph 仓根）：
+
+```powershell
+./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -CandidateDirectory .artifacts/candidates/0.0.0-candidate.20261015.g3e1f411
+```
+
+原始工件保留在 `.artifacts/candidate-delivery/20261015/`：`prepare.log`、`root-build.log`、
+`guard-results.json`、`probe-result.json`、`probe-logs/` 和 `summary.json`。
+它们是本地忽略工件；长期回归由脚本和 README 原文重跑。包准备内部工件另在
+`.artifacts/candidate-preparation/`，不是对外交付目录。
+本次仅验收附带示例与上述既有 API 故事，没有进行公开发布、OS 禁网、任意 RID 或完整签名信任链验证。
 
 ## 用任务 NuGet.Config 消费候选包
 
