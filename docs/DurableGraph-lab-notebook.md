@@ -19,10 +19,21 @@
 [根 README](../README.md#最短接入路径)将该路径设为首个示例，保留共享/循环引用、Transient 重建和相同实例续写；
 Event 类型与 E/S 保存移到可选章节，提醒两次提交各自发布。运行时、公共 API 和持久格式不变。
 
-最小验收由 [README 原文 runner](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1)承担：
+实测由 [README 原文 runner](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1)完成：
 两进程产生 S0/S1/S2（100/99/98），没有 Event；从 S1 分叉存为 89，全关重开续存为 88；
 另一个进程核对共同祖先、旧 State、主分支和零 Event。随后才添加 Event 模型，保留事件读取、策略、Upgrade/Verify 及原交付正反例。
-本轮普通包验证结果待补充；原始工件放在 `.artifacts/state-only-quickstart/20261015/`。
+普通包 G `0.0.0-stateonly.20261015.ga604cbb` 来自干净提交 `a604cbbadc852738361fc49b14a3554bcff40804`，
+S 保持 [StorageDependency.props](../eng/StorageDependency.props) 的 `0.1.3-dev.20261014.g3de8fb0`。Windows / SDK 10.0.201 结果：
+
+- 根 Release build：0 warnings / 0 errors；Persistence 全部 919 项通过，0 skipped。
+- 候选搬迁到仓外带空格目录，以全新缓存和唯一相对本地包源执行原文三条命令；旧命令仍准确报两项 NU1100。
+- 上述纯 State 历史／分叉／冷续写全部通过；策略保存为 HP97，随后可选 Event 为 HP96，V2 Upgrade 为 HP95 / Day1。
+- history 从两份 State 模型到新增 Event、再新增 World V2，旧内容保持；Clean/Verify 通过。
+- 主线程另核对 11 份缓存原包、10 份最终运行时输出 DLL、4 份 Generator/Build/props/targets 缓存输入、11 份命令日志摘要和 17 项未变交付输入；没有 ProjectReference。
+
+可交付目录 `.artifacts/candidates/0.0.0-stateonly.20261015.ga604cbb/` 保持未运行状态；
+工件 `.artifacts/state-only-quickstart/20261015/` 保存 prepare/build/test 日志、TRX、`readme-result.json`、`audit-result.json` 和仓外 `work-path.txt`。
+本轮验证正常保存、全关重开和示例接入，未新增故障注入或公开发布资格。
 
 ## 历史来源
 
