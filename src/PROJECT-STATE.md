@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)已选 E，显式编辑会话入口的实施计划就绪；本轮仅完善文档，下一轮实施。当前产品仍保下述 Open nullable 模式，不能把目标 API 当作已实现；签名、接线、迁移与验收统一查 DB-095。
+
 Schema-history 发布保护已实施并完成限定验收：Build 的 Publish/Verify 在同目录互斥内重读、校验与发布，
 保同形幂等及冲突写前拒绝；SG/targets 输入和历史格式保持。完整构建仍串行，冻结历史后可并行 Verify。
 准确新 G、源码回归和普通包正反例见 [完成记录](DurableGraph.Build/README.md#publication-coordination-validation)。
