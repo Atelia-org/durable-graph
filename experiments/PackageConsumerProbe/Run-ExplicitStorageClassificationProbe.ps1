@@ -11,8 +11,8 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
 $PackageSource = (Resolve-Path -LiteralPath $PackageSource).Path
 [xml]$pins = Get-Content -LiteralPath (Join-Path $repositoryRoot 'eng/StorageDependency.props') -Raw
-$storageVersion = $pins.Project.PropertyGroup.StoragePackageVersion
-$storageRevision = $pins.Project.PropertyGroup.StorageSourceRevision
+$storageVersion = $pins.SelectSingleNode('/Project/PropertyGroup/StoragePackageVersion').InnerText
+$storageRevision = $pins.SelectSingleNode('/Project/PropertyGroup/StorageSourceRevision').InnerText
 if ($Version -ceq $storageVersion) { throw 'Use independent DG G and storage S versions.' }
 $sourceRoot = Join-Path $PSScriptRoot 'ExplicitStorageClassificationConsumer'
 $projectName = 'ExplicitStorageClassificationConsumer.csproj'

@@ -121,7 +121,7 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 
 ### 显式存储分类的生效约束
 
-Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支持的持久模型，否则应在编译期拒绝；真实实例 Transient 表示有意排除，无目标或被忽略的分类不能冒充有效标注。普通类型的未标隐式 storage 不因此被统一强制分类，record 保持各自已有准入合同。该已选约束由 [DB-093](design-branches/0093-explicit-storage-classification/README.md)补齐，实际实施状态查[产品工作集](../src/PROJECT-STATE.md)。
+Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支持的持久模型，否则应在编译期拒绝；真实实例 Transient 表示有意排除，无目标或被忽略的分类不能冒充有效标注。普通类型的未标隐式 storage 不因此被统一强制分类，record 保持各自已有准入合同。准入合同与证据见 [DB-093](design-branches/0093-explicit-storage-classification/README.md)，实际能力从[产品工作集](../src/PROJECT-STATE.md)进入。
 
 这不授予普通 class/struct 的 backing 持久能力，也不改变不执行属性方法的恢复模型；正向支持仅为 [DB-094](design-branches/0094-backing-field-support/README.md)的后续研究。
 

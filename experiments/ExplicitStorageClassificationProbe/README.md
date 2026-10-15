@@ -86,7 +86,15 @@ dotnet run --project $probeProject --no-restore -p:UseStorageSources=true -p:Sto
 dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=false --filter 'FullyQualifiedName~RecordClass|FullyQualifiedName~RecordStruct|FullyQualifiedName~ImmutableLeaf|FullyQualifiedName~SourceMarkerLookalikeCannotGrantDurableQualification|FullyQualifiedName~UnqualifiedSourceClassCannotEnterNominalOrGenericSlots'
 ```
 
-原始长日志和比较收据位于忽略的 `.artifacts/doc-plan-0093-0094/20261015/`；这里保留可复现方法和限定结果。归档验证没有执行 DB-093 修复，也没有实验性接入 DB-094；H01 当前仍存在。
+原始长日志和比较收据位于忽略的 `.artifacts/doc-plan-0093-0094/20261015/`；这里保留可复现方法和限定结果。该次归档验证没有执行 DB-093 修复，也没有实验性接入 DB-094；归档当时 H01 尚未修复。
+
+## DB-093 修复后的观察
+
+2026-10-15 用 `5ae1f18` 的修复源码、相同 SDK/Roslyn 和准确 S package mode 重新运行本工具，14 项形状及 record 正控通过：8 项不支持或无目标的显式 Durable/Transient 分类报 DG0024，2 项 static backing 报 DG0009，其余 4 项真实 Transient、未标普通属性与 record 正控保持合法。
+
+缺陷输入的 source/生成后 CLR Emit 仍可成功；这说明观察层必须区分 Generator Error、current 模型资格与 CLR Emit。本工具仍不冻结“错误必须 Emit 失败”，也不把这些错误输入的旧“SG 无诊断”当作回归要求。
+
+当前动态输出位于 `.artifacts/db093-implementation/20261015/portable-probe.json`。事件边界的追加调查已转成正式产品测试；源码回归、普通包负例及修正后冷恢复的完成证据集中见 [DB-093](../../docs/design-branches/0093-explicit-storage-classification/README.md#5-2026-10-15-验收证据与复跑)，不由本工具授予产品或包资格。
 
 ## 限制
 

@@ -62,7 +62,6 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 ## 2. 已采纳方向中的未完成能力
 
 此表只列仍需工作的增量。方向已选不代表每项 API、顺序和细节已经批准。
-当前已选的 Generator 准入修复是 [DB-093 显式存储分类有效性](design-branches/0093-explicit-storage-classification/README.md)，尚待实施；具体行为、诊断和最小验收只维护在该计划。普通 backing 的正向能力另作 DB-094 储备，不随本片接线。
 
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。

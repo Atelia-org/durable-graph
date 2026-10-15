@@ -22,7 +22,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 | DB | 问题入口与检索词 |
 |---|---|
 | 094 | [有限支持真实 property backing field](0094-backing-field-support/README.md)；前期调研储备，范围与规模待摸清，未选为当前实施片 |
-| 093 | [显式存储分类有效性核对](0093-explicit-storage-classification/README.md)；方案已选、待实施；本轮只形成计划并归档机制 Probe，不开放普通 backing 持久化 |
+| 093 | [显式存储分类有效性核对](0093-explicit-storage-classification/README.md)；已实施并完成源码及新 G 普通包限定验收；DG0024 拒绝遗漏分类，不开放普通 backing 持久化 |
 | 092 | [类型名、命名空间与后续组织重构](0092-type-namespace-refactoring/README.md)；A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限文件组织与本轮候选已收敛；[D6](0092-type-namespace-refactoring/README.md#d6-status)采用根空间发布合同，准确新 G 普通有限消费通过，投影 helper／ObjectStateKind 保名。各片资格只查当片记录；重访与程序集问题由路线图中的真实需求触发 |
 | 091 | [淘汰材料删除、继任与验证](0091-retired-material-cleanup/README.md) |
 | 090 | [文档治理、问题目录与随任务维护](0090-document-governance/README.md) |

@@ -1,12 +1,12 @@
 # DB-093：核对所有显式存储分类是否有效
 
-> 状态：**方案已选，待实施**。2026-10-15 用户确认方案，并经独立审查、交叉质询与补充 Probe 完善本计划；尚未进入产品实施。
-> 源码调研基线：`b209a777c3c103108f95e0277241a127fb1cc7b4`。
+> 状态：**已实施并完成限定验收**；2026-10-15。本文保留当前合同、最小实现与证据；实施前计划见 Git `668f540`。
+> 实现与候选包来源：`5ae1f180014d955f5de66eb276a07bb9e9296fc1`；原始调查基线为 `b209a777c3c103108f95e0277241a127fb1cc7b4`。
 > 本案约束 Generator 的显式分类准入，不新增普通属性持久化能力。后继能力只作 [DB-094 前期调研](../0094-backing-field-support/README.md)。
 
-## 1. 问题、范围与最小成功标准
+## 1. 问题与完成边界
 
-普通 Durable class 的 `[field: DurableField]` 自动属性能编译、提交成功，但 backing field 在字段发现阶段被过滤，实际 Schema 不含该槽，冷恢复得到默认值。这个问题也涉及普通 struct、static backing，以及被 C# 忽略的错误 `field:` target。
+原来的普通 Durable class `[field: DurableField]` 自动属性能编译、提交成功，但 backing field 在字段发现阶段被过滤，实际 Schema 不含该槽，冷恢复得到默认值。这个问题也涉及普通 struct、static backing，以及被 C# 忽略的错误 `field:` target；现在这些显式分类须被有效处理或编译拒绝。
 
 本案选择的合同是：**在 Generator 管理的 Durable 声明内，每一处 DG 显式存储分类都必须有明确解释；能够处理就处理，不能处理就报错，不生成遗漏该标注的 current 持久模型。**
 
@@ -14,7 +14,7 @@
 
 最小实施模型是：**现有字段分析保持为唯一持久字段准入；新增局部补漏检查；错误接入既有 `hasErrors → null → 不进入 validTypes` 流程。** 不新建分类模型或 current 资格登记表。
 
-最小可观察成功标准：H01 在两个独立编译的默认与 Family 组都报预期 Error，且没有自己的 current 候选、Capture/Hydrate/binding；各组独立合法普通字段模型仍按预期路线生成。record 正控另编译，避免它把默认组整体切入 Family。普通包消费者须复现目标诊断，修正声明后可正常编译、保存和冷重开。
+已达到的最小成功标准：H01 在两个独立编译的默认与 Family 组都报 DG0024，且没有自己的 current 候选、Capture/Hydrate/binding；各组独立合法普通字段模型仍按预期路线生成。record 正控另编译，避免它把默认组整体切入 Family。新 G 普通包得到相同诊断，修正为显式字段后可正常编译、保存和冷重开，结果见 §5。
 
 ## 2. 依据与证据边界
 
@@ -38,9 +38,9 @@ public partial class OrdinaryModel : IDurableObject {
 
 这份一次性包见证证明模型生成阶段发生遗漏，不是旧字段字节损坏。它不是已实施的诊断回归，也不是本轮重新完成的包发布资格。
 
-### 2.2 当前源码原因
+### 2.2 原始缺口与修复入口
 
-- [Generator](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 的 `GetDirectFields` 过滤普通类型的 `IsImplicitlyDeclared` 字段，`AnalyzeDurableType` 只给 record 调用 storage audit。
+- 原始 [Generator](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 的 `GetDirectFields` 过滤普通类型的 `IsImplicitlyDeclared` 字段，`AnalyzeDurableType` 只给 record 调用 storage audit。修复保留该过滤，给普通类型接入[局部显式分类核对](../../../src/DurableGraph.Generator/DurableGraphGenerator.StorageClassification.cs)，不扩大持久字段集合。
 - [record 检查](../../../src/DurableGraph.Generator/DurableGraphGenerator.Records.cs) 已有语义属性识别和未消费标注核对，但还包括 record 专属的完整存储限制，不能整段套给普通类型。
 - [Attribute 定义](../../../src/DurableGraph/DurableFieldAttribute.cs) 允许 Field target；C# 并不能仅靠 AttributeUsage 区分显式字段与 backing field。
 
@@ -54,7 +54,7 @@ Probe 分列输入/生成后 C# 诊断、Generator 诊断、Emit 和 PE metadata
 
 ### 2.4 本次补充核实：field-like 语法不保证有 event backing
 
-2026-10-15 在上述 Probe 的隔离副本中追加 9 个 fixture，使用 C# 14 / Roslyn 5.3.0 与当前产品源码观察。原 14 项加新 9 项均可 source Emit，当前 SG 均无 Error；这仍是缺陷调查，未取得修复资格。
+2026-10-15 在修复前的上述 Probe 隔离副本中追加 9 个 fixture，使用 C# 14 / Roslyn 5.3.0 观察。原 14 项加新 9 项均可 source Emit，原 SG 均无 Error；这份调查本身不代表产品准入正确。
 
 | 新增形状 | C# / PE 观察 | 对本计划的约束 |
 |---|---|---|
@@ -70,7 +70,7 @@ partial 反例的最小成员为：
 public partial event System.Action? Changed { add { } remove { } }
 ```
 
-因此，事件核对需要语义 DG 标注、`field:` target 和真实 storage 的声明条件；既不能只看 `IFieldSymbol`，也不能把 `EventFieldDeclarationSyntax` 或 `!IsAbstract && !IsExtern` 当作充分条件。实现不需 Emit/反射或调用 C# 全量诊断来探测 backing。新增 fixture 源码与原始观察位于忽略的 `.artifacts/db093-dialectic/`；上述反例须在实施时进入正式测试。
+因此，事件核对需要语义 DG 标注、`field:` target 和真实 storage 的声明条件；既不能只看 `IFieldSymbol`，也不能把 `EventFieldDeclarationSyntax` 或 `!IsAbstract && !IsExtern` 当作充分条件。实现不需 Emit/反射或调用 C# 全量诊断来探测 backing。原始观察位于忽略的 `.artifacts/db093-dialectic/`；这些反例与真实 backing 正控已进入[正式回归](../../../tests/DurableGraph.Tests/ExplicitStorageClassificationGeneratorTests.cs)。
 
 ## 3. 已选行为合同
 
@@ -80,7 +80,7 @@ public partial event System.Action? Changed { add { } remove { } }
 
 普通类型新增核对，record 保现有准入。可复用语义识别和位置处理，不能把两种 policy 合成一个更严格的统一拒绝规则。
 
-| 普通 class/struct 中的形状 | 0093 要求 |
+| 普通 class/struct 中的形状 | 当前行为 |
 |---|---|
 | 当前受支持的显式 Durable 字段 | 沿现有类型、FieldId、Schema 与生成规则处理 |
 | 当前受支持的显式 Transient 实例字段 | 排除，不新增槽 |
@@ -99,9 +99,7 @@ public partial event System.Action? Changed { add { } remove { } }
 
 ### 3.2 诊断与失败输出
 
-本计划为普通类型的无效显式分类选择新增 **DG0024 / Error**，建议标题 `Invalid explicit storage classification`。这是待实施合同，当前 Generator 尚无此规则。
-
-原计划拟用的 DG0022 已由 [InvalidDefinitionsOption](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 占用，且 [现有测试](../../../tests/DurableGraph.Tests/CrossAssemblyGeneratorTests.cs)精确锁定；[SchemaExports](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs) 另用 DG0023。新编号已核对当前源码，实施时再核是否新增占用，不能仅按尚未完整登记的发布跟踪表取号。DG0021/0022/0023 保原职责，普通类型不借用 record 文案。
+普通类型的无效显式分类使用 **DG0024 / Error**，标题为 `Invalid explicit storage classification`。DG0021 保留 record 检查；[DG0022](../../../src/DurableGraph.Generator/DurableGraphGenerator.cs) 保留 Definition option 检查，[DG0023](../../../src/DurableGraph.Generator/DurableGraphGenerator.SchemaExports.cs) 保留跨程序集 Schema 材料检查，不重用已有编号。
 
 对能定位到真实 storage 的普通类型，主诊断顺序为：
 
@@ -123,13 +121,13 @@ public partial event System.Action? Changed { add { } remove { } }
 
 本片不纳入新的持久槽，不修改公共 Attribute 签名、Schema/history/wire 编码、runtime 保存恢复、Family 路由或 ImmutableLeaf 资格。原来静默通过的错误声明将被拒绝，属于明确的构建行为收严。
 
-交付需要新 G 中的 Generator，并重新编译模型项目；六个存储包 S 不因此升版。当前依赖准备继续使用[准确 pin 工作流](../../storage-dependency.md)。
+消费者须采用含本修复的新 G 并重新编译模型项目；六个存储包 S 不因此升版。当前依赖准备继续使用[准确 pin 工作流](../../storage-dependency.md)。
 
 应用若把 H01 改为显式字段而开始保存 Field1，仍是相对旧 accepted V1 的真实新增槽：须正常升版和显式 Upgrade，或在原型授权的实验库上重建。过去未保存的 42 无法由本修复恢复；不重写既有 history 或完成帧。
 
-## 4. 最小重构形状
+## 4. 已实施的最小结构
 
-保留 `GetDirectFields` 和现有字段循环。普通类型只增加一个局部补漏检查，返回错误布尔值并接入既有失败出口；不向 emitter 提供新的分类 IR。复用 record 的语义属性解析、源位置与 partial/nested 归属工具，record 的完整存储 policy 仍单独应用。
+保留 `GetDirectFields` 和现有字段循环。[ReportExplicitStorageClassificationErrors](../../../src/DurableGraph.Generator/DurableGraphGenerator.StorageClassification.cs) 返回错误布尔值并接入既有失败出口；不向 emitter 提供新的分类 IR。复用 record 的语义属性解析、源位置与 partial/nested 归属工具，record 的完整存储 policy 仍单独应用。
 
 补漏检查按以下三项闭合，不另做一遍完整字段分析：
 
@@ -137,46 +135,53 @@ public partial event System.Action? Changed { add { } remove { } }
 2. 对原过滤排除的 implicit 字段及 source 不暴露为字段的 event，核实实际分类和 target，按 §3.2 的 static/双分类/不支持 Durable/真实 Transient 顺序处理。事件只确认已知具有 backing 的普通 field-like 声明，排除 abstract、extern 与 partial/custom 等无 backing 情况；不实现事件配对框架。多变量声明的共享标注按整条声明解释，不能用 AttributeSyntax 充当 storage 的唯一身份。
 3. 扫描本类型各 partial 声明剩余的 DG 标注；不能被真实 target 或既有处理解释的，报 DG0024。主构造参数不能靠 captured field 名称猜配，nested 的标注不能归给外层。
 
-局部 syntax/span 集合如有需要只用于避免遗漏和重复报告，不成为新的模型或跨类型登记。普通 Transient backing 不进入 `durableFields`，不触发 Family；unsupported Durable 也不能先纳入再退回 BaseOnly 或属性访问。检查只服务编译期准入，不增加公开接口、运行时反射或持久状态。
+`classified` 局部集合只记录已有解释的 syntax/span，避免遗漏和重复报告，不成为新的模型或跨类型登记。普通 Transient backing 不进入 `durableFields`，不触发 Family；unsupported Durable 也不能先纳入再退回 BaseOnly 或属性访问。检查只服务编译期准入，不增加公开接口、运行时反射或持久状态。
 
-| 位置 | 最小责任 |
+| 位置 | 实现责任 |
 |---|---|
-| `DurableGraphGenerator.cs` 的 AnalyzeDurableType/GetDirectFields 周边 | 接入显式分类检查，保持错误声明的失败返回；不放开持久字段过滤 |
-| `DurableGraphGenerator.Records.cs` 周边 | 复用必要语义工具；保 record 全分类/事件策略，按需抽取小 helper |
-| Generator 的诊断定义及发布跟踪 | 登记 DG0024；保既有诊断编号及 record 规则 |
-| `tests/DurableGraph.Tests` | 按可观察行为补反例、正控、生成输出与 suppression 断言 |
-| `experiments/PackageConsumerProbe` | 增加有界普通包负/正故事；复用既有 feed/config，不新增通用 runner 框架 |
-| README/Attribute XML/产品工作集 | 更新实际准入说明；不把 DB-094 写成已支持 |
+| `DurableGraphGenerator.cs` / `StorageClassification.cs` | 接入局部检查和失败返回；不放开字段过滤或改变路由 |
+| `DurableGraphGenerator.Records.cs` | 只抽取属性符号类型解析 helper，保 record policy |
+| Generator 诊断与发布跟踪 | 定义及登记 DG0024，保已有编号 |
+| [源码测试](../../../tests/DurableGraph.Tests/ExplicitStorageClassificationGeneratorTests.cs) | 精确诊断、归属、输出、抑制与真实 Transient 运行反例；harness 仅加可选诊断配置 |
+| [普通包 consumer / runner](../../../experiments/PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md) | 两条路线的负例与修正后冷恢复；复用既有 feed/config |
+| README / Attribute XML / 产品工作集 | 说明实际准入，不把 DB-094 写成已支持 |
 
-## 5. 后续实施顺序与验收
+## 5. 2026-10-15 验收证据与复跑
 
-### 5.1 一个源码修复片
+### 5.1 源码与机制
 
-先为 H01 建立失败测试，随即接入 DG0024、局部检查与既有失败返回，再补齐以下独立分支。它们是同一修复片的验收，不是先建框架再接行为的横向阶段。
+使用 SDK 10.0.201、准确六包 S 的 package mode、完整任务 NuGet.Config；最终验证如下：
 
-| 证据组 | 最小见证与断言 |
+| 检查 | 结果与范围 |
 |---|---|
-| 两条真实生成路线 | 相同源包含 H01 错误类型和一个独立合法、非泛型显式字段 class。默认组不带 record、泛型、导入、Upgrade 或会触发 Family 的 history；另一组显式 `DurableGraphGenerateDefinitions=true`。分别确认合法控制生成传统 `DurableStates.g.cs` / Family `DurableGenericStates.g.cs`，且错误类型均无自己的 current 输出。仅切 option 不够：错误类型被过滤后若 `validTypes=0`，两条 emitter 都可能没执行 |
-| unsupported 与无 target | ordinary class/struct 的 auto/get-only/C# 14 field-backed Durable；computed property、主构造参数、custom/abstract/extern/partial event 的误标。命中 DG0024 和源位置，不以无关 C# 错误或 CS8785 充数 |
-| 既有诊断优先级 | 显式字段、backing、event 各选必要 static/双分类见证；真实 static 双分类仍为 DG0009，真实 instance 双分类为 DG0004。已由原循环解释的标注不附加 DG0024 |
-| 合法排除与普通现状 | 真实 Transient backing、普通/virtual/多变量 event 不入槽；未标 ordinary storage 保准入；包装属性不重复存储。用一个真实 backing 的运行见证确认 Capture/Hydrate 不执行 accessor，且 Transient 不改变 Schema 或触发 Family |
-| 局部归属与语义识别 | partial、泛型、继承声明层、nested 各选必要见证；别名/全名识别 DG 属性，指向无关 Attribute 的别名不误报。不做形状的笛卡尔积 |
-| suppression 与 retained history | 一个混合见证：错误 current 被抑制诊断仍无候选/投影/登记，独立合法模型仍生成；按现有 Family 条件允许的 historical DTO/body 保留。不要求 CLR Emit 必败或所有输出为空 |
-| 现有合同回归 | 复用 record、字段 Schema/body/history、Readonly 恢复、ImmutableLeaf 与 Definition option 的现有测试。constructor/initializer 绕过机制未改，不为每个新形状再建完整运行矩阵 |
+| 根 solution Release Rebuild | **0 warnings / 0 errors** |
+| 根 solution 全量测试 | **2,792 passed，0 failed/skipped**；Persistence 921、Serialization 133、Storage 36、Runtime/Generator/Build 1,702 |
+| 本片新增回归 | 上述全套包含 **51 项通过**：两种真实 emitter、class/struct backing、无 target、static/冲突、合法排除、alias/partial/generic/继承/nested、suppression/history 与 Capture/Delta/Hydrate |
+| 诊断抑制边界 | 错误 CLR 类型仍可 Emit，但无 current 候选/投影；保留历史 Family 的 domain/current factory 为 null，historical factory 存在，合法独立模型正常 |
+| 真实 Transient | 不新增槽、不触发 Family、不执行 accessor；只改 Transient 不产生 Delta；构造器/初始化器合同由既有回归保持 |
+| 存储输入 | 19 份实际输出 DLL 与准确六包 feed 的对应 DLL SHA256 一致 |
+| 共用机制 Probe | 原 14 形状与 record 正控通过；修复后的观察方法与结果只维护在 [Probe 入口](../../../experiments/ExplicitStorageClassificationProbe/README.md)；另复跑 23 项调查，15 项 DG0024、2 项 DG0009、6 项保持合法 |
 
-Transient 的保证针对生成的 Capture/恢复：不访问被排除 storage，不新增持久槽；构造器/初始化器继续由现有分配机制绕过。它不是“整个应用不执行用户代码”的新承诺，不包括用户构造输入实例或显式 Upgrade。
+无关 alias 正控使用 `@DurableField` 消除 C# 后缀歧义；未转义的歧义另有 **CS1614 + DG0024** 负例，不通过放宽语义识别获得“通过”。Transient 的保证只针对生成 Capture/恢复，不包括用户构造输入实例或显式 Upgrade。
 
-### 5.2 一次普通包交付验证
+复跑先按[依赖指南](../../storage-dependency.md)准备 package mode，再执行根 build/test。只查本片可对 `tests/DurableGraph.Tests/DurableGraph.Tests.csproj` 使用 `--filter FullyQualifiedName~ExplicitStorageClassification`。首次输入中发现的两个 fixture 错误已修正，完成证据取最终 Rebuild 与全套 TRX。
 
-使用新 G、准确 S、完整 feed、任务 NuGet.Config 和独立 consumer/cache：
+### 5.2 普通包限定资格
 
-1. 普通包的默认与显式 Family 负例沿用上述隔离 fixture，精确命中 DG0024/目标位置，并由合法控制输出确认实际路线。普通失败 build 前后核 accepted history 未新增或改写；使用既有 Publish/Verify 边界，不增加审计或回滚协议。static/冲突/别名矩阵由源码测试负责，不在包层重复。
-2. 将错误模型改为受支持的显式字段，并保留一个真实 Transient 正控；强制重新构建消费者，再验证新建和另一进程冷重开。正控使用新建实验库，不能把旧 H01 的 V1 少字段 history 当作同版合法输入，也不能用负例前留下的 DLL 代替重编译。
-3. 检查无 consumer ProjectReference、手工 analyzer/import 或 friend 身份；核新包和实际消费输出身份。两条包路线负责验证新 SG/Build 分发与编译选项传递，不扩成所有形状的交付矩阵。新 G 来源只代表本次有限故事。
+从干净的实现提交制作本地候选 **G=`0.0.0-db093.20261015.g5ae1f18`**；六包 **S=`0.1.3-dev.20261014.g3de8fb0`**，来源 `3de8fb050d81d35ee1c36d1b978024cbc42cb455`。四包 G 与六包 S 构成十包 feed，未远程发布。
 
-代码变更后运行 `dotnet build DurableGraph.slnx` 和相关 Generator/record/history/ImmutableLeaf 测试；涉及包入口时完成上述普通包故事。包与源码资格分列，结果保在本案一次验收记录，不复制进全部活动文档。
+[普通包 runner](../../../experiments/PackageConsumerProbe/Run-ExplicitStorageClassificationProbe.ps1)在仓外新目录、独立 cache、两个 project/history/database lane 中实跑通过：
 
-结束时压缩本计划为当前合同及完成证据，更新 PROJECT-STATE/路线图的待办状态。DB-094 仍是储备，0093 完成不自动授权其实施。
+| 路线 | 负例 | 修正后与冷进程 |
+|---|---|---|
+| 默认 | 唯一 Error DG0024，`Model.Invalid.cs:7:13`；合法控制生成 `DurableStates.g.cs`，错误类型无 current 输出/history | 显式字段加真实 Transient；Publish 两份 V1 history，Verify 保字节；保存 42/7，另一进程只读恢复 42/7、Transient=0 |
+| 显式 Family | 同一精确诊断与位置；合法控制生成 `DurableGenericStates.g.cs`，错误类型无 current 输出/history | 同上；没有旧 DLL 代替修正后的强制重编译 |
+
+两个 lane 各为负例 exit 1、修正 Publish/Verify exit 0；每个 lane 的写/读使用两个不同进程。Capture 和 Hydrate 不调用 Transient accessor；读进程自己验证 Scratch 才调用一次 getter。只读前后数据库及 accepted history 文件集、字节保持。
+
+consumer 无 ProjectReference、friend 或手工 analyzer/import。已核十包版本/commit、实际 compiler 的 packaged Generator 与 Build CLI、缓存 SG/tool/props/targets、输出及四个进程实际加载的十份 DLL 字节。包阶段不重复全部源码形状矩阵。
+
+复跑参数与方法见 [consumer README](../../../experiments/PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md)。忽略目录 `.artifacts/db093-implementation/20261015/` 保存最终 build/TRX、源码汇总、机制 JSON、干净打包来源、十包 feed 及包结果副本；仓外原始收据保留六次 build、负例冻结输出与四个进程证据。不将 source 测试或本候选的有限故事外推为旧库迁移、故障或性能资格。
 
 ## 6. 本次收敛与明确不做
 
@@ -191,4 +196,4 @@ Transient 的保证针对生成的 Capture/恢复：不访问被排除 storage�
 
 不支持普通 property backing 的持久化，不执行 getter/setter，不统一普通/record 的全部存储纪律，不改变生成 API 路由，不扩大 ImmutableLeaf，不新增 runtime 反射 preflight，不修复历史缺值，不设计旧包兼容壳或持久格式迁移器。
 
-前次[共用 Probe](../../../experiments/ExplicitStorageClassificationProbe/README.md)归档构建、14 形状复现及相关回归仍只保原有资格。本次只修订计划并补做 §2.4 的符号/PE 调查；§5 的产品修复、正式回归及新 G 包交付仍全部待实施。
+本片没有剩余必经实施步骤。后续状态从[产品工作集](../../../src/PROJECT-STATE.md)进入；DB-094 仍只按[路线图](../../DurableGraph-research-roadmap.md)的真实消费者触发条件重访，不由本片完成自动开启。

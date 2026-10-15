@@ -6,6 +6,7 @@
 | 问题 | 活动入口 |
 |---|---|
 | 实际包交付、Generator 与 history/build | [PackageConsumerProbe](PackageConsumerProbe/README.md) |
+| 显式分类诊断、两条生成路线与修正后的普通包冷恢复 | [ExplicitStorageClassificationConsumer](PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md) |
 | 无业务注册的 meta 冷读与容器 Delta | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md) |
 | accepted-history、Upgrade、准确 S、tag、Fork、Pair 与冷增量 | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md) |
 | baseline private、Nullable/List 升级与完整 ToShared | [PrivateContainerConsumer](PackageConsumerProbe/PrivateContainerConsumer/README.md) |
@@ -19,7 +20,7 @@
 
 | 问题 | 入口与资格 |
 |---|---|
-| 显式分类、真实 backing 的 Roslyn/PE 暴露与当前 SG 输出 | [ExplicitStorageClassificationProbe](ExplicitStorageClassificationProbe/README.md)；14 形状的观察工具，保独立正控；不把当前遗漏固定为产品回归，不证明普通 backing 已获支持 |
+| 显式分类、真实 backing 的 Roslyn/PE 暴露与当前 SG 输出 | [ExplicitStorageClassificationProbe](ExplicitStorageClassificationProbe/README.md)；14 形状的观察工具，保独立正控；不把原始遗漏固定为产品回归，不证明普通 backing 已获支持 |
 
 旧 raw Store 消费者的执行代码与 runner 已删除；保留的 19 类业务模型是
 [生成器与 history 编译资产](PackageConsumerProbe/README.md#model-fixtures)，不再是待恢复的运行门禁。
