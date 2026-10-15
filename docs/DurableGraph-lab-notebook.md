@@ -12,6 +12,18 @@
 | 实际 B/D/H、prior 与确认后基线 | [DB-029](design-branches/0029-prepared-object-revision-planning-slice/README.md)、[DB-069](design-branches/0069-incremental-save-baseline/README.md)、[链反例](../tests/DurableGraph.Persistence.Tests/MetaBootstrapP0IntegrityTests.cs) |
 | 进程中止与两根发布 | [MetaBootstrapCrashProbe](../experiments/MetaBootstrapCrashProbe/README.md)；不授断电或全部故障窗口保证 |
 
+<a id="state-only-quickstart"></a>
+## 2026-10-15：纯 State 快速入门
+
+问题来自 workshop 反馈 3：状态型应用是否能按文档直接连续保存 State，并使用历史与分叉，而无需先提交 Event？
+[根 README](../README.md#最短接入路径)将该路径设为首个示例，保留共享/循环引用、Transient 重建和相同实例续写；
+Event 类型与 E/S 保存移到可选章节，提醒两次提交各自发布。运行时、公共 API 和持久格式不变。
+
+最小验收由 [README 原文 runner](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1)承担：
+两进程产生 S0/S1/S2（100/99/98），没有 Event；从 S1 分叉存为 89，全关重开续存为 88；
+另一个进程核对共同祖先、旧 State、主分支和零 Event。随后才添加 Event 模型，保留事件读取、策略、Upgrade/Verify 及原交付正反例。
+本轮普通包验证结果待补充；原始工件放在 `.artifacts/state-only-quickstart/20261015/`。
+
 ## 历史来源
 
 旧 EXP 日志、轮转、raw Store 研究和冻结长稿已退出工作树，来源见

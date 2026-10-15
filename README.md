@@ -11,7 +11,8 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 目前是快速演进的 **.NET 10 原型**，API 和格式尚未冻结。本文面向首次接入的应用开发者和 Coding Agent，
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
-公开入口是非泛型 `Repository` / `BranchCheckout`：分别提交 Event 快照和 State，可从 Event 开始，也可连续提交同一角色。
+公开入口是非泛型 `Repository` / `BranchCheckout`：状态型应用直接连续提交 State，无需先提交 Event。
+需要记录业务事件时，可以另外提交 Event 快照；历史允许任意 E/S 排列。
 VersionStore 共同发布共享 Schema 根与命名分支目录；恢复读取已保存的结果，不重新执行历史业务处理器。
 
 ## 最短接入路径
@@ -95,11 +96,6 @@ public partial class World : IDurableObject {
 
     public Character Find(string name) => _byName[name];
 }
-
-[DurableType("DamageEvent", 1)]
-public partial class DamageEvent : IDurableObject {
-    [DurableField(1)] public int Amount;
-}
 ```
 
 领域 class/struct 使用顶层 `partial` 声明。class 实现 `IDurableObject`（可从自己的领域基类继承该接口）；每个参与持久化的声明显式标记
@@ -111,7 +107,7 @@ public partial class DamageEvent : IDurableObject {
 
 ### 2. 保存、重开、继续修改
 
-保存为 `Program.cs`，替换控制台模板的内容：
+保存为 `Program.cs`，替换控制台模板的内容。**每次业务保存只调用 `CommitState()`，无需定义 Event 类型：**
 
 ```csharp
 using Atelia.DurableGraph;
@@ -140,9 +136,7 @@ if (!ReferenceEquals(world.Hero, world.Characters[0]) ||
     throw new InvalidOperationException("Object identity was not preserved.");
 }
 
-var damage = new DamageEvent { Amount = 1 };
-session.CommitEvent(damage);
-world.Hero.Hp -= damage.Amount;
+world.Hero.Hp -= 1;
 var frame = session.CommitState();
 Console.WriteLine($"{world.Find("Alice").Name}: Hp={world.Hero.Hp}; Revision={frame.RevisionAddress}");
 
@@ -163,18 +157,89 @@ dotnet run --project QuickStart/QuickStart.csproj --no-restore -- ./quickstart-w
 dotnet run --project QuickStart/QuickStart.csproj --no-restore -- ./quickstart-world
 ```
 
-第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个工作副本的 `State`；
+从新目录开始，第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`；业务历史为 `S0(100) → S1(99) → S2(98)`，没有 Event。
+`CreateSharedBranch` 已经保存初始 S0。后续修改继续使用同一个工作副本的 `State`；
 成功提交 State 保留领域实例及比较基线。`Checkout` 保持分支精确 Head，只恢复最近的 State，不物化 Event 或自动重放。
 Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)` 允许替换为不同实际类型的根，成功后安装传入实例。
-这段最短程序每次运行都创建一条新事件，未实现中断恢复；不要把重新运行当作透明重试。
-需要恢复的应用须持久化自己的处理进度，见[事件快照与失败恢复](#事件快照与失败恢复)。
-
-`CreateSharedBranchFromEvent("main", firstEvent)` 可直接发布首个 Event 并返回 `State == null` 的工作副本；
-继续 `CommitEvent` 不改变这一状态，直到 `CommitState(nonNullRoot)` 发布首个 State。
-无 State 时，无参 `CommitState()` 会在捕获或追加前拒绝。已有 State 的读取失败会传播，不会转换成 null。
+重新运行会再扣一次 HP，是一次新业务操作；保存异常后不能把它当透明重试。
+发布失败的 outcome/fault 与重开边界见[事件快照与失败恢复](#事件快照与失败恢复)，纯 State 应用同样适用。
 
 省略策略参数即可使用默认 `(5, 5)`：对象级读取放大动机阈值为 5，可选 Base 软预算为 5%。
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
+
+### 3. 独立浏览与分支
+
+完成上面的两次运行后，可以浏览每次保存的 State，再从旧 State 分叉。
+以下片段保留原程序的 `using`、参数检查和 `path`/`models` 登记，替换从 `using var repository` 起的其余内容（含 `NewWorld`）。
+不要与尚未释放的 writer 一起执行。
+
+```csharp
+using (var history = Repository.OpenReadOnlyExisting(path, models)) {
+    foreach (var frame in history.ReadFrames("main")) { // 从旧到新；此例只有 State。
+        var saved = (World)history.ReadState(frame);
+        Console.WriteLine($"History: Hp={saved.Hero.Hp}"); // 100、99、98。
+    }
+}
+```
+
+`ReadFrames` 返回所选分支从旧到新的完整 E/S 元数据链，有全量成本；它本身不恢复领域对象。
+混合历史需先按 `frame.Kind` 选择 `ReadState` 或 `ReadEvent`。每次读取需要相应的 reader/Upgrade；
+修改独立读取的对象不会自动写盘。`OpenReadOnlyExisting` 用于零写入浏览。
+
+可写仓库支持 `ForkShared(name, selectedFrame)`，从已提交位置取得独立、可继续保存的工作副本。
+下面接续同一数据库，选择 S1（HP99）；`alternate` 须尚未存在。关闭第一段仓库后重开，继续保存该分支：
+
+```csharp
+using (var branches = Repository.OpenExisting(path, models)) {
+    var selected = branches.ReadFrames("main")[1]; // S1，不是 main 的最新 Head。
+    using var alternate = branches.ForkShared("alternate", selected);
+    var world = (World)alternate.State!;
+    world.Hero.Hp -= 10;
+    alternate.CommitState(); // alternate: 99 -> 89，main 仍为 98。
+}
+using (var reopened = Repository.OpenExisting(path, models)) {
+    using var alternate = reopened.CheckoutShared("alternate");
+    var world = (World)alternate.State!;
+    world.Hero.Hp -= 1;
+    alternate.CommitState(); // 冷开后继续：89 -> 88。
+    var original = (World)reopened.ReadState(reopened.GetHead("main"));
+    Console.WriteLine($"Branches: main={original.Hero.Hp}, alternate={world.Hero.Hp}"); // 98、88。
+}
+```
+
+每个 branch 至多一个活动工作副本；不同 branch 可同时保留，所有仓库操作仍须串行。
+显式 Dispose 释放该 branch 后可再次 `Checkout`；`MoveBranch(name, expectedHead, targetFrame)` 只要求目标 branch 没有活动工作副本。
+ref-only `CreateBranch("fork", selectedFrame)` 只建立持久引用，不恢复领域图或占用工作副本。
+Fork 自身只发布新 ref，不新增历史检查点；Event 地址仍只恢复最近 State，纯 Event 前缀则返回 `State == null`。
+消息处理和外部效果去重由应用负责；两个孩子从同一 Event 开始不表示库已经领取或完成该事件。
+handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
+位置统一使用 `CheckpointAddress`；它只用于本次打开，不是可序列化的外部地址。
+跨重开保存位置可使用不可变 tag：`repo.CreateTag("before-experiment", selectedFrame)`；
+关闭重开后用 `reopened.ResolveTag("before-experiment")` 取得当前打开的地址，再 ReadCheckpoint 或 Fork。
+tag 可指向 State 或尚无 State 的 Event；分支提交或移动不改变它，同名 tag 创建一律拒绝。
+tag 与 branch 名称空间独立，名称使用 1–128 个 ASCII 字符，匹配 `[a-z0-9][a-z0-9._-]*`，不能以 `.` 或 `.lock` 结尾。
+只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析均不推进分支或物化领域图。
+真实包和跨进程示例见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)。
+历史可为纯 State 的 `S0 → S1 → S2`，也可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
+业务 Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
+Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。
+
+`ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
+默认返回两个 `IDurableObject`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
+两个输入无需相邻，也不要求一份 State、一份 Event；调用方用显式转换或模式匹配取得领域类型。
+它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
+**两份结果及其可达对象都必须按只读快照使用，包括会影响观察结果的 Transient 写入**。
+不要分别给可能共享的 Actor 写入不同的 `OwnerWorld`、查询上下文或视图专属缓存；这些信息应由各自的图外
+`WorldView` / 索引持有。即使两个视图引用同一个 Actor，各自的查询仍使用各自的世界上下文。
+不能只用全局 Actor→context 表代替视图：共享的 Actor 会命中同一个 key。
+不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
+需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `ReadState` / `ReadEvent`，不需要开启 writer；
+持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `Checkout`。
+图外视图与共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)。
+共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
+Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
+
+## 工作副本与 Schema 归属
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
 Open 负责资源读写；取得工作副本时由入口明确普通保存归属：`CreateSharedBranch`、`CreateSharedBranchFromEvent`、`CheckoutShared` 和 `ForkShared` 选择 Shared，`CheckoutPrivate` 选择 Private。得到工作副本后，普通 `CommitState` / `CommitEvent` 使用该固定归属；显式 ToShared 只为本次提交选择 Shared。
@@ -193,96 +258,6 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
 
 显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
-
-### 3. 独立浏览与分支
-
-关闭 writer 后，可以只加载某个 Event；不需要先构造 World，也不必注册完全不在该 Event 图中的模型。
-每次操作仍需要所选图的完整 reader/Upgrade 能力。
-
-```csharp
-using var history = Repository.OpenReadOnlyExisting(path, models);
-var end = history.GetHead("main"); // 固定本次查询的结尾。
-foreach (var eventFrame in history.EnumerateEvents(end, HistoryOrder.OldestFirst)) {
-    var damage = (DamageEvent)history.ReadEvent(eventFrame);
-    Console.WriteLine(damage.Amount);
-}
-var lastEvent = history.EnumerateEvents(end).First(); // 默认从新到旧；此例已有事件。
-var checkpoint = (EventCheckpoint)history.ReadCheckpoint(lastEvent);
-var occurrence = (DamageEvent)checkpoint.Event;
-var before = (World)checkpoint.PreviousState!; // 此例从 State 开始。
-before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence 或持久历史。
-```
-
-`EnumerateEvents(end)` 沿固定的逻辑祖先链从新到旧返回事件地址，允许提前停止，跨过 State 时不恢复其领域图。
-后续分支推进或移动不改变所选结尾；循环内可以调用 `ReadEvent`。`HistoryOrder.OldestFirst` 先准备范围内的轻量地址，再从旧到新输出。
-可选 `afterExclusive` 排除下界及其更早历史；同点得到空范围，非祖先下界在交付首项前拒绝。这个校验可能需要完整范围的元数据回溯。
-`ReadFrames` 仍返回从旧到新的**完整元数据链**，用于检查所有 E/S 位置；它有全量成本。两种查询都排除其他分支独有记录和未连入所选链的 orphan。
-打开只读取必要分支目录／shared 两根；所选业务图 pin 完整 Schema 视图，读取时检查内容与来源关系，不执行全历史或 orphan 启动审计。
-需要零写入浏览时使用示例中的 `OpenReadOnlyExisting`。
-
-`ReadCheckpoint` 一次恢复当前图与最近严格祖先中另一角色的图，最多两份，全部成功才返回。
-`EventCheckpoint` 提供 `Event` / `PreviousState`；`StateCheckpoint` 提供 `State` / `PreviousEvent`，前驱另有对应地址。
-不存在相应祖先时，前驱根和地址同时为 null，包括首 State 之前的 Event。
-这些图彼此独立，也与其他读取和工作副本的可变对象隔离；重复 getter 保留同一实例及你的本地修改。
-`PreviousEvent` 仅表示历史中的邻近事件，不能证明它已经处理或是本次 State 的唯一原因。消息处理进度由应用 State 表达。
-这些历史恢复结果不安装保存基线，修改它们不会自动写盘。只需要事件时仍使用 `ReadEvent`，避免额外恢复前置 State。
-
-`ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
-默认返回两个 `IDurableObject`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
-两个输入无需相邻，也不要求一份 State、一份 Event；调用方用显式转换或模式匹配取得领域类型。
-它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
-**两份结果及其可达对象都必须按只读快照使用，包括会影响观察结果的 Transient 写入**。
-不要分别给可能共享的 Actor 写入不同的 `OwnerWorld`、查询上下文或视图专属缓存；这些信息应由各自的图外
-`WorldView` / 索引持有。即使两个视图引用同一个 Actor，各自的查询仍使用各自的世界上下文。
-不能只用全局 Actor→context 表代替视图：共享的 Actor 会命中同一个 key。
-不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
-需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `ReadState` / `ReadEvent`，不需要开启 writer；
-持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `Checkout`。
-图外视图与共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)。
-共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
-Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
-
-可写仓库支持 `ForkShared(name, selectedFrame)`：从已提交位置创建持久分支，并返回独立、可继续保存的工作副本。
-源工作副本可以保持打开；它的未提交字段不进入子分支。关闭上面的浏览仓库后，下面的代码接续示例数据库；
-它的 `main` Head 是已保存的 State，分支名 `left` / `right` 须尚未存在，`models` 沿用打开前注册的固定配置：
-
-```csharp
-using (var branches = Repository.OpenExisting(path, models)) {
-    using var source = branches.CheckoutShared("main");
-    var selected = source.Head;
-    using var left = branches.ForkShared("left", selected);
-    using var right = branches.ForkShared("right", selected);
-    var leftWorld = (World)left.State!;
-    var rightWorld = (World)right.State!;
-    leftWorld.Hero.Hp -= 1;
-    rightWorld.Hero.Hp -= 2;
-    left.CommitState();
-    right.CommitState(); // 每个分支独立保存；调用仍按顺序执行。
-}
-using (var reopened = Repository.OpenReadOnlyExisting(path, models)) {
-    var original = (World)reopened.ReadState(reopened.GetHead("main"));
-    var leftSaved = (World)reopened.ReadState(reopened.GetHead("left"));
-    var rightSaved = (World)reopened.ReadState(reopened.GetHead("right"));
-    Console.WriteLine($"Forks: source={original.Hero.Hp}, left={leftSaved.Hero.Hp}, right={rightSaved.Hero.Hp}");
-}
-```
-
-每个 branch 至多一个活动工作副本；不同 branch 可同时保留，所有仓库操作仍须串行。
-显式 Dispose 释放该 branch 后可再次 `Checkout`；`MoveBranch(name, expectedHead, targetFrame)` 只要求目标 branch 没有活动工作副本。
-ref-only `CreateBranch("fork", selectedFrame)` 只建立持久引用，不恢复领域图或占用工作副本。
-Fork 自身只发布新 ref，不新增历史检查点；Event 地址仍只恢复最近 State，纯 Event 前缀则返回 `State == null`。
-消息处理和外部效果去重由应用负责；两个孩子从同一 Event 开始不表示库已经领取或完成该事件。
-handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
-位置统一使用 `CheckpointAddress`；它只用于本次打开，不是可序列化的外部地址。
-跨重开保存位置可使用不可变 tag：`repo.CreateTag("before-experiment", selectedFrame)`；
-关闭重开后用 `reopened.ResolveTag("before-experiment")` 取得当前打开的地址，再 ReadCheckpoint 或 Fork。
-tag 可指向 State 或尚无 State 的 Event；分支提交或移动不改变它，同名 tag 创建一律拒绝。
-tag 与 branch 名称空间独立，名称使用 1–128 个 ASCII 字符，匹配 `[a-z0-9][a-z0-9._-]*`，不能以 `.` 或 `.lock` 结尾。
-只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析均不推进分支或物化领域图。
-真实包和跨进程示例见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)。
-历史可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
-业务 Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
-Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。
 
 ## 调整保存策略
 
@@ -306,15 +281,13 @@ Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖
 当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
 
 在 CreateSharedBranch、CreateSharedBranchFromEvent、CommitEvent 或 CommitState 的 `parameters` 参数传入配置即可。
-例如，对上面的工作副本，再完成一次偏向存储的事件/状态保存：
+例如，在第 2 节的输出语句之前插入下面代码，再保存一次状态：
 
 ```csharp
 var savePolicy = new ReadAmplificationBaseBudgetParameters(
     ReadAmplificationThreshold: 11,
     BaseBudgetPercent: 5);
-var nextDamage = new DamageEvent { Amount = 1 };
-session.CommitEvent(nextDamage, parameters: savePolicy);
-world.Hero.Hp -= nextDamage.Amount;
+world.Hero.Hp -= 1;
 session.CommitState(parameters: savePolicy);
 ```
 
@@ -325,6 +298,61 @@ session.CommitState(parameters: savePolicy);
 也可打开[交互函数图](docs/research/read-amplification-tradeoff/index.html)比较。
 
 ## 事件快照与失败恢复
+
+**按需记录 Event。** 如果只关心可浏览、可分叉的状态历史，上面的 State-only 流程已经足够。
+只有业务需要保留“发生了什么”时，再添加事件类型。将下面内容保存为 `Events.cs`，重新构建后再打开仓库：
+
+```csharp
+using Atelia.DurableGraph;
+
+namespace QuickStart;
+
+[DurableType("DamageEvent", 1)]
+public partial class DamageEvent : IDurableObject {
+    [DurableField(1)] public int Amount;
+}
+```
+
+下面按第 3 节的方式替换程序，仍沿用 `path`、`models` 和顶部 `using`；生成的 Register 会一并登记新增的事件类型。
+此例先记录事件，再由应用修改 State；**这是两次独立提交，不是一次事务**，库也不会自动应用或重放 Event。
+中断可能留下 `… → E` 而没有后续 State；需要恢复时使用下述处理进度协议。
+
+```csharp
+using (var events = Repository.OpenExisting(path, models)) {
+    using var session = events.CheckoutShared("main");
+    var world = (World)session.State!;
+    var damage = new DamageEvent { Amount = 1 };
+    session.CommitEvent(damage);
+    world.Hero.Hp -= damage.Amount;
+    session.CommitState();
+}
+using var history = Repository.OpenReadOnlyExisting(path, models);
+var end = history.GetHead("main");
+foreach (var eventFrame in history.EnumerateEvents(end, HistoryOrder.OldestFirst)) {
+    var damage = (DamageEvent)history.ReadEvent(eventFrame);
+    Console.WriteLine(damage.Amount);
+}
+var lastEvent = history.EnumerateEvents(end).First(); // 上面刚保存过事件。
+var checkpoint = (EventCheckpoint)history.ReadCheckpoint(lastEvent);
+var occurrence = (DamageEvent)checkpoint.Event;
+var before = (World)checkpoint.PreviousState!; // 此例从 State 开始。
+Console.WriteLine($"Event: amount={occurrence.Amount}; beforeHp={before.Hero.Hp}");
+```
+
+`EnumerateEvents(end)` 沿固定的逻辑祖先链从新到旧返回事件地址，允许提前停止，跨过 State 时不恢复其领域图。
+后续分支推进或移动不改变所选结尾；循环内可以调用 `ReadEvent`。`HistoryOrder.OldestFirst` 先准备范围内的轻量地址，再从旧到新输出。
+可选 `afterExclusive` 排除下界及其更早历史；同点得到空范围，非祖先下界在交付首项前拒绝。这个校验可能需要完整范围的元数据回溯。
+
+`ReadCheckpoint` 一次恢复当前图与最近严格祖先中另一角色的图，最多两份，全部成功才返回。
+`EventCheckpoint` 提供 `Event` / `PreviousState`；`StateCheckpoint` 提供 `State` / `PreviousEvent`，前驱另有对应地址。
+不存在相应祖先时，前驱根和地址同时为 null，包括首 State 之前的 Event。
+这些图彼此独立，也与其他读取和工作副本的可变对象隔离；重复 getter 保留同一实例及你的本地修改。
+`PreviousEvent` 仅表示历史中的邻近事件，不能证明它已经处理或是本次 State 的唯一原因。消息处理进度由应用 State 表达。
+这些历史恢复结果不安装保存基线，修改它们不会自动写盘。只需要事件时仍使用 `ReadEvent`，避免额外恢复前置 State。
+
+`CreateSharedBranchFromEvent("main", firstEvent)` 可直接发布首个 Event 并返回 `State == null` 的工作副本；
+继续 `CommitEvent` 不改变这一状态，直到 `CommitState(nonNullRoot)` 发布首个 State。
+无 State 时，无参 `CommitState()` 会在捕获或追加前拒绝。已有 State 的读取失败会传播，不会转换成 null。
 
 事件若需要记录角色“当时的 HP 和观察”，应保存所需的只读业务快照，通过业务 ActorId 找到当前角色进行修改。
 可以从可变 `List<string>` 复制为快照私有的 `string[]`，共享不可变 string；readonly 字段本身不会冻结数组或可变元素。

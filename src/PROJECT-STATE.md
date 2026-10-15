@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+本片处理 workshop 反馈 3：README 最短路径改为纯 State，连续保存、历史读取、旧 State 分叉与冷开续写共用一个故事；Event 作为可选后续示例。验收要求：README 同源的普通包程序两进程形成 S0/S1/S2，业务历史无 Event，分叉及冷续写保持主分支和旧历史；更新原文 Probe 并保留独立事件、Upgrade/Verify 与交付门禁。运行时/API/格式不扩展，结果待本轮验收。
+
 [DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)E 已实施并完成源码与新 G 普通包限定验收。Open 只管资源读写，命名创建/签出/Fork 决定工作副本 Shared/Private 归属；来源、完整目录和保存格式保持。本片无剩余必经施工，准确 G/S、门禁与边界统一查 DB-095 §12；private 无历史新建与复合 ForkPrivate 不随本片扩展。
 
 Schema-history 发布保护已实施并完成限定验收：Build 的 Publish/Verify 在同目录互斥内重读、校验与发布，

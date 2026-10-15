@@ -189,7 +189,7 @@ try {
     $hp = @([regex]::Matches($entry.Output, 'Alice: Hp=(\d+); Revision=') | ForEach-Object { $_.Groups[1].Value })
     if (($hp -join ',') -cne '99,98') { throw "Documented commands must cold-run twice, producing HP 99,98; got $($hp -join ',')." }
     $accepted = @(Images $history '*.dgschema')
-    if ($accepted.Count -ne 3) { throw 'Expected exactly three README V1 histories.' }
+    if ($accepted.Count -ne 2) { throw 'Expected only Character and World V1 histories; no Event model in QuickStart.' }
     $receipt['V1History'] = $accepted
     $assets = Get-Content -LiteralPath (Join-Path $projectRoot 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
     if ($assets.libraries.Count -ne 11 -or @($assets.libraries.Values | Where-Object type -cne 'package').Count -ne 0 -or
@@ -205,7 +205,82 @@ try {
         }
     }
     $receipt['ResolvedPackages'] = @($assets.libraries.Keys | Sort-Object)
-    $receipt.Regressions += 'Original commands: restore; separate HP99 and HP98 processes; three V1 histories'
+    $receipt.Regressions += 'Original commands: restore; independent HP99 and HP98 processes; only two State-model histories'
+
+    $prefix = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
+        "string path = args[0];`nvar models = new StateModelRegistry();`n" +
+        "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n"
+    $browse = $prefix + (Get-Example 'csharp' 'foreach (var frame in history.ReadFrames("main"))') + @'
+using (var check = Repository.OpenReadOnlyExisting(path, models)) {
+    var frames = check.ReadFrames("main");
+    if (frames.Count != 3 || frames.Any(frame => frame.Kind != CheckpointKind.State) ||
+        check.EnumerateEvents(check.GetHead("main")).Any() ||
+        !frames.Select(frame => ((World)check.ReadState(frame)).Hero.Hp).SequenceEqual(new[] { 100, 99, 98 })) {
+        throw new InvalidOperationException("Expected S0/S1/S2 only, with HP100/99/98 and no Event.");
+    }
+}
+'@
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $browse, $utf8)
+    $browseBefore = @(Images $database)
+    $browseResult = Run-DotNet 'state-browse' @('run', '--project', $project, '--no-restore', '--', $database)
+    $historyHp = @([regex]::Matches($browseResult.Output, 'History: Hp=(\d+)') | ForEach-Object { $_.Groups[1].Value })
+    if (($historyHp -join ',') -cne '100,99,98') { throw 'README State history must print HP100,99,98.' }
+    Require-Images $database $browseBefore
+    $receipt.Regressions += 'State-only browse: exactly S0/S1/S2, HP100/99/98, no Event, read-only database unchanged'
+
+    $fork = $prefix + (Get-Example 'csharp' 'using (var branches = Repository.OpenExisting(')
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $fork, $utf8)
+    $forkResult = Run-DotNet 'fork' @('run', '--project', $project, '--no-restore', '--', $database)
+    if ($forkResult.Output -notmatch 'Branches: main=98, alternate=88') { throw 'README historical-State fork and cold continuation failed.' }
+    $verifyFork = $prefix + @'
+using var check = Repository.OpenReadOnlyExisting(path, models);
+var main = check.ReadFrames("main");
+var alternate = check.ReadFrames("alternate");
+if (main.Count != 3 || alternate.Count != 4 || !main.Take(2).SequenceEqual(alternate.Take(2)) ||
+    main.Concat(alternate).Any(frame => frame.Kind != CheckpointKind.State) ||
+    check.EnumerateEvents(check.GetHead("main")).Any() || check.EnumerateEvents(check.GetHead("alternate")).Any() ||
+    !main.Select(frame => ((World)check.ReadState(frame)).Hero.Hp).SequenceEqual(new[] { 100, 99, 98 }) ||
+    !alternate.Select(frame => ((World)check.ReadState(frame)).Hero.Hp).SequenceEqual(new[] { 100, 99, 89, 88 })) {
+    throw new InvalidOperationException("Fork/cold save must preserve the shared ancestors, old State and main branch without Events.");
+}
+Console.WriteLine("StateOnly:main=100,99,98;alternate=100,99,89,88;events=0");
+'@
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $verifyFork, $utf8)
+    $verifyBefore = @(Images $database)
+    $null = Run-DotNet 'fork-cold-verify' @('run', '--project', $project, '--no-restore', '--', $database)
+    Require-Images $database $verifyBefore
+    $receipt['StateOnly'] = [ordered]@{ MainHp = @(100, 99, 98); AlternateHp = @(100, 99, 89, 88)
+        Events = 0; SharedAncestorCount = 2; IndependentColdVerification = $true }
+    $receipt.Regressions += 'Historical-State Fork: S1 HP99 -> HP89 -> cold HP88; independent process verifies old histories and main HP98; no Events'
+
+    $configured = $prefix +
+        "using var repository = Repository.OpenExisting(path, models);`n" +
+        "using var session = repository.CheckoutShared(""main"");`nWorld world = (World)session.State!;`n" +
+        (Get-Example 'csharp' 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
+        "`nif (world.Hero.Hp != 97 || !ReferenceEquals(world, session.State) || repository.EnumerateEvents(session.Head).Any()) { throw new InvalidOperationException(); }`n" +
+        "Console.WriteLine(""ReadmePolicyOverride:Hp=97:Threshold=11:Budget=5"");`n"
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $configured, $utf8)
+    $null = Run-DotNet 'policy' @('run', '--project', $project, '--no-restore', '--', $database)
+    $receipt.Regressions += 'State-only policy: HP97, threshold11, budget5, checkout instance retained, still no Event'
+
+    # The optional path introduces the Event model only after the complete State-only story.
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'Events.cs'), (Get-Example 'csharp' 'public partial class DamageEvent'), $utf8)
+    $events = $prefix + (Get-Example 'csharp' 'using (var events = Repository.OpenExisting(') +
+        "`nif (history.EnumerateEvents(end).Count() != 1 || occurrence.Amount != 1 || before.Hero.Hp != 97 ||`n" +
+        "    !ReferenceEquals(before, checkpoint.PreviousState) || ((World)history.ReadState(checkpoint.PreviousStateAddress!)).Hero.Hp != 97 ||`n" +
+        "    ((World)history.ReadState(end)).Hero.Hp != 96) { throw new InvalidOperationException(); }`n" +
+        "before.Hero.Hp = 100;`n" +
+        "if (!ReferenceEquals(before, checkpoint.PreviousState) || checkpoint.PreviousState is not World { Hero.Hp: 100 } ||`n" +
+        "    ((World)history.ReadState(checkpoint.PreviousStateAddress!)).Hero.Hp != 97) { throw new InvalidOperationException(); }`n"
+    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $events, $utf8)
+    $null = Run-DotNet 'optional-events' @('run', '--project', $project, '--no-restore', '--', $database)
+    $beforeUpgrade = @(Images $history '*.dgschema')
+    if ($beforeUpgrade.Count -ne 3) { throw 'Optional Event must add only its one history.' }
+    foreach ($entry in $accepted) {
+        if ((Get-FileHash -LiteralPath (Join-Path $history $entry.File)).Hash -cne $entry.Sha256) { throw 'Adding Event changed accepted State-model history.' }
+    }
+    $receipt['EventHistory'] = $beforeUpgrade
+    $receipt.Regressions += 'Optional Event: one E/S pair, damage1, previous State HP97 and current HP96; local read mutation preserves history and stable getters'
 
     $model = Get-Example 'csharp' 'public partial class Character'
     $program = Get-Example 'csharp' 'string path = Path.GetFullPath(args[0]);'
@@ -219,47 +294,14 @@ try {
     $checkedProgram = $program.Replace('world.RebuildTransient();', 'if (world.Day != 1) { throw new InvalidOperationException("Upgrade did not initialize Day."); }' + "`nworld.RebuildTransient();")
     [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $checkedProgram, $utf8)
     $upgrade = Run-DotNet 'upgrade' @('run', '--project', $project, '--no-restore', '--', $database)
-    if ($upgrade.Output -notmatch 'Alice: Hp=97; Revision=') { throw 'README V2 must produce HP97.' }
+    if ($upgrade.Output -notmatch 'Alice: Hp=95; Revision=') { throw 'README V2 must produce HP95 after the optional Event story.' }
     if (@(Images $history '*.dgschema').Count -ne 4) { throw 'Expected only one additional World V2 history.' }
-    foreach ($entry in $accepted) {
+    foreach ($entry in $beforeUpgrade) {
         if ((Get-FileHash -LiteralPath (Join-Path $history $entry.File)).Hash -cne $entry.Sha256) { throw 'Upgrade changed accepted V1 history.' }
     }
     $acceptedV2 = @(Images $history '*.dgschema')
     $receipt['V2History'] = $acceptedV2
-    $receipt.Regressions += 'Upgrade: HP97, Day1, original accepted histories unchanged'
-
-    $browse = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
-        "string path = args[0];`nvar models = new StateModelRegistry();`n" +
-        "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        (Get-Example 'csharp' 'using var history = Repository.OpenReadOnlyExisting(path, models);') +
-        "`nif (history.EnumerateEvents(end).Count() != 3 || occurrence.Amount != 1 || before.Hero.Hp != 100 ||`n" +
-        "    !ReferenceEquals(before, checkpoint.PreviousState) || ((World)history.ReadState(checkpoint.PreviousStateAddress!)).Hero.Hp != 98) { throw new InvalidOperationException(); }`n"
-    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $browse, $utf8)
-    $browseBefore = @(Images $database)
-    $null = Run-DotNet 'browse' @('run', '--project', $project, '--no-restore', '--', $database)
-    Require-Images $database $browseBefore
-    $receipt.Regressions += 'Browse: three events, first damage1, initial HP100, checkpoint previous HP98, read-only database unchanged'
-
-    $configured = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
-        "string path = args[0];`nvar models = new StateModelRegistry();`n" +
-        "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        "using var repository = Repository.OpenExisting(path, models);`n" +
-        "using var session = repository.CheckoutShared(""main"");`nWorld world = (World)session.State!;`n" +
-        (Get-Example 'csharp' 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
-        "`nif (world.Hero.Hp != 96 || !ReferenceEquals(world, session.State)) { throw new InvalidOperationException(); }`n" +
-        "Console.WriteLine(""ReadmePolicyOverride:Hp=96:Threshold=11:Budget=5"");`n"
-    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $configured, $utf8)
-    $null = Run-DotNet 'policy' @('run', '--project', $project, '--no-restore', '--', $database)
-    $receipt.Regressions += 'Policy: HP96, threshold11, budget5, checkout state preserved'
-
-    $fork = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
-        "string path = args[0];`nvar models = new StateModelRegistry();`n" +
-        "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        (Get-Example 'csharp' 'using (var branches = Repository.OpenExisting(')
-    [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $fork, $utf8)
-    $forkResult = Run-DotNet 'fork' @('run', '--project', $project, '--no-restore', '--', $database)
-    if ($forkResult.Output -notmatch 'Forks: source=96, left=95, right=94') { throw 'README named-Fork example failed.' }
-    $receipt.Regressions += 'Named Fork and cold reopen: source96, left95, right94'
+    $receipt.Regressions += 'Upgrade: HP95, Day1, original Character/World/Event histories unchanged'
     $null = Run-DotNet 'clean' @('clean', $project, '-v:q')
     $null = Run-DotNet 'verify' @('build', $project, '--no-restore', '-p:DurableGraphSchemaHistoryMode=Verify', '-v:q')
     Require-Images $history $acceptedV2 '*.dgschema'

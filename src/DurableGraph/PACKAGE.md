@@ -23,6 +23,8 @@ that coordination and may reject a temporarily incomplete history set.
 Domain declarations remain in `Atelia.DurableGraph`; layouts use `.Schema` and binding/capture/state
 operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Persistence`.
 
+State-based applications can create a branch with State and call CommitState repeatedly; no preceding
+Event or Event model is required. CommitEvent is optional and publishes separately from CommitState.
 Register models before Open; save independent Event/State graphs, query checkpoints, resolve immutable
 tags and fork named branches. Each branch has at most one active checkout; repository operations are
 serialized. Open selects resource access; CreateSharedBranch, CreateSharedBranchFromEvent, CheckoutShared

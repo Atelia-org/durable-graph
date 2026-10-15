@@ -8,7 +8,7 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 | 入口 | 验证的问题 |
 |---|---|
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
-| [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | 候选目录搬迁、完整配置与 README 原文命令，保留 Upgrade/Fork/Verify 回归 |
+| [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | README 原文纯 State 连续保存、历史分叉与冷续写；可选 Event、Upgrade/Verify 及候选交付 |
 | [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | DB-095 明确编辑入口的普通包编译正例、七项旧 API 精确编译负例及恢复合法源码后的冷保存 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
@@ -47,7 +47,11 @@ DB-095 的公开调用门禁接受完整候选 feed 与独立 DG 版本；`WorkD
 可用 `-WorkDirectory <fresh-outside-directory>` 指定新的仓外工作目录。
 runner 将交付目录搬迁，在故意错误的祖先 NuGet 配置、全新缓存下直接调用 dotnet，
 不经 `Invoke-DotNet` 的 restore 改写；检查旧命令准确 `NU1100`、新命令的本地包解析与两进程 HP99→98，
-并继续运行既有 V2/browse/policy/Fork/Verify 断言。结果与覆盖边界记在[候选交付验收](../../docs/storage-dependency.md#candidate-delivery-validation)。
+随后检查纯 State 历史为 100/99/98、没有 Event，从 HP99 的旧 State 分叉后保存为 89，关闭重开再存为 88；
+另一个进程确认共同祖先、主分支和旧 State 保持。只有完成这条路径后才添加 Event 模型并运行可选示例，
+继续验证策略覆盖、V2 Upgrade 和 Clean/Verify。初始模型只产生两份 history；可选 Event 和 World V2 各增加一份，既有文件不改写。
+结果与范围见[纯 State 验收记录](../../docs/DurableGraph-lab-notebook.md#state-only-quickstart)；
+[候选交付验收](../../docs/storage-dependency.md#candidate-delivery-validation)保留最初交付方案的历史证据。
 
 其他领域 runner 继续使用 `-PackageSource <ten-package-feed> -Version <G>` 和已有任务配置，
 可以联网取得第三方依赖；不要求所有领域 Probe 改用便携目录，也不把它们的 helper 行为作为原文命令的验收证据。

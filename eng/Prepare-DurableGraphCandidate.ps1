@@ -214,7 +214,7 @@ try {
         "Prepared using SDK $sdk. The supplied example targets net10.0, framework-dependent, with no explicit RID. It requires an already installed compatible SDK/runtime; the current acceptance baseline is SDK 10.0.201 (Roslyn 5.3.0). Other SDK feature bands have not been qualified.",
         'The local feed covers this supplied example only. It does not include SDK installation, arbitrary RID/self-contained publishing, additional application dependencies, or the DurableGraph repository test/build dependencies. A local package source does not suppress every possible SDK/certificate/audit network operation.',
         '',
-        'Move this whole directory together. In a shell opened in this directory, run the following commands copied from the source README. The two independent processes should print Hp=99 then Hp=98:',
+        'The QuickStart saves State directly; no Event type or preceding Event is required. Creation saves S0, and the two independent runs save S1 then S2 (Hp=99 then Hp=98). Move this whole directory together and run the following source-README commands in this directory:',
         '',
         '```powershell',
         $commands.TrimEnd(),
@@ -224,7 +224,7 @@ try {
         'The G property is written once in QuickStart.csproj and used by both top-level PackageReferences. Storage is selected through the original package dependencies; consumers do not maintain a second S pin.',
         'For an existing application, use these packages/configuration and pin this G in its model projects; retaining the sample program is unnecessary. Each model project directly references Atelia.DurableGraph.',
         'packages.sha256 records package bytes for copy-integrity troubleshooting; it is not a version selector or a source-authenticity trust chain. Commit your model source and generated DurableGraphSchemaHistory files, and keep quickstart-world outside source control.',
-        'This is a local candidate, not a claim of public publication. Never replace package bytes under an existing ID/version, in this directory or another feed; new content needs a new G. Rerunning the sample performs another business event and is not transparent recovery/retry.',
+        'This is a local candidate, not a claim of public publication. Never replace package bytes under an existing ID/version, in this directory or another feed; new content needs a new G. Rerunning the sample performs another business operation and is not transparent recovery/retry.',
         ''
     ) -join "`n"
     [IO.File]::WriteAllText((Join-Path $OutputDirectory 'README.md'), $deliveryReadme, $utf8)
