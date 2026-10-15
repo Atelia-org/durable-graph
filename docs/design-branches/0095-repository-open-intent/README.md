@@ -1,6 +1,6 @@
 # DB-095：Repository 打开意图与业务保存准入
 
-> 状态：**E 已实施，根构建与相关源码完整套件通过；新 G 普通包验收进行中**。
+> 状态：**E 已实施并完成源码、新 G 普通包与独立复核的限定验收；本片无剩余必经施工**。
 > 日期：2026-10-15；源码调查基线：`79bab5d27bf50c6e66a54da0d4cc729a9181b245`。
 > 阅读顺序：本节目标 → §7 API 合同 → §8 接线 → §9 迁移 → §10 验收 → §11 实施顺序。§3–6 保留竞争评审依据，不是并行实施路线。
 > §7–11 是本次实施合同；完成结果见末节。未记录通过的门禁不视为已验收。
@@ -130,7 +130,7 @@ Repository.OpenExisting(path, models, RepositoryOpenMode.ReadOnly);
 
 ## 7. 已选 API 合同：明确取得哪一种编辑会话
 
-以下为 **E 已落地的公开形状**；普通包完成资格另见 §12。本片采用明确命名入口，不再把命名/枚举作为施工前待决项。保资源入口名字，删除 Open-level `SchemaWriteMode?` 与对应未配置业务准入状态；只读仍由实际底层资源保证。每个可编辑会话一经取得，就已有确定的普通保存目的地。
+以下为 **E 已落地的公开形状**；普通包资格及范围见 §12。本片采用明确命名入口，不再把命名/枚举作为施工前待决项。保资源入口名字，删除 Open-level `SchemaWriteMode?` 与对应未配置业务准入状态；只读仍由实际底层资源保证。每个可编辑会话一经取得，就已有确定的普通保存目的地。
 
 | 操作 | 目标入口 | 语义 |
 |---|---|---|
@@ -291,8 +291,37 @@ dev.CommitState();             // 仍为 Private，基线已是推广后的 Head
 - Persistence 完整套件 **919/919**；DurableGraph 完整套件 **1718/1718**，无跳过，共 **2637** 项。
 - 新增公开 API 编译正例/八个准确负例，以及 Private 推广 P→Shared Q→Private 热/冷续写来源见证通过；已迁移完整目录冲突、只读/ref-only、故障与寿命回归。
 - 首轮 Runtime 中九个新编译用例因测试片段漏导入 Persistence namespace 失败；仅修测试源码，保留精确 oracle，重新根构建并完整重跑 Runtime 后通过。首轮日志/TRX保留，不合并冒充首跑通过。
-- 独立 reviewer 已按实际 diff 核对 core guards、热/冷恢复、Split 负例保留与新见证；新 G 尚待独立回读验收。
+- 独立 reviewer 已按实际 diff 核对 core guards、热/冷恢复、Split 负例保留与新见证；新 G 的独立回读结论见下文。
 
 证据目录：`.artifacts/db095-implementation/20261015/`（忽略目录），含 root-build-final.log、persistence-test.log、runtime-test.log 及 tests/*.trx；首轮 runtime-test-attempt1.log / tests/runtime-attempt1.trx 单独保留。
 
-新 G 普通包、额外消费者编译与最终集成检查进行中；未完成项不计入上述源码资格。
+### 12.1 唯一最终新 G 与普通包结果
+
+- 实现提交：`522b8a4bdee3579929eed5f8d420032ce53dd361`；此前计划单独保存在 `05e6186`。
+- 最终 G：**`0.0.0-db095.20261015.g522b8a4.2`**。S 保持 `0.1.3-dev.20261014.g3de8fb0`，准确来源 `3de8fb050d81d35ee1c36d1b978024cbc42cb455`；没有修改上游或公开发布。
+- 一次真实受控 pack 的 190 个 production inputs 在前后均匹配实现提交且工作树干净。凭据与十个 Atelia 原包在 `.artifacts/db095-implementation/20261015/controlled-g2/`，使用既有来源协议，未放宽 runner 的来源保护。
+- 便携交付：`.artifacts/candidates/0.0.0-db095.20261015.g522b8a4.2/`。任务导出脚本复用现有 exporter 的 README/C#/项目/配置模板及全部闭包检查，只将重新 pack 替换为复制这次受控原包，另附原始 K4os 包；脚本、精确 diff/hash 和记录保存在证据目录 `Export-ControlledCandidate.*`。没有改产品 exporter 或把两次打包混称为同一原包。
+
+所有下表门禁均统一使用最终 G，独立新目录/cache、正常 PackageReference 与实际打包的 SG/Build，无 ProjectReference 代替包；源码测试与包结果分别举证。
+
+| 门禁 | 结果与范围 | 证据入口（上述证据目录内） |
+|---|---|---|
+| README 原文接入 | 直接执行完整候选的字面命令；HP99→98、V2/历史/策略/Fork/Verify 与原 NU1100 负例通过 | `readme-work.txt`、`readme-package.log`，外部 work 的 `result.json` |
+| Split | 准确 Schema 来源、private 完整目录普通 Shared 拒绝、ToShared、冷 Delta/prior/H、旧帧与实际载入 hash 通过；旧 unconfigured block/回执已退出 | `split-work.txt`、`split-package.log`，外部 `result.json` 与五 lane evidence |
+| Development | baseline→两异形 V2 Off private draft→只发布定稿 B→Shared 冷续写及只读通过；12 命令/4编译阶段/5独立进程 | `development-results.json` |
+| PrivateContainer | Nullable/List 正常 Upgrade、baseline 身份、private/shared 冷 Delta、完整 promotion 与旧帧通过；6命令/2编译阶段/7独立进程 | `private-container-results.json` |
+| 公开 API | 七项移除 API 的编译负例各自准确 ID/行/列，恢复合法源码后重新 Verify Rebuild，再执行 Shared/Private/ToShared/Fork/Event-first/冷续写故事通过 | `api-results.json` |
+| 额外活动消费者 | EventHistoryRecovery、Tag、ImmutableLeaf Family、ExplicitClassification Default/Family 共五路 Publish/Verify 编译通过（17进程）；两路预期 DG0024 及历史零写通过。**没有运行这些消费者** | `additional-consumers-result.json` |
+| 两个源码实验 host | ListDeltaReplayProbe 与 MetaBootstrapCrashProbe 在准确且干净的 S source mode 下编译，均0 warnings/errors。**没有运行 crash/性能故事** | `source-hosts/result.json` |
+
+Development 的既有不兼容草稿负例出现预期 DG0015，另有 SG 拒绝生成后的从属 CS0234；这是既有 runner 的验收口径，不将其写成“唯一诊断”。新 API 的七项负例则按各自唯一准确 CS 诊断验收。
+
+### 12.2 独立验收与边界
+
+独立 reviewer 的最终结论为有限 PASS、无阻断：已核源码 diff、两个最终 TRX、新增关键见证，最终 G 的 11 原包、16 份纯包 assets、170 份实际加载 DLL、12 份 compiler inputs 及 81 份命令日志。最终复核记录随证据保存。190 个受控 source hashes 还与实现提交 Git blobs 逐项相符。所有新 G 结论只来自最终 `.2` 的全新运行，旧候选结果不补填。
+
+首个 G 的三个领域 runner 因缺受控来源 sidecar 而在消费者运行前拒绝。为保持 guard，曾真实重打同 G，但 ZIP 时间戳/随机 core-properties 导致原 nupkg SHA 不同；即使 DLL/nuspec payload 相同，也未用它给原包补造凭据。该次结果、原候选与首轮日志保留，随后换唯一 `.2` 受控 pack 并重跑全部普通包门禁。没有覆盖同版本原包或将旧 G 成功拼入最终资格。
+
+本片完成公开 API 与行为入口调整，**不改变持久格式**，存量完整帧纪律保持；没有旧二进制/API兼容外壳，下游需更新 G、迁移调用并重新编译。没有新增 private 无历史建根、复合 ForkPrivate、任意同身份异形模型并存、多 writer 或更高崩溃/断电保证。没有性能收益或跨平台新资格声明。
+
+本片没有剩余必经施工；新增能力只由独立消费者故事触发。当前产品工作集、目标与路线只保导航和长期边界，本记录承担具体结果与限定证据。

@@ -21,7 +21,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 095 | [Repository 打开意图与业务保存准入](0095-repository-open-intent/README.md)；E 已实施并通过源码门禁，普通包验收进行中；不扩 private 新建/ForkPrivate |
+| 095 | [Repository 打开意图与业务保存准入](0095-repository-open-intent/README.md)；E 已实施并完成源码/新 G 普通包限定验收；显式编辑会话入口，不扩 private 新建/ForkPrivate |
 | 094 | [有限支持真实 property backing field](0094-backing-field-support/README.md)；前期调研储备，范围与规模待摸清，未选为当前实施片 |
 | 093 | [显式存储分类有效性核对](0093-explicit-storage-classification/README.md)；已实施并完成源码及新 G 普通包限定验收；DG0024 拒绝遗漏分类，不开放普通 backing 持久化 |
 | 092 | [类型名、命名空间与后续组织重构](0092-type-namespace-refactoring/README.md)；A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限文件组织与本轮候选已收敛；[D6](0092-type-namespace-refactoring/README.md#d6-status)采用根空间发布合同，准确新 G 普通有限消费通过，投影 helper／ObjectStateKind 保名。各片资格只查当片记录；重访与程序集问题由路线图中的真实需求触发 |

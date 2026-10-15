@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)E 核心与调用迁移已完成，根构建及 2637 项相关源码完整套件通过；新 G 普通包验收进行中。当前 API 为显式编辑会话入口，签名、边界及最终资格统一查 DB-095。
+[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)E 已实施并完成源码与新 G 普通包限定验收。Open 只管资源读写，命名创建/签出/Fork 决定工作副本 Shared/Private 归属；来源、完整目录和保存格式保持。本片无剩余必经施工，准确 G/S、门禁与边界统一查 DB-095 §12；private 无历史新建与复合 ForkPrivate 不随本片扩展。
 
 Schema-history 发布保护已实施并完成限定验收：Build 的 Publish/Verify 在同目录互斥内重读、校验与发布，
 保同形幂等及冲突写前拒绝；SG/targets 输入和历史格式保持。完整构建仍串行，冻结历史后可并行 Verify。

@@ -63,8 +63,6 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 
 此表只列仍需工作的增量。方向已选不代表每项 API、顺序和细节已经批准。
 
-[DB-095 显式编辑会话入口](design-branches/0095-repository-open-intent/README.md)E 核心与迁移已实施，源码门禁通过、普通包验收进行中；准确停点和剩余验收只查该记录。private 无历史新建和复合 ForkPrivate 不随本片扩展，须有独立消费者需求才重访。
-
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
 
@@ -159,6 +157,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
+| [DB-095 后续能力](design-branches/0095-repository-open-intent/README.md) | 显式编辑会话入口已完成；只有真实应用需要从无历史数据开始 private，或需要恢复成功后一次发布 private fork 时，才另定有限能力；不为命名对称扩展，保现有 baseline→CheckoutPrivate 路线 |
 | [DB-094 普通 property backing 支持](design-branches/0094-backing-field-support/README.md) | 真实消费者持续因普通 class 的封装/Equals/继承需求付出字段包装成本时，先用该模型摸清声明范围、编译级 Family 切换与历史升版的影响，再选择有限路线；目前仅调研，DB-093 完成不自动开启 |
 | [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |
