@@ -19,7 +19,11 @@
 
 ## 当前焦点
 
-本次[循环维护](../maintenance/2026-10-14.md)的产品改动已整合：Build／Generator 的 nominal 规则统一，参数与 exact 检查保持，Build 同次解析 owned manifest 的记录与 reference hash。Frozen 容器读取使用只读 span，单次 decoder 复用本次已验证图的私有链遍历；ToShared 实际加载两份 catalog 各一次，保 Capture 前后完整合并及 callback 后 Store 可用性检查。默认保存复用前置完整来源核验，ToShared 保独立检查；旧 typed slot／数组元素机制只留测试。完整 history、来源、逐链及 typed 全图验证、寿命和复制隔离保持。验证、包门禁结果与保留裁决只维护在任务状态，不复开已完成命名分片。
+下一产品片为 [DB-093：核对所有显式存储分类是否有效](../docs/design-branches/0093-explicit-storage-classification/README.md)，方案已选、待实施。普通 class/struct 的显式 Durable 分类必须被处理或编译拒绝，真实 Transient 保排除；未标隐式 storage、record 既有纪律、生成路线与持久布局保持。本轮只形成实施计划并将[机制 Probe](../experiments/ExplicitStorageClassificationProbe/README.md)纳入源码管理，当前 Generator 仍有 H01 漏存，不能写成已修复。
+
+[DB-094：有限支持真实 property backing field](../docs/design-branches/0094-backing-field-support/README.md)仅为前期调研储备，范围/规模与生成路线待摸清，不是 DB-093 的并行工单。剩余工作和重访条件只查[路线图](../docs/DurableGraph-research-roadmap.md)。
+
+此前[循环维护](../maintenance/2026-10-14.md)的产品改动已整合，保持完整 history/source/typed 图验证、fault/lifetime 与复制隔离；实际改动、验证和保留裁决只查任务状态，不复开已完成命名分片。
 
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限源码组织与本轮候选已收敛；源码入口见[导航](DurableGraph.Persistence/README.md)。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。纯槽转换归 Schema 的 `DurableFieldInfo`，保编号与完整相等。
 公开历史角色 `CheckpointKind` 与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。

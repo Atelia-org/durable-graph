@@ -119,6 +119,12 @@ Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共�
 跨对象升级、多根 API、Transient hook 和 boxed value 的重访条件由[路线图](DurableGraph-research-roadmap.md#4-明确延后及重访条件)
 维护。非零下界和非 SZ rank-1 数组按不支持处理，不作为默认后续待办。
 
+### 显式存储分类的生效约束
+
+Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支持的持久模型，否则应在编译期拒绝；真实实例 Transient 表示有意排除，无目标或被忽略的分类不能冒充有效标注。普通类型的未标隐式 storage 不因此被统一强制分类，record 保持各自已有准入合同。该已选约束由 [DB-093](design-branches/0093-explicit-storage-classification/README.md)补齐，实际实施状态查[产品工作集](../src/PROJECT-STATE.md)。
+
+这不授予普通 class/struct 的 backing 持久能力，也不改变不执行属性方法的恢复模型；正向支持仅为 [DB-094](design-branches/0094-backing-field-support/README.md)的后续研究。
+
 ### 跨程序集模型组合
 
 领域库各自拥有声明、Schema history 和生成执行能力；应用通过库的公开登记 facade 将它们放进同一冻结目录。
