@@ -11,7 +11,7 @@
 - 理解产品目标与已选约束：[目标设计](../docs/DurableGraph-target-design-v0.md)。
 - 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。
-- 当前循环维护的线索、裁决与续接：[维护状态](../maintenance/durable-graph.md)。
+- 当前循环维护的线索、裁决与续接：[维护状态](../maintenance/2026-10-14.md)。
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
 
@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-本次[循环维护](../maintenance/durable-graph.md)的产品改动已整合：Build／Generator 的 nominal 规则统一，参数与 exact 检查保持，Build 同次解析 owned manifest 的记录与 reference hash。Frozen 容器读取使用只读 span，单次 decoder 复用本次已验证图的私有链遍历；ToShared 实际加载两份 catalog 各一次，保 Capture 前后完整合并及 callback 后 Store 可用性检查。默认保存复用前置完整来源核验，ToShared 保独立检查；旧 typed slot／数组元素机制只留测试。完整 history、来源、逐链及 typed 全图验证、寿命和复制隔离保持。验证、包门禁结果与保留裁决只维护在任务状态，不复开已完成命名分片。
+本次[循环维护](../maintenance/2026-10-14.md)的产品改动已整合：Build／Generator 的 nominal 规则统一，参数与 exact 检查保持，Build 同次解析 owned manifest 的记录与 reference hash。Frozen 容器读取使用只读 span，单次 decoder 复用本次已验证图的私有链遍历；ToShared 实际加载两份 catalog 各一次，保 Capture 前后完整合并及 callback 后 Store 可用性检查。默认保存复用前置完整来源核验，ToShared 保独立检查；旧 typed slot／数组元素机制只留测试。完整 history、来源、逐链及 typed 全图验证、寿命和复制隔离保持。验证、包门禁结果与保留裁决只维护在任务状态，不复开已完成命名分片。
 
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限源码组织与本轮候选已收敛；源码入口见[导航](DurableGraph.Persistence/README.md)。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。纯槽转换归 Schema 的 `DurableFieldInfo`，保编号与完整相等。
 公开历史角色 `CheckpointKind` 与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。

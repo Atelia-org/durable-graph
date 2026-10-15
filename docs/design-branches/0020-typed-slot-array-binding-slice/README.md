@@ -1,7 +1,7 @@
 # DB-020：typed 值槽位与数组元素 binding 分片
 
 > 历史迁移（2026-10-14）：原路径 `docs/design-branches/0020-typed-slot-array-binding-slice.md`；来源修订 `8ef9fca`，正文保留原时期语义。
-> 当前适用范围（2026-10-15）：仅保留 SZ/rank-2 ref 元素循环的测试机制见证；[ValueSlotCodec](../../../tests/DurableGraph.Serialization.Tests/TestHelpers/ValueSlotCodec.cs)、[ArrayElementCodec](../../../tests/DurableGraph.Serialization.Tests/TestHelpers/ArrayElementCodec.cs) 已随 primitive helper 移入测试，Serialization 不再提供这套 internal 路由。迁移验收见[维护状态 M006](../../../maintenance/durable-graph.md)，当前产品的静态 SG body 与数组对象能力从 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 续接。以下正文保留原时期实现与证据。
+> 当前适用范围（2026-10-15）：仅保留 SZ/rank-2 ref 元素循环的测试机制见证；[ValueSlotCodec](../../../tests/DurableGraph.Serialization.Tests/TestHelpers/ValueSlotCodec.cs)、[ArrayElementCodec](../../../tests/DurableGraph.Serialization.Tests/TestHelpers/ArrayElementCodec.cs) 已随 primitive helper 移入测试，Serialization 不再提供这套 internal 路由。迁移验收见[维护状态 M006](../../../maintenance/2026-10-14.md)，当前产品的静态 SG body 与数组对象能力从 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 续接。以下正文保留原时期实现与证据。
 
 > 状态：Chosen / Implemented — 2026-09-05，根构建、全部产品测试与独立审查通过。
 >
