@@ -59,6 +59,47 @@ $selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
 当前候选尚未公开时下载会明确失败，并提示源码联调或本地 feed 入口。
 公开下载仍核对签名条目存在性；该检查不等于完整签名信任链验证。
 
+<a id="candidate-delivery"></a>
+## 对外交付一个候选目录
+
+应用接入优先使用 [Prepare-DurableGraphCandidate.ps1](../eng/Prepare-DurableGraphCandidate.ps1) 导出的目录。
+它复用下文十包准备流程，附上当前示例还需要的原始 `K4os.Compression.LZ4 1.3.8`，
+将包、完整消费配置、固定版本的 QuickStart 和运行步骤放在一起；消费者不需要寻找生产者的临时配置。
+以下命令中的 `$storageFeed` 是上一节核验过的准确六包 feed：
+
+```powershell
+$version = "0.0.0-local.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
+$candidate = Join-Path (Get-Location) ".artifacts/candidates/$version"
+./eng/Prepare-DurableGraphCandidate.ps1 -Version $version -OutputDirectory $candidate -StoragePackageSource $storageFeed
+```
+
+输出目录必须是新目录。准备过程可以联网，S 的来源仍由 `StorageDependency.props` 和已有存储校验负责；
+G 只输入一次并写入生成项目的一个版本属性，由 Runtime 与 Persistence 两个顶层 PackageReference 共用。
+S 通过包的传递依赖取得，不增加一份消费者手写 pin，也不修改上游版本或自动回退到公开旧版。
+
+交付目录包含 `README.md`、`NuGet.Config`、`feed/`、`QuickStart/` 和 `packages.sha256`。
+配置仅使用相对 `feed`，清除继承的 sources、mapping 与 fallback folders；整个目录可以一起搬走。
+QuickStart 的项目、源码、配置和最短命令来自[根 README](../README.md#最短接入路径)，
+交付 README 另记录本批 G/S、来源与先决条件。消费步骤以该 README 为准，不依赖源仓路径。
+`packages.sha256` 用于核对本批包复制完整性，不负责依赖选择，也不替代来源或签名信任验证。
+
+本地包闭包的范围是：已安装 **.NET SDK 10.0.201** 后，附带的 `net10.0`、framework-dependent、
+没有额外 RID 的 QuickStart 可从交付本地源取得全部 nupkg。当前为四个 G 包、六个 S 包和一个 K4os 包。
+这不承诺 SDK 安装、任意应用依赖、额外 RID/self-contained publish 或根 solution 的离线构建；
+也不声称已对所有网络行为执行禁网验收。将来依赖变化时按实际示例重新验证，不能把十一包当通用闭包公式。
+
+Atelia nuspec 中的版本是最低范围，不强制任意应用只能解析到该版本。
+本次交付 feed 每个 ID 只含一个选定版本，验收再检查 assets 和实际程序集；
+消费者另引更新依赖的组合需要自己的验收。公开 preview 可作为后续分发渠道，不是本地候选接入的前置条件。
+
+<a id="candidate-delivery-validation"></a>
+### 候选交付验收
+
+[原文接入 runner](../experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1) 需要 PowerShell 7.3 或更新版本，接收 `-CandidateDirectory`，
+把完整目录搬到仓外新路径，在错误的祖先 NuGet 配置和全新缓存下直接执行 README 的 dotnet 命令。
+它同时保留旧 `--source` 命令的准确 `NU1100` 负例、HP99→98 冷进程正控，以及已有 Upgrade/Fork/Verify 回归。
+正式验收结果将在本轮脚本运行完成后补入此处；当前这段只规定门禁，不宣称尚未运行的结果。
+
 ## 用任务 NuGet.Config 消费候选包
 
 在本仓忽略目录 `.artifacts/storage-dev/NuGet.Config` 创建如下配置，按实际位置修改绝对 feed 路径。
@@ -103,7 +144,7 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 刷新 pin 后首次包构建使用 `Rebuild`：本地包归一化时间戳后，新旧 DLL 可能长度和时间戳相同，
 增量复制会保留旧输出。仅检查 assets 的版本不足以确认实际消费，验收还须核对输出 DLL 与所选包的字节。
 
-## DurableGraph 包与独立 probes
+## DurableGraph 十包 feed 与独立 probes
 
 四个 DG 包是 Runtime、Persistence、Storage、Serialization；包模式下分别 pack，G 必须与 S 不同。
 在上述 package restore 后使用 `--no-restore -p:UseStorageSources=false -p:PackageVersion=<G>`，
@@ -122,6 +163,9 @@ Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirecto
 
 runner 也可从任务环境变量 `DG_STORAGE_PACKAGE_SOURCE` 读取路径后显式传给 Prepare；路径不进入持久 pin。
 已有完整十包 feed 的 runner 使用 `-PackageSource <feed> -Version <G>`，不改写输入。
+这是可联网的领域 Probe 输入；其完整任务配置允许取得第三方依赖。
+它与上面的便携候选目录用途不同：十包 feed 不自带 QuickStart 的本地依赖闭包，
+内部 `pack.nuget.config` 也不作为对外交付的消费配置。
 活动验收只使用新建库，保留在新格式库内的模型 V1→V2 升级、branch/tag 与冷进程重开行为。
 旧存储提取、旧组织/API 包兼容 lanes 不再作为当前回归；历史证据仍可在对应 Git revision 中复现。
 相关命令见[包实验导航](../experiments/PackageConsumerProbe/README.md)和[根 README](../README.md#从源码打包)。

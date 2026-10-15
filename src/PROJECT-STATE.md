@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+正在实施 H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#candidate-delivery)：生成一份含固定 G、完整相对路径 NuGet.Config、README 同源 QuickStart 与当前第三方依赖的消费者目录。最小验收为严格 mapping 下旧命令准确 NU1100，以及候选搬迁后空 cache、本地唯一源、准确包资产和两进程 HP99/98；保留既有 Upgrade/Fork/Verify 回归。范围仅包准备脚本与接入文档，不改运行时/API/格式，不将公开 preview 作为前置。
+
 [DB-093：显式存储分类有效性](../docs/design-branches/0093-explicit-storage-classification/README.md)已实施并完成源码与新 G 普通包的限定验收。H01 等普通 class/struct 的不支持 backing 或无目标分类报 DG0024；真实 Transient 保排除，错误声明即使抑制诊断仍无 current 生成资格。未标隐式 storage、record 既有纪律、生成路线与持久布局保持。具体合同、包来源与结果只查 DB-093；[机制 Probe](../experiments/ExplicitStorageClassificationProbe/README.md)继续只承担符号/PE 观察。本片无剩余必经施工，后续由真实消费者反馈选增量。
 
 [DB-094：有限支持真实 property backing field](../docs/design-branches/0094-backing-field-support/README.md)仅为前期调研储备，范围/规模与生成路线待摸清，不是 DB-093 的并行工单。剩余工作和重访条件只查[路线图](../docs/DurableGraph-research-roadmap.md)。

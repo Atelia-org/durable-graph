@@ -6,6 +6,7 @@
 | 问题 | 活动入口 |
 |---|---|
 | 实际包交付、Generator 与 history/build | [PackageConsumerProbe](PackageConsumerProbe/README.md) |
+| 候选目录搬迁、完整 NuGet 配置与 README 原文接入 | [QuickStart 交付门禁](PackageConsumerProbe/README.md#对外交付与原文接入门禁) |
 | 显式分类诊断、两条生成路线与修正后的普通包冷恢复 | [ExplicitStorageClassificationConsumer](PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md) |
 | 无业务注册的 meta 冷读与容器 Delta | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md) |
 | accepted-history、Upgrade、准确 S、tag、Fork、Pair 与冷增量 | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md) |

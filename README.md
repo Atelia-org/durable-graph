@@ -16,10 +16,16 @@ VersionStore 共同发布共享 Schema 根与命名分支目录；恢复读取�
 
 ## 最短接入路径
 
-下面的应用接入示例需要 .NET 10 SDK 和包含当前 DurableGraph 包 G 的完整本地 NuGet feed，准备方式见文末
-[从源码打包](#从源码打包)。当前底层存储包 S 是准确来源的本地候选；这里不假定存储候选或 DurableGraph 包已公开发布。
+先取得一个候选目录：其中已附 `QuickStart/`、`feed/`、完整 `NuGet.Config` 和本批版本/来源说明，
+可整体复制到自己的目录。生产者的准备命令见文末[从源码打包](#从源码打包)。
+使用已验证的 **.NET SDK 10.0.201**；当前候选不假定已在 nuget.org 公开。
 
-创建一个独立控制台项目，例如 `QuickStart/QuickStart.csproj`：
+交付目录附带这个 `net10.0` 示例所需的四个 DG 包 G、六个 Storage 包 S 和原始第三方依赖；
+目前共十一包。已有适用 SDK/运行时后，示例可仅从本地源还原。
+这不包含 SDK 安装、额外 RID/self-contained 发布、任意应用或本仓测试依赖的离线闭包。
+
+生成的 `QuickStart/QuickStart.csproj` 来自下面的唯一模板，准备入口会在其中写入一次本批 G 的
+`DurableGraphPackageVersion` 属性。后续接到自己的应用时，同样固定实际版本并直接引用 Runtime 和 Persistence：
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -37,12 +43,29 @@ VersionStore 共同发布共享 Schema 根与命名分支目录；恢复读取�
 </Project>
 ```
 
-示例通过命令行传入 `DurableGraphPackageVersion`；正式接入时可将实际版本固定在项目属性或统一包版本文件中。
+交付项目已固定版本，无需在每条命令重复传入；正式接入也可用项目属性或统一包版本文件固定版本。
 `Atelia.DurableGraph` 包同时携带 Runtime、Source Generator 和 history 构建集成；Persistence 包提供持久化工作副本外观。
 本文说明文字遵循[项目术语表](docs/DurableGraph-glossary.md)，称 `BranchCheckout` 为“分支工作副本”，签出操作为 `Checkout`。
 `Repository` 与 `BranchCheckout` 位于根命名空间 `Atelia.DurableGraph`，实现仍由 Persistence 包提供。
 声明模型的每个项目都应**直接引用 Runtime 包**。无需手工添加 Analyzer、AdditionalFiles 或 Import，
 也不要仅以 Runtime 项目的 ProjectReference 代替完整包接入。
+
+候选目录根的 `NuGet.Config` 使用相对 `feed` 路径，内容如下；完整配置与包一起交付，
+不需要查找生产者的内部 pack 配置或修改用户级源。已有项目应采用匹配的配置，额外应用依赖另行配置：
+
+```xml
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="candidate" value="feed" />
+  </packageSources>
+  <packageSourceMapping>
+    <clear />
+    <packageSource key="candidate"><package pattern="*" /></packageSource>
+  </packageSourceMapping>
+  <fallbackPackageFolders><clear /></fallbackPackageFolders>
+</configuration>
+```
 
 ### 1. 定义领域模型
 
@@ -132,14 +155,12 @@ static World NewWorld() {
 }
 ```
 
-在 PowerShell 中设置 `$feed` 为本地 feed 绝对路径、`$version` 为其中的匹配版本，然后运行：
+在候选目录根运行以下 PowerShell 命令；数据库保存在该目录的 `quickstart-world/`，请放在源码版本控制之外：
 
 ```powershell
-# 在包含 QuickStart/ 的目录运行；数据库路径保持相同，并放在源码版本控制之外。
-$data = Join-Path (Get-Location) "quickstart-world"
-dotnet restore QuickStart/QuickStart.csproj --source $feed --source https://api.nuget.org/v3/index.json -p:DurableGraphPackageVersion=$version
-dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -- $data
-dotnet run --project QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -- $data
+dotnet restore QuickStart/QuickStart.csproj --configfile ./NuGet.Config
+dotnet run --project QuickStart/QuickStart.csproj --no-restore -- ./quickstart-world
+dotnet run --project QuickStart/QuickStart.csproj --no-restore -- ./quickstart-world
 ```
 
 第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`。后续修改继续使用同一个工作副本的 `State`；
@@ -366,8 +387,8 @@ public static class WorldUpgrades {
 CI 可设置 `ContinuousIntegrationBuild=true`，或显式验证而不发布 history：
 
 ```powershell
-dotnet clean QuickStart/QuickStart.csproj -p:DurableGraphPackageVersion=$version
-dotnet build QuickStart/QuickStart.csproj --no-restore -p:DurableGraphPackageVersion=$version -p:DurableGraphSchemaHistoryMode=Verify
+dotnet clean QuickStart/QuickStart.csproj
+dotnet build QuickStart/QuickStart.csproj --no-restore -p:DurableGraphSchemaHistoryMode=Verify
 ```
 
 初次 Publish 后再 Clean/Verify，可同时验证 history 确实能作为下一次编译的输入。
@@ -453,7 +474,7 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 底层使用独立 [atelia-storage](https://github.com/Atelia-org/atelia-storage) 的六包 RBF3 栈：
 Primitives、Data、Rbf、Binary、FrameStore、VersionStore。
 [StorageDependency.props](eng/StorageDependency.props) 统一固定版本 S 与准确来源；当前 pin 是未公开的本地候选。
-显式 source mode 用于源码 build/test，包交付使用候选完整 feed；不自动发现兄弟仓或回退旧存储包。
+显式 source mode 用于源码 build/test，包交付使用完整候选目录；不自动发现兄弟仓或回退旧存储包。
 源码入口、上游 Pack 和任务 NuGet.Config 见 [存储依赖指南](docs/storage-dependency.md)。
 
 先按指南从准确、干净的上游 commit 准备六包并设置 `$storageFeed`，再从 DurableGraph 根执行：
@@ -462,14 +483,25 @@ Primitives、Data、Rbf、Binary、FrameStore、VersionStore。
 ```powershell
 $ErrorActionPreference = "Stop"
 $version = "0.0.0-local.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
-$feed = Join-Path (Get-Location) ".artifacts/nuget/$version"
-. ./experiments/PackageConsumerProbe/PackageProbeSupport.ps1
-Prepare-DurableGraphProbeFeed -RepositoryRoot (Get-Location).Path -OutputDirectory $feed -Version $version -StoragePackageSource $storageFeed
+$candidate = Join-Path (Get-Location) ".artifacts/candidates/$version"
+./eng/Prepare-DurableGraphCandidate.ps1 -Version $version -OutputDirectory $candidate -StoragePackageSource $storageFeed
 ```
 
-得到含六个存储包和四个 DG 包的完整十包 feed，将 `$feed` 和 `$version` 用于前面的 restore/run。
-[真实包实验](experiments/PackageConsumerProbe/README.md) 使用独立 feed、两代模型和新库历史校验；
-只验收新建存储库，模型 history/reader/Upgrade 仍需保留，旧存储数据无需迁移。
+准备过程可联网，复用既有准确 S 验证和 G 打包，补齐附带示例的原始第三方包。
+最终 `$candidate` 内含匹配版本的项目、相对路径配置、包和 `packages.sha256`；将整个目录交给消费者，
+进入该目录执行前面的三条命令即可。输出目录必须尚不存在；不同内容使用新 G，不覆盖既有版本。
+生成项目和命令均来自本文，消费者无需了解内部 pack 工作目录。
+
+准备后用原文门禁验收（需要 PowerShell 7.3 或更新版本）：
+
+```powershell
+./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -CandidateDirectory $candidate
+```
+
+该门禁搬迁候选到仓外，以新缓存和明确配置执行原文，并保留原有升级/分叉/history 验证。
+[交付边界与证据](docs/storage-dependency.md#candidate-delivery)说明本地示例闭包与联网十包 feed 的区别。
+[领域包实验](experiments/PackageConsumerProbe/README.md)继续按各自输入和故事验收；
+模型 history/reader/Upgrade 仍需保留，当前存储实验库不要求旧格式数据迁移。
 
 `dotnet pack -p:UseStorageSources=true` 会被拒绝。打 DG 包先按指南用任务配置 package restore，
 再以 `--no-restore -p:UseStorageSources=false -p:PackageVersion=<G>` pack；存储版本由统一 S pin 提供。

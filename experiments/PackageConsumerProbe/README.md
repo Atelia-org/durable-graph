@@ -8,7 +8,7 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 | 入口 | 验证的问题 |
 |---|---|
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
-| [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | 根 README 公开调用示例 |
+| [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | 候选目录搬迁、完整配置与 README 原文命令，保留 Upgrade/Fork/Verify 回归 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
@@ -21,6 +21,27 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 包准备使用 [PackageProbeSupport](PackageProbeSupport.ps1)，消费独立 DG 四包版本 G 与准确存储六包版本 S；
 完整 feed、任务配置和候选来源见[依赖指南](../../docs/storage-dependency.md)。
 不以 source ProjectReference 或 feed 中存在 nupkg 代替实际消费。运行输出放在忽略目录。
+
+## 对外交付与原文接入门禁
+
+[候选导出入口](../../eng/Prepare-DurableGraphCandidate.ps1)在一个新目录内集中交付包、完整相对源配置、
+固定 G 的 QuickStart 和运行说明；准备命令与闭包边界见[候选交付合同](../../docs/storage-dependency.md#candidate-delivery)。
+项目、源码、配置和最短消费命令只从[根 README](../../README.md#最短接入路径)提取，
+不在 Probe 中另维护一份示例。当前示例闭包为十个 Atelia 包和原始 K4os 包，资格限于已安装 SDK 10.0.201 的附带示例。
+
+对已经生成的目录运行：
+
+```powershell
+./experiments/PackageConsumerProbe/Run-ReadmeQuickStartProbe.ps1 -CandidateDirectory <candidate>
+```
+
+可用 `-WorkDirectory <fresh-outside-directory>` 指定新的仓外工作目录。
+runner 将交付目录搬迁，在故意错误的祖先 NuGet 配置、全新缓存下直接调用 dotnet，
+不经 `Invoke-DotNet` 的 restore 改写；检查旧命令准确 `NU1100`、新命令的本地包解析与两进程 HP99→98，
+并继续运行既有 V2/browse/policy/Fork/Verify 断言。结果与覆盖边界记在[候选交付验收](../../docs/storage-dependency.md#candidate-delivery-validation)。
+
+其他领域 runner 继续使用 `-PackageSource <ten-package-feed> -Version <G>` 和已有任务配置，
+可以联网取得第三方依赖；不要求所有领域 Probe 改用便携目录，也不把它们的 helper 行为作为原文命令的验收证据。
 
 <a id="model-fixtures"></a>
 ## 模型与 history 编译资产
