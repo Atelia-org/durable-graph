@@ -81,7 +81,10 @@ public partial class DamageEvent : IDurableObject {
 
 领域 class/struct 使用顶层 `partial` 声明。class 实现 `IDurableObject`（可从自己的领域基类继承该接口）；每个参与持久化的声明显式标记
 `DurableType`。实例字段用 `DurableField` 或 `Transient` 明确分类；FieldId 是该声明内的稳定正整数，
-基类和派生类可以分别有自己的字段 1。方法不参与序列化，普通 class 自动属性目前不等价于受支持字段。
+基类和派生类可以分别有自己的字段 1。方法不参与序列化。普通 class/struct 的自动属性不能通过
+`[field: DurableField(...)]` 进入持久模型；这类标注报 DG0024，请改用显式字段（可另加包装属性）。
+真实属性 backing 或普通 field-like event 可用 `[field: Transient]` 明确排除；没有真实字段目标的标注也会报错。
+未标注的普通隐式 storage 保持排除，record 仍要求其已有的完整存储分类；属性访问器不参与保存恢复。
 
 ### 2. 保存、重开、继续修改
 

@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-下一产品片为 [DB-093：核对所有显式存储分类是否有效](../docs/design-branches/0093-explicit-storage-classification/README.md)，方案已选、待实施。普通 class/struct 的显式 Durable 分类必须被处理或编译拒绝，真实 Transient 保排除；未标隐式 storage、record 既有纪律、生成路线与持久布局保持。本轮只形成实施计划并将[机制 Probe](../experiments/ExplicitStorageClassificationProbe/README.md)纳入源码管理，当前 Generator 仍有 H01 漏存，不能写成已修复。
+正在实施 [DB-093：核对所有显式存储分类是否有效](../docs/design-branches/0093-explicit-storage-classification/README.md)。普通 class/struct 的显式 Durable 分类必须被处理或编译拒绝，真实 Transient 保排除；未标隐式 storage、record 既有纪律、生成路线与持久布局保持。按局部补漏检查、独立源码回归与新 G 普通包验收闭合；完成验收前不将 H01 写成已修复。[机制 Probe](../experiments/ExplicitStorageClassificationProbe/README.md)继续只承担符号/PE 观察。
 
 [DB-094：有限支持真实 property backing field](../docs/design-branches/0094-backing-field-support/README.md)仅为前期调研储备，范围/规模与生成路线待摸清，不是 DB-093 的并行工单。剩余工作和重访条件只查[路线图](../docs/DurableGraph-research-roadmap.md)。
 

@@ -76,9 +76,12 @@ public sealed partial class DurableGraphGenerator {
         return IsStorageAttributeSymbol(info.Symbol) || info.CandidateSymbols.Any(IsStorageAttributeSymbol);
     }
 
-    private static bool IsStorageAttributeSymbol(ISymbol? symbol) {
+    private static bool IsStorageAttributeSymbol(ISymbol? symbol) =>
+        IsStorageAttributeType(GetAttributeType(symbol));
+
+    private static INamedTypeSymbol? GetAttributeType(ISymbol? symbol) {
         if (symbol is IAliasSymbol alias) symbol = alias.Target;
-        return IsStorageAttributeType(symbol is IMethodSymbol constructor ? constructor.ContainingType : symbol as INamedTypeSymbol);
+        return symbol is IMethodSymbol constructor ? constructor.ContainingType : symbol as INamedTypeSymbol;
     }
 
     private static bool ReportRecordHelperCollisions(SourceProductionContext context, INamedTypeSymbol type,

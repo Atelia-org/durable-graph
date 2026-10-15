@@ -691,6 +691,7 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         List<IFieldSymbol> fields = GetDirectFields(type);
         List<DurableFieldAnalysis> durableFields = new();
         if (type.IsRecord) hasErrors |= ReportRecordStorageErrors(context, type, fields, compilation);
+        else hasErrors |= ReportExplicitStorageClassificationErrors(context, type, fields, compilation);
 
         foreach (IFieldSymbol field in fields) {
             AttributeData? durableFieldAttribute = GetAttribute(

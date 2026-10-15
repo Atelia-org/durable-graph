@@ -401,7 +401,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         string source,
         AdditionalText[] additionalTexts,
         ISourceGenerator[]? extraGenerators,
-        string? forceDefinitions) {
+        string? forceDefinitions,
+        IReadOnlyDictionary<string, ReportDiagnostic>? diagnosticOptions = null) {
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(WithFixtureBridgeImport(source), ParseOptions);
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: $"GeneratorTests_{Guid.NewGuid():N}",
@@ -416,7 +417,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 MetadataReference.CreateFromFile(typeof(Atelia.DurableGraph.Storage.ObjectVersionRecord).Assembly.Location)),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
-                nullableContextOptions: NullableContextOptions.Enable));
+                nullableContextOptions: NullableContextOptions.Enable)
+                .WithSpecificDiagnosticOptions(diagnosticOptions));
         ISourceGenerator durableGenerator = new DurableGraphGenerator().AsSourceGenerator();
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             generators: extraGenerators is null ? [durableGenerator] : [durableGenerator, .. extraGenerators],

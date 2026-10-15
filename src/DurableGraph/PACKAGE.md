@@ -8,6 +8,10 @@ Durable classes implement `IDurableObject`; explicitly marked partial classes/st
 readonly DTOs, Base/Delta bodies, Capture, model/reader registration, Normalize, Allocate and Hydrate.
 Supported compositions include references, inline values, generics, records, enums, Nullable, arrays,
 List and experimental Dictionary. Unsupported shapes produce diagnostics.
+Explicit storage classifications must have a valid field target. Ordinary class/struct property
+backing cannot be persisted with `field: DurableField` (DG0024); use an explicit field. Real property
+backing or ordinary field-like event storage can be excluded with `field: Transient`. Records retain
+their stricter storage rules. Capture and restoration do not invoke property accessors.
 
 Schema history uses `DurableGraphSchemaHistoryDirectory` and `DurableGraphSchemaHistoryMode`
 (`Publish`, `Verify`, `Off`). Commit accepted `.dgschema` files with model source; they retain old DTO/reader

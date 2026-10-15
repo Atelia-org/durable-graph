@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>DurableGraph.ExplicitStorageClassificationConsumer</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ShapeStage Condition="'$(ShapeStage)' == ''">Invalid</ShapeStage>
+    <DefineConstants Condition="'$(ShapeStage)' == 'Corrected'">$(DefineConstants);CORRECTED</DefineConstants>
+    <DefineConstants Condition="'$(DurableGraphGenerateDefinitions)' == 'true'">$(DefineConstants);FAMILY</DefineConstants>
+    <ErrorLog>$(MSBuildProjectDirectory)/obj/diagnostics.sarif,version=2.1</ErrorLog>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="LegalControl.cs" />
+    <Compile Include="Model.Invalid.cs" Condition="'$(ShapeStage)' == 'Invalid'" />
+    <Compile Include="Model.Corrected.cs" Condition="'$(ShapeStage)' == 'Corrected'" />
+    <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" Aliases="persistence" />
+  </ItemGroup>
+</Project>
