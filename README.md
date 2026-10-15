@@ -392,6 +392,10 @@ dotnet build QuickStart/QuickStart.csproj --no-restore -p:DurableGraphSchemaHist
 ```
 
 初次 Publish 后再 Clean/Verify，可同时验证 history 确实能作为下一次编译的输入。
+共享同一 history 目录的构建应串行进行，尤其是首次发布或新增 Schema/版本时；
+等待 Publish 构建成功结束后，可使用独立输出目录并行 Verify，期间不要再发布新历史。
+Build 工具会协调同目录的 Publish/Verify 操作，防止重叠发布写入冲突历史；这不保证整个构建并发成功，
+因为生成器读取历史发生在发布协调之前。遇到发布重叠导致的暂时缺失历史错误，应等待另一构建完成后串行重试。
 构建属性及诊断说明见 [Build 工具](src/DurableGraph.Build/README.md)。
 
 升级生成器包后，若报错提示 candidate／reference manifest 不是恰好一份，先检查报错中的

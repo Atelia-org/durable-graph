@@ -59,8 +59,29 @@ version; a SchemaId never becomes a path component.
 Publishing validates the entire manifest and all existing history before it
 writes. Exact existing schema-history records are left untouched. New records are written
 to a temporary file in the history directory and moved into place without
-overwrite. The prototype assumes one writer; publishing several files is not a
-transaction.
+overwrite. Publish and Verify acquire the same directory-scoped, cross-process mutex
+before reading history and retain it through validation and publication. A later identical
+publisher re-reads the accepted records and uses the existing already-exact path; a conflicting
+publisher fails validation before writing anything. The wait is bounded to 30 seconds;
+a timeout reports the history directory and asks the caller to run builds/publishing serially.
+
+Coordination uses a named OS mutex for the same machine/user and normalized absolute path.
+It does not write a lock file into history. Ordinary Windows path case and trailing separators
+are normalized; physical aliases such as junctions or mapped drives, other users/machines,
+old tools and external edits are outside this coordination. Acquisition errors do not fall back
+to unlocked publication. The operating system releases ownership after process termination;
+every operation still validates disk history, whether or not it observes an abandoned mutex.
+
+Builds sharing history should still run serially. After a Publish build has completed, Verify
+builds may run in parallel with separate intermediate/output directories while history remains
+unchanged. Generator inputs are selected before this tool runs: a build started during a multi-file
+publication can reject a temporarily incomplete history set, and a successful build need not include
+history added by another build after its inputs were selected. Wait for the publisher to complete,
+then retry the build serially. Off and design-time generation retain their existing behavior.
+
+Publishing several files is not a transaction. A failed or terminated publisher may leave completed
+files whose accepted dependency closure is incomplete. The next operation fails validation;
+releasing a mutex does not repair history. Never overwrite or delete accepted files to hide a conflict.
 
 For fixed inline fields or exact base schemas supplied by another assembly, package targets pass the separate
 `DurableGraphSchemaHistoryReferences.g.cs` file emitted by the same generation. It contains

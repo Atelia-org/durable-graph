@@ -13,6 +13,7 @@ internal sealed partial class SchemaHistoryTool {
         string schemaHistoryDirectory,
         string? referenceManifestPath = null) {
         IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath, out string? expectedHash);
+        using SchemaHistoryDirectoryLease lease = SchemaHistoryDirectoryLease.Acquire(schemaHistoryDirectory);
 
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
@@ -72,6 +73,7 @@ internal sealed partial class SchemaHistoryTool {
         string schemaHistoryDirectory,
         string? referenceManifestPath = null) {
         IReadOnlyList<SchemaHistoryRecord> candidates = SchemaHistoryTextCodec.ParseManifest(manifestPath, out string? expectedHash);
+        using SchemaHistoryDirectoryLease lease = SchemaHistoryDirectoryLease.Acquire(schemaHistoryDirectory);
         Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord> existing = Directory.Exists(schemaHistoryDirectory)
             ? LoadHistory(schemaHistoryDirectory)
             : new Dictionary<SchemaHistoryKey, ExistingSchemaHistoryRecord>();

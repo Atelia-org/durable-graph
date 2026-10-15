@@ -16,6 +16,10 @@ their stricter storage rules. Capture and restoration do not invoke property acc
 Schema history uses `DurableGraphSchemaHistoryDirectory` and `DurableGraphSchemaHistoryMode`
 (`Publish`, `Verify`, `Off`). Commit accepted `.dgschema` files with model source; they retain old DTO/reader
 definitions for explicit Upgrade. `Off` does not ignore accepted same-version conflicts.
+Build projects sharing a history directory serially. After a Publish build completes, Verify builds
+may run in parallel with separate outputs while history stays unchanged. Publish/Verify operations
+coordinate locally to protect history from overlapping publishers; compilation itself does not acquire
+that coordination and may reject a temporarily incomplete history set.
 Domain declarations remain in `Atelia.DurableGraph`; layouts use `.Schema` and binding/capture/state
 operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Persistence`.
 
