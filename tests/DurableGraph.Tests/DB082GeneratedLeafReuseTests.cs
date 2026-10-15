@@ -19,17 +19,17 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         object oldLeaf;
         using (Repository repository = DB082Create(directory.Path, fixture, reuse)) {
-            using BranchCheckout main = repository.CreateBranch("main", fixture.Create(), DB082NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", fixture.Create(), DB082NoRebase);
             CheckpointAddress source = main.Head;
             Assert.Null(repository.PreparedStateEntry);
             GraphReadStatistics cold = DB082Observe(repository);
-            using BranchCheckout first = repository.Fork("first", source);
+            using BranchCheckout first = repository.ForkShared("first", source);
             Assert.Equal(0, cold.ReusedImmutableLeaves);
             Assert.Equal(1, cold.PreparedGraphs);
             Assert.Equal(family ? 4 : 3, cold.AllocatedObjects);
             Assert.Equal(reuse ? 2 : 0, repository.PreparedStateEntry!.ImmutableLeafCount);
             GraphReadStatistics hit = DB082Observe(repository);
-            using BranchCheckout second = repository.Fork("second", source);
+            using BranchCheckout second = repository.ForkShared("second", source);
             Assert.Equal(1, hit.PreparedStateHits);
             Assert.Equal(0, hit.PreparedGraphs);
             Assert.Equal(0, hit.NormalizedObjects);
@@ -67,12 +67,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(source.Address, second.CommitState(DB082NoRebase).Parent);
             Assert.Equal(source, main.Head);
         }
-        using Repository reopened = Repository.OpenExisting(directory.Path, fixture.Models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenExisting(directory.Path, fixture.Models);
         reopened.PreparedStateReuseEnabled = true;
         reopened.ImmutableLeafReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
         GraphReadStatistics reopen = DB082Observe(reopened);
-        using BranchCheckout loaded = reopened.Checkout("first");
+        using BranchCheckout loaded = reopened.CheckoutShared("first");
         Assert.Equal(0, reopen.PreparedStateHits);
         Assert.Equal(0, reopen.ReusedImmutableLeaves);
         // Reopen prepares a fresh graph; this counter does not claim physical frame I/O.
@@ -84,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         if (family) Assert.Equal(2, Assert.IsAssignableFrom<IList>(DB082Member(loaded.State!, "Links")).Count);
         CheckpointAddress unchanged = loaded.CommitState(DB082NoRebase);
         Assert.Empty(DefaultRecords(DB082Resources(reopened).GraphStore, unchanged.RevisionAddress));
-        using BranchCheckout sibling = reopened.Checkout("second");
+        using BranchCheckout sibling = reopened.CheckoutShared("second");
         Assert.Equal(22, DB082Value(sibling.State!));
         Assert.NotNull(DB082Member(sibling.State!, "Right"));
     }
@@ -99,13 +99,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         using Repository repository = DB082Create(directory.Path, fixture, true);
         IDurableObject original = empty ? fixture.CreateEmpty() : fixture.CreateLeaf();
-        using BranchCheckout main = repository.CreateBranch("main", original, DB082NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", original, DB082NoRebase);
         Assert.Null(repository.PreparedStateEntry);
-        using BranchCheckout first = repository.Fork("first", main.Head);
+        using BranchCheckout first = repository.ForkShared("first", main.Head);
         Assert.NotSame(original, first.State);
         Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
         GraphReadStatistics statistics = DB082Observe(repository);
-        using BranchCheckout second = repository.Fork("second", main.Head);
+        using BranchCheckout second = repository.ForkShared("second", main.Head);
         Assert.Same(first.State, second.State);
         Assert.NotSame(first, second);
         Assert.Equal(1, statistics.ReusedImmutableLeaves);
@@ -117,13 +117,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Empty(DefaultRecords(DB082Resources(repository).GraphStore, secondCommit.RevisionAddress));
         // New revision, identical object head: first restoration must still build a fresh table.
         statistics = DB082Observe(repository);
-        using BranchCheckout newer = repository.Fork("newer", secondCommit);
+        using BranchCheckout newer = repository.ForkShared("newer", secondCommit);
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
         Assert.Equal(1, statistics.AllocatedObjects);
         Assert.NotSame(first.State, newer.State);
         second.Dispose();
         statistics = DB082Observe(repository);
-        using BranchCheckout checkout = repository.Checkout("second");
+        using BranchCheckout checkout = repository.CheckoutShared("second");
         Assert.Same(newer.State, checkout.State);
         Assert.Equal(1, statistics.ReusedImmutableLeaves);
         Assert.Equal(secondCommit, checkout.Head);
@@ -140,9 +140,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         DB082Fixture fixture = DB082Compile(family);
         using RawBaseDirectory directory = new();
         using Repository repository = DB082Create(directory.Path, fixture, true);
-        using BranchCheckout main = repository.CreateBranch("main", fixture.Create(), DB082NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", fixture.Create(), DB082NoRebase);
         CheckpointAddress state = main.Head;
-        using BranchCheckout first = repository.Fork("first", state);
+        using BranchCheckout first = repository.ForkShared("first", state);
         PreparedStateRestoration resident = repository.PreparedStateEntry!;
         CheckpointAddress e1 = main.CommitEvent(fixture.Create(), DB082NoRebase);
         CheckpointAddress e2 = main.CommitEvent(fixture.Create(), DB082NoRebase);
@@ -150,7 +150,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         int index = 0;
         foreach (CheckpointAddress address in new[] { state, e1, e2 }) {
             GraphReadStatistics statistics = DB082Observe(repository);
-            using BranchCheckout branch = repository.Fork($"event-source-{index++}", address);
+            using BranchCheckout branch = repository.ForkShared($"event-source-{index++}", address);
             Assert.Equal(address, branch.Head);
             Assert.Equal(address, repository.GetHead(branch.BranchName));
             Assert.Equal(state, repository.PreparedStateEntry!.StateCheckpoint);
@@ -159,10 +159,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(DB082Member(first.State!, "Left"), DB082Member(branch.State!, "Left"));
             Assert.NotSame(first.State, branch.State);
         }
-        using BranchCheckout events = repository.CreateBranchFromEvent("events", fixture.Create(), DB082NoRebase);
+        using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", fixture.Create(), DB082NoRebase);
         CheckpointAddress onlyEvents = events.CommitEvent(fixture.Create(), DB082NoRebase);
         GraphReadStatistics none = DB082Observe(repository);
-        using BranchCheckout empty = repository.Fork("event-only", onlyEvents);
+        using BranchCheckout empty = repository.ForkShared("event-only", onlyEvents);
         Assert.Null(empty.State);
         Assert.Equal(onlyEvents, empty.Head);
         Assert.Equal(0, none.PreparedStateHits);
@@ -174,7 +174,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CheckpointAddress initialState = empty.CommitState(fixture.CreateLeaf(), DB082NoRebase);
         Assert.Same(resident, repository.PreparedStateEntry);
         GraphReadStatistics cold = DB082Observe(repository);
-        using BranchCheckout firstStateFork = repository.Fork("first-state", initialState);
+        using BranchCheckout firstStateFork = repository.ForkShared("first-state", initialState);
         Assert.Equal(0, cold.ReusedImmutableLeaves);
         Assert.Equal(1, cold.AllocatedObjects);
         Assert.NotSame(resident, repository.PreparedStateEntry);
@@ -188,7 +188,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         DB082Fixture fixture = DB082Compile(family);
         using RawBaseDirectory directory = new();
         using Repository repository = DB082Create(directory.Path, fixture, true);
-        using BranchCheckout main = repository.CreateBranch("main", fixture.Create(), DB082NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", fixture.Create(), DB082NoRebase);
         CheckpointAddress state = main.Head;
         CheckpointAddress message = main.CommitEvent(fixture.Create(), DB082NoRebase);
         object[] ReadRoots() {
@@ -202,7 +202,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         object[] before = ReadRoots();
         Assert.Null(repository.PreparedStateEntry);
-        using BranchCheckout first = repository.Fork("first", message);
+        using BranchCheckout first = repository.ForkShared("first", message);
         PreparedStateRestoration resident = repository.PreparedStateEntry!;
         object leaf = DB082Member(first.State!, "Left")!;
         foreach (object root in before.Concat(ReadRoots())) {
@@ -212,7 +212,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Same(resident, repository.PreparedStateEntry);
         Assert.Equal(2, resident.ImmutableLeafCount);
         GraphReadStatistics statistics = DB082Observe(repository);
-        using BranchCheckout again = repository.Fork("again", message);
+        using BranchCheckout again = repository.ForkShared("again", message);
         Assert.Equal(2, statistics.ReusedImmutableLeaves);
         Assert.Same(leaf, DB082Member(again.State!, "Left"));
     }
@@ -224,16 +224,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         DB082Fixture fixture = DB082Compile(family);
         using RawBaseDirectory directory = new();
         using Repository repository = DB082Create(directory.Path, fixture, true);
-        using BranchCheckout main = repository.CreateBranch("main", fixture.Create(), DB082NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", fixture.Create(), DB082NoRebase);
         CheckpointAddress original = main.Head;
-        using BranchCheckout first = repository.Fork("first", original);
+        using BranchCheckout first = repository.ForkShared("first", original);
         object oldLeaf = DB082Member(first.State!, "Left")!;
         PreparedStateRestoration originalEntry = repository.PreparedStateEntry!;
         CheckpointAddress next = main.CommitState(DB082NoRebase);
         Assert.Empty(DefaultRecords(DB082Resources(repository).GraphStore, next.RevisionAddress));
         Assert.Same(originalEntry, repository.PreparedStateEntry);
         GraphReadStatistics statistics = DB082Observe(repository);
-        using BranchCheckout nextFork = repository.Fork("next", next);
+        using BranchCheckout nextFork = repository.ForkShared("next", next);
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
         Assert.NotSame(oldLeaf, DB082Member(nextFork.State!, "Left"));
         Assert.NotSame(originalEntry, repository.PreparedStateEntry);
@@ -241,7 +241,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         CheckpointAddress promotedAddress = main.CommitState(promoted, DB082NoRebase);
         Assert.NotEqual(next.RootId, promotedAddress.RootId);
         statistics = DB082Observe(repository);
-        using BranchCheckout promotedFork = repository.Fork("promoted", promotedAddress);
+        using BranchCheckout promotedFork = repository.ForkShared("promoted", promotedAddress);
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
         Assert.Equal(1, statistics.AllocatedObjects);
         Assert.Equal(fixture.LeafType, promotedFork.State!.GetType());
@@ -250,7 +250,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(promotedAddress.RootId, promotedFork.CommitState(DB082NoRebase).RootId);
         CheckpointAddress changedType = main.CommitState(fixture.CreateEmpty(), DB082NoRebase);
         statistics = DB082Observe(repository);
-        using BranchCheckout emptyFork = repository.Fork("empty-root", changedType);
+        using BranchCheckout emptyFork = repository.ForkShared("empty-root", changedType);
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
         Assert.Equal(fixture.EmptyType, emptyFork.State!.GetType());
         Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
@@ -260,14 +260,14 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(original.RootId, oldSaved.RootId);
         Assert.Equal(39, DB082Value(repository.ReadState(oldSaved)));
         statistics = DB082Observe(repository);
-        using BranchCheckout originalAgain = repository.Fork("original-again", original);
+        using BranchCheckout originalAgain = repository.ForkShared("original-again", original);
         Assert.Equal(0, statistics.ReusedImmutableLeaves);
         Assert.NotSame(oldLeaf, DB082Member(originalAgain.State!, "Left"));
         DB082CheckGraph(originalAgain.State!, family);
     }
 
     private static Repository DB082Create(string path, DB082Fixture fixture, bool reuse) {
-        Repository repository = Repository.CreateNew(path, fixture.Models, 64L * 1024 * 1024 * 1024, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        Repository repository = Repository.CreateNew(path, fixture.Models, 64L * 1024 * 1024 * 1024);
         repository.PreparedStateReuseEnabled = true;
         repository.ImmutableLeafReuseEnabled = reuse;
         return repository;

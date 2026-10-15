@@ -433,7 +433,7 @@ function Invoke-Consumer {
             'seed' { @('RingAndSharedList', 'ActualRefsVerified', 'CompleteStorageVerified') }
             'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'SameSUnchangedListShared', 'RewriteWidgetsIndependent') }
             'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'EventCandidateDiscardKeepsStateRewrite') }
-            'continue' { @('UnconfiguredSaveRejected', 'SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
+            'continue' { @('SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
                 'PrivateBaselineIdentities', 'PrivateEventAcceptsMetaOnly', 'PrivateFrozenCatalog', 'PrivateColdListDelta', 'PrivateSharedRootUnchanged', 'PrivateSharedSaveRejected',
                 'PrivateHotStateRetained', 'PrivateIndependentRead', 'PrivateSameOwnerCheckout',
                 'CompletePromotion', 'PromotionRefsAdvanced', 'PromotionEventRetainsState', 'SharedColdOwnerListDelta', 'PromotionRetainedOrigins') }

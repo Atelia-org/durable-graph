@@ -40,10 +40,11 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.Repository.CreateNew(' = 1
         'M:Atelia.DurableGraph.Repository.OpenExisting(' = 1
         'M:Atelia.DurableGraph.Repository.OpenReadOnlyExisting(' = 1
-        'M:Atelia.DurableGraph.Repository.CreateBranch(' = 2
-        'M:Atelia.DurableGraph.Repository.CreateBranchFromEvent(' = 1
-        'M:Atelia.DurableGraph.Repository.Checkout(' = 1
-        'M:Atelia.DurableGraph.Repository.Fork(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateBranch(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateSharedBranch(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateSharedBranchFromEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.CheckoutShared(' = 1
+        'M:Atelia.DurableGraph.Repository.ForkShared(' = 1
         'M:Atelia.DurableGraph.Repository.CreateTag(' = 1
         'M:Atelia.DurableGraph.Repository.ResolveTag(' = 1
         'M:Atelia.DurableGraph.Repository.ReadFrames(' = 1

@@ -116,9 +116,9 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         FrameAddress state0, schemaRoot;
         ObjectId listId;
         Dictionary<ObjectId, ObjectStorageInfo> storage;
-        using (Repository seed = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.OpenStorageExisting(_path, Models())) {
             seed.PreparedStateReuseEnabled = false;
-            using BranchCheckout main = seed.CreateBranch("main", Ring());
+            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
             state0 = main.Head.RevisionAddress;
             schemaRoot = seed.SharedSchemaRoot!.Value;
             seed.CreateTag("initial", main.Head);
@@ -138,11 +138,11 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
 
         FrameAddress state1;
         ObjectStorageInfo continuedStorage;
-        using (Repository reopened = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenStorageExisting(_path, Models())) {
             reopened.PreparedStateReuseEnabled = false;
             Assert.Equal(state0, reopened.GetHead("main").RevisionAddress);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
-            using BranchCheckout cold = reopened.Checkout("main");
+            using BranchCheckout cold = reopened.CheckoutShared("main");
             DB087Widget root = AssertRing(cold.State, 7);
             Assert.Equal(state0, cold.StateRevisionAddress);
             Assert.Equal(storage.Keys.Order(), cold.Baseline!.Objects.Keys.Order());
@@ -195,7 +195,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => {
             using Repository unexpected = readOnly
                 ? Repository.OpenStorageReadOnlyExisting(_path, Models())
-                : Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+                : Repository.OpenStorageExisting(_path, Models());
         });
         Assert.Contains("[VersionStore.RefNotFound]", error.Message, StringComparison.Ordinal);
     }

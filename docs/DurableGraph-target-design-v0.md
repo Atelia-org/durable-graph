@@ -427,9 +427,9 @@ owned 完成帧与完整目录可按完整帧地址复用，但仍为派生读�
 普通调用方不分别设置这些材料。仅受控加载和成功 State 提交推进其对应关系，Capture/Prepare/Accept 自身不等于持久 Commit。
 
 历史允许 Event-first 与任意连续 E/S。同一 CLR 类型可承担两种角色，E/S 不要求共同领域基类；每个持久图仍必须选择非空 durable 根。
-`CreateBranch(name, initialState)` 和 `CreateBranchFromEvent(name, initialEvent)` 各自完成首个 S 或 E 的发布后才交付工作副本，
+`CreateSharedBranch(name, initialState)` 和 `CreateSharedBranchFromEvent(name, initialEvent)` 各自完成首个 S 或 E 的发布后才交付工作副本，
 不暴露空 head。Event-first 的 State 为 null；无参 CommitState 在捕获前拒绝，显式非空根建立首 State。
-`Checkout(name)` 保持所选精确 Head，只恢复该位置自身或祖先中最近的 State；有效纯 Event 历史可用空模型目录签出为空 State，
+`CheckoutShared(name)` / `CheckoutPrivate(name)` 保持所选精确 Head，只恢复该位置自身或祖先中最近的 State；有效纯 Event 历史可用空模型目录签出为空 State，
 既不物化 Event，也不导入其对象身份。已有 State 的损坏、缺模型或 Upgrade 失败必须传播，不回退旧 State 或伪装成无 State。
 库没有 PendingEvent，不自动 replay，也不判定业务处理进度或外部效果是否完成。
 
@@ -453,7 +453,7 @@ VS 的分支目录根与 shared meta 根构成当前发布选择，图追加与 
 ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅由 ordinal 分支名集合表达，显式 Dispose 释放；
 丢失工作副本不会由 GC 自动解锁，旧副本重复 Dispose 也不能释放后继占用。
 
-`Fork(name, source)` 从本次打开签发的已提交位置创建新命名分支并交付独立工作副本，源工作副本可保持存活。
+`ForkShared(name, source)` 从本次打开签发的已提交位置创建新命名分支并交付独立工作副本，源工作副本可保持存活。
 它与 Checkout 共用最近 State 恢复规则，保持精确 source Head，不读取源副本的未提交修改，不物化 Event 或追加 E/S 图。
 完整 guard 内先占位、恢复并构造工作副本，再发布 ref；普通恢复失败不留新 ref，未交付占位只由本次持有者清理。
 发布后失败不删除 ref、不透明重试，仍依据 outcome/fault 重开检查；正常返回后子分支可独立续写。
@@ -495,6 +495,7 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 已接受定义不可改写；private 从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。
 各草稿可从同一已发布 baseline 独立 fork；若要继承已接受草稿的数据继续改型，则递增版本，不在同一目录重定义同 key。容器元素升级使用已有规则集及 Nullable lifting，不另设目录替换入口。最终只交付一个版本时从原 baseline 建立干净 final fork，而非从完整 ToShared 中过滤开发历史；具体路线见 [DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
 将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
+打开仓库仅选择资源读写。创建/签出编辑会话时由明确入口选择固定 Shared/Private 归属；同一可写 owner 可承载不同分支的两类会话并串行操作，不从分支名或持久历史推断目的地。
 单次显式 Shared 提交与工作副本的默认归属分责；不得借此原地更换冻结执行环境。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
 具体实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)；原分支重建、同 Open 双异形模型、Schema-only 与优化的重访条件见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 

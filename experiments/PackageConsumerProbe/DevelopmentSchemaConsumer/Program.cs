@@ -71,11 +71,11 @@ internal static class Program {
 
     private static object Seed(string database, string witnessPath) {
         Witness witness = new();
-        using (Repository repository = Repository.CreateNew(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateNew(database, Models())) {
             List<int> values = Enumerable.Range(0, 128).ToList();
             Widget root = new() { Value = 17, Numbers = values };
             root.Child = new() { Value = 19, Numbers = values, Child = root };
-            using BranchCheckout branch = repository.CreateBranch("main", root);
+            using BranchCheckout branch = repository.CreateSharedBranch("main", root);
             repository.CreateTag("baseline", branch.Head);
             Check(root, 17, 19, 7);
             witness.BaselineState = Hex(branch.Head.RevisionAddress);
@@ -147,8 +147,8 @@ internal static class Program {
         witness.SharedFinal = ReadShared(database);
         Need(witness.SharedFinal != witness.SharedV1, "Final B was not accepted by a changed shared ref.");
         CheckFrames(database, witness.Frames);
-        using (Repository cold = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout branch = cold.Checkout("final");
+        using (Repository cold = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout branch = cold.CheckoutShared("final");
             Need(Hex(branch.StateRevisionAddress!.Value) == witness.FinalState && branch.StateId?.Value == witness.RootId,
                 "Cold shared continuation lost the final State or root identity.");
             Widget root = Check(branch.State, BaseRoot + 10, BaseChild + 10, 7001);

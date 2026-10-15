@@ -68,11 +68,11 @@ internal static class Program {
     private static object Seed(string database, string witnessPath) {
         FrameAddress state, keeperState;
         uint rootId;
-        using (Repository repository = Repository.CreateNew(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using (BranchCheckout keeper = repository.CreateBranch("keeper", new Keeper { Value = 1234567890123L })) {
+        using (Repository repository = Repository.CreateNew(database, Models())) {
+            using (BranchCheckout keeper = repository.CreateSharedBranch("keeper", new Keeper { Value = 1234567890123L })) {
                 keeperState = keeper.Head.RevisionAddress;
             }
-            using (BranchCheckout main = repository.CreateBranch("main", Ring())) {
+            using (BranchCheckout main = repository.CreateSharedBranch("main", Ring())) {
                 Check(main.State, changed: false);
                 repository.CreateTag("old", main.Head);
                 state = main.Head.RevisionAddress;
@@ -175,9 +175,8 @@ internal static class Program {
         CheckFrames(before, witness.CompleteFrames);
         Need(before.BranchHeads[branchName] == source, "Cold continuation must use the actual prior branch State.");
         FrameAddress nextState;
-        using (Repository repository = Repository.OpenExisting(database, Models(),
-            schemaWriteMode: Wide ? null : SchemaWriteMode.Shared)) {
-            using BranchCheckout branch = Wide ? repository.CheckoutPrivate(branchName) : repository.Checkout(branchName);
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout branch = Wide ? repository.CheckoutPrivate(branchName) : repository.CheckoutShared(branchName);
             Root root = Check(branch.State, changed: false);
             Need(branch.StateRevisionAddress == source && branch.StateId!.Value.Value == (Wide ? witness.BRootId!.Value : witness.ARootId),
                 "The cold editable baseline must retain its exact source and committed root ID.");

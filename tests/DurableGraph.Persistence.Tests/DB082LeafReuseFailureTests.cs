@@ -27,10 +27,10 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Controls control = new();
         using Repository repository = Create(control);
         repository.ImmutableLeafReuseEnabled = !backfill;
-        using BranchCheckout main = repository.CreateBranch("main", Graph());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
         PreparedStateRestoration? previous = null;
         if (backfill) {
-            using BranchCheckout disabled = repository.Fork("disabled", main.Head);
+            using BranchCheckout disabled = repository.ForkShared("disabled", main.Head);
             previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
             Assert.Equal(0, previous.ImmutableLeafCount);
@@ -39,7 +39,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         control.FailTail = true;
         int hydrated = control.LeafHydrates;
         BranchCheckout? delivered = null;
-        Assert.Same(control.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.Fork("retry", main.Head)));
+        Assert.Same(control.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("retry", main.Head)));
         Assert.Null(delivered);
         Assert.Equal(hydrated + 1, control.LeafHydrates); // The leaf actually completed before the tail failed.
         Assert.Same(previous, repository.PreparedStateEntry);
@@ -47,7 +47,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.False(repository.IsFaulted);
 
         control.FailTail = false;
-        using BranchCheckout successful = repository.Fork("retry", main.Head);
+        using BranchCheckout successful = repository.ForkShared("retry", main.Head);
         Assert.Equal(hydrated + 2, control.LeafHydrates);
         PreparedStateRestoration installed = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, installed.ImmutableLeafCount);
@@ -56,14 +56,14 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         int allocations = control.LeafAllocations;
         hydrated = control.LeafHydrates;
         repository.RestorationStatistics = new();
-        Assert.Throws<InvalidDataException>(() => repository.Fork("failed-hit", main.Head));
+        Assert.Throws<InvalidDataException>(() => repository.ForkShared("failed-hit", main.Head));
         Assert.Equal(allocations, control.LeafAllocations);
         Assert.Equal(hydrated, control.LeafHydrates);
         Assert.Equal(1, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal((byte)7, leaf.Value);
         Assert.Same(installed, repository.PreparedStateEntry);
         control.FailTail = false;
-        using BranchCheckout afterFailure = repository.Fork("after-failure", main.Head);
+        using BranchCheckout afterFailure = repository.ForkShared("after-failure", main.Head);
         Assert.Same(leaf, Assert.IsType<Owner>(afterFailure.State).First);
         Assert.Equal(hydrated, control.LeafHydrates);
     }
@@ -72,8 +72,8 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void AllCachedInstancesAreRegisteredBeforeAnEarlierObjectIdAllocates() {
         Controls control = new();
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateBranch("main", new Owner { First = new(7), Second = new(8) });
-        using BranchCheckout warm = repository.Fork("warm", main.Head);
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Owner { First = new(7), Second = new(8) });
+        using BranchCheckout warm = repository.ForkShared("warm", main.Head);
         PreparedGraphSelection selection = repository.PreparedStateEntry!.Selection;
         ObjectId[] ids = selection.Reachable.Where(id => selection.Normalized.Objects[id].Model.DomainType == typeof(Leaf)).ToArray();
         Assert.Equal(2, ids.Length);
@@ -101,17 +101,17 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void LeafCallbackRequirementsSurviveColdCollectionAndHitBackfill(bool duringAllocate, bool backfill) {
         Controls control = new() { DependencyDuringAllocate = duringAllocate, CheckDependency = true };
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateBranch("main", Graph());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
         CheckpointAddress original = main.Head;
         CheckpointAddress eventAddress;
-        using (BranchCheckout events = repository.CreateBranchFromEvent("events", Graph(9))) { eventAddress = events.Head; }
+        using (BranchCheckout events = repository.CreateSharedBranchFromEvent("events", Graph(9))) { eventAddress = events.Head; }
         if (backfill) {
             repository.ImmutableLeafReuseEnabled = false;
-            using BranchCheckout disabled = repository.Fork("disabled", original);
+            using BranchCheckout disabled = repository.ForkShared("disabled", original);
             Assert.Equal(0, repository.PreparedStateEntry!.ImmutableLeafCount);
         }
         repository.ImmutableLeafReuseEnabled = true;
-        using BranchCheckout warm = repository.Fork("warm", original);
+        using BranchCheckout warm = repository.ForkShared("warm", original);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, entry.ImmutableLeafCount);
         Assert.True(control.DependencyChecks > 0);
@@ -128,11 +128,11 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Equal(hydrates, control.LeafHydrates);
         repository.RestorationStatistics = new();
         // Event-only requests still bypass the State certificate and leaf table.
-        using (BranchCheckout events = repository.Checkout("events")) {
+        using (BranchCheckout events = repository.CheckoutShared("events")) {
             Assert.Null(events.State);
             Assert.Equal(eventAddress, events.Head);
         }
-        using (BranchCheckout eventFork = repository.Fork("event-only", eventAddress)) {
+        using (BranchCheckout eventFork = repository.ForkShared("event-only", eventAddress)) {
             Assert.Null(eventFork.State);
             Assert.Equal(eventAddress, eventFork.Head);
         }
@@ -142,7 +142,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Equal(0, repository.RestorationStatistics.PreparedStateMisses);
         Assert.Equal(0, repository.RestorationStatistics.AllocatedObjects);
         Assert.Equal(0, repository.RestorationStatistics.HydratedObjects);
-        using BranchCheckout oldHit = repository.Fork("old-hit", original);
+        using BranchCheckout oldHit = repository.ForkShared("old-hit", original);
         Assert.Same(Assert.IsType<Owner>(warm.State).First, Assert.IsType<Owner>(oldHit.State).First);
         Assert.Equal(1, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal(0, repository.RestorationStatistics.DecodedObjects);
@@ -154,7 +154,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         // must check the callback dependency and must not install a partial table.
         CheckpointAddress newer = main.CommitState();
         int reused = repository.RestorationStatistics.ReusedImmutableLeaves;
-        Assert.Throws<InvalidDataException>(() => repository.Fork("rejected", newer));
+        Assert.Throws<InvalidDataException>(() => repository.ForkShared("rejected", newer));
         Assert.Equal(reused, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal(allocations + 1, control.LeafAllocations);
         Assert.Equal(hydrates + (duringAllocate ? 0 : 1), control.LeafHydrates);
@@ -170,8 +170,8 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void PublicationFailureNeverInstallsCandidateLeafTable(string phase) {
         Controls control = new();
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateBranch("main", Graph());
-        using BranchCheckout warm = repository.Fork("warm", main.Head);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
+        using BranchCheckout warm = repository.ForkShared("warm", main.Head);
         PreparedStateRestoration previous = repository.PreparedStateEntry!;
         Leaf deliveredLeaf = Assert.IsType<Owner>(warm.State).First!;
         CheckpointAddress newer = main.CommitState(Graph(9));
@@ -184,7 +184,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
                 throw new IOException("Publication interruption");
             }
         };
-        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.Fork("candidate", newer));
+        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.ForkShared("candidate", newer));
         Assert.Equal(hydrates + 1, control.LeafHydrates);
         Assert.Equal(phase == "before" ? RepositoryPublicationOutcome.NotPublished :
             phase == "after" ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.Unknown, error.Outcome);
@@ -194,14 +194,14 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
             Assert.False(repository.IsFaulted);
             Assert.Same(previous, repository.PreparedStateEntry);
             Assert.DoesNotContain("candidate", repository.ListBranches());
-            using BranchCheckout retry = repository.Fork("candidate", newer);
+            using BranchCheckout retry = repository.ForkShared("candidate", newer);
             Assert.Equal(hydrates + 2, control.LeafHydrates);
             Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
             Assert.NotSame(deliveredLeaf, Assert.IsType<Owner>(retry.State).First);
         } else {
             Assert.True(repository.IsFaulted);
             Assert.Null(repository.PreparedStateEntry);
-            Assert.Throws<InvalidOperationException>(() => repository.Fork("blocked", newer));
+            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("blocked", newer));
         }
     }
 
@@ -212,19 +212,19 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void SlotLifetimeReleasesItsOnlyStrongLeafReference(string finish) {
         Controls control = new();
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateBranch("main", Graph());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
         WeakReference<Leaf> leaf = WarmWeak(repository, main.Head);
         Assert.True(IsAlive(leaf));
         if (finish == "evict") {
             CheckpointAddress newer = main.CommitState(Graph(9));
-            using BranchCheckout replacement = repository.Fork("replacement", newer);
+            using BranchCheckout replacement = repository.ForkShared("replacement", newer);
         } else if (finish == "dispose") {
             repository.Dispose();
         } else {
             repository.OperationStageObserver = point => {
                 if (point == RepositoryOperationStage.AfterPublication) { throw new IOException("fault"); }
             };
-            Assert.Throws<RepositoryPublicationException>(() => repository.Fork("fault", main.Head));
+            Assert.Throws<RepositoryPublicationException>(() => repository.ForkShared("fault", main.Head));
             Assert.True(repository.IsFaulted);
         }
         if (finish != "evict") { Assert.Null(repository.PreparedStateEntry); }
@@ -238,14 +238,14 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     [Fact]
     public void LiveCheckoutRetainsLeafAndSavingSourceWithoutKeepingEvictedEntryAlive() {
         using Repository repository = Create(new());
-        using BranchCheckout main = repository.CreateBranch("main", Graph());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
         CheckpointAddress original = main.Head;
         var retained = WarmLive(repository, original);
         using BranchCheckout live = retained.Checkout;
         Owner root = Assert.IsType<Owner>(live.State);
         Leaf leaf = root.First!;
         CheckpointAddress newer = main.CommitState(Graph(9));
-        using BranchCheckout replacement = repository.Fork("replacement", newer);
+        using BranchCheckout replacement = repository.ForkShared("replacement", newer);
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -267,7 +267,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (BranchCheckout Checkout, WeakReference<PreparedStateRestoration> Entry) WarmLive(
         Repository repository, CheckpointAddress address) {
-        BranchCheckout checkout = repository.Fork("live", address);
+        BranchCheckout checkout = repository.ForkShared("live", address);
         return (checkout, new(repository.PreparedStateEntry!));
     }
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -275,14 +275,14 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference<Leaf> WarmWeak(Repository repository, CheckpointAddress address) {
-        using BranchCheckout fork = repository.Fork("warm", address);
+        using BranchCheckout fork = repository.ForkShared("warm", address);
         return new(Assert.IsType<Owner>(fork.State).First!);
     }
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool IsAlive(WeakReference<Leaf> weak) => weak.TryGetTarget(out _);
 
     private Repository Create(Controls control) {
-        Repository repository = Repository.CreateNew(_path, Models(control), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        Repository repository = Repository.CreateNew(_path, Models(control));
         repository.ImmutableLeafReuseEnabled = true;
         return repository;
     }

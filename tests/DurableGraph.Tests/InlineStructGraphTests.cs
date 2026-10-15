@@ -112,7 +112,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         object world = fixture.NewWorld();
         bool mutated = false;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
             repository.OperationStageObserver = checkpoint => {
                 if (checkpoint != RepositoryOperationStage.AfterPrepare) { return; }
                 fixture.ChangeNested(world, 999);
@@ -120,7 +120,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 fixture.Detach(world);
                 mutated = true;
             };
-            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)world);
+            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)world);
             Assert.True(mutated);
             Assert.Same(world, checkout.State);
         }
@@ -136,8 +136,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         InlineGraphFixture fixture = CompileInlineGraph();
         using RawBaseDirectory directory = new();
         FrameAddress first;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)fixture.NewWorld());
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
+            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)fixture.NewWorld());
             first = checkout.StateRevisionAddress!.Value;
         }
         using RepositoryResources resources = RepositoryResources.OpenExisting(directory.Path);

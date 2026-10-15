@@ -88,10 +88,9 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         }, hydrate: _ => {
             Assert.Equal(4, allocations);
             hydrations++;
-        }),
-        schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        }));
         Node state = Cycle(10, 20), message = Cycle(30, 40);
-        using BranchCheckout branch = repository.CreateBranch("main", state, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranch("main", state, NoRebase);
         CheckpointAddress stateAddress = branch.Head;
         CheckpointAddress address = branch.CommitEvent(message, NoRebase);
         Checkpoint? delivered = null;
@@ -126,9 +125,8 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Node singleton = new();
         int allocations = 0, hydrations = 0;
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(
-            allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++),
-            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 10 }, NoRebase);
+            allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++));
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 10 }, NoRebase);
         CheckpointAddress address = branch.CommitEvent(new Node { Value = 20 }, NoRebase);
         Checkpoint? delivered = null;
 
@@ -144,8 +142,8 @@ public sealed class DB079GraphRestorationTests : IDisposable {
 
     [Fact]
     public void CheckpointPreviousGraphPreparationFailsBeforeEitherGraphAllocates() {
-        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout branch = seed.CreateBranch("main", new Node { Value = 10 }, NoRebase);
+        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            using BranchCheckout branch = seed.CreateSharedBranch("main", new Node { Value = 10 }, NoRebase);
             branch.CommitEvent(new Node { Value = 30 }, NoRebase);
         }
         int allocations = 0, hydrations = 0;
@@ -159,8 +157,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
                 normalized.Add(state.Value);
                 if (state.Value == 10 && failPrevious) { throw failure; }
                 return state;
-            }, allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++),
-            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+            }, allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++));
         CheckpointAddress address = repository.GetHead("main");
         Checkpoint? delivered = null;
 

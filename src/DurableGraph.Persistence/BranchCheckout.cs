@@ -17,9 +17,10 @@ namespace Atelia.DurableGraph;
 /// With a committed State, re-checkout restores new domain instances from that nearest State's Schema view.
 /// Without State, shared creation uses the current shared view and private restoration uses the actual Head's view.
 /// Registry changes require closing the repository and opening it again; re-checkout alone does not load them.
-/// Restoration and in-memory editing do not select a Schema write destination. Ordinary checkouts require an
-/// Open-level Schema write mode; CheckoutPrivate explicitly selects a private destination.
-/// ToShared commits explicitly select shared for one operation. Other commits without a selection reject before capture.
+/// Named creation and checkout entry points select this session's fixed ordinary Schema save destination.
+/// Shared sessions require their complete selected view to have been accepted by shared; Private sessions
+/// continue from the actual Head's pin. ToShared commits merge the complete selected view for one operation
+/// without changing this session's ordinary destination or frozen execution environment.
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
@@ -131,8 +132,8 @@ public sealed class BranchCheckout : IDisposable {
 
     /// <summary>Publishes an Event while explicitly merging the complete selected Schema view into shared.</summary>
     /// <remarks>
-    /// Requires a writable owning repository; this named operation selects the shared destination even when
-    /// Open has no write mode. Confirmed publication accepts meta and Head without installing State identities,
+    /// Requires a writable owning repository; this named operation selects the shared destination for this call.
+    /// Confirmed publication accepts meta and Head without installing State identities,
     /// advancing its baseline or consuming rewrite requirements. Complete catalog conflicts reject preparation.
     /// The checkout's default destination and frozen execution environment remain unchanged.
     /// </remarks>

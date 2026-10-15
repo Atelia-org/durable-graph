@@ -20,22 +20,22 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
 
     [Fact]
     public void CurrentStateDropsHistoricalOnlyCertificateWhileEventsPreserveRewriteAndDoNotRepopulateSlot() {
-        using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout initial = seed.CreateBranch("main", new Root { Value = 17 }, NoRebase);
+        using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()))) {
+            using BranchCheckout initial = seed.CreateSharedBranch("main", new Root { Value = 17 }, NoRebase);
         }
         Counters counts = new();
-        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts));
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
         CheckpointAddress oldAddress = repository.GetHead("main");
-        using BranchCheckout upgraded = repository.Checkout("main");
+        using BranchCheckout upgraded = repository.CheckoutShared("main");
         PreparedStateRestoration oldEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, counts.Normalizes);
         Assert.Equal(17, Assert.IsType<Root>(upgraded.State).Value);
         Assert.True(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
 
-        using BranchCheckout other = repository.CreateBranch("other", new Root { Value = 44 }, NoRebase);
-        using BranchCheckout otherFork = repository.Fork("other-fork", other.Head);
+        using BranchCheckout other = repository.CreateSharedBranch("other", new Root { Value = 44 }, NoRebase);
+        using BranchCheckout otherFork = repository.ForkShared("other-fork", other.Head);
         PreparedStateRestoration otherEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.NotSame(oldEntry, otherEntry);
         NormalizedGraphState originalBaseline = Baseline(upgraded);
@@ -47,7 +47,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         Assert.True(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
 
         int misses = statistics.PreparedStateMisses;
-        using BranchCheckout eventFork = repository.Fork("event-fork", eventAddress);
+        using BranchCheckout eventFork = repository.ForkShared("event-fork", eventAddress);
         Assert.Equal(eventAddress, eventFork.Head);
         Assert.Equal(oldAddress.RevisionAddress, eventFork.StateRevisionAddress);
         Assert.Equal(misses + 1, statistics.PreparedStateMisses);
@@ -74,7 +74,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
 
         int normalized = counts.Normalizes;
         misses = statistics.PreparedStateMisses;
-        using BranchCheckout currentCold = repository.Fork("current-cold", newAddress);
+        using BranchCheckout currentCold = repository.ForkShared("current-cold", newAddress);
         Assert.Equal(17, Assert.IsType<Root>(currentCold.State).Value);
         Assert.Equal(newAddress.RevisionAddress, currentCold.StateRevisionAddress);
         Assert.Equal(misses + 1, statistics.PreparedStateMisses);
@@ -83,7 +83,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         Assert.NotSame(renewedOldEntry, currentEntry);
         Assert.Equal(newAddress, currentEntry.StateCheckpoint);
         int decoded = statistics.DecodedObjects, hits = statistics.PreparedStateHits;
-        using BranchCheckout currentHit = repository.Fork("current-hit", newAddress);
+        using BranchCheckout currentHit = repository.ForkShared("current-hit", newAddress);
         Assert.Equal(hits + 1, statistics.PreparedStateHits);
         Assert.Equal(decoded, statistics.DecodedObjects);
         Assert.Equal(normalized, counts.Normalizes);
@@ -95,7 +95,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         // historical read still uses its own immutable S and remains valid.
         Assert.True(renewedOldEntry.SchemaRequirementCount > currentEntry.SchemaRequirementCount);
         currentEntry.Requirements.Validate(wrongEnvironment.Models);
-        using BranchCheckout oldAgain = repository.Fork("old-again", oldAddress);
+        using BranchCheckout oldAgain = repository.ForkShared("old-again", oldAddress);
         Assert.Equal(17, Assert.IsType<Root>(oldAgain.State).Value);
         Assert.True(Baseline(oldAgain).Objects[oldAgain.StateId!.Value].RequiresRewrite);
         Assert.False(repository.IsFaulted);

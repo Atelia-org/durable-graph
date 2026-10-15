@@ -17,8 +17,8 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     [InlineData("missing-frame")]
     [InlineData("metadata")]
     public void SelectedTagPayloadAndGraphMetadataAreCheckedWithoutStartupTagAudit(string damage) {
-        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node());
+        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
             seed.CreateTag("good", main.Head);
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
@@ -45,8 +45,8 @@ public sealed class RepositoryTagStorageTests : IDisposable {
 
     [Fact]
     public void TagMetadataCanResolveBeforeSelectedGraphRejectsUnknownSchema() {
-        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node());
+        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
         }
         FrameAddress frame;
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
@@ -72,15 +72,15 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     [Fact]
     public void TagControlTailRecoveryRemainsLazyUntilNamedAccess() {
         FrameAddress saved;
-        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node());
+        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
             saved = main.Head.RevisionAddress;
             seed.CreateTag("bookmark", main.Head);
         }
         string bucket = Assert.Single(Directory.GetFiles(Path.Combine(_root, "versions", "tags"), "*.rbf", SearchOption.AllDirectories));
         byte[] complete = File.ReadAllBytes(bucket);
         File.WriteAllBytes(bucket, [.. complete, 1]);
-        using (Repository writable = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository writable = Repository.OpenExisting(_root, new StateModelRegistry())) {
             Assert.Equal(complete.Length + 1, new FileInfo(bucket).Length);
             Assert.DoesNotContain(ResourcesOf(writable).Versions.RecoveryReports,
                 report => report.FileKind == Atelia.VersionStore.VersionStoreRecoveryFileKind.TagBucket);

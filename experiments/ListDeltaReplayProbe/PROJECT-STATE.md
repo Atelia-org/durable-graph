@@ -4,8 +4,8 @@ Purpose: replay the same ordinary domain edits into independent DurableGraph rep
 compare codec-2 List writers under the same policy, with correctness ahead of performance ranking.
 
 Current focus: keep the public Repository/BranchCheckout replay on the current meta-bootstrap route.
-Writable opens now explicitly select `SchemaWriteMode.Shared`; the choice is per open and does not
-change measurements or workload semantics. Stored-exact DTOs and actual payload accounting use the
+Shared creation/checkout entry points explicitly select each editing session's save destination
+under DB-095; this does not change measurements or workload semantics. Stored-exact DTOs and actual payload accounting use the
 real split store at each graph's selected S. The finite correctness witness is the README Count 8
 ordinary smoke: published E/S fingerprints, IDs/head/H, cold baseline and candidate Apply/frozen
 inputs. Historical performance results retain their own versions; no speed claim follows from this

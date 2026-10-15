@@ -20,11 +20,11 @@ public sealed class FixtureGraphRepository : IDisposable {
     }
     public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.CreateNew(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
     }
     public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.OpenExisting(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
     }
     public FrameAddress? HeadRevisionAddress => _stateAddress;
     public bool IsFaulted => _repository.IsFaulted;
@@ -32,11 +32,11 @@ public sealed class FixtureGraphRepository : IDisposable {
         return new(this, state);
     }
     public FixtureGraphSession<T> Load<T>() where T : class, IDurableObject {
-        return new(this, _repository.Checkout("main"));
+        return new(this, _repository.CheckoutShared("main"));
     }
     internal BranchCheckout Initialize<T>(T state,
         ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject =>
-        _repository.CreateBranch("main", state, parameters);
+        _repository.CreateSharedBranch("main", state, parameters);
     internal void Accept(FrameAddress address) => _stateAddress = address;
     public void Dispose() => _repository.Dispose();
 }

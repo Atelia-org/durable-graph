@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)已选 E，显式编辑会话入口的实施计划就绪；本轮仅完善文档，下一轮实施。当前产品仍保下述 Open nullable 模式，不能把目标 API 当作已实现；签名、接线、迁移与验收统一查 DB-095。
+[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)E 核心与调用迁移已完成，根构建及 2637 项相关源码完整套件通过；新 G 普通包验收进行中。当前 API 为显式编辑会话入口，签名、边界及最终资格统一查 DB-095。
 
 Schema-history 发布保护已实施并完成限定验收：Build 的 Publish/Verify 在同目录互斥内重读、校验与发布，
 保同形幂等及冲突写前拒绝；SG/targets 输入和历史格式保持。完整构建仍串行，冻结历史后可并行 Verify。
@@ -47,7 +47,7 @@ H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
 Shared 准入、真实 baseline private 恢复／正常升版、准确冷签出与增量续写、完整目录单次 ToShared 均已接线。private 只发布 ref1且不 rebase latest shared；新增 shared 走同一两 ref CU。旧 rows／heads／S 保含义，普通 Shared 保存核完整目录已被接纳，显式 ToShared 同形复用／新项加入／同 key 异形拒绝，不改变默认归属或执行环境。
-Open 省略归属时普通业务写入提前拒；CheckoutPrivate或单次 ToShared另明确选择，模式不持久化。私有后续 meta 写来源取实际 Head.S；Shared／ToShared 的目标 meta 写来源取 latest shared，ToShared 的完整待导入声明另取实际 Head.S。业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State保存可推进 selected S。
+Open 只选择资源读写；Shared 命名创建/签出/Fork 与 CheckoutPrivate 决定工作副本普通保存归属，ToShared 为单次完整合入，归属不持久化。私有后续 meta 写来源取实际 Head.S；Shared／ToShared 的目标 meta 写来源取 latest shared，ToShared 的完整待导入声明另取实际 Head.S。业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State保存可推进 selected S。
 
 准确 origin／selected／execution S、共同 source／pending／fault owner、history／Pair／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
@@ -287,7 +287,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   共同 workspace／候选在 State 确认后才安装原实例／新根；独立 Event 使用最近 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State rewrite。
   Event 完整目录按 source − candidate 产生 Removes，保实际 local Base/Delta 与内容来源 external heads；后继 State 仍相对最近 State。
 - Repository 拥有 RepositoryResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
-  CreateBranch(initialState) / CreateBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
+  CreateSharedBranch(initialState) / CreateSharedBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
   业务 Parent 指向提交前精确 Head；业务内容来源取该 Parent 自身或祖先中最近 State，无 State 时为 null，旧称 Revision Parent。
   Checkout 保持精确 Head，只恢复最近 State 及完整来源；纯 Event 前缀交付 State=null、全新空 CaptureSession。

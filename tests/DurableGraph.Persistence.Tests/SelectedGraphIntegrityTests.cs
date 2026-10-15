@@ -13,7 +13,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
             first = main.Head.RevisionAddress;
             root = main.Head.RootId;
         }
@@ -40,10 +40,10 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         AssertFiles(before);
         if (!orphan) {
-            using Repository writer = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+            using Repository writer = Repository.OpenExisting(_root, Models());
             var head = writer.GetHead("main");
-            Assert.Throws<InvalidDataException>(() => writer.Checkout("main"));
-            Assert.Throws<InvalidDataException>(() => writer.Fork("invalid-fork", head));
+            Assert.Throws<InvalidDataException>(() => writer.CheckoutShared("main"));
+            Assert.Throws<InvalidDataException>(() => writer.ForkShared("invalid-fork", head));
             Assert.False(writer.IsFaulted);
             Assert.DoesNotContain("invalid-fork", writer.ListBranches());
         }
@@ -56,7 +56,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = seed.CreateBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
+            using BranchCheckout main = seed.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
             first = main.Head.RevisionAddress;
             root = main.Head.RootId;
         }
@@ -73,10 +73,10 @@ public sealed partial class EventHistoryRepositoryTests {
             else { Assert.Throws<InvalidDataException>(() => reader.ReadEvent(head)); }
             Assert.False(reader.IsFaulted);
         }
-        using Repository writer = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository writer = Repository.OpenExisting(_root, Models());
         CheckpointAddress selected = writer.GetHead("main");
-        Assert.Throws<InvalidDataException>(() => writer.Checkout("main"));
-        Assert.Throws<InvalidDataException>(() => writer.Fork("invalid-fork", selected));
+        Assert.Throws<InvalidDataException>(() => writer.CheckoutShared("main"));
+        Assert.Throws<InvalidDataException>(() => writer.ForkShared("invalid-fork", selected));
         Assert.False(writer.IsFaulted);
         Assert.Equal(new[] { "main" }, writer.ListBranches());
     }

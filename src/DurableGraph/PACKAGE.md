@@ -25,7 +25,10 @@ operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Pe
 
 Register models before Open; save independent Event/State graphs, query checkpoints, resolve immutable
 tags and fork named branches. Each branch has at most one active checkout; repository operations are
-serialized. Restoration bypasses constructors and field initializers. Rebuild Transient state after
+serialized. Open selects resource access; CreateSharedBranch, CreateSharedBranchFromEvent, CheckoutShared
+and ForkShared explicitly select Shared saves, while CheckoutPrivate selects Private. Commit uses that
+checkout destination; Commit...ToShared explicitly merges the complete catalog for one operation.
+Restoration bypasses constructors and field initializers. Rebuild Transient state after
 delivery; ReadPair may share read-only nodes, so view-specific context belongs outside those graphs.
 
 FrameStore/VersionStore own backing storage; meta Schema objects and business saves share publication.

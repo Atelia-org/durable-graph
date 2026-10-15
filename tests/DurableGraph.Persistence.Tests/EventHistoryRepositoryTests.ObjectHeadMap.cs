@@ -11,7 +11,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first, shrunk, hot, cold;
         ObjectId rootId;
         using (Repository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", world, NoRebase);
+            using var session = repository.CreateSharedBranch("main", world, NoRebase);
             first = session.StateRevisionAddress!.Value;
             rootId = session.StateId!.Value;
             session.CommitEvent(new Node { Value = 6 }, NoRebase);
@@ -39,8 +39,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(ObjectVersionKind.Delta, states.ReadDirectoryVersion(states.ReadGraph(hot).DirectoryRoot).Kind);
             Assert.Equal(shrunk, states.ReadGraph(hot).SourceGraph);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using var session = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using var session = repository.CheckoutShared("main");
             Assert.Equal(rootId, session.StateId!.Value);
             Assert.Null(((Node)session.State!).Left);
             Assert.Equal((byte)2, ((Node)session.State!).Value);
@@ -68,7 +68,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first, candidate;
         using (Repository repository = CreateRepository()) {
             Node original = LargeWorld();
-            using var session = repository.CreateBranch("main", original, NoRebase);
+            using var session = repository.CreateSharedBranch("main", original, NoRebase);
             first = session.StateRevisionAddress!.Value;
             session.CommitEvent(new Node { Value = 6 }, NoRebase);
             Node replacement = new() { Value = 7, Right = original.Right, Text = original.Text };
@@ -90,8 +90,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(3, states.ReadGraph(candidate).ObjectHeads.Count);
             Assert.Equal(1003, states.ReadGraph(first).ObjectHeads.Count);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using var recovered = reopened.Checkout("main");
+        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using var recovered = reopened.CheckoutShared("main");
         if (outcome == RepositoryPublicationOutcome.Published) {
             Assert.Equal(candidate, recovered.StateRevisionAddress!.Value);
             Assert.Equal((byte)7, ((Node)recovered.State!).Value);

@@ -26,8 +26,8 @@ internal static class Program {
                 Subject input = new() { Value = 42, Control = 7, Scratch = 777 };
                 Need(Subject.AccessorCalls == 1, "The fixture must exercise its setter before capture.");
                 Subject.AccessorCalls = 0;
-                using Repository repository = Repository.CreateNew(database, models, schemaWriteMode: SchemaWriteMode.Shared);
-                using BranchCheckout branch = repository.CreateBranch("main", input);
+                using Repository repository = Repository.CreateNew(database, models);
+                using BranchCheckout branch = repository.CreateSharedBranch("main", input);
                 Need(Subject.AccessorCalls == 0, "Capture executed a Transient accessor.");
             } else if (phase == "read") {
                 using Repository repository = Repository.OpenReadOnlyExisting(database, models);

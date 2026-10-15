@@ -73,8 +73,8 @@ internal static class Program {
     private static object Seed(string database, string witnessPath) {
         FrameAddress state;
         uint rootId;
-        using (Repository repository = Repository.CreateNew(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring());
+        using (Repository repository = Repository.CreateNew(database, Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
             repository.CreateTag("initial", main.Head);
             state = main.Head.RevisionAddress;
             rootId = main.StateId!.Value.Value;
@@ -141,8 +141,8 @@ internal static class Program {
         WireInspector.Snapshot original = WireInspector.Read(database);
         CheckRefs(original, oldSchema, ("main", seed));
         CheckStorage(original, original.Graph(seed), witness.SeedObjects);
-        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout main = repository.CheckoutShared("main");
             Check(main.State, upgraded: true);
             Need(main.StateRevisionAddress == seed && main.StateId!.Value.Value == witness.RootId,
                 "Cold main must select the exact historical State and root ID.");
@@ -157,8 +157,8 @@ internal static class Program {
 
         // Closing after Fork makes its ref-only nature observable independently.
         int beforeFork = Widget.UpgradeCalls;
-        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout fork = repository.Fork("fork", repository.ResolveTag("initial"));
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout fork = repository.ForkShared("fork", repository.ResolveTag("initial"));
             Need(fork.Head.RevisionAddress == seed && fork.StateRevisionAddress == seed && fork.StateId!.Value.Value == witness.RootId,
                 "Historical Fork must restore the tag's nearest State, independently of latest shared S.");
             Check(fork.State, upgraded: true);
@@ -170,8 +170,8 @@ internal static class Program {
         CheckStorage(forked, forked.Graph(seed), witness.SeedObjects);
 
         FrameAddress eventAddress, rewritten;
-        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout fork = repository.Checkout("fork");
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout fork = repository.CheckoutShared("fork");
             Widget root = Check(fork.State, upgraded: true);
             ObjectId rootId = fork.StateId!.Value;
             eventAddress = fork.CommitEvent(root).RevisionAddress;
@@ -221,30 +221,9 @@ internal static class Program {
         CheckRefs(previous, schema, ("main", Address(witness.MainState!)), ("fork", rewritten));
         StorageEvidence[] priorRows = Storage(previous, previous.Graph(rewritten));
         Need(priorRows.SequenceEqual(witness.RewriteObjects!), "Actual cold source storage differs from the last confirmed observation.");
-        Dictionary<string, string> beforeUnconfigured = FileImages(database);
-        using (Repository unconfigured = Repository.OpenExisting(database, Models())) {
-            Need(!unconfigured.IsReadOnly && unconfigured.SchemaWriteMode is null,
-                "Missing Schema write configuration must retain writable backing resources without admitting business saves.");
-            using BranchCheckout main = unconfigured.Checkout("main");
-            Widget root = Check(main.State, upgraded: true);
-            FrameAddress head = main.Head.RevisionAddress;
-            FrameAddress? state = main.StateRevisionAddress;
-            ObjectId? rootId = main.StateId;
-            Check(unconfigured.ReadState(unconfigured.GetHead("main")), upgraded: true);
-            foreach (Action save in new Action[] { () => main.CommitState(), () => main.CommitEvent(root) }) {
-                bool rejected = false;
-                try { save(); }
-                catch (InvalidOperationException) { rejected = true; }
-                Need(rejected && !unconfigured.IsFaulted && main.Head.RevisionAddress == head &&
-                    unconfigured.GetHead("main").RevisionAddress == head && main.StateRevisionAddress == state &&
-                    main.StateId == rootId && ReferenceEquals(main.State, root),
-                    "An unconfigured State/Event save must be rejected without advancing or faulting the loaded checkout.");
-            }
-        }
-        Need(SameFiles(beforeUnconfigured, FileImages(database)), "Unconfigured business-save rejection changed repository files.");
         FrameAddress continued;
-        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout fork = repository.Checkout("fork");
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout fork = repository.CheckoutShared("fork");
             Widget root = Check(fork.State, upgraded: true);
             Need(Widget.UpgradeCalls == 0 && fork.StateRevisionAddress == rewritten && fork.StateId!.Value.Value == witness.RootId,
                 "The fresh current State must retain root identity without another historical Upgrade.");
@@ -283,7 +262,7 @@ internal static class Program {
         WriteJson(witnessPath, next);
         return new { next.ContinuationState, Objects = updated, SingleListDelta = true, ExactPrior = true, IdsPreserved = true,
             ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true,
-            UnconfiguredSaveRejected = true, next.PrivateSeedState, next.PrivateState, next.PrivateSchema,
+            next.PrivateSeedState, next.PrivateState, next.PrivateSchema,
             PrivateObjects = next.PrivateObjects, PrivateUnusedDescriptor = next.PrivateUnusedDescriptorId,
             PrivateBaselineIdentities = true, PrivateEventAcceptsMetaOnly = true, PrivateFrozenCatalog = true, PrivateColdListDelta = true, PrivateSharedRootUnchanged = true, PrivateSharedSaveRejected = true,
             PrivateHotStateRetained = true, PrivateIndependentRead = true, PrivateSameOwnerCheckout = true,
@@ -323,8 +302,7 @@ internal static class Program {
         StorageEvidence[] initialRows = Storage(seeded, seedGraph);
         Need(initialRows.SequenceEqual(witness.ContinuationObjects!), "Fork changed source heads, H or IDs.");
         Need(SameSharedRef(sharedRef, ReadSharedRef(database)), "Private ref creation and Event changed shared ref2.");
-        RejectOrdinaryPrivateSaves(database, configuredShared: false, catalogEvent, initial);
-        RejectOrdinaryPrivateSaves(database, configuredShared: true, catalogEvent, initial);
+        RejectOrdinaryPrivateSaves(database, catalogEvent, initial);
 
         FrameAddress next;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
@@ -393,11 +371,10 @@ internal static class Program {
             PrivateFrames = Frames(actual).Where(frame => !oldFrames.Contains(frame.Address)).ToArray() };
     }
 
-    private static void RejectOrdinaryPrivateSaves(string database, bool configuredShared, FrameAddress eventHead, FrameAddress initial) {
+    private static void RejectOrdinaryPrivateSaves(string database, FrameAddress eventHead, FrameAddress initial) {
         Dictionary<string, string> before = FileImages(database);
-        using (Repository repository = Repository.OpenExisting(database, Models(),
-            schemaWriteMode: configuredShared ? SchemaWriteMode.Shared : null)) {
-            using BranchCheckout ordinary = repository.Checkout("private");
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout ordinary = repository.CheckoutShared("private");
             Widget root = Check(ordinary.State, upgraded: true, atSeven: 201);
             ObjectId? rootId = ordinary.StateId;
             foreach (Action save in new Action[] { () => ordinary.CommitState(), () => ordinary.CommitEvent(root) }) {
@@ -407,7 +384,7 @@ internal static class Program {
                 Need(rejected && !repository.IsFaulted && ordinary.Head.RevisionAddress == eventHead &&
                     ordinary.StateRevisionAddress == initial && ordinary.StateId == rootId && ReferenceEquals(ordinary.State, root) &&
                     repository.GetHead("private").RevisionAddress == eventHead,
-                    "Ordinary private-head save must reject missing mode or the complete unmatched declaration without advancing or faulting.");
+                    "A Shared checkout must reject the complete unmatched private declaration without advancing or faulting.");
             }
         }
         Need(SameFiles(before, FileImages(database)), "Rejected ordinary private-head saves changed repository files.");
@@ -459,8 +436,8 @@ internal static class Program {
         // This is a fresh owner in the Continue PID. The final Verify PID stays
         // wholly read-only; no claim of a second writer process is made here.
         FrameAddress continued;
-        using (Repository repository = Repository.OpenExisting(database, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout current = repository.Checkout("private");
+        using (Repository repository = Repository.OpenExisting(database, Models())) {
+            using BranchCheckout current = repository.CheckoutShared("private");
             Widget root = Check(current.State, upgraded: true, atSeven: 202);
             Need(current.Head.RevisionAddress == promotedEvent && current.StateRevisionAddress == privateState &&
                 current.StateId!.Value.Value == witness.PrivateRootId,

@@ -31,12 +31,12 @@ public sealed partial class EventHistoryRepositoryTests {
         ReadAmplificationBaseBudgetParameters currentDefault) {
         string path = Path.Combine(_root, name);
         List<FrameAddress> addresses = [];
-        using (var repository = Repository.CreateNew(path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (var repository = Repository.CreateNew(path, Models())) {
             Node state = new();
             using var session = includeOverrides
-                ? repository.CreateBranch("main", state, NoRebase)
-                : omitPolicy ? repository.CreateBranch("main", state)
-                : repository.CreateBranch("main", state, currentDefault);
+                ? repository.CreateSharedBranch("main", state, NoRebase)
+                : omitPolicy ? repository.CreateSharedBranch("main", state)
+                : repository.CreateSharedBranch("main", state, currentDefault);
             addresses.Add(session.StateRevisionAddress!.Value);
             // Long enough to exercise both Base and Delta for the proposed 3x/5x/10x
             // defaults; a materially different policy may need a different workload.

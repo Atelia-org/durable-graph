@@ -20,9 +20,9 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     // contract continues to require read-only results without promising cross-view identity.
     [Fact]
     public void SameSchemaSharesStableGeneratedClosureAndChangedChildSplitsItsAncestors() {
-        using (Repository seed = Repository.CreateStorageNew(_path, GeneratedModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, GeneratedModels())) {
             SplitPairEnvelope root = Envelope();
-            using BranchCheckout main = seed.CreateBranch("main", root);
+            using BranchCheckout main = seed.CreateSharedBranch("main", root);
             CheckpointAddress s0 = main.Head;
             seed.CreateTag("original", s0);
             CheckpointAddress s1 = main.CommitState();
@@ -81,8 +81,8 @@ public sealed class SplitRepositoryPairTests : IDisposable {
 
     [Fact]
     public void DifferentSchemaHydrationClosuresKeepEqualCurrentDtosIndependentAndMatchSingleReads() {
-        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
+            using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
             seed.CreateTag("before", main.Head);
             main.Catalog.Set(Extra);
             CheckpointAddress next = main.CommitEvent(main.State!);
@@ -125,8 +125,8 @@ public sealed class SplitRepositoryPairTests : IDisposable {
 
     [Fact]
     public void HistoricalRewriteIsNotSharedEvenWithinOneEnvironmentAndConfirmedBaseBecomesEligible() {
-        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
+        using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
+            using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
             seed.CreateTag("old", main.Head);
         }
         Counts counts = new();
@@ -149,8 +149,8 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(2, counts.Hydrates);
         }
         AssertFilesEqual(files, SnapshotFiles());
-        using (Repository writer = Repository.OpenStorageExisting(_path, registry, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = writer.Checkout("main");
+        using (Repository writer = Repository.OpenStorageExisting(_path, registry)) {
+            using BranchCheckout main = writer.CheckoutShared("main");
             CheckpointAddress current = main.CommitState();
             StoredGraphRevision graph = writer.GraphStore.ReadGraph(current.RevisionAddress);
             ObjectVersionRecord rewritten = Assert.Single(writer.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
@@ -231,7 +231,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             counts.DuringHydrate = () => {
                 Assert.Throws<InvalidOperationException>(() => reader.ReadPair(first, second));
                 Assert.Throws<InvalidOperationException>(() => reader.ReadState(first));
-                Assert.Throws<InvalidOperationException>(() => reader.Checkout("main"));
+                Assert.Throws<InvalidOperationException>(() => reader.CheckoutShared("main"));
                 Assert.Throws<InvalidOperationException>(() => reader.Dispose());
             };
             var pair = reader.ReadPair(first, second);
@@ -250,8 +250,8 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     }
 
     private CheckpointAddress SeedProbePair() {
-        using Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout main = seed.CreateBranch("main", new ProbeRoot { Value = 7 });
+        using Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()));
+        using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
         CheckpointAddress first = main.Head;
         seed.CreateTag("first", first);
         Assert.IsType<ProbeRoot>(main.State).Value = 8;

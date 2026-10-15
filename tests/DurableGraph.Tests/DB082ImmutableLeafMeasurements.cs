@@ -73,8 +73,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         string path = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
         try {
             using Repository repository = Repository.CreateNew(path, model.Models(),
-                64L * 1024 * 1024 * 1024,
-                schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+                64L * 1024 * 1024 * 1024);
             repository.PreparedStateReuseEnabled = true;
             repository.ImmutableLeafReuseEnabled = enabled;
             var seed = SeedLeafMeasurement(repository, model, scenario);
@@ -116,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static (CheckpointAddress[] Requests, long[] Checksums) SeedLeafMeasurement(
         Repository repository, LeafMeasurementModel model, string scenario) {
         IDurableObject root = model.Create(scenario);
-        using BranchCheckout source = repository.CreateBranch("main", root, LeafMeasurePolicy);
+        using BranchCheckout source = repository.CreateSharedBranch("main", root, LeafMeasurePolicy);
         CheckpointAddress first = source.Head;
         long firstChecksum = model.Check(root, scenario);
         CheckpointAddress second = first;
@@ -144,7 +143,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 string name = $"fork-{index}";
                 long allocationStart = GC.GetAllocatedBytesForCurrentThread();
                 long start = Stopwatch.GetTimestamp();
-                BranchCheckout checkout = repository.Fork(name, seed.Requests[index]);
+                BranchCheckout checkout = repository.ForkShared(name, seed.Requests[index]);
                 long stop = Stopwatch.GetTimestamp();
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - allocationStart;
                 double milliseconds = Stopwatch.GetElapsedTime(start, stop).TotalMilliseconds;

@@ -35,8 +35,8 @@ internal static class Program {
     }
 
     private static void Seed(string path) {
-        using var repository = Repository.CreateNew(path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
-        using var checkout = repository.CreateBranchFromEvent("main", new TagEvent { Code = 7 });
+        using var repository = Repository.CreateNew(path, Models());
+        using var checkout = repository.CreateSharedBranchFromEvent("main", new TagEvent { Code = 7 });
         CheckpointAddress firstEvent = checkout.Head;
         repository.CreateTag("event-start", firstEvent);
         checkout.CommitEvent(new TagEvent { Code = 8 });
@@ -67,7 +67,7 @@ internal static class Program {
         using (var prior = Repository.OpenReadOnlyExisting(path, new StateModelRegistry())) {
             oldOwner = prior.ResolveTag("state-baseline");
         }
-        using var repository = Repository.OpenExisting(path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
+        using var repository = Repository.OpenExisting(path, Models());
         CheckpointAddress firstEvent = repository.ResolveTag("event-start");
         CheckpointAddress firstState = repository.ResolveTag("state-baseline");
         Require(oldOwner != firstState, "A reopened tag returned a stale owner handle.");
@@ -79,27 +79,27 @@ internal static class Program {
         CheckState((TagState)repository.ReadState(firstState), 10);
 
         repository.CreateBranch("ref-state", firstState);
-        using (var byRef = repository.Checkout("ref-state")) {
+        using (var byRef = repository.CheckoutShared("ref-state")) {
             CheckState((TagState)byRef.State!, 10);
             ((TagState)byRef.State!).Value = 21;
             byRef.CommitState();
         }
-        using (var fork = repository.Fork("fork-state", firstState)) {
+        using (var fork = repository.ForkShared("fork-state", firstState)) {
             CheckState((TagState)fork.State!, 10);
             ((TagState)fork.State!).Value = 12;
             fork.CommitState();
         }
         repository.CreateBranch("ref-event", firstEvent);
-        using (var byRef = repository.Checkout("ref-event")) {
+        using (var byRef = repository.CheckoutShared("ref-event")) {
             Require(byRef.State is null && byRef.Head == firstEvent, "Event tag ref did not retain its exact State-free head.");
             byRef.CommitState(new TagState { Value = 40 });
         }
-        using (var fork = repository.Fork("fork-event", firstEvent)) {
+        using (var fork = repository.ForkShared("fork-event", firstEvent)) {
             Require(fork.State is null && fork.Head == firstEvent, "Event tag Fork imported a later State.");
             fork.CommitState(new TagState { Value = 30 });
         }
         CheckpointAddress advanced;
-        using (var source = repository.Checkout("main")) {
+        using (var source = repository.CheckoutShared("main")) {
             ((TagState)source.State!).Value = 99;
             advanced = source.CommitState();
         }

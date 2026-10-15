@@ -43,8 +43,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<ObjectId, ObjectStorageInfo> originalStorage;
         PrivateRefImage originalShared;
         PrivateFrameImage[] seedFrames, draftFrames;
-        using (Repository repository = Repository.CreateNew(directory.Path, old.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", old.Create());
+        using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
             ObjectId firstRoot = main.StateId!.Value;
             ObjectId[] firstIds = main.Baseline!.Objects.Keys.ToArray();
             // A fresh ring consumes a new block of IDs; promoting its existing
@@ -143,10 +143,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         // A fresh winner owner writes a real Delta with actual prior/head/H.
-        using (Repository repository = Repository.OpenExisting(directory.Path, winner.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, winner.Models())) {
             PrivateRefImage sharedBefore = PrivateReadRef(repository, 2);
             Assert.Equal(finalSchema, repository.SharedSchemaRoot);
-            using BranchCheckout final = repository.Checkout("final");
+            using BranchCheckout final = repository.CheckoutShared("final");
             DevelopmentAssertIdentity(final, winner, rootId, originalEdges);
             ObjectStorageInfo prior = final.Baseline!.Objects[listId].Storage!.Value;
             winner.ChangeList(final.State!, 9000);

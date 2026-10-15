@@ -21,10 +21,10 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
         ObjectId rootId, listId;
         ObjectStorageInfo storage;
         FrameAddress savedAddress, schemaRoot;
-        using (Repository seed = Repository.CreateStorageNew(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.CreateStorageNew(_path, Models(), readCacheBudgetBytes: budget)) {
             seed.PreparedStateReuseEnabled = false;
             DB087Widget root = Ring();
-            using BranchCheckout main = seed.CreateBranch("main", root);
+            using BranchCheckout main = seed.CreateSharedBranch("main", root);
             rootId = main.StateId!.Value;
             listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
             NormalizedGraphState initialBaseline = main.Baseline!;
@@ -80,7 +80,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             AssertRing(main.State, 201); // Independent mutable edits cannot change the active checkout or stored DTOs.
             NormalizedGraphState savedBaseline = main.Baseline!;
             main.Dispose();
-            using BranchCheckout signedAgain = seed.Checkout("main");
+            using BranchCheckout signedAgain = seed.CheckoutShared("main");
             DB087Widget restored = AssertRing(signedAgain.State, 201);
             Assert.NotSame(root, restored);
             Assert.NotSame(root.Child, restored.Child);
@@ -162,10 +162,10 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             Assert.Equal(0, reader.GraphStore.AppendedFrames);
         }
         AssertFilesEqual(files, SnapshotFiles());
-        using Repository reopened = Repository.OpenStorageExisting(_path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenStorageExisting(_path, Models(), readCacheBudgetBytes: budget);
         reopened.PreparedStateReuseEnabled = false;
         Assert.Null(reopened.PreparedStateEntry);
-        using BranchCheckout cold = reopened.Checkout("main");
+        using BranchCheckout cold = reopened.CheckoutShared("main");
         DB087Widget coldRoot = AssertRing(cold.State, 201);
         Assert.Equal(savedAddress, cold.StateRevisionAddress);
         Assert.Equal(rootId, cold.StateId);

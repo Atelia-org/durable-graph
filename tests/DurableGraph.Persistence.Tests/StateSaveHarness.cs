@@ -24,11 +24,11 @@ internal sealed class StateSaveHarness : IDisposable {
     }
     internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.CreateNew(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
     }
     internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.OpenExisting(path, models, rotationThresholdBytes, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
     }
     internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
     internal ObjectId? WorldId => _stateHead?.RootId;
@@ -42,12 +42,12 @@ internal sealed class StateSaveHarness : IDisposable {
         return new(this, world, null);
     }
     internal StateSaveSession<T> Load<T>() where T : class, IDurableObject {
-        BranchCheckout session = _repository.Checkout("main");
+        BranchCheckout session = _repository.CheckoutShared("main");
         return new(this, ((T)session.State!), session);
     }
     internal BranchCheckout Initialize<T>(T world,
         ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject {
-        BranchCheckout session = _repository.CreateBranch("main", world, parameters);
+        BranchCheckout session = _repository.CreateSharedBranch("main", world, parameters);
         _stateHead = session.Head;
         return session;
     }

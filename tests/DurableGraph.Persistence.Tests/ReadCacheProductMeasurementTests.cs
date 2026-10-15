@@ -20,8 +20,8 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                 Node world = new() { Value = 1, Text = new string('x', 32), Links = [] };
                 for (byte i = 0; i < 16; i++) world.Links.Add(new() { Value = i, Text = world.Text });
                 world.Next = world.Alias = world.Links[0];
-                using (Repository repository = Repository.CreateNew(path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-                    using BranchCheckout session = repository.CreateBranch("main", world, NoRebase);
+                using (Repository repository = Repository.CreateNew(path, models)) {
+                    using BranchCheckout session = repository.CreateSharedBranch("main", world, NoRebase);
                     for (int step = 0; step < 3; step++) {
                         session.CommitEvent(new Node { Value = 7 }, NoRebase);
                         world.Links[step].Value++;
@@ -66,9 +66,9 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                         Checksum = expected });
                 }
 
-                var writableOpen = Measure(() => Repository.OpenExisting(path, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
+                var writableOpen = Measure(() => Repository.OpenExisting(path, models));
                 using (Repository repository = writableOpen.Value) {
-                    var resume = Measure(() => repository.Checkout("main"));
+                    var resume = Measure(() => repository.CheckoutShared("main"));
                     using BranchCheckout session = resume.Value;
                     Node editableState = Assert.IsType<Node>(session.State);
                     Assert.NotNull(editableState.Links);

@@ -30,8 +30,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     [Fact]
     public void BeforeOutputNotPublishedKeepsTheOwnerHealthyAndRequiresAnExplicitRetry() {
         SeedResult seed = Seed();
-        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.Checkout("main");
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models())) {
+            using BranchCheckout main = repository.CheckoutShared("main");
             Assert.NotNull(repository.PreparedStateEntry);
             RepositoryResources resources = ResourcesOf(repository);
             GraphRecordStore store = repository.GraphStore;
@@ -91,8 +91,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         SeedResult seed = Seed();
         FrameAddress candidate = default;
         FrameImage[] captured = [];
-        using (Repository repository = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.Checkout("main");
+        using (Repository repository = Repository.OpenStorageExisting(_path, Models())) {
+            using BranchCheckout main = repository.CheckoutShared("main");
             Assert.NotNull(repository.PreparedStateEntry); // Actual cold checkout populated the State slot.
             RepositoryResources resources = ResourcesOf(repository);
             GraphRecordStore store = repository.GraphStore; // Borrow before Repository becomes busy.
@@ -159,7 +159,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
 
     private void VerifySelectedAndContinue(SeedResult seed, bool visible, FrameAddress? candidate, FrameImage[] capturedFrames) {
         FrameAddress continued;
-        using (Repository reopened = Repository.OpenStorageExisting(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenStorageExisting(_path, Models())) {
             RepositoryResources resources = ResourcesOf(reopened);
             GraphRecordStore store = reopened.GraphStore;
             IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Versions.ReadRef(1).Unwrap(), "P0R1"u8);
@@ -199,7 +199,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
                 if (!visible) { Assert.NotEqual(selectedState, completedCandidate); }
             }
             AssertRing(reopened.ReadState(reopened.ResolveTag("initial")), 7);
-            using BranchCheckout cold = reopened.Checkout("main");
+            using BranchCheckout cold = reopened.CheckoutShared("main");
             DB087Widget root = AssertRing(cold.State, visible ? 201 : 7);
             Assert.Equal(seed.RootId, cold.StateId);
             Assert.Equal(selectedState, cold.StateRevisionAddress);
@@ -241,8 +241,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
     }
 
     private SeedResult Seed() {
-        using Repository repository = Repository.CreateStorageNew(_path, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", Ring());
+        using Repository repository = Repository.CreateStorageNew(_path, Models());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
         repository.CreateTag("initial", main.Head);
         StoredGraphRevision graph = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
         Dictionary<ObjectId, ObjectStorageInfo> storage = main.Baseline!.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);

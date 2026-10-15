@@ -26,9 +26,9 @@ internal static class Program {
         // The catch is inside using: report health, then leave and dispose this attempt.
         try {
             using var repository = mode is "init-record" or "hot"
-                ? Repository.CreateNew(directory, Models(), schemaWriteMode: SchemaWriteMode.Shared)
+                ? Repository.CreateNew(directory, Models())
                 : mode == "verify" ? Repository.OpenReadOnlyExisting(directory, Models(eventOnly: true))
-                : Repository.OpenExisting(directory, Models(), schemaWriteMode: SchemaWriteMode.Shared);
+                : Repository.OpenExisting(directory, Models());
             try {
                 if (mode == "verify") {
                     // This catalog intentionally excludes World and Character.
@@ -40,8 +40,8 @@ internal static class Program {
                     return 0;
                 }
                 using var session = mode is "init-record" or "hot"
-                    ? repository.CreateBranch("main", new World())
-                    : repository.Checkout("main");
+                    ? repository.CreateSharedBranch("main", new World())
+                    : repository.CheckoutShared("main");
                 if (mode is "init-record" or "hot" or "next") {
                     Require(session.Head.Kind == CheckpointKind.State, "The application protocol requires completing its previous Event before accepting new work.");
                     int expectedHp = mode == "next" ? 7 : 10;

@@ -7,7 +7,7 @@ public sealed partial class DB078HistoryTests {
     public void JointSaveAcceptsNewSchemaAndPreservesOtherBranchHeads() {
         FrameAddress otherHead, published;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase);
             otherHead = repository.CreateBranch("other", main.Head).RevisionAddress;
             GraphRecordStore store = repository.GraphStore;
             var key = new SchemaKey(BetaSchema.Type, BetaSchema.Version);
@@ -33,7 +33,7 @@ public sealed partial class DB078HistoryTests {
     public void UnknownFirstEndKeepsBothPublishedRootsOldAlthoughBothCandidateGraphsExist() {
         FrameAddress previous, oldSchema, candidate;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase);
             previous = main.Head.RevisionAddress;
             oldSchema = repository.SharedSchemaRoot!.Value;
             int graphCheckpoints = 0;
@@ -50,7 +50,7 @@ public sealed partial class DB078HistoryTests {
             Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
         }
         // Both graph candidates are complete; one CU End cannot expose either root.
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenExisting(_root, Models());
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
         Assert.False(SchemaCatalogView.Load(reopened.GraphStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
         StoredGraphRevision orphan = reopened.GraphStore.ReadGraph(candidate);
@@ -65,7 +65,7 @@ public sealed partial class DB078HistoryTests {
     public void PrepublicationFailureKeepsNewSchemaUnacceptedAlongsideTheOldBusinessRoot() {
         FrameAddress previous, oldSchema;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase);
             previous = main.Head.RevisionAddress;
             oldSchema = repository.SharedSchemaRoot!.Value;
             repository.CreateBranch("other", main.Head);
@@ -77,7 +77,7 @@ public sealed partial class DB078HistoryTests {
             Assert.True(repository.IsFaulted);
             Assert.Equal(previous, main.Head.RevisionAddress);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenExisting(_root, Models());
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
         Assert.False(SchemaCatalogView.Load(reopened.GraphStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
         Assert.Equal(previous, reopened.GetHead("main").RevisionAddress);

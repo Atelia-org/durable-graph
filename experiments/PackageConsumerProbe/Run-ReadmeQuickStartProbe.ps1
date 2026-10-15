@@ -243,8 +243,8 @@ try {
     $configured = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n" +
-        "using var repository = Repository.OpenExisting(path, models, schemaWriteMode: SchemaWriteMode.Shared);`n" +
-        "using var session = repository.Checkout(""main"");`nWorld world = (World)session.State!;`n" +
+        "using var repository = Repository.OpenExisting(path, models);`n" +
+        "using var session = repository.CheckoutShared(""main"");`nWorld world = (World)session.State!;`n" +
         (Get-Example 'csharp' 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
         "`nif (world.Hero.Hp != 96 || !ReferenceEquals(world, session.State)) { throw new InvalidOperationException(); }`n" +
         "Console.WriteLine(""ReadmePolicyOverride:Hp=96:Threshold=11:Budget=5"");`n"

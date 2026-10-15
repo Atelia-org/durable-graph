@@ -32,13 +32,13 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         ObjectId rootId, leafId;
         CheckpointAddress saved;
         ObjectStorageInfo savedLeafStorage;
-        using (Repository repository = Repository.OpenExisting(_root, Models(current: true, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(_root, Models(current: true, new()))) {
             repository.ImmutableLeafReuseEnabled = reuse;
             GraphReadStatistics statistics = new();
             repository.RestorationStatistics = statistics;
-            using BranchCheckout first = repository.Checkout("main");
+            using BranchCheckout first = repository.CheckoutShared("main");
             CheckpointAddress original = first.Head;
-            using BranchCheckout hit = repository.Fork("saved", original);
+            using BranchCheckout hit = repository.ForkShared("saved", original);
             Root firstRoot = Assert.IsType<Root>(first.State), hitRoot = Assert.IsType<Root>(hit.State);
             Assert.NotSame(firstRoot, hitRoot);
             Assert.Equal(reuse, ReferenceEquals(firstRoot.Leaf, hitRoot.Leaf));
@@ -76,10 +76,10 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
             Assert.Equal(leafId, LeafObjectId(hit));
             saved = unchanged;
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(current: true, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenExisting(_root, Models(current: true, new()));
         reopened.ImmutableLeafReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
-        using BranchCheckout restored = reopened.Checkout("saved");
+        using BranchCheckout restored = reopened.CheckoutShared("saved");
         Root restoredRoot = Assert.IsType<Root>(restored.State);
         Assert.Equal(saved.RevisionAddress, restored.Head.RevisionAddress);
         Assert.Equal(saved.RootId, restored.Head.RootId);
@@ -95,11 +95,11 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
     [Fact]
     public void SuccessorRevisionWithUnchangedLeafHeadBuildsItsOwnLeafTable() {
-        using Repository repository = Repository.CreateNew(_root, Models(current: true, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.CreateNew(_root, Models(current: true, new()));
         repository.ImmutableLeafReuseEnabled = true;
         Leaf live = new(41);
-        using BranchCheckout seed = repository.CreateBranch("main", new Root { Value = 17, Leaf = live }, NoRebase);
-        using BranchCheckout first = repository.Fork("first", seed.Head);
+        using BranchCheckout seed = repository.CreateSharedBranch("main", new Root { Value = 17, Leaf = live }, NoRebase);
+        using BranchCheckout first = repository.ForkShared("first", seed.Head);
         Root firstRoot = Assert.IsType<Root>(first.State);
         Assert.NotSame(live, firstRoot.Leaf);
         PreparedStateRestoration oldEntry = repository.PreparedStateEntry!;
@@ -109,14 +109,14 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         CheckpointAddress next = first.CommitState(NoRebase);
         Assert.Equal(storage, Baseline(first).Objects[leafId].Storage);
         Assert.Same(oldEntry, repository.PreparedStateEntry);
-        using BranchCheckout nextCold = repository.Fork("next-cold", next);
+        using BranchCheckout nextCold = repository.ForkShared("next-cold", next);
         Root nextRoot = Assert.IsType<Root>(nextCold.State);
         Assert.NotSame(oldEntry, repository.PreparedStateEntry);
         Assert.NotSame(firstRoot.Leaf, nextRoot.Leaf);
         Assert.Equal(leafId, LeafObjectId(nextCold));
         Assert.Equal(storage, Baseline(nextCold).Objects[leafId].Storage);
         AssertStorage(repository, nextCold);
-        using BranchCheckout nextHit = repository.Fork("next-hit", next);
+        using BranchCheckout nextHit = repository.ForkShared("next-hit", next);
         Assert.Same(nextRoot.Leaf, Assert.IsType<Root>(nextHit.State).Leaf);
         Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
     }
@@ -125,17 +125,17 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     public void NewRevisionBuildsNewLeafTableAndDropsOnlyObsoleteHistoricalRequirements() {
         Seed();
         Counters counts = new();
-        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts));
         repository.ImmutableLeafReuseEnabled = true;
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        using BranchCheckout upgraded = repository.Checkout("main");
+        using BranchCheckout upgraded = repository.CheckoutShared("main");
         CheckpointAddress oldAddress = upgraded.Head;
         PreparedStateRestoration oldEntry = repository.PreparedStateEntry!;
         Leaf oldLeaf = Assert.IsType<Root>(upgraded.State).Leaf!;
         Assert.Equal(1, oldEntry.ImmutableLeafCount);
         Assert.Equal(1, counts.Normalizes);
-        using (BranchCheckout oldHit = repository.Fork("old-hit", oldAddress)) {
+        using (BranchCheckout oldHit = repository.ForkShared("old-hit", oldAddress)) {
             Assert.Same(oldLeaf, Assert.IsType<Root>(oldHit.State).Leaf);
             Assert.Equal(1, counts.LeafAllocations);
             Assert.Equal(1, counts.LeafHydrations);
@@ -144,7 +144,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         CheckpointAddress currentAddress = upgraded.CommitState(NoRebase);
         Assert.Same(oldEntry, repository.PreparedStateEntry); // DB-081 did not admit hot candidates.
         int misses = statistics.PreparedStateMisses, reused = statistics.ReusedImmutableLeaves;
-        using BranchCheckout currentCold = repository.Fork("current-cold", currentAddress);
+        using BranchCheckout currentCold = repository.ForkShared("current-cold", currentAddress);
         PreparedStateRestoration currentEntry = repository.PreparedStateEntry!;
         Leaf currentLeaf = Assert.IsType<Root>(currentCold.State).Leaf!;
         Assert.NotSame(oldEntry, currentEntry);
@@ -169,7 +169,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         Assert.Contains(IntermediateId, oldConflict.Message);
         Assert.True(oldEntry.SchemaRequirementCount > currentEntry.SchemaRequirementCount);
         currentEntry.Requirements.Validate(intermediateEnvironment.Models);
-        using (BranchCheckout currentHit = repository.Fork("current-hit", currentAddress)) {
+        using (BranchCheckout currentHit = repository.ForkShared("current-hit", currentAddress)) {
             Assert.Same(currentLeaf, Assert.IsType<Root>(currentHit.State).Leaf);
             Assert.Equal(reused + 1, statistics.ReusedImmutableLeaves);
             Assert.Equal(2, counts.LeafAllocations);
@@ -187,7 +187,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         int normalized = counts.Normalizes;
         int leafAllocations = counts.LeafAllocations;
         reused = statistics.ReusedImmutableLeaves;
-        InvalidDataException currentConflict = Assert.Throws<InvalidDataException>(() => repository.Fork("current-rejected", incompatibleState));
+        InvalidDataException currentConflict = Assert.Throws<InvalidDataException>(() => repository.ForkShared("current-rejected", incompatibleState));
         Assert.Contains(MaterializationId, currentConflict.Message);
         Assert.Equal(normalized, counts.Normalizes);
         Assert.Equal(reused, statistics.ReusedImmutableLeaves);
@@ -196,14 +196,14 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         Assert.Same(currentEntry, repository.PreparedStateEntry);
         Assert.DoesNotContain("current-rejected", repository.ListBranches());
         Assert.False(repository.IsFaulted);
-        using BranchCheckout oldAgain = repository.Fork("old-again", oldAddress);
+        using BranchCheckout oldAgain = repository.ForkShared("old-again", oldAddress);
         Assert.Equal(41, Assert.IsType<Root>(oldAgain.State).Leaf!.Value);
         Assert.True(Baseline(oldAgain).Objects[LeafObjectId(oldAgain)].RequiresRewrite);
     }
 
     private void Seed() {
-        using Repository repository = Repository.CreateNew(_root, Models(current: false, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout branch = repository.CreateBranch("main", new Root { Value = 17, Leaf = new(41) }, NoRebase);
+        using Repository repository = Repository.CreateNew(_root, Models(current: false, new()));
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Root { Value = 17, Leaf = new(41) }, NoRebase);
     }
 
     private static StateModelRegistry Models(bool current, Counters counts) {

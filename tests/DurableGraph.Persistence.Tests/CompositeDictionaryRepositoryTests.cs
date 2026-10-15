@@ -162,9 +162,9 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
     public void ConfigurationAddedAfterOpenCannotEnterItsFrozenEnvironmentUntilReopen() {
         StateModelRegistry models = Models<string>();
         World<string> world = new();
-        using Repository repository = Repository.CreateNew(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.CreateNew(_root, models);
         FrameAddress seed;
-        using (BranchCheckout session = repository.CreateBranch("main", world, NoRebase)) {
+        using (BranchCheckout session = repository.CreateSharedBranch("main", world, NoRebase)) {
             seed = session.StateRevisionAddress!.Value;
             session.CommitEvent(new World<string>(), NoRebase);
             models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
@@ -173,14 +173,14 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
             Assert.Equal(seed, session.StateRevisionAddress!.Value);
             Assert.False(repository.IsFaulted);
         }
-        using (BranchCheckout session = repository.Checkout("main")) {
+        using (BranchCheckout session = repository.CheckoutShared("main")) {
             ((World<string>)session.State!).First = new(new StringProxy(StringComparer.Ordinal));
             Assert.Throws<InvalidDataException>(() => session.CommitState(NoRebase));
             Assert.Equal(seed, session.StateRevisionAddress!.Value);
         }
         repository.Dispose();
-        using Repository reopened = Repository.OpenExisting(_root, models, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using (BranchCheckout session = reopened.Checkout("main")) {
+        using Repository reopened = Repository.OpenExisting(_root, models);
+        using (BranchCheckout session = reopened.CheckoutShared("main")) {
             ((World<string>)session.State!).First = new(new StringProxy(StringComparer.Ordinal));
             session.CommitState(NoRebase);
             Assert.NotEqual(seed, session.StateRevisionAddress!.Value);

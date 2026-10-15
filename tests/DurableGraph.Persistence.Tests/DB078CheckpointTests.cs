@@ -29,8 +29,8 @@ public sealed class DB078CheckpointTests : IDisposable {
         using Repository repository = Create(SharedReadModel.Models(
             allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++));
         using BranchCheckout branch = eventFirst
-            ? repository.CreateBranchFromEvent("main", new Node { Value = 1 }, NoRebase)
-            : repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+            ? repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase)
+            : repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
         CheckpointAddress first = branch.Head;
         CheckpointAddress e1 = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         CheckpointAddress e2 = branch.CommitEvent(new Node { Value = 3 }, NoRebase);
@@ -82,7 +82,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         Node state = new() { Value = 1, Next = child, Alias = child, Links = [child, child] };
         Node message = new() { Value = 3, Next = child, Alias = child, Links = state.Links };
         using Repository repository = Create();
-        using BranchCheckout branch = repository.CreateBranch("main", state, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranch("main", state, NoRebase);
         CheckpointAddress eventAddress = branch.CommitEvent(message, NoRebase);
         CheckpointAddress selected = stateCheckpoint ? branch.CommitState(NoRebase) : eventAddress;
         Checkpoint checkpoint = repository.ReadCheckpoint(selected);
@@ -125,7 +125,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         List<byte> hydrated = [];
         using Repository repository = Create(SharedReadModel.Models(
             allocate: () => { allocations++; return new Node(); }, hydrate: node => hydrated.Add(node.Value)));
-        using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
         CheckpointAddress address = branch.CommitEvent(new Node { Value = 7 }, NoRebase);
         allocations = 0;
         hydrated.Clear();
@@ -144,7 +144,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         Node singleton = new();
         bool violate = true;
         using Repository repository = Create(SharedReadModel.Models(allocate: () => violate ? singleton : new Node()));
-        using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
         CheckpointAddress address = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         Checkpoint? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = repository.ReadCheckpoint(address));
@@ -172,7 +172,7 @@ public sealed class DB078CheckpointTests : IDisposable {
             }
         }));
         current = repository;
-        using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
         CheckpointAddress address = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         enabled = true;
         Checkpoint? delivered = null;
@@ -193,7 +193,7 @@ public sealed class DB078CheckpointTests : IDisposable {
     public void AllocationCallbacksCannotDisposeOrReenterReadOrAdvanceAnEnumerator() {
         Action? duringAllocate = null;
         using Repository repository = Create(SharedReadModel.Models(allocate: () => { duringAllocate?.Invoke(); return new Node(); }));
-        using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
         CheckpointAddress address = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         using IEnumerator<CheckpointAddress> events = repository.EnumerateEvents(address).GetEnumerator();
         duringAllocate = () => {
@@ -210,10 +210,10 @@ public sealed class DB078CheckpointTests : IDisposable {
     [Fact]
     public void MissingGraphCapabilityDoesNotBecomeAnAbsentPreviousGraph() {
         using (Repository repository = Create()) {
-            using BranchCheckout branch = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+            using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
             branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         }
-        using Repository empty = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository empty = Repository.OpenExisting(_root, new StateModelRegistry());
         Checkpoint? delivered = null;
         Assert.ThrowsAny<Exception>(() => delivered = empty.ReadCheckpoint(empty.GetHead("main")));
         Assert.Null(delivered);
@@ -223,6 +223,6 @@ public sealed class DB078CheckpointTests : IDisposable {
 
     private static Node Root(Checkpoint checkpoint) => Assert.IsType<Node>(checkpoint is EventCheckpoint e ? e.Event : ((StateCheckpoint)checkpoint).State);
     private static Node Previous(Checkpoint checkpoint) => Assert.IsType<Node>(checkpoint is EventCheckpoint e ? e.PreviousState : ((StateCheckpoint)checkpoint).PreviousEvent);
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db078-checkpoint-");
 }

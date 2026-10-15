@@ -54,7 +54,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [Fact]
     public void ErasedEventBoundaryRejectsBoxedAndUnregisteredMarkersBeforePublication() {
         using Repository repository = CreateRepository();
-        using BranchCheckout session = repository.CreateBranch("main", new Node(), TestSavePolicies.Baseline);
+        using BranchCheckout session = repository.CreateSharedBranch("main", new Node(), TestSavePolicies.Baseline);
         CheckpointAddress initial = session.Head;
         IDurableObject boxed = new BoxedMarker();
         Assert.Throws<ArgumentException>(() => session.CommitEvent(boxed, TestSavePolicies.Baseline));

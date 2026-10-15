@@ -25,10 +25,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         PrivateFrameImage[] originalFrames;
         PrivateRefImage sharedBeforePrivate, sharedAfterAdvance;
 
-        using (Repository repository = Repository.CreateNew(directory.Path, a.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateNew(directory.Path, a.Models())) {
             // This accepted declaration is never reachable from either Widget business graph.
-            using (BranchCheckout unused = repository.CreateBranch("unused", a.CreateUnused())) { }
-            using BranchCheckout main = repository.CreateBranch("main", a.Create());
+            using (BranchCheckout unused = repository.CreateSharedBranch("unused", a.CreateUnused())) { }
+            using BranchCheckout main = repository.CreateSharedBranch("main", a.Create());
             a.Check(main.State!, 1, 7, 8);
             aState = main.Head.RevisionAddress;
             repository.CreateTag("a-initial", main.Head);
@@ -42,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
 
         using (Repository repository = Repository.OpenExisting(directory.Path, b.Models())) {
-            Assert.Null(repository.SchemaWriteMode);
+
             repository.CreateBranch("private", repository.ResolveTag("a-initial"));
             using BranchCheckout branch = repository.CheckoutPrivate("private");
             branch.CommitState();
@@ -86,11 +86,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             PrivateAssertFramesPreserved(PrivateResources(repository).Data, originalFrames);
         }
 
-        using (Repository repository = Repository.OpenExisting(directory.Path, a.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using (BranchCheckout later = repository.CreateBranch("later", a.CreateLater())) { }
+        using (Repository repository = Repository.OpenExisting(directory.Path, a.Models())) {
+            using (BranchCheckout later = repository.CreateSharedBranch("later", a.CreateLater())) { }
             latestShared = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(sourceShared, latestShared);
-            using BranchCheckout main = repository.Checkout("main");
+            using BranchCheckout main = repository.CheckoutShared("main");
             a.Check(main.State!, 1, 7, 8);
             a.ChangeList(main.State!, 8, 202);
             FrameAddress saved = main.CommitState().RevisionAddress;

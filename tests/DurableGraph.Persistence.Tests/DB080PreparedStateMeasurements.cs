@@ -57,7 +57,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
     private void Run(bool family, bool containers, string scenario, int sample, bool enabled, StreamWriter? file) {
         string path = Path.Combine(Path.GetTempPath(), FixturePrefix + Guid.NewGuid().ToString("N"));
         try {
-            using Repository repository = Repository.CreateNew(path, Models(family), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+            using Repository repository = Repository.CreateNew(path, Models(family));
             repository.PreparedStateReuseEnabled = enabled;
             CheckpointAddress[] requests = Seed(repository, containers, scenario);
             GraphReadStatistics statistics = new();
@@ -70,7 +70,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
                 string name = $"fork-{index}";
                 long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
                 long start = Stopwatch.GetTimestamp();
-                BranchCheckout fork = repository.Fork(name, requests[index]);
+                BranchCheckout fork = repository.ForkShared(name, requests[index]);
                 long end = Stopwatch.GetTimestamp();
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
                 double milliseconds = Stopwatch.GetElapsedTime(start, end).TotalMilliseconds;
@@ -115,8 +115,8 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
     private static CheckpointAddress[] Seed(Repository repository, bool containers, string scenario) {
         Node root = Graph(containers);
         using BranchCheckout branch = scenario == "event-only"
-            ? repository.CreateBranchFromEvent("main", root, NoRebase)
-            : repository.CreateBranch("main", root, NoRebase);
+            ? repository.CreateSharedBranchFromEvent("main", root, NoRebase)
+            : repository.CreateSharedBranch("main", root, NoRebase);
         CheckpointAddress first = branch.Head;
         CheckpointAddress[] requests = new CheckpointAddress[Forks];
         if (scenario == "alternating-state") {

@@ -39,7 +39,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
 | `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
-| `continue`／V2 | 无配置默认保存拒且全文件零变，显式 Shared 冷单 List Delta；真实 baseline checkpoint→CheckoutPrivate；SG Event 接纳 State 不可达声明而不推进 State；Event Head 全关冷签出、私有 List Delta及 ref2 保持；List202热 State／独立读回／同 owner 再签出保持值与身份且不追加提交；随后无配置 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／准确旧 Base origin |
+| `continue`／V2 | 明确 Shared 会话冷单 List Delta；真实 baseline checkpoint→CheckoutPrivate；SG Event 接纳 State 不可达声明而不推进 State；Event Head 全关冷签出、私有 List Delta及 ref2 保持；List202热 State／独立读回／同 owner 再签出保持值与身份且不追加提交；随后显式 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／准确旧 Base origin |
 | `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、旧 private State、推广 Event／Shared State、准确各图 S与完整 meta 声明；全部完成帧保持，完整文件集合／SHA不变 |
 
 每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
@@ -73,9 +73,11 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 <a id="p2-admission-package-evidence"></a>
 ## 历史资格：P2 写准入首片的公开包复验
 
+本节冻结该次旧包资格。DB-095 后活动消费者在编辑入口明确选择 Shared/Private；已移除 `UnconfiguredSaveRejected` 场景及回执字段，保留 `CheckoutShared` 对完整未匹配 private 目录的拒绝与后续真实 Delta/promotion。新 API 的包验收另见 [DB-095](../../../docs/design-branches/0095-repository-open-intent/README.md)，不回填本节历史结果。
+
 当片消费者所有实际 writer Open 显式选择 `SchemaWriteMode.Shared`，读取工厂保原义。`continue` 在冷 Delta 前用普通公开 API 完成一个无配置反例：准确读取与 Checkout 成功，State／Event 保存各以 InvalidOperationException 拒绝，Head／State 地址／ID／实例和 owner 健康不变；全部资源关闭后整个文件集合／SHA不变，然后显式 Shared 继续原来的单 List Delta。
 
-主线程实跑、独立核工件并经只读反审，有限 PASS。runner 现在把 `UnconfiguredSaveRejected` 列为 continue 必需判据；尾修后在全新 stage／cache 复用同一不可变 feed，再完成五个进程，未重包或覆盖原版本。源码 2708 项、活动 Replay Count8（20 个实测库／300 修订）、CrashProbe 仅构建和 README 原文包故事另有各自资格，不把它们混为 package crash／性能证据。
+主线程实跑、独立核工件并经只读反审，有限 PASS。该次 runner 把 `UnconfiguredSaveRejected` 列为 continue 必需判据；尾修后在全新 stage／cache 复用同一不可变 feed，再完成五个进程，未重包或覆盖原版本。源码 2708 项、活动 Replay Count8（20 个实测库／300 修订）、CrashProbe 仅构建和 README 原文包故事另有各自资格，不把它们混为 package crash／性能证据。
 
 | 证据 | 结果 |
 |---|---|

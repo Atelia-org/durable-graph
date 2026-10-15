@@ -21,8 +21,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         IReadOnlyDictionary<uint, FrameAddress> privateHeads;
         PrivateFrameImage[] initialFrames;
 
-        using (Repository repository = Repository.CreateNew(directory.Path, v1.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout origin = repository.CreateBranch("origin", v1.CreateSharedOrigin());
+        using (Repository repository = Repository.CreateNew(directory.Path, v1.Models())) {
+            using BranchCheckout origin = repository.CreateSharedBranch("origin", v1.CreateSharedOrigin());
             repository.CreateTag("baseline", origin.Head);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, v1.Models())) {
@@ -58,8 +58,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         // Both independent successors start from the same shared origin. Late
         // uses Widget's three-field shape but another nominal identity, so these
         // real catalogs deliberately reuse a number for different descriptors.
-        using (Repository repository = Repository.OpenExisting(directory.Path, v1.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout late = repository.CreateBranch("late", v1.CreateLate());
+        using (Repository repository = Repository.OpenExisting(directory.Path, v1.Models())) {
+            using BranchCheckout late = repository.CreateSharedBranch("late", v1.CreateLate());
             SchemaCatalogView latest = SchemaCatalogView.Load(ReferenceGraphStore(repository), repository.SharedSchemaRoot!.Value);
             Assert.Equal(privateDescriptor, latest.SchemaNodeId(v1.Schema("Late")));
             Assert.False(latest.Schemas.ContainsKey(new(v1.Schema("Widget").Type, 1)));

@@ -33,7 +33,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         repository.RestorationStatistics = statistics;
         BranchCheckout? delivered = null;
 
-        InvalidDataException failure = Assert.Throws<InvalidDataException>(() => delivered = repository.Fork("rejected", scenario.Selected));
+        InvalidDataException failure = Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("rejected", scenario.Selected));
 
         Assert.Contains(Dependency.SchemaId, failure.Message);
         Assert.Null(delivered);
@@ -52,7 +52,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.False(repository.IsFaulted);
         // The failed request neither poisons a different State certificate nor faults the repository.
         repository.RestorationStatistics = new();
-        using BranchCheckout unrelated = repository.Fork("unrelated-again", scenario.Warm.Head);
+        using BranchCheckout unrelated = repository.ForkShared("unrelated-again", scenario.Warm.Head);
         Assert.Equal(1, repository.RestorationStatistics.PreparedStateHits);
         Assert.Equal((byte)31, Assert.IsType<SharedReadModel.Node>(unrelated.State).Value);
     }
@@ -69,7 +69,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         // The persisted candidate must not follow later edits to the original CLR instance.
         Assert.IsType<Root>(scenario.Main.State).Value = 77;
         repository.RestorationStatistics = new();
-        using BranchCheckout first = repository.Fork("first", scenario.Selected);
+        using BranchCheckout first = repository.ForkShared("first", scenario.Selected);
         Assert.Equal(committed, Assert.IsType<Root>(first.State).Value);
         Assert.Equal(1, repository.RestorationStatistics.PreparedStateMisses);
         Assert.Equal(0, repository.RestorationStatistics.PreparedStateHits);
@@ -83,7 +83,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
 
         Assert.IsType<Root>(first.State).Value = 91;
         repository.RestorationStatistics = new();
-        using BranchCheckout second = repository.Fork("second", scenario.Selected);
+        using BranchCheckout second = repository.ForkShared("second", scenario.Selected);
         Assert.Equal(committed, Assert.IsType<Root>(second.State).Value);
         Assert.NotSame(first.State, second.State);
         Assert.NotSame(scenario.Main.State, second.State);
@@ -108,9 +108,9 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     [Fact]
     public void PriorSuccessfulReadOfSameReaderDoesNotProveNewValuesConditionalDependency() {
         Counters counts = new();
-        using Repository repository = Repository.CreateNew(_path, Models(DependencyMode.BaseForSeven, counts), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", new Root { Value = 1 }, NoRebase);
-        using BranchCheckout first = repository.Fork("first", main.Head);
+        using Repository repository = Repository.CreateNew(_path, Models(DependencyMode.BaseForSeven, counts));
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Root { Value = 1 }, NoRebase);
+        using BranchCheckout first = repository.ForkShared("first", main.Head);
         Assert.Equal(1, counts.BaseReads);
         Assert.Equal(0, counts.DependencyChecks);
         PreparedStateRestoration old = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
@@ -129,7 +129,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         // the normal cost selector consequently stores a Base.
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(repository, newer)).Kind);
         repository.RestorationStatistics = new();
-        Assert.Throws<InvalidDataException>(() => repository.Fork("rejected", newer));
+        Assert.Throws<InvalidDataException>(() => repository.ForkShared("rejected", newer));
         Assert.Equal(2, counts.BaseReads);
         Assert.Equal(1, counts.DependencyChecks);
         Assert.Equal(1, counts.Allocations);
@@ -138,7 +138,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.DoesNotContain("rejected", repository.ListBranches());
         Assert.False(repository.IsFaulted);
         repository.RestorationStatistics = new();
-        using BranchCheckout older = repository.Fork("older", old.StateCheckpoint);
+        using BranchCheckout older = repository.ForkShared("older", old.StateCheckpoint);
         Assert.Equal(1, repository.RestorationStatistics.PreparedStateHits);
         Assert.Equal(1, Assert.IsType<Root>(older.State).Value);
     }
@@ -146,18 +146,17 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     private Scenario Seed(bool preclose, bool delta, bool conflict) {
         Counters counts = new();
         Repository repository = Repository.CreateNew(_path, Models(
-            delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts),
-            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+            delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts));
         try {
-            using BranchCheckout unrelated = repository.CreateBranch("unrelated", new SharedReadModel.Node { Value = 31 }, NoRebase);
-            BranchCheckout warm = repository.Fork("warm", unrelated.Head);
+            using BranchCheckout unrelated = repository.CreateSharedBranch("unrelated", new SharedReadModel.Node { Value = 31 }, NoRebase);
+            BranchCheckout warm = repository.ForkShared("warm", unrelated.Head);
             var previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
             if (conflict) {
                 warm.Catalog.Set(WrongDependency);
                 warm.CommitEvent(warm.State!, NoRebase);
             }
-            BranchCheckout main = repository.CreateBranch("main", new Root { Value = 7 }, NoRebase);
+            BranchCheckout main = repository.CreateSharedBranch("main", new Root { Value = 7 }, NoRebase);
             // This is the actual checkout's frozen execution environment. Explicit
             // preclosure still does not execute ReadBase/ReadDelta's body checks.
             if (preclose) { main.Models.ResolveReader(Owner); }

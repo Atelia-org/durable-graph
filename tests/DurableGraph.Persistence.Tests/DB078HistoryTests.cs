@@ -40,7 +40,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
         CheckpointAddress s0, e1, e2, s1, s2;
         Alpha root = new() { Value = 1 };
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateBranch("main", root, NoRebase);
+            using BranchCheckout checkout = repository.CreateSharedBranch("main", root, NoRebase);
             s0 = checkout.Head;
             e1 = checkout.CommitEvent(new Message { Value = 11 }, NoRebase);
             e2 = checkout.CommitEvent(new Message { Value = 12 }, NoRebase);
@@ -68,8 +68,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
             }
             Assert.Equal(s1.RevisionAddress, states.ReadGraph(s2.RevisionAddress).SourceGraph);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout cold = reopened.Checkout("main");
+        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using BranchCheckout cold = reopened.CheckoutShared("main");
         Assert.Equal((byte)3, Assert.IsType<Alpha>(cold.State).Value);
         Assert.Equal(s2.RevisionAddress, cold.Head.RevisionAddress);
         CheckpointAddress nextEvent = cold.CommitEvent(new Message(), NoRebase);
@@ -81,7 +81,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void EventOnlyColdCheckoutNeedsNoModelsAndFirstStateCanReplaceTypeAndSaveAgain() {
         CheckpointAddress e0, e1, s0, s1, s2;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Message { Value = 7 }, NoRebase);
+            using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message { Value = 7 }, NoRebase);
             e0 = checkout.Head;
             Assert.Null(checkout.State);
             Assert.Null(checkout.StateId);
@@ -89,15 +89,15 @@ public sealed partial class DB078HistoryTests : IDisposable {
             e1 = checkout.CommitEvent(new Message { Value = 8 }, NoRebase);
             Assert.Null(repository.GetPreviousState(e1));
         }
-        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout empty = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
+            using BranchCheckout empty = repository.CheckoutShared("main");
             Assert.Null(empty.State);
             Assert.Equal(e1.RevisionAddress, empty.Head.RevisionAddress);
             Assert.ThrowsAny<Exception>(() => repository.ReadEvent(empty.Head));
             Assert.False(repository.IsFaulted);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout checkout = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using BranchCheckout checkout = repository.CheckoutShared("main");
             Alpha alpha = new() { Value = 20 };
             s0 = checkout.CommitState(alpha, NoRebase);
             Assert.Same(alpha, checkout.State);
@@ -122,8 +122,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(s0.RevisionAddress, states.ReadGraph(s1.RevisionAddress).SourceGraph);
             Assert.Equal(s1.RevisionAddress, states.ReadGraph(s2.RevisionAddress).SourceGraph);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout cold = reopened.Checkout("main");
+        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using BranchCheckout cold = reopened.CheckoutShared("main");
         Assert.Equal((byte)31, Assert.IsType<Beta>(cold.State).Value);
         Assert.Equal(s2.RootId, cold.StateId);
     }
@@ -135,7 +135,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
         alpha.Child = beta;
         CheckpointAddress original, promoted, removed;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateBranch("main", alpha, NoRebase);
+            using BranchCheckout checkout = repository.CreateSharedBranch("main", alpha, NoRebase);
             original = checkout.Head;
             promoted = checkout.CommitState(beta, NoRebase);
             Assert.Same(beta, checkout.State);
@@ -157,8 +157,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(new[] { promoted.RootId.Value }, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
             Assert.DoesNotContain(original.RootId.Value, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout cold = reopened.Checkout("main");
+        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using BranchCheckout cold = reopened.CheckoutShared("main");
         Assert.Null(Assert.IsType<Beta>(cold.State).Child);
         Assert.Equal(promoted.RootId, cold.StateId);
         Assert.Equal(promoted.RootId, cold.CommitState(NoRebase).RootId);
@@ -167,7 +167,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void SameClrTypeMayTakeEitherRoleAndReadPairPreservesArgumentOrder() {
         using Repository repository = Create();
-        using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
+        using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
         CheckpointAddress e = checkout.Head;
         CheckpointAddress s = checkout.CommitState(new Message { Value = 2 }, NoRebase);
         Assert.Equal(CheckpointKind.Event, e.Kind);
@@ -182,7 +182,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void CheckpointPreservesActualRootTypesAcrossStateReplacement() {
         using Repository repository = Create();
-        using BranchCheckout checkout = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase);
+        using BranchCheckout checkout = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase);
         CheckpointAddress first = checkout.Head;
         CheckpointAddress message = checkout.CommitEvent(new Message { Value = 2 }, NoRebase);
         CheckpointAddress replacement = checkout.CommitState(new Beta { Value = 3 }, NoRebase);
@@ -201,7 +201,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void MissingPreviousEventModelFailsCheckpointEvenWhenCurrentStateIsReadable() {
         using (Repository repository = Create()) {
-            using BranchCheckout branch = repository.CreateBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
+            using BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
             branch.CommitState(new Alpha { Value = 2 }, NoRebase);
         }
         using Repository stateOnly = Repository.OpenReadOnlyExisting(_root, Models(includeMessage: false));
@@ -218,19 +218,19 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void StateOnlyCatalogRestoresFromConsecutiveEventHeadButMissingStateNeverBecomesNull() {
         CheckpointAddress e2;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateBranch("main", new Alpha { Value = 4 }, NoRebase);
+            using BranchCheckout checkout = repository.CreateSharedBranch("main", new Alpha { Value = 4 }, NoRebase);
             checkout.CommitEvent(new Message { Value = 5 }, NoRebase);
             e2 = checkout.CommitEvent(new Message { Value = 6 }, NoRebase);
         }
-        using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout checkout = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false))) {
+            using BranchCheckout checkout = repository.CheckoutShared("main");
             Assert.Equal(e2.RevisionAddress, checkout.Head.RevisionAddress);
             Assert.Equal((byte)4, Assert.IsType<Alpha>(checkout.State).Value);
             Assert.ThrowsAny<Exception>(() => repository.ReadEvent(checkout.Head));
             Assert.Equal(CheckpointKind.State, checkout.CommitState(NoRebase).Kind);
         }
-        using Repository missing = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        Assert.ThrowsAny<Exception>(() => missing.Checkout("main"));
+        using Repository missing = Repository.OpenExisting(_root, new StateModelRegistry());
+        Assert.ThrowsAny<Exception>(() => missing.CheckoutShared("main"));
         Assert.False(missing.IsFaulted);
         Assert.Equal(CheckpointKind.State, missing.GetHead("main").Kind);
     }
@@ -239,12 +239,12 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void PredictableMissingRootAndNoStateFailuresDoNotCaptureOrWrite() {
         int captures = 0;
         using (Repository repository = Create(Models(onCapture: () => captures++))) {
-            using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Message(), NoRebase);
+            using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message(), NoRebase);
         }
         int captured = captures;
         var before = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, Models(onCapture: () => captures++), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout checkout = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models(onCapture: () => captures++))) {
+            using BranchCheckout checkout = repository.CheckoutShared("main");
             CheckpointAddress original = checkout.Head;
             Assert.Throws<InvalidOperationException>(() => checkout.CommitState(NoRebase));
             Assert.Throws<ArgumentNullException>(() => checkout.CommitState(null!, NoRebase));
@@ -257,13 +257,13 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.False(repository.IsFaulted);
         }
         AssertFiles(before);
-        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout checkout = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using BranchCheckout checkout = repository.CheckoutShared("main");
             checkout.CommitState(new Alpha(), NoRebase);
         }
         before = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, Models(onCapture: () => captures++), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout checkout = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models(onCapture: () => captures++))) {
+            using BranchCheckout checkout = repository.CheckoutShared("main");
             IDurableObject root = checkout.State!;
             CheckpointAddress original = checkout.Head;
             Assert.ThrowsAny<Exception>(() => checkout.CommitState(new Unregistered(), NoRebase));
@@ -278,7 +278,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void AddressesHaveOwnerScopedValueEqualityAndRefOnlyOperationsNeedNoModels() {
         CheckpointAddress old;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Message(), NoRebase);
+            using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message(), NoRebase);
             old = checkout.Head;
             Assert.Equal(old, repository.GetHead("main"));
             Assert.True(old == repository.GetHead("main"));
@@ -286,7 +286,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Equal(old.GetHashCode(), repository.GetHead("main").GetHashCode());
             Assert.Single(new HashSet<CheckpointAddress> { old, repository.GetHead("main"), repository.ReadFrames("main")[0] });
         }
-        using (Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry())) {
             CheckpointAddress current = reopened.GetHead("main");
             Assert.NotEqual(old, current);
             Assert.Equal(current, reopened.CreateBranch("copy", current));
@@ -294,7 +294,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             reopened.MoveBranch("copy", current, current);
         }
         var before = SnapshotFiles();
-        using (Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry())) {
             CheckpointAddress current = reopened.GetHead("main");
             Assert.Throws<ArgumentException>(() => reopened.ReadEvent(old));
             Assert.Throws<ArgumentException>(() => reopened.CreateBranch("old", old));
@@ -312,7 +312,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             Assert.Throws<ArgumentNullException>(() => reopened.CreateBranch("null", (CheckpointAddress)null!));
             Assert.Throws<ArgumentNullException>(() => reopened.MoveBranch("copy", null!, current));
             Assert.Throws<ArgumentNullException>(() => reopened.MoveBranch("copy", current, null!));
-            using BranchCheckout checkout2 = reopened.Checkout("copy");
+            using BranchCheckout checkout2 = reopened.CheckoutShared("copy");
             Assert.Null(checkout2.State);
         }
         AssertFiles(before);
@@ -322,15 +322,15 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void PhysicallyInterleavedBranchesFollowTheirOwnLogicalStateAncestors() {
         CheckpointAddress root, mainEvent, otherState, mainEvent2, mainState;
         using (Repository repository = Create()) {
-            using (BranchCheckout checkout = repository.CreateBranch("main", new Alpha { Value = 1 }, NoRebase)) {
+            using (BranchCheckout checkout = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase)) {
                 root = checkout.Head;
                 mainEvent = checkout.CommitEvent(new Message { Value = 2 }, NoRebase);
             }
             repository.CreateBranch("other", root);
-            using (BranchCheckout other = repository.Checkout("other")) {
+            using (BranchCheckout other = repository.CheckoutShared("other")) {
                 otherState = other.CommitState(new Beta { Value = 8 }, NoRebase);
             }
-            using (BranchCheckout main = repository.Checkout("main")) {
+            using (BranchCheckout main = repository.CheckoutShared("main")) {
                 mainEvent2 = main.CommitEvent(new Message { Value = 3 }, NoRebase);
                 mainState = main.CommitState(NoRebase);
             }
@@ -350,11 +350,11 @@ public sealed partial class DB078HistoryTests : IDisposable {
                 Assert.Equal(root.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
             }
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using (BranchCheckout main = reopened.Checkout("main")) {
+        using Repository reopened = Repository.OpenExisting(_root, Models());
+        using (BranchCheckout main = reopened.CheckoutShared("main")) {
             Assert.Equal((byte)1, Assert.IsType<Alpha>(main.State).Value);
         }
-        using BranchCheckout otherCold = reopened.Checkout("other");
+        using BranchCheckout otherCold = reopened.CheckoutShared("other");
         Assert.Equal((byte)8, Assert.IsType<Beta>(otherCold.State).Value);
     }
 
@@ -404,7 +404,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
             }, Visit);
     }
 
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? Models());
     private SegmentStore OpenState() => SegmentStore.Open(Path.Combine(_root, "data"));
     private Dictionary<string, byte[]> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => path, File.ReadAllBytes);

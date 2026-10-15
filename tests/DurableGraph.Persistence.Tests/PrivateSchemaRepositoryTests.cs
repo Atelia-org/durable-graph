@@ -28,7 +28,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         RefImage shared;
         ObjectId[] identities;
         using (Repository repository = CreateShared()) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             // Replace the original graph to make identity retention distinguishable from fresh allocation.
             main.CommitState(Ring(), NoRebase);
             identities = main.Baseline!.Objects.Keys.ToArray();
@@ -46,7 +46,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         using BranchCheckout cold = reopened.CheckoutPrivate("dev");
         DB087Widget root = AssertRing(cold.State, 7);
         Assert.Equal(identities, cold.Baseline!.Objects.Keys.ToArray());
-        Assert.Null(reopened.SchemaWriteMode);
+
         AssertSameRef(shared, ReadRef(reopened, 2));
         root.Numbers[7] = 301;
         CheckpointAddress next = cold.CommitState(NoRebase);
@@ -63,7 +63,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         FrameAddress sharedRoot, privateRoot, sharedBusiness;
         RefImage sharedRef;
         using (Repository repository = CreateShared()) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             main.Catalog.Set(SharedExtra);
             main.Catalog.Set(Unreachable);
             sharedBusiness = main.CommitState(NoRebase).RevisionAddress;
@@ -101,7 +101,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         FrameAddress stateAddress, stateSchema, eventAddress, eventSchema;
         RefImage sharedRef;
         using (Repository repository = CreateShared()) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
             stateAddress = dev.Head.RevisionAddress;
@@ -152,7 +152,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
     [Fact]
     public void Discarded_private_meta_can_be_corrected_without_appending_or_claiming_the_wrong_shape() {
         using Repository repository = CreateShared();
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         PublicationImage before = Snapshot(repository);
@@ -182,7 +182,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
     [Fact]
     public void Unchanged_private_save_reuses_meta_and_directory_and_never_rebases_to_latest_shared() {
         using Repository repository = CreateShared();
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         main.Catalog.Set(SharedExtra);
         main.CommitState(NoRebase);
         repository.CreateBranch("dev", main.Head);
@@ -216,8 +216,8 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
     [Fact]
     public void Shared_save_rejects_unreachable_private_declarations_before_capture_but_accepts_an_already_contained_view() {
         int captures = 0;
-        using Repository repository = Repository.CreateNew(_path, CountingModels(() => captures++), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", new CountingRoot { Value = 1 }, NoRebase);
+        using Repository repository = Repository.CreateNew(_path, CountingModels(() => captures++));
+        using BranchCheckout main = repository.CreateSharedBranch("main", new CountingRoot { Value = 1 }, NoRebase);
         repository.CreateBranch("dev", main.Head);
         using (BranchCheckout dev = repository.CheckoutPrivate("dev")) {
             Assert.IsType<CountingRoot>(dev.State).Value = 2;
@@ -225,7 +225,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             dev.Catalog.Set(AddedByEvent); // No business field or reachable layout names this declaration.
             dev.CommitEvent(new CountingRoot { Value = 3 }, NoRebase);
         }
-        using (BranchCheckout ordinary = repository.Checkout("dev")) {
+        using (BranchCheckout ordinary = repository.CheckoutShared("dev")) {
             PublicationImage before = Snapshot(repository);
             NormalizedGraphState baseline = ordinary.Baseline!;
             CheckpointAddress oldHead = ordinary.Head;
@@ -243,7 +243,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         main.Catalog.Set(AddedByEvent);
         main.CommitState(NoRebase);
         RefImage shared = ReadRef(repository, 2);
-        using BranchCheckout contained = repository.Checkout("dev");
+        using BranchCheckout contained = repository.CheckoutShared("dev");
         Assert.NotEqual(contained.Catalog.Accepted!.Snapshot!.Address,
             repository.GraphStore.ReadMetadata(contained.Head.RevisionAddress).SchemaRoot);
         captures = 0;
@@ -264,7 +264,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         RefImage shared;
         RepositoryPublicationException error;
         using (Repository repository = CreateShared()) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
             oldHead = dev.Head.RevisionAddress;
@@ -312,7 +312,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
     [InlineData("business")]
     public void Private_raw_preparation_cannot_substitute_a_real_but_wrong_meta_or_business_source(string wrongSource) {
         using Repository repository = CreateShared();
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         dev.Catalog.Set(PrivateExtra);
@@ -345,7 +345,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
     [Fact]
     public void Private_checkout_rejects_missing_occupied_and_readonly_before_output() {
         using (Repository repository = CreateShared()) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
             PublicationImage before = Snapshot(repository);
@@ -365,11 +365,11 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         FrameAddress firstEvent, oldPin, latestShared, privateEvent, privatePin;
         RefImage shared;
         using (Repository repository = CreateShared()) {
-            using BranchCheckout events = repository.CreateBranchFromEvent("events", Ring(100), NoRebase);
+            using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", Ring(100), NoRebase);
             firstEvent = events.Head.RevisionAddress;
             oldPin = Catalog(repository, firstEvent).Snapshot!.Address;
             Assert.Null(events.State);
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             main.Catalog.Set(Unreachable);
             main.CommitState(NoRebase);
             latestShared = repository.SharedSchemaRoot!.Value;
@@ -378,7 +378,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         }
         using (Repository repository = Repository.OpenExisting(_path, Models())) {
             using BranchCheckout events = repository.CheckoutPrivate("events");
-            Assert.Null(repository.SchemaWriteMode);
+
             Assert.Equal(firstEvent, events.Head.RevisionAddress);
             Assert.Null(events.State);
             Assert.Null(events.StateId);
@@ -426,7 +426,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
 
 
 
-    private Repository CreateShared() => Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
+    private Repository CreateShared() => Repository.CreateNew(_path, Models());
     private static StateModelRegistry Models() {
         StateModelRegistry models = new();
         models.Register(global::Atelia.DurableGraph.Generated.Family_5030576964676574.Definition);

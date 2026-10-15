@@ -12,16 +12,16 @@ public sealed class DB078EventQueryTests : IDisposable {
     public void MetadataQueryWithEmptyModelsCrossesStatesAndIgnoresPhysicalSiblingRecords() {
         using (Repository repository = Create()) {
             CheckpointAddress e0;
-            using (BranchCheckout branch = repository.CreateBranchFromEvent("main", new Node { Value = 1 }, NoRebase)) {
+            using (BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase)) {
                 e0 = branch.Head;
                 branch.CommitState(new Node { Value = 2 }, NoRebase);
                 branch.CommitEvent(new Node { Value = 3 }, NoRebase);
             }
             repository.CreateBranch("sibling", e0);
-            using (BranchCheckout sibling = repository.Checkout("sibling")) {
+            using (BranchCheckout sibling = repository.CheckoutShared("sibling")) {
                 sibling.CommitEvent(new Node { Value = 99 }, NoRebase);
             }
-            using (BranchCheckout main = repository.Checkout("main")) {
+            using (BranchCheckout main = repository.CheckoutShared("main")) {
                 main.CommitState(NoRebase);
                 main.CommitEvent(new Node { Value = 4 }, NoRebase);
                 main.CommitState(NoRebase);
@@ -46,12 +46,12 @@ public sealed class DB078EventQueryTests : IDisposable {
     public void InvalidBoundsFailBeforeAnyItemCanEscape(HistoryOrder order) {
         using Repository repository = Create();
         CheckpointAddress initial, end, sibling;
-        using (BranchCheckout main = repository.CreateBranchFromEvent("main", new Node(), NoRebase)) {
+        using (BranchCheckout main = repository.CreateSharedBranchFromEvent("main", new Node(), NoRebase)) {
             initial = main.Head;
             end = main.CommitEvent(new Node(), NoRebase);
         }
         repository.CreateBranch("sibling", initial);
-        using (BranchCheckout other = repository.Checkout("sibling")) {
+        using (BranchCheckout other = repository.CheckoutShared("sibling")) {
             sibling = other.CommitEvent(new Node(), NoRebase);
         }
         foreach ((CheckpointAddress selected, CheckpointAddress lower) in new[] { (end, sibling), (initial, end) }) {
@@ -69,12 +69,12 @@ public sealed class DB078EventQueryTests : IDisposable {
         int allocations = 0;
         CheckpointAddress stale;
         using (Repository repository = Create()) {
-            using BranchCheckout branch = repository.CreateBranchFromEvent("main", new Node(), NoRebase);
+            using BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node(), NoRebase);
             stale = branch.Head;
         }
-        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout other = foreign.CreateBranchFromEvent("main", new Node(), NoRebase);
+        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }));
+        using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models());
+        using BranchCheckout other = foreign.CreateSharedBranchFromEvent("main", new Node(), NoRebase);
         CheckpointAddress valid = reopened.GetHead("main");
         foreach (CheckpointAddress bad in new[] { stale, other.Head }) {
             Assert.Throws<ArgumentException>(() => reopened.ReadCheckpoint(bad));
@@ -94,7 +94,7 @@ public sealed class DB078EventQueryTests : IDisposable {
     [InlineData(HistoryOrder.OldestFirst)]
     public void IteratorKeepsCapturedEndAcrossCommitsAndRefMovesAndAllowsReadsInLoop(HistoryOrder order) {
         using Repository repository = Create();
-        BranchCheckout branch = repository.CreateBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
+        BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
         CheckpointAddress e0 = branch.Head;
         branch.CommitState(new Node { Value = 8 }, NoRebase);
         CheckpointAddress e1 = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
@@ -140,7 +140,7 @@ public sealed class DB078EventQueryTests : IDisposable {
     [InlineData(HistoryOrder.OldestFirst, true, 3)]
     public void EveryMoveNextChecksRepositoryEvenBeforeStartOrAfterExhaustion(HistoryOrder order, bool fault, int iteratorState) {
         using Repository repository = Create();
-        using BranchCheckout branch = repository.CreateBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
+        using BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
         CheckpointAddress first = branch.Head;
         CheckpointAddress end = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
         using IEnumerator<CheckpointAddress> iterator = repository.EnumerateEvents(end, order,
@@ -169,6 +169,6 @@ public sealed class DB078EventQueryTests : IDisposable {
         }
     }
 
-    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db078-query-");
 }

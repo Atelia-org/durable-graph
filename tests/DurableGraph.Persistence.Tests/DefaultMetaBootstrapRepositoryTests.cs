@@ -20,9 +20,9 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         ObjectId listId;
         ObjectStorageInfo savedList;
         FrameImage[] completed;
-        using (Repository repository = Repository.CreateNew(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateNew(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0)) {
             DB087Widget root = Ring();
-            using BranchCheckout main = repository.CreateBranch("main", root);
+            using BranchCheckout main = repository.CreateSharedBranch("main", root);
             initialState = main.Head.RevisionAddress;
             initialSchema = repository.SharedSchemaRoot!.Value;
             StoredGraphRevision first = repository.GraphStore.ReadGraph(initialState);
@@ -98,8 +98,8 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         }
         AssertFilesUnchanged(readOnlyImages, SnapshotFiles(path));
 
-        using (Repository reopened = Repository.OpenExisting(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout cold = reopened.Checkout("main");
+        using (Repository reopened = Repository.OpenExisting(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0)) {
+            using BranchCheckout cold = reopened.CheckoutShared("main");
             DB087Widget root = AssertRing(cold.State, 201);
             Assert.Equal(savedState, cold.StateRevisionAddress);
             Assert.Equal(savedList, cold.Baseline!.Objects[listId].Storage);
@@ -142,8 +142,8 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     public void PublicCacheBudgetControlsActualColdReadProductionAndOwnedLifetime(long budget) {
         string path = NewPath();
         FrameAddress saved;
-        using (Repository seed = Repository.CreateNew(path, Models(), readCacheBudgetBytes: budget, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = seed.CreateBranch("main", Ring());
+        using (Repository seed = Repository.CreateNew(path, Models(), readCacheBudgetBytes: budget)) {
+            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
             saved = main.Head.RevisionAddress;
         }
         Dictionary<string, byte[]> images = SnapshotFiles(path);
@@ -187,9 +187,9 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     [Fact]
     public void PublicFactoryNegativeBudgetsRejectBeforeCreatingOrOpeningBackingResources() {
         string path = NewPath();
-        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateNew(path, Models(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.CreateNew(path, Models(), readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => RepositoryResources.CreateNew(path, readCacheBudgetBytes: -1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenExisting(path, Models(), readCacheBudgetBytes: -1, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenExisting(path, Models(), readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => RepositoryResources.OpenExisting(path, readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => RepositoryResources.OpenReadOnlyExisting(path, readCacheBudgetBytes: -1));

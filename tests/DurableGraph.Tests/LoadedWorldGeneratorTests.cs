@@ -19,9 +19,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId rootId;
         uint retiredId;
         uint[] sourceIds;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.OldModels(), rotationThreshold, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.OldModels(), rotationThreshold)) {
             object root = fixture.CreateOld();
-            using BranchCheckout branch = repository.CreateBranch("main", (IDurableObject)root, ReferenceGraphNoRebase);
+            using BranchCheckout branch = repository.CreateSharedBranch("main", (IDurableObject)root, ReferenceGraphNoRebase);
             first = branch.Head.Address;
             rootId = branch.StateId!.Value;
             repository.CreateTag("initial", branch.Head);
@@ -42,9 +42,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(0, fixture.UpgradeCalls()); // Stored-exact reads do not Upgrade.
             fixture.ChangeOld(root, 99); // Later CLR mutation cannot change completed frames.
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), rotationThreshold, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), rotationThreshold)) {
             fixture.ResetConstructors();
-            using BranchCheckout loaded = repository.Checkout("main");
+            using BranchCheckout loaded = repository.CheckoutShared("main");
             fixture.Check(loaded.State!, 3);
             Assert.Equal(1, fixture.UpgradeCalls()); // Upgrade runs after both historical Deltas.
             Assert.Equal(rootId, loaded.StateId);
@@ -61,10 +61,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Change(loaded.State!, 99);
             fixture.Check(repository.ReadState(loaded.Head), 3);
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), rotationThreshold, schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), rotationThreshold)) {
             fixture.ResetConstructors();
             int upgrades = fixture.UpgradeCalls();
-            using BranchCheckout loaded = repository.Checkout("main");
+            using BranchCheckout loaded = repository.CheckoutShared("main");
             fixture.Check(loaded.State!, 3);
             Assert.Equal(upgrades, fixture.UpgradeCalls());
             Assert.Equal(rootId, loaded.StateId);
@@ -91,7 +91,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Contains(retiredId, store.ReadGraph(third).ObjectHeads.Keys);
             DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, third, fixture.CurrentModels());
             Assert.Equal(3, fixture.ReadStoredNumber(stored.GetRequired(rootId)));
-            Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
+            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
         }
         Assert.Equal(bytesBefore.Keys.Order(), Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] contents) in bytesBefore) { Assert.Equal(contents, File.ReadAllBytes(path)); }
@@ -103,8 +103,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress original, merged;
         uint rootId, nameId, aliasId, emptyId;
-        using (Repository repository = Repository.CreateNew(directory.Path, fixture.CurrentModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout seed = repository.CreateBranch("main", (IDurableObject)fixture.CreateCurrent(), ReferenceGraphNoRebase);
+        using (Repository repository = Repository.CreateNew(directory.Path, fixture.CurrentModels())) {
+            using BranchCheckout seed = repository.CreateSharedBranch("main", (IDurableObject)fixture.CreateCurrent(), ReferenceGraphNoRebase);
             original = seed.Head.Address;
             rootId = seed.StateId!.Value.Value;
             repository.CreateTag("original", seed.Head);
@@ -117,9 +117,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             emptyId = Assert.Single(source.Objects, row => row.Kind == ObjectStateKind.String && row.StringContent.Length == 0).Id.Value;
             Assert.Equal(4, source.Objects.Count); // Ordinary capture already canonicalizes both Empty references.
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels())) {
             fixture.ResetConstructors();
-            using BranchCheckout loaded = repository.Checkout("main");
+            using BranchCheckout loaded = repository.CheckoutShared("main");
             fixture.CheckCurrent(loaded.State!, 3);
             Assert.Equal(0, fixture.UpgradeCalls());
             GraphRecordStore store = ReferenceGraphStore(repository);
@@ -136,10 +136,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(store.ReadGraph(original).ObjectHeads[nameId], store.ReadGraph(merged).ObjectHeads[nameId]);
             Assert.Equal(store.ReadGraph(original).ObjectHeads[emptyId], store.ReadGraph(merged).ObjectHeads[emptyId]);
         }
-        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels())) {
             fixture.ResetConstructors();
             fixture.CheckCurrent(repository.ReadState(repository.ResolveTag("original")), 3);
-            using BranchCheckout loaded = repository.Checkout("main");
+            using BranchCheckout loaded = repository.CheckoutShared("main");
             fixture.CheckMerged(loaded.State!, 3);
             GraphRecordStore store = ReferenceGraphStore(repository);
             Assert.Equal(2, store.ReadObjectChain(merged, rootId).Entries.Count);

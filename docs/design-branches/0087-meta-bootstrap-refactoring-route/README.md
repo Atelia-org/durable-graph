@@ -5,6 +5,8 @@
 
 问题是以一套共同对象版本保存核心与一个发布 owner 支撑 meta 自举及完整共享/私有视图。
 
+打开/编辑会话的公开外观由 [DB-095](../0095-repository-open-intent/README.md) 接续：移除 Open nullable Schema 模式，由命名编辑入口选归属；准确来源、完整目录、共同保存与故障合同继续适用。旧正文的 Open 模式说明保其历史含义。
+
 - [详细合同、有限停点与源码导航](0087-meta-bootstrap-refactoring-route.md)：准确环境、来源、共同保存及故障仍在此查。
 - [2026-10-13 归档（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")：冻结源 ecc80683，保 P0/P1；不包含后来 P2 全部原合同。
 - 原 P2 完整合同从 Git `d8c0ecb:docs/design-branches/0087-meta-bootstrap-refactoring-route.md` 的 §9 恢复。

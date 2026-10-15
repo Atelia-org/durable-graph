@@ -9,6 +9,7 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 |---|---|
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
 | [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | 候选目录搬迁、完整配置与 README 原文命令，保留 Upgrade/Fork/Verify 回归 |
+| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | DB-095 明确编辑入口的普通包编译正例、七项旧 API 精确编译负例及恢复合法源码后的冷保存 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
@@ -21,6 +22,14 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 包准备使用 [PackageProbeSupport](PackageProbeSupport.ps1)，消费独立 DG 四包版本 G 与准确存储六包版本 S；
 完整 feed、任务配置和候选来源见[依赖指南](../../docs/storage-dependency.md)。
 不以 source ProjectReference 或 feed 中存在 nupkg 代替实际消费。运行输出放在忽略目录。
+
+DB-095 的公开调用门禁接受完整候选 feed 与独立 DG 版本；`WorkDirectory` 可省略，由 runner 创建仓外新目录。
+它使用全新包缓存及正常 PackageReference/Generator/Build，不配置 friend 或手工 analyzer。
+每个旧调用单独断言诊断代码与源码位置；负例结束后恢复合法源码并重新 Verify build，再执行 Shared/Private 冷恢复保存。
+
+```powershell
+./experiments/PackageConsumerProbe/Run-RepositoryApiProbe.ps1 -PackageSource <feed> -Version <G> -WorkDirectory <fresh-outside-directory>
+```
 
 ## 对外交付与原文接入门禁
 

@@ -89,13 +89,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         var check = host.GetMethod("Check")!.CreateDelegate<Action<object, int>>();
         using RawBaseDirectory directory = new();
         bool mutated = false;
-        using (Repository repository = Repository.CreateNew(directory.Path, models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateNew(directory.Path, models())) {
             repository.OperationStageObserver = checkpoint => {
                 if (checkpoint != RepositoryOperationStage.AfterPrepare) { return; }
                 mutate(world);
                 mutated = true;
             };
-            using BranchCheckout checkout = repository.CreateBranch("main", (IDurableObject)world);
+            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)world);
             Assert.True(mutated);
             Assert.Same(world, checkout.State);
         }

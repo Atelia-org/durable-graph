@@ -19,13 +19,13 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     private static readonly ObjectLayout UnreachableList = ObjectLayout.ForList(new(DurableFieldInfo.Reference(1, TypeExpr.Named("Promotion.AbsentElement"))));
 
     [Fact]
-    public void Ordinary_null_RW_promotion_merges_the_actual_complete_head_remaps_descriptor_numbers_and_cold_continues_Delta() {
+    public void Shared_checkout_promotion_merges_the_actual_complete_head_remaps_descriptor_numbers_and_cold_continues_Delta() {
         FrameAddress privateState, privateEvent, statePin, privatePin, sharedPin, oldEnvelopeHead, promoted, continued;
         FrameImage[] complete;
         ObjectId envelopeId;
         ObjectId privateDescriptor, sharedDescriptor;
-        using (Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using (Repository repository = Repository.CreateNew(_path, Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             DB087Widget ring = Ring();
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
@@ -54,8 +54,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             complete = ReadFrames(ResourcesOf(repository).Data);
         }
         using (Repository repository = Repository.OpenExisting(_path, Models())) {
-            using BranchCheckout ordinary = repository.Checkout("dev");
-            Assert.Null(repository.SchemaWriteMode);
+            using BranchCheckout ordinary = repository.CheckoutShared("dev");
+
             Assert.False(ordinary.UsesPrivateSchemas);
             Assert.Equal(sharedPin, ordinary.Catalog.Accepted!.Snapshot!.Address);
             Assert.False(ordinary.Catalog.Accepted.Schemas.ContainsKey(new(PrivateOnly.Type, 1)));
@@ -66,6 +66,9 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             DecodedRevision.SchemaViewBindingEnvironment environment = ordinary.BindingEnvironment!;
             var storage = ordinary.Baseline!.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray();
             StoredGraphRevision previous = repository.GraphStore.ReadGraph(privateState);
+            PublicationImage beforePromotion = Snapshot(repository);
+            Assert.Throws<InvalidOperationException>(() => ordinary.CommitState(NoRebase));
+            AssertUnchanged(repository, beforePromotion);
             promoted = ordinary.CommitStateToShared(NoRebase).RevisionAddress;
             StoredGraphRevision saved = repository.GraphStore.ReadGraph(promoted);
             SchemaCatalogView merged = SchemaCatalogView.Load(repository.GraphStore, saved.SchemaRoot!.Value);
@@ -90,15 +93,12 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             Assert.Equal((byte)1, header.ReadByte());
             Assert.Equal(privateDescriptor.Value, header.ReadVarUInt32());
             AssertEnvelope(repository.ReadState(repository.GetHead("dev")), 7);
-            Assert.Null(repository.SchemaWriteMode);
+
             Assert.False(ordinary.UsesPrivateSchemas);
             Assert.Same(models, ordinary.Models);
             Assert.Same(environment, ordinary.BindingEnvironment);
-            PublicationImage beforeRejectedDefault = Snapshot(repository);
-            Assert.Throws<InvalidOperationException>(() => ordinary.CommitState(NoRebase));
-            AssertUnchanged(repository, beforeRejectedDefault);
             RefImage shared = ReadRef(repository, 2);
-            FrameAddress reused = ordinary.CommitStateToShared(NoRebase).RevisionAddress;
+            FrameAddress reused = ordinary.CommitState(NoRebase).RevisionAddress;
             StoredGraphRevision unchanged = repository.GraphStore.ReadGraph(reused);
             Assert.Equal(saved.SchemaRoot, unchanged.SchemaRoot);
             Assert.Equal(saved.DirectoryRoot, unchanged.DirectoryRoot);
@@ -108,7 +108,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             ObjectId list = ordinary.Baseline!.Objects.Single(pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
             ObjectStorageInfo prior = ordinary.Baseline.Objects[list].Storage!.Value;
             root.Numbers[7] = 401;
-            continued = ordinary.CommitStateToShared(root, NoRebase).RevisionAddress;
+            continued = ordinary.CommitState(root, NoRebase).RevisionAddress;
             StoredGraphRevision deltaGraph = repository.GraphStore.ReadGraph(continued);
             Assert.Equal(reused, deltaGraph.SourceGraph);
             ObjectVersionBatch batch = repository.GraphStore.ReadBatch(deltaGraph.OwnedBatch!.Value);
@@ -131,9 +131,95 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     }
 
     [Fact]
+    public void Private_session_after_promotion_keeps_promoted_pin_and_excludes_later_shared_additions_even_after_cold_open() {
+        DurableSchema laterShared = new("Promotion.LaterShared", 1, new DurableFieldInfo(1, TypeTag.Byte));
+        DurableSchema warmPrivate = new("Promotion.WarmPrivate", 1, new DurableFieldInfo(1, TypeTag.Int16));
+        DurableSchema coldPrivate = new("Promotion.ColdPrivate", 1, new DurableFieldInfo(1, TypeTag.Int64));
+        FrameAddress promotedPin, warmPin, warmState, sharedPin;
+        RefImage shared;
+        FrameImage[] complete;
+        using (Repository repository = Repository.CreateNew(_path, Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+            repository.CreateBranch("dev", main.Head);
+            using BranchCheckout dev = repository.CheckoutPrivate("dev");
+            ModelExecutionEnvironment models = dev.Models;
+            DecodedRevision.SchemaViewBindingEnvironment execution = dev.BindingEnvironment!;
+            dev.Catalog.Set(PrivateOnly);
+            dev.CommitState(NoRebase);
+            dev.CommitStateToShared(NoRebase);
+            promotedPin = dev.Catalog.Accepted!.Snapshot!.Address;
+            Assert.Equal(promotedPin, repository.SharedSchemaRoot);
+            Assert.True(dev.UsesPrivateSchemas);
+            Assert.Same(models, dev.Models);
+            Assert.Same(execution, dev.BindingEnvironment);
+
+            main.Catalog.Set(laterShared);
+            main.CommitState(NoRebase);
+            sharedPin = repository.SharedSchemaRoot!.Value;
+            Assert.NotEqual(promotedPin, sharedPin);
+            SchemaCatalogView latest = SchemaCatalogView.Load(repository.GraphStore, sharedPin);
+            Assert.Equal(PrivateOnly, latest.Schemas[new(PrivateOnly.Type, 1)]);
+            Assert.Equal(laterShared, latest.Schemas[new(laterShared.Type, 1)]);
+            shared = ReadRef(repository, 2);
+            Assert.Equal(promotedPin, dev.Catalog.Accepted.Snapshot.Address);
+            Assert.False(dev.Catalog.Accepted.Schemas.ContainsKey(new(laterShared.Type, 1)));
+
+            dev.Catalog.Set(warmPrivate);
+            AssertRing(dev.State, 7).Numbers[7] = 501;
+            using (PreparedBranchSave candidate = dev.SaveSession.Prepare(dev.State!, parameters: NoRebase)) {
+                Assert.Equal(promotedPin, candidate.Pending.CatalogSource);
+            }
+            warmState = dev.CommitState(NoRebase).RevisionAddress;
+            StoredGraphRevision saved = repository.GraphStore.ReadGraph(warmState);
+            warmPin = saved.SchemaRoot!.Value;
+            SchemaCatalogView view = SchemaCatalogView.Load(repository.GraphStore, warmPin);
+            Assert.Equal(promotedPin, view.Snapshot!.SourceGraph);
+            Assert.Equal(PrivateOnly, view.Schemas[new(PrivateOnly.Type, 1)]);
+            Assert.Equal(warmPrivate, view.Schemas[new(warmPrivate.Type, 1)]);
+            Assert.False(view.Schemas.ContainsKey(new(laterShared.Type, 1)));
+            Assert.Equal(warmPin, repository.GraphStore.ReadMetadata(dev.Head.RevisionAddress).SchemaRoot);
+            Assert.True(dev.UsesPrivateSchemas);
+            Assert.Same(models, dev.Models);
+            Assert.Same(execution, dev.BindingEnvironment);
+            AssertSameRef(shared, ReadRef(repository, 2));
+            complete = ReadFrames(ResourcesOf(repository).Data);
+        }
+        using (Repository repository = Repository.OpenExisting(_path, Models())) {
+            using BranchCheckout dev = repository.CheckoutPrivate("dev");
+            Assert.Equal(warmState, dev.Head.RevisionAddress);
+            Assert.Equal(warmPin, dev.Catalog.Accepted!.Snapshot!.Address);
+            Assert.Equal(PrivateOnly, dev.Catalog.Accepted.Schemas[new(PrivateOnly.Type, 1)]);
+            Assert.Equal(warmPrivate, dev.Catalog.Accepted.Schemas[new(warmPrivate.Type, 1)]);
+            Assert.False(dev.Catalog.Accepted.Schemas.ContainsKey(new(laterShared.Type, 1)));
+            dev.Catalog.Set(coldPrivate);
+            AssertRing(dev.State, 501).Numbers[7] = 502;
+            using (PreparedBranchSave candidate = dev.SaveSession.Prepare(dev.State!, parameters: NoRebase)) {
+                Assert.Equal(warmPin, candidate.Pending.CatalogSource);
+            }
+            CheckpointAddress next = dev.CommitState(NoRebase);
+            StoredGraphRevision saved = repository.GraphStore.ReadGraph(next.RevisionAddress);
+            Assert.Equal(warmState, saved.SourceGraph);
+            Assert.Equal(saved.SchemaRoot, repository.GraphStore.ReadMetadata(dev.Head.RevisionAddress).SchemaRoot);
+            SchemaCatalogView view = SchemaCatalogView.Load(repository.GraphStore, saved.SchemaRoot!.Value);
+            Assert.Equal(warmPin, view.Snapshot!.SourceGraph);
+            Assert.Equal(PrivateOnly, view.Schemas[new(PrivateOnly.Type, 1)]);
+            Assert.Equal(warmPrivate, view.Schemas[new(warmPrivate.Type, 1)]);
+            Assert.Equal(coldPrivate, view.Schemas[new(coldPrivate.Type, 1)]);
+            Assert.False(view.Schemas.ContainsKey(new(laterShared.Type, 1)));
+            Assert.Equal(sharedPin, repository.SharedSchemaRoot);
+            AssertSameRef(shared, ReadRef(repository, 2));
+            AssertFramesPreserved(ResourcesOf(repository).Data, complete);
+        }
+        using Repository reader = Repository.OpenReadOnlyExisting(_path, Models());
+        AssertRing(reader.ReadState(reader.GetHead("dev")), 502);
+        AssertSameRef(shared, ReadRef(reader, 2));
+        AssertFramesPreserved(ResourcesOf(reader).Data, complete);
+    }
+
+    [Fact]
     public void Layout_only_promotion_adds_no_Schema_but_publishes_both_refs_and_reuses_the_business_directory() {
-        using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using Repository repository = Repository.CreateNew(_path, Models());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         ObjectLayout dynamicList = ObjectLayout.ForList(new(DurableFieldInfo.Reference(1, TypeExpr.Named("P0Widget"))));
@@ -160,8 +246,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     public void Shared_Event_accepts_meta_without_consuming_the_State_heads_H_or_pending_layout_rewrite() {
         FrameAddress source, sourcePin, eventAddress;
         ObjectStorageInfo original;
-        using (Repository repository = Repository.CreateNew(_path, CounterModels(1), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", new Counter { Value = 7 }, NoRebase);
+        using (Repository repository = Repository.CreateNew(_path, CounterModels(1))) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Counter { Value = 7 }, NoRebase);
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
             source = dev.Head.RevisionAddress;
@@ -194,7 +280,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         Assert.Equal(7, Assert.IsType<Counter>(checkout.State).Value);
         Assert.Equal(20, Assert.IsType<Counter>(cold.ReadEvent(checkout.Head)).Value);
         Assert.True(checkout.UsesPrivateSchemas);
-        Assert.Null(cold.SchemaWriteMode);
+
         Assert.Same(models, checkout.Models);
         Assert.Same(environment, checkout.BindingEnvironment);
         FrameAddress state = checkout.CommitStateToShared(NoRebase).RevisionAddress;
@@ -212,8 +298,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     [Fact]
     public void Discard_keeps_private_dirty_intent_and_a_later_conflict_is_corrected_before_shared_acceptance() {
         int captures = 0;
-        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => captures++), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", new Counter { Value = 1 }, NoRebase);
+        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => captures++));
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Counter { Value = 1 }, NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         Assert.IsType<Counter>(dev.State).Value = 2;
@@ -257,8 +343,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         int captures = 0;
         DurableSchema a = new("Promotion.Conflict", 1, new DurableFieldInfo(1, TypeTag.Int32));
         DurableSchema b = new(a.Type, 1, new DurableFieldInfo(1, TypeTag.Int64));
-        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => captures++), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", new Counter { Value = 1 }, NoRebase);
+        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => captures++));
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Counter { Value = 1 }, NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         Assert.IsType<Counter>(dev.State).Value = 2;
@@ -359,8 +445,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
 
     [Fact]
     public void Promotion_imports_a_new_root_layout_first_encountered_by_business_Capture() {
-        using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using Repository repository = Repository.CreateNew(_path, Models());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         DurableSchema envelope = dev.Models.ResolveCurrentModel(typeof(DB087EnvelopeRoot)).CurrentSchema;
@@ -382,8 +468,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
 
     [Fact]
     public void Late_shared_conflict_from_the_captured_new_root_keeps_private_saving_usable() {
-        using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using Repository repository = Repository.CreateNew(_path, Models());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         DurableSchema envelope = dev.Models.ResolveCurrentModel(typeof(DB087EnvelopeRoot)).CurrentSchema;
@@ -415,9 +501,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
     public void Promotion_Capture_keeps_public_and_resource_owner_reentry_guards_until_preparation_finishes() {
         Action? duringCapture = null;
         int captures = 0;
-        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => { captures++; duringCapture?.Invoke(); }),
-            schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Counter { Value = 1 }, NoRebase);
+        using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => { captures++; duringCapture?.Invoke(); }));
+        using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Counter { Value = 1 }, NoRebase);
         RepositoryResources resources = ResourcesOf(repository);
         using RepositoryStorageFacade facade = new(resources);
         bool nestedProducerCalled = false;
@@ -451,9 +536,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         Action? duringCapture = null;
         int captures = 0, bodyPreparations = 0, afterPrepare = 0;
         using Repository repository = Repository.CreateNew(_path,
-            CounterModels(1, () => { captures++; duringCapture?.Invoke(); }, () => bodyPreparations++),
-            schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout checkout = repository.CreateBranchFromEvent("main", new Counter { Value = 1 }, NoRebase);
+            CounterModels(1, () => { captures++; duringCapture?.Invoke(); }, () => bodyPreparations++));
+        using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Counter { Value = 1 }, NoRebase);
         RepositoryResources resources = ResourcesOf(repository);
         GraphRecordStore retained = repository.GraphStore;
         PublicationImage before = Snapshot(repository);
@@ -494,8 +578,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
 
     [Fact]
     public void Shared_raw_pending_requires_latest_shared_meta_source_and_the_exact_business_State_source() {
-        using Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using Repository repository = Repository.CreateNew(_path, Models());
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
         repository.CreateBranch("dev", main.Head);
         using BranchCheckout dev = repository.CheckoutPrivate("dev");
         dev.Catalog.Set(PrivateOnly);
@@ -531,8 +615,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         FrameImage[] complete;
         RepositoryPublicationException error;
         RefImage shared, oldBranches;
-        using (Repository repository = Repository.CreateNew(_path, Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", Ring(), NoRebase);
+        using (Repository repository = Repository.CreateNew(_path, Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
             dev.Catalog.Set(PrivateOnly);

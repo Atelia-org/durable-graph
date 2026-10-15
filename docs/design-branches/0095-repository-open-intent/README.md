@@ -1,9 +1,9 @@
 # DB-095：Repository 打开意图与业务保存准入
 
-> 状态：**E 方向已获用户同意；实施计划已细化，可进入下一轮实施，产品尚未修改**。
+> 状态：**E 已实施，根构建与相关源码完整套件通过；新 G 普通包验收进行中**。
 > 日期：2026-10-15；源码调查基线：`79bab5d27bf50c6e66a54da0d4cc729a9181b245`。
 > 阅读顺序：本节目标 → §7 API 合同 → §8 接线 → §9 迁移 → §10 验收 → §11 实施顺序。§3–6 保留竞争评审依据，不是并行实施路线。
-> 本轮仅完善计划；下一轮才实施。计划就绪不等于代码、回归或普通包已经验收。
+> §7–11 是本次实施合同；完成结果见末节。未记录通过的门禁不视为已验收。
 
 ## 1. 问题与研究边界
 
@@ -17,12 +17,12 @@
 
 本案是 DB-087 打开/保存准入外观的候选后继，不重开其完整持久化重构。现行合同仍见 [DB-087](../0087-meta-bootstrap-refactoring-route/README.md) 与 [产品工作集](../../../src/PROJECT-STATE.md)。本轮不改变格式、升级规则、构建期 history 协议、并发模型或底层恢复纪律。
 
-## 2. 已核实现状
+## 2. 已核实现状（改动前基线）
 
 | 事实 | 实现或测试入口 |
 |---|---|
 | `CreateNew` / `OpenExisting` 默认 `SchemaWriteMode? = null`；`IsReadOnly` 独立取自底层资源 | [Repository](../../../src/DurableGraph.Persistence/Repository.cs) |
-| `SchemaWriteMode` 当前只有 `Shared = 1`；null 不是只读，而是缺少普通业务写入归属 | [枚举](../../../src/DurableGraph.Persistence/SchemaWriteMode.cs)、[准入测试](../../../tests/DurableGraph.Persistence.Tests/SchemaWriteAdmissionTests.cs) |
+| `SchemaWriteMode` 当前只有 `Shared = 1`；null 不是只读，而是缺少普通业务写入归属 | 枚举（Git 基线 `79bab5d:src/DurableGraph.Persistence/SchemaWriteMode.cs`）、[准入测试](../../../tests/DurableGraph.Persistence.Tests/SchemaWriteAdmissionTests.cs) |
 | 未指定时仍能恢复 checkout、Fork、修改 ref/tag；普通业务保存即使无变化也在 Capture 前拒绝 | `RequireSchemaWriter`、`MissingModeRejectsBeforeAnyCaptureCallbackIncludingUnchangedSave` |
 | Private 目前由 `CheckoutPrivate` 选择，只恢复已有分支；要求实际 Head 的准确 Schema pin | [Private 入口](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 的 `PrivateCatalogRoot` |
 | 普通 Shared 保存检查选定的完整 Schema 视图已被 shared 接纳；不会自动把 private 视图合入共享目录 | `Repository.RequireSchemaWriter` |
@@ -130,7 +130,7 @@ Repository.OpenExisting(path, models, RepositoryOpenMode.ReadOnly);
 
 ## 7. 已选 API 合同：明确取得哪一种编辑会话
 
-以下为 **E 下一轮实施的最小形状**，不是当前 API。本片采用明确命名入口，不再把命名/枚举作为施工前待决项。保资源入口名字，删除 Open-level `SchemaWriteMode?` 与对应未配置业务准入状态；只读仍由实际底层资源保证。每个可编辑会话一经取得，就已有确定的普通保存目的地。
+以下为 **E 已落地的公开形状**；普通包完成资格另见 §12。本片采用明确命名入口，不再把命名/枚举作为施工前待决项。保资源入口名字，删除 Open-level `SchemaWriteMode?` 与对应未配置业务准入状态；只读仍由实际底层资源保证。每个可编辑会话一经取得，就已有确定的普通保存目的地。
 
 | 操作 | 目标入口 | 语义 |
 |---|---|---|
@@ -169,7 +169,7 @@ dev.CommitState();             // 仍为 Private，基线已是推广后的 Head
 
 ## 8. 核心接线与不变量
 
-本节是下一轮代码改动的边界；先做最小接线，不重写保存内核。
+本节限定本次核心改动；采用最小接线，不重写保存内核。
 
 | 文件/符号 | 必改内容 | 保留边界 |
 |---|---|---|
@@ -268,7 +268,7 @@ dev.CommitState();             // 仍为 Private，基线已是推广后的 Head
 
 ## 11. 实施顺序、停点与就绪判断
 
-本轮只准备计划；下一轮收到实施指令后按以下顺序推进，不需要重新投票选型：
+本次按以下依赖顺序实施与验收：
 
 1. **核心与可构建迁移**：主线程固定 §7 签名；同步修改公开/内部工厂、guard、根源码测试与 XML。使用明确文件分工迁移独立消费者，不能让多人同时改 Repository。删除旧入口，不为保持中间提交可构建引入兼容外壳。
 2. **语义验收**：按 §9 处理过时断言，增加公开编译见证与 ToShared 后续来源故事；根 build 和两个相关套件通过。独立复核重点是 guard 保留、实际 ref/Schema source 和负例准确诊断，不只看批量改名 diff。
@@ -279,6 +279,20 @@ dev.CommitState();             // 仍为 Private，基线已是推广后的 Head
 
 仅以下发现需要重开设计：显式入口仍无法覆盖真实已支持的调用；必须改变 owner 来源/合并协议才能完成有限 E；现有来源或失败回归揭示合同矛盾；普通包编译/运行证据否定公开形状。个别调用迁移、测试助手或诊断预期修正属于实施，不自动扩成新 API 设计。
 
-**当前就绪判断：可以实施。** 已固定入口、删除项、保留 guard、过时回归处置、包验收和停止边界；未发现必须先做机制 Probe 才能选路的新阻断。主要成本是调用与验收资产迁移，而非新的持久化机制。尚未编译新 API、执行新测试或出新包，因此这里声明的是计划成熟度，不是产品完成度。
+实施路线与停止边界已完成准备并按本合同落地；实际证据与资格只查下节，不再将“计划就绪”当作待施工任务。
 
-前轮三方评审及独立复核的意见见 §6；本轮重新静态核对生产接线与 Split/PrivateContainer/README runner，补齐迁移中的行为变化。本轮文档检查通过：计划全文与三处新导航合计 22 个本地链接目标可达，集成叙述与差异空白已检查；无产品代码、配置或包修改，未运行 build/test。
+## 12. 实施结果与限定验收
+
+核心与调用迁移已落地：删除 Open 的模式参数/属性/枚举，新增四个 Shared 命名入口；ref-only、Private 和 ToShared 保既有准确来源与保存协议。没有持久格式或上游版本变化，无兼容转发。下游更新 G 后需迁移调用并重新编译。
+
+2026-10-15，Windows / SDK 10.0.201，准确 S package mode 的源码验证：
+
+- 根 Release build：0 warnings / 0 errors，最终构建 10.89 秒；首次构建亦通过。
+- Persistence 完整套件 **919/919**；DurableGraph 完整套件 **1718/1718**，无跳过，共 **2637** 项。
+- 新增公开 API 编译正例/八个准确负例，以及 Private 推广 P→Shared Q→Private 热/冷续写来源见证通过；已迁移完整目录冲突、只读/ref-only、故障与寿命回归。
+- 首轮 Runtime 中九个新编译用例因测试片段漏导入 Persistence namespace 失败；仅修测试源码，保留精确 oracle，重新根构建并完整重跑 Runtime 后通过。首轮日志/TRX保留，不合并冒充首跑通过。
+- 独立 reviewer 已按实际 diff 核对 core guards、热/冷恢复、Split 负例保留与新见证；新 G 尚待独立回读验收。
+
+证据目录：`.artifacts/db095-implementation/20261015/`（忽略目录），含 root-build-final.log、persistence-test.log、runtime-test.log 及 tests/*.trx；首轮 runtime-test-attempt1.log / tests/runtime-attempt1.trx 单独保留。
+
+新 G 普通包、额外消费者编译与最终集成检查进行中；未完成项不计入上述源码资格。

@@ -39,12 +39,12 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         VerifyPreclosedDependency(false, factory);
 
     private void VerifyPreclosedDependency(bool evict, string? extraFactory) {
-        using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout state = seed.CreateBranch("main", new HistoricalRoot { Value = 17 }, NoRebase);
-            using BranchCheckout events = seed.CreateBranchFromEvent("events", new HistoricalRoot { Value = 29 }, NoRebase);
+        using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()))) {
+            using BranchCheckout state = seed.CreateSharedBranch("main", new HistoricalRoot { Value = 17 }, NoRebase);
+            using BranchCheckout events = seed.CreateSharedBranchFromEvent("events", new HistoricalRoot { Value = 29 }, NoRebase);
         }
         HistoryCounters counters = new();
-        using Repository repository = Repository.OpenExisting(_root, HistoryModels(current: true, counters, extraFactory), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenExisting(_root, HistoryModels(current: true, counters, extraFactory));
         CheckpointAddress address = repository.GetHead("main");
         CheckpointAddress eventAddress = repository.GetHead("events");
         // A real readonly operation restores the historical root in its own exact
@@ -57,7 +57,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         counters.Normalizes = counters.Allocations = 0;
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        using BranchCheckout first = repository.Checkout("main");
+        using BranchCheckout first = repository.CheckoutShared("main");
         PreparedStateRestoration original = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, counters.Normalizes);
         Assert.Equal(1, counters.Allocations);
@@ -65,10 +65,10 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         Assert.True(original.Selection.Normalized.Objects[first.StateId!.Value].RequiresRewrite);
 
         if (evict) {
-            using BranchCheckout replacement = repository.CreateBranch("replacement", new HistoricalRoot { Value = 44 }, NoRebase);
-            using BranchCheckout replacementFork = repository.Fork("replacement-fork", replacement.Head);
+            using BranchCheckout replacement = repository.CreateSharedBranch("replacement", new HistoricalRoot { Value = 44 }, NoRebase);
+            using BranchCheckout replacementFork = repository.ForkShared("replacement-fork", replacement.Head);
             Assert.NotSame(original, repository.PreparedStateEntry);
-            using BranchCheckout reloaded = repository.Fork("reloaded", address);
+            using BranchCheckout reloaded = repository.ForkShared("reloaded", address);
             Assert.Equal(17, Assert.IsType<HistoricalRoot>(reloaded.State).Value);
             Assert.Equal(2, counters.Normalizes);
             Assert.NotSame(original, repository.PreparedStateEntry);
@@ -107,7 +107,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // the old State's exact S or poison its successful preparation certificate.
         int normalized = counters.Normalizes, allocated = counters.Allocations;
         var before = Counts(statistics);
-        using (BranchCheckout eventFork = repository.Fork("event-fork", eventAddress)) {
+        using (BranchCheckout eventFork = repository.ForkShared("event-fork", eventAddress)) {
             Assert.Null(eventFork.State);
             Assert.Equal(eventAddress, eventFork.Head);
         }
@@ -116,7 +116,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         Assert.Equal(normalized, counters.Normalizes);
         Assert.Equal(allocated, counters.Allocations);
 
-        using (BranchCheckout old = repository.Fork("unpolluted", address)) {
+        using (BranchCheckout old = repository.ForkShared("unpolluted", address)) {
             Assert.Equal(17, Assert.IsType<HistoricalRoot>(old.State).Value);
             Assert.NotSame(first.State, old.State);
             Assert.Same(entry, repository.PreparedStateEntry);
@@ -147,7 +147,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         before = Counts(statistics);
         BranchCheckout? delivered = null;
         InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
-            delivered = repository.Fork("rejected", repository.GetHead("conflicting-source")));
+            delivered = repository.ForkShared("rejected", repository.GetHead("conflicting-source")));
         Assert.Contains(conflictingId, error.Message);
         Assert.Contains("v5", error.Message);
         Assert.Null(delivered);
@@ -172,12 +172,12 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     [InlineData(true)]
     public void UpgradedSourceRetainsUnreachableRowsHighIdsEmptyIdentityAndRewrite(bool enableReuse) {
         SeedCompleteHistoricalSource();
-        using Repository repository = Repository.OpenExisting(_root, ProvenanceModels(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenExisting(_root, ProvenanceModels());
         repository.PreparedStateReuseEnabled = enableReuse;
         repository.RestorationStatistics = new();
         CheckpointAddress address = repository.GetHead("main");
-        using BranchCheckout first = repository.Checkout("main");
-        using BranchCheckout second = repository.Fork("second", address);
+        using BranchCheckout first = repository.CheckoutShared("main");
+        using BranchCheckout second = repository.ForkShared("second", address);
         Assert.NotSame(first.State, second.State);
         Assert.Equal(enableReuse ? 1 : 0, repository.RestorationStatistics.PreparedStateHits);
         foreach (BranchCheckout branch in new[] { first, second }) {
@@ -224,8 +224,8 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     }
 
     private void SeedCompleteHistoricalSource() {
-        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout branch = repository.CreateBranch("main", new Node(), NoRebase);
+        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
+        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node(), NoRebase);
         RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
         SchemaCatalogView catalog = SchemaCatalogView.Load(store, resources.SharedSchemaRoot!.Value);

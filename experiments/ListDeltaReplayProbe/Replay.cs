@@ -35,7 +35,7 @@ internal static class Replay {
         List<Saved> saved = [];
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
-        Repository repository = Repository.CreateNew(directory, models, StoreOptions, schemaWriteMode: SchemaWriteMode.Shared);
+        Repository repository = Repository.CreateNew(directory, models, StoreOptions);
         BranchCheckout? session = null;
         double setupMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long setupAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
@@ -59,7 +59,7 @@ internal static class Replay {
                 long start = Stopwatch.GetTimestamp();
                 ReadAmplificationBaseBudgetParameters parameters = new(settings.ReadAmplification, settings.BaseBudgetPercent);
                 if (session is null) {
-                    session = repository.CreateBranch("main", world, parameters);
+                    session = repository.CreateSharedBranch("main", world, parameters);
                 } else {
                     // The marker carries no World reference; E and S overhead are both timed.
                     session.CommitEvent(new ReplayEvent(), parameters);
@@ -159,8 +159,8 @@ internal static class Replay {
 
         allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         started = Stopwatch.GetTimestamp();
-        using Repository reopened = Repository.OpenExisting(directory, Models(), StoreOptions, schemaWriteMode: SchemaWriteMode.Shared);
-        using BranchCheckout restored = reopened.Checkout("main");
+        using Repository reopened = Repository.OpenExisting(directory, Models(), StoreOptions);
+        using BranchCheckout restored = reopened.CheckoutShared("main");
         double coldMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long coldAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         if (workload.Fingerprint(((World<T>)restored.State!)) != saved[^1].Fingerprint) { throw new InvalidOperationException("Cold latest graph differs."); }

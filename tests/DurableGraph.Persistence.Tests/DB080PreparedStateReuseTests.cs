@@ -20,13 +20,13 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     public void RepeatedForkAndCheckoutKeepCyclesContainersAndIndependentSavingBaselines(bool reuse) {
         using (Repository repository = Create()) {
             repository.PreparedStateReuseEnabled = reuse;
-            using BranchCheckout main = repository.CreateBranch("main", Cycle(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Cycle(), NoRebase);
             CheckpointAddress source = main.Head;
             GraphReadStatistics first = Observe(repository);
-            using BranchCheckout a = repository.Fork("a", source);
+            using BranchCheckout a = repository.ForkShared("a", source);
             AssertCold(first);
             GraphReadStatistics second = Observe(repository);
-            using BranchCheckout b = repository.Fork("b", source);
+            using BranchCheckout b = repository.ForkShared("b", source);
             AssertRepeat(second, reuse);
             Assert.Equal(first.AllocatedObjects, second.AllocatedObjects);
             Assert.Equal(first.HydratedObjects, second.HydratedObjects);
@@ -45,26 +45,26 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             Assert.Equal(source.Address, b.CommitState(NoRebase).Parent);
             Assert.Equal(source, main.Head);
         }
-        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models());
         reopened.PreparedStateReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
         Node previous;
         GraphReadStatistics cold = Observe(reopened);
-        using (BranchCheckout a = reopened.Checkout("a")) {
+        using (BranchCheckout a = reopened.CheckoutShared("a")) {
             previous = Assert.IsType<Node>(a.State);
             Assert.Equal((byte)21, previous.Next!.Value);
             Assert.Equal(3, previous.Links!.Count);
             Assert.Same(previous, previous.Links[2]);
             AssertCold(cold);
             GraphReadStatistics occupied = Observe(reopened);
-            Assert.Throws<InvalidOperationException>(() => reopened.Checkout("a"));
+            Assert.Throws<InvalidOperationException>(() => reopened.CheckoutShared("a"));
             AssertNoGraphWork(occupied);
         }
         GraphReadStatistics repeat = Observe(reopened);
-        using BranchCheckout again = reopened.Checkout("a");
+        using BranchCheckout again = reopened.CheckoutShared("a");
         AssertRepeat(repeat, reuse);
         Assert.NotSame(previous, again.State);
-        using BranchCheckout reopenedB = reopened.Checkout("b");
+        using BranchCheckout reopenedB = reopened.CheckoutShared("b");
         Assert.Equal((byte)22, Assert.IsType<Node>(reopenedB.State).Next!.Value);
         Assert.Equal(2, Assert.IsType<Node>(reopenedB.State).Links!.Count);
     }
@@ -76,7 +76,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         List<byte> hydrated = [];
         using Repository repository = Create(SharedReadModel.Models(hydrate: node => hydrated.Add(node.Value)));
         repository.PreparedStateReuseEnabled = reuse;
-        using BranchCheckout main = repository.CreateBranch("main", Cycle(), NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Cycle(), NoRebase);
         CheckpointAddress state = main.Head;
         CheckpointAddress e1 = main.CommitEvent(new Node { Value = 51 }, NoRebase);
         CheckpointAddress e2 = main.CommitEvent(new Node { Value = 52 }, NoRebase);
@@ -84,7 +84,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         for (int i = 0; i < requests.Length; i++) {
             hydrated.Clear();
             GraphReadStatistics stats = Observe(repository);
-            using BranchCheckout child = repository.Fork($"child{i}", requests[i]);
+            using BranchCheckout child = repository.ForkShared($"child{i}", requests[i]);
             if (i == 0) AssertCold(stats); else AssertRepeat(stats, reuse);
             Assert.Equal(requests[i], child.Head);
             Assert.Equal(requests[i], repository.GetHead($"child{i}"));
@@ -100,15 +100,15 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     public void EventOnlyHistoryDoesNoGraphWorkAndLeavesExistingStateSlotAlone(bool reuse) {
         using Repository repository = Create();
         repository.PreparedStateReuseEnabled = reuse;
-        using BranchCheckout main = repository.CreateBranch("main", Cycle(), NoRebase);
-        using BranchCheckout first = repository.Fork("first", main.Head);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Cycle(), NoRebase);
+        using BranchCheckout first = repository.ForkShared("first", main.Head);
         var prepared = repository.PreparedStateEntry;
-        using BranchCheckout events = repository.CreateBranchFromEvent("events", new Node { Value = 50 }, NoRebase);
+        using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", new Node { Value = 50 }, NoRebase);
         CheckpointAddress e2 = events.CommitEvent(new Node { Value = 51 }, NoRebase);
         repository.CreateBranch("event-copy", e2);
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout emptyFork = repository.Fork("empty-fork", e2);
-        using BranchCheckout emptyCheckout = repository.Checkout("event-copy");
+        using BranchCheckout emptyFork = repository.ForkShared("empty-fork", e2);
+        using BranchCheckout emptyCheckout = repository.CheckoutShared("event-copy");
         Assert.Null(emptyFork.State);
         Assert.Null(emptyCheckout.State);
         Assert.Equal(e2, emptyFork.Head);
@@ -118,7 +118,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         // The first State after the Event-only prefix must establish its own preparation.
         CheckpointAddress firstState = emptyFork.CommitState(new Node { Value = 60 }, NoRebase);
         stats = Observe(repository);
-        using BranchCheckout stateFork = repository.Fork("first-state", firstState);
+        using BranchCheckout stateFork = repository.ForkShared("first-state", firstState);
         AssertCold(stats);
         Assert.Equal((byte)60, Assert.IsType<Node>(stateFork.State).Value);
         Assert.Equal(firstState, stateFork.Head);
@@ -131,22 +131,22 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     public void NewRevisionAndPromotedChildGetNewPreparationAndEvictedStateRemainsSavable(bool reuse) {
         using Repository repository = Create();
         repository.PreparedStateReuseEnabled = reuse;
-        using BranchCheckout main = repository.CreateBranch("main", Cycle(), NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Cycle(), NoRebase);
         CheckpointAddress original = main.Head;
-        using BranchCheckout old = repository.Fork("old", original);
+        using BranchCheckout old = repository.ForkShared("old", original);
         var firstEntry = repository.PreparedStateEntry;
         // Even an unchanged State commit has a new revision validation obligation.
         CheckpointAddress unchanged = main.CommitState(NoRebase);
         Assert.NotEqual(original.RevisionAddress, unchanged.RevisionAddress);
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout sameValues = repository.Fork("same-values", unchanged);
+        using BranchCheckout sameValues = repository.ForkShared("same-values", unchanged);
         AssertCold(stats);
         if (reuse) Assert.NotSame(firstEntry, repository.PreparedStateEntry);
         Node promoted = Assert.IsType<Node>(main.State).Next!;
         CheckpointAddress promotedAddress = main.CommitState(promoted, NoRebase);
         Assert.NotEqual(original.RootId, promotedAddress.RootId);
         stats = Observe(repository);
-        using BranchCheckout childRoot = repository.Fork("child-root", promotedAddress);
+        using BranchCheckout childRoot = repository.ForkShared("child-root", promotedAddress);
         AssertCold(stats);
         Node restored = Assert.IsType<Node>(childRoot.State);
         Assert.Equal((byte)2, restored.Value);
@@ -158,7 +158,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         Assert.Equal(original.RootId, savedOld.RootId);
         Assert.Equal(original.Address, savedOld.Parent);
         stats = Observe(repository);
-        using BranchCheckout originalAgain = repository.Fork("original-again", original);
+        using BranchCheckout originalAgain = repository.ForkShared("original-again", original);
         AssertCold(stats);
         Assert.Equal((byte)1, Assert.IsType<Node>(originalAgain.State).Value);
         Assert.Equal((byte)71, Assert.IsType<Node>(repository.ReadState(savedOld)).Value);
@@ -172,17 +172,17 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         models.Register(OtherModel());
         using Repository repository = Create(models);
         repository.PreparedStateReuseEnabled = reuse;
-        using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
-        using BranchCheckout old = repository.Fork("old", main.Head);
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
+        using BranchCheckout old = repository.ForkShared("old", main.Head);
         var previous = repository.PreparedStateEntry;
         CheckpointAddress replaced = main.CommitState(new Other { Value = 42 }, NoRebase);
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout cold = repository.Fork("cold", replaced);
+        using BranchCheckout cold = repository.ForkShared("cold", replaced);
         AssertCold(stats);
         Assert.Equal((byte)42, Assert.IsType<Other>(cold.State).Value);
         if (reuse) Assert.NotSame(previous, repository.PreparedStateEntry);
         stats = Observe(repository);
-        using BranchCheckout repeat = repository.Fork("repeat", replaced);
+        using BranchCheckout repeat = repository.ForkShared("repeat", replaced);
         AssertRepeat(stats, reuse);
         Assert.NotSame(cold.State, repeat.State);
         Assert.IsType<Other>(repeat.State).Value = 43;
@@ -200,8 +200,8 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     [InlineData(true, "hydrate")]
     public void FailedColdReplacementPreservesOldSlotAndAllowsRetry(bool reuse, string phase) {
         using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateBranch("main", Cycle(), NoRebase);
-            using BranchCheckout other = seed.CreateBranch("other", new Node {
+            using BranchCheckout main = seed.CreateSharedBranch("main", Cycle(), NoRebase);
+            using BranchCheckout other = seed.CreateSharedBranch("other", new Node {
                 Value = 10, Next = new Node { Value = 20 }
             }, NoRebase);
         }
@@ -219,16 +219,15 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
                 return new Node();
             }, hydrate: node => {
                 if (fail && phase == "hydrate" && node.Value == 20) throw failure;
-            }),
-            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+            }));
         repository.PreparedStateReuseEnabled = reuse;
-        using BranchCheckout warm = repository.Fork("warm", repository.GetHead("main"));
+        using BranchCheckout warm = repository.ForkShared("warm", repository.GetHead("main"));
         var successfulEntry = repository.PreparedStateEntry;
         CheckpointAddress source = repository.GetHead("other");
         fail = true;
         allocations = normalizations = 0;
         BranchCheckout? delivered = null;
-        Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = repository.Fork("failed", source)));
+        Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("failed", source)));
         Assert.Null(delivered);
         Assert.True(normalizations > 0);
         Assert.Same(successfulEntry, repository.PreparedStateEntry);
@@ -240,7 +239,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         fail = false;
         allocations = normalizations = 0;
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout retry = repository.Fork("failed", source);
+        using BranchCheckout retry = repository.ForkShared("failed", source);
         AssertCold(stats);
         Assert.Equal(2, normalizations);
         Assert.Equal((byte)20, Assert.IsType<Node>(retry.State).Next!.Value);
@@ -262,15 +261,15 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         }, hydrate: node => {
             if (fail && phase == "hydrate" && node.Value == 2) throw failure;
         }));
-        using BranchCheckout main = repository.CreateBranch("main", Cycle(), NoRebase);
-        using BranchCheckout warm = repository.Fork("warm", main.Head);
+        using BranchCheckout main = repository.CreateSharedBranch("main", Cycle(), NoRebase);
+        using BranchCheckout warm = repository.ForkShared("warm", main.Head);
         var entry = repository.PreparedStateEntry;
         Assert.NotNull(entry);
         fail = true;
         allocations = 0;
         GraphReadStatistics stats = Observe(repository);
         BranchCheckout? delivered = null;
-        Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = repository.Fork("retry", main.Head)));
+        Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("retry", main.Head)));
         Assert.Null(delivered);
         Assert.Equal(1, stats.PreparedStateHits);
         Assert.Equal(0, stats.DecodedObjects);
@@ -280,7 +279,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         Assert.False(repository.IsFaulted);
         fail = false;
         stats = Observe(repository);
-        using BranchCheckout retry = repository.Fork("retry", main.Head);
+        using BranchCheckout retry = repository.ForkShared("retry", main.Head);
         AssertRepeat(stats, true);
         AssertGraph(Assert.IsType<Node>(retry.State));
     }
@@ -290,21 +289,20 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     [InlineData(true)]
     public void RealUpgradeNormalizeRunsOnColdOnlyAndReadonlyQueriesNeverUseTheSlot(bool reuse) {
         using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node { Value = 1 }, NoRebase);
+            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
             main.CommitEvent(new Node { Value = 2 }, NoRebase);
         }
         int normalized = 0;
         using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(currentVersion: 2,
-            normalize: row => { normalized++; return row.GetState<SharedReadModel.State>(); }),
-            schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+            normalize: row => { normalized++; return row.GetState<SharedReadModel.State>(); }));
         repository.PreparedStateReuseEnabled = reuse;
         CheckpointAddress head = repository.GetHead("main");
         CheckpointAddress state = repository.GetPreviousState(head)!;
-        using BranchCheckout warm = repository.Fork("warm", head);
+        using BranchCheckout warm = repository.ForkShared("warm", head);
         Assert.Equal(1, normalized);
         var entry = repository.PreparedStateEntry;
         normalized = 0;
-        using BranchCheckout repeat = repository.Fork("repeat", head);
+        using BranchCheckout repeat = repository.ForkShared("repeat", head);
         Assert.Equal(reuse ? 0 : 1, normalized);
         normalized = 0;
         repository.ReadCheckpoint(head);
@@ -320,7 +318,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         Assert.Equal(2, normalized);
         Assert.Same(entry, repository.PreparedStateEntry);
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout afterReads = repository.Fork("after-reads", head);
+        using BranchCheckout afterReads = repository.ForkShared("after-reads", head);
         AssertRepeat(stats, reuse);
     }
 
@@ -329,8 +327,8 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     [InlineData(true)]
     public void ForkPublicationFailurePreservesOldSlotOrReleasesItOnFault(bool afterPublication) {
         using Repository repository = Create();
-        using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 1 }, NoRebase);
-        using BranchCheckout warm = repository.Fork("warm", main.Head);
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
+        using BranchCheckout warm = repository.ForkShared("warm", main.Head);
         var previous = repository.PreparedStateEntry;
         Assert.NotNull(previous);
         CheckpointAddress newer = main.CommitState(new Node { Value = 2 }, NoRebase);
@@ -340,19 +338,19 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             }
         };
         BranchCheckout? delivered = null;
-        RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.Fork("failed", newer));
+        RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.ForkShared("failed", newer));
         Assert.Null(delivered);
         Assert.Equal(afterPublication ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
         Assert.Equal(afterPublication, repository.IsFaulted);
         repository.OperationStageObserver = null;
         if (afterPublication) {
             Assert.Null(repository.PreparedStateEntry);
-            Assert.Throws<InvalidOperationException>(() => repository.Fork("blocked", newer));
+            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("blocked", newer));
         } else {
             Assert.Same(previous, repository.PreparedStateEntry);
             Assert.DoesNotContain("failed", repository.ListBranches());
             GraphReadStatistics stats = Observe(repository);
-            using BranchCheckout retry = repository.Fork("failed", newer);
+            using BranchCheckout retry = repository.ForkShared("failed", newer);
             AssertCold(stats);
             Assert.NotSame(previous, repository.PreparedStateEntry);
         }
@@ -365,15 +363,15 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         Node delivered;
         CheckpointAddress source;
         try {
-            using BranchCheckout main = repository.CreateBranch("main", Cycle(), NoRebase);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Cycle(), NoRebase);
             source = main.Head;
-            using BranchCheckout fork = repository.Fork("fork", source);
+            using BranchCheckout fork = repository.ForkShared("fork", source);
             delivered = Assert.IsType<Node>(fork.State);
             Assert.NotNull(repository.PreparedStateEntry);
         } finally { repository.Dispose(); }
         Assert.Null(repository.PreparedStateEntry);
         AssertGraph(delivered);
-        Assert.Throws<ObjectDisposedException>(() => repository.Fork("blocked", source));
+        Assert.Throws<ObjectDisposedException>(() => repository.ForkShared("blocked", source));
     }
 
     [Fact]
@@ -381,7 +379,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         FrameAddress original;
         ObjectId rootId;
         using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
+            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
             original = main.Head.RevisionAddress;
             rootId = main.Head.RootId;
         }
@@ -394,13 +392,13 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             resources.PublishBranchRoot(resources.PrepareBranchRoot("invalid", invalid), out _);
         }
         // Physical history/root checks permit opening; typed graph validation must still reject.
-        using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using BranchCheckout warm = repository.Fork("warm", repository.GetHead("main"));
+        using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models());
+        using BranchCheckout warm = repository.ForkShared("warm", repository.GetHead("main"));
         var previous = repository.PreparedStateEntry;
         Assert.NotNull(previous);
         GraphReadStatistics stats = Observe(repository);
         BranchCheckout? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = repository.Fork("failed", repository.GetHead("invalid")));
+        Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("failed", repository.GetHead("invalid")));
         Assert.Null(delivered);
         Assert.Equal(0, stats.PreparedStateHits);
         Assert.Equal(1, stats.PreparedStateMisses);
@@ -410,7 +408,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         Assert.DoesNotContain("failed", repository.ListBranches());
         Assert.False(repository.IsFaulted);
         stats = Observe(repository);
-        using BranchCheckout goodAgain = repository.Fork("good-again", repository.GetHead("main"));
+        using BranchCheckout goodAgain = repository.ForkShared("good-again", repository.GetHead("main"));
         AssertRepeat(stats, true);
         Assert.Equal((byte)2, Assert.IsType<Node>(goodAgain.State).Next!.Value);
     }
@@ -495,7 +493,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             static (target, _) => target.Value, Visit);
     }
 
-    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+    private Repository Create(StateModelRegistry? models = null) => Repository.CreateNew(_root, models ?? SharedReadModel.Models());
 
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-db080-reuse-");
 }

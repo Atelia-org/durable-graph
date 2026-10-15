@@ -13,7 +13,7 @@ public sealed partial class EventHistoryRepositoryTests {
     public void ConsumerRecoveryUsesFreshPendingOrSkipsAlreadyPublishedState(int point, bool published) {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         using (Repository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", oldState);
+            using var session = repository.CreateSharedBranch("main", oldState);
             session.CommitEvent(oldEvent);
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("State commit interrupted");
@@ -26,8 +26,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
 
         var beforeRecovery = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using var session = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using var session = repository.CheckoutShared("main");
             Assert.NotSame(oldState, ((Node)session.State!));
             Assert.Equal(published ? (byte)7 : (byte)10, ((Node)session.State!).Value);
             if (published) Assert.Equal(CheckpointKind.State, session.Head.Kind);
@@ -60,8 +60,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         // Sample only while closed: the backing-store owner holds its locks.
         if (published) AssertFiles(beforeRecovery); // No replacement Event, extra State or physical append.
-        using Repository verification = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using var verified = verification.Checkout("main");
+        using Repository verification = Repository.OpenExisting(_root, Models());
+        using var verified = verification.CheckoutShared("main");
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
         Assert.Equal(CheckpointKind.State, verified.Head.Kind);
         Assert.Equal(3, verification.ReadFrames("main").Count());
@@ -75,12 +75,12 @@ public sealed partial class EventHistoryRepositoryTests {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         InvalidOperationException original = new("Application or preparation failure");
         using (Repository repository = CreateRepository()) {
-            using var session = repository.CreateBranch("main", oldState);
+            using var session = repository.CreateSharedBranch("main", oldState);
             session.CommitEvent(oldEvent);
         }
         var beforeAttempt = SnapshotFiles();
-        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using var session = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using var session = repository.CheckoutShared("main");
             oldState = ((Node)session.State!);
             oldEvent = ((Node)repository.ReadEvent(session.Head));
             if (failDuringPrepare) repository.OperationStageObserver = checkpoint => {
@@ -99,8 +99,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         AssertFiles(beforeAttempt);
 
-        using (Repository repository = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using var session = repository.Checkout("main");
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using var session = repository.CheckoutShared("main");
             Assert.NotSame(oldState, ((Node)session.State!));
             Assert.NotSame(oldEvent, repository.ReadEvent(session.Head));
             Assert.Equal((byte)10, ((Node)session.State!).Value);
@@ -117,8 +117,8 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
             Assert.Equal(3, repository.ReadFrames("main").Count());
         }
-        using Repository verification = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
-        using var verified = verification.Checkout("main");
+        using Repository verification = Repository.OpenExisting(_root, Models());
+        using var verified = verification.CheckoutShared("main");
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
         Assert.Equal(CheckpointKind.State, verified.Head.Kind);
     }

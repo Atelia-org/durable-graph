@@ -35,8 +35,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint[] ids;
         PrivateFrameImage[] oldFrames;
         PrivateRefImage shared;
-        using (Repository repository = Repository.CreateNew(directory.Path, old.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", old.Create());
+        using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
             // Consume the empty-session allocation range before fixing the user snapshot.
             main.CommitState(old.Create());
             baseline = main.Head.RevisionAddress;

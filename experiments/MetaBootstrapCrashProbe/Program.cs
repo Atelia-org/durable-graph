@@ -53,7 +53,7 @@ internal static class Program {
     private static void InitWriter(string repositoryPath, string window, string readyPath) {
         uint target = window == "AfterFirstCreateRef" ? 1u : 2u;
         List<uint> completed = [];
-        using Repository unexpected = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared, afterCreateRef: localId => {
+        using Repository unexpected = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), afterCreateRef: localId => {
             completed.Add(localId);
             Need(localId == (uint)completed.Count, "The factory must complete refs1/2 in order.");
             if (localId != target) { return; }
@@ -140,7 +140,7 @@ internal static class Program {
     private static void RejectIncompleteFactory(string repositoryPath, bool readOnly) {
         try {
             using Repository unexpected = readOnly ? Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())
-                : Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
+                : Repository.OpenStorageExisting(repositoryPath, HostModel.Models());
         } catch (InvalidOperationException error) {
             Need(error.Message.Contains("[VersionStore.RefNotFound]", StringComparison.Ordinal), "Fresh DG rejected for a cause other than missing ref2.");
             return;
@@ -163,10 +163,10 @@ internal static class Program {
         ObjectEvidence[] initial;
         FrameEvidence[] seedFrames;
         uint listId;
-        using (Repository seed = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository seed = Repository.OpenStorageExisting(repositoryPath, HostModel.Models())) {
             seed.PreparedStateReuseEnabled = false;
             Need(seed.ListBranches().Count == 0 && seed.SharedSchemaRoot is null, "Writable DG must see the complete empty initialization.");
-            using BranchCheckout main = seed.CreateBranch("main", HostModel.Ring());
+            using BranchCheckout main = seed.CreateSharedBranch("main", HostModel.Ring());
             seed.CreateTag("initial", main.Head);
             state = main.Head.RevisionAddress;
             schema = seed.SharedSchemaRoot!.Value;
@@ -183,9 +183,9 @@ internal static class Program {
         }
         FrameAddress next;
         ObjectEvidence[] updated;
-        using (Repository reopened = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository reopened = Repository.OpenStorageExisting(repositoryPath, HostModel.Models())) {
             reopened.PreparedStateReuseEnabled = false;
-            using BranchCheckout cold = reopened.Checkout("main");
+            using BranchCheckout cold = reopened.CheckoutShared("main");
             Widget root = HostModel.Check(cold.State, 7);
             Need(cold.StateRevisionAddress == state && Objects(cold).SequenceEqual(initial), "Cold checkout must preserve complete seed IDs, actual heads and H.");
             ObjectEvidence list = initial.Single(row => row.Id == listId);
@@ -225,9 +225,9 @@ internal static class Program {
 
     private static void Seed(string repositoryPath, string resultPath) {
         object evidence;
-        using (Repository repository = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.CreateStorageNew(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
-            using BranchCheckout main = repository.CreateBranch("main", HostModel.Ring());
+            using BranchCheckout main = repository.CreateSharedBranch("main", HostModel.Ring());
             repository.CreateTag("initial", main.Head);
             StoredGraphRevision state = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
             FrameAddress schema = RequiredSchema(state);
@@ -248,9 +248,9 @@ internal static class Program {
     private static void Writer(string repositoryPath, string window, string readyPath) {
         // These scopes intentionally never complete: the controller must kill this
         // process after READY. There is no exception/finally path used as a crash.
-        using Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared);
+        using Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models());
         repository.PreparedStateReuseEnabled = false;
-        using BranchCheckout main = repository.Checkout("main");
+        using BranchCheckout main = repository.CheckoutShared("main");
         Widget root = HostModel.Check(main.State, 7);
         RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
@@ -385,13 +385,13 @@ internal static class Program {
         Need(beforeReadOnly.Count == afterReadOnly.Count && beforeReadOnly.All(pair => afterReadOnly.TryGetValue(pair.Key, out string? hash) && hash == pair.Value),
             "Readonly root, typed and completed-frame verification changed repository files.");
 
-        using (Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models(), schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
             RepositoryResources resources = Resources(repository);
             Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,
                 "Writable cold Open changed the selected pair.");
             StoredGraphRevision selected = repository.GraphStore.ReadGraph(expectedState);
-            using BranchCheckout checkout = repository.Checkout("main");
+            using BranchCheckout checkout = repository.CheckoutShared("main");
             Widget root = HostModel.Check(checkout.State, expectNew ? 201 : 7);
             selectedObjects = Objects(checkout);
             Need(selectedObjects.Select(row => row.Id).SequenceEqual(ready.Objects.Select(row => row.Id)), "Cold complete IDs changed.");

@@ -16,17 +16,17 @@ internal static class Program {
         string directory = Path.GetFullPath(args.Single());
         Require(ReadImmutableLeafFlag(ResolveLeafBinding()), "The Family leaf binding must report IsImmutableLeaf=true.");
         Leaf leaf = new(42);
-        using (Repository repository = Repository.CreateNew(directory, Models(), Options, schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout session = repository.CreateBranch("main", leaf, Policy);
+        using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
+            using BranchCheckout session = repository.CreateSharedBranch("main", leaf, Policy);
             Require(((Leaf)session.State!).Value == 42, "CreateBranch lost the seed value.");
         }
-        using (Repository repository = Repository.OpenExisting(directory, Models(), Options, schemaWriteMode: SchemaWriteMode.Shared)) {
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
             EnableLeafExperiment(repository);
-            using BranchCheckout session = repository.Checkout("main");
+            using BranchCheckout session = repository.CheckoutShared("main");
             Require(((Leaf)session.State!).Value == 42, "The reopened world lost the leaf's persisted value.");
             Require(!ReferenceEquals(leaf, session.State), "The original live seed must not populate the leaf table.");
-            using BranchCheckout first = repository.Fork("pure-first", session.Head);
-            using BranchCheckout second = repository.Fork("pure-second", session.Head);
+            using BranchCheckout first = repository.ForkShared("pure-first", session.Head);
+            using BranchCheckout second = repository.ForkShared("pure-second", session.Head);
             Require(ReferenceEquals(first.State, second.State), "Pure leaf roots should reuse the successfully restored instance.");
             first.CommitState(Policy);
             second.CommitState(Policy);
@@ -35,9 +35,9 @@ internal static class Program {
             owner.Alias = owner.First;
             owner.Next = owner;
             Require(!ReadImmutableLeafFlag(ResolveBinding(typeof(Owner))), "Mutable owner must not claim leaf capability.");
-            using BranchCheckout source = repository.CreateBranch("owners", owner, Policy);
-            using BranchCheckout left = repository.Fork("owner-left", source.Head);
-            using BranchCheckout right = repository.Fork("owner-right", source.Head);
+            using BranchCheckout source = repository.CreateSharedBranch("owners", owner, Policy);
+            using BranchCheckout left = repository.ForkShared("owner-left", source.Head);
+            using BranchCheckout right = repository.ForkShared("owner-right", source.Head);
             Owner leftOwner = (Owner)left.State!, rightOwner = (Owner)right.State!;
             Require(!ReferenceEquals(leftOwner, rightOwner), "Mutable owner leaked across branches.");
             Require(ReferenceEquals(leftOwner.First, rightOwner.First), "Generated Family leaf did not reuse across forks.");
@@ -50,9 +50,9 @@ internal static class Program {
             Owner independent = (Owner)repository.ReadState(committed);
             Require(independent.Counter == 1 && !ReferenceEquals(independent.First, leftOwner.First), "ReadState must remain independent of the leaf table.");
         }
-        using (Repository repository = Repository.OpenExisting(directory, Models(), Options, schemaWriteMode: SchemaWriteMode.Shared)) {
-            using BranchCheckout left = repository.Checkout("owner-left");
-            using BranchCheckout right = repository.Checkout("owner-right");
+        using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
+            using BranchCheckout left = repository.CheckoutShared("owner-left");
+            using BranchCheckout right = repository.CheckoutShared("owner-right");
             Require(((Owner)left.State!).Counter == 1 && ((Owner)right.State!).Counter == 0, "Cold reopen lost independent saves.");
             Require(((Owner)left.State!).First!.Value == 7 && ((Owner)right.State!).Second!.Value == 7, "Cold reopen lost leaf content.");
         }

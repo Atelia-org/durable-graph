@@ -17,11 +17,11 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     public void ClosedUpstreamBeforeTagOutputIsNotPublishedAndRequiresReopen() {
         Atelia.FrameStore.FrameAddress revision;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
             CheckpointAddress address = main.Head;
             revision = address.RevisionAddress;
             repository.CreateTag("stable", address);
-            using BranchCheckout warm = repository.Fork("warm", address);
+            using BranchCheckout warm = repository.ForkShared("warm", address);
             Assert.NotNull(repository.PreparedStateEntry);
             repository.OperationStageObserver = point => {
                 if (point == RepositoryOperationStage.BeforePublication) { ResourcesOf(repository).Versions.Dispose(); }
@@ -51,10 +51,10 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     public void RepositoryPublicationGatePreservesNotPublishedVersusPublished(bool afterPublication) {
         Atelia.FrameStore.FrameAddress revision;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
             CheckpointAddress address = main.Head;
             revision = address.RevisionAddress;
-            using BranchCheckout warm = repository.Fork("warm", address);
+            using BranchCheckout warm = repository.ForkShared("warm", address);
             PreparedStateRestoration entry = repository.PreparedStateEntry!;
             IOException injected = new("DG publication checkpoint");
             repository.OperationStageObserver = point => {
@@ -89,10 +89,10 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     [Fact]
     public void TagPublicationRejectsReentryAndBusyDisposalWithoutDamagingOuterOperation() {
         using Repository repository = Create();
-        using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
         CheckpointAddress address = main.Head;
         repository.CreateTag("stable", address);
-        using BranchCheckout warm = repository.Fork("warm", address);
+        using BranchCheckout warm = repository.ForkShared("warm", address);
         PreparedStateRestoration entry = repository.PreparedStateEntry!;
         int checks = 0;
         InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => {
@@ -100,7 +100,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => repository.CreateTag("nested", address));
             Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("stable"));
             Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
-            Assert.Throws<InvalidOperationException>(() => repository.Fork("nested-fork", address));
+            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("nested-fork", address));
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
             Assert.Throws<InvalidOperationException>(() => main.Dispose());
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
@@ -114,7 +114,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         Assert.DoesNotContain("nested-fork", repository.ListBranches());
         Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("nested")).Message);
         // Rejected disposal did not release this branch's editing occupancy.
-        Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
+        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
         main.CommitState();
         Assert.Equal(address, repository.ResolveTag("outer"));
     }
@@ -128,13 +128,12 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             checks++;
             Assert.Throws<InvalidOperationException>(() => active!.ResolveTag("stable"));
             Assert.Throws<InvalidOperationException>(() => active!.CreateTag("nested", target!));
-        }),
-        schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        }));
         active = repository;
-        using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
         target = main.Head;
         repository.CreateTag("stable", main.Head);
-        using BranchCheckout fork = repository.Fork("fork", main.Head);
+        using BranchCheckout fork = repository.ForkShared("fork", main.Head);
         Assert.Equal(1, checks);
         Assert.Equal(main.Head, repository.ResolveTag("stable"));
         Assert.False(repository.IsFaulted);
@@ -144,10 +143,10 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     public void ReadonlyResolvesWithoutWritesAndDisposedInstanceRejectsBothOperations() {
         CheckpointAddress oldAddress;
         using (Repository writer = Create()) {
-            using BranchCheckout main = writer.CreateBranch("main", new Node { Value = 17 });
+            using BranchCheckout main = writer.CreateSharedBranch("main", new Node { Value = 17 });
             oldAddress = main.Head;
             writer.CreateTag("stable", oldAddress);
-            using BranchCheckout warm = writer.Fork("warm", oldAddress);
+            using BranchCheckout warm = writer.ForkShared("warm", oldAddress);
             Assert.NotNull(writer.PreparedStateEntry);
             writer.Dispose();
             Assert.Null(writer.PreparedStateEntry);
@@ -168,7 +167,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         AssertSnapshot(before);
     }
 
-    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+    private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
     private static T Field<T>(object instance, string name) =>
         (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
     private static void AssertFaultedOperations(Repository repository, BranchCheckout main, CheckpointAddress address) {
@@ -178,8 +177,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
         Assert.Throws<InvalidOperationException>(() => repository.ListBranches());
         Assert.Throws<InvalidOperationException>(() => repository.ReadCheckpoint(address));
-        Assert.Throws<InvalidOperationException>(() => repository.Checkout("main"));
-        Assert.Throws<InvalidOperationException>(() => repository.Fork("blocked", address));
+        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+        Assert.Throws<InvalidOperationException>(() => repository.ForkShared("blocked", address));
         Assert.Throws<InvalidOperationException>(() => main.CommitState());
         Assert.Throws<InvalidOperationException>(() => main.CommitEvent(new Node()));
     }

@@ -127,11 +127,11 @@ var models = new StateModelRegistry();
 Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 
 using var repository = Directory.Exists(path)
-    ? Repository.OpenExisting(path, models, schemaWriteMode: SchemaWriteMode.Shared)
-    : Repository.CreateNew(path, models, schemaWriteMode: SchemaWriteMode.Shared);
+    ? Repository.OpenExisting(path, models)
+    : Repository.CreateNew(path, models);
 using var session = repository.ListBranches().Contains("main")
-    ? repository.Checkout("main")
-    : repository.CreateBranch("main", NewWorld()); // 已保存初始 S0。
+    ? repository.CheckoutShared("main")
+    : repository.CreateSharedBranch("main", NewWorld()); // 已保存初始 S0。
 
 World world = (World)session.State!;
 world.RebuildTransient(); // Load 不调用构造器/字段初始化器，也不自动执行此方法。
@@ -169,7 +169,7 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 这段最短程序每次运行都创建一条新事件，未实现中断恢复；不要把重新运行当作透明重试。
 需要恢复的应用须持久化自己的处理进度，见[事件快照与失败恢复](#事件快照与失败恢复)。
 
-`CreateBranchFromEvent("main", firstEvent)` 可直接发布首个 Event 并返回 `State == null` 的工作副本；
+`CreateSharedBranchFromEvent("main", firstEvent)` 可直接发布首个 Event 并返回 `State == null` 的工作副本；
 继续 `CommitEvent` 不改变这一状态，直到 `CommitState(nonNullRoot)` 发布首个 State。
 无 State 时，无参 `CommitState()` 会在捕获或追加前拒绝。已有 State 的读取失败会传播，不会转换成 null。
 
@@ -177,8 +177,8 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 无需自己估算尺寸、挑 Base/Delta 或调用 DTO 的二进制 body；有需要再按下文[调整保存策略](#调整保存策略)。
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
-普通工作副本的默认保存还须显式选择 `schemaWriteMode: SchemaWriteMode.Shared`；RW Open 省略时可以读取、签出及发布 ref/tag，默认业务提交提前拒绝。下述 ToShared 入口另为单次提交显式选择归属。
-`IsReadOnly == false` 只表示底座可写，不表示已选择 Schema 写入归属。选择仅属于本次打开，冷开后需再次明确选择。
+Open 负责资源读写；取得工作副本时由入口明确普通保存归属：`CreateSharedBranch`、`CreateSharedBranchFromEvent`、`CheckoutShared` 和 `ForkShared` 选择 Shared，`CheckoutPrivate` 选择 Private。得到工作副本后，普通 `CommitState` / `CommitEvent` 使用该固定归属；显式 ToShared 只为本次提交选择 Shared。
+`IsReadOnly` 表示底层资源是否只读。Schema 归属属于工作副本，不持久化；冷开后通过相应签出入口重新选择，同一个可写 Repository 可同时保有不同分支的 Shared/Private 工作副本并串行操作。
 读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，普通 checkout 无 State 取创建时 shared；普通模型与 Family 按需闭合。State 提交可以推进持久 Schema 视图和保存基线，仍保留工作副本的执行环境；Event 不安装 State。V2 程序签出 V1 数据时已执行显式 Upgrade，得到 V2 内存对象，可以连续增量保存，无需每次提交后重新签出。
 独立 `ReadState` / `ReadEvent` 按被读图自己的准确 Schema 视图恢复。Dispose 后重新 Checkout 取得新的领域实例；有 State 时仍选择最近 State 的视图，不追到最新 shared 或 Event 的目录，也不重载代码配置。
 
@@ -192,7 +192,7 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S，不借 latest shared 补缺。已有私有定义不可改写；同 key 内容不同的未定稿版本应在不同 baseline fork 试验，需要继承已接受草稿的数据再改型则递增版本。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
 开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
 
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口可用于没有 Open 写模式的可写仓库，只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
+显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
 
 ### 3. 独立浏览与分支
 
@@ -242,16 +242,16 @@ before.Hero.Hp = 100; // 仅修改这份独立恢复图，不修改 occurrence �
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
-可写仓库支持 `Fork(name, selectedFrame)`：从已提交位置创建持久分支，并返回独立、可继续保存的工作副本。
+可写仓库支持 `ForkShared(name, selectedFrame)`：从已提交位置创建持久分支，并返回独立、可继续保存的工作副本。
 源工作副本可以保持打开；它的未提交字段不进入子分支。关闭上面的浏览仓库后，下面的代码接续示例数据库；
 它的 `main` Head 是已保存的 State，分支名 `left` / `right` 须尚未存在，`models` 沿用打开前注册的固定配置：
 
 ```csharp
-using (var branches = Repository.OpenExisting(path, models, schemaWriteMode: SchemaWriteMode.Shared)) {
-    using var source = branches.Checkout("main");
+using (var branches = Repository.OpenExisting(path, models)) {
+    using var source = branches.CheckoutShared("main");
     var selected = source.Head;
-    using var left = branches.Fork("left", selected);
-    using var right = branches.Fork("right", selected);
+    using var left = branches.ForkShared("left", selected);
+    using var right = branches.ForkShared("right", selected);
     var leftWorld = (World)left.State!;
     var rightWorld = (World)right.State!;
     leftWorld.Hero.Hp -= 1;
@@ -305,7 +305,7 @@ Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖
 **重建 payload 减少 33.3% 不等于读取快 33.3%**，写入比例也不是整个仓库的磁盘空间保证。
 当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
 
-在 CreateBranch、CreateBranchFromEvent、CommitEvent 或 CommitState 的 `parameters` 参数传入配置即可。
+在 CreateSharedBranch、CreateSharedBranchFromEvent、CommitEvent 或 CommitState 的 `parameters` 参数传入配置即可。
 例如，对上面的工作副本，再完成一次偏向存储的事件/状态保存：
 
 ```csharp

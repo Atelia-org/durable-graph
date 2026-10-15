@@ -13,19 +13,19 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress candidate;
         using (Repository repository = CreateRepository()) {
             InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage));
-            var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateBranch("main", new Node(), NoRebase));
+            var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateSharedBranch("main", new Node(), NoRebase));
             Assert.Equal(outcome, error.Outcome);
             Assert.True(repository.IsFaulted);
             candidate = Assert.IsType<FrameAddress>(error.CandidateRevisionAddress);
         }
-        using Repository reopened = Repository.OpenExisting(_root, Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared);
+        using Repository reopened = Repository.OpenExisting(_root, Models());
         Assert.Equal(visible, reopened.ListBranches().Contains("main"));
         StoredGraphRevision appended = reopened.GraphStore.ReadGraph(candidate);
         SchemaCatalogView candidateCatalog = SchemaCatalogView.Load(reopened.GraphStore, appended.SchemaRoot!.Value);
         Assert.Equal(Schema, candidateCatalog.Schemas[new(Schema.Type, Schema.Version)]);
         if (visible) {
             Assert.Equal(appended.SchemaRoot, reopened.SharedSchemaRoot);
-            using BranchCheckout main = reopened.Checkout("main");
+            using BranchCheckout main = reopened.CheckoutShared("main");
             Assert.Equal(CheckpointKind.State, main.Head.Kind);
             Assert.Equal(candidate, main.Head.RevisionAddress);
         } else {
@@ -38,7 +38,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData((int)RepositorySaveStage.BeforeInstall)]
     public void DgOnlyFaultInvalidatesRetainedWarmFacadesEvenWhenDataOwnerIsUsable(int point) {
         using Repository repository = CreateRepository();
-        using BranchCheckout main = repository.CreateBranch("main", new Node(), NoRebase);
+        using BranchCheckout main = repository.CreateSharedBranch("main", new Node(), NoRebase);
         RepositoryResources resources = ResourcesOf(repository);
         GraphRecordStore retained = resources.GraphStore;
         FrameAddress old = main.Head.RevisionAddress;
@@ -72,8 +72,8 @@ public sealed partial class RepositoryTagFailureWindowTests : IDisposable {
     [InlineData("AfterConfirmed", RepositoryPublicationOutcome.Published, true)]
     public void ActualTagPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, RepositoryPublicationOutcome outcome, bool visible) {
         FrameAddress saved;
-        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(), schemaWriteMode: global::Atelia.DurableGraph.SchemaWriteMode.Shared)) {
-            using BranchCheckout main = repository.CreateBranch("main", new Node { Value = 17 });
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
             saved = main.Head.RevisionAddress;
             InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage), tag: true);
             var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("candidate", main.Head));

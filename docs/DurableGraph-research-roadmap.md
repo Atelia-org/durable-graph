@@ -63,7 +63,7 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 
 此表只列仍需工作的增量。方向已选不代表每项 API、顺序和细节已经批准。
 
-[DB-095 显式编辑会话入口](design-branches/0095-repository-open-intent/README.md)已选 E，计划就绪、尚未实施；下一轮按其 API/接线/迁移/验收合同推进，移除 Open 未配置保存状态，保 Shared/Private 与准确来源纪律。private 无历史新建和复合 ForkPrivate 不随本片扩展，须有独立消费者需求才重访。
+[DB-095 显式编辑会话入口](design-branches/0095-repository-open-intent/README.md)E 核心与迁移已实施，源码门禁通过、普通包验收进行中；准确停点和剩余验收只查该记录。private 无历史新建和复合 ForkPrivate 不随本片扩展，须有独立消费者需求才重访。
 
 B/D/H 分别指本轮精确 Base payload、Delta payload 上界、已有对象重建链的实际 payload 字节；
 均排除 ObjectId、ObjectHeadMap 目录与共享 Revision Frame 结构。
