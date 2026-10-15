@@ -111,3 +111,24 @@ remove this project's DurableGraph generator output beneath it. Keep Schema-hist
 then force compilation with `dotnet build -t:Rebuild`; `dotnet clean` alone may leave generator
 output behind. The hash detects mismatched generation inputs; it does not detect a
 coordinated replacement of all history and generated inputs with a different self-consistent set.
+
+<a id="publication-coordination-validation"></a>
+## Publication coordination validation
+
+2026-10-15, implementation `21d1aeb7e6bcdb1326794dce0429be71e0e46969`:
+Release solution build passed with no warnings/errors; 236 focused history/template/cross-assembly
+tests passed, including seven new coordination cases. The new package candidate
+`0.0.0-historylock.20261015.g21d1aeb` retained storage `0.1.3-dev.20261014.g3de8fb0`.
+An external consumer with a fresh cache and only the complete local feed passed first Debug/Release
+builds for one seven-field schema, then serial Verify with unchanged history. Original package CLI
+pairs accepted both identical manifests and exactly one of each shape/kind/arity conflict pair.
+A simulated owner-only history input failed with exact DG0019 for its missing local inline dependency;
+adding that dependency's original file made the subsequent serial build succeed.
+
+The [source tests](../../tests/DurableGraph.Tests/SchemaHistoryPublicationConcurrencyTests.cs)
+and local `.artifacts/schema-history-concurrency/simplification/` evidence retain the details.
+Package/cache bytes and the executed build-tool DLL were checked against the original candidate.
+Process overlap was observed without claiming a deterministic internal scheduling handshake;
+the partial-history case was an input fixture, not a paused production publisher. This qualification
+is Windows/.NET SDK 10.0.201 only, and does not extend to IDE behavior, physical path aliases,
+other platforms, all concurrent builds, or batch crash recovery.

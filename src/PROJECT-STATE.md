@@ -19,11 +19,10 @@
 
 ## 当前焦点
 
-Schema-history 发布保护正在实施：问题是两个后置发布者可基于旧目录分别接受冲突候选。
-限定为 Build 工具 Publish/Verify 读取、校验和发布区间的同目录互斥，保持 SG/targets 输入与格式；
-最小验收为真实进程下同形幂等、异形/family 冲突只接纳一方，已有历史不改写，以及新 G 普通包验证。
-完整构建仍按串行 Publish 后冻结历史并行 Verify 的工作流；合同见 [Build 工具](DurableGraph.Build/README.md)。
-输入名单/编译快照不属于本片，验证完成后将此项替换为完成入口。
+Schema-history 发布保护已实施并完成限定验收：Build 的 Publish/Verify 在同目录互斥内重读、校验与发布，
+保同形幂等及冲突写前拒绝；SG/targets 输入和历史格式保持。完整构建仍串行，冻结历史后可并行 Verify。
+准确新 G、源码回归和普通包正反例见 [完成记录](DurableGraph.Build/README.md#publication-coordination-validation)。
+本片无剩余必经施工；仅在真实消费者必须消除多记录重叠编译失败时重访稳定输入名单，不自动开启该方案。
 
 H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#candidate-delivery)已实施：`eng/Prepare-DurableGraphCandidate.ps1` 导出固定 G、完整相对路径配置、README 同源 QuickStart 与当前示例原包闭包；原文 runner 直接执行命令。干净来源的新 G 已通过搬迁、空 cache、本地唯一源和既有 Upgrade/Fork/Verify 限定验收，来源与证据只查[完成记录](../docs/storage-dependency.md#candidate-delivery-validation)。本片无剩余必经施工；公开 preview 保留为分发选择，不改运行时/API/格式。
 
