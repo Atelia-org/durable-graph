@@ -4,9 +4,11 @@
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
-下一步先读[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
+**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决、明天的 API 草图起点与未决顺序集中于此；其余材料按问题查阅。
 
-[应用合同与并行设计稿](application-design.md)整合本轮操作、标签/摘要、发布和查询分析：在首版无 rewind、业务 Head 仅真实提交的条件下，优先验证继承 head-history，显式父链降为对照；标签承载与准确历史起点仍待收敛。
+需求依据见[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
+
+[应用合同与并行设计稿](application-design.md)整合操作、标签/摘要、发布和查询分析：在首版无 rewind、业务 Head 仅真实提交的条件下，优先验证继承 head-history，显式父链降为对照；标签承载与 DG 历史窗口 API 仍待收敛，上游准确历史起点已交付。
 
 [存档定位值的五个调用故事](save-handle-stories.md)进一步串起继续、书签、分页、fork 和 LLM 恢复；[新的 HeadStore 请求](headstore-save-handles-request.md)收敛两类 ID 编解码、准确 Entry 历史起点和使用时资格。它取代[原请求](headstore-requests.md)中 R1 的具体范围；原文继续保留已实施引用初始化的比较依据。
 
@@ -196,7 +198,7 @@ HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHea
 
 形成短调用草图后，再用同一故事比较显式父链 / head-log、世界线与 Head 的映射及属性存放位置，最后针对实际规模验证枚举和更新成本。§8 的机制比较保留作检查工具，不再充当需求讨论的起点。
 
-上游改名和 DG 接入不再待选；下一步是 domain-history 的需求和设计。持续状态由[产品工作集](../../../src/PROJECT-STATE.md)承载，未决研究入口由[路线图](../../DurableGraph-research-roadmap.md)维护；本目录暂不建立第二份状态账本。
+产品实际能力仍由[产品工作集](../../../src/PROJECT-STATE.md)承载，全局未决入口由[路线图](../../DurableGraph-research-roadmap.md)维护。用户要求跨上下文续接后，本设计问题使用本地 [PROJECT-STATE](PROJECT-STATE.md)维护简短研究焦点与已确认边界，不复制产品能力或完整设计账本。
 
 ## 10. 证据与阅读入口
 
