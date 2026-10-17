@@ -8,7 +8,9 @@
 
 [应用合同与并行设计稿](application-design.md)整合本轮操作、标签/摘要、发布和查询分析：在首版无 rewind、业务 Head 仅真实提交的条件下，优先验证继承 head-history，显式父链降为对照；标签承载与准确历史起点仍待收敛。
 
-[HeadStore 增强请求](headstore-requests.md)单列已认可的准确 ID 持久化读回需求，以及已交由上游选择引用初始化的对比依据。用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
+[存档定位值的五个调用故事](save-handle-stories.md)进一步串起继续、书签、分页、fork 和 LLM 恢复；[新的 HeadStore 请求](headstore-save-handles-request.md)收敛两类 ID 编解码、准确 Entry 历史起点和使用时资格。它取代[原请求](headstore-requests.md)中 R1 的具体范围；原文继续保留已实施引用初始化的比较依据。
+
+用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 
 ## 1. 本轮问题与边界
 
@@ -188,7 +190,7 @@ HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHea
 
 先从[具体用户故事](user-stories.md)提炼对外功能，再在实现成本与使用便利之间取舍。当前优先把 DramaBoard 的多开局、主动分叉、重复显示标签、末端预览和重开继续串成完整操作；区分用户明确需要的行为、推荐默认和待确认问题。
 
-父入口继续、历史位置分叉、按存档归属建树、原线只追加及 fork 立即可见已经明确。[并行设计稿](application-design.md)已推演操作与失败结果；下一步集中选择标签承载、解释新根与 shared Schema 的创建发布，以及准确历史起点和 State/Event 恢复材料。rewind、唯一名称查询、归档等不进入首片。
+父入口继续、历史位置分叉、按存档归属建树、原线只追加及 fork 立即可见已经明确。[并行设计稿](application-design.md)覆盖创建/发布，[调用故事](save-handle-stories.md)覆盖定位与操作组合；准确历史起点等已形成可交接的[上游请求](headstore-save-handles-request.md)。后续继续收敛标签、新根与 shared Schema 的创建协议及 DG 恢复材料；rewind、唯一名称查询、归档等不进入首片。
 
 形成短调用草图后，再用同一故事比较显式父链 / head-log、世界线与 Head 的映射及属性存放位置，最后针对实际规模验证枚举和更新成本。§8 的机制比较保留作检查工具，不再充当需求讨论的起点。
 
