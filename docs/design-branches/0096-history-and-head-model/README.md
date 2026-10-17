@@ -10,6 +10,8 @@
 
 [存档定位值的五个调用故事](save-handle-stories.md)进一步串起继续、书签、分页、fork 和 LLM 恢复；[新的 HeadStore 请求](headstore-save-handles-request.md)收敛两类 ID 编解码、准确 Entry 历史起点和使用时资格。它取代[原请求](headstore-requests.md)中 R1 的具体范围；原文继续保留已实施引用初始化的比较依据。
 
+[最新交付复核与 API 方向](headstore-delivery-review.md)：上游同库 codec/准确历史已可用，独立消费者通过；紧凑 Handle 只作弱跨库检出，原 P1 的完整身份要求有差异，建议 DG 对外引用补全仓库 scope。该职责待确认，DG pin/产品接入尚未更新。
+
 用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 
 ## 1. 本轮问题与边界
@@ -20,7 +22,7 @@
 
 本轮形成首选验证候选，不冻结 metadata 编码和附件协议。用户此前提出的“一世界线一 Head、Entry payload 存父 HeadEntryId”保留为[父链对照](user-stories.md#26-候选细化一世界线一-headentry-payload-显式父链)。既有有限源码适配只增加独立书签目录并迁移上游 API，不代表完成新历史模型。
 
-DG 既有接入基线为 Storage `731eef7cd3158572532fbeea7ba95a79213a7328`，见[固定依赖](../../../eng/StorageDependency.props)与[接入切片](headstore-adaptation.md)。本轮设计末已只读核对上游引用初始化提交 `474dbe4ddfc12898a894c157f72ac5a44a7bcc80`；以下 HS 现行术语按新源码解释，不表示 DG pin、代码或测试资格已更新。
+DG 既有接入基线为 Storage `731eef7cd3158572532fbeea7ba95a79213a7328`，见[固定依赖](../../../eng/StorageDependency.props)与[接入切片](headstore-adaptation.md)。最新交付复核 HEAD 为 `3e1dc46041ce731768f18552639c18fbf73e111e`、包来源为 `c6fb64a97ebc066e10c480e4439f20a2067683a2`；以下 HS 现行术语已按紧凑 Handle 校准，不表示 DG pin、代码或测试资格已更新。
 
 ## 2. 先区分两种历史
 
@@ -99,8 +101,8 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 
 | 当前标识符 | 标识什么 | 不能据此推断什么 |
 |---|---|---|
-| `HeadId` | 带 HeadStore 持久身份的 Head 身份；`LocalId` 只是库内编号。 | 名称、DG 分支身份、目标存在或内容健康。 |
-| `HeadEntryId` | 实际 Head 身份 + 完整 ticket 的定位值；从发布、checked read 或 checked HeadSetTag 表取得，值可脱离 owner 比较。 | 业务 checkpoint 身份、读到的内容永远健康，或调用方选择来源的 UI 上下文。不是 DG 的 open-scoped 地址。 |
+| `HeadId` | 4B 紧凑库上下文 Handle；通过公开 codec 读回；局部编号由 owner 的 `GetLocalHeadId` 解释。 | 不含完整库身份，跨库相等/误命中可能发生；不证明名称、DG 分支资格、存在或健康。 |
+| `HeadEntryId` | 紧凑 HeadId + 完整 ticket；12B 持久表示，可脱离 owner 编解码/比较，使用时校验目标。 | 不证明完整库身份、业务 checkpoint 资格或永久健康；不含选中世界线的 UI 上下文。DG 对外引用建议另带完整 scope。 |
 | `FrameAddress` | 指定 FrameStore 上下文中的物理帧位置。 | 仓库全局唯一身份、领域对象身份或发布成功。 |
 | `CheckpointAddress` | 当前打开的 DG owner + 图帧位置；按这两者判等。 | 可序列化的跨重开书签。`RevisionAddress` 只是诊断投影。 |
 | `ObjectId` | 图解释上下文中的领域对象身份。 | 某个 checkpoint、head、存储位置，或跨独立仓库的全局对象身份。 |
