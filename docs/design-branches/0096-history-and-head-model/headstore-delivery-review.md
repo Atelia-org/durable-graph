@@ -1,6 +1,6 @@
 # DB-096：HeadStore 交付复核与 DG 后续 API 方向
 
-> 状态：2026-10-17，已完成只读源码复核和独立 public PackageReference 消费者验证。**主要操作能力满足；跨库身份有一项实质合同差异，不能将原请求标为全部满足。**
+> 状态：2026-10-17，已完成源码复核和独立 public PackageReference 消费者验证。用户随后明确跨库检查只需开发期诊断；[概率与实际实验](handle-misuse-detection.md)支持现有紧凑 Handle。按澄清后的需求，交付可用，无需为强身份返工；撤回每个 DG 引用默认增加 16B scope 的建议。
 > 对照：[持久定位值与准确历史请求](headstore-save-handles-request.md)、[五个调用故事](save-handle-stories.md)。本文不修改 DG pin 或运行时，不代表 DG 接入已验收。
 
 ## 1. 结论及来源
@@ -11,11 +11,11 @@
 
 | 请求 | 实际交付 | 本次判断 |
 |---|---|---|
-| P1 两类 ID 持久化 | HeadId 4B、HeadEntryId 12B；纯值 TryWrite/TryRead，无 owner 或 I/O | 同库往返与调用组合满足；完整跨库身份不由裸 ID 提供 |
+| P1 两类 ID 持久化 | HeadId 4B、HeadEntryId 12B；纯值 TryWrite/TryRead，无 owner 或 I/O | 满足同库往返与已澄清的开发期误用诊断；不是强跨库身份 |
 | P2 准确历史起点 | `ReadEntryHistory(startInclusive, budget, visitor, token)`，直接定位 anchor 后继承来源前缀 | 满足 inclusive 与现有分页方案，未发现阻断 |
 | P3 导入位置检查 | 同库范围、记录首尾/CRC/Fence、正常 writer 转义与 CU 资格；错误不回退 | 支持正常存储模型中的局部准确验证；错库判断仍受紧凑 Handle 弱身份限制 |
 
-可以继续 DG API 设计，但须把“裸 Handle 自带完整库身份”改为明确的分层选择。建议在 DG 对外定位值中补充完整仓库 scope；这项责任调整应反馈用户/上游确认，不伪装成原 P1 已逐字实现。
+可以继续 DG API 设计。原 P1 的强身份要求与上游紧凑表示确实不同，但用户已明确不需要这种强保证；默认保留紧凑 ID 和显式 Repository 调用上下文，不为每个引用增加完整仓库身份。原源码/消费者证据仍有效，需求校准与补充实验集中见[误用检出分析](handle-misuse-detection.md)。
 
 ## 2. 新 API 与需要接线的差异
 
@@ -38,20 +38,15 @@ AteliaResult<HeadHistoryEnd> store.ReadEntryHistory(
 
 准确历史从 anchor 的 ticket 建立有界逆扫，不先遍历新后缀。直接 anchor 若是未成立 CU，失败；正常向旧扫描遇到合法未成立 CU 则跳过。重复 inclusive anchor、跨 Head 和必要 CU 工作均计预算。停止不证明更多项或完成；callback 中仍不能 fork，退出后可用保留的 ID fork。
 
-## 3. 可直接转发的反馈：完整库身份的责任归属
+## 3. 身份目标已澄清，无需反馈返工
 
 **观察到的差异：** 原 P1 要求完整持久库身份、不同库同编号不混同。现行 `HeadId` 仅有 4B 编码值，HeadEntryId 再加 8B ticket；两者的相等与持久编码均不含完整 16B HeadStoreId。跨库误用只作概率性检出。
 
 这不是普通 decoder 漏检。正式合同和测试均明确：不同完整库身份、相同 key 或相同高 key 字节时，导入 Handle 可以与本库目标相等，`ReadEntry`、`ReadEntryHistory`、`ForkHead` 也可以成功访问该健康目标。该性质按库对相关，不能描述成每次调用都有独立的低概率防护。
 
-**建议确认以下职责划分：**
+**用户补充后的裁决：** 目标是开发期误用诊断，不是所有跨库值都必拒绝。之前的分析强调范围检查约 255/256，未充分计入“解码到的文件号实际未使用”这层检出能力。随机独立库 key 下，目标库有 N 个 Head 时，已有文件命中概率约为 `N/2^32`；1000 个 Head 时约四百二十九万分之一。代码空间穷举与特殊值修正见[补充分析](handle-misuse-detection.md)。
 
-1. HS 保留当前紧凑 Handle 和正常存储模型中的准确记录/发布资格验证。
-2. DG 对外的世界线/存档定位值携带完整 HeadStoreId，先检查 scope 再调用 HS；公开相等与哈希也包含 scope。
-3. 仓库内部、已验证所属上下文中的字段可以只存 compact Handle；跨仓库传递、应用设置和外部书签使用带 scope 的表示。
-4. 原 request 的强跨库身份要求由 DG 包装实现，不再归因于裸 HeadId/HeadEntryId。若上游希望通用消费者也有带 scope 的便捷表示，可另议，但不是继续 DG 设计的接口前置。
-
-现有 `HeadStore.HeadStoreId` 已公开完整 16B opaque canonical 身份，最低信息足够，无需立即恢复宽 Handle。请确认这一责任调整即可；本轮没有发现需因 P2 或同库编解码而返工的阻断。
+因此撤回要求每个 DG 引用默认携带完整 HeadStoreId 的建议，不再把这项身份差异当成上游阻塞或待确认反馈。完整 StoreId 仍可用于仓库级管理，但是否放进应用的外层配置，由具体功能决定；默认不摊到每个存档 handle。
 
 **证据：** [HeadId](../../../../atelia-storage/src/HeadStore/HeadId.cs)的类型备注/相等规则、[HandleCodecTests](../../../../atelia-storage/tests/HeadStore.Tests/Values/HandleCodecTests.cs)的 `ImportedHandlesRetainProbabilisticOwnerContextRatherThanFullIdentity`、[ImportedEntryValidationTests](../../../../atelia-storage/tests/HeadStore.Tests/Public/ImportedEntryValidationTests.cs)的 `ImportedWeakIdentityCanSelectHealthyTargetWithSameKeyOrSameHighKeyByte`，以及 [S4](../../../../atelia-storage/docs/HeadStore/04-versionstore-publication.md)紧凑 Handle 合同。
 
@@ -60,13 +55,14 @@ AteliaResult<HeadHistoryEnd> store.ReadEntryHistory(
 建议按下列角色推进，名称和字节布局尚不冻结：
 
 ```text
-LineRef = { HeadStoreScope, HeadId }
-SaveRef = { HeadStoreScope, HeadEntryId }
+LineRef = HeadId 的世界线角色包装（若包装有实际收益）
+SaveRef = HeadEntryId 的存档角色包装（若包装有实际收益）
+操作 = 在调用方选定的 Repository 上使用对应定位值
 ```
 
-scope 用自有不可变 16B 值，不能借用 owner 的 Span；不另生成重复 GUID。HeadStore gate 已绑定实际 FrameStore 的完整身份，Head header 也校验完整 HeadStoreId，因此当前单仓库模型无需每个引用再复制 FS 身份。复制出来且继续分化的两个同身份仓库目录仍由应用选择，不引入复制管理协议。
+包装用于区分业务角色，不额外生成 GUID，也不默认增加 16B 字段。Repository 上下文由调用方选择；相等/哈希按紧凑值解释，不宣称全局唯一。确需跨仓库集合或缓存时，用集合外层/调用上下文区分；需要持久仓库选择的应用可在配置中保存一次仓库信息。
 
-关键边界：不能将未知来源 raw Handle 通过 `FromRaw(currentRepo, raw)` 自动升级为已知来源的公开引用。即使 `ReadEntry(raw)` 成功，也无法找回它原来的库身份。来自外部的引用必须保留其完整 scope；来自本仓库读取/已验证内层记录的 Handle 可以在该已知上下文内构成公开引用。公开操作不提供悄悄绕过 scope 的 raw 重载。
+成功读取不能恢复 Handle 原来的完整库身份，概率性检查也不是认证。不过这不妨碍在本轮明确的开发期诊断目标下使用它，无需为当前故事引入强 scope 引用层。复制出来且分化的同身份目录仍由应用选择，不新增复制管理协议。
 
 定位值编码的版本和种类可由外层容器或字段 schema 承担，不必每项重复存 discriminator。解码成功只证明表示合法；业务成员资格、State/Event 种类、准确图和 Schema 仍在使用时检查。
 
@@ -79,7 +75,7 @@ scope 用自有不可变 16B 值，不能借用 owner 的 Span；不另生成重
 | 分叉 | SaveRef + 标签 → 新 LineRef | HS fork + DG 完整可见创建协议；不复制业务存档 |
 | 继续编辑 | LineRef + Shared/Private 编辑意图 → checkout | 续写目标明确；State/Event/外部工具语义保持 |
 
-新的细化顺序建议是：先确认 scope 归属并定义两类定位值，再定义存档小描述和历史窗口结果，最后与标签 A/B 方案、新根/shared Schema 创建协议组合。精准历史起点与 codec 已不需要继续停留在“等待上游提供”的状态。
+新的细化顺序建议是：按紧凑值和仓库调用上下文定义两类定位角色，再定义存档小描述和历史窗口结果，最后与标签 A/B 方案、新根/shared Schema 创建协议组合。身份目标已澄清，精准历史起点与 codec 也已交付，不再等待额外强 scope 方案。
 
 ## 5. 独立消费者执行证据
 
@@ -104,4 +100,4 @@ scope 用自有不可变 16B 值，不能借用 owner 的 Span；不另生成重
 
 ## 6. 本轮停止边界
 
-本轮完成交付核查、差异反馈与后续设计方向。DG 固定依赖、格式、公共 API 和运行时没有改动；上游工作树原有变更保持。下一轮应按确认的 scope 责任继续 DG 方案，并单独安排新包/source pin 接入与回归，不将本消费者的成功替代产品验收。
+本轮完成交付核查与后续设计方向；后继概率实验接受开发期诊断目标，原强 scope 建议已退出。DG 固定依赖、格式、公共 API 和运行时没有改动。下一轮按紧凑定位值继续 DG 方案，并单独安排新包/source pin 接入与回归，不将本消费者的成功替代产品验收。

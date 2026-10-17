@@ -10,7 +10,7 @@
 
 [存档定位值的五个调用故事](save-handle-stories.md)进一步串起继续、书签、分页、fork 和 LLM 恢复；[新的 HeadStore 请求](headstore-save-handles-request.md)收敛两类 ID 编解码、准确 Entry 历史起点和使用时资格。它取代[原请求](headstore-requests.md)中 R1 的具体范围；原文继续保留已实施引用初始化的比较依据。
 
-[最新交付复核与 API 方向](headstore-delivery-review.md)：上游同库 codec/准确历史已可用，独立消费者通过；紧凑 Handle 只作弱跨库检出，原 P1 的完整身份要求有差异，建议 DG 对外引用补全仓库 scope。该职责待确认，DG pin/产品接入尚未更新。
+[最新交付复核与 API 方向](headstore-delivery-review.md)：上游同库 codec/准确历史已可用，独立消费者通过。用户明确跨库检查只需开发期诊断，[概率与穷举实验](handle-misuse-detection.md)支持默认保留紧凑 Handle，撤回每个引用附完整 scope 的建议；DG pin/产品接入尚未更新。
 
 用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 
@@ -102,7 +102,7 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 | 当前标识符 | 标识什么 | 不能据此推断什么 |
 |---|---|---|
 | `HeadId` | 4B 紧凑库上下文 Handle；通过公开 codec 读回；局部编号由 owner 的 `GetLocalHeadId` 解释。 | 不含完整库身份，跨库相等/误命中可能发生；不证明名称、DG 分支资格、存在或健康。 |
-| `HeadEntryId` | 紧凑 HeadId + 完整 ticket；12B 持久表示，可脱离 owner 编解码/比较，使用时校验目标。 | 不证明完整库身份、业务 checkpoint 资格或永久健康；不含选中世界线的 UI 上下文。DG 对外引用建议另带完整 scope。 |
+| `HeadEntryId` | 紧凑 HeadId + 完整 ticket；12B 持久表示，可脱离 owner 编解码/比较，使用时校验目标。 | 不证明完整库身份、业务 checkpoint 资格或永久健康；不含选中世界线 UI 上下文。按已确认目标用于对应仓库上下文，不默认增加完整 scope。 |
 | `FrameAddress` | 指定 FrameStore 上下文中的物理帧位置。 | 仓库全局唯一身份、领域对象身份或发布成功。 |
 | `CheckpointAddress` | 当前打开的 DG owner + 图帧位置；按这两者判等。 | 可序列化的跨重开书签。`RevisionAddress` 只是诊断投影。 |
 | `ObjectId` | 图解释上下文中的领域对象身份。 | 某个 checkpoint、head、存储位置，或跨独立仓库的全局对象身份。 |
