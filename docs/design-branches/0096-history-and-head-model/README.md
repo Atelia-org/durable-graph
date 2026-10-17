@@ -1,10 +1,14 @@
 # DB-096：版本、历史与命名入口的概念模型
 
-> 状态：上游术语已落地；DG 接入已施工，domain-history 新模型仍待设计。校准：2026-10-17。
+> 状态：既有术语与 DG 接入已落地；上游引用初始化已提交，DG 新接入未验收。DramaBoard 首版只追加、fork 立即可见已确认；继承历史为首选验证候选，DG 新模型未实施。校准：2026-10-17。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
-先读本文的分层模型，再读[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
+下一步先读[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
+
+[应用合同与并行设计稿](application-design.md)整合本轮操作、标签/摘要、发布和查询分析：在首版无 rewind、业务 Head 仅真实提交的条件下，优先验证继承 head-history，显式父链降为对照；标签承载与准确历史起点仍待收敛。
+
+[HeadStore 增强请求](headstore-requests.md)单列已认可的准确 ID 持久化读回需求，以及已交由上游选择引用初始化的对比依据。用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 
 ## 1. 本轮问题与边界
 
@@ -12,9 +16,9 @@
 
 本轮最小验收标准：用同一组术语解释保存、rewind 后续写、从继承祖先分叉、重开定位和名称绑定；区分现有事实与候选设计，并能指出两种 domain-history 路线必须共同回答的问题。只核对源码、测试内容和下游用法，不宣称运行实验或性能资格。
 
-本轮不选择父链或 head-log 路线，不展开 app metadata 的编码和附件协议。有限源码适配只增加独立书签目录，并迁移上游 API；不代表完成增量名称索引或通用 domain-history 设计。
+本轮形成首选验证候选，不冻结 metadata 编码和附件协议。用户此前提出的“一世界线一 Head、Entry payload 存父 HeadEntryId”保留为[父链对照](user-stories.md#26-候选细化一世界线一-headentry-payload-显式父链)。既有有限源码适配只增加独立书签目录并迁移上游 API，不代表完成新历史模型。
 
-上游基线：Storage `731eef7cd3158572532fbeea7ba95a79213a7328`，见[固定依赖](../../../eng/StorageDependency.props)。DG 本轮适配和验证边界只记在[接入切片](headstore-adaptation.md)，旧包资格不沿用。
+DG 既有接入基线为 Storage `731eef7cd3158572532fbeea7ba95a79213a7328`，见[固定依赖](../../../eng/StorageDependency.props)与[接入切片](headstore-adaptation.md)。本轮设计末已只读核对上游引用初始化提交 `474dbe4ddfc12898a894c157f72ac5a44a7bcc80`；以下 HS 现行术语按新源码解释，不表示 DG pin、代码或测试资格已更新。
 
 ## 2. 先区分两种历史
 
@@ -51,7 +55,7 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 | **HeadEntry（头修订）** | 某个 head 上一次已接受发布的准确位置与对应值。同值的两次发布仍可有不同 Entry。 | HS `HeadEntryId`、`HeadEntry`。 |
 | **本地 head-log** | 同一 head 自己的已接受发布序列。其顺序有发布意义，不自动有业务祖先意义。 | 同一 Head 文件中经 HS 校验后交付的发布记录；不能直接把全部物理帧当作有效发布。 |
 | **继承 head-history（含来源的头历史）** | 本地 log 逆序遍历后，沿创建来源接续源 log 的准确前缀。用于明确区别单个文件的本地序列。 | `ReadHeadHistory` 当前提供此遍历；不是新增另一种存储。 |
-| **head fork origin（头创建来源）** | 新 head 从哪个实际 source HeadEntry 克隆初值。 | `HeadOriginInfo.SourceHeadId / SourceEntryTicket` 的来源声明；`ForkHead` 写入。 |
+| **head fork origin（头创建来源）** | 新 head 引用哪个实际 source HeadEntry 作为固定初值。 | `HeadOriginInfo.SourceHeadId / SourceEntryTicket` 的来源声明；`ForkHead` 写入。 |
 | **HeadEntryPayload（发布根载荷）** | HS 原样存取的字节，含义由上层定义。root 是发布入口角色，不意味着必须内联完整对象图。 | `PublishHead` / `PublishHeads` 等的 payload。 |
 | **联合发布（multi-head publication）** | 多个既有 head 的新 payload 作为一次共同更新接受。 | `PublishHeads`；创建 head、命名绑定、读快照隔离不因这个名称而自动纳入。 |
 | **HeadSetTag（具名 Head 位置表）** | 固定所选 Head 当前已接受 Entry 的非空表，不随后续发布移动；不代表业务历史书签或一次业务事务。 | `CreateTag(name, heads, out outcome)` / `ReadTag`；输入 `ReadOnlySpan<HeadId>`。 |
@@ -118,9 +122,11 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 - 内容位置 a1 实际属于 A 的发布记录。
 - 用户选择的操作来源上下文是 B。
 - 直接 `ForkHead(a1Revision)` 的 header 来源是 A。
-- 从 B 自己的初始克隆 Entry 分叉时，来源可以是 B，但那份值对应 a2，不能冒充 a1。
+- 旧 clone 实现曾给 B 生成初始 Entry；新引用初始化不生成它，B 未续写时读取当前值直接得到源 a2，不能冒充 a1。
 
-这不是底层来源不准确，而是两种来源描述不同事实。workshop 的 `parentNumber` 保存第 4 项；若后续决定 UI 只展示内容祖先，应明确这是产品语义选择，不能称为从现有历史恢复了同一信息。
+这不是底层来源不准确，而是两种来源描述不同事实。workshop 的 `parentNumber` 保存第 4 项。**DramaBoard 当前故事已明确选择 C 挂在 A 下**，按准确存档归属表达来源，不要求保留“从 B 的视图创建”；因此该故事可省去操作来源上下文。这个选择与 workshop 原有展示语义不同，不能称为从现有历史恢复了同一信息，也不据此修改 workshop。
+
+在一世界线一 Head 候选中，历史列表保留 a1 的原始身份，再调用 `ForkHead(a1.Id)`，即可使底层 origin 与上述业务来源一致。父线继续发布不改变子线固定的分叉位置。若选到的是 fork 初始克隆，应先解释它代表的源存档；具体规则和接线缺口见用户故事 §2.6。
 
 ## 6. 操作用语与候选实现的分界
 
@@ -128,7 +134,7 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 |---|---|---|
 | publish | 让某个 head 接受新 payload。 | HS 层，不自动新增业务节点。 |
 | commit | 提交一个领域 State 或 Event 并推进逻辑末端。 | DG `CommitState` / `CommitEvent`；各自独立发布。 |
-| head fork | 新建底层 head，克隆准确来源 revision。 | HS `ForkHead`；复制 HeadEntryPayload 不意味着复制整个对象图。 |
+| head fork | 新建底层 head，固定引用准确来源 Entry。 | 新 HS `ForkHead` 返回新 HeadId，不生成克隆 Entry，也不复制对象图。 |
 | domain fork | 从逻辑位置创建新的应用历史入口。 | 当前 `CreateBranch` / `ForkShared`；后者另交付工作副本。是否对应 head fork 待选。 |
 | rewind | 将既有逻辑入口选点退到本历史的旧位置，使以后提交从该位置接续。 | 讨论用语；当前可通过 `MoveBranch` 表达，但 `MoveBranch` 允许更广的跨线重定位。 |
 | move / retarget | 将入口指向另一个合法位置，不限定祖先关系。 | 当前 `MoveBranch(name, expectedHead, target)` 检查预期 Head，要求关闭目标分支 checkout。 |
@@ -144,13 +150,14 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 | workshop 实际消费者 | 按游戏日浏览历史、从选定分支旧日分叉、显示父分支和 fork day、关闭后续写。当前以名字编码编号/父编号/日期。 | 没有大图或长期分支增长的性能数据；不证明必须引入通用 metadata 框架。 |
 | 用户本轮明确方向 | 区分 head-log 与 domain-history；研究易用的 DG 历史层；名称映射需保持原子性并缩小写入范围、方便查询。 | 没有选定每分支一个 HS Head、父链、树型目录或具体复杂度指标。 |
 | 用户另一个设计分支 | app 摘要可不透明，较大 BLOB 可按地址按需读取。 | 本片不确定编码、更新协议、格式版本或附件存储 API。 |
+| DramaBoard 多世界线故事 | 多开局森林；父子线均可继续；可枚举历史并分叉，按选中存档归属挂接；重复且相对固定的显示标签；每次提交一同发布摘要。详见[用户故事](user-stories.md)。 | 不要求 Git 式唯一分支名或操作视图来源；一世界线一 Head 与 payload 父链仍是候选，rewind 未列为必需。 |
 | 本轮分析提出的探问 | 入口改名后身份、回退后旧路线发现、分页游标、归档/删除与保留策略。 | 都是待确认的使用场景，不是承诺全部交付的需求。 |
 
 “易于查询”还应拆为：按名定位、列出入口、按固定末端遍历逻辑历史、浏览发布轨迹、查询来源关系、读取摘要。历史节点数、分支数和单份 State 大小是不同成本维度。当前 `ReadFrames` 不恢复 State，但仍全链读取与分配；“无需反序列化 State”不等于“有分页或有界开销”。
 
 ## 8. 两种 domain-history 路线的共同讨论题
 
-本节保留用户提出的两个候选，列出比较轴，不作优劣裁决。
+本节保留早期以 rewind 为比较题的两条路线。首版现已明确不需要原线 rewind，因此不必在两者之间预选一整套回退机制；继承历史直接表达只追加领域历史的较小候选见[应用合同设计稿](application-design.md)。下表供需求变化时复查。
 
 | 比较轴 | A：显式逻辑父链 | B：rewind 时 fork head-log 并切换入口 |
 |---|---|---|
@@ -158,18 +165,18 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 | rewind 后继续 | 选旧 tip，新节点指向该点；底层发布仍可追加到原 head。 | 从准确选点创建新 log，入口切换后追加；旧 log 保留。 |
 | 节点身份 | 明确 checkpoint 与物理图位置是否绑定。 | 明确 checkpoint 与 HeadEntry 是否绑定；fork 初始克隆不应未经定义就算额外业务节点。 |
 | 非业务发布 | 目录 / 属性发布不在逻辑父链中。 | 必须定义哪些 Entry 属于业务节点；不能把元数据更新自动算成领域进展。 |
-| 来源表达 | 逻辑前驱不能独自表达操作来源上下文。 | HS origin 表达实际克隆来源；继承祖先场景仍需裁决操作上下文语义。 |
+| 来源表达 | 逻辑前驱不能独自表达操作来源上下文；DramaBoard 已选择不以该上下文建树。 | HS origin 表达实际克隆来源；若传入归一后的准确存档，符合 DramaBoard 的归属选择。 |
 | 原子性问题 | 名称、tip、其他必需根如何共同发布。 | 新 head 创建、入口改绑及其他根的发布如何形成可恢复的完整操作。 |
 | 管理与查询 | 遍历父链、旧路线的发现入口、目录更新范围。 | log 数量与生命周期、继承遍历、入口切换轨迹、旧 log 的发现入口。 |
 
-HS 当前 `ReadHeadHistory` 会交付 child 初始克隆和 source Entry；两项 payload 相等，但 EntryId 不同。B 必须定义这种存储级重复如何投影为业务历史；按 payload 字节相等去重也不能普遍成立，因为应用可能合法地连续保存相同状态。
+旧 HS `ReadHeadHistory` 会交付 child 初始克隆和 source Entry，两项 payload 相等但 EntryId 不同；新上游引用初始化已取消该重复。用户认可 fork 不增加领域存档，真实的同值重复保存仍保留，不按 payload 去重。[请求 R2](headstore-requests.md)保留前后比较与接入场景；DG 仍需验证新上游和所选领域历史模型。
 
 HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHead` / `ForkHead` 自动纳入同一次调用。因此 B 中“fork 后改绑名称”不能仅凭有 `PublishHeads` 就宣称整体已经原子；需要后续协议证明。相同问题也约束任何采用动态 head 创建的目录方案。
 
 ### 供后续方案共同解释的场景
 
 1. 保存 S0、S1、S2，rewind S0 后保存 S3：当前逻辑路径是 S0、S3；发布轨迹能否查询另行定义。
-2. A、B 共享旧前缀，从 B 的继承祖先创建 C：明确 UI 所谓来源是实际内容归属还是操作来源上下文。
+2. A、B 共享旧前缀，从 B 的继承祖先创建 C：DramaBoard 要求 C 挂在实际存档所属的 A 下；A、B、C 各自可继续。核对准确分叉位置与初始克隆的解释。
 3. 关闭重开后，按名称或固定书签取回位置：不得复用旧 DG owner 的句柄。
 4. 更新一个名称绑定或一个分支末端：说明必须一起可见的事实，以及实际需要重写的范围。
 5. 创建新 head 后入口发布失败：说明哪些结果可见、如何重新发现或管理准备产物；不能承诺透明重试。
@@ -179,7 +186,11 @@ HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHea
 
 ## 9. 后续讨论顺序
 
-先裁决 domain-history 的可见语义：rewind 是否保留入口身份、旧路线需怎样被发现、UI 来源具体表达什么、重复保存和 fork 克隆是否形成节点。再用相同场景比较 A/B，之后讨论名称目录的原子性与更新成本。checkpoint metadata 独立展开，并与选定的 checkpoint 身份和发布边界衔接。
+先从[具体用户故事](user-stories.md)提炼对外功能，再在实现成本与使用便利之间取舍。当前优先把 DramaBoard 的多开局、主动分叉、重复显示标签、末端预览和重开继续串成完整操作；区分用户明确需要的行为、推荐默认和待确认问题。
+
+父入口继续、历史位置分叉、按存档归属建树、原线只追加及 fork 立即可见已经明确。[并行设计稿](application-design.md)已推演操作与失败结果；下一步集中选择标签承载、解释新根与 shared Schema 的创建发布，以及准确历史起点和 State/Event 恢复材料。rewind、唯一名称查询、归档等不进入首片。
+
+形成短调用草图后，再用同一故事比较显式父链 / head-log、世界线与 Head 的映射及属性存放位置，最后针对实际规模验证枚举和更新成本。§8 的机制比较保留作检查工具，不再充当需求讨论的起点。
 
 上游改名和 DG 接入不再待选；下一步是 domain-history 的需求和设计。持续状态由[产品工作集](../../../src/PROJECT-STATE.md)承载，未决研究入口由[路线图](../../DurableGraph-research-roadmap.md)维护；本目录暂不建立第二份状态账本。
 
