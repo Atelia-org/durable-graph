@@ -1,11 +1,11 @@
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
 
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph;
 
-/// <summary>Owns shared data and the VersionStore root publishing branches and immutable tags.</summary>
+/// <summary>Owns shared data and the HeadStore root publishing branches and immutable tags.</summary>
 /// <remarks>
 /// Single-threaded, one writer and at most one active checkout per branch. Different branches may have
 /// live checkouts together; all repository operations remain serial. Close a branch's checkout before moving it.

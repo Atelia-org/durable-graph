@@ -1,20 +1,20 @@
 
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
 // Concrete metadata-graph owner used by the public factories and bounded internal probes.
 public sealed partial class RepositoryResources {
-    private const uint BranchRef = 1, SharedRef = 2;
+    private const uint BranchDirectoryHead = 1, SharedSchemaHead = 2, BookmarkDirectoryHead = 3;
     private const string BranchPrefix = "branch/", SchemaKey = "schema";
     private static ReadOnlySpan<byte> BranchMagic => "P0R1"u8;
     private static ReadOnlySpan<byte> SharedMagic => "P0S1"u8;
     private PublicationBaseline _baseline = null!;
-    private RefRevision _branchRevision, _sharedRevision;
+    private HeadEntryId _branchEntry, _sharedEntry;
     private PendingRepositorySave? _pending;
     private bool _preparing, _committing;
 
@@ -24,21 +24,23 @@ public sealed partial class RepositoryResources {
         internal FrameAddress? SharedRoot { get; } = sharedRoot;
     }
 
-    private RepositoryResources(DataStore data, PublicationStore versions,
-        RefBytesSnapshot branches, RefBytesSnapshot shared, long readCacheBudgetBytes) {
+    private RepositoryResources(DataStore data, PublicationStore heads,
+        HeadEntry branches, HeadEntry shared, HeadEntry bookmarks, long readCacheBudgetBytes) {
         Data = data;
-        IsReadOnly = versions.IsReadOnly;
-        _versions = versions;
-        _branchRevision = branches.Revision;
-        _sharedRevision = shared.Revision;
+        IsReadOnly = heads.IsReadOnly;
+        _heads = heads;
+        _branchEntry = branches.Id;
+        _sharedEntry = shared.Id;
         _baseline = new(DecodeBranches(branches.Payload), DecodeShared(shared.Payload));
+        _bookmarkEntry = bookmarks.Id;
+        _bookmarks = DecodeBookmarks(bookmarks.Payload);
         _graphStore = new(data, RequireStorageAvailable, readCacheBudgetBytes);
         try {
             if (_baseline.SharedRoot is { } schema && _graphStore.ReadMetadata(schema).Kind != StoredGraphKind.Meta) {
                 throw new InvalidDataException("The shared root must select a P0 meta graph.");
             }
         } catch (Exception error) {
-            // The outer factory closes VS/FS; release a facade created before root validation failed.
+            // The outer factory closes HS/FS; release a facade created before root validation failed.
             CloseResources(error, _graphStore, null, null);
             throw;
         }
@@ -52,9 +54,9 @@ public sealed partial class RepositoryResources {
     internal FrameAddress? SharedSchemaRoot { get { RequireStorageAvailable(); return _baseline.SharedRoot; } }
 
     internal static RepositoryResources CreateStorageNew(string path,
-        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateHead = null,
         long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
-        OpenStorage(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
+        OpenStorage(path, create: true, readOnly: false, readCacheBudgetBytes, afterCreateHead, rotationThresholdBytes);
     internal static RepositoryResources OpenStorageExisting(string path,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes,
         long rotationThresholdBytes = DefaultRotationThresholdBytes) =>
@@ -64,7 +66,7 @@ public sealed partial class RepositoryResources {
         OpenStorage(path, create: false, readOnly: true, readCacheBudgetBytes);
 
     private static RepositoryResources OpenStorage(string path, bool create, bool readOnly, long readCacheBudgetBytes,
-        Action<uint>? afterCreateRef = null, long rotationThresholdBytes = DefaultRotationThresholdBytes) {
+        Action<uint>? afterCreateHead = null, long rotationThresholdBytes = DefaultRotationThresholdBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         string root = Path.GetFullPath(path);
@@ -74,27 +76,30 @@ public sealed partial class RepositoryResources {
         } else if (!Directory.Exists(root)) { throw new DirectoryNotFoundException(root); }
 
         DataStore? data = null;
-        PublicationStore? versions = null;
+        PublicationStore? heads = null;
         try {
-            string dataPath = Path.Combine(root, "data"), versionsPath = Path.Combine(root, "versions");
+            string dataPath = Path.Combine(root, "data"), headsPath = Path.Combine(root, "versions");
             data = create ? DataStore.Create(dataPath, rotationThresholdBytes) : readOnly
                 ? DataStore.OpenReadOnly(dataPath) : DataStore.Open(dataPath, rotationThresholdBytes);
-            versions = create ? PublicationStore.Create(versionsPath, data, reservedRefIdUpperBound: SharedRef)
-                : readOnly ? PublicationStore.OpenReadOnly(versionsPath, data) : PublicationStore.Open(versionsPath, data);
-            if (versions.ReservedRefIdUpperBound != SharedRef) { throw new InvalidDataException("Not a P0 publication layout."); }
+            heads = create ? PublicationStore.Create(headsPath, data, reservedHeadIdUpperBound: BookmarkDirectoryHead)
+                : readOnly ? PublicationStore.OpenReadOnly(headsPath, data) : PublicationStore.Open(headsPath, data);
+            if (heads.ReservedHeadIdUpperBound != BookmarkDirectoryHead) { throw new InvalidDataException("Not a P0 publication layout."); }
             if (create) {
-                versions.CreateRef(BranchRef, EncodeBranches(new(StringComparer.Ordinal)), out _).Unwrap();
-                afterCreateRef?.Invoke(BranchRef);
-                versions.CreateRef(SharedRef, EncodeShared(null), out _).Unwrap();
-                afterCreateRef?.Invoke(SharedRef);
+                heads.CreateHead(BranchDirectoryHead, EncodeBranches(new(StringComparer.Ordinal)), out _).Unwrap();
+                afterCreateHead?.Invoke(BranchDirectoryHead);
+                heads.CreateHead(SharedSchemaHead, EncodeShared(null), out _).Unwrap();
+                afterCreateHead?.Invoke(SharedSchemaHead);
+                heads.CreateHead(BookmarkDirectoryHead, EncodeRoot(BookmarkMagic, new Dictionary<string, FrameAddress>(StringComparer.Ordinal)), out _).Unwrap();
+                afterCreateHead?.Invoke(BookmarkDirectoryHead);
             }
-            // Missing either ref is an incomplete initialization, never a resumable create.
-            RefBytesSnapshot branches = versions.ReadRef(BranchRef).Unwrap();
-            RefBytesSnapshot shared = versions.ReadRef(SharedRef).Unwrap();
-            return new(data, versions, branches, shared, readCacheBudgetBytes);
+            // Missing any required Head is an incomplete initialization, never a resumable create.
+            HeadEntry branches = heads.ReadHead(BranchDirectoryHead).Unwrap();
+            HeadEntry shared = heads.ReadHead(SharedSchemaHead).Unwrap();
+            HeadEntry bookmarks = heads.ReadHead(BookmarkDirectoryHead).Unwrap();
+            return new(data, heads, branches, shared, bookmarks, readCacheBudgetBytes);
         }
         catch (Exception error) {
-            CloseResources(error, null, versions, data);
+            CloseResources(error, null, heads, data);
             throw;
         }
     }
@@ -125,7 +130,7 @@ public sealed partial class RepositoryResources {
     }
 
     internal sealed record PreparedBranchRootUpdate(RepositoryResources Owner,
-        PublicationBaseline ExpectedBaseline, RefRevision ExpectedRevision,
+        PublicationBaseline ExpectedBaseline, HeadEntryId ExpectedRevision,
         PublicationBaseline NextBaseline, byte[] Payload);
 
     internal PreparedBranchRootUpdate PrepareBranchRoot(string branch, FrameAddress head) {
@@ -134,63 +139,35 @@ public sealed partial class RepositoryResources {
         _ = ReadHistory(head);
         var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) { [branch] = head };
         PublicationBaseline next = new(branches, _baseline.SharedRoot);
-        return new(this, _baseline, _branchRevision, next, EncodeBranches(branches));
+        return new(this, _baseline, _branchEntry, next, EncodeBranches(branches));
     }
 
-    // This operation updates only the branch ref. The shared Schema head and revision stay fixed.
+    // This operation updates only the branch directory Head. The shared Schema head and revision stay fixed.
     internal void PublishBranchRoot(PreparedBranchRootUpdate candidate, out PublicationOutcome outcome) {
         outcome = PublicationOutcome.NotAttempted;
         EnsureEditingAllowed();
         ArgumentNullException.ThrowIfNull(candidate);
         if (!ReferenceEquals(candidate.Owner, this) || !ReferenceEquals(candidate.ExpectedBaseline, _baseline) ||
-            candidate.ExpectedRevision != _branchRevision) {
+            candidate.ExpectedRevision != _branchEntry) {
             throw new InvalidOperationException("Branch publication requires this owner's latest prepared root.");
         }
         bool publicationRejected = false;
         _committing = true;
         try {
-            var published = _versions.PublishRef(_branchRevision.RefId, candidate.Payload, out outcome);
+            var published = _heads.PublishHead(_branchEntry.HeadId, candidate.Payload, out outcome);
             publicationRejected = published.IsFailure;
-            RefRevision revision = published.Unwrap();
+            HeadEntryId revision = published.Unwrap();
             _baseline = candidate.NextBaseline;
-            _branchRevision = revision;
+            _branchEntry = revision;
         } catch {
             if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable()) { MarkFaulted(); }
             throw;
         } finally { _committing = false; }
-    }
-
-    internal void CreateStoredTag(string name, FrameAddress address, out PublicationOutcome outcome) {
-        outcome = PublicationOutcome.NotAttempted;
-        EnsureEditingAllowed();
-        _ = ReadHistory(address);
-        byte[] payload = new byte[FrameAddress.EncodedSize];
-        if (!address.TryWrite(payload)) { throw new InvalidDataException("Invalid graph tag address."); }
-        bool publicationRejected = false;
-        _committing = true;
-        try {
-            var published = _versions.CreateTag(name, payload, out outcome);
-            publicationRejected = published.IsFailure;
-            published.Unwrap();
-        } catch {
-            if (!publicationRejected || outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable()) { MarkFaulted(); }
-            throw;
-        } finally { _committing = false; }
-    }
-
-    internal FrameAddress ResolveStoredTag(string name) {
-        RequireStorageAvailable();
-        var payload = _versions.ResolveTag(name).Unwrap();
-        if (payload.Bytes.Length != FrameAddress.EncodedSize || !FrameAddress.TryRead(payload.Bytes, out FrameAddress address)) {
-            throw new InvalidDataException("Invalid graph address in tag payload.");
-        }
-        _ = ReadHistory(address);
-        return address;
     }
 
     internal void EnsureEditingAllowed() {
         RequireStorageAvailable();
-        if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
+        if (_heads.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
         if (_pending is not null || _preparing || _committing) { throw new InvalidOperationException("A P0 save is already being prepared or pending."); }
     }
 
@@ -253,7 +230,7 @@ public sealed partial class RepositoryResources {
         Action<StoredGraphRevision>? prepareBusinessDelivery = null) {
         RequireStorageAvailable();
         ArgumentNullException.ThrowIfNull(pending);
-        if (_versions.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
+        if (_heads.IsReadOnly) { throw new InvalidOperationException("The P0 repository is read-only."); }
         if (_committing || !ReferenceEquals(pending.Owner, this) || !ReferenceEquals(_pending, pending) ||
             !pending.IsPrepared || !ReferenceEquals(pending.Baseline, _baseline)) {
             throw new InvalidOperationException("CommitMetaBootstrap requires this owner's latest, unused pending save.");
@@ -292,24 +269,24 @@ public sealed partial class RepositoryResources {
             var nextBaseline = new PublicationBaseline(branches, sharedRoot);
             byte[] branchPayload = EncodeBranches(branches);
             byte[]? sharedPayload = pending.PrivateCatalog || pending.Catalog is null ? null : EncodeShared(schemaRoot);
-            Dictionary<RefId, ReadOnlyMemory<byte>>? changes = sharedPayload is null ? null : new() {
-                [_branchRevision.RefId] = branchPayload,
-                [_sharedRevision.RefId] = sharedPayload
+            Dictionary<HeadId, ReadOnlyMemory<byte>>? changes = sharedPayload is null ? null : new() {
+                [_branchEntry.HeadId] = branchPayload,
+                [_sharedEntry.HeadId] = sharedPayload
             };
             var saved = new RepositorySaveResult(business, selectedMeta, sharedRoot);
             SaveStageObserver?.Invoke(RepositorySaveStage.BeforePublication);
             RequireStorageAvailable();
 
             publishing = true;
-            RefRevision nextBranch, nextShared = _sharedRevision;
+            HeadEntryId nextBranch, nextShared = _sharedEntry;
             if (changes is not null) {
-                var published = _versions.PublishRefs(changes, out outcome);
+                var published = _heads.PublishHeads(changes, out outcome);
                 publicationRejected = published.IsFailure;
-                IReadOnlyDictionary<RefId, RefRevision> revisions = published.Unwrap();
-                nextBranch = revisions[_branchRevision.RefId];
-                nextShared = revisions[_sharedRevision.RefId];
+                IReadOnlyDictionary<HeadId, HeadEntryId> revisions = published.Unwrap();
+                nextBranch = revisions[_branchEntry.HeadId];
+                nextShared = revisions[_sharedEntry.HeadId];
             } else {
-                var published = _versions.PublishRef(_branchRevision.RefId, branchPayload, out outcome);
+                var published = _heads.PublishHead(_branchEntry.HeadId, branchPayload, out outcome);
                 publicationRejected = published.IsFailure;
                 nextBranch = published.Unwrap();
             }
@@ -318,8 +295,8 @@ public sealed partial class RepositoryResources {
             SaveStageObserver?.Invoke(RepositorySaveStage.BeforeInstall);
             RequireStorageAvailable();
             _baseline = nextBaseline;
-            _branchRevision = nextBranch;
-            _sharedRevision = nextShared;
+            _branchEntry = nextBranch;
+            _sharedEntry = nextShared;
             // Even a reused exact meta graph can consume a producer's same-shape dirty set.
             if (selectedMeta is not null) { installMeta?.Invoke(selectedMeta); }
             RequireStorageAvailable();
@@ -328,7 +305,7 @@ public sealed partial class RepositoryResources {
             return saved;
         }
         catch (Exception error) {
-            // A normal VS rejection proves no publication and may leave healthy orphan data.
+            // A normal HS rejection proves no publication and may leave healthy orphan data.
             // Other output exceptions, or interrupted DG installation, invalidate old facades.
             bool fault = outcome != PublicationOutcome.NotAttempted || !StorageBackingUsable() ||
                 (publishing ? !publicationRejected : store.AppendedFrames != framesBefore);
@@ -364,7 +341,7 @@ public sealed partial class RepositoryResources {
     }
 
     private bool StorageBackingUsable() {
-        try { Data.EnsureUsable(); _versions.EnsureUsable(); return true; }
+        try { Data.EnsureUsable(); _heads.EnsureUsable(); return true; }
         catch (InvalidOperationException) { return false; }
     }
 
@@ -375,9 +352,9 @@ public sealed partial class RepositoryResources {
         schema is { } address ? new Dictionary<string, FrameAddress>(StringComparer.Ordinal) { [SchemaKey] = address } : new(StringComparer.Ordinal));
 
     private static byte[] EncodeRoot(ReadOnlySpan<byte> magic, IReadOnlyDictionary<string, FrameAddress> roots) {
-        byte[] body = RootMapCodec.Encode(roots).Unwrap();
+        byte[] body = NamedFrameMapCodec.Encode(roots).Unwrap();
         int length = checked(magic.Length + body.Length);
-        if (length > PublicationStore.MaxRootPayloadLength) { throw new InvalidOperationException("P0 publication root exceeds the ref payload capacity."); }
+        if (length > PublicationStore.MaxHeadEntryPayloadLength) { throw new InvalidOperationException("P0 publication root exceeds the HeadEntry payload capacity."); }
         byte[] payload = new byte[length];
         magic.CopyTo(payload);
         body.CopyTo(payload, magic.Length);
@@ -408,7 +385,7 @@ public sealed partial class RepositoryResources {
 
     private static IReadOnlyDictionary<string, FrameAddress> DecodeRoot(ReadOnlySpan<byte> magic, ReadOnlySpan<byte> payload) {
         if (!payload.StartsWith(magic)) { throw new InvalidDataException("Unknown P0 publication-root format."); }
-        return RootMapCodec.Decode(payload[magic.Length..]).Unwrap();
+        return NamedFrameMapCodec.Decode(payload[magic.Length..]).Unwrap();
     }
 
 }

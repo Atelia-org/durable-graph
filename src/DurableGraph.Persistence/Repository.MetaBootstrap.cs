@@ -16,9 +16,9 @@ public sealed partial class Repository {
     }
 
     internal static Repository CreateStorageNew(string path, StateModelRegistry models,
-        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+        long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes, Action<uint>? afterCreateHead = null,
         long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes) =>
-        OpenStorage(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes);
+        OpenStorage(path, models, create: true, readOnly: false, readCacheBudgetBytes, afterCreateHead, rotationThresholdBytes);
     internal static Repository OpenStorageExisting(string path, StateModelRegistry models,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes,
         long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes) =>
@@ -29,13 +29,13 @@ public sealed partial class Repository {
         OpenStorage(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
     private static Repository OpenStorage(string path, StateModelRegistry models, bool create, bool readOnly,
-        long readCacheBudgetBytes, Action<uint>? afterCreateRef = null,
+        long readCacheBudgetBytes, Action<uint>? afterCreateHead = null,
         long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes) {
         ArgumentNullException.ThrowIfNull(models);
         ArgumentOutOfRangeException.ThrowIfNegative(readCacheBudgetBytes);
         RepositoryResources? resources = null;
         try {
-            resources = create ? RepositoryResources.CreateStorageNew(path, readCacheBudgetBytes, afterCreateRef, rotationThresholdBytes) : readOnly
+            resources = create ? RepositoryResources.CreateStorageNew(path, readCacheBudgetBytes, afterCreateHead, rotationThresholdBytes) : readOnly
                 ? RepositoryResources.OpenStorageReadOnlyExisting(path, readCacheBudgetBytes)
                 : RepositoryResources.OpenStorageExisting(path, readCacheBudgetBytes, rotationThresholdBytes);
             return new(resources, models.FreezeConfiguration());

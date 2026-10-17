@@ -21,6 +21,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
+| 096 | [版本、历史与命名入口的概念模型](0096-history-and-head-model/README.md)；上游 HeadStore / HeadSetTag 已对齐，DG 三入口书签适配；domain-history 路线仍待比较 |
 | 095 | [Repository 打开意图与业务保存准入](0095-repository-open-intent/README.md)；E 已实施并完成源码/新 G 普通包限定验收；显式编辑会话入口，不扩 private 新建/ForkPrivate |
 | 094 | [有限支持真实 property backing field](0094-backing-field-support/README.md)；前期调研储备，范围与规模待摸清，未选为当前实施片 |
 | 093 | [显式存储分类有效性核对](0093-explicit-storage-classification/README.md)；已实施并完成源码及新 G 普通包限定验收；DG0024 拒绝遗漏分类，不开放普通 backing 持久化 |

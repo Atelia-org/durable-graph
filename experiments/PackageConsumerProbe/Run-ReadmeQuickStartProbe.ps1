@@ -134,7 +134,7 @@ try {
     $receipt['StorageRevision'] = $storageRevision
 
     $ids = @('Atelia.Binary', 'Atelia.Data', 'Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization',
-        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.VersionStore', 'K4os.Compression.LZ4')
+        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore', 'K4os.Compression.LZ4')
     $packages = @(Get-ChildItem -LiteralPath $feed -File -Filter '*.nupkg')
     $hashLines = @(Get-Content -LiteralPath (Join-Path $moved 'packages.sha256') | Where-Object { $_.Trim() })
     if ($packages.Count -ne 11 -or $hashLines.Count -ne 11) { throw 'Require the current example closure: four G, six S and one K4os package.' }

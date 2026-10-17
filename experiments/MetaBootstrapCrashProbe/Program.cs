@@ -6,13 +6,13 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using MetaBootstrapCrash;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
 
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 // READY is diagnostic evidence, never publication authority. Only a fresh owner
 // reading refs1/2 decides the selected pair after an external process termination.
@@ -51,13 +51,13 @@ internal static class Program {
     }
 
     private static void InitWriter(string repositoryPath, string window, string readyPath) {
-        uint target = window == "AfterFirstCreateRef" ? 1u : 2u;
+        uint target = window == "AfterFirstCreateHead" ? 1u : window == "AfterSecondCreateHead" ? 2u : 3u;
         List<uint> completed = [];
-        using Repository unexpected = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), afterCreateRef: localId => {
+        using Repository unexpected = Repository.CreateStorageNew(repositoryPath, HostModel.Models(), afterCreateHead: localId => {
             completed.Add(localId);
-            Need(localId == (uint)completed.Count, "The factory must complete refs1/2 in order.");
+            Need(localId == (uint)completed.Count, "The factory must complete Heads 1/2/3 in order.");
             if (localId != target) { return; }
-            // CreateRef has returned: its private RBF was flushed, closed and renamed.
+            // CreateHead has returned: its private RBF was flushed, closed and renamed.
             // Only those closed formal control files are hashed here; the borrowed
             // FrameStore remains exclusive and no Repository has been delivered.
             string refsPath = Path.Combine(repositoryPath, "versions", "refs");
@@ -65,7 +65,7 @@ internal static class Program {
                 .Select(path => new FileImage(Path.GetRelativePath(repositoryPath, path), Hash(File.ReadAllBytes(path)))).ToArray();
             Need(files.Length == completed.Count, "Unexpected formal ref set at the factory checkpoint.");
             Need(Directory.GetFiles(Path.Combine(repositoryPath, "versions", "creating")).Length == 0,
-                "A successful CreateRef must not leave private pending output.");
+                "A successful CreateHead must not leave private pending output.");
             // This is a source-informed declaration, not an active FS inventory.
             // The fresh verifier independently measures the actual user-frame count.
             Wait(new InitReadyEvidence(Protocol, window, Environment.ProcessId, localId,
@@ -77,8 +77,8 @@ internal static class Program {
     private static void InitVerify(string repositoryPath, string window, string readyPath, string resultPath) {
         InitReadyEvidence ready = JsonSerializer.Deserialize<InitReadyEvidence>(File.ReadAllText(readyPath), Json)
             ?? throw new InvalidDataException("Missing initialization READY evidence.");
-        bool complete = window == "AfterSecondCreateRef";
-        uint[] refs = complete ? [1, 2] : [1];
+        bool complete = window == "AfterThirdCreateHead";
+        uint[] refs = complete ? [1, 2, 3] : window == "AfterSecondCreateHead" ? [1, 2] : [1];
         Need(ready.Protocol == Protocol && ready.Window == window && ready.ProcessId != Environment.ProcessId &&
             ready.CompletedRefId == refs[^1] && ready.CompletedRefs.SequenceEqual(refs) && ready.DeclaredUserDataFrames == 0,
             "Initialization READY must describe the exact successful factory returns in another process.");
@@ -92,8 +92,8 @@ internal static class Program {
             using (Repository reader = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
                 RepositoryResources resources = Resources(reader);
                 Need(reader.IsReadOnly && reader.ListBranches().Count == 0 && reader.SharedSchemaRoot is null,
-                    "Two completed factory refs must open as an empty readonly DG repository.");
-                CheckEmptyInitializationRoots(resources.Versions, complete: true);
+                    "Three completed factory Heads must open as an empty readonly DG repository.");
+                CheckEmptyInitializationRoots(resources.Heads, 3);
                 Need(Inventory(resources).Length == 0, "The initialization factory must not contain user data frames.");
             }
         } else { RejectIncompleteFactory(repositoryPath, readOnly: true); }
@@ -108,14 +108,14 @@ internal static class Program {
         // formal roots and the zero user-frame declaration without a DG cache.
         using (DataStore data = DataStore.Open(Path.Combine(repositoryPath, "data")))
         using (PublicationStore versions = PublicationStore.Open(Path.Combine(repositoryPath, "versions"), data)) {
-            Need(versions.ReservedRefIdUpperBound == 2 && versions.ListRefs().Unwrap().Select(id => id.LocalId).Order().SequenceEqual(refs),
+            Need(versions.ReservedHeadIdUpperBound == 3 && versions.ListHeads().Unwrap().Select(id => id.LocalId).Order().SequenceEqual(refs),
                 "Fresh exclusive backing must expose precisely the completed formal refs.");
-            CheckEmptyInitializationRoots(versions, complete);
+            CheckEmptyInitializationRoots(versions, refs.Length);
             int userFrames = 0;
             data.Inventory(_ => userFrames++).Unwrap();
             Need(userFrames == 0, "Actual initialized data has unexpected user frames.");
             Need(data.RecoveryReports.Values.All(report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.None) && versions.RecoveryReports.Count == 0,
-                "After-successful-CreateRef Kill must not require backing tail repair.");
+                "After-successful-CreateHead Kill must not require backing tail repair.");
         }
         Need(SameFiles(initialFiles, SnapshotFiles(repositoryPath)), "Initialization verification changed completed data or formal ref bytes.");
         string? seedState = null, schema = null, continuationState = null;
@@ -130,7 +130,7 @@ internal static class Program {
         }
         WriteJson(resultPath, new { Protocol, Lane = "init-verify", Passed = true, ProcessId = Environment.ProcessId,
             WriterProcessId = ready.ProcessId, Window = window,
-            ObservedInitialization = complete ? "CompleteEmptyRoots" : "MissingSecondRef",
+            ObservedInitialization = complete ? "CompleteEmptyRoots" : refs.Length == 1 ? "MissingSecondHead" : "MissingThirdHead",
             InitialUserDataFrames = 0, FileBytesPreserved = true, ReadOnlyFilesUnchanged = true, LocksReleased = true,
             SingleDelta = complete, ExactPrior = complete, IdsPreserved = complete, HVerified = complete,
             SeedState = seedState, Schema = schema, ContinuationState = continuationState, Objects = objects,
@@ -142,18 +142,22 @@ internal static class Program {
             using Repository unexpected = readOnly ? Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())
                 : Repository.OpenStorageExisting(repositoryPath, HostModel.Models());
         } catch (InvalidOperationException error) {
-            Need(error.Message.Contains("[VersionStore.RefNotFound]", StringComparison.Ordinal), "Fresh DG rejected for a cause other than missing ref2.");
+            Need(error.Message.Contains("[HeadStore.HeadNotFound]", StringComparison.Ordinal), "Fresh DG rejected for a cause other than missing ref2.");
             return;
         }
         throw new InvalidDataException("DG must refuse incomplete initialization rather than fill or ignore ref2.");
     }
 
-    private static void CheckEmptyInitializationRoots(PublicationStore versions, bool complete) {
-        Need(DecodeRoot(versions.ReadRef(1).Unwrap().Payload, "P0R1"u8).Count == 0, "Initial branch root payload must be exactly empty.");
-        if (complete) { Need(DecodeRoot(versions.ReadRef(2).Unwrap().Payload, "P0S1"u8).Count == 0, "Initial shared root payload must be exactly empty."); }
-        else {
-            var missing = versions.ReadRef(2);
-            Need(missing.IsFailure && missing.Error!.ErrorCode == "VersionStore.RefNotFound", "Missing ref2 must remain absent after failed DG Open.");
+    private static void CheckEmptyInitializationRoots(PublicationStore versions, int completed) {
+        string[] magic = ["P0R1", "P0S1", "P0T1"];
+        for (uint id = 1; id <= 3; id++) {
+            var read = versions.ReadHead(id);
+            if (id <= completed) {
+                Need(DecodeRoot(read.Unwrap().Payload, System.Text.Encoding.UTF8.GetBytes(magic[id - 1])).Count == 0,
+                    "Initialized directory must be empty.");
+            } else {
+                Need(read.IsFailure && read.Error!.ErrorCode == "HeadStore.HeadNotFound", "Missing Head must remain absent.");
+            }
         }
     }
 
@@ -280,10 +284,10 @@ internal static class Program {
                 Wait(Prepared("DG.BeforeInstall"), readyPath);
             }
         };
-        InstallHooks(resources.Versions, () => {
+        InstallHooks(resources.Heads, () => {
             cuEnds++;
-            if (window == "AfterFirstCuEnd" && cuEnds == 1) { Wait(Prepared("VS.AfterRefRecordAppended.1"), readyPath); }
-            if (window == "AfterAllCuEnd" && cuEnds == 2) { Wait(Prepared("VS.AfterRefRecordAppended.2"), readyPath); }
+            if (window == "AfterFirstCuEnd" && cuEnds == 1) { Wait(Prepared("VS.AfterHeadRecordAppended.1"), readyPath); }
+            if (window == "AfterAllCuEnd" && cuEnds == 2) { Wait(Prepared("VS.AfterHeadRecordAppended.2"), readyPath); }
         }, () => beforeCuFlushCalls++, () => {
             Need(cuEnds == 2 && beforeCuFlushCalls == 2, "The mutation must publish two CU members.");
             if (window == "AfterPublicationConfirmed") { Wait(Prepared("VS.AfterPublicationConfirmed"), readyPath); }
@@ -340,8 +344,8 @@ internal static class Program {
             RepositoryResources resources = Resources(repository);
             // Necessary refs only. READY expectations do not substitute for actual
             // formal root reads, joint publication qualification or graph pins.
-            RefBytesSnapshot branches = resources.Versions.ReadRef(1).Unwrap();
-            RefBytesSnapshot shared = resources.Versions.ReadRef(2).Unwrap();
+            HeadEntry branches = resources.Heads.ReadHead(1).Unwrap();
+            HeadEntry shared = resources.Heads.ReadHead(2).Unwrap();
             IReadOnlyDictionary<string, FrameAddress> branchRoots = DecodeRoot(branches.Payload, "P0R1"u8);
             IReadOnlyDictionary<string, FrameAddress> sharedRoots = DecodeRoot(shared.Payload, "P0S1"u8);
             Need(branchRoots.Count == 1 && branchRoots.TryGetValue("branch/main", out FrameAddress branchHead) && branchHead == expectedState,
@@ -378,7 +382,7 @@ internal static class Program {
             }
             HostModel.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
             HostModel.Check(repository.ReadState(repository.GetHead("main")), expectNew ? 201 : 7);
-            Need(resources.Data.RecoveryReports.Count == 0 && resources.Versions.RecoveryReports.Count == 0,
+            Need(resources.Data.RecoveryReports.Count == 0 && resources.Heads.RecoveryReports.Count == 0,
                 "Readonly verification must not execute physical recovery.");
         }
         Dictionary<string, string> afterReadOnly = SnapshotFiles(repositoryPath);
@@ -429,7 +433,7 @@ internal static class Program {
             HostModel.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
             Need(resources.Data.RecoveryReports.Values.All(report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.None),
                 "A READY-complete data prefix must not require tail repair.");
-            Need(resources.Versions.RecoveryReports.All(report => report.Recovery.Action == Atelia.Rbf.RbfTailRecoveryAction.None),
+            Need(resources.Heads.RecoveryReports.All(report => report.Recovery.Action == Atelia.Rbf.RbfTailRecoveryAction.None),
                 "Completed CU members must not require control-file tail repair.");
         }
         // A second independent owner verifies that the accepted continuation, selected
@@ -493,7 +497,7 @@ internal static class Program {
     private static void InstallHooks(PublicationStore versions, Action afterCuEnd, Action beforeCuFlush, Action afterConfirmed) {
         FieldInfo field = typeof(PublicationStore).GetField("_testHooks", BindingFlags.Instance | BindingFlags.NonPublic)!;
         object hooks = Activator.CreateInstance(field.FieldType, nonPublic: true)!;
-        field.FieldType.GetField("AfterRefRecordAppended", BindingFlags.Instance | BindingFlags.NonPublic)!
+        field.FieldType.GetField("AfterHeadRecordAppended", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(hooks, (Action<Atelia.Data.SizedPtr>)(_ => afterCuEnd()));
         field.FieldType.GetField("AfterPublicationConfirmed", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(hooks, afterConfirmed);
         field.FieldType.GetField("BeforeConditionalUpdateFlush", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -525,7 +529,7 @@ internal static class Program {
     private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes));
     private static IReadOnlyDictionary<string, FrameAddress> DecodeRoot(ReadOnlySpan<byte> payload, ReadOnlySpan<byte> magic) {
         Need(payload.StartsWith(magic), "Incorrect actual root payload role.");
-        return RootMapCodec.Decode(payload[magic.Length..]).Unwrap();
+        return NamedFrameMapCodec.Decode(payload[magic.Length..]).Unwrap();
     }
     private static Dictionary<string, string> SnapshotFiles(string repositoryPath) =>
         Directory.GetFiles(repositoryPath, "*", SearchOption.AllDirectories)
@@ -551,7 +555,7 @@ internal static class Program {
     }
     private static string InitWindow(Dictionary<string, string> options) {
         string window = Required(options, "window");
-        Need(window is "AfterFirstCreateRef" or "AfterSecondCreateRef", "Unknown direct factory initialization window.");
+        Need(window is "AfterFirstCreateHead" or "AfterSecondCreateHead" or "AfterThirdCreateHead", "Unknown direct factory initialization window.");
         return window;
     }
     private static void Need(bool condition, string message) {

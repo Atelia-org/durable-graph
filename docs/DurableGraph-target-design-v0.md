@@ -37,7 +37,7 @@ Source Generator 负责可在编译期确定的类型知识与机械代码，框
 
 [DB-071](design-branches/0071-assembly-namespace/0071-assembly-namespace-organization-review.md) 保留七项目的职责与依赖边界：
 Persistence 组合 Runtime、Storage 与发布底座；Runtime 和 Storage 共用 Serialization。
-新底座方向按[DB-086（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md")采用 Binary/FrameStore/VersionStore，不因换底座进一步拆程序集。
+新底座方向按[DB-086（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/design-branches/0086-new-storage-refactoring-plan/0086-new-storage-refactoring-plan.md")采用 Binary/FrameStore/HeadStore，不因换底座进一步拆程序集。
 主 DurableGraph 程序集的根 namespace 保留领域/登记契约，Schema 放布局描述，Runtime 放执行绑定与状态操作。
 这些 namespace 不增加程序集边界，不要求 Schema 与 Runtime 在同程序集内形成单向依赖。
 组织迁移要求依赖闭包重编译，保留类型访问级别、Generated/Family/DTO、模型 ID/版本与持久格式；不引入旧包兼容壳。
@@ -462,9 +462,9 @@ ref-only CreateBranch 不恢复领域图，也不占用工作副本。占用仅�
 
 历史读写统一使用本次 Repository 签发的 CheckpointAddress，按打开 owner 与图帧位置判等；
 null、外仓库或重开旧地址拒绝，诊断用 RevisionAddress/RootId 不能认证来源。重开从持久 branch ref 取得新地址，不提供外部可序列化地址。
-不可变tag的持久权威归上游发布底座，DG只创建和解析绑定；新方向由VersionStore承担，旧实现证据保留在[DB-084](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md)。
+不可变 tag 是 DG 的历史图书签，由独立书签目录 Head 3 发布名称到图地址的绑定；与上游 HeadSetTag 的当前 Head 集合捕获分开。具体布局和有限范围见 [DB-096](design-branches/0096-history-and-head-model/headstore-adaptation.md)，旧上游 bytes tag 证据保留在 [DB-084](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md)。
 tag 与 branch 名称空间独立、同名一律拒绝；可定位 Event-first 历史，重开解析签发当前打开的地址，不物化图或修改分支。
-不另立持久权威，也不把tag名当作跨仓库外部地址；发布outcome与资源fault分开解释，故障后fresh重开并按名字检查。
+书签目录是唯一绑定权威，不把 tag 名当作跨仓库外部地址；发布outcome与资源fault分开解释，故障后fresh重开并按名字检查。
 旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
 旧 publication.rbf 也不引入迁移或双发布机制。
 

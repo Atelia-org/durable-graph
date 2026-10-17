@@ -2,7 +2,7 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -38,8 +38,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             NormalizedGraphState baseline = main.Baseline!;
             CheckpointAddress oldHead = main.Head;
             SchemaCatalogView accepted = main.Catalog.Accepted!;
-            RefBytesSnapshot oldBranches = resources.Versions.ReadRef(1).Unwrap();
-            RefBytesSnapshot oldShared = resources.Versions.ReadRef(2).Unwrap();
+            HeadEntry oldBranches = resources.Heads.ReadHead(1).Unwrap();
+            HeadEntry oldShared = resources.Heads.ReadHead(2).Unwrap();
             FrameImage[] oldFrames = ReadFrames(resources.Data);
             long appended = store.AppendedFrames;
             DB087Widget root = AssertRing(main.State, 7);
@@ -66,8 +66,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.Equal(appended, store.AppendedFrames);
             Assert.Equal(oldFrames.Length, ReadFrames(resources.Data).Length);
             AssertFramesPreserved(resources.Data, oldFrames);
-            AssertSameRef(oldBranches, resources.Versions.ReadRef(1).Unwrap());
-            AssertSameRef(oldShared, resources.Versions.ReadRef(2).Unwrap());
+            AssertSameRef(oldBranches, resources.Heads.ReadHead(1).Unwrap());
+            AssertSameRef(oldShared, resources.Heads.ReadHead(2).Unwrap());
             Assert.Equal(seed.State, repository.GetHead("main").RevisionAddress);
             Assert.Equal(seed.Schema, repository.SharedSchemaRoot);
             Assert.NotNull(repository.PreparedStateEntry);
@@ -116,7 +116,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
                 if (stage == "BeforeInstall" && point == RepositorySaveStage.BeforeInstall) { hookCalls++; throw failure; }
             };
             if (stage != "BeforeInstall") {
-                InstallPublicationFault(resources.Versions, stage, () => {
+                InstallPublicationFault(resources.Heads, stage, () => {
                     if (stage != "AfterAppend" || ++hookCalls == failOnAppend) {
                         if (stage != "AfterAppend") { hookCalls++; }
                         throw failure;
@@ -162,8 +162,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         using (Repository reopened = Repository.OpenStorageExisting(_path, Models())) {
             RepositoryResources resources = ResourcesOf(reopened);
             GraphRecordStore store = reopened.GraphStore;
-            IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Versions.ReadRef(1).Unwrap(), "P0R1"u8);
-            IReadOnlyDictionary<string, FrameAddress> shared = ReadRoot(resources.Versions.ReadRef(2).Unwrap(), "P0S1"u8);
+            IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Heads.ReadHead(1).Unwrap(), "P0R1"u8);
+            IReadOnlyDictionary<string, FrameAddress> shared = ReadRoot(resources.Heads.ReadHead(2).Unwrap(), "P0S1"u8);
             FrameAddress selectedState = branches["branch/main"], selectedSchema = shared["schema"];
             Assert.Single(branches);
             Assert.Single(shared);
@@ -252,12 +252,12 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         return new(graph.Address, graph.SchemaRoot!.Value, graph.DirectoryRoot, graph.RootId, list, storage, ReadFrames(ResourcesOf(repository).Data));
     }
 
-    private static IReadOnlyDictionary<string, FrameAddress> ReadRoot(RefBytesSnapshot snapshot, ReadOnlySpan<byte> magic) {
+    private static IReadOnlyDictionary<string, FrameAddress> ReadRoot(HeadEntry snapshot, ReadOnlySpan<byte> magic) {
         Assert.True(snapshot.Payload.StartsWith(magic));
-        return RootMapCodec.Decode(snapshot.Payload[magic.Length..]).Unwrap();
+        return NamedFrameMapCodec.Decode(snapshot.Payload[magic.Length..]).Unwrap();
     }
-    private static void AssertSameRef(RefBytesSnapshot expected, RefBytesSnapshot actual) {
-        Assert.Equal(expected.Revision, actual.Revision);
+    private static void AssertSameRef(HeadEntry expected, HeadEntry actual) {
+        Assert.Equal(expected.Id, actual.Id);
         Assert.Equal(expected.Payload.ToArray(), actual.Payload.ToArray());
     }
     private static FrameImage[] ReadFrames(DataStore data) {

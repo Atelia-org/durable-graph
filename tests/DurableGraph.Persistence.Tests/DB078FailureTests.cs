@@ -77,7 +77,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using (Repository repository = CreateRepository()) {
             using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Node { Value = 7 }, NoRebase);
             var eventHead = checkout.Head;
-            InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("After root record append"));
+            InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => throw new IOException("After root record append"));
             var failure = Assert.Throws<RepositoryPublicationException>(() => checkout.CommitState(new Node { Value = 9 }, NoRebase));
             Assert.Equal(RepositoryPublicationOutcome.Unknown, failure.Outcome);
             Assert.True(repository.IsFaulted);

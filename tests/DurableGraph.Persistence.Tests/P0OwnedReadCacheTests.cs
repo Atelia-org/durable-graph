@@ -455,7 +455,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
             case "OwnerFault": resources.MarkFaulted(); break;
             case "OwnerDispose": resources.Dispose(); break;
             case "DataClose": resources.Data.Dispose(); break;
-            case "VersionsClose": resources.Versions.Dispose(); break;
+            case "VersionsClose": resources.Heads.Dispose(); break;
             default: throw new InvalidOperationException(stop);
         }
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadMetadata(address));
@@ -504,7 +504,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
             case "OwnerFault": resources.MarkFaulted(); break;
             case "OwnerDispose": resources.Dispose(); break;
             case "DataClose": resources.Data.Dispose(); break;
-            case "VersionsClose": resources.Versions.Dispose(); break;
+            case "VersionsClose": resources.Heads.Dispose(); break;
             default: throw new InvalidOperationException(stop);
         }
         ObjectVersionChain? delivered = null;

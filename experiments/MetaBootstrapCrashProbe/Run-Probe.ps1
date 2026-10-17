@@ -18,7 +18,7 @@ if (-not (Test-Path -LiteralPath $assetsPath -PathType Leaf)) {
 }
 $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
 $sourceProjects = @()
-foreach ($name in @('Atelia.Primitives', 'Atelia.Data', 'Atelia.Binary', 'Atelia.Rbf', 'Atelia.FrameStore', 'Atelia.VersionStore')) {
+foreach ($name in @('Atelia.Primitives', 'Atelia.Data', 'Atelia.Binary', 'Atelia.Rbf', 'Atelia.FrameStore', 'Atelia.HeadStore')) {
     $matches = @($assets.libraries.PSObject.Properties | Where-Object { $_.Name.Split('/')[0] -eq $name })
     if ($matches.Count -ne 1 -or $matches[0].Value.type -ne 'project') {
         throw "This source-only witness requires an actual ProjectReference for $name."
@@ -171,8 +171,9 @@ function Read-Result {
 }
 
 $windows = if ($InitializationOnly) { @(
-    @{ Name = 'AfterFirstCreateRef'; Expected = 'MissingSecondRef'; CompletedRefId = 1 },
-    @{ Name = 'AfterSecondCreateRef'; Expected = 'CompleteEmptyRoots'; CompletedRefId = 2 }
+    @{ Name = 'AfterFirstCreateHead'; Expected = 'MissingSecondHead'; CompletedRefId = 1 },
+    @{ Name = 'AfterSecondCreateHead'; Expected = 'MissingThirdHead'; CompletedRefId = 2 },
+    @{ Name = 'AfterThirdCreateHead'; Expected = 'CompleteEmptyRoots'; CompletedRefId = 3 }
 ) } else { @(
     @{ Name = 'AfterMetaAppend'; Expected = 'Old' },
     @{ Name = 'AfterBusinessAppend'; Expected = 'Old' },
@@ -219,10 +220,11 @@ try {
             if ($InitializationOnly) {
                 if ($ready.CompletedRefId -ne $window.CompletedRefId -or
                     @($ready.CompletedRefs).Count -ne $window.CompletedRefId -or $ready.CompletedRefs[0] -ne 1 -or
-                    ($window.CompletedRefId -eq 2 -and $ready.CompletedRefs[1] -ne 2) -or
+                    ($window.CompletedRefId -ge 2 -and $ready.CompletedRefs[1] -ne 2) -or
+                    ($window.CompletedRefId -eq 3 -and $ready.CompletedRefs[2] -ne 3) -or
                     @($ready.FormalRefImages).Count -ne $window.CompletedRefId -or
                     $null -eq $ready.DeclaredUserDataFrames -or $ready.DeclaredUserDataFrames -ne 0) {
-                    throw "Initialization READY does not prove the requested completed CreateRef boundary at $($window.Name)."
+                    throw "Initialization READY does not prove the requested completed CreateHead boundary at $($window.Name)."
                 }
                 foreach ($image in $ready.FormalRefImages) {
                     if ([string]::IsNullOrWhiteSpace([string]$image.Path) -or $image.Sha256 -notmatch '^[0-9a-fA-F]{64}$') {
@@ -269,7 +271,7 @@ try {
             if ($verified.$check -isnot [bool] -or -not $verified.$check) { throw "Verifier failed $check at $($window.Name)." }
         }
         if ($InitializationOnly) {
-            $hasTypedContinuation = $window.CompletedRefId -eq 2
+            $hasTypedContinuation = $window.CompletedRefId -eq 3
             foreach ($check in @('SingleDelta', 'ExactPrior', 'IdsPreserved', 'HVerified')) {
                 if ($verified.$check -isnot [bool] -or $verified.$check -ne $hasTypedContinuation) {
                     throw "Initialization verifier has an incorrect typed continuation marker $check at $($window.Name)."

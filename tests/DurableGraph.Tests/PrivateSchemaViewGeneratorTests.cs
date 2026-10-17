@@ -6,7 +6,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
@@ -297,13 +297,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         """;
 
     private sealed record PrivateFrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool Tombstone, byte[] Bytes);
-    private sealed record PrivateRefImage(RefRevision Revision, byte[] Bytes);
+    private sealed record PrivateRefImage(HeadEntryId Revision, byte[] Bytes);
     private sealed record PrivatePublicationImage(PrivateRefImage Branches, PrivateRefImage Shared, PrivateFrameImage[] Frames, long Appended);
     private static RepositoryResources PrivateResources(Repository repository) =>
         (RepositoryResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
     private static PrivateRefImage PrivateReadRef(Repository repository, uint id) {
-        RefBytesSnapshot actual = PrivateResources(repository).Versions.ReadRef(id).Unwrap();
-        return new(actual.Revision, actual.Payload.ToArray());
+        HeadEntry actual = PrivateResources(repository).Heads.ReadHead(id).Unwrap();
+        return new(actual.Id, actual.Payload.ToArray());
     }
     private static void PrivateAssertSameRef(PrivateRefImage expected, PrivateRefImage actual) {
         Assert.Equal(expected.Revision, actual.Revision);

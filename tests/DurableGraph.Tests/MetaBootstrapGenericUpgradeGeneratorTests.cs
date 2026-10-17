@@ -6,7 +6,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -162,8 +162,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         Dictionary<string, string> before = BootstrapGenericUpgradeFileHashes(files.Path);
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
-            var branch = repository.Versions.ReadRef(1).Unwrap();
-            var shared = repository.Versions.ReadRef(2).Unwrap();
+            var branch = repository.Heads.ReadHead(1).Unwrap();
+            var shared = repository.Heads.ReadHead(2).Unwrap();
             currentHost.ResetCalls();
             currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, source, currentHost.Models(0)), 1);
             currentHost.CheckCalls([ownerId]); // The same physical source succeeds with complete capabilities.
@@ -180,10 +180,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.False(repository.IsFaulted);
             Assert.Equal(source, repository.GetHead("main"));
             Assert.Equal(schema, repository.SharedSchemaRoot);
-            Assert.Equal(branch.Revision, repository.Versions.ReadRef(1).Unwrap().Revision);
-            Assert.Equal(shared.Revision, repository.Versions.ReadRef(2).Unwrap().Revision);
-            Assert.Equal(branch.Payload.ToArray(), repository.Versions.ReadRef(1).Unwrap().Payload.ToArray());
-            Assert.Equal(shared.Payload.ToArray(), repository.Versions.ReadRef(2).Unwrap().Payload.ToArray());
+            Assert.Equal(branch.Id, repository.Heads.ReadHead(1).Unwrap().Id);
+            Assert.Equal(shared.Id, repository.Heads.ReadHead(2).Unwrap().Id);
+            Assert.Equal(branch.Payload.ToArray(), repository.Heads.ReadHead(1).Unwrap().Payload.ToArray());
+            Assert.Equal(shared.Payload.ToArray(), repository.Heads.ReadHead(2).Unwrap().Payload.ToArray());
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
         AssertBootstrapGenericUpgradeFilesUnchanged(before, files.Path);

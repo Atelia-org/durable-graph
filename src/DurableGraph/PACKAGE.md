@@ -33,7 +33,7 @@ checkout destination; Commit...ToShared explicitly merges the complete catalog f
 Restoration bypasses constructors and field initializers. Rebuild Transient state after
 delivery; ReadPair may share read-only nodes, so view-specific context belongs outside those graphs.
 
-FrameStore/VersionStore own backing storage; meta Schema objects and business saves share publication.
+FrameStore/HeadStore own backing storage; meta Schema objects and business saves share publication.
 Completed frames remain append-only. Normal backing recovery handles incomplete tails; read-only
 opening does not repair them. Publication failures expose outcome and fault state: close and reopen
 when required, inspect durable names, and do not transparently retry. No old raw Store or storage-format

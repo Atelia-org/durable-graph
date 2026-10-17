@@ -1,21 +1,21 @@
 using System.Runtime.ExceptionServices;
 
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
-/// <summary>Owns one repository's matching data FrameStore, VersionStore, publication roots and save lifecycle.</summary>
+/// <summary>Owns one repository's matching data FrameStore, HeadStore, publication roots and save lifecycle.</summary>
 /// <remarks>
 /// Operations are serial. Facades and borrowed Data remain valid only while this owner is usable.
 /// Normal backing-store recovery runs before DG caches are constructed. Complete frames are never
 /// rewritten by DG. Data-only users can explicitly call Data.ConfirmDurable; Repository publication
-/// uses VersionStore's data-first barrier. Dispose and reopen after an uncertain owned operation.
+/// uses HeadStore's data-first barrier. Dispose and reopen after an uncertain owned operation.
 /// </remarks>
 public sealed partial class RepositoryResources : IDisposable {
     internal const long DefaultRotationThresholdBytes = 64L * 1024 * 1024 * 1024;
-    private readonly PublicationStore _versions;
+    private readonly PublicationStore _heads;
     private bool _faulted;
     private bool _disposed;
 
@@ -24,11 +24,11 @@ public sealed partial class RepositoryResources : IDisposable {
     public bool IsFaulted {
         get {
             if (_faulted) { return true; }
-            try { Data.EnsureUsable(); _versions.EnsureUsable(); return false; }
+            try { Data.EnsureUsable(); _heads.EnsureUsable(); return false; }
             catch (InvalidOperationException) { return true; }
         }
     }
-    internal PublicationStore Versions => _versions;
+    internal PublicationStore Heads => _heads;
 
     public static RepositoryResources CreateNew(string path, long rotationThresholdBytes = DefaultRotationThresholdBytes,
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
@@ -55,7 +55,7 @@ public sealed partial class RepositoryResources : IDisposable {
         if (_faulted) { throw new InvalidOperationException("Repository resources are faulted; dispose and reopen before further operations."); }
         try {
             Data.EnsureUsable();
-            _versions.EnsureUsable();
+            _heads.EnsureUsable();
         } catch {
             MarkFaulted();
             throw;
@@ -82,29 +82,29 @@ public sealed partial class RepositoryResources : IDisposable {
         _disposed = true;
         _pending?.Finish();
         _pending = null;
-        CloseResources(null, _graphStore, _versions, Data);
+        CloseResources(null, _graphStore, _heads, Data);
     }
 
     // Keep failure evidence while attempting every owned resource. Backing owners aggregate their
     // own close failures; retain those aggregates instead of flattening or replacing their errors.
     private static void CloseResources(Exception? primary, IDisposable? states,
-        PublicationStore? versions, DataStore? data) {
+        PublicationStore? heads, DataStore? data) {
         Exception? stateError = null;
-        Exception? versionError = null;
+        Exception? headError = null;
         Exception? dataError = null;
         try { states?.Dispose(); } catch (Exception error) { stateError = error; }
-        try { versions?.Dispose(); } catch (Exception error) { versionError = error; }
+        try { heads?.Dispose(); } catch (Exception error) { headError = error; }
         try { data?.Dispose(); } catch (Exception error) { dataError = error; }
 
-        Exception? first = primary ?? stateError ?? versionError ?? dataError;
+        Exception? first = primary ?? stateError ?? headError ?? dataError;
         if (first is null) { return; }
         int count = (primary is null ? 0 : 1) + (stateError is null ? 0 : 1)
-            + (versionError is null ? 0 : 1) + (dataError is null ? 0 : 1);
+            + (headError is null ? 0 : 1) + (dataError is null ? 0 : 1);
         if (count == 1) { ExceptionDispatchInfo.Capture(first).Throw(); }
         var errors = new List<Exception>(count);
         if (primary is not null) { errors.Add(primary); }
         if (stateError is not null) { errors.Add(stateError); }
-        if (versionError is not null) { errors.Add(versionError); }
+        if (headError is not null) { errors.Add(headError); }
         if (dataError is not null) { errors.Add(dataError); }
         throw new AggregateException("Repository failure and resource cleanup errors.", errors);
     }

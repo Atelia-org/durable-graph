@@ -223,7 +223,7 @@ try {
     if ($proof.DgVersion -cne $Version -or !$proof.ProductionInputsMatchHead -or $proof.IncludesUncommittedProductionSource) { throw 'Reuse a controlled committed-production package candidate.' }
     $receipt['PackProvenance'] = [ordered]@{ Path = $PackProvenancePath; Sha256 = (Get-FileHash -LiteralPath $PackProvenancePath -Algorithm SHA256).Hash; SourceHead = $proof.RepositoryHead }
     $ids = @('Atelia.Binary', 'Atelia.Data', 'Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization',
-        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.VersionStore')
+        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore')
     if (@(Get-ChildItem -LiteralPath $PackageSource -File -Filter '*.nupkg').Count -ne 10) { throw 'Require the existing exact complete ten-package feed.' }
     foreach ($id in $ids) {
         $packageVersion = if ($id.StartsWith('Atelia.DurableGraph')) { $Version } else { $storageVersion }

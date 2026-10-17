@@ -1,6 +1,6 @@
 using Atelia.FrameStore;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
@@ -21,7 +21,7 @@ internal sealed class RepositoryStorageFacade : IDisposable {
     }
 
     internal DataStore Data { get { RequireAvailable(); return _resources.Data; } }
-    internal PublicationStore Versions { get { RequireAvailable(); return _resources.Versions; } }
+    internal PublicationStore Heads { get { RequireAvailable(); return _resources.Heads; } }
     internal GraphRecordStore Store { get { RequireAvailable(); return _resources.GraphStore; } }
     internal Action<RepositorySaveStage>? SaveStageObserver {
         get => _resources.SaveStageObserver;

@@ -189,7 +189,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         using Repository repository = Repository.OpenStorageExisting(_path, ProbeModels(1, new()));
         using BranchCheckout warm = repository.ForkShared("warm", repository.GetHead("main"));
         PreparedStateRestoration previous = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
-        var before = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
+        var before = ResourcesOf(repository).Heads.ReadHead(1).Unwrap();
         repository.OperationStageObserver = point => {
             if (point == (afterPublication ? RepositoryOperationStage.AfterPublication : RepositoryOperationStage.BeforePublication)) {
                 throw new IOException("split preparation Fork publication window");
@@ -206,8 +206,8 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => warm.CommitState());
         } else {
             Assert.Same(previous, repository.PreparedStateEntry);
-            var unchanged = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
-            Assert.Equal(before.Revision, unchanged.Revision);
+            var unchanged = ResourcesOf(repository).Heads.ReadHead(1).Unwrap();
+            Assert.Equal(before.Id, unchanged.Id);
             Assert.Equal(before.Payload.ToArray(), unchanged.Payload.ToArray());
             GraphReadStatistics stats = Observe(repository);
             using BranchCheckout retry = repository.ForkShared("retry", repository.GetHead("other"));

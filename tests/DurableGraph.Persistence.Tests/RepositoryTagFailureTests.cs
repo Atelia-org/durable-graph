@@ -1,6 +1,6 @@
 using System.Reflection;
 using Atelia.Data;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Atelia.Rbf;
 using Atelia.FrameStore;
 
@@ -24,10 +24,10 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             using BranchCheckout warm = repository.ForkShared("warm", address);
             Assert.NotNull(repository.PreparedStateEntry);
             repository.OperationStageObserver = point => {
-                if (point == RepositoryOperationStage.BeforePublication) { ResourcesOf(repository).Versions.Dispose(); }
+                if (point == RepositoryOperationStage.BeforePublication) { ResourcesOf(repository).Heads.Dispose(); }
             };
-            // The real subsequent upstream CreateTag rejects its disposed owner before output;
-            // VersionStore supplies NotAttempted despite the exception.
+            // The real subsequent upstream PublishHead rejects its disposed owner before output;
+            // HeadStore supplies NotAttempted despite the exception.
             RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("candidate", address));
             Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Null(error.CandidateRevisionAddress);
@@ -41,7 +41,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         Assert.Equal(revision, reopened.ResolveTag("stable").RevisionAddress);
         Assert.Equal(reopened.GetHead("main"), reopened.ResolveTag("stable"));
         InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => reopened.ResolveTag("candidate"));
-        Assert.Contains("[VersionStore.TagNotFound]", missing.Message);
+        Assert.Contains("[DurableGraph.TagNotFound]", missing.Message);
     }
 
 
@@ -75,7 +75,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
                 Assert.False(repository.IsFaulted);
                 Assert.Same(entry, repository.PreparedStateEntry);
                 InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("candidate"));
-                Assert.Contains("[VersionStore.TagNotFound]", missing.Message);
+                Assert.Contains("[DurableGraph.TagNotFound]", missing.Message);
                 repository.CreateTag("candidate", address);
                 Assert.Equal(address, repository.ResolveTag("candidate"));
                 Assert.Same(entry, repository.PreparedStateEntry);
@@ -95,7 +95,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         using BranchCheckout warm = repository.ForkShared("warm", address);
         PreparedStateRestoration entry = repository.PreparedStateEntry!;
         int checks = 0;
-        InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => {
+        InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => {
             checks++;
             Assert.Throws<InvalidOperationException>(() => repository.CreateTag("nested", address));
             Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("stable"));
@@ -104,15 +104,15 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
             Assert.Throws<InvalidOperationException>(() => main.Dispose());
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
-        }, tag: true);
+        });
         repository.CreateTag("outer", address);
-        ClearPublicationFault(ResourcesOf(repository).Versions);
+        ClearPublicationFault(ResourcesOf(repository).Heads);
         Assert.Equal(1, checks);
         Assert.Equal(address, repository.ResolveTag("outer"));
         Assert.False(repository.IsFaulted);
         Assert.Same(entry, repository.PreparedStateEntry);
         Assert.DoesNotContain("nested-fork", repository.ListBranches());
-        Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("nested")).Message);
+        Assert.Contains("[DurableGraph.TagNotFound]", Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("nested")).Message);
         // Rejected disposal did not release this branch's editing occupancy.
         Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
         main.CommitState();

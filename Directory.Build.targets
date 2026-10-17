@@ -10,8 +10,8 @@
            Text="StorageSourceRoot does not contain src/Binary/Binary.csproj. Source mode never falls back to packages." />
     <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/FrameStore/FrameStore.csproj')"
            Text="StorageSourceRoot does not contain src/FrameStore/FrameStore.csproj. Source mode never falls back to packages." />
-    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/VersionStore/VersionStore.csproj')"
-           Text="StorageSourceRoot does not contain src/VersionStore/VersionStore.csproj. Source mode never falls back to packages." />
+    <Error Condition="'$(UseStorageSources)' == 'true' and !Exists('$(StorageSourceRoot)/src/HeadStore/HeadStore.csproj')"
+           Text="StorageSourceRoot does not contain src/HeadStore/HeadStore.csproj. Source mode never falls back to packages." />
     <Exec Condition="'$(UseStorageSources)' == 'true'"
           Command="git -C &quot;$(StorageSourceRoot)&quot; rev-parse HEAD"
           ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="Low">

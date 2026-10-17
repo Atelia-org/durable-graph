@@ -2,16 +2,17 @@
 
 [eng/StorageDependency.props](../eng/StorageDependency.props) 是存储版本、准确来源 commit 和仓地址的唯一位置。
 RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia.Rbf`、`Atelia.Binary`、
-`Atelia.FrameStore`、`Atelia.VersionStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
+`Atelia.FrameStore`、`Atelia.HeadStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
-当前 pin 为 `0.1.3-dev.20261014.g3de8fb0`，来源为
-`3de8fb050d81d35ee1c36d1b978024cbc42cb455`（上游维护更新，API 与 wire format 不变）。**这是未公开发布的本地候选**，不能假定 nuget.org 已有该版本。
-当前源码联调采用下面的显式 source mode；包验收使用准确来源的完整本地 feed 和任务 NuGet.Config。
-默认仍为 package mode，不探测兄弟仓、不回退旧包、不在仓库配置中保存本机路径。
+当前 pin 为 `0.1.3-dev.20261017.g731eef7`，来源为 `731eef7cd3158572532fbeea7ba95a79213a7328`。
+这是为新 HeadStore 来源预留的候选版本，**尚未制作本轮 feed，也未取得 DG 普通包资格**。
+本机可通过环境变量 `UseStorageSources=true` 与 `StorageSourceRoot` 联调；也可显式使用下方命令。
+默认仍为 package mode，不探测兄弟仓、不回退旧包、不在配置中保存本机路径。
 
-本次 pin 已通过上游四个隔离包消费者，以及 DG 独立缓存下的包模式 Release Rebuild（0 warnings/errors）和根 solution 的 2,690 项测试。
-六包缓存与当前 solution 的 19 份输出 DLL 均与候选 feed 字节一致；验证工件保留在 `.artifacts/storage-pin-upgrade/20261014-3de8fb0/`。
+本轮依赖包含非兼容 API 与格式变化：上游 HeadSetTag 格式 2，DG 三入口目录；旧库拒绝打开，不自动迁移。
+DG 书签仍定位历史 checkpoint，由独立目录发布；详见 [DB-096 接入切片](design-branches/0096-history-and-head-model/headstore-adaptation.md)。
+旧 `3de8fb0` 的包验收结果保留历史身份，不能作为本轮证据。
 
 ## 显式源码联调
 
@@ -24,13 +25,13 @@ dotnet build DurableGraph.slnx -c Release --no-restore -m:1 -nr:false -p:UseStor
 dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
 ```
 
-`StorageSourceRoot` 必须是绝对路径，包含 Binary/FrameStore/VersionStore 三个项目，且 Git HEAD 等于 pin 的完整来源。
+`StorageSourceRoot` 必须是绝对路径，包含 Binary/FrameStore/HeadStore 三个项目，且 Git HEAD 等于 pin 的完整来源。
 同一 HEAD 上的源码编辑可用于联调；它们不构成可发布包的来源凭据。无效路径、缺项目或不符 revision 都清晰失败，不回退到包。
 `UseStorageSources=true` 仅用于 build/test；`dotnet pack -p:UseStorageSources=true` 在生成包前拒绝执行。
 
 切换到 package mode 必须重新 restore；不要以 source mode 的旧 assets 或 DLL 当作包消费证据。
 Generator 仍是 `netstandard2.0` Roslyn 组件，它生成对 Bare reader/writer 的直接调用；Runtime 通过 Serialization 取得 Binary 依赖。
-Storage 依赖 FrameStore，Persistence 依赖 VersionStore；必要的 Data/Primitives/Rbf 位于同一个新栈闭包。
+Storage 依赖 FrameStore，Persistence 依赖 HeadStore；必要的 Data/Primitives/Rbf 位于同一个新栈闭包。
 
 ## 准备准确来源的六包
 
@@ -38,14 +39,14 @@ Storage 依赖 FrameStore，Persistence 依赖 VersionStore；必要的 Data/Pri
 
 ```powershell
 $storage = '/repos/Atelia-org/atelia-storage'
-$storageVersion = '0.1.3-dev.20261014.g3de8fb0'
+$storageVersion = '0.1.3-dev.20261017.g731eef7'
 $storageFeed = Join-Path $storage "artifacts/feeds/$storageVersion"
 & "$storage/eng/Pack.ps1" -Version $storageVersion -OutputDirectory $storageFeed
 ```
 
 Pack 使用存储仓固定 SDK，产出六个 nupkg、六个 snupkg 和 `manifest.<S>.json`，记录准确来源与字节 SHA256。
 相同版本只允许复用已核验的完整产物；不同内容使用新版本，不覆盖公开包或已有候选，不清空全局缓存。
-上述候选已经在该来源上生成；它是本地验收输入，未进行远程发布。换 feed 路径不会改变包内容或来源。
+本轮尚未执行上述打包；后续需在准确干净来源上生成完整 feed，再进行 DG 包模式验收。
 
 [eng/Prepare-Storage.ps1](../eng/Prepare-Storage.ps1) 可以只读验证这个完整 feed：
 
@@ -140,7 +141,7 @@ G `0.0.0-candidate.20261015.g3e1f411`；S 保持本文 pin。Windows / SDK 10.0.
       <package pattern="Atelia.Rbf" />
       <package pattern="Atelia.Binary" />
       <package pattern="Atelia.FrameStore" />
-      <package pattern="Atelia.VersionStore" />
+      <package pattern="Atelia.HeadStore" />
     </packageSource>
     <packageSource key="nuget.org">
       <package pattern="*" />
@@ -193,7 +194,7 @@ runner 也可从任务环境变量 `DG_STORAGE_PACKAGE_SOURCE` 读取路径后�
 ## 查阅边界
 
 以 `StorageSourceRevision` 对应的准确源码、README/XML 与本次候选 manifest 为依据，不以无关兄弟仓 HEAD 解释 pin。
-先读上游 `src/Binary/README.md`、`src/FrameStore/README.md`、`src/VersionStore/README.md` 与 RBF3 文档。
-裸地址/帧 CRC、共享数据确认与根/tag 发布由新底座提供；DG 保留必要内容、因果、publication/fault 和缓存寿命检查。
+先读上游 `src/Binary/README.md`、`src/FrameStore/README.md`、`src/HeadStore/README.md` 与 RBF3 文档。
+裸地址/帧 CRC、共享数据确认与Head/HeadSetTag 发布由新底座提供；DG 历史书签目录通过 Head 发布；DG 保留必要内容、因果、publication/fault 和缓存寿命检查。
 正常 backing-store 尾恢复、只读与显式离线救援的边界见 [AGENTS.md](../AGENTS.md#persistent-data-discipline)；
 不重新建立全库重开确认、启动审计或严格 writable 预检。

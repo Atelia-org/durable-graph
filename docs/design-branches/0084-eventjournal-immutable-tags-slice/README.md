@@ -1,5 +1,7 @@
 # DB-084：不可变 tag 与跨重开定位
 
+> 2026-10-17 后继：[DB-096 HeadStore 接入](../0096-history-and-head-model/headstore-adaptation.md)采用三入口布局和 DG 书签目录；本文两根初始化及上游 bytes tag 的既有证据保留历史范围，不作为新布局合同。
+
 > 结论与适用性：旧 EventJournal 栈的消费接入已实施；底座由 DB-086 替换，当前 tag 由 VS 承担，CheckpointAddress 仍非外部可序列化地址。
 > 本次整理来源 Git `8ef9fca`；原主入口 `docs/design-branches/0084-eventjournal-immutable-tags-slice.md`。
 

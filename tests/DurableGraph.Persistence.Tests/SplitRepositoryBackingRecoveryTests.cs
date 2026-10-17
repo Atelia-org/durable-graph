@@ -5,7 +5,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using Atelia.Rbf;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -39,7 +39,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
             var report = Assert.Single(resources.Data.RecoveryReports);
             Assert.Equal(fileId, report.Key);
             AssertTruncated(report.Value, completeLength);
-            Assert.Empty(resources.Versions.RecoveryReports);
+            Assert.Empty(resources.Heads.RecoveryReports);
             Assert.Equal(seed.Head, recovered.GetHead("main").RevisionAddress);
             Assert.Equal(seed.SchemaRoot, recovered.SharedSchemaRoot);
             AssertHistory(recovered, seed);
@@ -89,18 +89,18 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
     public void UnselectedOrdinaryRefTailStaysUntouchedUntilItsActualLazyFirstRead() {
         SeedResult seed = Seed();
         byte[] ordinaryPayload = [30, 40, 50];
-        RefRevision ordinaryRevision;
+        HeadEntryId ordinaryRevision;
         using (Repository owner = Repository.OpenStorageExisting(_path, Models())) {
-            var versions = ResourcesOf(owner).Versions;
-            // DG reserves only 1/2. The explicit-ID CreateRef overload cannot create
-            // ordinary ref3; automatic H+1 is the actual public VersionStore route.
-            RefRevision created = versions.CreateRef(new byte[] { 10, 20 }, out PublicationOutcome createdOutcome).Unwrap();
+            var versions = ResourcesOf(owner).Heads;
+            // DG reserves 1/2/3. The explicit-ID CreateHead overload cannot create
+            // ordinary head4; automatic H+1 is the actual public HeadStore route.
+            HeadEntryId created = versions.CreateHead(new byte[] { 10, 20 }, out PublicationOutcome createdOutcome).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, createdOutcome);
-            Assert.Equal(3u, created.RefId.LocalId);
-            ordinaryRevision = versions.PublishRef(created.RefId, ordinaryPayload, out PublicationOutcome published).Unwrap();
+            Assert.Equal(4u, created.HeadId.LocalId);
+            ordinaryRevision = versions.PublishHead(created.HeadId, ordinaryPayload, out PublicationOutcome published).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, published);
         }
-        string refPath = Path.Combine(_path, "versions", "refs", "00000003.rbf");
+        string refPath = Path.Combine(_path, "versions", "refs", "00000004.rbf");
         uint dataFileId = FileIdOf(seed.Head);
         long dataLength = new FileInfo(Path.Combine(_path, "data", "active", dataFileId.ToString("x8") + ".rbf")).Length;
         byte[] completeRef = File.ReadAllBytes(refPath);
@@ -110,7 +110,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         Assert.Equal(completeRef.Length + 1, incompleteRef.Length);
 
         using (Repository readonlyOwner = Repository.OpenStorageReadOnlyExisting(_path, Models())) {
-            var versions = ResourcesOf(readonlyOwner).Versions;
+            var versions = ResourcesOf(readonlyOwner).Heads;
             Assert.Empty(versions.RecoveryReports);
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));
             Assert.Equal(seed.Head, readonlyOwner.GetHead("main").RevisionAddress);
@@ -122,21 +122,21 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
 
         using (Repository writer = Repository.OpenStorageExisting(_path, Models())) {
             RepositoryResources resources = ResourcesOf(writer);
-            IReadOnlyList<VersionStoreRecoveryReport> reports = resources.Versions.RecoveryReports;
+            IReadOnlyList<HeadStoreRecoveryReport> reports = resources.Heads.RecoveryReports;
             Assert.Empty(reports);
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));
             AssertHistory(writer, seed);
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));
             Assert.Empty(reports);
             AssertHealthyActive(resources.Data, dataFileId, dataLength);
-            RefBytesSnapshot actual = resources.Versions.ReadRef(3).Unwrap();
-            Assert.Equal(ordinaryRevision, actual.Revision);
+            HeadEntry actual = resources.Heads.ReadHead(4).Unwrap();
+            Assert.Equal(ordinaryRevision, actual.Id);
             Assert.Equal(ordinaryPayload, actual.Payload.ToArray());
-            VersionStoreRecoveryReport report = Assert.Single(reports);
-            Assert.Equal(VersionStoreRecoveryFileKind.Ref, report.FileKind);
-            Assert.Equal(3u, report.LocalId);
+            HeadStoreRecoveryReport report = Assert.Single(reports);
+            Assert.Equal(HeadStoreRecoveryFileKind.Head, report.FileKind);
+            Assert.Equal(4u, report.LocalId);
             AssertTruncated(report.Recovery, completeRef.Length);
-            Assert.Equal(ordinaryRevision, resources.Versions.ReadRef(3).Unwrap().Revision);
+            Assert.Equal(ordinaryRevision, resources.Heads.ReadHead(4).Unwrap().Id);
             Assert.Equal(report, Assert.Single(reports)); // A successful repeated read does not produce another recovery action.
             Assert.Equal(seed.Head, writer.GetHead("main").RevisionAddress);
             Assert.Equal(seed.SchemaRoot, writer.SharedSchemaRoot);
@@ -147,10 +147,10 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         Dictionary<string, byte[]> expected = new(damagedFiles) { [Path.GetRelativePath(_path, refPath)] = completeRef };
         AssertFilesEqual(expected, SnapshotFiles());
         using Repository fresh = Repository.OpenStorageReadOnlyExisting(_path, Models());
-        RefBytesSnapshot coldRef = ResourcesOf(fresh).Versions.ReadRef(3).Unwrap();
-        Assert.Equal(ordinaryRevision, coldRef.Revision);
+        HeadEntry coldRef = ResourcesOf(fresh).Heads.ReadHead(4).Unwrap();
+        Assert.Equal(ordinaryRevision, coldRef.Id);
         Assert.Equal(ordinaryPayload, coldRef.Payload.ToArray());
-        Assert.Empty(ResourcesOf(fresh).Versions.RecoveryReports);
+        Assert.Empty(ResourcesOf(fresh).Heads.RecoveryReports);
         AssertHistory(fresh, seed);
         AssertCompletedFrames(ResourcesOf(fresh).Data, seed.Frames);
     }

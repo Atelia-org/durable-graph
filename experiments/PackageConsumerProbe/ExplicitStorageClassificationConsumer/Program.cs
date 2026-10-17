@@ -41,7 +41,7 @@ internal static class Program {
             }
             string[] names = ["Atelia.Binary", "Atelia.Data", "Atelia.DurableGraph", "Atelia.DurableGraph.Persistence",
                 "Atelia.DurableGraph.Serialization", "Atelia.DurableGraph.Storage", "Atelia.FrameStore",
-                "Atelia.Primitives", "Atelia.Rbf", "Atelia.VersionStore"];
+                "Atelia.Primitives", "Atelia.Rbf", "Atelia.HeadStore"];
             File.WriteAllText(args[2], JsonSerializer.Serialize(new {
                 Protocol = "DG.ExplicitStorageClassificationConsumer.v1", Phase = phase, Passed = true,
                 ProcessId = Environment.ProcessId, Route = Route, FieldIds = fields, Subject.AccessorCalls,

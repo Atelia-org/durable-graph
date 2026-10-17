@@ -165,7 +165,7 @@ function Consume([string]$Phase) {
 Save-Receipt
 try {
     $ids = @('Atelia.Binary', 'Atelia.Data', 'Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization',
-        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.VersionStore')
+        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore')
     if (@(Get-ChildItem -LiteralPath $PackageSource -File -Filter '*.nupkg').Count -ne 10) { throw 'Require the complete ten-package feed.' }
     foreach ($id in $ids) {
         $packageVersion = if ($id.StartsWith('Atelia.DurableGraph')) { $Version } else { $storageVersion }

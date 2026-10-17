@@ -6,7 +6,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -66,8 +66,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             // Load employee metadata before constructing any business model snapshot.
             SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, meta0);
             AssertBootstrapContainerUpgradeCatalog(catalog, old);
-            var branches = repository.Versions.ReadRef(1).Unwrap();
-            var shared = repository.Versions.ReadRef(2).Unwrap();
+            var branches = repository.Heads.ReadHead(1).Unwrap();
+            var shared = repository.Heads.ReadHead(2).Unwrap();
             StateModelRegistry models = currentHost.Models();
             currentHost.ResetCalls();
             DecodedGraphRows stored = ReadBootstrapContainerUpgradeRows(repository, s0, models, catalog);
@@ -80,10 +80,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(s0, repository.GetHead("main"));
             Assert.Equal(meta0, repository.SharedSchemaRoot);
             AssertBootstrapContainerUpgradeCatalog(SchemaCatalogView.Load(repository.Store, meta0), old);
-            Assert.Equal(branches.Revision, repository.Versions.ReadRef(1).Unwrap().Revision);
-            Assert.Equal(shared.Revision, repository.Versions.ReadRef(2).Unwrap().Revision);
-            Assert.Equal(branches.Payload.ToArray(), repository.Versions.ReadRef(1).Unwrap().Payload.ToArray());
-            Assert.Equal(shared.Payload.ToArray(), repository.Versions.ReadRef(2).Unwrap().Payload.ToArray());
+            Assert.Equal(branches.Id, repository.Heads.ReadHead(1).Unwrap().Id);
+            Assert.Equal(shared.Id, repository.Heads.ReadHead(2).Unwrap().Id);
+            Assert.Equal(branches.Payload.ToArray(), repository.Heads.ReadHead(1).Unwrap().Payload.ToArray());
+            Assert.Equal(shared.Payload.ToArray(), repository.Heads.ReadHead(2).Unwrap().Payload.ToArray());
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
         AssertBootstrapContainerUpgradeFilesUnchanged(readOnlyFiles, files.Path);
@@ -236,12 +236,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         models.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key)), selected);
 
     private static void AssertBootstrapContainerUpgradePublishedRefs(RepositoryStorageFacade repository, FrameAddress graph, FrameAddress meta) {
-        byte[] branches = repository.Versions.ReadRef(1).Unwrap().Payload.ToArray();
-        byte[] shared = repository.Versions.ReadRef(2).Unwrap().Payload.ToArray();
+        byte[] branches = repository.Heads.ReadHead(1).Unwrap().Payload.ToArray();
+        byte[] shared = repository.Heads.ReadHead(2).Unwrap().Payload.ToArray();
         Assert.True(branches.AsSpan().StartsWith("P0R1"u8));
         Assert.True(shared.AsSpan().StartsWith("P0S1"u8));
-        Assert.Equal(graph, RootMapCodec.Decode(branches.AsSpan(4)).Unwrap()["branch/main"]);
-        Assert.Equal(meta, RootMapCodec.Decode(shared.AsSpan(4)).Unwrap()["schema"]);
+        Assert.Equal(graph, NamedFrameMapCodec.Decode(branches.AsSpan(4)).Unwrap()["branch/main"]);
+        Assert.Equal(meta, NamedFrameMapCodec.Decode(shared.AsSpan(4)).Unwrap()["schema"]);
     }
 
     private static void AssertBootstrapContainerUpgradeWrites(PreparedBranchSave save, uint[] ids, FrameAddress source, ObjectVersionKind kind) {

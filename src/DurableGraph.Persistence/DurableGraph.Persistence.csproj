@@ -17,12 +17,12 @@
   <ItemGroup Condition="'$(UseStorageSources)' != 'true'">
     <PackageReference Include="Atelia.Binary" Version="$(StoragePackageVersion)" />
     <PackageReference Include="Atelia.FrameStore" Version="$(StoragePackageVersion)" />
-    <PackageReference Include="Atelia.VersionStore" Version="$(StoragePackageVersion)" />
+    <PackageReference Include="Atelia.HeadStore" Version="$(StoragePackageVersion)" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseStorageSources)' == 'true'">
     <ProjectReference Include="$(StorageSourceRoot)/src/Binary/Binary.csproj" />
     <ProjectReference Include="$(StorageSourceRoot)/src/FrameStore/FrameStore.csproj" />
-    <ProjectReference Include="$(StorageSourceRoot)/src/VersionStore/VersionStore.csproj" />
+    <ProjectReference Include="$(StorageSourceRoot)/src/HeadStore/HeadStore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

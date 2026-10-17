@@ -5,7 +5,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -125,7 +125,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         // This never rewrites a completed frame. The tag is published through the real VS data-first barrier.
         byte[] payload = new byte[FrameAddress.EncodedSize];
         Assert.True(bad.TryWrite(payload));
-        resources.Versions.CreateTag("bad-directory", payload, out _).Unwrap();
+        resources.CreateStoredTag("bad-directory", bad, out _);
         CheckpointAddress selected = repository.ResolveTag("bad-directory");
         Assert.Equal(bad, selected.RevisionAddress);
         Assert.Equal(selected, repository.CreateBranch("metadata", selected));
@@ -221,16 +221,16 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         Counts counts = new() { FailAllocate = true };
         using Repository repository = Repository.OpenStorageExisting(_path, ProbeModels(1, counts));
         CheckpointAddress source = repository.GetHead("main");
-        var branchRef = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
-        var sharedRef = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
+        var branchRef = ResourcesOf(repository).Heads.ReadHead(1).Unwrap();
+        var sharedRef = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
         long frames = repository.GraphStore.AppendedFrames;
         BranchCheckout? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("retry", source));
         Assert.Null(delivered);
         Assert.False(repository.IsFaulted);
         Assert.Equal(new[] { "main" }, repository.ListBranches());
-        Assert.Equal(branchRef.Revision, ResourcesOf(repository).Versions.ReadRef(1).Unwrap().Revision);
-        Assert.Equal(sharedRef.Revision, ResourcesOf(repository).Versions.ReadRef(2).Unwrap().Revision);
+        Assert.Equal(branchRef.Id, ResourcesOf(repository).Heads.ReadHead(1).Unwrap().Id);
+        Assert.Equal(sharedRef.Id, ResourcesOf(repository).Heads.ReadHead(2).Unwrap().Id);
         Assert.Equal(frames, repository.GraphStore.AppendedFrames);
         counts.FailAllocate = false;
         using BranchCheckout retry = repository.ForkShared("retry", source);
@@ -245,7 +245,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
     [InlineData(true)]
     public void RefOnlyForkPublicationFailurePreservesDataAndSharedRefAndHasExplicitRecovery(bool published) {
         FrameAddress source;
-        RefRevision sharedRevision;
+        HeadEntryId sharedRevision;
         byte[] sharedPayload;
         using (Repository seed = Repository.CreateStorageNew(_path, Models())) {
             using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
@@ -254,11 +254,11 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         Dictionary<string, byte[]> data = SnapshotFiles(Path.Combine(_path, "data"));
         using (Repository repository = Repository.OpenStorageExisting(_path, Models())) {
             using BranchCheckout main = repository.CheckoutShared("main");
-            var branches = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
-            RefRevision branchRevision = branches.Revision;
+            var branches = ResourcesOf(repository).Heads.ReadHead(1).Unwrap();
+            HeadEntryId branchRevision = branches.Id;
             byte[] branchPayload = branches.Payload.ToArray();
-            var shared = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
-            sharedRevision = shared.Revision;
+            var shared = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
+            sharedRevision = shared.Id;
             sharedPayload = shared.Payload.ToArray();
             IOException injected = new("split ref-only fork window");
             repository.OperationStageObserver = point => {
@@ -276,8 +276,8 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
                 Assert.Throws<InvalidOperationException>(() => main.CommitState());
             } else {
                 Assert.Equal(new[] { "main" }, repository.ListBranches());
-                var unchanged = ResourcesOf(repository).Versions.ReadRef(1).Unwrap();
-                Assert.Equal(branchRevision, unchanged.Revision);
+                var unchanged = ResourcesOf(repository).Heads.ReadHead(1).Unwrap();
+                Assert.Equal(branchRevision, unchanged.Id);
                 Assert.Equal(branchPayload, unchanged.Payload.ToArray());
                 using BranchCheckout retry = repository.ForkShared("candidate", main.Head);
                 AssertRing(retry.State, 0);
@@ -287,8 +287,8 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         AssertFilesEqual(data, SnapshotFiles(Path.Combine(_path, "data")));
         using Repository reopened = Repository.OpenStorageReadOnlyExisting(_path, Models());
         Assert.Equal(source, reopened.GetHead("candidate").RevisionAddress);
-        var selected = ResourcesOf(reopened).Versions.ReadRef(2).Unwrap();
-        Assert.Equal(sharedRevision, selected.Revision);
+        var selected = ResourcesOf(reopened).Heads.ReadHead(2).Unwrap();
+        Assert.Equal(sharedRevision, selected.Id);
         Assert.Equal(sharedPayload, selected.Payload.ToArray());
         AssertRing(reopened.ReadState(reopened.GetHead("candidate")), 0);
     }

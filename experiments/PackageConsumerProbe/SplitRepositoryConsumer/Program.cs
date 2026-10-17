@@ -7,7 +7,7 @@ using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using SplitRepositoryPackage;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
@@ -32,7 +32,7 @@ internal static class Program {
         string? PromotionEvent = null, string? PromotionSchema = null, uint? PromotedUnusedDescriptorId = null,
         StorageEvidence[]? PromotionObjects = null, FrameImage[]? PromotionFrames = null,
         string? SharedContinuationState = null, StorageEvidence[]? SharedContinuationObjects = null, FrameImage[]? SharedContinuationFrames = null);
-    private sealed record RefImage(RefRevision Revision, byte[] Payload);
+    private sealed record RefImage(HeadEntryId Revision, byte[] Payload);
 
     private static int Main(string[] args) {
         if (args.Length != 3) { throw new ArgumentException("Expected seed|upgrade|rewrite|continue|verify, database and witness path."); }
@@ -488,9 +488,9 @@ internal static class Program {
 
     private static RefImage ReadRefImage(string database, uint refId) {
         using var data = Atelia.FrameStore.FrameStore.OpenReadOnly(Path.Combine(database, "data"));
-        using var versions = Atelia.VersionStore.VersionStore.OpenReadOnly(Path.Combine(database, "versions"), data);
-        RefBytesSnapshot snapshot = versions.ReadRef(refId).Unwrap();
-        return new(snapshot.Revision, snapshot.Payload.ToArray());
+        using var versions = Atelia.HeadStore.HeadStore.OpenReadOnly(Path.Combine(database, "versions"), data);
+        HeadEntry snapshot = versions.ReadHead(refId).Unwrap();
+        return new(snapshot.Id, snapshot.Payload.ToArray());
     }
 
     private static bool SameSharedRef(RefImage before, RefImage after) => SameRefImage(before, after);

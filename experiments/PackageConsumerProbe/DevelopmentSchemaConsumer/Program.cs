@@ -8,7 +8,7 @@ using Atelia.FrameStore;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 namespace DevelopmentSchemaPackage;
 
@@ -17,7 +17,7 @@ internal static class Program {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private static readonly string[] Assemblies = ["Atelia.Binary", "Atelia.Data", "Atelia.DurableGraph",
         "Atelia.DurableGraph.Persistence", "Atelia.DurableGraph.Serialization", "Atelia.DurableGraph.Storage",
-        "Atelia.FrameStore", "Atelia.Primitives", "Atelia.Rbf", "Atelia.VersionStore"];
+        "Atelia.FrameStore", "Atelia.Primitives", "Atelia.Rbf", "Atelia.HeadStore"];
 #if SHAPE_V1
     private static string Shape => "V1";
 #elif SHAPE_A
@@ -226,10 +226,10 @@ internal static class Program {
     private static RefSnapshot ReadRefs(string database) {
         using DataStore data = DataStore.OpenReadOnly(Path.Combine(database, "data"));
         using PublicationStore versions = PublicationStore.OpenReadOnly(Path.Combine(database, "versions"), data);
-        var branches = versions.ReadRef(1).Unwrap();
-        var shared = versions.ReadRef(2).Unwrap();
-        return new(new(branches.Revision.Ticket.Packed, Convert.ToHexString(branches.Payload)),
-            new(shared.Revision.Ticket.Packed, Convert.ToHexString(shared.Payload)));
+        var branches = versions.ReadHead(1).Unwrap();
+        var shared = versions.ReadHead(2).Unwrap();
+        return new(new(branches.Id.Ticket.Packed, Convert.ToHexString(branches.Payload)),
+            new(shared.Id.Ticket.Packed, Convert.ToHexString(shared.Payload)));
     }
     private static FrameImage[] Frames(string database) {
         using DataStore data = DataStore.OpenReadOnly(Path.Combine(database, "data"));

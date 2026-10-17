@@ -177,7 +177,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         CheckpointAddress newer = main.CommitState(Graph(9));
         int hydrates = control.LeafHydrates;
         if (phase == "unknown") {
-            InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("Unknown after actual root append"));
+            InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => throw new IOException("Unknown after actual root append"));
         }
         repository.OperationStageObserver = point => {
             if (phase != "unknown" && point == (phase == "before" ? RepositoryOperationStage.BeforePublication : RepositoryOperationStage.AfterPublication)) {

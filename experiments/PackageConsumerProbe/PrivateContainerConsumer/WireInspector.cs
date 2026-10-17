@@ -7,9 +7,9 @@ using Atelia.DurableGraph.Storage;
 using Atelia.DurableGraph.Schema;
 using persistence::Atelia.DurableGraph.Persistence;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 // A test-only observer of this probe's current wire, not a repository reader or
 // a format contract. Run only after all Repository/Checkout owners have closed.
@@ -38,7 +38,7 @@ internal static class WireInspector {
         IReadOnlyDictionary<uint, FrameAddress> Heads) {
         internal IReadOnlyDictionary<uint, FrameAddress> Objects => Heads;
     }
-    internal sealed record RefImage(RefRevision Revision, byte[] Payload);
+    internal sealed record RefImage(HeadEntryId Revision, byte[] Payload);
     internal sealed record Catalog(IReadOnlyList<uint> DeclaredIds, IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas,
         IReadOnlyDictionary<SchemaKey, uint> SchemaIds, IReadOnlyDictionary<ObjectLayout, uint> DescriptorIds,
         IReadOnlyList<uint> LiveIds) {
@@ -89,8 +89,8 @@ internal static class WireInspector {
         using PublicationStore versions = PublicationStore.OpenReadOnly(Path.Combine(database, "versions"), data);
         Dictionary<uint, RefImage> refs = [];
         foreach (uint id in new uint[] { 1, 2 }) {
-            RefBytesSnapshot value = versions.ReadRef(id).Unwrap();
-            refs.Add(id, new(value.Revision, value.Payload.ToArray()));
+            HeadEntry value = versions.ReadHead(id).Unwrap();
+            refs.Add(id, new(value.Id, value.Payload.ToArray()));
         }
         IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(refs[1].Payload, "P0R1"u8);
         IReadOnlyDictionary<string, FrameAddress> shared = Root(refs[2].Payload, "P0S1"u8);
@@ -566,7 +566,7 @@ internal static class WireInspector {
 
     private static IReadOnlyDictionary<string, FrameAddress> Root(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> magic) {
         Require(bytes.StartsWith(magic), "Unknown publication root format.");
-        return RootMapCodec.Decode(bytes[magic.Length..]).Unwrap();
+        return NamedFrameMapCodec.Decode(bytes[magic.Length..]).Unwrap();
     }
     private static Record Version(ref BareValueReader reader, uint id) {
         int start = reader.ConsumedCount;

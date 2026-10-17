@@ -6,7 +6,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -38,7 +38,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             Assert.Equal(identities, branch.Baseline!.Objects.Keys.ToArray());
             branch.Catalog.Set(PrivateExtra);
             initial = branch.CommitState(NoRebase).RevisionAddress;
-            shared = ReadRef(repository, 2);
+            shared = ReadHead(repository, 2);
             Assert.Equal(PrivateExtra, Catalog(repository, initial).Schemas[new(PrivateExtra.Type, 1)]);
             AssertRing(branch.State, 7);
         }
@@ -47,14 +47,14 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         DB087Widget root = AssertRing(cold.State, 7);
         Assert.Equal(identities, cold.Baseline!.Objects.Keys.ToArray());
 
-        AssertSameRef(shared, ReadRef(reopened, 2));
+        AssertSameRef(shared, ReadHead(reopened, 2));
         root.Numbers[7] = 301;
         CheckpointAddress next = cold.CommitState(NoRebase);
         StoredGraphRevision continued = reopened.GraphStore.ReadGraph(next.RevisionAddress);
         Assert.Equal(initial, continued.SourceGraph);
         Assert.Contains(LocalRecords(reopened.GraphStore, continued.Address), row => row.Kind == ObjectVersionKind.Delta);
         AssertRing(reopened.ReadState(next), 301);
-        AssertSameRef(shared, ReadRef(reopened, 2));
+        AssertSameRef(shared, ReadHead(reopened, 2));
     }
 
 
@@ -68,7 +68,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             main.Catalog.Set(Unreachable);
             sharedBusiness = main.CommitState(NoRebase).RevisionAddress;
             sharedRoot = repository.SharedSchemaRoot!.Value;
-            sharedRef = ReadRef(repository, 2);
+            sharedRef = ReadHead(repository, 2);
             SchemaCatalogView accepted = SchemaCatalogView.Load(repository.GraphStore, sharedRoot);
             repository.CreateBranch("dev", main.Head);
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
@@ -82,13 +82,13 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             foreach ((SchemaKey key, DurableSchema schema) in accepted.Schemas) { Assert.Equal(schema, fork.Schemas[key]); }
             Assert.Equal(Unreachable, fork.Schemas[new(Unreachable.Type, 1)]);
             Assert.Equal(accepted.SchemaNodeId(SharedExtra), fork.SchemaNodeId(SharedExtra));
-            AssertSameRef(sharedRef, ReadRef(repository, 2));
+            AssertSameRef(sharedRef, ReadHead(repository, 2));
             Assert.Equal(sharedBusiness, repository.GetHead("main").RevisionAddress);
             Assert.Empty(LocalRecords(repository.GraphStore, privateRoot));
         }
         using Repository cold = Repository.OpenReadOnlyExisting(_path, Models());
         Assert.Equal(sharedRoot, cold.SharedSchemaRoot);
-        AssertSameRef(sharedRef, ReadRef(cold, 2));
+        AssertSameRef(sharedRef, ReadHead(cold, 2));
         Assert.Equal(PrivateExtra, Catalog(cold, privateRoot).Schemas[new(PrivateExtra.Type, 1)]);
         Assert.Equal(Unreachable, Catalog(cold, privateRoot).Schemas[new(Unreachable.Type, 1)]);
         AssertRing(cold.ReadState(cold.GetHead("main")), 7);
@@ -106,7 +106,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             using BranchCheckout dev = repository.CheckoutPrivate("dev");
             stateAddress = dev.Head.RevisionAddress;
             stateSchema = Catalog(repository, stateAddress).Snapshot!.Address;
-            sharedRef = ReadRef(repository, 2);
+            sharedRef = ReadHead(repository, 2);
             IDurableObject oldState = dev.State!;
             ObjectId? oldId = dev.StateId;
             NormalizedGraphState baseline = dev.Baseline!;
@@ -129,7 +129,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             Assert.Equal(stateAddress, dev.StateRevisionAddress);
             Assert.Same(baseline, dev.Baseline);
             Assert.Equal(storage, dev.Baseline!.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray());
-            AssertSameRef(sharedRef, ReadRef(repository, 2));
+            AssertSameRef(sharedRef, ReadHead(repository, 2));
         }
         using Repository cold = Repository.OpenExisting(_path, Models());
         using BranchCheckout checkout = cold.CheckoutPrivate("dev");
@@ -146,7 +146,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         Assert.Equal(stateAddress, graphNext.SourceGraph);
         Assert.Equal(eventSchema, graphNext.SchemaRoot);
         AssertRing(cold.ReadState(next), 302);
-        AssertSameRef(sharedRef, ReadRef(cold, 2));
+        AssertSameRef(sharedRef, ReadHead(cold, 2));
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         Assert.Equal(0, dev.Catalog.DirtyCount);
         AssertRing(repository.ReadState(saved), 303);
         Assert.NotNull(repository.SharedSchemaRoot);
-        AssertSameRef(before.Shared, ReadRef(repository, 2));
+        AssertSameRef(before.Shared, ReadHead(repository, 2));
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         DurableSchema latest = new("Private.Schema.Later", 1, new DurableFieldInfo(1, TypeTag.Int32));
         main.Catalog.Set(latest);
         main.CommitState(NoRebase);
-        RefImage sharedRef = ReadRef(repository, 2);
+        RefImage sharedRef = ReadHead(repository, 2);
         Assert.NotEqual(previous.SchemaRoot, repository.SharedSchemaRoot);
         CheckpointAddress next = dev.CommitState(NoRebase);
         StoredGraphRevision saved = repository.GraphStore.ReadGraph(next.RevisionAddress);
@@ -204,13 +204,13 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         Assert.Equal(previous.Address, saved.SourceGraph);
         Assert.False(dev.Catalog.Accepted!.Schemas.ContainsKey(new(latest.Type, 1)));
         Assert.Equal(PrivateExtra, dev.Catalog.Accepted.Schemas[new(PrivateExtra.Type, 1)]);
-        AssertSameRef(sharedRef, ReadRef(repository, 2));
+        AssertSameRef(sharedRef, ReadHead(repository, 2));
         DurableSchema privateLater = new(latest.Type, 1, new DurableFieldInfo(1, TypeTag.Byte));
         dev.Catalog.Set(privateLater); // Missing private declarations do not consult latest shared.
         next = dev.CommitState(NoRebase);
         Assert.Equal(privateLater, Catalog(repository, next.RevisionAddress).Schemas[new(latest.Type, 1)]);
         Assert.Equal(latest, SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value).Schemas[new(latest.Type, 1)]);
-        AssertSameRef(sharedRef, ReadRef(repository, 2));
+        AssertSameRef(sharedRef, ReadHead(repository, 2));
     }
 
     [Fact]
@@ -242,7 +242,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         }
         main.Catalog.Set(AddedByEvent);
         main.CommitState(NoRebase);
-        RefImage shared = ReadRef(repository, 2);
+        RefImage shared = ReadHead(repository, 2);
         using BranchCheckout contained = repository.CheckoutShared("dev");
         Assert.NotEqual(contained.Catalog.Accepted!.Snapshot!.Address,
             repository.GraphStore.ReadMetadata(contained.Head.RevisionAddress).SchemaRoot);
@@ -250,7 +250,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         CheckpointAddress saved = contained.CommitState(NoRebase);
         Assert.Equal(1, captures);
         Assert.Equal(repository.SharedSchemaRoot, repository.GraphStore.ReadMetadata(saved.RevisionAddress).SchemaRoot);
-        AssertSameRef(shared, ReadRef(repository, 2));
+        AssertSameRef(shared, ReadHead(repository, 2));
         Assert.Equal(2, Assert.IsType<CountingRoot>(contained.State).Value);
     }
 
@@ -270,7 +270,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             oldHead = dev.Head.RevisionAddress;
             oldSchema = dev.Catalog.Accepted!.Snapshot!.Address;
             mainHead = main.Head.RevisionAddress;
-            shared = ReadRef(repository, 2);
+            shared = ReadHead(repository, 2);
             complete = ReadFrames(ResourcesOf(repository).Data);
             NormalizedGraphState baseline = dev.Baseline!;
             dev.Catalog.Set(AddedByEvent);
@@ -294,7 +294,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         }
         using Repository cold = Repository.OpenExisting(_path, Models());
         using BranchCheckout recovered = cold.CheckoutPrivate("dev");
-        AssertSameRef(shared, ReadRef(cold, 2));
+        AssertSameRef(shared, ReadHead(cold, 2));
         Assert.Equal(mainHead, cold.GetHead("main").RevisionAddress);
         Assert.Equal(visible ? error.CandidateRevisionAddress : oldHead, recovered.Head.RevisionAddress);
         AssertRing(recovered.State, visible ? 304 : 7);
@@ -373,7 +373,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             main.Catalog.Set(Unreachable);
             main.CommitState(NoRebase);
             latestShared = repository.SharedSchemaRoot!.Value;
-            shared = ReadRef(repository, 2);
+            shared = ReadHead(repository, 2);
             Assert.NotEqual(oldPin, latestShared);
         }
         using (Repository repository = Repository.OpenExisting(_path, Models())) {
@@ -401,7 +401,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             Assert.Null(events.State);
             Assert.Null(events.Baseline);
             Assert.Null(events.StateRevisionAddress);
-            AssertSameRef(shared, ReadRef(repository, 2));
+            AssertSameRef(shared, ReadHead(repository, 2));
         }
         using Repository cold = Repository.OpenExisting(_path, Models());
         using BranchCheckout empty = cold.CheckoutPrivate("events");
@@ -421,7 +421,7 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
         Assert.All(records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
         AssertRing(cold.ReadState(firstState), 7);
         Assert.Equal(latestShared, cold.SharedSchemaRoot);
-        AssertSameRef(shared, ReadRef(cold, 2));
+        AssertSameRef(shared, ReadHead(cold, 2));
     }
 
 
@@ -469,21 +469,21 @@ public sealed class PrivateSchemaRepositoryTests : IDisposable {
             Assert.Equal(frame.Payload, retained.Payload);
         }
     }
-    private sealed record RefImage(RefRevision Revision, byte[] Payload);
+    private sealed record RefImage(HeadEntryId Revision, byte[] Payload);
     private sealed record PublicationImage(RefImage Branches, RefImage Shared, long Bytes, long Appended);
-    private static RefImage ReadRef(Repository repository, uint id) {
-        RefBytesSnapshot read = ResourcesOf(repository).Versions.ReadRef(id).Unwrap();
-        return new(read.Revision, read.Payload.ToArray());
+    private static RefImage ReadHead(Repository repository, uint id) {
+        HeadEntry read = ResourcesOf(repository).Heads.ReadHead(id).Unwrap();
+        return new(read.Id, read.Payload.ToArray());
     }
-    private static PublicationImage Snapshot(Repository repository) => new(ReadRef(repository, 1), ReadRef(repository, 2),
+    private static PublicationImage Snapshot(Repository repository) => new(ReadHead(repository, 1), ReadHead(repository, 2),
         DataBytes(ResourcesOf(repository).Data), repository.GraphStore.AppendedFrames);
     private static void AssertSameRef(RefImage before, RefImage after) {
         Assert.Equal(before.Revision, after.Revision);
         Assert.Equal(before.Payload, after.Payload);
     }
     private static void AssertUnchanged(Repository repository, PublicationImage before) {
-        AssertSameRef(before.Branches, ReadRef(repository, 1));
-        AssertSameRef(before.Shared, ReadRef(repository, 2));
+        AssertSameRef(before.Branches, ReadHead(repository, 1));
+        AssertSameRef(before.Shared, ReadHead(repository, 2));
         Assert.Equal(before.Bytes, DataBytes(ResourcesOf(repository).Data));
         Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
         Assert.False(ResourcesOf(repository).HasPendingSave);

@@ -1,5 +1,7 @@
 # DurableGraph
 
+> 当前存储依赖已升级至 HeadStore 非兼容重构；本轮 feed 尚未制作，先用[源码联调](docs/storage-dependency.md#显式源码联调)。旧存档不自动迁移，包模式需待准确候选准备完成。
+
 [MIT License](LICENSE)
 
 **带 Schema 版本历史的 C# 对象图增量序列化库。**
@@ -13,7 +15,7 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 
 公开入口是非泛型 `Repository` / `BranchCheckout`：状态型应用直接连续提交 State，无需先提交 Event。
 需要记录业务事件时，可以另外提交 Event 快照；历史允许任意 E/S 排列。
-VersionStore 共同发布共享 Schema 根与命名分支目录；恢复读取已保存的结果，不重新执行历史业务处理器。
+HeadStore 共同发布共享 Schema 根与命名分支目录；恢复读取已保存的结果，不重新执行历史业务处理器。
 
 ## 最短接入路径
 
@@ -217,7 +219,7 @@ handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发�
 跨重开保存位置可使用不可变 tag：`repo.CreateTag("before-experiment", selectedFrame)`；
 关闭重开后用 `reopened.ResolveTag("before-experiment")` 取得当前打开的地址，再 ReadCheckpoint 或 Fork。
 tag 可指向 State 或尚无 State 的 Event；分支提交或移动不改变它，同名 tag 创建一律拒绝。
-tag 与 branch 名称空间独立，名称使用 1–128 个 ASCII 字符，匹配 `[a-z0-9][a-z0-9._-]*`，不能以 `.` 或 `.lock` 结尾。
+tag 与 branch 名称空间独立。tag 名称使用 1–1024 个 UTF-16 code units 的有效 Unicode，按 Ordinal 比较；branch 名称仍使用 1–128 个 ASCII 字符，匹配 `[a-z0-9][a-z0-9._-]*`，不能以 `.` 或 `.lock` 结尾。
 只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析均不推进分支或物化领域图。
 真实包和跨进程示例见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)。
 历史可为纯 State 的 `S0 → S1 → S2`，也可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
@@ -488,7 +490,7 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 [DB-078-A](docs/design-branches/0078-editable-checkpoint-fork-slice/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史) 已交付自由 E/S 历史和跨类型 State 替换。
 [DB-083](docs/design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、named Fork 与不可变 tag 已接入。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
-正常打开由 FrameStore/VersionStore 恢复不完整尾部，只读打开不写不修；不承诺完整 OS crash/power-loss 保证。仓库使用共享 `data/` 与发布 `versions/`，不另建 repository.lock。
+正常打开由 FrameStore/HeadStore 恢复不完整尾部，只读打开不写不修；不承诺完整 OS crash/power-loss 保证。仓库使用共享 `data/` 与发布 `versions/`，不另建 repository.lock。
 当前运行时只支持新建的新存储格式库；模型程序集需要重编译，模型的 accepted history 与显式 Upgrade 继续保留。
 
 保存失败时不要一律重试：`RepositoryPublicationException.Outcome` 区分 NotPublished / Unknown / Published，
@@ -504,7 +506,7 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 仅组织迁移不需要提高业务 Schema 版本，保留 accepted history；不提供旧 DLL 的直接二进制兼容。
 
 底层使用独立 [atelia-storage](https://github.com/Atelia-org/atelia-storage) 的六包 RBF3 栈：
-Primitives、Data、Rbf、Binary、FrameStore、VersionStore。
+Primitives、Data、Rbf、Binary、FrameStore、HeadStore。
 [StorageDependency.props](eng/StorageDependency.props) 统一固定版本 S 与准确来源；当前 pin 是未公开的本地候选。
 显式 source mode 用于源码 build/test，包交付使用完整候选目录；不自动发现兄弟仓或回退旧存储包。
 源码入口、上游 Pack 和任务 NuGet.Config 见 [存储依赖指南](docs/storage-dependency.md)。

@@ -3,9 +3,9 @@ using System.Reflection;
 using Atelia.Data;
 using Atelia.DurableGraph.Storage;
 
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -42,15 +42,15 @@ internal static class StorageTestData {
     internal static RepositoryResources ResourcesOf(Repository repository) =>
         (RepositoryResources)typeof(Repository).GetField("_resources", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
 
-    internal static void InstallPublicationFault(PublicationStore versions, string stage, Action action, bool tag = false) {
+    internal static void InstallPublicationFault(PublicationStore versions, string stage, Action action) {
         FieldInfo field = typeof(PublicationStore).GetField("_testHooks", BindingFlags.Instance | BindingFlags.NonPublic)!;
         object hooks = Activator.CreateInstance(field.FieldType, nonPublic: true)!;
         if (stage == "BeforeDataConfirm") {
             Set("ConfirmDataDurable", (Action)(() => { action(); ResourcesData(versions).ConfirmDurable(); }));
         } else if (stage == "AfterAppend") {
-            Set(tag ? "AfterTagRecordAppended" : "AfterRefRecordAppended", (Action<SizedPtr>)(_ => action()));
-        } else if (stage == "BeforeNewRefRename") {
-            Set("BeforeNewRefRename", action);
+            Set("AfterHeadRecordAppended", (Action<SizedPtr>)(_ => action()));
+        } else if (stage == "BeforeNewHeadRename") {
+            Set("BeforeNewHeadRename", action);
         } else if (stage == "AfterConfirmed") {
             Set("AfterPublicationConfirmed", action);
         } else { throw new ArgumentOutOfRangeException(nameof(stage)); }

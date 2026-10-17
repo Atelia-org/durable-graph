@@ -38,7 +38,7 @@ public sealed partial class DB078HistoryTests {
             oldSchema = repository.SharedSchemaRoot!.Value;
             int graphCheckpoints = 0;
             repository.OperationStageObserver = _ => graphCheckpoints++;
-            InstallPublicationFault(ResourcesOf(repository).Versions, "AfterAppend", () => throw new IOException("First joint End outcome unknown."));
+            InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => throw new IOException("First joint End outcome unknown."));
             RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => main.CommitState(new Beta { Value = 2 }, NoRebase));
             Assert.Equal(RepositoryPublicationOutcome.Unknown, error.Outcome);
             Assert.IsType<IOException>(error.InnerException);

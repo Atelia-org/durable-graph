@@ -6,7 +6,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -97,13 +97,13 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             Assert.False(ordinary.UsesPrivateSchemas);
             Assert.Same(models, ordinary.Models);
             Assert.Same(environment, ordinary.BindingEnvironment);
-            RefImage shared = ReadRef(repository, 2);
+            RefImage shared = ReadHead(repository, 2);
             FrameAddress reused = ordinary.CommitState(NoRebase).RevisionAddress;
             StoredGraphRevision unchanged = repository.GraphStore.ReadGraph(reused);
             Assert.Equal(saved.SchemaRoot, unchanged.SchemaRoot);
             Assert.Equal(saved.DirectoryRoot, unchanged.DirectoryRoot);
             Assert.Null(unchanged.OwnedBatch);
-            AssertSameRef(shared, ReadRef(repository, 2)); // No meta write uses the single branch ref.
+            AssertSameRef(shared, ReadHead(repository, 2)); // No meta write uses the single branch ref.
             DB087EnvelopeRoot root = AssertEnvelope(ordinary.State, 7);
             ObjectId list = ordinary.Baseline!.Objects.Single(pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
             ObjectStorageInfo prior = ordinary.Baseline.Objects[list].Storage!.Value;
@@ -160,7 +160,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             SchemaCatalogView latest = SchemaCatalogView.Load(repository.GraphStore, sharedPin);
             Assert.Equal(PrivateOnly, latest.Schemas[new(PrivateOnly.Type, 1)]);
             Assert.Equal(laterShared, latest.Schemas[new(laterShared.Type, 1)]);
-            shared = ReadRef(repository, 2);
+            shared = ReadHead(repository, 2);
             Assert.Equal(promotedPin, dev.Catalog.Accepted.Snapshot.Address);
             Assert.False(dev.Catalog.Accepted.Schemas.ContainsKey(new(laterShared.Type, 1)));
 
@@ -181,7 +181,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             Assert.True(dev.UsesPrivateSchemas);
             Assert.Same(models, dev.Models);
             Assert.Same(execution, dev.BindingEnvironment);
-            AssertSameRef(shared, ReadRef(repository, 2));
+            AssertSameRef(shared, ReadHead(repository, 2));
             complete = ReadFrames(ResourcesOf(repository).Data);
         }
         using (Repository repository = Repository.OpenExisting(_path, Models())) {
@@ -207,12 +207,12 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             Assert.Equal(coldPrivate, view.Schemas[new(coldPrivate.Type, 1)]);
             Assert.False(view.Schemas.ContainsKey(new(laterShared.Type, 1)));
             Assert.Equal(sharedPin, repository.SharedSchemaRoot);
-            AssertSameRef(shared, ReadRef(repository, 2));
+            AssertSameRef(shared, ReadHead(repository, 2));
             AssertFramesPreserved(ResourcesOf(repository).Data, complete);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(_path, Models());
         AssertRing(reader.ReadState(reader.GetHead("dev")), 502);
-        AssertSameRef(shared, ReadRef(reader, 2));
+        AssertSameRef(shared, ReadHead(reader, 2));
         AssertFramesPreserved(ResourcesOf(reader).Data, complete);
     }
 
@@ -233,8 +233,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         Assert.Equal(oldShared.Schemas.Count, merged.Schemas.Count);
         Assert.Equal(oldShared.ObjectLayouts.Count() + 1, merged.ObjectLayouts.Count());
         Assert.Equal(dynamicList, merged.ResolveLayout(merged.DescriptorId(dynamicList)));
-        Assert.NotEqual(before.Branches.Revision, ReadRef(repository, 1).Revision);
-        Assert.NotEqual(before.Shared.Revision, ReadRef(repository, 2).Revision);
+        Assert.NotEqual(before.Branches.Revision, ReadHead(repository, 1).Revision);
+        Assert.NotEqual(before.Shared.Revision, ReadHead(repository, 2).Revision);
         Assert.Equal(repository.SharedSchemaRoot, saved.SchemaRoot);
         Assert.Equal(previous.DirectoryRoot, saved.DirectoryRoot);
         Assert.Equal(previous.ObjectHeads.ToArray(), saved.ObjectHeads.ToArray());
@@ -362,7 +362,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         dev.CommitState(NoRebase);
         Assert.Equal(1, captures);
         Assert.Equal(b, dev.Catalog.Accepted!.Schemas[new(b.Type, 1)]);
-        AssertSameRef(before.Shared, ReadRef(repository, 2));
+        AssertSameRef(before.Shared, ReadHead(repository, 2));
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         CheckpointAddress saved = dev.CommitState(root, NoRebase);
         Assert.Same(root, dev.State);
         AssertEnvelope(repository.ReadState(saved), 7);
-        AssertSameRef(before.Shared, ReadRef(repository, 2));
+        AssertSameRef(before.Shared, ReadHead(repository, 2));
     }
 
     [Fact]
@@ -551,7 +551,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
                 case "StoreDispose": retained.Dispose(); break;
                 case "OwnerFault": resources.MarkFaulted(); break;
                 case "DataClose": resources.Data.Dispose(); break;
-                case "VersionsClose": resources.Versions.Dispose(); break;
+                case "VersionsClose": resources.Heads.Dispose(); break;
                 default: throw new ArgumentOutOfRangeException(nameof(stop));
             }
         };
@@ -569,8 +569,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         repository.Dispose();
 
         using Repository cold = Repository.OpenReadOnlyExisting(_path, CounterModels(1));
-        AssertSameRef(before.Branches, ReadRef(cold, 1));
-        AssertSameRef(before.Shared, ReadRef(cold, 2));
+        AssertSameRef(before.Branches, ReadHead(cold, 1));
+        AssertSameRef(before.Shared, ReadHead(cold, 2));
         Assert.Equal(before.Frames.Select(frame => frame.Address), ReadFrames(ResourcesOf(cold).Data).Select(frame => frame.Address));
         AssertFramesPreserved(ResourcesOf(cold).Data, before.Frames);
         Assert.Equal(1, Assert.IsType<Counter>(cold.ReadEvent(cold.GetHead("main"))).Value);
@@ -625,8 +625,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             oldShared = repository.SharedSchemaRoot!.Value;
             mainHead = main.Head.RevisionAddress;
             complete = ReadFrames(ResourcesOf(repository).Data);
-            shared = ReadRef(repository, 2);
-            oldBranches = ReadRef(repository, 1);
+            shared = ReadHead(repository, 2);
+            oldBranches = ReadHead(repository, 1);
             NormalizedGraphState baseline = dev.Baseline!;
             DB087Widget root = AssertRing(dev.State, 7);
             root.Numbers[7] = 402;
@@ -649,8 +649,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         Assert.Equal(visible, SchemaCatalogView.Load(cold.GraphStore, cold.SharedSchemaRoot!.Value).Schemas.ContainsKey(new(PrivateOnly.Type, 1)));
         Assert.Equal(cold.SharedSchemaRoot == oldShared, !visible);
         if (!visible) {
-            AssertSameRef(oldBranches, ReadRef(cold, 1));
-            AssertSameRef(shared, ReadRef(cold, 2));
+            AssertSameRef(oldBranches, ReadHead(cold, 1));
+            AssertSameRef(shared, ReadHead(cold, 2));
         } else { Assert.Equal(cold.SharedSchemaRoot, cold.GraphStore.ReadMetadata(recovered.Head.RevisionAddress).SchemaRoot); }
         AssertRing(recovered.State, visible ? 402 : 7);
         AssertFramesPreserved(ResourcesOf(cold).Data, complete);
@@ -719,12 +719,12 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         return prepared.View;
     }
 
-    private sealed record RefImage(RefRevision Revision, byte[] Payload);
+    private sealed record RefImage(HeadEntryId Revision, byte[] Payload);
     private sealed record FrameImage(FrameAddress Address, uint Tag, int MetaLength, bool IsTombstone, byte[] Payload);
     private sealed record PublicationImage(RefImage Branches, RefImage Shared, long Appended, FrameImage[] Frames);
-    private static RefImage ReadRef(Repository repository, uint id) {
-        RefBytesSnapshot read = ResourcesOf(repository).Versions.ReadRef(id).Unwrap();
-        return new(read.Revision, read.Payload.ToArray());
+    private static RefImage ReadHead(Repository repository, uint id) {
+        HeadEntry read = ResourcesOf(repository).Heads.ReadHead(id).Unwrap();
+        return new(read.Id, read.Payload.ToArray());
     }
     private static FrameImage[] ReadFrames(Frames data) {
         List<FrameInfo> frames = [];
@@ -734,7 +734,7 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
             return new FrameImage(info.Address, read.Tag, read.TailMetaLength, read.IsTombstone, read.PayloadAndMeta.ToArray());
         }).ToArray();
     }
-    private static PublicationImage Snapshot(Repository repository) => new(ReadRef(repository, 1), ReadRef(repository, 2),
+    private static PublicationImage Snapshot(Repository repository) => new(ReadHead(repository, 1), ReadHead(repository, 2),
         repository.GraphStore.AppendedFrames, ReadFrames(ResourcesOf(repository).Data));
     private static void AssertSameRef(RefImage before, RefImage after) {
         Assert.Equal(before.Revision, after.Revision);
@@ -751,8 +751,8 @@ public sealed class PrivateSchemaPromotionTests : IDisposable {
         foreach (FrameImage frame in before) { AssertFrame(frame, after.Single(item => item.Address == frame.Address)); }
     }
     private static void AssertUnchanged(Repository repository, PublicationImage before) {
-        AssertSameRef(before.Branches, ReadRef(repository, 1));
-        AssertSameRef(before.Shared, ReadRef(repository, 2));
+        AssertSameRef(before.Branches, ReadHead(repository, 1));
+        AssertSameRef(before.Shared, ReadHead(repository, 2));
         Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
         FrameImage[] after = ReadFrames(ResourcesOf(repository).Data);
         Assert.Equal(before.Frames.Select(frame => frame.Address), after.Select(frame => frame.Address));

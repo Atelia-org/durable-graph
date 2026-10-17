@@ -1,5 +1,5 @@
 
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -12,7 +12,7 @@ public sealed partial class EventHistoryRepositoryTests {
     public void ActualRootPublicationStagePreservesEvidenceAcrossFreshOpen(string stage, RepositoryPublicationOutcome outcome, bool visible) {
         FrameAddress candidate;
         using (Repository repository = CreateRepository()) {
-            InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage));
+            InstallPublicationFault(ResourcesOf(repository).Heads, stage, () => throw new IOException(stage));
             var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateSharedBranch("main", new Node(), NoRebase));
             Assert.Equal(outcome, error.Outcome);
             Assert.True(repository.IsFaulted);
@@ -75,7 +75,7 @@ public sealed partial class RepositoryTagFailureWindowTests : IDisposable {
         using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
             using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
             saved = main.Head.RevisionAddress;
-            InstallPublicationFault(ResourcesOf(repository).Versions, stage, () => throw new IOException(stage), tag: true);
+            InstallPublicationFault(ResourcesOf(repository).Heads, stage, () => throw new IOException(stage));
             var error = Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("candidate", main.Head));
             Assert.Equal(outcome, error.Outcome);
             Assert.True(repository.IsFaulted);

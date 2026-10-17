@@ -6,7 +6,7 @@ using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -23,8 +23,8 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Assert.False(repository.IsReadOnly);
             PublicationSnapshot before = Snapshot(repository);
             Assert.Empty(before.Frames);
-            Assert.Empty(RootMapCodec.Decode(before.Branches.Payload[4..]).Unwrap());
-            Assert.Empty(RootMapCodec.Decode(before.Shared.Payload[4..]).Unwrap());
+            Assert.Empty(NamedFrameMapCodec.Decode(before.Branches.Payload[4..]).Unwrap());
+            Assert.Empty(NamedFrameMapCodec.Decode(before.Shared.Payload[4..]).Unwrap());
             using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
             using BranchCheckout eventOnly = repository.CreateSharedBranchFromEvent("event-only", Ring());
             AssertRing(main.State, 7);
@@ -62,7 +62,7 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             DB087Widget root = AssertRing(main.State, 7);
             Assert.Equal(rootId, main.StateId);
             Assert.Equal(originalList, main.Baseline!.Objects[listId].Storage);
-            RefBytesSnapshot sharedBefore = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
+            HeadEntry sharedBefore = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
             root.Numbers[7] = 201;
             continued = main.CommitState().RevisionAddress;
             StoredGraphRevision graph = repository.GraphStore.ReadGraph(continued);
@@ -77,7 +77,7 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Assert.Equal(originalList.Head, delta.PriorAddress);
             Assert.Equal(originalList.ReconstructionPayloadBytes + delta.EncodedPayloadBytes!.Value,
                 main.Baseline!.Objects[listId].Storage!.Value.ReconstructionPayloadBytes);
-            AssertSameRef(sharedBefore, ResourcesOf(repository).Versions.ReadRef(2).Unwrap());
+            AssertSameRef(sharedBefore, ResourcesOf(repository).Heads.ReadHead(2).Unwrap());
             AssertFramesPreserved(ResourcesOf(repository).Data, completed);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, Models());
@@ -157,7 +157,7 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Assert.Equal(old, repository.GetHead("fork"));
             Assert.Equal(latest, repository.ResolveTag("bookmark"));
             Assert.Equal(schema, repository.SharedSchemaRoot);
-            AssertSameRef(before.Shared, ResourcesOf(repository).Versions.ReadRef(2).Unwrap());
+            AssertSameRef(before.Shared, ResourcesOf(repository).Heads.ReadHead(2).Unwrap());
             AssertExactFrames(before.Frames, ReadFrames(ResourcesOf(repository).Data));
             Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
             Assert.False(repository.IsFaulted);
@@ -245,23 +245,23 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
     }
 
     private sealed record FrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool IsTombstone, byte[] PayloadAndMeta);
-    private sealed record PublicationSnapshot(RefBytesSnapshot Branches, RefBytesSnapshot Shared, FrameImage[] Frames, long Appended);
+    private sealed record PublicationSnapshot(HeadEntry Branches, HeadEntry Shared, FrameImage[] Frames, long Appended);
     private static PublicationSnapshot Snapshot(Repository repository) {
         RepositoryResources resources = ResourcesOf(repository);
-        return new(resources.Versions.ReadRef(1).Unwrap(), resources.Versions.ReadRef(2).Unwrap(),
+        return new(resources.Heads.ReadHead(1).Unwrap(), resources.Heads.ReadHead(2).Unwrap(),
             ReadFrames(resources.Data), repository.GraphStore.AppendedFrames);
     }
     private static void AssertUnchanged(Repository repository, PublicationSnapshot before) {
         RepositoryResources resources = ResourcesOf(repository);
-        AssertSameRef(before.Branches, resources.Versions.ReadRef(1).Unwrap());
-        AssertSameRef(before.Shared, resources.Versions.ReadRef(2).Unwrap());
+        AssertSameRef(before.Branches, resources.Heads.ReadHead(1).Unwrap());
+        AssertSameRef(before.Shared, resources.Heads.ReadHead(2).Unwrap());
         AssertExactFrames(before.Frames, ReadFrames(resources.Data));
         Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
         Assert.False(resources.HasPendingSave);
         Assert.False(repository.IsFaulted);
     }
-    private static void AssertSameRef(RefBytesSnapshot before, RefBytesSnapshot after) {
-        Assert.Equal(before.Revision, after.Revision);
+    private static void AssertSameRef(HeadEntry before, HeadEntry after) {
+        Assert.Equal(before.Id, after.Id);
         Assert.Equal(before.Payload.ToArray(), after.Payload.ToArray());
     }
     private static FrameImage[] ReadFrames(Frames data) {

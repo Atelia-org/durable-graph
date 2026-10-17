@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using Frames = Atelia.FrameStore.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -57,7 +57,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             AssertPublished(repository, eventAddress, acceptedSchema);
             repository.CreateTag("event", publishedEvent);
 
-            RefBytesSnapshot sharedBefore = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
+            HeadEntry sharedBefore = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
             root.Numbers[7] = 201;
             savedState = main.CommitState().RevisionAddress;
             StoredGraphRevision saved = repository.GraphStore.ReadGraph(savedState);
@@ -70,8 +70,8 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(baseline.Objects[listId].Storage!.Value.Head, delta.PriorAddress);
             savedList = main.Baseline!.Objects[listId].Storage!.Value;
-            RefBytesSnapshot sharedAfter = ResourcesOf(repository).Versions.ReadRef(2).Unwrap();
-            Assert.Equal(sharedBefore.Revision, sharedAfter.Revision);
+            HeadEntry sharedAfter = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
+            Assert.Equal(sharedBefore.Id, sharedAfter.Id);
             Assert.Equal(sharedBefore.Payload.ToArray(), sharedAfter.Payload.ToArray());
             AssertPublished(repository, savedState, acceptedSchema);
             completed = ReadFrameImages(ResourcesOf(repository).Data);
@@ -103,7 +103,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             DB087Widget root = AssertRing(cold.State, 201);
             Assert.Equal(savedState, cold.StateRevisionAddress);
             Assert.Equal(savedList, cold.Baseline!.Objects[listId].Storage);
-            RefBytesSnapshot sharedBefore = ResourcesOf(reopened).Versions.ReadRef(2).Unwrap();
+            HeadEntry sharedBefore = ResourcesOf(reopened).Heads.ReadHead(2).Unwrap();
             root.Numbers[8] = 202;
             continuedState = cold.CommitState().RevisionAddress;
             StoredGraphRevision continued = reopened.GraphStore.ReadGraph(continuedState);
@@ -119,8 +119,8 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             // This commit itself crosses files, proving OpenExisting also forwards the rotation value.
             Assert.True(new[] { continued.Address, continued.DirectoryRoot, continued.OwnedBatch.Value }
                 .Select(FileId).Distinct().Count() > 1);
-            RefBytesSnapshot sharedAfter = ResourcesOf(reopened).Versions.ReadRef(2).Unwrap();
-            Assert.Equal(sharedBefore.Revision, sharedAfter.Revision);
+            HeadEntry sharedAfter = ResourcesOf(reopened).Heads.ReadHead(2).Unwrap();
+            Assert.Equal(sharedBefore.Id, sharedAfter.Id);
             Assert.Equal(sharedBefore.Payload.ToArray(), sharedAfter.Payload.ToArray());
             AssertPublished(reopened, continuedState, acceptedSchema);
             AssertFrameImages(reopened, completed);
@@ -220,13 +220,13 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     }
     private static void AssertPublished(Repository repository, FrameAddress head, FrameAddress schema) {
         RepositoryResources resources = ResourcesOf(repository);
-        RefBytesSnapshot branch = resources.Versions.ReadRef(1).Unwrap(), shared = resources.Versions.ReadRef(2).Unwrap();
+        HeadEntry branch = resources.Heads.ReadHead(1).Unwrap(), shared = resources.Heads.ReadHead(2).Unwrap();
         Assert.True(branch.Payload.StartsWith("P0R1"u8));
         Assert.True(shared.Payload.StartsWith("P0S1"u8));
-        Assert.Equal(head, Assert.Single(RootMapCodec.Decode(branch.Payload[4..]).Unwrap()).Value);
-        Assert.Equal("branch/main", Assert.Single(RootMapCodec.Decode(branch.Payload[4..]).Unwrap()).Key);
-        Assert.Equal(schema, Assert.Single(RootMapCodec.Decode(shared.Payload[4..]).Unwrap()).Value);
-        Assert.Equal("schema", Assert.Single(RootMapCodec.Decode(shared.Payload[4..]).Unwrap()).Key);
+        Assert.Equal(head, Assert.Single(NamedFrameMapCodec.Decode(branch.Payload[4..]).Unwrap()).Value);
+        Assert.Equal("branch/main", Assert.Single(NamedFrameMapCodec.Decode(branch.Payload[4..]).Unwrap()).Key);
+        Assert.Equal(schema, Assert.Single(NamedFrameMapCodec.Decode(shared.Payload[4..]).Unwrap()).Value);
+        Assert.Equal("schema", Assert.Single(NamedFrameMapCodec.Decode(shared.Payload[4..]).Unwrap()).Key);
         Assert.Equal(head, repository.GetHead("main").RevisionAddress);
         Assert.Equal(schema, repository.SharedSchemaRoot);
     }

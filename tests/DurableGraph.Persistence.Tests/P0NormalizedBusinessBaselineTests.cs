@@ -4,7 +4,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using WidgetState = Atelia.DurableGraph.Generated.Family_5030576964676574.V1;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -174,7 +174,7 @@ public sealed partial class P0BusinessPlanningAccountingTests {
     [Fact]
     public void P0InstallationPreparationFailureKeepsRefsAndBaselineAndPreservesCompleteOrphans() {
         FrameAddress oldState, oldMeta, orphan;
-        RefRevision branchRevision, sharedRevision;
+        HeadEntryId branchRevision, sharedRevision;
         byte[] branchPayload, sharedPayload;
         long before;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
@@ -185,9 +185,9 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             NormalizedGraphState source = Baseline(session);
             SchemaCatalogView accepted = session.Catalog.Accepted!;
             ObjectId childId = source.Objects[session.StateSource!.RootId].Current.GetState<WidgetState>().Segment0Field3;
-            var branches = repository.Versions.ReadRef(1).Unwrap();
-            var shared = repository.Versions.ReadRef(2).Unwrap();
-            branchRevision = branches.Revision; sharedRevision = shared.Revision;
+            var branches = repository.Heads.ReadHead(1).Unwrap();
+            var shared = repository.Heads.ReadHead(2).Unwrap();
+            branchRevision = branches.Id; sharedRevision = shared.Id;
             branchPayload = branches.Payload.ToArray(); sharedPayload = shared.Payload.ToArray();
             before = DataBytes(repository.Data);
             root.Numbers[7] = 9;
@@ -217,10 +217,10 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             Assert.Equal(1, session.Catalog.DirtyCount);
         }
         using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenExisting(_path);
-        var reopenedBranches = reopened.Versions.ReadRef(1).Unwrap();
-        var reopenedShared = reopened.Versions.ReadRef(2).Unwrap();
-        Assert.Equal(branchRevision, reopenedBranches.Revision);
-        Assert.Equal(sharedRevision, reopenedShared.Revision);
+        var reopenedBranches = reopened.Heads.ReadHead(1).Unwrap();
+        var reopenedShared = reopened.Heads.ReadHead(2).Unwrap();
+        Assert.Equal(branchRevision, reopenedBranches.Id);
+        Assert.Equal(sharedRevision, reopenedShared.Id);
         Assert.Equal(branchPayload, reopenedBranches.Payload.ToArray());
         Assert.Equal(sharedPayload, reopenedShared.Payload.ToArray());
         Assert.Equal(oldState, reopened.GetHead("main"));

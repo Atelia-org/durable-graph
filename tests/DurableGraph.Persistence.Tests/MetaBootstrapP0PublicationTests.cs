@@ -25,7 +25,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             before = DataBytes(repository.Data);
             using var pending = Prepare(repository, 2);
             int appends = 0;
-            InstallPublicationFault(repository.Versions, stage, () => {
+            InstallPublicationFault(repository.Heads, stage, () => {
                 if (stage != "AfterAppend" || ++appends == failOnAppend) { throw new IOException("P0 real publication window"); }
             });
             int installed = 0;

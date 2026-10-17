@@ -4,9 +4,9 @@ using System.Security.Cryptography;
 using Atelia.Binary;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
-using PublicationStore = Atelia.VersionStore.VersionStore;
+using PublicationStore = Atelia.HeadStore.HeadStore;
 
 // A test-only observer of this probe's current wire, not a repository reader or
 // a format contract. Run only after all Repository/Checkout owners have closed.
@@ -70,8 +70,8 @@ internal static class WireInspector {
     internal static Snapshot Read(string database) {
         using DataStore data = DataStore.OpenReadOnly(Path.Combine(database, "data"));
         using PublicationStore versions = PublicationStore.OpenReadOnly(Path.Combine(database, "versions"), data);
-        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(versions.ReadRef(1).Unwrap().Payload, "P0R1"u8);
-        IReadOnlyDictionary<string, FrameAddress> shared = Root(versions.ReadRef(2).Unwrap().Payload, "P0S1"u8);
+        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(versions.ReadHead(1).Unwrap().Payload, "P0R1"u8);
+        IReadOnlyDictionary<string, FrameAddress> shared = Root(versions.ReadHead(2).Unwrap().Payload, "P0S1"u8);
         Dictionary<string, FrameAddress> branches = new(StringComparer.Ordinal);
         foreach (var pair in branchRoot) {
             Require(pair.Key.StartsWith("branch/", StringComparison.Ordinal) && pair.Key.Length > 7, "Unknown branch root key.");
@@ -452,7 +452,7 @@ internal static class WireInspector {
 
     private static IReadOnlyDictionary<string, FrameAddress> Root(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> magic) {
         Require(bytes.StartsWith(magic), "Unknown publication root format.");
-        return RootMapCodec.Decode(bytes[magic.Length..]).Unwrap();
+        return NamedFrameMapCodec.Decode(bytes[magic.Length..]).Unwrap();
     }
     private static Record Version(ref BareValueReader reader, uint id) {
         int start = reader.ConsumedCount;

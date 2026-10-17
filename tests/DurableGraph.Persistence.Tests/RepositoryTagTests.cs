@@ -112,7 +112,7 @@ public sealed class RepositoryTagTests : IDisposable {
     }
 
     [Fact]
-    public void CreatingTagWithEmptyRegistryChangesOnlyTagBucket() {
+    public void CreatingTagWithEmptyRegistryChangesOnlyBookmarkHead() {
         using (Repository seed = Create()) {
             using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
         }
@@ -124,11 +124,15 @@ public sealed class RepositoryTagTests : IDisposable {
             Assert.Equal(head, metadata.GetHead("main"));
             Assert.Null(metadata.PreparedStateEntry);
         }
-        string tagsRoot = Path.Combine(_root, "versions", "tags") + Path.DirectorySeparatorChar;
+        string bookmarkFile = Path.Combine(_root, "versions", "refs", "00000003.rbf");
         var after = SnapshotFiles();
-        Assert.Contains(after.Keys, path => path.StartsWith(tagsRoot, StringComparison.Ordinal));
-        foreach (var pair in before) { Assert.Equal(pair.Value, after[pair.Key]); }
-        Assert.All(after.Keys.Except(before.Keys), path => Assert.StartsWith(tagsRoot, path, StringComparison.Ordinal));
+        Assert.Equal(before.Keys.Order(), after.Keys.Order());
+        foreach (var pair in before) {
+            if (pair.Key == bookmarkFile) {
+                Assert.True(after[pair.Key].Length > pair.Value.Length);
+                Assert.Equal(pair.Value, after[pair.Key][..pair.Value.Length]);
+            } else { Assert.Equal(pair.Value, after[pair.Key]); }
+        }
         using Repository verify = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
         Assert.Single(verify.ReadFrames("main"));
     }
@@ -253,7 +257,7 @@ public sealed class RepositoryTagTests : IDisposable {
 
     [Fact]
     public void InvalidTagNamesRejectWithoutWritingWhileLengthBoundariesPersist() {
-        string longest = new('a', Atelia.VersionStore.VersionStore.MaxTagNameCodeUnits);
+        string longest = new('a', RepositoryResources.MaxBookmarkNameCodeUnits);
         using (Repository seed = Create()) {
             using BranchCheckout main = seed.CreateSharedBranch("main", new Node(), NoRebase);
             seed.CreateTag("a", main.Head);
@@ -267,7 +271,7 @@ public sealed class RepositoryTagTests : IDisposable {
             CheckpointAddress address = repository.GetHead("main");
             Assert.Equal(address, repository.ResolveTag("a"));
             Assert.Equal(address, repository.ResolveTag(longest));
-            string?[] invalidNames = [null, "", new string('a', Atelia.VersionStore.VersionStore.MaxTagNameCodeUnits + 1)];
+            string?[] invalidNames = [null, "", "\uD800", "\uDC00", new string('a', RepositoryResources.MaxBookmarkNameCodeUnits + 1)];
             foreach (string? name in invalidNames) {
                 AssertOrdinaryFailure("InvalidTagName", () => repository.CreateTag(name!, address));
                 AssertOrdinaryFailure("InvalidTagName", () => repository.ResolveTag(name!));
@@ -279,7 +283,7 @@ public sealed class RepositoryTagTests : IDisposable {
 
     private static void AssertOrdinaryFailure(string errorName, Action action) {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(action);
-        Assert.Contains($"[VersionStore.{errorName}]", error.Message);
+        Assert.Contains($"[DurableGraph.{errorName}]", error.Message);
     }
 
     private static void AssertNoGraphWork(GraphReadStatistics statistics) {

@@ -24,7 +24,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         using (RepositoryResources resources = RepositoryResources.CreateStorageNew(_path)) {
             using RepositoryStorageFacade facade = new(resources);
             Assert.Same(resources.Data, facade.Data);
-            Assert.Same(resources.Versions, facade.Versions);
+            Assert.Same(resources.Heads, facade.Heads);
             StateModelRegistry models = Models();
             BranchSaveSession session = new(facade, "main", models);
             List<int> numbers = Enumerable.Repeat(0, 128).ToList();
@@ -175,7 +175,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             case "Fault": resources.MarkFaulted(); break;
             case "Dispose": resources.Dispose(); break;
             case "DataClose": resources.Data.Dispose(); break;
-            case "VersionsClose": resources.Versions.Dispose(); break;
+            case "VersionsClose": resources.Heads.Dispose(); break;
             default: throw new InvalidOperationException(stop);
         }
         Assert.ThrowsAny<InvalidOperationException>(resources.RequireAvailable);
@@ -205,7 +205,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         using RepositoryStorageFacade second = new(resources);
         Assert.Same(resources.Data, first.Data);
         Assert.Same(first.Data, second.Data);
-        Assert.Same(resources.Versions, first.Versions);
+        Assert.Same(resources.Heads, first.Heads);
         Assert.Same(first.Store, second.Store);
         using PendingRepositorySave pending = PrepareRaw(first, 1);
         Assert.Same(resources, pending.Owner);

@@ -29,7 +29,7 @@ $packagePins = @(
     [pscustomobject]@{ Id = 'Atelia.Rbf'; Version = $version; Revision = $revision },
     [pscustomobject]@{ Id = 'Atelia.Binary'; Version = $version; Revision = $revision },
     [pscustomobject]@{ Id = 'Atelia.FrameStore'; Version = $version; Revision = $revision },
-    [pscustomobject]@{ Id = 'Atelia.VersionStore'; Version = $version; Revision = $revision }
+    [pscustomobject]@{ Id = 'Atelia.HeadStore'; Version = $version; Revision = $revision }
 )
 $manifestPath = Join-Path $OutputDirectory 'manifest.published.json'
 $expectedRepository = $pinRepositoryUrl.TrimEnd('/') -replace '\.git$', ''

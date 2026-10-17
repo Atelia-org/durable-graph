@@ -189,8 +189,8 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         Dictionary<string, byte[]> before = Files();
         int upgrades = 0;
         using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
-            var branches = reader.Versions.ReadRef(1).Unwrap();
-            var shared = reader.Versions.ReadRef(2).Unwrap();
+            var branches = reader.Heads.ReadHead(1).Unwrap();
+            var shared = reader.Heads.ReadHead(2).Unwrap();
             StateModelRegistry models = Registry(Model(Current, Old, onUpgrade: () => upgrades++));
             BoundaryRoot restored = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, source.State, models));
             Assert.Equal((byte)5, restored.Value);
@@ -199,10 +199,10 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             SchemaCatalogView stillStored = SchemaCatalogView.Load(reader.Store, source.Schema);
             Assert.Single(stillStored.Schemas);
             Assert.False(stillStored.Schemas.ContainsKey(new(Current.Type, Current.Version)));
-            Assert.Equal(branches.Revision, reader.Versions.ReadRef(1).Unwrap().Revision);
-            Assert.Equal(shared.Revision, reader.Versions.ReadRef(2).Unwrap().Revision);
-            Assert.Equal(branches.Payload.ToArray(), reader.Versions.ReadRef(1).Unwrap().Payload.ToArray());
-            Assert.Equal(shared.Payload.ToArray(), reader.Versions.ReadRef(2).Unwrap().Payload.ToArray());
+            Assert.Equal(branches.Id, reader.Heads.ReadHead(1).Unwrap().Id);
+            Assert.Equal(shared.Id, reader.Heads.ReadHead(2).Unwrap().Id);
+            Assert.Equal(branches.Payload.ToArray(), reader.Heads.ReadHead(1).Unwrap().Payload.ToArray());
+            Assert.Equal(shared.Payload.ToArray(), reader.Heads.ReadHead(2).Unwrap().Payload.ToArray());
             Assert.Equal(source.Schema, reader.SharedSchemaRoot);
             Assert.Equal(source.State, reader.GetHead("main"));
         }

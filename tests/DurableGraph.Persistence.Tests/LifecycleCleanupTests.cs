@@ -17,10 +17,10 @@ public sealed class LifecycleCleanupTests : IDisposable {
         FrameAddress address = graph.Address;
         retained.ReadMetadata(address);
         retained.ReadDirectory(graph.DirectoryRoot);
-        IOException versionError = new("VersionStore owner lock close failed.");
+        IOException versionError = new("HeadStore owner lock close failed.");
         IOException dataError = new("FrameStore owner lock close failed.");
         List<string> attempted = [];
-        using IDisposable originalVersionLock = ReplaceOwnerLock(resources.Versions, versionError, () => attempted.Add("versions"));
+        using IDisposable originalVersionLock = ReplaceOwnerLock(resources.Heads, versionError, () => attempted.Add("versions"));
         using IDisposable originalDataLock = ReplaceOwnerLock(GetField(resources.Data, "_core"), dataError, () => attempted.Add("data"));
 
         AggregateException error = Assert.Throws<AggregateException>(resources.Dispose);
@@ -32,7 +32,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
         Assert.Throws<ObjectDisposedException>(() => retained.Append(StoredGraphKind.State, address, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
-        Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
+        Assert.Throws<ObjectDisposedException>(resources.Heads.EnsureUsable);
         resources.Dispose();
 
         using RepositoryResources fresh = RepositoryResources.OpenExisting(_root);
@@ -46,7 +46,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         using RepositoryResources resources = RepositoryResources.CreateNew(_root);
         GraphRecordStore retained = resources.GraphStore;
         IOException injected = new("Single owner lock close failed.");
-        object target = versionOwner ? resources.Versions : GetField(resources.Data, "_core");
+        object target = versionOwner ? resources.Heads : GetField(resources.Data, "_core");
         int attempts = 0;
         using IDisposable originalLock = ReplaceOwnerLock(target, injected, () => attempts++);
 
@@ -56,7 +56,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Equal(1, attempts);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(TestAddress()));
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
-        Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
+        Assert.Throws<ObjectDisposedException>(resources.Heads.EnsureUsable);
         using RepositoryResources fresh = RepositoryResources.OpenExisting(_root);
         fresh.RequireAvailable();
     }
@@ -68,20 +68,20 @@ public sealed class LifecycleCleanupTests : IDisposable {
         using RepositoryResources resources = RepositoryResources.CreateNew(_root);
         GraphRecordStore retained = resources.GraphStore;
         IOException primary = CapturePrimary();
-        IOException versionError = new("VersionStore cleanup failed.");
+        IOException versionError = new("HeadStore cleanup failed.");
         IOException dataError = new("FrameStore cleanup failed.");
         IDisposable? originalVersionLock = null;
         IDisposable? originalDataLock = null;
         List<string> attempted = [];
         try {
             if (failCleanup) {
-                originalVersionLock = ReplaceOwnerLock(resources.Versions, versionError, () => attempted.Add("versions"));
+                originalVersionLock = ReplaceOwnerLock(resources.Heads, versionError, () => attempted.Add("versions"));
                 originalDataLock = ReplaceOwnerLock(GetField(resources.Data, "_core"), dataError, () => attempted.Add("data"));
             }
             MethodInfo cleanup = typeof(RepositoryResources).GetMethod("CloseResources", BindingFlags.Static | BindingFlags.NonPublic)!;
             // Open invokes this same helper. Reflection adds only its normal invocation envelope.
             TargetInvocationException invocation = Assert.Throws<TargetInvocationException>(() => cleanup.Invoke(null,
-                [primary, retained, resources.Versions, resources.Data]));
+                [primary, retained, resources.Heads, resources.Data]));
             if (failCleanup) {
                 AggregateException error = Assert.IsType<AggregateException>(invocation.InnerException);
                 Assert.Collection(error.InnerExceptions,
@@ -93,7 +93,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
             }
             Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(TestAddress()));
             Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
-            Assert.Throws<ObjectDisposedException>(resources.Versions.EnsureUsable);
+            Assert.Throws<ObjectDisposedException>(resources.Heads.EnsureUsable);
             resources.Dispose();
             using RepositoryResources fresh = RepositoryResources.OpenExisting(_root);
             fresh.RequireAvailable();

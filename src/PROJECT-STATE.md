@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-10-15；DB-086 新存储栈与既有 DB-077、DB-078-A/B/C、DB-079/080、DB-084 能力已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-10-17；DB-086 新存储栈与既有 DB-077、DB-078-A/B/C、DB-079/080、DB-084 能力已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -18,6 +18,8 @@
 默认搜索 src/tests 与活动回归；已淘汰设计和实验只在明确历史问题时查[Git 来源](../experiments/ARCHIVE.md)。
 
 ## 当前焦点
+
+[DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)已与上游 HeadStore / Head / HeadEntry / HeadSetTag 对齐。DG 源码接入采用独立书签目录 Head 3，分支目录 Head 1、shared Schema Head 2 保持职责；业务 CreateTag/ResolveTag 仍选任意历史图，不能等同上游 HeadSetTag。范围、格式变化与验收见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。domain-history 父链与 fork-log 两条路线仍未裁决，增量名称索引与业务 metadata 未展开；不由本片临时目录形状反推最终设计。当前仅源码联调，新 feed / DG 普通包资格尚未取得。
 
 workshop 反馈 3 的纯 State 入门已完成：[README](../README.md#最短接入路径)以连续 State 保存、历史读取、旧 State 分叉及冷开续写为主路径，Event 为可选后续示例。源码与新 G 原文普通包验收通过，运行时/API/格式保持；准确 G/S、证据与范围见[验收记录](../docs/DurableGraph-lab-notebook.md#state-only-quickstart)，本片无剩余必经施工。
 
@@ -57,12 +59,12 @@ Open 只选择资源读写；Shared 命名创建/签出/Fork 与 CheckoutPrivate
 
 DB-087 原有限停点与 DB-088 后继删减均已完成；其他增量与条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。旧包执行 lanes 已退出，保留模型仅作编译资产。内部名称／wire 未冻结，共同持久化内核是当前产品路径。
 
-DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿（Git 历史）](../docs/design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")（`ecc8068`）。续工先核实际 HEAD／工作树；DB-089 C 已制作新 G 并显式 restore package mode，root solution assets／DLL 当前为准确 S pin 的 package-mode 输出。后续 source 联调须按[依赖指南](../docs/storage-dependency.md)显式重新 restore，不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
+DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿（Git 历史）](../docs/design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")（`ecc8068`）。续工先核实际 HEAD／工作树；DB-089 C 的新 G 包结果保历史身份；当前 DB-096 已重新 restore 为 HeadStore source mode。包交付仍须按[依赖指南](../docs/storage-dependency.md)准备准确 feed 并重新 restore，不混用输出或将 source build 当成 pack 证据。用户已允许按需自主本地 Git 提交，验收／文档同步后提交。
 
-[DB-086](../docs/design-branches/0086-new-storage-refactoring-plan/README.md)只保现行正常 backing 恢复、完整帧稳定、必要读取、fault/lifetime 与离线救援约定；物理地址与轮转由 FS/VS 承担，准确 pin 和操作见[依赖指南](../docs/storage-dependency.md)。
+[DB-086](../docs/design-branches/0086-new-storage-refactoring-plan/README.md)只保现行正常 backing 恢复、完整帧稳定、必要读取、fault/lifetime 与离线救援约定；物理地址与轮转由 FS/HS 承担，准确 pin 和操作见[依赖指南](../docs/storage-dependency.md)。
 
 [DB-084 DG tag 接入](../docs/design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
-不可变绑定现由上游 VersionStore 拥有；State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
+旧上游 bytes tag 接入已由 [DB-096 书签目录](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)取代；不可变绑定由 DG 拥有。State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
 普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，重开按名字检查实际结果，不自动重试。物理尾恢复由底座承担。
 准确公开包、故障与真实包证据集中于接入记录。下一步由下游固定书签/历史浏览/分叉续写的真实反馈选择产品增量。
 
@@ -94,7 +96,7 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 081 不再作为必经工单；一般新 State 的 reader 完整证明需要先解决，不能以 Capture 或旧历史证书代替。
 无 State 请求绕过材料槽/实验叶表，优化关闭仍须正确；热提交准入未实施，叶实例复用只在内部实验开关下可用。
 [DB-084 不可变 tag](../docs/design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) 已按准确公开 package/revision 接入；
-旧栈接入证据保留历史含义；当前 Binary/FS/VS 六包 pin 和源码入口见[依赖指南](../docs/storage-dependency.md)。
+旧栈接入证据保留历史含义；当前 Binary/FS/HS 六包 pin 和源码入口见[依赖指南](../docs/storage-dependency.md)。
 [DB-073](../docs/design-branches/0073-repository-scoped-weak-reference-cache/README.md) /
 [DB-074](../docs/design-branches/0074-efficient-fork-deferred-directions/README.md) 继续 **Draft / 尚待进一步修订**，不作为并行工单。
 
@@ -162,7 +164,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认两根／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／真实 baseline private 升版、冷续写、单次完整目录 ToShared | [DB-087 有限 P1／P2 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)成立；原分支重建、同 Open 双异形模型及性能等按条件延期，源码／包各保限定资格 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／真实 baseline private 升版、冷续写、单次完整目录 ToShared | [DB-087 有限 P1／P2 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)成立；原分支重建、同 Open 双异形模型及性能等按条件延期，源码／包各保限定资格 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
@@ -281,14 +283,14 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
-- RepositoryResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 VersionStore，保管最新分支目录／shared 两根与唯一 pending；只读不写盘、不修尾。
+- RepositoryResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 HeadStore，保管分支目录／shared／书签三个入口与唯一 pending；只读不写盘、不修尾。
   GraphReader.ReadPair 各自 Decode/Normalize/验证后，在同 ID/head、current model/完整布局、未重写且有完整状态相等 proof 的候选中，
   沿反向引用剔除依赖非候选者；剩余只读闭包共享 Allocate/Hydrate，稳定环可整体复用，changed-child 会使 owner 分裂。
   共享还要求同 reader-issued 环境；string 在既有 same-ID/head 候选内按引用快路／Ordinal 完整内容证明，不 intern 不同 ID 的等值非空串。只读结果不导入可编辑基线。
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   共同 workspace／候选在 State 确认后才安装原实例／新根；独立 Event 使用最近 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State rewrite。
   Event 完整目录按 source − candidate 产生 Removes，保实际 local Base/Delta 与内容来源 external heads；后继 State 仍相对最近 State。
-- Repository 拥有 RepositoryResources 的 FS/VS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
+- Repository 拥有 RepositoryResources 的 FS/HS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
   CreateSharedBranch(initialState) / CreateSharedBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
   CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
   业务 Parent 指向提交前精确 Head；业务内容来源取该 Parent 自身或祖先中最近 State，无 State 时为 null，旧称 Revision Parent。

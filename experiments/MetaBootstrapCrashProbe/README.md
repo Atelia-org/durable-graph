@@ -1,6 +1,8 @@
 # Split DG ProcessCrashOnly 见证
 
-本 Probe 验证 DB-087 内部 split Repository 的有限进程中止窗口：默认模式检查真实生成的 Widget、共享 List、新增 Schema 的六个保存停点；`-InitializationOnly` 检查直接工厂两次成功 CreateRef 后的停点。两模式都由 controller 外部终止 writer，再由独立 verifier 冷验证。
+2026-10-17：已适配 HeadStore 和三入口布局；本轮重新运行初始化三个及保存六个真实 Kill 窗口均通过，来源和证据见 [DB-096 接入](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。
+
+本 Probe 验证 DB-087 内部 split Repository 的有限进程中止窗口：默认模式检查真实生成的 Widget、共享 List、新增 Schema 的六个保存停点；`-InitializationOnly` 检查直接工厂三次成功 CreateHead 后的停点。两模式都由 controller 外部终止 writer，再由独立 verifier 冷验证。
 
 这是源码模式的有限进程中止见证，默认公开工厂使用同一 meta 自举内核；不授 PackageReference、OS crash、断电、设备故障或完整 P1d 门禁资格。正常关闭重开、异常抛出与 writer 的 Dispose 都不能代替这里的外部 Kill。活动状态与后续门禁见 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
 
@@ -13,7 +15,7 @@
 ```powershell
 dotnet build experiments/MetaBootstrapCrashProbe/MetaBootstrapCrashProbe.csproj -c Release -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage --verbosity minimal -m:1 -nr:false
 pwsh -File experiments/MetaBootstrapCrashProbe/Run-Probe.ps1 -AssemblyPath experiments/MetaBootstrapCrashProbe/bin/Release/net10.0/Atelia.DurableGraph.Persistence.Tests.dll
-# 初始化两窗口使用另一组全新夹具，不运行 seed 或六个保存窗口。
+# 初始化三窗口使用另一组全新夹具，不运行 seed 或六个保存窗口。
 pwsh -File experiments/MetaBootstrapCrashProbe/Run-Probe.ps1 -InitializationOnly -AssemblyPath experiments/MetaBootstrapCrashProbe/bin/Release/net10.0/Atelia.DurableGraph.Persistence.Tests.dll
 ```
 
@@ -30,12 +32,13 @@ pwsh -File experiments/MetaBootstrapCrashProbe/Run-Probe.ps1 -InitializationOnly
 | `AfterPublicationConfirmed` | 两个新根；发布确认后、DG 安装前 |
 | `BeforeInstall` | 两个新根；DG 安装停点 |
 
-初始化模式只有以下两个固定窗口，无 seed。`init-writer` 直接调用真实 DG 内部 factory；停点在相应 `CreateRef(...).Unwrap()` 成功返回后、factory 交付 Repository 前。它不写业务或 meta 用户帧，也不制造占位 State。
+初始化模式只有以下三个固定窗口，无 seed。`init-writer` 直接调用真实 DG 内部 factory；停点在相应 `CreateHead(...).Unwrap()` 成功返回后、factory 交付 Repository 前。它不写业务或 meta 用户帧，也不制造占位 State。
 
 | 初始化停点 | fresh verifier 结果 |
 |---|---|
-| `AfterFirstCreateRef` | `MissingSecondRef`：ref1 完整、ref2 缺失；fresh RO／RW 均拒绝，不补建、不改文件；随后裸 backing store 独占打开，证明失败 Open 已释放锁 |
-| `AfterSecondCreateRef` | `CompleteEmptyRoots`：两个正式空根可 fresh RO 打开且文件不变；全关后 RW 保存真实 Widget 环／共享 List，再全关冷开续写准确单条 Delta |
+| `AfterFirstCreateHead` | `MissingSecondHead`：仅 Head 1 完整；fresh RO／RW 均拒绝，不补建、不改文件；随后裸 backing store 独占打开，证明失败 Open 已释放锁 |
+| `AfterSecondCreateHead` | `MissingThirdHead`：Head 1/2 完整但书签目录 Head 3 缺失；RO/RW 拒绝且不补建 |
+| `AfterThirdCreateHead` | `CompleteEmptyRoots`：三个正式空目录可 fresh RO 打开且文件不变；全关后 RW 保存真实 Widget 环／共享 List，再全关冷开续写准确单条 Delta |
 
 writer 写完原子 `ready.json`，输出并 flush 单行 `READY`，随后保持存活等待外部终止。controller 同时核对 READY 行、文件中的窗口和真实 PID，调用 `Process.Kill(entireProcessTree: true)`，等待退出后才启动 fresh verifier。进程以 `UseShellExecute=false`／`CreateNoWindow=true` 隐藏启动，输出和错误均捕获；READY 默认限时 60 秒，seed／verify 默认 120 秒，终止默认 30 秒。参数仅调这些有限等待，不扩大固定矩阵。
 

@@ -1,7 +1,7 @@
 
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
@@ -157,15 +157,15 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
         new(resources.GetBranchStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])]);
 
     private static PublicationSnapshot Snapshot(RepositoryResources resources) {
-        var branches = resources.Versions.ReadRef(1).Unwrap();
-        var shared = resources.Versions.ReadRef(2).Unwrap();
-        return new(branches.Revision, branches.Payload.ToArray(), shared.Revision, shared.Payload.ToArray(),
+        var branches = resources.Heads.ReadHead(1).Unwrap();
+        var shared = resources.Heads.ReadHead(2).Unwrap();
+        return new(branches.Id, branches.Payload.ToArray(), shared.Id, shared.Payload.ToArray(),
             resources.GetBranchHead("main")!.Value, resources.SharedSchemaRoot!.Value,
             resources.GraphStore.AppendedFrames);
     }
     private static void AssertUnchanged(RepositoryResources resources, PublicationSnapshot expected) {
-        var branches = resources.Versions.ReadRef(1).Unwrap();
-        Assert.Equal(expected.BranchRevision, branches.Revision);
+        var branches = resources.Heads.ReadHead(1).Unwrap();
+        Assert.Equal(expected.BranchRevision, branches.Id);
         Assert.Equal(expected.BranchPayload, branches.Payload.ToArray());
         Assert.Equal(expected.MainHead, resources.GetBranchHead("main"));
         AssertSharedAndFramesUnchanged(resources, expected);
@@ -175,16 +175,16 @@ public sealed class SplitRepositoryRefGuardTests : IDisposable {
         Assert.Equal(expected.Frames, resources.GraphStore.AppendedFrames);
     }
     private static void AssertSharedUnchanged(RepositoryResources resources, PublicationSnapshot expected) {
-        var shared = resources.Versions.ReadRef(2).Unwrap();
-        Assert.Equal(expected.SharedRevision, shared.Revision);
+        var shared = resources.Heads.ReadHead(2).Unwrap();
+        Assert.Equal(expected.SharedRevision, shared.Id);
         Assert.Equal(expected.SharedPayload, shared.Payload.ToArray());
         Assert.Equal(expected.SharedRoot, resources.SharedSchemaRoot);
     }
     private static void AssertTagMissing(RepositoryResources resources, string tag) =>
-        Assert.Contains("[VersionStore.TagNotFound]", Assert.Throws<InvalidOperationException>(() => resources.ResolveStoredTag(tag)).Message);
+        Assert.Contains("[DurableGraph.TagNotFound]", Assert.Throws<InvalidOperationException>(() => resources.ResolveStoredTag(tag)).Message);
 
-    private sealed record PublicationSnapshot(RefRevision BranchRevision, byte[] BranchPayload,
-        RefRevision SharedRevision, byte[] SharedPayload, FrameAddress MainHead, FrameAddress SharedRoot, long Frames);
+    private sealed record PublicationSnapshot(HeadEntryId BranchRevision, byte[] BranchPayload,
+        HeadEntryId SharedRevision, byte[] SharedPayload, FrameAddress MainHead, FrameAddress SharedRoot, long Frames);
 
     public void Dispose() {
         SharedReadModel.DeleteFixture(_path, Prefix);

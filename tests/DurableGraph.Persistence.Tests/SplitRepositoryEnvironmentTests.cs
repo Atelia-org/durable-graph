@@ -299,9 +299,9 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         string legacyPath = _path + "-legacy";
         Directory.CreateDirectory(legacyPath);
         using (var data = Atelia.FrameStore.FrameStore.Create(Path.Combine(legacyPath, "data"))) {
-            using var versions = Atelia.VersionStore.VersionStore.Create(Path.Combine(legacyPath, "versions"), data,
-                reservedRefIdUpperBound: 1);
-            versions.CreateRef(1, [0], out _).Unwrap(); // Valid opaque VS payload, incompatible required ref layout.
+            using var versions = Atelia.HeadStore.HeadStore.Create(Path.Combine(legacyPath, "versions"), data,
+                reservedHeadIdUpperBound: 1);
+            versions.CreateHead(1, [0], out _).Unwrap(); // Valid opaque VS payload, incompatible required ref layout.
         }
         var incompatibleFiles = Directory.GetFiles(legacyPath, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
         Assert.Throws<InvalidDataException>(() => Repository.OpenStorageReadOnlyExisting(legacyPath, Models(new())));

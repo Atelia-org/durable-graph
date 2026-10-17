@@ -41,7 +41,7 @@ foreach ($scenario in $scenarios) {
     }
     if ($scenario.Name -eq 'incomplete-publication-tail') {
         # Inject an incomplete tail after the complete root publication while all owners
-        # are closed. Writable VS ReadRef is expected to recover it and retain head 2.
+        # are closed. Writable VS ReadHead is expected to recover it and retain head 2.
         $publicationPath = Join-Path $directory 'versions/refs/00000001.rbf'
         $stream = [IO.File]::Open($publicationPath, [IO.FileMode]::Append, [IO.FileAccess]::Write)
         try { $stream.Write([byte[]]@(0x10, 0x20)); $stream.Flush($true) }

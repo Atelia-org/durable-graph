@@ -118,7 +118,7 @@ public sealed class GraphResourcesTests : IDisposable {
         ObjectVersionBatch owned = retained.ReadBatch(graph.OwnedBatch!.Value);
         retained.ReadDirectory(graph.DirectoryRoot);
         Assert.True(retained.ReadCacheStatistics.ResidentChargeBytes > 0);
-        if (closeVersionStore) { resources.Versions.Dispose(); }
+        if (closeVersionStore) { resources.Heads.Dispose(); }
         else { resources.Data.Dispose(); }
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(graph.Address));

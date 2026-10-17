@@ -1,6 +1,6 @@
 using Atelia.DurableGraph.Persistence;
 using Atelia.FrameStore;
-using Atelia.VersionStore;
+using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph;
 

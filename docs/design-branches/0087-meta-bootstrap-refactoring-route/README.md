@@ -1,5 +1,7 @@
 # DB-087：meta 自举与共享私有 Schema 视图
 
+> 2026-10-17 后继：[DB-096 HeadStore 接入](../0096-history-and-head-model/headstore-adaptation.md)采用三入口布局和 DG 书签目录；本文两根初始化及上游 bytes tag 的既有证据保留历史范围，不作为新布局合同。
+
 > 结论与适用性：原有限 P1/P2 已完成；默认 meta 自举、完整 private/ToShared 保留，特例退出与新普通包资格由 DB-088 接续。
 > 本次整理来源 Git `8ef9fca`；原主入口 `docs/design-branches/0087-meta-bootstrap-refactoring-route.md`。
 
