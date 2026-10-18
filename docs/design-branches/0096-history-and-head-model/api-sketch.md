@@ -22,6 +22,8 @@ BranchId 对应紧凑 HeadId，CommitId 对应紧凑 HeadEntryId；推荐薄角�
 
 ```text
 repo.ListBranches()                         → BranchInfo[]
+repo.ListRootBranches()                     → BranchInfo[]
+repo.ListBranchSubtree(branchId)             → BranchInfo[]
 repo.ReadBranchInfo(branchId)                → BranchInfo
 repo.ReadCurrentCommit(branchId)             → { BranchId, Commit: CommitInfo }
 repo.ReadCommitInfo(commitId)                → CommitInfo
@@ -120,7 +122,13 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 `StopReason` 区分抵达根和页满停止；若选择返回预算截断页，还必须区分预算限制。取消/损坏等错误另行传播。Continuation 不证明还有一项：满页末端恰是根时，下次可以返回空且完整。部分条目后预算耗尽是保留前缀还是调用失败，仍待合同裁决；零进度失败不能伪造推进位置，也不保证相同预算重试能前进。
 
-ListBranches 先考虑完整小目录及内存树索引，不先造持久子树索引。目录读取标签/固定来源；展开某组分支再读该组 current 摘要，选中附件才读 BLOB。缺失父节点或坏来源不能被展示成新根。
+### 根与子树查询
+
+用户已同意纳入 `ListRootBranches()` 与 `ListBranchSubtree(branchId)`。前者返回没有 ForkedFromCommitId 的正式 Branch；后者包含指定 Branch 自身及沿固定分叉来源连接的全部后代，返回平面 BranchInfo 集合，不返回 Commit 历史或物化 State。空 fork 正常参与子树。无效/未登记的起点应失败，不能伪装成空树；缺失父节点或坏来源不能被展示成新根。
+
+这些查询都以 DG 正式成员为范围。在登记候选 B 中，不登记 Shared Schema 等管理 Head，也不展示创建中断遗留的未登记 Head。HeadStore 保留区只约束编号分配，不能替代成员资格；仅过滤低编号仍可能暴露自动区的未登记产物。应用自己的角色/知识 Branch 仍是业务成员，是否出现在“选择世界”的界面由应用决定。
+
+首版可完整读取小目录并建立内存来源索引，子树查询不保证只访问该子树的磁盘文件。列表不承诺时间排序；应用按需排序和展开。展开某组分支再读该组 current 摘要，选中附件才读 BLOB。不先造持久子树索引，也不以新增查询为由强制增强 HeadStore。来源查询能否限定已登记集合及其成本，留到接入时验证。
 
 ## 6. 创建协议与后续工作
 
@@ -129,3 +137,16 @@ ListBranches 先考虑完整小目录及内存树索引，不先造持久子树�
 该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。1000条分支的目录容量须按实际 payload/标签上限核算；不先假定整表方案合格，不新增 GC。
 
 下一步依次细化：创建完整可见性；存档描述及准确 Schema/内容重建依赖；summary/BLOB；加载对象的可变性与寿命、分页结果及 Private 创建边界。之后再定 C# 签名、接入依赖和实施切片。命名审阅没有冻结上述未决项，也没有新增 rewind、merge、内容寻址或唯一名字需求。
+
+## 7. 多 Branch 联合提交：新候选
+
+用户提出 WorkingCopy 准备操作、Repository 统一提交的方向；这是当前研究范围，尚未选为首片实施合同。推荐先比较轻量 `CommitRequest` 与真正冻结内容的 `PreparedCommit`，具体取舍见[联合提交设计候选](multi-branch-commits.md)。主候选调用为：
+
+```text
+repo.CommitBranches([
+    worldWork.CreateStateCommitRequest(worldState, worldSummary),
+    playerWork.CreateStateCommitRequest(playerState, playerSummary)
+]) → BranchId 到 CommitInfo 的结果表
+```
+
+另有 `CreateEventCommitRequest(domainEvent, summary)`。创建 request 不发布、不捕获业务图快照；在 CommitBranches 期间统一捕获、校验和准备。同一次调用只提交同一 Repository 实例中不同 Branch 的有效工作副本，每分支一个 State 或 Event。既有 CommitState/CommitEvent 仍表示立即提交，不能放入上述集合充当延迟请求。普通提交与联合提交应复用同一内核；此处没有公开新的跨库事务或任意 Head 写入入口。
