@@ -7,6 +7,8 @@
 
 > 后继交付：两类 codec 与 `ReadEntryHistory` 已交付并通过独立消费者复核；用户确认紧凑 Handle 的开发期误用诊断目标，[补充实验](handle-misuse-detection.md)支持不为每个引用增加完整 scope。[复核记录](headstore-delivery-review.md)维护准确来源，本片无待上游补强身份的阻塞。
 
+> 后继机制调查（2026-10-18）：[源码映射与最小实验](mechanism-feasibility.md)进一步区分登记两层 outcome、最近 State 内容来源、全量 origin 访问范围与目录累计写量；以下候选须连同该证据理解，仍未实施。
+
 ## 1. 本轮边界与结论
 
 用户在本轮明确：首版原世界线只追加；从旧存档继续通过另开世界线实现，不要求原线 rewind。fork 成功后，即使没有新业务保存，也必须能列出、预览、关闭重开和继续。父子线均可独立推进；来源按选中存档的实际归属确定。
@@ -75,7 +77,7 @@ c1 = workC.CommitState(changedState, newSummary)
 
 至少固定两个恢复见证：`S0,E1,E2` 从 E1 fork 后，逻辑末端仍是 E1、State 恢复 S0；`E0,E1` 从 E1 fork 后，末端仍是 E1、State 为“尚无”。两者都不自动重放 Event。找不到 State 只有在完整走到根且确无 State 时成立；预算耗尽、坏 State 或读取失败不能降格为“没有 State”，也不回退到更旧的健康 State。
 
-删除逻辑 Parent 不意味着删除对象 Delta prior 或内容来源。现有 `GraphRecordStore.ResolveContentSource` 会沿 Parent 寻找同类内容来源；重写必须显式交接准确最近 State/同类来源或设计等价查找，不能只删除字段。业务时间线和对象重建依赖分别承担职责。
+删除逻辑 Parent 不意味着删除对象 Delta prior 或内容来源。源码复核确认，`GraphRecordStore.ResolveContentSource` 对 State 和 Event 都沿 Parent 寻找最近 State，Meta 则取前 Meta；此前“同类内容来源”的表述不准确。重写必须交接这些准确来源及其关系校验，不能只删除字段。业务时间线和对象重建依赖分别承担职责；直接 State 锚点与历史推导的取舍及错源反例见[机制调查 §7](mechanism-feasibility.md#7-恢复先纠正文档再验证删除-parent-的闭包)。
 
 Event 摘要的建议最小规则：调用方显式提供或显式缺省；不能默默把最近 State 的摘要标成 Event 的新状态。应用若要展示最近 State，可返回一个明确标识其来源的单独视图。API 草图已采用显式提供或明确缺省且不继承另一记录摘要的边界；具体缺省语义仍待定，不增加业务自动推导。
 

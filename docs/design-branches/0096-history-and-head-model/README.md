@@ -8,6 +8,8 @@
 
 **当前阶段转为收敛验证。** 用户认可已有 API 的清晰性与功能覆盖；后续先映射实际机制，再验证发布/创建、恢复材料和查询成本，寻找保留功能与易用性的简化。具体恢复顺序与最小产物集中在研究工作集，不继续默认扩展需求，也不将设计认可等同于实现验收。
 
+**首批机制调查已完成：**[API 到源码机制的映射](mechanism-feasibility.md)记录 Shared 共同准备、登记两层 outcome、最近 State 内容依赖、来源查询范围及目录容量估算；给出下一批最小实验。当前结论仍是候选与源码证据，未修改产品代码或运行新模型实验。
+
 需求依据见[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
 
 [应用合同与并行设计稿](application-design.md)整合操作、标签/摘要、发布和查询分析：在首版无 rewind、业务 Head 仅真实提交的条件下，优先验证继承 head-history，显式父链降为对照；标签承载与 DG 历史窗口 API 仍待收敛，上游准确历史起点已交付。
@@ -22,7 +24,9 @@
 
 ## 1. 本轮问题与边界
 
-本次文档对齐的最小验收标准：活动设计使用 API 草图的概念和调用职责；底层 API、旧源码符号与历史证据保持可辨认；无法直接对应的旧方案注明适用范围。只修改本目录文档，不代表产品改名或机制验收。
+当前首批调查的最小验收标准：各 API 组有现有原语、缺口、访问范围与失败点；跨包结论经源码复核，下一批实验有可观察判据。范围与结果集中在[机制调查](mechanism-feasibility.md)，本批不代表产品改名、接入或运行验收。
+
+此前文档对齐已完成：活动设计使用 API 草图的概念和调用职责；底层 API、旧源码符号与历史证据保持可辨认；无法直接对应的旧方案注明适用范围。
 
 ### 当前词汇与阅读边界
 
@@ -44,7 +48,7 @@
 
 本轮形成首选验证候选，不冻结 metadata 编码和附件协议。用户此前提出的“一世界线一 Head、Entry payload 存父 HeadEntryId”保留为[父链对照](user-stories.md#26-候选细化一世界线一-headentry-payload-显式父链)。既有有限源码适配只增加独立书签目录并迁移上游 API，不代表完成新历史模型。
 
-DG 既有接入基线为 Storage `731eef7cd3158572532fbeea7ba95a79213a7328`，见[固定依赖](../../../eng/StorageDependency.props)与[接入切片](headstore-adaptation.md)。最新交付复核 HEAD 为 `3e1dc46041ce731768f18552639c18fbf73e111e`、包来源为 `c6fb64a97ebc066e10c480e4439f20a2067683a2`；以下 HS 现行术语已按紧凑 Handle 校准，不表示 DG pin、代码或测试资格已更新。
+DG 既有接入基线为 Storage `731eef7cd3158572532fbeea7ba95a79213a7328`，见[固定依赖](../../../eng/StorageDependency.props)与[接入切片](headstore-adaptation.md)。既有交付复核 HEAD 为 `3e1dc46041ce731768f18552639c18fbf73e111e`、包来源为 `c6fb64a97ebc066e10c480e4439f20a2067683a2`；本批另查 `f8868b5` 源码，完整基线见[机制调查](mechanism-feasibility.md#2-本次源码基线)。以下 HS 现行术语已按紧凑 Handle 校准，不表示 DG pin、代码或测试资格已更新。
 
 ## 2. 先区分两种历史
 

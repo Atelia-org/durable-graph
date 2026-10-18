@@ -2,6 +2,8 @@
 
 > 2026-10-18，用户已认可采用轻量 CommitRequest，由 Repository 执行时统一捕获与共同提交。请求路线及捕获边界已选；实现、完整失败合同与首片扩展范围尚未完成。需求事实见[用户故事 C4/C5](user-stories.md)，公开概念沿用 [Branch / Commit / WorkingCopy](api-sketch.md)。本文保留冻结准备的对照理由，不再将两种路线并列为待选。
 
+> 后继源码调查：[共同准备的真实缺口与首选实验](mechanism-feasibility.md#5-联合提交保留一个操作窗口合并-shared-准备)。单 pending 的调整不足以支持联合提交；必须先汇总显式 dirty 和捕获布局、检出组间冲突并统一分配 Shared 描述符。该调查没有改变执行时捕获决定，也不是运行资格。
+
 ## 1. 能力与范围
 
 DG 有条件组合现有底层原语，为同一 Repository 中多个既有 Branch 追加提交，并共同发布必要的 Schema。一次组操作每个参与分支产生自己的 CommitId；不把整组重新命名成一个 Commit，不需要先引入持久 GroupId 或全局事务历史。
