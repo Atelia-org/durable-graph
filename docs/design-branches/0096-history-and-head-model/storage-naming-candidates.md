@@ -2,7 +2,9 @@
 
 2026-10-17 更新：命名海选已结束。实际采用的合同来自上游[15 重命名记录](../../../../atelia-storage/docs/HeadStore/15-headstore-renaming-plan.md)与[16 HeadSetTag 方案](../../../../atelia-storage/docs/HeadStore/16-headset-tags-plan.md)。本页保留竞争方案的取舍理由，供理解当前分层；不再是待批准改名表。
 
-## 当前统一词汇
+> 适用边界：本页记录 `731eef7` 时期的上游命名收敛。表内 fork 初始克隆、LocalId 与格式 2 是当时事实；后续已改为引用初始化、GetLocalHeadId 与格式 4，见[交付复核](headstore-delivery-review.md)。DG 外观统一使用 [API 草图](api-sketch.md)的 Branch / Commit / WorkingCopy；此页不把底层 Head 改叫 Branch，也不把所有 HeadEntry 都当作业务 Commit。
+
+## 上游命名映射（历史基线）
 
 | 原符号 | 实际符号 | 关键边界 |
 | --- | --- | --- |
@@ -39,8 +41,8 @@
 
 ## 留给 DG 的词汇与问题
 
-Version、Revision、Snapshot、Branch、Checkpoint 可以围绕领域故事重新梳理，但不因术语可用就新增实体。首先区分 head-log 与 domain-history；确定逻辑历史入口、rewind 和操作来源上下文，再选择身份、目录和 metadata。
+当前 DG 推荐词汇已选为 Branch、Commit、WorkingCopy：BranchId 对应 HeadId，CommitId 对应 HeadEntryId，WorkingCopy 是绑定 Branch 的编辑与提交对象。只把 DG 正式成员作为 Branch，只把真实 State/Event 保存作为业务 Commit；管理 Head/Entry 不因同构就获得业务身份。旧 CheckpointAddress / BranchCheckout 是当前源码名称，迁移尚未实施；尤其 FrameAddress 形式的 CheckpointAddress 不能直接视为新 CommitId。首版原线只追加、旧点另开，rewind 已明确延期。
 
-DG 当前 `CreateTag/ResolveTag` 仍是历史图书签；不能因同名就转发至 HS.CreateTag。当前适配采用独立目录，详见[接入切片](headstore-adaptation.md)。业务 Branch 仍不等于 Head，一图也不等于一个 HeadEntry。
+DG 当前 `CreateTag/ResolveTag` 仍是历史图书签；不能因同名就转发至 HS.CreateTag。当前适配采用独立目录，详见[接入切片](headstore-adaptation.md)。当前源码的一图也不等于一个 HeadEntry；新模型拟以业务 Head 承载 Branch、以实际业务 Entry 定位 Commit，仍须由 DG 校验成员、Kind、准确图和 Schema。
 
 具体实现和可运行证据以[上游验收](../../../../atelia-storage/docs/HeadStore/16-headset-tags-acceptance.md)及 DG 接入切片为准，不把早期提名、试读或讨论当作新版本验收。

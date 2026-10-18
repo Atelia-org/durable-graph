@@ -5,7 +5,7 @@
 
 ## 目标与当前停点
 
-为 DG 重新设计历史、世界线/分支、存档定位及预览 API。先以实际下游故事选择对外能力，再与存储实现取舍。用户明确 DG 现有 publish 设计/实现和 GraphEnvelope.Parent 是可重写草稿，无兼容包袱；不要为保留旧形状建立双 Parent 或过渡兼容层。
+为 DG 重新设计 Branch、Commit 与 WorkingCopy 的 API；世界线是应用称呼，准确存档位置在新外观中称 Commit。先以实际下游故事选择对外能力，再与存储实现取舍。用户明确 DG 现有 publish 设计/实现和 GraphEnvelope.Parent 是可重写草稿，无兼容包袱；不要为保留旧形状建立双 Parent 或过渡兼容层。
 
 上游已交付引用初始化 fork、紧凑 ID codec 和准确 Entry 起点历史；同库操作经独立消费者验证。已接受其开发期跨库误用检出目标，撤回每引用附加16B scope的建议。**用户认可当前 API 的清晰性与功能覆盖，下一阶段转向可行性验证、效率与简化，收窄设计；尚未开始新模型实施。**
 
@@ -24,19 +24,19 @@
 
 ## 当前设计认识
 
-1. **写入目标与准确存档分开。** HeadId 对应继续哪条线；HeadEntryId 对应查看、恢复或从哪点 fork。空 C 的 current 可以是 A/a1，但首次保存仍写 C。上次世界线存前者，固定书签存后者。
+1. **写入目标与准确提交位置分开。** BranchId（对应 HeadId）决定继续哪个 Branch；CommitId（对应 HeadEntryId）决定查看、加载或从哪点 fork。空 C 的 current 可以是 A/a1，但首次保存仍写 C。上次世界线存前者，固定书签存后者。
 2. **首选继承 head-history。** 在“业务 Head 只发布真实 State/Event、原线只追加、管理属性在链外”的条件下，不额外存逻辑 Parent。仍是首选设计候选，未冻结 wire/API。
 3. **不为 fork 制造存档。** 新 C 只有固定来源引用，首次新保存才产生 c1；同值真实保存仍有不同 Entry 身份。
 4. **紧凑 ID 足够当前目标。** HeadId编码4B、HeadEntryId编码12B；跨库误用是开发期概率诊断。随机独立key、目标有N个Head时，误命中已有Head约N/2^32（保零有极小修正）。1000个Head约四百二十九万分之一；固定库对内相关，不是每次独立抽奖。不要重新默认附16B强scope。
 5. **仓库由调用方选择。** 值可无owner编码/解码，相等不代表全局身份。必要的仓库选择信息可放在应用配置/集合外层，不默认重复到每个引用。
-6. **位置校验与业务解释分层。** HS检查记录和发布资格；DG检查正式业务成员、Kind、准确图与Schema。历史Schema不能取当前shared替代，存档handle也不必携带全部meta Heads快照。
-7. **分页按准确Entry起点。** inclusive重读上页最后处理项并跳过该项即可；筛选State时继续位置仍取最后扫描的Entry。完成、停止、预算不足和错误分开；没有新项的预算失败不保证原样重试能推进。
+6. **位置校验与业务解释分层。** HS检查记录和发布资格；DG检查正式业务成员、Kind、准确图与Schema。历史Schema不能取当前shared替代，CommitId 也不必携带全部 meta Heads 快照。
+7. **分页按准确 Commit 起点。** ReadHistoryPage 使用 AtOrBefore/Before；底层 inclusive 重读上页最后处理项并跳过该项。筛选 State 时 Continuation 仍取最后扫描的 Commit。完成、停止、预算不足和错误分开；没有新项的预算失败不保证原样重试能推进。
 
 ## 当前焦点与下一步
 
 **压缩后恢复顺序：完整读本文 → [API 草图](api-sketch.md) → 按验证题读一份详细设计。先不继续扩展故事或海选名字，也不直接铺开产品重构。**
 
-当前讨论基线：
+当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
 - **Branch / Commit / WorkingCopy** 已形成清晰概念族；Read/List 读描述，Load 加载对象，OpenWorkingCopy 显式选 SchemaMode，Create/Fork/Commit 发布。准确 LoadState/LoadEvent 与 LoadLatestSavedState 分开；加载对象无分支提交能力，不等于深度不可变。当前源码 Checkpoint/BranchCheckout 尚未改名。
 - 根/子树查询已加入设计；历史以 AtOrBefore/Before 和 Continuation 表达准确边界，返回 State/Event 小描述。五个核心调用故事保持可走通，不用减少方法数代替使用便利。
@@ -60,9 +60,13 @@
 
 ## 已知未决项与明确延期
 
-未决：标签A/B、新root与shared Schema发布、是否/怎样包装紧凑ID、DG序列化定位值的标量适配、Event摘要缺省语义、图片错误展示规则；联合提交的组内Schema、基线安装、请求消费/失败后复用、结果未知与历史组合恢复。执行时捕获已选，不重开冻结快照方案。最近State/同类内容来源必须有恢复方案，不能删除GraphEnvelope.Parent后遗失重建依赖。
+未决：登记候选 B 的证明及属性候选 A 的对照、新根与 Shared Schema 发布、BranchId/CommitId 薄角色类型的具体 codec、DG序列化定位值的标量适配、Event摘要缺省语义、图片错误展示规则；联合提交的组内Schema、基线安装、请求消费/失败后复用、结果未知与历史组合恢复。执行时捕获已选，不重开冻结快照方案。最近State/同类内容来源必须有恢复方案，不能删除GraphEnvelope.Parent后遗失重建依赖。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
+
+## 本次文档对齐
+
+2026-10-18：统一活动设计的 Branch / Commit / WorkingCopy 词汇与调用职责；底层 Head / HeadEntry、旧 Checkpoint / BranchCheckout、早期 rewind 和名称绑定方案保留为明确标注的对照。验收范围与词汇映射见 [README §1](README.md#1-本轮问题与边界)。没有修改产品代码或 API 草图基准，也没有把未决协议写成已实施能力。
 
 ## 实现与证据边界
 

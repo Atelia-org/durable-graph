@@ -1,6 +1,6 @@
 # DB-096：应用合同与并行设计收敛稿
 
-> 后续公开概念与命名以 [API 草图](api-sketch.md)为讨论入口：Branch 对应本文世界线，Commit 对应一次真实业务保存；本文保留创建、发布及成本分析，不单独维护另一套公开签名。
+> 后续公开概念与命名以 [API 草图](api-sketch.md)为讨论入口：Branch 对应本文世界线，Commit 对应一次真实业务保存，WorkingCopy 是绑定分支的可编辑工作副本。BranchId/CommitId 分别对应底层 HeadId/HeadEntryId；本文的 Head、Entry 和 HS 方法名保留底层含义。本文保留创建、发布及成本分析，不单独维护另一套公开签名。
 
 > 状态：2026-10-17，三个有界调查包经主线程整合的设计稿，未实施。来源故事和已确认需求只维护在[用户故事](user-stories.md)；本文负责候选合同、取舍与最小验证。
 > 本轮分析期间上游完成引用初始化并提交 `474dbe4ddfc12898a894c157f72ac5a44a7bcc80`。主线程只读核对新源码与[正式历史/fork 合同](../../../../atelia-storage/docs/HeadStore/05-versionstore-names-and-indexes.md)，临时方案 17 已删除；DG 固定依赖与运行验收尚未更新，不沿用上游资格作为 DG 接入证据。
@@ -13,33 +13,35 @@
 
 据此，**首选继续验证“一世界线一 Head，继承 head-history 表达领域历史”**。前提是该 Head 只接收真实 State/Event 提交，标签等管理信息放在链外；不另存一份重复的逻辑 Parent。显式父链作为需求变化时的竞争方案保留，不宣称已经完成方案或代码验收。
 
-另一个确定的信息边界是：**世界线标签与当前存档摘要必须具有独立归属。** 新 C 可以与 A 共用 a1，但 C 需要自己的标签。创建属性放在哪里尚待选择；为标签制造一次业务 Entry 会重新带回历史过滤问题。
+另一个确定的信息边界是：**世界线标签与当前存档摘要必须具有独立归属。** 新 C 可以与 A 共用 a1，但 C 需要自己的标签。创建属性当前推荐登记候选 B，仍待机制验证；为标签制造一次业务 Commit 会重新带回历史过滤问题。
 
 用户补充的现实目标是玩具交互游戏：每库预计不超过 1000 条世界线，先选根再展开，优先近期路线并通常继续上次进度；每线存档可能很多，例如每分钟保存。durable LLM Agent tool-loop 是重要应用，RL Gym 则是远期性能方向，暂不据此设吞吐指标。不注册业务模型浏览不是硬要求，先顺应实现能力，不另建浏览打开协议。
 
 ## 2. 应用操作草图
 
-以下只是功能草图，不是已有或已冻结 API。`line` 是写入目标，`save` 是准确存档；root 创建示例使用 State，不排除 Event-first。
+以下沿用 API 草图的职责与伪签名，不是已有或已冻结 API。BranchId 是写入目标，CommitId 是准确存档；根创建示例使用 State，另有 CreateRootBranchFromEvent。SchemaMode 必填，创建路径先按 Shared 推演，Private 新根仍待论证。
 
 ```text
-A = 创建世界线(标签="废灵根", 初始State, 摘要0)
-a1 = 保存State(A, State1, 摘要1)
-a2 = 保存State(A, State2, 摘要2)
+A = repo.CreateRootBranchFromState("废灵根", initialState, summary0, SchemaMode.Shared)
+using workA = repo.OpenWorkingCopy(A.Id, schemaMode: SchemaMode.Shared)
+a1 = workA.CommitState(state1, summary1)
+a2 = workA.CommitState(state2, summary2)
 
 从 A 的历史列表选中 a1
-C = 从存档分叉(a1, 标签="捡到小绿瓶")
-列世界线 → 已包含 C
-读当前预览(C) → {世界线=C, 存档=a1, 标签=C的标签, 摘要=a1的摘要}
+C = repo.ForkBranch(sourceCommitId: a1.Id, displayLabel: "捡到小绿瓶")
+repo.ListBranches() → 已包含 C
+repo.ReadBranchInfo(C.Id) → C 的标签与准确来源
+repo.ReadCurrentCommit(C.Id) → {BranchId=C.Id, Commit=a1}
 
 关闭全部资源后重开
-按 C 的身份重新定位并签出
-c1 = 保存State(C, 修改后的State, 新摘要)
-继续保存 A → 不改变 C 的末端或固定来源
+using workC = repo.OpenWorkingCopy(C.Id, schemaMode: SchemaMode.Private)
+c1 = workC.CommitState(changedState, newSummary)
+重新打开 A 的 WorkingCopy 并提交 → 不改变 C 的末端或固定来源
 ```
 
 身份的持久读回编码另行设计；此处“按 C 的身份”不要求沿用旧 owner 的句柄，也不依赖标签唯一。从没有新保存的 C 当前状态再 fork D，D 仍按 a1 的归属挂在 A 下。
 
-草图把持久创建/fork 与签出恢复分开：前者成功交付正式世界线身份，后者要求相应模型能力并可能失败。“重开可继续”表示资源与模型具备时能够恢复，不保证缺少模型仍能构造业务对象。若最终保留一次调用就返回可写 checkout 的便利入口，须单独定义恢复准备与持久创建顺序，不能把创建已成功后的恢复错误说成创建已回滚。
+草图把持久 Create/Fork 与 OpenWorkingCopy 恢复分开：前者成功交付正式世界线身份，后者要求相应模型能力并可能失败。“重开可继续”表示资源与模型具备时能够恢复，不保证缺少模型仍能构造业务对象。若最终保留一次调用就返回 WorkingCopy 的便利入口，须单独定义恢复准备与持久创建顺序，不能把创建已成功后的恢复错误说成创建已回滚。
 
 | 操作 | 成功后的可观察结果 | 不隐含什么 |
 |---|---|---|
@@ -58,7 +60,7 @@ c1 = 保存State(C, 修改后的State, 新摘要)
 
 在 `a0 → a1 → a2` 中选择 a1 创建 C，C 的第一次保存 c1 自然接续 a1；A 后来新增 a3 不进入 C 的历史。上游引用初始化避免了额外克隆位置。框架仍要检查业务 Entry 描述的格式和种类，不能把任意底层 payload 当合法存档。
 
-采用该候选时，准确历史位置须能定位真实 Entry；图的 FrameAddress 仅定位图内容，不能继续单独承担“由此查回领域前史”的合同。未来公共位置可以包装 Entry 身份，也可按层暴露，但不为兼容旧 `CheckpointAddress` 形状建立第二套逻辑父链。
+采用该候选时，准确历史位置须能定位真实 Entry；图的 FrameAddress 仅定位图内容，不能继续单独承担“由此查回领域前史”的合同。公开 CommitId 推荐采用 HeadEntryId 的薄角色类型，但不为兼容旧 `CheckpointAddress` 形状建立第二套逻辑父链。
 
 | 路线 | 首版收益 | 成本或重新讨论的触发条件 |
 |---|---|---|
@@ -75,13 +77,13 @@ c1 = 保存State(C, 修改后的State, 新摘要)
 
 删除逻辑 Parent 不意味着删除对象 Delta prior 或内容来源。现有 `GraphRecordStore.ResolveContentSource` 会沿 Parent 寻找同类内容来源；重写必须显式交接准确最近 State/同类来源或设计等价查找，不能只删除字段。业务时间线和对象重建依赖分别承担职责。
 
-Event 摘要的建议最小规则：调用方显式提供或显式缺省；不能默默把最近 State 的摘要标成 Event 的新状态。应用若要展示最近 State，可返回一个明确标识其来源的单独视图。这一规则待调用草图进一步裁决，不增加业务自动推导。
+Event 摘要的建议最小规则：调用方显式提供或显式缺省；不能默默把最近 State 的摘要标成 Event 的新状态。应用若要展示最近 State，可返回一个明确标识其来源的单独视图。API 草图已采用显式提供或明确缺省且不继承另一记录摘要的边界；具体缺省语义仍待定，不增加业务自动推导。
 
-### 3.3 当前查询缺口
+### 3.3 准确起点的上游能力与 DG 接线
 
 此缺口现已由 HS `ReadEntryHistory(startInclusive, ...)` 填补；原有 `ReadHeadHistory` 仍从 Head 调用时的固定上界开始。DG 可用准确 Entry 起点衔接固定末端与分页，实际资格与预算边界见[交付复核](headstore-delivery-review.md)。
 
-从 current 向前扫描并跳过目标起点之后的部分可得到正确结果，但读取量随后来提交增长；新建临时 fork 来获得旧起点也不适合作为只读查询。[五个调用故事](save-handle-stories.md)已将准确起点、分页边界和两类 ID 持久化共同收敛成[新上游请求](headstore-save-handles-request.md)，不预建通用 cursor，也不因该缺口引入显式父链。
+从 current 向前扫描并跳过目标起点之后的部分可得到正确结果，但读取量随后来提交增长；新建临时 fork 来获得旧起点也不适合作为只读查询。[五个调用故事](save-handle-stories.md)已将准确起点、分页边界和两类 ID 持久化共同收敛成[新上游请求](headstore-save-handles-request.md)，DG 对外采用 HistoryStart.AtOrBefore/Before 和 CommitHistoryPage.Continuation；不预建通用物理 cursor，也不为已补齐的上游缺口引入显式父链。
 
 ## 4. 三类信息与标签承载
 
@@ -97,7 +99,7 @@ Event 摘要的建议最小规则：调用方显式提供或显式缺省；不�
 
 **A：Head 创建时附带小型不可变属性。** 由上游在 root/fork 正式创建时一同发布 DG 类型标识和标签。C 无本地 Entry 也可完整显示；业务保存只更新业务 Head。它与用户允许固定标签的边界相符，但上游本轮引用初始化未增加这项能力，需要独立请求，不能作为已有保证。枚举是否逐文件读 header、属性尺寸如何限制均须定义。
 
-**B：DG 世界线登记。** 由一个独立管理记录集合保存 `HeadId → 标签`，只有已登记 Head 是 DG 正式世界线。先创建底层 Head，再完成登记，最后才报告创建成功。目录无须存重复的 current 或摘要；它是正式成员资格的权威，不是名字唯一索引或可随意丢弃的缓存。
+**B：DG 分支登记（当前推荐）。** 由一个独立管理记录集合保存分支成员与 DisplayLabel（底层对应 `HeadId → 标签`），只有已登记 Head 是 DG 正式世界线。先创建底层 Head，再完成登记，最后才报告创建成功。目录无须存重复的 current 或摘要；它是正式成员资格的权威，不是名字唯一索引或可随意丢弃的缓存。
 
 B 的中断结果可能是未登记底层 Head。DG 不展示它，不自动删除、不把它重新认领为另一次创建，也不通过扫描全部物理 Head 猜测正式成员。已登记者必须指向此前完成可靠创建的 Head。登记发布失败与底层创建失败需要分别映射，不把“没有用户可见线”说成磁盘完全未变。删除/GC 不纳入首片。
 
@@ -113,7 +115,7 @@ B 可先用小型直接编码，避免为标签依赖完整领域模型；但若
 
 当前实现把完整分支字典发布到 Head 1，shared Schema 有更新时与 Head 2 联合发布；该布局可重写。应保留或由新协议等价保证：准确 Schema 解释、必要数据先持久化、发布后安装内存基线、完成帧不回写、owner/fault 与资源寿命约束。
 
-候选普通保存流程：
+候选普通提交流程（WorkingCopy.CommitState/CommitEvent）：
 
 ```text
 准备业务图 / 精确 Schema / 小摘要 / 附件
@@ -125,9 +127,9 @@ B 可先用小型直接编码，避免为标签依赖完整领域模型；但若
 
 每个历史存档必须固定准确 Schema，而不能在读历史时取最新 shared Schema。完整闭包先持久化足以解释历史；“shared 指针必须和业务提交一起推进”则是另一项行为选择。首轮建议沿用 shared 增长与业务保存联合发布的行为，不在重写中顺便改成“业务失败但 shared 仍增长”。不增长时无需为此制造另一次业务 Entry。
 
-Schema private/shared 编辑模式不是世界线来源关系。保留其使用语义、重写其实现布局；本轮不扩展多 writer、跨库事务或新的 Schema 演化机制。
+SchemaMode.Shared / Private 仅选择后续提交的 Schema 归属，不是分支来源关系、可见性或并发隔离级别。Private 从该分支末端的准确 Schema 继续；Shared 保留完整准入检查，不静默合并 private Schema。历史始终使用自身准确 Schema；本轮不扩展多 writer、跨库事务或新的 Schema 演化机制。
 
-### 5.2 创建与常规保存分开设计
+### 5.2 创建与常规提交分开设计
 
 HS 的联合发布只覆盖既有 Heads，不能直接当作新 Head 创建事务。A 候选需上游的创建属性与完整正式发布；B 候选以最终登记为 DG 可见提交点。
 
@@ -145,19 +147,21 @@ HS 的联合发布只覆盖既有 Heads，不能直接当作新 Head 创建事�
 
 这里的“老末端可见”是持久结果描述，不等于发生 I/O 故障后旧 owner 仍可继续操作。准确 Outcome、错误类型与是否允许重试留给实施合同；不默认透明重试。
 
+普通提交与多分支 CommitBranches 应共用发布内核；已选 CommitRequest 在调用执行时统一捕获，不能把这里的“准备”理解成公开冻结的 PreparedCommit。联合提交的消费与失败合同见[联合提交设计](multi-branch-commits.md)。
+
 ## 6. 查询层次与成本边界
 
 | 查询 | 最小读取范围 | 待定的规模合同 |
 |---|---|---|
-| 根、子线、祖先路径 | 正式成员、固定来源、标签 | 一次完整扫描建内存索引是否足够；无需逐线恢复 State |
-| 当前预览 | 所选线的当前 Entry 和小摘要 | 查询结果同时保留所选线 ID 与真实 Entry ID |
-| 历史选择 | 固定起点的逆序存档描述 | 小窗口能否提前停止、准确旧起点是否需新上游 API |
+| ListBranches / ListRootBranches / ListBranchSubtree | 正式 BranchInfo、ForkedFromCommitId、DisplayLabel | 子树包含起点；可先完整扫描小目录建内存索引，无需逐线加载 State |
+| ReadCurrentCommit / ReadCommitInfo | 当前或准确 CommitInfo 和 Summary | 当前查询保留 BranchId；Commit 的实际归属由 CreatedOnBranchId 表达 |
+| ReadHistoryPage | 固定 CommitId 起点，按继承顺序从新到旧的 CommitInfo | 上游准确起点已交付；DG 分页预算与失败合同待细化 |
 | 缩略图 | 明确选中的 BLOB | 大小上限、缺图与读取错误显示策略 |
-| 签出继续 | 准确 Schema、领域对象和重建依赖 | 这一步才需要相应模型能力 |
+| LoadState / LoadEvent / LoadLatestSavedState；OpenWorkingCopy | 准确 Schema、业务对象和必要重建依赖 | 加载与获取编辑能力分开；都需相应模型，Load 不授予分支提交能力 |
 
 现有 DG 已允许空/部分 registry 做检查；`ReadFrames` 也不物化领域对象，但它全链读取并分配结果。新设计不能把“无业务反序列化”等同“固定小开销”。当前 Open 还会读取固定控制 Heads 和 shared Meta 元帧；若将来要求无关 Schema 损坏不影响目录浏览，是另一个容错合同，不能仅靠去掉 models 参数得到。
 
-查询必须区分完整结果、主动停止/预算截断和错误。截断的来源集合不证明根集合完整；历史尚未遍完不证明没有旧 State。可以先做完整冷开索引或有界迭代，但不能通过返回普通空集合隐藏这些差异；是否需要分页 token 尚未决定。
+查询必须区分完整结果、主动停止/预算截断和错误。截断的来源集合不证明根集合完整；历史尚未遍完不证明没有旧 State。可以先做完整冷开索引或有界迭代，但不能通过返回普通空集合隐藏这些差异；DG 历史页已选 Continuation 边界值；部分结果及预算失败的具体返回合同仍待定，目录查询不因此自动获得分页。
 
 成本轴为世界线数 N、每线存档数 H、分叉深度 D、小描述字节数 M、State 大小 S、图片大小 B 与冷/热缓存。N≤1000 的现实目标允许先评估一次成员/来源/标签扫描与内存树索引；不因此立即设计持久增量索引。若 B 采用单 payload 整表，还需按标签字节上限计算容量，不能仅凭“1000条”断言一定装得下。
 
@@ -176,7 +180,7 @@ HS 的联合发布只覆盖既有 Heads，不能直接当作新 Head 创建事�
 | 已有量级、待测成本 | 世界线≤1000、长历史与每分钟保存；优先选根/近期/继续；无模型浏览不设硬门槛。延迟、空间预算尚未量化，先取得上述机制成本 |
 | 后续产品取舍 | Event 摘要缺省规则、附件缺失策略；若无明确增强要求，先不做自动补图或旧摘要修订 |
 
-原 R1 已被[新请求](headstore-save-handles-request.md)接替：HeadId 支持继续世界线，HeadEntryId 支持固定存档，准确历史起点支持分页和恢复。两个能力可独立实施，不再只按显式 Parent 的字段存取来判断价值。
+原 R1 已被[新请求](headstore-save-handles-request.md)接替：底层 HeadId 对应继续分支的 BranchId，HeadEntryId 对应固定提交的 CommitId，准确历史起点支持分页和恢复。两个能力可独立实施，不再只按显式 Parent 的字段存取来判断价值。
 
 首片不实施 rewind、merge、唯一显示名查询、任意字段索引、GC/删除、跨库地址交换、并发 writer 或可改历史摘要。可改标签是用户偏好而非必需；冻结标签首版可接受。RL Gym 不转化为首片批量分叉、并发仿真或吞吐优化工单。
 

@@ -4,6 +4,8 @@
 > 来源：[五个调用故事](save-handle-stories.md)。本请求取代[旧 R1](headstore-requests.md#2-r1持久化-headentryid-并按准确位置读回)的具体范围和“导入优先立即读取 Payload”建议，也收敛先前单列的准确历史起点问题。已实施的引用初始化 R2 保持。
 > 请求形成时核对上游 `06ff3d9a80c938d0d1af7d4895cd26b9ec04b488`；新交付基线与实际包验证见复核记录。DG 未修改依赖 pin 或运行时。无旧 API/存档兼容要求。
 
+> 阅读边界：下文保留发出时的请求与验收要求；“当前”“待实施”均指请求形成基线，不是最新进度。ReadHistoryFrom 是当时职责示意，实际交付为 ReadEntryHistory。DG 对外词汇按 [API 草图](api-sketch.md)：BranchId 对应 HeadId，CommitId 对应 HeadEntryId，旧 SaveId/存档定位包装的角色由 CommitId 承担；WorkingCopy 负责继续编辑。它们仍是未接入的 DG 外观，不能将上游成功视为 DG 实现。
+
 ## 1. 最小请求与动机
 
 希望 HeadId 与 HeadEntryId 成为可跨进程保存的定位值，并让一个准确 Entry 能自然作为历史查询起点。下游需要的不是另一组“save”类型，而是补齐现有身份和操作的组合能力。
@@ -19,6 +21,8 @@
 ## 2. P1：两类定位值的持久化
 
 ### 2.1 必须表达什么
+
+> 本节“完整库身份”“不同库同编号不混同”是原请求措辞；已由开发期概率诊断目标取代。当前 DG 推荐薄 BranchId / CommitId，沿用 4B / 12B 编码，不加每引用 16B scope。
 
 - HeadId 保存持久 HeadStore 身份和准确 Head 身份；HeadEntryId 额外保存完整位置和长度。不能只保存 LocalId、offset、运行时 hash 或 CLR struct 内存布局。
 - 受支持编码格式内，值经导出、关闭全部 owner、解码后仍按原等值规则比较。不同库同编号不混同；同 payload 的不同 Entry 不合并。
@@ -110,7 +114,7 @@ HeadSetTag 仍用于捕获所选 Heads 的当前位置集合，不改为接受�
 | 连续未成立 CU、预算耗尽零项/部分项、取消 | 不宣称完整或没有更早记录；固定预算无进展可观察；已交付结果边界明确 |
 | visitor 内请求 fork，与退出后 fork | 前者遵守现有重入拒绝；后者使用保留 ID 正常执行 |
 
-DG 另行验收：SaveId 业务包装拒绝管理 Entry、State/Event 最近 State 区分、准确 Schema 恢复、正式创建可见性、业务模型内定位值序列化、工具副作用边界；不要求 HeadStore 测试这些领域行为。
+DG 另行验收：CommitId（原请求称 SaveId）业务包装拒绝管理 Entry、State/Event 最近 State 区分、准确 Schema 恢复、正式创建可见性、业务模型内定位值序列化、工具副作用边界；不要求 HeadStore 测试这些领域行为。
 
 ## 7. 建议反馈与实施顺序
 

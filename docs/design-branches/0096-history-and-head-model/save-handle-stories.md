@@ -1,7 +1,7 @@
 # DB-096：以存档定位值贯通五个调用故事
 
 > 状态：2026-10-17，设计推演，未实施。用户已认可从下游调用故事精炼 handle/anchor 能力；本文不是公开 API 定稿。
-> 后继命名：本文 LineId/SaveId 等保留故事推演时的占位含义；后续设计推荐 BranchId/CommitId、WorkingCopy 等，统一看 [API 草图](api-sketch.md)及[旧名映射](api-naming-review.md)。调用职责已有细化，不将旧伪 API 当作现行签名。
+> 术语与调用职责已按 [API 草图](api-sketch.md)对齐；世界线是应用称呼，对应 Branch，存档对应 Commit。本文保留底层 Head/Entry 名称说明实现映射，历史占位名称见[旧名映射](api-naming-review.md)，不代表源码已经改名。
 > 接续[应用合同稿](application-design.md)；提炼给上游的最小能力集中在[新的 HeadStore 请求](headstore-save-handles-request.md)。源码核对基线：上游 `06ff3d9a80c938d0d1af7d4895cd26b9ec04b488`。
 
 > 交付后的设计前提校准：上游采用 4B/12B 紧凑 Handle，用户确认跨库误用只需开发期诊断；[概率实验](handle-misuse-detection.md)支持默认保留紧凑值，不额外附16B。以下 DG 定位角色在调用方选定的仓库上下文中使用，不宣称裸 ID 全局唯一。
@@ -10,53 +10,53 @@
 
 | 对象 | 回答的问题 | 跨重开保存什么 |
 |---|---|---|
-| 世界线定位值 | 继续写哪条线？ | HeadId，或不强制附完整库身份的角色包装 |
-| 存档定位值 | 查看、恢复、从哪个准确位置分叉？ | HeadEntryId，或不强制附完整库身份的角色包装 |
-| 存档视图 / checkout | 当前 owner 下读到什么、怎样编辑和提交？ | 不直接保存对象、缓存或活着的枚举器 |
+| BranchId／分支定位值 | 继续写哪条线？ | 对应紧凑 HeadId 的薄角色类型，编码4B |
+| CommitId／提交定位值 | 查看、加载、从哪个准确位置分叉？ | 对应紧凑 HeadEntryId 的薄角色类型，编码12B |
+| CommitInfo / 加载对象 / WorkingCopy | 分别描述记录、物化业务内容、绑定分支编辑与提交 | 不直接保存对象、缓存或活着的枚举器 |
 
-新 C 从 A 的 a1 分叉但尚未续写时，`current(C).Id == a1.Id`，而写入目标仍是 C。一个 EntryId 不能同时替代这两种身份。HeadEntryId 中的 HeadId 保持实际 Entry 归属，不写入用户选中的视图上下文。
+新 C 从 A 的 a1 分叉但尚未续写时，`repo.ReadCurrentCommit(C.Id).Commit.Id == a1.Id`，而写入目标仍是 C。一个 EntryId 不能同时替代这两种身份。HeadEntryId 中的 HeadId 保持实际 Entry 归属，不写入用户选中的视图上下文。
 
-本文用 `LineId`、`SaveId` 表示 DG 角色，尚不决定新增类型或最终名称。推荐薄包装只增加业务角色和调用便利，不再生成一套独立 GUID，也不绑定某次 Open。包装的构造/解码不等于目标永久有效；DG 在使用时验证业务 Entry 描述、正式世界线资格与所需内容。
+本文采用 `BranchId`、`CommitId` 表示 DG 角色；API 草图推荐薄角色类型，具体 codec 与序列化接线待定。薄包装只增加业务角色和调用便利，不再生成一套独立 GUID，也不绑定某次 Open。包装的构造/解码不等于目标永久有效；DG 在使用时验证业务 Entry 描述、正式世界线资格与所需内容。
 
 仓库路径和调用上下文由应用选择，紧凑 Handle 提供开发期概率性误用检出，不保证所有错库都拒绝。应用若需持久记录仓库选择，可在配置/集合外层保存一次相关信息，不强制每个定位值附完整身份。Handle 不自动发现文件路径，仓库副本如何选择也不纳入地址 codec。
 
-以下均为伪 API。`Decode` 无 I/O；`Resolve/Read/Checkout/Fork` 才进入 owner 与持久状态检查。示例的 `Commit` 成功指经过实际发布，不包含未知结果下的透明重试。
+以下均为伪 API。`Decode` 无 I/O；`Read/Load/OpenWorkingCopy/Create/Fork/Commit` 才进入 owner 与持久状态检查。示例的 `Commit` 成功指经过实际发布，不包含未知结果下的透明重试。
 
 ## 2. 故事 H1：继续上次世界线
 
 ```text
 打开用户选择的仓库
-line = 用户选择的正式世界线
-应用偏好保存 Encode(line.Id)
+branch = 用户选择的正式分支描述 BranchInfo
+应用偏好保存 EncodeBranchId(branch.Id)
 
 关闭重开后：
-lineId = DecodeLineId(偏好中的字节)
-line = DG.ResolveLine(lineId)
-preview = DG.Current(line)        // {LineId=C, SaveId=a1, ...}
-checkout = DG.Checkout(line, schemaIntent)
-修改并 CommitState(checkout, state, summary)
+branchId = DecodeBranchId(偏好中的字节)
+preview = repo.ReadCurrentCommit(branchId) // {BranchId=C, Commit.Id=a1, ...}
+using work = repo.OpenWorkingCopy(branchId, schemaMode: SchemaMode.Shared)
+修改 work.State
+committed = work.CommitState(work.State, summary)
 ```
 
-**最低持久值是 LineId。** 仓库定位配置另存；若应用想提示“离开后有新保存”，可以另存 last-seen SaveId，但它是比较基线，不替代写入目标。
+**最低持久值是 BranchId。** 仓库定位配置另存；若应用想提示“离开后有新保存”，可以另存 last-seen CommitId，但它是比较基线，不替代写入目标。
 
-反例：保存 `preview.SaveId.HeadId` 会在空 C 情形保存 A，重开后误续写父线。`ReadHead(localId)` 也不能在返回源 Entry 时恢复 C 的完整身份，因此公开 HeadId 编码不是冗余便利。
+反例：保存 `preview.Commit.CreatedOnBranchId` 会在空 C 情形保存 A，重开后误续写父线。`ReadHead(localId)` 也不能在返回源 Entry 时恢复 C 的完整身份，因此公开 HeadId 编码不是冗余便利。
 
 继续读取的是 C 此时的 current；若想回到固定旧状态，进入 H2/H4。缺失模型、Schema 不可解释或 owner 故障应明确失败；不要静默选择其他世界线或更旧的健康存档。
 
 ## 3. 故事 H2：固定存档书签
 
 ```text
-selected = 历史列表中的准确存档
-bookmark = { title: "获得小绿瓶之前", position: Encode(selected.SaveId) }
+selected = 历史列表中的 CommitInfo
+bookmark = { title: "获得小绿瓶之前", position: EncodeCommitId(selected.Id) }
 应用将 bookmark 存入设置、数据库，或 DG 中的业务对象
 
 重开后：
-saveId = DecodeSaveId(bookmark.position)
-description = DG.ReadSave(saveId) // Kind、摘要、准确图定位；不默认物化 State
-按用户选择：读附件 / 恢复只读内容 / 从该点 fork
+commitId = DecodeCommitId(bookmark.position)
+description = repo.ReadCommitInfo(commitId) // Kind、Summary；不物化业务对象
+按用户选择：读附件 / LoadState 或 LoadEvent / LoadLatestSavedState / ForkBranch
 ```
 
-**最低持久值是 SaveId。** 标题和书签是否可改绑由应用或 DG 书签 API 决定。原线推进不改变目标；同值的两次真实保存仍是不同书签位置。它不是“上次所在世界线”的记录，也不捕获多个 Head 的当前值，无需为了一个准确存档强制创建 HeadSetTag。
+**最低持久值是 CommitId。** 标题和书签是否可改绑由应用决定；草图未新增 DG 书签 API。原线推进不改变目标；同值的两次真实保存仍是不同书签位置。它不是“上次所在世界线”的记录，也不捕获多个 Head 的当前值，无需为了一个准确存档强制创建 HeadSetTag。
 
 若定位值进入 DurableGraph 序列化对象，DG 需通过公开 codec 提供标量/包装的序列化适配，或先显式保存编码字节。不能依赖读取 HeadId 的私有字段或假设当前 Generator 已自动支持这些上游 struct；这部分接线归 DG，不要求 HeadStore 引用 DG 或增加序列化框架扩展点。
 
@@ -65,22 +65,23 @@ description = DG.ReadSave(saveId) // Kind、摘要、准确图定位；不默认
 ## 4. 故事 H3：历史分页选点
 
 ```text
-line = 选中的世界线 C
-fixedTop = DG.Current(line).SaveId
-page1 = DG.ReadOlder(fixedTop, includeAnchor=true, limits)
-page2 = DG.ReadOlder(page1.LastScannedSaveId, includeAnchor=false, limits)
-选择某项 → ReadSave / ForkWorldline
+branchId = 选中的分支 C 的 BranchId
+fixedTop = repo.ReadCurrentCommit(branchId).Commit.Id
+page1 = repo.ReadHistoryPage(HistoryStart.AtOrBefore(fixedTop), limits)
+if page1.Continuation is present:
+    page2 = repo.ReadHistoryPage(page1.Continuation, limits)
+选择某项 → ReadCommitInfo / LoadState / LoadEvent / LoadLatestSavedState / ForkBranch
 ```
 
 语义要求：首次固定准确上界，向旧方向推进；之后父线/子线继续保存，不把新后缀插入当前浏览。下一页不从今日 current 重新扫描已浏览前缀。世界线 C 的标题与选择上下文另保留，不能因翻到 A 的存档就悄悄切换续写目标。
 
-上游只提供 inclusive 准确起点，也足够实现基础分页：下一页重读上一页最后处理的 Entry，仅略过首次出现的同一 anchor，再收集更早项。这个略过依据准确 ID，不按 payload 去重；预算需包含重读 anchor。公开 exclusive 模式是便利项，不是首版正确性的必要条件。
+上游只提供 inclusive 准确起点，也足够实现基础分页：下一页重读上一页最后处理的 Entry，仅略过首次出现的同一 anchor，再收集更早项。这个略过依据准确 ID，不按 payload 去重；预算需包含重读 anchor。DG 的 HistoryStart.Before 以此实现排除边界，正常进度下 Continuation 取 Before(lastProcessedCommitId)；无需上游增加 exclusive 原语。
 
 ### 4.1 展示进度、扫描进度与完成性
 
-DG 若只展示 State，可能已读很多 Event 却没有展示项。继续边界应记录**最后处理的已接受业务 Entry**，不能只记录最后展示的 State，否则会重复扫描事件区间。尚未交付任何 Entry 时不能伪造继续位置。
+DG 首版返回 State/Event 小描述，由应用筛选；应用若只展示 State，可能已读很多 Event 却没有展示项。继续边界应记录**最后处理的已接受业务 Entry**，不能只记录最后展示的 State，否则会重复扫描事件区间。尚未交付任何 Entry 时不能伪造继续位置。
 
-页满后的主动停止不证明还有下一项，也不证明已到根。返回中必须区分完成、主动停止、预算不足、取消和错误。UI 可显示“继续加载”；若需要精确 HasMore，可由调用层多读并保留一项，不能丢弃这个位置导致漏项。
+页满后的主动停止不证明还有下一项，也不证明已到根。CommitHistoryPage.StopReason 区分抵达根与页满；若返回预算截断页还须区分预算限制。取消和损坏等错误另行传播；预算耗尽时保留前缀还是失败仍待裁决。UI 可显示“继续加载”；若需要精确 HasMore，可由调用层多读并保留一项，不能丢弃这个位置导致漏项。
 
 最后交付 ID 只记录 Entry 进度，不记录合法未成立 CU 等无输出物理扫描进度。若某区间的资格工作超过每次工作预算，原样重试可能一直停在同一位置。首版允许明确中断或提高预算；不承诺任意小预算下都能持续前进。要保存任意扫描/CU 子进度的 cursor 是另一项需求，本轮不预建。
 
@@ -89,19 +90,19 @@ DG 若只展示 State，可能已读很多 Event 却没有展示项。继续边�
 ## 5. 故事 H4：从旧点创建新世界线
 
 ```text
-sourceId = 书签或历史项中的 SaveId
-C = DG.ForkWorldline(sourceId, label="尝试另一种选择")
+sourceId = 书签或历史项中的 CommitId
+C = repo.ForkBranch(sourceCommitId: sourceId, displayLabel: "尝试另一种选择")
 应用记住 C.Id，立即列出并预览 C
-关闭重开 → C 当前仍是 sourceId
-checkout = DG.Checkout(C, schemaIntent)
-c1 = CommitState(checkout, newState, newSummary)
+关闭重开 → repo.ReadCurrentCommit(C.Id).Commit.Id 仍是 sourceId
+using work = repo.OpenWorkingCopy(C.Id, schemaMode: SchemaMode.Private)
+c1 = work.CommitState(newState, newSummary)
 ```
 
 输入只需准确源存档，输出必须是新世界线身份。即使从 B 的视图选中 A 的 a1，C 仍挂在 A 下。空 C 预览与 a1 相同，标签不同；fork 不新增领域存档。第一次新保存写 C，不写 sourceId 的 owner A。
 
-HeadStore 已有 `ForkHead(HeadEntryId) → HeadId`，不需要另造带“业务存档”名称的底层 fork API。DG 要组合正式成员资格、标签、数据图及 Schema 的解释和创建协议；这些仍按[应用合同稿](application-design.md)的 A/B 候选设计，不由 ID codec 自动解决。
+HeadStore 已有 `ForkHead(HeadEntryId) → HeadId`，不需要另造带“业务存档”名称的底层 fork API。DG 要组合正式成员资格、标签、数据图及 Schema 的解释和创建协议；这些按[应用合同稿](application-design.md)推荐的登记候选 B 继续证明，A 作为对照保留，不由 ID codec 自动解决。
 
-持久 fork 与恢复可编辑对象是两个步骤。若便利 API 将两者合并，必须明确恢复准备与发布先后，以及“线已创建但 checkout 交付失败”的结果，不能误称回滚。没有模型也能解析定位值，不等于无需模型恢复业务对象。
+持久 fork 与恢复可编辑对象是两个步骤。若便利 API 将两者合并，必须明确恢复准备与发布先后，以及“线已创建但 WorkingCopy 交付失败”的结果，不能误称回滚。没有模型也能解析定位值，不等于无需模型恢复业务对象。
 
 ## 6. 故事 H5：durable LLM tool-loop 恢复
 
@@ -112,15 +113,17 @@ State = { phase=准备调用, operationId, request, context, ... }
 State = { phase=结果已记录, operationId, result, 消费进度, ... }
 保存 State，并确认发布结果
 
-重启：按 LineId 签出当前 State，按应用 phase 决定下一步
-对照试验：选择准确旧 SaveId，fork 新线并执行应用自己的分支策略
+重启：按 BranchId 显式选 SchemaMode 并 OpenWorkingCopy 恢复当前 State，按应用 phase 决定下一步
+对照试验：选择准确旧 CommitId，fork 新线并执行应用自己的分支策略
 ```
 
-应用持久状态表达阶段、请求、结果与消费进度，字段不由 DG 规定。只保存 HeadEntryId 不能补回从未保存的工具结果。工具成功与结果落盘之间的中断，需要应用的幂等键、结果查询或人工处置；DG 不自动重放工具，也不提供跨外部系统 exactly-once。旧状态 fork 后是否继续复用 operationId 是业务选择，框架不能自动生成或复用来掩盖这个问题。
+应用持久状态表达阶段、请求、结果与消费进度，字段不由 DG 规定。只保存 CommitId 不能补回从未保存的工具结果。工具成功与结果落盘之间的中断，需要应用的幂等键、结果查询或人工处置；DG 不自动重放工具，也不提供跨外部系统 exactly-once。旧状态 fork 后是否继续复用 operationId 是业务选择，框架不能自动生成或复用来掩盖这个问题。
 
-纯 State 连续保存足以成立；Event 可选，不强制一 Event 一 State。若有 `S0,E1,E2`，从 E1 恢复取得逻辑末端 E1 与最近 State S0，不执行 E1；若仅有 `E0,E1`，可确实没有 State。必须完整走到根才可断言没有 State，预算耗尽或坏 State 不得被解释为“没有”或更旧健康状态。
+Load 得到的业务对象没有绑定分支的提交能力，不等于深度不可变；继续向分支保存须显式 OpenWorkingCopy。
 
-每个存档的内容按其准确 Schema 解释，而非当前 shared Schema。正常保存需要的 Schema meta Head 联合发布归 DG；只要业务 Entry 能定位完整恢复上下文，SaveId 不必携带所有 Schema Heads 的当前位置，也不需要在应用层组成大快照。
+纯 State 连续保存足以成立；Event 可选，不强制一 Event 一 State。若有 `S0,E1,E2`，LoadLatestSavedState(atOrBefore: E1) 返回 SelectedCommitId=E1、StateCommitId=S0 和 S0 对象，不执行 E1；LoadEvent(E1) 只加载该 Event；若仅有 `E0,E1`，可确实没有 State。必须完整走到根才可断言没有 State，预算耗尽或坏 State 不得被解释为“没有”或更旧健康状态。
+
+每个存档的内容按其准确 Schema 解释，而非当前 shared Schema。正常保存需要的 Schema meta Head 联合发布归 DG；只要业务 Entry 能定位完整恢复上下文，CommitId 不必携带所有 Schema Heads 的当前位置，也不需要在应用层组成大快照。
 
 细粒度保存形成长历史。当前预览和保存的历史管理部分不应扫描累计历史；历史选择按固定起点取近期窗口。对象 Delta 重建、最近 State 搜索和 CU 必要工作另计，不承诺所有恢复都是固定成本。
 
@@ -128,19 +131,19 @@ State = { phase=结果已记录, operationId, result, 消费进度, ... }
 
 ```text
 应用选择 Repository
-  → DG 正式世界线（标签、来源）
-    → 所选 Head 的 current
-      → 准确 Entry 起点的历史
-        → 预览 / 附件 / 内容恢复 / 新世界线
+  → ListBranches / ListRootBranches / ListBranchSubtree（正式 BranchInfo）
+    → ReadCurrentCommit(branchId)
+      → ReadHistoryPage（准确 CommitId 起点）
+        → 描述 / 附件 / Load / ForkBranch
 
-应用保存的 LineId / SaveId → 在所选 Repository 中直接重新定位
+应用保存的 BranchId / CommitId → 在所选 Repository 中直接重新定位
 ```
 
-HS `ListHeads` 提供物理 Head 集合，DG 排除管理 Head，并按选定创建方案判断正式世界线；它不是新的全库 Entry catalog。历史返回 EntryId，自然为后续读取、保存书签和分叉提供 handle。两条世界线可以共享同一 Entry，不需要为每个视图复制存档身份。
+HS `ListHeads` 提供物理 Head 集合，DG 排除管理 Head，并按选定创建方案判断正式世界线；它不是新的全库 Entry catalog。DG 历史返回含 CommitId 的 CommitInfo，自然为后续读取、保存书签和分叉提供 handle。两条分支的当前提交可以指向同一 Commit，不需要为每个视图复制存档身份。
 
-`ListHeadOrigins` 的声明边可建立父子视图，但未检查的 source ticket 不能冒充目标健康证明。五个主故事都能从 current、历史或书签获得准确位置，暂不要求调用方自行拼接 source ticket 和 codec 字节。若后续要直接点击来源边跳到分叉点，再比较窄的来源解析便利接口。
+`ListHeadOrigins` 的声明边可建立父子视图，但未检查的 source ticket 不能冒充目标健康证明。五个主故事都能从 current、历史或书签获得准确位置，BranchInfo.ForkedFromCommitId 表达准确来源，调用方无需自行拼接 source ticket 和 codec 字节；底层来源到 DG CommitId 的解析与成员校验仍须在接入时验证。
 
-不提供无上下文的“下一存档”：某点可能有原线后续和多个分支。最近使用由应用记录 LineId；最新保存时间只作展示依据，不代表跨线全序或新空 fork 的创建时间。
+不提供无上下文的“下一存档”：某点可能有原线后续和多个分支。最近使用由应用记录 BranchId；最新保存时间只作展示依据，不代表跨线全序或新空 fork 的创建时间。
 
 ## 8. 分层收敛与验收场景
 

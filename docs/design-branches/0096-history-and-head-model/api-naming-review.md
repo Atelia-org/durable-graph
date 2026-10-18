@@ -19,13 +19,13 @@
 
 | 候选族 | 优点 | 本项目的主要代价 | 本轮取舍 |
 |---|---|---|---|
-| Line / Save / SaveView | 短，贴近游戏对话 | Line 不说明分叉入口；Save 是动作还是记录不清；View 把小描述、State、Event、owner混在一起 | 退出主草图，旧故事保留占位映射 |
+| Line / Save / SaveView | 短，贴近游戏对话 | Line 不说明分叉入口；Save 是动作还是记录不清；View 把小描述、State、Event、owner混在一起 | 退出活跃调用草图；仅在本表和旧名映射中保留历史对照 |
 | Branch / Checkpoint / WorkingCopy | 熟悉；分支与可编辑副本直观，已有项目用语 | Event-only Checkpoint 容易被理解成完整可恢复的状态检查点 | 有力备选；现源码用法继续如实记录，设计主词不选它 |
 | Timeline / HistoryEntry / EditSession | HistoryEntry 能自然容纳 State/Event | Timeline 容易像时间排序的完整序列；EditSession 容易像退出时提交/回滚的事务；Entry也接近底层HeadEntry | 不选；并非错误，而是要解释的额外预期较多 |
 | Branch / Revision 或 Version / WorkingCopy | 历史位置与可变入口分开 | Revision/Version 容易被读成某一对象状态的新版本；当前已有图内容版本和Schema版本，不宜再扩大歧义 | 暂不占用这些词 |
 | **Branch / Commit / WorkingCopy** | 入口、一次业务保存、内存编辑对象三者分明；State/Event 均可提交，fork 可以没有新提交 | Commit 容易关联Git内容哈希或整个底层事务；WorkingCopy也需说明不落地成另一个磁盘工作目录 | **推荐**，以明确的业务提交边界和内存生命周期约束其含义 |
 
-Commit 的定义是一次已接受的**业务 State 或 Event 保存记录**。Schema 联合更新可以伴随它，但内部管理 Entry、创建分支和修改标签不因此变成业务 Commit；它没有内容哈希身份。Branch 表达分出后各自追加，不承诺唯一标签、rewind或merge。WorkingCopy 是可以多次提交的内存对象，不是一个延迟到 Dispose 才完成的事务。
+Commit 的定义是一次已接受的**业务 State 或 Event 保存记录**。Schema 联合更新可以伴随它，但内部管理 Entry、普通 fork 和修改标签不因此变成业务 Commit；新根创建仍产生首个真实 State/Event Commit；它没有内容哈希身份。Branch 表达分出后各自追加，不承诺唯一标签、rewind或merge。WorkingCopy 是可以多次提交的内存对象，不是一个延迟到 Dispose 才完成的事务。
 
 这不是按 subagent 票数决定：一次独立方案推荐 Checkpoint，另一次推荐 Commit；主线程用 Event-first 和 fork 无新记录两个反例裁决，随后交叉质疑确认 Commit 的业务边界可以解释。保留 Repository、State/Event、Summary、CommitState/CommitEvent 等已有且职责清楚的词，不为了整齐全部改名。
 
@@ -43,7 +43,7 @@ Commit 的定义是一次已接受的**业务 State 或 Event 保存记录**。S
 
 ## 4. 旧草图到推荐用语
 
-此表是设计符号映射，不是当前 C# 声明重命名表；真正施工时另核对声明和用途。
+此表保留历史设计符号用于解释变迁；活跃调用故事已采用 API 草图用语。它不是当前 C# 声明重命名表；真正施工时另核对声明和用途，真实 HeadStore API 保持原名。
 
 | 旧草图 | 新草图 | 性质／理由 |
 |---|---|---|
@@ -53,13 +53,15 @@ Commit 的定义是一次已接受的**业务 State 或 Event 保存记录**。S
 | ListLines / ReadLine | ListBranches / ReadBranchInfo | 易发现实体与描述 |
 | ReadCurrent / ReadSave | ReadCurrentCommit / ReadCommitInfo | 前者保留选中 BranchId，后者按准确 CommitId 查询 |
 | CreateRoot(initialRecord, …) | CreateRootBranchFromState / FromEvent | 两个业务角色，不能靠相同根类型重载区分 |
-| Fork | ForkBranch(sourceCommitId, displayLabel) | 输入准确记录，产出持久分支 |
+| Fork / ForkWorldline | ForkBranch(sourceCommitId, displayLabel) | 输入准确记录，产出持久分支 |
 | Restore / SaveView | LoadState / LoadEvent / LoadLatestSavedState + LoadedState | **职责细分**，不是等价替换；不再承诺对象深度只读 |
 | CheckoutShared / CheckoutPrivate / Checkout | OpenWorkingCopy(…, schemaMode) / WorkingCopy | 推荐一个必选策略参数，明确返回编辑对象 |
 | Tip / StateSaveId（恢复结果） | SelectedCommitId / StateCommitId | 选中位置与 State 来源可不同 |
 | BaseSaveId（工作副本） | BaseCommitId，另列 StateSourceCommitId | 逻辑末端不等于最近 State |
 | Including / After | HistoryStart.AtOrBefore / Before | 向祖先，包含性明确 |
-| ReadHistory / HistoryPage / Next | ReadHistoryPage / CommitHistoryPage / Continuation | 小页而非全历史；续查不保证非空 |
+| ReadHistory / ReadOlder / HistoryPage / Next | ReadHistoryPage / CommitHistoryPage / Continuation | 小页而非全历史；续查不保证非空 |
+
+联合提交后续已选 CommitRequest：WorkingCopy.CreateStateCommitRequest / CreateEventCommitRequest 只构造请求，Repository.CommitBranches 执行时统一捕获与提交。PreparedCommit 是未采用的冻结快照候选，不能与请求混用；CommitState/CommitEvent 仍立即提交。详见[联合提交设计](multi-branch-commits.md)。
 
 ## 5. 审阅证据与局限
 

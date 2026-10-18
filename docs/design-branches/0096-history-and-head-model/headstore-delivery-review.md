@@ -3,6 +3,8 @@
 > 状态：2026-10-17，已完成源码复核和独立 public PackageReference 消费者验证。用户随后明确跨库检查只需开发期诊断；[概率与实际实验](handle-misuse-detection.md)支持现有紧凑 Handle。按澄清后的需求，交付可用，无需为强身份返工；撤回每个 DG 引用默认增加 16B scope 的建议。
 > 对照：[持久定位值与准确历史请求](headstore-save-handles-request.md)、[五个调用故事](save-handle-stories.md)。本文不修改 DG pin 或运行时，不代表 DG 接入已验收。
 
+> 术语对齐：以下上游 API、版本和执行证据保持原名；§4 的 DG 后续方向已按 [API 草图](api-sketch.md)更新为 Branch / Commit / WorkingCopy。该对齐不是新一轮源码或包验收。
+
 ## 1. 结论及来源
 
 上游调查 HEAD 为 `3e1dc46041ce731768f18552639c18fbf73e111e`。编码与准确历史增量的实现/包来源为 `c6fb64a97ebc066e10c480e4439f20a2067683a2`；更早的 `34cd0e8` 已将 Handle 改为紧凑表示。不能只看最后一个 feat 而忽略这项前置改变。
@@ -52,11 +54,11 @@ AteliaResult<HeadHistoryEnd> store.ReadEntryHistory(
 
 ## 4. DG 可以继续收敛的公开模型
 
-建议按下列角色推进，名称和字节布局尚不冻结：
+当前按 [API 草图](api-sketch.md)的推荐角色推进；薄包装的具体签名和 codec 适配尚未冻结：
 
 ```text
-LineRef = HeadId 的世界线角色包装（若包装有实际收益）
-SaveRef = HeadEntryId 的存档角色包装（若包装有实际收益）
+BranchId = HeadId 的分支角色薄包装（编码 4B）
+CommitId = HeadEntryId 的业务提交角色薄包装（编码 12B）
 操作 = 在调用方选定的 Repository 上使用对应定位值
 ```
 
@@ -68,14 +70,15 @@ SaveRef = HeadEntryId 的存档角色包装（若包装有实际收益）
 
 | DG 操作角色（非最终签名） | 输入与输出 | 现已明确的分工 |
 |---|---|---|
-| 列世界线 / 定位世界线 | Repository → LineRef 与小描述 | DG 正式成员与标签；不直接暴露全部管理 Heads |
-| 当前预览 | LineRef → 所选 LineRef + 当前 SaveRef + 摘要 | 空 C 的 SaveRef 可属于 A，选中的 C 保持 |
-| 读取 / 恢复存档 | SaveRef → 描述或领域读取视图 | schema pin 和模型能力归 DG，不取最新 shared 代替旧环境 |
-| 历史窗口 | SaveRef inclusive 起点 → 页面、扫描继续位置及终止状态 | 复用 ReadEntryHistory；筛选 State 时仍记录最后扫描 Entry |
-| 分叉 | SaveRef + 标签 → 新 LineRef | HS fork + DG 完整可见创建协议；不复制业务存档 |
-| 继续编辑 | LineRef + Shared/Private 编辑意图 → checkout | 续写目标明确；State/Event/外部工具语义保持 |
+| ListBranches / ReadBranchInfo | Repository、BranchId → BranchInfo | DG 正式成员与标签；不直接暴露全部管理 Heads |
+| ReadCurrentCommit | BranchId → 所选 BranchId + CommitInfo | 空 C 的当前 Commit 可由 A 创建，选中的 C 保持 |
+| ReadCommitInfo / LoadState / LoadEvent | CommitId → 描述或准确 Kind 的领域对象 | Load 无分支提交能力，不证明对象深度不可变；历史使用准确 Schema |
+| LoadLatestSavedState | CommitId → LoadedState | 找不晚于选点的最近已保存 State，不重放 Event；SelectedCommitId 与 StateCommitId 分开 |
+| ReadHistoryPage | HistoryStart.AtOrBefore / Before → CommitHistoryPage | 复用 ReadEntryHistory；Continuation 用最后扫描 Commit，Before 可重读 inclusive anchor 后跳过 |
+| ForkBranch | CommitId + DisplayLabel → BranchInfo | HS fork + DG 完整可见创建协议；不制造业务 Commit |
+| OpenWorkingCopy | BranchId + 显式 SchemaMode.Shared / Private → WorkingCopy | 工作副本绑定续写分支；CommitState / CommitEvent 显式发布 |
 
-新的细化顺序建议是：按紧凑值和仓库调用上下文定义两类定位角色，再定义存档小描述和历史窗口结果，最后与标签 A/B 方案、新根/shared Schema 创建协议组合。身份目标已澄清，精准历史起点与 codec 也已交付，不再等待额外强 scope 方案。
+两类定位角色、小描述与历史页现已有 API 草图；创建协议当前推荐 DG 独立登记候选 B，具体失败合同和可行性仍需验证。身份目标已澄清，准确历史起点与底层 codec 已交付；这不等于 DG 的 BranchId / CommitId、WorkingCopy 或联合提交已实现。当前验证顺序见 [PROJECT-STATE](PROJECT-STATE.md)。
 
 ## 5. 独立消费者执行证据
 
@@ -100,4 +103,4 @@ SaveRef = HeadEntryId 的存档角色包装（若包装有实际收益）
 
 ## 6. 本轮停止边界
 
-本轮完成交付核查与后续设计方向；后继概率实验接受开发期诊断目标，原强 scope 建议已退出。DG 固定依赖、格式、公共 API 和运行时没有改动。下一轮按紧凑定位值继续 DG 方案，并单独安排新包/source pin 接入与回归，不将本消费者的成功替代产品验收。
+本轮完成交付核查与后续设计方向；后继概率实验接受开发期诊断目标，原强 scope 建议已退出。DG 固定依赖、格式、公共 API 和运行时没有改动。后续按 [API 草图](api-sketch.md)与 [PROJECT-STATE](PROJECT-STATE.md)推进可行性验证，并单独安排新包/source pin 接入与回归，不将本消费者的成功替代产品验收。

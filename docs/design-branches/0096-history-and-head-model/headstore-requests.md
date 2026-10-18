@@ -4,9 +4,11 @@
 > R1 已由[持久定位值与准确历史起点请求](headstore-save-handles-request.md)接替；R2 已由上游实施于 `474dbe4ddfc12898a894c157f72ac5a44a7bcc80`，DG 接入尚未验收。本文保留问题来源与 fork 对比依据，不替代新请求或上游正式合同。不承担兼容旧格式/API 的要求。
 > 背景：[用户故事](user-stories.md)、[概念入口](README.md)。原比较基线为 `731eef7cd3158572532fbeea7ba95a79213a7328`；§3 的旧 API/编码描述保留这个含义，已实施结果见正式合同。
 
+> 术语对齐：本文是上游请求与历史方案比较。DG 新外观以 [API 草图](api-sketch.md)为准：世界线对应 Branch，业务存档对应 Commit，编辑对象对应 WorkingCopy；BranchId / CommitId 分别对应底层 HeadId / HeadEntryId。下文 HS API、旧克隆 c0 和显式 Parent 候选保留用于解释取舍，不是当前 DG 公共模型。
+
 ## 1. 需求与当前设计自由度
 
-DramaBoard 要求父子世界线分别可继续，从历史存档分叉，并按选中存档的实际归属建树。世界线标签相对固定；存档摘要随每次提交发布。候选将一条世界线映射到一个 Head，把图入口、摘要和基础存档的 HeadEntryId 放在 Entry payload 中。
+DramaBoard 要求父子世界线分别可继续，从历史存档分叉，并按选中存档的实际归属建树。世界线标签相对固定；存档摘要随每次提交发布。当时的候选将一条世界线映射到一个 Head，把图入口、摘要和基础存档的 HeadEntryId 放在 Entry payload 中。当前设计中的一个正式 Branch 对应一个业务 Head；准确 Schema、内容重建依赖及 payload 字段仍待验证，旧字段设想不是已选持久格式。
 
 后续用户确认首版原线只追加、旧点另开、fork 成功即完整可见；[应用合同设计稿](application-design.md)据此优先验证继承 head-history，暂不额外编码逻辑 Parent。R1 请求仍保留，但不再因为父链候选就自动成为首片全部工作的前置。
 
@@ -83,14 +85,14 @@ R 不要求 HeadStore 理解游戏、ParentAddress、摘要或“业务存档”
 3. Head 的标签承载仍是独立待选事项。R 去掉 c0 不自动解决标签随创建发布；不要通过制造一个“标签用 Entry”把重复节点重新引入。
 4. DG publish 重写在这些上游边界和应用故事收敛后进行。不要为过渡兼容新增双 Parent 协议，也不要将新的领域 Parent 解释能力下沉到 HeadStore。
 
-### 后续设计发现的两个待协商能力
+### 后续设计发现的两项能力及现状
 
-它们尚未获得上游承诺，不能悄悄并入 R2：
+它们最初独立于 R2 提出；准确历史读取已交付，创建属性仍是对照候选：
 
 | 能力 | DG 的具体动机 | 当前边界 |
 |---|---|---|
-| 从准确 Entry 开始的有界继承历史读取 | 固定旧存档的历史选择、Event 点的最近 State 恢复；避免每次从今天的 Head 尾扫描 | 已纳入[新请求 P2](headstore-save-handles-request.md)，与两类持久定位值共同设计；不预建通用 cursor |
-| 创建 root/fork 时共同发布小型不可变属性 | 新世界线无本地业务 Entry 时仍有自己的标签，并可识别业务 Head | 是标签候选 A；候选 B 在 DG 登记层完成，不要求上游必做；还需单独解释新根 shared Schema 发布 |
+| 从准确 Entry 开始的有界继承历史读取 | 固定旧存档的历史选择、Event 点的最近 State 恢复；避免每次从今天的 Head 尾扫描 | 已由 ReadEntryHistory 交付并完成[独立消费者复核](headstore-delivery-review.md)；DG ReadHistoryPage 尚未接入，不预建通用 cursor |
+| 创建 root/fork 时共同发布小型不可变属性 | 新世界线无本地业务 Entry 时仍有自己的标签，并可识别业务 Head | 是标签候选 A；当前推荐候选 B 在 DG 登记层完成，不作为上游前置请求；还需验证新根 shared Schema 发布 |
 
 需求和替代方案统一见[应用合同稿](application-design.md)，此处只登记接口交接边界。
 

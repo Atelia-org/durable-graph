@@ -2,6 +2,8 @@
 
 日期：2026-10-17。范围：对齐已实施的上游术语/API，并保留 DG 任意历史 checkpoint 的不可变书签。不决定后续 domain-history 的结构。
 
+> 历史实施记录：本文固定在 `731eef7` 的接入切片，保留真实源码名称 `CheckpointAddress`、`checkout`、书签目录和格式 2。本切片的完成不表示 [API 草图](api-sketch.md)的 `CommitId` / `WorkingCopy` 已实施；新草图的 CommitId 对应 HeadEntryId，而本切片 CheckpointAddress 是 FrameAddress，不能机械改名。后续上游格式 4 与引用初始化交付见[复核](headstore-delivery-review.md)，DG 新外观尚未接入。
+
 ## 上游事实
 
 来源为 Storage `731eef7cd3158572532fbeea7ba95a79213a7328` 的[重命名记录](../../../../atelia-storage/docs/HeadStore/15-headstore-renaming-plan.md)和[HeadSetTag 方案](../../../../atelia-storage/docs/HeadStore/16-headset-tags-plan.md)，具体行为以对应源码为准。
