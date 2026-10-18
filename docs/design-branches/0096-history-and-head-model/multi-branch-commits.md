@@ -1,6 +1,6 @@
-# DB-096：多 Branch 联合提交候选
+# DB-096：基于 CommitRequest 的多 Branch 联合提交设计
 
-> 2026-10-18，用户提出组合 WorkingCopy 准备操作、由 Repository 统一提交。本文为设计调研，未实施、未冻结首片范围。需求事实见[用户故事 C4/C5](user-stories.md)，公开概念沿用 [Branch / Commit / WorkingCopy](api-sketch.md)。本轮最小产物是界定捕获时机、共同发布范围和可执行验收题。
+> 2026-10-18，用户已认可采用轻量 CommitRequest，由 Repository 执行时统一捕获与共同提交。请求路线及捕获边界已选；实现、完整失败合同与首片扩展范围尚未完成。需求事实见[用户故事 C4/C5](user-stories.md)，公开概念沿用 [Branch / Commit / WorkingCopy](api-sketch.md)。本文保留冻结准备的对照理由，不再将两种路线并列为待选。
 
 ## 1. 能力与范围
 
@@ -12,12 +12,12 @@ DG 有条件组合现有底层原语，为同一 Repository 中多个既有 Bran
 
 ## 2. Prepare 到底准备什么
 
-| 候选 | 调用时保存的东西 | 好处 | 额外合同 |
+| 路线 | 调用时保存的东西 | 好处 | 额外合同 |
 |---|---|---|---|
-| **CommitRequest：延迟请求** | WorkingCopy、目标 Branch、预期 BaseCommitId、State/Event 根引用、小摘要参数 | 不建立长寿命 frozen graph 或额外存储资源；Repository 能统筹捕获和 Schema | 创建请求后、执行前的领域对象修改会进入保存；请求不是快照 |
-| PreparedCommit：内容已冻结 | 上述身份及捕获后的不可变内容、所需布局/准备材料 | 可以保存 Prepare 当时的值，随后修改源对象也不改变候选 | 内存/资源释放、失效、单次消费、准备副作用、Schema最终协调，以及发布后工作副本的活对象与旧快照基线关系 |
+| **已选 CommitRequest：延迟请求** | WorkingCopy、目标 Branch、预期 BaseCommitId、State/Event 根引用、小摘要参数 | 不建立长寿命 frozen graph 或额外存储资源；Repository 能统筹捕获和 Schema | 创建请求后、执行前的领域对象修改会进入保存；请求不是快照 |
+| 未采用 PreparedCommit：内容已冻结 | 上述身份及捕获后的不可变内容、所需布局/准备材料 | 可以保存 Prepare 当时的值，随后修改源对象也不改变候选 | 内存/资源释放、失效、单次消费、准备副作用、Schema最终协调，以及发布后工作副本的活对象与旧快照基线关系 |
 
-当前推荐第一种，名字用 `CreateStateCommitRequest` / `CreateEventCommitRequest`，使“构造请求”和“真正准备保存”不混淆。用户提出的 PrepareCommitState/Event 可作为第二种命名候选；若仍用于仅保存参数的请求，必须显式说明没有捕获快照。两种方案都不应把已有立即发布的 CommitState/Event 偷改成延迟行为。
+已选第一种，设计入口采用 `CreateStateCommitRequest` / `CreateEventCommitRequest`，使“构造请求”和“真正准备保存”不混淆。PrepareCommitState/Event 不进入本次公开草图，避免暗示已经冻结内容。已有 CommitState/Event 保持立即发布；只有出现必须保存请求创建时快照的具体需求时，才重访 PreparedCommit。
 
 ```text
 requests = [
@@ -28,7 +28,7 @@ result = repo.CommitBranches(requests)
 // result 按 BranchId 对应各 CommitInfo；正常返回意味着整组已确认。
 ```
 
-推荐请求不做图捕获、不占用新的存储 writer、不改变工作副本基线。携带预期 BaseCommitId；执行前若该副本已另行提交则拒绝，不把旧请求自动套到新基线。请求绑定活 owner/副本，不是可序列化或可重放的任务。首版用后丢弃，不承诺自动重试或幂等执行；准确消费状态与失败后复用规则在实现合同中定稿。
+CommitRequest 不做图捕获、不占用新的存储 writer、不改变工作副本基线。它保留 State/Event 根引用与操作角色，携带预期 BaseCommitId；执行前若该副本已另行提交则拒绝，不把旧请求自动套到新基线。Schema 编辑意图来自绑定 WorkingCopy，不在 request 上另设可覆盖策略。请求绑定活 owner/副本，不是可序列化或可重放的任务。首版用后丢弃，不承诺自动重试或幂等执行；准确消费状态与失败后复用规则在实现合同中定稿。
 
 摘要若为可变字节，应在创建请求时复制为自有小数据，或使用明确不可变的值；业务图仍在执行时捕获。期间继续修改业务图时，应用需要同步更新摘要请求，框架不保证二者业务一致。调用方必须在 CommitBranches 全部捕获期间保持所有参与图稳定；不预建对象变更追踪或后台冻结机制。
 

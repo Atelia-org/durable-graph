@@ -55,13 +55,15 @@
 
 随后细化存档描述/重建依赖、summary/BLOB接口、Shared/Private编辑意图与故障结果，最后安排DG依赖接入和产品实施。分页部分结果、Private新根和精确来源解析仍须收敛，不把伪API当成已有能力。
 
-新增研究分支：[多 Branch 联合提交候选](multi-branch-commits.md)。用户提出 WorkingCopy 准备、Repository 统一发布；现推荐先以轻量 CommitRequest 组合，在 CommitBranches 内统一捕获/协调Schema，不先暴露冻结快照的长寿命 PreparedCommit。命名候选 CreateStateCommitRequest/CreateEventCommitRequest；原 CommitState/Event 仍立即执行。首要机制题是两个Shared成员同时引入Schema，不得各自准备后覆盖其中一份。范围和准确失败合同未冻结，也未批准施工。
+新增研究分支：[多 Branch 联合提交设计](multi-branch-commits.md)。用户已认可轻量 CommitRequest 路线：CreateStateCommitRequest/CreateEventCommitRequest 保存身份、基线与根引用，在 CommitBranches 内统一捕获/协调Schema；不冻结请求创建时的图，也不引入公开 PreparedCommit。原 CommitState/Event 仍立即执行。首要机制题是两个Shared成员同时引入Schema，不得各自准备后覆盖其中一份。路线已选，准确失败/消费合同与首片扩展范围仍待细化，尚未实施。
 
 [用户故事](user-stories.md)新增 C4 密码门（物品可迁移、世界不回溯）与 C5 知识神器（可选旧路线、只迁移幂等且不遗忘的知识）。均为用户提供的参考故事，尚不承诺全部支持。C5 可先映射旧点另开，不自动引入原线rewind；物品所有权和知识单调性归应用。
 
+同文已记录对下游应用的建议：单个跨分支效果幂等不足以防止组合放大；C5可采用稳定且有适用范围的知识身份、独立向前保存及集合并集，防止同一批事实重复增殖。完整收益/新事实生成需另审查；不把此性质当作DG请求可重放、日志不增长或故事整体有界的保证。
+
 ## 已知未决项与明确延期
 
-未决：标签A/B、新root与shared Schema发布、是否/怎样包装紧凑ID、DG序列化定位值的标量适配、Event摘要缺省语义、图片错误展示规则；联合提交的捕获时机、组内Schema、基线安装、结果未知与历史组合恢复。最近State/同类内容来源必须有恢复方案，不能删除GraphEnvelope.Parent后遗失重建依赖。
+未决：标签A/B、新root与shared Schema发布、是否/怎样包装紧凑ID、DG序列化定位值的标量适配、Event摘要缺省语义、图片错误展示规则；联合提交的组内Schema、基线安装、请求消费/失败后复用、结果未知与历史组合恢复。执行时捕获已选，不重开冻结快照方案。最近State/同类内容来源必须有恢复方案，不能删除GraphEnvelope.Parent后遗失重建依赖。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
@@ -81,7 +83,7 @@
 | 五种调用流程与定位值职责 | [存档调用故事](save-handle-stories.md) |
 | 最小调用面与当前创建协议建议 | [API草图](api-sketch.md) |
 | 命名原则、竞争方案、旧名映射与审阅限度 | [命名审阅](api-naming-review.md) |
-| 跨分支共同保存、请求/冻结候选与实验题 | [联合提交候选](multi-branch-commits.md) |
+| 跨分支共同保存、已选请求路线与实验题 | [联合提交设计](multi-branch-commits.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |
 | 上游实际交付、API和验收限度 | [交付复核](headstore-delivery-review.md) |
 | 原request与其已澄清身份要求 | [持久Handle请求](headstore-save-handles-request.md) |

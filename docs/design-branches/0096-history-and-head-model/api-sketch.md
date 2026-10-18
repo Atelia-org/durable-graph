@@ -42,6 +42,10 @@ repo.LoadLatestSavedState(atOrBefore: commitId)
 repo.OpenWorkingCopy(branchId, schemaMode)   → WorkingCopy
 work.CommitState(state, summary)             → CommitInfo
 work.CommitEvent(domainEvent, summary)       → CommitInfo
+
+work.CreateStateCommitRequest(state, summary)       → CommitRequest
+work.CreateEventCommitRequest(domainEvent, summary) → CommitRequest
+repo.CommitBranches(requests)                      → BranchId 到 CommitInfo 的结果表
 ```
 
 `SchemaMode.Shared / Private` 必须显式选择，没有 null、隐含默认或 ReadOnly 分支。该参数仅描述**后续保存的 Schema 归属**，不是分支的可见性、并发隔离级别或读取历史时选哪份 Schema。Private 从该分支实际末端的准确 Schema 继续独立演进；Shared 保留完整准入检查，不把 private Schema 静默合入 shared。历史内容始终按它自己的准确 Schema 解释。
@@ -138,9 +142,9 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 下一步依次细化：创建完整可见性；存档描述及准确 Schema/内容重建依赖；summary/BLOB；加载对象的可变性与寿命、分页结果及 Private 创建边界。之后再定 C# 签名、接入依赖和实施切片。命名审阅没有冻结上述未决项，也没有新增 rewind、merge、内容寻址或唯一名字需求。
 
-## 7. 多 Branch 联合提交：新候选
+## 7. 多 Branch 联合提交：已选 CommitRequest 路线
 
-用户提出 WorkingCopy 准备操作、Repository 统一提交的方向；这是当前研究范围，尚未选为首片实施合同。推荐先比较轻量 `CommitRequest` 与真正冻结内容的 `PreparedCommit`，具体取舍见[联合提交设计候选](multi-branch-commits.md)。主候选调用为：
+用户已认可轻量 `CommitRequest` 路线：WorkingCopy 构造请求，Repository 执行时统一捕获与共同提交。冻结内容的 PreparedCommit 不进入当前设计；具体职责和对照理由见[联合提交设计](multi-branch-commits.md)。实现与完整失败合同仍待细化。调用为：
 
 ```text
 repo.CommitBranches([

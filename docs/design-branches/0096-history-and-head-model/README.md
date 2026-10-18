@@ -16,7 +16,7 @@
 
 用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 
-根/子树查询已纳入 API 设计；用户提供的密码门和知识神器故事见[用户故事 C4/C5](user-stories.md)。[多 Branch 联合提交候选](multi-branch-commits.md)比较延迟请求与冻结准备、组内 Schema 和发布边界，尚未冻结首片范围或实施。
+根/子树查询已纳入 API 设计；用户提供的密码门和知识神器故事见[用户故事 C4/C5](user-stories.md)。[多 Branch 联合提交设计](multi-branch-commits.md)已选 CommitRequest 与执行时统一捕获，继续细化组内 Schema 和发布边界，尚未实施。
 
 ## 1. 本轮问题与边界
 
