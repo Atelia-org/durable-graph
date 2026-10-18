@@ -40,7 +40,9 @@
 3. fork 后立即可见、关闭重开；父子独立续写。
 4. LLM State恢复，以及 Event-first/最近State的边界。
 
-草图区分目录描述、存档描述、只读恢复视图和可编辑 checkout；推荐薄角色包装但不增加持久字节。首版历史返回全部 State/Event，小页筛选由应用展示层处理，框架给出扫描继续位置；目录先完整读小集合并在内存建树。这些是本轮建议，未冻结公开签名或新增用户已确认需求。
+经[命名审阅](api-naming-review.md)，后续草图推荐 **Branch / Commit / WorkingCopy**：持久追加入口、一次业务 State/Event 保存记录、绑定分支的内存工作副本。Line/Save 是旧故事占位；当前源码 Checkpoint/BranchCheckout 不因设计文档更新而已改名。推荐薄角色包装仍不增加持久字节。
+
+调用约定为 Read/List 读描述、Load 加载对象、OpenWorkingCopy 显式选择 SchemaMode、Create/Fork/Commit 持久发布。准确 LoadState/LoadEvent 与 LoadLatestSavedState(atOrBefore) 分开；加载结果没有分支提交能力，不等于领域对象深度只读。最近 State 查询返回选点与实际 State 来源，不重放 Event。历史采用 AtOrBefore/Before 和 Continuation，返回全部 State/Event 小描述；目录先完整读小集合并在内存建树。推荐词汇用于后续讨论，签名、对象寿命/可变性和部分失败合同仍未冻结。
 
 **下一件事：证明世界线标签随成功创建一起可见的协议。**
 
@@ -73,6 +75,7 @@
 | 用户明确要求、规模、非目标 | [用户故事](user-stories.md) |
 | 五种调用流程与定位值职责 | [存档调用故事](save-handle-stories.md) |
 | 最小调用面与当前创建协议建议 | [API草图](api-sketch.md) |
+| 命名原则、竞争方案、旧名映射与审阅限度 | [命名审阅](api-naming-review.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |
 | 上游实际交付、API和验收限度 | [交付复核](headstore-delivery-review.md) |
 | 原request与其已澄清身份要求 | [持久Handle请求](headstore-save-handles-request.md) |

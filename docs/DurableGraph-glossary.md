@@ -9,7 +9,7 @@
 
 ## 使用与维护
 
-版本、历史、命名入口与来源关系的下一轮概念研究见 [DB-096](design-branches/0096-history-and-head-model/README.md)。其中候选术语尚未替换本文的现行合同，也不是代码改名指令。
+版本、历史、命名入口与来源关系的下一轮概念研究见 [DB-096](design-branches/0096-history-and-head-model/README.md)。其 [API 草图](design-branches/0096-history-and-head-model/api-sketch.md)推荐 Branch / Commit / WorkingCopy；这些候选术语尚未替换本文的现行合同，也不是代码改名指令。
 
 - 表中粗体为讨论和说明文字的首选术语；代码符号标明**当前落点**，不意味着所有符号已经采用首选命名。
   同一行并列的词由释义说明其关系，只有明确标为同义才可互换。

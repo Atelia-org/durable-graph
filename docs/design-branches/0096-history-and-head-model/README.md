@@ -4,7 +4,7 @@
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
-**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[最小 API 草图](api-sketch.md)：已串起五个调用故事，推荐继续证明 DG 登记创建协议，尚未冻结或实施。
+**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。创建协议继续证明 DG 登记候选，尚未冻结或实施。以下现状术语表仍描述当前源码，不以草图用语替换历史事实。
 
 需求依据见[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
 

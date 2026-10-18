@@ -1,6 +1,7 @@
 # DB-096：以存档定位值贯通五个调用故事
 
 > 状态：2026-10-17，设计推演，未实施。用户已认可从下游调用故事精炼 handle/anchor 能力；本文不是公开 API 定稿。
+> 后继命名：本文 LineId/SaveId 等保留故事推演时的占位含义；后续设计推荐 BranchId/CommitId、WorkingCopy 等，统一看 [API 草图](api-sketch.md)及[旧名映射](api-naming-review.md)。调用职责已有细化，不将旧伪 API 当作现行签名。
 > 接续[应用合同稿](application-design.md)；提炼给上游的最小能力集中在[新的 HeadStore 请求](headstore-save-handles-request.md)。源码核对基线：上游 `06ff3d9a80c938d0d1af7d4895cd26b9ec04b488`。
 
 > 交付后的设计前提校准：上游采用 4B/12B 紧凑 Handle，用户确认跨库误用只需开发期诊断；[概率实验](handle-misuse-detection.md)支持默认保留紧凑值，不额外附16B。以下 DG 定位角色在调用方选定的仓库上下文中使用，不宣称裸 ID 全局唯一。
