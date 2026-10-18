@@ -7,7 +7,7 @@
 
 为 DG 重新设计历史、世界线/分支、存档定位及预览 API。先以实际下游故事选择对外能力，再与存储实现取舍。用户明确 DG 现有 publish 设计/实现和 GraphEnvelope.Parent 是可重写草稿，无兼容包袱；不要为保留旧形状建立双 Parent 或过渡兼容层。
 
-上游已交付引用初始化 fork、紧凑 ID codec 和准确 Entry 起点历史；同库操作经独立消费者验证。最后一轮已接受其开发期跨库误用检出目标，撤回每引用附加16B scope的建议。**没有待上游补强身份的阻塞；接下来回到 DG 功能/API 设计，尚未开始新模型实施。**
+上游已交付引用初始化 fork、紧凑 ID codec 和准确 Entry 起点历史；同库操作经独立消费者验证。已接受其开发期跨库误用检出目标，撤回每引用附加16B scope的建议。**用户认可当前 API 的清晰性与功能覆盖，下一阶段转向可行性验证、效率与简化，收窄设计；尚未开始新模型实施。**
 
 ## 已确认的需求与边界
 
@@ -34,32 +34,29 @@
 
 ## 当前焦点与下一步
 
-已形成[最小公开 API 草图](api-sketch.md)，用[五个调用故事](save-handle-stories.md)逐项走通：
+**压缩后恢复顺序：完整读本文 → [API 草图](api-sketch.md) → 按验证题读一份详细设计。先不继续扩展故事或海选名字，也不直接铺开产品重构。**
 
-1. 继续上次世界线；固定存档书签。
-2. 读当前预览；从准确旧点分页选项。
-3. fork 后立即可见、关闭重开；父子独立续写。
-4. LLM State恢复，以及 Event-first/最近State的边界。
+当前讨论基线：
 
-经[命名审阅](api-naming-review.md)，后续草图推荐 **Branch / Commit / WorkingCopy**：持久追加入口、一次业务 State/Event 保存记录、绑定分支的内存工作副本。Line/Save 是旧故事占位；当前源码 Checkpoint/BranchCheckout 不因设计文档更新而已改名。推荐薄角色包装仍不增加持久字节。
+- **Branch / Commit / WorkingCopy** 已形成清晰概念族；Read/List 读描述，Load 加载对象，OpenWorkingCopy 显式选 SchemaMode，Create/Fork/Commit 发布。准确 LoadState/LoadEvent 与 LoadLatestSavedState 分开；加载对象无分支提交能力，不等于深度不可变。当前源码 Checkpoint/BranchCheckout 尚未改名。
+- 根/子树查询已加入设计；历史以 AtOrBefore/Before 和 Continuation 表达准确边界，返回 State/Event 小描述。五个核心调用故事保持可走通，不用减少方法数代替使用便利。
+- [联合提交设计](multi-branch-commits.md)已选 CommitRequest：保存身份、基线、根引用，CommitBranches 执行时统一捕获和协调Schema；原 CommitState/Event 立即执行。公开冻结 PreparedCommit 暂不采用，具体消费/失败合同仍待定。
+- [创建方案](application-design.md)推荐 B：DG 登记决定正式成员；先准备 Head，再登记，允许不展示的未登记产物；普通保存不更新目录。上游不可变创建属性 A 留作对照，不作为前置依赖。新根不能假定 CreateHead 参加 PublishHeads。
+- [用户故事](user-stories.md)中 C4 密码门、C5 知识神器是验证参考，不要求全部产品化。应用幂等不保证组合不放大；稳定知识身份、独立向前保存与并集建议只约束同一批事实，不改变 DG 提交/重试合同。
 
-调用约定为 Read/List 读描述、Load 加载对象、OpenWorkingCopy 显式选择 SchemaMode、Create/Fork/Commit 持久发布。准确 LoadState/LoadEvent 与 LoadLatestSavedState(atOrBefore) 分开；加载结果没有分支提交能力，不等于领域对象深度只读。最近 State 查询返回选点与实际 State 来源，不重放 Event。历史采用 AtOrBefore/Before 和 Continuation，返回全部 State/Event 小描述；目录先完整读小集合并在内存建树。推荐词汇用于后续讨论，签名、对象寿命/可变性和部分失败合同仍未冻结。
+### 收敛阶段的验证顺序
 
-**下一件事：证明世界线标签随成功创建一起可见的协议。**
+| 顺序 | 具体问题与最小产物 | 通过后才能决定什么 |
+|---|---|---|
+| 1. API 到机制的映射 | 重新核对 DG/Storage 的实际HEAD、pin、环境和工作树；列出每组 API 的现有原语、缺口、读写范围及失败点 | 哪些可直接组合，哪些需要调整内部边界或提出小型上游请求 |
+| 2. 发布与创建 | 先查两个 Shared 工作副本同时新增不同 Schema 的共同准备；再查 fork、新根无/有shared增长的登记路径。用最小机制见证/故障窗口说明共同成立与结果未知 | 一个共同发布内核是否可承接普通/联合保存；登记是否足够，不先添新事务框架 |
+| 3. 描述与恢复 | 画最小持久描述和读取依赖，区分历史顺序、准确Schema、最近State、Delta重建；走通Event-only与空fork | 能否去掉重复Parent/重复current，哪些摘要/附件材料必须留，字段尚不冻结wire |
+| 4. 查询与成本 | 核算千条分支目录容量/打开范围；固定旧点取小页，改变后续历史长度观察成本；区分冷/热与必要CU工作 | 整表小目录/内存树是否足够，是否值得换查询原语或微调返回形状 |
+| 5. 再简化与收口 | 用同一组消费者故事比较少量可行实现；保留收益有证据的方案，给出最终签名草案、未决项及小实施切片 | 进入产品接入与实施；实验成功不冒充完整产品资格 |
 
-- A：上游 Head 创建属性，首版不可变；概念直接，但当前上游未承诺这个能力。
-- B：DG 独立登记，只有登记成功的 Head 是正式世界线；先建 Head 后登记，失败可留下不展示的未登记产物。不要求GC或自动修复。
-- 不把标签放进继承的a1，也不为标签写假业务Entry。普通fork与新root分别推演；新root首次引入Schema时，不能假设CreateHead天然参加PublishHeads事务。
+第1项的映射结果用于选择后续最小实验，不预建覆盖所有机制的大Probe。第2–4项按真实依赖调整次序；每个实验先写问题与最小可观察标准。阶段结束应得到“可行API＋最小内部模型＋证据和边界”，不是更多候选名单。
 
-当前推荐 B：其登记与必要 shared Schema 可形成共同的 DG 可见发布点，普通保存无需更新登记目录。尚待证明三条路径（fork、新root无Schema增长、新root有shared增长）的耐久顺序、结果不明时的发现，以及按实际payload/标签上限核算1000条线容量；不先假定整表方案已合格。A保留为对照，未向上游提出新增创建属性要求。
-
-随后细化存档描述/重建依赖、summary/BLOB接口、Shared/Private编辑意图与故障结果，最后安排DG依赖接入和产品实施。分页部分结果、Private新根和精确来源解析仍须收敛，不把伪API当成已有能力。
-
-新增研究分支：[多 Branch 联合提交设计](multi-branch-commits.md)。用户已认可轻量 CommitRequest 路线：CreateStateCommitRequest/CreateEventCommitRequest 保存身份、基线与根引用，在 CommitBranches 内统一捕获/协调Schema；不冻结请求创建时的图，也不引入公开 PreparedCommit。原 CommitState/Event 仍立即执行。首要机制题是两个Shared成员同时引入Schema，不得各自准备后覆盖其中一份。路线已选，准确失败/消费合同与首片扩展范围仍待细化，尚未实施。
-
-[用户故事](user-stories.md)新增 C4 密码门（物品可迁移、世界不回溯）与 C5 知识神器（可选旧路线、只迁移幂等且不遗忘的知识）。均为用户提供的参考故事，尚不承诺全部支持。C5 可先映射旧点另开，不自动引入原线rewind；物品所有权和知识单调性归应用。
-
-同文已记录对下游应用的建议：单个跨分支效果幂等不足以防止组合放大；C5可采用稳定且有适用范围的知识身份、独立向前保存及集合并集，防止同一批事实重复增殖。完整收益/新事实生成需另审查；不把此性质当作DG请求可重放、日志不增长或故事整体有界的保证。
+允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
 ## 已知未决项与明确延期
 
@@ -70,7 +67,7 @@
 ## 实现与证据边界
 
 - DG固定依赖仍是旧 `731eef7`，新模型尚未接入；本机 source mode 环境变量可能指向更新的 sibling。**实施前重新核对HEAD、pin、环境和工作树，不沿用旧build结论。**
-- 最新只读上游调查HEAD `3e1dc46`；新包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。实际格式4、HeadId.LocalId已改为owner.GetLocalHeadId；新ReadEntryHistory已存在。
+- 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
 - [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
 - [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**
 - 两份实验源码/receipt在本机`.artifacts`，不随Git克隆分发；详细路径见上述记录。上游既有未提交文件不属于本工作，不覆盖、不清理。
