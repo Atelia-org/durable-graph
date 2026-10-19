@@ -4,6 +4,8 @@
 
 > 后继决定（2026-10-19）：用户已选[统一 Catalog](shared-schema-only.md)，Private/混组/promotion 不再是后续设计候选。本文保留首批源码基线和当时边界；§7 的 Private 恢复说明属于旧实现证据，准确历史 Schema 约束继续有效。新实验状态从后继文档恢复。
 
+> 后继收窄：[组内核](group-kernel-design.md)接管统一候选、生命周期及失败矩阵；[Branch 纵切](branch-vertical-design.md)接管 Parent 替换的恢复材料与创建接线；当前分页已选预算耗尽整次失败。本文 §9 保留最初实验顺序，实际下一片以 PROJECT-STATE 为准，不重复完成已有局部见证。
+
 ## 1. 问题、范围与验收
 
 问题：已认可的 Branch / Commit / WorkingCopy API 能否由现有底座和较小的 DG 内部调整承接，哪些不确定性必须先用实验消除？

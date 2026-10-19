@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的 API 草图
 
-> 2026-10-19 统一 Catalog 收敛版；讨论稿，未实施，未冻结 C# 签名或持久格式。用户已决定同库仅使用统一 Schema Catalog，删除 Private/ToShared，依据见[统一 Catalog 设计](shared-schema-only.md)。调用故事见[五个调用故事](save-handle-stories.md)；词汇审阅与旧名映射见[命名审阅](api-naming-review.md)。当前源码术语仍见[项目术语表](../../DurableGraph-glossary.md)，不能把本稿当成已完成的实现。
+> 2026-10-19 机制收敛版；讨论稿，未实施，未冻结 C# 签名或持久格式。同库统一 Catalog、请求无独立消费状态；描述查询和内容恢复分别承担明确的校验范围。依据见[统一 Catalog](shared-schema-only.md)、[组内核](group-kernel-design.md)及[Branch 纵切](branch-vertical-design.md)。调用故事见[五个调用故事](save-handle-stories.md)；词汇审阅与旧名映射见[命名审阅](api-naming-review.md)。当前源码术语仍见[项目术语表](../../DurableGraph-glossary.md)，不能把本稿当成已完成的实现。
 
 ## 1. 三个核心概念
 
@@ -69,6 +69,8 @@ repo.CommitBranches(requests)                      → BranchId 到 CommitInfo �
 
 `DisplayLabel` 不叫 Name，避免暗示唯一键；`ForkedFromCommitId` 不叫 ParentId，避免丢掉准确分叉点。目录按来源提交的 CreatedOnBranchId 建父子关系；相同来源可复用描述读取。由 B 的历史选中 A/a1 创建 C，C 挂在 A 下。
 
+描述查询检查正式成员、HS 发布资格、小描述及图 envelope 的业务角色；不顺便完整恢复对象或逐项寻找最近 State。描述成功不保证全部内容/模型/附件可用。内容加载才执行相应准确 Schema、source/prior、对象和模型检查。首个纵切候选让 Kind 保留在图 envelope，Entry 仅存图入口和 summary；付出一次小帧读取，先避免重复 Kind 权威，成本待测。
+
 ### 对象加载不等于回退，也不等于重放
 
 `LoadState` / `LoadEvent` 严格读取所选记录的对应内容；Kind 不匹配失败，不自动向前找。只加载 Event 不要求顺便恢复最近 State。`LoadLatestSavedState` 才沿选中提交的继承历史向前找最近 State；**不执行 Event**。
@@ -124,7 +126,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 首版返回所有 State/Event 小描述，应用筛选展示；正常取得扫描进度后，Continuation 为 `HistoryStart.Before(lastProcessedCommitId)`，使用最后扫描项而非最后显示的 State。Before 在底层重读 inclusive anchor 并跳过首项，预算包含该工作。条数限制与工作量限制分别约束，ReadHistoryPage 不先算全历史总数。
 
-`StopReason` 区分抵达根和页满停止；若选择返回预算截断页，还必须区分预算限制。取消/损坏等错误另行传播。Continuation 不证明还有一项：满页末端恰是根时，下次可以返回空且完整。部分条目后预算耗尽是保留前缀还是调用失败，仍待合同裁决；零进度失败不能伪造推进位置，也不保证相同预算重试能前进。
+**首版选择页满正常返回、工作预算耗尽整次失败。** `StopReason` 只区分抵达根和页满停止，不新增预算截断页；已在内部收集的前缀不交付。取消、损坏和清理错误照常失败。Continuation 不证明还有一项：满页末端恰是根时，下次可以返回空且完整。零进度失败不能伪造推进位置，也不保证相同预算重试能前进。[独立 HeadStore 见证](../../../experiments/BranchHeadMechanismProbe/README.md)验证了该组合与跨 fork 分页；DG 小描述物化及故障资格仍待接入。
 
 ### 根与子树查询
 
@@ -140,11 +142,11 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。1000条分支的目录容量须按实际 payload/标签上限核算；不先假定整表方案合格，不新增 GC。
 
-下一步依次细化：统一 Catalog 共同准备；创建完整可见性；存档描述及准确 Schema/内容重建依赖；summary/BLOB；加载对象的可变性与寿命、分页结果。Private 创建与混组不再是未决项。之后再定 C# 签名、接入依赖和实施切片；没有新增 rewind、merge、内容寻址或唯一名字需求。
+下一步先按[组内核](group-kernel-design.md)接通真实 State/Event 混组发布/安装，并按[Branch 纵切](branch-vertical-design.md)证明 Parent 替换后的恢复/再保存；创建成功路径已有示意原语见证，但实际 DG 登记故障资格仍待验证。然后收敛 summary/BLOB、加载对象寿命、ID 字段支持与具体异常。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 
 ## 7. 多 Branch 联合提交：已选 CommitRequest 路线
 
-用户已认可轻量 `CommitRequest` 路线：WorkingCopy 构造请求，Repository 执行时统一捕获与共同提交。冻结内容的 PreparedCommit 不进入当前设计；具体职责和对照理由见[联合提交设计](multi-branch-commits.md)。实现与完整失败合同仍待细化。调用为：
+用户已认可轻量 `CommitRequest` 路线：WorkingCopy 构造请求，Repository 执行时统一捕获与共同提交。冻结内容的 PreparedCommit 不进入当前设计；具体职责、失败矩阵和对照理由见[联合提交设计](multi-branch-commits.md)。调用为：
 
 ```text
 repo.CommitBranches([
@@ -154,3 +156,5 @@ repo.CommitBranches([
 ```
 
 另有 `CreateEventCommitRequest(domainEvent, summary)`。创建 request 不发布、不捕获业务图快照；在 CommitBranches 期间统一捕获、校验和准备。同一次调用只提交同一 Repository 实例中不同 Branch 的有效工作副本，每分支一个 State 或 Event。既有 CommitState/CommitEvent 仍表示立即提交，不能放入上述集合充当延迟请求。普通提交与联合提交应复用同一内核；此处没有公开新的跨库事务或任意 Head 写入入口。
+
+请求不占资源、不实现独立消费状态。它绑定原活 WorkingCopy 实例及 expected Base；健康失败且基线未变时可再次执行并重新捕获当前图，摘要仍是创建请求时自有的值。成功（包括 Event）使旧请求过期；Unknown、发布后异常或 owner fault 阻止复用，关闭重开的新副本也不能接收旧请求。框架不自动重试；NotPublished 不等于资源健康。正常返回完整结果表，失败不保证全部新 CommitId 已可取得。

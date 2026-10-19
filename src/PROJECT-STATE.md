@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：[独立删除 Private/ToShared](../docs/design-branches/0096-history-and-head-model/private-removal.md)已实施并完成源码、新 G 普通包和有限进程中止验收（实现 `efdf61b`）。按[统一 Catalog 合同](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)退出私有路线；保当前历史布局及 Shared 命名，不混入新 API/组提交。`P0R2` 根标记拒绝旧库，无兼容或自动导入。本片无剩余实施项，下一步回到 DB-096 组级共同准备/发布设计；准确版本与验证范围只查删除切片。
+2026-10-19：[独立删除 Private/ToShared](../docs/design-branches/0096-history-and-head-model/private-removal.md)已实施并完成源码、新 G 普通包和有限进程中止验收（实现 `efdf61b`）。按[统一 Catalog 合同](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)退出私有路线；保当前历史布局及 Shared 命名，不混入新 API/组提交。`P0R2` 根标记拒绝旧库，无兼容或自动导入。本片无剩余实施项；后继组内核/Branch 纵切已收窄，下一片及局部见证只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，尚未实现组协调器或新历史模型。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有源码接入为三控制Head与独立书签目录，实际范围见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。后续设计从[DB-096研究工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)恢复：用户已确认只追加/旧点另开/fork立即可见，继承历史为首选候选；上游紧凑codec与准确历史已做独立消费者复核，开发期误用诊断足够，不增加每引用16B scope。DG仍固定旧依赖，新历史模型、包接入与产品回归尚未完成，不把上游或独立消费者资格当作DG产品资格。
 
@@ -211,7 +211,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   普通 class 仍不支持一般属性，marker 不授予接口持久槽、boxed 身份或任意外部基类。迁移与证据见 DB-068。
 - `TypeExpr` 区分 builtin、named 定义及有序实参、声明内 parameter、SZ/rank 2–4 数组和内建 List/Nullable/Dictionary 构造；持久 key 为闭合 TypeExpr + 定义版本。
   SchemaId 只表示定义 ID，不能用来区分闭合族。base/inline 显式升版仍沿定义传播；Box<int> 也随 Box 定义升版。
-  同一已接受 Schema 目录的声明索引内同 key 完整布局严格一致；同仓库的显式 private 新 view 可与 shared 同 key 异形，旧 view 含义保持。不同 view 或两个独立空库的 key 不授布局互换保证，不提供闭合历史账本。
+  同库统一 Catalog 的声明索引内同 key 完整布局严格一致；同 key 异形开发试验使用独立完整库副本，Private 路线已移除。历史 view 保准确含义；两个独立库的 key 不授布局互换保证，不提供闭合历史账本。
   TypeExpr depth≤64、展开 nodes≤4096、arity≤32，exact 布局 DAG depth≤256。
 - 含泛型/Nullable 当前定义或历史、当前 enum/record struct、显式 DurableUpgrade 或值规则/依赖属性的编译，
   以及有当前声明且保留无当前声明的 inline history 的编译，使用 `Generated.Family_<UTF8HexId>.Vn<TState...>`，
