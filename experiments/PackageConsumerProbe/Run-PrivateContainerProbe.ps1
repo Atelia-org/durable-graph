@@ -78,7 +78,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB096 ordinary package normal Point V1-to-V2 Upgrade, nullable lifting and List elements, real baseline identities, full old/new shared catalog and missing List rule rejection, cold Delta/prior/H; pending new G acceptance, no Array/Dictionary/crash/power-loss/performance qualification'
+    Scope = 'DB096 ordinary package normal Point V1-to-V2 Upgrade, nullable lifting and List elements, real baseline identities, full old/new shared catalog and missing List rule rejection, cold Delta/prior/H; no Array/Dictionary/crash/power-loss/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot

@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：[独立删除 Private/ToShared](../docs/design-branches/0096-history-and-head-model/private-removal.md)代码已集成、正在验收。按[统一 Catalog 合同](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)退出私有路线；保当前历史布局及 Shared 命名，不混入新 API/组提交。`P0R2` 根标记拒绝旧库，无兼容或自动导入。完整源码与普通包结果只维护在删除切片。
+2026-10-19：[独立删除 Private/ToShared](../docs/design-branches/0096-history-and-head-model/private-removal.md)已实施并完成源码、新 G 普通包和有限进程中止验收（实现 `efdf61b`）。按[统一 Catalog 合同](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)退出私有路线；保当前历史布局及 Shared 命名，不混入新 API/组提交。`P0R2` 根标记拒绝旧库，无兼容或自动导入。本片无剩余实施项，下一步回到 DB-096 组级共同准备/发布设计；准确版本与验证范围只查删除切片。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有源码接入为三控制Head与独立书签目录，实际范围见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。后续设计从[DB-096研究工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)恢复：用户已确认只追加/旧点另开/fork立即可见，继承历史为首选候选；上游紧凑codec与准确历史已做独立消费者复核，开发期误用诊断足够，不增加每引用16B scope。DG仍固定旧依赖，新历史模型、包接入与产品回归尚未完成，不把上游或独立消费者资格当作DG产品资格。
 

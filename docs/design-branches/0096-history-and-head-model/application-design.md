@@ -9,7 +9,7 @@
 
 > 后继机制调查（2026-10-18）：[源码映射与最小实验](mechanism-feasibility.md)进一步区分登记两层 outcome、最近 State 内容来源、全量 origin 访问范围与目录累计写量；以下候选须连同该证据理解，仍未实施。
 
-> 2026-10-19：按用户决定改为[同库统一 Catalog](shared-schema-only.md)，开发草稿在独立库副本中隔离；Private/ToShared 退出后续设计。本文调用随 API 草图同步，当前源码尚未删除旧机制。
+> 2026-10-19：按用户决定改为[同库统一 Catalog](shared-schema-only.md)，开发草稿在独立库副本中隔离；Private/ToShared 已在[独立删除切片](private-removal.md)退出源码。本文其余调用随 API 草图同步，仍为待实施设计。
 
 ## 1. 本轮边界与结论
 

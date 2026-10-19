@@ -1,6 +1,6 @@
 # DB-096：统一 Schema Catalog 与开发库隔离
 
-> 2026-10-19，一个 Repository 只维护统一的 Schema 接纳路线。Private / ToShared 删除已进入独立实施；当前进度和验收统一见[删除切片](private-removal.md)。本页保留设计依据、前轮机制见证与删除合同。
+> 2026-10-19，一个 Repository 只维护统一的 Schema 接纳路线。Private / ToShared 已删除并完成限定验收，结果统一见[删除切片](private-removal.md)。本页保留设计依据、前轮机制见证与删除合同。
 
 ## 1. 决定及不可混淆的边界
 
@@ -62,7 +62,7 @@ API 草稿已经去掉 SchemaMode；`OpenWorkingCopy(branchId)`、两个 CreateR
 | 测试 | Private 不推进 Shared、永不跟随 Shared、推广后仍 Private、跨目录 remap、未推广目录拒绝等退出语义 | 普通升级/缺 Upgrade、完整帧保持、readonly/fault、reentry、Event-only、Event/Discard 保 State/rewrite、错 source 及冷 Delta 证据转入统一路线 |
 | 包消费者 | Development 改独立副本；PrivateContainer 改普通容器升级；Split 退出 Private/promotion 调用 | Development 的真实 MSBuild、容器缺规则、Event 接纳 Schema 但 State 不推进、准确历史与冷开故事，用新包重新验证 |
 
-删除全表 admission 的成立前提是：**受支持的新库中所有写入均来自统一单调 Catalog**，同 key 不变，没有旁路导入旧 Private 分支。旧格式可能隐藏 private 历史，不能仅因当前根看起来 Shared 就放行；采用新库格式/版本准入并拒绝旧布局，不做启动全历史审计或迁移器。具体版本标识在删除片实现，完整帧 append-only 纪律不因此放松。
+删除全表 admission 的成立前提是：**受支持的新库中所有写入均来自统一单调 Catalog**，同 key 不变，没有旁路导入旧 Private 分支。旧格式可能隐藏 private 历史，不能仅因当前根看起来 Shared 就放行；删除片以 P0R2 分支目录标记拒绝 P0R1 旧布局，不做启动全历史审计或迁移器，完整帧 append-only 纪律不因此放松。
 
 关键源码入口：[Repository.RequireCheckoutWriter](../../../src/DurableGraph.Persistence/Repository.cs)、[保存会话](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)、[Catalog](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs)、[发布 owner](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)。已删除的 Private 入口与旧回归可在 Git `a347a2f` 查阅；内部 Catalog/workspace 不按关键词整束删除。
 

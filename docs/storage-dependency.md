@@ -6,7 +6,7 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
 当前 pin 为 `0.1.3-dev.20261017.g731eef7`，来源为 `731eef7cd3158572532fbeea7ba95a79213a7328`。
-这是为新 HeadStore 来源预留的候选版本，**尚未制作本轮 feed，也未取得 DG 普通包资格**。
+这是未公开发布的本地候选。2026-10-19 已从准确来源制作六包 feed，当前 DG 普通包验收状态与来源见[Private 删除切片](design-branches/0096-history-and-head-model/private-removal.md)；不将它视作较新 HeadStore 的接入资格。
 本机可通过环境变量 `UseStorageSources=true` 与 `StorageSourceRoot` 联调；也可显式使用下方命令。
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在配置中保存本机路径。
 
@@ -46,7 +46,7 @@ $storageFeed = Join-Path $storage "artifacts/feeds/$storageVersion"
 
 Pack 使用存储仓固定 SDK，产出六个 nupkg、六个 snupkg 和 `manifest.<S>.json`，记录准确来源与字节 SHA256。
 相同版本只允许复用已核验的完整产物；不同内容使用新版本，不覆盖公开包或已有候选，不清空全局缓存。
-本轮尚未执行上述打包；后续需在准确干净来源上生成完整 feed，再进行 DG 包模式验收。
+本机本次六包及 manifest 位于 `.artifacts/db096-private-removal/storage-feed`；来源为准确提交的干净独立 worktree。其他机器按上述入口自行重建完整 feed，包文件不随 Git 分发。
 
 [eng/Prepare-Storage.ps1](../eng/Prepare-Storage.ps1) 可以只读验证这个完整 feed：
 

@@ -74,7 +74,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB089 protected raw-query compilation and finite non-friend public Repository accepted-history, Shared admission, baseline private fork, hot/independent/same-owner/cold SG recovery, complete Event-to-Shared promotion and fresh-Shared-owner List Delta PackageReference gate; five consumer PIDs with final independent-PID read-only verification, no fresh-PID-writer/same-key-reshape/process-crash/performance qualification'
+    Scope = 'DB096 single-catalog non-friend public Repository accepted-history and protected raw-query compilation, baseline Shared fork, hot/independent/same-owner/cold SG recovery, Event accepting a new catalog declaration without advancing State, compatible Event followup and fresh-owner List Delta PackageReference gate; five consumer PIDs with final independent-PID read-only verification, no fresh-PID-writer/same-key-reshape/process-crash/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot
