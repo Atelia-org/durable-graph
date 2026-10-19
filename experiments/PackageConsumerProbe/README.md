@@ -2,7 +2,7 @@
 
 实际 PackageReference 消费是源码测试之外的交付验证。活动门禁各保范围，运行参数、包来源、
 history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
-DB-096 当前消费者迁移及新包验收进度见[工作集](../../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)；旧包记录仅证明其准确来源版本，源码迁移完成不等于新包门禁已经通过。
+DB-096 的活动入口已完成迁移与普通包运行，准确 G/S、回归和边界见[验收记录](../../docs/design-branches/0096-history-and-head-model/package-cutover-validation.md)；旧包记录只保其来源版本资格。
 
 ## 活动门禁
 
@@ -23,6 +23,7 @@ DB-096 当前消费者迁移及新包验收进度见[工作集](../../docs/desig
 包准备使用 [PackageProbeSupport](PackageProbeSupport.ps1)，消费独立 DG 四包版本 G 与准确存储六包版本 S；
 完整 feed、任务配置和候选来源见[依赖指南](../../docs/storage-dependency.md)。
 不以 source ProjectReference 或 feed 中存在 nupkg 代替实际消费。运行输出放在忽略目录。
+单 Runtime 的 Run-Probe 每轮复制明确输入到新消费目录，避免原 obj 的旧生成器文件污染；可传配对的 `-PackageSource <feed> -Version <G>` 复用完整十包，省略时自行准备新版本。
 
 公开调用门禁已按 DB-096 的 Branch/Commit/WorkingCopy 调整，接受完整候选 feed 与独立 DG 版本；`WorkDirectory` 可省略，由 runner 创建仓外新目录。
 它使用全新包缓存及正常 PackageReference/Generator/Build，不配置 friend 或手工 analyzer。

@@ -6,7 +6,7 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
 当前 pin 为 `0.1.3-dev.20261019.gf8868b5`，来源为 `f8868b57e8f012745413bb38a83d67f1dba29f26`。
-这是为准确来源保留的唯一候选版本，已由准确干净源码生成本地六包 feed，尚未公开发布。新 pin 的 DG 源码资格与后续接线状态见 [DB-096 工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)；独立上游 Probe 不替代 DG 产品验收。
+这是为准确来源保留的唯一候选版本，已由准确干净源码生成本地六包 feed，尚未公开发布。新 pin 的源码与活动普通包资格见 [DB-096 验收](design-branches/0096-history-and-head-model/package-cutover-validation.md)，后续接线状态见[工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)；独立上游 Probe 不替代 DG 产品验收。
 2026-10-19 的 [Private 删除切片](design-branches/0096-history-and-head-model/private-removal.md)使用旧 `731eef7` / `0.1.3-dev.20261017.g731eef7` feed；其普通包结果保留原版本意义，不证明新 pin 的包资格。
 本机可通过环境变量 `UseStorageSources=true` 与 `StorageSourceRoot` 联调；也可显式使用下方命令。
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在配置中保存本机路径。

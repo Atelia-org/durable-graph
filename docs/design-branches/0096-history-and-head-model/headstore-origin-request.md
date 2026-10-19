@@ -36,3 +36,13 @@ DG 在登记成员集合内检查父成员存在、来源自环和环；`ReadBra
 4. 只读/可写、取消（若提供）、临时资源清理与故障边界遵循现有查询纪律。
 
 这是产品目录访问范围的改进，不是 [Branch 机制 Probe](../../../experiments/BranchHeadMechanismProbe/README.md)健康数据组合验证的前置条件。上游交付后，DG 另做实际依赖接入与限定回归，不能用本请求或已有独立消费者结果替代产品资格。
+
+## 本地实施接点
+
+2026-10-19，只读核对 `f8868b5` 后，已找到可实施的窄路线；尚未修改上游。后续可在既有跨仓操作授权内另建隔离工作树实施，不必等外部调度。保留已资格化的固定 worktree/feed，不在其上改写源码。
+
+`HeadStore.ForkQuery.cs` 已有 `ResolveHead` → `GetForkQueryHead` → `HeadRecordReader.CheckHeader` → `CloseForkQueryTemporary` / `CleanupErrors` 接点；可复用 owned/history 句柄，否则只临时打开指定目标。不能经 `ReadHead` 追当前/来源 Entry，也不能用把每个新访问文件长期收进 owner 的路线。采用现有累积异常、finally 清理、最后检查再交付的模式；try 内提前 return 可能漏掉清理失败。
+
+实际 `AteliaResult<T>` 要求非 null 成功值，不能直接照抄上面的 nullable 语义签名。首选候选为 `AteliaResult<HeadOrigin>`，小只读值的唯一属性 `HeadEntryId? SourceEntryId`：null 表示 root，非 null 表示 checked header 的声明定位值。比用 default ID 当 root 哨兵或放宽全局 Result 合同更明确；具体声明仍需在上游切片裁决。公开 codec 已允许未验证定位值，文档中旧“不得包装为 checked 源 EntryId”应澄清为不授发布资格，而不是禁止返回声明值；保持现有全集查询的较强语义。
+
+最小验收复用 ForkQuery/Fault fixture：root/空 fork/首存后来源不变，指定目标访问计数（不 List/Visit、不读 source），坏目标与无关坏文件隔离，来源不可读时仍只返回声明，owned/history 借用及临时关闭，主错误与 cleanup/fault 顺序，目标不完整尾的正常 RW 恢复及 RO 拒绝不改字节。之后才更新 DG pin，替换全量 adapter，验证正式目录父成员与坏来源拒绝。上述是源码调查和下一片判据，不是实现或测试通过报告。

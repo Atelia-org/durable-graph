@@ -227,7 +227,7 @@ dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --no-r
 
 ### 下一片：先限制读取范围，再补交付闭包
 
-1. **根测试迁移与 D 重复投影均已完成。**后继[目录查询切片](directory-persistence.md#已接受目录的查询投影)按 accepted D 实例复用只读查询表；普通 B/S/T 不重建，成员/fault 检查保留。不要重做该优化或由此推断整体列表性能。最近 State 重复扫描保留为独立、须有计数反例的后续候选，不阻挡先收拢包调用闭包。
-2. **定向 origin 仍为正式合入门槛。**D 查询片再次只读核对上游仍为 `f8868b5`，窄请求仍未交付，也未代用户发送。交付后另接 pin 并验证坏目标/无关未登记坏 Head 的隔离，以及已登记子 Head 的父成员缺失反例；当前全量 adapter 不能作为最终 ReadBranchInfo 产品资格。
-3. **下一片优先补齐仓库外层交付。**剩余 PackageConsumerProbe 项目、打包脚本/普通包原文流程以及术语导航按新 API 迁移，包来源独立资格化；不要把 source build 或新测试数字借给旧包。静态清单：EventHistoryRecovery、DevelopmentSchema、ExplicitStorageClassification、PrivateContainer、SplitRepository、Tag、ImmutableLeaf/Family 的 Program；MetaBootstrapSchema 的内部 session/source 调用；Run-RepositoryApiProbe 与 Run-EventHistoryRecoveryProbe 的生成代码。Tag 的 Move/跨 owner 拒绝改成旧点 fork/同库持久 ID 合同，Run-TagProbe 及 Run-SplitRepositoryProbe 的结果断言同步检查。README runner 已迁移但尚未执行新包流程；不把保留模型编译资产扩成全部旧故事重新实施。
+1. **根测试迁移与 D 重复投影均已完成。**后继[目录查询切片](directory-persistence.md#已接受目录的查询投影)按 accepted D 实例复用只读查询表；普通 B/S/T 不重建，成员/fault 检查保留。不要重做该优化或由此推断整体列表性能。最近 State 重复扫描保留为独立、须有计数反例的后续候选，不阻挡核心功能补齐。
+2. **下一片定向 origin 仍为正式合入门槛。**本轮上游仍为 `f8868b5`；[窄请求](headstore-origin-request.md#本地实施接点)已定位现成解析/header/临时句柄接点。可按既有跨仓授权隔离实施，再接新 pin 并验证坏目标、无关坏 Head 与父成员缺失；不必将未交付无限延续为等待，当前全量 adapter 不能作为最终产品资格。
+3. **仓库外层调用闭包已完成。**[包迁移验收](package-cutover-validation.md)记录活动消费者、独立 wire inspector、准确编译负例、XML 与术语导航的迁移，以及11个活动门禁的真实普通包结果。根测试、README 和这些消费者不再列为待迁移；后续签名/依赖变化仍需同步受影响入口并获得相应新版本的资格。
 4. 此后按 §7 重核是否可整体合入，再接 CommitRequest 组内核、根/子树和分页。它们没有因本轮恢复原回归而变成已实施；不再重新搭健康 Branch/目录实验协调器。

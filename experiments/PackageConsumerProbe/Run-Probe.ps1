@@ -1,7 +1,10 @@
 [CmdletBinding()]
-param()
+param([string] $PackageSource, [string] $Version)
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($PackageSource) -ne [string]::IsNullOrWhiteSpace($Version)) {
+    throw 'Supply both -PackageSource and -Version, or neither for a self-contained run.'
+}
 
 . (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
 
@@ -65,14 +68,16 @@ function Assert-HistoryCount {
 
 $probeRoot = $PSScriptRoot
 $repositoryRoot = (Resolve-Path (Join-Path $probeRoot "../..")).Path
-$consumerProject = Join-Path $probeRoot "Consumer/Consumer.csproj"
-$runId = "run-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID"
+$consumerSource = Join-Path $probeRoot "Consumer"
+$runId = "run-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))-$PID-$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $workRoot = Join-Path $probeRoot "obj/$runId"
-$feed = Join-Path $workRoot "feed"
+$consumerRoot = Join-Path $workRoot "Consumer"
+$consumerProject = Join-Path $consumerRoot "Consumer.csproj"
+$feed = if ([string]::IsNullOrWhiteSpace($PackageSource)) { Join-Path $workRoot "feed" } else { (Resolve-Path -LiteralPath $PackageSource).Path }
 $packageCache = Join-Path $workRoot "packages"
 $history = Join-Path $workRoot "history"
-$packageVersion = "0.0.0-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID"
-$consumerProjectText = Get-Content -LiteralPath $consumerProject -Raw
+$packageVersion = if ([string]::IsNullOrWhiteSpace($Version)) { "0.0.0-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID" } else { $Version }
+$consumerProjectText = Get-Content -LiteralPath (Join-Path $consumerSource "Consumer.csproj") -Raw
 
 foreach ($forbiddenConsumerWiring in @(
     "<Import",
@@ -85,12 +90,25 @@ foreach ($forbiddenConsumerWiring in @(
     }
 }
 
-New-Item -ItemType Directory -Path $feed, $packageCache | Out-Null
+New-Item -ItemType Directory -Path $consumerRoot, $packageCache | Out-Null
+# Each run gets only the fixture inputs. Old generator names beneath the source
+# project's obj survive dotnet clean and must never enter this run's manifest search.
+foreach ($file in @('Consumer.csproj', 'Program.cs', 'Domain.None.cs', 'Domain.V1.cs', 'Domain.V2.cs',
+    'Domain.Binary.cs', 'Domain.Delta.cs', 'Domain.Preparation.cs', 'Domain.ReferenceCapture.cs', 'Domain.StringDecoding.cs')) {
+    Copy-Item -LiteralPath (Join-Path $consumerSource $file) -Destination (Join-Path $consumerRoot $file)
+}
+# Stop parent repo MSBuild discovery: this is an ordinary package consumer, not a
+# source-tree build. Keep the existing assembly name used by the runtime assertion.
+'<Project><PropertyGroup><AssemblyName>Atelia.Consumer</AssemblyName></PropertyGroup></Project>' |
+    Set-Content -LiteralPath (Join-Path $consumerRoot 'Directory.Build.props') -Encoding utf8NoBOM
+'<Project />' | Set-Content -LiteralPath (Join-Path $consumerRoot 'Directory.Build.targets') -Encoding utf8NoBOM
 
 Push-Location $repositoryRoot
 
 try {
-    Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
+    if ([string]::IsNullOrWhiteSpace($PackageSource)) {
+        Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
+    }
     $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File -ErrorAction Stop)
     if ($packages.Count -ne 10) { throw "Expected the complete ten-package feed, found $($packages.Count)." }
 
@@ -161,7 +179,7 @@ try {
         "-p:ProbeVersion=1"
     ) -ExpectedText "DurableGraphSnapshotHistoryDirectory has been removed; use DurableGraphSchemaHistoryDirectory and .dgschema files."
 
-    $legacyDefaultDirectory = Join-Path $probeRoot "Consumer/DurableGraphSnapshots"
+    $legacyDefaultDirectory = Join-Path $consumerRoot "DurableGraphSnapshots"
     $legacyDefaultFile = Join-Path $legacyDefaultDirectory "legacy.dgsnapshot"
     New-Item -ItemType Directory -Path $legacyDefaultDirectory | Out-Null
     Set-Content -LiteralPath $legacyDefaultFile -Value "legacy default Schema-history fixture" -NoNewline
@@ -196,7 +214,7 @@ try {
     )
     Assert-HistoryCount $history 2
 
-    $consumerAssembly = Join-Path $probeRoot "Consumer/bin/Debug/net10.0/Atelia.Consumer.dll"
+    $consumerAssembly = Join-Path $consumerRoot "bin/Debug/net10.0/Atelia.Consumer.dll"
     $consumerOutput = (& dotnet $consumerAssembly | Out-String).Trim()
 
     if ($LASTEXITCODE -ne 0 -or $consumerOutput -ne "7:True:2") {
@@ -215,7 +233,7 @@ try {
         "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=0"
     )
-    $generatedRoot = Join-Path $probeRoot "Consumer/obj/Debug/net10.0/generated"
+    $generatedRoot = Join-Path $consumerRoot "obj/Debug/net10.0/generated"
     $emptyManifests = @(Get-ChildItem -LiteralPath $generatedRoot -Recurse -File |
         Where-Object Name -eq "DurableGraphSchemaHistoryCandidates.g.cs")
 
