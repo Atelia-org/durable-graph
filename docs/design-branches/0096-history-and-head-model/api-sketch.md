@@ -56,7 +56,7 @@ repo.CommitBranches(requests)                      → BranchId 到 CommitInfo �
 
 ### B2 的具体值与迁移合同
 
-2026-10-19 收窄：以下薄 ID 与 codec 已随 B2 实施；[组提交](group-commit-integration.md)已接入，根/子树和分页仍为待实施设计。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
+2026-10-19 收窄：以下薄 ID 与 codec 已随 B2 实施；[组提交](group-commit-integration.md)已接入，[根/子树](branch-tree-queries.md)已实施验收，分页仍为待实施设计。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
 
 ```csharp
 public readonly struct BranchId : IEquatable<BranchId> {
@@ -176,7 +176,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 这些查询都以 DG 正式成员为范围。在登记候选 B 中，不登记 Shared Schema 等管理 Head，也不展示创建中断遗留的未登记 Head。HeadStore 保留区只约束编号分配，不能替代成员资格；仅过滤低编号仍可能暴露自动区的未登记产物。应用自己的角色/知识 Branch 仍是业务成员，是否出现在“选择世界”的界面由应用决定。
 
-首版可完整读取小目录并建立内存来源索引，子树查询不保证只访问该子树的磁盘文件。列表不承诺时间排序；应用按需排序和展开。展开某组分支再读该组 current 摘要，选中附件才读 BLOB。不先造持久子树索引，也不以新增查询为由强制增强 HeadStore。来源查询能否限定已登记集合及其成本，留到接入时验证。
+首版可完整读取小目录并建立内存来源索引，子树查询不保证只访问该子树的磁盘文件。列表不承诺时间排序；应用按需排序和展开。展开某组分支再读该组 current 摘要，选中附件才读 BLOB。不先造持久子树索引，也不以新增查询为由强制增强 HeadStore。[当前实现与验收](branch-tree-queries.md)已限定已登记集合并校验完整森林；临时邻接构建/遍历为线性，不将其外推为完整磁盘 I/O 或规模性能资格。
 
 ## 6. 创建协议与后续工作
 

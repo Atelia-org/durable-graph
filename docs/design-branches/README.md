@@ -21,7 +21,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 096 | [版本、历史与命名入口的概念模型](0096-history-and-head-model/README.md)；Private/ToShared 已删除，来源 snapshot 接缝已实施验收；新 Storage 已完成源码接入；B2 新布局/API、根回归、活动包消费者及定向 origin 已在隔离分支验收；真实多分支组内核已获源码及受影响包资格；旧Kill host已迁移并通过6＋3窗，下一片根/子树；分页与正式合入仍未完成 |
+| 096 | [版本、历史与命名入口的概念模型](0096-history-and-head-model/README.md)；Private/ToShared 已删除，来源 snapshot 接缝已实施验收；新 Storage 已完成源码接入；B2 新布局/API、根回归、活动包消费者及定向 origin 已在隔离分支验收；真实多分支组内核已获源码及受影响包资格；旧Kill host已迁移并通过6＋3窗，根/子树已完成限定验收；下一片分页，正式合入仍未完成 |
 | 095 | [Repository 打开意图与业务保存准入](0095-repository-open-intent/README.md)；E 的限定验收保历史范围；Open/编辑分责保持，双 Schema 归属由 DB-096 统一 Catalog 取代 |
 | 094 | [有限支持真实 property backing field](0094-backing-field-support/README.md)；前期调研储备，范围与规模待摸清，未选为当前实施片 |
 | 093 | [显式存储分类有效性核对](0093-explicit-storage-classification/README.md)；已实施并完成源码及新 G 普通包限定验收；DG0024 拒绝遗漏分类，不开放普通 backing 持久化 |

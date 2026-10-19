@@ -25,8 +25,14 @@
 
 ## 普通包验收
 
-待本片新 G 的 Split 和 GroupCommit 普通包验收。GroupCommit 消费者已增加创建后立即列树、父继续后空 fork 来源固定，以及独立进程空模型注册的冷目录读取；当前源码通过不代替该包资格。S 保持 `0.1.3-dev.20261019.g70b406c` / `70b406cd8d1117733eee81a33e7f978399aa98b2`，不重新打上游包。
+产品来源 `39200fad988fd79e9d8151ba9c40acac75eb788c`，G `0.0.0-public-history-e2e.20261019095140.25524`；S 保持 `0.1.3-dev.20261019.g70b406c` / `70b406cd8d1117733eee81a33e7f978399aa98b2`。独立 package-mode restore/Release 根 Rebuild 通过，0警告/0错误。Split 控制打包的 provenance 证明生产输入匹配 HEAD、打包时工作树干净；未公开发布包。
+
+- Split：seed/upgrade/rewrite/continue/verify 五个独立 PID 均成功，receipt Passed=true，保原公开恢复/升级/冷续写门禁。
+- GroupCommit：seed/continue/verify 三个进程成功，Publish/Verify 两次构建0警告/0错误。新增见证为创建后立即列树、父继续后空 fork 来源固定，以及独立进程先用空模型注册冷读目录。产品测试另证无业务回调，消费者不独立证明内部绝无实例化。
+- 主线程核实 Group assets 的4G＋6S均为 package，并逐一将十个输出 DLL 的 SHA256 与准确 nupkg 比对，全部一致。
+
+本机 `.artifacts/db096-branch-tree/package-paths.json` 指向 `W:/TEMP/db096-tree-427167664f3d4ac5aa8ef6b0e525f1db/split/result.json` 及其 feed/provenance；`group-package-verification.json` 记录 Group 工件和逐包核对。其余日志为 `package-{restore,build,split,group}.log`；Split 的完整打包/运行日志在其外部工件目录。本片仅对新 G 资格化这两个门禁，其他历史资格保原版本意义，最终交付仍须对最终版本验收完整活动集合。
 
 ## 后续
 
-本片闭合后推进公开历史分页；登记故障剩余窗口、最终消费者/文档清理和正式合入仍待完成。完整目标和顺序仅维护在 [PROJECT-STATE](PROJECT-STATE.md)。
+本片源码与受影响普通包验收已闭合，后继推进公开历史分页；登记故障剩余窗口、最终消费者/文档清理和正式合入仍待完成。完整目标和顺序仅维护在 [PROJECT-STATE](PROJECT-STATE.md)。

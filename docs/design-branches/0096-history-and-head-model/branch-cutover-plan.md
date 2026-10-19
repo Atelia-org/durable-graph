@@ -1,6 +1,6 @@
 # DB-096：真实 Branch 历史的一次切换计划
 
-> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；根 solution、活动包调用闭包及定向 origin 已接入，组内核已完成限定验收，旧Kill host已恢复，下一片实现根/子树；正式合入尚未完成，见 §9**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
+> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；根 solution、活动包调用闭包及定向 origin 已接入，组内核已完成限定验收，旧Kill host与根/子树已完成限定验收，下一片实现历史分页；正式合入尚未完成，见 §9**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
 
 ## 1. 收窄结果
 
@@ -225,9 +225,9 @@ dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --no-r
 
 本机证据：`.artifacts/db096-branch-vertical/migration-build-5.log`、`{persistence,runtime}-migration-2.{log,trx}`；初轮故障与修复前记录保 `*-migration-1`。README source 项目位于同目录 `readme-source/`，使用显式 ProjectReference/Generator 验证，不等于普通包/Build history/候选搬迁资格。从当前 README 原文提取的 source 验证已在新库运行：两个独立进程得到 HP99/98，浏览100/99/98，旧点 fork 并冷续写后 main98/alternate88，4B ID codec 往返成功，可选 Event 读回 Amount1/PreviousState HP98。日志为 `readme-verified-{initial,reopen,browse,fork,events-program}.log`；每步重写 Program 并核对预期输出，防止增量构建误跑旧样例。未执行普通包 runner 或 Schema history/升级流程的重新资格化。
 
-### 当前续接：真实多分支组内核
+### 当前续接：历史分页与最终验收
 
 1. **根测试迁移与 D 重复投影均已完成。**后继[目录查询切片](directory-persistence.md#已接受目录的查询投影)按 accepted D 实例复用只读查询表；普通 B/S/T 不重建，成员/fault 检查保留。不要重做该优化或由此推断整体列表性能。最近 State 重复扫描保留为独立、须有计数反例的后续候选，不阻挡核心功能补齐。
 2. **定向 origin 已交付、接入并完成限定验收。**[接入记录](targeted-origin-integration.md)集中记录新 Storage pin、上游访问与清理边界、DG 坏目标/无关坏 Head/父成员/准确来源/森林环反例，以及新版本源码和包资格。全量 adapter 已退出，不再列作待交付或阻塞下一片的门槛。
 3. **仓库外层调用闭包已完成。**[包迁移验收](package-cutover-validation.md)记录活动消费者、独立 wire inspector、准确编译负例、XML 与术语导航的迁移，以及11个活动门禁的真实普通包结果。根测试、README 和这些消费者不再列为待迁移；后续签名/依赖变化仍需同步受影响入口并获得相应新版本的资格。
-4. **CommitRequest 组内核已完成限定验收。**[实施记录](group-commit-integration.md)集中维护共同 Catalog、多业务 Head 发布、全组 Base/guard/清理/outcome 及新G资格。[旧 Kill host](process-crash-migration.md)已恢复；下一片补根/子树，再接分页；正式合入仍须重核 §7 和完整目标。不要重做已完成原语或保留第二套协调器。
+4. **CommitRequest 组内核已完成限定验收。**[实施记录](group-commit-integration.md)集中维护共同 Catalog、多业务 Head 发布、全组 Base/guard/清理/outcome 及新G资格。[旧 Kill host](process-crash-migration.md)已恢复；[根/子树](branch-tree-queries.md)已完成限定验收，下一片接分页；正式合入仍须重核 §7 和完整目标。不要重做已完成原语或保留第二套协调器。

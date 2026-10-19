@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：A/B1/目录原语之后，B2 已在隔离分支 `db096/branch-repository-cutover` 接入真实新 API 与布局，首段纵切、根 solution 构建及 Persistence/Runtime 完整回归通过；后继已收窄[accepted D 查询投影](directory-persistence.md#已接受目录的查询投影)，公开签名与持久格式保持。[活动消费者与普通包资格](package-cutover-validation.md)已完成；[定向 origin 接入](targeted-origin-integration.md)已完成，[真实多分支组内核](group-commit-integration.md)已完成源码与受影响普通包验收；根/子树、分页与正式合入尚未完成。当前施工结果及合入限制只查[整体切换计划 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。文档对齐：2026-10-19。
+> 状态：A/B1/目录原语之后，B2 已在隔离分支 `db096/branch-repository-cutover` 接入真实新 API 与布局，首段纵切、根 solution 构建及 Persistence/Runtime 完整回归通过；后继已收窄[accepted D 查询投影](directory-persistence.md#已接受目录的查询投影)，公开签名与持久格式保持。[活动消费者与普通包资格](package-cutover-validation.md)已完成；[定向 origin 接入](targeted-origin-integration.md)已完成，[真实多分支组内核](group-commit-integration.md)已完成源码与受影响普通包验收；[根/子树查询](branch-tree-queries.md)已完成源码与新 G Split/Group 验收；分页与正式合入尚未完成。当前施工结果及合入限制只查[整体切换计划 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
@@ -24,7 +24,7 @@
 
 用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 
-根/子树查询已纳入 API 设计；用户提供的密码门和知识神器故事见[用户故事 C4/C5](user-stories.md)。[多 Branch 联合提交设计](multi-branch-commits.md)已选 CommitRequest 与执行时统一捕获，已落实组内 Schema 和发布边界，当前资格见[实施验收](group-commit-integration.md)。
+[根/子树查询](branch-tree-queries.md)已实施并限定验收；用户提供的密码门和知识神器故事见[用户故事 C4/C5](user-stories.md)。[多 Branch 联合提交设计](multi-branch-commits.md)已选 CommitRequest 与执行时统一捕获，已落实组内 Schema 和发布边界，当前资格见[实施验收](group-commit-integration.md)。
 
 ## 1. 本轮问题与边界
 
