@@ -74,7 +74,7 @@ Unknown 的准确组位置发现仍是独立恢复合同，不由本页新增幂
 
 ## 6. 下一片的最小判别实验
 
-以下完整组实验尚未运行；本轮仅验证了 §7 的候选清理原语。建议先使用内部入口证明生命周期，不增加旧布局的过渡公共 `CommitBranches`。
+以下是新组协调器的验收要求，尚未整体运行。§7 验证候选清理；§8 进一步验证真实混组发布、安装和冷续写原语。后续将这些判据迁入新布局，不再为旧目录实现正式组协调器或过渡公共 `CommitBranches`。
 
 1. **共同 Catalog＋成功混组。** 两个真实工作副本各引入不同 Schema，一个 State、一个 Event；一次发布，冷重开读取两份准确内容与共同 Meta；热端 State 身份/baseline 推进，Event 的 State/rewrite 不推进。随后分别继续保存，验证正确 Delta/source/prior/H。
 2. **第二成员失败与 staging 清理。** 第一成员完成 Capture，第二成员 Capture 抛出；另一用例所有 Capture 成功后跨成员布局冲突。所有 tips、Catalog、基线不变、零 append、owner 健康，两个 WC 都能再次正常保存。包含 Event-only 成员。
@@ -82,7 +82,7 @@ Unknown 的准确组位置发现仍是独立恢复合同，不由本页新增幂
 4. **生命周期窗口。** Capture 回调尝试 Repository/资源/其他参与 WC 重入与 Dispose；四类 Store/owner/backing 失效反例迁入组，断言下一 Capture 或 body 尚未执行便拒绝。body 回调失效也不得进入 append/publication。
 5. **真正组发布故障。** 有/无 Catalog 增长均覆盖旧组或整组新值；明确 NotPublished、Unknown、Published 与 fault。注入第二成员安装故障、确认后返回映射缺项，必须 Published＋全 owner 停用，不返回半组。
 
-其中 1–4 可先在当前旧目录布局做内部生命周期见证，验证范围须写明“并非多业务 Head 发布资格”；5 的最终验收要在一 Branch 一 Head 接入后运行。两条线共享上述状态机与候选材料约定，但不需要先造适配器维持两套长期产品布局。单成员回归继续验证已有 Capture 后检查、准确来源和 Event/Discard；根构建和相关 tests 是实施片门禁，普通包/进程中止另行记录资格。
+其中 1–4 原可在旧目录布局做内部生命周期见证；§7/§8 已取得部分原语证据，剩余项与 5 一并在新实际内核验收，不再扩张旧宿主。两条线共享上述状态机与候选材料约定，不造适配器维持两套长期产品布局。单成员回归继续验证已有 Capture 后检查、准确来源和 Event/Discard；根构建和相关 tests 是实施片门禁，普通包/进程中止另行记录资格。
 
 ## 7. 已运行的候选生命周期见证
 
@@ -93,3 +93,19 @@ Unknown 的准确组位置发现仍是独立恢复合同，不由本页新增幂
 这仅为实际候选清理/安装原语及既有共同编码的限定资格；第三例直接追加并安装内部图，没有声称已经发布。尚未实现仓库组协调器、公开 request、完整混组安装或新业务 Head 原子发布，未跑全套、包或进程中断门禁。产品 C# 与固定依赖本轮保持。
 
 独立复核核对恢复边界、请求资格、HS 确认后返回失败路径及本轮测试/Probe 的断言范围，未发现阻断；补齐整次调用图稳定、单 State 到根、旧 ForkShared 与新 ForkBranch 的校验区别，以及清理异常不得绕过 outcome 分类。集成的14份 Markdown 共601个本地链接、55个锚点检查通过，`git diff --check` 通过；这些是文档集成检查，不扩大运行资格。
+
+## 8. 真实混组发布与冷续写见证
+
+2026-10-19，从 DG `35ae718` 新增 [GroupPublicationMechanismTests](../../../tests/DurableGraph.Persistence.Tests/GroupPublicationMechanismTests.cs)。两个已有 State 基线分别准备 State List Delta 与新类型 Event；共同 Catalog 接纳显式声明及 Event 的新类型。只调用一次真实 `PublishHeads`，发布旧业务目录 D 与 Schema S，然后安装 Catalog/State、丢弃 Event 候选。断言 Event 的 State 实例、source、baseline、对象 head/H 不变。
+
+完全关闭 owner 后重开，实际解码目录、共同 Schema 和 Event；两条线分别通过现行 `BranchSaveSession` 再保存，检查真实 Delta、准确 prior/source/H，最后再次全关冷读。Event 所在线的后续 State 以 Event 为逻辑 Parent、以原 State 为内容 source，验证二者确实分开。
+
+直接 HS 发布没有安装旧 `RepositoryResources` 的目录缓存，因此该 owner 随即关闭，不能再通过它保存。本测试证明可组合原语，不是 Repository 组协调器、公开 request、全部 WorkingCopy Base 安装或一 Branch 一 Head 的运行资格。State 侧此例使用已有根布局并加入显式声明，不能称为两成员都捕获了新根类型。
+
+确认后安装故障复用现有 [MetaBootstrapP0PublicationTests](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapP0PublicationTests.cs) 的 `Confirmed_install_failure_keeps_both_roots_and_invalidates_old_owner`：真实第二安装回调抛错，Published、owner fault，冷开双根已更新。没有另造测试状态机，也不据此宣称新组故障资格通过。
+
+主线程显式使用固定 `731eef7` worktree，根 build 零警告/错误；筛选 `GroupPublicationMechanismTests|SplitBusinessWorkspaceTests|SharedCatalogGroupPreparationTests|MetaBootstrapP0PublicationTests|P0NormalizedBusinessBaselineTests` **27/27** 通过、零跳过。日志 `.artifacts/db096-next/root-build.log`、`mechanism-tests.log`，TRX `results/mechanism-tests.trx`。其中仅混组 Fact 为本轮新增；其余为实际重跑的既有回归。独立复核核对完整资源关闭、source/Parent 区别及断言范围。
+
+**旧布局原语见证到此收束。**下一片先实施[来源 snapshot 接缝 A](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)，再在新布局接入真实组内核。§6 的重入、清理错误、组 Base 安装、Unknown/Published 和多业务 Head CU 判据仍保留，随真实内核验收；不为提前满足清单而复制旧协调器。本轮未改产品 C#、依赖或格式，未跑全套、包、进程中止或新 HS 产品资格。
+
+本轮集成复核：10份受影响 Markdown 的557个本地链接、58个锚点检查通过，`git diff --check` 通过。续工入口、路线图和设计索引已改为 A→B→新布局组内核，不重复开启本轮已完成的原语见证。

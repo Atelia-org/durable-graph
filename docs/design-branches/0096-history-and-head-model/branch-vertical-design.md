@@ -65,7 +65,7 @@ Event-only 只有完整到根才能证明 source=null。扫描预算耗尽、坏
 
 可用最小内部材料是：**同 owner、准确所选图、经过相应边界历史查询取得的 expected State source（或完整到根的无源结论）**。已发布材料还保留 CommitId；尚未发布候选从当前操作的已验证 tip/baseline 派生材料，没有虚构 CommitId。
 
-Repository 是该材料的生产者，物理层继续用它比对图、owned batch、directory creator/source 和准确 prior。材料随 `StoredGraphRevision → DecodedRevision → NormalizedGraphState` 保留；重读验证沿用同 owner 的来源材料，不让任意 FrameAddress 获得保存权限。它是内部接线，不是可序列化证明、公开 capability API 或一份全库历史缓存。资源关闭/fault 后照常失效。
+Repository 是该材料的生产者，物理层继续用它比对图、owned batch、directory creator/source 和准确 prior。材料随 `StoredGraphRevision → DecodedRevision → NormalizedGraphState` 保留；重读验证沿用同 owner 的来源材料，不让任意 FrameAddress 获得保存权限。[接缝调查](history-source-seam.md)进一步推荐直接保留现有 `StoredGraphRevision`，无需另建 proof/token；CommitId 留在 Repository 层，不要求所有物理 DTO 携带。它是内部接线，不是可序列化证明、公开 capability API 或一份全库历史缓存。资源关闭/fault 后保存资格失效，已解码 DTO 内容仍遵循关闭后可读合同。
 
 发布前候选必须同样经过实际追加图、实际 batch/heads、安装成员、Schema 与 candidate source 校验。发布成功前只准备安装，成功后安装 State 基线与准确 CommitId；Event 只推进逻辑末端。发布后安装失败按 owner 整体 fault 处理，不能继续半安装的 WorkingCopy。
 
@@ -101,6 +101,8 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 创建的候选 BranchId 在物理创建成功后已经得到，故最终登记错误的定位合同可以很小。物理创建本身 Unknown 且未返回 ID 时，不要求伪造候选 ID；DG 已知其尚未登记。这与组提交 Unknown 时尚无新 CommitId 的恢复问题不同，不必强造一种统一结果定位结构。
 
 ## 6. 查询和实验顺序
+
+**下一片先做[来源 snapshot 接缝 A](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)**：仅保留和传递已有实际图材料，仍以当前 Parent 取得来源资格，保格式/公开 API 与热复核；减少同次 decoder 的重复完整图校验。随后以同文 B 资格化新依赖并整体切换业务历史权威。下列真实纵切和登记判据保持，不以 A 替代新布局验收。
 
 成员目录只需小型直接编码，标签先固定；来源仍以 HS header 为准。`ListHeadOrigins` 在当前上游扫描物理全集，包含管理 Head/未登记产物，并验证整个来源图；它能做健康数据的功能见证，**不能证明只访问登记集合或忽略无关损坏的查询边界**。
 

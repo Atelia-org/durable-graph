@@ -21,7 +21,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 096 | [版本、历史与命名入口的概念模型](0096-history-and-head-model/README.md)；Private/ToShared 已删除，组内核/Branch 纵切与请求合同已收窄；候选清理、HS 登记/分页有局部见证，真实新布局与组发布待实施 |
+| 096 | [版本、历史与命名入口的概念模型](0096-history-and-head-model/README.md)；Private/ToShared 已删除，旧布局混组发布/冷续写获限定见证；下一片先贯穿来源 snapshot，再切换新历史布局与组内核，公共 API 尚未实施 |
 | 095 | [Repository 打开意图与业务保存准入](0095-repository-open-intent/README.md)；E 的限定验收保历史范围；Open/编辑分责保持，双 Schema 归属由 DB-096 统一 Catalog 取代 |
 | 094 | [有限支持真实 property backing field](0094-backing-field-support/README.md)；前期调研储备，范围与规模待摸清，未选为当前实施片 |
 | 093 | [显式存储分类有效性核对](0093-explicit-storage-classification/README.md)；已实施并完成源码及新 G 普通包限定验收；DG0024 拒绝遗漏分类，不开放普通 backing 持久化 |

@@ -158,7 +158,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
-| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | Private/ToShared 已删除；[组内核](design-branches/0096-history-and-head-model/group-kernel-design.md)与[Branch 纵切](design-branches/0096-history-and-head-model/branch-vertical-design.md)已细化，下一片为真实混组安装和 Parent 替换恢复。候选清理、HS 示意登记/分页见证不代替产品新布局或故障资格；续工顺序只查 DB-096 工作集 |
+| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | Private/ToShared 已删除；旧布局混组发布/冷续写获限定见证，不再扩展旧协调器。先做[来源 snapshot 接缝](design-branches/0096-history-and-head-model/history-source-seam.md)，再接新 Storage/单成员历史纵切，最后接组内核与故障验收；准确顺序和未决项只查 DB-096 工作集，原语见证不代替新布局资格 |
 | [DB-094 普通 property backing 支持](design-branches/0094-backing-field-support/README.md) | 真实消费者持续因普通 class 的封装/Equals/继承需求付出字段包装成本时，先用该模型摸清声明范围、编译级 Family 切换与历史升版的影响，再选择有限路线；目前仅调研，DB-093 完成不自动开启 |
 | [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |

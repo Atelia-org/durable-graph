@@ -35,11 +35,11 @@
 
 ## 当前焦点与下一步
 
-**当前停点：组内核与 Branch 纵切设计已收窄，两个局部机制见证通过（2026-10-19）。**本轮起点 `c077d1c`；[组内核](group-kernel-design.md)明确共同 Catalog、阶段清理/安装和失败矩阵，[Branch 纵切](branch-vertical-design.md)明确描述/内容资格、继承历史来源材料及创建交付。候选原语与既有相关测试15/15、独立 HS 示意 Probe 45断言通过；不是组协调器或新 DG 布局已经实施。产品仍是旧业务目录/Parent、每 checkout 内部 Catalog；未改产品 C#、固定依赖或推出过渡公共 API。Private 删除资格仍查[删除切片](private-removal.md)。
+**当前停点：旧布局混组原语见证已完成，下一片转入来源 snapshot 的内部接缝实施（2026-10-19）。**本轮起点 `35ae718`；真实 State/Event 共同 Catalog、一次 D/S 发布、按角色安装、全关冷读和两线 Delta 续写通过，[证据与限度](group-kernel-design.md#8-真实混组发布与冷续写见证)集中记录。根 build 零警告/错误，相关回归27/27。历史源码调查选中[复用 StoredGraphRevision 的较小方案](history-source-seam.md)，不新建 proof/token 或解析器；独立复核通过。产品仍是旧业务目录/Parent、每 checkout 内部 Catalog，未实现 Repository 组协调器或新 DG 布局，未改产品 C#、固定依赖。Private 删除资格仍查[删除切片](private-removal.md)。
 
-此前[首批机制调查](mechanism-feasibility.md)保留源码原语、创建/恢复/查询缺口与最小实验；其中 Private/混组候选已由本次决定退出，其余证据仍适用。
+此前[首批机制调查](mechanism-feasibility.md)保留源码原语、创建/恢复/查询缺口与最小实验；其中 Private/Shared Schema 混组候选已退出，其余证据仍适用。
 
-**压缩后恢复顺序：完整读本文 → [API 草图](api-sketch.md) → 按验证题读一份详细设计。先不继续扩展故事或海选名字，也不直接铺开产品重构。**
+**压缩后恢复顺序：完整读本文 → [来源接缝 §6 的 A 片](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威) → 对应源码/回归；涉及外观再读 [API 草图](api-sketch.md)。不重开命名/故事，不再扩展旧目录协调器测试平台。**
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -51,17 +51,17 @@
 
 ### 机制结论与下一片顺序
 
-- **发布：**一个 accepted Catalog＋操作内共同候选。清理不能统一 Dispose staging；真实原语见证支持逐成员 AbortPreparation，installed 后无操作。Event 丢弃临时身份，保 State/rewrite；全部 Base 安装和清理也在 outcome/fault 范围内。实际 CommitId 确认后才取得，Published 失败也可能拿不到 ID。
+- **发布：**一个 accepted Catalog＋操作内共同候选。staging/ready 逐成员 AbortPreparation，installed 后无操作。真实混组见证已验证共同编码、一次旧 D/S 发布、State 安装/Event 丢弃、冷续写；直接 HS 发布后必须关旧 owner，不能继续使用其陈旧目录缓存。全组 Base/guard/清理故障仍须真实内核验收。实际 CommitId 确认后才取得，Published 失败也可能拿不到 ID。
 - **创建：**三路径登记的公开 HS 成功组合已通过示意 Probe；未登记 Head 冷开隐藏、空 fork 立即可读且不产生 c0。root 的 D/S 可共同发布；实际 DG 图/Schema 与中断资格仍未验证。登记 Unknown/Published 错误保已知候选 BranchId；物理创建 Unknown、尚未尝试登记时 DG 确知未登记。
-- **恢复：**来源材料从 HS 准确历史取得并在同 owner 内贯穿 graph/decoder/normalized baseline，避免重复扫描与 Graph→Commit 反查。冷恢复需最近 State 及其严格前源（不足两个到根）；保留 tip Event 的轻量关系验证。已验证活 WC 的后续保存可复用来源结论。尚无真实新布局运行资格。
+- **恢复：**直接保留已有 StoredGraphRevision 到 decoder/normalized/热安装，CommitId 留在 Repository 层；不新增 proof/token 或 Graph→Commit 反查。先用当前 Parent 签发材料完成接缝，再改 HS 签发。冷恢复需最近 State 及其严格前源（不足两个到根），保 tip Event 轻量检查。物理 Delta 只核 source 角色与准确 prior，不扩大为递归历史审计。尚无真实新布局运行资格。
 - **查询：**描述/fork 只做入口角色检查，内容恢复再验 source/prior/Schema；新 ForkBranch 不是会先恢复对象的旧 ForkShared 改名。Kind 暂从小图 envelope 取得，避免重复存储；成本待测。已写[定向 origin 请求](headstore-origin-request.md)，未提交上游，不复制来源权威。
 - **分页：**首版选页满成功、工作预算耗尽整次失败，不交付已收集前缀。示意 Probe 已覆盖跨 fork/Before/根后空页/真实部分预算失败；固定旧 anchor 的20项页在较新后缀0/100/10000下冷/热最小预算都45，仅为健康 SingleEntry 计数，不是恒定 I/O 资格。
 
-下一片按两个独立结果推进，暂不直接铺开全部公开 API：
+下一片转为有依赖的三个结果，暂不铺开全部公开 API：
 
-1. **组线：**接仓库 accepted Catalog 与操作内共同候选，做真实 State/Event 混组的准备、发布、安装、冷读及后续 Delta；覆盖第二成员失败、Capture 后即时寿命检查、清理错误与确认后安装失败。旧目录可作内部生命周期见证，不发布过渡 `CommitBranches`。判据见[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)。
-2. **历史线：**先明确并资格化新 Storage 实验/产品依赖边界，再用真实 DG 图完成 `S0,E1,S1,E2` 旧点 fork→冷开→最近 State→Event/State 续写，保错 source/prior/Schema、唯一 State/无 State 到根反例；随后补登记中断。判据见[纵切 §6](branch-vertical-design.md#6-查询和实验顺序)。示意 Probe 不替代这片。
-3. **合流：**在新布局上验真正多业务 Head 共同发布/故障，之后定公开 C#、summary/BLOB 与 ID 字段支持。定向 origin 可独立交上游；目录容量/句柄和长 Event 前缀按实际测量决定是否需要优化，不先加索引。
+1. **A：来源 snapshot 内部贯穿。**以现行 ReadGraph/Append＋Parent 取得资格，不改 wire/公开 API、不提前加 expected-source 入口。decoder 复用首次 snapshot，decoded/normalized/CompleteInstallation 保留来源；warm/prepared/安装仍复核实际图。以冷热恢复→Event/State→再保存、wrong owner/fixture/fault、准确 Schema/source/prior 及窄计数验收。完整边界见[接缝 §6](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)。
+2. **B：新 Storage 资格＋单成员真实纵切。**精确新 pin/不兼容调用先验收；随后在隔离实施分支整体改一 Branch 一 Head、DG 登记与 HS 来源签发、删除业务 Parent并拒旧格式。从 E2 旧点 fork 的真实 S/E 冷恢复、再存 Delta、错 source/prior/Schema 与唯一/无 State 到根是合入门槛；不保两套产品布局。见[纵切](branch-vertical-design.md)。
+3. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断与完整公开 C#。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary/BLOB、ID 字段、定向 origin 和成本测量按依赖推进，不先加索引。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
@@ -73,11 +73,11 @@
 
 ## 本批完成边界
 
-本轮根 build 零警告/错误；固定旧 pin 下相关测试15/15（新增候选清理3例），范围与日志见[组内核 §7](group-kernel-design.md#7-已运行的候选生命周期见证)。独立实验锁定新 Storage `f8868b5`，45断言及单独 Release build 通过，准确 receipt/限制见[Probe](../../../experiments/BranchHeadMechanismProbe/README.md)。经独立契约/源码和断言复核；未跑产品全套、包、进程 kill、DG 新模型或故障原子性门禁。
+本轮固定旧 pin 下根 build 零警告/错误，相关测试27/27（仅混组 Fact 新增），日志与范围见[组内核 §8](group-kernel-design.md#8-真实混组发布与冷续写见证)。此前候选清理及新 Storage `f8868b5` 的45断言 HS [Probe](../../../experiments/BranchHeadMechanismProbe/README.md)保其原资格，本轮未重跑。独立复核新测试、接缝和实施顺序；未跑产品全套、包、进程 kill、DG 新模型或组故障原子性门禁。
 
 ## 实现与证据边界
 
-- 前轮统一 Catalog 见证起点为 DG `19bd6ae`；本轮从 `c077d1c`、Storage主工作树 `f8868b5` 开始，起点均干净。默认环境仍指向与 pin 不同的 sibling；根构建/候选测试显式使用独立 `731eef7` worktree，HS Probe 用另一独立 `f8868b5` worktree。新HeadStore产品接入未完成，后续不混用两个基线。
+- 本轮 DG 起点 `35ae718`；Storage主工作树仍 `f8868b5`，起点均干净且本轮未改上游。默认环境指向与 pin 不同的 sibling；根构建/测试显式使用独立 `731eef7` worktree。此前 HS Probe 用另一独立 `f8868b5` worktree；新 HeadStore 产品接入未完成，不混用两个基线。
 - 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
 - [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
 - [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**
@@ -96,6 +96,7 @@
 | 跨分支共同保存、已选请求路线与实验题 | [联合提交设计](multi-branch-commits.md) |
 | accepted Catalog、候选生命周期、组安装及下一片判据 | [组内核](group-kernel-design.md) |
 | 继承历史来源资格、最小布局与真实恢复纵切 | [Branch 纵切](branch-vertical-design.md) |
+| 下一实施片：现有 snapshot 贯穿、A/B 接线与验收 | [来源接缝](history-source-seam.md) |
 | 定向读取已登记 Head 的创建来源 | [上游窄请求](headstore-origin-request.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |
 | 上游实际交付、API和验收限度 | [交付复核](headstore-delivery-review.md) |
