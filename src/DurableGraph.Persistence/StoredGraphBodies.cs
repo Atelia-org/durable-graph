@@ -70,7 +70,24 @@ internal static class StoredGraphDecoder {
         Read(store, store.ReadGraph(graph), models, selected);
 
     internal static DecodedGraphRows Read(GraphRecordStore store, StoredGraphRevision snapshot,
-        ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) {
+        ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) =>
+        ReadCore(store, snapshot, models, selected, directoryKind: null);
+
+    internal static DecodedGraphRows ReadManagementDirectory(GraphRecordStore store, FrameAddress graph,
+        ManagementDirectoryKind kind) {
+        StoredGraphRevision snapshot = store.ReadGraph(graph);
+        if (snapshot.Kind != StoredGraphKind.Meta || snapshot.SchemaRoot is not null) {
+            throw new InvalidDataException("A management directory requires a Schema-free Meta graph.");
+        }
+        // The fixed builtin environment has no application models, upgrades or comparer resolver.
+        DecodedGraphRows decoded = ReadCore(store, snapshot, new StateModelRegistry().CreateEnvironment(),
+            selected: null, directoryKind: kind);
+        ManagementDirectoryReader.ValidateRows(decoded, kind);
+        return decoded;
+    }
+
+    private static DecodedGraphRows ReadCore(GraphRecordStore store, StoredGraphRevision snapshot,
+        ModelExecutionEnvironment? models, SchemaCatalogView? selected, ManagementDirectoryKind? directoryKind) {
         IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(snapshot);
         Dictionary<ObjectId, ObjectStateRecord> rows = [];
         Dictionary<ObjectId, ObjectStorageInfo> storage = [];
@@ -80,6 +97,10 @@ internal static class StoredGraphDecoder {
         foreach (ObjectVersionChain chain in chains) {
             uint id = chain.ObjectId;
             SchemaCatalogView? origin = null;
+            if (directoryKind is not null && chain.Entries.Any(static entry => entry.SchemaRoot is not null)) {
+                // Check every retained Base/Delta before any dynamic Schema load or body reader.
+                throw new InvalidDataException("A management object chain cannot use a dynamic Schema root.");
+            }
             if (chain.Entries[0].SchemaRoot is { } sourceSchema) {
                 if (models is null) { throw new InvalidDataException("A meta graph cannot use a dynamic source view."); }
                 if (!origins.TryGetValue(sourceSchema, out origin)) {
@@ -88,6 +109,7 @@ internal static class StoredGraphDecoder {
                 }
             }
             var decoded = TypedBaseBodyCodec.Decode(chain.Entries[0].Record.Body, origin);
+            if (directoryKind is { } kind) { ManagementDirectoryReader.RequireLayout(decoded.Layout, kind); }
             // A null model catalog is the meta reader, whose whitelist is deliberately finite.
             // Schema-free business container bodies use the standalone fixed reader instead.
             if (models is null && !BootstrapBindings.TryCode(decoded.Layout, out _)) {

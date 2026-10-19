@@ -13,6 +13,8 @@
 
 隔离分支只是容纳暂时不能通过全体调用的工作，并不能减少协议依赖。B2 不顺带实现多成员 CommitRequest 协调器、BLOB 管理、持久索引或性能优化；一成员保存仍须使用真实业务 Head，不能继续更新旧 name→graph 目录。
 
+不改变公开面和现行布局的前置内部接缝可独立验收；[D/T 窄读取片](directory-persistence.md#6-窄管理读取切片)属于此类。其合入不代表 B2 的新 Repository 合入门槛已经满足；目录候选和业务布局仍按本文整体闭合。
+
 ## 2. 最少协议选择
 
 以下是建议落实的具体形状。**D/T 改为复用现有 Dictionary 增量序列化，撤回专用整表 codec 作为施工选择。** 管理图的具体形状、角色验证、初始化与发布接线只在[目录持久化合同](directory-persistence.md)维护。原[独立 codec 见证](../../../experiments/BranchWireFormatProbe/README.md)的 D/T 容量结果仅作旧方案对照，Entry 小描述与 ID/摘要结论保留；它们均不证明新 Repository 已运行。

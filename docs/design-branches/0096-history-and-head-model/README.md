@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施。来源 snapshot 接缝 A、新 Storage 接入已验收；用户已选[复用 Dictionary 管理目录](directory-persistence.md)，替代 D/T 整表 codec。现有[真实 Meta/Delta 机制见证](../../../experiments/DirectoryDictionaryMechanismProbe/README.md)不等于产品切换，下一片按[整体切换计划](branch-cutover-plan.md)接管理目录和真实业务历史。文档对齐：2026-10-19。
+> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施。来源 snapshot 接缝 A、新 Storage 接入已验收；用户已选[复用 Dictionary 管理目录](directory-persistence.md)，替代 D/T 整表 codec。[窄管理读取切片](directory-persistence.md#6-窄管理读取切片)已接内部源码；下一片接目录候选与实际回读安装，再按[整体切换计划](branch-cutover-plan.md)接真实业务历史。内部读取与原语见证不等于 Repository 切换。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 

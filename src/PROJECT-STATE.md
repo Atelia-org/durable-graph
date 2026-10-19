@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：[B1 新 Storage 源码接入](../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)已验收，当前依赖 `f8868b5`；上游格式4拒旧，DG 自身公开 API、`P0R2` 和业务 Parent 保持。此前 A 的真实 snapshot 贯穿与保存再验证已实现。用户已选[复用 Dictionary 管理目录](../docs/design-branches/0096-history-and-head-model/directory-persistence.md)，撤回 D/T 专用整表 codec；Meta/Delta/联合发布的机制见证不改变产品资格。下一片按[B2 计划](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)接窄管理 reader/目录候选及真实业务历史，再迁移调用和接组内核。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。新 Branch API、组协调器与当前 pin 的普通包资格仍未完成；Private/ToShared 删除保已完成状态。
+2026-10-19：[B1 新 Storage 源码接入](../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)已验收，当前依赖 `f8868b5`；DG 自身公开 API、`P0R2` 和业务 Parent 保持。此前 A 的真实 snapshot 贯穿与保存再验证已实现。[Dictionary 目录窄读取切片](../docs/design-branches/0096-history-and-head-model/directory-persistence.md#6-窄管理读取切片)已增加内部入口，共用解码循环、拒绝历史动态 Schema、验证完整布局及条目角色，保持 S 原有限 reader；尚未接 Repository 新布局。下一片按[目录 §4.1](../docs/design-branches/0096-history-and-head-model/directory-persistence.md#41-下一片的最小状态与安装轮廓尚未实施)实施冻结基线、目录候选和实际回读安装，再按[B2 计划](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)切换真实业务历史与调用。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。新 Branch API、组协调器与当前 pin 的普通包资格仍未完成；Private/ToShared 删除保已完成状态。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下已回归，新历史模型另需真实纵切，不把它们混为同一次验收。
 
