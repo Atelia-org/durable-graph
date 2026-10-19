@@ -37,7 +37,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectId rootId;
         Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> originalEdges;
         Dictionary<ObjectId, ObjectStorageInfo> originalStorage;
-        PrivateFrameImage[] originalFrames;
+        EvidenceFrameImage[] originalFrames;
         using (Repository repository = Repository.CreateNew(template.Path, old.Models())) {
             using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
             uint firstMaximum = main.Baseline!.Objects.Keys.Max(id => id.Value);
@@ -53,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             old.Check(main.State!, 2, 1, 7);
             repository.CreateTag("user-v1", main.Head);
             schemaV1 = repository.SharedSchemaRoot!.Value;
-            originalFrames = PrivateReadFrames(PrivateResources(repository).Data);
+            originalFrames = EvidenceReadFrames(EvidenceResources(repository).Data);
         }
 
         // All source owners are closed. Copy every file and directory; never
@@ -87,7 +87,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 host.Check(repository.ReadState(repository.GetHead("main")), 2 + host.Offset, 1 + host.Offset, seven);
                 Assert.Equal(baseline, repository.ResolveTag("user-v1").RevisionAddress);
                 Assert.Equal(schemaV1, ReferenceGraphStore(repository).ReadGraph(baseline).SchemaRoot);
-                PrivateAssertFramesPreserved(PrivateResources(repository).Data, originalFrames);
+                EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, originalFrames);
             }
         }
         AssertSharedCopyHashes(templateHashes, SharedCopyFileHashes(template.Path));
@@ -135,7 +135,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (Repository repository = Repository.OpenReadOnlyExisting(release.Path, winner.Models())) {
             winner.Check(repository.ReadState(repository.GetHead("main")), 202, 201, 9000);
             winner.Check(repository.ReadState(repository.ResolveTag("user-v1")), 202, 201, 7);
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, originalFrames);
+            EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, originalFrames);
         }
         // The repository's current catalog now contains V2, but an old host can
         // still read the bookmarked V1 with its own exact historical Schema.

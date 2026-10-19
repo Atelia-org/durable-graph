@@ -241,11 +241,11 @@ Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
-## 工作副本与 Schema 归属
+## 工作副本与统一 Schema Catalog
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
-Open 负责资源读写；取得工作副本时由入口明确普通保存归属：`CreateSharedBranch`、`CreateSharedBranchFromEvent`、`CheckoutShared` 和 `ForkShared` 选择 Shared，`CheckoutPrivate` 选择 Private。得到工作副本后，普通 `CommitState` / `CommitEvent` 使用该固定归属；显式 ToShared 只为本次提交选择 Shared。
-`IsReadOnly` 表示底层资源是否只读。Schema 归属属于工作副本，不持久化；冷开后通过相应签出入口重新选择，同一个可写 Repository 可同时保有不同分支的 Shared/Private 工作副本并串行操作。
+Open 负责资源读写；`CreateSharedBranch`、`CreateSharedBranchFromEvent`、`CheckoutShared` 和 `ForkShared` 取得可提交的工作副本。所有 `CommitState` / `CommitEvent` 共用仓库的 Schema Catalog；不同类型及正常版本可以共存，同 SchemaKey 的已接受完整定义不可改形。
+`IsReadOnly` 表示底层资源是否只读。一个可写 Repository 可同时保有不同分支的工作副本并串行操作；业务分支不创建独立的 Schema 接纳路线。
 读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，普通 checkout 无 State 取创建时 shared；普通模型与 Family 按需闭合。State 提交可以推进持久 Schema 视图和保存基线，仍保留工作副本的执行环境；Event 不安装 State。V2 程序签出 V1 数据时已执行显式 Upgrade，得到 V2 内存对象，可以连续增量保存，无需每次提交后重新签出。
 独立 `ReadState` / `ReadEvent` 按被读图自己的准确 Schema 视图恢复。Dispose 后重新 Checkout 取得新的领域实例；有 State 时仍选择最近 State 的视图，不追到最新 shared 或 Event 的目录，也不重载代码配置。
 
@@ -255,11 +255,9 @@ Open 负责资源读写；取得工作副本时由入口明确普通保存归属
 `StateBindingContext.TryGetSchema` 是供核心准确解析／验证使用的 protected 实现接缝；普通 factory 通过 `BindSchema`／`ResolveReader` 等公开服务闭合能力。外部派生 context 可以 override 并在自身方法内调用；访问范围收窄只减少默认查询能力，不能验证用户闭包的行为。长期约束见[模型执行环境与 factory 行为](docs/DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)。
 Capture 必须提供 canonical current DTO，同布局保存／恢复正确往返持久字段和引用关系；历史值变化由显式 Upgrade 定义。exact current durable DTO 不调用历史 Normalize 委托。reader、引用遍历、比较器与 binding factory 不修改输入 DTO；Allocate/Hydrate 只创建和填充本次恢复图，业务初始化和视图专属 Transient 放在完整恢复交付之后。上述行为合同不证明任意自定义 reader 都能读回：Commit 成功不等于已执行 reader body 的全部验证。
 
-开发阶段先用 `CreateBranch(name, baselineCheckpoint)` 从固定用户快照建立分支，再用 `CheckoutPrivate(name)` 签出。在匹配历史 reader／Upgrade 的模型环境中，旧业务图恢复后保留存活对象身份、共享与循环，正常升版的布局保存为新 Base。私有保存只推进分支目录，不改 shared 根。两个操作分开：创建 ref 成功后，签出失败保留该名字及 baseline 指向；修正模型环境后可以重试。
-私有冷签出有 State 取 State.S 执行环境，纯 Event 前缀取 Head.S；meta 写来源总取当前 Head.S，不借 latest shared 补缺。已有私有定义不可改写；同 key 内容不同的未定稿版本应在不同 baseline fork 试验，需要继承已接受草稿的数据再改型则递增版本。普通 Shared 保存要求整个所选目录已被 shared 同形接受，否则 Capture 前拒绝。
-开发用 `DurableGraphSchemaHistoryMode=Off` 保已发布 history 输入而不冻结新候选；它不能忽略已有同版冲突。最终只交付一个版本时，从原 baseline 建立干净 final fork，执行定稿 Upgrade／必要重放，再接纳完整目录。具体流程和资格边界见 [DB-088](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
+新增 Schema 与业务提交共同原子发布；无新增定义时复用当前 Catalog。历史读取仍使用所选图和对象 batch 的准确 Schema，不能用最新目录替换历史解释。普通 Upgrade 保留存活对象身份、共享和循环，改型布局保存为新 Base；Event 不推进 State 基线。
 
-显式 `CommitStateToShared()`／`CommitStateToShared(nextState)`／`CommitEventToShared(domainEvent)` 可把当前 Head.S 的完整目录、待改定义和本次捕获布局合入最新 shared，包括业务不可达的声明。同形复用、新项加入、同 key 异形拒绝；新增 meta 与业务提交共同原子发布。该入口只为本次提交选择 Shared，不改变工作副本的后续默认归属或执行环境。Event 仍不推进 State 基线；无 rewrite 且完整布局相容的旧对象可保留原 head，不因 descriptor 编号不同强制重写。具体范围与源码／包资格见 [DB-087](docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#private-plan)。 DB-087 的有限自举停点保其历史资格；DB-088 删除特例后的 Development、Split 与 PrivateContainer 已通过新 G 普通包故事，当前来源与限定验收见 [DB-088 §7](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)；旧包结果仍只解释各自历史版本。
+未定稿的同版本异形模型使用关闭后的完整 Repository 副本隔离，流程见[开发尚未定稿的 Schema](#开发尚未定稿的-schema)。`CheckoutPrivate` 和 `Commit...ToShared` 已删除，直接使用普通签出和提交。分支目录格式标识由 `P0R1` 改为 `P0R2`；读写和只读打开均拒绝旧库，不自动导入旧 Private 历史。实验数据可重建；需要保留旧数据时应先用对应旧版本另行导出。范围和验收见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)。
 
 ## 调整保存策略
 
@@ -440,15 +438,15 @@ Build 工具会协调同目录的 Publish/Verify 操作，防止重叠发布写�
 只停止候选写入／Verify；已经接纳的同版本定义仍不可改形。草稿输入应只含此前已发布的 history，
 定稿时再显式 `Publish`，随后 Clean／Rebuild 并 `Verify`。无需删除此前已发布的 history。
 
-复现用户场景时，可固定一个旧版 checkpoint，以 `CreateBranch(name, checkpoint)` 建分支，再
-`CheckoutPrivate(name)` 按当前模型 Upgrade 原图并保留仍存活对象身份。重要模型调整后从同一
-baseline 建立新的 dev fork；需要继承上次已保存草稿数据再改模型时，应递增 Schema 版本，
-并在该 dev 独立的 history 中保留相邻模板与 Upgrade。两个公开操作分开完成，签出失败不会
-撤销已经发布的新分支。
+复现用户场景时，关闭 baseline 的所有工作副本、Repository 和底层资源，再复制整个仓库目录。
+每个草稿使用自己的数据副本、模型代码、编译 history 与输出目录；用 `CheckoutShared` 和普通
+`CommitState` / `CommitEvent` 开发。重要模型调整后从干净 baseline 重建试验副本；需要继承
+上次已保存草稿再改型时，应递增 Schema 版本，并保留相邻模板与 Upgrade。
 
-完整 ToShared 会导入全部声明；只交付一个定稿新版本时，从固定 baseline 建立干净的 final fork，
-执行 baseline→定稿的 Upgrade 和必要重放，再接纳 compiler history 与运行时 Shared。
-实际开发故事与特例删减边界见 [DB-088](docs/design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
+只交付一个定稿新版本时，另取干净 baseline 副本，执行 baseline→定稿的 Upgrade 和必要重放，
+再接纳 compiler history 与运行时 Catalog。没有试验帧合库或自动推广草稿数据的入口。
+副本保留原仓库身份与已有坐标，应始终通过各自路径使用；不能凭相同 ID 判断分化后的数据相同。
+设计、可执行见证和限度见 [DB-096 统一 Catalog](docs/design-branches/0096-history-and-head-model/shared-schema-only.md)。
 
 ## 当前能放进模型的内容
 

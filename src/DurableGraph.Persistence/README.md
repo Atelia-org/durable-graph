@@ -6,7 +6,7 @@
 固定员工的持久 SchemaId 与 Family 宿主保持，C 的生成与存档资格见[实施记录](../../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)。
 业务图 wire 标识保持；上游 HeadStore 格式与三入口书签布局变更见 [DB-096](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。原 meta 内核合同与限定资格维护在
 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
-开发 Schema 与查询后继见 DB-088/089，不从旧逐片“下一步”恢复排期。
+统一 Catalog 与 Private/ToShared 删除见 [DB-096 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)；开发隔离改用完整关闭库副本。DB-088 保历史故事，查询后继见 DB-089，不从旧逐片“下一步”恢复排期。
 
 两种变化来源共用一套对象版本保存和一个发布 owner：业务 Capture/比较与受控 meta 编辑。
 catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存活目录使用 Dictionary body。
@@ -27,7 +27,7 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 | 两根与发布/fault/资源 owner | [RepositoryResources](RepositoryResources.MetaBootstrap.cs) |
 | owned 物理缓存 | [GraphPhysicalReadCache](GraphPhysicalReadCache.cs)、[缓存合同](../../docs/design-branches/0067-owned-revision-read-cache-design/README.md) |
 
-准入、private 与 ToShared 规则从 DB-087 当前合同进入；实际普通包门禁见
+当前保存统一向仓库 Catalog 准备，准确历史 Schema 与 source/prior 验证保留；旧 Private/ToShared 合同不再适用。实际普通包门禁见
 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)。
 旧 raw 消费者只保模型编译资产，不授原运行故事资格。进程 Kill 见证使用
 [MetaBootstrapCrashProbe](../../experiments/MetaBootstrapCrashProbe/README.md)，不授断电保证。

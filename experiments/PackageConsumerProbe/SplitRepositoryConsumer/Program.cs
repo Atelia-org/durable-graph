@@ -26,11 +26,11 @@ internal static class Program {
         string? MainState = null, string? RewriteEvent = null, string? RewriteState = null, string? RewriteSchema = null,
         uint? CurrentWidgetDescriptorId = null, StorageEvidence[]? RewriteObjects = null, FrameImage[]? RewriteFrames = null,
         string? ContinuationState = null, StorageEvidence[]? ContinuationObjects = null, FrameImage[]? ContinuationFrames = null,
-        string? PrivateSeedState = null, string? PrivateState = null, string? PrivateSchema = null, string? PrivateCatalogEvent = null,
-        uint? PrivateRootId = null, uint? PrivateListId = null, uint? PrivateUnusedDescriptorId = null,
-        StorageEvidence[]? PrivateSeedObjects = null, StorageEvidence[]? PrivateObjects = null, FrameImage[]? PrivateFrames = null,
-        string? PromotionEvent = null, string? PromotionSchema = null, uint? PromotedUnusedDescriptorId = null,
-        StorageEvidence[]? PromotionObjects = null, FrameImage[]? PromotionFrames = null,
+        string? CatalogSeedState = null, string? CatalogState = null, string? CatalogSchema = null, string? CatalogAcceptanceEvent = null,
+        uint? CatalogRootId = null, uint? CatalogListId = null, uint? CatalogEventDescriptorId = null,
+        StorageEvidence[]? CatalogSeedObjects = null, StorageEvidence[]? CatalogObjects = null, FrameImage[]? CatalogFrames = null,
+        string? FollowupEvent = null, string? FollowupSchema = null, uint? FollowupEventDescriptorId = null,
+        StorageEvidence[]? FollowupObjects = null, FrameImage[]? FollowupFrames = null,
         string? SharedContinuationState = null, StorageEvidence[]? SharedContinuationObjects = null, FrameImage[]? SharedContinuationFrames = null);
     private sealed record RefImage(HeadEntryId Revision, byte[] Payload);
 
@@ -257,231 +257,213 @@ internal static class Program {
         HashSet<string> previousFrames = witness.SeedFrames.Concat(witness.RewriteFrames!).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
         Witness next = witness with { ContinuationState = Hex(continued), ContinuationObjects = updated,
             ContinuationFrames = Frames(actual).Where(frame => !previousFrames.Contains(frame.Address)).ToArray() };
-        next = PrivateStory(database, next, actual);
-        next = PromotionStory(database, next);
+        next = CatalogStory(database, next, actual);
+        next = FollowupStory(database, next);
         WriteJson(witnessPath, next);
         return new { next.ContinuationState, Objects = updated, SingleListDelta = true, ExactPrior = true, IdsPreserved = true,
             ActualWireH = true, RetainedWidgetHeads = true, ActualRefsVerified = true, CompleteFramesPreserved = true,
-            next.PrivateSeedState, next.PrivateState, next.PrivateSchema,
-            PrivateObjects = next.PrivateObjects, PrivateUnusedDescriptor = next.PrivateUnusedDescriptorId,
-            PrivateBaselineIdentities = true, PrivateEventAcceptsMetaOnly = true, PrivateFrozenCatalog = true, PrivateColdListDelta = true, PrivateSharedRootUnchanged = true, PrivateSharedSaveRejected = true,
-            PrivateHotStateRetained = true, PrivateIndependentRead = true, PrivateSameOwnerCheckout = true,
-            next.PromotionEvent, next.PromotionSchema, next.SharedContinuationState, next.PromotedUnusedDescriptorId,
-            CompletePromotion = true, PromotionRefsAdvanced = true, PromotionEventRetainsState = true,
-            SharedColdOwnerListDelta = true, PromotionRetainedOrigins = true };
+            next.CatalogSeedState, next.CatalogState, next.CatalogSchema,
+            CatalogObjects = next.CatalogObjects, CatalogEventDescriptor = next.CatalogEventDescriptorId,
+            CatalogBaselineIdentities = true, CatalogEventAcceptsMetaOnly = true, CatalogRetainedDeclarations = true, CatalogColdListDelta = true, CatalogSharedRootAdvanced = true,
+            CatalogHotStateRetained = true, CatalogIndependentRead = true, CatalogSameOwnerCheckout = true,
+            next.FollowupEvent, next.FollowupSchema, next.SharedContinuationState, next.FollowupEventDescriptorId,
+            FollowupCatalogUnchanged = true, FollowupBranchAdvanced = true, FollowupEventRetainsState = true,
+            SharedColdOwnerListDelta = true, FollowupRetainedOrigins = true };
     }
 
-    private static Witness PrivateStory(string database, Witness witness, WireInspector.Snapshot shared) {
-        RefImage sharedRef = ReadSharedRef(database);
+    private static Witness CatalogStory(string database, Witness witness, WireInspector.Snapshot shared) {
+        RefImage sharedRef = ReadSharedRef(database), branchRef = ReadRefImage(database, 1);
         FrameAddress initial = Address(witness.ContinuationState!), catalogEvent;
         uint rootId = witness.RootId, listId = witness.ListId;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            // Publish the baseline ref first; explicit private checkout restores its
-            // original identities. Registration alone must not persist the Event type.
-            repository.CreateBranch("private", repository.GetHead("fork"));
-            using BranchCheckout created = repository.CheckoutPrivate("private");
+            // Fork the real baseline; registration alone must not persist the Event type.
+            repository.CreateBranch("catalog", repository.GetHead("fork"));
+            using BranchCheckout created = repository.CheckoutShared("catalog");
             Widget root = Check(created.State, upgraded: true, atSeven: 201);
             Need(created.Head.RevisionAddress == initial && created.StateRevisionAddress == initial &&
-                created.StateId!.Value.Value == rootId, "Private fork must restore the actual baseline identities.");
-            catalogEvent = created.CommitEvent(new PrivateUnused { Value = 41 }).RevisionAddress;
+                created.StateId!.Value.Value == rootId, "Catalog fork must restore the actual baseline identities.");
+            catalogEvent = created.CommitEvent(new CatalogEvent { Value = 41 }).RevisionAddress;
             Need(created.Head.RevisionAddress == catalogEvent && created.StateRevisionAddress == initial &&
                 created.StateId!.Value.Value == rootId && ReferenceEquals(created.State, root),
-                "Private Event must accept meta without advancing the State baseline, identity or instance.");
+                "Catalog Event must accept meta without advancing the State baseline, identity or instance.");
         }
         WireInspector.Snapshot seeded = WireInspector.Read(database);
         WireInspector.Graph seedGraph = seeded.Graph(initial), eventGraph = seeded.Graph(catalogEvent);
-        FrameAddress privateSchema = RequiredSchema(eventGraph);
-        Need(privateSchema != Address(witness.RewriteSchema!) &&
+        FrameAddress catalogSchema = RequiredSchema(eventGraph);
+        Need(catalogSchema != Address(witness.RewriteSchema!) &&
             RequiredSchema(seedGraph) == Address(witness.RewriteSchema!) &&
             eventGraph.Kind == WireInspector.GraphKind.Event && eventGraph.Parent == initial &&
             eventGraph.SourceGraph == initial && seedGraph.RootId == rootId,
-            "Private Event must pin its newly accepted directory independently of the older State S.");
+            "Catalog Event must pin its newly accepted directory independently of the older State S.");
         Need(CheckCatalog(shared, RequiredSchema(seedGraph), current: true) == witness.CurrentWidgetDescriptorId,
             "The baseline catalog must not already contain the Event declaration.");
-        uint unused = CheckPrivateCatalog(seeded, privateSchema, witness);
+        uint unused = CheckEventCatalog(seeded, catalogSchema, witness);
         StorageEvidence[] initialRows = Storage(seeded, seedGraph);
         Need(initialRows.SequenceEqual(witness.ContinuationObjects!), "Fork changed source heads, H or IDs.");
-        Need(SameSharedRef(sharedRef, ReadSharedRef(database)), "Private ref creation and Event changed shared ref2.");
-        RejectOrdinaryPrivateSaves(database, catalogEvent, initial);
+        Need(seeded.SharedSchemaRoot == catalogSchema && !SameSharedRef(sharedRef, ReadSharedRef(database)) &&
+            !SameRefImage(branchRef, ReadRefImage(database, 1)),
+            "The Event must publish the new declaration and branch head into their actual formal refs.");
+        RefImage acceptedSharedRef = ReadSharedRef(database);
 
         FrameAddress next;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout current = repository.CheckoutPrivate("private");
+            using BranchCheckout current = repository.CheckoutShared("catalog");
             Widget root = Check(current.State, upgraded: true, atSeven: 201);
             Need(current.Head.RevisionAddress == catalogEvent && current.StateRevisionAddress == initial && current.StateId!.Value.Value == rootId,
-                "Cold explicit private checkout must import its own exact root identity and source.");
+                "Cold Shared checkout must import its own exact root identity and source.");
             root.Numbers[7] = 202;
             CheckpointAddress saved = current.CommitState();
             next = saved.RevisionAddress;
             Need(ReferenceEquals(root, Check(current.State, upgraded: true, atSeven: 202)) &&
                 current.StateId!.Value.Value == rootId && current.StateRevisionAddress == next,
-                "Confirmed private State must accept the original edited instances and identity.");
+                "Confirmed State must accept the original edited instances and identity.");
 
             Widget independent = Check(repository.ReadState(saved), upgraded: true, atSeven: 202);
             Need(!ReferenceEquals(root, independent) && !ReferenceEquals(root.Child, independent.Child) &&
                 !ReferenceEquals(root.Numbers, independent.Numbers),
                 "Same-owner independent State read must restore equal values in independent mutable instances.");
             current.Dispose();
-            using BranchCheckout signedAgain = repository.CheckoutPrivate("private");
+            using BranchCheckout signedAgain = repository.CheckoutShared("catalog");
             Widget restored = Check(signedAgain.State, upgraded: true, atSeven: 202);
             Need(signedAgain.Head.RevisionAddress == next && signedAgain.StateRevisionAddress == next &&
-                signedAgain.StateId!.Value.Value == rootId && repository.GetHead("private").RevisionAddress == next &&
+                signedAgain.StateId!.Value.Value == rootId && repository.GetHead("catalog").RevisionAddress == next &&
                 !ReferenceEquals(root, restored) && !ReferenceEquals(root.Child, restored.Child) &&
                 !ReferenceEquals(root.Numbers, restored.Numbers) && !ReferenceEquals(independent, restored) &&
                 !ReferenceEquals(independent.Child, restored.Child) && !ReferenceEquals(independent.Numbers, restored.Numbers),
-                "Same-owner private recheckout must retain the saved State and identity while restoring an independent graph.");
+                "Same-owner recheckout must retain the saved State and identity while restoring an independent graph.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(next);
         Need(graph.Parent == catalogEvent && graph.SourceGraph == initial && graph.RootId == rootId &&
-            RequiredSchema(graph) == privateSchema && graph.OwnedBatch is not null &&
+            RequiredSchema(graph) == catalogSchema && graph.OwnedBatch is not null &&
             graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).SequenceEqual(new[] { listId }),
-            "Private cold continuation must write only the changed List against its exact State and frozen S.");
+            "Catalog cold continuation must write only the changed List against its exact State and accepted S.");
         var priorList = seeded.ObjectChain(initial, listId);
         var currentList = actual.ObjectChain(next, listId);
         var delta = currentList.Entries[^1];
         Need(delta.Record.Kind == ObjectVersionKind.Delta && delta.Record.PriorAddress == priorList.Head &&
-            delta.ContainingBatch == graph.OwnedBatch && delta.SourceGraph == initial && delta.SchemaRoot == privateSchema &&
+            delta.ContainingBatch == graph.OwnedBatch && delta.SourceGraph == initial && delta.SchemaRoot == catalogSchema &&
             currentList.H == checked(priorList.H + delta.Record.ActualPayloadBytes),
-            "Private List Delta must preserve its exact prior and add actual encoded payload bytes to H.");
+            "Catalog List Delta must preserve its exact prior and add actual encoded payload bytes to H.");
         StorageEvidence[] rows = Storage(actual, graph);
-        Need(rows.Select(row => row.Id).SequenceEqual(initialRows.Select(row => row.Id)), "Private continuation changed complete membership IDs.");
+        Need(rows.Select(row => row.Id).SequenceEqual(initialRows.Select(row => row.Id)), "Catalog continuation changed complete membership IDs.");
         foreach (StorageEvidence row in initialRows.Where(row => row.Id != listId)) {
-            Need(rows.Single(candidate => candidate.Id == row.Id) == row, "Private continuation changed a retained Widget head/H.");
+            Need(rows.Single(candidate => candidate.Id == row.Id) == row, "Catalog continuation changed a retained Widget head/H.");
         }
-        Need(CheckPrivateCatalog(actual, privateSchema, witness) == unused, "Private frozen declarations or IDs changed after cold saving.");
-        CheckRefs(actual, Address(witness.RewriteSchema!), ("main", Address(witness.MainState!)),
-            ("fork", Address(witness.ContinuationState!)), ("private", next));
+        Need(CheckEventCatalog(actual, catalogSchema, witness) == unused, "Catalog accepted declarations or IDs changed after cold saving.");
+        CheckRefs(actual, catalogSchema, ("main", Address(witness.MainState!)),
+            ("fork", Address(witness.ContinuationState!)), ("catalog", next));
         CheckStorage(actual, actual.Graph(Address(witness.ContinuationState!)), witness.ContinuationObjects!);
         CheckFrames(actual, Frames(shared));
-        Need(SameSharedRef(sharedRef, ReadSharedRef(database)), "Private saves changed the actual shared ref revision or payload.");
+        Need(SameSharedRef(acceptedSharedRef, ReadSharedRef(database)), "Saving known layouts must retain the accepted shared ref.");
         Dictionary<string, string> beforeRead = FileImages(database);
         using (Repository reader = Repository.OpenReadOnlyExisting(database, Models())) {
             Check(reader.ReadState(reader.GetHead("main")), upgraded: true);
             Check(reader.ReadState(reader.GetHead("fork")), upgraded: true, atSeven: 201);
-            Check(reader.ReadState(reader.GetHead("private")), upgraded: true, atSeven: 202);
-            Need(reader.ReadEvent(reader.ReadFrames("private").Single(frame => frame.RevisionAddress == catalogEvent)) is PrivateUnused { Value: 41 },
-                "Readonly must recover the generated Event through its own accepted private S.");
+            Check(reader.ReadState(reader.GetHead("catalog")), upgraded: true, atSeven: 202);
+            Need(reader.ReadEvent(reader.ReadFrames("catalog").Single(frame => frame.RevisionAddress == catalogEvent)) is CatalogEvent { Value: 41 },
+                "Readonly must recover the generated Event through its own accepted historical S.");
         }
-        Need(SameFiles(beforeRead, FileImages(database)), "Readonly shared/private cold recovery changed repository files.");
+        Need(SameFiles(beforeRead, FileImages(database)), "Readonly cold recovery changed repository files.");
         HashSet<string> oldFrames = Frames(shared).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
-        return witness with { PrivateSeedState = Hex(initial), PrivateState = Hex(next), PrivateSchema = Hex(privateSchema), PrivateCatalogEvent = Hex(catalogEvent),
-            PrivateRootId = rootId, PrivateListId = listId, PrivateUnusedDescriptorId = unused,
-            PrivateSeedObjects = initialRows, PrivateObjects = rows,
-            PrivateFrames = Frames(actual).Where(frame => !oldFrames.Contains(frame.Address)).ToArray() };
+        return witness with { CatalogSeedState = Hex(initial), CatalogState = Hex(next), CatalogSchema = Hex(catalogSchema), CatalogAcceptanceEvent = Hex(catalogEvent),
+            CatalogRootId = rootId, CatalogListId = listId, CatalogEventDescriptorId = unused,
+            CatalogSeedObjects = initialRows, CatalogObjects = rows,
+            CatalogFrames = Frames(actual).Where(frame => !oldFrames.Contains(frame.Address)).ToArray() };
     }
 
-    private static void RejectOrdinaryPrivateSaves(string database, FrameAddress eventHead, FrameAddress initial) {
-        Dictionary<string, string> before = FileImages(database);
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout ordinary = repository.CheckoutShared("private");
-            Widget root = Check(ordinary.State, upgraded: true, atSeven: 201);
-            ObjectId? rootId = ordinary.StateId;
-            foreach (Action save in new Action[] { () => ordinary.CommitState(), () => ordinary.CommitEvent(root) }) {
-                bool rejected = false;
-                try { save(); }
-                catch (InvalidOperationException) { rejected = true; }
-                Need(rejected && !repository.IsFaulted && ordinary.Head.RevisionAddress == eventHead &&
-                    ordinary.StateRevisionAddress == initial && ordinary.StateId == rootId && ReferenceEquals(ordinary.State, root) &&
-                    repository.GetHead("private").RevisionAddress == eventHead,
-                    "A Shared checkout must reject the complete unmatched private declaration without advancing or faulting.");
-            }
-        }
-        Need(SameFiles(before, FileImages(database)), "Rejected ordinary private-head saves changed repository files.");
-    }
-
-    private static uint CheckPrivateCatalog(WireInspector.Snapshot actual, FrameAddress schema, Witness witness) {
+    private static uint CheckEventCatalog(WireInspector.Snapshot actual, FrameAddress schema, Witness witness) {
         var catalog = actual.Catalogs[schema];
         Need(catalog.DeclaredIds.Count == 3 && catalog.WidgetDescriptors.Count == 2 &&
             catalog.WidgetDescriptors[1] == witness.WidgetDescriptorId && catalog.WidgetDescriptors[2] == witness.CurrentWidgetDescriptorId &&
-            catalog.PrivateUnusedDescriptor is { } unused && catalog.DeclaredIds.Contains(unused) &&
+            catalog.CatalogEventDescriptor is { } unused && catalog.DeclaredIds.Contains(unused) &&
             unused != witness.WidgetDescriptorId && unused != witness.CurrentWidgetDescriptorId,
-            "Private full catalog must retain unreachable V1/current V2 IDs and the State-unreachable SG Event schema.");
-        return catalog.PrivateUnusedDescriptor!.Value;
+            "The accepted catalog must retain unreachable V1/current V2 IDs and the State-unreachable SG Event schema.");
+        return catalog.CatalogEventDescriptor!.Value;
     }
 
-    private static Witness PromotionStory(string database, Witness witness) {
-        FrameAddress privateState = Address(witness.PrivateState!);
+    private static Witness FollowupStory(string database, Witness witness) {
+        FrameAddress catalogState = Address(witness.CatalogState!);
         WireInspector.Snapshot before = WireInspector.Read(database);
         RefImage oldBranchRef = ReadRefImage(database, 1), oldSharedRef = ReadRefImage(database, 2);
-        FrameAddress promotedEvent;
+        FrameAddress followupEvent;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout current = repository.CheckoutPrivate("private");
+            using BranchCheckout current = repository.CheckoutShared("catalog");
             Widget root = Check(current.State, upgraded: true, atSeven: 202);
             ObjectId? rootId = current.StateId;
-            promotedEvent = current.CommitEventToShared(root).RevisionAddress;
-            Need(current.Head.RevisionAddress == promotedEvent && current.StateRevisionAddress == privateState &&
+            followupEvent = current.CommitEvent(root).RevisionAddress;
+            Need(current.Head.RevisionAddress == followupEvent && current.StateRevisionAddress == catalogState &&
                 current.StateId == rootId && ReferenceEquals(current.State, root),
-                "Explicit shared Event must accept meta and Head without accepting a new State baseline or instance.");
+                "Ordinary Event must accept Head without accepting a new State baseline or instance.");
         }
-        WireInspector.Snapshot promoted = WireInspector.Read(database);
-        FrameAddress sharedSchema = promoted.SharedSchemaRoot ?? throw new InvalidDataException("Promotion did not publish shared S.");
-        uint unused = CheckPrivateCatalog(promoted, sharedSchema, witness);
-        RefImage promotedBranchRef = ReadRefImage(database, 1), promotedSharedRef = ReadRefImage(database, 2);
-        Need(sharedSchema != Address(witness.RewriteSchema!) &&
-            oldBranchRef.Revision != promotedBranchRef.Revision && !oldBranchRef.Payload.AsSpan().SequenceEqual(promotedBranchRef.Payload) &&
-            oldSharedRef.Revision != promotedSharedRef.Revision && !oldSharedRef.Payload.AsSpan().SequenceEqual(promotedSharedRef.Payload),
-            "Successful promotion must publish both actual formal refs and accept the previously private unused declaration.");
-        WireInspector.Graph domainEvent = promoted.Graph(promotedEvent), previous = promoted.Graph(privateState);
-        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == privateState && domainEvent.SourceGraph == privateState &&
-            RequiredSchema(domainEvent) == sharedSchema && domainEvent.RootId == witness.PrivateRootId &&
+        WireInspector.Snapshot followup = WireInspector.Read(database);
+        FrameAddress sharedSchema = followup.SharedSchemaRoot ?? throw new InvalidDataException("Followup did not publish shared S.");
+        uint unused = CheckEventCatalog(followup, sharedSchema, witness);
+        RefImage followupBranchRef = ReadRefImage(database, 1), followupSharedRef = ReadRefImage(database, 2);
+        Need(sharedSchema == Address(witness.CatalogSchema!) &&
+            oldBranchRef.Revision != followupBranchRef.Revision && !oldBranchRef.Payload.AsSpan().SequenceEqual(followupBranchRef.Payload) &&
+            SameRefImage(oldSharedRef, followupSharedRef),
+            "A known-layout Event must advance the business ref while retaining the accepted shared catalog.");
+        WireInspector.Graph domainEvent = followup.Graph(followupEvent), previous = followup.Graph(catalogState);
+        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == catalogState && domainEvent.SourceGraph == catalogState &&
+            RequiredSchema(domainEvent) == sharedSchema && domainEvent.RootId == witness.CatalogRootId &&
             domainEvent.DirectoryRoot == previous.DirectoryRoot && domainEvent.OwnedBatch is null,
-            "The no-change promotion Event must preserve the actual directory while selecting the complete shared view.");
-        CheckStorage(promoted, domainEvent, witness.PrivateObjects!);
-        CheckStorage(promoted, previous, witness.PrivateObjects!);
-        CheckRefs(promoted, sharedSchema, ("main", Address(witness.MainState!)),
-            ("fork", Address(witness.ContinuationState!)), ("private", promotedEvent));
-        CheckFrames(promoted, Frames(before));
+            "The no-change Event must preserve the actual directory and accepted shared view.");
+        CheckStorage(followup, domainEvent, witness.CatalogObjects!);
+        CheckStorage(followup, previous, witness.CatalogObjects!);
+        CheckRefs(followup, sharedSchema, ("main", Address(witness.MainState!)),
+            ("fork", Address(witness.ContinuationState!)), ("catalog", followupEvent));
+        CheckFrames(followup, Frames(before));
 
         // This is a fresh owner in the Continue PID. The final Verify PID stays
         // wholly read-only; no claim of a second writer process is made here.
         FrameAddress continued;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout current = repository.CheckoutShared("private");
+            using BranchCheckout current = repository.CheckoutShared("catalog");
             Widget root = Check(current.State, upgraded: true, atSeven: 202);
-            Need(current.Head.RevisionAddress == promotedEvent && current.StateRevisionAddress == privateState &&
-                current.StateId!.Value.Value == witness.PrivateRootId,
-                "Cold Shared checkout must restore the previous State while preserving the newly promoted Event head.");
+            Need(current.Head.RevisionAddress == followupEvent && current.StateRevisionAddress == catalogState &&
+                current.StateId!.Value.Value == witness.CatalogRootId,
+                "Cold Shared checkout must restore the previous State while preserving the newer Event head.");
             root.Numbers[7] = 203;
             continued = current.CommitState().RevisionAddress;
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(continued);
-        uint listId = witness.PrivateListId!.Value;
-        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == promotedEvent && graph.SourceGraph == privateState &&
-            RequiredSchema(graph) == sharedSchema && graph.RootId == witness.PrivateRootId && graph.OwnedBatch is not null &&
+        uint listId = witness.CatalogListId!.Value;
+        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == followupEvent && graph.SourceGraph == catalogState &&
+            RequiredSchema(graph) == sharedSchema && graph.RootId == witness.CatalogRootId && graph.OwnedBatch is not null &&
             graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).SequenceEqual(new[] { listId }),
             "Cold Shared State must use the Event Parent, original State content source, and only a new List record.");
-        var prior = before.ObjectChain(privateState, listId);
+        var prior = before.ObjectChain(catalogState, listId);
         var chain = actual.ObjectChain(continued, listId);
         var delta = chain.Entries[^1];
-        Need(delta.Record.Kind == ObjectVersionKind.Delta && delta.Record.PriorAddress == prior.Head && delta.SourceGraph == privateState &&
+        Need(delta.Record.Kind == ObjectVersionKind.Delta && delta.Record.PriorAddress == prior.Head && delta.SourceGraph == catalogState &&
             delta.SchemaRoot == sharedSchema && delta.ContainingBatch == graph.OwnedBatch &&
             chain.H == checked(prior.H + delta.Record.ActualPayloadBytes),
-            "Shared continuation Delta must extend the exact private State head and its actual wire H.");
+            "Shared continuation Delta must extend the exact State head and its actual wire H.");
         StorageEvidence[] rows = Storage(actual, graph);
-        Need(rows.Select(row => row.Id).SequenceEqual(witness.PrivateObjects!.Select(row => row.Id)), "Promotion changed complete live IDs.");
-        foreach (StorageEvidence row in witness.PrivateObjects!.Where(row => row.Id != listId)) {
+        Need(rows.Select(row => row.Id).SequenceEqual(witness.CatalogObjects!.Select(row => row.Id)), "Followup changed complete live IDs.");
+        foreach (StorageEvidence row in witness.CatalogObjects!.Where(row => row.Id != listId)) {
             Need(rows.Single(candidate => candidate.Id == row.Id) == row, "Shared continuation rewrote a compatible retained Widget head/H.");
         }
         foreach (uint id in graph.Heads.Keys) {
-            Need(actual.ObjectChain(continued, id).Entries[0].ContainingBatch == before.ObjectChain(privateState, id).Entries[0].ContainingBatch &&
-                actual.ObjectChain(continued, id).Entries[0].SchemaRoot == before.ObjectChain(privateState, id).Entries[0].SchemaRoot,
-                "Retained Base interpretation must remain tied to its exact private origin S.");
+            Need(actual.ObjectChain(continued, id).Entries[0].ContainingBatch == before.ObjectChain(catalogState, id).Entries[0].ContainingBatch &&
+                actual.ObjectChain(continued, id).Entries[0].SchemaRoot == before.ObjectChain(catalogState, id).Entries[0].SchemaRoot,
+                "Retained Base interpretation must remain tied to its exact historical origin S.");
         }
-        Need(CheckPrivateCatalog(actual, sharedSchema, witness) == unused && actual.SharedSchemaRoot == sharedSchema,
-            "Cold Shared saving lost the complete promoted catalog or changed its accepted descriptor identity.");
+        Need(CheckEventCatalog(actual, sharedSchema, witness) == unused && actual.SharedSchemaRoot == sharedSchema,
+            "Cold Shared saving lost the complete accepted catalog or changed its accepted descriptor identity.");
         CheckRefs(actual, sharedSchema, ("main", Address(witness.MainState!)),
-            ("fork", Address(witness.ContinuationState!)), ("private", continued));
+            ("fork", Address(witness.ContinuationState!)), ("catalog", continued));
         CheckStorage(actual, graph, rows);
-        CheckFrames(actual, Frames(promoted));
+        CheckFrames(actual, Frames(followup));
         HashSet<string> beforeFrames = Frames(before).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
-        HashSet<string> promotedFrames = Frames(promoted).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
-        return witness with { PromotionEvent = Hex(promotedEvent), PromotionSchema = Hex(sharedSchema), PromotedUnusedDescriptorId = unused,
-            PromotionObjects = Storage(promoted, domainEvent),
-            PromotionFrames = Frames(promoted).Where(frame => !beforeFrames.Contains(frame.Address)).ToArray(),
+        HashSet<string> followupFrames = Frames(followup).Select(frame => frame.Address).ToHashSet(StringComparer.Ordinal);
+        return witness with { FollowupEvent = Hex(followupEvent), FollowupSchema = Hex(sharedSchema), FollowupEventDescriptorId = unused,
+            FollowupObjects = Storage(followup, domainEvent),
+            FollowupFrames = Frames(followup).Where(frame => !beforeFrames.Contains(frame.Address)).ToArray(),
             SharedContinuationState = Hex(continued), SharedContinuationObjects = rows,
-            SharedContinuationFrames = Frames(actual).Where(frame => !promotedFrames.Contains(frame.Address)).ToArray() };
+            SharedContinuationFrames = Frames(actual).Where(frame => !followupFrames.Contains(frame.Address)).ToArray() };
     }
 
     private static RefImage ReadSharedRef(string database) => ReadRefImage(database, 2);
@@ -507,13 +489,13 @@ internal static class Program {
             Check(repository.ReadState(initial), upgraded: true);
             Check(repository.ReadState(repository.GetHead("main")), upgraded: true);
             Check(repository.ReadState(repository.GetHead("fork")), upgraded: true, atSeven: 201);
-            Need(repository.GetHead("private").RevisionAddress == Address(witness.SharedContinuationState!), "The promoted branch's published head changed.");
-            Check(repository.ReadState(repository.GetHead("private")), upgraded: true, atSeven: 203);
-            var privateHistory = repository.ReadFrames("private");
-            Check(repository.ReadState(privateHistory.Single(frame => frame.RevisionAddress == Address(witness.PrivateState!))), upgraded: true, atSeven: 202);
-            Check(repository.ReadEvent(privateHistory.Single(frame => frame.RevisionAddress == Address(witness.PromotionEvent!))), upgraded: true, atSeven: 202);
-            Need(repository.ReadEvent(privateHistory.Single(frame => frame.RevisionAddress == Address(witness.PrivateCatalogEvent!))) is PrivateUnused { Value: 41 },
-                "The original generated Event must remain readable through its own private origin S after promotion.");
+            Need(repository.GetHead("catalog").RevisionAddress == Address(witness.SharedContinuationState!), "The catalog branch's published head changed.");
+            Check(repository.ReadState(repository.GetHead("catalog")), upgraded: true, atSeven: 203);
+            var catalogHistory = repository.ReadFrames("catalog");
+            Check(repository.ReadState(catalogHistory.Single(frame => frame.RevisionAddress == Address(witness.CatalogState!))), upgraded: true, atSeven: 202);
+            Check(repository.ReadEvent(catalogHistory.Single(frame => frame.RevisionAddress == Address(witness.FollowupEvent!))), upgraded: true, atSeven: 202);
+            Need(repository.ReadEvent(catalogHistory.Single(frame => frame.RevisionAddress == Address(witness.CatalogAcceptanceEvent!))) is CatalogEvent { Value: 41 },
+                "The original generated Event must remain readable through its own historical origin S.");
             Check(repository.ReadEvent(repository.ReadFrames("fork").Single(frame => frame.RevisionAddress == Address(witness.RewriteEvent!))), upgraded: true);
             var pair = repository.ReadPair(initial, repository.GetHead("fork"));
             Widget old = Check(pair.First, upgraded: true), current = Check(pair.Second, upgraded: true, atSeven: 201);
@@ -522,8 +504,8 @@ internal static class Program {
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         FrameAddress schema = Address(witness.RewriteSchema!), next = Address(witness.ContinuationState!);
-        FrameAddress promotedSchema = Address(witness.PromotionSchema!), sharedHead = Address(witness.SharedContinuationState!);
-        CheckRefs(actual, promotedSchema, ("main", Address(witness.MainState!)), ("fork", next), ("private", sharedHead));
+        FrameAddress followupSchema = Address(witness.FollowupSchema!), sharedHead = Address(witness.SharedContinuationState!);
+        CheckRefs(actual, followupSchema, ("main", Address(witness.MainState!)), ("fork", next), ("catalog", sharedHead));
         Need(CheckCatalog(actual, Address(witness.SeedSchema), current: false) == witness.WidgetDescriptorId &&
             CheckCatalog(actual, schema, current: true, version: 1) == witness.WidgetDescriptorId &&
             CheckCatalog(actual, schema, current: true) == witness.CurrentWidgetDescriptorId,
@@ -536,26 +518,26 @@ internal static class Program {
         CheckStorage(actual, actual.Graph(Address(witness.SeedState)), witness.SeedObjects);
         CheckStorage(actual, actual.Graph(Address(witness.RewriteState!)), witness.RewriteObjects!);
         CheckStorage(actual, actual.Graph(next), witness.ContinuationObjects!);
-        FrameAddress privateSeed = Address(witness.PrivateSeedState!), privateHead = Address(witness.PrivateState!);
-        Need(RequiredSchema(actual.Graph(privateSeed)) == Address(witness.RewriteSchema!) &&
-            RequiredSchema(actual.Graph(Address(witness.PrivateCatalogEvent!))) == Address(witness.PrivateSchema!) &&
-            RequiredSchema(actual.Graph(privateHead)) == Address(witness.PrivateSchema!) &&
-            CheckPrivateCatalog(actual, Address(witness.PrivateSchema!), witness) == witness.PrivateUnusedDescriptorId,
-            "Final private graphs must preserve their exact full frozen catalog and declaration IDs.");
-        CheckStorage(actual, actual.Graph(privateSeed), witness.PrivateSeedObjects!);
-        CheckStorage(actual, actual.Graph(privateHead), witness.PrivateObjects!);
-        FrameAddress promotionEvent = Address(witness.PromotionEvent!);
-        Need(RequiredSchema(actual.Graph(promotionEvent)) == promotedSchema && RequiredSchema(actual.Graph(sharedHead)) == promotedSchema &&
-            CheckPrivateCatalog(actual, promotedSchema, witness) == witness.PromotedUnusedDescriptorId,
-            "Final shared catalog must contain the complete formerly private declaration and exact promoted graph pins.");
-        CheckStorage(actual, actual.Graph(promotionEvent), witness.PromotionObjects!);
+        FrameAddress catalogSeed = Address(witness.CatalogSeedState!), catalogHead = Address(witness.CatalogState!);
+        Need(RequiredSchema(actual.Graph(catalogSeed)) == Address(witness.RewriteSchema!) &&
+            RequiredSchema(actual.Graph(Address(witness.CatalogAcceptanceEvent!))) == Address(witness.CatalogSchema!) &&
+            RequiredSchema(actual.Graph(catalogHead)) == Address(witness.CatalogSchema!) &&
+            CheckEventCatalog(actual, Address(witness.CatalogSchema!), witness) == witness.CatalogEventDescriptorId,
+            "Final catalog-branch graphs must preserve their exact full accepted catalog and declaration IDs.");
+        CheckStorage(actual, actual.Graph(catalogSeed), witness.CatalogSeedObjects!);
+        CheckStorage(actual, actual.Graph(catalogHead), witness.CatalogObjects!);
+        FrameAddress followupEvent = Address(witness.FollowupEvent!);
+        Need(RequiredSchema(actual.Graph(followupEvent)) == followupSchema && RequiredSchema(actual.Graph(sharedHead)) == followupSchema &&
+            CheckEventCatalog(actual, followupSchema, witness) == witness.FollowupEventDescriptorId,
+            "Final shared catalog must contain the complete State-unreachable declaration and exact followup graph pins.");
+        CheckStorage(actual, actual.Graph(followupEvent), witness.FollowupObjects!);
         CheckStorage(actual, actual.Graph(sharedHead), witness.SharedContinuationObjects!);
-        CheckFrames(actual, witness.SeedFrames.Concat(witness.RewriteFrames!).Concat(witness.ContinuationFrames!).Concat(witness.PrivateFrames!)
-            .Concat(witness.PromotionFrames!).Concat(witness.SharedContinuationFrames!));
+        CheckFrames(actual, witness.SeedFrames.Concat(witness.RewriteFrames!).Concat(witness.ContinuationFrames!).Concat(witness.CatalogFrames!)
+            .Concat(witness.FollowupFrames!).Concat(witness.SharedContinuationFrames!));
         Need(SameFiles(before, FileImages(database)), "Final readonly verification changed repository files.");
         return new { ReadOnlyFilesUnchanged = true, OldTagPreserved = true, MainAndForkValues = true, AccurateSchemaPins = true,
             ActualRefsVerified = true, CompleteStorageVerified = true, CompleteFramesPreserved = true, CrossSPairIndependent = true,
-            PrivateColdValues = true, PromotedSharedColdValues = true };
+            CatalogColdValues = true, FollowupSharedColdValues = true };
     }
 
     private static S.V1 ReadHistoricalWidget(WireInspector.Snapshot actual, FrameAddress graph, uint id, uint descriptor) {

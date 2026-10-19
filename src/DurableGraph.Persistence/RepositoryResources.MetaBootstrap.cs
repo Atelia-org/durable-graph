@@ -11,7 +11,9 @@ namespace Atelia.DurableGraph.Persistence;
 public sealed partial class RepositoryResources {
     private const uint BranchDirectoryHead = 1, SharedSchemaHead = 2, BookmarkDirectoryHead = 3;
     private const string BranchPrefix = "branch/", SchemaKey = "schema";
-    private static ReadOnlySpan<byte> BranchMagic => "P0R1"u8;
+    // Version 2 admits only repositories whose business saves use the shared catalog.
+    // Version 1 may contain private histories, even when its current shared root looks valid.
+    private static ReadOnlySpan<byte> BranchMagic => "P0R2"u8;
     private static ReadOnlySpan<byte> SharedMagic => "P0S1"u8;
     private PublicationBaseline _baseline = null!;
     private HeadEntryId _branchEntry, _sharedEntry;
@@ -178,15 +180,7 @@ public sealed partial class RepositoryResources {
     }
 
     internal PendingRepositorySave PrepareSaveFrom(string branch, StoredGraphKind kind,
-        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) =>
-        PrepareSaveFromCore(branch, kind, produce, privateCatalog: false);
-
-    internal PendingRepositorySave PreparePrivateSaveFrom(string branch, StoredGraphKind kind,
-        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) =>
-        PrepareSaveFromCore(branch, kind, produce, privateCatalog: true);
-
-    private PendingRepositorySave PrepareSaveFromCore(string branch, StoredGraphKind kind,
-        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce, bool privateCatalog) {
+        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) {
         EnsureEditingAllowed();
         ArgumentNullException.ThrowIfNull(produce);
         ValidateBranchName(branch);
@@ -194,12 +188,12 @@ public sealed partial class RepositoryResources {
         _preparing = true;
         try {
             var prepared = produce();
-            return PrepareSaveCore(branch, kind, prepared.Business, prepared.Catalog, privateCatalog);
+            return PrepareSaveCore(branch, kind, prepared.Business, prepared.Catalog);
         } finally { _preparing = false; }
     }
 
     private PendingRepositorySave PrepareSaveCore(string branch, StoredGraphKind kind,
-        PreparedGraphWrite business, PreparedGraphWrite? catalog, bool privateCatalog = false) {
+        PreparedGraphWrite business, PreparedGraphWrite? catalog) {
         RequireStorageAvailable();
         ValidateBranchName(branch);
         ArgumentNullException.ThrowIfNull(business);
@@ -209,17 +203,14 @@ public sealed partial class RepositoryResources {
             throw new InvalidDataException("The business candidate must use the branch's exact latest State source.");
         }
         // Select the actual owner-bound source, never a caller-supplied Schema address.
-        FrameAddress? catalogSource = privateCatalog && parent is { } existing
-            ? GraphStore.ReadMetadata(existing).SchemaRoot
-                ?? throw new InvalidDataException("A private continuation requires its current business head's Schema pin.")
-            : _baseline.SharedRoot;
+        FrameAddress? catalogSource = _baseline.SharedRoot;
         if (catalogSource is { } source && GraphStore.ReadMetadata(source).Kind != StoredGraphKind.Meta) {
             throw new InvalidDataException("The selected catalog source must be an actual meta graph.");
         }
         if (catalog is not null && catalog.SourceGraph != catalogSource) {
             throw new InvalidDataException("The catalog candidate must use the exact selected meta source.");
         }
-        var pending = new PendingRepositorySave(this, _baseline, branch, kind, business, catalog, privateCatalog, catalogSource);
+        var pending = new PendingRepositorySave(this, _baseline, branch, kind, business, catalog, catalogSource);
         _pending = pending;
         return pending;
     }
@@ -265,10 +256,10 @@ public sealed partial class RepositoryResources {
             var branches = new Dictionary<string, FrameAddress>(_baseline.Branches, StringComparer.Ordinal) {
                 [pending.Branch] = business.Address
             };
-            FrameAddress? sharedRoot = pending.PrivateCatalog ? _baseline.SharedRoot : schemaRoot;
+            FrameAddress? sharedRoot = schemaRoot;
             var nextBaseline = new PublicationBaseline(branches, sharedRoot);
             byte[] branchPayload = EncodeBranches(branches);
-            byte[]? sharedPayload = pending.PrivateCatalog || pending.Catalog is null ? null : EncodeShared(schemaRoot);
+            byte[]? sharedPayload = pending.Catalog is null ? null : EncodeShared(schemaRoot);
             Dictionary<HeadId, ReadOnlyMemory<byte>>? changes = sharedPayload is null ? null : new() {
                 [_branchEntry.HeadId] = branchPayload,
                 [_sharedEntry.HeadId] = sharedPayload

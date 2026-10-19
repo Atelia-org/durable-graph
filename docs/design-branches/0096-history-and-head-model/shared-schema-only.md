@@ -1,6 +1,6 @@
 # DB-096：统一 Schema Catalog 与开发库隔离
 
-> 2026-10-19，用户已选定后续设计：一个 Repository 只维护统一的 Schema 接纳路线，删除 Private Schema 与 ToShared 的职责。当前产品实现尚未删除；本页记录新设计、验证与后续实施边界。
+> 2026-10-19，一个 Repository 只维护统一的 Schema 接纳路线。Private / ToShared 删除已进入独立实施；当前进度和验收统一见[删除切片](private-removal.md)。本页保留设计依据、前轮机制见证与删除合同。
 
 ## 1. 决定及不可混淆的边界
 
@@ -64,9 +64,9 @@ API 草稿已经去掉 SchemaMode；`OpenWorkingCopy(branchId)`、两个 CreateR
 
 删除全表 admission 的成立前提是：**受支持的新库中所有写入均来自统一单调 Catalog**，同 key 不变，没有旁路导入旧 Private 分支。旧格式可能隐藏 private 历史，不能仅因当前根看起来 Shared 就放行；采用新库格式/版本准入并拒绝旧布局，不做启动全历史审计或迁移器。具体版本标识在删除片实现，完整帧 append-only 纪律不因此放松。
 
-关键源码入口：[Repository.RequireSchemaWriter](../../../src/DurableGraph.Persistence/Repository.cs)、[Private 入口](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[保存会话](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)、[Catalog](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs)、[发布 owner](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)。内部 Catalog/workspace 不按关键词整束删除。
+关键源码入口：[Repository.RequireCheckoutWriter](../../../src/DurableGraph.Persistence/Repository.cs)、[保存会话](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)、[Catalog](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs)、[发布 owner](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)。已删除的 Private 入口与旧回归可在 Git `a347a2f` 查阅；内部 Catalog/workspace 不按关键词整束删除。
 
-测试迁移须先提取共享夹具：当前 `PrivateSchemaViewGeneratorTests` 的 PrivateResources/PrivateReadFrames/PrivateAssert* 被多个 partial 测试及新复制见证复用，实际是帧/文件/资源检查助手。新复制见证还复用旧 Development 模型/身份检查。先保留这些中性材料，再删除仅旧政策用例，避免为可编译而保留生产 Private 路径。Event/Discard 的 rewrite 保留应从旧 `DevelopmentSaveDraft` 转成普通 Shared 见证；“合并 Catalog 正确”不替代这项验收。
+测试迁移保留中性材料：[RepositoryEvidenceHelpers](../../../tests/DurableGraph.Tests/RepositoryEvidenceHelpers.cs)从旧 Private view 文件提取帧/文件/资源检查；新复制见证继续复用 Development 模型/身份检查。Event/Discard 的 rewrite 保留转为普通 Shared 见证；“合并 Catalog 正确”不替代这项验收。具体覆盖映射见删除切片。
 
 ## 5. 本轮基线、验证与限度
 
@@ -90,6 +90,6 @@ dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.
 
 ## 6. 当前停点与后续顺序
 
-已选：同库统一 Catalog；新 API 无归属参数；开发试验复制完整关闭库。首选内部模型进一步收窄为仓库 accepted Catalog＋操作内共同候选，保各业务冻结执行环境与基线。两份机制见证支持该方向，当前产品 Private 路由仍在，尚未删除。
+已选：同库统一 Catalog；新 API 无归属参数；开发试验复制完整关闭库。首选内部模型进一步收窄为仓库 accepted Catalog＋操作内共同候选，保各业务冻结执行环境与基线。两份机制见证支持该方向；产品删除进度与资格见[独立切片](private-removal.md)。
 
-接下来先独立删除 Private/ToShared 并迁移有效回归、明确新格式准入；然后接组级准备/发布与所有副本安装，最后与 Branch/CommitId 新历史模型集成。登记三路径、Parent 删除的来源资格、定向 origin 请求、分页成本仍按[首批调查](mechanism-feasibility.md)各自推进，不把局部成功包装为整个 API 已可实施或已验收。
+删除片完成后接组级准备/发布与所有副本安装，最后与 Branch/CommitId 新历史模型集成。登记三路径、Parent 删除的来源资格、定向 origin 请求、分页成本仍按[首批调查](mechanism-feasibility.md)各自推进，不把局部成功包装为整个 API 已可实施或已验收。

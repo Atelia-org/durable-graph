@@ -30,8 +30,6 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             AssertRing(main.State, 7);
             Assert.Null(eventOnly.State);
             Assert.Equal(CheckpointKind.Event, eventOnly.Head.Kind);
-            Assert.False(main.UsesPrivateSchemas);
-            Assert.False(eventOnly.UsesPrivateSchemas);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, Models());
         AssertRing(reader.ReadState(reader.GetHead("main")), 7);
@@ -184,7 +182,6 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             PublicationSnapshot before = Snapshot(reader);
             Action[] writes = [
                 () => reader.CheckoutShared("main"),
-                () => reader.CheckoutPrivate("main"),
                 () => reader.CreateSharedBranch("state", Ring()),
                 () => reader.CreateSharedBranchFromEvent("event", Ring()),
                 () => reader.CreateBranch("plain", head),

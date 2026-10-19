@@ -97,11 +97,10 @@ using (Repository repository = Repository.CreateNew(path, Models())) {
     using BranchCheckout main = repository.CreateSharedBranch("main", new State { Value = 1 });
     ((State)main.State!).Value = 2;
     main.CommitState();
-    repository.CreateBranch("private", main.Head);
-    using BranchCheckout draft = repository.CheckoutPrivate("private");
+    repository.CreateBranch("other", main.Head);
+    using BranchCheckout draft = repository.CheckoutShared("other");
     ((State)draft.State!).Value = 3;
     draft.CommitState();
-    draft.CommitStateToShared();
     using BranchCheckout fork = repository.ForkShared("fork", main.Head);
     fork.CommitState();
     using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", new State { Value = 4 });
@@ -112,14 +111,14 @@ using (Repository repository = Repository.OpenExisting(path, Models())) {
     using BranchCheckout main = repository.CheckoutShared("main");
     if (((State)main.State!).Value != 2) { throw new InvalidDataException("Shared cold value changed."); }
     main.CommitState();
-    using BranchCheckout draft = repository.CheckoutPrivate("private");
-    if (((State)draft.State!).Value != 3) { throw new InvalidDataException("Private cold value changed."); }
+    using BranchCheckout draft = repository.CheckoutShared("other");
+    if (((State)draft.State!).Value != 3) { throw new InvalidDataException("Forked cold value changed."); }
     draft.CommitState();
 }
 using (Repository reader = Repository.OpenReadOnlyExisting(path, Models())) {
     if (((State)reader.ReadState(reader.GetHead("events"))!).Value != 5) { throw new InvalidDataException("Cold first State changed."); }
 }
-Console.WriteLine("RepositoryApi:NewNamedEntries:SharedPrivateColdSave:Passed");
+Console.WriteLine("RepositoryApi:NewNamedEntries:SharedColdSave:Passed");
 '@ | Set-Content -LiteralPath (Join-Path $workRoot 'Program.cs') -Encoding utf8NoBOM
     $null = Execute 'restore' @('restore', $project, '--configfile', (Join-Path $workRoot 'NuGet.Config'), '--packages', $cache, '--disable-parallel')
     $assetsFile = Join-Path $workRoot 'obj/project.assets.json'
@@ -150,7 +149,11 @@ Console.WriteLine("RepositoryApi:NewNamedEntries:SharedPrivateColdSave:Passed");
         @('mode-property', '_ = repository.SchemaWriteMode;', 'CS1061', 'SchemaWriteMode'),
         @('mode-parameter', '_ = Repository.OpenExisting("path", models, schemaWriteMode: default);', 'CS1739', 'schemaWriteMode'),
         @('mode-type', '_ = typeof(global::Atelia.DurableGraph.SchemaWriteMode);', 'CS0234', 'SchemaWriteMode'),
-        @('object-create', 'repository.CreateBranch("main", state);', 'CS1503', 'state')
+        @('object-create', 'repository.CreateBranch("main", state);', 'CS1503', 'state'),
+        @('private-checkout', 'repository.CheckoutPrivate("main");', 'CS1061', 'CheckoutPrivate'),
+        @('promote-state', 'repository.CheckoutShared("main").CommitStateToShared();', 'CS1061', 'CommitStateToShared'),
+        @('promote-explicit-state', 'repository.CheckoutShared("main").CommitStateToShared(state);', 'CS1061', 'CommitStateToShared'),
+        @('promote-event', 'repository.CheckoutShared("main").CommitEventToShared(state);', 'CS1061', 'CommitEventToShared')
     )
     $negative = Join-Path $workRoot 'Negative.cs'
     foreach ($case in $cases) {
@@ -173,7 +176,7 @@ Console.WriteLine("RepositoryApi:NewNamedEntries:SharedPrivateColdSave:Passed");
     [IO.File]::WriteAllText($negative, '// Removed obsolete-call negative; restored legal source.' + [Environment]::NewLine)
     $null = Execute 'restored-positive-verify' $build
     $run = Execute 'run' @((Join-Path $workRoot 'bin/Release/net10.0/RepositoryApi.dll'), (Join-Path $workRoot 'database'))
-    if (!$run.Output.Contains('RepositoryApi:NewNamedEntries:SharedPrivateColdSave:Passed', [StringComparison]::Ordinal)) { throw 'The restored consumer did not complete its runtime story.' }
+    if (!$run.Output.Contains('RepositoryApi:NewNamedEntries:SharedColdSave:Passed', [StringComparison]::Ordinal)) { throw 'The restored consumer did not complete its runtime story.' }
     $receipt.Passed = $true
     Write-Host "Repository API package probe passed. Artifacts: $workRoot"
 } catch {

@@ -10,8 +10,8 @@
 | 显式分类诊断、两条生成路线与修正后的普通包冷恢复 | [ExplicitStorageClassificationConsumer](PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md) |
 | 无业务注册的 meta 冷读与容器 Delta | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md) |
 | accepted-history、Upgrade、准确 S、tag、Fork、Pair 与冷增量 | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md) |
-| baseline private、Nullable/List 升级与完整 ToShared | [PrivateContainerConsumer](PackageConsumerProbe/PrivateContainerConsumer/README.md) |
-| 用户 baseline、开发 fork、定稿与 history 模式 | [DevelopmentSchemaConsumer](PackageConsumerProbe/DevelopmentSchemaConsumer/README.md) |
+| 统一 Catalog 的 Nullable/List 升级与冷续写 | [容器升级消费者](PackageConsumerProbe/PrivateContainerConsumer/README.md)（保留历史目录名） |
+| 完整关闭库副本、独立草稿、定稿与 history 模式 | [DevelopmentSchemaConsumer](PackageConsumerProbe/DevelopmentSchemaConsumer/README.md) |
 | 泛型 DTO、工厂与 readonly accessor 的独立机制 | [GenericBindingShapeProbe](GenericBindingShapeProbe/README.md) |
 | FS/VS 发布可见性与进程中止后的正常尾恢复 | [PublicationCrashProbe](PublicationCrashProbe/README.md) |
 | 实际 DG 两根创建与 SG 保存的固定 Kill 窗口 | [MetaBootstrapCrashProbe](MetaBootstrapCrashProbe/README.md) |

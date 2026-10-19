@@ -13,16 +13,14 @@ namespace Atelia.DurableGraph;
 /// Handles belong to one open repository instance. Persisted members of read results are historical snapshots.
 /// Independent ReadState/ReadEvent calls allow application-side Transient initialization without a writer.
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
-/// Keep per-view owner/context/cache outside paired graphs. Use CheckoutShared or CheckoutPrivate to continue editing and committing.
+/// Keep per-view owner/context/cache outside paired graphs. Use CheckoutShared to continue editing and committing.
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Close all checkouts and this repository before reopening to load new registrations. First save supported
 /// pending domain changes or preserve/rebuild them in the application; Dispose does not save or roll them back.
 /// Successful closures may be reused within an exact Schema environment; callbacks and equality/hash policies
 /// must remain semantically stable. Freezing retains delegate/comparer references, not their external mutable state.
 /// Independent graph reads use each graph's exact Schema view, not an active checkout's execution environment.
-/// Named creation and checkout entry points select the ordinary Schema save destination for each editing session.
-/// Shared and Private sessions may coexist on different branches. ToShared commits select shared for one operation
-/// without changing the session's ordinary destination or execution environment.
+/// All branches share one monotonically accepted Schema catalog; historical reads retain their exact Schema pins.
 /// </remarks>
 public sealed partial class Repository : IDisposable {
     private readonly RepositoryResources _resources;
@@ -47,7 +45,7 @@ public sealed partial class Repository : IDisposable {
     /// </remarks>
     public bool IsFaulted => _resources.IsFaulted;
     /// <summary>Creates a repository with frozen code configuration and exact stored Schema views.</summary>
-    /// <remarks>Configuration is captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens. Rotation controls FrameStore file allocation; the separate cache budget controls owned physical reads. Opening resources does not accept business Schemas; named creation and checkout entry points select the ordinary save destination.</remarks>
+    /// <remarks>Configuration is captured after resource acquisition without eagerly closing unused models. Later builder changes affect only future opens. Rotation controls FrameStore file allocation; the separate cache budget controls owned physical reads. Opening resources does not accept business Schemas; business commits accept definitions into the shared catalog.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository CreateNew(string path, StateModelRegistry models,
         long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes,
@@ -55,7 +53,7 @@ public sealed partial class Repository : IDisposable {
         OpenStorage(path, models, create: true, readOnly: false, readCacheBudgetBytes,
             rotationThresholdBytes: rotationThresholdBytes);
     /// <summary>Opens the required repository roots with frozen code configuration and exact stored Schema views.</summary>
-    /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities. Opening resources does not accept business Schemas. CheckoutShared or CheckoutPrivate explicitly selects the ordinary save destination for an editing session.</remarks>
+    /// <remarks>An empty or partial registry supports inspection; materializing a graph still requires its model capabilities. Opening resources does not accept business Schemas. CheckoutShared restores an editing session; its commits use the shared catalog.</remarks>
     /// <exception cref="ArgumentNullException">models is null; no directory or file is acquired.</exception>
     public static Repository OpenExisting(string path, StateModelRegistry models,
         long rotationThresholdBytes = RepositoryResources.DefaultRotationThresholdBytes,
@@ -101,10 +99,9 @@ public sealed partial class Repository : IDisposable {
     /// initializers do not run; application code rebuilds Transient state and interprets its own event progress.
     /// The checkout keeps this starting execution environment across commits. Re-checkout does not reload
     /// model registrations or select the latest shared catalog instead of the nearest State's Schema view.
-    /// Ordinary commits use shared and require the complete selected Schema view to have been accepted there.
-    /// Restoration may succeed for a private view that requires an explicit ToShared commit before ordinary saves.
+    /// Ordinary commits accept new compatible definitions into the repository's shared Schema catalog.
     /// </remarks>
-    public BranchCheckout CheckoutShared(string branchName) => CheckoutCore(branchName, privateCatalog: false);
+    public BranchCheckout CheckoutShared(string branchName) => CheckoutCore(branchName);
 
     /// <summary>Creates a durable named branch at source and returns its independently restored checkout.</summary>
     /// <param name="branchName">A new branch name; the returned checkout occupies only this branch.</param>
@@ -117,7 +114,7 @@ public sealed partial class Repository : IDisposable {
     /// All restoration and checkout preparation precede ref publication; ordinary restoration failures leave no
     /// new ref. Publication can succeed before delivery fails: inspect RepositoryPublicationException.Outcome and IsFaulted
     /// independently, then reopen a faulted repository to inspect refs. Application callback effects are not rolled back.
-    /// The returned session uses shared for ordinary commits, including the complete selected-view admission check.
+    /// The returned session uses shared for ordinary commits, retaining the exact historical Schema view for restoration.
     /// </remarks>
     public BranchCheckout ForkShared(string branchName, CheckpointAddress source) {
         RequireWriter();
@@ -129,7 +126,7 @@ public sealed partial class Repository : IDisposable {
             ValidateNewName(branchName);
             acquired = _activeBranches.Add(branchName);
             if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate, privateCatalog: false);
+            BranchCheckout checkout = RestoreCheckout(branchName, source, out PreparedStateRestoration? candidate);
             MutateBranchCore(branchName, source.Address);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
@@ -281,7 +278,7 @@ public sealed partial class Repository : IDisposable {
     /// Each call restores its own mutable domain instances. Application code may initialize their
     /// Transient state after delivery, without opening a writer; persisted members remain a historical
     /// snapshot. Constructors and field initializers do not run. This does not install a saving baseline:
-    /// use CheckoutShared or CheckoutPrivate to continue editing and committing. Strings and application-owned global objects do
+    /// use CheckoutShared to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
     public IDurableObject ReadEvent(CheckpointAddress frame) => ReadGraph(frame, CheckpointKind.Event);
@@ -290,7 +287,7 @@ public sealed partial class Repository : IDisposable {
     /// Each call restores its own mutable domain instances. Application code may initialize their
     /// Transient state after delivery, without opening a writer; persisted members remain a historical
     /// snapshot. Constructors and field initializers do not run. This does not install a saving baseline:
-    /// use CheckoutShared or CheckoutPrivate to continue editing and committing. Strings and application-owned global objects do
+    /// use CheckoutShared to continue editing and committing. Strings and application-owned global objects do
     /// not acquire a general deep-copy guarantee.
     /// </remarks>
     public IDurableObject ReadState(CheckpointAddress frame) => ReadGraph(frame, CheckpointKind.State);
@@ -321,7 +318,7 @@ public sealed partial class Repository : IDisposable {
     /// This includes observable Transient mutation on any reachable object. Keep per-view owner,
     /// context, indexes and caches outside the graphs, since a node may belong to both views.
     /// Use independent ReadState/ReadEvent calls for per-view Transient initialization without a writer;
-    /// use CheckoutShared or CheckoutPrivate to continue editing and committing. Sharing comparison does not prepare object
+    /// use CheckoutShared to continue editing and committing. Sharing comparison does not prepare object
     /// Base/Delta payloads; ordinary read validation can still encode canonical Dictionary keys.
     /// Application callback side effects are not rolled back.
     /// </remarks>
@@ -428,10 +425,6 @@ public sealed partial class Repository : IDisposable {
         IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
         CommitSave(session, domainEvent, nextState, parameters);
 
-    internal CheckpointAddress CommitToShared(BranchCheckout session, IDurableObject? domainEvent,
-        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) =>
-        CommitSave(session, domainEvent, nextState, parameters, toShared: true);
-
     private CheckpointAddress HeadCore(string branchName) => StoredHeadCore(branchName);
 
     private CheckpointAddress? PreviousStateCore(CheckpointAddress frame) => PreviousCore(frame, CheckpointKind.State);
@@ -480,29 +473,9 @@ public sealed partial class Repository : IDisposable {
         RequireAvailable();
         _resources.RequireWritable();
     }
-    private void RequireSchemaWriter(BranchCheckout checkout) {
+    private void RequireCheckoutWriter(BranchCheckout checkout) {
         RequireWriter();
         RequireCheckoutSource(checkout);
-        if (!checkout.UsesPrivateSchemas && _storageFacade.Store.ReadMetadata(checkout.Head.Address).SchemaRoot is { } selected) {
-            SchemaCatalogView source = SchemaCatalogView.Load(_storageFacade.Store, selected);
-            SchemaCatalogView? shared = _storageFacade.SharedSchemaRoot is { } latest
-                ? SchemaCatalogView.Load(_storageFacade.Store, latest) : null;
-            // A Shared save cannot silently drop declarations from a private view.
-            // Only an already-contained complete view may return to this destination.
-            foreach (var (key, schema) in source.Schemas) {
-                if (shared is null || !shared.Schemas.TryGetValue(key, out var accepted)) {
-                    throw new InvalidOperationException("The complete selected Schema view is not accepted by the shared catalog.");
-                }
-                if (!accepted.Equals(schema)) { throw new SchemaConflictException(accepted, schema); }
-            }
-            foreach (var layout in source.ObjectLayouts) {
-                if (shared is null) { throw new InvalidOperationException("The complete selected layout view is not accepted by the shared catalog."); }
-                try { shared.Require(layout); }
-                catch (InvalidDataException error) {
-                    throw new InvalidOperationException("The complete selected layout view is not accepted by the shared catalog.", error);
-                }
-            }
-        }
     }
     private void RequireAvailable() {
         ObjectDisposedException.ThrowIf(_disposed, this);

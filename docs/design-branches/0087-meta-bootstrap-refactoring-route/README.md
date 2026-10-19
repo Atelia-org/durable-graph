@@ -1,8 +1,10 @@
 # DB-087：meta 自举与共享私有 Schema 视图
 
+> 2026-10-19 后继：[DB-096](../0096-history-and-head-model/private-removal.md)已删除 Private/ToShared，统一使用仓库 Catalog；本页及正文保留旧路线的实现与资格。meta 自举、准确历史 Schema、source/prior 与发布/fault 纪律继续适用。
+
 > 2026-10-17 后继：[DB-096 HeadStore 接入](../0096-history-and-head-model/headstore-adaptation.md)采用三入口布局和 DG 书签目录；本文两根初始化及上游 bytes tag 的既有证据保留历史范围，不作为新布局合同。
 
-> 结论与适用性：原有限 P1/P2 已完成；默认 meta 自举、完整 private/ToShared 保留，特例退出与新普通包资格由 DB-088 接续。
+> 原结论与适用性：有限 P1/P2 已完成；当时保留完整 private/ToShared，特例退出与当时的新普通包资格由 DB-088 接续。该双路线现已退出。
 > 本次整理来源 Git `8ef9fca`；原主入口 `docs/design-branches/0087-meta-bootstrap-refactoring-route.md`。
 
 问题是以一套共同对象版本保存核心与一个发布 owner 支撑 meta 自举及完整共享/私有视图。

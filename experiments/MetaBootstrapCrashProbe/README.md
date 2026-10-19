@@ -2,6 +2,8 @@
 
 2026-10-17：已适配 HeadStore 和三入口布局；本轮重新运行初始化三个及保存六个真实 Kill 窗口均通过，来源和证据见 [DB-096 接入](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。
 
+2026-10-19：[Private 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)将分支目录改为 P0R2，本 host 同步该标记。本次构建、重跑矩阵及证据范围统一见该切片；旧结果不自动作为新格式资格。
+
 本 Probe 验证 DB-087 内部 split Repository 的有限进程中止窗口：默认模式检查真实生成的 Widget、共享 List、新增 Schema 的六个保存停点；`-InitializationOnly` 检查直接工厂三次成功 CreateHead 后的停点。两模式都由 controller 外部终止 writer，再由独立 verifier 冷验证。
 
 这是源码模式的有限进程中止见证，默认公开工厂使用同一 meta 自举内核；不授 PackageReference、OS crash、断电、设备故障或完整 P1d 门禁资格。正常关闭重开、异常抛出与 writer 的 Dispose 都不能代替这里的外部 Kill。活动状态与后续门禁见 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。

@@ -20,15 +20,11 @@ public sealed class RepositoryPublicApiTests {
                     using var initialState = created.CreateSharedBranch("main", state);
                     using var initialEvent = created.CreateSharedBranchFromEvent("events", domainEvent);
                     using var shared = created.CheckoutShared("shared");
-                    using var privateSession = created.CheckoutPrivate("private");
                     using var fork = created.ForkShared("fork", source);
                     CheckpointAddress reference = created.CreateBranch("reference", source);
                     shared.CommitState();
                     shared.CommitState(state);
                     shared.CommitEvent(domainEvent);
-                    privateSession.CommitStateToShared();
-                    privateSession.CommitStateToShared(state);
-                    privateSession.CommitEventToShared(domainEvent);
                     using var writable = Repository.OpenExisting(path, models,
                         rotationThresholdBytes: 4096, readCacheBudgetBytes: 0);
                     using var readOnly = Repository.OpenReadOnlyExisting(path, models, readCacheBudgetBytes: 0);
@@ -50,6 +46,10 @@ public sealed class RepositoryPublicApiTests {
     [InlineData("_ = Repository.OpenExisting(path, models, [|schemaWriteMode|]: default);", "CS1739", "schemaWriteMode")]
     [InlineData("_ = typeof(global::Atelia.DurableGraph.[|SchemaWriteMode|]);", "CS0234", "SchemaWriteMode")]
     [InlineData("repository.CreateBranch(\"main\", [|state|]);", "CS1503", "CheckpointAddress")]
+    [InlineData("repository.[|CheckoutPrivate|](\"main\");", "CS1061", "CheckoutPrivate")]
+    [InlineData("repository.CheckoutShared(\"main\").[|CommitStateToShared|]();", "CS1061", "CommitStateToShared")]
+    [InlineData("repository.CheckoutShared(\"main\").[|CommitStateToShared|](state);", "CS1061", "CommitStateToShared")]
+    [InlineData("repository.CheckoutShared(\"main\").[|CommitEventToShared|](state);", "CS1061", "CommitEventToShared")]
     public void RemovedImplicitSelectionRequiresSpecificCompileError(
         string markedStatement, string expectedCode, string expectedTarget) {
         const string prefix = """

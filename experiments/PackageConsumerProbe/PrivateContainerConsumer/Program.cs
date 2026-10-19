@@ -14,7 +14,7 @@ using persistence::Atelia.DurableGraph.Persistence;
 // diagnostic: after every product owner closes, the observer re-reads actual
 // formal refs, complete catalogs and exact object-version chains independently.
 internal static class Program {
-    private const string Protocol = "DG.PrivateContainerConsumer.v2";
+    private const string Protocol = "DG.SchemaContainerConsumer.v3";
 #if SHAPE_A
     private const string ShapeEnvironment = "A";
 #elif SHAPE_B
@@ -41,7 +41,7 @@ internal static class Program {
             "create" when Wide => Create(database, witnessPath),
             "continue-a" when !Wide => Continue(database, witnessPath),
             "continue-b" when Wide => Continue(database, witnessPath),
-            "promote-b" when Wide => Promote(database, witnessPath),
+            "missing-upgrade" when Wide => MissingUpgrade(database, witnessPath),
             "verify-a" when !Wide => Verify(database, witnessPath),
             "verify-b" when Wide => Verify(database, witnessPath),
             _ => throw new ArgumentException("This phase does not belong to the compiled shape environment."),
@@ -61,7 +61,7 @@ internal static class Program {
                 .OrderBy(assembly => assembly.GetName().Name, StringComparer.Ordinal).Select(AssemblyEvidence).ToArray(),
             Observations = observations,
         });
-        Console.WriteLine("PrivateContainerConsumer:" + phase + ":Passed");
+        Console.WriteLine("SchemaContainerConsumer:" + phase + ":Passed");
         return 0;
     }
 
@@ -109,8 +109,8 @@ internal static class Program {
         FrameAddress state;
         uint rootId;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            repository.CreateBranch("private", repository.ResolveTag("old"));
-            using BranchCheckout branch = repository.CheckoutPrivate("private");
+            repository.CreateBranch("upgraded", repository.ResolveTag("old"));
+            using BranchCheckout branch = repository.CheckoutShared("upgraded");
             Check(branch.State, changed: false);
             Need(branch.StateId!.Value.Value == witness.ARootId, "Upgrade must preserve the original root identity.");
             state = branch.CommitState().RevisionAddress;
@@ -119,12 +119,12 @@ internal static class Program {
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(state);
         FrameAddress schema = RequiredSchema(graph);
-        Need(schema != before.SharedSchemaRoot && actual.BranchHeads.Count == 3 && actual.BranchHeads["private"] == state &&
+        Need(schema != before.SharedSchemaRoot && actual.BranchHeads.Count == 3 && actual.BranchHeads["upgraded"] == state &&
             actual.BranchHeads["main"] == before.BranchHeads["main"] && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],
-            "Private creation must only add its new business branch.");
+            "Upgrade must advance only its business branch and the common Catalog.");
         Need(graph.RootId == rootId && graph.Parent == Address(witness.SeedState) && graph.SourceGraph == Address(witness.SeedState) &&
             graph.Heads.Keys.Order().SequenceEqual(before.Graph(Address(witness.SeedState)).Heads.Keys.Order()),
-            "The private fork must retain baseline IDs and exact business source.");
+            "The upgraded fork must retain baseline IDs and exact business source.");
         uint upgradedList = witness.AListId;
         WireInspector.Chain upgraded = actual.ObjectChain(state, upgradedList);
         Need(upgraded.Entries.Count == 1 && upgraded.Entries[0].Record.Kind == ObjectVersionKind.Base &&
@@ -144,21 +144,21 @@ internal static class Program {
             "Normal version growth must retain old and new Point/List declarations.");
         Need(target.DescriptorId(ObjectLayout.ForDurable(RootSchema())) == oldCatalog.DescriptorId(ObjectLayout.ForDurable(RootSchema())) &&
             target.DescriptorId(ObjectLayout.ForDurable(KeeperSchema())) == keeper,
-            "Untouched Root and unreachable Keeper descriptors must be retained in the full frozen fork.");
+            "Untouched Root and unreachable Keeper descriptors must be retained in the full common Catalog.");
         WireInspector.Graph meta = actual.Graph(schema);
         Need(meta.Kind == WireInspector.GraphKind.Meta && meta.Parent == before.SharedSchemaRoot &&
-            meta.SourceGraph == before.SharedSchemaRoot, "Private meta must derive from the actual complete frozen shared root.");
-        CheckRef(before, actual, 2);
-        Need(actual.SharedSchemaRoot == before.SharedSchemaRoot, "Private creation must not move shared Schema authority.");
+            meta.SourceGraph == before.SharedSchemaRoot, "Shared meta must derive from the actual complete frozen shared root.");
+        Need(actual.SharedSchemaRoot == schema && !actual.Refs[2].Revision.Equals(before.Refs[2].Revision),
+            "Ordinary Shared upgrade must publish the grown common Catalog.");
         CheckFrames(actual, witness.CompleteFrames);
         uint list = ListId(actual, graph, wide: true), child = graph.Heads.Keys.Single(id => id != rootId && id != list);
         StorageEvidence[] rows = Storage(actual, graph);
         CheckStorage(actual, graph, rows);
-        Witness next = witness with { BSeedState = Hex(state), BState = Hex(state), BSchema = Hex(schema),
+        Witness next = witness with { BSeedState = Hex(state), BState = Hex(state), BSchema = Hex(schema), SharedSchema = Hex(schema),
             BRootId = rootId, BChildId = child, BListId = list, BSeedObjects = rows, BObjects = rows, CompleteFrames = Frames(actual) };
         WriteJson(witnessPath, next);
         return new { BaselineIdentitiesPreserved = true, UpgradeListBase = true, ExactBusinessSource = true,
-            FullFrozenFork = true, KeeperPreserved = true, SharedRefUnchanged = true,
+            FullCommonCatalog = true, KeeperPreserved = true, SharedCatalogAdvanced = true,
             State = Hex(state), Schema = Hex(schema), RootId = rootId, ChildId = child, ListId = list,
             OldPointId = oldPoint, NewPointId = newPoint, OldListId = oldList, NewListId = newList, KeeperId = keeper,
             Objects = rows, Refs = RefFacts(actual), Catalog = CatalogFacts(actual, schema), Graph = GraphFacts(actual, graph) };
@@ -167,7 +167,7 @@ internal static class Program {
     private static object Continue(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         WireInspector.Snapshot before = WireInspector.Read(database);
-        string branchName = Wide ? "private" : "main";
+        string branchName = Wide ? "upgraded" : "main";
         FrameAddress source = Address(Wide ? witness.BState! : witness.AState);
         uint list = Wide ? witness.BListId!.Value : witness.AListId;
         StorageEvidence[] priorRows = Wide ? witness.BObjects! : witness.AObjects;
@@ -176,7 +176,7 @@ internal static class Program {
         Need(before.BranchHeads[branchName] == source, "Cold continuation must use the actual prior branch State.");
         FrameAddress nextState;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout branch = Wide ? repository.CheckoutPrivate(branchName) : repository.CheckoutShared(branchName);
+            using BranchCheckout branch = repository.CheckoutShared(branchName);
             Root root = Check(branch.State, changed: false);
             Need(branch.StateRevisionAddress == source && branch.StateId!.Value.Value == (Wide ? witness.BRootId!.Value : witness.ARootId),
                 "The cold editable baseline must retain its exact source and committed root ID.");
@@ -188,16 +188,16 @@ internal static class Program {
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         WireInspector.Graph graph = actual.Graph(nextState);
-        FrameAddress schema = RequiredSchema(graph), expectedSchema = Address(Wide ? witness.BSchema! : witness.SharedSchema);
+        FrameAddress schema = RequiredSchema(graph), expectedSchema = Address(witness.SharedSchema);
         Need(schema == expectedSchema && graph.Parent == source && graph.SourceGraph == source &&
             actual.BranchHeads[branchName] == nextState && graph.RootId == before.Graph(source).RootId,
             "The continued State must preserve exact business source/root and the selected Schema pin.");
-        CheckCatalog(actual, schema, Wide, keeper: true);
+        CheckCatalog(actual, schema, wide: true, keeper: true);
         CheckSingleDelta(before, actual, source, nextState, list, priorRows);
         CheckRef(before, actual, 2);
         Need(actual.SharedSchemaRoot == before.SharedSchemaRoot && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],
             "A cold compatible save must retain shared authority and the unrelated Keeper branch.");
-        string other = Wide ? "main" : "private";
+        string other = Wide ? "main" : "upgraded";
         Need(actual.BranchHeads[other] == before.BranchHeads[other], "The other environment's branch was changed.");
         CheckFrames(actual, witness.CompleteFrames);
         StorageEvidence[] rows = Storage(actual, graph);
@@ -205,38 +205,32 @@ internal static class Program {
             : witness with { AState = Hex(nextState), AObjects = rows, CompleteFrames = Frames(actual) };
         WriteJson(witnessPath, next);
         return new { SingleListDelta = true, ExactPrior = true, ActualWireH = true, IdsPreserved = true,
-            RetainedRootHeads = true, PrivateRefUnchanged = !Wide, SharedRefUnchanged = true,
+            RetainedRootHeads = true, OtherBranchUnchanged = true, SharedRefUnchanged = true,
             State = Hex(nextState), SourceState = Hex(source), Schema = Hex(schema), ListId = list, Objects = rows,
             Refs = RefFacts(actual), Graph = GraphFacts(actual, graph), CompleteFramesPreserved = true };
     }
 
-    private static object Promote(string database, string witnessPath) {
+    private static object MissingUpgrade(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         WireInspector.Snapshot before = WireInspector.Read(database);
-        FrameAddress state;
-        using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout branch = repository.CheckoutPrivate("private");
-            Check(branch.State, changed: true);
-            state = branch.CommitStateToShared().RevisionAddress;
+        using (Repository repository = Repository.OpenExisting(database, Models(includeListRules: false))) {
+            // Repeat the rejected checkout to verify it never occupies the branch.
+            for (int attempt = 0; attempt < 2; attempt++) {
+                bool rejected = false;
+                try {
+                    using BranchCheckout branch = repository.CheckoutShared("main");
+                } catch (InvalidDataException error) when (error.Message ==
+                    "Changing a list element layout requires an explicitly selected list element upgrade rule set.") {
+                    rejected = true;
+                }
+                Need(rejected && !repository.IsFaulted, "Missing List rules must reject checkout without faulting its owner.");
+                Need(repository.GetHead("main").RevisionAddress == Address(witness.AState), "Rejected checkout moved main.");
+            }
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
-        WireInspector.Graph graph = actual.Graph(state);
-        FrameAddress schema = RequiredSchema(graph);
-        Need(actual.BranchHeads["private"] == state && actual.SharedSchemaRoot == schema && schema != before.SharedSchemaRoot &&
-            graph.RootId == witness.ARootId && graph.Heads.Keys.Order().SequenceEqual(before.Graph(Address(witness.BState!)).Heads.Keys.Order()),
-            "Compatible ToShared must publish the complete directory and preserve user identities.");
-        Need(graph.Parent == Address(witness.BState!) && graph.SourceGraph == Address(witness.BState!),
-            "Promotion must preserve the exact cold private business source and parent.");
-        Need(!actual.Refs[1].Revision.Equals(before.Refs[1].Revision) && !actual.Refs[2].Revision.Equals(before.Refs[2].Revision),
-            "Promotion must publish both the business branch and shared Schema refs.");
-        CheckCatalog(actual, schema, wide: true, keeper: true);
-        CheckFrames(actual, witness.CompleteFrames);
-        Need(actual.BranchHeads["main"] == before.BranchHeads["main"] && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],
-            "Promotion must not move unrelated branch refs.");
-        WriteJson(witnessPath, witness with { BState = Hex(state), BSchema = Hex(schema), SharedSchema = Hex(schema),
-            BObjects = Storage(actual, graph), CompleteFrames = Frames(actual) });
-        return new { CompletePromotion = true, IdsPreserved = true, CompleteFramesPreserved = true,
-            Refs = RefFacts(actual), Catalog = CatalogFacts(actual, schema), Graph = GraphFacts(actual, graph) };
+        CheckUnchanged(before, actual, bothRefs: true);
+        return new { MissingListUpgradeRejected = true, NoBranchOccupancy = true, PublicationUnchanged = true,
+            CompleteFramesPreserved = true };
     }
 
     private static object Verify(string database, string witnessPath) {
@@ -244,7 +238,7 @@ internal static class Program {
         Dictionary<string, string> originalFiles = FileImages(database);
         WireInspector.Snapshot before = WireInspector.Read(database);
         CheckFrames(before, witness.CompleteFrames);
-        string own = Wide ? "private" : "main", foreign = Wide ? "main" : "private";
+        string own = Wide ? "upgraded" : "main", foreign = Wide ? "main" : "upgraded";
         FrameAddress selected = Address(Wide ? witness.BState! : witness.AState);
         using (Repository reader = Repository.OpenReadOnlyExisting(database, Models())) {
             Need(reader.IsReadOnly && reader.GetHead(own).RevisionAddress == selected,
@@ -261,7 +255,7 @@ internal static class Program {
         CheckUnchanged(before, actual, bothRefs: true);
         Need(SameFiles(originalFiles, FileImages(database)), "Readonly changed the complete file set or bytes.");
         Need(actual.SharedSchemaRoot == Address(witness.SharedSchema) && actual.BranchHeads.Count == 3 &&
-            actual.BranchHeads["main"] == Address(witness.AState) && actual.BranchHeads["private"] == Address(witness.BState!) &&
+            actual.BranchHeads["main"] == Address(witness.AState) && actual.BranchHeads["upgraded"] == Address(witness.BState!) &&
             actual.BranchHeads["keeper"] == Address(witness.KeeperState), "Final actual root pair disagrees with the observed history.");
         CheckCatalog(actual, Address(witness.SharedSchema), wide: true, keeper: true);
         CheckCatalog(actual, Address(witness.BSchema!), wide: true, keeper: true);
@@ -272,7 +266,7 @@ internal static class Program {
         CheckFrames(actual, witness.CompleteFrames);
         return new { ReadOnlyFilesUnchanged = true, OwnBranchRead = true, BaselineUpgradeRead = Wide,
             CompleteFramesPreserved = true, OldTagRead = !Wide, State = Hex(selected), Schema = Hex(RequiredSchema(actual.Graph(selected))),
-            SharedSchema = witness.SharedSchema, PrivateSchema = witness.BSchema, Refs = RefFacts(actual),
+            SharedSchema = witness.SharedSchema, UpgradedSchema = witness.BSchema, Refs = RefFacts(actual),
             AObjects = witness.AObjects, BObjects = witness.BObjects, Graph = GraphFacts(actual, actual.Graph(selected)) };
     }
 
@@ -361,11 +355,11 @@ internal static class Program {
                 "A complete frame address, tag, payload or tail metadata was changed or lost.");
         }
     }
-    private static StateModelRegistry Models() {
+    private static StateModelRegistry Models(bool includeListRules = true) {
         StateModelRegistry result = new();
         global::Atelia.DurableGraph.Generated.DurableDefinitions.Register(result);
 #if SHAPE_B
-        result.UseListElementUpgrades(typeof(PointRules));
+        if (includeListRules) { result.UseListElementUpgrades(typeof(PointRules)); }
 #endif
         return result;
     }

@@ -8,7 +8,6 @@ internal sealed class BranchSaveSession {
     private readonly RepositoryStorageFacade _repository;
     private readonly string _branch;
     private readonly BusinessPersistenceAdapter _business;
-    private readonly bool _privateCatalog;
 
     internal BranchSaveSession(RepositoryStorageFacade repository, string branch, StateModelRegistry models) {
         _repository = repository;
@@ -22,25 +21,21 @@ internal sealed class BranchSaveSession {
     }
 
     internal BranchSaveSession(RepositoryStorageFacade repository, string branch,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, bool privateCatalog = false)
-        : this(repository, branch, configuration, ensureEditingAllowed, repository.GetStateHead(branch), privateCatalog,
-            repository.GetHead(branch)) { }
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed)
+        : this(repository, branch, configuration, ensureEditingAllowed, repository.GetStateHead(branch)) { }
 
     // The selected business head is owner-checked by Repository before restoring a historical Fork.
     // No target branch is published or consulted to choose the State being restored.
     internal BranchSaveSession(RepositoryStorageFacade repository, string branch, FrameAddress selectedHead,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, bool privateCatalog = false)
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed)
         : this(repository, branch, configuration, ensureEditingAllowed,
-            repository.Store.ResolveContentSource(StoredGraphKind.State, selectedHead), privateCatalog, selectedHead) { }
+            repository.Store.ResolveContentSource(StoredGraphKind.State, selectedHead)) { }
 
     private BranchSaveSession(RepositoryStorageFacade repository, string branch,
-        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, FrameAddress? sourceState,
-        bool privateCatalog, FrameAddress? selectedHead) {
+        StateModelRegistry.FrozenConfiguration configuration, Action ensureEditingAllowed, FrameAddress? sourceState) {
         _repository = repository;
         _branch = branch;
-        _privateCatalog = privateCatalog;
-        FrameAddress? catalogRoot = privateCatalog
-            ? PrivateCatalogRoot(repository, selectedHead) : repository.SharedSchemaRoot;
+        FrameAddress? catalogRoot = repository.SharedSchemaRoot;
         SchemaCatalogView? catalog = catalogRoot is { } schema
             ? SchemaCatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
@@ -54,16 +49,14 @@ internal sealed class BranchSaveSession {
     }
 
     internal BranchSaveSession(RepositoryStorageFacade repository, string branch, BusinessPersistenceAdapter business,
-        Action ensureEditingAllowed, bool privateCatalog = false, FrameAddress? selectedHead = null) {
+        Action ensureEditingAllowed) {
         if (business.Source is not { } source || !ReferenceEquals(source.SourceOwner, repository.Store)) {
             throw new InvalidDataException("A restored business workspace must belong to this exact repository Store.");
         }
         _repository = repository;
         _branch = branch;
         _business = business;
-        _privateCatalog = privateCatalog;
-        FrameAddress? catalogRoot = privateCatalog
-            ? PrivateCatalogRoot(repository, selectedHead ?? repository.GetHead(branch)) : repository.SharedSchemaRoot;
+        FrameAddress? catalogRoot = repository.SharedSchemaRoot;
         SchemaCatalogView? catalog = catalogRoot is { } schema
             ? SchemaCatalogView.Load(repository.Store, schema) : null;
         Catalog = new(ensureEditingAllowed, catalog);
@@ -77,46 +70,30 @@ internal sealed class BranchSaveSession {
     internal ObjectId RootId => _business.RootId;
     internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => _business.BindingEnvironment;
 
-    private static FrameAddress PrivateCatalogRoot(RepositoryStorageFacade repository, FrameAddress? selectedHead) =>
-        selectedHead is { } head && repository.Store.ReadMetadata(head).SchemaRoot is { } schema ? schema
-            : throw new InvalidDataException("A private checkout requires the current business head's exact Schema pin.");
-
     private void EnsureEditingAllowed() {
         _repository.EnsureEditingAllowed();
     }
 
     internal PreparedBranchSave Prepare(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
-        ReadAmplificationBaseBudgetParameters? parameters = null, bool toShared = false) {
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
         EnsureEditingAllowed();
         BusinessSaveCandidate? capture = null;
         PreparedSchemaCatalogWrite? catalog = null;
         PreparedBusinessWrite? business = null;
         try {
             (PreparedGraphWrite Business, PreparedGraphWrite? Catalog) Produce() {
-                if (toShared) {
-                    // Freeze both actual roots inside the owner producer window. The
-                    // complete merge must pass before invoking business Capture.
-                    FrameAddress? headSchemaRoot = _repository.GetHead(_branch) is { } head
-                        ? _repository.Store.ReadMetadata(head).SchemaRoot
-                            ?? throw new InvalidDataException("A shared promotion requires the current business head's exact Schema pin.")
-                        : null;
-                    FrameAddress? latestSharedRoot = _repository.SharedSchemaRoot;
-                    catalog = Catalog.PrepareToSharedOwned(_repository.Store, headSchemaRoot, latestSharedRoot, () => {
-                        capture = _business.CaptureOwned(root, kind);
-                        return capture.Graph.Objects.Select(static row => row.Layout);
-                    });
-                } else {
-                    if (!_privateCatalog && _repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
-                        Catalog.RebaseOwned(SchemaCatalogView.Load(_repository.Store, latest));
-                    }
-                    capture = _business.CaptureOwned(root, kind);
-                    catalog = Catalog.PrepareOwned(capture.Graph.Objects.Select(static row => row.Layout));
+                if (_repository.SharedSchemaRoot is { } latest && Catalog.Accepted?.Snapshot?.Address != latest) {
+                    Catalog.RebaseOwned(SchemaCatalogView.Load(_repository.Store, latest));
                 }
-                business = _business.PrepareOwned(capture!, catalog.View, parameters);
+                capture = _business.CaptureOwned(root, kind);
+                // Capture can invoke application callbacks. Recheck lifetime before
+                // preparing catalog or business bodies, including Event-only saves.
+                _repository.Store.EnsureUsable();
+                catalog = Catalog.PrepareOwned(capture.Graph.Objects.Select(static row => row.Layout));
+                business = _business.PrepareOwned(capture, catalog.View, parameters);
                 return (business.Write, catalog.Write);
             }
-            PendingRepositorySave pending = _privateCatalog && !toShared ? _repository.PreparePrivateFrom(_branch, kind, Produce)
-                : _repository.PrepareFrom(_branch, kind, Produce);
+            PendingRepositorySave pending = _repository.PrepareFrom(_branch, kind, Produce);
             return new(_repository, pending, catalog!, business!);
         } catch {
             capture?.AbortPreparation();

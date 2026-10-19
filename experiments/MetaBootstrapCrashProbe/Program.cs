@@ -149,7 +149,7 @@ internal static class Program {
     }
 
     private static void CheckEmptyInitializationRoots(PublicationStore versions, int completed) {
-        string[] magic = ["P0R1", "P0S1", "P0T1"];
+        string[] magic = ["P0R2", "P0S1", "P0T1"];
         for (uint id = 1; id <= 3; id++) {
             var read = versions.ReadHead(id);
             if (id <= completed) {
@@ -346,7 +346,7 @@ internal static class Program {
             // formal root reads, joint publication qualification or graph pins.
             HeadEntry branches = resources.Heads.ReadHead(1).Unwrap();
             HeadEntry shared = resources.Heads.ReadHead(2).Unwrap();
-            IReadOnlyDictionary<string, FrameAddress> branchRoots = DecodeRoot(branches.Payload, "P0R1"u8);
+            IReadOnlyDictionary<string, FrameAddress> branchRoots = DecodeRoot(branches.Payload, "P0R2"u8);
             IReadOnlyDictionary<string, FrameAddress> sharedRoots = DecodeRoot(shared.Payload, "P0S1"u8);
             Need(branchRoots.Count == 1 && branchRoots.TryGetValue("branch/main", out FrameAddress branchHead) && branchHead == expectedState,
                 "Actual ref1 must select the exact expected business graph.");

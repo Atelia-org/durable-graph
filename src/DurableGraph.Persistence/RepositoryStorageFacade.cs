@@ -54,12 +54,6 @@ internal sealed class RepositoryStorageFacade : IDisposable {
         return _resources.PrepareSaveFrom(branch, kind, produce);
     }
 
-    internal PendingRepositorySave PreparePrivateFrom(string branch, StoredGraphKind kind,
-        Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) {
-        RequireAvailable();
-        return _resources.PreparePrivateSaveFrom(branch, kind, produce);
-    }
-
     internal RepositorySaveResult Commit(PendingRepositorySave pending,
         Action<StoredGraphRevision>? installMeta = null, Action<StoredGraphRevision>? installState = null,
         Action<StoredGraphRevision>? prepareMeta = null, Action<StoredGraphRevision>? prepareState = null,

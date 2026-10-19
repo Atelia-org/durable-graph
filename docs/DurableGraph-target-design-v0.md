@@ -257,7 +257,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
   历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
   元数据缓存只是派生结果，后续登记的 exact base/inline 定义仍必须与缓存的完整依赖闭包一致。
-- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本。[DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md)已选定后续同 Repository 的单调接纳路线，Private 删除尚待实施。
+- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本。[DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md)采用同 Repository 的单调接纳路线；Private/ToShared 已退出，实施边界见[删除切片](design-branches/0096-history-and-head-model/private-removal.md)。
   同库同 key 的已接受定义不可改形；相互冲突的开发草稿在独立 Repository 副本中试验，不能互换解释旧 bytes。不同类型和正常版本可在统一目录共存。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
@@ -280,7 +280,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
 ### 模型执行环境与 factory 行为
 
 Open 固定模型／reader／Upgrade／策略注册，按需闭合能力；保留委托／comparer 引用，不复制其外部可变状态。
-checkout 保起始执行环境：有 State 取最近 State.S；统一 Catalog 路线无 State 时取创建／恢复时的当前 Catalog，空库可无 S。旧 Private 无 State 选 Head.S 的路径随 DB-096 删除；当前源码资格仍见产品工作集。State 保存可推进持久 selected S 和比较基线，不原地更换 execution；Event 不安装 State 或消费其 rewrite。V2 程序恢复 V1 已执行显式 Upgrade，可以持续增量保存，无需每次提交后重签出。
+checkout 保起始执行环境：有 State 取最近 State.S；无 State 时取创建／恢复时的当前 Catalog，空库可无 S。State 保存可推进持久 selected S 和比较基线，不原地更换 execution；Event 不安装 State 或消费其 rewrite。V2 程序恢复 V1 已执行显式 Upgrade，可以持续增量保存，无需每次提交后重签出。
 
 独立读取使用被读图自己的准确 S。重新 Checkout 重新恢复领域实例，不能重载代码注册；有 State 时不追到 Event 或 latest shared 的目录。登记变化须关闭全部 checkout 和 Repository 后重新 Open；未提交修改先明确保存当前配置支持的内容，或由应用保留／重建，Dispose 不保存或回滚。地址在新 owner 重新签发，旧 CLR 引用不跟随新签出。
 
@@ -429,7 +429,7 @@ owned 完成帧与完整目录可按完整帧地址复用，但仍为派生读�
 历史允许 Event-first 与任意连续 E/S。同一 CLR 类型可承担两种角色，E/S 不要求共同领域基类；每个持久图仍必须选择非空 durable 根。
 `CreateSharedBranch(name, initialState)` 和 `CreateSharedBranchFromEvent(name, initialEvent)` 各自完成首个 S 或 E 的发布后才交付工作副本，
 不暴露空 head。Event-first 的 State 为 null；无参 CommitState 在捕获前拒绝，显式非空根建立首 State。
-`CheckoutShared(name)` / `CheckoutPrivate(name)` 保持所选精确 Head，只恢复该位置自身或祖先中最近的 State；有效纯 Event 历史可用空模型目录签出为空 State，
+`CheckoutShared(name)` 保持所选精确 Head，只恢复该位置自身或祖先中最近的 State；有效纯 Event 历史可用空模型目录签出为空 State，
 既不物化 Event，也不导入其对象身份。已有 State 的损坏、缺模型或 Upgrade 失败必须传播，不回退旧 State 或伪装成无 State。
 库没有 PendingEvent，不自动 replay，也不判定业务处理进度或外部效果是否完成。
 
@@ -494,7 +494,7 @@ DB-096 首版采用只追加分支、旧点另开，原线 rewind 延期；Schem
 业务图 pin 准确 Schema 根，历史 batch 保其准确来源，不以 current Catalog 补解释。统一写入目录不消除历史解释视图。
 已接受定义不可改写；从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。
 开发草稿从关闭后的完整 baseline 副本起步，隔离代码、编译 history 与数据；定稿在干净基线用普通保存升级。继承已接受草稿继续改形仍须升版；没有原始存储记录合库、过滤推广或迁移链压缩。旧 [DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)保留历史资格，后继见[统一 Catalog 设计](design-branches/0096-history-and-head-model/shared-schema-only.md)。
-打开仓库只选择资源读写；后续创建/编辑 API 不再选择 Shared/Private。所有提交向统一 Catalog 准备，跨 Branch 共同保存仍须汇总闭包、拒绝冲突并统一分配描述符。
+打开仓库只选择资源读写；创建/编辑 API 不选择 Schema 归属。所有提交向统一 Catalog 准备；后续跨 Branch 共同保存仍须汇总闭包、拒绝冲突并统一分配描述符。
 各工作副本的对象身份、State 基线和冻结执行环境仍独立。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
 旧实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)；统一 Catalog 的后继实施与其他 Schema-only/优化的边界见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 

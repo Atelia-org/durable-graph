@@ -15,17 +15,13 @@ namespace Atelia.DurableGraph;
 /// An existing State selects its own exact Schema view. State commits advance the persisted view and saving
 /// baseline without replacing that execution environment; normal editing needs no checkout refresh.
 /// With a committed State, re-checkout restores new domain instances from that nearest State's Schema view.
-/// Without State, shared creation uses the current shared view and private restoration uses the actual Head's view.
+/// Without State, creation and restoration use the current shared Schema view.
 /// Registry changes require closing the repository and opening it again; re-checkout alone does not load them.
-/// Named creation and checkout entry points select this session's fixed ordinary Schema save destination.
-/// Shared sessions require their complete selected view to have been accepted by shared; Private sessions
-/// continue from the actual Head's pin. ToShared commits merge the complete selected view for one operation
-/// without changing this session's ordinary destination or frozen execution environment.
+/// Every commit accepts definitions into the repository's shared Schema catalog.
 /// </remarks>
 public sealed class BranchCheckout : IDisposable {
     private readonly Repository _repository;
     private readonly BranchSaveSession _saveSession;
-    internal bool UsesPrivateSchemas { get; }
     internal BranchSaveSession SaveSession => _saveSession;
     internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => SaveSession.BindingEnvironment;
     internal ModelExecutionEnvironment Models => SaveSession.Models;
@@ -34,12 +30,10 @@ public sealed class BranchCheckout : IDisposable {
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
-    internal BranchCheckout(Repository repository, string branchName, BranchSaveSession session, CheckpointAddress? head,
-        bool usesPrivateSchemas = false) {
+    internal BranchCheckout(Repository repository, string branchName, BranchSaveSession session, CheckpointAddress? head) {
         _repository = repository;
         BranchName = branchName;
         _saveSession = session;
-        UsesPrivateSchemas = usesPrivateSchemas;
         Head = head!; // Initial creation publishes before this checkout is delivered.
     }
 
@@ -104,50 +98,11 @@ public sealed class BranchCheckout : IDisposable {
         return _repository.Commit(this, null, nextState, parameters);
     }
 
-    /// <summary>Publishes the current State while explicitly merging the complete selected Schema view into shared.</summary>
-    /// <remarks>
-    /// Requires an existing State and writable owning repository. Complete definitions and layouts, including
-    /// declarations unused by the business graph, must be compatible with latest shared. Only confirmed
-    /// publication accepts the catalog candidate. This one operation does not change the checkout's default
-    /// write destination or frozen execution environment; subsequent ordinary commits retain their existing rules.
-    /// </remarks>
-    public CheckpointAddress CommitStateToShared(ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        IDurableObject state = State ?? throw new InvalidOperationException("There is no State to commit; supply the first State explicitly.");
-        return _repository.CommitToShared(this, null, state, parameters);
-    }
-
-    /// <summary>Publishes the supplied State while explicitly merging the complete selected Schema view into shared.</summary>
-    /// <remarks>
-    /// The complete selected catalog, final catalog editing requests and captured layouts participate in the
-    /// merge. Same complete layouts reuse shared descriptors, new items are added, and conflicting definitions
-    /// are rejected. This operation does not change the checkout's default write destination or execution models.
-    /// Normal return installs the supplied original State instance. Outcome and fault handling follow CommitState.
-    /// </remarks>
-    public CheckpointAddress CommitStateToShared(IDurableObject nextState, ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(nextState);
-        return _repository.CommitToShared(this, null, nextState, parameters);
-    }
-
-    /// <summary>Publishes an Event while explicitly merging the complete selected Schema view into shared.</summary>
-    /// <remarks>
-    /// Requires a writable owning repository; this named operation selects the shared destination for this call.
-    /// Confirmed publication accepts meta and Head without installing State identities,
-    /// advancing its baseline or consuming rewrite requirements. Complete catalog conflicts reject preparation.
-    /// The checkout's default destination and frozen execution environment remain unchanged.
-    /// </remarks>
-    public CheckpointAddress CommitEventToShared(IDurableObject domainEvent, ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(domainEvent);
-        return _repository.CommitToShared(this, domainEvent, null, parameters);
-    }
-
     // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.
     internal void PrepareAndDiscard(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
-        ReadAmplificationBaseBudgetParameters? parameters = null, bool toShared = false) {
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _repository.PrepareAndDiscardSave(this, root, kind, parameters, toShared);
+        _repository.PrepareAndDiscardSave(this, root, kind, parameters);
     }
 
     /// <summary>Releases this branch's editing occupancy without saving or removing its durable ref.</summary>

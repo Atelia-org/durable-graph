@@ -221,7 +221,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     private static void AssertPublished(Repository repository, FrameAddress head, FrameAddress schema) {
         RepositoryResources resources = ResourcesOf(repository);
         HeadEntry branch = resources.Heads.ReadHead(1).Unwrap(), shared = resources.Heads.ReadHead(2).Unwrap();
-        Assert.True(branch.Payload.StartsWith("P0R1"u8));
+        Assert.True(branch.Payload.StartsWith("P0R2"u8));
         Assert.True(shared.Payload.StartsWith("P0S1"u8));
         Assert.Equal(head, Assert.Single(NamedFrameMapCodec.Decode(branch.Payload[4..]).Unwrap()).Value);
         Assert.Equal("branch/main", Assert.Single(NamedFrameMapCodec.Decode(branch.Payload[4..]).Unwrap()).Key);

@@ -4,7 +4,7 @@
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
-**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；本轮以真实 Shared 路径验证开发副本和共同 Catalog 编码，产品 Private 删除及组发布接线尚待实施。
+**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已集成、正在验收。组发布和新历史模型尚待实施。
 
 **跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。创建协议继续证明 DG 登记候选，尚未冻结或实施。以下现状术语表仍描述当前源码，不以草图用语替换历史事实。
 
@@ -105,7 +105,7 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 | **逻辑历史入口** | 应用用于选择、推进或重定位一条逻辑历史的入口。它可在 rewind 后继续存在，而底层 head 是否改变由方案决定。 | 当前最接近 DG branch；新设计采用 BranchId；原线重定位不进入首版。 |
 | **branch（DG 分支）** | 当前是持久的名称到 domain tip 的绑定。新设计已分开 BranchId、DisplayLabel 与底层 Head，见 API 草图；此行仅描述旧实现。 | `ListBranches`、`GetHead`、`CreateBranch`、`ForkShared`；不能等同 HS Head。 |
 | **name binding（名称绑定）** | 字符串到目标身份或位置的关联；名称比较、唯一性、改绑规则属于目录语义。 | 当前 `branchName → FrameAddress`；新设计以 BranchId 定位，不以 DisplayLabel 查找；旧名称目录不是新设计的必需兼容层。 |
-| **checkout（工作副本）** | 可编辑的内存对象、保存基线及编辑占用，不是持久入口或历史节点。 | `BranchCheckout`；`CheckoutShared` / `CheckoutPrivate`。 |
+| **checkout（工作副本）** | 可编辑的内存对象、保存基线及编辑占用，不是持久入口或历史节点。 | `BranchCheckout`；`CheckoutShared`。 |
 | **tag / bookmark（标签 / 书签）** | 跨重开重新取得固定历史位置的命名手段。 | DG `CreateTag/ResolveTag`；独立书签目录 Head 3 保存名称到历史 FrameAddress。与 HS `HeadSetTag` 捕获当前 Head 集合不同。 |
 
 ### 3.3 管理、查询与业务补充信息

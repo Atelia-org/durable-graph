@@ -1,0 +1,327 @@
+using System.Buffers;
+using Atelia.Binary;
+
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
+using Atelia.DurableGraph.Storage;
+using Atelia.FrameStore;
+using Atelia.HeadStore;
+using Frames = Atelia.FrameStore.FrameStore;
+
+namespace Atelia.DurableGraph.Persistence.Tests;
+
+// Shared Catalog evolution preserves exact historical views and independent State baselines.
+public sealed class SharedSchemaRepositoryTests : IDisposable {
+    private const string Prefix = "dg-shared-schema-";
+    private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
+    private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1_000_000, 1);
+    private static readonly DurableSchema BranchExtra = new("Shared.Schema.BranchExtra", 1, new DurableFieldInfo(1, TypeTag.Int64));
+    private static readonly DurableSchema Unreachable = new("Shared.Schema.Unreachable", 1, new DurableFieldInfo(1, TypeTag.Int32));
+    private static readonly DurableSchema AddedByEvent = new("Shared.Schema.EventOnly", 1, new DurableFieldInfo(1, TypeTag.Int16));
+
+    [Fact]
+    public void Shared_baseline_fork_cold_continues_with_no_additional_catalog_write() {
+        FrameAddress initial;
+        RefImage shared;
+        ObjectId[] identities;
+        using (Repository repository = CreateShared()) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+            // Replace the original graph to make identity retention distinguishable from fresh allocation.
+            main.CommitState(Ring(), NoRebase);
+            identities = main.Baseline!.Objects.Keys.ToArray();
+            Assert.All(identities, id => Assert.True(id.Value > 3));
+            repository.CreateBranch("dev", main.Head);
+            using BranchCheckout branch = repository.CheckoutShared("dev");
+            Assert.Equal(identities, branch.Baseline!.Objects.Keys.ToArray());
+            branch.Catalog.Set(BranchExtra);
+            initial = branch.CommitState(NoRebase).RevisionAddress;
+            shared = ReadHead(repository, 2);
+            Assert.Equal(BranchExtra, Catalog(repository, initial).Schemas[new(BranchExtra.Type, 1)]);
+            AssertRing(branch.State, 7);
+        }
+        using Repository reopened = Repository.OpenExisting(_path, Models());
+        using BranchCheckout cold = reopened.CheckoutShared("dev");
+        DB087Widget root = AssertRing(cold.State, 7);
+        Assert.Equal(identities, cold.Baseline!.Objects.Keys.ToArray());
+
+        AssertSameRef(shared, ReadHead(reopened, 2));
+        root.Numbers[7] = 301;
+        CheckpointAddress next = cold.CommitState(NoRebase);
+        StoredGraphRevision continued = reopened.GraphStore.ReadGraph(next.RevisionAddress);
+        Assert.Equal(initial, continued.SourceGraph);
+        Assert.Contains(LocalRecords(reopened.GraphStore, continued.Address), row => row.Kind == ObjectVersionKind.Delta);
+        AssertRing(reopened.ReadState(next), 301);
+        AssertSameRef(shared, ReadHead(reopened, 2));
+    }
+
+
+    [Fact]
+    public void Shared_Event_accepts_meta_but_cold_execution_and_State_identity_stay_on_the_saved_State() {
+        FrameAddress stateAddress, stateSchema, eventAddress, eventSchema;
+        RefImage sharedRef;
+        using (Repository repository = CreateShared()) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+            repository.CreateBranch("dev", main.Head);
+            using BranchCheckout dev = repository.CheckoutShared("dev");
+            stateAddress = dev.Head.RevisionAddress;
+            stateSchema = Catalog(repository, stateAddress).Snapshot!.Address;
+            sharedRef = ReadHead(repository, 2);
+            IDurableObject oldState = dev.State!;
+            ObjectId? oldId = dev.StateId;
+            NormalizedGraphState baseline = dev.Baseline!;
+            var storage = baseline.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray();
+            dev.Catalog.Set(AddedByEvent);
+            eventAddress = dev.CommitEvent(Ring(100), NoRebase).RevisionAddress;
+            StoredGraphRevision graph = repository.GraphStore.ReadGraph(eventAddress);
+            eventSchema = graph.SchemaRoot!.Value;
+            Assert.NotEqual(stateSchema, eventSchema);
+            Assert.Equal(stateSchema, Catalog(repository, eventAddress).Snapshot!.SourceGraph);
+            Assert.Equal(AddedByEvent, dev.Catalog.Accepted!.Schemas[new(AddedByEvent.Type, 1)]);
+            Assert.Equal(eventSchema, dev.Catalog.Accepted.Snapshot!.Address);
+            Assert.Equal(stateAddress, graph.Parent);
+            Assert.Equal(stateAddress, graph.SourceGraph);
+            ObjectVersionBatch batch = repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
+            Assert.Equal(stateAddress, batch.SourceGraph);
+            Assert.Equal(eventSchema, batch.SchemaRoot);
+            Assert.Same(oldState, dev.State);
+            Assert.Equal(oldId, dev.StateId);
+            Assert.Equal(stateAddress, dev.StateRevisionAddress);
+            Assert.Same(baseline, dev.Baseline);
+            Assert.Equal(storage, dev.Baseline!.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray());
+            Assert.NotEqual(sharedRef.Revision, ReadHead(repository, 2).Revision);
+            sharedRef = ReadHead(repository, 2);
+        }
+        using Repository cold = Repository.OpenExisting(_path, Models());
+        using BranchCheckout checkout = cold.CheckoutShared("dev");
+        DB087Widget state = AssertRing(checkout.State, 7);
+        Assert.Equal(eventAddress, checkout.Head.RevisionAddress);
+        Assert.Equal(stateAddress, checkout.StateRevisionAddress);
+        Assert.Equal(eventSchema, checkout.Catalog.Accepted!.Snapshot!.Address);
+        Assert.Equal(stateSchema, checkout.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
+        AssertRing(cold.ReadEvent(checkout.Head), 7, value: 100);
+        state.Numbers[7] = 302;
+        CheckpointAddress next = checkout.CommitState(NoRebase);
+        StoredGraphRevision graphNext = cold.GraphStore.ReadGraph(next.RevisionAddress);
+        Assert.Equal(eventAddress, graphNext.Parent);
+        Assert.Equal(stateAddress, graphNext.SourceGraph);
+        Assert.Equal(eventSchema, graphNext.SchemaRoot);
+        AssertRing(cold.ReadState(next), 302);
+        AssertSameRef(sharedRef, ReadHead(cold, 2));
+    }
+
+    [Fact]
+    public void Discarded_catalog_candidate_can_be_corrected_without_appending_or_claiming_the_wrong_shape() {
+        using Repository repository = CreateShared();
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+        repository.CreateBranch("dev", main.Head);
+        using BranchCheckout dev = repository.CheckoutShared("dev");
+        PublicationImage before = Snapshot(repository);
+        NormalizedGraphState baseline = dev.Baseline!;
+        CheckpointAddress oldHead = dev.Head;
+        FrameAddress oldSchema = dev.Catalog.Accepted!.Snapshot!.Address;
+        DurableSchema wrong = new("Shared.Schema.Corrected", 1, new DurableFieldInfo(1, TypeTag.Byte));
+        DurableSchema corrected = new("Shared.Schema.Corrected", 1, new DurableFieldInfo(1, TypeTag.Int64));
+        dev.Catalog.Set(wrong);
+        AssertRing(dev.State, 7).Numbers[7] = 303;
+        dev.PrepareAndDiscard(dev.State!, parameters: NoRebase);
+        AssertUnchanged(repository, before);
+        Assert.Same(baseline, dev.Baseline);
+        Assert.Equal(oldHead, dev.Head);
+        Assert.Equal(oldSchema, dev.Catalog.Accepted.Snapshot!.Address);
+        Assert.False(dev.Catalog.Accepted.Schemas.ContainsKey(new(wrong.Type, 1)));
+        Assert.True(dev.Catalog.DirtyCount > 0);
+        dev.Catalog.Set(corrected);
+        CheckpointAddress saved = dev.CommitState(NoRebase);
+        Assert.Equal(corrected, Catalog(repository, saved.RevisionAddress).Schemas[new(corrected.Type, 1)]);
+        Assert.Equal(0, dev.Catalog.DirtyCount);
+        AssertRing(repository.ReadState(saved), 303);
+        Assert.NotNull(repository.SharedSchemaRoot);
+        Assert.NotEqual(before.Shared.Revision, ReadHead(repository, 2).Revision);
+    }
+
+    [Theory]
+    [InlineData("state-meta")]
+    [InlineData("business")]
+    public void Shared_raw_preparation_cannot_substitute_a_real_but_wrong_meta_or_business_source(string wrongSource) {
+        using Repository repository = CreateShared();
+        using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+        repository.CreateBranch("dev", main.Head);
+        using BranchCheckout dev = repository.CheckoutShared("dev");
+        dev.Catalog.Set(BranchExtra);
+        dev.CommitState(NoRebase);
+        FrameAddress state = dev.StateRevisionAddress!.Value;
+        Assert.NotEqual(main.StateRevisionAddress, dev.StateRevisionAddress);
+        FrameAddress stateSchema = Catalog(repository, state).Snapshot!.Address;
+        dev.Catalog.Set(AddedByEvent);
+        dev.CommitEvent(Ring(100), NoRebase);
+        FrameAddress latestCatalog = dev.Catalog.Accepted!.Snapshot!.Address;
+        Assert.NotEqual(stateSchema, latestCatalog);
+        using RepositoryStorageFacade facade = new(ResourcesOf(repository));
+        FrameAddress catalogSource = wrongSource switch {
+            "state-meta" => stateSchema,
+            _ => latestCatalog,
+        };
+        SchemaCatalogWorkspace catalog = new(facade.EnsureEditingAllowed, SchemaCatalogView.Load(facade.Store, catalogSource));
+        catalog.Set(new DurableSchema("Shared.Schema.RawCandidate", 1, new DurableFieldInfo(1, TypeTag.Byte)));
+        PreparedGraphWrite write = catalog.Prepare().Write!;
+        FrameAddress businessSource = wrongSource == "business" ? main.StateRevisionAddress!.Value : state;
+        PreparedGraphWrite business = new(businessSource, dev.StateId!.Value, []);
+        PublicationImage before = Snapshot(repository);
+        Assert.Throws<InvalidDataException>(() => facade.PrepareFrom("dev", StoredGraphKind.State, () => (business, write)));
+        AssertUnchanged(repository, before);
+        Assert.False(facade.HasPending);
+        Assert.Equal(latestCatalog, dev.Catalog.Accepted.Snapshot!.Address);
+    }
+
+    [Fact]
+    public void Shared_checkout_rejects_missing_occupied_and_readonly_before_output() {
+        using (Repository repository = CreateShared()) {
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+            repository.CreateBranch("dev", main.Head);
+            using BranchCheckout dev = repository.CheckoutShared("dev");
+            PublicationImage before = Snapshot(repository);
+            Assert.Throws<KeyNotFoundException>(() => repository.CheckoutShared("absent"));
+            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("dev"));
+            AssertUnchanged(repository, before);
+        }
+        using Repository readOnly = Repository.OpenReadOnlyExisting(_path, Models());
+        PublicationImage readOnlyBefore = Snapshot(readOnly);
+        Assert.Throws<InvalidOperationException>(() => readOnly.CheckoutShared("dev"));
+        AssertUnchanged(readOnly, readOnlyBefore);
+    }
+
+
+    [Fact]
+    public void Event_only_cold_checkout_uses_the_latest_catalog_and_its_first_State_has_no_content_source() {
+        FrameAddress firstEvent, oldPin, latestShared, secondEvent, eventPin;
+        RefImage shared;
+        using (Repository repository = CreateShared()) {
+            using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", Ring(100), NoRebase);
+            firstEvent = events.Head.RevisionAddress;
+            oldPin = Catalog(repository, firstEvent).Snapshot!.Address;
+            Assert.Null(events.State);
+            using BranchCheckout main = repository.CreateSharedBranch("main", Ring(), NoRebase);
+            main.Catalog.Set(Unreachable);
+            main.CommitState(NoRebase);
+            latestShared = repository.SharedSchemaRoot!.Value;
+            shared = ReadHead(repository, 2);
+            Assert.NotEqual(oldPin, latestShared);
+        }
+        using (Repository repository = Repository.OpenExisting(_path, Models())) {
+            using BranchCheckout events = repository.CheckoutShared("events");
+
+            Assert.Equal(firstEvent, events.Head.RevisionAddress);
+            Assert.Null(events.State);
+            Assert.Null(events.StateId);
+            Assert.Null(events.StateRevisionAddress);
+            Assert.Null(events.Baseline);
+            Assert.Equal(latestShared, events.Catalog.Accepted!.Snapshot!.Address);
+            Assert.Equal(latestShared, events.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
+            Assert.Same(events.Models, events.BindingEnvironment.Models);
+            Assert.True(events.Catalog.Accepted.Schemas.ContainsKey(new(Unreachable.Type, 1)));
+            events.Catalog.Set(AddedByEvent);
+            secondEvent = events.CommitEvent(Ring(200), NoRebase).RevisionAddress;
+            StoredGraphRevision saved = repository.GraphStore.ReadGraph(secondEvent);
+            eventPin = saved.SchemaRoot!.Value;
+            Assert.NotEqual(oldPin, eventPin);
+            Assert.Equal(firstEvent, saved.Parent);
+            Assert.Null(saved.SourceGraph);
+            Assert.Equal(latestShared, events.Catalog.Accepted!.Snapshot!.SourceGraph);
+            Assert.Equal(eventPin, events.Catalog.Accepted.Snapshot.Address);
+            Assert.Null(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).SourceGraph);
+            Assert.Null(events.State);
+            Assert.Null(events.Baseline);
+            Assert.Null(events.StateRevisionAddress);
+            Assert.NotEqual(shared.Revision, ReadHead(repository, 2).Revision);
+            shared = ReadHead(repository, 2);
+        }
+        using Repository cold = Repository.OpenExisting(_path, Models());
+        using BranchCheckout empty = cold.CheckoutShared("events");
+        Assert.Equal(secondEvent, empty.Head.RevisionAddress);
+        Assert.Null(empty.State);
+        Assert.Null(empty.Baseline);
+        Assert.Null(empty.StateRevisionAddress);
+        Assert.Equal(eventPin, empty.Catalog.Accepted!.Snapshot!.Address);
+        Assert.Equal(eventPin, empty.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
+        CheckpointAddress firstState = empty.CommitState(Ring(), NoRebase);
+        StoredGraphRevision graph = cold.GraphStore.ReadGraph(firstState.RevisionAddress);
+        Assert.Equal(secondEvent, graph.Parent);
+        Assert.Null(graph.SourceGraph);
+        Assert.Equal(eventPin, graph.SchemaRoot);
+        IReadOnlyList<ObjectVersionRecord> records = LocalRecords(cold.GraphStore, graph.Address);
+        Assert.Equal(3, records.Count);
+        Assert.All(records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+        AssertRing(cold.ReadState(firstState), 7);
+        Assert.Equal(eventPin, cold.SharedSchemaRoot);
+        AssertSameRef(shared, ReadHead(cold, 2));
+    }
+
+
+
+    private Repository CreateShared() => Repository.CreateNew(_path, Models());
+    private static StateModelRegistry Models() {
+        StateModelRegistry models = new();
+        models.Register(global::Atelia.DurableGraph.Generated.Family_5030576964676574.Definition);
+        return models;
+    }
+    private static DB087Widget Ring(int value = 1) {
+        List<int> numbers = Enumerable.Range(0, 128).ToList();
+        DB087Widget root = new() { Value = value, Numbers = numbers };
+        root.Child = new() { Value = value + 1, Numbers = numbers, Child = root };
+        return root;
+    }
+    private static DB087Widget AssertRing(IDurableObject? instance, int atSeven, int value = 1) {
+        DB087Widget root = Assert.IsType<DB087Widget>(instance), child = Assert.IsType<DB087Widget>(root.Child);
+        Assert.Equal(value, root.Value);
+        Assert.Equal(value + 1, child.Value);
+        Assert.Same(root, child.Child);
+        Assert.Same(root.Numbers, child.Numbers);
+        Assert.Equal(128, root.Numbers.Count);
+        for (int i = 0; i < 128; i++) { Assert.Equal(i == 7 ? atSeven : i, root.Numbers[i]); }
+        return root;
+    }
+    private static SchemaCatalogView Catalog(Repository repository, FrameAddress business) =>
+        SchemaCatalogView.Load(repository.GraphStore, repository.GraphStore.ReadMetadata(business).SchemaRoot!.Value);
+    private sealed record FrameImage(FrameAddress Address, uint Tag, int MetaLength, bool IsTombstone, byte[] Payload);
+    private static FrameImage[] ReadFrames(Frames data) {
+        List<FrameInfo> frames = [];
+        data.Inventory(frames.Add).Unwrap();
+        return frames.Select(info => {
+            using FrameRead read = data.ReadFrame(info.Address).Unwrap();
+            return new FrameImage(info.Address, read.Tag, read.TailMetaLength, read.IsTombstone, read.PayloadAndMeta.ToArray());
+        }).ToArray();
+    }
+    private static void AssertFramesPreserved(Frames data, IEnumerable<FrameImage> before) {
+        FrameImage[] after = ReadFrames(data);
+        foreach (FrameImage frame in before) {
+            FrameImage retained = after.Single(item => item.Address == frame.Address);
+            Assert.Equal(frame.Tag, retained.Tag);
+            Assert.Equal(frame.MetaLength, retained.MetaLength);
+            Assert.Equal(frame.IsTombstone, retained.IsTombstone);
+            Assert.Equal(frame.Payload, retained.Payload);
+        }
+    }
+    private sealed record RefImage(HeadEntryId Revision, byte[] Payload);
+    private sealed record PublicationImage(RefImage Branches, RefImage Shared, long Bytes, long Appended);
+    private static RefImage ReadHead(Repository repository, uint id) {
+        HeadEntry read = ResourcesOf(repository).Heads.ReadHead(id).Unwrap();
+        return new(read.Id, read.Payload.ToArray());
+    }
+    private static PublicationImage Snapshot(Repository repository) => new(ReadHead(repository, 1), ReadHead(repository, 2),
+        DataBytes(ResourcesOf(repository).Data), repository.GraphStore.AppendedFrames);
+    private static void AssertSameRef(RefImage before, RefImage after) {
+        Assert.Equal(before.Revision, after.Revision);
+        Assert.Equal(before.Payload, after.Payload);
+    }
+    private static void AssertUnchanged(Repository repository, PublicationImage before) {
+        AssertSameRef(before.Branches, ReadHead(repository, 1));
+        AssertSameRef(before.Shared, ReadHead(repository, 2));
+        Assert.Equal(before.Bytes, DataBytes(ResourcesOf(repository).Data));
+        Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
+        Assert.False(ResourcesOf(repository).HasPendingSave);
+        Assert.False(repository.IsFaulted);
+    }
+
+    public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);
+}

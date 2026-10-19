@@ -1,7 +1,8 @@
 # DB-087：meta 自举与共享／私有 Schema 视图
 
-> 后继决定（2026-10-19）：[DB-096 统一 Catalog](../0096-history-and-head-model/shared-schema-only.md)已选删除 Private/ToShared，当前产品尚未实施删除。本文保留原实现与资格；meta 自举、准确历史 Schema、source/prior 和发布/fault 纪律继续有效，私有目录演进不再是后续设计目标。
+> 后继实施（2026-10-19）：[DB-096](../0096-history-and-head-model/private-removal.md)已删除 Private/ToShared，统一使用仓库 Catalog。本文保留原实现与资格；meta 自举、准确历史 Schema、source/prior 和发布/fault 纪律继续有效，私有目录演进不再是后续设计目标。
 
+> 已删除源码符号按 Git `a347a2f` 查阅；以下历史源码路径不表示当前入口。
 > 校准：2026-10-13。本文只保留当前契约、源码落点、已获资格与条件延期。
 > 默认公开路径已接 meta 自举，旧保存／typed reader／Schema 权威／raw Storage 束已退出。
 > 旧权威退出及有限 P1／P2 原停点保删除前资格；DB-088 已承接开发流程与特例删减，删除后的源码及新包资格分别维护。
@@ -222,7 +223,7 @@ zero 关闭、negative pre-I/O 拒绝、oversize bypass／驱逐保持；预算 
 - 持久核心：[GraphRecordStore](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)、[wire](../../../src/DurableGraph.Persistence/GraphFrameCodec.cs)、[目录 codec](../../../src/DurableGraph.Persistence/ObjectHeadDirectoryCodec.cs)、[共用 payload](../../../src/DurableGraph.Storage/ObjectVersionPayloadCodec.cs)。
 - 业务 producer／候选：[BusinessWorkspace](../../../src/DurableGraph.Persistence/BusinessWorkspace.cs)、[BusinessPersistenceAdapter](../../../src/DurableGraph.Persistence/BusinessPersistenceAdapter.cs)、[planner](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs)、[NormalizedGraphState](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)。
 - owner／公开前端：[RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.cs)／[发布 partial](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)、[Repository](../../../src/DurableGraph.Persistence/Repository.cs)／[恢复 partial](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)／[history partial](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.History.cs)、[BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)。
-- baseline 私有恢复／冷续写：[具体入口](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)；只新增具体 scope 与 owner 派生的 meta 来源，不建立 resolver／策略平台。
+- baseline 私有恢复／冷续写：`src/DurableGraph.Persistence/Repository.PrivateSchemas.cs`（删除前源码）、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)；只新增具体 scope 与 owner 派生的 meta 来源，不建立 resolver／策略平台。
 - 环境／恢复／缓存：[StateModelRegistry](../../../src/DurableGraph.Persistence/StateModelRegistry.cs)、[ReadStoredGraph](../../../src/DurableGraph.Persistence/DecodedRevision.cs)、[GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)、[State 槽](../../../src/DurableGraph.Persistence/PreparedStateRestoration.cs)、[owned cache](../../../src/DurableGraph.Persistence/GraphPhysicalReadCache.cs)。
 
 修改具体机制时先核相应 source／tests，再选[历史证据组](#evidence-index)，不按分片编号通读过去施工。
@@ -280,7 +281,7 @@ DB-087 原约定的有限 P2 已在删除前完成。用户后续校准的开发
 - private 只发布 ref1，ref2 与 owner shared 基线保持。Event 接受 meta／Head，不推进 State、heads/H 或 rewrite；Discard 保已提交基线、待改意图及领域修改。
 - 普通 Shared 保存先检查整个 Head.S view 已被最新 shared 同形接纳，missing／异形在 Capture 前拒绝；不能把地址不同当成不相容，也不能只推广业务可达定义。
 
-源码落点为 [Repository 私有签出](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 和 [SchemaCatalogWorkspace](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs)。无新的 resolver／token／策略框架；meta 固定员工引导与对象版本核心保留。
+源码落点为 `src/DurableGraph.Persistence/Repository.PrivateSchemas.cs`（删除前源码）、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 和 [SchemaCatalogWorkspace](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs)。无新的 resolver／token／策略框架；meta 固定员工引导与对象版本核心保留。
 
 ### 单次完整目录 ToShared
 

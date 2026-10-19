@@ -3,7 +3,6 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
-using Atelia.FrameStore;
 using CatalogDto = Atelia.DurableGraph.Generated.Family_503043.V1;
 using DescriptorDto = Atelia.DurableGraph.Generated.Family_503044.V1;
 using FieldDto = Atelia.DurableGraph.Generated.Family_503046.V1;
@@ -61,51 +60,6 @@ internal sealed class SchemaCatalogWorkspace {
             builder.AddContainer(layout);
         }
         return builder.Finish(this);
-    }
-
-    // Promotion imports the complete declared Head.S, including definitions that no
-    // captured business object reaches. The owner derives and freezes both roots;
-    // neither an external view nor this workspace's possibly older accepted view
-    // can substitute for loading those actual graphs.
-    internal PreparedSchemaCatalogWrite PrepareToSharedOwned(GraphRecordStore store, FrameAddress? headSchemaRoot,
-        FrameAddress? latestSharedRoot, Func<IEnumerable<ObjectLayout>> captureLayouts) {
-        ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(captureLayouts);
-        SchemaCatalogView? source = headSchemaRoot is { } head ? SchemaCatalogView.Load(store, head) : null;
-        SchemaCatalogView? target = latestSharedRoot is { } shared ? SchemaCatalogView.Load(store, shared) : null;
-        _ = CollectToShared(source, target, []);
-        IEnumerable<ObjectLayout> capturedLayouts = captureLayouts();
-        store.EnsureUsable();
-        var (schemas, layouts) = CollectToShared(source, target, capturedLayouts);
-        // Only the latest shared graph supplies meta priors, retained rows and the
-        // destination ID domain. Source descriptor numbers are never copied.
-        Builder builder = new(target);
-        foreach (DurableSchema schema in schemas.Values.OrderBy(static value => value.Type).ThenBy(static value => value.Version)) {
-            _ = builder.AddSchema(schema);
-        }
-        foreach (ObjectLayout layout in layouts.Where(static value => (value.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && !BootstrapBindings.IsBuiltin(value))) {
-            builder.AddContainer(layout);
-        }
-        // Keep the original workspace unchanged until the common pending save is
-        // confirmed; discard preserves its accepted view and explicit dirty roots.
-        return builder.Finish(this);
-    }
-
-    private (IReadOnlyDictionary<SchemaKey, DurableSchema> Schemas, ObjectLayout[] Layouts)
-        CollectToShared(SchemaCatalogView? source, SchemaCatalogView? target,
-            IEnumerable<ObjectLayout> capturedLayouts) {
-        ArgumentNullException.ThrowIfNull(capturedLayouts);
-        ObjectLayout[] layouts = (source?.ObjectLayouts ?? []).Concat(_containers).Concat(capturedLayouts).Distinct().ToArray();
-        foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
-        IReadOnlyDictionary<SchemaKey, DurableSchema> schemas = SchemaCatalogSemantics.Collect(
-            (source?.Schemas.Values ?? []).Concat(_schemas.Values), layouts);
-        // Collect checks complete same-key equality across both views and every
-        // exact base/inline/container dependency, before any IDs or bodies exist.
-        ObjectLayout[] mergedLayouts = (target?.ObjectLayouts ?? []).Concat(layouts).Distinct().ToArray();
-        IReadOnlyDictionary<SchemaKey, DurableSchema> merged = SchemaCatalogSemantics.Collect(
-            (target?.Schemas.Values ?? []).Concat(schemas.Values), mergedLayouts);
-        SchemaCatalogSemantics.ValidateDeclarations(merged.Values, mergedLayouts);
-        return (schemas, layouts);
     }
 
     private void CheckAccepted(SchemaKey key, DurableSchema schema) {

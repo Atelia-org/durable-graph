@@ -10,220 +10,111 @@ using Atelia.FrameStore;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
-    // This Fact exercises real SG assemblies and real repository publication.
-    // The separate MSBuild probe owns Off/Publish target execution evidence.
+    // Real SG and storage: Event publication may accept V2 while the loaded
+    // State still requires a rewrite. Discard and Event must not consume it.
     [Fact]
-    public void GeneratedDevelopmentForksKeepUserIdentitiesAndPublishOnlyCleanWinningVersion() {
+    public void SharedUpgradeDiscardAndEventPreserveStateRewriteUntilStateCommit() {
         using AncestryHistoryDirectory history = new();
         SchemaHistoryTool publisher = new();
         GeneratorTestRun v1 = RunGenerator(DevelopmentWorkflowSource(1, wideMarker: false), [], null, "true");
         AssertSchemaOnlyCompiles(v1);
         publisher.Publish(history.WriteManifest(v1), history.History);
-        Dictionary<string, string> acceptedV1 = history.ReadContents();
-        Assert.Single(acceptedV1);
-        DevelopmentWorkflowHost old = DevelopmentWorkflowHost.Load(v1);
-
-        // Both drafts compile against only the same accepted V1 template. Their
-        // generated V2 candidates are not accepted into compiler history here.
-        GeneratorTestRun draftA = RunGenerator(DevelopmentWorkflowSource(2, wideMarker: false), history.ReadAdditionalTexts(), null, "true");
-        GeneratorTestRun draftB = RunGenerator(DevelopmentWorkflowSource(2, wideMarker: true), history.ReadAdditionalTexts(), null, "true");
-        AssertSchemaOnlyCompiles(draftA);
-        AssertSchemaOnlyCompiles(draftB);
-        DevelopmentWorkflowHost a = DevelopmentWorkflowHost.Load(draftA), b = DevelopmentWorkflowHost.Load(draftB);
-        Assert.Equal(a.Schema().Type, b.Schema().Type);
-        Assert.Equal(2, a.Schema().Version);
-        Assert.Equal(2, b.Schema().Version);
-        Assert.NotEqual(a.Schema(), b.Schema());
-        DevelopmentAssertHistoryUnchanged(history, acceptedV1);
-
+        GeneratorTestRun v2 = RunGenerator(DevelopmentWorkflowSource(2, wideMarker: false), history.ReadAdditionalTexts(), null, "true");
+        AssertSchemaOnlyCompiles(v2);
+        DevelopmentWorkflowHost old = DevelopmentWorkflowHost.Load(v1), current = DevelopmentWorkflowHost.Load(v2);
         using RawBaseDirectory directory = new();
-        FrameAddress baseline, sharedV1, aState, aSchema, bState, bSchema, finalState, finalSchema, continued;
-        ObjectId rootId, listId;
-        Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> originalEdges;
-        Dictionary<ObjectId, ObjectStorageInfo> originalStorage;
-        PrivateRefImage originalShared;
-        PrivateFrameImage[] seedFrames, draftFrames;
+        FrameAddress source, schemaV1, schemaV2, eventAddress, saved, continued;
+        ObjectId rootId;
+        Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges;
+        Dictionary<ObjectId, ObjectStorageInfo> storage;
+        EvidenceFrameImage[] originalFrames;
         using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
-            ObjectId firstRoot = main.StateId!.Value;
-            ObjectId[] firstIds = main.Baseline!.Objects.Keys.ToArray();
-            // A fresh ring consumes a new block of IDs; promoting its existing
-            // child then proves root identity is not accidental 1/2/3 allocation.
-            main.CommitState(old.Create());
-            IDurableObject child = old.Child(main.State!);
-            baseline = main.CommitState(child).RevisionAddress;
-            Assert.Same(child, main.State);
-            rootId = main.StateId!.Value;
-            Assert.NotEqual(firstRoot, rootId);
-            Assert.All(main.Baseline!.Objects.Keys, id => Assert.True(id.Value > firstIds.Max(id => id.Value)));
-            old.Check(main.State!, 2, 1, 7);
-            originalEdges = DevelopmentEdges(main, old);
-            originalStorage = DevelopmentStorage(main);
-            Assert.Equal(3, originalStorage.Count);
-            listId = Assert.Single(main.Baseline!.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
-            Assert.Equal(listId, originalEdges[rootId].List);
-            Assert.Equal(rootId, originalEdges[originalEdges[rootId].Child].Child);
-            repository.CreateTag("user-v1", main.Head);
-            sharedV1 = repository.SharedSchemaRoot!.Value;
-            SchemaCatalogView catalog = SchemaCatalogView.Load(ReferenceGraphStore(repository), sharedV1);
-            Assert.Equal(old.Schema(), Assert.Single(catalog.Schemas).Value);
-            originalShared = PrivateReadRef(repository, 2);
-            seedFrames = PrivateReadFrames(PrivateResources(repository).Data);
+            using BranchCheckout branch = repository.CreateSharedBranch("main", old.Create());
+            branch.CommitState(old.Create());
+            source = branch.CommitState(old.Child(branch.State!)).RevisionAddress;
+            rootId = branch.StateId!.Value;
+            edges = DevelopmentEdges(branch, old);
+            storage = DevelopmentStorage(branch);
+            repository.CreateTag("v1", branch.Head);
+            schemaV1 = repository.SharedSchemaRoot!.Value;
+            originalFrames = EvidenceReadFrames(EvidenceResources(repository).Data);
         }
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+            using BranchCheckout branch = repository.CheckoutShared("main");
+            DevelopmentAssertIdentity(branch, current, rootId, edges);
+            Assert.Equal(2, branch.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
+            Assert.Equal(schemaV1, branch.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
+            NormalizedGraphState baseline = branch.Baseline;
+            IDurableObject state = branch.State!;
+            EvidencePublicationImage before = EvidencePublication(repository);
+            branch.PrepareAndDiscard(state);
+            EvidenceAssertPublicationUnchanged(repository, before);
+            Assert.Same(baseline, branch.Baseline);
+            Assert.Same(state, branch.State);
+            Assert.Equal(2, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
 
-        aState = DevelopmentSaveDraft(directory.Path, "dev-a", a, baseline, rootId, originalEdges,
-            originalStorage, originalShared, out aSchema);
-        bState = DevelopmentSaveDraft(directory.Path, "dev-b", b, baseline, rootId, originalEdges,
-            originalStorage, originalShared, out bSchema);
-        Assert.NotEqual(aSchema, bSchema);
-        DevelopmentAssertHistoryUnchanged(history, acceptedV1);
-
-        aState = DevelopmentContinue(directory.Path, "dev-a", a, aState, aSchema, rootId, originalEdges, 7001,
-            originalShared);
-        bState = DevelopmentContinue(directory.Path, "dev-b", b, bState, bSchema, rootId, originalEdges, 7002,
-            originalShared);
-
-        // Each real V2 host must refuse the other branch's accepted same-key
-        // shape. Closing the readonly owners leaves the complete file set intact.
-        Dictionary<string, byte[]> beforeWrong = PrivateFiles(directory.Path);
-        using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, a.Models())) {
-            a.Check(repository.ReadState(repository.GetHead("dev-a")), 102, 101, 7001);
-            Assert.ThrowsAny<InvalidDataException>(() => repository.ReadState(repository.GetHead("dev-b")));
-            Assert.False(repository.IsFaulted);
-        }
-        using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, b.Models())) {
-            b.Check(repository.ReadState(repository.GetHead("dev-b")), 202, 201, 7002);
-            Assert.ThrowsAny<InvalidDataException>(() => repository.ReadState(repository.GetHead("dev-a")));
-            Assert.False(repository.IsFaulted);
-        }
-        PrivateAssertFilesUnchanged(beforeWrong, PrivateFiles(directory.Path));
-
-        // Compiler history accepts only the winning V2. This tool call is not
-        // claimed as execution of the packaged MSBuild Publish/Verify targets.
-        publisher.Publish(history.WriteManifest(draftB), history.History);
-        publisher.Verify(history.WriteManifest(draftB), history.History);
-        Assert.Equal(2, history.ReadContents().Count);
-        foreach ((string file, string contents) in acceptedV1) {
-            Assert.Equal(contents, File.ReadAllText(Path.Combine(history.History, file)));
-        }
-        GeneratorTestRun finalRun = RunGenerator(DevelopmentWorkflowSource(2, wideMarker: true), history.ReadAdditionalTexts(), null, "true");
-        AssertSchemaOnlyCompiles(finalRun);
-        DevelopmentWorkflowHost winner = DevelopmentWorkflowHost.Load(finalRun);
-        Assert.Equal(b.Schema(), winner.Schema());
-
-        using (Repository repository = Repository.OpenExisting(directory.Path, winner.Models())) {
+            eventAddress = branch.CommitEvent(state).RevisionAddress;
             GraphRecordStore store = ReferenceGraphStore(repository);
-            draftFrames = PrivateReadFrames(PrivateResources(repository).Data);
-            FrameAddress fixedSource = repository.ResolveTag("user-v1").RevisionAddress;
-            Assert.Equal(baseline, fixedSource);
-            long frames = store.AppendedFrames;
-            repository.CreateBranch("final", repository.ResolveTag("user-v1"));
-            Assert.Equal(frames, store.AppendedFrames); // A ref-only operation, not a new root.
-            using BranchCheckout final = repository.CheckoutPrivate("final");
-            Assert.Equal(baseline, final.StateRevisionAddress);
-            DevelopmentAssertIdentity(final, winner, rootId, originalEdges);
-            Assert.Equal(2, final.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
-            finalState = final.CommitStateToShared().RevisionAddress;
-            finalSchema = repository.SharedSchemaRoot!.Value;
-            Assert.NotEqual(sharedV1, finalSchema);
-            DevelopmentAssertUpgrade(store, final, winner, baseline, baseline, finalSchema, rootId, originalEdges, originalStorage);
-            SchemaCatalogView published = SchemaCatalogView.Load(store, finalSchema);
-            Assert.Equal(2, published.Schemas.Count);
-            Assert.Equal(old.Schema(), published.Schemas[new(old.Schema().Type, 1)]);
-            Assert.Equal(winner.Schema(), published.Schemas[new(winner.Schema().Type, 2)]);
-            Assert.DoesNotContain(published.Schemas.Values, schema => schema.Equals(a.Schema()));
-            Assert.Equal(aState, repository.GetHead("dev-a").RevisionAddress);
-            Assert.Equal(bState, repository.GetHead("dev-b").RevisionAddress);
-            Assert.Equal(baseline, repository.GetHead("main").RevisionAddress);
-            Assert.Equal(sharedV1, store.ReadGraph(baseline).SchemaRoot);
-            Assert.Equal(aSchema, store.ReadGraph(aState).SchemaRoot);
-            Assert.Equal(bSchema, store.ReadGraph(bState).SchemaRoot);
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, seedFrames);
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, draftFrames);
+            StoredGraphRevision domainEvent = store.ReadGraph(eventAddress);
+            schemaV2 = repository.SharedSchemaRoot!.Value;
+            Assert.NotEqual(schemaV1, schemaV2);
+            Assert.Equal(schemaV2, domainEvent.SchemaRoot);
+            Assert.Equal(source, domainEvent.Parent);
+            Assert.Equal(source, domainEvent.SourceGraph);
+            Assert.Equal(StoredGraphKind.Event, domainEvent.Kind);
+            Assert.Same(baseline, branch.Baseline);
+            Assert.Same(state, branch.State);
+            Assert.Equal(source, branch.StateRevisionAddress);
+            Assert.Equal(rootId, branch.StateId);
+            Assert.Equal(schemaV1, branch.BindingEnvironment.SelectedSchemaView.Snapshot!.Address);
+            Assert.Equal(2, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
+            Assert.Equal(old.Schema(), branch.Catalog.Accepted!.Schemas[new(old.Schema().Type, 1)]);
+            Assert.Equal(current.Schema(), branch.Catalog.Accepted.Schemas[new(current.Schema().Type, 2)]);
+            Assert.Equal(2, DefaultRecords(store, eventAddress).Count);
+            Assert.All(DefaultRecords(store, eventAddress), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            before = EvidencePublication(repository);
+            branch.PrepareAndDiscard(state);
+            EvidenceAssertPublicationUnchanged(repository, before);
+            Assert.Same(baseline, branch.Baseline);
+            Assert.Equal(2, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
         }
-
-        // A fresh winner owner writes a real Delta with actual prior/head/H.
-        using (Repository repository = Repository.OpenExisting(directory.Path, winner.Models())) {
-            PrivateRefImage sharedBefore = PrivateReadRef(repository, 2);
-            Assert.Equal(finalSchema, repository.SharedSchemaRoot);
-            using BranchCheckout final = repository.CheckoutShared("final");
-            DevelopmentAssertIdentity(final, winner, rootId, originalEdges);
-            ObjectStorageInfo prior = final.Baseline!.Objects[listId].Storage!.Value;
-            winner.ChangeList(final.State!, 9000);
-            continued = final.CommitState(new(int.MaxValue, 1)).RevisionAddress;
-            DevelopmentAssertDelta(ReferenceGraphStore(repository), final, finalState, continued, finalSchema, listId, prior);
-            PrivateAssertSameRef(sharedBefore, PrivateReadRef(repository, 2));
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, draftFrames);
+        // Reopen at the Event: execution still normalizes the old State using its
+        // exact V1 pin, while publication uses the already accepted V2 Catalog.
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+            using BranchCheckout branch = repository.CheckoutShared("main");
+            Assert.Equal(eventAddress, branch.Head.RevisionAddress);
+            Assert.Equal(source, branch.StateRevisionAddress);
+            Assert.Equal(schemaV1, branch.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
+            Assert.Equal(2, branch.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
+            EvidenceRefImage shared = EvidenceReadRef(repository, 2);
+            saved = branch.CommitState().RevisionAddress;
+            DevelopmentAssertUpgrade(ReferenceGraphStore(repository), branch, current, source, eventAddress,
+                schemaV2, rootId, edges, storage);
+            EvidenceAssertSameRef(shared, EvidenceReadRef(repository, 2));
+            EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, originalFrames);
         }
-        Dictionary<string, byte[]> beforeFinalRead = PrivateFiles(directory.Path);
+        using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
+            using BranchCheckout branch = repository.CheckoutShared("main");
+            DevelopmentAssertIdentity(branch, current, rootId, edges);
+            Assert.All(branch.Baseline!.Objects.Values, row => Assert.False(row.RequiresRewrite));
+            ObjectId list = edges[rootId].List;
+            ObjectStorageInfo prior = branch.Baseline.Objects[list].Storage!.Value;
+            current.ChangeList(branch.State!, 9000);
+            continued = branch.CommitState(new(int.MaxValue, 1)).RevisionAddress;
+            DevelopmentAssertDelta(ReferenceGraphStore(repository), branch, saved, continued, schemaV2, list, prior);
+        }
+        Dictionary<string, byte[]> files = EvidenceFiles(directory.Path);
         using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, old.Models())) {
-            Assert.Equal(baseline, repository.ResolveTag("user-v1").RevisionAddress);
-            old.Check(repository.ReadState(repository.ResolveTag("user-v1")), 2, 1, 7);
+            old.Check(repository.ReadState(repository.ResolveTag("v1")), 2, 1, 7);
         }
-        using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, winner.Models())) {
-            winner.Check(repository.ReadState(repository.ResolveTag("user-v1")), 202, 201, 7);
-            winner.Check(repository.ReadState(repository.GetHead("final")), 202, 201, 9000);
-            winner.Check(repository.ReadState(repository.GetHead("dev-b")), 202, 201, 7002);
-            Assert.Equal(continued, repository.GetHead("final").RevisionAddress);
-            Assert.Equal(finalSchema, repository.SharedSchemaRoot);
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, seedFrames);
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, draftFrames);
+        using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, current.Models())) {
+            current.Check(repository.ReadState(repository.GetHead("main")), 102, 101, 9000);
+            current.Check(repository.ReadEvent(Assert.Single(repository.ReadFrames("main"), row => row.RevisionAddress == eventAddress)), 102, 101, 7);
+            Assert.Equal(continued, repository.GetHead("main").RevisionAddress);
+            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+            EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, originalFrames);
         }
-        PrivateAssertFilesUnchanged(beforeFinalRead, PrivateFiles(directory.Path));
-    }
-
-    private static FrameAddress DevelopmentSaveDraft(string path, string name, DevelopmentWorkflowHost host,
-        FrameAddress baseline, ObjectId rootId, Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges,
-        Dictionary<ObjectId, ObjectStorageInfo> sourceStorage, PrivateRefImage shared, out FrameAddress schema) {
-        using Repository repository = Repository.OpenExisting(path, host.Models());
-        GraphRecordStore store = ReferenceGraphStore(repository);
-        Assert.Equal(baseline, repository.ResolveTag("user-v1").RevisionAddress);
-        long appended = store.AppendedFrames;
-        repository.CreateBranch(name, repository.ResolveTag("user-v1"));
-        Assert.Equal(appended, store.AppendedFrames);
-        PrivateAssertSameRef(shared, PrivateReadRef(repository, 2));
-        using BranchCheckout branch = repository.CheckoutPrivate(name);
-        Assert.Equal(baseline, branch.StateRevisionAddress);
-        DevelopmentAssertIdentity(branch, host, rootId, edges);
-        Assert.Equal(sourceStorage.Keys.Order(), branch.Baseline!.Objects.Keys.Order());
-        foreach ((ObjectId id, ObjectStorageInfo info) in sourceStorage) { Assert.Equal(info, branch.Baseline!.Objects[id].Storage); }
-        Assert.Equal(2, branch.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
-        NormalizedGraphState before = branch.Baseline!;
-        branch.PrepareAndDiscard(branch.State!);
-        Assert.Same(before, branch.Baseline);
-        FrameAddress eventAddress = branch.CommitEvent(branch.State!).RevisionAddress;
-        Assert.Same(before, branch.Baseline);
-        Assert.Equal(baseline, branch.StateRevisionAddress);
-        Assert.Equal(2, branch.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
-        StoredGraphRevision eventGraph = store.ReadGraph(eventAddress);
-        Assert.Equal(baseline, eventGraph.Parent);
-        Assert.Equal(baseline, eventGraph.SourceGraph);
-        schema = eventGraph.SchemaRoot!.Value;
-        Assert.NotEqual(repository.SharedSchemaRoot, schema);
-        FrameAddress saved = branch.CommitState().RevisionAddress;
-        DevelopmentAssertUpgrade(store, branch, host, baseline, eventAddress, schema, rootId, edges, sourceStorage);
-        PrivateAssertSameRef(shared, PrivateReadRef(repository, 2));
-        return saved;
-    }
-
-    private static FrameAddress DevelopmentContinue(string path, string name, DevelopmentWorkflowHost host,
-        FrameAddress source, FrameAddress schema, ObjectId rootId, Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges,
-        int seven, PrivateRefImage sharedRef) {
-        using Repository repository = Repository.OpenExisting(path, host.Models());
-        using BranchCheckout branch = repository.CheckoutPrivate(name);
-        Assert.Equal(source, branch.StateRevisionAddress);
-        DevelopmentAssertIdentity(branch, host, rootId, edges);
-        ObjectId listId = edges[rootId].List;
-        Dictionary<ObjectId, ObjectStorageInfo> priorStorage = DevelopmentStorage(branch);
-        host.ChangeList(branch.State!, seven);
-        FrameAddress saved = branch.CommitState(new(int.MaxValue, 1)).RevisionAddress;
-        DevelopmentAssertDelta(ReferenceGraphStore(repository), branch, source, saved, schema, listId, priorStorage[listId]);
-        foreach ((ObjectId id, ObjectStorageInfo info) in priorStorage.Where(pair => pair.Key != listId)) {
-            Assert.Equal(info, branch.Baseline!.Objects[id].Storage);
-        }
-        PrivateAssertSameRef(sharedRef, PrivateReadRef(repository, 2));
-        host.Check(branch.State!, 2 + host.Offset, 1 + host.Offset, seven);
-        return saved;
+        EvidenceAssertFilesUnchanged(files, EvidenceFiles(directory.Path));
     }
 
     private static void DevelopmentAssertUpgrade(GraphRecordStore store, BranchCheckout branch, DevelopmentWorkflowHost host,

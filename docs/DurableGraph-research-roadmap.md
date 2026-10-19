@@ -158,7 +158,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
-| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | 用户已选同库唯一 Schema 接纳路线；开发副本/共同编码见证完成，Private/ToShared 删除及有效回归迁移为后续独立片；DB-095 的 private 新建/复合 fork 队列关闭 |
+| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | 同库唯一 Schema 接纳路线与 [Private/ToShared 删除](design-branches/0096-history-and-head-model/private-removal.md)已落地；下一步为操作内共同候选、组发布/安装与新历史模型接入，开发副本/共同编码见证不代替这些资格 |
 | [DB-094 普通 property backing 支持](design-branches/0094-backing-field-support/README.md) | 真实消费者持续因普通 class 的封装/Equals/继承需求付出字段包装成本时，先用该模型摸清声明范围、编译级 Family 切换与历史升版的影响，再选择有限路线；目前仅调研，DB-093 完成不自动开启 |
 | [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |
@@ -166,7 +166,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design/README.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice/README.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
-| Schema/meta 后续能力 | DB-096 统一 Catalog 与 Private 删除为当前路线；业务分支不再承载冲突的同 key Schema 试验。Schema-only 与优化按 §4.1 条件触发；多 writer、压缩/GC 另待真实需求 |
+| Schema/meta 后续能力 | DB-096 统一 Catalog 为当前路线；业务分支不承载冲突的同 key Schema 试验。Schema-only 与优化按 §4.1 条件触发；多 writer、压缩/GC 另待真实需求 |
 | Schema 目录分页或分段 | DB-087 已用 meta 对象版本增量保存；真实目录接近单帧上限或保存成本成为瓶颈时重访更细粒度机制。正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-086 采用 FS/VS 的 data-first 发布、outcome 与正常不完整尾恢复，DG 保留 expected head、必要内容与 fault 检查。实际访问坏完整内容报错；OS crash/power loss、设备失效与目录持久性保证仍待明确需求和独立实验，不能由普通进程关闭/重开推导 |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
@@ -196,9 +196,9 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 ### 4.2 开发 Schema 与正式定稿
 
-2026-10-19 用户已改选：关闭的完整 baseline → 独立 Repository 副本试验 → 定稿在干净正式基线普通升级，具体不变量、证据和删除边界见 [DB-096](design-branches/0096-history-and-head-model/shared-schema-only.md)。同库只使用统一 Catalog；Private、混组、ToShared 和 private 新根不再是待设计能力。产品尚未删除旧路径，旧 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)只保其原版本资格。
+2026-10-19 用户已改选：关闭的完整 baseline → 独立 Repository 副本试验 → 定稿在干净正式基线普通升级，具体不变量与机制证据见 [DB-096](design-branches/0096-history-and-head-model/shared-schema-only.md)。同库只使用统一 Catalog；Private、混组、ToShared 和 private 新根退出。旧路径删除、有效回归/消费者迁移与格式门禁见[删除切片](design-branches/0096-history-and-head-model/private-removal.md)，旧 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)只保其原版本资格。
 
-保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离。剩余工作为 Private 路由删除及有效回归/普通包消费者迁移，不为旧测试恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。
+保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离，不恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。新 API 的共同候选与组级保存仍按 DB-096 独立推进。
 
 ### 4.3 checkout 执行环境与 factory 查询入口
 

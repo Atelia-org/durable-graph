@@ -47,7 +47,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         Directory.CreateDirectory(_path);
         using (DataStore data = DataStore.Create(DataPath))
         using (PublicationStore heads = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 2)) {
-            heads.CreateHead(1, EmptyRootPayload("P0R1"u8), out _).Unwrap();
+            heads.CreateHead(1, EmptyRootPayload("P0R2"u8), out _).Unwrap();
             heads.CreateHead(2, EmptyRootPayload("P0S1"u8), out _).Unwrap();
         }
         var before = SnapshotTree(_path);
@@ -59,7 +59,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     [Fact]
     public void SingleFormalRootFreshReadOnlyAndWritableOpenRejectWithoutCompletingOrRemovingContent() {
         Directory.CreateDirectory(_path);
-        byte[] branches = EmptyRootPayload("P0R1"u8);
+        byte[] branches = EmptyRootPayload("P0R2"u8);
         FrameAddress sentinel;
         HeadEntryId first;
         using (DataStore data = DataStore.Create(DataPath))
@@ -87,7 +87,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     public void LowerSecondCreateRefFailureFreshDgOpenFollowsFormalRootsAndReportedOutcome(
         string stage, PublicationOutcome expectedOutcome, bool bothFormal) {
         Directory.CreateDirectory(_path);
-        byte[] branches = EmptyRootPayload("P0R1"u8), shared = EmptyRootPayload("P0S1"u8);
+        byte[] branches = EmptyRootPayload("P0R2"u8), shared = EmptyRootPayload("P0S1"u8);
         FrameAddress sentinel;
         HeadEntryId first;
         using (DataStore data = DataStore.Create(DataPath))

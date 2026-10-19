@@ -162,7 +162,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
         using (Repository reopened = Repository.OpenStorageExisting(_path, Models())) {
             RepositoryResources resources = ResourcesOf(reopened);
             GraphRecordStore store = reopened.GraphStore;
-            IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Heads.ReadHead(1).Unwrap(), "P0R1"u8);
+            IReadOnlyDictionary<string, FrameAddress> branches = ReadRoot(resources.Heads.ReadHead(1).Unwrap(), "P0R2"u8);
             IReadOnlyDictionary<string, FrameAddress> shared = ReadRoot(resources.Heads.ReadHead(2).Unwrap(), "P0S1"u8);
             FrameAddress selectedState = branches["branch/main"], selectedSchema = shared["schema"];
             Assert.Single(branches);

@@ -10,9 +10,9 @@ namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
-    public void GeneratedPrivateContainerUpgradeRejectsMissingListRulesAndColdForkPreservesIdentities() {
+    public void GeneratedSharedContainerUpgradeRejectsMissingListRulesAndColdForkPreservesIdentities() {
         // Reuse the generated Array/List/Dictionary + nullable inline history witness.
-        // The additional qualification here is the PUBLIC private checkout lifecycle.
+        // The additional qualification here is the public Shared checkout lifecycle.
         using AncestryHistoryDirectory history = new();
         SchemaHistoryTool tool = new();
         GeneratorTestRun v1 = RunGenerator(BootstrapContainerUpgradeSource(1), [], null, "true");
@@ -30,11 +30,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         BootstrapContainerUpgradeHost missing = BootstrapContainerUpgradeHost.Load(missingRun);
 
         using RawBaseDirectory directory = new();
-        FrameAddress baseline, firstPrivate;
+        FrameAddress baseline, firstSaved;
         ObjectId root;
         uint[] ids;
-        PrivateFrameImage[] oldFrames;
-        PrivateRefImage shared;
+        EvidenceFrameImage[] oldFrames;
+        EvidenceRefImage shared;
         using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
             using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
             // Consume the empty-session allocation range before fixing the user snapshot.
@@ -44,46 +44,47 @@ public sealed partial class DurableSchemaGeneratorTests {
             ids = main.Baseline!.Objects.Keys.Select(id => id.Value).Order().ToArray();
             Assert.All(ids, id => Assert.True(id > 4));
             repository.CreateTag("baseline", main.Head);
-            oldFrames = PrivateReadFrames(PrivateResources(repository).Data);
-            shared = PrivateReadRef(repository, 2);
+            oldFrames = EvidenceReadFrames(EvidenceResources(repository).Data);
+            shared = EvidenceReadRef(repository, 2);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, missing.Models())) {
             CheckpointAddress checkpoint = repository.ResolveTag("baseline");
-            repository.CreateBranch("private", checkpoint);
-            PrivatePublicationImage before = PrivatePublication(repository);
-            Assert.ThrowsAny<InvalidDataException>(() => repository.CheckoutPrivate("private"));
-            PrivateAssertPublicationUnchanged(repository, before);
-            Assert.Equal(checkpoint, repository.GetHead("private"));
+            repository.CreateBranch("upgraded", checkpoint);
+            EvidencePublicationImage before = EvidencePublication(repository);
+            Assert.ThrowsAny<InvalidDataException>(() => repository.CheckoutShared("upgraded"));
+            EvidenceAssertPublicationUnchanged(repository, before);
+            Assert.Equal(checkpoint, repository.GetHead("upgraded"));
             // A second preflight must reach the same data error, rather than occupancy rejection.
-            Assert.ThrowsAny<InvalidDataException>(() => repository.CheckoutPrivate("private"));
-            PrivateAssertPublicationUnchanged(repository, before);
+            Assert.ThrowsAny<InvalidDataException>(() => repository.CheckoutShared("upgraded"));
+            EvidenceAssertPublicationUnchanged(repository, before);
             Assert.False(repository.IsFaulted);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
-            using BranchCheckout branch = repository.CheckoutPrivate("private");
+            using BranchCheckout branch = repository.CheckoutShared("upgraded");
             current.Check(branch.State!, 1);
             Assert.Equal(root, branch.StateId);
             Assert.Equal(ids, branch.Baseline!.Objects.Keys.Select(id => id.Value).Order().ToArray());
             Assert.Equal(3, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
-            firstPrivate = branch.CommitState().RevisionAddress;
+            firstSaved = branch.CommitState().RevisionAddress;
             GraphRecordStore store = ReferenceGraphStore(repository);
-            StoredGraphRevision saved = store.ReadGraph(firstPrivate);
+            StoredGraphRevision saved = store.ReadGraph(firstSaved);
             Assert.Equal(baseline, saved.Parent);
             Assert.Equal(baseline, saved.SourceGraph);
             Assert.Equal(ids, saved.ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(root, saved.RootId);
-            Assert.Equal(3, DefaultRecords(store, firstPrivate).Count);
-            Assert.All(DefaultRecords(store, firstPrivate), record => {
+            Assert.Equal(3, DefaultRecords(store, firstSaved).Count);
+            Assert.All(DefaultRecords(store, firstSaved), record => {
                 Assert.Equal(ObjectVersionKind.Base, record.Kind);
                 Assert.Null(record.PriorAddress);
             });
             Assert.Equal(store.ReadGraph(baseline).ObjectHeads[root.Value], saved.ObjectHeads[root.Value]);
             AssertBootstrapContainerUpgradeCatalog(branch.Catalog.Accepted!, ExpectedBootstrapContainerUpgrade(1), ExpectedBootstrapContainerUpgrade(2));
-            PrivateAssertSameRef(shared, PrivateReadRef(repository, 2));
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, oldFrames);
+            Assert.Equal(saved.SchemaRoot, repository.SharedSchemaRoot);
+            shared = EvidenceReadRef(repository, 2);
+            EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, oldFrames);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
-            using BranchCheckout branch = repository.CheckoutPrivate("private");
+            using BranchCheckout branch = repository.CheckoutShared("upgraded");
             current.Check(branch.State!, 1);
             Assert.Equal(root, branch.StateId);
             Dictionary<ObjectId, ObjectStorageInfo> previous = branch.Baseline!.Objects
@@ -91,7 +92,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             current.Change(branch.State!);
             FrameAddress next = branch.CommitState().RevisionAddress;
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(firstPrivate, store.ReadGraph(next).SourceGraph);
+            Assert.Equal(firstSaved, store.ReadGraph(next).SourceGraph);
             Assert.Equal(ids, store.ReadGraph(next).ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(3, DefaultRecords(store, next).Count);
             Assert.All(DefaultRecords(store, next), record => {
@@ -102,8 +103,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                     branch.Baseline!.Objects[new(record.ObjectId)].Storage!.Value.ReconstructionPayloadBytes);
             });
             current.Check(repository.ReadState(branch.Head), 2);
-            PrivateAssertSameRef(shared, PrivateReadRef(repository, 2));
-            PrivateAssertFramesPreserved(PrivateResources(repository).Data, oldFrames);
+            EvidenceAssertSameRef(shared, EvidenceReadRef(repository, 2));
+            EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, oldFrames);
         }
     }
 }

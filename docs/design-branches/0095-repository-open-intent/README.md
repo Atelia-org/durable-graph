@@ -1,7 +1,8 @@
 # DB-095：Repository 打开意图与业务保存准入
 
-> 后继决定（2026-10-19）：[DB-096](../0096-history-and-head-model/shared-schema-only.md)已选同库统一 Catalog，后续 API 去掉 Schema 归属选择、Private 与 ToShared。本片仍描述现有实现及原验收；“打开资源与取得编辑能力分开”保留，双归属入口不再约束新 API。
+> 后继实施（2026-10-19）：[DB-096](../0096-history-and-head-model/private-removal.md)已统一同库 Catalog，删除 Private 与 ToShared。本片描述当时的实现及原验收；“打开资源与取得编辑能力分开”保留，双归属入口已退出，不再约束新 API。
 
+> 已删除源码符号按 Git `a347a2f` 查阅；以下历史源码路径不表示当前入口。
 > 状态：**E 已实施并完成源码、新 G 普通包与独立复核的限定验收；本片无剩余必经施工**。
 > 日期：2026-10-15；源码调查基线：`79bab5d27bf50c6e66a54da0d4cc729a9181b245`。
 > 阅读顺序：本节目标 → §7 API 合同 → §8 接线 → §9 迁移 → §10 验收 → §11 实施顺序。§3–6 保留竞争评审依据，不是并行实施路线。
@@ -26,16 +27,16 @@
 | `CreateNew` / `OpenExisting` 默认 `SchemaWriteMode? = null`；`IsReadOnly` 独立取自底层资源 | [Repository](../../../src/DurableGraph.Persistence/Repository.cs) |
 | `SchemaWriteMode` 当前只有 `Shared = 1`；null 不是只读，而是缺少普通业务写入归属 | 枚举（Git 基线 `79bab5d:src/DurableGraph.Persistence/SchemaWriteMode.cs`）、[准入测试](../../../tests/DurableGraph.Persistence.Tests/SchemaWriteAdmissionTests.cs) |
 | 未指定时仍能恢复 checkout、Fork、修改 ref/tag；普通业务保存即使无变化也在 Capture 前拒绝 | `RequireSchemaWriter`、`MissingModeRejectsBeforeAnyCaptureCallbackIncludingUnchangedSave` |
-| Private 目前由 `CheckoutPrivate` 选择，只恢复已有分支；要求实际 Head 的准确 Schema pin | [Private 入口](../../../src/DurableGraph.Persistence/Repository.PrivateSchemas.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 的 `PrivateCatalogRoot` |
+| Private 目前由 `CheckoutPrivate` 选择，只恢复已有分支；要求实际 Head 的准确 Schema pin | `src/DurableGraph.Persistence/Repository.PrivateSchemas.cs`（删除前源码）、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 的 `PrivateCatalogRoot` |
 | 普通 Shared 保存检查选定的完整 Schema 视图已被 shared 接纳；不会自动把 private 视图合入共享目录 | `Repository.RequireSchemaWriter` |
-| `Commit…ToShared` 是显式单次完整目录合入；不改变 checkout 默认归属或固定执行环境 | [BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、[promotion 测试](../../../tests/DurableGraph.Persistence.Tests/PrivateSchemaPromotionTests.cs) |
+| `Commit…ToShared` 是显式单次完整目录合入；不改变 checkout 默认归属或固定执行环境 | [BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、`tests/DurableGraph.Persistence.Tests/PrivateSchemaPromotionTests.cs`（删除前源码） |
 | 私有续写取实际 Head.S，业务恢复取最近 State.S；两者不能合并为一个“当前 Schema” | [Repository 接线](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)、[保存 owner](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs) |
 
 这里核对的是源码和测试定义；本轮尚未运行新 Probe，不把现有测试名字等同于本轮已通过的结果。
 
 两条会改变方案取舍的补充事实：
 
-- [PrivateSchemaRepositoryTests](../../../tests/DurableGraph.Persistence.Tests/PrivateSchemaRepositoryTests.cs) 的 `Unchanged_private_save_reuses_meta_and_directory_and_never_rebases_to_latest_shared` 在同一 owner 内交错 Shared main 与 Private dev 保存：main 推进 shared 后，dev 仍保持自身视图，并可在各自目录新增同 key 不同布局。promotion 回归还以这种混用制造 descriptor 编号冲突。它证明现有能力与机制验证价值；尚不能据此声称外部业务应用必须混用。
+- `tests/DurableGraph.Persistence.Tests/PrivateSchemaRepositoryTests.cs`（删除前源码） 的 `Unchanged_private_save_reuses_meta_and_directory_and_never_rebases_to_latest_shared` 在同一 owner 内交错 Shared main 与 Private dev 保存：main 推进 shared 后，dev 仍保持自身视图，并可在各自目录新增同 key 不同布局。promotion 回归还以这种混用制造 descriptor 编号冲突。它证明现有能力与机制验证价值；尚不能据此声称外部业务应用必须混用。
 - [DB-088 §4/§6](../0088-development-schema-workflow/0088-development-schema-workflow.md) 刚完成 private 新根 bootstrap、空来源建根及 overrides/replacements 特例的删除，首选固定 baseline→private 恢复。新 private 初次创建不必等同于重建全部旧特例，但必须独立证明需要，不能作为入口对称性的免费附赠。
 
 ## 3. 初始候选 A：必选 Repository 三态（未采用）

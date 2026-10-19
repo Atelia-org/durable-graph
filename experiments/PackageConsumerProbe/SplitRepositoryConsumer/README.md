@@ -1,12 +1,12 @@
 # 公开 accepted-history 包消费者
 
-此目录是 DB-087 P1 的有限公开回归，并覆盖 P2 写准入、真实 baseline 的私有 fork／冷续写与完整目录 Event ToShared。普通程序集 `DurableGraph.PublicHistoryConsumer` 通过 PackageReference 调用默认公开 Repository／BranchCheckout；不借 IVT、内部工厂或产品私有反射。真实 SG Widget V1→V2 与共享 List／环经自举 meta、真实 refs 发布，全部关闭后按准确历史 S 恢复续写；另以私有不可达声明验证完整推广与新 Shared owner 增量保存。最小验收是下表五个独立进程成功，并完成包来源、history 与持久字节核对。
+此目录覆盖普通包消费下的真实 SG Widget V1→V2、Shared Schema Catalog、共享 List／环、Event 与 State 各自推进以及冷增量续写。不借 IVT、内部工厂或产品私有反射。最小验收是下表五个独立进程成功，并核对包来源、history 和持久字节。
 
-**DB-088 历史资格：**真实 baseline 与生成的 `PrivateUnused` Event 已通过删除特例后的新 G 普通包门禁；Open 前只注册 definition，提交 Event 才新增私有声明。ToShared 捕获普通 Widget，完整导入不能靠再次捕获 Event 补声明。下面旧工件保留其原生产来源与新根故事；当前资格见 DB-089 C 小节。
+**2026-10-19 后继：**按 [DB-096 单一 Catalog 决策](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md) 删除活动 Private／ToShared 路线。`catalog` 分支从真实 baseline Fork，普通 `CommitEvent(new CatalogEvent(...))` 将 State 不可达的 Event 声明接纳进共享 Catalog，同时保留原 State；随后普通 State 和 Event 保存验证热读、独立读回、同 owner 再签出与全关冷续写。该消费者只接受新的 `P0R2` 分支根格式。下面历史包回执保持原意，**不构成本次修改的新 G 包资格**。
 
-项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从1个增至3个（Widget V1／V2 和 Event V1）且旧文件不变。旧内部 friend 形态及其资格仅见 [DB-087 §33 归档（Git 历史）](../../../docs/design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#33-p1d-第四片准确包与-accepted-history")，不将当前源码回写为旧证据。
+`CatalogEvent` 保留历史 durable key `probe.private.unreachable`，便于与旧证据对照；该键仅是 fixture 的类型名，不表示 Private 语义。当前 runner 必需观察包含 `CatalogSharedRootAdvanced`、`FollowupCatalogUnchanged`、`FollowupEventRetainsState` 及三项热读／独立读／同 owner 再签出结果。
 
-[DB-089 §8.2](../../../docs/design-branches/0089-checkout-environment-and-factory-query-refactoring/0089-checkout-environment-and-factory-query-refactoring.md#82-新-g-门禁)新增同 owner 的生命周期观察：私有 List 保存 202 后，热 State 保原实例与 root ID，独立 ReadState 保值／共享／环且 root、child、List 实例独立；Dispose 后在同 Repository 再 CheckoutPrivate，核同一 State 地址、root ID 和 202。只读结果不再编辑或保存，重新签出不提交；原提交序列及后续全关冷开、ToShared 和 Shared 增量保存保持。continue 输出 `PrivateHotStateRetained`、`PrivateIndependentRead`、`PrivateSameOwnerCheckout` 三个门禁；下面 DB-088 的历史包结果不替代新增观察的新 G 资格。
+项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从 1 个增至 3 个（Widget V1／V2 和 Event V1）且旧文件不变。
 
 ## DB-089 C：protected 查询与同 owner 生命周期的有限验收
 
@@ -39,12 +39,12 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
 | `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
-| `continue`／V2 | 明确 Shared 会话冷单 List Delta；真实 baseline checkpoint→CheckoutPrivate；SG Event 接纳 State 不可达声明而不推进 State；Event Head 全关冷签出、私有 List Delta及 ref2 保持；List202热 State／独立读回／同 owner 再签出保持值与身份且不追加提交；随后显式 `CommitEventToShared` 完整推广、State 不变，两 ref 共同推进；全关后同 PID 新 Shared owner 单 List Delta／真实 prior/H／准确旧 Base origin |
-| `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、旧 private State、推广 Event／Shared State、准确各图 S与完整 meta 声明；全部完成帧保持，完整文件集合／SHA不变 |
+| `continue`／V2 | Shared 冷单 List Delta；从真实 baseline 创建 `catalog` 分支；SG Event 接纳 State 不可达声明并推进共享 Catalog，State 不变；全关冷签出 List Delta；List202 热 State／独立读回／同 owner 再签出保持值与身份且不额外提交；普通 Widget Event 保持 Catalog／State，只推进业务 Head；全关后同 PID 新 owner 单 List Delta／真实 prior/H／准确旧 Base origin |
+| `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、catalog 的历史 State／Event／当前 State、准确各图 S 与完整 meta 声明；全部完成帧保持，完整文件集合／SHA 不变 |
 
 每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
-公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、ToShared 后的跨 PID writer 续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
+公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、另一个 writer PID 的续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
 
 <a id="2026-10-13-限定验收"></a>
 ## 历史资格：2026-10-13 DB-087 P1 限定验收
@@ -73,7 +73,7 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 <a id="p2-admission-package-evidence"></a>
 ## 历史资格：P2 写准入首片的公开包复验
 
-本节冻结该次旧包资格。DB-095 后活动消费者在编辑入口明确选择 Shared/Private；已移除 `UnconfiguredSaveRejected` 场景及回执字段，保留 `CheckoutShared` 对完整未匹配 private 目录的拒绝与后续真实 Delta/promotion。新 API 的包验收另见 [DB-095](../../../docs/design-branches/0095-repository-open-intent/README.md)，不回填本节历史结果。
+本节冻结该次旧包资格。DB-095 时活动消费者在编辑入口明确选择 Shared/Private；已移除 `UnconfiguredSaveRejected` 场景及回执字段，保留 `CheckoutShared` 对完整未匹配 private 目录的拒绝与后续真实 Delta/promotion。当时 API 的包验收另见 [DB-095](../../../docs/design-branches/0095-repository-open-intent/README.md)，不回填本节历史结果。
 
 当片消费者所有实际 writer Open 显式选择 `SchemaWriteMode.Shared`，读取工厂保原义。`continue` 在冷 Delta 前用普通公开 API 完成一个无配置反例：准确读取与 Checkout 成功，State／Event 保存各以 InvalidOperationException 拒绝，Head／State 地址／ID／实例和 owner 健康不变；全部资源关闭后整个文件集合／SHA不变，然后显式 Shared 继续原来的单 List Delta。
 

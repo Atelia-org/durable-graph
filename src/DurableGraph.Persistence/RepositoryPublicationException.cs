@@ -19,7 +19,7 @@ public enum RepositoryPublicationOutcome {
 /// Even <see cref="RepositoryPublicationOutcome.NotPublished"/> can accompany a faulted repository.
 /// Unknown or Published outcomes must not be transparently retried. Dispose and reopen a faulted
 /// repository. For a graph or branch-ref operation, inspect the persisted branch and its history,
-/// then CheckoutShared or CheckoutPrivate using the application's saved processing progress. A checkout restores only the latest
+/// then CheckoutShared using the application's saved processing progress. A checkout restores only the latest
 /// State, if one exists; it never replays Events. For tag creation, ResolveTag by name to determine
 /// the persisted binding; tags do not have an editing checkout and cannot be rebound.
 /// Failures before an append attempt can instead propagate their original exception; absence of this

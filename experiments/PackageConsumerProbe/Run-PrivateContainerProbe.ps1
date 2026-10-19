@@ -78,7 +78,7 @@ $revision = (& git -C $repositoryRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record the DurableGraph source revision.' }
 $receipt = [ordered]@{
     SchemaVersion = 2
-    Scope = 'DB088 ordinary package normal Point V1-to-V2 Upgrade, nullable lifting and List elements, real baseline identities, full old/new catalog and ToShared, cold Delta/prior/H; pending new G acceptance, no Array/Dictionary/crash/power-loss/performance qualification'
+    Scope = 'DB096 ordinary package normal Point V1-to-V2 Upgrade, nullable lifting and List elements, real baseline identities, full old/new shared catalog and missing List rule rejection, cold Delta/prior/H; pending new G acceptance, no Array/Dictionary/crash/power-loss/performance qualification'
     ConsumerAssemblyName = $consumerAssemblyName
     PublicCarrierUsesFriendIdentity = $false
     RepositoryRoot = $repositoryRoot
@@ -284,11 +284,11 @@ function Invoke-Consumer {
             if ([DateTime]::UtcNow -ge $deadline) { throw "Consumer $Lane exceeded $ProcessTimeoutSeconds seconds." }
         }
         $output = $outputTask.GetAwaiter().GetResult()
-        if ($process.ExitCode -ne 0 -or $output.Trim() -cne ('PrivateContainerConsumer:' + $Lane + ':Passed')) {
+        if ($process.ExitCode -ne 0 -or $output.Trim() -cne ('SchemaContainerConsumer:' + $Lane + ':Passed')) {
             throw "Consumer $Lane failed; inspect its stdout/stderr in $workRoot."
         }
         $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
-        if ($evidence.Protocol -cne 'DG.PrivateContainerConsumer.v2' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
+        if ($evidence.Protocol -cne 'DG.SchemaContainerConsumer.v3' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
             $evidence.Lane -cne $Lane -or $evidence.ShapeEnvironment -cne $Stage.ShapeEnvironment -or $evidence.ProcessId -ne $process.Id -or $evidence.TypedBodyAbi -ne 5) {
             throw "Consumer $Lane did not report its actual successful process and current typed ABI."
         }
@@ -319,12 +319,12 @@ function Invoke-Consumer {
         }
         $requiredObservations = switch ($Lane) {
             'seed' { @('RingAndSharedList', 'FullSharedCatalog', 'ActualRefs', 'CompleteFrames') }
-            'create' { @('BaselineIdentitiesPreserved', 'UpgradeListBase', 'ExactBusinessSource', 'FullFrozenFork', 'KeeperPreserved', 'SharedRefUnchanged') }
-            'continue-a' { @('SingleListDelta', 'ExactPrior', 'ActualWireH', 'IdsPreserved', 'RetainedRootHeads', 'PrivateRefUnchanged') }
+            'create' { @('BaselineIdentitiesPreserved', 'UpgradeListBase', 'ExactBusinessSource', 'FullCommonCatalog', 'KeeperPreserved', 'SharedCatalogAdvanced') }
+            'continue-a' { @('SingleListDelta', 'ExactPrior', 'ActualWireH', 'IdsPreserved', 'RetainedRootHeads', 'OtherBranchUnchanged') }
             'continue-b' { @('SingleListDelta', 'ExactPrior', 'ActualWireH', 'IdsPreserved', 'RetainedRootHeads', 'SharedRefUnchanged') }
             'verify-a' { @('ReadOnlyFilesUnchanged', 'OwnBranchRead', 'CompleteFramesPreserved', 'OldTagRead') }
             'verify-b' { @('ReadOnlyFilesUnchanged', 'OwnBranchRead', 'BaselineUpgradeRead', 'CompleteFramesPreserved') }
-            'promote-b' { @('CompletePromotion', 'IdsPreserved', 'CompleteFramesPreserved') }
+            'missing-upgrade' { @('MissingListUpgradeRejected', 'NoBranchOccupancy', 'PublicationUnchanged', 'CompleteFramesPreserved') }
             default { throw "Unknown fixed consumer phase: $Lane" }
         }
         foreach ($check in $requiredObservations) {
@@ -556,9 +556,9 @@ try {
         }
         $receipt['ReleasedHistoryPreserved'] = $true
         foreach ($phase in @(
-            @{ Lane = 'seed'; Shape = 'A' }, @{ Lane = 'create'; Shape = 'B' },
+            @{ Lane = 'seed'; Shape = 'A' }, @{ Lane = 'missing-upgrade'; Shape = 'B' },
+            @{ Lane = 'create'; Shape = 'B' },
             @{ Lane = 'continue-a'; Shape = 'A' }, @{ Lane = 'continue-b'; Shape = 'B' },
-            @{ Lane = 'promote-b'; Shape = 'B' },
             @{ Lane = 'verify-a'; Shape = 'A' }, @{ Lane = 'verify-b'; Shape = 'B' }
         )) {
             Require-FrozenStageSources -ConsumerRoot $stages[$phase.Shape].ConsumerRoot
@@ -608,7 +608,7 @@ try {
         }
     }
     $receipt.Passed = $true
-    Write-Host "Private container independent-history package consumer passed. Artifacts: $workRoot"
+    Write-Host "Shared container upgrade package consumer passed. Artifacts: $workRoot"
 } catch {
     $receipt.Failure = $_.Exception.ToString()
     throw

@@ -15,7 +15,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         Assert.Equal(3u, resources.Heads.ReservedHeadIdUpperBound);
         var initialBranches = resources.Heads.ReadHead(1).Unwrap();
         var initialShared = resources.Heads.ReadHead(2).Unwrap();
-        Assert.Equal("P0R1"u8.ToArray(), initialBranches.Payload[..4].ToArray());
+        Assert.Equal("P0R2"u8.ToArray(), initialBranches.Payload[..4].ToArray());
         Assert.Equal("P0S1"u8.ToArray(), initialShared.Payload[..4].ToArray());
         Assert.Empty(NamedFrameMapCodec.Decode(initialBranches.Payload[4..]).Unwrap());
         Assert.Empty(NamedFrameMapCodec.Decode(initialShared.Payload[4..]).Unwrap());
@@ -31,6 +31,35 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         Assert.Equal("schema", Assert.Single(shared).Key);
         Assert.Equal(resources.SharedSchemaRoot, shared["schema"]);
         Assert.Equal(StoredGraphKind.Meta, resources.GraphStore.ReadMetadata(shared["schema"]).Kind);
+    }
+
+    [Fact]
+    public void Legacy_three_head_P0R1_repository_rejects_both_open_modes_without_mutation() {
+        byte[] payload;
+        using (RepositoryResources resources = RepositoryResources.CreateNew(_root)) {
+            Seed(resources);
+            payload = resources.Heads.ReadHead(1).Unwrap().Payload.ToArray();
+            Assert.True(payload.AsSpan().StartsWith("P0R2"u8));
+        }
+        // Publish a complete, otherwise valid legacy branch-directory root using
+        // only the backing stores, with every DG owner/cache already closed.
+        using (var data = Atelia.FrameStore.FrameStore.Open(Path.Combine(_root, "data")))
+        using (var heads = PublicationStore.Open(Path.Combine(_root, "versions"), data)) {
+            payload[3] = (byte)'1';
+            var branch = heads.ReadHead(1).Unwrap();
+            heads.PublishHead(branch.Id.HeadId, payload, out PublicationOutcome outcome).Unwrap();
+            Assert.Equal(PublicationOutcome.Confirmed, outcome);
+        }
+        var before = Snapshot();
+        foreach (bool readOnly in new[] { true, false }) {
+            InvalidDataException error = Assert.Throws<InvalidDataException>(() => {
+                using Repository repository = readOnly
+                    ? Repository.OpenReadOnlyExisting(_root, SharedReadModel.Models())
+                    : Repository.OpenExisting(_root, SharedReadModel.Models());
+            });
+            Assert.Equal("Unknown P0 publication-root format.", error.Message);
+            AssertSnapshot(before);
+        }
     }
 
     [Theory]
@@ -60,11 +89,11 @@ public sealed class RepositoryRootCodecTests : IDisposable {
             Dictionary<string, FrameAddress> roots = new(StringComparer.Ordinal) { [key] = selected };
             if (mutation == "schema-extra") { roots["extra"] = selected; }
             byte[] map = NamedFrameMapCodec.Encode(roots).Unwrap();
-            byte[] magic = refId == 1 ? "P0R1"u8.ToArray() : "P0S1"u8.ToArray();
-            if (mutation == "header-role") { magic = refId == 1 ? "P0S1"u8.ToArray() : "P0R1"u8.ToArray(); }
+            byte[] magic = refId == 1 ? "P0R2"u8.ToArray() : "P0S1"u8.ToArray();
+            if (mutation == "header-role") { magic = refId == 1 ? "P0S1"u8.ToArray() : "P0R2"u8.ToArray(); }
             byte[] payload = [.. magic, .. map];
             if (mutation == "magic") { payload[0] = 0; }
-            if (mutation == "version") { payload[3] = (byte)'2'; }
+            if (mutation == "version") { payload[3] = (byte)'9'; }
             resources.Heads.PublishHead(resources.Heads.ReadHead(refId).Unwrap().Id.HeadId, payload, out _).Unwrap();
         }
         var before = Snapshot();
@@ -94,7 +123,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
                 if (!body.IsFailure && body.Value!.Length + 4 <= PublicationStore.MaxHeadEntryPayloadLength) { low = count; }
                 else { high = count; }
             }
-            acceptedPayload = [.. "P0R1"u8, .. NamedFrameMapCodec.Encode(Candidate(low)).Unwrap()];
+            acceptedPayload = [.. "P0R2"u8, .. NamedFrameMapCodec.Encode(Candidate(low)).Unwrap()];
             extraName = Name(low);
             RepositoryResources.ValidateBranchName(extraName);
             Assert.True(acceptedPayload.Length <= PublicationStore.MaxHeadEntryPayloadLength);

@@ -92,7 +92,7 @@ internal static class WireInspector {
             HeadEntry value = versions.ReadHead(id).Unwrap();
             refs.Add(id, new(value.Id, value.Payload.ToArray()));
         }
-        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(refs[1].Payload, "P0R1"u8);
+        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(refs[1].Payload, "P0R2"u8);
         IReadOnlyDictionary<string, FrameAddress> shared = Root(refs[2].Payload, "P0S1"u8);
         Dictionary<string, FrameAddress> branches = new(StringComparer.Ordinal);
         foreach (var pair in branchRoot) {

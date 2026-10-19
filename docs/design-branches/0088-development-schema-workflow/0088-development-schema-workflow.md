@@ -1,6 +1,6 @@
 # DB-088：固定用户基线上的 Schema 开发与定稿
 
-> 后继决定（2026-10-19）：[DB-096](../0096-history-and-head-model/shared-schema-only.md)改选统一 Catalog＋独立完整开发库副本，Private/ToShared 已决定退出，产品删除尚待实施。本文保留原 private 开发路线的实现与验收记录；后续不再按本页“保留 Private”安排施工。
+> 后继实施（2026-10-19）：[DB-096](../0096-history-and-head-model/private-removal.md)采用统一 Catalog＋独立完整开发库副本，已删除 Private/ToShared。本文保留原 private 开发路线的实现与验收记录；后续不再按本页“保留 Private”安排施工。
 
 > 状态：2026-10-13，实施与限定验收完成：生产特例退出、测试迁移、源码回归及三条新 G 普通包故事均通过。承接 DB-087 完成后的用户需求校准；后续易用性与版本发布机制仍延期。
 

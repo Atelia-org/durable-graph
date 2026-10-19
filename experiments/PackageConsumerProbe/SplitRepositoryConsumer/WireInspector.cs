@@ -15,7 +15,7 @@ internal static class WireInspector {
     private const uint GraphTag = 0x37474250, BatchTag = 0x37424250, DirectoryTag = 0x37444250;
     private const int Limit = 1_000_000;
     private const string WidgetName = "package.split.widget";
-    private const string PrivateUnusedName = "probe.private.unreachable";
+    private const string CatalogEventName = "probe.private.unreachable";
 
     internal enum GraphKind : byte { Event = 1, State = 2, Meta = 3 }
     internal sealed record FrameImage(FrameAddress Address, uint Tag, string PayloadSha256, string TailMetaSha256);
@@ -37,7 +37,7 @@ internal static class WireInspector {
         internal IReadOnlyDictionary<uint, FrameAddress> Objects => Heads;
     }
     internal sealed record Catalog(IReadOnlyList<uint> DeclaredIds, IReadOnlyDictionary<int, uint> WidgetDescriptors,
-        IReadOnlyDictionary<int, IReadOnlyList<int>> WidgetFields, uint? PrivateUnusedDescriptor = null);
+        IReadOnlyDictionary<int, IReadOnlyList<int>> WidgetFields, uint? CatalogEventDescriptor = null);
 
     internal sealed class Snapshot {
         internal Snapshot(IReadOnlyDictionary<string, FrameAddress> branchHeads, FrameAddress? sharedSchemaRoot,
@@ -70,7 +70,7 @@ internal static class WireInspector {
     internal static Snapshot Read(string database) {
         using DataStore data = DataStore.OpenReadOnly(Path.Combine(database, "data"));
         using PublicationStore versions = PublicationStore.OpenReadOnly(Path.Combine(database, "versions"), data);
-        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(versions.ReadHead(1).Unwrap().Payload, "P0R1"u8);
+        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(versions.ReadHead(1).Unwrap().Payload, "P0R2"u8);
         IReadOnlyDictionary<string, FrameAddress> shared = Root(versions.ReadHead(2).Unwrap().Payload, "P0S1"u8);
         Dictionary<string, FrameAddress> branches = new(StringComparer.Ordinal);
         foreach (var pair in branchRoot) {
@@ -328,7 +328,7 @@ internal static class WireInspector {
             Require(declared.Distinct().Count() == declared.Length, "Repeated catalog declaration.");
             Dictionary<int, uint> widgets = [];
             Dictionary<int, IReadOnlyList<int>> fieldsByVersion = [];
-            uint? privateUnused = null;
+            uint? catalogEvent = null;
             foreach (uint id in declared) {
                 BareValueReader descriptor = Employee(graph, id, 3);
                 byte kind = descriptor.ReadByte();
@@ -341,15 +341,15 @@ internal static class WireInspector {
                 Require(kind == 1 && element == 0 && codec == 0 && ancestor == 0,
                     "The finite probe requires a reference descriptor without container or base slots.");
                 uint[] members = ReferenceList(graph, fields, 6);
-                if (name == PrivateUnusedName) {
-                    Require(version == 1 && privateUnused is null && members.Length == 1,
-                        "The private unused declaration must be unique V1 with one field.");
+                if (name == CatalogEventName) {
+                    Require(version == 1 && catalogEvent is null && members.Length == 1,
+                        "The State-unreachable Event declaration must be unique V1 with one field.");
                     BareValueReader unused = Employee(graph, members[0], 4);
                     Require(unused.ReadVarInt32() == 1 && unused.ReadByte() == 2 && unused.ReadVarUInt32() == 0 &&
                         unused.ReadVarUInt32() == 0 && unused.ReadVarUInt32() == 0,
-                        "The private unused declaration requires exactly Int32 field1 with no composed slots.");
+                        "The State-unreachable Event declaration requires exactly Int32 field1 with no composed slots.");
                     unused.EnsureFullyConsumed();
-                    privateUnused = id;
+                    catalogEvent = id;
                     continue;
                 }
                 Require(name == WidgetName && version is 1 or 2, "Unknown declaration outside the finite probe.");
@@ -373,7 +373,7 @@ internal static class WireInspector {
                 widgets.Add(version, id);
                 fieldsByVersion.Add(version, fieldIds.AsReadOnly());
             }
-            return new(Array.AsReadOnly(declared), Freeze(widgets), Freeze(fieldsByVersion), privateUnused);
+            return new(Array.AsReadOnly(declared), Freeze(widgets), Freeze(fieldsByVersion), catalogEvent);
         }
 
         private string TypeName(Graph graph, uint id, int depth = 0) {

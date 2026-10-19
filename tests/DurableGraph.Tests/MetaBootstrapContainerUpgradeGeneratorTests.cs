@@ -238,7 +238,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static void AssertBootstrapContainerUpgradePublishedRefs(RepositoryStorageFacade repository, FrameAddress graph, FrameAddress meta) {
         byte[] branches = repository.Heads.ReadHead(1).Unwrap().Payload.ToArray();
         byte[] shared = repository.Heads.ReadHead(2).Unwrap().Payload.ToArray();
-        Assert.True(branches.AsSpan().StartsWith("P0R1"u8));
+        Assert.True(branches.AsSpan().StartsWith("P0R2"u8));
         Assert.True(shared.AsSpan().StartsWith("P0S1"u8));
         Assert.Equal(graph, NamedFrameMapCodec.Decode(branches.AsSpan(4)).Unwrap()["branch/main"]);
         Assert.Equal(meta, NamedFrameMapCodec.Decode(shared.AsSpan(4)).Unwrap()["schema"]);

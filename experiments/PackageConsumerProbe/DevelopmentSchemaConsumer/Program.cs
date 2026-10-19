@@ -96,9 +96,9 @@ internal static class Program {
             CheckpointAddress fork = repository.CreateBranch(branchName, baseline);
             Need(fork.RevisionAddress == baseline.RevisionAddress, "Ref-only creation did not select the baseline.");
             Widget.UpgradeCalls = 0;
-            using BranchCheckout branch = repository.CheckoutPrivate(branchName);
+            using BranchCheckout branch = repository.CheckoutShared(branchName);
             Need(branch.StateRevisionAddress == baseline.RevisionAddress && branch.StateId?.Value == witness.RootId,
-                "The private checkout did not import the original State address/root identity.");
+                "The copied checkout did not retain the original State address/root identity.");
             Check(branch.State, BaseRoot, BaseChild, 7);
             Need(Widget.UpgradeCalls == 2, "Off must retain V1 history and perform both real V1-to-V2 Upgrades.");
             ApplyDraft((Widget)branch.State!);
@@ -110,34 +110,34 @@ internal static class Program {
             if (Shape == "A") { witness.DraftAState = Hex(saved.RevisionAddress); }
             else { witness.DraftBState = Hex(saved.RevisionAddress); }
         }
-        Need(ReadShared(database) == witness.SharedV1, "Private draft saving changed shared revision/payload.");
+        Need(ReadShared(database) != witness.SharedV1, "The draft must accept its V2 into its own copied repository catalog.");
         CheckFrames(database, witness.Frames);
         using (Repository cold = Repository.OpenReadOnlyExisting(database, Models())) {
-            Need(Hex(cold.GetHead("main")!.RevisionAddress) == witness.BaselineState, "Private saving changed main.");
+            Need(Hex(cold.GetHead("main")!.RevisionAddress) == witness.BaselineState, "Draft saving changed the original branch.");
             Check(cold.ReadState(cold.GetHead(branchName)!), BaseRoot + 10, BaseChild + 10, 7001);
             Check(cold.ReadState(cold.ResolveTag("baseline")), BaseRoot, BaseChild, 7);
         }
         witness.Frames = Frames(database);
         WriteJson(witnessPath, witness);
-        return new { BaselineIdentityImported = true, V1UpgradeWithOff = true, PrivateColdValues = true,
-            SharedV1Unchanged = true, CompleteFramesPreserved = true, RootId = witness.RootId,
+        return new { BaselineIdentityImported = true, V1UpgradeWithOff = true, DraftColdValues = true,
+            CopiedCatalogAdvanced = true, CompleteFramesPreserved = true, RootId = witness.RootId,
             DraftState = Shape == "A" ? witness.DraftAState : witness.DraftBState };
     }
 
     private static object Final(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
-        Need(ReadShared(database) == witness.SharedV1, "Neither draft may have accepted V2 into shared.");
+        Need(ReadShared(database) == witness.SharedV1, "Release must start from the unchanged V1 repository copy.");
         using (Repository repository = Repository.OpenExisting(database, Models())) {
             CheckpointAddress baseline = repository.ResolveTag("baseline");
             repository.CreateBranch("final", baseline);
             Widget.UpgradeCalls = 0;
-            using BranchCheckout branch = repository.CheckoutPrivate("final");
+            using BranchCheckout branch = repository.CheckoutShared("final");
             Need(branch.StateRevisionAddress == baseline.RevisionAddress && branch.StateId?.Value == witness.RootId,
                 "The final branch must also import the fixed V1 State and identity.");
             Check(branch.State, BaseRoot, BaseChild, 7);
             Need(Widget.UpgradeCalls == 2, "Finalization must Upgrade V1, not inherit a draft V2 State.");
             ApplyDraft((Widget)branch.State!);
-            CheckpointAddress saved = branch.CommitStateToShared();
+            CheckpointAddress saved = branch.CommitState();
             IReadOnlyList<CheckpointAddress> history = repository.ReadFrames("final");
             Need(saved.RootId.Value == witness.RootId && history[^1] == saved &&
                 history[^2].RevisionAddress == baseline.RevisionAddress,
@@ -164,7 +164,7 @@ internal static class Program {
         CheckFrames(database, witness.Frames);
         witness.Frames = Frames(database);
         WriteJson(witnessPath, witness);
-        return new { WinnerBOnlyPromoted = true, BaselineIdentityImported = true, FinalFromV1 = true,
+        return new { WinnerBAcceptedFromCleanCopy = true, BaselineIdentityImported = true, FinalFromV1 = true,
             ColdSharedContinuation = true, CompleteFramesPreserved = true, witness.FinalState, witness.ContinuationState,
             witness.SharedV1, witness.SharedFinal };
     }
@@ -174,21 +174,23 @@ internal static class Program {
         Dictionary<string, string> before = FileImages(database);
         using (Repository repository = Repository.OpenReadOnlyExisting(database, Models())) {
             Need(Hex(repository.ResolveTag("baseline").RevisionAddress) == witness.BaselineState, "The original tag changed.");
-            Need(Hex(repository.GetHead("main")!.RevisionAddress) == witness.BaselineState &&
-                Hex(repository.GetHead("dev-a")!.RevisionAddress) == witness.DraftAState &&
-                Hex(repository.GetHead("dev-b")!.RevisionAddress) == witness.DraftBState,
-                "A fixed main or private draft head changed.");
+            Need(Hex(repository.GetHead("main")!.RevisionAddress) == witness.BaselineState,
+                "The fixed original branch changed.");
             Check(repository.ReadState(repository.ResolveTag("baseline")), BaseRoot, BaseChild, 7);
-            Check(repository.ReadState(repository.GetHead("dev-b")!), BaseRoot + 10, BaseChild + 10, 7001);
             CheckpointAddress final = repository.GetHead("final")!;
             Need(Hex(final.RevisionAddress) == witness.ContinuationState && final.RootId.Value == witness.RootId,
                 "The cold final history or original identity changed.");
             Check(repository.ReadState(final), BaseRoot + 10, BaseChild + 10, 7002);
-            bool rejected = false;
-            try { repository.ReadState(repository.GetHead("dev-a")!); }
-            catch (InvalidDataException) { rejected = true; }
-            Need(rejected, "The incompatible V2A private data was interpreted as V2B.");
         }
+        string draftA = Path.Combine(Path.GetDirectoryName(database)!, "database-a");
+        Dictionary<string, string> draftBefore = FileImages(draftA);
+        bool rejected = false;
+        try {
+            using Repository repository = Repository.OpenReadOnlyExisting(draftA, Models());
+            repository.ReadState(repository.GetHead("dev-a")!);
+        } catch (InvalidDataException) { rejected = true; }
+        Need(rejected, "The incompatible V2A copy was interpreted as V2B.");
+        Need(SameFiles(draftBefore, FileImages(draftA)), "Rejected cross-model reading changed the draft copy.");
         Need(ReadShared(database) == witness.SharedFinal, "Readonly verification changed shared.");
         CheckFrames(database, witness.Frames);
         Need(SameFiles(before, FileImages(database)), "Readonly verification changed repository files.");

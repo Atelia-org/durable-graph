@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-10-17；DB-086 新存储栈与既有 DB-077、DB-078-A/B/C、DB-079/080、DB-084 能力已实施；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-10-19；DB-096 统一 Catalog 删除片见当前焦点；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,13 +19,13 @@
 
 ## 当前焦点
 
-2026-10-19：[DB-096 统一 Catalog](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)已获用户决定，新API不再选择Shared/Private；本轮新增开发库复制与共同Catalog的源码见证。**下文 Private/ToShared 仍是当前实现事实，删除尚待独立切片**；不新增兼容入口，准确历史Schema/Upgrade/State基线保留。后续具体边界与验证只维护在该设计页。
+2026-10-19：[独立删除 Private/ToShared](../docs/design-branches/0096-history-and-head-model/private-removal.md)代码已集成、正在验收。按[统一 Catalog 合同](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)退出私有路线；保当前历史布局及 Shared 命名，不混入新 API/组提交。`P0R2` 根标记拒绝旧库，无兼容或自动导入。完整源码与普通包结果只维护在删除切片。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有源码接入为三控制Head与独立书签目录，实际范围见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。后续设计从[DB-096研究工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)恢复：用户已确认只追加/旧点另开/fork立即可见，继承历史为首选候选；上游紧凑codec与准确历史已做独立消费者复核，开发期误用诊断足够，不增加每引用16B scope。DG仍固定旧依赖，新历史模型、包接入与产品回归尚未完成，不把上游或独立消费者资格当作DG产品资格。
 
 workshop 反馈 3 的纯 State 入门已完成：[README](../README.md#最短接入路径)以连续 State 保存、历史读取、旧 State 分叉及冷开续写为主路径，Event 为可选后续示例。源码与新 G 原文普通包验收通过，运行时/API/格式保持；准确 G/S、证据与范围见[验收记录](../docs/DurableGraph-lab-notebook.md#state-only-quickstart)，本片无剩余必经施工。
 
-[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)E 已实施并完成源码与新 G 普通包限定验收。Open 只管资源读写，命名创建/签出/Fork 决定工作副本 Shared/Private 归属；来源、完整目录和保存格式保持。本片无剩余必经施工，准确 G/S、门禁与边界统一查 DB-095 §12；private 无历史新建与复合 ForkPrivate 不随本片扩展。
+[DB-095：打开意图与业务保存准入](../docs/design-branches/0095-repository-open-intent/README.md)保留 Open 管资源、创建/签出/Fork 取得编辑能力的边界。其旧 Shared/Private 归属由 DB-096 单 Catalog 取代；旧源码与包资格仅解释 DB-095 当时版本。
 
 Schema-history 发布保护已实施并完成限定验收：Build 的 Publish/Verify 在同目录互斥内重读、校验与发布，
 保同形幂等及冲突写前拒绝；SG/targets 输入和历史格式保持。完整构建仍串行，冻结历史后可并行 Verify。
@@ -52,12 +52,12 @@ H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#
 
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
-Shared 准入、真实 baseline private 恢复／正常升版、准确冷签出与增量续写、完整目录单次 ToShared 均已接线。private 只发布 ref1且不 rebase latest shared；新增 shared 走同一两 ref CU。旧 rows／heads／S 保含义，普通 Shared 保存核完整目录已被接纳，显式 ToShared 同形复用／新项加入／同 key 异形拒绝，不改变默认归属或执行环境。
-Open 只选择资源读写；Shared 命名创建/签出/Fork 与 CheckoutPrivate 决定工作副本普通保存归属，ToShared 为单次完整合入，归属不持久化。私有后续 meta 写来源取实际 Head.S；Shared／ToShared 的目标 meta 写来源取 latest shared，ToShared 的完整待导入声明另取实际 Head.S。业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State保存可推进 selected S。
+当前保存统一跟随 latest Shared Catalog；同 key 异形拒绝，新增定义与业务目录走同一两 Head CU。无新增 Catalog 时只发布业务目录。Private/ToShared 入口和私有来源、推广/remap、完整 selected-view admission 扫描退出；P0R2 根准入隔离旧布局。
+Open 只选择资源读写；Shared 命名创建/签出/Fork 取得可保存工作副本。业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State 保存可推进 selected S。历史图与对象 batch 的准确 Schema 继续保留，开发同版本异形试验在完整关闭库的独立副本进行。
 
 准确 origin／selected／execution S、共同 source／pending／fault owner、history／Pair／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
-普通 baseline fork／正常升版的 Development、Split、PrivateContainer 三条包故事资格见 DB-088；DB-089 新 G 另取得查询接口与增强 Split 生命周期的有限资格，不将旧包结果回填为新接口证据。源码精确身份／source／H 与普通包观察各保边界；实际包来源与工件只查对应结果记录。
+Development、Split、容器升级的当前消费者见 [PackageConsumerProbe](../experiments/PackageConsumerProbe/README.md)，本次资格见删除切片。DB-088/089 的旧包结果保各自版本意义；源码精确身份／source／H 与普通包观察各保边界。
 
 DB-087 原有限停点与 DB-088 后继删减均已完成；其他增量与条件延期只维护在[路线图 §4.1](../docs/DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。旧包执行 lanes 已退出，保留模型仅作编译资产。内部名称／wire 未冻结，共同持久化内核是当前产品路径。
 
@@ -166,7 +166,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；显式 Shared／真实 baseline private 升版、冷续写、单次完整目录 ToShared | [DB-087 有限 P1／P2 停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)成立；原分支重建、同 Open 双异形模型及性能等按条件延期，源码／包各保限定资格 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；新 Branch/Commit/WorkingCopy、组提交和操作内 Catalog 候选尚待实施 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 

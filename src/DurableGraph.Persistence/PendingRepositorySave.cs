@@ -9,14 +9,13 @@ internal sealed class PendingRepositorySave : IDisposable {
 
     internal PendingRepositorySave(RepositoryResources owner, RepositoryResources.PublicationBaseline baseline,
         string branch, StoredGraphKind kind, PreparedGraphWrite business, PreparedGraphWrite? catalog,
-        bool privateCatalog, FrameAddress? catalogSource) {
+        FrameAddress? catalogSource) {
         Owner = owner;
         Baseline = baseline;
         Branch = branch;
         Kind = kind;
         Business = business;
         Catalog = catalog;
-        PrivateCatalog = privateCatalog;
         CatalogSource = catalogSource;
     }
 
@@ -26,7 +25,6 @@ internal sealed class PendingRepositorySave : IDisposable {
     internal StoredGraphKind Kind { get; }
     internal PreparedGraphWrite Business { get; }
     internal PreparedGraphWrite? Catalog { get; }
-    internal bool PrivateCatalog { get; }
     internal FrameAddress? CatalogSource { get; }
     internal bool IsPrepared => _state == PendingState.Prepared;
 

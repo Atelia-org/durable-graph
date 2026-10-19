@@ -9,15 +9,15 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 |---|---|
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
 | [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | README 原文纯 State 连续保存、历史分叉与冷续写；可选 Event、Upgrade/Verify 及候选交付 |
-| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | DB-095 明确编辑入口的普通包编译正例、七项旧 API 精确编译负例及恢复合法源码后的冷保存 |
+| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、十一项旧 API（含 Private/ToShared）精确编译负例及恢复合法源码后的冷保存 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
 | [EventHistoryRecoveryConsumer](EventHistoryRecoveryConsumer/README.md)、[runner](Run-EventHistoryRecoveryProbe.ps1) | 应用自身的事件快照与处理进度协议 |
 | [MetaBootstrapSchemaConsumer](MetaBootstrapSchemaConsumer/README.md)、[runner](Run-MetaBootstrapSchemaProbe.ps1) | 员工自举、无业务注册的 meta 冷读、数组与字典真实 Delta |
 | [SplitRepositoryConsumer](SplitRepositoryConsumer/README.md)、[runner](Run-SplitRepositoryProbe.ps1) | 公开两根 Repository、accepted history、Upgrade、Pair、Fork 与冷续写 |
-| [PrivateContainerConsumer](PrivateContainerConsumer/README.md)、[runner](Run-PrivateContainerProbe.ps1) | baseline private、Nullable/List 正常升级、完整 ToShared |
-| [DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md)、[runner](Run-DevelopmentSchemaProbe.ps1) | 用户 baseline、开发 fork、定稿及 Off/Publish/Verify |
+| [容器升级](PrivateContainerConsumer/README.md)、[runner](Run-PrivateContainerProbe.ps1) | Shared Nullable/List 升级、缺规则拒绝、真实冷 Delta；路径保留历史名字 |
+| [DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md)、[runner](Run-DevelopmentSchemaProbe.ps1) | 完整关闭库副本 A/B/release、独立编译 history、正常 Shared 升级及 Off/Publish/Verify |
 
 包准备使用 [PackageProbeSupport](PackageProbeSupport.ps1)，消费独立 DG 四包版本 G 与准确存储六包版本 S；
 完整 feed、任务配置和候选来源见[依赖指南](../../docs/storage-dependency.md)。
@@ -25,7 +25,7 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 
 DB-095 的公开调用门禁接受完整候选 feed 与独立 DG 版本；`WorkDirectory` 可省略，由 runner 创建仓外新目录。
 它使用全新包缓存及正常 PackageReference/Generator/Build，不配置 friend 或手工 analyzer。
-每个旧调用单独断言诊断代码与源码位置；负例结束后恢复合法源码并重新 Verify build，再执行 Shared/Private 冷恢复保存。
+每个旧调用单独断言诊断代码与源码位置；负例结束后恢复合法源码并重新 Verify build，再执行 Shared 分支冷恢复保存。
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-RepositoryApiProbe.ps1 -PackageSource <feed> -Version <G> -WorkDirectory <fresh-outside-directory>

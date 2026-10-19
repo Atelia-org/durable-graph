@@ -1,5 +1,7 @@
 # DB-088：开发 Schema 草稿 fork 与定稿
 
+> 2026-10-19 后继：[DB-096](../0096-history-and-head-model/private-removal.md)已删除 Private/ToShared，开发试验改用关闭后的完整 Repository 副本。以下固定 baseline→private 草稿 fork→定稿流程及验收只保历史范围，不作为当前使用指引。
+
 > 结论与适用性：固定 V1→独立 V2 草稿 fork→定稿 V2 的有限故事已验收；生产特例退出及三条新 G 普通包通过，不预建主/次版本或 release 平台。
 > 本次整理来源 Git `8ef9fca`；原主入口 `docs/design-branches/0088-development-schema-workflow.md`。
 

@@ -434,10 +434,10 @@ function Invoke-Consumer {
             'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'SameSUnchangedListShared', 'RewriteWidgetsIndependent') }
             'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'EventCandidateDiscardKeepsStateRewrite') }
             'continue' { @('SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
-                'PrivateBaselineIdentities', 'PrivateEventAcceptsMetaOnly', 'PrivateFrozenCatalog', 'PrivateColdListDelta', 'PrivateSharedRootUnchanged', 'PrivateSharedSaveRejected',
-                'PrivateHotStateRetained', 'PrivateIndependentRead', 'PrivateSameOwnerCheckout',
-                'CompletePromotion', 'PromotionRefsAdvanced', 'PromotionEventRetainsState', 'SharedColdOwnerListDelta', 'PromotionRetainedOrigins') }
-            'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSPairIndependent', 'PrivateColdValues', 'PromotedSharedColdValues') }
+                'CatalogBaselineIdentities', 'CatalogEventAcceptsMetaOnly', 'CatalogRetainedDeclarations', 'CatalogColdListDelta', 'CatalogSharedRootAdvanced',
+                'CatalogHotStateRetained', 'CatalogIndependentRead', 'CatalogSameOwnerCheckout',
+                'FollowupCatalogUnchanged', 'FollowupBranchAdvanced', 'FollowupEventRetainsState', 'SharedColdOwnerListDelta', 'FollowupRetainedOrigins') }
+            'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSPairIndependent', 'CatalogColdValues', 'FollowupSharedColdValues') }
         }
         foreach ($check in $requiredObservations) {
             if ($evidence.Observations.$check -isnot [bool] -or !$evidence.Observations.$check) { throw "Consumer $Lane failed its $check observation." }

@@ -48,16 +48,24 @@ if (Test-Path -LiteralPath $workRoot) { throw 'Do not overwrite prior history, d
 [IO.Directory]::CreateDirectory($workRoot) | Out-Null
 $cache = Join-Path $workRoot 'packages'
 $developmentHistory = Join-Path $workRoot 'development-history'
+$historyA = Join-Path $workRoot 'history-a'
+$historyB = Join-Path $workRoot 'history-b'
 $releaseHistory = Join-Path $workRoot 'release-history'
 $database = Join-Path $workRoot 'database'
 $witness = Join-Path $workRoot 'witness.json'
+$databaseA = Join-Path $workRoot 'database-a'
+$databaseB = Join-Path $workRoot 'database-b'
+$databaseRelease = Join-Path $workRoot 'database-release'
+$witnessA = Join-Path $workRoot 'witness-a.json'
+$witnessB = Join-Path $workRoot 'witness-b.json'
+$witnessRelease = Join-Path $workRoot 'witness-release.json'
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'global.json') -Destination (Join-Path $workRoot 'global.json')
 foreach ($name in @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props')) {
     [IO.File]::WriteAllText((Join-Path $workRoot $name), '<Project />', [Text.UTF8Encoding]::new($false))
 }
 $receipt = [ordered]@{
     Protocol = 'DG.DevelopmentSchemaProbe.v1'
-    Scope = 'Ordinary exact-package MSBuild and public runtime development workflow: fixed shared V1/tag, inherited V1 identity/content, two incompatible V2 Off drafts, only winner B accepted/released; no new-root fork, data migration from another V2 draft, wire/H/performance/crash qualification'
+    Scope = 'Ordinary exact-package MSBuild and public runtime development workflow: complete closed V1 repository copies, isolated V1 compiler histories, incompatible V2 Off drafts in separate repositories, normal Shared upgrade of clean release copy to B; no draft import, wire/H/performance/crash qualification'
     PackageSource = $PackageSource; DgVersion = $Version; StorageVersion = $storageVersion; StorageRevision = $storageRevision
     WorkDirectory = $workRoot; ControllerProcessId = $PID; StartedUtc = [DateTime]::UtcNow.ToString('O')
     Inputs = @(@($PSCommandPath) + @($sources.FullName) | ForEach-Object { [ordered]@{ Path = $_; Sha256 = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash } })
@@ -166,17 +174,22 @@ function Compile-Stage([string]$Name, [string]$Shape, [string]$History, [string[
     Save-Receipt
     return $stage
 }
-function Store-Images {
-    @(Get-ChildItem -LiteralPath $database -File -Recurse | Sort-Object FullName | ForEach-Object {
-        [ordered]@{ Path = [IO.Path]::GetRelativePath($database, $_.FullName); Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+function Store-Images([string]$DatabasePath = $database) {
+    @(Get-ChildItem -LiteralPath $DatabasePath -File -Recurse | Sort-Object FullName | ForEach-Object {
+        [ordered]@{ Path = [IO.Path]::GetRelativePath($DatabasePath, $_.FullName); Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
     })
 }
-function Consume([string]$Phase, $Stage) {
-    $before = if ($Phase -ceq 'verify') { @(Store-Images) } else { @() }
+function Require-Store([string]$DatabasePath, $Images) {
+    if ((@(Store-Images $DatabasePath) | ConvertTo-Json -Compress) -cne ($Images | ConvertTo-Json -Compress)) {
+        throw "Repository file set or complete bytes differ: $DatabasePath"
+    }
+}
+function Consume([string]$Phase, $Stage, [string]$DatabasePath = $database, [string]$WitnessPath = $witness) {
+    $before = if ($Phase -ceq 'verify') { @(Store-Images $DatabasePath) } else { @() }
     $start = [Diagnostics.ProcessStartInfo]::new((Get-Command dotnet -CommandType Application | Select-Object -First 1).Source)
     $start.UseShellExecute = $false; $start.CreateNoWindow = $true
     $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true; $start.WorkingDirectory = $workRoot
-    foreach ($argument in @($Stage.Assembly, $Phase, $database, $witness)) { $start.ArgumentList.Add($argument) }
+    foreach ($argument in @($Stage.Assembly, $Phase, $DatabasePath, $WitnessPath)) { $start.ArgumentList.Add($argument) }
     $process = [Diagnostics.Process]::Start($start)
     $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
     $entry = [ordered]@{ Phase = $Phase; Shape = $Stage.Shape; ProcessId = $process.Id; Passed = $false }
@@ -197,13 +210,13 @@ function Consume([string]$Phase, $Stage) {
         }
         $checks = switch ($Phase) {
             'seed' { @('FixedV1Baseline', 'RingAndAlias') }
-            'draft-a' { @('BaselineIdentityImported', 'V1UpgradeWithOff', 'PrivateColdValues', 'SharedV1Unchanged', 'CompleteFramesPreserved') }
-            'draft-b' { @('BaselineIdentityImported', 'V1UpgradeWithOff', 'PrivateColdValues', 'SharedV1Unchanged', 'CompleteFramesPreserved') }
-            'final' { @('WinnerBOnlyPromoted', 'BaselineIdentityImported', 'FinalFromV1', 'ColdSharedContinuation', 'CompleteFramesPreserved') }
+            'draft-a' { @('BaselineIdentityImported', 'V1UpgradeWithOff', 'DraftColdValues', 'CopiedCatalogAdvanced', 'CompleteFramesPreserved') }
+            'draft-b' { @('BaselineIdentityImported', 'V1UpgradeWithOff', 'DraftColdValues', 'CopiedCatalogAdvanced', 'CompleteFramesPreserved') }
+            'final' { @('WinnerBAcceptedFromCleanCopy', 'BaselineIdentityImported', 'FinalFromV1', 'ColdSharedContinuation', 'CompleteFramesPreserved') }
             'verify' { @('FixedBaselinePreserved', 'WinnerBColdValues', 'IncompatibleDraftRejected', 'ReadOnlyFilesUnchanged', 'CompleteFramesPreserved') }
         }
         foreach ($check in $checks) { if ($evidence.Observations.$check -isnot [bool] -or !$evidence.Observations.$check) { throw "Missing actual $check evidence." } }
-        if ($Phase -ceq 'verify' -and ($before | ConvertTo-Json -Compress) -cne (@(Store-Images) | ConvertTo-Json -Compress)) { throw 'Readonly PID changed the database file set/bytes.' }
+        if ($Phase -ceq 'verify') { Require-Store $DatabasePath $before }
         $entry['Evidence'] = $evidencePath; $entry['EvidenceSha256'] = (Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash
         $entry['Observations'] = $evidence.Observations; $entry['LoadedAssemblies'] = $evidence.LoadedAssemblies; $entry.Passed = $true
         Write-Host $stdout.GetAwaiter().GetResult().Trim()
@@ -256,24 +269,39 @@ try {
         $frozenV1 = @(History-Images $developmentHistory)
         if ($frozenV1.Count -ne 1 -or $frozenV1[0].File -notmatch '\.V1\.') { throw 'The frozen development history must contain exactly V1.' }
         Consume 'seed' $v1
-        $a = Compile-Stage 'stage-a' 'A' $developmentHistory @('Off')
-        Require-History $developmentHistory $frozenV1
-        Consume 'draft-a' $a
-        $b = Compile-Stage 'stage-b' 'B' $developmentHistory @('Off')
-        Require-History $developmentHistory $frozenV1
-        Consume 'draft-b' $b
-        [IO.Directory]::CreateDirectory($releaseHistory) | Out-Null
-        Copy-Item -LiteralPath (Join-Path $developmentHistory $frozenV1[0].File) -Destination (Join-Path $releaseHistory $frozenV1[0].File)
+        # Seed PID has exited and closed every owner. Copy the entire repository, not selected heads/frames.
+        $baselineFiles = @(Store-Images $database)
+        foreach ($destination in @($databaseA, $databaseB, $databaseRelease)) {
+            Copy-Item -LiteralPath $database -Destination $destination -Recurse
+            Require-Store $destination $baselineFiles
+        }
+        foreach ($destination in @($witnessA, $witnessB, $witnessRelease)) { Copy-Item -LiteralPath $witness -Destination $destination }
+        foreach ($destination in @($historyA, $historyB, $releaseHistory)) {
+            Copy-Item -LiteralPath $developmentHistory -Destination $destination -Recurse
+            Require-History $destination $frozenV1
+        }
+        $receipt['BaselineCopyFiles'] = $baselineFiles
+        $a = Compile-Stage 'stage-a' 'A' $historyA @('Off')
+        Require-History $historyA $frozenV1
+        Consume 'draft-a' $a $databaseA $witnessA
+        $b = Compile-Stage 'stage-b' 'B' $historyB @('Off')
+        Require-History $historyB $frozenV1
+        Consume 'draft-b' $b $databaseB $witnessB
+        Require-Store $database $baselineFiles
+        Require-Store $databaseRelease $baselineFiles
         $final = Compile-Stage 'stage-final-b' 'B' $releaseHistory @('Publish', 'Verify')
         $released = @(History-Images $releaseHistory)
         if ($released.Count -ne 2 -or @($released | Where-Object { $_.File -match '\.V2\.' }).Count -ne 1 -or
             ($released | Where-Object { $_.File -ceq $frozenV1[0].File }).Sha256 -cne $frozenV1[0].Sha256) { throw 'Release must preserve V1 and accept exactly final V2B.' }
-        Consume 'final' $final
+        Consume 'final' $final $databaseRelease $witnessRelease
         Compile-Stage 'stage-rejected-a' 'A' $releaseHistory @('Off') $true
         Require-History $releaseHistory $released
-        Consume 'verify' $final
+        Consume 'verify' $final $databaseRelease $witnessRelease
         Require-History $developmentHistory $frozenV1
+        Require-History $historyA $frozenV1
+        Require-History $historyB $frozenV1
         Require-History $releaseHistory $released
+        Require-Store $database $baselineFiles
     } finally { Pop-Location }
     if (@($receipt.Processes.ProcessId | Select-Object -Unique).Count -ne 5 -or
         @($receipt.Commands | Where-Object { $_.Arguments -contains '-t:Rebuild' -and !$_.ExpectedRejection }).Count -ne 6 -or

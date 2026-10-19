@@ -11,7 +11,7 @@
 
 ## 已确认的需求与边界
 
-- **2026-10-19 用户已决定：后续一个 Repository 只有统一的 Schema Catalog（原 Shared 路线），移除 Private 演进和 ToShared 推广；开发草稿在独立库副本中试验。**历史图/batch 的准确 Schema、正常版本升级和完整关系校验继续保留。当前产品仍含 Private，不能把设计决定写成已删除。
+- **2026-10-19 用户已决定：一个 Repository 只有统一的 Schema Catalog（原 Shared 路线），移除 Private 演进和 ToShared 推广；开发草稿在独立库副本中试验。**历史图/batch 的准确 Schema、正常版本升级和完整关系校验继续保留。删除实现的资格见[独立切片](private-removal.md)。
 - DramaBoard 多根、多层世界线森林；应用主动在关键点分叉；不要求 merge 或内容寻址。
 - 父子线都能继续。首版原线只追加，旧存档另开新线，不做原线 rewind/任意重定位。
 - 标签可重复，相对固定；可改更好，但首版固定可接受。不要求 Git 式唯一名字或按标签打开。
@@ -35,7 +35,7 @@
 
 ## 当前焦点与下一步
 
-**当前停点：统一 Catalog 设计与小机制验证（2026-10-19）。**API 草图已去掉 SchemaMode；独立完整副本开发与共同 Catalog 编码/冷读已有可执行见证；Private 删除范围已收敛。决策、准确验证范围和后续删除片集中在[统一 Catalog 设计](shared-schema-only.md)。产品旧 Private 路由尚未删除，组发布尚未接线。
+**当前施工：独立删除 Private/ToShared（2026-10-19），实现已集成，验收中。**过程和验收集中于[删除切片](private-removal.md)。P0R2 根标记拒绝旧布局；旧 Shared 命名和业务历史保持，每 checkout 的内部 Catalog 暂保留。本片不接新历史模型或组提交。设计依据、独立完整副本开发与共同 Catalog 编码见证见[统一 Catalog 设计](shared-schema-only.md)。
 
 此前[首批机制调查](mechanism-feasibility.md)保留源码原语、创建/恢复/查询缺口与最小实验；其中 Private/混组候选已由本次决定退出，其余证据仍适用。
 
@@ -57,19 +57,19 @@
 - **查询：**完整 BranchInfo 需要来源；现 ListHeadOrigins 扫物理全集，未登记产物会扩大访问/故障范围。建议评估定向 origin 读取，不复制来源为第二权威。千条小标签容量可行性有估算，整表创建累计写量与 current 文件句柄仍需测。
 - **分页：**优先试页满返回、预算耗尽整次失败，暂不增加预算截断页；这是候选，未冻结公开合同。
 
-下一轮先从[统一 Catalog §4–6](shared-schema-only.md#4-private-实现删除合同)推进独立 Private/ToShared 删除片，保当前历史布局并迁移有效断言，明确新格式拒绝旧Private布局；接着实现统一组准备/发布/安装。三路径登记、Parent来源资格和查询成本仍按[调查 §9](mechanism-feasibility.md#9-下一批最小实验与依赖顺序)独立推进。当前两见证使用准确旧 pin，不代表更新 HeadStore 的产品接入已验收。
+删除片验收完成后，下一轮回到统一组准备/发布/安装的收敛设计，先替换 per-copy 可变写目录，再证明共同发布及所有工作副本安装。三路径登记、Parent来源资格和查询成本仍按[调查 §9](mechanism-feasibility.md#9-下一批最小实验与依赖顺序)独立推进。本片使用准确旧 pin，不代表更新 HeadStore 的产品接入已验收。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
 ## 已知未决项与明确延期
 
-未决：统一 Catalog 操作内候选与业务捕获/安装接线、Private 删除的新格式标识与有效回归迁移；登记 B 的运行见证及创建未知结果如何保留候选 BranchId、直接 State 锚点与历史校验取舍、定向 origin 的窄请求、分页预算合同；BranchId/CommitId 外部 codec 与 DG 字段表示、Event 摘要缺省、附件闭包/错误；请求消费/失败后复用及历史组合恢复。Private 新根/混组/promotion 已关闭，不重开冻结快照方案；准确历史 Schema、最近State、Meta 前源与 Delta 依赖保留。
+未决：统一 Catalog 操作内候选与业务捕获/安装接线；登记 B 的运行见证及创建未知结果如何保留候选 BranchId、直接 State 锚点与历史校验取舍、定向 origin 的窄请求、分页预算合同；BranchId/CommitId 外部 codec 与 DG 字段表示、Event 摘要缺省、附件闭包/错误；请求消费/失败后复用及历史组合恢复。Private 新根/混组/promotion 已关闭，不重开冻结快照方案；准确历史 Schema、最近State、Meta 前源与 Delta 依赖保留。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
 ## 本批完成边界
 
-2026-10-19：明确统一 Catalog，更新活动 API 与长期目标；新增两份源码机制见证，形成 Private 删除合同并独立审阅。实际构建/测试及限度只查[统一 Catalog §5](shared-schema-only.md#5-本轮基线验证与限度)。产品代码、固定依赖未修改；不是新API、组事务或普通包验收。
+前轮统一 Catalog 机制见证范围见[统一 Catalog §5](shared-schema-only.md#5-本轮基线验证与限度)；本轮删除实现与验收见[独立切片](private-removal.md)。固定依赖不变；新 API 与组事务尚未实施。
 
 ## 实现与证据边界
 
