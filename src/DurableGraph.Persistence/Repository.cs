@@ -103,8 +103,37 @@ public sealed partial class Repository : IDisposable {
     public BranchInfo[] ListBranches() {
         RequireAvailable();
         _busy = true;
-        try { return _resources.ListBranches().Select(pair => ReadBranchInfoCore(new(pair.Key), pair.Value)).ToArray(); }
+        try {
+            BranchInfo[] branches = _resources.ListBranches().Select(pair => ReadBranchInfoCore(new(pair.Key), pair.Value)).ToArray();
+            ValidateBranchForest(branches);
+            return branches;
+        }
         finally { EndOperation(); }
+    }
+
+    // A single-target header query does not validate the declared forest. Check only
+    // the registered set already read for this list, without touching other Heads.
+    private static void ValidateBranchForest(BranchInfo[] branches) {
+        var byId = branches.ToDictionary(branch => branch.Id);
+        Dictionary<BranchId, byte> marks = [];
+        List<BranchId> path = [];
+        foreach (BranchInfo start in branches) {
+            path.Clear();
+            BranchInfo? current = start;
+            while (current is not null) {
+                if (marks.TryGetValue(current.Id, out byte mark)) {
+                    if (mark == 1) { throw new InvalidDataException("The registered branch origins contain a cycle."); }
+                    break;
+                }
+                marks.Add(current.Id, 1);
+                path.Add(current.Id);
+                if (current.ForkedFromCommitId is not { } source) { break; }
+                if (!byId.TryGetValue(new(source.Value.HeadId), out current)) {
+                    throw new InvalidDataException("A branch origin refers to an unregistered parent.");
+                }
+            }
+            foreach (BranchId id in path) { marks[id] = 2; }
+        }
     }
 
     /// <summary>Reads the registered branch's label and fixed creation origin without restoring a domain graph.</summary>
@@ -120,7 +149,6 @@ public sealed partial class Repository : IDisposable {
         ReadBranchInfoCore(branchId, _resources.GetBranchLabel(branchId.Value));
 
     private BranchInfo ReadBranchInfoCore(BranchId branchId, string label) {
-        // Isolated B2 adapter. Formal merge requires a bounded target-origin query upstream.
         var origin = _resources.ReadOrigin(branchId.Value);
         return new(branchId, label, origin is { } source ? new(source) : null);
     }

@@ -44,6 +44,8 @@
 
 ## 当前焦点与下一步
 
+**当前切片进行中：定向 origin 接入。**上游已在独立 `dg-targeted-origin` 分支形成提交 `70b406cd8d1117733eee81a33e7f978399aa98b2`（工作树 `.artifacts/db096-targeted-origin/storage`），新增 HeadOrigin/ReadHeadOrigin，无格式变化；完整上游3608通过、10平台跳过，新29项全部通过。DG pin 已改为该 revision / `0.1.3-dev.20261019.g70b406c`，替换全量 adapter并保 current/直接source检查；ListBranches另做登记集合内存环检。DG根构建0/0，8个新反例、完整Persistence994/994、Runtime定向16/16均通过；首轮两处fixture错误已修，证据见[接入记录](targeted-origin-integration.md)。新S普通包、DG新G与上游main快进尚未完成；原固定worktree/feed保持。以下包闭包段保前一片资格，不代表新pin已经获得包资格。
+
 **当前停点：B2 的真实 API、原根回归、D 查询收窄及活动包消费者闭包已在隔离分支 `db096/branch-repository-cutover` 完成，尚未合入 master。**本片源码迁移提交 `651e51c`；全部11个活动普通包门禁通过，source build 和 Storage package-mode 根 Rebuild 均0警告/0错误，完整根回归2879/2879。产品本片仅补 XML，公开签名/行为/持久格式保持；准确 G/S、各门禁限度与唯一 runner 尾修只查[包迁移验收](package-cutover-validation.md)。
 
 下一片处理定向 origin：先在准确上游基线上隔离实施单 Head header 查询和访问/清理/正常恢复反例，再固定新 Storage pin 接入 DG，并验证无关坏 Head 不阻断、坏目标与未登记父成员拒绝。用户已有跨仓操作授权，现有 helper 可复用，不应反复等待尚未发生的外部交付；具体实现备忘见[窄请求](headstore-origin-request.md#本地实施接点)。本轮没有修改上游或公开发布包。

@@ -203,23 +203,13 @@ public sealed partial class RepositoryResources {
         return previous;
     }
 
-    // Isolated B2 bridge only. Formal merge requires targeted upstream origin lookup;
-    // this all-origins scan can still fail on an unrelated unregistered Head.
     internal HeadEntryId? ReadOrigin(HeadId branch) {
-        // The all-origins API omits roots and missing files alike. An exact current read
-        // distinguishes a real root from a registered ID whose physical Head is absent.
+        // Keep the DG current-entry role check. The header query below visits only
+        // this Head; its declared source still needs DG membership and Entry validation.
         _ = ReadCurrent(branch);
-        Span<byte> bytes = stackalloc byte[HeadEntryId.EncodedSize];
-        foreach (HeadOriginInfo origin in _heads.ListHeadOrigins(int.MaxValue).Unwrap()) {
-            if (origin.ChildHeadId != branch) { continue; }
-            RequireMember(origin.SourceHeadId);
-            origin.SourceHeadId.TryWrite(bytes);
-            BinaryPrimitives.WriteUInt64LittleEndian(bytes[HeadId.EncodedSize..], origin.SourceEntryTicket.Packed);
-            if (!HeadEntryId.TryRead(bytes, out HeadEntryId id)) { throw new InvalidDataException("Invalid branch origin."); }
-            _ = ReadDescriptor(id);
-            return id;
-        }
-        return null;
+        HeadEntryId? source = _heads.ReadHeadOrigin(branch).Unwrap().SourceEntryId;
+        if (source is { } id) { _ = ReadDescriptor(id); }
+        return source;
     }
 
     internal HeadId ForkBranch(HeadEntryId source, string label, out PublicationOutcome outcome) {
