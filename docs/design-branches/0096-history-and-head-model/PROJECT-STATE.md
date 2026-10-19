@@ -50,7 +50,7 @@
 
 **当前停点：根/子树查询已完成源码与新 G 普通包验收。**`ListRootBranches()` 与包含起点的 `ListBranchSubtree(branchId)` 共用已登记森林验证；不恢复业务对象，不增加持久父关系或索引。多根/重复标签、真实来源、空fork冷开及损坏/寿命边界已验证，准确源码、包版本和成本限度只查[树查询验收](branch-tree-queries.md)。
 
-**下一片：公开历史分页。**以一次准确起点的 HeadStore `ReadEntryHistory` 扫描接入 `ReadHistoryPage`，返回所有 State/Event 描述，应用自行筛选。`AtOrBefore/Before`、页满成功和预算耗尽整次失败保持；Before 重读并验证 anchor 后跳过，Continuation 取最后扫描项。最小判据：固定旧点不受新提交漂移、跨fork无重漏、满页恰到根后空末页、全Event页筛选后仍可续进、坏/未登记anchor拒绝、预算/取消/清理失败不交付部分页、冷开无业务模型。不要用全链物化后Take、逐项ReadPrevious或无预算的额外CheckCommit替代一次扫描。
+**当前实施中：[公开历史分页](history-pagination.md)，源码已通过，普通包待验。**以一次准确起点的 HeadStore `ReadEntryHistory` 扫描接入 `ReadHistoryPage`，返回所有 State/Event 描述，应用自行筛选。`AtOrBefore/Before`、页满成功和预算耗尽整次失败保持；Before 重读并验证 anchor 后跳过，Continuation 取最后扫描项。最小判据：固定旧点不受新提交漂移、跨fork无重漏、满页恰到根后空末页、全Event页筛选后仍可续进、坏/未登记anchor拒绝、预算/取消/清理失败不交付部分页、冷开无业务模型。不要用全链物化后Take、逐项ReadPrevious或无预算的额外CheckCommit替代一次扫描。
 
 **压缩后恢复顺序：完整读本文 → API草图 §5 → RepositoryResources.MetaBootstrap.cs 的 ScanHistory/Describe 与上游 HeadStore.History 的准确起点、预算及终止合同。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`；source模式显式restore/build，包模式使用完整feed。完成的组提交、origin、树查询及Kill门禁不重做；新产品变更按自身影响范围获得资格。
 
@@ -66,7 +66,7 @@
 
 - **已完成基础：**来源 snapshot 接缝 A、Storage B1、B2 新布局/外观、原回归迁移、D 查询投影、活动消费者与定向 origin。各片只证明其实际版本，历史记录不作为未完成工单。
 - **组提交已完成：**owner accepted Catalog和操作内共同候选；全员先准入、再Capture，guard覆盖输入枚举与整个调用。Capture清理由协调器统一负责，旧每WC dirty Catalog已退出；各工作副本执行环境保持冻结。一次真实CU、全部Base推进、State/Event差异和清理/outcome反例已有资格，进程Kill与平台范围不由此外推。
-- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核已保原创建回归，仍需补剩余登记失败窗口。新根不能假定 CreateHead 参加 PublishHeads。
+- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核已保原创建回归，剩余登记失败窗口已只读收敛为[11项与一处冷开补强](creation-failure-acceptance.md)，尚未新增运行。新根不能假定 CreateHead 参加 PublishHeads。
 - **树与历史页：**根/子树查询已闭合；接下来补公开分页。历史固定准确 anchor，Before 排除重复首项；页满成功、工作预算耗尽整次失败。既有 Probe 只证明有限健康计数，不是完整 I/O 资格。
 - **最终交付：**完成以上功能、故障边界和调用示例，重核源码与普通包门禁、文档/旧 API 清理（包括 src/PROJECT-STATE 仍保留的旧 API 能力细节），再正式合入。新版本必须有自己的资格，不借用前片绿色记录。
 

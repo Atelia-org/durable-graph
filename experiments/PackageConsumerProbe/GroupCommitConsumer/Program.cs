@@ -45,6 +45,8 @@ internal static class Program {
         using var repo = Repository.CreateNew(path, Models());
         using var worldWork = repo.OpenWorkingCopy(repo.CreateRootBranchFromEvent("world", new Seed { Number = 1 }).Id);
         using var playerWork = repo.OpenWorkingCopy(repo.CreateRootBranchFromEvent("player", new Seed { Number = 2 }).Id);
+        repo.CreateTag("world-seed", worldWork.BaseCommitId);
+        repo.CreateTag("player-seed", playerWork.BaseCommitId);
         World world = new() { Swords = 1 };
         Player player = new() { Swords = 0 };
         byte[] summary = [1, 2, 3];
@@ -84,6 +86,21 @@ internal static class Program {
         Need(!repo.IsFaulted, "Event-expired request faulted owner.");
         Console.WriteLine("GroupContinue:ColdState:MixedRoles:EventKeepsState:ExpiredRequest");
     }
+    private static List<CommitInfo> ReadPages(Repository repo, CommitId anchor) {
+        List<CommitInfo> commits = [];
+        HistoryStart next = HistoryStart.AtOrBefore(anchor);
+        for (int pageNumber = 0; pageNumber < 8; pageNumber++) {
+            CommitHistoryPage page = repo.ReadHistoryPage(next, new HistoryPageLimits(1, 1000));
+            commits.AddRange(page.Items);
+            if (page.StopReason == HistoryPageStopReason.ReachedRoot) {
+                Need(page.Items.Count == 0 && page.Continuation is null, "One-item pages must end in an empty root page.");
+                return commits;
+            }
+            Need(page.Items.Count == 1 && page.Continuation is { IsInclusive: false }, "Full page lost its exclusive continuation.");
+            next = page.Continuation!.Value;
+        }
+        throw new InvalidOperationException("History failed to reach its root.");
+    }
     private static void Verify(string path) {
         // Directory browsing does not need the business model registry.
         using (var directory = Repository.OpenReadOnlyExisting(path, new StateModelRegistry())) {
@@ -91,6 +108,12 @@ internal static class Program {
             Need(directory.ListRootBranches().Select(branch => branch.Id).ToHashSet().SetEquals([world, player]), "Cold roots changed.");
             Need(directory.ListBranchSubtree(world).Select(branch => branch.Id).ToHashSet().SetEquals([world, alternate]), "Cold subtree lost the unedited fork.");
             Need(directory.ReadCurrentCommit(alternate).Commit.Id == directory.ResolveTag("world-transfer"), "Parent advancement moved the fork's inherited commit.");
+            var inherited = ReadPages(directory, directory.ReadCurrentCommit(alternate).Commit.Id);
+            Need(inherited.Count == 2 && inherited[0].Id == directory.ResolveTag("world-transfer") && inherited[1].Kind == CommitKind.Event && inherited[1].Id == directory.ResolveTag("world-seed"),
+                "Empty-fork history must retain its fixed State/Event prefix without a synthetic commit.");
+            var mixed = ReadPages(directory, directory.ReadCurrentCommit(player).Commit.Id);
+            Need(mixed.Count == 3 && mixed[0].Kind == CommitKind.Event && mixed[1].Id == directory.ResolveTag("player-transfer") && mixed[2].Kind == CommitKind.Event && mixed[2].Id == directory.ResolveTag("player-seed"),
+                "Cold pagination must preserve Event/State/Event order without business models.");
         }
         using var repo = Repository.OpenReadOnlyExisting(path, Models());
         CommitId worldCurrent = repo.ReadCurrentCommit(Find(repo, "world")).Commit.Id;
@@ -101,6 +124,6 @@ internal static class Program {
         Need(savedPlayer.StateCommitId == repo.ResolveTag("player-transfer") && ((Player)savedPlayer.State!).Swords == 1, "Event persisted an uncommitted State edit.");
         Need(((World)repo.LoadState(repo.ResolveTag("world-transfer"))).Swords == 0, "Old World commit changed.");
         Need(repo.ReadCommitInfo(repo.ResolveTag("world-transfer")).Summary.Span.SequenceEqual(new byte[] { 1, 2, 3 }), "The durable summary changed.");
-        Console.WriteLine("GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState:Tree");
+        Console.WriteLine("GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState:Tree:Pages");
     }
 }

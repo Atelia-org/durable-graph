@@ -1,5 +1,7 @@
 # DB-096：应用合同与并行设计收敛稿
 
+> 当前适用范围（2026-10-19）：本文保留前期候选与成本分析，正文中的“未实施/待验证”保其写作时点。登记候选 B、Branch/Commit/WorkingCopy、统一 Catalog、组提交与根/子树现已落地，当前资格和后续顺序以 [PROJECT-STATE](PROJECT-STATE.md) 为准；创建剩余故障门槛见[定向验收清单](creation-failure-acceptance.md)，不要重新启动健康路径或标签 A/B 海选。
+
 > 后续公开概念与命名以 [API 草图](api-sketch.md)为讨论入口：Branch 对应本文世界线，Commit 对应一次真实业务保存，WorkingCopy 是绑定分支的可编辑工作副本。BranchId/CommitId 分别对应底层 HeadId/HeadEntryId；本文的 Head、Entry 和 HS 方法名保留底层含义。本文保留创建、发布及成本分析，不单独维护另一套公开签名。
 
 > 状态：2026-10-17，三个有界调查包经主线程整合的设计稿，未实施。来源故事和已确认需求只维护在[用户故事](user-stories.md)；本文负责候选合同、取舍与最小验证。

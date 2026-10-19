@@ -59,7 +59,7 @@ try {
     foreach ($lane in @(
         @{ Name = 'seed'; Expected = 'GroupSeed:TwoNewSchemas:DeferredCapture:OwnedSummary:AllBases' },
         @{ Name = 'continue'; Expected = 'GroupContinue:ColdState:MixedRoles:EventKeepsState:ExpiredRequest' },
-        @{ Name = 'verify'; Expected = 'GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState:Tree' }
+        @{ Name = 'verify'; Expected = 'GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState:Tree:Pages' }
     )) {
         # Separate processes cannot accidentally reuse a repository owner, DTO cache,
         # generated model instance table, or an in-memory handle from the preceding lane.

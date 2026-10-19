@@ -172,6 +172,28 @@ public sealed partial class RepositoryResources {
         RequireMember(id.HeadId);
         _heads.ReadEntryHistory(id, new(long.MaxValue, long.MaxValue), entry => visitor(Describe(entry))).Unwrap();
     }
+    // The caller owns a synchronous page operation; only the exact anchor is scanned, with no extra ReadEntry.
+    internal HeadHistoryEnd ScanHistoryPage(HeadEntryId id, HeadHistoryBudget budget,
+        Func<HistoryGraphRecord, bool> visitor, CancellationToken cancellationToken) {
+        RequireMember(id.HeadId);
+        EnsureSaveUsable();
+        cancellationToken.ThrowIfCancellationRequested();
+        HeadHistoryEnd end = _heads.ReadEntryHistory(id, budget, entry => {
+            cancellationToken.ThrowIfCancellationRequested();
+            HistoryGraphRecord record = Describe(entry);
+            EnsureSaveUsable();
+            cancellationToken.ThrowIfCancellationRequested();
+            bool keepGoing = visitor(record);
+            EnsureSaveUsable();
+            cancellationToken.ThrowIfCancellationRequested();
+            return keepGoing;
+        }, cancellationToken).Unwrap();
+        // HeadStore has finished its temporary/peer cleanup; a later resource failure must still prevent delivery.
+        EnsureSaveUsable();
+        cancellationToken.ThrowIfCancellationRequested();
+        return end;
+    }
+
     internal IReadOnlyList<HistoryGraphRecord> ReadHistory(HeadEntryId id) {
         List<HistoryGraphRecord> result = [];
         ScanHistory(id, item => { result.Add(item); return true; });

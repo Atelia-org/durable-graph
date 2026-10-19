@@ -271,6 +271,16 @@ OpenWorkingCopy 只恢复最近 State；独立读取的 Event 与工作副本不
 
 多开局目录可用 `repo.ListRootBranches()` 取得根，再用 `repo.ListBranchSubtree(branchId)` 取得包含起点的平面子树。它们只返回正式业务 Branch 的标签和固定来源，不加载领域对象，也不要求登记业务模型；空 fork 可立即列出。结果无排序保证，应用自行排序和画树。首版会读取并验证整个已登记森林，不能将子树查询理解为只访问该子树的磁盘文件。
 
+长历史可从准确提交向祖先分页，不用先读取整条历史：
+
+```csharp
+HistoryStart start = HistoryStart.AtOrBefore(repo.ReadCurrentCommit(branchId).Commit.Id);
+CommitHistoryPage page = repo.ReadHistoryPage(start, new HistoryPageLimits(MaxItems: 50, MaxWorkSteps: 10_000));
+// 展示 page.Items；下一次使用 page.Continuation（null 表示已到根）。
+```
+
+页面包含 State/Event 描述，不恢复业务对象。即使应用筛选后没有显示项，也使用页面给出的 Continuation；满页不保证后面还有数据，末尾可以有一个空完成页。工作预算耗尽或取消会使整次调用失败，不返回部分页；MaxWorkSteps 计量 HeadStore 历史工作，不是全部 I/O 或耗时上限。完整公开调用见[普通包示例](experiments/PackageConsumerProbe/GroupCommitConsumer/README.md)。
+
 ## 工作副本与统一 Schema Catalog
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
