@@ -7,7 +7,7 @@
 
 为 DG 重新设计 Branch、Commit 与 WorkingCopy 的 API；世界线是应用称呼，准确存档位置在新外观中称 Commit。先以实际下游故事选择对外能力，再与存储实现取舍。用户明确 DG 现有 publish 设计/实现和 GraphEnvelope.Parent 是可重写草稿，无兼容包袱；不要为保留旧形状建立双 Parent 或过渡兼容层。
 
-上游已交付引用初始化 fork、紧凑 ID codec 和准确 Entry 起点历史；同库操作经独立消费者验证。已接受其开发期跨库误用检出目标，撤回每引用附加16B scope的建议。**用户认可当前 API 的清晰性与功能覆盖，下一阶段转向可行性验证、效率与简化，收窄设计；尚未开始新模型实施。**
+上游已交付引用初始化 fork、紧凑 ID codec 和准确 Entry 起点历史；同库操作经独立消费者验证。已接受其开发期跨库误用检出目标，撤回每引用附加16B scope的建议。**用户认可当前 API 的清晰性与功能覆盖，下一阶段转向可行性验证、效率与简化，收窄设计；公开新模型尚未切换。**
 
 ## 已确认的需求与边界
 
@@ -36,11 +36,11 @@
 
 ## 当前焦点与下一步
 
-**当前停点：B2 窄管理读取已接入内部源码，下一片是目录候选与回读安装（2026-10-19）。**本轮起点 `fa4a858`；[目录合同 §6](directory-persistence.md#6-窄管理读取切片)集中记录本片边界与验证。D/T 共用原 decoder 循环，动态来源在 Schema 加载前拒绝，有限布局在 body reader 前检查；原 S reader 不扩大。此前[机制见证](../../../experiments/DirectoryDictionaryMechanismProbe/README.md)保留其规划器、D/S 发布与未发布候选不可见证据。Repository 仍使用旧业务目录/Parent，新 Branch API、目录写入/安装和组内核尚未实施。
+**当前停点：目录内部原语已闭合，下一片直接进入 B2 隔离分支的真实 Repository 纵切（2026-10-19）。**本轮起点 `e7282f3`；[目录合同 §7](directory-persistence.md#7-目录候选与小入口切片)记录候选、实际回读安装材料、小入口及健康共同发布证据。D/T 都已用正常 planner 跑通 Base/Delta、冷续写再冷读；实际 D/S 共同发布后安装、未发布 D/S/T 候选冷开不可见。Repository 仍是旧业务目录/Parent；原语没有代替正式登记、发布故障或新 Branch API 接线。
 
 此前[首批机制调查](mechanism-feasibility.md)保留源码原语、创建/恢复/查询缺口与最小实验；其中 Private/Shared Schema 混组候选已退出，其余证据仍适用。
 
-**压缩后恢复顺序：完整读本文 → [目录合同 §4.1/§6](directory-persistence.md#41-下一片的最小状态与安装轮廓尚未实施) → 实际 ManagementDirectoryReader/回归 → [B2 整体切换计划](branch-cutover-plan.md) → 按需查 [API B2 合同](api-sketch.md#b2-的具体值与迁移合同)。下一片准备两个冻结目录基线及候选，发布前通过窄 reader 回读取得真实安装材料；不再扩整表 codec、重写 reader 或重复健康原语见证。保留公开值、历史停止矩阵与 Entry 摘要；A 接缝与 B1 不重做，不重开命名/故事、不再扩展旧目录协调器。**
+**压缩后恢复顺序：完整读本文 → [B2 整体切换计划](branch-cutover-plan.md) → [目录合同 §4.1/§7](directory-persistence.md#41-最小状态与安装合同)及实际 Writer/Pointer → [Branch 纵切](branch-vertical-design.md) → 按需查 [API B2 合同](api-sketch.md#b2-的具体值与迁移合同)。从已验证目录原语进入真实 Repository，不再写独立目录协调器或重复健康原语见证。A 接缝与 B1 不重做，不重开命名/故事；公开值、历史停止矩阵与 Entry 摘要保持。**
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -54,7 +54,7 @@
 
 - **发布：**一个 accepted Catalog＋操作内共同候选。staging/ready 逐成员 AbortPreparation，installed 后无操作。真实混组见证已验证共同编码、一次旧 D/S 发布、State 安装/Event 丢弃、冷续写；直接 HS 发布后必须关旧 owner，不能继续使用其陈旧目录缓存。全组 Base/guard/清理故障仍须真实内核验收。实际 CommitId 确认后才取得，Published 失败也可能拿不到 ID。
 - **创建：**三路径登记的公开 HS 成功组合已通过示意 Probe；未登记 Head 冷开隐藏、空 fork 立即可读且不产生 c0。目录与真实 Catalog 的 D/S 共同发布已有机制见证；新根业务图、登记生命周期与中断闭包仍未验证。登记 Unknown/Published 错误保已知候选 BranchId；物理创建 Unknown、尚未尝试登记时 DG 确知未登记。
-- **目录：**D/T 复用内建 Dictionary，分别为 uint→string 与 string→byte[]；小入口无图时表示初始空目录，首次添加才 Base。目录各有独立 Meta 来源，不借 S；窄 reader 已检查历史 Schema、全部 live 布局、根和所有 Dictionary 条目。独立未引用叶子不额外承受标签/书签角色约束。下一片各保一个 DecodedGraphRows? accepted；对象身份、真实 H 同源，不另存可编辑 CLR Dictionary 权威。候选追加后回读准备安装，发布成功才替换基线；完整解码成本明确，T 规模没有1000上限，优化等测量。
+- **目录：**D/T 复用内建 Dictionary；窄 reader 保历史 Schema/完整布局/条目验证，Writer 保真实身份/prior/H和全部live成员。每个目录一个 DecodedGraphRows? accepted，候选不修改它。PrepareInstall核实际图和records后回读，GetInstallation只交付材料/核基线与寿命，不证明发布；真实owner须发布前核基线、guard内发布后共同接受。小入口5/17B已严格编码；Repository尚未启用。完整解码成本明确，T无1000规模上限，优化等测量。
 - **恢复：**已有 StoredGraphRevision 已保留到 decoder/normalized/实际安装，仍由当前 Parent 签发并在保存时复核；不新增 proof/token 或 Graph→Commit 反查。下一片改 HS 签发，CommitId 留在 Repository 层。新布局冷恢复需最近 State 及其严格前源（不足两个到根），保 tip Event 轻量检查。物理 Delta 只核 source 角色与准确 prior，不扩大为递归历史审计。尚无真实新布局运行资格。
 - **查询：**描述/fork 只做入口角色检查，内容恢复再验 source/prior/Schema；新 ForkBranch 不是会先恢复对象的旧 ForkShared 改名。Kind 暂从小图 envelope 取得，避免重复存储；成本待测。已写[定向 origin 请求](headstore-origin-request.md)，尚未交付/提交上游。它不阻挡隔离分支的健康纵切，但正式 ReadBranchInfo 合入须满足定向访问边界；不能把全量 adapter 偷换成产品合同，不复制来源权威。
 - **分页：**首版选页满成功、工作预算耗尽整次失败，不交付已收集前缀。示意 Probe 已覆盖跨 fork/Before/根后空页/真实部分预算失败；固定旧 anchor 的20项页在较新后缀0/100/10000下冷/热最小预算都45，仅为健康 SingleEntry 计数，不是恒定 I/O 资格。
@@ -63,24 +63,24 @@
 
 1. **A 已完成：来源 snapshot 内部贯穿。**当前 Parent 仍是唯一来源权威；冷读一次完整资格、warm/安装再验证、fixture/owner/lifetime、历史 rewrite 和真实 Delta 均有[回归证据](history-source-seam.md#7-a-实施与验收)。不继续扩成 typed 缓存或免校验证书。
 2. **B1：新 Storage 源码接入。**已固定 `f8868b5`，DG 仍用旧历史布局；源码、进程窗口与包资格分开，见[接入记录](storage-handle-adaptation.md)。下一片不重复接依赖；若 origin 新交付改变 revision，再验收相应增量。
-3. **B2：单布局整体切换。**下一可验收子片按[目录 §4.1](directory-persistence.md#41-下一片的最小状态与安装轮廓尚未实施)接角色增项函数与窄候选：空入口/首项 Base、完整成员和实际 records 比对、wrong-owner/source 不能安装、准备后 accepted 不变、D/T 冷续写及 T 正常规划器选择/D-S 共同安装。窄 reader 已有反例，不重复建设。随后在隔离分支接一 Branch 一 Head、DG 登记、HS 来源签发与业务 Parent 删除，运行真实业务恢复再保存纵切；T 书签、Pair/Checkpoint/事件枚举与调用一并迁移后合入。MoveBranch 退出，不保两套布局。中文重复标签、连续同值冷续写、Meta Delta、跨根 Pair 与错源反例保持。origin 未交付时只跑隔离健康纵切，正式定向查询仍有合入门槛。
+3. **B2：单布局整体切换。**目录原语完成，下一片在隔离分支接真实 Repository：必要D/S/T入口及候选生命周期、一 Branch 一 Head、DG 正式登记、HS 来源签发与业务 Parent 删除，先跑新根→保存→旧点fork→冷恢复→再次保存的真实闭环。正式owner统一接发布前基线检查、D/S接受、T重复名称和追加失败后的outcome/fault；不复制另一个实验协调器。再将T书签、Pair/Checkpoint/事件枚举及全部调用迁移后整体合入。MoveBranch退出，不保两套布局。保中文重复标签、同值冷续写、Meta Delta、跨根Pair与错源反例。origin仍未交付，只允许隔离健康查询adapter，正式定向查询保持合入门槛。
 4. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断、根/子树与分页外观。内部每 checkout Catalog 可留到此时合并，不让它扩大 B2。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary 的基本 opaque bytes 随 B2，BLOB、ID durable 字段与成本测量后置，不先加索引。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
 ## 已知未决项与明确延期
 
-未实施/待验证：目录候选/安装、空入口、T 冷续写及正式发布故障；组协调器真实准备/安装与失败；HS 历史签发 snapshot；DG 登记中断与已选异常字段接线；定向 origin 上游接入；ID 的 DG durable 字段表示、附件闭包/错误、加载寿命及历史组合恢复。目录内部内建表示不扩大公共 ID 字段支持；ID 外部 codec、摘要与历史停止条件已选，转为实施验收。直接 State 锚点仅在长 Event 成本证据后比较。请求无消费状态与分页预算整次失败已选；Private 新根/混组/promotion 已关闭，不重开冻结快照方案。
+未实施/待验证：真实Repository目录初始化/登记/发布安装与故障、缺控制Head拒绝；HS历史签发snapshot及业务Parent删除；组协调器准备/安装与失败；DG登记中断与异常字段接线；定向origin上游接入；ID的DG durable字段、附件及历史组合恢复。目录读取/候选/小入口内部原语不再列为待做，超过旧1MiB目录和吞吐留待实际规模验证。已有ID codec、摘要、历史停止条件直接进入实施；Private/混组/推广不重开。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
 ## 本批完成边界
 
-本轮新增内部窄 reader 与28个回归用例，准确运行结果和未覆盖范围只查[目录读取切片](directory-persistence.md#6-窄管理读取切片)。未改变公开 API 或现行持久格式；不把内部读取资格算成新 Repository 接线完成。前轮 Dictionary 原语、旧159项 codec 对照及 B1 的有限进程/包边界保留原记录；没有新 feed/包发布。
+本轮目录候选、小入口和真实共同发布组合的交付及运行结果只查[目录 §7](directory-persistence.md#7-目录候选与小入口切片)。公开API和当前Repository持久布局保持；原语新增格式尚未由Repository启用，不算新API交付。前轮reader、Dictionary原语、旧codec对照和B1有限资格保原记录；无新feed/包发布。
 
 ## 实现与证据边界
 
-- 本轮 DG 起点 `fa4a858`；Storage pin 仍为 `f8868b5`，本轮未改上游，构建/测试显式使用干净独立 `f8868b5` worktree。旧 A / Private 删除的 `731eef7` 资格不重写；当前六包候选 `0.1.3-dev.20261019.gf8868b5` 尚未制作 feed，后续包交付必须重新资格化。
+- 本轮 DG 起点 `e7282f3`；本轮只读复核 Storage 主工作树及 pin 仍为 `f8868b5`，未发现 ReadHeadOrigin，未改上游。构建/测试显式使用独立 `f8868b5` worktree。六包候选 `0.1.3-dev.20261019.gf8868b5` 未制作feed，未来包交付须重新资格化。
 - 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
 - [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
 - [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**

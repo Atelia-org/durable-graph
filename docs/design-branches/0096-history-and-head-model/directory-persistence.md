@@ -1,6 +1,6 @@
 # DB-096：管理目录复用 Dictionary 持久化
 
-> 2026-10-19，B2 的目录接线合同。用户已接受复用现有增量序列化，替代 D/T 专用整表 codec；窄管理读取切片见 §6，Repository 的新目录写入与发布接线尚未实施。它收窄[整体切换计划](branch-cutover-plan.md)的管理载荷，不改变 Branch/Commit、继承历史或创建登记语义。
+> 2026-10-19，B2 的目录接线合同。用户已接受复用现有增量序列化，替代 D/T 专用整表 codec；内部窄读取见 §6，增项候选、回读安装材料与小入口见 §7。Repository 的新布局和发布接线尚未实施。它收窄[整体切换计划](branch-cutover-plan.md)的管理载荷，不改变 Branch/Commit、继承历史或创建登记语义。
 
 ## 1. 选择与边界
 
@@ -58,19 +58,21 @@ T = "P0T2" + hasGraph[1] + (GraphAddress[12] if hasGraph == 1)
 
 这一步不引入通用 Meta workspace 框架。可在 RepositoryResources 内维护两个窄目录状态，抽取确实相同的编码/准备小函数；复用底层容器机制，不为了统一业务保存、Catalog 和管理目录强造新的公开层级。早期验证失败、追加后失败、NotAttempted/Unknown/Confirmed 和安装失败应沿用当前 owner/outcome 边界，不能因“只是目录”放松。
 
-### 4.1 下一片的最小状态与安装轮廓（尚未实施）
+### 4.1 最小状态与安装合同
 
-经源码复核，首片可进一步减少状态：D/T 分别持有一个可空的 `DecodedGraphRows` accepted baseline，初始无图时为 null。它已经包含实际 snapshot、冻结 rows、对象 head 与重建成本 H；不再并行维护另一份可编辑的 CLR Dictionary 作为持久化权威。查询索引可由这些 rows 派生，不能独立推进。实际控制 HeadEntryId 仍由 RepositoryResources 持有，目录候选不新增 publication owner。
+采用最小状态：D/T 分别持有一个可空的 `DecodedGraphRows` accepted baseline，初始无图时为 null。它已经包含实际 snapshot、冻结 rows、对象 head 与重建成本 H；不再并行维护另一份可编辑的 CLR Dictionary 作为持久化权威。查询索引可由这些 rows 派生，不能独立推进。实际控制 HeadEntryId 仍由 RepositoryResources 持有，目录候选不新增 publication owner。
 
 候选只需保留角色、预期 accepted baseline、`PreparedGraphWrite` 与可空的已准备安装结果。D/T 使用两个角色专用增项函数，公共部分只复用窄候选载体和已有 planner；不设计通用 Meta workspace。由完整 accepted rows 分配新 ObjectId（用宽游标检查 uint 耗尽），保留所有旧对象身份和不可达但仍 live 的行；替换根 Dictionary 的冻结状态并增加所需字符串/数组行。T 从输入复制定位字节，不持有调用方数组。字符串去重是可选实现细节，不改变标签可重复的合同。
 
 准备阶段先用 `GraphRecordStore.Revalidate` 复核长期持有的实际 snapshot，再复用当前 Dictionary 的完整前后状态 `PrepareDelta` 与 `ObjectWritePlanner`，提供完整 post-live 集和真实 prior/H。现有操作列表 Delta emitter 可留作测量后的优化，不作为本片前置，也不新增 add-only 容器格式。
 
+内部基线必须来自窄 reader 或候选的实际回读；Revalidate 验证 snapshot 并不认证同程序集任意伪造的 rows/H。当前调用边界不引入新 proof 类型，也不为防内部手工构造而在每次 Prepare 前再完整解码一次。角色不匹配仍须拒绝。
+
 **首片采用实际回读准备安装。**追加后、发布前，核对同一 owner、准确 source/root、完整成员集合，以及实际 OwnedBatch 的 ObjectId/Kind/prior/body 与候选 records 一致；再经窄管理 reader 读回该实际图，取得安装用 rows/snapshot/H。这样无需移植业务 `NormalizedGraphState` 的热安装成本推导或另建一套证明。回读成功仍不修改 accepted；全部 D/S 安装材料就绪后才能共同发布，成功后在 guard 内替换基线与实际 EntryId，交付失败按既有合同停用 owner。旧候选不能安装到已推进的基线上；未发布候选直接丢弃内存材料，完成帧保留。
 
 安装反例须覆盖错误 owner/source/root/实际 records 与成员遗漏，不能只核数量。首版增项的预期成员是 accepted 全体成员与新记录 ID 的并集；未写对象保留准确旧 head。T 新增了 graph append 阶段，失败分类须采用现有管理追加与发布边界，不能照抄当前只发布小 payload 的 bookmark catch 条件。
 
-代价是每次目录变化会完整解码目录，物理缓存可能减少 I/O，但不保证 O(新增项)。D 仅创建时变化，普通保存不承担此成本；T 的规模不受“1000条世界线”估计约束，不能据此宣称书签吞吐足够。只有实测表明回读成为瓶颈后，再考虑沿实际 records 增量计算安装材料。此轮尚未实施候选或验证该成本。
+代价是每次目录变化会完整解码目录，物理缓存可能减少 I/O，但不保证 O(新增项)。D 仅创建时变化，普通保存不承担此成本；T 的规模不受“1000条世界线”估计约束，不能据此宣称书签吞吐足够。只有实测表明回读成为瓶颈后，再考虑沿实际 records 增量计算安装材料。候选内部原语见 §7，尚无吞吐测量。
 
 ## 5. 容量、成本与最小验收
 
@@ -78,14 +80,14 @@ T = "P0T2" + hasGraph[1] + (GraphAddress[12] if hasGraph == 1)
 
 增量持久化不代表增量捕获或磁盘单点查询。首次读取允许完整恢复目录到内存；准备更新可能扫描完整字典。现有策略可能周期性重写字典 Base。先记录读取量、捕获量和实际落盘变化，再由证据决定分片或索引；不重新写容器来兑现未经验证的 O(1) 承诺。
 
-下一片最小可观察判据：
+目录接线的最小可观察判据（已有内部证据见 §6/§7，Repository 资格另行验收）：
 
 - D/T 用真实 Meta 图完成 Base→新增项→实际 Delta，保准确 source/prior/H；关闭全部资源后恢复，再新增并关闭重开。
 - D 有重复中文标签但不同合法 HeadId；T 保 Ordinal、不可重绑与12B准确值。证明不查询应用 Schema，S 默认 reader 仍拒绝目录布局，D/T 拒绝错误根、比较器、闭包和畸形值；历史 Base 带动态 Schema 时，必须在读取该 Schema 图之前失败。
 - D 候选与真实增长的 S 候选在一次 HeadStore CU 中共同发布，冷重开同时看到二者；未发布候选不进入目录，正式产品故障分类另依 B2 验收。
 - 空库无图入口和首项 Base、缺必需 Head 拒绝保持；大于旧1 MiB整表容量的目录若通过现有帧限制，应由实际图读取见证，不能仅从地址变小推出。
 
-原 [BranchWireFormatProbe](../../../experiments/BranchWireFormatProbe/README.md)的 D/T 整表编码与容量结论保留为已替代方案的对照，其 Entry 小描述/ID/摘要隔离部分仍适用；它不是本方案的运行资格。新[Dictionary 机制见证](../../../experiments/DirectoryDictionaryMechanismProbe/README.md)验证了 D 的真实 Meta/规划器 Delta/冷开续写和 D/S 共同发布，以及 T 的 Base 冷读；后继窄读取见 §6，完整目录候选/安装、空入口与故障仍未实施。不能把这些原语组合或 source build 冒充新 Repository 已完成切换。
+原 [BranchWireFormatProbe](../../../experiments/BranchWireFormatProbe/README.md)的 D/T 整表编码与容量结论保留为已替代方案的对照，其 Entry 小描述/ID/摘要隔离部分仍适用；它不是本方案的运行资格。新[Dictionary 机制见证](../../../experiments/DirectoryDictionaryMechanismProbe/README.md)验证了 D 的真实 Meta/规划器 Delta/冷开续写和 D/S 共同发布，以及 T 的 Base 冷读；后继窄读取与候选接缝见 §6/§7。不能把这些原语组合或 source build 冒充新 Repository 已完成切换。
 
 ## 6. 窄管理读取切片
 
@@ -98,3 +100,19 @@ T = "P0T2" + hasGraph[1] + (GraphAddress[12] if hasGraph == 1)
 **2026-10-19 验收：**DG 起点 `fa4a858`，Storage 使用 pin `f8868b5` 的独立源码 worktree。实施者定向28项通过；独立 subagent 复核源码/反例，主线程检查集成 diff 并运行根 `dotnet build DurableGraph.slnx`（0警告/0错误）及 Persistence 全套（957/957，0失败/跳过）。两条命令均显式 `UseStorageSources=true`、`StorageSourceRoot=.artifacts/db096-head-mechanism/storage-f8868b5`；实际命令传入绝对路径。构建、测试日志与 TRX 位于本机 `.artifacts/db096-management-reader/`。文档本地链接与锚点检查、`git diff --check` 通过。没有运行全 solution tests、包或进程中止验收。
 
 边界：此处 Delta 由既有 body encoder 明确构造，用于验证读取，不证明规划器会为这个小样本选择 Delta。T 的冷 Delta 读取不等于冷续写候选/安装或名称不可重绑已接通。5/17B 空入口、首项创建、D/S 安装与故障、超过旧1 MiB目录、公开 Branch API 和普通包资格均不在本片。
+
+## 7. 目录候选与小入口切片
+
+本片问题：既有 Dictionary 的冻结状态和正常 planner 能否直接承担 D/T 增项，并在实际追加、回读后取得准确安装材料，而不提前污染 accepted？最小判据是初始 Base、自然 Delta/后续 Base、冷续写再冷读、错误图不能安装，以及真实 HeadStore 共同发布后的冷可见性。仅新增内部原语，公开 Repository 仍保持原布局。
+
+[ManagementDirectoryWriter](../../../src/DurableGraph.Persistence/ManagementDirectoryWriter.cs)提供两个角色增项方法，返回 `PreparedDirectoryWrite`。它用既有 Dictionary body、typed Base 与 `{5,5}` planner 准备完整 live 集合，保留旧对象身份和不可达 live 行；T 的定位字节由传入的 HeadEntryId 编码为自有数组。重复 D ID、重复 T Ordinal 名称在追加前拒绝；显示标签可重复。`PrepareInstall` 核对实际图与候选后经窄 reader 回读，`GetInstallation(currentBaseline)` 检查 owner 可用和预期基线引用后返回该材料；两者都不修改调用者 accepted，也不拥有发布权威。
+
+`GetInstallation` 不是“证明已经发布”的方法。真实 Repository 必须在发布前核基线仍当前，持 guard 发布，成功后接受全部已准备材料和真实 EntryId；不得把第一次旧基线检查拖到发布之后。将来接 Repository 时，公开重复名称等诊断继续由操作层维护，内部 helper 的参数异常不直接定义公开 API。
+
+[ManagementDirectoryPointer](../../../src/DurableGraph.Persistence/ManagementDirectoryPointer.cs)实现 §2 的5/17B固定入口，复用上游地址 codec；[入口测试](../../../tests/DurableGraph.Persistence.Tests/ManagementDirectoryPointerTests.cs)覆盖角色、旧格式、全截断长度、尾随、存在标记和非法地址。它不把合法地址编码当成实际 Meta 图资格。
+
+[候选测试](../../../tests/DurableGraph.Persistence.Tests/ManagementDirectoryCandidateTests.cs)覆盖 D/T 连续增项的真实 planner Base/Delta、旧对象 head 保留、关闭后续写再重开、实际 H，以及错误 owner/source/root/records/成员不能安装且不污染候选。不可达成员保留及 uint ObjectId 耗尽另有边界测试。[共同发布见证](../../../tests/DurableGraph.Persistence.Tests/ManagementDirectoryPublicationTests.cs)用实际 FS/HS 和新内部部件，从空指针开始，准备 D 与真实 S 的初版及增长版，单次 PublishHeads 后安装并全关冷读；T 的准确定位和未发布 D/S/T 候选不成为 current 也通过实际回读观察。完成但未引用的图仍保留且可读。
+
+**2026-10-19 验收：**DG 起点 `e7282f3`，Storage pin/独立源码 worktree仍为 `f8868b5`。新增候选5项、小入口7项、共同发布1项，共13项；实施者定向验收后，独立 subagent 复核原语和主线程集成 fixture，主线程实际执行根构建（0警告/0错误）与 Persistence 全套（970/970，0失败/跳过）。命令仍显式 `UseStorageSources=true`，`StorageSourceRoot` 指向 `.artifacts/db096-head-mechanism/storage-f8868b5` 的绝对路径；日志/TRX 在本机 `.artifacts/db096-directory-candidate/`。文档链接/锚点与 diff 检查通过。未运行全 solution tests、包或进程中止验收；本轮没有改上游。
+
+后续直接进入 B2 隔离分支的真实 Repository 纵切：三必要 Head 的初始化/打开、D 正式登记、一 Branch 一 Head、HS 签发 source 与删除业务 Parent，再闭合旧调用迁移。不要继续增加独立发布协调器或泛化目录 workspace。当前组合见证没有实施 Repository 的故障分类、登记中断、缺控制 Head 拒绝及 D/S 安装失败后的 owner 停用；这些验收应随真实 owner 接线完成。超过旧1 MiB容量、吞吐、进程中止和普通包资格仍未覆盖。

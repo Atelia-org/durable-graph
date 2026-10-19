@@ -81,7 +81,7 @@ internal static class ManagementDirectoryReader {
         return target;
     }
 
-    private static void RequireText(string text) {
+    internal static void RequireText(string text) {
         if (text.Length is < 1 or > 1024) { throw new InvalidDataException("Directory text requires 1..1024 UTF-16 code units."); }
         for (int i = 0; i < text.Length; i++) {
             if (char.IsHighSurrogate(text[i])) {

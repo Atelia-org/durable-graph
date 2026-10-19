@@ -13,7 +13,7 @@
 
 隔离分支只是容纳暂时不能通过全体调用的工作，并不能减少协议依赖。B2 不顺带实现多成员 CommitRequest 协调器、BLOB 管理、持久索引或性能优化；一成员保存仍须使用真实业务 Head，不能继续更新旧 name→graph 目录。
 
-不改变公开面和现行布局的前置内部接缝可独立验收；[D/T 窄读取片](directory-persistence.md#6-窄管理读取切片)属于此类。其合入不代表 B2 的新 Repository 合入门槛已经满足；目录候选和业务布局仍按本文整体闭合。
+不改变公开面和现行布局的前置内部接缝可独立验收；[D/T 读取及候选原语](directory-persistence.md#7-目录候选与小入口切片)已属此类交付。其合入不代表 B2 的新 Repository 合入门槛已经满足；下一片直接将这些原语接入隔离分支的真实 owner/业务布局，不继续扩展独立目录 workspace 或发布协调器。
 
 ## 2. 最少协议选择
 
@@ -127,7 +127,7 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 
 **定向 origin 影响正式描述查询，不阻断图来源接缝。**上游尚缺[ReadHeadOrigin 窄接口](headstore-origin-request.md)时，可在隔离分支用既有全量 ListHeadOrigins 跑健康数据见证；不能以它为生产 `ReadBranchInfo` 的最终资格，因为无关孤儿损坏会扩散到本次查询。B2 合入前应取得窄接口并固定依赖，或由主线程显式重新裁决并记录较弱边界；不得暗中在 D 重存 origin、从最早 Entry 猜 origin，或将每次 Open 变成全库审计。
 
-新图/Entry 标记、标签上限、summary 所有权与薄 ID codec 继续按 §2 和 API 草图施工；D/T 改按[目录合同](directory-persistence.md)复用现有 Dictionary，需验证窄管理接线、冷恢复后真实 Delta 和 D/S 共同发布。随后接产品纵切和畸形/拒旧测试，不扩展专用目录 codec；附件、树索引和联合提交不是前置。若实际接线揭示必须偏离这些持久形状，再用证据更新本合同及对应反例。
+新图/Entry 标记、标签上限、summary 所有权与薄 ID codec 继续按 §2 和 API 草图施工；D/T 按[目录合同](directory-persistence.md)复用现有 Dictionary。内部读取、候选/小入口、自然 Delta/冷续写和健康 D/S 发布已有 §7 证据；下一片验收真实 Repository 接线及失败边界，不重复原语实验。附件、树索引和联合提交不是前置。若实际接线揭示必须偏离这些持久形状，再用证据更新本合同及对应反例。
 
 没有发现需要回到用户故事层的新需求冲突。实际施工量仍需用首个纵切 diff 校准，尤其历史便利入口与包模板迁移；不能把“隔离分支”当成可以无限扩展范围的理由。
 
