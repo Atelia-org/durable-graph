@@ -1,5 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图
 
+> 后继决定（2026-10-19）：[DB-096 统一 Catalog](../0096-history-and-head-model/shared-schema-only.md)已选删除 Private/ToShared，当前产品尚未实施删除。本文保留原实现与资格；meta 自举、准确历史 Schema、source/prior 和发布/fault 纪律继续有效，私有目录演进不再是后续设计目标。
+
 > 校准：2026-10-13。本文只保留当前契约、源码落点、已获资格与条件延期。
 > 默认公开路径已接 meta 自举，旧保存／typed reader／Schema 权威／raw Storage 束已退出。
 > 旧权威退出及有限 P1／P2 原停点保删除前资格；DB-088 已承接开发流程与特例删减，删除后的源码及新包资格分别维护。

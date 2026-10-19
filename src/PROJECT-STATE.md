@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+2026-10-19：[DB-096 统一 Catalog](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)已获用户决定，新API不再选择Shared/Private；本轮新增开发库复制与共同Catalog的源码见证。**下文 Private/ToShared 仍是当前实现事实，删除尚待独立切片**；不新增兼容入口，准确历史Schema/Upgrade/State基线保留。后续具体边界与验证只维护在该设计页。
+
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有源码接入为三控制Head与独立书签目录，实际范围见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。后续设计从[DB-096研究工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)恢复：用户已确认只追加/旧点另开/fork立即可见，继承历史为首选候选；上游紧凑codec与准确历史已做独立消费者复核，开发期误用诊断足够，不增加每引用16B scope。DG仍固定旧依赖，新历史模型、包接入与产品回归尚未完成，不把上游或独立消费者资格当作DG产品资格。
 
 workshop 反馈 3 的纯 State 入门已完成：[README](../README.md#最短接入路径)以连续 State 保存、历史读取、旧 State 分叉及冷开续写为主路径，Event 为可选后续示例。源码与新 G 原文普通包验收通过，运行时/API/格式保持；准确 G/S、证据与范围见[验收记录](../docs/DurableGraph-lab-notebook.md#state-only-quickstart)，本片无剩余必经施工。

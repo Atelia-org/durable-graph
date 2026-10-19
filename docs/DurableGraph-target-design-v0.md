@@ -257,8 +257,8 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
   历史 DTO/body 位于纯状态宿主，按 stored 完整布局闭合，不要求旧领域值 CLR 类型继续存在。
   单对象整条相邻 Upgrade 链先绑定再执行；中间 exact 布局不足以唯一确定时明确拒绝，不能用 current/latest 补齐。
   元数据缓存只是派生结果，后续登记的 exact base/inline 定义仍必须与缓存的完整依赖闭包一致。
-- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本；最初的 Repository 单调注册表已由[DB-087 准确视图](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#view-contract)的边界承接。
-  shared 与各已接受 private view 内均拒绝同 key 异形；从尚无该 key 的共同 baseline 独立 fork 后，可各自接纳同 key 异形草稿，不能互换解释旧 bytes。
+- 泛型闭合 Schema 在同一已接受目录内严格一致，暂不增加闭合历史账本。[DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md)已选定后续同 Repository 的单调接纳路线，Private 删除尚待实施。
+  同库同 key 的已接受定义不可改形；相互冲突的开发草稿在独立 Repository 副本中试验，不能互换解释旧 bytes。不同类型和正常版本可在统一目录共存。
   开放定义 history 保证模板不变，不承诺穷尽检测所有实参导致的漏升版；不同空库可能首次接受同 key、不同完整布局。
   因此完整 Schema 校验不能省略，也不能仅凭 key 跨库复用绑定。具体反例、方案比较与后续触发见
   [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design/README.md#33-必须明确的保证作用域两个空仓库)。
@@ -280,7 +280,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
 ### 模型执行环境与 factory 行为
 
 Open 固定模型／reader／Upgrade／策略注册，按需闭合能力；保留委托／comparer 引用，不复制其外部可变状态。
-checkout 保起始执行环境：有 State 取最近 State.S；Shared 无 State 取创建／恢复时 shared，空库可无 S；Private 无 State 取实际 Head.S，不借 latest shared。State 保存可推进持久 selected S 和比较基线，不原地更换 execution；Event 不安装 State 或消费其 rewrite。V2 程序恢复 V1 已执行显式 Upgrade，可以持续增量保存，无需每次提交后重签出。
+checkout 保起始执行环境：有 State 取最近 State.S；统一 Catalog 路线无 State 时取创建／恢复时的当前 Catalog，空库可无 S。旧 Private 无 State 选 Head.S 的路径随 DB-096 删除；当前源码资格仍见产品工作集。State 保存可推进持久 selected S 和比较基线，不原地更换 execution；Event 不安装 State 或消费其 rewrite。V2 程序恢复 V1 已执行显式 Upgrade，可以持续增量保存，无需每次提交后重签出。
 
 独立读取使用被读图自己的准确 S。重新 Checkout 重新恢复领域实例，不能重载代码注册；有 State 时不追到 Event 或 latest shared 的目录。登记变化须关闭全部 checkout 和 Repository 后重新 Open；未提交修改先明确保存当前配置支持的内容，或由应用保留／重建，Dispose 不保存或回滚。地址在新 owner 重新签发，旧 CLR 引用不跟随新签出。
 
@@ -414,7 +414,7 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 超出底座正常恢复的离线救援先关闭资源并丢弃缓存，再以fresh owner恢复使用。
 日常打开不提供全库健康或全历史重新确认；只加载必要根/Schema目录，对本次访问内容保持正确性检查。
 meta 员工对象、对象 batch、存活 Dictionary 目录和图入口共用 FS；VS 的分支目录根与 shared meta 根由同一 owner 发布。
-新增 shared 时两根通过同一 CU 确认，private 只推进分支目录；图 pin 准确 S，不借 latest 补解释。
+新增 Catalog 定义时，相关业务发布和 Catalog 根通过同一 CU 确认；无增长则复用既有根。图 pin 准确 S，不借 latest 补解释。既有 private 只推进分支目录的路径已被 DB-096 选定退出，尚未从产品删除。
 业务 Parent、内容来源、outcome/fault 与完整 view 校验保持，当前合同见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)，正常恢复与寿命见 [DB-086](design-branches/0086-new-storage-refactoring-plan/README.md)。
 owned 完成帧与完整目录可按完整帧地址复用，但仍为派生读缓存，不成为发布或 typed 图有效性的权威；
 缓存由借用底层的 Store 自己释放，底层寿命更长，已交付的 owned 值保持可读。具体实现与验收见 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)。
@@ -487,17 +487,16 @@ EnumerateEvents 固定 endInclusive，仅返回事件地址；可选 afterExclus
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
 不预先冻结字段表或原子发布实现。
 
-统一 Commit/Ref 应共同选择 StateStore、SchemaStore、ArtifactStore 的 exact 视图，支持整体推进、
-回滚与分叉；不能让旧 State 视图意外配上最新 Schema/Artifact 视图。整体回滚不要求删除已追加的
-物理记录。同一已接受 Schema view 内同 key 必须保完整布局，不提供跨 view 的全局布局账本。
+统一发布应共同选择业务内容及必要 Schema/附件的准确视图；不能让旧 State 视图意外配上最新 Schema/附件。
+DB-096 首版采用只追加分支、旧点另开，原线 rewind 延期；Schema Catalog 在同库统一演进，不随业务 fork 回退。
+同库同 SchemaKey 的已接受定义保持唯一完整布局，不提供跨独立 Repository 的全局布局账本。
 本案选择 Schema descriptor 与存活目录复用对象序列化／版本保存，业务比较与受控 meta 编辑汇入共同发布 owner。
-业务图 pin 准确 Schema 根；shared 目录与分支 rewind 分责，private 采用完整冻结 view，不以 latest shared 补缺。
-已接受定义不可改写；private 从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。
-各草稿可从同一已发布 baseline 独立 fork；若要继承已接受草稿的数据继续改型，则递增版本，不在同一目录重定义同 key。容器元素升级使用已有规则集及 Nullable lifting，不另设目录替换入口。最终只交付一个版本时从原 baseline 建立干净 final fork，而非从完整 ToShared 中过滤开发历史；具体路线见 [DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)。
-将私有 view 转入 shared 时必须比较完整声明／布局，不能只登记当前业务可达类型。
-打开仓库仅选择资源读写。创建/签出编辑会话时由明确入口选择固定 Shared/Private 归属；同一可写 owner 可承载不同分支的两类会话并串行操作，不从分支名或持久历史推断目的地。
-单次显式 Shared 提交与工作副本的默认归属分责；不得借此原地更换冻结执行环境。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
-具体实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)；原分支重建、同 Open 双异形模型、Schema-only 与优化的重访条件见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
+业务图 pin 准确 Schema 根，历史 batch 保其准确来源，不以 current Catalog 补解释。统一写入目录不消除历史解释视图。
+已接受定义不可改写；从真实历史 baseline 恢复并导入存活身份，布局改型通过正常版本与显式 Upgrade 表达，旧 Schema／容器声明保持，新版本追加共存。
+开发草稿从关闭后的完整 baseline 副本起步，隔离代码、编译 history 与数据；定稿在干净基线用普通保存升级。继承已接受草稿继续改形仍须升版；没有原始存储记录合库、过滤推广或迁移链压缩。旧 [DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)保留历史资格，后继见[统一 Catalog 设计](design-branches/0096-history-and-head-model/shared-schema-only.md)。
+打开仓库只选择资源读写；后续创建/编辑 API 不再选择 Shared/Private。所有提交向统一 Catalog 准备，跨 Branch 共同保存仍须汇总闭包、拒绝冲突并统一分配描述符。
+各工作副本的对象身份、State 基线和冻结执行环境仍独立。descriptor 编号只在自身 origin Schema 根内解释，完整相容的 retained head 不因目标编号变化自动重写，真正的布局升级仍须新 Base。
+旧实现资格与有限 P1／P2 停点见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)；统一 Catalog 的后继实施与其他 Schema-only/优化的边界见[后续路线](DurableGraph-research-roadmap.md#41-schemastore-复用-statestore-与联合版本视图)。
 
 只有已发布的 exact head/manifest 引用的 candidate 才取得权威。文件存在、时间戳或最新编号
 都不够。被引用数据应先完成规定的 durability barrier，再发布；具体 process/OS crash、

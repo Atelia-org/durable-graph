@@ -4,6 +4,8 @@
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
+**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；本轮以真实 Shared 路径验证开发副本和共同 Catalog 编码，产品 Private 删除及组发布接线尚待实施。
+
 **跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。创建协议继续证明 DG 登记候选，尚未冻结或实施。以下现状术语表仍描述当前源码，不以草图用语替换历史事实。
 
 **当前阶段转为收敛验证。** 用户认可已有 API 的清晰性与功能覆盖；后续先映射实际机制，再验证发布/创建、恢复材料和查询成本，寻找保留功能与易用性的简化。具体恢复顺序与最小产物集中在研究工作集，不继续默认扩展需求，也不将设计认可等同于实现验收。

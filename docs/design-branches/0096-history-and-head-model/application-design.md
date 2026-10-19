@@ -9,6 +9,8 @@
 
 > 后继机制调查（2026-10-18）：[源码映射与最小实验](mechanism-feasibility.md)进一步区分登记两层 outcome、最近 State 内容来源、全量 origin 访问范围与目录累计写量；以下候选须连同该证据理解，仍未实施。
 
+> 2026-10-19：按用户决定改为[同库统一 Catalog](shared-schema-only.md)，开发草稿在独立库副本中隔离；Private/ToShared 退出后续设计。本文调用随 API 草图同步，当前源码尚未删除旧机制。
+
 ## 1. 本轮边界与结论
 
 用户在本轮明确：首版原世界线只追加；从旧存档继续通过另开世界线实现，不要求原线 rewind。fork 成功后，即使没有新业务保存，也必须能列出、预览、关闭重开和继续。父子线均可独立推进；来源按选中存档的实际归属确定。
@@ -21,11 +23,11 @@
 
 ## 2. 应用操作草图
 
-以下沿用 API 草图的职责与伪签名，不是已有或已冻结 API。BranchId 是写入目标，CommitId 是准确存档；根创建示例使用 State，另有 CreateRootBranchFromEvent。SchemaMode 必填，创建路径先按 Shared 推演，Private 新根仍待论证。
+以下沿用 API 草图的职责与伪签名，不是已有或已冻结 API。BranchId 是写入目标，CommitId 是准确存档；根创建示例使用 State，另有 CreateRootBranchFromEvent。同库只使用统一 Catalog，无 SchemaMode 参数。
 
 ```text
-A = repo.CreateRootBranchFromState("废灵根", initialState, summary0, SchemaMode.Shared)
-using workA = repo.OpenWorkingCopy(A.Id, schemaMode: SchemaMode.Shared)
+A = repo.CreateRootBranchFromState("废灵根", initialState, summary0)
+using workA = repo.OpenWorkingCopy(A.Id)
 a1 = workA.CommitState(state1, summary1)
 a2 = workA.CommitState(state2, summary2)
 
@@ -36,7 +38,7 @@ repo.ReadBranchInfo(C.Id) → C 的标签与准确来源
 repo.ReadCurrentCommit(C.Id) → {BranchId=C.Id, Commit=a1}
 
 关闭全部资源后重开
-using workC = repo.OpenWorkingCopy(C.Id, schemaMode: SchemaMode.Private)
+using workC = repo.OpenWorkingCopy(C.Id)
 c1 = workC.CommitState(changedState, newSummary)
 重新打开 A 的 WorkingCopy 并提交 → 不改变 C 的末端或固定来源
 ```
@@ -129,7 +131,7 @@ B 可先用小型直接编码，避免为标签依赖完整领域模型；但若
 
 每个历史存档必须固定准确 Schema，而不能在读历史时取最新 shared Schema。完整闭包先持久化足以解释历史；“shared 指针必须和业务提交一起推进”则是另一项行为选择。首轮建议沿用 shared 增长与业务保存联合发布的行为，不在重写中顺便改成“业务失败但 shared 仍增长”。不增长时无需为此制造另一次业务 Entry。
 
-SchemaMode.Shared / Private 仅选择后续提交的 Schema 归属，不是分支来源关系、可见性或并发隔离级别。Private 从该分支末端的准确 Schema 继续；Shared 保留完整准入检查，不静默合并 private Schema。历史始终使用自身准确 Schema；本轮不扩展多 writer、跨库事务或新的 Schema 演化机制。
+所有后续保存向同一 Catalog 接纳定义，业务 fork 不另开 Schema 路线。各历史图仍使用自身准确 Schema，旧对象 Base 按其 batch 的来源解释；同库同 key 定义冲突拒绝，正常新版本可以共存。本轮不扩展多 writer、跨库事务或将不同开发库的原始存储记录合并。
 
 ### 5.2 创建与常规提交分开设计
 

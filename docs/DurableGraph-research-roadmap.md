@@ -158,7 +158,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
-| [DB-095 后续能力](design-branches/0095-repository-open-intent/README.md) | 显式编辑会话入口已完成；只有真实应用需要从无历史数据开始 private，或需要恢复成功后一次发布 private fork 时，才另定有限能力；不为命名对称扩展，保现有 baseline→CheckoutPrivate 路线 |
+| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | 用户已选同库唯一 Schema 接纳路线；开发副本/共同编码见证完成，Private/ToShared 删除及有效回归迁移为后续独立片；DB-095 的 private 新建/复合 fork 队列关闭 |
 | [DB-094 普通 property backing 支持](design-branches/0094-backing-field-support/README.md) | 真实消费者持续因普通 class 的封装/Equals/继承需求付出字段包装成本时，先用该模型摸清声明范围、编译级 Family 切换与历史升版的影响，再选择有限路线；目前仅调研，DB-093 完成不自动开启 |
 | [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | 真实浏览流程需要最近 N 条或连续分页时，先冻结所浏览 head，再选择起点/方向/限制与续页表示，验证顺序、无重漏及无需恢复无关 State。分别测量正常 Open、frame 枚举、对象恢复；不由 IEnumerable/Reverse/Take 推导惰性读取，保留所访问路径的必要校验。现有整链物化合同与只读入口见 README/DB-065；正常打开边界由 DB-086 更新 |
@@ -166,7 +166,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | ObjectId 数字回收 | 单调分配配合其他机制开发后，再定义候选隔离、retire/reuse 时机与恢复；可评估 StateJournal SlabBitmap/SlotPool，不能复用旧对象 Delta 链 |
 | 字典比较的进一步能力 | 同闭合类型多 Application 角色需要实例选择信息，引用内容比较需要确定恢复阶段，保留历史业务规则需要独立能力合同。均按真实需求重访；根 Nullable Key、ValueTuple 外观和标准模式迁移不随 DB-055/056 开放。比较合同仍沿 [DB-055 §10](design-branches/0055-composite-dictionary-key-design/README.md#10-审阅结论与后续裁决) |
 | 后续映射与 BCL 集合 | ValueTuple 先解决多 child exact 槽、参数来源、Item/Rest 组合及完整历史能力，调查入口见 [DB-057 §8](design-branches/0057-bcl-scalar-value-slice/README.md#8-valuetuple-后继保留的问题)，再组合现有字典；Nullable 根 key 另排。SortedDictionary 另定排序比较，OrderedDictionary 另定顺序状态，Set 等逐类型排期；自建外观仅在明确 API 痛点下重访 |
-| Schema/meta 后续能力 | [DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)已完成；原分支重建、同 Open 双异形模型、Schema-only 与优化只按 §4.1 条件触发；多 writer、压缩/GC 另待真实需求 |
+| Schema/meta 后续能力 | DB-096 统一 Catalog 与 Private 删除为当前路线；业务分支不再承载冲突的同 key Schema 试验。Schema-only 与优化按 §4.1 条件触发；多 writer、压缩/GC 另待真实需求 |
 | Schema 目录分页或分段 | DB-087 已用 meta 对象版本增量保存；真实目录接近单帧上限或保存成本成为瓶颈时重访更细粒度机制。正常物理尾恢复由上游承担，不增加确认水位/linked fallback |
 | 发布恢复保证扩展 | DB-086 采用 FS/VS 的 data-first 发布、outcome 与正常不完整尾恢复，DG 保留 expected head、必要内容与 fault 检查。实际访问坏完整内容报错；OS crash/power loss、设备失效与目录持久性保证仍待明确需求和独立实验，不能由普通进程关闭/重开推导 |
 | ArtifactStore | 事件/快照消费者已选 DB-063 EventHistory，暂不另建 ArtifactStore；大附件/chunk/外部地址尚无本轮证据，按实际需要重访，不强迫 State 常驻完整历史 |
@@ -184,21 +184,21 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
 | UpgradeContext 的动态工具与生命周期扩展 | 当前查询已声明、已绑定的值工具；具体迁移确需执行中解析时，再裁决首个业务回调前失败保证。池化/异步或合法跨回调工具复用有消费者后，再设计生命周期；不提前添加服务定位器、租约或通用工具平台 |
 | 值规则的跨程序集与更广生成外观 | 本地 marker/provider 已可显式使用只读导入的外部 inline 历史端点，仍不扫描依赖库的业务方法或自动选择规则。实际需要跨库发现/复用规则或更广属性入口时，再扩展显式登记/诊断；Runtime 的 builtin/引用/闭合模式能力不自动扩张 SG 外观 |
-| 泛型闭合历史账本/独立版本 | 同一已接受目录内严格一致；[DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#view-contract) 允许显式 private 新 view 同键异形，不能跨 view 互换布局。要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，历史问题见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design/README.md#33-必须明确的保证作用域两个空仓库) |
+| 泛型闭合历史账本/独立版本 | DB-096 后续统一 Catalog 保同库同 key 完整定义一致，开发副本之间仍可能异形，不能跨库仅按 key 互换布局。要求共享 build history 对所有空库也锁住闭合布局、跨程序集独立演化或跨库交换时，再比较闭合目录与布局身份，历史问题见 [DB-038 §3.3](design-branches/0038-generic-schema-state-and-binding-design/README.md#33-必须明确的保证作用域两个空仓库) |
 
 ### 4.1 SchemaStore 复用 StateStore 与联合版本视图
 
 [DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)原停点已完成：默认 meta 自举、旧权威退出、显式 Shared、完整私有视图与 ToShared。新根／容器替换及双异形独立包只保删除前资格；[DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)承接真实 baseline 开发故事和特例退出后的验收。业务比较与受控 meta 变化进入共同 writer／PendingSave／发布 owner，长期联合发布约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。此处不再保本案必经工单。
 
-后续仅在真实需求出现时选择一项：[原分支重建／按操作选模型、业务 head 不动的 Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)。先说明消费者／身份合同或给测量，再形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
+当前后继为 [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md)，覆盖旧 Private 相关路线。其他[Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)须有消费者或测量后形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
 
 旧包执行 lanes 已退出，保留模型仅作[编译资产](../experiments/PackageConsumerProbe/README.md#model-fixtures)；代表门禁不授其原运行故事资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")；旧“下一片”不作为当前排期。
 
 ### 4.2 开发 Schema 与正式定稿
 
-用户已选固定 shared baseline→独立 dev fork 的下一版草稿→只交付定稿版本，保原用户存活身份；需要继承已接受草稿改形时递增版本，不允许同分支同 key 异形。开发故事、特例退出与源码／新包限定验收均已完成，见 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)，不重复本案完成停点。
+2026-10-19 用户已改选：关闭的完整 baseline → 独立 Repository 副本试验 → 定稿在干净正式基线普通升级，具体不变量、证据和删除边界见 [DB-096](design-branches/0096-history-and-head-model/shared-schema-only.md)。同库只使用统一 Catalog；Private、混组、ToShared 和 private 新根不再是待设计能力。产品尚未删除旧路径，旧 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)只保其原版本资格。
 
-DB-088 已退出同 key 新根 bootstrap、Schema overrides 与完整 container replacements，保普通 private／ToShared／fault 规律；删除后的 Development、Split、PrivateContainer 三条新 G 普通包故事已通过，无剩余必经门禁。若有消费者要求从 V3/V4 scratch 直接交付一个不带中间模板／Handler 的版本，再单独设计 release 与开发 history 边界；主／次版本、自动折叠 Upgrade 和过滤推广尚未选定。当前完整 ToShared 不提供最后版本过滤。
+保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离。剩余工作为 Private 路由删除及有效回归/普通包消费者迁移，不为旧测试恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。
 
 ### 4.3 checkout 执行环境与 factory 查询入口
 

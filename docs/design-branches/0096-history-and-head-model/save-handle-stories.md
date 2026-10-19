@@ -32,7 +32,7 @@ branch = 用户选择的正式分支描述 BranchInfo
 关闭重开后：
 branchId = DecodeBranchId(偏好中的字节)
 preview = repo.ReadCurrentCommit(branchId) // {BranchId=C, Commit.Id=a1, ...}
-using work = repo.OpenWorkingCopy(branchId, schemaMode: SchemaMode.Shared)
+using work = repo.OpenWorkingCopy(branchId)
 修改 work.State
 committed = work.CommitState(work.State, summary)
 ```
@@ -94,7 +94,7 @@ sourceId = 书签或历史项中的 CommitId
 C = repo.ForkBranch(sourceCommitId: sourceId, displayLabel: "尝试另一种选择")
 应用记住 C.Id，立即列出并预览 C
 关闭重开 → repo.ReadCurrentCommit(C.Id).Commit.Id 仍是 sourceId
-using work = repo.OpenWorkingCopy(C.Id, schemaMode: SchemaMode.Private)
+using work = repo.OpenWorkingCopy(C.Id)
 c1 = work.CommitState(newState, newSummary)
 ```
 
@@ -113,7 +113,7 @@ State = { phase=准备调用, operationId, request, context, ... }
 State = { phase=结果已记录, operationId, result, 消费进度, ... }
 保存 State，并确认发布结果
 
-重启：按 BranchId 显式选 SchemaMode 并 OpenWorkingCopy 恢复当前 State，按应用 phase 决定下一步
+重启：按 BranchId 调用 OpenWorkingCopy 恢复当前 State，按应用 phase 决定下一步；同库只有统一 Catalog
 对照试验：选择准确旧 CommitId，fork 新线并执行应用自己的分支策略
 ```
 

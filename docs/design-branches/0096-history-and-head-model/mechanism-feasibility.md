@@ -2,6 +2,8 @@
 
 > 2026-10-18，首批源码调查与集成稿。公开行为以 [API 草图](api-sketch.md)为基准，活动状态由 [PROJECT-STATE](PROJECT-STATE.md)维护。本批只读源码与文档，不把推演、已有测试代码或历史验收当成新模型的运行资格。
 
+> 后继决定（2026-10-19）：用户已选[统一 Catalog](shared-schema-only.md)，Private/混组/promotion 不再是后续设计候选。本文保留首批源码基线和当时边界；§7 的 Private 恢复说明属于旧实现证据，准确历史 Schema 约束继续有效。新实验状态从后继文档恢复。
+
 ## 1. 问题、范围与验收
 
 问题：已认可的 Branch / Commit / WorkingCopy API 能否由现有底座和较小的 DG 内部调整承接，哪些不确定性必须先用实验消除？

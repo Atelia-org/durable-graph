@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的 API 草图
 
-> 2026-10-18 命名审阅版；讨论稿，未实施，未冻结 C# 签名或持久格式。后续设计采用本文的推荐词汇，用户仍可调整。依据是[五个调用故事](save-handle-stories.md)；原则、竞争方案和旧名映射见[命名审阅](api-naming-review.md)。当前源码术语仍见[项目术语表](../../DurableGraph-glossary.md)，不能把本稿当成已完成的改名。
+> 2026-10-19 统一 Catalog 收敛版；讨论稿，未实施，未冻结 C# 签名或持久格式。用户已决定同库仅使用统一 Schema Catalog，删除 Private/ToShared，依据见[统一 Catalog 设计](shared-schema-only.md)。调用故事见[五个调用故事](save-handle-stories.md)；词汇审阅与旧名映射见[命名审阅](api-naming-review.md)。当前源码术语仍见[项目术语表](../../DurableGraph-glossary.md)，不能把本稿当成已完成的实现。
 
 ## 1. 三个核心概念
 
@@ -29,9 +29,9 @@ repo.ReadCurrentCommit(branchId)             → { BranchId, Commit: CommitInfo 
 repo.ReadCommitInfo(commitId)                → CommitInfo
 repo.ReadHistoryPage(start, limits)          → CommitHistoryPage
 
-repo.CreateRootBranchFromState(displayLabel, initialState, summary, schemaMode)
+repo.CreateRootBranchFromState(displayLabel, initialState, summary)
                                              → BranchInfo
-repo.CreateRootBranchFromEvent(displayLabel, initialEvent, summary, schemaMode)
+repo.CreateRootBranchFromEvent(displayLabel, initialEvent, summary)
                                              → BranchInfo
 repo.ForkBranch(sourceCommitId, displayLabel) → BranchInfo
 
@@ -39,7 +39,7 @@ repo.LoadState(stateCommitId)                → State 对象（准确点必须�
 repo.LoadEvent(eventCommitId)                → Event 对象（准确点必须是 Event）
 repo.LoadLatestSavedState(atOrBefore: commitId)
                                              → LoadedState
-repo.OpenWorkingCopy(branchId, schemaMode)   → WorkingCopy
+repo.OpenWorkingCopy(branchId)              → WorkingCopy
 work.CommitState(state, summary)             → CommitInfo
 work.CommitEvent(domainEvent, summary)       → CommitInfo
 
@@ -48,11 +48,11 @@ work.CreateEventCommitRequest(domainEvent, summary) → CommitRequest
 repo.CommitBranches(requests)                      → BranchId 到 CommitInfo 的结果表
 ```
 
-`SchemaMode.Shared / Private` 必须显式选择，没有 null、隐含默认或 ReadOnly 分支。该参数仅描述**后续保存的 Schema 归属**，不是分支的可见性、并发隔离级别或读取历史时选哪份 Schema。Private 从该分支实际末端的准确 Schema 继续独立演进；Shared 保留完整准入检查，不把 private Schema 静默合入 shared。历史内容始终按它自己的准确 Schema 解释。
+同一 Repository 只有统一的 Schema Catalog；创建、编辑和请求都不再选择 SchemaMode，也没有 ToShared 推广操作。Catalog 持续接纳不同类型和正常版本，同一个 SchemaKey 的已接受完整定义不可改形。历史图和 batch 仍固定准确解释来源；统一写入目录不等于用最新 Schema 读取全部历史。资源读写模式、模型/Upgrade 准入、fault 与重入检查继续独立成立。
 
-两个创建入口分别说明首个真实记录是什么，避免 `initialRecord` 或相同 CLR 根类型的重载隐藏 State/Event 区别。这不是批准 Private 新根：创建路径先按 Shared 推演，Private 初始化来源仍待单独论证。普通 Fork 固定继承旧提交，编辑归属在之后打开 WorkingCopy 时选择。
+两个创建入口分别说明首个真实记录是什么，避免 `initialRecord` 或相同 CLR 根类型的重载隐藏 State/Event 区别。普通 Fork 固定继承旧提交，之后 OpenWorkingCopy 取得写入该 Branch 的能力；从旧点继续也沿仓库当前统一 Catalog 准备新增定义，不重置 Schema 演进路线。
 
-异步/取消/预算参数、实际泛型/根类型签名尚未定稿。本文是主要故事的设计面，不是现有所有 API 的迁移清单；未列出的 Schema promotion、比较读取等能力不因省略而被决定删除。
+异步/取消/预算参数、实际泛型/根类型签名尚未定稿。本文是主要故事的设计面，不是现有所有 API 的迁移清单；Private/Schema promotion 已决定从新 API 删除，比较读取等其他未列能力不因省略而被决定删除。
 
 ## 3. 定位值、描述与加载对象分开
 
@@ -87,7 +87,7 @@ OpenWorkingCopy 恢复分支当前内容和编辑基线，不切换 Repository �
 // 继续上次分支：应用另外保存仓库位置，标签不参与定位。
 branchId = DecodeBranchId(preferences.LastBranch)
 current = repo.ReadCurrentCommit(branchId)
-using work = repo.OpenWorkingCopy(branchId, schemaMode: SchemaMode.Shared)
+using work = repo.OpenWorkingCopy(branchId)
 Advance(work.State)
 committed = work.CommitState(work.State, summary)
 
@@ -108,11 +108,11 @@ child = repo.ForkBranch(sourceCommitId: selectedCommitId,
                         displayLabel: "尝试另一种选择")
 preferences.LastBranch = EncodeBranchId(child.Id)
 // 即使此处关闭重开，child 仍可发现，当前提交仍是 selectedCommitId。
-using childWork = repo.OpenWorkingCopy(child.Id, schemaMode: SchemaMode.Private)
+using childWork = repo.OpenWorkingCopy(child.Id)
 childWork.CommitState(newState, newSummary)
 
 // LLM：按应用保存的 phase 恢复流程，不替应用重放工具。
-using run = repo.OpenWorkingCopy(runBranchId, schemaMode: SchemaMode.Shared)
+using run = repo.OpenWorkingCopy(runBranchId)
 ResumeAccordingToApplicationPhase(run.State)
 ```
 
@@ -140,7 +140,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。1000条分支的目录容量须按实际 payload/标签上限核算；不先假定整表方案合格，不新增 GC。
 
-下一步依次细化：创建完整可见性；存档描述及准确 Schema/内容重建依赖；summary/BLOB；加载对象的可变性与寿命、分页结果及 Private 创建边界。之后再定 C# 签名、接入依赖和实施切片。命名审阅没有冻结上述未决项，也没有新增 rewind、merge、内容寻址或唯一名字需求。
+下一步依次细化：统一 Catalog 共同准备；创建完整可见性；存档描述及准确 Schema/内容重建依赖；summary/BLOB；加载对象的可变性与寿命、分页结果。Private 创建与混组不再是未决项。之后再定 C# 签名、接入依赖和实施切片；没有新增 rewind、merge、内容寻址或唯一名字需求。
 
 ## 7. 多 Branch 联合提交：已选 CommitRequest 路线
 

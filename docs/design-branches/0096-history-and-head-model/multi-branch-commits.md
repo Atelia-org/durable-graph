@@ -4,6 +4,8 @@
 
 > 后继源码调查：[共同准备的真实缺口与首选实验](mechanism-feasibility.md#5-联合提交保留一个操作窗口合并-shared-准备)。单 pending 的调整不足以支持联合提交；必须先汇总显式 dirty 和捕获布局、检出组间冲突并统一分配 Shared 描述符。该调查没有改变执行时捕获决定，也不是运行资格。
 
+> 2026-10-19 范围收窄：用户已选[统一 Catalog](shared-schema-only.md)。所有成员只有同一 Schema 接纳目的地；Private、混组、promotion 退出设计，但组内闭包、冲突和描述符分配仍须统一完成。
+
 ## 1. 能力与范围
 
 DG 有条件组合现有底层原语，为同一 Repository 中多个既有 Branch 追加提交，并共同发布必要的 Schema。一次组操作每个参与分支产生自己的 CommitId；不把整组重新命名成一个 Commit，不需要先引入持久 GroupId 或全局事务历史。
@@ -30,7 +32,7 @@ result = repo.CommitBranches(requests)
 // result 按 BranchId 对应各 CommitInfo；正常返回意味着整组已确认。
 ```
 
-CommitRequest 不做图捕获、不占用新的存储 writer、不改变工作副本基线。它保留 State/Event 根引用与操作角色，携带预期 BaseCommitId；执行前若该副本已另行提交则拒绝，不把旧请求自动套到新基线。SchemaMode 来自 OpenWorkingCopy 时显式选择的 Shared/Private，只表示后续保存的 Schema 归属，不在 request 上另设可覆盖策略；历史内容仍按其准确 Schema 解释。请求绑定活 owner/副本，不是可序列化或可重放的任务。首版用后丢弃，不承诺自动重试或幂等执行；准确消费状态与失败后复用规则在实现合同中定稿。
+CommitRequest 不做图捕获、不占用新的存储 writer、不改变工作副本基线。它保留 State/Event 根引用与操作角色，携带预期 BaseCommitId；执行前若该副本已另行提交则拒绝，不把旧请求自动套到新基线。工作副本和 request 都没有 SchemaMode：执行时以仓库当前统一 Catalog 汇总准备，历史内容仍按其准确 Schema 解释。请求绑定活 owner/副本，不是可序列化或可重放的任务。首版用后丢弃，不承诺自动重试或幂等执行；准确消费状态与失败后复用规则在实现合同中定稿。
 
 摘要若为可变字节，应在创建请求时复制为自有小数据，或使用明确不可变的值；业务图仍在执行时捕获。期间继续修改业务图时，应用需要同步更新摘要请求，框架不保证二者业务一致。调用方必须在 CommitBranches 全部捕获期间保持所有参与图稳定；不预建对象变更追踪或后台冻结机制。
 
@@ -46,9 +48,11 @@ CommitRequest 不做图捕获、不占用新的存储 writer、不改变工作�
 4. 将各业务 Head 的新 payload 与必要的共享 Schema 管理 Head **一次共同发布**。
 5. 发布确认后安装所有工作副本的相应基线，再交付完整结果表。
 
-多份 Shared 请求不能分别以同一个旧 shared 根准备后，只选择最后一份 Schema 更新。必须共同解决定义兼容、描述符分配与准确 pin；一个共享管理 Head 在最终发布组中只有一个新值。Private 各按自己的准确视图准备，不因入组而自动合入 shared。Shared/Private 混组是否在首片交付、既有 promotion 如何加入，须在机制验证后裁决，不为接口形状对称偷偷扩张。
+多份请求不能分别以同一个旧 Catalog 根准备后，只选择最后一份更新。必须共同解决定义兼容、描述符分配与准确 pin；一个 Catalog 管理 Head 在最终发布组中只有一个新值。所有成员的显式声明和捕获布局先作完整闭包检查，再由一次 Builder 分配描述符。跨成员同 key 异形使整组失败，不能借 Set 覆盖或选择最后一个定义解决。没有 Private 分配域和 promotion/remap 路线。
 
-CommitState 更新 BaseCommitId 与 StateSourceCommitId，并安装相应 State 保存基线；CommitEvent 只推进 BaseCommitId，不改变 StateSourceCommitId，也不隐含保存该副本的 State 编辑。每个副本保留各自的 Schema 编辑意图与执行环境。单分支 CommitState/Event 应复用组内核的单成员路径，避免两套持久化语义。
+公开路径自动从捕获图收集布局，没有逐 WorkingCopy 编辑 Catalog 的公开 API。新内核首选仓库 accepted Catalog＋操作内共同候选；显式声明仅作为必要的内部输入，不能为沿用旧 dirty 测试而新增公开编辑协议。两份图共同编码/冷读的限定证据与仍未接通的发布/安装见[统一 Catalog §3](shared-schema-only.md#3-两个可执行机制见证)。
+
+CommitState 更新 BaseCommitId 与 StateSourceCommitId，并安装相应 State 保存基线；CommitEvent 只推进 BaseCommitId，不改变 StateSourceCommitId，也不隐含保存该副本的 State 编辑。统一 Catalog 不合并各业务图的身份、保存基线或冻结执行环境。单分支 CommitState/Event 应复用组内核的单成员路径，避免两套持久化语义。
 
 ## 4. 原子性具体保证什么
 
