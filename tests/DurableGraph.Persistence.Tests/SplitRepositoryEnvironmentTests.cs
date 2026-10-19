@@ -71,7 +71,6 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Empty(counts.NextLookups);
             listId = Assert.Single(baseline0.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
 
-            checkout.Catalog.Set(Extra);
             CommitId head0 = checkout.BaseCommitId;
             long frames = repository.GraphStore.AppendedFrames;
             checkout.PrepareAndDiscard(original);
@@ -81,9 +80,9 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Same(baseline0, checkout.Baseline);
             Assert.Same(models0, checkout.Models);
             Assert.Same(environment0, checkout.BindingEnvironment);
-            Assert.Equal(1, checkout.Catalog.DirtyCount);
+            Assert.False(checkout.AcceptedCatalog!.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
 
-            CommitId event1 = checkout.CommitEvent(original).Id;
+            CommitId event1 = repository.CommitBranches([checkout.CreateEventCommitRequest(original)], [Extra])[checkout.BranchId].Id;
             FrameAddress schema1 = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(schema0, schema1);
             Assert.Same(original, checkout.State);
@@ -91,8 +90,8 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Same(baseline0, checkout.Baseline);
             Assert.Same(models0, checkout.Models);
             Assert.Same(environment0, checkout.BindingEnvironment);
-            Assert.Equal(0, checkout.Catalog.DirtyCount);
-            Assert.Equal(schema1, checkout.Catalog.Accepted!.Snapshot!.Address);
+
+            Assert.Equal(schema1, checkout.AcceptedCatalog!.Snapshot!.Address);
             Assert.False(checkout.BindingEnvironment!.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             Assert.Equal(schema0, repository.GraphStore.ReadBusinessGraph(oldState, null).SchemaRoot);
             Assert.Equal(schema1, Snapshot(repository, event1).SchemaRoot);
@@ -245,7 +244,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "side")));
             Assert.Throws<InvalidOperationException>(repository.Dispose);
             Assert.Throws<InvalidOperationException>(checkout.Dispose);
-            Assert.Throws<InvalidOperationException>(() => checkout.Catalog.Set(Extra));
+            Assert.Throws<InvalidOperationException>(() => repository.CommitBranches([], [Extra]));
         };
         NextRoot candidate = new() { Value = 8, Link = original };
         CommitId installed = checkout.CommitState(candidate).Id;
@@ -267,8 +266,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Counts counts = new();
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(counts))) {
             using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
-                main.Catalog.Set(Extra);
-                main.CommitEvent(main.State!);
+                repository.CommitBranches([main.CreateEventCommitRequest(main.State!)], [Extra]);
             }
             NextRoot first = new() { Value = 5, Link = Ring() };
             using WorkingCopy eventOnly = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("event-only", first).Id);

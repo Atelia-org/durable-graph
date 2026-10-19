@@ -25,25 +25,23 @@ public sealed partial class DurableSchemaGeneratorTests {
             CommitId head = checkout.BaseCommitId;
             FrameAddress? schemaRoot = DB082Resources(repository).SharedSchemaRoot;
             long appended = DB082Resources(repository).GraphStore.AppendedFrames;
-            checkout.Catalog.Set(conflicting);
 
-            Assert.Throws<SchemaConflictException>(() => checkout.CommitState(replacement));
+            Assert.Throws<SchemaConflictException>(() => repository.CommitBranches([checkout.CreateStateCommitRequest(replacement)], [conflicting]));
             Assert.Equal(head, checkout.BaseCommitId);
             Assert.Equal(head, repository.ReadCurrentCommit(checkout.BranchId).Commit.Id);
             Assert.Equal(schemaRoot, DB082Resources(repository).SharedSchemaRoot);
             Assert.Equal(appended, DB082Resources(repository).GraphStore.AppendedFrames);
             Assert.Same(acceptedState, checkout.State);
             Assert.False(repository.IsFaulted);
-            Assert.Equal(1, checkout.Catalog.DirtyCount);
+            Assert.Equal(schemaRoot, checkout.AcceptedCatalog!.Snapshot!.Address);
             Assert.NotEmpty(DB082Graph(repository, head).ObjectHeads);
 
             // The same logical request can be corrected after failed capture/closure preparation.
-            checkout.Catalog.Set(requested);
-            CommitId corrected = checkout.CommitState(replacement).Id;
+            CommitId corrected = repository.CommitBranches([checkout.CreateStateCommitRequest(replacement)], [requested])[checkout.BranchId].Id;
             Assert.NotEqual(head, corrected);
             Assert.Same(replacement, checkout.State);
-            Assert.Equal(0, checkout.Catalog.DirtyCount);
-            Assert.Equal(requested, checkout.Catalog.Accepted!.Schemas[new(requested.Type, requested.Version)]);
+
+            Assert.Equal(requested, checkout.AcceptedCatalog!.Schemas[new(requested.Type, requested.Version)]);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, models);
         CommitId latest = reopened.ReadCurrentCommit(Assert.Single(reopened.ListBranches()).Id).Commit.Id;

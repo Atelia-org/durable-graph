@@ -44,8 +44,8 @@ internal static class Program {
     private static void Seed(string database, string witnessPath) {
         using var repository = RepositoryStorageFacade.CreateNew(database);
         StateModelRegistry models = Host.Models();
-        var session = new BranchSaveSession(repository, null, null, models.FreezeConfiguration(), repository.EnsureEditingAllowed);
-        Need(session.Catalog.Accepted is null && session.Catalog.DirtyCount == 0, "Seed must not manually register catalog entries.");
+        var session = new BranchSaveSession(repository, null, null, models.FreezeConfiguration());
+        Need(session.AcceptedCatalog is null, "Seed must not manually register catalog entries.");
         using var pending = session.Prepare(Host.Create(), rootLabel: "main");
         CheckCatalog(pending.Catalog.View);
         Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.All(row => row.Kind == ObjectVersionKind.Base), "First save must write Root, four Lists, two Arrays and two Dictionary Base rows.");
@@ -106,7 +106,7 @@ internal static class Program {
         CheckFixedRowsWithoutCatalog(repository, s0, witness.Ids, 0);
         StateModelRegistry.FrozenConfiguration configuration = Host.Models().FreezeConfiguration();
         BusinessPersistenceAdapter business = BusinessPersistenceAdapter.LoadState(repository.Store, s0, configuration);
-        var session = new BranchSaveSession(repository, commit0.HeadId, commit0, configuration, repository.EnsureEditingAllowed, business);
+        var session = new BranchSaveSession(repository, commit0.HeadId, commit0, configuration, business);
         IDurableObject restored = session.State ?? throw new InvalidDataException("Missing restored State.");
         Host.Check(restored, 0);
         foreach (uint id in witness.Ids.All) {

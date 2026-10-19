@@ -292,9 +292,8 @@ internal static class Program {
             Need(cuEnds == 2 && beforeCuFlushCalls == 2, "The mutation must publish two CU members.");
             if (window == "AfterPublicationConfirmed") { Wait(Prepared("VS.AfterPublicationConfirmed"), readyPath); }
         });
-        main.Catalog.Set(Extra); // Forces a new selected meta graph and a real two-ref CU.
         root.Numbers[7] = 201;
-        main.CommitState();
+        repository.CommitBranches([main.CreateStateCommitRequest()], [Extra]); // One declaration forces a real business/Schema CU.
         throw new InvalidOperationException("The configured window was not reached; writer must not exit normally.");
 
         ReadyEvidence Prepared(string stage) {

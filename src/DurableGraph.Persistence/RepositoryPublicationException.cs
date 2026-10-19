@@ -25,23 +25,49 @@ public enum RepositoryPublicationOutcome {
 /// the persisted binding; tags do not have an editing checkout and cannot be rebound.
 /// Failures before an append attempt can instead propagate their original exception; absence of this
 /// wrapper does not imply that domain mutations were rolled back or that the repository is healthy.
+/// For multiple branches use Members; the single-member convenience properties are null.
 /// </remarks>
 public sealed class RepositoryPublicationException : IOException {
     internal RepositoryPublicationException(RepositoryPublicationOutcome outcome, FrameAddress? candidate, Exception inner,
         HeadId? targetBranch = null, HeadEntryId? expectedBase = null, HeadEntryId? candidateCommit = null)
+        : this(outcome, inner, [new RepositoryPublicationMember(targetBranch, expectedBase, candidate, candidateCommit)]) { }
+
+    internal RepositoryPublicationException(RepositoryPublicationOutcome outcome, Exception inner,
+        IEnumerable<RepositoryPublicationMember> members)
         : base($"Graph publication interrupted; publication outcome: {outcome}.", inner) {
         Outcome = outcome;
-        CandidateRevisionAddress = candidate;
-        TargetBranchId = targetBranch is { } branch ? new(branch) : null;
-        ExpectedBaseCommitId = expectedBase is { } expected ? new(expected) : null;
-        CandidateCommitId = candidateCommit is { } commit ? new(commit) : null;
+        Members = Array.AsReadOnly(members.ToArray());
+        if (Members.Count == 1) {
+            CandidateRevisionAddress = Members[0].CandidateRevisionAddress;
+            TargetBranchId = Members[0].TargetBranchId;
+            ExpectedBaseCommitId = Members[0].ExpectedBaseCommitId;
+            CandidateCommitId = Members[0].CandidateCommitId;
+        }
     }
+
+    /// <summary>Each attempted member and the actual publication identities known at failure; never a partial-success result.</summary>
+    public IReadOnlyList<RepositoryPublicationMember> Members { get; }
 
     /// <summary>The known publication result, independently of the repository's IsFaulted status.</summary>
     public RepositoryPublicationOutcome Outcome { get; }
-    /// <summary>The candidate graph frame address when known; null for ref-only and tag operations. It does not establish publication or form a bookmark.</summary>
+    /// <summary>The candidate graph frame address when known; null for ref-only, tag and multi-member operations. It does not establish publication or form a bookmark.</summary>
     public FrameAddress? CandidateRevisionAddress { get; }
     public BranchId? TargetBranchId { get; }
     public CommitId? ExpectedBaseCommitId { get; }
+    public CommitId? CandidateCommitId { get; }
+}
+
+/// <summary>An attempted branch publication, its original baseline and any actually known candidate positions.</summary>
+/// <remarks>A candidate frame does not establish publication. Unknown Commit IDs remain null.</remarks>
+public sealed class RepositoryPublicationMember {
+    internal RepositoryPublicationMember(HeadId? target, HeadEntryId? expected, FrameAddress? candidate, HeadEntryId? commit) {
+        TargetBranchId = target is { } branch ? new(branch) : null;
+        ExpectedBaseCommitId = expected is { } baseline ? new(baseline) : null;
+        CandidateRevisionAddress = candidate;
+        CandidateCommitId = commit is { } published ? new(published) : null;
+    }
+    public BranchId? TargetBranchId { get; }
+    public CommitId? ExpectedBaseCommitId { get; }
+    public FrameAddress? CandidateRevisionAddress { get; }
     public CommitId? CandidateCommitId { get; }
 }

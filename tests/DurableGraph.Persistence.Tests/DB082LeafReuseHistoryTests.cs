@@ -161,9 +161,11 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         Assert.Equal(LeafObjectId(upgraded), LeafObjectId(currentCold));
         AssertStorage(repository, currentCold);
 
-        upgraded.Catalog.Set(new DurableSchema(IntermediateId, 5, SchemaKind.InlineValue,
-            new DurableFieldInfo(1, TypeTag.Int64)));
-        CommitId intermediateEvent = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
+        repository.CommitBranches(
+            [upgraded.CreateEventCommitRequest(upgraded.State!, parameters: NoRebase)],
+            [new DurableSchema(IntermediateId, 5, SchemaKind.InlineValue,
+                new DurableFieldInfo(1, TypeTag.Int64))]);
+        CommitId intermediateEvent = upgraded.BaseCommitId;
         var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
         var intermediateEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
             configuration, repository.GraphStore.ReadMetadata(Describe(repository, intermediateEvent).Address).SchemaRoot!.Value);
@@ -178,9 +180,11 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
             Assert.Equal(2, counts.LeafHydrations);
         }
         Assert.Same(currentEntry, repository.PreparedStateEntry);
-        upgraded.Catalog.Set(new DurableSchema(MaterializationId, 1, SchemaKind.InlineValue,
-            new DurableFieldInfo(1, TypeTag.Int64)));
-        CommitId materializationEvent = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
+        repository.CommitBranches(
+            [upgraded.CreateEventCommitRequest(upgraded.State!, parameters: NoRebase)],
+            [new DurableSchema(MaterializationId, 1, SchemaKind.InlineValue,
+                new DurableFieldInfo(1, TypeTag.Int64))]);
+        CommitId materializationEvent = upgraded.BaseCommitId;
         var materializationEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
             configuration, repository.GraphStore.ReadMetadata(Describe(repository, materializationEvent).Address).SchemaRoot!.Value);
         InvalidDataException certificateConflict = Assert.Throws<InvalidDataException>(() => currentEntry.Requirements.Validate(materializationEnvironment.Models));

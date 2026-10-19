@@ -1,6 +1,6 @@
 # DB-096：基于 CommitRequest 的多 Branch 联合提交设计
 
-> 2026-10-19 收敛版；采用轻量 CommitRequest，由 Repository 执行时统一捕获与共同提交。请求不另设消费状态，失败合同见 §2.1；产品组内核尚未实施。需求事实见[用户故事 C4/C5](user-stories.md)，公开概念沿用 [Branch / Commit / WorkingCopy](api-sketch.md)。本文保留冻结准备的对照理由，不再将两种路线并列为待选。
+> 2026-10-19 收敛版；采用轻量 CommitRequest，由 Repository 执行时统一捕获与共同提交。请求不另设消费状态，失败合同见 §2.1；产品组内核已实施，源码/包资格及限度只查[实施验收](group-commit-integration.md)。需求事实见[用户故事 C4/C5](user-stories.md)，公开概念沿用 [Branch / Commit / WorkingCopy](api-sketch.md)。本文保留冻结准备的对照理由，不再将两种路线并列为待选。
 
 > 后继源码调查：[共同准备的真实缺口与首选实验](mechanism-feasibility.md#5-联合提交保留一个操作窗口合并-shared-准备)。单 pending 的调整不足以支持联合提交；必须先汇总显式 dirty 和捕获布局、检出组间冲突并统一分配 Shared 描述符。该调查没有改变执行时捕获决定，也不是运行资格。
 
@@ -56,7 +56,7 @@ CommitRequest 不做图捕获、不占用新的存储 writer、不改变工作�
 
 所有参与图在整个调用期间应保持稳定，包括 Capture 回调不得修改另一个成员的图。相同 CLR 对象同时作为两份输入不自动获得跨 Branch 持久身份；各自拥有身份表，独立冷加载不承诺跨图 `ReferenceEquals`。首片不为拒绝或合并这种别名做跨图扫描。
 
-该简化要求清理所有未安装候选并保 owner 操作窗口，不能把“参数对象无状态”理解为内部保存候选也无状态。具体阶段与最小反例见[组内核设计](group-kernel-design.md)。这些是选定设计规则，尚无新组内核运行资格。
+该简化要求清理所有未安装候选并保 owner 操作窗口，不能把“参数对象无状态”理解为内部保存候选也无状态。具体阶段与最小反例见[组内核设计](group-kernel-design.md)。这些是选定设计规则，后继运行证据见[实施验收](group-commit-integration.md)。
 
 ## 3. Repository 层的共同准备
 

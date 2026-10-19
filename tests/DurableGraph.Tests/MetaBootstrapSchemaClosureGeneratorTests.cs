@@ -34,8 +34,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(expected.List, list!.CurrentLayout.List);
 
             BranchSaveSessionFixture session = new(repository, "main", registered);
-            Assert.Null(session.Catalog.Accepted);
-            Assert.Equal(0, session.Catalog.DirtyCount);
+            Assert.Null(session.AcceptedCatalog);
+
             using PreparedFixtureSave save = session.Prepare(original); // No manual Set of any dependency.
             AssertBootstrapSchemaClosure(save.Catalog.View, expected.Root, expected.Base, expected.Point);
             Assert.Equal(2, save.Business.Write.Records.Count);
@@ -99,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             RepositorySaveResult result = save.Commit();
             s1 = result.Business.Address;
             Assert.Equal(schemaRoot, result.Meta!.Address); // Commit returns the selected meta, including reuse.
-            Assert.Equal(schemaRoot, session.Catalog.Accepted!.Snapshot!.Address);
+            Assert.Equal(schemaRoot, session.AcceptedCatalog!.Snapshot!.Address);
             Assert.Equal(schemaRoot, result.Business.SchemaRoot);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
             Assert.Same(restored, session.State);

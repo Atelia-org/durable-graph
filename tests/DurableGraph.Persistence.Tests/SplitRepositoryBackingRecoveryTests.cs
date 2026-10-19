@@ -162,9 +162,8 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         BranchInfo branch = seed.CreateRootBranchFromState("main", root);
         using WorkingCopy main = seed.OpenWorkingCopy(branch.Id);
         root = Assert.IsType<DB087Widget>(main.State);
-        main.Catalog.Set(Extra);
         root.Numbers[7] = 200;
-        main.CommitEvent(root);
+        seed.CommitBranches([main.CreateEventCommitRequest(root)], [Extra]);
         root.Numbers[7] = 201;
         CommitInfo state = main.CommitState();
         ObjectId listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;

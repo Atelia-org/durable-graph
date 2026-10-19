@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Persistence;
 
 using Atelia.FrameStore;
@@ -64,8 +65,7 @@ public sealed partial class Repository {
         try {
             ArgumentNullException.ThrowIfNull(root);
             RepositoryResources.ValidateDisplayLabel(displayLabel);
-            var session = new BranchSaveSession(_storageFacade, null, null, _modelConfiguration,
-                () => _resources.EnsureEditingAllowed());
+            var session = new BranchSaveSession(_storageFacade, null, null, _modelConfiguration);
             using var pending = session.Prepare(root, kind, parameters ?? DefaultPolicy, summary, displayLabel);
             OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
             BranchInfo? branch = null;
@@ -95,12 +95,9 @@ public sealed partial class Repository {
 
     private WorkingCopy NewCheckout(BranchId branchId, HistoryGraphRecord head,
         BusinessPersistenceAdapter? business = null) {
-        WorkingCopy? work = null;
-        var session = new BranchSaveSession(_storageFacade, branchId.Value, head.Id, _modelConfiguration,
-            () => EnsureEditingAllowed(work!), business);
+        var session = new BranchSaveSession(_storageFacade, branchId.Value, head.Id, _modelConfiguration, business);
         var state = _resources.FindNearestState(head.Id, inclusive: true);
-        work = new(this, branchId, session, new(head.Id), state is null ? null : new(state.Id));
-        return work;
+        return new(this, branchId, session, new(head.Id), state is null ? null : new(state.Id));
     }
 
     private WorkingCopy RestoreCheckout(BranchId branchId, HistoryGraphRecord head,
@@ -161,11 +158,6 @@ public sealed partial class Repository {
         return restored;
     }
 
-    private void EnsureEditingAllowed(WorkingCopy work) {
-        RequireCheckoutWriter(work);
-        _storageFacade.EnsureEditingAllowed();
-    }
-
     private void RequireCheckoutSource(WorkingCopy work) {
         if (!work.IsLiveFor(this) || !_activeBranches.Contains(work.BranchId) ||
             _resources.ReadCurrent(work.BranchId.Value).Id != work.BaseCommitId.Value) {
@@ -181,32 +173,18 @@ public sealed partial class Repository {
 
     private CommitInfo CommitSave(WorkingCopy work, IDurableObject? domainEvent, IDurableObject? nextState,
         ReadOnlyMemory<byte> summary, ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireCheckoutWriter(work);
-        _busy = true;
-        try {
-            var kind = domainEvent is null ? StoredGraphKind.State : StoredGraphKind.Event;
-            using var pending = work.SaveSession.Prepare(domainEvent ?? nextState!, kind, parameters ?? DefaultPolicy, summary);
-            OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
-            CommitInfo? info = null;
-            // The owner catches delivery failures with Pending.ExpectedEntry, never a partially
-            // advanced WorkingCopy value, and attaches only the actual HeadStore result IDs.
-            pending.Commit(deliver: result => {
-                info = Issue(_resources.ReadDescriptor(result.CommitId));
-                work.SaveSession.Advance(result.CommitId);
-                work.BaseCommitId = info.Id;
-                if (kind == StoredGraphKind.State) { work.StateSourceCommitId = info.Id; }
-            });
-            return info!;
-        } finally { EndOperation(); }
+        CommitRequest request = CreateCommitRequest(work, domainEvent ?? nextState!,
+            domainEvent is null ? StoredGraphKind.State : StoredGraphKind.Event, summary, parameters);
+        return CommitBranches([request])[work.BranchId];
     }
 
     internal void PrepareAndDiscardSave(WorkingCopy work, IDurableObject root, StoredGraphKind kind,
-        ReadAmplificationBaseBudgetParameters? parameters) {
+        ReadAmplificationBaseBudgetParameters? parameters, IEnumerable<DurableSchema>? declarations = null) {
         RequireCheckoutWriter(work);
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            using var pending = work.SaveSession.Prepare(root, kind, parameters ?? DefaultPolicy);
+            using var pending = work.SaveSession.Prepare(root, kind, parameters ?? DefaultPolicy, declarations: declarations);
             OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
         } finally { EndOperation(); }
     }

@@ -38,13 +38,14 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             GraphRecordStore store = repository.GraphStore;
             NormalizedGraphState baseline = main.Baseline!;
             CommitId oldHead = main.BaseCommitId;
-            SchemaCatalogView accepted = main.Catalog.Accepted!;
+            SchemaCatalogWorkspace catalogOwner = resources.CatalogForPreparation;
+            SchemaCatalogView accepted = catalogOwner.Accepted!;
             HeadEntry oldBranches = resources.Heads.ReadHead(1).Unwrap();
             HeadEntry oldShared = resources.Heads.ReadHead(2).Unwrap();
             FrameImage[] oldFrames = ReadFrames(resources.Data);
             long appended = store.AppendedFrames;
             DB087Widget root = AssertRing(main.State, 7);
-            main.Catalog.Set(Extra);
+
             root.Numbers[7] = 201;
             IOException failure = new("Before any output");
             int attempts = 0;
@@ -52,7 +53,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
                 if (point == RepositorySaveStage.BeforeAppend) { attempts++; throw failure; }
             };
             CommitId? delivered = null;
-            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = main.CommitState().Id);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.CommitBranches([main.CreateStateCommitRequest()], [Extra])[main.BranchId].Id);
             Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
             Assert.Same(failure, error.InnerException);
             Assert.Null(error.CandidateRevisionAddress);
@@ -61,8 +62,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.False(repository.IsFaulted);
             Assert.Same(baseline, main.Baseline);
             Assert.Equal(oldHead, main.BaseCommitId);
-            Assert.Same(accepted, main.Catalog.Accepted);
-            Assert.Equal(1, main.Catalog.DirtyCount);
+            Assert.Same(accepted, catalogOwner.Accepted);
+
             Assert.Equal(7, baseline.Objects[seed.ListId].Current.GetListState<int>().Elements[7]);
             Assert.Equal(appended, store.AppendedFrames);
             Assert.Equal(oldFrames.Length, ReadFrames(resources.Data).Length);
@@ -77,12 +78,12 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             // No automatic retry occurred. Removing the injection is an explicit
             // second save of the preserved application mutation and manual intent.
             repository.SaveStageObserver = null;
-            CommitId saved = main.CommitState().Id;
+            CommitId saved = repository.CommitBranches([main.CreateStateCommitRequest()], [Extra])[main.BranchId].Id;
             StoredGraphRevision graph = Snapshot(repository, saved);
             Assert.Equal(seed.State, graph.SourceGraph);
             Assert.NotEqual(seed.Schema, graph.SchemaRoot);
             Assert.Equal(repository.SharedSchemaRoot, graph.SchemaRoot);
-            Assert.Equal(0, main.Catalog.DirtyCount);
+
             AssertRing(repository.LoadState(saved), 201);
         }
         VerifySelectedAndContinue(seed, visible: true, candidate: null, capturedFrames: []);
@@ -102,7 +103,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.True(store.ReadCacheStatistics.EntryCount > 0);
             NormalizedGraphState baseline = main.Baseline!;
             CommitId oldHead = main.BaseCommitId;
-            SchemaCatalogView accepted = main.Catalog.Accepted!;
+            SchemaCatalogWorkspace catalogOwner = resources.CatalogForPreparation;
+            SchemaCatalogView accepted = catalogOwner.Accepted!;
             HashSet<FrameAddress> oldAddresses = seed.Frames.Select(frame => frame.Address).ToHashSet();
             IOException failure = new("Actual split publication " + stage);
             int hookCalls = 0;
@@ -125,10 +127,10 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
                 });
             }
             DB087Widget root = AssertRing(main.State, 7);
-            main.Catalog.Set(Extra); // Ensures the save updates meta and the business ref together.
+
             root.Numbers[7] = 201;
             CommitId? delivered = null;
-            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = main.CommitState().Id);
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.CommitBranches([main.CreateStateCommitRequest()], [Extra])[main.BranchId].Id);
             Assert.Equal(outcome, error.Outcome);
             Assert.Same(failure, error.InnerException);
             Assert.NotEqual(default, candidate);
@@ -141,8 +143,8 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.Equal(seed.State, main.StateRevisionAddress);
             Assert.Same(baseline, main.Baseline);
             Assert.Equal(7, baseline.Objects[seed.ListId].Current.GetListState<int>().Elements[7]);
-            Assert.Same(accepted, main.Catalog.Accepted);
-            Assert.Equal(1, main.Catalog.DirtyCount);
+            Assert.Same(accepted, catalogOwner.Accepted);
+
             Assert.Null(repository.PreparedStateEntry);
             Assert.Equal(0, store.ReadCacheStatistics.EntryCount);
             Assert.Equal(0, store.ReadCacheStatistics.ResidentChargeBytes);

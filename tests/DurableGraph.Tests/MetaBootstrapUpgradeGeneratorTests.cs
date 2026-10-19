@@ -46,16 +46,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
             StateModelRegistry oldModels = oldHost.Models();
             BranchSaveSessionFixture session = new(repository, "main", oldModels);
-            session.Catalog.Set(oldSchema); // The initial writer knows only actual V1.
             IDurableObject oldRoot = oldHost.Create();
             Assert.Equal(oldHost.ClrType, oldRoot.GetType());
-            using PreparedFixtureSave save = session.Prepare(oldRoot);
+            using PreparedFixtureSave save = session.Prepare(oldRoot, declarations: [oldSchema]);
             RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             meta0 = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
-            Assert.Equal(oldSchema, session.Catalog.Accepted!.Schemas[oldKey]);
-            Assert.False(session.Catalog.Accepted.Schemas.ContainsKey(currentKey));
+            Assert.Equal(oldSchema, session.AcceptedCatalog!.Schemas[oldKey]);
+            Assert.False(session.AcceptedCatalog.Schemas.ContainsKey(currentKey));
             AssertBootstrapStoredSchema(repository, result.Business, oldSchema, ObjectVersionKind.Base);
         }
 
@@ -84,8 +83,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             IDurableObject root = session.State!;
             currentHost.Check(root, 107);
             Assert.Equal(s0, session.StateSource!.Address);
-            Assert.False(session.Catalog.Accepted!.Schemas.ContainsKey(currentKey));
-            Assert.Equal(0, session.Catalog.DirtyCount);
+            Assert.False(session.AcceptedCatalog!.Schemas.ContainsKey(currentKey));
+
 
             // Capture registers current V2 automatically. Discard installs neither authority.
             long frames = repository.Store.AppendedFrames;
@@ -97,10 +96,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(frames, repository.Store.AppendedFrames);
             Assert.Equal(s0, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(meta0, repository.SharedSchemaRoot);
-            Assert.False(session.Catalog.Accepted.Schemas.ContainsKey(currentKey));
+            Assert.False(session.AcceptedCatalog.Schemas.ContainsKey(currentKey));
             // Automatically discovered dependencies belong to this capture, not a second dirty authority.
             // The unchanged live V2 root will rediscover them on the next real save.
-            Assert.Equal(0, session.Catalog.DirtyCount);
+
             Assert.Same(root, session.State);
             Assert.Equal(s0, session.StateSource.Address);
 
@@ -114,8 +113,8 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(meta1, result.Business.SchemaRoot);
                 AssertBootstrapStoredSchema(repository, result.Business, currentSchema, ObjectVersionKind.Base);
             }
-            Assert.Equal(currentSchema, session.Catalog.Accepted.Schemas[currentKey]);
-            Assert.Equal(0, session.Catalog.DirtyCount);
+            Assert.Equal(currentSchema, session.AcceptedCatalog.Schemas[currentKey]);
+
             Assert.Equal(s0, session.StateSource.Address);
             Assert.Same(root, session.State);
 

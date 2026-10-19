@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Schema;
 using Atelia.FrameStore;
 using Atelia.DurableGraph.Persistence;
 
@@ -26,7 +27,7 @@ public sealed class WorkingCopy : IDisposable {
     internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => SaveSession.BindingEnvironment;
     internal ModelExecutionEnvironment Models => SaveSession.Models;
     internal NormalizedGraphState? Baseline => SaveSession.Baseline;
-    internal SchemaCatalogWorkspace Catalog => SaveSession.Catalog;
+    internal SchemaCatalogView? AcceptedCatalog => SaveSession.AcceptedCatalog;
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
@@ -107,11 +108,36 @@ public sealed class WorkingCopy : IDisposable {
         return _repository.Commit(this, null, nextState, summary, parameters);
     }
 
-    // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.
-    internal void PrepareAndDiscard(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
+    /// <summary>Creates a deferred request for the current State; it does not capture or publish.</summary>
+    public CommitRequest CreateStateCommitRequest(ReadOnlyMemory<byte> summary = default,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _repository.PrepareAndDiscardSave(this, root, kind, parameters);
+        IDurableObject state = State ?? throw new InvalidOperationException("There is no State to commit; supply the first State explicitly.");
+        return _repository.CreateCommitRequest(this, state, StoredGraphKind.State, summary, parameters);
+    }
+
+    /// <summary>Creates a deferred request retaining the supplied State reference and copying its summary.</summary>
+    /// <remarks>The graph is captured at CommitBranches execution; success installs the supplied instance.</remarks>
+    public CommitRequest CreateStateCommitRequest(IDurableObject nextState, ReadOnlyMemory<byte> summary = default,
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(nextState);
+        return _repository.CreateCommitRequest(this, nextState, StoredGraphKind.State, summary, parameters);
+    }
+
+    /// <summary>Creates a deferred Event request; execution advances the branch baseline without saving its State.</summary>
+    public CommitRequest CreateEventCommitRequest(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default,
+        ReadAmplificationBaseBudgetParameters? parameters = null) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        return _repository.CreateCommitRequest(this, domainEvent, StoredGraphKind.Event, summary, parameters);
+    }
+
+    // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.
+    internal void PrepareAndDiscard(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
+        ReadAmplificationBaseBudgetParameters? parameters = null, IEnumerable<DurableSchema>? declarations = null) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _repository.PrepareAndDiscardSave(this, root, kind, parameters, declarations);
     }
 
     /// <summary>Releases this branch's editing occupancy without saving changes or removing the durable branch.</summary>

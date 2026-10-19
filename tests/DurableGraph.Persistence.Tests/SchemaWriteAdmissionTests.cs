@@ -117,9 +117,9 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
         Assert.Equal(6, captures);
         using WorkingCopy newEvent = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("new-event", root).Id);
         Assert.Equal(7, captures);
-        checkout.Catalog.Set(Extra);
-        checkout.Catalog.Set(ObjectLayout.ForDurable(Extra));
-        Assert.Equal(1, checkout.Catalog.DirtyCount);
+        repository.CommitBranches([checkout.CreateStateCommitRequest()], [Extra, Extra]);
+        Assert.Equal(Extra, checkout.AcceptedCatalog!.Schemas[new(Extra.Type, Extra.Version)]);
+        Assert.Equal(8, captures);
         Assert.False(repository.IsFaulted);
     }
 

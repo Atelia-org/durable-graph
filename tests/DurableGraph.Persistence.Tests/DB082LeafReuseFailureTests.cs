@@ -120,9 +120,10 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Equal(1, entry.ImmutableLeafCount);
         Assert.True(control.DependencyChecks > 0);
         int allocations = control.LeafAllocations, hydrates = control.LeafHydrates;
-        main.Catalog.Set(new DurableSchema(Dependency.SchemaId, 1, SchemaKind.InlineValue,
-            new DurableFieldInfo(1, TypeTag.Int64)));
-        CommitId catalogEvent = main.CommitEvent(main.State!).Id;
+        repository.CommitBranches([main.CreateEventCommitRequest(main.State!)],
+            [new DurableSchema(Dependency.SchemaId, 1, SchemaKind.InlineValue,
+                new DurableFieldInfo(1, TypeTag.Int64))]);
+        CommitId catalogEvent = main.BaseCommitId;
         var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
         var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
             configuration, repository.GraphStore.ReadMetadata(Describe(repository, catalogEvent).Address).SchemaRoot!.Value);

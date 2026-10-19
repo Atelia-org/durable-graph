@@ -139,8 +139,8 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         // Publish the additional declaration jointly with an unrelated Event. Historical
         // reads retain S0; the next Save must still qualify its captured V2 against latest S.
         using WorkingCopy checkout = reader.OpenWorkingCopy(BranchNamed(reader, "main"));
-        checkout.Catalog.Set(new DurableSchema(RootSchema.SchemaId, 2, new DurableFieldInfo(1, TypeTag.Int32)));
-        checkout.CommitEvent(new EventModel());
+        reader.CommitBranches([checkout.CreateEventCommitRequest(new EventModel())],
+            [new DurableSchema(RootSchema.SchemaId, 2, new DurableFieldInfo(1, TypeTag.Int32))]);
         Assert.Equal(7, ((RootModel)reader.LoadState(head)).Values!["key"]);
         long frames = reader.GraphStore.AppendedFrames;
         Assert.Throws<SchemaConflictException>(() => checkout.CommitState().Id);

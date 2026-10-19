@@ -25,7 +25,7 @@ public sealed class GraphResourcesTests : IDisposable {
             Assert.Throws<InvalidOperationException>(reader.RequireWritable);
             Assert.Throws<InvalidOperationException>(facade.EnsureEditingAllowed);
             BranchSaveSessionFixture readonlySession = new(facade, "main", SharedReadModel.Models());
-            Assert.Throws<InvalidOperationException>(() => readonlySession.Catalog.Set(Schema));
+            Assert.Throws<InvalidOperationException>(() => readonlySession.Prepare(new SharedReadModel.Node(), declarations: [Schema]));
             Assert.Throws<InvalidOperationException>(() => MechanismFixture.Prepare(facade, "other", StoredGraphKind.State,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, [10])])));
             using RepositoryResources second = RepositoryResources.OpenReadOnlyExisting(_root);
@@ -153,8 +153,7 @@ public sealed class GraphResourcesTests : IDisposable {
     private static StoredGraphRevision SeedTyped(RepositoryResources resources) {
         using RepositoryStorageFacade facade = new(resources);
         BranchSaveSessionFixture session = new(facade, "main", SharedReadModel.Models());
-        session.Catalog.Set(Schema);
-        using PreparedFixtureSave save = session.Prepare(new SharedReadModel.Node { Value = 7 });
+        using PreparedFixtureSave save = session.Prepare(new SharedReadModel.Node { Value = 7 }, declarations: [Schema]);
         return save.Commit().Business;
     }
     private static StoredGraphRevision SeedRaw(RepositoryResources resources) {

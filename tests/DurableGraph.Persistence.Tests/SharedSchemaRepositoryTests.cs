@@ -35,8 +35,9 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             repository.ForkBranch(main.BaseCommitId, "dev");
             using WorkingCopy branch = repository.OpenWorkingCopy(BranchNamed(repository, "dev"));
             Assert.Equal(identities, branch.Baseline!.Objects.Keys.ToArray());
-            branch.Catalog.Set(BranchExtra);
-            initial = Describe(repository, branch.CommitState(parameters: NoRebase).Id).Address;
+            initial = Describe(repository, repository.CommitBranches([
+                branch.CreateStateCommitRequest(branch.State!, parameters: NoRebase)
+            ], [BranchExtra])[branch.BranchId].Id).Address;
             shared = ReadHead(repository, 2);
             Assert.Equal(BranchExtra, Catalog(repository, initial).Schemas[new(BranchExtra.Type, 1)]);
             AssertRing(branch.State, 7);
@@ -72,15 +73,16 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             ObjectId? oldId = dev.StateId;
             NormalizedGraphState baseline = dev.Baseline!;
             var storage = baseline.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray();
-            dev.Catalog.Set(AddedByEvent);
-            CommitId eventCommit = dev.CommitEvent(Ring(100), parameters: NoRebase).Id;
+            CommitId eventCommit = repository.CommitBranches([
+                dev.CreateEventCommitRequest(Ring(100), parameters: NoRebase)
+            ], [AddedByEvent])[dev.BranchId].Id;
             eventAddress = Describe(repository, eventCommit).Address;
             StoredGraphRevision graph = DB096TestAccess.Snapshot(repository, eventCommit);
             eventSchema = graph.SchemaRoot!.Value;
             Assert.NotEqual(stateSchema, eventSchema);
             Assert.Equal(stateSchema, Catalog(repository, eventAddress).Snapshot!.SourceGraph);
-            Assert.Equal(AddedByEvent, dev.Catalog.Accepted!.Schemas[new(AddedByEvent.Type, 1)]);
-            Assert.Equal(eventSchema, dev.Catalog.Accepted.Snapshot!.Address);
+            Assert.Equal(AddedByEvent, dev.AcceptedCatalog!.Schemas[new(AddedByEvent.Type, 1)]);
+            Assert.Equal(eventSchema, dev.AcceptedCatalog.Snapshot!.Address);
             Assert.Equal(stateAddress, Describe(repository, Previous(repository, eventCommit)!.Value).Address);
             Assert.Equal(stateAddress, graph.SourceGraph);
             ObjectVersionBatch batch = repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
@@ -99,7 +101,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         DB087Widget state = AssertRing(checkout.State, 7);
         Assert.Equal(eventAddress, Describe(cold, checkout.BaseCommitId).Address);
         Assert.Equal(stateAddress, checkout.StateRevisionAddress);
-        Assert.Equal(eventSchema, checkout.Catalog.Accepted!.Snapshot!.Address);
+        Assert.Equal(eventSchema, checkout.AcceptedCatalog!.Snapshot!.Address);
         Assert.Equal(stateSchema, checkout.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
         AssertRing(cold.LoadEvent(checkout.BaseCommitId), 7, value: 100);
         state.Numbers[7] = 302;
@@ -113,7 +115,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
     }
 
     [Fact]
-    public void Discarded_catalog_candidate_can_be_corrected_without_appending_or_claiming_the_wrong_shape() {
+    public void Discarded_prepared_declarations_do_not_leak_into_a_later_commit() {
         using Repository repository = CreateShared();
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring(), parameters: NoRebase).Id);
         repository.ForkBranch(main.BaseCommitId, "dev");
@@ -121,22 +123,28 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         PublicationImage before = Snapshot(repository);
         NormalizedGraphState baseline = dev.Baseline!;
         CommitId oldHead = dev.BaseCommitId;
-        FrameAddress oldSchema = dev.Catalog.Accepted!.Snapshot!.Address;
+        FrameAddress oldSchema = dev.AcceptedCatalog!.Snapshot!.Address;
         DurableSchema wrong = new("Shared.Schema.Corrected", 1, new DurableFieldInfo(1, TypeTag.Byte));
         DurableSchema corrected = new("Shared.Schema.Corrected", 1, new DurableFieldInfo(1, TypeTag.Int64));
-        dev.Catalog.Set(wrong);
         AssertRing(dev.State, 7).Numbers[7] = 303;
-        dev.PrepareAndDiscard(dev.State!, parameters: NoRebase);
+        using (PreparedBranchSave discarded = dev.SaveSession.Prepare(dev.State!, parameters: NoRebase, declarations: [wrong])) {
+            Assert.NotNull(discarded.Catalog.Write);
+            Assert.Equal(wrong, discarded.Catalog.View.Schemas[new(wrong.Type, 1)]);
+        }
         AssertUnchanged(repository, before);
         Assert.Same(baseline, dev.Baseline);
         Assert.Equal(oldHead, dev.BaseCommitId);
-        Assert.Equal(oldSchema, dev.Catalog.Accepted.Snapshot!.Address);
-        Assert.False(dev.Catalog.Accepted.Schemas.ContainsKey(new(wrong.Type, 1)));
-        Assert.True(dev.Catalog.DirtyCount > 0);
-        dev.Catalog.Set(corrected);
-        CommitId saved = dev.CommitState(parameters: NoRebase).Id;
+        Assert.Equal(oldSchema, dev.AcceptedCatalog.Snapshot!.Address);
+        Assert.False(dev.AcceptedCatalog.Schemas.ContainsKey(new(corrected.Type, 1)));
+        CommitId undeclared = dev.CommitState(parameters: NoRebase).Id;
+        Assert.False(Catalog(repository, Describe(repository, undeclared).Address).Schemas.ContainsKey(new(wrong.Type, 1)));
+        Assert.Equal(oldSchema, dev.AcceptedCatalog!.Snapshot!.Address);
+        AssertRing(repository.LoadState(undeclared), 303);
+        CommitId saved = repository.CommitBranches([
+            dev.CreateStateCommitRequest(dev.State!, parameters: NoRebase)
+        ], [corrected])[dev.BranchId].Id;
         Assert.Equal(corrected, Catalog(repository, Describe(repository, saved).Address).Schemas[new(corrected.Type, 1)]);
-        Assert.Equal(0, dev.Catalog.DirtyCount);
+        Assert.Equal(corrected, dev.AcceptedCatalog!.Schemas[new(corrected.Type, 1)]);
         AssertRing(repository.LoadState(saved), 303);
         Assert.NotNull(repository.SharedSchemaRoot);
         Assert.NotEqual(before.Shared.Revision, ReadHead(repository, 2).Revision);
@@ -150,14 +158,12 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring(), parameters: NoRebase).Id);
         repository.ForkBranch(main.BaseCommitId, "dev");
         using WorkingCopy dev = repository.OpenWorkingCopy(BranchNamed(repository, "dev"));
-        dev.Catalog.Set(BranchExtra);
-        dev.CommitState(parameters: NoRebase);
+        repository.CommitBranches([dev.CreateStateCommitRequest(dev.State!, parameters: NoRebase)], [BranchExtra]);
         FrameAddress state = dev.StateRevisionAddress!.Value;
         Assert.NotEqual(main.StateRevisionAddress, dev.StateRevisionAddress);
         FrameAddress stateSchema = Catalog(repository, state).Snapshot!.Address;
-        dev.Catalog.Set(AddedByEvent);
-        dev.CommitEvent(Ring(100), parameters: NoRebase);
-        FrameAddress latestCatalog = dev.Catalog.Accepted!.Snapshot!.Address;
+        repository.CommitBranches([dev.CreateEventCommitRequest(Ring(100), parameters: NoRebase)], [AddedByEvent]);
+        FrameAddress latestCatalog = dev.AcceptedCatalog!.Snapshot!.Address;
         Assert.NotEqual(stateSchema, latestCatalog);
         using RepositoryStorageFacade facade = new(ResourcesOf(repository));
         FrameAddress catalogSource = wrongSource switch {
@@ -173,7 +179,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (business, write)));
         AssertUnchanged(repository, before);
         Assert.False(facade.HasPending);
-        Assert.Equal(latestCatalog, dev.Catalog.Accepted.Snapshot!.Address);
+        Assert.Equal(latestCatalog, dev.AcceptedCatalog.Snapshot!.Address);
     }
 
     [Fact]
@@ -206,8 +212,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             oldPin = Catalog(repository, firstEvent).Snapshot!.Address;
             Assert.Null(events.State);
             using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring(), parameters: NoRebase).Id);
-            main.Catalog.Set(Unreachable);
-            main.CommitState(parameters: NoRebase);
+            repository.CommitBranches([main.CreateStateCommitRequest(main.State!, parameters: NoRebase)], [Unreachable]);
             latestShared = repository.SharedSchemaRoot!.Value;
             shared = ReadHead(repository, 2);
             Assert.NotEqual(oldPin, latestShared);
@@ -220,20 +225,21 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             Assert.Null(events.StateId);
             Assert.Null(events.StateRevisionAddress);
             Assert.Null(events.Baseline);
-            Assert.Equal(latestShared, events.Catalog.Accepted!.Snapshot!.Address);
+            Assert.Equal(latestShared, events.AcceptedCatalog!.Snapshot!.Address);
             Assert.Equal(latestShared, events.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
             Assert.Same(events.Models, events.BindingEnvironment.Models);
-            Assert.True(events.Catalog.Accepted.Schemas.ContainsKey(new(Unreachable.Type, 1)));
-            events.Catalog.Set(AddedByEvent);
-            CommitId secondEventCommit = events.CommitEvent(Ring(200), parameters: NoRebase).Id;
+            Assert.True(events.AcceptedCatalog.Schemas.ContainsKey(new(Unreachable.Type, 1)));
+            CommitId secondEventCommit = repository.CommitBranches([
+                events.CreateEventCommitRequest(Ring(200), parameters: NoRebase)
+            ], [AddedByEvent])[events.BranchId].Id;
             secondEvent = Describe(repository, secondEventCommit).Address;
             StoredGraphRevision saved = DB096TestAccess.Snapshot(repository, secondEventCommit);
             eventPin = saved.SchemaRoot!.Value;
             Assert.NotEqual(oldPin, eventPin);
             Assert.Equal(firstEvent, Describe(repository, Previous(repository, secondEventCommit)!.Value).Address);
             Assert.Null(saved.SourceGraph);
-            Assert.Equal(latestShared, events.Catalog.Accepted!.Snapshot!.SourceGraph);
-            Assert.Equal(eventPin, events.Catalog.Accepted.Snapshot.Address);
+            Assert.Equal(latestShared, events.AcceptedCatalog!.Snapshot!.SourceGraph);
+            Assert.Equal(eventPin, events.AcceptedCatalog.Snapshot.Address);
             Assert.Null(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).SourceGraph);
             Assert.Null(events.State);
             Assert.Null(events.Baseline);
@@ -247,7 +253,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         Assert.Null(empty.State);
         Assert.Null(empty.Baseline);
         Assert.Null(empty.StateRevisionAddress);
-        Assert.Equal(eventPin, empty.Catalog.Accepted!.Snapshot!.Address);
+        Assert.Equal(eventPin, empty.AcceptedCatalog!.Snapshot!.Address);
         Assert.Equal(eventPin, empty.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
         CommitId firstState = empty.CommitState(Ring(), parameters: NoRebase).Id;
         StoredGraphRevision graph = DB096TestAccess.Snapshot(cold, firstState);

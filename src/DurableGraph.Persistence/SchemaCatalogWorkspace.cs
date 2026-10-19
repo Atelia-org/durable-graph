@@ -45,10 +45,10 @@ internal sealed class SchemaCatalogWorkspace {
         return PrepareOwned([]);
     }
 
-    internal PreparedSchemaCatalogWrite PrepareOwned(IEnumerable<ObjectLayout> capturedLayouts) {
+    internal PreparedSchemaCatalogWrite PrepareOwned(IEnumerable<ObjectLayout> capturedLayouts, IEnumerable<DurableSchema>? declarations = null) {
         ObjectLayout[] layouts = _containers.Concat(capturedLayouts).Distinct().ToArray();
         foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
-        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = SchemaCatalogSemantics.Collect(_schemas.Values, layouts);
+        IReadOnlyDictionary<SchemaKey, DurableSchema> closure = SchemaCatalogSemantics.Collect(_schemas.Values.Concat(declarations ?? []), layouts);
         foreach ((SchemaKey key, DurableSchema schema) in closure) { CheckAccepted(key, schema); }
         SchemaCatalogSemantics.ValidateDeclarations((_accepted?.Schemas.Values ?? []).Concat(closure.Values),
             (_accepted?.ObjectLayouts ?? []).Concat(layouts));

@@ -31,16 +31,63 @@ internal sealed class RepositoryStorageFacade : IDisposable {
     internal HistoryGraphRecord ReadCurrent(HeadId branch) { RequireAvailable(); return _resources.ReadCurrent(branch); }
     internal HistoryGraphRecord? FindNearestState(HeadEntryId id, bool inclusive) { RequireAvailable(); return _resources.FindNearestState(id, inclusive); }
     internal PendingRepositorySave PrepareFrom(HeadId? branch, HeadEntryId? expected, string? rootLabel,
-        StoredGraphKind kind, ReadOnlyMemory<byte> summary, Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) {
+        StoredGraphKind kind, ReadOnlyMemory<byte> summary, Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce, Action? abort = null) {
         RequireAvailable();
-        return _resources.PrepareSaveFrom(branch, expected, rootLabel, kind, summary, produce);
+        return _resources.PrepareSaveFrom(branch, expected, rootLabel, kind, summary, produce, abort);
     }
     internal RepositorySaveResult Commit(PendingRepositorySave pending,
         Action<StoredGraphRevision>? installMeta = null, Action<StoredGraphRevision>? installState = null,
         Action<StoredGraphRevision>? prepareMeta = null, Action<StoredGraphRevision>? prepareState = null,
-        Action<StoredGraphRevision>? prepareBusinessDelivery = null, Action<RepositorySaveResult>? deliver = null) {
+        Action<StoredGraphRevision>? prepareBusinessDelivery = null, Action<RepositorySaveResult>? deliver = null, Action? cleanup = null) {
         RequireAvailable();
-        return _resources.CommitSave(pending, installMeta, installState, prepareMeta, prepareState, prepareBusinessDelivery, deliver);
+        return _resources.CommitSave(pending, installMeta, installState, prepareMeta, prepareState, prepareBusinessDelivery, deliver, cleanup);
+    }
+    internal SchemaCatalogWorkspace CatalogForPreparation { get { RequireAvailable(); return _resources.CatalogForPreparation; } }
+    internal void EnsureSaveUsable() { RequireAvailable(); _resources.EnsureSaveUsable(); }
+    internal PendingRepositorySave PrepareGroup(Func<PreparedSaveGroup> produce, Action? abort = null) {
+        RequireAvailable();
+        return _resources.PrepareSaveGroup(produce, abort);
+    }
+    internal IReadOnlyList<RepositorySaveResult> CommitGroup(PendingRepositorySave pending,
+        Action<StoredGraphRevision>? installMeta, Action<StoredGraphRevision>? prepareMeta,
+        Action<int, StoredGraphRevision>? prepareState, Action<int, StoredGraphRevision>? installState,
+        Action<IReadOnlyList<RepositorySaveResult>>? deliver, Action? cleanup) {
+        RequireAvailable();
+        return _resources.CommitSaveGroup(pending, installMeta, prepareMeta, prepareState, installState,
+            deliver: deliver, cleanup: cleanup);
+    }
+    internal void AbortCandidates(Action abort) {
+        try { abort(); }
+        catch { _resources.MarkFaulted(); throw; }
+    }
+    internal T[] MaterializeInputs<T>(IEnumerable<T> source) {
+        var items = new List<T>();
+        IEnumerator<T>? iterator = null;
+        Exception? primary = null, cleanup = null;
+        try {
+            iterator = source.GetEnumerator();
+            EnsureSaveUsable();
+            if (iterator is null) { throw new InvalidOperationException("The input returned no enumerator."); }
+            while (true) {
+                bool more = iterator.MoveNext();
+                EnsureSaveUsable();
+                if (!more) { break; }
+                T item = iterator.Current;
+                EnsureSaveUsable();
+                items.Add(item);
+            }
+        } catch (Exception error) { primary = error; }
+        try { iterator?.Dispose(); }
+        catch (Exception error) { cleanup = error; }
+        try { EnsureSaveUsable(); }
+        catch (Exception error) {
+            cleanup = cleanup is null ? error : new AggregateException("Input disposal and resource validation failed.", cleanup, error);
+        }
+        if (primary is not null && cleanup is not null) {
+            throw new AggregateException("Input enumeration and cleanup failed.", primary, cleanup);
+        }
+        if ((primary ?? cleanup) is { } failure) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw(); }
+        return items.ToArray();
     }
     internal void Discard(PendingRepositorySave pending) { ObjectDisposedException.ThrowIf(_disposed, this); _resources.DiscardSave(pending); }
     private void RequireAvailable() { ObjectDisposedException.ThrowIf(_disposed, this); _resources.RequireStorageAvailable(); }

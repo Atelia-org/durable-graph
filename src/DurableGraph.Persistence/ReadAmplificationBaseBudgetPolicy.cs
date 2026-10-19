@@ -5,10 +5,7 @@ namespace Atelia.DurableGraph.Persistence;
 /// The optional Base budget is soft; required writes do not consume it.
 /// </summary>
 internal static class ReadAmplificationBaseBudgetPolicy {
-    internal static ObjectRepresentationPlan Plan(
-        IReadOnlyList<ObjectSaveEstimate> objects,
-        ReadAmplificationBaseBudgetParameters parameters) {
-        ArgumentNullException.ThrowIfNull(objects);
+    internal static void ValidateParameters(ReadAmplificationBaseBudgetParameters parameters) {
         if (parameters.ReadAmplificationThreshold < 1) {
             throw new ArgumentOutOfRangeException(
                 nameof(parameters), parameters, "Read amplification threshold must be at least one.");
@@ -18,6 +15,14 @@ internal static class ReadAmplificationBaseBudgetPolicy {
             throw new ArgumentOutOfRangeException(
                 nameof(parameters), parameters, "Base budget percent must be between one and one hundred.");
         }
+
+    }
+
+    internal static ObjectRepresentationPlan Plan(
+        IReadOnlyList<ObjectSaveEstimate> objects,
+        ReadAmplificationBaseBudgetParameters parameters) {
+        ArgumentNullException.ThrowIfNull(objects);
+        ValidateParameters(parameters);
 
         HashSet<ObjectId> objectIds = new();
         List<ObjectWriteDecision> writes = new();

@@ -44,7 +44,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemaRoot = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
             Assert.Equal(4, result.Business.ObjectHeads.Count); // Root and three Lists; shared inner is one object.
-            Assert.Equal(0, session.Catalog.DirtyCount);
+
         }
 
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {

@@ -21,7 +21,7 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             DB087Widget root = new() { Numbers = Enumerable.Repeat(0, 123).ToList() };
             using (PreparedFixtureSave save = session.Prepare(root)) { save.Commit(); }
             StoredGraphRevision source = session.StateSource!;
-            SchemaCatalogView catalog = session.Catalog.Accepted!;
+            SchemaCatalogView catalog = session.AcceptedCatalog!;
             DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, source.Address), models.CreateEnvironment(), catalog);
             listId = Assert.Single(rows.Rows.Values, row => row.Kind == ObjectStateKind.List).Id.Value;
             ObjectVersionChainEntry first = Assert.Single(repository.Store.ReadObjectChain(MechanismFixture.Snapshot(repository, source.Address), listId).Entries);

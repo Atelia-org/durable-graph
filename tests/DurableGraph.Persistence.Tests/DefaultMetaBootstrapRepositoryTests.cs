@@ -46,7 +46,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             acceptedSchema = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(initialSchema, acceptedSchema);
             Assert.Equal(2, SchemaCatalogView.Load(repository.GraphStore, acceptedSchema).Schemas.Count);
-            Assert.Equal(acceptedSchema, main.Catalog.Accepted!.Snapshot!.Address);
+            Assert.Equal(acceptedSchema, main.AcceptedCatalog!.Snapshot!.Address);
             Assert.Same(baseline, main.Baseline);
             Assert.Equal(initialState, main.StateRevisionAddress);
             Assert.Same(root, main.State);

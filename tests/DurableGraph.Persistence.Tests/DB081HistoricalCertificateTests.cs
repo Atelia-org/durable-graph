@@ -68,9 +68,11 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         // DB-080 has no hot admission. Retaining this old entry is valid; installing
         // its historical certificate under newAddress would be an incorrect optimization.
         Assert.Same(renewedOldEntry, repository.PreparedStateEntry);
-        upgraded.Catalog.Set(new DurableSchema(Intermediate, 5, SchemaKind.InlineValue,
-            new DurableFieldInfo(1, TypeTag.Int64)));
-        CommitId catalogEvent = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
+        repository.CommitBranches(
+            [upgraded.CreateEventCommitRequest(upgraded.State!, parameters: NoRebase)],
+            [new DurableSchema(Intermediate, 5, SchemaKind.InlineValue,
+                new DurableFieldInfo(1, TypeTag.Int64))]);
+        CommitId catalogEvent = upgraded.BaseCommitId;
         var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
         var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore, configuration,
             repository.GraphStore.ReadMetadata(Describe(repository, catalogEvent).Address).SchemaRoot!.Value);

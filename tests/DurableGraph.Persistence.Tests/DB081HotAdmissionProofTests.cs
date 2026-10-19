@@ -119,9 +119,9 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Equal(1, counts.BaseReads);
         Assert.Equal(0, counts.DependencyChecks);
         PreparedStateRestoration old = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
-        main.Catalog.Set(WrongDependency);
         Assert.IsType<Root>(main.State).Value = 7;
-        CommitId newer = main.CommitState(parameters: NoRebase).Id;
+        repository.CommitBranches([main.CreateStateCommitRequest(parameters: NoRebase)], [WrongDependency]);
+        CommitId newer = main.BaseCommitId;
         Assert.Equal(1, counts.BaseReads);
         Assert.Equal(0, counts.DeltaReads);
         Assert.Equal(0, counts.DependencyChecks);
@@ -160,8 +160,8 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
             var previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
             if (conflict) {
-                warm.Catalog.Set(WrongDependency);
-                warm.CommitEvent(warm.State!, parameters: NoRebase);
+                repository.CommitBranches(
+                    [warm.CreateEventCommitRequest(warm.State!, parameters: NoRebase)], [WrongDependency]);
             }
             IDurableObject mainInitial = new Root { Value = 7 };
             WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node(), parameters: NoRebase).Id);

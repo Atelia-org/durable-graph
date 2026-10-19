@@ -129,4 +129,5 @@ internal enum RepositorySaveStage {
     BeforePublication,
     AfterPublication,
     BeforeInstall,
+    BeforeMemberInstall,
 }

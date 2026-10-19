@@ -43,7 +43,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
                 Assert.Same(resources.GraphStore, facade.Store);
             }
             StoredGraphRevision s0 = MechanismFixture.Snapshot(facade, state0);
-            DecodedGraphRows rows = StoredGraphDecoder.Read(facade.Store, MechanismFixture.Snapshot(facade, state0), models.CreateEnvironment(), session.Catalog.Accepted!);
+            DecodedGraphRows rows = StoredGraphDecoder.Read(facade.Store, MechanismFixture.Snapshot(facade, state0), models.CreateEnvironment(), session.AcceptedCatalog!);
             listId = Assert.Single(rows.Rows.Values, row => row.Kind == ObjectStateKind.List).Id;
             childId = Assert.Single(rows.Rows.Keys, id => id != rootId && id != listId);
             listHead0 = s0.ObjectHeads[listId.Value];
@@ -51,9 +51,8 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             childHead0 = s0.ObjectHeads[childId.Value];
             h0 = facade.Store.ReadObjectChain(MechanismFixture.Snapshot(facade, state0), listId.Value).ReconstructionPayloadBytes;
 
-            session.Catalog.Set(extra); // The new descriptor has no business CLR registration.
             root.Numbers[7] = 1;
-            using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event)) {
+            using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event, declarations: [extra])) {
                 Assert.Same(resources, save.Pending.Owner);
                 Assert.NotNull(save.Catalog.Write);
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
@@ -70,8 +69,8 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             Assert.Equal(state0, session.StateSource!.Address);
             Assert.Equal(schema0, session.StateSource.SchemaRoot);
             Assert.Same(root, session.State);
-            Assert.Equal(0, session.Catalog.DirtyCount);
-            Assert.Equal(schema1, session.Catalog.Accepted!.Snapshot!.Address);
+
+            Assert.Equal(schema1, session.AcceptedCatalog!.Snapshot!.Address);
             Assert.Equal(event1, MechanismFixture.FindCurrent(facade, "main")?.Address);
             Assert.Equal(state0, MechanismFixture.State(facade, "main")?.Address);
             Assert.Equal(schema1, facade.SharedSchemaRoot);
@@ -106,7 +105,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             DB087Widget root = AssertRing(session.State, 0); // E1's content is not editable State.
             Assert.Equal(state0, session.StateSource!.Address);
             Assert.Equal(schema0, session.StateSource.SchemaRoot);
-            Assert.Equal(schema1, session.Catalog.Accepted!.Snapshot!.Address);
+            Assert.Equal(schema1, session.AcceptedCatalog!.Snapshot!.Address);
             Assert.Equal(h0, facade.Store.ReadObjectChain(MechanismFixture.Snapshot(facade, state0), listId.Value).ReconstructionPayloadBytes);
             root.Numbers[7] = 2;
             long d;

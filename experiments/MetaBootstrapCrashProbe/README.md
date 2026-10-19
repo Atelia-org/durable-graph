@@ -1,5 +1,7 @@
 # Split DG ProcessCrashOnly 见证
 
+> 0096 后继注意：本 host 尚待迁移新 Branch/Commit API 和 B/S 发布定位，当前源码不可作为新内核的进程 Kill 门禁。以下运行协议及结果保旧版本含义；具体迁移接点见[组提交记录](../../docs/design-branches/0096-history-and-head-model/group-commit-integration.md#后续边界)。
+
 2026-10-17：已适配 HeadStore 和三入口布局；本轮重新运行初始化三个及保存六个真实 Kill 窗口均通过，来源和证据见 [DB-096 接入](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。
 
 2026-10-19：[Private 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)将分支目录改为 P0R2，本 host 同步该标记。本次构建、重跑矩阵及证据范围统一见该切片；旧结果不自动作为新格式资格。

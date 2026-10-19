@@ -84,7 +84,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             check(restored, 0);
             object[] restoredObjects = objects(restored);
             StoredGraphRevision prior = session.StateSource!;
-            SchemaCatalogView meta = session.Catalog.Accepted!;
+            SchemaCatalogView meta = session.AcceptedCatalog!;
             ModelExecutionEnvironment snapshot = registered.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
             DecodedGraphRows oldRows = StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s0), snapshot, meta);
             change(restored); // Remove, Add, three value patches, then reverse insertion order.

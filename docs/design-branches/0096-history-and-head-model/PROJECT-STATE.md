@@ -46,7 +46,7 @@
 
 **当前停点：定向 origin 已完成。**隔离分支 `db096/branch-repository-cutover` 的实现提交 `c9ad935` 已替换全集 adapter：单 Branch 查询只访问目标及直接相关来源，完整列表在已登记集合中检查环。公开 DG 签名与持久格式不变。Storage pin 已到 `70b406c` / `0.1.3-dev.20261019.g70b406c`，上游 `main` 已快进；准确源码、反例及新 S/G 包验收只查[接入记录](targeted-origin-integration.md)。DG 尚未正式合入。
 
-**下一片：公开 CommitRequest、owner 共同 Catalog 和真正多 Branch 提交共核。**先 Capture 全员，再统一准备 Schema、逐成员准备内容，一次发布 B₁…Bₙ 与必要 S；不更新 D。即时单提交复用单成员路径。成功必须推进全部 Base，State/Event 各自基线规则保持；输入枚举、准备、发布、安装、清理和交付都在同一操作边界内。实现接点与最小反例集中于[组内核 §9](group-kernel-design.md#9-新布局实际内核的施工接点)，不得用旧布局原语 Probe 代替正式接口验收。
+**当前实施中：公开 CommitRequest、owner 共同 Catalog 和真正多 Branch 提交共核。**先 Capture 全员，再统一准备 Schema、逐成员准备内容，一次发布 B₁…Bₙ 与必要 S；不更新 D。即时单提交复用单成员路径。成功必须推进全部 Base，State/Event 各自基线规则保持；输入枚举、准备、发布、安装、清理和交付都在同一操作边界内。实现接点与最小反例集中于[组内核 §9](group-kernel-design.md#9-新布局实际内核的施工接点)，不得用旧布局原语 Probe 代替正式接口验收。当前写入分为产品共核、健康公开调用、故障反例、旧内部 Catalog 测试迁移；主线程集成并统一构建。根 build 已0警告/0错误，完整 Persistence 1049/1049通过（含55新组反例）；完整Runtime 1724/1724亦通过，新G普通包资格待完成。当前证据与未覆盖处见[组提交实施验收](group-commit-integration.md)。
 
 **压缩后恢复顺序：完整读本文 → 组内核 §9 与联合提交合同 → 当前 BranchSaveSession / RepositoryResources / WorkingCopy 源码。**用当前 pin 的源码根或完整新 feed；旧 `f8868b5` worktree/feed只保其原资格。不要重迁消费者、重做 D 优化或重新等待 origin 交付。
 
@@ -76,10 +76,10 @@
 
 ## 实现与证据边界
 
-- 当前定向 origin 的源码、测试、S/G 来源、包资格及 Git 边界见[接入记录](targeted-origin-integration.md)。新包只验受影响 Split/Tag 与上游四 smoke；没有把前片11门禁外推到新 G。
+- 定向 origin 的源码、测试、S/G 来源、包资格及 Git 边界见[接入记录](targeted-origin-integration.md)。新包只验受影响 Split/Tag 与上游四 smoke；没有把前片11门禁外推到新 G。
 - 原 B2 调用闭包、完整根回归及11个普通包消费者见[包迁移验收](package-cutover-validation.md)；来源/范围保持其原版本，后续不重复那次迁移。
 - [交付复核](headstore-delivery-review.md)是更早同库 Handle/历史能力的独立消费者证据；[误用检出实验](handle-misuse-detection.md)支持紧凑 ID 的开发期诊断边界，旧强 scope 建议已退出。二者不代替当前产品验收。
-- 组提交、根/子树和分页尚未作为公开产品能力交付；未公开发布包、未正式合入 DG。底层普通恢复、完整帧 append-only、owner/fault/lifetime 纪律保持。
+- 组提交已获源码资格、普通包仍待验收；根/子树和分页尚未作为公开产品能力交付；未公开发布包、未正式合入 DG。底层普通恢复、完整帧 append-only、owner/fault/lifetime 纪律保持。
 
 ## 按需阅读
 
@@ -91,7 +91,7 @@
 | 五种调用流程与定位值职责 | [存档调用故事](save-handle-stories.md) |
 | 最小调用面与当前创建协议建议 | [API草图](api-sketch.md) |
 | 命名原则、竞争方案、旧名映射与审阅限度 | [命名审阅](api-naming-review.md) |
-| 跨分支共同保存、已选请求路线与实验题 | [联合提交设计](multi-branch-commits.md) |
+| 跨分支共同保存、请求合同及实施资格 | [联合提交设计](multi-branch-commits.md)；[组提交验收](group-commit-integration.md) |
 | accepted Catalog、候选生命周期、组安装及下一片判据 | [组内核](group-kernel-design.md) |
 | 继承历史来源资格、最小布局与真实恢复纵切 | [Branch 纵切](branch-vertical-design.md) |
 | 已完成 A 的 snapshot 接缝、历史权威切换边界 | [来源接缝](history-source-seam.md) |

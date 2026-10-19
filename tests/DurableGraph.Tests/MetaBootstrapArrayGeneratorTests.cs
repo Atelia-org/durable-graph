@@ -45,7 +45,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemaRoot = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
             Assert.Equal(3, result.Business.ObjectHeads.Count);
-            Assert.Equal(0, session.Catalog.DirtyCount);
+
         }
 
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {

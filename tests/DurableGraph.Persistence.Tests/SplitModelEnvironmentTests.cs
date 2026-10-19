@@ -29,8 +29,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         ProbeRoot root = new() { Value = 7 };
         StoredGraphRevision s0, s1;
         using (PreparedFixtureSave save = writer.Prepare(root)) { s0 = save.Commit().Business; }
-        writer.Catalog.Set(Extra);
-        using (PreparedFixtureSave save = writer.Prepare(root)) {
+        using (PreparedFixtureSave save = writer.Prepare(root, declarations: [Extra])) {
             Assert.Empty(save.Business.Write.Records);
             s1 = save.Commit().Business;
         }
@@ -229,8 +228,8 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         ProbeRoot root = new() { Value = 7 };
         StoredGraphRevision good, bad;
         using (PreparedFixtureSave save = writer.Prepare(root)) { good = save.Commit().Business; }
-        writer.Catalog.Set(new DurableSchema(CurrentRoot.Type, CurrentRoot.Version, new DurableFieldInfo(1, TypeTag.Int64)));
-        using (PreparedFixtureSave save = writer.Prepare(root)) { bad = save.Commit().Business; }
+        using (PreparedFixtureSave save = writer.Prepare(root, declarations:
+            [new DurableSchema(CurrentRoot.Type, CurrentRoot.Version, new DurableFieldInfo(1, TypeTag.Int64))])) { bad = save.Commit().Business; }
         Counts counts = new();
         StateModelRegistry.FrozenConfiguration frozen = ProbeModels(delayedLookup: true, counts).FreezeConfiguration();
         DecodedRevision old = DecodedRevision.ReadStoredGraph(repository.Store, good, frozen);

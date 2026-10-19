@@ -290,6 +290,24 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 读写和只读打开都不兼容旧布局，实验数据可重建，需要旧数据时先用对应版本另行导出。
 Schema 简化背景见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)，当前布局见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)。
 
+## 多分支共同保存
+
+同一 Repository 中，已打开的多个 WorkingCopy 可以共同保存。例如世界减少一把剑、角色增加一把剑后，把两份 State 一同提交：
+
+```csharp
+// worldWork 和 playerWork 属于同一 repo，且各自已有 State。
+var saved = repo.CommitBranches([
+    worldWork.CreateStateCommitRequest(),
+    playerWork.CreateStateCommitRequest()
+]);
+CommitId worldCommit = saved[worldWork.BranchId].Id;
+CommitId playerCommit = saved[playerWork.BranchId].Id;
+```
+
+请求只保留根引用，执行 `CommitBranches` 时才捕获对象；整个调用期间保持全部参与图稳定。摘要在创建请求时复制。每条分支只能出现一次，正常返回表示全部业务提交和必要 Schema 已共同发布。成功后旧请求因 Base 改变而过期。
+
+也可用 `CreateEventCommitRequest(domainEvent)` 参与混组：Event 仅推进历史位置，不保存该工作副本的 State 编辑。失败检查 `RepositoryPublicationException.Outcome`、`Members` 与 `IsFaulted`；发布失败不回滚领域修改，也不替应用检查物品守恒。完整公开调用和冷重开见[普通包示例](experiments/PackageConsumerProbe/GroupCommitConsumer/README.md)。
+
 ## 调整保存策略
 
 `ReadAmplificationThreshold` 控制何时产生可选 Base 动机：小值倾向缩短冷恢复的对象链，大值倾向少写重复 Base、节省历史存储。

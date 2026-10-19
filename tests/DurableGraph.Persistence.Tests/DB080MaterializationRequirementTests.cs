@@ -58,8 +58,9 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
         PreparedStateRestoration prepared = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(2, prepared.SchemaRequirementCount); // Owner plus Allocate/Hydrate-only dependency.
 
-        main.Catalog.Set(wrongDependency); // The key is absent from S0; a later S may declare it.
-        CommitId catalogEvent = main.CommitEvent(main.State!).Id;
+        // The key is absent from S0; this Event's commit may declare it in a later S.
+        repository.CommitBranches([main.CreateEventCommitRequest(main.State!)], [wrongDependency]);
+        CommitId catalogEvent = main.BaseCommitId;
         var configuration = (StateModelRegistry.FrozenConfiguration)typeof(Repository)
             .GetField("_modelConfiguration", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
         var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,

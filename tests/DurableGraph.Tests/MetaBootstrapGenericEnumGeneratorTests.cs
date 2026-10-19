@@ -42,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             schemaRoot = result.Meta!.Address;
             rootId = result.Business.RootId.Value;
             Assert.Equal(3, result.Business.ObjectHeads.Count); // Inline, enum and Nullable never acquire object IDs.
-            Assert.Equal(0, session.Catalog.DirtyCount);
+
         }
 
         // Close every FS/VS/DG resource before decoding meta, with no business registry input.

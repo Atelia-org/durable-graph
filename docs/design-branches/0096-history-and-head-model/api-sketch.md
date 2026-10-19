@@ -56,7 +56,7 @@ repo.CommitBranches(requests)                      → BranchId 到 CommitInfo �
 
 ### B2 的具体值与迁移合同
 
-2026-10-19 收窄：以下薄 ID 与 codec 已随 B2 实施；组提交、根/子树和分页仍为待实施设计。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
+2026-10-19 收窄：以下薄 ID 与 codec 已随 B2 实施；[组提交](group-commit-integration.md)已接入，根/子树和分页仍为待实施设计。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
 
 ```csharp
 public readonly struct BranchId : IEquatable<BranchId> {
@@ -92,7 +92,7 @@ repo.ResolveTag(name)                         → CommitId
 
 Checkpoint 的所选位置用 `CommitInfo Commit`，对应 State/Event 结果的前序位置用 `PreviousEventCommit` / `PreviousStateCommit`，与其领域根同时为空或同时存在；不再塞 owner-bound CheckpointAddress。ReadCheckpoint 的两个对象图独立；ReadPair 可以读取不同根、兄弟分支或同一位置，保输入顺序及现有整对只读共享合同。ReadFrames 固定一次 current、完整物化旧到新列表。EnumerateEvents 保原上下界/方向/按需推进/寿命合同；不把完整扫描与分页混淆。具体停止条件与反例集中于[施工计划 §3.1](branch-cutover-plan.md#31-repository-的两个读取步骤)。ResolveTag 仍验证目标的成员/Entry/业务描述，不能只解码12B就宣布成功。
 
-沿用 `RepositoryPublicationException` 与三个 Outcome，仅补必要的已知定位字段：`TargetBranchId?`、`ExpectedBaseCommitId?`、`CandidateCommitId?`。普通保存前已知前两者；创建取得物理 Head 后，在登记及结果交付失败时保留 TargetBranchId。CandidateCommitId 仅填已经实际取得的新业务 Entry，不能预造；新根取得该 Entry 也不等于已登记为 DG Branch，fork 不产生新 Entry。Confirmed 异常仍可能拿不到新 CommitId。物理创建尚未返回 HeadId 时 TargetBranchId 可以为空；尚未尝试 D 登记时 DG 确知 NotPublished。Tag 失败可留这三个字段为空，由调用者持有的 tag name 查结果。保现有诊断 CandidateRevisionAddress，不把它变成存档句柄，也不新增通用操作结果框架。
+沿用 `RepositoryPublicationException` 与三个 Outcome；组提交通过自有 `Members` 列表保各成员的已知定位，单成员保便利字段，多成员时这些便利字段为 null。每个成员的定位字段：`TargetBranchId?`、`ExpectedBaseCommitId?`、`CandidateCommitId?`。普通保存前已知前两者；创建取得物理 Head 后，在登记及结果交付失败时保留 TargetBranchId。CandidateCommitId 仅填已经实际取得的新业务 Entry，不能预造；新根取得该 Entry 也不等于已登记为 DG Branch，fork 不产生新 Entry。Confirmed 异常仍可能拿不到新 CommitId。物理创建尚未返回 HeadId 时 TargetBranchId 可以为空；尚未尝试 D 登记时 DG 确知 NotPublished。Tag 失败可留这三个字段为空，由调用者持有的 tag name 查结果。保现有诊断 CandidateRevisionAddress，不把它变成存档句柄，也不新增通用操作结果框架。
 
 Outcome 不表示 owner 健康或业务对象回滚；前置错误不必全部包异常。持久 ID 能跨打开使用，不改变 WorkingCopy、source snapshot、prepared material 绑定当前 owner 的纪律。ID 相等不能替代 owner/lifetime/model 与实际 source 复核。
 

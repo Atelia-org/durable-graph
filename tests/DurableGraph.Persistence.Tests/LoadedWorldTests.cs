@@ -219,14 +219,12 @@ public sealed class LoadedWorldTests : IDisposable {
         World world = Assert.IsType<World>(session.State);
         // A conflicting final intent meets the captured target in the same temporary
         // catalog; no global registration mutates the source's accurate old view.
-        session.Catalog.Set(new DurableSchema("World", 2, new DurableFieldInfo(1, TypeTag.Int64)));
         long tail = Tail();
-        Assert.Throws<SchemaConflictException>(() => session.Prepare(world, parameters: NoRebase));
+        Assert.Throws<SchemaConflictException>(() => session.Prepare(world, parameters: NoRebase, declarations: [new DurableSchema("World", 2, new DurableFieldInfo(1, TypeTag.Int64))]));
         Assert.Equal(tail, Tail());
         Assert.Equal(address, session.StateSource!.Address);
         Assert.False(_repository.HasPending);
-        session.Catalog.Set(Current);
-        using PreparedFixtureSave retry = session.Prepare(world, parameters: NoRebase);
+        using PreparedFixtureSave retry = session.Prepare(world, parameters: NoRebase, declarations: [Current]);
         Assert.Equal(address, retry.Business.Write.SourceGraph);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(retry.Business.Write.Records).Kind);
     }

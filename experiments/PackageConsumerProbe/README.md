@@ -12,6 +12,7 @@ DB-096 的活动入口已完成迁移与普通包运行，准确 G/S、回归和
 | [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | README 原文纯 State 连续保存、历史分叉与冷续写；可选 Event、Upgrade/Verify 及候选交付 |
 | [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、十八项旧 API/错误调用（含旧 BranchCheckout、Move 和 Private/ToShared）精确编译负例及恢复合法源码后的冷保存 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
+| [GroupCommitConsumer](GroupCommitConsumer/README.md)、[runner](Run-GroupCommitProbe.ps1) | 多分支共同 Schema、执行时捕获、State/Event 安装差异及冷重开；本次资格见0096工作集 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
 | [EventHistoryRecoveryConsumer](EventHistoryRecoveryConsumer/README.md)、[runner](Run-EventHistoryRecoveryProbe.ps1) | 应用自身的事件快照与处理进度协议 |

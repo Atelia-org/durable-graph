@@ -30,8 +30,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", Ring()).Id);
             seed.CreateTag("state", main.BaseCommitId);
             seed.CreateTag("event1", main.CommitEvent(new DB087Widget { Value = 51 }).Id);
-            main.Catalog.Set(Extra);
-            seed.CreateTag("event2", main.CommitEvent(new DB087Widget { Value = 52 }).Id);
+            seed.CreateTag("event2", seed.CommitBranches([main.CreateEventCommitRequest(new DB087Widget { Value = 52 })], [Extra])[main.BranchId].Id);
         }
         FrameAddress saved;
         ObjectId listId;
@@ -250,10 +249,10 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             BusinessPersistenceAdapter foreignBusiness = BusinessPersistenceAdapter.LoadState(foreign.GraphStore, Snapshot(foreign, state), configuration);
             long appended = repository.GraphStore.AppendedFrames;
             using RepositoryStorageFacade borrowed = new(ResourcesOf(repository));
-            Assert.Throws<InvalidDataException>(() => new BranchSaveSession(borrowed, warm.BranchId.Value, warm.BaseCommitId.Value, configuration, static () => { }, foreignBusiness));
+            Assert.Throws<InvalidDataException>(() => new BranchSaveSession(borrowed, warm.BranchId.Value, warm.BaseCommitId.Value, configuration, foreignBusiness));
             Assert.Equal(appended, repository.GraphStore.AppendedFrames);
             BusinessPersistenceAdapter ownBusiness = BusinessPersistenceAdapter.LoadState(repository.GraphStore, Snapshot(repository, state), configuration);
-            BranchSaveSession positive = new(borrowed, warm.BranchId.Value, warm.BaseCommitId.Value, configuration, static () => { }, ownBusiness);
+            BranchSaveSession positive = new(borrowed, warm.BranchId.Value, warm.BaseCommitId.Value, configuration, ownBusiness);
             Assert.Equal(Describe(foreign, state).Address, positive.StateSource!.Address);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(positive.State).Value);
             Assert.Equal(appended, repository.GraphStore.AppendedFrames);
@@ -266,8 +265,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(allocations, controls.Allocations);
             Assert.Equal(bodyReads, controls.BodyReads);
 
-            warm.Catalog.Set(WrongBodyDependency); // Absent from old S; this new S may legally declare the unknown key.
-            CommitId newState = warm.CommitState().Id;
+            CommitId newState = repository.CommitBranches([warm.CreateStateCommitRequest()], [WrongBodyDependency])[warm.BranchId].Id;
             Assert.Same(prepared, repository.PreparedStateEntry);
             FrameAddress newSchema = repository.GraphStore.ReadMetadata(Describe(repository, newState).Address).SchemaRoot!.Value;
             var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore, configuration, newSchema);

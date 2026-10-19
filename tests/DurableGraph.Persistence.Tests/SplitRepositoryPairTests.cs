@@ -86,8 +86,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
             seed.CreateTag("before", main.BaseCommitId);
-            main.Catalog.Set(Extra);
-            CommitId next = main.CommitEvent(main.State!).Id;
+            CommitId next = seed.CommitBranches([main.CreateEventCommitRequest(main.State!)], [Extra])[main.BranchId].Id;
             seed.CreateTag("after", next);
             StoredGraphRevision first = Snapshot(seed, main.StateSourceCommitId!.Value);
             StoredGraphRevision second = Snapshot(seed, next);

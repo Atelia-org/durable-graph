@@ -11,27 +11,33 @@ internal sealed class PendingRepositorySave : IDisposable {
         PreparedGraphWrite business, PreparedGraphWrite? catalog, FrameAddress? catalogSource, FrameAddress? stateSource) {
         Owner = owner;
         Baseline = baseline;
-        Branch = branch;
-        ExpectedEntry = expectedEntry;
-        RootLabel = rootLabel;
-        Kind = kind;
-        Summary = summary;
-        Business = business;
+        Members = [new(branch, expectedEntry, rootLabel, kind, summary, business, stateSource)];
         Catalog = catalog;
         CatalogSource = catalogSource;
-        StateSource = stateSource;
+
     }
     internal RepositoryResources Owner { get; }
     internal RepositoryResources.PublicationBaseline Baseline { get; }
-    internal HeadId? Branch { get; }
-    internal HeadEntryId? ExpectedEntry { get; }
-    internal string? RootLabel { get; }
-    internal StoredGraphKind Kind { get; }
-    internal ReadOnlyMemory<byte> Summary { get; }
-    internal PreparedGraphWrite Business { get; }
+    internal PendingRepositorySave(RepositoryResources owner, RepositoryResources.PublicationBaseline baseline,
+        PendingBusinessSave[] members, PreparedGraphWrite? catalog, FrameAddress? catalogSource) {
+        Owner = owner;
+        Baseline = baseline;
+        Members = members;
+        Catalog = catalog;
+        CatalogSource = catalogSource;
+    }
+    internal PendingBusinessSave[] Members { get; }
+    internal HeadId? Branch => Single.Branch;
+    internal HeadEntryId? ExpectedEntry => Single.ExpectedEntry;
+    internal string? RootLabel => Single.RootLabel;
+    internal StoredGraphKind Kind => Single.Kind;
+    internal ReadOnlyMemory<byte> Summary => Single.Summary;
+    internal PreparedGraphWrite Business => Single.Business;
+    internal FrameAddress? StateSource => Single.StateSource;
+    private PendingBusinessSave Single => Members.Length == 1 ? Members[0]
+        : throw new InvalidOperationException("This save has multiple members.");
     internal PreparedGraphWrite? Catalog { get; }
     internal FrameAddress? CatalogSource { get; }
-    internal FrameAddress? StateSource { get; }
     internal bool IsPrepared => _state == PendingState.Prepared;
     internal void BeginCommit() {
         if (!IsPrepared) { throw new InvalidOperationException("A pending save is single-use."); }
@@ -44,3 +50,8 @@ internal sealed class PendingRepositorySave : IDisposable {
         Owner.DiscardSave(this);
     }
 }
+
+internal sealed record PendingBusinessSave(HeadId? Branch, HeadEntryId? ExpectedEntry, string? RootLabel,
+    StoredGraphKind Kind, ReadOnlyMemory<byte> Summary, PreparedGraphWrite Business, FrameAddress? StateSource);
+
+internal sealed record PreparedSaveGroup(PendingBusinessSave[] Members, PreparedGraphWrite? Catalog);

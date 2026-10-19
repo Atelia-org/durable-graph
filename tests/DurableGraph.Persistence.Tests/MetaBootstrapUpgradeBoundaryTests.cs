@@ -52,9 +52,10 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
                     var session = new BranchSaveSessionFixture(repository, "main", Registry(Model(Current, Old, cutText: true)));
                     BoundaryRoot root = Assert.IsType<BoundaryRoot>(session.State);
                     for (int mutation = 0; mutation < 2; mutation++) {
-                        session.Catalog.Set(new DurableSchema(name + $".Added{mutation}", 1, new DurableFieldInfo(1, TypeTag.Byte)));
                         root.Value++;
-                        using var save = session.Prepare(root);
+                        using var save = session.Prepare(root, declarations: [
+                            new DurableSchema(name + $".Added{mutation}", 1, new DurableFieldInfo(1, TypeTag.Byte)),
+                        ]);
                         current = save.Commit().Business.Address;
                         Assert.Equal(current, session.StateSource!.Address);
                         SchemaCatalogView accepted = SchemaCatalogView.Load(repository.Store, repository.SharedSchemaRoot!.Value);
@@ -95,8 +96,6 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         }));
         var outer = new BranchSaveSessionFixture(repository, "main", models);
         inner = new BranchSaveSessionFixture(repository, "other", models);
-        outer.Catalog.Set(Old);
-        inner.Catalog.Set(Old);
 
         BoundaryRoot root = new() { Value = 7 };
         using (var save = outer.Prepare(root)) {
@@ -253,8 +252,8 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         }
         Assert.Equal(eventResult.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
         Assert.Equal(source.State, session.StateSource!.Address);
-        Assert.Equal(eventResult.Business.SchemaRoot, session.Catalog.Accepted!.Snapshot!.Address);
-        Assert.True(session.Catalog.Accepted.Schemas.ContainsKey(new(Current.Type, 2)));
+        Assert.Equal(eventResult.Business.SchemaRoot, session.AcceptedCatalog!.Snapshot!.Address);
+        Assert.True(session.AcceptedCatalog.Schemas.ContainsKey(new(Current.Type, 2)));
         Assert.Same(root, session.State);
 
         using (var discarded = session.Prepare(root)) {
@@ -291,8 +290,9 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         var first = new BranchSaveSessionFixture(repository, "main", Registry(Model(Current, Old)));
         BoundaryRoot upgraded = Assert.IsType<BoundaryRoot>(first.State);
         var other = new BranchSaveSessionFixture(repository, "other", Registry(Model(Old, Old)));
-        other.Catalog.Set(Schema(2, wideValue: true));
-        using (var publishConflict = other.Prepare(new BoundaryRoot { Value = 9 })) { publishConflict.Commit(); }
+        using (var publishConflict = other.Prepare(new BoundaryRoot { Value = 9 }, declarations: [Schema(2, wideValue: true)])) {
+            publishConflict.Commit();
+        }
         FrameAddress shared = repository.SharedSchemaRoot!.Value;
         long appended = repository.Store.AppendedFrames;
         Assert.Throws<SchemaConflictException>(() => first.Prepare(upgraded));

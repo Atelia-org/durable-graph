@@ -44,7 +44,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             metaRoot = result.Meta!.Address;
-            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s0), snapshot, session.Catalog.Accepted);
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s0), snapshot, session.AcceptedCatalog);
             ids = expected.Take(3).Select(schema => Assert.Single(rows.Rows.Values, row => row.Schema!.Equals(schema)).Id.Value).ToArray();
             Assert.Equal(result.Business.RootId.Value, ids[0]);
             Assert.Equal(3, result.Business.ObjectHeads.Count); // Base and Pair declarations have no independent objects.
@@ -127,7 +127,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     Assert.Equal(ObjectVersionKind.Delta, chain.Entries[1].Record.Kind);
                     Assert.Equal(source.ObjectHeads[id], chain.Entries[1].Record.PriorAddress);
                 }
-                SchemaCatalogView catalog = session.Catalog.Accepted!;
+                SchemaCatalogView catalog = session.AcceptedCatalog!;
                 AssertBootstrapGenericInheritanceDtos(StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s1),
                     registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key)), catalog), ids, 1);
             }

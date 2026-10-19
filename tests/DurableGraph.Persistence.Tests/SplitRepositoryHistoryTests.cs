@@ -25,9 +25,8 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", root).Id);
             root = Assert.IsType<DB087Widget>(main.State);
             CommitId s0 = main.BaseCommitId;
-            main.Catalog.Set(Extra);
             root.Numbers[7] = 11;
-            CommitId e1 = main.CommitEvent(root).Id;
+            CommitId e1 = repository.CommitBranches([main.CreateEventCommitRequest(root)], [Extra])[main.BranchId].Id;
             CommitId e2 = main.CommitEvent(Ring(12)).Id;
             root.Numbers[7] = 2;
             CommitId s1 = main.CommitState().Id;
@@ -153,8 +152,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
     public void ReadCheckpointUsesEachGraphsAccurateSchemaAndReturnsIndependentMutableRoots() {
         using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
-            main.Catalog.Set(Extra);
-            main.CommitEvent(main.State!);
+            seed.CommitBranches([main.CreateEventCommitRequest(main.State!)], [Extra]);
         }
         Dictionary<string, byte[]> files = SnapshotFiles(_path);
         Counts counts = new();
@@ -186,8 +184,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", Ring(1)).Id);
             selected = Describe(seed, main.BaseCommitId).Address;
             seed.CreateTag("prefix", main.BaseCommitId);
-            main.Catalog.Set(Extra);
-            main.CommitEvent(Ring(2));
+            seed.CommitBranches([main.CreateEventCommitRequest(Ring(2))], [Extra]);
             shared = seed.SharedSchemaRoot!.Value;
         }
         using (Repository noModels = Repository.OpenStorageExisting(_path, new())) {

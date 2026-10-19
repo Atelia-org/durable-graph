@@ -80,7 +80,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Null(record.PriorAddress);
             });
             Assert.Equal(PublishedGraph(EvidenceResources(repository), baseline).ObjectHeads[root.Value], saved.ObjectHeads[root.Value]);
-            AssertBootstrapContainerUpgradeCatalog(branch.Catalog.Accepted!, ExpectedBootstrapContainerUpgrade(1), ExpectedBootstrapContainerUpgrade(2));
+            AssertBootstrapContainerUpgradeCatalog(branch.AcceptedCatalog!, ExpectedBootstrapContainerUpgrade(1), ExpectedBootstrapContainerUpgrade(2));
             Assert.Equal(saved.SchemaRoot, repository.SharedSchemaRoot);
             shared = EvidenceReadRef(repository, 2);
             EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, oldFrames);

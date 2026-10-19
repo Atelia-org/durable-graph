@@ -34,9 +34,8 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             ModelExecutionEnvironment executionModels = main.Models;
             DecodedRevision.SchemaViewBindingEnvironment? executionEnvironment = main.BindingEnvironment;
             seed.CreateTag("state0", main.BaseCommitId);
-            main.Catalog.Set(Extra);
             root.Numbers[7] = 200;
-            seed.CreateTag("event", main.CommitEvent(root).Id);
+            seed.CreateTag("event", seed.CommitBranches([main.CreateEventCommitRequest(root)], [Extra])[main.BranchId].Id);
             Assert.Same(initialBaseline, main.Baseline);
             Assert.Same(executionModels, main.Models);
             Assert.Same(executionEnvironment, main.BindingEnvironment);

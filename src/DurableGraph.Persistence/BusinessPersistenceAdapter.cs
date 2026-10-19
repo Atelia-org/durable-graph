@@ -33,37 +33,34 @@ internal sealed class BusinessPersistenceAdapter {
     internal BusinessSaveCandidate CaptureOwned(IDurableObject root, StoredGraphKind kind) =>
         _workspace.Capture(root, independentSnapshot: kind == StoredGraphKind.Event);
 
+    // The operation that owns Capture owns failure cleanup too; leave staging/ready candidates
+    // available for its single AbortPreparation pass, including when body preparation fails.
     internal PreparedBusinessWrite PrepareOwned(BusinessSaveCandidate candidate, SchemaCatalogView catalog,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(catalog);
         _workspace.RequirePreparing(candidate);
-        try {
-            NormalizedGraphState? baseline = _workspace.Baseline;
-            if (Source?.Address != baseline?.RevisionAddress) { throw new InvalidDataException("State source and normalized baseline must agree."); }
-            baseline?.RequireStoredSource(_store, _workspace.Models);
-            IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents();
-            List<PreparedObject> rows = [];
-            foreach (PreparedCapturedObject item in prepared) {
-                EncodedBaseObjectBody body = new(TypedBaseBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog));
-                rows.Add(ObjectWritePlanner.ClassifyCaptured(item, body,
-                    item.Previous is null ? null : Source!.ObjectHeads[item.Current.Id.Value],
-                    baseline is not null && baseline.Objects.TryGetValue(item.Current.Id, out NormalizedObject? prior) && prior.RequiresRewrite));
-            }
-            // Keep the existing full post-live Base budget. P0 does not claim total O(k).
-            Dictionary<ObjectId, long> priorH = baseline?.Objects.ToDictionary(static pair => pair.Key,
-                static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes) ?? [];
-            var (records, _, _) = ObjectWritePlanner.PlanObjectWrites(rows, priorH, parameters ?? new(5, 5));
-            NormalizedGraphState? next = candidate.IsIndependentSnapshot ? null :
-                NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline);
-            HashSet<ObjectId> live = candidate.Graph.Objects.Select(static row => row.Id).ToHashSet();
-            uint[] removed = baseline?.Objects.Keys.Where(id => !live.Contains(id)).Select(static id => id.Value).ToArray() ?? [];
-            candidate.CompletePreparation(next);
-            return new(this, _store, candidate, new(Source?.Address, candidate.RootId, records, removed), catalog);
-        } catch {
-            candidate.AbortPreparation();
-            throw;
+        NormalizedGraphState? baseline = _workspace.Baseline;
+        if (Source?.Address != baseline?.RevisionAddress) { throw new InvalidDataException("State source and normalized baseline must agree."); }
+        baseline?.RequireStoredSource(_store, _workspace.Models);
+        IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents();
+        List<PreparedObject> rows = [];
+        foreach (PreparedCapturedObject item in prepared) {
+            EncodedBaseObjectBody body = new(TypedBaseBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog));
+            rows.Add(ObjectWritePlanner.ClassifyCaptured(item, body,
+                item.Previous is null ? null : Source!.ObjectHeads[item.Current.Id.Value],
+                baseline is not null && baseline.Objects.TryGetValue(item.Current.Id, out NormalizedObject? prior) && prior.RequiresRewrite));
         }
+        // Keep the existing full post-live Base budget. P0 does not claim total O(k).
+        Dictionary<ObjectId, long> priorH = baseline?.Objects.ToDictionary(static pair => pair.Key,
+            static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes) ?? [];
+        var (records, _, _) = ObjectWritePlanner.PlanObjectWrites(rows, priorH, parameters ?? new(5, 5));
+        NormalizedGraphState? next = candidate.IsIndependentSnapshot ? null :
+            NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline);
+        HashSet<ObjectId> live = candidate.Graph.Objects.Select(static row => row.Id).ToHashSet();
+        uint[] removed = baseline?.Objects.Keys.Where(id => !live.Contains(id)).Select(static id => id.Value).ToArray() ?? [];
+        candidate.CompletePreparation(next);
+        return new(this, _store, candidate, new(Source?.Address, candidate.RootId, records, removed), catalog);
     }
 
     internal void PrepareInstall(PreparedBusinessWrite prepared, StoredGraphRevision graph) {

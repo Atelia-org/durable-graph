@@ -192,7 +192,8 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             using (PreparedFixtureSave seed = session.Prepare(root)) { oldState = seed.Commit().Business.Address; }
             oldMeta = repository.SharedSchemaRoot!.Value;
             NormalizedGraphState source = Baseline(session);
-            SchemaCatalogView accepted = session.Catalog.Accepted!;
+            SchemaCatalogWorkspace catalogOwner = repository.CatalogForPreparation;
+            SchemaCatalogView accepted = catalogOwner.Accepted!;
             ObjectId childId = source.Objects[session.StateSource!.RootId].Current.GetState<WidgetState>().Segment0Field3;
             branchId = MechanismFixture.Branch(repository, "main");
             var branches = repository.Heads.ReadHead(branchId).Unwrap();
@@ -201,8 +202,8 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             branchPayload = branches.Payload.ToArray(); sharedPayload = shared.Payload.ToArray();
             before = DataBytes(repository.Data);
             root.Numbers[7] = 9;
-            session.Catalog.Set(new DurableSchema("Unpublished.InstallationFailure", 1, new DurableFieldInfo(1, TypeTag.Int32)));
-            using PreparedFixtureSave save = session.Prepare(root);
+            using PreparedFixtureSave save = session.Prepare(root, declarations:
+                [new DurableSchema("Unpublished.InstallationFailure", 1, new DurableFieldInfo(1, TypeTag.Int32))]);
             bool reached = false, publicationReached = false;
             repository.SaveStageObserver = point => {
                 if (point == RepositorySaveStage.BeforePublication) { publicationReached = true; }
@@ -223,8 +224,7 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             orphan = error.CandidateRevisionAddress!.Value;
             Assert.True(repository.IsFaulted);
             Assert.Same(source, Baseline(session));
-            Assert.Same(accepted, session.Catalog.Accepted);
-            Assert.Equal(1, session.Catalog.DirtyCount);
+            Assert.Same(accepted, catalogOwner.Accepted);
         }
         using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenExisting(_path);
         var reopenedBranches = reopened.Heads.ReadHead(branchId).Unwrap();

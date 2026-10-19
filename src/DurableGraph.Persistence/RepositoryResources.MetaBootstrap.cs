@@ -259,124 +259,30 @@ public sealed partial class RepositoryResources {
     }
 
     internal PendingRepositorySave PrepareSaveFrom(HeadId? branch, HeadEntryId? expected, string? rootLabel,
-        StoredGraphKind kind, ReadOnlyMemory<byte> summary, Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce) {
-        EnsureEditingAllowed();
-        ArgumentNullException.ThrowIfNull(produce);
-        if (kind is not StoredGraphKind.State and not StoredGraphKind.Event) { throw new ArgumentException("A business graph kind is required.", nameof(kind)); }
-        BusinessEntryPayloadCodec.ValidateSummaryLength(summary.Length);
-        byte[] ownedSummary = summary.ToArray();
-        FrameAddress? source = null;
-        if (branch is { } target) {
-            if (expected is null || rootLabel is not null || ReadCurrent(target).Id != expected.Value) { throw new InvalidOperationException("The branch's accepted Commit has changed."); }
-            source = FindNearestState(expected.Value, true)?.Address;
-        } else {
-            if (expected is not null) { throw new ArgumentException("A new root cannot have an accepted Commit."); }
-            ValidateDisplayLabel(rootLabel!);
-        }
-        _preparing = true;
-        try {
+        StoredGraphKind kind, ReadOnlyMemory<byte> summary, Func<(PreparedGraphWrite Business, PreparedGraphWrite? Catalog)> produce,
+        Action? abort = null) => PrepareSaveGroup(() => {
+            ArgumentNullException.ThrowIfNull(produce);
+            if (kind is not StoredGraphKind.State and not StoredGraphKind.Event) {
+                throw new ArgumentException("A business graph kind is required.", nameof(kind));
+            }
+            BusinessEntryPayloadCodec.ValidateSummaryLength(summary.Length);
+            byte[] ownedSummary = summary.ToArray();
+            FrameAddress? source = ValidateSaveTarget(branch, expected, rootLabel);
             var prepared = produce();
-            RequireStorageAvailable();
-            if (branch is { } current && ReadCurrent(current).Id != expected) { throw new InvalidOperationException("The branch changed during capture."); }
-            if (prepared.Business.SourceGraph != source) { throw new InvalidDataException("The business candidate must use the exact latest State selected by HeadStore history."); }
-            if (prepared.Catalog is not null && prepared.Catalog.SourceGraph != _baseline.SharedRoot) { throw new InvalidDataException("The catalog candidate must use the accepted catalog source."); }
-            var pending = new PendingRepositorySave(this, _baseline, branch, expected, rootLabel, kind, ownedSummary,
-                prepared.Business, prepared.Catalog, _baseline.SharedRoot, source);
-            _pending = pending;
-            return pending;
-        } finally { _preparing = false; }
-    }
+            EnsureSaveUsable();
+            return new([new(branch, expected, rootLabel, kind, ownedSummary, prepared.Business, source)], prepared.Catalog);
+        }, abort);
 
     internal RepositorySaveResult CommitSave(PendingRepositorySave pending,
         Action<StoredGraphRevision>? installMeta = null, Action<StoredGraphRevision>? installState = null,
         Action<StoredGraphRevision>? prepareMeta = null, Action<StoredGraphRevision>? prepareState = null,
-        Action<StoredGraphRevision>? prepareBusinessDelivery = null, Action<RepositorySaveResult>? deliver = null) {
-        RequireStorageAvailable();
-        ArgumentNullException.ThrowIfNull(pending);
-        if (_heads.IsReadOnly || _committing || !ReferenceEquals(pending.Owner, this) || !ReferenceEquals(_pending, pending) ||
-            !pending.IsPrepared || !ReferenceEquals(pending.Baseline, _baseline)) { throw new InvalidOperationException("Commit requires the owner's latest unused pending save."); }
-        if (pending.Branch is { } target && ReadCurrent(target).Id != pending.ExpectedEntry) { throw new InvalidOperationException("The branch's accepted Commit has changed."); }
-        pending.BeginCommit();
-        _committing = true;
-        PublicationOutcome outcome = PublicationOutcome.NotAttempted, physicalOutcome = PublicationOutcome.NotAttempted;
-        FrameAddress? candidate = null;
-        HeadId? targetBranch = pending.Branch;
-        HeadEntryId? commitId = null;
-        GraphRecordStore store = GraphStore;
-        long framesBefore = store.AppendedFrames;
-        bool publishing = false, publicationRejected = false;
-        try {
-            SaveStageObserver?.Invoke(RepositorySaveStage.BeforeAppend);
-            RequireStorageAvailable();
-            StoredGraphRevision? meta = pending.Catalog is not null ? store.AppendMeta(pending.CatalogSource, pending.Catalog)
-                : pending.CatalogSource is { } existingMeta ? store.ReadMetaGraph(existingMeta) : null;
-            if (pending.Catalog is not null) { SaveStageObserver?.Invoke(RepositorySaveStage.AfterMetaAppend); }
-            RequireStorageAvailable();
-            StoredGraphRevision business = store.AppendBusiness(pending.Kind, pending.StateSource, meta?.Address, pending.Business);
-            candidate = business.Address;
-            SaveStageObserver?.Invoke(RepositorySaveStage.AfterBusinessAppend);
-            RequireStorageAvailable();
-            if (meta is not null) { prepareMeta?.Invoke(meta); }
-            if (pending.Kind == StoredGraphKind.State) { prepareState?.Invoke(business); }
-            prepareBusinessDelivery?.Invoke(business);
-            RequireStorageAvailable();
-            byte[] businessPayload = BusinessEntryPayloadCodec.Encode(business.Address, pending.Summary.Span);
-            PreparedDirectoryWrite? registration = null;
-            DecodedGraphRows? nextDirectory = _baseline.Branches;
-            byte[]? directoryPayload = null;
-            if (targetBranch is null) {
-                var physical = _heads.CreateHead(businessPayload, out physicalOutcome);
-                publicationRejected = physical.IsFailure;
-                commitId = physical.Unwrap();
-                targetBranch = commitId.Value.HeadId;
-                registration = ManagementDirectoryWriter.PrepareBranchAddition(store, _baseline.Branches, targetBranch.Value, pending.RootLabel!);
-                StoredGraphRevision directory = store.AppendMeta(registration.Write.SourceGraph, registration.Write);
-                registration.PrepareInstall(directory);
-                nextDirectory = registration.GetInstallation(_baseline.Branches);
-                directoryPayload = ManagementDirectoryPointer.Encode(ManagementDirectoryKind.Branches, directory.Address);
-            }
-            byte[]? schemaPayload = pending.Catalog is null ? null : EncodeShared(meta!.Address);
-            var changes = new Dictionary<HeadId, ReadOnlyMemory<byte>> {
-                [directoryPayload is null ? targetBranch.Value : _branchEntry.HeadId] = directoryPayload ?? businessPayload
-            };
-            if (schemaPayload is not null) { changes.Add(_sharedEntry.HeadId, schemaPayload); }
-            SaveStageObserver?.Invoke(RepositorySaveStage.BeforePublication);
-            RequireStorageAvailable();
-            // Recheck every baseline after application/observer callbacks, before crossing publication.
-            if (!ReferenceEquals(pending.Baseline, _baseline) || (pending.Branch is { } b && ReadCurrent(b).Id != pending.ExpectedEntry)) {
-                throw new InvalidOperationException("The prepared save baseline changed.");
-            }
-            if (registration is not null) { _ = registration.GetInstallation(_baseline.Branches); }
-            publishing = true;
-            var published = _heads.PublishHeads(changes, out outcome);
-            publicationRejected = published.IsFailure;
-            IReadOnlyDictionary<HeadId, HeadEntryId> entries = published.Unwrap();
-            if (pending.Branch is not null) { commitId = entries[targetBranch.Value]; }
-            SaveStageObserver?.Invoke(RepositorySaveStage.AfterPublication);
-            RequireStorageAvailable();
-            SaveStageObserver?.Invoke(RepositorySaveStage.BeforeInstall);
-            RequireStorageAvailable();
-            _baseline = new(nextDirectory, meta?.Address);
-            if (registration is not null) { _branchEntry = entries[_branchEntry.HeadId]; }
-            if (schemaPayload is not null) { _sharedEntry = entries[_sharedEntry.HeadId]; }
-            if (meta is not null) { installMeta?.Invoke(meta); }
-            RequireStorageAvailable();
-            if (pending.Kind == StoredGraphKind.State) { installState?.Invoke(business); }
-            RequireStorageAvailable();
-            var result = new RepositorySaveResult(business, meta, meta?.Address, commitId!.Value, targetBranch.Value);
-            deliver?.Invoke(result);
-            RequireStorageAvailable();
-            return result;
-        } catch (Exception error) {
-            bool fault = outcome != PublicationOutcome.NotAttempted || physicalOutcome != PublicationOutcome.NotAttempted || !StorageBackingUsable() ||
-                (publishing ? !publicationRejected : store.AppendedFrames != framesBefore);
-            if (fault) { MarkFaulted(); }
-            throw PublicationFailure(outcome, candidate, error, targetBranch, pending.ExpectedEntry, commitId);
-        } finally {
-            pending.Finish();
-            if (ReferenceEquals(_pending, pending)) { _pending = null; }
-            _committing = false;
-        }
+        Action<StoredGraphRevision>? prepareBusinessDelivery = null, Action<RepositorySaveResult>? deliver = null,
+        Action? cleanup = null) {
+        if (pending.Members.Length != 1) { throw new InvalidOperationException("A single save requires one member."); }
+        return CommitSaveGroup(pending, installMeta, prepareMeta,
+            (_, graph) => prepareState?.Invoke(graph), (_, graph) => installState?.Invoke(graph),
+            (_, graph) => prepareBusinessDelivery?.Invoke(graph),
+            results => deliver?.Invoke(results[0]), cleanup)[0];
     }
 
     private static RepositoryPublicationException PublicationFailure(PublicationOutcome outcome, FrameAddress? candidate,

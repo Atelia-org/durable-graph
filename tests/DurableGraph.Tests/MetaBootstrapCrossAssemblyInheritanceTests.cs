@@ -69,7 +69,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             RepositorySaveResult result = save.Commit();
             s0 = result.Business.Address;
             metaRoot = result.Meta!.Address;
-            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s0), snapshot, session.Catalog.Accepted);
+            DecodedGraphRows rows = StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s0), snapshot, session.AcceptedCatalog);
             ids = layouts.Select(layout => Assert.Single(rows.Rows.Values, row => row.Layout.Equals(layout)).Id.Value).ToArray();
             Assert.Equal(result.Business.RootId.Value, ids[0]);
             Assert.Equal(3, result.Business.ObjectHeads.Count); // Only two actual leaves and their shared List.
@@ -138,7 +138,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(ObjectVersionKind.Base, chain.Entries[0].Record.Kind);
                 Assert.Equal(ObjectVersionKind.Delta, chain.Entries[1].Record.Kind);
                 Assert.Equal(source.ObjectHeads[ids[0]], chain.Entries[1].Record.PriorAddress);
-                SchemaCatalogView catalog = session.Catalog.Accepted!;
+                SchemaCatalogView catalog = session.AcceptedCatalog!;
                 AssertBootstrapCrossAssemblyInheritanceDtos(StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, s1),
                     registered.CreateEnvironment(schemaLookup: key => catalog.Schemas.GetValueOrDefault(key)), catalog), ids, 1);
             }

@@ -80,7 +80,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             Assert.Equal(s1, session.StateSource!.Address);
             Assert.Equal(meta1, repository.SharedSchemaRoot);
-            SchemaCatalogView accepted = session.Catalog.Accepted!;
+            SchemaCatalogView accepted = session.AcceptedCatalog!;
             Assert.NotEqual(accepted.DescriptorId(ObjectLayout.ForDurable(current[1])), accepted.DescriptorId(ObjectLayout.ForDurable(current[2])));
             foreach (int index in new[] { 1, 2 }) {
                 Assert.NotEqual(accepted.DescriptorId(ObjectLayout.ForDurable(old[index])), accepted.DescriptorId(ObjectLayout.ForDurable(current[index])));

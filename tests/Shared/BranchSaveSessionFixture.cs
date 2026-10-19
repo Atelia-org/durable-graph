@@ -1,5 +1,6 @@
 using System.Reflection;
 using Atelia.FrameStore;
+using Atelia.DurableGraph.Schema;
 using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
@@ -19,7 +20,7 @@ internal sealed class BranchSaveSessionFixture {
         RepositoryResources resources = MechanismFixture.Resources(facade);
         var members = resources.ListBranches().Where(pair => pair.Value == label).ToArray();
         if (members.Length == 0) {
-            Session = new(facade, null, null, _configuration, facade.EnsureEditingAllowed);
+            Session = new(facade, null, null, _configuration);
         } else {
             HeadId branch = members.Single().Key;
             _bound = true;
@@ -27,19 +28,19 @@ internal sealed class BranchSaveSessionFixture {
             HistoryGraphRecord? state = resources.FindNearestState(current.Id, inclusive: true);
             BusinessPersistenceAdapter? restored = business ?? (state is null ? null : BusinessPersistenceAdapter.LoadState(
                 facade.Store, MechanismFixture.Snapshot(facade, state.Address), _configuration));
-            Session = new(facade, branch, current.Id, _configuration, facade.EnsureEditingAllowed, restored);
+            Session = new(facade, branch, current.Id, _configuration, restored);
         }
     }
     internal IDurableObject? State => Session.State;
     internal ObjectId RootId => Session.RootId;
     internal StoredGraphRevision? StateSource => Session.StateSource;
-    internal SchemaCatalogWorkspace Catalog => Session.Catalog;
+    internal SchemaCatalogView? AcceptedCatalog => Session.AcceptedCatalog;
     internal ModelExecutionEnvironment Models => Session.Models;
     internal NormalizedGraphState? Baseline => Session.Baseline;
     internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => Session.BindingEnvironment;
     internal PreparedFixtureSave Prepare(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
-        ReadAmplificationBaseBudgetParameters? parameters = null) =>
-        new(this, Session.Prepare(root, kind, parameters, rootLabel: _bound ? null : _label));
+        ReadAmplificationBaseBudgetParameters? parameters = null, IEnumerable<DurableSchema>? declarations = null) =>
+        new(this, Session.Prepare(root, kind, parameters, rootLabel: _bound ? null : _label, declarations: declarations));
     internal void Accept(RepositorySaveResult result) {
         if (_bound) { Session.Advance(result.CommitId); return; }
         _bound = true;
@@ -47,7 +48,7 @@ internal sealed class BranchSaveSessionFixture {
         // the fixture's continuation to the actual branch and publication returned by HeadStore.
         BusinessPersistenceAdapter business = (BusinessPersistenceAdapter)typeof(BranchSaveSession)
             .GetField("_business", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Session)!;
-        Session = new(_facade, result.BranchId, result.CommitId, _configuration, _facade.EnsureEditingAllowed,
+        Session = new(_facade, result.BranchId, result.CommitId, _configuration,
             business.Source is null ? null : business);
     }
 }

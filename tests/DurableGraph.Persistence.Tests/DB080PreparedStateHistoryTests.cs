@@ -105,9 +105,10 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // This key belongs only to historical v2 or a factory's standard Resolve.
         // Neither source/current layouts nor persisted v1 contain it; registration is late.
         string conflictingId = extraFactory is null ? IntermediateId : FactoryDependencyId;
-        first.Catalog.Set(new DurableSchema(conflictingId, 5, SchemaKind.InlineValue,
-            new DurableFieldInfo(1, TypeTag.Int64)));
-        first.CommitEvent(new HistoricalRoot { Value = 55 }, parameters: NoRebase);
+        repository.CommitBranches(
+            [first.CreateEventCommitRequest(new HistoricalRoot { Value = 55 }, parameters: NoRebase)],
+            [new DurableSchema(conflictingId, 5, SchemaKind.InlineValue,
+                new DurableFieldInfo(1, TypeTag.Int64))]);
         // Controlled metadata acceptance advances latest shared S, but cannot reinterpret
         // the old State's exact S or poison its successful preparation certificate.
         int normalized = counters.Normalizes, allocated = counters.Allocations;
