@@ -1,6 +1,6 @@
 # DB-096：公开历史分页实施与验收
 
-2026-10-19。本片接通 [API 草图 §5](api-sketch.md#5-历史方向和成本边界) 已接受的准确起点分页；不新增 State 筛选、持久 cursor、历史总数或另一套历史权威，不重写已有完整历史读取。当前源码已实现并通过完整 Persistence；普通包尚待验收，不能借用前片包资格。
+2026-10-19。本片接通 [API 草图 §5](api-sketch.md#5-历史方向和成本边界) 已接受的准确起点分页；不新增 State 筛选、持久 cursor、历史总数或另一套历史权威，不重写已有完整历史读取。当前源码与新 G 的受影响普通包验收均已完成；不将本片资格外推到其他旧 G/S 或未覆盖场景。
 
 ## 最小调用面
 
@@ -42,4 +42,12 @@ Before 的 anchor 仍先验证再略过；底层 Entry allowance 为 `(long)MaxI
 
 ## 普通包与后续
 
-待新G的Split及扩展GroupCommit消费者运行；后者增加空业务registry的固定继承前缀与混合历史逐页读取，以准确seed/transfer书签核对来源。仍使用S `0.1.3-dev.20261019.g70b406c` / `70b406c`。通过后继续[创建登记故障专项](creation-failure-acceptance.md)及最终交付；完整队列只维护在 [PROJECT-STATE](PROJECT-STATE.md)。
+产品来源 `2e4823dbbf8445f80c23413a91f1be0d54fb98d7`；G `0.0.0-public-history-e2e.20261019101005.37220`，S保持 `0.1.3-dev.20261019.g70b406c` / `70b406cd8d1117733eee81a33e7f978399aa98b2`。package-mode restore/Release根Rebuild为0警告/0错误。Split控制打包确认生产输入匹配HEAD且当时工作树干净，未公开发布包。
+
+- Split：五个独立PID的seed/upgrade/rewrite/continue/verify通过，receipt Passed=true。
+- Group：三个进程通过，history Publish/Verify构建0警告/0错误。空业务registry冷开后分页固定继承前缀与混合Event/State/Event，逐项满页最后续空页，以准确seed/transfer书签核对来源。预算和故障资格由上述源码测试承担。
+- 主线程核Group assets的4G＋6S均为package，十个实际输出DLL的SHA256与准确nupkg全部一致。
+
+本机 `.artifacts/db096-history-pages/package-paths.json` 指向 `W:/TEMP/db096-pages-435e9c33de8c4808be4a9cb2fb16d4b4/split/result.json` 和feed/provenance；`group-package-verification.json`保Group路径与哈希。根日志为 `package-{restore,build,split,group}.log`，Split完整打包/运行日志在外部工件目录。本片新G只资格化Split/Group，最终交付仍须对最终版本验收完整活动集合。
+
+下一片为[创建登记故障专项](creation-failure-acceptance.md)，随后最终消费者/文档清理和合入；完整队列只维护在 [PROJECT-STATE](PROJECT-STATE.md)。

@@ -52,11 +52,11 @@ repo.CommitBranches(requests)                      → BranchId 到 CommitInfo �
 
 两个创建入口分别说明首个真实记录是什么，避免 `initialRecord` 或相同 CLR 根类型的重载隐藏 State/Event 区别。普通 Fork 固定继承旧提交，之后 OpenWorkingCopy 取得写入该 Branch 的能力；从旧点继续也沿仓库当前统一 Catalog 准备新增定义，不重置 Schema 演进路线。
 
-异步/取消/预算参数、实际泛型/根类型签名尚未定稿。本文是主要故事的设计面，不是现有所有 API 的迁移清单；Private/Schema promotion 已决定从新 API 删除，比较读取等其他未列能力不因省略而被决定删除。
+分页的同步取消、limits及结果形状已实施，见[分页验收](history-pagination.md)；其他伪签名须对照当前源码，不据此推定异步或泛型能力。本文是主要故事的设计面，不是现有所有 API 的迁移清单；Private/Schema promotion 已决定从新 API 删除，比较读取等其他未列能力不因省略而被决定删除。
 
 ### B2 的具体值与迁移合同
 
-2026-10-19 收窄：以下薄 ID 与 codec 已随 B2 实施；[组提交](group-commit-integration.md)已接入，[根/子树](branch-tree-queries.md)已实施验收，分页仍为待实施设计。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
+2026-10-19 收窄：以下薄 ID 与 codec 已随 B2 实施；[组提交](group-commit-integration.md)已接入，[根/子树](branch-tree-queries.md)已实施验收，[分页](history-pagination.md)也已实施验收。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
 
 ```csharp
 public readonly struct BranchId : IEquatable<BranchId> {
@@ -168,7 +168,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 首版返回所有 State/Event 小描述，应用筛选展示；正常取得扫描进度后，Continuation 为 `HistoryStart.Before(lastProcessedCommitId)`，使用最后扫描项而非最后显示的 State。Before 在底层重读 inclusive anchor 并跳过首项，预算包含该工作。条数限制与工作量限制分别约束，ReadHistoryPage 不先算全历史总数。
 
-**首版选择页满正常返回、工作预算耗尽整次失败。** `StopReason` 只区分抵达根和页满停止，不新增预算截断页；已在内部收集的前缀不交付。取消、损坏和清理错误照常失败。Continuation 不证明还有一项：满页末端恰是根时，下次可以返回空且完整。零进度失败不能伪造推进位置，也不保证相同预算重试能前进。[独立 HeadStore 见证](../../../experiments/BranchHeadMechanismProbe/README.md)验证了该组合与跨 fork 分页；DG 小描述物化及故障资格仍待接入。
+**首版选择页满正常返回、工作预算耗尽整次失败。** `StopReason` 只区分抵达根和页满停止，不新增预算截断页；已在内部收集的前缀不交付。取消、损坏和清理错误照常失败。Continuation 不证明还有一项：满页末端恰是根时，下次可以返回空且完整。零进度失败不能伪造推进位置，也不保证相同预算重试能前进。[独立 HeadStore 见证](../../../experiments/BranchHeadMechanismProbe/README.md)验证了该组合与跨 fork 分页；DG 小描述物化及预算/取消/清理反例已通过[源码与普通包验收](history-pagination.md)。
 
 ### 根与子树查询
 
@@ -182,7 +182,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 仍推荐继续证明[DG 独立登记候选 B](application-design.md)：只有登记成员是正式 Branch；先准备内容/物理 Head，再发布登记，最后交付 BranchInfo。普通 fork 复用准确旧 Commit；新根创建首个真实 Commit，必要时将登记与 shared Schema 更新联合发布。登记只保存成员/标签等创建属性，普通高频提交无需重写目录。
 
-该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。D/T 改为[复用 Dictionary 增量持久化](directory-persistence.md)，Head 只存图入口；1000条分支的目录恢复与更新成本须实测，不再用旧整表 payload 的1 MiB限制判断容量，不新增 GC。
+fork、新根无 Schema 增长、新根有 shared 增长均已有成功与部分失败资格；剩余耐久顺序和失败窗口收敛为[定向验收清单](creation-failure-acceptance.md)。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。D/T 改为[复用 Dictionary 增量持久化](directory-persistence.md)，Head 只存图入口；1000条分支的目录恢复与更新成本须实测，不再用旧整表 payload 的1 MiB限制判断容量，不新增 GC。
 
 旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，该前置切片当时尚未提供本稿新外观，后续由 B2 接入。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；真实 Branch 的 Parent 替换、恢复/再保存、书签与历史组合已获得[隔离首段见证](branch-cutover-plan.md#8-b2-隔离分支首段纵切)；[原测试/根 solution 回归已恢复](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)；[目录读取收窄](directory-persistence.md#已接受目录的查询投影)、[活动消费者与包资格](package-cutover-validation.md)及[定向 origin 接入](targeted-origin-integration.md)已完成；[真正多业务 Head 组内核](group-commit-integration.md)已完成限定验收，下一步与剩余门槛只查[工作集](PROJECT-STATE.md)。基本 summary 与单成员异常字段随 B2；附件 BLOB、加载对象寿命与 ID 字段支持继续后置。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 
