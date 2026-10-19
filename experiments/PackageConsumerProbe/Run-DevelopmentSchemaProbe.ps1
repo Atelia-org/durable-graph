@@ -199,7 +199,7 @@ function Consume([string]$Phase, $Stage, [string]$DatabasePath = $database, [str
         if ($process.ExitCode -ne 0 -or $stdout.GetAwaiter().GetResult().Trim() -cne ("DevelopmentSchemaConsumer:$Phase" + ':Passed')) { throw "Phase $Phase failed." }
         $evidencePath = Join-Path $workRoot ($Phase + '.evidence.json')
         $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
-        if ($evidence.Protocol -cne 'DG.DevelopmentSchemaConsumer.v1' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
+        if ($evidence.Protocol -cne 'DG.DevelopmentSchemaConsumer.v2' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
             $evidence.Phase -cne $Phase -or $evidence.Shape -cne $Stage.Shape -or $evidence.ProcessId -ne $process.Id -or
             $evidence.HostAssembly.Name -cne $assemblyName -or $evidence.HostAssembly.Path -ine $Stage.Assembly -or
             $evidence.HostAssembly.Sha256 -cne $Stage.AssemblySha256 -or @($evidence.LoadedAssemblies).Count -ne 10) { throw 'Wrong actual consumer process, assembly, shape or protocol.' }

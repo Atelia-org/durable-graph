@@ -20,14 +20,15 @@ sets `DurableGraphGenerateDefinitions=true`. It resolves the leaf's current bind
 generated `DurableDefinitions` registration catalog and requires the internal `IsImmutableLeaf`
 capability flag to be `true`. The flag is read through reflection only; the probe adds no public
 query API and uses no friend access. The consumer then round-trips the leaf value:
-`Repository.CreateNew` publishes the branch, and a fresh `OpenExisting` plus `Checkout`
-restores the persisted `Value` without running constructors.
+`CreateRootBranchFromState` publishes the branch, and `OpenWorkingCopy(branch.Id)`
+restores the persisted `Value` without running constructors. The consumer retains actual `BranchId`
+values across repository disposal and reopening; labels are display text, not lookup keys.
 
 The Family consumer also enables the internal DB-082 A/B candidate through probe-only reflection
 (`ImmutableLeafReuseEnabled=true`, no public option or friend access). It verifies pure-leaf root
 sharing, independent mutable owners, preserved aliases/cycles, distinct IDs for equal-valued leaves,
-and that live seed instances never populate the restored leaf table. Both branches save independently;
-`ReadState` remains independent, and a fresh repository reopens the correct persisted branch values.
+and that live seed instances never populate the restored leaf table. Fork creation and opening the working copy are explicit separate operations. Both branches save independently;
+`LoadState(commitId)` remains independent, and a fresh repository reopens the correct persisted branch values.
 This explicitly enabled candidate check does not claim that the experiment is enabled by default.
 
 The **sibling consumer** compiles the identical model together with a local sibling source
@@ -45,6 +46,7 @@ ImmutableLeafFamily:Flag:True:Roundtrip:True:ForkSharing:True:MutableIsolation:T
 ImmutableLeafSibling:Flag:False:True
 ```
 
+The source now uses DB-096 Branch/Commit APIs; qualification requires running it against the selected new package feed.
 This probe verifies package delivery of the DB-075 capability; it does not replace the focused
 generator and runtime tests for classification rules, helper shape checks or sibling scenarios,
 and it makes no DB-073 read-cache or performance claim. DB-082 A/B timings are measured separately

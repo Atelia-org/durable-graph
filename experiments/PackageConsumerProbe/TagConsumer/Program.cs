@@ -36,16 +36,18 @@ internal static class Program {
 
     private static void Seed(string path) {
         using var repository = Repository.CreateNew(path, Models());
-        using var checkout = repository.CreateSharedBranchFromEvent("main", new TagEvent { Code = 7 });
-        CheckpointAddress firstEvent = checkout.Head;
+        BranchInfo main = repository.CreateRootBranchFromEvent("main", new TagEvent { Code = 7 });
+        using var work = repository.OpenWorkingCopy(main.Id);
+        CommitId firstEvent = work.BaseCommitId;
         repository.CreateTag("event-start", firstEvent);
-        checkout.CommitEvent(new TagEvent { Code = 8 });
+        work.CommitEvent(new TagEvent { Code = 8 });
         TagState state = new() { Value = 10 };
         state.Self = state;
-        CheckpointAddress firstState = checkout.CommitState(state);
+        CommitId firstState = work.CommitState(state).Id;
         repository.CreateTag("state-baseline", firstState);
-        state.Value = 11;
-        checkout.CommitState();
+        // A successful CommitState installs the supplied instance; later edits use the working State.
+        ((TagState)work.State!).Value = 11;
+        work.CommitState();
         Require(repository.ResolveTag("event-start") == firstEvent &&
             repository.ResolveTag("state-baseline") == firstState, "Branch advancement moved a tag.");
         Console.WriteLine("TagsSeed:EventFirst:State:AdvancedBranch");
@@ -53,75 +55,100 @@ internal static class Program {
 
     private static void Metadata(string path) {
         using var repository = Repository.OpenReadOnlyExisting(path, new StateModelRegistry());
-        CheckpointAddress firstEvent = repository.ResolveTag("event-start");
-        CheckpointAddress firstState = repository.ResolveTag("state-baseline");
-        Require(firstEvent.Kind == CheckpointKind.Event && firstState.Kind == CheckpointKind.State &&
-            firstEvent.RootId.Value != 0 && firstState.RootId.Value != 0, "Tag metadata was not resolved without models.");
+        CommitId firstEvent = repository.ResolveTag("event-start");
+        CommitId firstState = repository.ResolveTag("state-baseline");
+        Require(repository.ReadCommitInfo(firstEvent).Kind == CommitKind.Event &&
+            repository.ReadCommitInfo(firstState).Kind == CommitKind.State,
+            "Tag metadata was not resolved without models.");
         Require(repository.GetPreviousState(firstEvent) is null, "Event-first tag unexpectedly has a State.");
         Require(repository.ResolveTag("event-start") == firstEvent, "Repeated tag resolution changed its position.");
         Console.WriteLine("TagsMetadata:EmptyRegistry:ReadOnly:EventFirst");
     }
 
     private static void Continue(string path) {
-        CheckpointAddress oldOwner;
+        CommitId persisted = default;
         using (var prior = Repository.OpenReadOnlyExisting(path, new StateModelRegistry())) {
-            oldOwner = prior.ResolveTag("state-baseline");
+            CommitId selected = prior.ResolveTag("state-baseline");
+            byte[] bytes = new byte[CommitId.EncodedSize];
+            Require(selected.TryWrite(bytes) && CommitId.TryRead(bytes, out persisted), "CommitId codec failed.");
         }
         using var repository = Repository.OpenExisting(path, Models());
-        CheckpointAddress firstEvent = repository.ResolveTag("event-start");
-        CheckpointAddress firstState = repository.ResolveTag("state-baseline");
-        Require(oldOwner != firstState, "A reopened tag returned a stale owner handle.");
-        bool rejected = false;
-        try { repository.CreateTag("old-owner", oldOwner); }
-        catch (ArgumentException) { rejected = true; }
-        Require(rejected && !repository.IsFaulted, "Creating a tag accepted an old-owner address or faulted the repository.");
-        Require(((TagEvent)repository.ReadEvent(firstEvent)).Code == 7, "Tagged Event changed after reopening.");
-        CheckState((TagState)repository.ReadState(firstState), 10);
+        CommitId firstEvent = repository.ResolveTag("event-start");
+        CommitId firstState = repository.ResolveTag("state-baseline");
+        Require(persisted == firstState, "A persistent same-repository CommitId changed after reopening.");
+        repository.CreateTag("reopened-handle", persisted);
+        Require(repository.ResolveTag("reopened-handle") == firstState, "A retained CommitId did not bind its exact State.");
+        RequireRejected<ArgumentException>(() => repository.CreateTag("invalid", default));
+        RequireRejected<ArgumentException>(() => repository.LoadState(firstEvent));
+        Require(!repository.IsFaulted, "Predictable invalid-handle or role rejection faulted the repository.");
+        Require(((TagEvent)repository.LoadEvent(firstEvent)).Code == 7, "Tagged Event changed after reopening.");
+        CheckState((TagState)repository.LoadState(firstState), 10);
 
-        repository.CreateBranch("ref-state", firstState);
-        using (var byRef = repository.CheckoutShared("ref-state")) {
-            CheckState((TagState)byRef.State!, 10);
-            ((TagState)byRef.State!).Value = 21;
-            byRef.CommitState();
+        // Creation and editing are separate: even an unedited fork is immediately durable.
+        BranchInfo stateA = repository.ForkBranch(firstState, "state-a");
+        using (var work = repository.OpenWorkingCopy(stateA.Id)) {
+            CheckState((TagState)work.State!, 10);
+            ((TagState)work.State!).Value = 21;
+            work.CommitState();
         }
-        using (var fork = repository.ForkShared("fork-state", firstState)) {
-            CheckState((TagState)fork.State!, 10);
-            ((TagState)fork.State!).Value = 12;
-            fork.CommitState();
+        BranchInfo stateB = repository.ForkBranch(firstState, "state-b");
+        using (var work = repository.OpenWorkingCopy(stateB.Id)) {
+            CheckState((TagState)work.State!, 10);
+            ((TagState)work.State!).Value = 12;
+            work.CommitState();
         }
-        repository.CreateBranch("ref-event", firstEvent);
-        using (var byRef = repository.CheckoutShared("ref-event")) {
-            Require(byRef.State is null && byRef.Head == firstEvent, "Event tag ref did not retain its exact State-free head.");
-            byRef.CommitState(new TagState { Value = 40 });
+        BranchInfo eventA = repository.ForkBranch(firstEvent, "event-a");
+        using (var work = repository.OpenWorkingCopy(eventA.Id)) {
+            Require(work.State is null && work.BaseCommitId == firstEvent, "Event fork did not retain its exact State-free current commit.");
+            work.CommitState(new TagState { Value = 40 });
         }
-        using (var fork = repository.ForkShared("fork-event", firstEvent)) {
-            Require(fork.State is null && fork.Head == firstEvent, "Event tag Fork imported a later State.");
-            fork.CommitState(new TagState { Value = 30 });
+        BranchInfo eventB = repository.ForkBranch(firstEvent, "event-b");
+        using (var work = repository.OpenWorkingCopy(eventB.Id)) {
+            Require(work.State is null && work.BaseCommitId == firstEvent, "Event fork imported a later State.");
+            work.CommitState(new TagState { Value = 30 });
         }
-        CheckpointAddress advanced;
-        using (var source = repository.CheckoutShared("main")) {
+        CommitId advanced;
+        BranchId main = BranchNamed(repository, "main");
+        using (var source = repository.OpenWorkingCopy(main)) {
             ((TagState)source.State!).Value = 99;
-            advanced = source.CommitState();
+            advanced = source.CommitState().Id;
         }
-        repository.MoveBranch("main", advanced, firstEvent);
+        BranchInfo oldPoint = repository.ForkBranch(firstEvent, "from-old-event");
+        Require(repository.ReadCurrentCommit(main).Commit.Id == advanced &&
+            repository.ReadCurrentCommit(oldPoint.Id).Commit.Id == firstEvent,
+            "Forking an old point rewound the source or manufactured a new commit.");
         Require(repository.ResolveTag("event-start") == firstEvent &&
-            repository.ResolveTag("state-baseline") == firstState, "Moving the source branch moved an immutable tag.");
-        CheckState((TagState)repository.ReadState(firstState), 10);
-        Console.WriteLine("TagsContinue:RefCheckout:NamedFork:EventFirstState:OldOwnerRejected:MoveStable");
+            repository.ResolveTag("state-baseline") == firstState, "Advancing or forking changed an immutable tag.");
+        CheckState((TagState)repository.LoadState(firstState), 10);
+        Console.WriteLine("TagsContinue:StateForks:EventFirstStates:PersistentId:AppendOnly");
     }
 
     private static void Verify(string path) {
         using var repository = Repository.OpenReadOnlyExisting(path, Models());
-        CheckpointAddress firstEvent = repository.ResolveTag("event-start");
-        Require(repository.GetHead("main") == firstEvent && ((TagEvent)repository.ReadEvent(firstEvent)).Code == 7,
-            "Moved source branch or Event tag changed on cold reopen.");
-        CheckState((TagState)repository.ReadState(repository.ResolveTag("state-baseline")), 10);
-        CheckState((TagState)repository.ReadState(repository.GetHead("ref-state")), 21);
-        CheckState((TagState)repository.ReadState(repository.GetHead("fork-state")), 12);
-        Require(((TagState)repository.ReadState(repository.GetHead("ref-event"))).Value == 40 &&
-            ((TagState)repository.ReadState(repository.GetHead("fork-event"))).Value == 30,
+        CommitId firstEvent = repository.ResolveTag("event-start");
+        Require(repository.ReadCurrentCommit(BranchNamed(repository, "from-old-event")).Commit.Id == firstEvent &&
+            ((TagEvent)repository.LoadEvent(firstEvent)).Code == 7,
+            "The unedited old-point fork or Event tag changed on cold reopen.");
+        CheckState((TagState)repository.LoadState(Current(repository, "main")), 99);
+        CheckState((TagState)repository.LoadState(repository.ResolveTag("state-baseline")), 10);
+        CheckState((TagState)repository.LoadState(repository.ResolveTag("reopened-handle")), 10);
+        CheckState((TagState)repository.LoadState(Current(repository, "state-a")), 21);
+        CheckState((TagState)repository.LoadState(Current(repository, "state-b")), 12);
+        Require(((TagState)repository.LoadState(Current(repository, "event-a"))).Value == 40 &&
+            ((TagState)repository.LoadState(Current(repository, "event-b"))).Value == 30,
             "First States continued from the Event tag did not survive reopening.");
         Console.WriteLine("TagsVerify:ColdValues:Cycles:ImmutableTags");
+    }
+
+    // Labels happen to be unique in this fixture; production callers can persist BranchId directly.
+    private static BranchId BranchNamed(Repository repository, string label) =>
+        repository.ListBranches().Single(branch => branch.DisplayLabel == label).Id;
+    private static CommitId Current(Repository repository, string label) =>
+        repository.ReadCurrentCommit(BranchNamed(repository, label)).Commit.Id;
+    private static void RequireRejected<TException>(Action operation) where TException : Exception {
+        try { operation(); }
+        catch (TException) { return; }
+        throw new InvalidDataException($"Expected {typeof(TException).Name}.");
     }
 
     private static void CheckState(TagState state, int expected) =>

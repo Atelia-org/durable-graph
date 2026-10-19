@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using Atelia.Binary;
+using CommitId = persistence::Atelia.DurableGraph.CommitId;
 using Atelia.DurableGraph.Storage;
 using Atelia.DurableGraph.Schema;
 using persistence::Atelia.DurableGraph.Persistence;
@@ -33,6 +34,8 @@ internal static class WireInspector {
     }
     internal sealed record Batch(FrameAddress Address, FrameAddress? SourceGraph, FrameAddress? SchemaRoot,
         IReadOnlyDictionary<uint, Record> Records);
+    // Parent is an observer fact: business predecessor comes only from HeadStore history;
+    // Meta predecessor comes from P0G2 PreviousMeta. It is not a business wire field.
     internal sealed record Graph(FrameAddress Address, GraphKind Kind, FrameAddress? Parent, uint RootId,
         FrameAddress DirectoryRoot, FrameAddress? SchemaRoot, FrameAddress? OwnedBatch, FrameAddress? SourceGraph,
         IReadOnlyDictionary<uint, FrameAddress> Heads) {
@@ -70,6 +73,21 @@ internal static class WireInspector {
             Refs = refs;
         }
         private readonly IReadOnlyDictionary<(FrameAddress Graph, uint Id), Chain> _chains;
+        internal IReadOnlyDictionary<HeadEntryId, FrameAddress> CommitGraphs { get; set; } = new Dictionary<HeadEntryId, FrameAddress>();
+        internal FrameAddress GraphAddress(CommitId commit) {
+            Span<byte> bytes = stackalloc byte[CommitId.EncodedSize];
+            Require(commit.TryWrite(bytes) && HeadEntryId.TryRead(bytes, out _), "Invalid commit handle.");
+            HeadEntryId.TryRead(bytes, out HeadEntryId entry);
+            return CommitGraphs.TryGetValue(entry, out var graph) ? graph
+                : throw new InvalidDataException("Commit is absent from the registered branch histories.");
+        }
+        internal CommitId CommitAt(FrameAddress graph) {
+            HeadEntryId entry = CommitGraphs.Single(pair => pair.Value == graph).Key;
+            Span<byte> bytes = stackalloc byte[HeadEntryId.EncodedSize];
+            Require(entry.TryWrite(bytes) && CommitId.TryRead(bytes, out _), "Invalid physical commit identity.");
+            CommitId.TryRead(bytes, out CommitId commit);
+            return commit;
+        }
         internal IReadOnlyDictionary<string, FrameAddress> BranchHeads { get; }
         internal FrameAddress? SharedSchemaRoot { get; }
         internal IReadOnlyDictionary<FrameAddress, Graph> Graphs { get; }
@@ -88,17 +106,13 @@ internal static class WireInspector {
         using DataStore data = DataStore.OpenReadOnly(Path.Combine(database, "data"));
         using PublicationStore versions = PublicationStore.OpenReadOnly(Path.Combine(database, "versions"), data);
         Dictionary<uint, RefImage> refs = [];
-        foreach (uint id in new uint[] { 1, 2 }) {
+        foreach (uint id in new uint[] { 1, 2, 3 }) {
             HeadEntry value = versions.ReadHead(id).Unwrap();
             refs.Add(id, new(value.Id, value.Payload.ToArray()));
         }
-        IReadOnlyDictionary<string, FrameAddress> branchRoot = Root(refs[1].Payload, "P0R2"u8);
-        IReadOnlyDictionary<string, FrameAddress> shared = Root(refs[2].Payload, "P0S1"u8);
-        Dictionary<string, FrameAddress> branches = new(StringComparer.Ordinal);
-        foreach (var pair in branchRoot) {
-            Require(pair.Key.StartsWith("branch/", StringComparison.Ordinal) && pair.Key.Length > 7, "Unknown branch root key.");
-            branches.Add(pair.Key[7..], pair.Value);
-        }
+        FrameAddress? directory = Pointer(versions.ReadHead(1).Unwrap().Payload, "P0R3"u8);
+        FrameAddress? bookmarks = Pointer(versions.ReadHead(3).Unwrap().Payload, "P0T2"u8);
+        IReadOnlyDictionary<string, FrameAddress> shared = Root(versions.ReadHead(2).Unwrap().Payload, "P0S1"u8);
         Require(shared.Count == 0 || shared.Count == 1 && shared.ContainsKey("schema"), "Unknown shared root key.");
         FrameAddress? schema = shared.TryGetValue("schema", out FrameAddress selected) ? selected : null;
         List<FrameInfo> inventory = [];
@@ -113,7 +127,7 @@ internal static class WireInspector {
             images.Add(new(info.Address, frame.Tag, Hash(frame.Payload), Hash(frame.TailMeta)));
             raw.Add(info.Address, new(frame.Tag, frame.Payload.ToArray()));
         }
-        return new Parser(raw).Read(branches, schema, images, Freeze(refs));
+        return new Parser(raw).Read(versions, directory, bookmarks, schema, images, Freeze(refs));
     }
 
     // A Base contains the typed header; Delta bodies do not. This fixture's
@@ -132,6 +146,9 @@ internal static class WireInspector {
                 descriptor = reader.ReadVarUInt32();
                 Require(descriptor != 0, "A dynamic descriptor must be nonzero.");
                 break;
+            case 2:
+                ReadStructuralType(ref reader);
+                break;
             default: throw new InvalidDataException("Unknown typed route.");
         }
         return new(abi, route, descriptor, fixedCode, bytes[reader.ConsumedCount..].ToArray());
@@ -144,19 +161,28 @@ internal static class WireInspector {
 
     private sealed class Parser(Dictionary<FrameAddress, RawFrame> raw) {
         private readonly Dictionary<FrameAddress, Metadata> _metadata = [];
+        private readonly Dictionary<FrameAddress, FrameAddress?> _businessPrevious = [];
+        private readonly Dictionary<HeadEntryId, FrameAddress> _commits = [];
         private readonly Dictionary<FrameAddress, Batch> _batches = [];
         private readonly Dictionary<FrameAddress, DirectoryVersion> _directories = [];
         private readonly Dictionary<FrameAddress, IReadOnlyDictionary<uint, FrameAddress>> _heads = [];
         private readonly HashSet<FrameAddress> _readingDirectory = [];
         private readonly Dictionary<(FrameAddress, uint), Chain> _chains = [];
 
-        internal Snapshot Read(Dictionary<string, FrameAddress> branches, FrameAddress? shared, List<FrameImage> images,
+        internal Snapshot Read(PublicationStore versions, FrameAddress? branchDirectory, FrameAddress? bookmarks, FrameAddress? shared, List<FrameImage> images,
             IReadOnlyDictionary<uint, RefImage> refs) {
             foreach (var pair in raw.Where(static pair => pair.Value.Tag == GraphTag)) { _ = MetadataAt(pair.Key); }
+            Dictionary<string, FrameAddress> branches = ReadBranches(versions, branchDirectory);
+            if (bookmarks is { } tagGraph) { Require(MetadataAt(tagGraph).Kind == GraphKind.Meta, "T is not Meta."); }
             Dictionary<FrameAddress, Graph> graphs = [];
             foreach (var pair in _metadata) {
+                // Unpublished business frames retain their inventory/hash evidence, but have no
+                // authoritative history position from which an expected content source can be proved.
+                if (pair.Value.Kind != GraphKind.Meta && !_businessPrevious.ContainsKey(pair.Key)) { continue; }
+
                 Metadata m = pair.Value;
-                FrameAddress? source = Source(m.Kind, m.Parent, pair.Key);
+                FrameAddress? parent = m.Kind == GraphKind.Meta ? m.Parent : _businessPrevious[pair.Key];
+                FrameAddress? source = Source(m.Kind, parent, pair.Key);
                 var heads = Heads(m.DirectoryRoot);
                 Require(heads.ContainsKey(m.RootId), "Graph root is absent from its complete directory.");
                 FrameAddress? sourceDirectory = source is { } previous ? MetadataAt(previous).DirectoryRoot : null;
@@ -177,17 +203,24 @@ internal static class WireInspector {
                             "An owned object record is not selected by the complete directory.");
                     }
                 }
-                graphs.Add(pair.Key, new(pair.Key, m.Kind, m.Parent, m.RootId, m.DirectoryRoot, m.SchemaRoot,
+                graphs.Add(pair.Key, new(pair.Key, m.Kind, parent, m.RootId, m.DirectoryRoot, m.SchemaRoot,
                     m.OwnedBatch, source, heads));
                 foreach (var row in heads) { _chains.Add((pair.Key, row.Key), ChainAt(row.Key, row.Value)); }
             }
             foreach (FrameAddress address in branches.Values) { Require(graphs.ContainsKey(address), "Published branch graph is absent."); }
             if (shared is { } sroot) { Require(graphs[sroot].Kind == GraphKind.Meta, "Published shared S is not meta."); }
             Dictionary<FrameAddress, Catalog> catalogs = [];
-            foreach (Graph graph in graphs.Values.Where(static graph => graph.Kind == GraphKind.Meta)) {
-                catalogs.Add(graph.Address, CatalogAt(graph));
+            HashSet<FrameAddress> catalogRoots = [];
+            FrameAddress? nextCatalog = shared;
+            while (nextCatalog is { } address) {
+                Require(catalogRoots.Add(address), "Shared Schema history cycle.");
+                Graph graph = graphs[address];
+                Require(graph.Kind == GraphKind.Meta, "Shared Schema history contains business data.");
+                catalogs.Add(address, CatalogAt(graph));
+                nextCatalog = graph.Parent;
             }
-            // Each physical Base is checked, including retained origins and meta.
+            // Check every Base selected by the registered histories or inventoried Meta graphs,
+            // including retained object origins. Unpublished business frames remain inventory-only.
             byte[] abis = _chains.Values.Select(chain => Header(chain.Entries[0].Record.Body).FormatVersion).Distinct().ToArray();
             Require(abis.Length == 1, "Expected one actual typed ABI in the nonempty probe.");
             foreach (var pair in _chains) {
@@ -196,7 +229,7 @@ internal static class WireInspector {
                 BaseHeader header = Header(origin.Record.Body);
                 Graph selected = graphs[pair.Key.Item1];
                 if (selected.Kind == GraphKind.Meta) {
-                    Require(header.Route == 0 && origin.SchemaRoot is null, "Meta must use fixed employee interpretation.");
+                    Require(header.Route is 0 or 2 && origin.SchemaRoot is null, "Meta must use fixed or builtin structural interpretation.");
                 } else {
                     Require(header.Route == 1 && origin.SchemaRoot is { } originS && catalogs.ContainsKey(originS),
                         "Business Base lacks its exact dynamic origin S.");
@@ -205,17 +238,91 @@ internal static class WireInspector {
                     _ = catalogs[selected.SchemaRoot!.Value].DescriptorId(stored);
                 }
             }
-            return new(Freeze(branches), shared, Freeze(graphs), Freeze(_batches), Freeze(_chains), Freeze(catalogs),
-                Array.AsReadOnly(images.ToArray()), abis[0], refs);
+            return new Snapshot(Freeze(branches), shared, Freeze(graphs), Freeze(_batches), Freeze(_chains), Freeze(catalogs),
+                Array.AsReadOnly(images.ToArray()), abis[0], refs) { CommitGraphs = Freeze(_commits) };
+        }
+
+        private Dictionary<string, FrameAddress> ReadBranches(PublicationStore versions, FrameAddress? directory) {
+            Dictionary<string, FrameAddress> branches = new(StringComparer.Ordinal);
+            if (directory is not { } address) { return branches; }
+            Metadata meta = MetadataAt(address);
+            Require(meta.Kind == GraphKind.Meta && meta.SchemaRoot is null, "D requires a fixed Meta graph.");
+            var heads = Heads(meta.DirectoryRoot);
+            Require(heads.TryGetValue(meta.RootId, out _), "D root is absent from its directory.");
+            Chain root = ChainAt(meta.RootId, heads[meta.RootId]);
+            ReadOnlySpan<byte> encoded = root.Entries[0].Record.Body;
+            Require(encoded.StartsWith(new byte[] { 5, 2, 10, 1, 9, 1, 4 }), "D requires Dictionary<UInt32,String>.");
+            BareValueReader reader = new(Header(encoded).Body);
+            Require(reader.ReadByte() == 0, "D requires ScalarDefault comparison.");
+            Dictionary<uint, uint> rows = [];
+            int count = Count(ref reader);
+            for (int i = 0; i < count; i++) { rows.Add(Nonzero(ref reader), Nonzero(ref reader)); }
+            reader.EnsureFullyConsumed();
+            foreach (Entry delta in root.Entries.Skip(1)) {
+                reader = new(delta.Record.Body);
+                HashSet<uint> changed = [];
+                int removed = Count(ref reader);
+                for (int i = 0; i < removed; i++) {
+                    uint key = Nonzero(ref reader);
+                    Require(changed.Add(key) && rows.Remove(key), "Invalid D removal.");
+                }
+                int patched = Count(ref reader);
+                for (int i = 0; i < patched; i++) {
+                    uint key = Nonzero(ref reader), value = Nonzero(ref reader);
+                    Require(changed.Add(key) && rows.TryGetValue(key, out uint old) && old != value, "Invalid D patch.");
+                    rows[key] = value;
+                }
+                int added = Count(ref reader);
+                for (int i = 0; i < added; i++) {
+                    uint key = Nonzero(ref reader), value = Nonzero(ref reader);
+                    Require(changed.Add(key) && rows.TryAdd(key, value), "Invalid D addition.");
+                }
+                reader.EnsureFullyConsumed();
+            }
+            HashSet<HeadId> members = [];
+            foreach (uint key in rows.Keys) { members.Add(DecodeHead(key)); }
+            foreach (var row in rows) {
+                Require(heads.TryGetValue(row.Value, out _), "D label is missing.");
+                Chain label = ChainAt(row.Value, heads[row.Value]);
+                Require(label.Entries.Count == 1, "D string must be one immutable Base.");
+                BaseHeader header = Header(label.Entries[0].Record.Body);
+                Require(header.Route == 0 && header.FixedCode == 1, "D label must be a String.");
+                BareValueReader text = new(header.Body);
+                string name = text.ReadString();
+                text.EnsureFullyConsumed();
+                Require(name.Length is >= 1 and <= 1024, "Invalid D label length.");
+                HeadId head = DecodeHead(row.Key);
+                HeadEntry current = versions.ReadHead(head).Unwrap();
+                List<HeadEntry> history = [];
+                var end = versions.ReadEntryHistory(current.Id, new(Limit, long.MaxValue), entry => {
+                    history.Add(entry);
+                    return true;
+                }).Unwrap();
+                Require(end == HeadHistoryEnd.Complete && history.Count != 0, "Expected complete checked branch history.");
+                FrameAddress? previous = null;
+                for (int i = history.Count - 1; i >= 0; i--) {
+                    HeadEntry entry = history[i];
+                    Require(members.Contains(entry.Id.HeadId), "History entry owner is not registered in D.");
+                    FrameAddress graph = BusinessGraph(entry.Payload);
+                    Require(MetadataAt(graph).Kind is GraphKind.Event or GraphKind.State, "Business entry selects Meta.");
+                    if (_commits.TryGetValue(entry.Id, out var known)) { Require(known == graph, "Commit graph changed."); }
+                    else { _commits.Add(entry.Id, graph); }
+                    if (_businessPrevious.TryGetValue(graph, out var prior)) { Require(prior == previous, "Graph history position is ambiguous."); }
+                    else { _businessPrevious.Add(graph, previous); }
+                    previous = graph;
+                }
+                Require(branches.TryAdd(name, BusinessGraph(current.Payload)), "This finite fixture expects distinct display labels.");
+            }
+            return branches;
         }
 
         private Metadata MetadataAt(FrameAddress address) {
             if (_metadata.TryGetValue(address, out Metadata? found)) { return found; }
             BareValueReader reader = new(Payload(address, GraphTag));
-            Magic(ref reader, "P0G1"u8);
+            Magic(ref reader, "P0G2"u8);
             GraphKind kind = (GraphKind)reader.ReadByte();
             Require(kind is GraphKind.Event or GraphKind.State or GraphKind.Meta, "Unknown graph role.");
-            FrameAddress? parent = Optional(ref reader);
+            FrameAddress? parent = kind == GraphKind.Meta ? Optional(ref reader) : null;
             uint root = Nonzero(ref reader);
             FrameAddress directory = Address(ref reader);
             FrameAddress? schema = Optional(ref reader), batch = Optional(ref reader);
@@ -237,7 +344,7 @@ internal static class WireInspector {
                 }
                 Require(prior.Kind != GraphKind.Meta, "Business ancestry cannot contain meta.");
                 if (prior.Kind == GraphKind.State) { return address; }
-                parent = prior.Parent;
+                parent = _businessPrevious[address];
             }
             return null;
         }
@@ -561,6 +668,51 @@ internal static class WireInspector {
         private ReadOnlySpan<byte> Payload(FrameAddress address, uint tag) {
             Require(raw.TryGetValue(address, out RawFrame? frame) && frame.Tag == tag, "Wrong/missing completed frame role.");
             return raw[address].Payload;
+        }
+    }
+
+    private static HeadId DecodeHead(uint encoded) {
+        Span<byte> bytes = stackalloc byte[HeadId.EncodedSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, encoded);
+        Require(HeadId.TryRead(bytes, out HeadId head), "Invalid D HeadId.");
+        return head;
+    }
+
+    private static FrameAddress BusinessGraph(ReadOnlySpan<byte> payload) {
+        const int overhead = 4 + FrameAddress.EncodedSize + sizeof(uint);
+        Require(payload.Length >= overhead && payload.Length <= PublicationStore.MaxHeadEntryPayloadLength &&
+            payload[..4].SequenceEqual("P0E1"u8), "Invalid business entry descriptor.");
+        Require(FrameAddress.TryRead(payload.Slice(4, FrameAddress.EncodedSize), out FrameAddress graph), "Invalid business graph address.");
+        Require(BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(4 + FrameAddress.EncodedSize)) == payload.Length - overhead,
+            "Business summary length differs from its owned bytes.");
+        return graph;
+    }
+
+    private static FrameAddress? Pointer(ReadOnlySpan<byte> payload, ReadOnlySpan<byte> magic) {
+        BareValueReader reader = new(payload);
+        Magic(ref reader, magic);
+        FrameAddress? graph = Optional(ref reader);
+        reader.EnsureFullyConsumed();
+        return graph;
+    }
+
+    private static void ReadStructuralType(ref BareValueReader reader) {
+        // Closed finite support: business List<Int32>, D Dictionary<UInt32,String>,
+        // T Dictionary<String,Byte[]> and its Byte[] leaves. No product codec is invoked.
+        byte type = reader.ReadByte();
+        if (type == 8) {
+            Require(reader.ReadByte() == 1 && reader.ReadByte() == 2, "Expected List<Int32>.");
+        } else if (type == 4) {
+            Require(reader.ReadByte() == 1 && reader.ReadByte() == 5, "Expected Byte[].");
+        } else {
+            Require(type == 10 && reader.ReadByte() == 1, "Unknown finite structural type.");
+            byte key = reader.ReadByte();
+            if (key == 9) {
+                Require(reader.ReadByte() == 1 && reader.ReadByte() == 4, "Expected Dictionary<UInt32,String>.");
+            } else {
+                Require(key == 4 && reader.ReadByte() == 4 && reader.ReadByte() == 1 && reader.ReadByte() == 5,
+                    "Expected Dictionary<String,Byte[]>.");
+            }
         }
     }
 

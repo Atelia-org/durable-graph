@@ -16,43 +16,48 @@ internal static class Program {
         string directory = Path.GetFullPath(args.Single());
         Require(ReadImmutableLeafFlag(ResolveLeafBinding()), "The Family leaf binding must report IsImmutableLeaf=true.");
         Leaf leaf = new(42);
+        BranchId mainId, leftId, rightId;
         using (Repository repository = Repository.CreateNew(directory, Models(), Options)) {
-            using BranchCheckout session = repository.CreateSharedBranch("main", leaf, Policy);
-            Require(((Leaf)session.State!).Value == 42, "CreateBranch lost the seed value.");
+            mainId = repository.CreateRootBranchFromState("main", leaf, parameters: Policy).Id;
+            using WorkingCopy session = repository.OpenWorkingCopy(mainId);
+            Require(((Leaf)session.State!).Value == 42, "Root creation/restoration lost the seed value.");
         }
         using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
             EnableLeafExperiment(repository);
-            using BranchCheckout session = repository.CheckoutShared("main");
+            using WorkingCopy session = repository.OpenWorkingCopy(mainId);
             Require(((Leaf)session.State!).Value == 42, "The reopened world lost the leaf's persisted value.");
             Require(!ReferenceEquals(leaf, session.State), "The original live seed must not populate the leaf table.");
-            using BranchCheckout first = repository.ForkShared("pure-first", session.Head);
-            using BranchCheckout second = repository.ForkShared("pure-second", session.Head);
+            using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(session.BaseCommitId, "pure-first").Id);
+            using WorkingCopy second = repository.OpenWorkingCopy(repository.ForkBranch(session.BaseCommitId, "pure-second").Id);
             Require(ReferenceEquals(first.State, second.State), "Pure leaf roots should reuse the successfully restored instance.");
-            first.CommitState(Policy);
-            second.CommitState(Policy);
+            first.CommitState(parameters: Policy);
+            second.CommitState(parameters: Policy);
 
             Owner owner = new() { First = new Leaf(7), Second = new Leaf(7) };
             owner.Alias = owner.First;
             owner.Next = owner;
             Require(!ReadImmutableLeafFlag(ResolveBinding(typeof(Owner))), "Mutable owner must not claim leaf capability.");
-            using BranchCheckout source = repository.CreateSharedBranch("owners", owner, Policy);
-            using BranchCheckout left = repository.ForkShared("owner-left", source.Head);
-            using BranchCheckout right = repository.ForkShared("owner-right", source.Head);
+            BranchId owners = repository.CreateRootBranchFromState("owners", owner, parameters: Policy).Id;
+            CommitId source = repository.ReadCurrentCommit(owners).Commit.Id;
+            leftId = repository.ForkBranch(source, "owner-left").Id;
+            using WorkingCopy left = repository.OpenWorkingCopy(leftId);
+            rightId = repository.ForkBranch(source, "owner-right").Id;
+            using WorkingCopy right = repository.OpenWorkingCopy(rightId);
             Owner leftOwner = (Owner)left.State!, rightOwner = (Owner)right.State!;
             Require(!ReferenceEquals(leftOwner, rightOwner), "Mutable owner leaked across branches.");
             Require(ReferenceEquals(leftOwner.First, rightOwner.First), "Generated Family leaf did not reuse across forks.");
-            Require(!ReferenceEquals(owner.First, leftOwner.First), "Live CreateBranch leaf must not seed restored sharing.");
+            Require(!ReferenceEquals(owner.First, leftOwner.First), "Live root-creation leaf must not seed restored sharing.");
             Require(!ReferenceEquals(leftOwner.First, leftOwner.Second), "Equal-valued leaves with different IDs merged.");
             Require(ReferenceEquals(leftOwner.First, leftOwner.Alias) && ReferenceEquals(leftOwner.Next, leftOwner), "Graph aliases/cycle lost.");
             leftOwner.Counter = 1;
-            CheckpointAddress committed = left.CommitState(Policy);
+            CommitId committed = left.CommitState(parameters: Policy).Id;
             Require(rightOwner.Counter == 0 && rightOwner.First!.Value == 7, "One branch's edit mutated another branch.");
-            Owner independent = (Owner)repository.ReadState(committed);
-            Require(independent.Counter == 1 && !ReferenceEquals(independent.First, leftOwner.First), "ReadState must remain independent of the leaf table.");
+            Owner independent = (Owner)repository.LoadState(committed);
+            Require(independent.Counter == 1 && !ReferenceEquals(independent.First, leftOwner.First), "LoadState must remain independent of the leaf table.");
         }
         using (Repository repository = Repository.OpenExisting(directory, Models(), Options)) {
-            using BranchCheckout left = repository.CheckoutShared("owner-left");
-            using BranchCheckout right = repository.CheckoutShared("owner-right");
+            using WorkingCopy left = repository.OpenWorkingCopy(leftId);
+            using WorkingCopy right = repository.OpenWorkingCopy(rightId);
             Require(((Owner)left.State!).Counter == 1 && ((Owner)right.State!).Counter == 0, "Cold reopen lost independent saves.");
             Require(((Owner)left.State!).First!.Value == 7 && ((Owner)right.State!).Second!.Value == 7, "Cold reopen lost leaf content.");
         }

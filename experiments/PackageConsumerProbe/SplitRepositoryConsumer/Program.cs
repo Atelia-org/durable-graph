@@ -16,7 +16,7 @@ using S = global::Atelia.DurableGraph.Generated.Family_7061636B6167652E73706C697
 // Witnesses are diagnostic. Physical checks independently read public backing
 // stores after every Repository and checkout in that operation has closed.
 internal static class Program {
-    private const string Protocol = "DG.SplitRepositoryConsumer.v1";
+    private const string Protocol = "DG.SplitRepositoryConsumer.v2";
     private const string WidgetName = "package.split.widget";
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private sealed record StorageEvidence(uint Id, string Head, long H);
@@ -72,15 +72,17 @@ internal static class Program {
 #if HISTORY_V1
     private static object Seed(string database, string witnessPath) {
         FrameAddress state;
+        CommitId stateCommit;
         uint rootId;
         using (Repository repository = Repository.CreateNew(database, Models())) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
-            repository.CreateTag("initial", main.Head);
-            state = main.Head.RevisionAddress;
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id);
+            repository.CreateTag("initial", main.BaseCommitId);
+            stateCommit = main.BaseCommitId;
             rootId = main.StateId!.Value.Value;
             Check(main.State, upgraded: false);
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        state = actual.GraphAddress(stateCommit);
         WireInspector.Graph graph = actual.Graph(state);
         FrameAddress schema = RequiredSchema(graph);
         CheckRefs(actual, schema, ("main", state));
@@ -116,9 +118,9 @@ internal static class Program {
             "The generated accepted V1 body reader must preserve exact historical values/IDs without Upgrade.");
         int upgrades;
         using (Repository repository = Repository.OpenReadOnlyExisting(database, Models())) {
-            CheckpointAddress initial = repository.ResolveTag("initial");
-            Need(initial.RevisionAddress == seed, "The initial tag changed.");
-            Check(repository.ReadState(initial), upgraded: true);
+            CommitId initial = repository.ResolveTag("initial");
+            Need(initial == original.CommitAt(seed), "The initial tag changed.");
+            Check(repository.LoadState(initial), upgraded: true);
             Need(Widget.UpgradeCalls == 2, "Readonly materialization must Upgrade both historical Widget rows.");
             var pair = repository.ReadPair(initial, initial);
             Widget first = Check(pair.First, upgraded: true), second = Check(pair.Second, upgraded: true);
@@ -138,17 +140,19 @@ internal static class Program {
     private static object Rewrite(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         FrameAddress seed = Address(witness.SeedState), oldSchema = Address(witness.SeedSchema), mainState;
+        CommitId mainCommit;
         WireInspector.Snapshot original = WireInspector.Read(database);
         CheckRefs(original, oldSchema, ("main", seed));
         CheckStorage(original, original.Graph(seed), witness.SeedObjects);
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout main = repository.CheckoutShared("main");
+            using WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Check(main.State, upgraded: true);
-            Need(main.StateRevisionAddress == seed && main.StateId!.Value.Value == witness.RootId,
+            Need(main.StateSourceCommitId == original.CommitAt(seed) && main.StateId!.Value.Value == witness.RootId,
                 "Cold main must select the exact historical State and root ID.");
-            mainState = main.CommitState().RevisionAddress;
+            mainCommit = main.CommitState().Id;
         }
         WireInspector.Snapshot latest = WireInspector.Read(database);
+        mainState = latest.GraphAddress(mainCommit);
         FrameAddress schema = RequiredSchema(latest.Graph(mainState));
         Need(schema != oldSchema, "The automatically captured V2 closure must advance the shared catalog.");
         uint descriptor = CheckCatalog(latest, schema, current: true);
@@ -158,39 +162,43 @@ internal static class Program {
         // Closing after Fork makes its ref-only nature observable independently.
         int beforeFork = Widget.UpgradeCalls;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout fork = repository.ForkShared("fork", repository.ResolveTag("initial"));
-            Need(fork.Head.RevisionAddress == seed && fork.StateRevisionAddress == seed && fork.StateId!.Value.Value == witness.RootId,
+            using WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(repository.ResolveTag("initial"), "fork").Id);
+            Need(fork.BaseCommitId == original.CommitAt(seed) && fork.StateSourceCommitId == original.CommitAt(seed) && fork.StateId!.Value.Value == witness.RootId,
                 "Historical Fork must restore the tag's nearest State, independently of latest shared S.");
             Check(fork.State, upgraded: true);
             Need(Widget.UpgradeCalls == beforeFork + 2, "Historical Fork must execute accepted V1 history for both Widgets.");
         }
         WireInspector.Snapshot forked = WireInspector.Read(database);
         CheckRefs(forked, schema, ("main", mainState), ("fork", seed));
-        Need(Frames(forked).SequenceEqual(Frames(latest)), "Historical ref-only Fork appended or changed completed frames.");
+        CheckFrames(forked, Frames(latest)); // Fork appends D metadata but no business Commit.
+        Need(forked.CommitAt(seed) == original.CommitAt(seed), "Fork fabricated a new inherited Commit.");
         CheckStorage(forked, forked.Graph(seed), witness.SeedObjects);
 
         FrameAddress eventAddress, rewritten;
+        CommitId eventCommit, rewrittenCommit;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout fork = repository.CheckoutShared("fork");
+            using WorkingCopy fork = repository.OpenWorkingCopy(BranchNamed(repository, "fork"));
             Widget root = Check(fork.State, upgraded: true);
             ObjectId rootId = fork.StateId!.Value;
-            eventAddress = fork.CommitEvent(root).RevisionAddress;
-            Need(fork.Head.RevisionAddress == eventAddress && fork.StateRevisionAddress == seed && fork.StateId == rootId &&
+            eventCommit = fork.CommitEvent(root).Id;
+            Need(fork.BaseCommitId == eventCommit && fork.StateSourceCommitId == original.CommitAt(seed) && fork.StateId == rootId &&
                 ReferenceEquals(root, fork.State), "Confirmed Event must discard its State candidate and retain the original State instance/ID/source.");
-            Check(repository.ReadEvent(fork.Head), upgraded: true);
-            rewritten = fork.CommitState().RevisionAddress;
-            Need(fork.StateRevisionAddress == rewritten && fork.StateId == rootId && ReferenceEquals(root, fork.State),
+            Check(repository.LoadEvent(fork.BaseCommitId), upgraded: true);
+            rewrittenCommit = fork.CommitState().Id;
+            Need(fork.StateSourceCommitId == rewrittenCommit && fork.StateId == rootId && ReferenceEquals(root, fork.State),
                 "The following State must accept the original upgraded instances and IDs.");
-            var same = repository.ReadPair(fork.Head, fork.Head);
+            var same = repository.ReadPair(fork.BaseCommitId, fork.BaseCommitId);
             Need(ReferenceEquals(Check(same.First, upgraded: true), Check(same.Second, upgraded: true)),
                 "Same-S exact no-rewrite cycle must remain Pair-shareable in this fixture.");
-            var mixed = repository.ReadPair(repository.ResolveTag("initial"), fork.Head);
+            var mixed = repository.ReadPair(repository.ResolveTag("initial"), fork.BaseCommitId);
             Widget oldRoot = Check(mixed.First, upgraded: true), newRoot = Check(mixed.Second, upgraded: true);
             Need(!ReferenceEquals(oldRoot, newRoot) && !ReferenceEquals(oldRoot.Numbers, newRoot.Numbers) &&
                 oldRoot.Value == newRoot.Value && oldRoot.Child!.Value == newRoot.Child!.Value && oldRoot.Numbers.SequenceEqual(newRoot.Numbers),
                 "Different exact-S Pair environments must preserve equal contents without sharing this fixture's mutable instances.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        eventAddress = actual.GraphAddress(eventCommit);
+        rewritten = actual.GraphAddress(rewrittenCommit);
         CheckRefs(actual, schema, ("main", mainState), ("fork", rewritten));
         WireInspector.Graph domainEvent = actual.Graph(eventAddress);
         Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == seed && domainEvent.SourceGraph == seed &&
@@ -222,17 +230,19 @@ internal static class Program {
         StorageEvidence[] priorRows = Storage(previous, previous.Graph(rewritten));
         Need(priorRows.SequenceEqual(witness.RewriteObjects!), "Actual cold source storage differs from the last confirmed observation.");
         FrameAddress continued;
+        CommitId continuedCommit;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout fork = repository.CheckoutShared("fork");
+            using WorkingCopy fork = repository.OpenWorkingCopy(BranchNamed(repository, "fork"));
             Widget root = Check(fork.State, upgraded: true);
-            Need(Widget.UpgradeCalls == 0 && fork.StateRevisionAddress == rewritten && fork.StateId!.Value.Value == witness.RootId,
+            Need(Widget.UpgradeCalls == 0 && fork.StateSourceCommitId == previous.CommitAt(rewritten) && fork.StateId!.Value.Value == witness.RootId,
                 "The fresh current State must retain root identity without another historical Upgrade.");
             root.Numbers[7] = 201;
-            continued = fork.CommitState().RevisionAddress;
-            Check(repository.ReadState(repository.ResolveTag("initial")), upgraded: true);
-            Check(repository.ReadState(repository.GetHead("fork")), upgraded: true, atSeven: 201);
+            continuedCommit = fork.CommitState().Id;
+            Check(repository.LoadState(repository.ResolveTag("initial")), upgraded: true);
+            Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id), upgraded: true, atSeven: 201);
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        continued = actual.GraphAddress(continuedCommit);
         WireInspector.Graph graph = actual.Graph(continued);
         Need(graph.Parent == rewritten && graph.SourceGraph == rewritten && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
             "Cold Delta must select the exact current content Parent and Schema.");
@@ -274,20 +284,22 @@ internal static class Program {
     private static Witness CatalogStory(string database, Witness witness, WireInspector.Snapshot shared) {
         RefImage sharedRef = ReadSharedRef(database), branchRef = ReadRefImage(database, 1);
         FrameAddress initial = Address(witness.ContinuationState!), catalogEvent;
+        CommitId catalogEventCommit;
         uint rootId = witness.RootId, listId = witness.ListId;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
             // Fork the real baseline; registration alone must not persist the Event type.
-            repository.CreateBranch("catalog", repository.GetHead("fork"));
-            using BranchCheckout created = repository.CheckoutShared("catalog");
+            repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id, "catalog");
+            using WorkingCopy created = repository.OpenWorkingCopy(BranchNamed(repository, "catalog"));
             Widget root = Check(created.State, upgraded: true, atSeven: 201);
-            Need(created.Head.RevisionAddress == initial && created.StateRevisionAddress == initial &&
+            Need(created.BaseCommitId == shared.CommitAt(initial) && created.StateSourceCommitId == shared.CommitAt(initial) &&
                 created.StateId!.Value.Value == rootId, "Catalog fork must restore the actual baseline identities.");
-            catalogEvent = created.CommitEvent(new CatalogEvent { Value = 41 }).RevisionAddress;
-            Need(created.Head.RevisionAddress == catalogEvent && created.StateRevisionAddress == initial &&
+            catalogEventCommit = created.CommitEvent(new CatalogEvent { Value = 41 }).Id;
+            Need(created.BaseCommitId == catalogEventCommit && created.StateSourceCommitId == shared.CommitAt(initial) &&
                 created.StateId!.Value.Value == rootId && ReferenceEquals(created.State, root),
                 "Catalog Event must accept meta without advancing the State baseline, identity or instance.");
         }
         WireInspector.Snapshot seeded = WireInspector.Read(database);
+        catalogEvent = seeded.GraphAddress(catalogEventCommit);
         WireInspector.Graph seedGraph = seeded.Graph(initial), eventGraph = seeded.Graph(catalogEvent);
         FrameAddress catalogSchema = RequiredSchema(eventGraph);
         Need(catalogSchema != Address(witness.RewriteSchema!) &&
@@ -302,37 +314,39 @@ internal static class Program {
         Need(initialRows.SequenceEqual(witness.ContinuationObjects!), "Fork changed source heads, H or IDs.");
         Need(seeded.SharedSchemaRoot == catalogSchema && !SameSharedRef(sharedRef, ReadSharedRef(database)) &&
             !SameRefImage(branchRef, ReadRefImage(database, 1)),
-            "The Event must publish the new declaration and branch head into their actual formal refs.");
+            "Fork registration must advance D, and the Event must publish the new declaration plus its business Head.");
         RefImage acceptedSharedRef = ReadSharedRef(database);
 
         FrameAddress next;
+        CommitId nextCommit;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout current = repository.CheckoutShared("catalog");
+            using WorkingCopy current = repository.OpenWorkingCopy(BranchNamed(repository, "catalog"));
             Widget root = Check(current.State, upgraded: true, atSeven: 201);
-            Need(current.Head.RevisionAddress == catalogEvent && current.StateRevisionAddress == initial && current.StateId!.Value.Value == rootId,
+            Need(current.BaseCommitId == catalogEventCommit && current.StateSourceCommitId == shared.CommitAt(initial) && current.StateId!.Value.Value == rootId,
                 "Cold Shared checkout must import its own exact root identity and source.");
             root.Numbers[7] = 202;
-            CheckpointAddress saved = current.CommitState();
-            next = saved.RevisionAddress;
+            CommitId saved = current.CommitState().Id;
+            nextCommit = saved;
             Need(ReferenceEquals(root, Check(current.State, upgraded: true, atSeven: 202)) &&
-                current.StateId!.Value.Value == rootId && current.StateRevisionAddress == next,
+                current.StateId!.Value.Value == rootId && current.StateSourceCommitId == nextCommit,
                 "Confirmed State must accept the original edited instances and identity.");
 
-            Widget independent = Check(repository.ReadState(saved), upgraded: true, atSeven: 202);
+            Widget independent = Check(repository.LoadState(saved), upgraded: true, atSeven: 202);
             Need(!ReferenceEquals(root, independent) && !ReferenceEquals(root.Child, independent.Child) &&
                 !ReferenceEquals(root.Numbers, independent.Numbers),
                 "Same-owner independent State read must restore equal values in independent mutable instances.");
             current.Dispose();
-            using BranchCheckout signedAgain = repository.CheckoutShared("catalog");
+            using WorkingCopy signedAgain = repository.OpenWorkingCopy(BranchNamed(repository, "catalog"));
             Widget restored = Check(signedAgain.State, upgraded: true, atSeven: 202);
-            Need(signedAgain.Head.RevisionAddress == next && signedAgain.StateRevisionAddress == next &&
-                signedAgain.StateId!.Value.Value == rootId && repository.GetHead("catalog").RevisionAddress == next &&
+            Need(signedAgain.BaseCommitId == nextCommit && signedAgain.StateSourceCommitId == nextCommit &&
+                signedAgain.StateId!.Value.Value == rootId && repository.ReadCurrentCommit(BranchNamed(repository, "catalog")).Commit.Id == nextCommit &&
                 !ReferenceEquals(root, restored) && !ReferenceEquals(root.Child, restored.Child) &&
                 !ReferenceEquals(root.Numbers, restored.Numbers) && !ReferenceEquals(independent, restored) &&
                 !ReferenceEquals(independent.Child, restored.Child) && !ReferenceEquals(independent.Numbers, restored.Numbers),
                 "Same-owner recheckout must retain the saved State and identity while restoring an independent graph.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        next = actual.GraphAddress(nextCommit);
         WireInspector.Graph graph = actual.Graph(next);
         Need(graph.Parent == catalogEvent && graph.SourceGraph == initial && graph.RootId == rootId &&
             RequiredSchema(graph) == catalogSchema && graph.OwnedBatch is not null &&
@@ -358,10 +372,10 @@ internal static class Program {
         Need(SameSharedRef(acceptedSharedRef, ReadSharedRef(database)), "Saving known layouts must retain the accepted shared ref.");
         Dictionary<string, string> beforeRead = FileImages(database);
         using (Repository reader = Repository.OpenReadOnlyExisting(database, Models())) {
-            Check(reader.ReadState(reader.GetHead("main")), upgraded: true);
-            Check(reader.ReadState(reader.GetHead("fork")), upgraded: true, atSeven: 201);
-            Check(reader.ReadState(reader.GetHead("catalog")), upgraded: true, atSeven: 202);
-            Need(reader.ReadEvent(reader.ReadFrames("catalog").Single(frame => frame.RevisionAddress == catalogEvent)) is CatalogEvent { Value: 41 },
+            Check(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id), upgraded: true);
+            Check(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "fork")).Commit.Id), upgraded: true, atSeven: 201);
+            Check(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "catalog")).Commit.Id), upgraded: true, atSeven: 202);
+            Need(reader.LoadEvent(catalogEventCommit) is CatalogEvent { Value: 41 },
                 "Readonly must recover the generated Event through its own accepted historical S.");
         }
         Need(SameFiles(beforeRead, FileImages(database)), "Readonly cold recovery changed repository files.");
@@ -385,25 +399,28 @@ internal static class Program {
     private static Witness FollowupStory(string database, Witness witness) {
         FrameAddress catalogState = Address(witness.CatalogState!);
         WireInspector.Snapshot before = WireInspector.Read(database);
-        RefImage oldBranchRef = ReadRefImage(database, 1), oldSharedRef = ReadRefImage(database, 2);
+        RefImage oldBranchRef = ReadBusinessRef(database, before.CommitAt(catalogState)), oldSharedRef = ReadRefImage(database, 2);
+        RefImage directoryBefore = ReadRefImage(database, 1);
         FrameAddress followupEvent;
+        CommitId followupCommit;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout current = repository.CheckoutShared("catalog");
+            using WorkingCopy current = repository.OpenWorkingCopy(BranchNamed(repository, "catalog"));
             Widget root = Check(current.State, upgraded: true, atSeven: 202);
             ObjectId? rootId = current.StateId;
-            followupEvent = current.CommitEvent(root).RevisionAddress;
-            Need(current.Head.RevisionAddress == followupEvent && current.StateRevisionAddress == catalogState &&
+            followupCommit = current.CommitEvent(root).Id;
+            Need(current.BaseCommitId == followupCommit && current.StateSourceCommitId == before.CommitAt(catalogState) &&
                 current.StateId == rootId && ReferenceEquals(current.State, root),
                 "Ordinary Event must accept Head without accepting a new State baseline or instance.");
         }
         WireInspector.Snapshot followup = WireInspector.Read(database);
+        followupEvent = followup.GraphAddress(followupCommit);
         FrameAddress sharedSchema = followup.SharedSchemaRoot ?? throw new InvalidDataException("Followup did not publish shared S.");
         uint unused = CheckEventCatalog(followup, sharedSchema, witness);
-        RefImage followupBranchRef = ReadRefImage(database, 1), followupSharedRef = ReadRefImage(database, 2);
+        RefImage followupBranchRef = ReadBusinessRef(database, followupCommit), followupSharedRef = ReadRefImage(database, 2);
         Need(sharedSchema == Address(witness.CatalogSchema!) &&
             oldBranchRef.Revision != followupBranchRef.Revision && !oldBranchRef.Payload.AsSpan().SequenceEqual(followupBranchRef.Payload) &&
-            SameRefImage(oldSharedRef, followupSharedRef),
-            "A known-layout Event must advance the business ref while retaining the accepted shared catalog.");
+            SameRefImage(oldSharedRef, followupSharedRef) && SameRefImage(directoryBefore, ReadRefImage(database, 1)),
+            "A known-layout Event must advance its business Head while retaining D and the accepted shared Catalog.");
         WireInspector.Graph domainEvent = followup.Graph(followupEvent), previous = followup.Graph(catalogState);
         Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == catalogState && domainEvent.SourceGraph == catalogState &&
             RequiredSchema(domainEvent) == sharedSchema && domainEvent.RootId == witness.CatalogRootId &&
@@ -418,16 +435,18 @@ internal static class Program {
         // This is a fresh owner in the Continue PID. The final Verify PID stays
         // wholly read-only; no claim of a second writer process is made here.
         FrameAddress continued;
+        CommitId continuedCommit;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout current = repository.CheckoutShared("catalog");
+            using WorkingCopy current = repository.OpenWorkingCopy(BranchNamed(repository, "catalog"));
             Widget root = Check(current.State, upgraded: true, atSeven: 202);
-            Need(current.Head.RevisionAddress == followupEvent && current.StateRevisionAddress == catalogState &&
+            Need(current.BaseCommitId == followupCommit && current.StateSourceCommitId == before.CommitAt(catalogState) &&
                 current.StateId!.Value.Value == witness.CatalogRootId,
                 "Cold Shared checkout must restore the previous State while preserving the newer Event head.");
             root.Numbers[7] = 203;
-            continued = current.CommitState().RevisionAddress;
+            continuedCommit = current.CommitState().Id;
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        continued = actual.GraphAddress(continuedCommit);
         WireInspector.Graph graph = actual.Graph(continued);
         uint listId = witness.CatalogListId!.Value;
         Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == followupEvent && graph.SourceGraph == catalogState &&
@@ -466,6 +485,16 @@ internal static class Program {
             SharedContinuationFrames = Frames(actual).Where(frame => !followupFrames.Contains(frame.Address)).ToArray() };
     }
 
+    private static RefImage ReadBusinessRef(string database, CommitId commit) {
+        Span<byte> bytes = stackalloc byte[CommitId.EncodedSize];
+        Need(commit.TryWrite(bytes) && HeadEntryId.TryRead(bytes, out _), "Invalid CommitId codec.");
+        HeadEntryId.TryRead(bytes, out HeadEntryId id);
+        using var data = Atelia.FrameStore.FrameStore.OpenReadOnly(Path.Combine(database, "data"));
+        using var heads = Atelia.HeadStore.HeadStore.OpenReadOnly(Path.Combine(database, "versions"), data);
+        HeadEntry current = heads.ReadHead(id.HeadId).Unwrap();
+        return new(current.Id, current.Payload.ToArray());
+    }
+
     private static RefImage ReadSharedRef(string database) => ReadRefImage(database, 2);
 
     private static RefImage ReadRefImage(string database, uint refId) {
@@ -483,21 +512,22 @@ internal static class Program {
     private static object Verify(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
         Dictionary<string, string> before = FileImages(database);
+        WireInspector.Snapshot prior = WireInspector.Read(database);
         using (Repository repository = Repository.OpenReadOnlyExisting(database, Models())) {
-            CheckpointAddress initial = repository.ResolveTag("initial");
-            Need(initial.RevisionAddress == Address(witness.SeedState), "The immutable initial tag moved.");
-            Check(repository.ReadState(initial), upgraded: true);
-            Check(repository.ReadState(repository.GetHead("main")), upgraded: true);
-            Check(repository.ReadState(repository.GetHead("fork")), upgraded: true, atSeven: 201);
-            Need(repository.GetHead("catalog").RevisionAddress == Address(witness.SharedContinuationState!), "The catalog branch's published head changed.");
-            Check(repository.ReadState(repository.GetHead("catalog")), upgraded: true, atSeven: 203);
-            var catalogHistory = repository.ReadFrames("catalog");
-            Check(repository.ReadState(catalogHistory.Single(frame => frame.RevisionAddress == Address(witness.CatalogState!))), upgraded: true, atSeven: 202);
-            Check(repository.ReadEvent(catalogHistory.Single(frame => frame.RevisionAddress == Address(witness.FollowupEvent!))), upgraded: true, atSeven: 202);
-            Need(repository.ReadEvent(catalogHistory.Single(frame => frame.RevisionAddress == Address(witness.CatalogAcceptanceEvent!))) is CatalogEvent { Value: 41 },
+            CommitId initial = repository.ResolveTag("initial");
+            Need(initial == prior.CommitAt(Address(witness.SeedState)), "The immutable initial tag moved.");
+            Check(repository.LoadState(initial), upgraded: true);
+            Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id), upgraded: true);
+            Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id), upgraded: true, atSeven: 201);
+            Need(repository.ReadCurrentCommit(BranchNamed(repository, "catalog")).Commit.Id == prior.CommitAt(Address(witness.SharedContinuationState!)), "The catalog branch's published head changed.");
+            Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "catalog")).Commit.Id), upgraded: true, atSeven: 203);
+            var catalogHistory = repository.ReadFrames(BranchNamed(repository, "catalog"));
+            Check(repository.LoadState(catalogHistory.Single(commit => commit.Id == prior.CommitAt(Address(witness.CatalogState!))).Id), upgraded: true, atSeven: 202);
+            Check(repository.LoadEvent(catalogHistory.Single(commit => commit.Id == prior.CommitAt(Address(witness.FollowupEvent!))).Id), upgraded: true, atSeven: 202);
+            Need(repository.LoadEvent(catalogHistory.Single(commit => commit.Id == prior.CommitAt(Address(witness.CatalogAcceptanceEvent!))).Id) is CatalogEvent { Value: 41 },
                 "The original generated Event must remain readable through its own historical origin S.");
-            Check(repository.ReadEvent(repository.ReadFrames("fork").Single(frame => frame.RevisionAddress == Address(witness.RewriteEvent!))), upgraded: true);
-            var pair = repository.ReadPair(initial, repository.GetHead("fork"));
+            Check(repository.LoadEvent(repository.ReadFrames(BranchNamed(repository, "fork")).Single(commit => commit.Id == prior.CommitAt(Address(witness.RewriteEvent!))).Id), upgraded: true);
+            var pair = repository.ReadPair(initial, repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id);
             Widget old = Check(pair.First, upgraded: true), current = Check(pair.Second, upgraded: true, atSeven: 201);
             Need(!ReferenceEquals(old, current) && !ReferenceEquals(old.Numbers, current.Numbers),
                 "Final cross-S Pair must retain independent mutable instances in this fixture.");
@@ -668,6 +698,7 @@ internal static class Program {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(value, Json));
     }
+    private static BranchId BranchNamed(Repository repository, string label) => repository.ListBranches().Single(branch => branch.DisplayLabel == label).Id;
     private static string Hex(FrameAddress address) {
         Span<byte> bytes = stackalloc byte[FrameAddress.EncodedSize];
         Need(address.TryWrite(bytes), "Invalid address.");

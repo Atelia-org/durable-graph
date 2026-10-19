@@ -2,13 +2,13 @@
 
 此目录覆盖普通包消费下的真实 SG Widget V1→V2、Shared Schema Catalog、共享 List／环、Event 与 State 各自推进以及冷增量续写。不借 IVT、内部工厂或产品私有反射。最小验收是下表五个独立进程成功，并核对包来源、history 和持久字节。
 
-**2026-10-19 后继：**按 [DB-096 单一 Catalog 决策](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md) 删除活动 Private／ToShared 路线。`catalog` 分支从真实 baseline Fork，普通 `CommitEvent(new CatalogEvent(...))` 将 State 不可达的 Event 声明接纳进共享 Catalog，同时保留原 State；随后普通 State 和 Event 保存验证热读、独立读回、同 owner 再签出与全关冷续写。该消费者只接受新的 `P0R2` 分支根格式。下面历史包回执保持原意，**不构成本次修改的新 G 包资格**。
+**2026-10-19 后继：**按 [DB-096 单一 Catalog 决策](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md) 删除活动 Private／ToShared 路线。`catalog` 分支从真实 baseline Fork，普通 `CommitEvent(new CatalogEvent(...))` 将 State 不可达的 Event 声明接纳进共享 Catalog，同时保留原 State；随后普通 State 和 Event 保存验证热读、独立读回、同 owner 再签出与全关冷续写。该消费者已迁移到 `BranchId`／`CommitId`／`WorkingCopy`、`P0R3` D 管理图入口和 `P0G2` 图；业务接续来自真实 HeadStore Entry 历史。协议升为 `DG.SplitRepositoryConsumer.v2`。下面历史包回执保持原意，**不构成本次修改的新 G 包资格**。
 
 `CatalogEvent` 保留历史 durable key `probe.private.unreachable`，便于与旧证据对照；该键仅是 fixture 的类型名，不表示 Private 语义。当前 runner 必需观察包含 `CatalogSharedRootAdvanced`、`FollowupCatalogUnchanged`、`FollowupEventRetainsState` 及三项热读／独立读／同 owner 再签出结果。
 
 项目只有 Runtime／Persistence 两个 PackageReference，另八包传递取得；没有手动 Import、Analyzer、AdditionalFiles 或 ProjectReference。包内 SG／Build inputs 实际参与 V1/V2 编译及 accepted-history Publish／Verify，历史文件从 1 个增至 3 个（Widget V1／V2 和 Event V1）且旧文件不变。
 
-## DB-089 C：protected 查询与同 owner 生命周期的有限验收
+## 历史资格：DB-089 C：protected 查询与同 owner 生命周期的有限验收
 
 G `0.0.0-public-history-e2e.20261014041822.37600`，生产提交 `dee9008ee3b857fdd7860e5d9bb698e3beee69b4`；准确 Storage S `0.1.3-dev.20261011.g974fd47`／`974fd47abb73792f9d350af87ab91a53848952eb`。189 项生产输入匹配 HEAD；消费者／文档修改另记录，未声称整个工作树干净。十包来源与五个消费者 PID 的 50 份实际加载 DLL 经核验。
 
@@ -16,7 +16,7 @@ G `0.0.0-public-history-e2e.20261014041822.37600`，生产提交 `dee9008ee3b857
 
 工件 `W:/TEMP/dg-db089-c-20261014-041310-11152/result.json`，SHA256 `99C02824FE24E1200FE165BE2CD177882D3981A57C0D5E9167B1BC5940812F6E`；主线验收及修饰符核验见仓内忽略工件 `.artifacts/db089-c-20261014-041310/acceptance.json`、`metadata.json`。重跑使用下面既有 runner／准确 feed 配方。此资格限于普通包编译能力边界和本 Widget／List 故事，不证明 callback 沙箱、任意 reader 完整可恢复性、进程故障、断电或性能。
 
-## DB-088 第二轮：删除特例后的新 G 验收
+## 历史资格：DB-088 第二轮：删除特例后的新 G 验收
 
 G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50ac6968f1b12988043`；准确 Storage S `0.1.3-dev.20261011.g974fd47`／`974fd47abb73792f9d350af87ab91a53848952eb`。受控新 pack 的 189 项生产输入、实际包／DLL与 SG／Build inputs 核验通过；两 stage 四次成功 Publish／Verify Rebuild，五个独立 PID全部 exit0，history 1→3且原 V1保持。
 
@@ -38,11 +38,11 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 |---|---|
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
 | `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
-| `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 仍按 State.S0 恢复，只更新 ref。升级环的 Event 保 State 地址／ID／实例，随后 State 以 Event 为业务 Parent、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
+| `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 创建引用 Head 并登记 D，不产生克隆业务 Commit；随后 OpenWorkingCopy 按 State.S0 恢复。升级环的 Event 保 State 地址／ID／实例，随后 State 以 HeadStore 历史中的 Event 为前序、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
 | `continue`／V2 | Shared 冷单 List Delta；从真实 baseline 创建 `catalog` 分支；SG Event 接纳 State 不可达声明并推进共享 Catalog，State 不变；全关冷签出 List Delta；List202 热 State／独立读回／同 owner 再签出保持值与身份且不额外提交；普通 Widget Event 保持 Catalog／State，只推进业务 Head；全关后同 PID 新 owner 单 List Delta／真实 prior/H／准确旧 Base origin |
 | `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、catalog 的历史 State／Event／当前 State、准确各图 S 与完整 meta 声明；全部完成帧保持，完整文件集合／SHA 不变 |
 
-每次物理观察都在相应 Repository／Checkout 全关后进行。[WireInspector](WireInspector.cs) 仅用公开 FS／VS／Binary 独立只读打开，观察固定图／batch／Dictionary目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
+每次物理观察都在相应 Repository／WorkingCopy 全关后进行。活动调用只传真实 CommitId；关闭后再由独立 inspector 将 Entry payload 映射到图地址。[WireInspector](WireInspector.cs) 仅用公开 FS／HeadStore／Binary 独立只读打开，观察P0R3 指针及 D Dictionary 图、P0E1 Entry payload、P0G2 图／batch／对象目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。业务前序和最近 State 来源由正式 D 成员的准确 Entry 历史提供；Meta 的 PreviousMeta 单独验证。D/T Meta 不冒充 Schema Catalog。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
 公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、另一个 writer PID 的续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
 

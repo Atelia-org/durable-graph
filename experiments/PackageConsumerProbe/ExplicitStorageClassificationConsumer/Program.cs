@@ -27,11 +27,12 @@ internal static class Program {
                 Need(Subject.AccessorCalls == 1, "The fixture must exercise its setter before capture.");
                 Subject.AccessorCalls = 0;
                 using Repository repository = Repository.CreateNew(database, models);
-                using BranchCheckout branch = repository.CreateSharedBranch("main", input);
+                repository.CreateRootBranchFromState("main", input);
                 Need(Subject.AccessorCalls == 0, "Capture executed a Transient accessor.");
             } else if (phase == "read") {
                 using Repository repository = Repository.OpenReadOnlyExisting(database, models);
-                Subject restored = (Subject)repository.ReadState(repository.GetHead("main")!)!;
+                BranchId branch = repository.ListBranches().Single().Id;
+                Subject restored = (Subject)repository.LoadState(repository.ReadCurrentCommit(branch).Commit.Id);
                 Need(restored.Value == 42 && restored.Control == 7, "Cold values disagree.");
                 Need(Subject.AccessorCalls == 0, "Restore executed a Transient accessor.");
                 Need(restored.Scratch == 0 && Subject.AccessorCalls == 1,

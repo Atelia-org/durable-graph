@@ -32,18 +32,18 @@ internal static class Program {
             try {
                 if (mode == "verify") {
                     // This catalog intentionally excludes World and Character.
-                    var events = repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray();
-                    DamageEvent first = ((DamageEvent)repository.ReadEvent(events.First()));
+                    var events = repository.EnumerateEvents(repository.ReadCurrentCommit(MainBranch(repository)).Commit.Id, HistoryOrder.OldestFirst).ToArray();
+                    DamageEvent first = ((DamageEvent)repository.LoadEvent(events.First().Id));
                     CheckSnapshot(first, 10);
                     Require(events.Count() is 1 or 2, "Unexpected event count.");
                     Console.WriteLine("Verified:EventOnly:Hp=10:Observations=ready,armed");
                     return 0;
                 }
                 using var session = mode is "init-record" or "hot"
-                    ? repository.CreateSharedBranch("main", new World())
-                    : repository.CheckoutShared("main");
+                    ? repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new World()).Id)
+                    : repository.OpenWorkingCopy(MainBranch(repository));
                 if (mode is "init-record" or "hot" or "next") {
-                    Require(session.Head.Kind == CheckpointKind.State, "The application protocol requires completing its previous Event before accepting new work.");
+                    Require(repository.ReadCommitInfo(session.BaseCommitId).Kind == CommitKind.State, "The application protocol requires completing its previous Event before accepting new work.");
                     int expectedHp = mode == "next" ? 7 : 10;
                     Require(((World)session.State!).Actor.Hp == expectedHp, "Unexpected initial State.");
                     var pending = new DamageEvent(((World)session.State!).Actor, 3);
@@ -61,7 +61,7 @@ internal static class Program {
                 int hp = ((World)session.State!).Actor.Hp;
                 Require(hp == (mode == "next" ? 4 : 7), "Recovery used a stale State or replayed an already completed event.");
                 Require(((World)session.State!).Actor.Observations.SequenceEqual(new[] { "changed", "later" }), "State observations differ between hot and cold processing.");
-                Console.WriteLine($"Completed={completed}:StateHp={hp}:Pending={session.Head.Kind == CheckpointKind.Event}");
+                Console.WriteLine($"Completed={completed}:StateHp={hp}:Pending={repository.ReadCommitInfo(session.BaseCommitId).Kind == CommitKind.Event}");
                 return 0;
             }
             catch (Exception error) {
@@ -75,6 +75,11 @@ internal static class Program {
             return 1;
         }
     }
+
+    // This one-branch application deliberately keeps its display label unique. Larger applications
+    // should persist the selected BranchId; labels are not library-enforced identifiers.
+    private static BranchId MainBranch(Repository repository) =>
+        repository.ListBranches().Single(branch => branch.DisplayLabel == "main").Id;
 
     private static void Apply(World state, IDurableObject pending) {
         if (pending is not DamageEvent damage) { throw new InvalidOperationException("Unsupported pending event."); }

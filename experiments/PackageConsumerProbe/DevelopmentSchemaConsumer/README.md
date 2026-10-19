@@ -3,9 +3,9 @@
 这是一个有限普通 PackageReference 实验。问题是：完整复制已关闭的 V1 Repository，并隔离编译 history 与输出后，两个同 key/version 异形 V2 草稿能否各自在自己的库中正常 Shared 升级，最后将干净 V1 正式副本正常升级到定稿 V2B？
 2026-10-19 起按 [统一 Catalog 决定](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md) 改写。下方旧包结果是历史资格，不能替代本版的新包验证。
 
-模型只有一个 Widget 族：V1 的 Value 为 int，V2A 为 long，V2B 为 double；两份 V2 的 key/version 相同但真实布局不同。两个 Widget 成环并共享 128 项 List<int>。seed PID 退出后，controller 完整复制数据库到 A/B/release，按相对路径文件集合及 SHA 核对；各自复制 witness、V1 history，编译目录也隔离。草稿在自己的副本使用 baseline tag：ResolveTag → CreateBranch → CheckoutShared → 修改已恢复的 State → CommitState，接纳本库的 V2。
+模型只有一个 Widget 族：V1 的 Value 为 int，V2A 为 long，V2B 为 double；两份 V2 的 key/version 相同但真实布局不同。两个 Widget 成环并共享 128 项 List<int>。seed PID 退出后，controller 完整复制数据库到 A/B/release，按相对路径文件集合及 SHA 核对；各自复制 witness、V1 history，编译目录也隔离。草稿在自己的副本使用 baseline tag：ResolveTag → ForkBranch → OpenWorkingCopy → 修改已恢复的 State → CommitState，接纳本库的 V2。
 
-正式 release 副本在定稿前必须与 V1 模板逐文件相同；用 B 代码执行普通 CommitState，然后关闭全部资源，以新的 Shared owner 冷续写 List。没有草稿帧导入或推广。公开 State/root ID、chronological ReadFrames 的准确前驱、领域值、环和 alias 共同观察继承；精确对象头、完整对象 IDs、record kind/prior/H 由源码测试另证。复制会保留已有持久身份，分化后的副本以路径区分，不能当成可合并分支。
+正式 release 副本在定稿前必须与 V1 模板逐文件相同；用 B 代码执行普通 CommitState，然后关闭全部资源，以新的 Shared owner 冷续写 List。没有草稿帧导入或推广。公开 CommitId／StateSourceCommitId／root ObjectId、chronological ReadFrames 的准确前驱、领域值、环和 alias 共同观察继承；精确对象头、完整对象 IDs、record kind/prior/H 由源码测试另证。复制会保留已有持久身份，分化后的副本以路径区分，不能当成可合并分支。
 
 | 编译输出 | 模型 | history 输入 | 实际模式 |
 |---|---|---|---|
@@ -32,6 +32,8 @@ pwsh -NoProfile -File experiments/PackageConsumerProbe/Run-DevelopmentSchemaProb
 本故事将两个 V2 草稿限定为各自从固定 V1 baseline 开始。若后一个模型继承前一个 V2 草稿的数据，应用仍须递增版本；本实验不实现任意草稿间迁移、不承诺一库容纳同 key 异形模型，也不授 OS 快照、进程 Kill、断电、H 或性能资格。
 
 当前合同见 [统一 Catalog](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)，相关包故事见 [SplitRepositoryConsumer](../SplitRepositoryConsumer/README.md) 和 [容器升级](../PrivateContainerConsumer/README.md)。
+
+DB-096 当前协议为 `DG.DevelopmentSchemaConsumer.v2`。witness 中各 `*State` 定位值现在编码真实 CommitId，原有 FrameImage.Address 仍是物理 FrameAddress；两者不混用。两种值都固定编码，但只有 CommitId 用于公开恢复和分叉。旧协议收据不作为本版资格。
 
 ## 历史资格：DB-088 第二轮删除特例后的新 G 验收
 

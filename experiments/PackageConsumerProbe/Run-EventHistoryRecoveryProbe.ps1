@@ -40,26 +40,33 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.Repository.CreateNew(' = 1
         'M:Atelia.DurableGraph.Repository.OpenExisting(' = 1
         'M:Atelia.DurableGraph.Repository.OpenReadOnlyExisting(' = 1
-        'M:Atelia.DurableGraph.Repository.CreateBranch(' = 1
-        'M:Atelia.DurableGraph.Repository.CreateSharedBranch(' = 1
-        'M:Atelia.DurableGraph.Repository.CreateSharedBranchFromEvent(' = 1
-        'M:Atelia.DurableGraph.Repository.CheckoutShared(' = 1
-        'M:Atelia.DurableGraph.Repository.ForkShared(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateRootBranchFromState(' = 1
+        'M:Atelia.DurableGraph.Repository.CreateRootBranchFromEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.OpenWorkingCopy(' = 1
+        'M:Atelia.DurableGraph.Repository.ForkBranch(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadCurrentCommit(' = 1
+        'M:Atelia.DurableGraph.Repository.ReadCommitInfo(' = 1
         'M:Atelia.DurableGraph.Repository.CreateTag(' = 1
         'M:Atelia.DurableGraph.Repository.ResolveTag(' = 1
         'M:Atelia.DurableGraph.Repository.ReadFrames(' = 1
         'M:Atelia.DurableGraph.Repository.EnumerateEvents(' = 1
         'M:Atelia.DurableGraph.Repository.ReadCheckpoint(' = 1
-        'M:Atelia.DurableGraph.Repository.ReadState(' = 1
-        'M:Atelia.DurableGraph.Repository.ReadEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.LoadState(' = 1
+        'M:Atelia.DurableGraph.Repository.LoadEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.LoadLatestSavedState(' = 1
         'M:Atelia.DurableGraph.Repository.ReadPair(' = 1
         'P:Atelia.DurableGraph.Repository.IsFaulted' = 1
-        'M:Atelia.DurableGraph.BranchCheckout.CommitEvent(' = 1
-        'M:Atelia.DurableGraph.BranchCheckout.CommitState(' = 2
-        'P:Atelia.DurableGraph.BranchCheckout.State' = 1
-        'P:Atelia.DurableGraph.BranchCheckout.IsFaulted' = 1
+        'M:Atelia.DurableGraph.WorkingCopy.CommitEvent(' = 1
+        'M:Atelia.DurableGraph.WorkingCopy.CommitState(' = 2
+        'P:Atelia.DurableGraph.WorkingCopy.State' = 1
+        'P:Atelia.DurableGraph.WorkingCopy.IsFaulted' = 1
         'T:Atelia.DurableGraph.RepositoryPublicationException' = 1
-        'T:Atelia.DurableGraph.CheckpointAddress' = 1
+        'T:Atelia.DurableGraph.BranchId' = 1
+        'T:Atelia.DurableGraph.CommitId' = 1
+        'T:Atelia.DurableGraph.CommitInfo' = 1
+        'T:Atelia.DurableGraph.BranchInfo' = 1
+        'T:Atelia.DurableGraph.CurrentCommit' = 1
+        'T:Atelia.DurableGraph.LoadedState' = 1
         'T:Atelia.DurableGraph.Checkpoint' = 1
         'T:Atelia.DurableGraph.EventCheckpoint' = 1
         'T:Atelia.DurableGraph.StateCheckpoint' = 1
@@ -77,7 +84,7 @@ function Test-PackageDocumentation {
             }
             if ($member.name.StartsWith('M:Atelia.DurableGraph.Repository.ReadPair', [StringComparison]::Ordinal)) {
                 $remarks = ($member.remarks.InnerText ?? [string]$member.remarks) -replace '\s+', ' '
-                foreach ($required in @('Transient mutation', 'outside the graphs', 'without a writer', 'Checkout')) {
+                foreach ($required in @('Transient mutation', 'outside the graphs', 'without a writer', 'OpenWorkingCopy')) {
                     if (-not $remarks.Contains($required, [StringComparison]::Ordinal)) {
                         throw "Missing ReadPair Transient contract '$required': $($member.name)."
                     }
@@ -85,18 +92,21 @@ function Test-PackageDocumentation {
             }
         }
     }
-    $checkpointProperties = @('Checkpoint.Address', 'EventCheckpoint.Event', 'EventCheckpoint.PreviousState',
-        'EventCheckpoint.PreviousStateAddress', 'StateCheckpoint.State', 'StateCheckpoint.PreviousEvent',
-        'StateCheckpoint.PreviousEventAddress')
+    $checkpointProperties = @('Checkpoint.Commit', 'EventCheckpoint.Event', 'EventCheckpoint.PreviousState',
+        'EventCheckpoint.PreviousStateCommit', 'StateCheckpoint.State', 'StateCheckpoint.PreviousEvent',
+        'StateCheckpoint.PreviousEventCommit')
     foreach ($property in $checkpointProperties) {
         $members = @($documentation.doc.members.member | Where-Object { $_.name -ceq "P:Atelia.DurableGraph.$property" })
         if ($members.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$members[0].summary)) {
             throw "Missing Checkpoint property documentation: $property"
         }
     }
-    if (@($documentation.doc.members.member | Where-Object {
-        $_.name.StartsWith('M:Atelia.DurableGraph.Repository.ReadEvents(', [StringComparison]::Ordinal)
-    }).Count -ne 0) { throw 'The obsolete ReadEvents API must not remain in the current package.' }
+    foreach ($obsolete in @('ReadEvents', 'ReadState', 'ReadEvent', 'CreateBranch', 'CreateSharedBranch',
+        'CreateSharedBranchFromEvent', 'CheckoutShared', 'ForkShared', 'MoveBranch')) {
+        if (@($documentation.doc.members.member | Where-Object {
+            $_.name.StartsWith("M:Atelia.DurableGraph.Repository.$obsolete(", [StringComparison]::Ordinal)
+        }).Count -ne 0) { throw "The obsolete $obsolete API must not remain in the current package." }
+    }
     Write-Host "FacadeDocumentation:Packaged:Restored:MembersVerified"
 }
 

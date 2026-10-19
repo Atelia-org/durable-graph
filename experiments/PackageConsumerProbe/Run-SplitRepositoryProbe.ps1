@@ -401,7 +401,7 @@ function Invoke-Consumer {
             throw "Consumer $Lane failed; inspect its stdout/stderr in $workRoot."
         }
         $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
-        if ($evidence.Protocol -cne 'DG.SplitRepositoryConsumer.v1' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
+        if ($evidence.Protocol -cne 'DG.SplitRepositoryConsumer.v2' -or $evidence.Passed -isnot [bool] -or !$evidence.Passed -or
             $evidence.Lane -cne $Lane -or $evidence.ProcessId -ne $process.Id -or $evidence.TypedBodyAbi -ne 5) {
             throw "Consumer $Lane did not report its actual successful process and current typed ABI."
         }

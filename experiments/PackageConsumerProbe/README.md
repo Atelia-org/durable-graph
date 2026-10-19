@@ -2,6 +2,7 @@
 
 实际 PackageReference 消费是源码测试之外的交付验证。活动门禁各保范围，运行参数、包来源、
 history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
+DB-096 当前消费者迁移及新包验收进度见[工作集](../../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)；旧包记录仅证明其准确来源版本，源码迁移完成不等于新包门禁已经通过。
 
 ## 活动门禁
 
@@ -9,7 +10,7 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 |---|---|
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
 | [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | README 原文纯 State 连续保存、历史分叉与冷续写；可选 Event、Upgrade/Verify 及候选交付 |
-| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、十一项旧 API（含 Private/ToShared）精确编译负例及恢复合法源码后的冷保存 |
+| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、十八项旧 API/错误调用（含旧 BranchCheckout、Move 和 Private/ToShared）精确编译负例及恢复合法源码后的冷保存 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
@@ -23,9 +24,9 @@ history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE
 完整 feed、任务配置和候选来源见[依赖指南](../../docs/storage-dependency.md)。
 不以 source ProjectReference 或 feed 中存在 nupkg 代替实际消费。运行输出放在忽略目录。
 
-DB-095 的公开调用门禁接受完整候选 feed 与独立 DG 版本；`WorkDirectory` 可省略，由 runner 创建仓外新目录。
+公开调用门禁已按 DB-096 的 Branch/Commit/WorkingCopy 调整，接受完整候选 feed 与独立 DG 版本；`WorkDirectory` 可省略，由 runner 创建仓外新目录。
 它使用全新包缓存及正常 PackageReference/Generator/Build，不配置 friend 或手工 analyzer。
-每个旧调用单独断言诊断代码与源码位置；负例结束后恢复合法源码并重新 Verify build，再执行 Shared 分支冷恢复保存。
+每个旧调用单独断言诊断代码与源码位置；负例结束后恢复合法源码并重新 Verify build，再执行新 Branch API 的冷恢复保存。
 
 ```powershell
 ./experiments/PackageConsumerProbe/Run-RepositoryApiProbe.ps1 -PackageSource <feed> -Version <G> -WorkDirectory <fresh-outside-directory>

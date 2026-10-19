@@ -1,8 +1,8 @@
 # Shared container upgrade package consumer
 
-本消费者遵循 [DB-096 单 Catalog 决定](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)：普通 Shared 分支保存接纳 Point V1→V2；不再执行 Private 或 ToShared。目录、项目、程序集和 runner 保留旧 `PrivateContainer` 名称，仅作历史工件路径；运行协议已改为 `DG.SchemaContainerConsumer.v3`，旧收据不能证明当前源码通过。
+本消费者遵循 [DB-096 单 Catalog 决定](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)：普通分支保存接纳 Point V1→V2；不再执行 Private 或 ToShared。目录、项目、程序集和 runner 保留旧 `PrivateContainer` 名称，仅作历史工件路径；运行协议已改为 `DG.SchemaContainerConsumer.v4`，旧收据不能证明当前源码通过。
 
-普通 PackageReference 消费者，无 IVT、ProjectReference、手动 Analyzer／AdditionalFiles／Import 或产品私有反射。WireInspector 仅在全部产品资源关闭后经公开 FS／HeadStore／Bare 观察 ABI5、P0R2 目录、实际 Heads、完整 Catalog、source／prior／H 与旧完整帧；不作为产品启动 audit。
+普通 PackageReference 消费者，无 IVT、ProjectReference、手动 Analyzer／AdditionalFiles／Import 或产品私有反射。WireInspector 仅在全部产品资源关闭后经公开 FS／HeadStore／Bare 观察 ABI5、P0R3 指针及 D Dictionary 图、P0E1 Entries、P0G2 图、实际 Heads、完整 Catalog、source／prior／H 与旧完整帧；不作为产品启动 audit。
 
 运行（准确 Storage feed 和 DG 新 G；runner 可受控打包）：
 
@@ -17,14 +17,16 @@ A、B 编译为两个独立 host；A 发布 V1 history，B 继承其精确文件
 | 阶段 | 关键观察 |
 |---|---|
 | A seed | keeper＋main；两 Root 环和共享 Nullable List；固定旧 tag、完整目录和三个真实用户对象 IDs |
-| B missing-upgrade | 不选择 List element rules；连续两次 Shared checkout 由准确缺规则错误拒绝，分支未被占用、owner 不 fault、publication 和完整帧不变 |
-| B create | 从旧 tag 创建 upgraded 分支，普通 Shared checkout/commit 升级；ID 与准确 source 保持，List 写升级 Base，旧新 Point/List 和不可达 Keeper 共存，统一 Catalog 推进 |
+| B missing-upgrade | 不选择 List element rules；连续两次 OpenWorkingCopy 由准确缺规则错误拒绝，分支未被占用、owner 不 fault、publication 和完整帧不变 |
+| B create | 从旧 tag 创建 upgraded 分支，普通 OpenWorkingCopy/commit 升级；ID 与准确 source 保持，List 写升级 Base，旧新 Point/List 和不可达 Keeper 共存，统一 Catalog 推进 |
 | A continue-a | V1 host 冷开 main；新保存采用当前完整 Catalog，旧对象 origin 仍按原准确 Catalog 解码；单 List 真 Delta、exact prior/H；其他分支和 Catalog 不变 |
 | B continue-b | V2 host 冷开 upgraded；单 List 真 Delta、exact prior/H、两 Root 保持，main 与 Catalog 不变 |
 | A verify-a | 全程 readonly 读 V1 main 和旧 tag，完整文件集合与字节不变 |
 | B verify-b | 全程 readonly 读 V2 upgraded，也能将 main V1 读取升级，精确 IDs/链/完整帧保持 |
 
 当前迁移需用新 G 重新执行 runner 验收；以下旧证据保持历史含义。Array／Dictionary、同版冲突开发副本、发布故障、Unknown／Kill／断电与性能不属于此包片。
+
+活动 API 使用 BranchId／CommitId／WorkingCopy；创建与 fork 返回 BranchInfo，显式 OpenWorkingCopy 才恢复对象。业务历史前序和最近 State 来源由实际 HeadStore Entry 历史验证；Graph.Parent 仅是 observer 派生字段，不是 P0G2 的业务 wire 字段。物理地址只在全部 owner 关闭后解析，不保留裸图地址业务读取入口。
 
 ## DB-088 第二轮：删除特例后的新 G 验收
 

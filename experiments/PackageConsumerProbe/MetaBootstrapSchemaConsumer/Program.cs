@@ -8,6 +8,7 @@ using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
+using Atelia.HeadStore;
 using BootstrapSchemaClosure;
 using persistence::Atelia.DurableGraph.Persistence;
 
@@ -17,7 +18,7 @@ internal static class Program {
         uint Scalars, uint Entries) {
         internal uint[] All => [Root, Samples, Optional, Nested, Inner, ArrayOptional, Points, Scalars, Entries];
     }
-    private sealed record Witness(string State0, string? State1, string Schema, BusinessIds Ids, Dictionary<uint, string> Heads);
+    private sealed record Witness(string Commit0, string? Commit1, string Schema, BusinessIds Ids, Dictionary<uint, string> Heads);
 
     private static int Main(string[] args) {
         if (args.Length != 3) { throw new ArgumentException("Expected lane, database and witness path."); }
@@ -34,6 +35,7 @@ internal static class Program {
                 Lane = lane, ProcessId = Environment.ProcessId, EmployeeAssembly = AssemblyEvidence(typeof(SchemaCatalogRecord).Assembly),
                 PersistenceAssembly = AssemblyEvidence(typeof(RepositoryStorageFacade).Assembly), RuntimeAssembly = AssemblyEvidence(typeof(DurableSchema).Assembly),
                 HostAssembly = AssemblyEvidence(typeof(Host).Assembly), TypedBodyAbi = TypedBaseBodyCodec.FormatVersion,
+                CommitHandleBytes = HeadEntryId.EncodedSize, SourceSelection = "HeadStoreStrictPrecedingState",
             }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine("MetaBootstrapSchema:" + lane + ":Passed");
         return 0;
@@ -42,40 +44,43 @@ internal static class Program {
     private static void Seed(string database, string witnessPath) {
         using var repository = RepositoryStorageFacade.CreateNew(database);
         StateModelRegistry models = Host.Models();
-        var session = new BranchSaveSession(repository, "main", models);
+        var session = new BranchSaveSession(repository, null, null, models.FreezeConfiguration(), repository.EnsureEditingAllowed);
         Need(session.Catalog.Accepted is null && session.Catalog.DirtyCount == 0, "Seed must not manually register catalog entries.");
-        using var pending = session.Prepare(Host.Create());
+        using var pending = session.Prepare(Host.Create(), rootLabel: "main");
         CheckCatalog(pending.Catalog.View);
         Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.All(row => row.Kind == ObjectVersionKind.Base), "First save must write Root, four Lists, two Arrays and two Dictionary Base rows.");
         RepositorySaveResult saved = pending.Commit();
         Need(saved.Business.ObjectHeads.Count == 9, "Inline/base/Nullable must not create rows; the shared inner List must create only one.");
         FrameAddress schema = repository.SharedSchemaRoot!.Value;
         Need(saved.Business.SchemaRoot == schema, "The business graph must pin its actual meta root.");
-        BusinessIds ids = CheckRows(repository, saved.Business.Address, pending.Catalog.View, models);
-        CheckFixedRowsWithoutCatalog(repository, saved.Business.Address, ids, 0);
-        WriteWitness(witnessPath, new(Hex(saved.Business.Address), null, Hex(schema), ids,
+        BusinessIds ids = CheckRows(repository, saved.Business, pending.Catalog.View, models);
+        CheckFixedRowsWithoutCatalog(repository, saved.Business, ids, 0);
+        WriteWitness(witnessPath, new(Hex(saved.CommitId), null, Hex(schema), ids,
             saved.Business.ObjectHeads.ToDictionary(pair => pair.Key, pair => Hex(pair.Value))));
     }
 
     private static void Read(string database, string witnessPath, bool continued) {
         Witness witness = ReadWitness(witnessPath);
         using var repository = RepositoryStorageFacade.OpenReadOnlyExisting(database);
-        FrameAddress schema = Address(witness.Schema), s0 = Address(witness.State0);
-        Need(repository.Store.ReadGraph(s0).SchemaRoot == schema, "The seed State must retain its exact Schema pin.");
+        FrameAddress schema = Address(witness.Schema);
+        HeadEntryId commit0 = Entry(witness.Commit0);
+        StoredGraphRevision s0 = Snapshot(repository, commit0);
+        Need(s0.SchemaRoot == schema, "The seed State must retain its exact Schema pin.");
         // This is intentionally before the first registration of any business model in this process.
         SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schema);
         CheckCatalog(meta);
         CheckFixedRowsWithoutCatalog(repository, s0, witness.Ids, 0);
-        FrameAddress? s1 = continued ? Address(witness.State1 ?? throw new InvalidDataException("Missing continued State.")) : null;
+        HeadEntryId? commit1 = continued ? Entry(witness.Commit1 ?? throw new InvalidDataException("Missing continued Commit.")) : null;
+        StoredGraphRevision? s1 = commit1 is { } selectedCommit ? Snapshot(repository, selectedCommit) : null;
         if (s1 is { } current) { CheckFixedRowsWithoutCatalog(repository, current, witness.Ids, 1); }
         Need(repository.Store.AppendedFrames == 0, "Reading meta must not append.");
         StateModelRegistry models = Host.Models();
         Need(CheckRows(repository, s0, meta, models) == witness.Ids, "Cold seed rows must retain every object ID.");
         Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, models), 0);
         if (s1 is { } accepted) {
-            Need(repository.GetHead("main") == accepted && repository.GetStateHead("main") == accepted, "Fresh published roots must select the continued State.");
-            StoredGraphRevision graph = repository.Store.ReadGraph(accepted);
-            Need(graph.SourceGraph == s0 && graph.SchemaRoot == schema, "The Delta State must retain its exact content source and Schema pin.");
+            Need(repository.ReadCurrent(commit0.HeadId).Id == commit1 && repository.FindNearestState(commit1!.Value, inclusive: true)!.Id == commit1, "Fresh published roots must select the continued State.");
+            StoredGraphRevision graph = accepted;
+            Need(graph.SourceGraph == s0.Address && graph.SchemaRoot == schema, "The Delta State must retain its exact content source and Schema pin.");
             Need(CheckRows(repository, accepted, meta, models) == witness.Ids, "Cold continued rows must retain every object ID.");
             Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, accepted, models), 1);
             foreach (uint id in witness.Ids.All) {
@@ -84,26 +89,36 @@ internal static class Program {
                 Need(chain.Entries[^1].Record.PriorAddress == Address(witness.Heads[id]), "Fresh Delta prior must equal its exact seed head.");
                 Need(graph.ObjectHeads[id] != Address(witness.Heads[id]), "A changed object's accepted head must advance.");
             }
-        } else { Need(repository.GetHead("main") == s0, "Fresh roots must select the seed State."); }
+        } else { Need(repository.ReadCurrent(commit0.HeadId).Id == commit0, "Fresh roots must select the seed State."); }
         Need(repository.SharedSchemaRoot == schema && repository.Store.AppendedFrames == 0, "Read-only lanes must keep the exact shared root.");
     }
 
     private static void Continue(string database, string witnessPath) {
         Witness witness = ReadWitness(witnessPath);
-        FrameAddress s0 = Address(witness.State0), schema = Address(witness.Schema);
+        FrameAddress schema = Address(witness.Schema);
+        HeadEntryId commit0 = Entry(witness.Commit0);
         using var repository = RepositoryStorageFacade.OpenExisting(database);
-        Need(repository.Store.ReadGraph(s0).SchemaRoot == schema, "Cold continuation must read the pinned seed Schema.");
+        StoredGraphRevision s0 = Snapshot(repository, commit0);
+        Need(repository.ReadCurrent(commit0.HeadId).Id == commit0, "Cold continuation must use the selected current Commit.");
+        Need(s0.SchemaRoot == schema, "Cold continuation must read the pinned seed Schema.");
         SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schema); // No business registration yet.
         CheckCatalog(meta);
         CheckFixedRowsWithoutCatalog(repository, s0, witness.Ids, 0);
-        var session = new BranchSaveSession(repository, "main", Host.Models());
+        StateModelRegistry.FrozenConfiguration configuration = Host.Models().FreezeConfiguration();
+        BusinessPersistenceAdapter business = BusinessPersistenceAdapter.LoadState(repository.Store, s0, configuration);
+        var session = new BranchSaveSession(repository, commit0.HeadId, commit0, configuration, repository.EnsureEditingAllowed, business);
         IDurableObject restored = session.State ?? throw new InvalidDataException("Missing restored State.");
         Host.Check(restored, 0);
+        foreach (uint id in witness.Ids.All) {
+            ObjectVersionChain chain = repository.Store.ReadObjectChain(s0, id);
+            Need(session.Baseline!.Objects[new(id)].Storage == new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes),
+                "Cold restoration must retain exact object heads and reconstruction payload bytes.");
+        }
         object[] instances = Host.Objects(restored);
         Host.Change(restored);
         using var pending = session.Prepare(restored, parameters: new(1_000_000, 1));
         Need(pending.Catalog.Write is null && pending.Catalog.AddedDescriptors == 0 && pending.Catalog.EncodedIds.Count == 0, "Same-shape continuation must reuse the catalog.");
-        Need(pending.Business.Write.SourceGraph == s0 && pending.Business.Write.RemovedIds.Count == 0, "Continuation must preserve the exact content source and live set.");
+        Need(pending.Business.Write.SourceGraph == s0.Address && pending.Business.Write.RemovedIds.Count == 0, "Continuation must preserve the exact content source and live set.");
         Need(pending.Business.Write.Records.Count == 9 && pending.Business.Write.Records.Select(row => row.ObjectId).Order().SequenceEqual(witness.Ids.All.Order()), "Sparse changes must write exactly the nine existing objects.");
         foreach (ObjectVersionRecord row in pending.Business.Write.Records) {
             Need(row.Kind == ObjectVersionKind.Delta, "Every stored change must be a real Delta.");
@@ -111,17 +126,22 @@ internal static class Program {
         }
         RepositorySaveResult saved = pending.Commit();
         Need(repository.SharedSchemaRoot == schema && saved.Business.SchemaRoot == schema, "Continuation must retain its accurate Schema pin.");
+        foreach (uint id in witness.Ids.All) {
+            ObjectVersionChain chain = repository.Store.ReadObjectChain(saved.Business, id);
+            Need(session.Baseline!.Objects[new(id)].Storage == new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes),
+                "Delta installation must retain exact object heads and accumulated reconstruction payload bytes.");
+        }
         object[] installed = Host.Objects(session.State!);
         for (int i = 0; i < instances.Length; i++) {
             Need(ReferenceEquals(instances[i], installed[i]), "Successful installation must retain every frozen candidate live identity.");
         }
-        CheckFixedRowsWithoutCatalog(repository, saved.Business.Address, witness.Ids, 1);
+        CheckFixedRowsWithoutCatalog(repository, saved.Business, witness.Ids, 1);
         Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, Host.Models()), 0);
-        Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, saved.Business.Address, Host.Models()), 1);
-        WriteWitness(witnessPath, witness with { State1 = Hex(saved.Business.Address) });
+        Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, saved.Business, Host.Models()), 1);
+        WriteWitness(witnessPath, witness with { Commit1 = Hex(saved.CommitId) });
     }
 
-    private static BusinessIds CheckRows(RepositoryStorageFacade repository, FrameAddress graph, SchemaCatalogView meta,
+    private static BusinessIds CheckRows(RepositoryStorageFacade repository, StoredGraphRevision graph, SchemaCatalogView meta,
         StateModelRegistry models) {
         var expected = Expected();
         ModelExecutionEnvironment snapshot = models.CreateEnvironment(schemaLookup: key => meta.Schemas.GetValueOrDefault(key));
@@ -156,7 +176,7 @@ internal static class Program {
         return ids;
     }
 
-    private static void CheckFixedRowsWithoutCatalog(RepositoryStorageFacade repository, FrameAddress graph, BusinessIds ids, int stage) {
+    private static void CheckFixedRowsWithoutCatalog(RepositoryStorageFacade repository, StoredGraphRevision graph, BusinessIds ids, int stage) {
         var expected = Expected();
         // Neither header interpretation nor Base/Delta body reading receives a Schema view or user definitions.
         ModelExecutionEnvironment empty = new StateModelRegistry().CreateEnvironment();
@@ -283,6 +303,24 @@ internal static class Program {
     };
     private static Witness ReadWitness(string path) => JsonSerializer.Deserialize<Witness>(File.ReadAllText(path)) ?? throw new InvalidDataException("Missing witness.");
     private static void WriteWitness(string path, Witness witness) => File.WriteAllText(path, JsonSerializer.Serialize(witness));
+    // The witness carries the exact published location, not a graph-address/source assertion.
+    // Resolve the selected State and its strict predecessor from HeadStore history before content decoding.
+    private static StoredGraphRevision Snapshot(RepositoryStorageFacade repository, HeadEntryId commit) {
+        HistoryGraphRecord selected = repository.FindNearestState(commit, inclusive: true)
+            ?? throw new InvalidDataException("Witness Commit has no State.");
+        Need(selected.Id == commit, "Witness Commit must select a State, not a later Event.");
+        FrameAddress? source = repository.FindNearestState(commit, inclusive: false)?.Address;
+        return repository.Store.ReadBusinessGraph(selected.Address, source);
+    }
+    private static string Hex(HeadEntryId entry) {
+        byte[] encoded = new byte[HeadEntryId.EncodedSize];
+        Need(entry.TryWrite(encoded), "Invalid fixture Commit.");
+        return Convert.ToHexString(encoded);
+    }
+    private static HeadEntryId Entry(string encoded) {
+        Need(HeadEntryId.TryRead(Convert.FromHexString(encoded), out HeadEntryId entry), "Invalid persisted witness Commit.");
+        return entry;
+    }
     private static string Hex(FrameAddress address) {
         byte[] encoded = new byte[FrameAddress.EncodedSize];
         Need(address.TryWrite(encoded), "Invalid fixture address.");

@@ -59,6 +59,7 @@ try {
         $output = (Join-Path $workRoot "$($consumer.Name)-bin") + [IO.Path]::DirectorySeparatorChar
         $properties = @(
             "-p:DurableGraphPackageVersion=$Version",
+            "-p:UseStorageSources=false",
             "-p:DurableGraphSchemaHistoryDirectory=$history",
             "-p:BaseIntermediateOutputPath=$intermediate",
             "-p:BaseOutputPath=$output"

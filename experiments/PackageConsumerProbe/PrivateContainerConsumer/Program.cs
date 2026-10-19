@@ -14,7 +14,7 @@ using persistence::Atelia.DurableGraph.Persistence;
 // diagnostic: after every product owner closes, the observer re-reads actual
 // formal refs, complete catalogs and exact object-version chains independently.
 internal static class Program {
-    private const string Protocol = "DG.SchemaContainerConsumer.v3";
+    private const string Protocol = "DG.SchemaContainerConsumer.v4";
 #if SHAPE_A
     private const string ShapeEnvironment = "A";
 #elif SHAPE_B
@@ -67,19 +67,22 @@ internal static class Program {
 
     private static object Seed(string database, string witnessPath) {
         FrameAddress state, keeperState;
+        CommitId stateCommit, keeperCommit;
         uint rootId;
         using (Repository repository = Repository.CreateNew(database, Models())) {
-            using (BranchCheckout keeper = repository.CreateSharedBranch("keeper", new Keeper { Value = 1234567890123L })) {
-                keeperState = keeper.Head.RevisionAddress;
+            using (WorkingCopy keeper = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("keeper", new Keeper { Value = 1234567890123L }).Id)) {
+                keeperCommit = keeper.BaseCommitId;
             }
-            using (BranchCheckout main = repository.CreateSharedBranch("main", Ring())) {
+            using (WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id)) {
                 Check(main.State, changed: false);
-                repository.CreateTag("old", main.Head);
-                state = main.Head.RevisionAddress;
+                repository.CreateTag("old", main.BaseCommitId);
+                stateCommit = main.BaseCommitId;
                 rootId = main.StateId!.Value.Value;
             }
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        state = actual.GraphAddress(stateCommit);
+        keeperState = actual.GraphAddress(keeperCommit);
         WireInspector.Graph graph = actual.Graph(state);
         FrameAddress mainSchema = RequiredSchema(graph), shared = actual.SharedSchemaRoot!.Value;
         CheckCatalog(actual, mainSchema, wide: false, keeper: true);
@@ -107,16 +110,18 @@ internal static class Program {
         Need(before.BranchHeads["main"] == Address(witness.AState) &&
             before.SharedSchemaRoot == Address(witness.SharedSchema), "B must fork the actual complete frozen shared view.");
         FrameAddress state;
+        CommitId stateCommit;
         uint rootId;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            repository.CreateBranch("upgraded", repository.ResolveTag("old"));
-            using BranchCheckout branch = repository.CheckoutShared("upgraded");
+            repository.ForkBranch(repository.ResolveTag("old"), "upgraded");
+            using WorkingCopy branch = repository.OpenWorkingCopy(BranchNamed(repository, "upgraded"));
             Check(branch.State, changed: false);
             Need(branch.StateId!.Value.Value == witness.ARootId, "Upgrade must preserve the original root identity.");
-            state = branch.CommitState().RevisionAddress;
+            stateCommit = branch.CommitState().Id;
             rootId = branch.StateId!.Value.Value;
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        state = actual.GraphAddress(stateCommit);
         WireInspector.Graph graph = actual.Graph(state);
         FrameAddress schema = RequiredSchema(graph);
         Need(schema != before.SharedSchemaRoot && actual.BranchHeads.Count == 3 && actual.BranchHeads["upgraded"] == state &&
@@ -175,18 +180,20 @@ internal static class Program {
         CheckFrames(before, witness.CompleteFrames);
         Need(before.BranchHeads[branchName] == source, "Cold continuation must use the actual prior branch State.");
         FrameAddress nextState;
+        CommitId nextCommit;
         using (Repository repository = Repository.OpenExisting(database, Models())) {
-            using BranchCheckout branch = repository.CheckoutShared(branchName);
+            using WorkingCopy branch = repository.OpenWorkingCopy(BranchNamed(repository, branchName));
             Root root = Check(branch.State, changed: false);
-            Need(branch.StateRevisionAddress == source && branch.StateId!.Value.Value == (Wide ? witness.BRootId!.Value : witness.ARootId),
+            Need(branch.StateSourceCommitId == before.CommitAt(source) && branch.StateId!.Value.Value == (Wide ? witness.BRootId!.Value : witness.ARootId),
                 "The cold editable baseline must retain its exact source and committed root ID.");
             root.Numbers[7] = PointAt(7, changed: true);
             // The fixture asks for the actual Delta candidate without optional Base spending.
-            nextState = branch.CommitState(new ReadAmplificationBaseBudgetParameters(int.MaxValue, 1)).RevisionAddress;
+            nextCommit = branch.CommitState(parameters: new ReadAmplificationBaseBudgetParameters(int.MaxValue, 1)).Id;
             Check(branch.State, changed: true);
-            if (!Wide) { Check(repository.ReadState(repository.ResolveTag("old")), changed: false); }
+            if (!Wide) { Check(repository.LoadState(repository.ResolveTag("old")), changed: false); }
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
+        nextState = actual.GraphAddress(nextCommit);
         WireInspector.Graph graph = actual.Graph(nextState);
         FrameAddress schema = RequiredSchema(graph), expectedSchema = Address(witness.SharedSchema);
         Need(schema == expectedSchema && graph.Parent == source && graph.SourceGraph == source &&
@@ -218,13 +225,13 @@ internal static class Program {
             for (int attempt = 0; attempt < 2; attempt++) {
                 bool rejected = false;
                 try {
-                    using BranchCheckout branch = repository.CheckoutShared("main");
+                    using WorkingCopy branch = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
                 } catch (InvalidDataException error) when (error.Message ==
                     "Changing a list element layout requires an explicitly selected list element upgrade rule set.") {
                     rejected = true;
                 }
                 Need(rejected && !repository.IsFaulted, "Missing List rules must reject checkout without faulting its owner.");
-                Need(repository.GetHead("main").RevisionAddress == Address(witness.AState), "Rejected checkout moved main.");
+                Need(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id == before.CommitAt(Address(witness.AState)), "Rejected checkout moved main.");
             }
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
@@ -241,14 +248,14 @@ internal static class Program {
         string own = Wide ? "upgraded" : "main", foreign = Wide ? "main" : "upgraded";
         FrameAddress selected = Address(Wide ? witness.BState! : witness.AState);
         using (Repository reader = Repository.OpenReadOnlyExisting(database, Models())) {
-            Need(reader.IsReadOnly && reader.GetHead(own).RevisionAddress == selected,
+            Need(reader.IsReadOnly && reader.ReadCurrentCommit(BranchNamed(reader, own)).Commit.Id == before.CommitAt(selected),
                 "Readonly must select the actual branch root from the formal ref.");
-            Check(reader.ReadState(reader.GetHead(own)), changed: true);
-            if (Wide) { Check(reader.ReadState(reader.GetHead(foreign)), changed: true); }
+            Check(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, own)).Commit.Id), changed: true);
+            if (Wide) { Check(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, foreign)).Commit.Id), changed: true); }
             if (!Wide) {
-                CheckpointAddress old = reader.ResolveTag("old");
-                Need(old.RevisionAddress == Address(witness.SeedState), "The old tag binding moved.");
-                Check(reader.ReadState(old), changed: false);
+                CommitId old = reader.ResolveTag("old");
+                Need(old == before.CommitAt(Address(witness.SeedState)), "The old tag binding moved.");
+                Check(reader.LoadState(old), changed: false);
             }
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
@@ -444,6 +451,7 @@ internal static class Program {
     }
     private static object AssemblyEvidence(Assembly assembly) => new { Name = assembly.GetName().Name, assembly.FullName,
         Path = assembly.Location, Sha256 = Hash(File.ReadAllBytes(assembly.Location)) };
+    private static BranchId BranchNamed(Repository repository, string label) => repository.ListBranches().Single(branch => branch.DisplayLabel == label).Id;
     private static string Hex(FrameAddress address) {
         Span<byte> bytes = stackalloc byte[FrameAddress.EncodedSize];
         Need(address.TryWrite(bytes), "Invalid address.");

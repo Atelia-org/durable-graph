@@ -38,6 +38,7 @@ public sealed class WorkingCopy : IDisposable {
         StateSourceCommitId = stateSource;
     }
 
+    /// <summary>The fixed target branch for every commit made through this working copy.</summary>
     public BranchId BranchId { get; }
     /// <summary>The current editable State root, or null before the history's first State.</summary>
     /// <remarks>Successful replacement installs the supplied instance; previously obtained CLR references do not follow it.</remarks>
@@ -46,7 +47,11 @@ public sealed class WorkingCopy : IDisposable {
     public ObjectId? StateId => State is null ? null : _saveSession.RootId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
     public FrameAddress? StateRevisionAddress => _saveSession.StateSource?.Address;
+    /// <summary>The current saved history position, advanced by successful State and Event commits.</summary>
+    /// <remarks>May belong to an ancestor branch until the first local commit; BranchId still identifies the write target.</remarks>
     public CommitId BaseCommitId { get; internal set; }
+    /// <summary>The nearest saved State supplying the editing baseline, or null before the first State.</summary>
+    /// <remarks>Event commits advance BaseCommitId but do not change this State source or replay business handlers.</remarks>
     public CommitId? StateSourceCommitId { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>
@@ -55,12 +60,12 @@ public sealed class WorkingCopy : IDisposable {
     /// </remarks>
     public bool IsFaulted => _repository.IsFaulted;
 
-    /// <summary>Publishes an Event after the exact current Head without advancing the State baseline.</summary>
+    /// <summary>Publishes an Event after BaseCommitId without advancing the State baseline.</summary>
     /// <param name="domainEvent">The nonnull registered Event root; keep its reachable content stable during capture.</param>
     /// <param name="summary">Opaque preview bytes copied during preparation; omission stores an empty summary.</param>
     /// <param name="parameters">Policy for this call only; null uses the library default.</param>
     /// <remarks>
-    /// Any State/Event history position can be followed by an Event. Normal return advances Head without
+    /// Any State/Event history position can be followed by an Event. Normal return advances BaseCommitId without
     /// accepting Event identity bindings or replacing State. Capturing does not freeze caller-owned objects.
     /// Publication can succeed before delivery fails. Inspect outcome and IsFaulted independently, and reopen
     /// a faulted repository to inspect history. Pre-append failures may propagate their original exception.
@@ -109,7 +114,7 @@ public sealed class WorkingCopy : IDisposable {
         _repository.PrepareAndDiscardSave(this, root, kind, parameters);
     }
 
-    /// <summary>Releases this branch's editing occupancy without saving or removing its durable ref.</summary>
+    /// <summary>Releases this branch's editing occupancy without saving changes or removing the durable branch.</summary>
     /// <remarks>Idempotent. Reentrant disposal during a repository operation is rejected without releasing occupancy.</remarks>
     public void Dispose() {
         if (_disposed) { return; }

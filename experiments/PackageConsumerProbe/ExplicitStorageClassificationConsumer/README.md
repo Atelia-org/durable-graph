@@ -16,8 +16,8 @@ H01 自动属性负例和独立、非泛型的合法 `LegalControl`；不混入 
    失败前后 accepted history 仍为空，没有可运行的旧 consumer DLL。
 2. 将项目输入切换到 `Model.Corrected.cs` 的显式字段和真实 C# 14 Transient backing；强制 Rebuild，Publish 两份 V1 history。
    再强制 Rebuild / Verify，已接受 history 的文件集与内容不变。负例没有发布的少字段 history 不作为正例输入。
-3. 在新进程创建新 Repository，保存 `Value=42`、`Control=7`、`Scratch=777`；Capture 不执行 Transient accessor。
-   另一进程只读冷开，前两值保留，Transient backing 为 0；Hydrate 不执行 accessor。只有消费程序自己验证
+3. 在新进程创建新 Repository，用 `CreateRootBranchFromState` 保存 `Value=42`、`Control=7`、`Scratch=777`；Capture 不执行 Transient accessor。
+   另一进程只读冷开，由唯一分支的 `BranchId` 读取当前 `CommitId` 后 `LoadState`，前两值保留，Transient backing 为 0；Hydrate 不执行 accessor。只有消费程序自己验证
    `Scratch` 的显式 getter 调用计数为 1。只读进程前后数据库文件集与内容不变。
 
 使用主线程准备的新 G 完整十包 feed；G 独立于 [准确六包 S pin](../../../eng/StorageDependency.props)。

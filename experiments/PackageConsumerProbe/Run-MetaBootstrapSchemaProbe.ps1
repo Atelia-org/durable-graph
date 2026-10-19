@@ -133,6 +133,9 @@ try {
             }
             if ($null -ne $before -and $before -cne (Store-Snapshot)) { throw 'A read-only package process changed the repository files.' }
             $evidence = Get-Content -LiteralPath (Join-Path $workRoot ($lane + '.evidence.json')) -Raw | ConvertFrom-Json
+            if ($evidence.CommitHandleBytes -ne 12 -or $evidence.SourceSelection -cne 'HeadStoreStrictPrecedingState') {
+                throw 'Consumer must select exact published Commit handles and qualify the strict preceding State from HeadStore history.'
+            }
             foreach ($name in @('EmployeeAssembly', 'PersistenceAssembly', 'RuntimeAssembly')) {
                 $loaded = $evidence.$name
                 if (!$loaded.Path.StartsWith($binaryRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
@@ -159,7 +162,8 @@ try {
     })
     $manifest = Join-Path $storage.PackageSource ('manifest.' + $storage.Version + '.json')
     [ordered]@{
-        SchemaVersion = 2; Scope = 'DB087 P1b internal employee Schema closure and List/Array/Dictionary bodies; no public migration/crash qualification';
+        SchemaVersion = 3; Scope = 'DB096 package migration of internal employee Schema closure and List/Array/Dictionary bodies; no public API/crash qualification';
+        CommitHandleBytes = 12; SourceSelection = 'HeadStoreStrictPrecedingState';
         DgVersion = $Version; StorageVersion = $storage.Version; StorageRevision = $storage.Revision;
         StorageManifest = $manifest; StorageManifestSha256 = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash;
         WorkDirectory = $workRoot; PackageSource = $PackageSource; PackageCache = $packageCache;

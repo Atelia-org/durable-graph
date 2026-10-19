@@ -93,32 +93,42 @@ static StateModelRegistry Models() {
     return models;
 }
 string path = Path.GetFullPath(args[0]);
+BranchId mainId, otherId, eventsId;
 using (Repository repository = Repository.CreateNew(path, Models())) {
-    using BranchCheckout main = repository.CreateSharedBranch("main", new State { Value = 1 });
+    mainId = repository.CreateRootBranchFromState("main", new State { Value = 1 }).Id;
+    using WorkingCopy main = repository.OpenWorkingCopy(mainId);
     ((State)main.State!).Value = 2;
     main.CommitState();
-    repository.CreateBranch("other", main.Head);
-    using BranchCheckout draft = repository.CheckoutShared("other");
+    otherId = repository.ForkBranch(main.BaseCommitId, "other").Id;
+    using WorkingCopy draft = repository.OpenWorkingCopy(otherId);
     ((State)draft.State!).Value = 3;
     draft.CommitState();
-    using BranchCheckout fork = repository.ForkShared("fork", main.Head);
+    BranchId forkId = repository.ForkBranch(main.BaseCommitId, "fork").Id;
+    using WorkingCopy fork = repository.OpenWorkingCopy(forkId);
     fork.CommitState();
-    using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", new State { Value = 4 });
+    eventsId = repository.CreateRootBranchFromEvent("events", new State { Value = 4 }).Id;
+    using WorkingCopy events = repository.OpenWorkingCopy(eventsId);
     if (events.State is not null) { throw new InvalidDataException("Event-only branch acquired a State."); }
-    events.CommitState(new State { Value = 5 });
+    State firstState = new() { Value = 5 };
+    CommitInfo saved = events.CommitState(firstState);
+    if (!ReferenceEquals(firstState, events.State) || saved.Id != events.BaseCommitId) {
+        throw new InvalidDataException("Successful State publication did not install the supplied instance and actual CommitId.");
+    }
 }
 using (Repository repository = Repository.OpenExisting(path, Models())) {
-    using BranchCheckout main = repository.CheckoutShared("main");
+    using WorkingCopy main = repository.OpenWorkingCopy(mainId);
     if (((State)main.State!).Value != 2) { throw new InvalidDataException("Shared cold value changed."); }
     main.CommitState();
-    using BranchCheckout draft = repository.CheckoutShared("other");
+    using WorkingCopy draft = repository.OpenWorkingCopy(otherId);
     if (((State)draft.State!).Value != 3) { throw new InvalidDataException("Forked cold value changed."); }
     draft.CommitState();
 }
 using (Repository reader = Repository.OpenReadOnlyExisting(path, Models())) {
-    if (((State)reader.ReadState(reader.GetHead("events"))!).Value != 5) { throw new InvalidDataException("Cold first State changed."); }
+    if (((State)reader.LoadState(reader.ReadCurrentCommit(eventsId).Commit.Id)).Value != 5) {
+        throw new InvalidDataException("Cold first State changed.");
+    }
 }
-Console.WriteLine("RepositoryApi:NewNamedEntries:SharedColdSave:Passed");
+Console.WriteLine("RepositoryApi:BranchCommitIds:SharedColdSave:Passed");
 '@ | Set-Content -LiteralPath (Join-Path $workRoot 'Program.cs') -Encoding utf8NoBOM
     $null = Execute 'restore' @('restore', $project, '--configfile', (Join-Path $workRoot 'NuGet.Config'), '--packages', $cache, '--disable-parallel')
     $assetsFile = Join-Path $workRoot 'obj/project.assets.json'
@@ -140,7 +150,7 @@ Console.WriteLine("RepositoryApi:NewNamedEntries:SharedColdSave:Passed");
     }
     $receipt['Assets'] = $assetsFile
     $receipt['AssetsSha256'] = (Get-FileHash -LiteralPath $assetsFile).Hash
-    $build = @('build', $project, '-c', 'Release', '--no-restore', '-t:Rebuild', '-m:1', '-nr:false', '-p:DurableGraphSchemaHistoryMode=Verify')
+    $build = @('build', $project, '-c', 'Release', '--no-restore', '-t:Rebuild', '-m:1', '-nr:false', '-p:DurableGraphSchemaHistoryMode=Verify', '-p:UseStorageSources=false')
     $null = Execute 'positive-publish' ($build | ForEach-Object { $_.Replace('DurableGraphSchemaHistoryMode=Verify', 'DurableGraphSchemaHistoryMode=Publish') })
     $cases = @(
         @('checkout', 'repository.Checkout("main");', 'CS1061', 'Checkout'),
@@ -149,21 +159,28 @@ Console.WriteLine("RepositoryApi:NewNamedEntries:SharedColdSave:Passed");
         @('mode-property', '_ = repository.SchemaWriteMode;', 'CS1061', 'SchemaWriteMode'),
         @('mode-parameter', '_ = Repository.OpenExisting("path", models, schemaWriteMode: default);', 'CS1739', 'schemaWriteMode'),
         @('mode-type', '_ = typeof(global::Atelia.DurableGraph.SchemaWriteMode);', 'CS0234', 'SchemaWriteMode'),
-        @('object-create', 'repository.CreateBranch("main", state);', 'CS1503', 'state'),
+        @('removed-create', 'repository.CreateBranch("main", checkpoint);', 'CS1061', 'CreateBranch'),
+        @('old-state-create', 'repository.CreateSharedBranch("main", state);', 'CS1061', 'CreateSharedBranch'),
+        @('old-checkout', 'repository.CheckoutShared("main");', 'CS1061', 'CheckoutShared'),
+        @('old-fork', 'repository.ForkShared("fork", checkpoint);', 'CS1061', 'ForkShared'),
+        @('address-type', '_ = typeof(global::Atelia.DurableGraph.CheckpointAddress);', 'CS0234', 'CheckpointAddress'),
+        @('checkout-type', '_ = typeof(global::Atelia.DurableGraph.BranchCheckout);', 'CS0234', 'BranchCheckout'),
+        @('rewind', 'repository.MoveBranch("main", checkpoint, checkpoint);', 'CS1061', 'MoveBranch'),
+        @('object-fork', 'repository.ForkBranch(state, "fork");', 'CS1503', 'state'),
         @('private-checkout', 'repository.CheckoutPrivate("main");', 'CS1061', 'CheckoutPrivate'),
-        @('promote-state', 'repository.CheckoutShared("main").CommitStateToShared();', 'CS1061', 'CommitStateToShared'),
-        @('promote-explicit-state', 'repository.CheckoutShared("main").CommitStateToShared(state);', 'CS1061', 'CommitStateToShared'),
-        @('promote-event', 'repository.CheckoutShared("main").CommitEventToShared(state);', 'CS1061', 'CommitEventToShared')
+        @('promote-state', 'repository.OpenWorkingCopy(default).CommitStateToShared();', 'CS1061', 'CommitStateToShared'),
+        @('promote-explicit-state', 'repository.OpenWorkingCopy(default).CommitStateToShared(state);', 'CS1061', 'CommitStateToShared'),
+        @('promote-event', 'repository.OpenWorkingCopy(default).CommitEventToShared(state);', 'CS1061', 'CommitEventToShared')
     )
     $negative = Join-Path $workRoot 'Negative.cs'
     foreach ($case in $cases) {
-        $line = '    public static void Check(Repository repository, StateModelRegistry models, IDurableObject state, CheckpointAddress checkpoint) { ' + $case[1] + ' }'
+        $line = '    public static void Check(Repository repository, StateModelRegistry models, IDurableObject state, CommitId checkpoint) { ' + $case[1] + ' }'
         @('using Atelia.DurableGraph;', 'using Atelia.DurableGraph.Persistence;', 'internal static class Negative {', $line, '}') |
             Set-Content -LiteralPath $negative -Encoding utf8NoBOM
         $result = Execute ('negative-' + $case[0]) $build $true
         $diagnostics = @([regex]::Matches($result.Output, '(?m)^.*Negative\.cs\((\d+),(\d+)\): error (CS\d+): (.*)$') | ForEach-Object { $_.Value.Trim() } | Select-Object -Unique)
         $position = $line.IndexOf($case[3], [StringComparison]::Ordinal)
-        if ($case[0] -eq 'object-create') { $position = $line.LastIndexOf('state', [StringComparison]::Ordinal) }
+        if ($case[0] -eq 'object-fork') { $position = $line.LastIndexOf('state', [StringComparison]::Ordinal) }
         $expected = 'Negative.cs(4,' + ($position + 1) + '): error ' + $case[2] + ':'
         if ($result.ExitCode -eq 0 -or $diagnostics.Count -ne 1 -or !$diagnostics[0].Contains($expected, [StringComparison]::Ordinal)) {
             throw "Expected one $expected diagnostic; see negative-$($case[0]).log"
@@ -176,7 +193,7 @@ Console.WriteLine("RepositoryApi:NewNamedEntries:SharedColdSave:Passed");
     [IO.File]::WriteAllText($negative, '// Removed obsolete-call negative; restored legal source.' + [Environment]::NewLine)
     $null = Execute 'restored-positive-verify' $build
     $run = Execute 'run' @((Join-Path $workRoot 'bin/Release/net10.0/RepositoryApi.dll'), (Join-Path $workRoot 'database'))
-    if (!$run.Output.Contains('RepositoryApi:NewNamedEntries:SharedColdSave:Passed', [StringComparison]::Ordinal)) { throw 'The restored consumer did not complete its runtime story.' }
+    if (!$run.Output.Contains('RepositoryApi:BranchCommitIds:SharedColdSave:Passed', [StringComparison]::Ordinal)) { throw 'The restored consumer did not complete its runtime story.' }
     $receipt.Passed = $true
     Write-Host "Repository API package probe passed. Artifacts: $workRoot"
 } catch {

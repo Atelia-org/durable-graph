@@ -11,6 +11,8 @@ namespace Atelia.DurableGraph;
 /// live checkouts together; all repository operations remain serial.
 /// Backing stores recover incomplete tails during normal writable opens; there is no transparent publication retry.
 /// Persistent IDs are interpreted by the selected repository. Persisted members of read results are historical snapshots.
+/// IDs can be stored and reused after reopening the same repository; they are not globally unique capabilities.
+/// Operations validate branch membership, commit location and any required State/Event role before use.
 /// Independent LoadState/LoadEvent calls allow application-side Transient initialization without a writer.
 /// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
 /// Keep per-view owner/context/cache outside paired graphs. Use OpenWorkingCopy to continue editing and committing.
@@ -35,6 +37,7 @@ public sealed partial class Repository : IDisposable {
     internal GraphReadStatistics? RestorationStatistics { get; set; }
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
 
+    /// <summary>Whether this repository was opened without writing or editing capability.</summary>
     public bool IsReadOnly => _resources.IsReadOnly;
     /// <summary>Whether this repository has faulted and must be disposed and reopened before further use.</summary>
     /// <remarks>
@@ -66,16 +69,37 @@ public sealed partial class Repository : IDisposable {
         long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
         OpenStorage(path, models, create: false, readOnly: true, readCacheBudgetBytes);
 
+    /// <summary>Publishes the first State and registers a new root branch.</summary>
+    /// <remarks>
+    /// No preceding Event is required. Labels need not be unique; the returned ID identifies the branch.
+    /// The branch is durable on normal return. OpenWorkingCopy separately restores new domain instances for editing;
+    /// this call does not retain the supplied root as a working copy. Summary bytes are copied; omission stores empty bytes.
+    /// Publication outcome and IsFaulted are independent; a failed call does not imply that nothing was published.
+    /// </remarks>
     public BranchInfo CreateRootBranchFromState(string displayLabel, IDurableObject initialState,
         ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) =>
         CreateBranchCore(displayLabel, initialState, StoredGraphKind.State, summary, parameters);
 
+    /// <summary>Publishes the first Event and registers a new root branch without a saved State.</summary>
+    /// <remarks>
+    /// The branch is durable on normal return; labels need not be unique. OpenWorkingCopy separately acquires editing
+    /// capability with State absent until explicitly committed. No Event handlers are replayed automatically.
+    /// Summary bytes are copied; omission stores empty bytes. Publication outcome and IsFaulted are independent.
+    /// </remarks>
     public BranchInfo CreateRootBranchFromEvent(string displayLabel, IDurableObject initialEvent,
         ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) =>
         CreateBranchCore(displayLabel, initialEvent, StoredGraphKind.Event, summary, parameters);
 
+    /// <summary>Acquires this branch for editing and restores its nearest saved State as new domain instances.</summary>
+    /// <remarks>
+    /// Requires a writable repository and no other live working copy for this branch. State is null if the selected
+    /// history contains only Events; Events are never replayed. An inherited current commit does not change the target
+    /// branch for future commits. Dispose the working copy to release occupancy; restoration failure also releases it.
+    /// </remarks>
     public WorkingCopy OpenWorkingCopy(BranchId branchId) => CheckoutCore(branchId);
 
+    /// <summary>Lists registered business branches and their fixed creation origins without restoring domain graphs.</summary>
+    /// <remarks>Internal management heads are excluded. Labels may repeat; no ordering is promised.</remarks>
     public BranchInfo[] ListBranches() {
         RequireAvailable();
         _busy = true;
@@ -83,6 +107,8 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
+    /// <summary>Reads the registered branch's label and fixed creation origin without restoring a domain graph.</summary>
+    /// <remarks>The ID must identify a business branch in this repository; labels are not lookup keys.</remarks>
     public BranchInfo ReadBranchInfo(BranchId branchId) {
         RequireAvailable();
         _busy = true;
@@ -99,6 +125,8 @@ public sealed partial class Repository : IDisposable {
         return new(branchId, label, origin is { } source ? new(source) : null);
     }
 
+    /// <summary>Reads the selected branch's current commit and preview summary without restoring its domain graph.</summary>
+    /// <remarks>A fork with no local saves inherits its source commit; the returned BranchId remains the selected branch.</remarks>
     public CurrentCommit ReadCurrentCommit(BranchId branchId) {
         RequireAvailable();
         _busy = true;
@@ -106,6 +134,8 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
+    /// <summary>Reads the exact saved commit's role and preview summary without restoring its domain graph.</summary>
+    /// <remarks>The persistent ID must locate a commit on a registered business branch in this repository.</remarks>
     public CommitInfo ReadCommitInfo(CommitId commitId) {
         RequireAvailable();
         _busy = true;
@@ -113,6 +143,8 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
+    /// <summary>Reads all State and Event descriptors up to this branch's current commit, oldest first.</summary>
+    /// <remarks>Includes inherited history, without a synthetic commit for the fork itself. Results do not track later saves.</remarks>
     public IReadOnlyList<CommitInfo> ReadFrames(BranchId branchId) {
         RequireAvailable();
         _busy = true;
@@ -122,6 +154,12 @@ public sealed partial class Repository : IDisposable {
         } finally { EndOperation(); }
     }
 
+    /// <summary>Enumerates Event descriptors through a fixed inclusive end, optionally after an exclusive ancestor.</summary>
+    /// <remarks>
+    /// State commits are skipped; no domain graph is restored or replayed. A supplied lower bound must be an ancestor
+    /// of the end, or equal to it for an empty result. It is checked before the first item is yielded.
+    /// The repository must remain open and healthy throughout enumeration. Oldest-first enumeration buffers results.
+    /// </remarks>
     public IEnumerable<CommitInfo> EnumerateEvents(CommitId endInclusive,
         HistoryOrder order = HistoryOrder.NewestFirst, CommitId? afterExclusive = null) {
         RequireAvailable();
@@ -196,6 +234,8 @@ public sealed partial class Repository : IDisposable {
         public void Dispose() => inner.Dispose();
     }
 
+    /// <summary>Finds the nearest strict ancestor State of the selected Event, or null before the first State.</summary>
+    /// <remarks>Requires an Event commit. The result describes saved history, not application processing progress.</remarks>
     public CommitId? GetPreviousState(CommitId eventCommitId) {
         RequireAvailable();
         _busy = true;
@@ -205,9 +245,15 @@ public sealed partial class Repository : IDisposable {
         } finally { EndOperation(); }
     }
 
+    /// <summary>Independently restores the exact Event commit's domain root.</summary>
+    /// <remarks>Rejects State commits. Supports application-side Transient initialization without a writer; no Event handler is invoked.</remarks>
     public IDurableObject LoadEvent(CommitId eventCommitId) => ReadGraph(eventCommitId, CommitKind.Event);
+    /// <summary>Independently restores the exact State commit's domain root.</summary>
+    /// <remarks>Rejects Event commits instead of searching backward. Supports application-side Transient initialization without a writer; use OpenWorkingCopy for branch editing.</remarks>
     public IDurableObject LoadState(CommitId stateCommitId) => ReadGraph(stateCommitId, CommitKind.State);
 
+    /// <summary>Independently restores the nearest saved State at or before a State or Event commit.</summary>
+    /// <remarks>Returns both the selected position and the actual State position. State and its ID are null when absent; Events are not replayed.</remarks>
     public LoadedState LoadLatestSavedState(CommitId atOrBefore) {
         RequireAvailable();
         _busy = true;
@@ -218,6 +264,8 @@ public sealed partial class Repository : IDisposable {
         } finally { EndOperation(); }
     }
 
+    /// <summary>Restores the exact selected graph and its nearest strict ancestor of the opposite State/Event role.</summary>
+    /// <remarks>The two graphs have independent mutable instances. Their relationship describes history, not an Event's cause or application completion.</remarks>
     public Checkpoint ReadCheckpoint(CommitId commitId) {
         RequireAvailable();
         _busy = true;
@@ -226,6 +274,11 @@ public sealed partial class Repository : IDisposable {
     }
 
     /// <summary>Returns a pair in input order. Both graphs, including Transient fields, must be treated as read-only.</summary>
+    /// <remarks>
+    /// Matching reachable instances may be shared, so the read-only constraint includes observable Transient mutation.
+    /// Keep per-view owner/context/cache outside the graphs. Independent LoadState/LoadEvent calls support Transient
+    /// initialization without a writer. Use OpenWorkingCopy for branch editing and committing.
+    /// </remarks>
     public (IDurableObject First, IDurableObject Second) ReadPair(CommitId first, CommitId second) {
         RequireAvailable();
         _busy = true;
@@ -233,6 +286,13 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
+    /// <summary>Registers a new branch inheriting the exact source commit, without creating a duplicate commit.</summary>
+    /// <remarks>
+    /// Registration does not restore domain objects or acquire editing occupancy. On normal return the branch can be
+    /// listed and reopened even before its first local save. OpenWorkingCopy restores its nearest State and commits to
+    /// the new branch; the source branch can continue independently. Uncommitted source edits are not included.
+    /// Publication outcome and IsFaulted are independent; reopen a faulted repository to inspect persisted results.
+    /// </remarks>
     public BranchInfo ForkBranch(CommitId sourceCommitId, string displayLabel) {
         RequireWriter();
         _busy = true;
@@ -254,6 +314,8 @@ public sealed partial class Repository : IDisposable {
         } finally { EndOperation(); }
     }
 
+    /// <summary>Creates an immutable named bookmark for an exact saved commit.</summary>
+    /// <remarks>Duplicate names are rejected. Does not move a branch or restore domain graphs. After a publication failure, inspect outcome and IsFaulted independently and resolve the name after reopening.</remarks>
     public void CreateTag(string name, CommitId commitId) {
         RequireWriter();
         _busy = true;
@@ -261,6 +323,8 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
+    /// <summary>Resolves a named bookmark to its persistent commit ID.</summary>
+    /// <remarks>Validates the stored location without restoring domain graphs or moving a branch; missing names are rejected.</remarks>
     public CommitId ResolveTag(string name) {
         RequireAvailable();
         _busy = true;
@@ -301,6 +365,8 @@ public sealed partial class Repository : IDisposable {
         _resources.RequireAvailable();
         if (_busy) { throw new InvalidOperationException("Repository operations cannot be reentered."); }
     }
+    /// <summary>Closes repository resources without saving uncommitted domain changes.</summary>
+    /// <remarks>Idempotent; disposal during an active repository operation is rejected. Working copies cannot commit after disposal.</remarks>
     public void Dispose() {
         if (_disposed) { return; }
         if (_busy) { throw new InvalidOperationException("Cannot dispose a busy repository."); }

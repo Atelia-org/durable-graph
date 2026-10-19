@@ -56,11 +56,11 @@ try {
     foreach ($lane in @(
         @{ Name = 'seed'; Expected = 'TagsSeed:EventFirst:State:AdvancedBranch' },
         @{ Name = 'metadata'; Expected = 'TagsMetadata:EmptyRegistry:ReadOnly:EventFirst' },
-        @{ Name = 'continue'; Expected = 'TagsContinue:RefCheckout:NamedFork:EventFirstState:OldOwnerRejected:MoveStable' },
+        @{ Name = 'continue'; Expected = 'TagsContinue:StateForks:EventFirstStates:PersistentId:AppendOnly' },
         @{ Name = 'verify'; Expected = 'TagsVerify:ColdValues:Cycles:ImmutableTags' }
     )) {
         # Separate processes cannot accidentally reuse a repository owner, DTO cache,
-        # generated model instance table, or an address from the preceding lane.
+        # generated model instance table, or an in-memory handle from the preceding lane.
         $actual = (& dotnet $assembly $lane.Name $database | Out-String).Trim()
         if ($LASTEXITCODE -ne 0 -or $actual -cne $lane.Expected) {
             throw "Tag consumer lane '$($lane.Name)' failed; output was '$actual'."
