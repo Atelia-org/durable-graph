@@ -23,7 +23,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | [交付复核](design-branches/0096-history-and-head-model/headstore-delivery-review.md)与[误用诊断实验](design-branches/0096-history-and-head-model/handle-misuse-detection.md)确认当前能力可继续使用，不增加每引用16B scope。紧凑定位角色、标签与创建登记协议已接入隔离新内核；[新 Storage 源码接入](design-branches/0096-history-and-head-model/storage-handle-adaptation.md)与新模型分开；后者已在隔离分支通过首段纵切及原回归，D 查询投影已收窄，活动包闭包已完成；定向 origin 与组提交已完成限定验收；旧Kill host与根/子树已完成限定验收；公开分页已完成限定验收；创建登记专项已完成源码资格；最终版本完整门禁及正式合入仍待完成。首版只追加、旧点另开、fork立即可见。 |
+| [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | Branch/Commit/WorkingCopy、组提交、目录树、分页、旧API迁移及[完整交付与master合入](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合。首版只追加、旧点另开、fork立即可见；后续附件、ID字段、改标签与规模优化由实际消费者需求触发，不继续原施工队列。 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
 | [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前发布合同与活动资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
 | [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md) 保持 |
@@ -158,7 +158,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
-| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | Private/ToShared 已删除；[来源 snapshot 接缝 A](design-branches/0096-history-and-head-model/history-source-seam.md)已实施验收，新 Storage 已完成源码接入，下一片按[整体切换计划](design-branches/0096-history-and-head-model/branch-cutover-plan.md)在已通过源码/活动普通包闭包和定向 origin 验收的新内核上完成最终产品版本的完整源码/普通包验收与交付审计；旧Kill host已完成迁移及有限进程验收；不再扩展旧协调器，准确顺序和未决项只查 DB-096 工作集，原语见证不代替新布局资格 |
+| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | Private/ToShared已删除，新内核及共同Catalog已通过最终源码/普通包验收并合入，见[交付记录](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)。无剩余迁移工单；开发草稿用独立完整库副本，其他Schema工作按下文真实需求选片。 |
 | [DB-094 普通 property backing 支持](design-branches/0094-backing-field-support/README.md) | 真实消费者持续因普通 class 的封装/Equals/继承需求付出字段包装成本时，先用该模型摸清声明范围、编译级 Family 切换与历史升版的影响，再选择有限路线；目前仅调研，DB-093 完成不自动开启 |
 | [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | DB-096已接通准确Commit起点、继承倒序、排他续页及两个独立限制，见[分页验收](design-branches/0096-history-and-head-model/history-pagination.md)。该功能不再列作未实施项；后续仅由真实规模测量触发Open/metadata/对象恢复成本优化，不能把HS work步数外推为整个查询的I/O上限 |
@@ -198,7 +198,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 2026-10-19 用户已改选：关闭的完整 baseline → 独立 Repository 副本试验 → 定稿在干净正式基线普通升级，具体不变量与机制证据见 [DB-096](design-branches/0096-history-and-head-model/shared-schema-only.md)。同库只使用统一 Catalog；Private、Shared/Private Schema 混组、ToShared 和 private 新根退出。State/Event 多 Branch 共同提交仍是当前能力。旧路径删除、有效回归/消费者迁移与格式门禁见[删除切片](design-branches/0096-history-and-head-model/private-removal.md)，旧 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)只保其原版本资格。
 
-保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离，不恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。新 API 的共同候选与组级保存已由 DB-096 实施，准确资格和剩余交付门槛只查其工作集。
+保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离，不恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。新 API 的共同候选与组级保存已由 DB-096 实施，准确资格和已闭合交付记录只查其工作集。
 
 ### 4.3 checkout 执行环境与 factory 查询入口
 

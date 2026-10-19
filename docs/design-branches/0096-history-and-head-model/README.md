@@ -1,14 +1,14 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：A/B1/目录原语之后，B2 已在隔离分支 `db096/branch-repository-cutover` 接入真实新 API 与布局，首段纵切、根 solution 构建及 Persistence/Runtime 完整回归通过；后继已收窄[accepted D 查询投影](directory-persistence.md#已接受目录的查询投影)，公开签名与持久格式保持。[活动消费者与普通包资格](package-cutover-validation.md)已完成；[定向 origin 接入](targeted-origin-integration.md)已完成，[真实多分支组内核](group-commit-integration.md)已完成源码与受影响普通包验收；[根/子树查询](branch-tree-queries.md)已完成源码与新 G Split/Group 验收；[公开分页](history-pagination.md)已完成源码与新 G 普通包验收；[创建登记专项](creation-failure-acceptance.md)已完成源码验收并修复Tag重复异常包装；[最终版本完整门禁及正式合入](final-delivery-acceptance.md)尚未完成。当前施工结果及合入限制只查[整体切换计划 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。文档对齐：2026-10-19。
+> 状态：Branch/Commit/WorkingCopy、统一Catalog、多分支原子提交、根/子树和历史分页已完成实现、消费者迁移、最终源码与普通包验收，并合入本地master。准确来源、2992项根回归、12个活动包runner及资格限度见[最终交付验收](final-delivery-acceptance.md)。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
-**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已实施并通过源码、新包与有限进程中止验收。组发布已接入，限定资格见[实施验收](group-commit-integration.md)；新历史模型仍在隔离分支。
+**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已实施并通过源码、新包与有限进程中止验收。组发布已接入，限定资格见[实施验收](group-commit-integration.md)；新历史模型已合入本地master。
 
-**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。DG 登记已进入真实实现验证。以下早期现状对照保切换前基线；新分支的能力与限制以施工记录 §9 为准，不把草稿中全部 API 都当成已交付。
+**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。DG登记已完成实现与验收。以下早期现状对照保切换前基线；实际交付范围与限制以最终验收为准。
 
-**当前阶段转为收敛验证。** 用户认可已有 API 的清晰性与功能覆盖；后续先映射实际机制，再验证发布/创建、恢复材料和查询成本，寻找保留功能与易用性的简化。具体恢复顺序与最小产物集中在研究工作集，不继续默认扩展需求，也不将设计认可等同于实现验收。
+**本期收敛与交付已完成。** 后续由真实消费者反馈选择增量；重复扫描、索引与缓存优化须有成本证据，保持已接受功能和易用性，明确延期项不自动成为新任务。
 
 **首批机制调查已完成：**[API 到源码机制的映射](mechanism-feasibility.md)记录 Shared 共同准备、登记两层 outcome、最近 State 内容依赖、来源查询范围及目录容量估算；给出下一批最小实验。该调查保其当时的源码证据；后继实现与运行边界由施工记录限定。
 
@@ -220,7 +220,7 @@ HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHea
 
 ## 9. 后续验证顺序
 
-调用职责与概念以 [API 草图](api-sketch.md) 为基准；功能、创建故障与逐片源码/包资格已完成，当前执行[最终交付验收](final-delivery-acceptance.md)，不再从头海选命名。最终产品版本的完整门禁、合入与当前停点集中在 [PROJECT-STATE](PROJECT-STATE.md)。
+调用职责与概念以 [API 草图](api-sketch.md) 为基准；功能、创建故障与逐片源码/包资格已完成，已完成[最终交付验收与合入](final-delivery-acceptance.md)，不再从头海选命名。最终产品版本的完整门禁、合入与当前停点集中在 [PROJECT-STATE](PROJECT-STATE.md)。
 
 [应用合同稿](application-design.md)保留登记候选 B 与上游属性候选 A 的机制比较；[联合提交设计](multi-branch-commits.md)采用 CommitRequest 与执行时捕获。§8 的 rewind 比较仅作需求变化时的历史对照，不是当前实施路线。恢复材料、创建可见性与失败边界已有源码见证；其范围见各分片记录，最终版本的整体资格以交付清单为准。
 
