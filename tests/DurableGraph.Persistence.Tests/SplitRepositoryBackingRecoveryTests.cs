@@ -96,7 +96,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
             // ordinary head4; automatic H+1 is the actual public HeadStore route.
             HeadEntryId created = versions.CreateHead(new byte[] { 10, 20 }, out PublicationOutcome createdOutcome).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, createdOutcome);
-            Assert.Equal(4u, created.HeadId.LocalId);
+            Assert.Equal(4u, versions.GetLocalHeadId(created.HeadId).Unwrap());
             ordinaryRevision = versions.PublishHead(created.HeadId, ordinaryPayload, out PublicationOutcome published).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, published);
         }

@@ -36,7 +36,7 @@ AteliaResult<HeadHistoryEnd> store.ReadEntryHistory(
 
 以上列实际能力；实例方法签名的写法仅为阅读方便。TryRead 要求精确长度，拒绝零 Head 与零 ticket 长度；TryWrite 失败不改目标缓冲区。v1 Entry 编码为 4B Handle + 8B LE 完整 ticket，ticket 固定 38:26、4字节单位布局，不能改用 `SizedPtr.Serialize()`。version/kind 归外层容器，不能 dump CLR struct padding。
 
-`HeadId.LocalId` 已退出；需要局部编号时用 `store.GetLocalHeadId(head)`，该方法只解释本库上下文，不证明目标存在。存储格式现为 4，拒绝 1/2/3。DG 仍固定旧 `731eef7`，本轮不更新该 pin，也不把普通消费者验证扩大为 DG build/test 资格；现有 tests/MetaBootstrapCrashProbe 中的 `HeadId.LocalId` 用法待实际接入时调整。
+`HeadId.LocalId` 已退出；需要局部编号时用 `store.GetLocalHeadId(head)`，该方法只解释本库上下文，不证明目标存在。存储格式现为 4，拒绝 1/2/3。该次复核时 DG 固定旧 `731eef7`，当轮未更新该 pin，也不把普通消费者验证扩大为 DG build/test 资格；后续 tests/MetaBootstrapCrashProbe 的局部编号调用已在[B1 接入](storage-handle-adaptation.md)适配，其产品资格单独记录。
 
 准确历史从 anchor 的 ticket 建立有界逆扫，不先遍历新后缀。直接 anchor 若是未成立 CU，失败；正常向旧扫描遇到合法未成立 CU 则跳过。重复 inclusive anchor、跨 Head 和必要 CU 工作均计预算。停止不证明更多项或完成；callback 中仍不能 fork，退出后可用保留的 ID fork。
 

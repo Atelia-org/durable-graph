@@ -108,7 +108,7 @@ internal static class Program {
         // formal roots and the zero user-frame declaration without a DG cache.
         using (DataStore data = DataStore.Open(Path.Combine(repositoryPath, "data")))
         using (PublicationStore versions = PublicationStore.Open(Path.Combine(repositoryPath, "versions"), data)) {
-            Need(versions.ReservedHeadIdUpperBound == 3 && versions.ListHeads().Unwrap().Select(id => id.LocalId).Order().SequenceEqual(refs),
+            Need(versions.ReservedHeadIdUpperBound == 3 && versions.ListHeads().Unwrap().Select(id => versions.GetLocalHeadId(id).Unwrap()).Order().SequenceEqual(refs),
                 "Fresh exclusive backing must expose precisely the completed formal refs.");
             CheckEmptyInitializationRoots(versions, refs.Length);
             int userFrames = 0;

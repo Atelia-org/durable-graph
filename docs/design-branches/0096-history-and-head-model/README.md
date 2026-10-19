@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施或冻结签名。来源 snapshot 内部接缝 A 已实施验收；下一片资格化新 Storage 并切换真实历史布局。文档对齐：2026-10-19。
+> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施或冻结签名。来源 snapshot 内部接缝 A 已实施验收；新 Storage 已接入源码；下一片按[整体切换计划](branch-cutover-plan.md)实施真实历史布局。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
@@ -12,7 +12,7 @@
 
 **首批机制调查已完成：**[API 到源码机制的映射](mechanism-feasibility.md)记录 Shared 共同准备、登记两层 outcome、最近 State 内容依赖、来源查询范围及目录容量估算；给出下一批最小实验。当前结论仍是候选与源码证据，未修改产品代码或运行新模型实验。
 
-**后继收窄与局部实施：**[组内核](group-kernel-design.md)明确一个 accepted Catalog、一次共同候选及阶段清理/安装；旧目录真实 State/Event 混组已有发布和冷 Delta 续写见证。现有格式下[来源 snapshot 接缝 A 已接通并验收](history-source-seam.md#7-a-实施与验收)，无需新 proof/token，保存仍复核实际图。下一步以[Branch 纵切](branch-vertical-design.md)切换 HS 历史及删除业务 Parent。旧布局不再复制正式组协调器。请求不设 Consumed，分页预算耗尽整次失败；[独立 HS Probe](../../../experiments/BranchHeadMechanismProbe/README.md)与[定向 origin 请求](headstore-origin-request.md)保其各自范围。
+**后继收窄与局部实施：**[组内核](group-kernel-design.md)明确一个 accepted Catalog、一次共同候选及阶段清理/安装；旧目录真实 State/Event 混组已有发布和冷 Delta 续写见证。现有格式下[来源 snapshot 接缝 A 已接通并验收](history-source-seam.md#7-a-实施与验收)，无需新 proof/token，保存仍复核实际图。[B1 新依赖接入](storage-handle-adaptation.md)之后，按[整体切换计划](branch-cutover-plan.md)实施[Branch 纵切](branch-vertical-design.md)、删除业务 Parent；书签与既有历史读取同时迁移到 CommitId。旧布局不再复制正式组协调器。请求不设 Consumed，分页预算耗尽整次失败；[独立 HS Probe](../../../experiments/BranchHeadMechanismProbe/README.md)与[定向 origin 请求](headstore-origin-request.md)保其各自范围。
 
 需求依据见[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
 
@@ -20,7 +20,7 @@
 
 [存档定位值的五个调用故事](save-handle-stories.md)进一步串起继续、书签、分页、fork 和 LLM 恢复；[新的 HeadStore 请求](headstore-save-handles-request.md)收敛两类 ID 编解码、准确 Entry 历史起点和使用时资格。它取代[原请求](headstore-requests.md)中 R1 的具体范围；原文继续保留已实施引用初始化的比较依据。
 
-[最新交付复核与 API 方向](headstore-delivery-review.md)：上游同库 codec/准确历史已可用，独立消费者通过。用户明确跨库检查只需开发期诊断，[概率与穷举实验](handle-misuse-detection.md)支持默认保留紧凑 Handle，撤回每个引用附完整 scope 的建议；DG pin/产品接入尚未更新。
+[最新交付复核与 API 方向](headstore-delivery-review.md)：上游同库 codec/准确历史已可用，独立消费者通过。用户明确跨库检查只需开发期诊断，[概率与穷举实验](handle-misuse-detection.md)支持默认保留紧凑 Handle，撤回每个引用附完整 scope 的建议；DG 的新 pin 源码接入见[B1 记录](storage-handle-adaptation.md)，新历史模型和普通包资格仍分开验证。
 
 用户已明确 DG 当前 publish 设计与实现是可重写草稿；本文列举的 GraphEnvelope.Parent、目录布局与发布 API 是现状证据，不是新模型的兼容性约束。
 

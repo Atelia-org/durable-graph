@@ -6,7 +6,7 @@
 
 ## 运行
 
-本实验独立锁定 Storage `f8868b57e8f012745413bb38a83d67f1dba29f26`，**不修改 DG 的旧 Storage pin**。项目不继承 DG 的 Directory.Build.props/targets，并检查显式传入的源码目录 HEAD 和 tracked source 清洁度。需要 .NET 10 与本机可恢复的上游构建依赖。
+本实验独立锁定 Storage `f8868b57e8f012745413bb38a83d67f1dba29f26`，**不依赖或修改 DG 的 Storage pin**；DG 后续独立完成[B1 源码接入](../../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)，不改变本实验原资格。项目不继承 DG 的 Directory.Build.props/targets，并检查显式传入的源码目录 HEAD 和 tracked source 清洁度。需要 .NET 10 与本机可恢复的上游构建依赖。
 
 在 DG 根目录执行 PowerShell；首次创建独立 worktree，已存在时直接复用：
 

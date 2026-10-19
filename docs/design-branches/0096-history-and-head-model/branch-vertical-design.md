@@ -1,6 +1,6 @@
 # DB-096：一 Branch 一 Head 的最小纵切
 
-> 2026-10-19，设计收窄稿，尚未运行或接入产品。承接 [API 草图](api-sketch.md)、[应用合同](application-design.md)及[首批机制调查](mechanism-feasibility.md)。本次复核 DG `c077d1c`、上游 `f8868b5`；DG 仍固定 Storage `731eef7`，两个基线不能共用运行资格。
+> 2026-10-19，设计收窄稿，尚未运行或接入产品。承接 [API 草图](api-sketch.md)、[应用合同](application-design.md)及[首批机制调查](mechanism-feasibility.md)。最初调查基线为 DG `c077d1c` / Storage `731eef7`；后续[B1 已接入 f8868b5](storage-handle-adaptation.md)。具体调用迁移及单布局合入门槛见[整体切换计划](branch-cutover-plan.md)，不把依赖资格当成新历史布局资格。
 
 ## 1. 问题和当前推荐
 
@@ -102,7 +102,7 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 
 ## 6. 查询和实验顺序
 
-**[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)**：保留和传递已有实际图材料，仍以当前 Parent 取得来源资格，保格式/公开 API 与热复核；消除同次 decoder 的重复完整图校验。下一片以同文 B 资格化新依赖并整体切换业务历史权威。下列真实纵切和登记判据保持，不以 A 替代新布局验收。
+**[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)**：保留和传递已有实际图材料，仍以当前 Parent 取得来源资格，保格式/公开 API 与热复核；消除同次 decoder 的重复完整图校验。新依赖的[B1 接入](storage-handle-adaptation.md)已完成，下一片按[整体切换计划](branch-cutover-plan.md)切换业务历史权威及相关调用。下列真实纵切和登记判据保持，不以 A 替代新布局验收。
 
 成员目录只需小型直接编码，标签先固定；来源仍以 HS header 为准。`ListHeadOrigins` 在当前上游扫描物理全集，包含管理 Head/未登记产物，并验证整个来源图；它能做健康数据的功能见证，**不能证明只访问登记集合或忽略无关损坏的查询边界**。
 
@@ -126,4 +126,4 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 - [Repository 恢复入口](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)：`RestoreCheckout` 先对选中 Event 执行 `ValidateMetadataRelations`，再找最近 State 并物化；上述纵切保留该检查范围。
 - 上游 [ForkHead](../../../../atelia-storage/src/HeadStore/HeadStore.Fork.cs)准确重验来源后只写 header；[ReadEntryHistory](../../../../atelia-storage/src/HeadStore/HeadStore.History.cs)起点 inclusive，禁止活动 visitor 递归历史，正常停止不证明未访问历史健康；[ListHeadOrigins](../../../../atelia-storage/src/HeadStore/HeadStore.ForkQuery.cs)扫描完整物理集合。
 
-本稿对应的新 DG 布局未构建/运行；产品仅完成[同格式 snapshot 接缝 A](history-source-seam.md#7-a-实施与验收)，上游或依赖未改。[独立 HeadStore Probe](../../../experiments/BranchHeadMechanismProbe/README.md)已用示意 payload 验证三条登记成功路径、空 fork、跨 fork 分页及旧起点后缀预算；它不引用 DG，不能替代本稿的准确图恢复与登记故障资格。仍未验证：HS 来源签发及业务 Parent 删除后的真实恢复、三路径登记中断、长 Event 段成本、定向 origin 接入、整目录实际容量/累计写量。以上见证通过后再收敛产品字段、异常交付和实施顺序；现阶段无需新增需求边界询问。
+本稿对应的新 DG 布局未构建/运行；产品仅完成[同格式 snapshot 接缝 A](history-source-seam.md#7-a-实施与验收)，新依赖资格单列于[B1 记录](storage-handle-adaptation.md)，上游源码未改。[独立 HeadStore Probe](../../../experiments/BranchHeadMechanismProbe/README.md)已用示意 payload 验证三条登记成功路径、空 fork、跨 fork 分页及旧起点后缀预算；它不引用 DG，不能替代本稿的准确图恢复与登记故障资格。仍未验证：HS 来源签发及业务 Parent 删除后的真实恢复、三路径登记中断、长 Event 段成本、定向 origin 接入、整目录实际容量/累计写量。以上见证通过后再收敛产品字段、异常交付和实施顺序；现阶段无需新增需求边界询问。

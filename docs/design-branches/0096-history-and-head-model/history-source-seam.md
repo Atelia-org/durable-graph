@@ -1,6 +1,6 @@
 # DB-096：历史来源材料的最小接缝
 
-> 2026-10-19。A 的 snapshot 接缝已接入生产，实施起点 `4980426`；验收见 §7。B 的 HS 来源签发、业务 Parent 删除及新布局仍未实施。产品固定 Storage `731eef7`；本轮只读核对的上游仍为 `f8868b57e8f012745413bb38a83d67f1dba29f26`，干净，尚无 `ReadHeadOrigin`。本文细化[Branch 纵切](branch-vertical-design.md)，不替代其需求、查询范围和登记协议。
+> 2026-10-19。A 的 snapshot 接缝已接入生产，实施起点 `4980426`；验收见 §7。B 的 HS 来源签发、业务 Parent 删除及新布局仍未实施。A 的验收使用 Storage `731eef7`；后继[B1 已切换依赖](storage-handle-adaptation.md)。A 当轮只读核对的上游为 `f8868b57e8f012745413bb38a83d67f1dba29f26`，干净，尚无 `ReadHeadOrigin`。本文细化[Branch 纵切](branch-vertical-design.md)，不替代其需求、查询范围和登记协议。
 
 ## 1. 结论：复用已有 snapshot，不另建证明体系
 
@@ -106,7 +106,7 @@ A 的合入门槛：
 
 B 的最小判据：真实 `S0,E1,S1,E2`，父线再推进 E3 后从准确旧点 **E2** fork，关闭所有 resources/caches 重开；恢复 S1 时证明前源 S0；子线 Event 后 State 使用正确 baseline，State 再次变更确实写 Delta，父线继续不改变子线历史。补一个只有 S0 的根证明和 Event-only 到根证明。反例至少包括“E2 图/batch/directory 一致自报 S0、HS 前源实际 S1”、错误 prior、错误 selected/origin Schema、snapshot 跨 owner/关闭后重用、已安装 State 下次保存丢失来源材料。登记中断与真实多成员 CU 在该闭环之后接入。
 
-下一步转入 B：先精确资格化新 Storage，再整体切换单成员真实纵切；定向 origin 请求可独立推动，不阻断来源材料接线。旧布局的[混组原语见证](group-kernel-design.md#8-真实混组发布与冷续写见证)保其原资格，不等于新布局或组内核已实现。
+B1 的[精确依赖接入](storage-handle-adaptation.md)已完成；下一步按[整体切换计划](branch-cutover-plan.md)实施 B2 单成员真实纵切，连同书签/现存历史调用一起迁移；定向 origin 请求可独立推动，不阻断来源材料接线。旧布局的[混组原语见证](group-kernel-design.md#8-真实混组发布与冷续写见证)保其原资格，不等于新布局或组内核已实现。
 
 ## 7. A 实施与验收
 

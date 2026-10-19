@@ -35,11 +35,11 @@
 
 ## 当前焦点与下一步
 
-**当前停点：来源 snapshot 接缝 A 已实施并验收，下一片为 B 的精确依赖资格与真实历史纵切（2026-10-19）。**本轮起点 `4980426`；已有 `StoredGraphRevision` 贯穿 decoded/normalized/实际安装，冷解码不重复完整图资格检查，warm/prepared/保存和安装仍复核实际图。根 build 零警告/错误，Persistence 927项及相关生成模型13项通过，详见[唯一验收记录](history-source-seam.md#7-a-实施与验收)。格式、公开 API、Parent 权威和固定依赖保持。产品仍是旧业务目录/Parent、每 checkout 内部 Catalog，未实现 Repository 组协调器或新 DG 布局。Private 删除资格仍查[删除切片](private-removal.md)。
+**当前停点：B1 新 Storage 源码接入已验收，B2 整体切换计划已完成独立复核（2026-10-19）。**本轮起点 `2d118da`；依赖已接到 `f8868b5`，根构建、2817项测试、初始化3窗/保存6窗通过，准确源/包及故障边界只查[B1 记录](storage-handle-adaptation.md)。[B2 施工计划](branch-cutover-plan.md)补齐书签 CommitId、现有历史调用迁移、Unicode 重复标签、MetaPrevious 和合法目录复用；不新增第二布局或反查索引。产品仍是旧业务目录/Parent、每 checkout 内部 Catalog，尚未实施新 Branch API 或组内核。A/Private 删除资格保各自原版本记录。
 
 此前[首批机制调查](mechanism-feasibility.md)保留源码原语、创建/恢复/查询缺口与最小实验；其中 Private/Shared Schema 混组候选已退出，其余证据仍适用。
 
-**压缩后恢复顺序：完整读本文 → [来源接缝 §6 的 B 片](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)及 §7 的已完成边界 → [Branch 纵切](branch-vertical-design.md) → 对应源码/回归。先核新 Storage revision/不兼容调用，再切换历史权威；不重做 A、不重开命名/故事、不再扩展旧目录协调器测试平台。**
+**压缩后恢复顺序：完整读本文 → [B2 整体切换计划](branch-cutover-plan.md) → 按问题读[Branch 纵切](branch-vertical-design.md)的来源合同/源码。A 接缝与 B1 依赖接入分别有独立记录，不重做；不重开命名/故事、不再扩展旧目录协调器测试平台。**
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -54,14 +54,15 @@
 - **发布：**一个 accepted Catalog＋操作内共同候选。staging/ready 逐成员 AbortPreparation，installed 后无操作。真实混组见证已验证共同编码、一次旧 D/S 发布、State 安装/Event 丢弃、冷续写；直接 HS 发布后必须关旧 owner，不能继续使用其陈旧目录缓存。全组 Base/guard/清理故障仍须真实内核验收。实际 CommitId 确认后才取得，Published 失败也可能拿不到 ID。
 - **创建：**三路径登记的公开 HS 成功组合已通过示意 Probe；未登记 Head 冷开隐藏、空 fork 立即可读且不产生 c0。root 的 D/S 可共同发布；实际 DG 图/Schema 与中断资格仍未验证。登记 Unknown/Published 错误保已知候选 BranchId；物理创建 Unknown、尚未尝试登记时 DG 确知未登记。
 - **恢复：**已有 StoredGraphRevision 已保留到 decoder/normalized/实际安装，仍由当前 Parent 签发并在保存时复核；不新增 proof/token 或 Graph→Commit 反查。下一片改 HS 签发，CommitId 留在 Repository 层。新布局冷恢复需最近 State 及其严格前源（不足两个到根），保 tip Event 轻量检查。物理 Delta 只核 source 角色与准确 prior，不扩大为递归历史审计。尚无真实新布局运行资格。
-- **查询：**描述/fork 只做入口角色检查，内容恢复再验 source/prior/Schema；新 ForkBranch 不是会先恢复对象的旧 ForkShared 改名。Kind 暂从小图 envelope 取得，避免重复存储；成本待测。已写[定向 origin 请求](headstore-origin-request.md)，未提交上游，不复制来源权威。
+- **查询：**描述/fork 只做入口角色检查，内容恢复再验 source/prior/Schema；新 ForkBranch 不是会先恢复对象的旧 ForkShared 改名。Kind 暂从小图 envelope 取得，避免重复存储；成本待测。已写[定向 origin 请求](headstore-origin-request.md)，尚未交付/提交上游。它不阻挡隔离分支的健康纵切，但正式 ReadBranchInfo 合入须满足定向访问边界；不能把全量 adapter 偷换成产品合同，不复制来源权威。
 - **分页：**首版选页满成功、工作预算耗尽整次失败，不交付已收集前缀。示意 Probe 已覆盖跨 fork/Before/根后空页/真实部分预算失败；固定旧 anchor 的20项页在较新后缀0/100/10000下冷/热最小预算都45，仅为健康 SingleEntry 计数，不是恒定 I/O 资格。
 
-依赖顺序中 A 已完成，下一片推进 B，暂不铺开全部公开 API：
+依赖顺序中 A、B1 分别验收，下一片推进 B2：
 
 1. **A 已完成：来源 snapshot 内部贯穿。**当前 Parent 仍是唯一来源权威；冷读一次完整资格、warm/安装再验证、fixture/owner/lifetime、历史 rewrite 和真实 Delta 均有[回归证据](history-source-seam.md#7-a-实施与验收)。不继续扩成 typed 缓存或免校验证书。
-2. **B：新 Storage 资格＋单成员真实纵切。**精确新 pin/不兼容调用先验收；随后在隔离实施分支整体改一 Branch 一 Head、DG 登记与 HS 来源签发、删除业务 Parent并拒旧格式。从 E2 旧点 fork 的真实 S/E 冷恢复、再存 Delta、错 source/prior/Schema 与唯一/无 State 到根是合入门槛；不保两套产品布局。见[纵切](branch-vertical-design.md)。
-3. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断与完整公开 C#。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary/BLOB、ID 字段、定向 origin 和成本测量按依赖推进，不先加索引。
+2. **B1：新 Storage 源码接入。**已固定 `f8868b5`，DG 仍用旧历史布局；源码、进程窗口与包资格分开，见[接入记录](storage-handle-adaptation.md)。下一片不重复接依赖；若 origin 新交付改变 revision，再验收相应增量。
+3. **B2：单布局整体切换。**按[施工计划](branch-cutover-plan.md)在隔离分支改一 Branch 一 Head、DG 登记、HS 来源签发与业务 Parent 删除；T 书签同步存 CommitId，保 Pair/Checkpoint/事件枚举等已有能力并迁移调用，MoveBranch 因只追加合同退出。先真实纵切，再闭合现有调用与回归后合入；不保两套产品布局。中文重复标签、同值新 Entry/目录复用、Meta Delta 和来源反例纳入门槛。协议号、标签/摘要编码和最小 ID codec 在该片开始时按推荐候选落实。
+4. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断、根/子树与分页外观。内部每 checkout Catalog 可留到此时合并，不让它扩大 B2。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary 的基本 opaque bytes 随 B2，BLOB、ID durable 字段与成本测量后置，不先加索引。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
@@ -73,11 +74,11 @@
 
 ## 本批完成边界
 
-本轮 A 的源码、独立复核及运行资格集中于[接缝 §7](history-source-seam.md#7-a-实施与验收)。此前旧布局混组和新 Storage `f8868b5` 的45断言 HS [Probe](../../../experiments/BranchHeadMechanismProbe/README.md)保其原资格，后者本轮未重跑。未跑全 solution 测试、包、进程 kill、DG 新模型或组故障原子性门禁。
+本轮 B1 的源码全量回归与有限进程窗口资格集中于[接入记录](storage-handle-adaptation.md)；B2 只有源码设计/独立复核，尚无新布局执行资格。此前 A、旧布局混组和独立 HS Probe 保其原资格。不把新 Storage 下旧布局测试视为新 Branch、组内核或普通包交付；本轮没有新 feed/包发布。
 
 ## 实现与证据边界
 
-- 本轮 DG 起点 `4980426`；Storage主工作树仍 `f8868b5`，起点均干净且本轮未改上游。默认环境指向与 pin 不同的 sibling；根构建/测试显式使用独立 `731eef7` worktree。此前 HS Probe 用另一独立 `f8868b5` worktree；新 HeadStore 产品接入未完成，不混用两个基线。
+- 本轮 DG 起点 `2d118da`；Storage主工作树仍 `f8868b5`，起点均干净且本轮未改上游。当前 pin 与其一致，根构建/测试仍显式使用干净独立 `f8868b5` worktree。旧 A / Private 删除的 `731eef7` 资格不重写；当前六包候选 `0.1.3-dev.20261019.gf8868b5` 尚未制作 feed，后续包交付必须重新资格化。
 - 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
 - [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
 - [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**
@@ -96,7 +97,9 @@
 | 跨分支共同保存、已选请求路线与实验题 | [联合提交设计](multi-branch-commits.md) |
 | accepted Catalog、候选生命周期、组安装及下一片判据 | [组内核](group-kernel-design.md) |
 | 继承历史来源资格、最小布局与真实恢复纵切 | [Branch 纵切](branch-vertical-design.md) |
-| 已完成 A 的 snapshot 接缝、下一实施片 B 与验收 | [来源接缝](history-source-seam.md) |
+| 已完成 A 的 snapshot 接缝、历史权威切换边界 | [来源接缝](history-source-seam.md) |
+| B1 新 Storage pin 的源码/运行资格 | [依赖接入](storage-handle-adaptation.md) |
+| 下一实施片 B2：单布局、旧调用迁移、合入门槛 | [整体切换计划](branch-cutover-plan.md) |
 | 定向读取已登记 Head 的创建来源 | [上游窄请求](headstore-origin-request.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |
 | 上游实际交付、API和验收限度 | [交付复核](headstore-delivery-review.md) |

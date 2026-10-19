@@ -35,7 +35,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             else {
                 using RepositoryResources resources = readOnly
                     ? RepositoryResources.OpenReadOnlyExisting(_path) : RepositoryResources.OpenExisting(_path);
-                Assert.Equal(new uint[] { 1, 2, 3 }, resources.Heads.ListHeads().Unwrap().Select(id => id.LocalId).Order());
+                Assert.Equal(new uint[] { 1, 2, 3 }, resources.Heads.ListHeads().Unwrap().Select(id => resources.Heads.GetLocalHeadId(id).Unwrap()).Order());
                 Assert.Empty(resources.ListBranches());
             }
             AssertFilesEqual(before, SnapshotTree(_path));
@@ -242,7 +242,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         using PublicationStore versions = PublicationStore.Open(VersionsPath, data);
         Assert.Equal(3u, versions.ReservedHeadIdUpperBound);
         Assert.Equal(shared is null ? (versions.ReadHead(3).IsSuccess ? new uint[] { 1, 3 } : new uint[] { 1 }) : new uint[] { 1, 2, 3 },
-            versions.ListHeads().Unwrap().Select(id => id.LocalId).Order());
+            versions.ListHeads().Unwrap().Select(id => versions.GetLocalHeadId(id).Unwrap()).Order());
         HeadEntry branch = versions.ReadHead(1).Unwrap();
         Assert.Equal(first, branch.Id);
         Assert.Equal(branches, branch.Payload.ToArray());

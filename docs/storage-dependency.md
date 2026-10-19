@@ -5,13 +5,15 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 `Atelia.FrameStore`、`Atelia.HeadStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
-当前 pin 为 `0.1.3-dev.20261017.g731eef7`，来源为 `731eef7cd3158572532fbeea7ba95a79213a7328`。
-这是未公开发布的本地候选。2026-10-19 已从准确来源制作六包 feed，当前 DG 普通包验收状态与来源见[Private 删除切片](design-branches/0096-history-and-head-model/private-removal.md)；不将它视作较新 HeadStore 的接入资格。
+当前 pin 为 `0.1.3-dev.20261019.gf8868b5`，来源为 `f8868b57e8f012745413bb38a83d67f1dba29f26`。
+这是为准确来源保留的唯一候选版本，尚未制作六包 feed，也未公开发布。新 pin 的 DG 源码资格与后续接线状态见 [DB-096 工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)；独立上游 Probe 不替代 DG 产品验收。
+2026-10-19 的 [Private 删除切片](design-branches/0096-history-and-head-model/private-removal.md)使用旧 `731eef7` / `0.1.3-dev.20261017.g731eef7` feed；其普通包结果保留原版本意义，不证明新 pin 的包资格。
 本机可通过环境变量 `UseStorageSources=true` 与 `StorageSourceRoot` 联调；也可显式使用下方命令。
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在配置中保存本机路径。
 
-本轮依赖包含非兼容 API 与格式变化：上游 HeadSetTag 格式 2，DG 三入口目录；旧库拒绝打开，不自动迁移。
-DG 书签仍定位历史 checkpoint，由独立目录发布；详见 [DB-096 接入切片](design-branches/0096-history-and-head-model/headstore-adaptation.md)。
+本轮依赖包含非兼容 API 与格式变化：上游统一 HeadStore 格式 4 拒绝格式 1/2/3；`HeadId.LocalId` 改为 owner 上的 `GetLocalHeadId`，持久 handle 编码为 4B/12B。Fork 只写固定来源 header，未产生本地 Entry 时承接该固定 Entry 的值，不随父 Head 后续发布推进。
+DG 自身仍使用 `P0R2`、三控制 Head 和原业务 Parent 导航；本轮依赖适配未切换 DG 历史布局或公开 API。即使 DG 根格式相同，上游格式拒旧也使旧库不能打开；不自动迁移。
+DG 书签仍定位历史 checkpoint，由独立目录发布；旧三入口接入的历史范围见 [DB-096 接入切片](design-branches/0096-history-and-head-model/headstore-adaptation.md)。
 旧 `3de8fb0` 的包验收结果保留历史身份，不能作为本轮证据。
 
 ## 显式源码联调
@@ -39,14 +41,14 @@ Storage 依赖 FrameStore，Persistence 依赖 HeadStore；必要的 Data/Primit
 
 ```powershell
 $storage = '/repos/Atelia-org/atelia-storage'
-$storageVersion = '0.1.3-dev.20261017.g731eef7'
+$storageVersion = '0.1.3-dev.20261019.gf8868b5'
 $storageFeed = Join-Path $storage "artifacts/feeds/$storageVersion"
 & "$storage/eng/Pack.ps1" -Version $storageVersion -OutputDirectory $storageFeed
 ```
 
 Pack 使用存储仓固定 SDK，产出六个 nupkg、六个 snupkg 和 `manifest.<S>.json`，记录准确来源与字节 SHA256。
 相同版本只允许复用已核验的完整产物；不同内容使用新版本，不覆盖公开包或已有候选，不清空全局缓存。
-本机本次六包及 manifest 位于 `.artifacts/db096-private-removal/storage-feed`；来源为准确提交的干净独立 worktree。其他机器按上述入口自行重建完整 feed，包文件不随 Git 分发。
+当前 pin 尚无本机 feed。`.artifacts/db096-private-removal/storage-feed` 只含旧 `731eef7` 候选，不能用于当前 pin；按上述入口从准确干净来源建立完整新 feed，包文件不随 Git 分发。
 
 [eng/Prepare-Storage.ps1](../eng/Prepare-Storage.ps1) 可以只读验证这个完整 feed：
 
@@ -102,7 +104,7 @@ Atelia nuspec 中的版本是最低范围，不强制任意应用只能解析到
 当前最短示例已改为纯 State，另有可选 Event 路径；范围与新候选结果见[纯 State 验收记录](DurableGraph-lab-notebook.md#state-only-quickstart)。
 下述数字与目录保留首次交付的历史含义。
 2026-10-15，以上入口已从干净提交 `3e1f41164d319fd1607ebdd2d2b572cc0089ba57` 生成并验收
-G `0.0.0-candidate.20261015.g3e1f411`；S 保持本文 pin。Windows / SDK 10.0.201 的结果为：
+G `0.0.0-candidate.20261015.g3e1f411`；S 为当时的 `0.1.3-dev.20261014.g3de8fb0`，不是本文当前 pin。Windows / SDK 10.0.201 的结果为：
 
 - 根 Release Rebuild：0 warnings / 0 errors；本轮未修改产品 C#、公共 API 或持久格式。
 - 已有输出目录不被覆盖；缺失 Storage feed 失败后恢复调用者缓存环境且不产生消费者目录；G/S 同版提前拒绝。
@@ -130,7 +132,7 @@ G `0.0.0-candidate.20261015.g3e1f411`；S 保持本文 pin。Windows / SDK 10.0.
 <configuration>
   <packageSources>
     <clear />
-    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261014.g3de8fb0" />
+    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261019.gf8868b5" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
   <packageSourceMapping>

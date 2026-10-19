@@ -19,9 +19,9 @@
 
 ## 当前焦点
 
-2026-10-19：[来源 snapshot 接缝 A](../docs/design-branches/0096-history-and-head-model/history-source-seam.md#7-a-实施与验收)已实施验收：真实材料贯穿 decoded/normalized/实际安装，冷读取不重复完整图资格检查，保存和安装仍重新核对实际图。保持公开 API、格式、Parent 权威和旧 Storage pin；下一片资格化新依赖并切换真实历史布局，再接组内核。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，尚未实现新 Branch API 或组协调器。[Private/ToShared 删除片](../docs/design-branches/0096-history-and-head-model/private-removal.md)保其已完成资格，`P0R2` 拒旧库；不重开私有路线。
+2026-10-19：[B1 新 Storage 源码接入](../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)已验收，当前依赖 `f8868b5`；上游格式4拒旧，DG 自身公开 API、`P0R2` 和业务 Parent 保持。此前 A 的真实 snapshot 贯穿与保存再验证已实现。下一片按[B2 整体切换计划](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)在隔离分支实施真实历史布局及旧调用迁移，再接组内核。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。新 Branch API、组协调器与当前 pin 的普通包资格仍未完成；Private/ToShared 删除保已完成状态。
 
-[DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有源码接入为三控制Head与独立书签目录，实际范围见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。后续设计从[DB-096研究工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)恢复：用户已确认只追加/旧点另开/fork立即可见，继承历史为首选候选；上游紧凑codec与准确历史已做独立消费者复核，开发期误用诊断足够，不增加每引用16B scope。DG仍固定旧依赖，新历史模型、包接入与产品回归尚未完成，不把上游或独立消费者资格当作DG产品资格。
+[DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下已回归，新历史模型另需真实纵切，不把它们混为同一次验收。
 
 workshop 反馈 3 的纯 State 入门已完成：[README](../README.md#最短接入路径)以连续 State 保存、历史读取、旧 State 分叉及冷开续写为主路径，Event 为可选后续示例。源码与新 G 原文普通包验收通过，运行时/API/格式保持；准确 G/S、证据与范围见[验收记录](../docs/DurableGraph-lab-notebook.md#state-only-quickstart)，本片无剩余必经施工。
 
