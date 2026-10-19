@@ -32,7 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, FrameAddress>>()(directory.Path);
             StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
             using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
-            exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models).Objects).Schema!;
+            exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), models.FreezeConfiguration()).Objects).Schema!;
         }
         GeneratorTestRun bases2 = RunCrossAssemblyGenerator(InheritanceHistoryBases(2), history: baseHistory.ReadAdditionalTexts(), forceDefinitions: "true");
         var baseImage2 = EmitCrossAssemblyReference(bases2);
@@ -55,7 +55,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type currentHost = current.Load(app2).GetType("InheritanceHistoryApp.Host")!;
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(false);
         using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
-            var stored = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, currentModels).Objects);
+            var stored = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), currentModels.FreezeConfiguration()).Objects);
             Assert.Equal(exact, stored.Schema);
             Assert.Equal(1, stored.Schema!.Version);
             Assert.Equal(1, stored.Schema.BaseSchema!.Version);
@@ -66,9 +66,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress[] addresses = currentHost.GetMethod("UpgradeAndSave")!.CreateDelegate<Func<string, FrameAddress[]>>()(directory.Path);
         using RepositoryResources finalSegments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var store = finalSegments.GraphStore;
-        Assert.Equal(ObjectVersionKind.Base, Assert.Single(DefaultRecords(store, addresses[0])).Kind);
-        foreach (int index in new[] { 1, 3 }) Assert.Empty(DefaultRecords(store, addresses[index]));
-        ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, addresses[2]));
+        Assert.Equal(ObjectVersionKind.Base, Assert.Single(DefaultRecords(store, PublishedGraph(finalSegments, addresses[0]))).Kind);
+        foreach (int index in new[] { 1, 3 }) Assert.Empty(DefaultRecords(store, PublishedGraph(finalSegments, addresses[index])));
+        ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, PublishedGraph(finalSegments, addresses[2])));
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         Assert.Equal(new byte[] { 0x10, 0xC6, 0x01 }, delta.Body.ToArray());
     }

@@ -19,19 +19,19 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
-        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
+        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[0]), models.FreezeConfiguration());
         ObjectStateRecord decimals = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.Decimal &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.ScalarDefault);
         foreach (int index in new[] { 1, 13 }) {
-            Assert.Empty(DefaultRecords(states, addresses[index]));
-            Assert.Empty(DefaultRemoved(states, addresses[index]));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[index])));
+            Assert.Empty(PublishedRemoved(segments, addresses[index]));
         }
         // Each isolated scale-only edit must persist, including the enclosing World and generic Box bodies.
         for (int index = 2; index <= 12; index++) {
-            Assert.NotEmpty(DefaultRecords(states, addresses[index]));
+            Assert.NotEmpty(DefaultRecords(states, PublishedGraph(segments, addresses[index])));
         }
-        ObjectVersionRecord replacement = Assert.Single(DefaultRecords(states, addresses[11]),
+        ObjectVersionRecord replacement = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[11])),
             row => row.ObjectId == decimals.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, replacement.Kind);
         BareValueReader reader = new(replacement.Body);
@@ -42,7 +42,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(decimal.GetBits(1.00m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
         Assert.Equal(decimal.GetBits(10.0m), decimal.GetBits(BclValueCodec.ReadDecimal(ref reader)));
         reader.EnsureFullyConsumed();
-        ObjectVersionRecord patch = Assert.Single(DefaultRecords(states, addresses[12]),
+        ObjectVersionRecord patch = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[12])),
             row => row.ObjectId == decimals.Id.Value);
         Assert.Equal(ObjectVersionKind.Delta, patch.Kind);
         reader = new(patch.Body);
@@ -56,7 +56,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrozenDictionaryState<decimal, decimal> old = decimals.GetDictionaryState<decimal, decimal>();
         Assert.Equal(decimal.GetBits(1.0m), decimal.GetBits(old.Entries.ToArray().Single(p => p.Key == 1m).Key));
         Assert.Equal(decimal.GetBits(10.0m), decimal.GetBits(old.Entries.ToArray().Single(p => p.Key == 1m).Value));
-        DecodedRevision final = DecodedRevision.ReadStoredGraph(states, addresses[^1], models);
+        DecodedRevision final = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[^1]), models.FreezeConfiguration());
         foreach (ObjectStateRecord row in final.Objects.Where(row => row.Kind == ObjectStateKind.Dictionary)) {
             Assert.Equal(row.Layout.Dictionary!.KeySlot.TypeTag == TypeTag.Decimal &&
                 row.Layout.Dictionary.ValueSlot.TypeTag == TypeTag.Int32

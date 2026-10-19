@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
@@ -22,15 +23,15 @@ public sealed class SharedEventHistoryTests : IDisposable {
         FrameAddress initial, eventRevision, saved;
         ObjectId stateId;
         using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout session = repository.CreateSharedBranch("main", world, NoRebase);
+            using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", world, parameters: NoRebase).Id);
             initial = session.StateRevisionAddress!.Value;
             stateId = session.StateId!.Value;
-            eventRevision = session.CommitEvent(domainEvent, NoRebase).RevisionAddress;
+            eventRevision = WorkTestAccess.Address(session, session.CommitEvent(domainEvent, parameters: NoRebase).Id);
         }
 
         using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
-            using BranchCheckout resumed = repository.CheckoutShared("main");
-            Node pending = ((Node)repository.ReadEvent(resumed.Head));
+            using WorkingCopy resumed = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            Node pending = ((Node)repository.LoadEvent(resumed.BaseCommitId));
             Node restoredState = Assert.IsType<Node>(resumed.State);
             Assert.NotNull(restoredState.Next);
             Assert.NotNull(restoredState.Links);
@@ -53,17 +54,17 @@ public sealed class SharedEventHistoryTests : IDisposable {
             Assert.Equal((byte)2, pending.Next.Value);
             Assert.Equal(2, pending.Links.Count);
             Assert.Same(pending.Links[0], pending.Links[1]);
-            saved = resumed.CommitState(NoRebase).RevisionAddress;
-            Assert.Equal(CheckpointKind.State, resumed.Head.Kind);
+            saved = WorkTestAccess.Address(resumed, resumed.CommitState(parameters: NoRebase).Id);
+            Assert.Equal(CommitKind.State, WorkTestAccess.Kind(resumed));
         }
 
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
-            StoredGraphRevision next = store.ReadGraph(saved);
+            StoredGraphRevision next = MechanismFixture.Snapshot(store, saved);
             IReadOnlyList<ObjectVersionRecord> writes = StorageTestData.LocalRecords(store, saved);
             Assert.Equal(initial, next.SourceGraph);
-            Assert.Equal(initial, store.ReadGraph(eventRevision).SourceGraph);
-            Assert.Equal(store.ReadGraph(initial).ObjectHeads.Keys.Order(), store.ReadGraph(saved).ObjectHeads.Keys.Order());
+            Assert.Equal(initial, MechanismFixture.Snapshot(store, eventRevision).SourceGraph);
+            Assert.Equal(MechanismFixture.Snapshot(store, initial).ObjectHeads.Keys.Order(), MechanismFixture.Snapshot(store, saved).ObjectHeads.Keys.Order());
             if (editState) {
                 // Only the existing child and List changed; string IDs and World reference slots remain stable.
                 Assert.Equal(2, writes.Count);
@@ -75,8 +76,8 @@ public sealed class SharedEventHistoryTests : IDisposable {
         }
 
         using Repository reader = Repository.OpenReadOnlyExisting(_root, SharedReadModel.Models());
-        Node coldState = ((Node)reader.ReadState(reader.GetHead("main")));
-        Node coldEvent = ((Node)reader.ReadEvent(Assert.Single(reader.EnumerateEvents(reader.GetHead("main"), HistoryOrder.OldestFirst).ToArray())));
+        Node coldState = ((Node)reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id));
+        Node coldEvent = ((Node)reader.LoadEvent(Assert.Single(reader.EnumerateEvents(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray()).Id));
         Assert.Equal(editState ? (byte)9 : (byte)2, coldState.Next!.Value);
         Assert.Equal(editState ? 0 : 2, coldState.Links!.Count);
         Assert.Equal((byte)2, coldEvent.Next!.Value);
@@ -87,8 +88,8 @@ public sealed class SharedEventHistoryTests : IDisposable {
     [Fact]
     public void CheckoutRejectsASingletonAllocatorBeforeHydratingItsMutableGraph() {
         using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout session = repository.CreateSharedBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
-            session.CommitEvent(new Node { Value = 7 }, NoRebase);
+            using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1, Next = new Node { Value = 2 } }, parameters: NoRebase).Id);
+            session.CommitEvent(new Node { Value = 7 }, parameters: NoRebase);
         }
 
         Node singleton = new();
@@ -96,9 +97,9 @@ public sealed class SharedEventHistoryTests : IDisposable {
         StateModelRegistry broken = SharedReadModel.Models(allocate: () => singleton,
             hydrate: node => hydratedValues.Add(node.Value));
         using Repository reopened = Repository.OpenExisting(_root, broken);
-        BranchCheckout? delivered = null;
+        WorkingCopy? delivered = null;
 
-        Assert.Throws<InvalidDataException>(() => delivered = reopened.CheckoutShared("main"));
+        Assert.Throws<InvalidDataException>(() => delivered = reopened.OpenWorkingCopy(BranchNamed(reopened, "main")));
 
         Assert.Null(delivered);
         Assert.Empty(hydratedValues);
@@ -106,9 +107,9 @@ public sealed class SharedEventHistoryTests : IDisposable {
         Assert.False(reopened.IsFaulted);
         reopened.Dispose();
         using Repository healthy = Repository.OpenExisting(_root, SharedReadModel.Models());
-        using BranchCheckout retry = healthy.CheckoutShared("main");
+        using WorkingCopy retry = healthy.OpenWorkingCopy(BranchNamed(healthy, "main"));
         Assert.Equal((byte)1, ((Node)retry.State!).Value);
-        Assert.Equal((byte)7, ((Node)healthy.ReadEvent(retry.Head)).Value);
+        Assert.Equal((byte)7, ((Node)healthy.LoadEvent(retry.BaseCommitId)).Value);
     }
 
     public void Dispose() => SharedReadModel.DeleteFixture(_root, "durable-shared-history-");

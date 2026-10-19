@@ -29,7 +29,7 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
                     : ManagementDirectoryWriter.PrepareBranchAddition(store, accepted, id.HeadId, "重复标签");
                 Assert.Throws<InvalidOperationException>(() => candidate.GetInstallation(accepted));
                 var before = accepted;
-                var graph = store.Append(StoredGraphKind.Meta, candidate.Write.SourceGraph, null, candidate.Write);
+                var graph = store.AppendMeta(candidate.Write.SourceGraph, candidate.Write);
                 candidate.PrepareInstall(graph);
                 var installed = candidate.GetInstallation(accepted);
                 Assert.Same(before, accepted);
@@ -61,7 +61,7 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
             var id = heads.CreateHead("cold"u8.ToArray(), out _).Unwrap();
             var candidate = bookmarks ? ManagementDirectoryWriter.PrepareBookmarkAddition(store, before, "cold", target)
                 : ManagementDirectoryWriter.PrepareBranchAddition(store, before, id.HeadId, "冷续写");
-            var graph = store.Append(StoredGraphKind.Meta, last, null, candidate.Write);
+            var graph = store.AppendMeta(last, candidate.Write);
             candidate.PrepareInstall(graph);
             var after = candidate.GetInstallation(before);
             Assert.Equal(last, after.Snapshot.SourceGraph);
@@ -77,7 +77,7 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
                 : restored.Rows[root].GetDictionaryState<uint, ObjectId>().Count;
             Assert.Equal(81, count);
             Assert.Equal(last, restored.Snapshot.Address);
-            Assert.Equal(store.ReadObjectChain(last, root.Value).Entries.Sum(entry => (long)entry.PayloadBytes),
+            Assert.Equal(store.ReadObjectChain(store.ReadMetaGraph(last), root.Value).Entries.Sum(entry => (long)entry.PayloadBytes),
                 restored.Storage[root].ReconstructionPayloadBytes);
         }
     }
@@ -89,25 +89,25 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
         using var store = new GraphRecordStore(data);
         var id = heads.CreateHead("a"u8.ToArray(), out _).Unwrap();
         var first = ManagementDirectoryWriter.PrepareBranchAddition(store, null, id.HeadId, "a");
-        var g0 = store.Append(StoredGraphKind.Meta, null, null, first.Write);
+        var g0 = store.AppendMeta(null, first.Write);
         first.PrepareInstall(g0);
         var accepted = first.GetInstallation(null);
         var id2 = heads.CreateHead("b"u8.ToArray(), out _).Unwrap();
         var next = ManagementDirectoryWriter.PrepareBranchAddition(store, accepted, id2.HeadId, "b");
         using (var other = new GraphRecordStore(data)) {
-            Assert.Throws<InvalidDataException>(() => next.PrepareInstall(other.ReadGraph(g0.Address)));
+            Assert.Throws<InvalidDataException>(() => next.PrepareInstall(other.ReadMetaGraph(g0.Address)));
         }
         Assert.Throws<InvalidDataException>(() => next.PrepareInstall(g0));
         var wrongText = ManagementDirectoryWriter.PrepareBranchAddition(store, accepted, id2.HeadId, "wrong");
-        var badRecords = store.Append(StoredGraphKind.Meta, g0.Address, null, wrongText.Write);
+        var badRecords = store.AppendMeta(g0.Address, wrongText.Write);
         Assert.Throws<InvalidDataException>(() => next.PrepareInstall(badRecords));
-        var wrongRoot = store.Append(StoredGraphKind.Meta, g0.Address, null,
+        var wrongRoot = store.AppendMeta(g0.Address,
             new(g0.Address, new(2), next.Write.Records));
         Assert.Throws<InvalidDataException>(() => next.PrepareInstall(wrongRoot));
-        var missing = store.Append(StoredGraphKind.Meta, g0.Address, null,
+        var missing = store.AppendMeta(g0.Address,
             new(g0.Address, next.Write.RootId, next.Write.Records, [2]));
         Assert.Throws<InvalidDataException>(() => next.PrepareInstall(missing));
-        var correct = store.Append(StoredGraphKind.Meta, g0.Address, null, next.Write);
+        var correct = store.AppendMeta(g0.Address, next.Write);
         next.PrepareInstall(correct);
         Assert.Equal(correct.Address, next.GetInstallation(accepted).Snapshot.Address);
         Assert.Equal(2, accepted.Rows.Count);
@@ -125,7 +125,7 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
         Assert.Throws<ArgumentException>(() => ManagementDirectoryWriter.PrepareBookmarkAddition(store, null, "a", default));
         Assert.Throws<InvalidDataException>(() => ManagementDirectoryWriter.PrepareBranchAddition(store, null, id.HeadId, "\ud800"));
         var first = ManagementDirectoryWriter.PrepareBookmarkAddition(store, null, "a", id);
-        var graph = store.Append(StoredGraphKind.Meta, null, null, first.Write);
+        var graph = store.AppendMeta(null, first.Write);
         first.PrepareInstall(graph);
         var accepted = first.GetInstallation(null);
         Assert.Throws<InvalidDataException>(() => ManagementDirectoryWriter.PrepareBranchAddition(store, accepted, id.HeadId, "a"));
@@ -145,16 +145,16 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
         var first = ManagementDirectoryWriter.PrepareBranchAddition(store, null, id.HeadId, "a");
         var leaf = ObjectVersionRecord.CreateBase(100, TypedBaseBodyCodec.Encode(
             Atelia.DurableGraph.Schema.ObjectLayout.String, Atelia.DurableGraph.Serialization.StringBodyPreparer.PrepareBase("unreachable")));
-        var initial = store.Append(StoredGraphKind.Meta, null, null, new(null, new(1), first.Write.Records.Append(leaf)));
+        var initial = store.AppendMeta(null, new(null, new(1), first.Write.Records.Append(leaf)));
         var accepted = ManagementDirectoryReader.ReadBranches(store, initial.Address);
         var id2 = heads.CreateHead("b"u8.ToArray(), out _).Unwrap();
         var next = ManagementDirectoryWriter.PrepareBranchAddition(store, accepted, id2.HeadId, "b");
         Assert.Contains(next.Write.Records, record => record.ObjectId == 101);
-        var actual = store.Append(StoredGraphKind.Meta, initial.Address, null, next.Write);
+        var actual = store.AppendMeta(initial.Address, next.Write);
         next.PrepareInstall(actual);
         Assert.Equal(initial.ObjectHeads[100], next.GetInstallation(accepted).Snapshot.ObjectHeads[100]);
         var exhausted = ObjectVersionRecord.CreateBase(uint.MaxValue, leaf.Body);
-        var full = store.Append(StoredGraphKind.Meta, initial.Address, null, new(initial.Address, new(1), [exhausted]));
+        var full = store.AppendMeta(initial.Address, new(initial.Address, new(1), [exhausted]));
         var maxBaseline = ManagementDirectoryReader.ReadBranches(store, full.Address);
         Assert.Throws<InvalidOperationException>(() => ManagementDirectoryWriter.PrepareBranchAddition(store, maxBaseline, id2.HeadId, "b"));
     }

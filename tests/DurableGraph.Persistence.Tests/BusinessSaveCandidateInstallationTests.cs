@@ -18,13 +18,13 @@ public sealed partial class SplitBusinessWorkspaceTests {
         SchemaCatalogWorkspace catalogOwner = new(_repository.EnsureEditingAllowed);
         catalogOwner.Set(Current);
         PreparedSchemaCatalogWrite metadata = catalogOwner.Prepare();
-        StoredGraphRevision schema = Store.Append(StoredGraphKind.Meta, null, null, metadata.Write!);
+        StoredGraphRevision schema = Store.AppendMeta(null, metadata.Write!);
         SchemaCatalogView catalog = SchemaCatalogView.Load(Store, schema.Address);
 
         using BusinessSaveCandidate candidateA = workspaceA.CaptureOwned(rootA, StoredGraphKind.State);
         using PreparedBusinessWrite preparedA = workspaceA.PrepareOwned(candidateA, catalog, NoRebase);
-        StoredGraphRevision graphA = Store.Append(StoredGraphKind.State, null, schema.Address, preparedA.Write);
-        Assert.Equal((byte)17, Read(graphA.Address, candidateA.RootId, registry).Value);
+        StoredGraphRevision graphA = Store.AppendBusiness(StoredGraphKind.State, null, schema.Address, preparedA.Write);
+        Assert.Equal((byte)17, DecodedRevision.ReadStoredGraph(Store, graphA, registry.FreezeConfiguration()).GetRequired(candidateA.RootId).GetState<State>().Value);
         preparedA.PrepareInstall(graphA);
         preparedA.Install(graphA);
         NormalizedGraphState installationA = workspaceA.Baseline!;
@@ -32,10 +32,10 @@ public sealed partial class SplitBusinessWorkspaceTests {
 
         using BusinessSaveCandidate candidateB = workspaceB.CaptureOwned(rootB, StoredGraphKind.State);
         using PreparedBusinessWrite preparedB = workspaceB.PrepareOwned(candidateB, catalog, NoRebase);
-        StoredGraphRevision graphB = Store.Append(StoredGraphKind.State, null, schema.Address, preparedB.Write);
+        StoredGraphRevision graphB = Store.AppendBusiness(StoredGraphKind.State, null, schema.Address, preparedB.Write);
         NormalizedGraphState nextB = candidateB.NextBaseline;
         NormalizedGraphState installationB = nextB.PrepareGraphInstallation(Store, graphB, preparedB.Write.Records, catalog);
-        Assert.Equal((byte)42, Read(graphB.Address, candidateB.RootId, registry).Value);
+        Assert.Equal((byte)42, DecodedRevision.ReadStoredGraph(Store, graphB, registry.FreezeConfiguration()).GetRequired(candidateB.RootId).GetState<State>().Value);
         Assert.NotEqual(graphA.Address, graphB.Address);
         Assert.Equal(candidateA.RootId, candidateB.RootId);
         Assert.Equal(installationA.Objects.Keys.Order(), installationB.Objects.Keys.Order());

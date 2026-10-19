@@ -29,15 +29,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(1, assembly.GetType("R")!.GetField("Upgrades")!.GetValue(null));
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var store = segments.GraphStore;
-        ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, addresses[0]));
+        ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, PublishedGraph(segments, addresses[0])));
         Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
         Assert.Null(rewrite.PriorAddress);
-        Assert.Equal(1, DefaultLayout(store, original, rewrite.ObjectId).Schema!.Version);
-        Assert.Equal(2, DefaultLayout(store, addresses[0], rewrite.ObjectId).Schema!.Version);
-        Assert.Single(store.ReadObjectChain(addresses[0], rewrite.ObjectId).Entries);
+        Assert.Equal(1, DefaultLayout(store, PublishedGraph(segments, original), rewrite.ObjectId).Schema!.Version);
+        Assert.Equal(2, DefaultLayout(store, PublishedGraph(segments, addresses[0]), rewrite.ObjectId).Schema!.Version);
+        Assert.Single(store.ReadObjectChain(PublishedGraph(segments, addresses[0]), rewrite.ObjectId).Entries);
         StateModelRegistry models = assembly.GetType("Host")!.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        AssertRecordTypedDeltaCost(store, addresses[0], addresses[1], new(rewrite.ObjectId), models, assembly.GetType("R")!);
-        Assert.Empty(DefaultRecords(store, addresses[2]));
+        AssertRecordTypedDeltaCost(segments, addresses[0], addresses[1], new(rewrite.ObjectId), models, assembly.GetType("R")!);
+        Assert.Empty(DefaultRecords(store, PublishedGraph(segments, addresses[2])));
     }
 
     [Fact]
@@ -70,11 +70,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var store = segments.GraphStore;
-        Assert.Empty(DefaultRecords(store, saved[0])); // Same layout needs neither Upgrade nor a replacement Base.
-        ObjectVersionRecord changed = Assert.Single(DefaultRecords(store, saved[1]));
-        AssertRecordTypedDeltaCost(store, saved[0], saved[1], new(changed.ObjectId), currentModels, currentAssembly.GetType("Leaf")!);
-        Assert.Equal(Assert.Single(DefaultRecords(store, original)).ObjectId, changed.ObjectId);
-        Assert.Empty(DefaultRecords(store, saved[2]));
+        Assert.Empty(DefaultRecords(store, PublishedGraph(segments, saved[0]))); // Same layout needs neither Upgrade nor a replacement Base.
+        ObjectVersionRecord changed = Assert.Single(DefaultRecords(store, PublishedGraph(segments, saved[1])));
+        AssertRecordTypedDeltaCost(segments, saved[0], saved[1], new(changed.ObjectId), currentModels, currentAssembly.GetType("Leaf")!);
+        Assert.Equal(Assert.Single(DefaultRecords(store, PublishedGraph(segments, original))).ObjectId, changed.ObjectId);
+        Assert.Empty(DefaultRecords(store, PublishedGraph(segments, saved[2])));
         DurableSchema before = EnumHistoryRegistry(priorAssembly).CreateEnvironment().ResolveCurrentModel(priorAssembly.GetType("Leaf")!).CurrentSchema;
         DurableSchema after = currentModels.CreateEnvironment().ResolveCurrentModel(currentAssembly.GetType("Leaf")!).CurrentSchema;
         Assert.Equal(before, after);

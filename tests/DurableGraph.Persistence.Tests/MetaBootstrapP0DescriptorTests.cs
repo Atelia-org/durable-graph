@@ -20,7 +20,7 @@ public sealed class MetaBootstrapP0DescriptorTests : IDisposable {
             ? ObjectVersionRecord.CreateBase(row.ObjectId, badName) : row).ToArray();
         FrameAddress graph;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            graph = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, prepared.View.RootId, records)).Address;
+            graph = repository.Store.AppendMeta(null, new(null, prepared.View.RootId, records)).Address;
         }
         using var reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reopened.Store, graph));
@@ -40,7 +40,7 @@ public sealed class MetaBootstrapP0DescriptorTests : IDisposable {
             ? ObjectVersionRecord.CreateBase(row.ObjectId, body) : row).ToArray();
         FrameAddress graph;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            graph = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, prepared.View.RootId, records)).Address;
+            graph = repository.Store.AppendMeta(null, new(null, prepared.View.RootId, records)).Address;
         }
         using var reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reopened.Store, graph));

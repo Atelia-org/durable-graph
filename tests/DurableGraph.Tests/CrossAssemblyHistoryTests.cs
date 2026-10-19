@@ -33,7 +33,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var oldModels = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
             using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
-            var revision = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, oldModels);
+            var revision = DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), oldModels.FreezeConfiguration());
             exactWorld = Assert.Single(revision.Objects, row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
 
@@ -57,7 +57,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool>>()(directory.Path));
         var models = currentHost.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
         using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
-            var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models);
+            var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), models.FreezeConfiguration());
             var world = Assert.Single(decoded.Objects, row => row.Schema?.SchemaId == "CrossWorld");
             Assert.Equal(exactWorld, world.Schema);
             Assert.Equal(1, world.Schema!.Version);
@@ -68,13 +68,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
             var store = segments.GraphStore;
-            Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
-            Assert.All(DefaultRecords(store, addresses[0]), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            Assert.Equal(2, DefaultRecords(store, PublishedGraph(segments, addresses[0])).Count);
+            Assert.All(DefaultRecords(store, PublishedGraph(segments, addresses[0])), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             foreach (int index in new[] { 1, 3 }) {
-                Assert.Empty(DefaultRecords(store, addresses[index]));
-                Assert.Empty(DefaultRemoved(store, addresses[index]));
+                Assert.Empty(DefaultRecords(store, PublishedGraph(segments, addresses[index])));
+                Assert.Empty(PublishedRemoved(segments, addresses[index]));
             }
-            var changed = Assert.Single(DefaultRecords(store, addresses[2]));
+            var changed = Assert.Single(DefaultRecords(store, PublishedGraph(segments, addresses[2])));
             if (!empty) { Assert.Equal(ObjectVersionKind.Delta, changed.Kind); }
         }
     }
@@ -97,7 +97,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, true);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<bool, StateModelRegistry>>()(true);
             using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
-            prior = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original, models).Objects,
+            prior = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), models.FreezeConfiguration()).Objects,
                 row => row.Schema?.SchemaId == "CrossWorld").Schema!;
         }
         // Generate valid retained history first, then explicitly omit its historical value

@@ -40,25 +40,25 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_root);
         long tail = DataBytes(reopened.Data);
         StateModelRegistry readers = WorldReaders();
-        Assert.Equal((byte)7, DecodedRevision.ReadStoredGraph(reopened.Store, first, readers).GetRequired(new(1)).GetState<WorldState>().Value);
-        DecodedRevision deltaView = DecodedRevision.ReadStoredGraph(reopened.Store, changed, readers);
+        Assert.Equal((byte)7, DecodedRevision.ReadStoredGraph(reopened.Store, MechanismFixture.Snapshot(reopened, first), readers.FreezeConfiguration()).GetRequired(new(1)).GetState<WorldState>().Value);
+        DecodedRevision deltaView = DecodedRevision.ReadStoredGraph(reopened.Store, MechanismFixture.Snapshot(reopened, changed), readers.FreezeConfiguration());
         Assert.Equal(new WorldState(new(2), 9), deltaView.GetRequired(new(1)).GetState<WorldState>());
         Assert.Equal("old", deltaView.GetRequired(new(2)).StringContent);
-        DecodedRevision baseView = DecodedRevision.ReadStoredGraph(reopened.Store, rewritten, readers);
+        DecodedRevision baseView = DecodedRevision.ReadStoredGraph(reopened.Store, MechanismFixture.Snapshot(reopened, rewritten), readers.FreezeConfiguration());
         Assert.Equal((byte)11, baseView.GetRequired(new(1)).GetState<WorldState>().Value);
 
         SchemaCatalogView selected = SchemaCatalogView.Load(reopened.Store, schemaRoot);
         Assert.Equal(descriptor, selected.DescriptorId(layout));
         Assert.Equal(layout, selected.ResolveLayout(descriptor));
-        ObjectVersionChain oldChain = reopened.Store.ReadObjectChain(changed, 1);
+        ObjectVersionChain oldChain = reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, changed), 1);
         Assert.Equal(2, oldChain.Entries.Count);
-        Assert.Equal(reopened.Store.ReadGraph(first).ObjectHeads[1], oldChain.Entries[1].Record.PriorAddress);
+        Assert.Equal(MechanismFixture.Snapshot(reopened, first).ObjectHeads[1], oldChain.Entries[1].Record.PriorAddress);
         Assert.Equal(new byte[] { 9 }, oldChain.Entries[1].Record.Body.ToArray());
         Assert.Equal(oldChain.Head, deltaView.ObjectHeads[new(1)]);
-        Assert.Equal(reopened.Store.ReadGraph(first).ObjectHeads[2], deltaView.ObjectHeads[new(2)]);
+        Assert.Equal(MechanismFixture.Snapshot(reopened, first).ObjectHeads[2], deltaView.ObjectHeads[new(2)]);
         Assert.NotEqual(changed, deltaView.ObjectHeads[new(1)]);
         Assert.Equal(oldChain.Entries.Sum(static entry => (long)entry.PayloadBytes), deltaView.ObjectStorage[new(1)].ReconstructionPayloadBytes);
-        ObjectVersionChain newChain = reopened.Store.ReadObjectChain(rewritten, 1);
+        ObjectVersionChain newChain = reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, rewritten), 1);
         Assert.Single(newChain.Entries);
         Assert.Equal(newChain.Head, baseView.ObjectHeads[new(1)]);
         Assert.Equal((long)newChain.Entries[0].PayloadBytes, baseView.ObjectStorage[new(1)].ReconstructionPayloadBytes);
@@ -102,7 +102,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
 
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
         using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_root)) {
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, revision, WorldReaders()));
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, MechanismFixture.Snapshot(reopened, revision), WorldReaders().FreezeConfiguration()));
         }
         Assert.Equal(before.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in before) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
@@ -133,7 +133,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
 
         using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(_root);
         long tail = DataBytes(reopened.Data);
-        DecodedRevision retained = DecodedRevision.ReadStoredGraph(reopened.Store, revision, RetiredPointReaders(includeCode: true));
+        DecodedRevision retained = DecodedRevision.ReadStoredGraph(reopened.Store, MechanismFixture.Snapshot(reopened, revision), RetiredPointReaders(includeCode: true).FreezeConfiguration());
         Assert.Equal(layout, retained.GetRequired(new(12)).Layout);
         Assert.Throws<InvalidDataException>(() => retained.SourceModels!.GetDomainType(layout.Type));
         FrozenArrayState<int> decoded = retained.GetRequired(new(12)).GetArrayState<int>();
@@ -145,7 +145,7 @@ public sealed class RepresentationIntegrationTests : IDisposable {
         // configuration successfully bound this descriptor on the same Store.
         SchemaCatalogView selected = SchemaCatalogView.Load(reopened.Store, schemaRoot);
         Assert.Equal(layout, selected.ResolveLayout(descriptor));
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, revision, RetiredPointReaders(includeCode: false)));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reopened.Store, MechanismFixture.Snapshot(reopened, revision), RetiredPointReaders(includeCode: false).FreezeConfiguration()));
         Assert.Equal(tail, DataBytes(reopened.Data));
     }
 
@@ -173,7 +173,11 @@ public sealed class RepresentationIntegrationTests : IDisposable {
 
     private static StoredGraphRevision Save(RepositoryStorageFacade repository, FrameAddress? source,
         ObjectId root, ObjectVersionRecord[] records, PreparedGraphWrite? catalog = null) {
-        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, new(source, root, records), catalog);
+        var matches = MechanismFixture.Resources(repository).ListBranches().Where(pair => pair.Value == "main").ToArray();
+        HistoryGraphRecord? current = matches.Length == 0 ? null : repository.ReadCurrent(matches.Single().Key);
+        using PendingRepositorySave pending = repository.PrepareFrom(
+            current is null ? null : matches.Single().Key, current?.Id, current is null ? "main" : null,
+            StoredGraphKind.State, default, () => (new(source, root, records), catalog));
         return repository.Commit(pending).Business;
     }
 

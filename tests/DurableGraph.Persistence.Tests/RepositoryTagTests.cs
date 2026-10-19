@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Reflection;
 using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
@@ -14,37 +15,36 @@ public sealed class RepositoryTagTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void TagsKeepStateOrEventFirstPositionAcrossBranchChangesReopenAndContinuation(bool eventFirst) {
-        CheckpointAddress old;
+        CommitId old;
         using (Repository repository = Create()) {
-            using BranchCheckout main = eventFirst
-                ? repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase)
-                : repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
-            old = main.Head;
+            using WorkingCopy main = eventFirst
+                ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id)
+                : repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+            old = main.BaseCommitId;
             repository.CreateTag("start", old);
-            CheckpointAddress intermediate = main.CommitEvent(new Node { Value = 2 }, NoRebase);
-            CheckpointAddress advanced = main.CommitState(new Node { Value = 3 }, NoRebase);
+            CommitId intermediate = main.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+            CommitId advanced = main.CommitState(new Node { Value = 3 }, parameters: NoRebase).Id;
             Assert.Equal(old, repository.ResolveTag("start"));
-            Assert.Equal(advanced, repository.GetHead("main"));
+            Assert.Equal(advanced, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
             main.Dispose();
-            repository.MoveBranch("main", advanced, intermediate);
-            Assert.Equal(intermediate, repository.GetHead("main"));
+            BranchInfo historical = repository.ForkBranch(intermediate, "historical");
+            Assert.Equal(intermediate, repository.ReadCurrentCommit(historical.Id).Commit.Id);
+            Assert.Equal(advanced, repository.ReadCurrentCommit(main.BranchId).Commit.Id);
             Assert.Equal(old, repository.ResolveTag("start"));
         }
         using (Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models())) {
-            CheckpointAddress selected = reopened.ResolveTag("start");
-            Assert.NotEqual(old, selected);
-            Assert.Equal(old.Address, selected.Address);
-            Assert.Equal(old.RevisionAddress, selected.RevisionAddress);
-            Assert.Equal(old.RootId, selected.RootId);
-            Assert.Equal(eventFirst ? CheckpointKind.Event : CheckpointKind.State, selected.Kind);
-            Assert.Equal((byte)1, Assert.IsType<Node>(eventFirst ? reopened.ReadEvent(selected) : reopened.ReadState(selected)).Value);
-            CheckpointAddress sourceHead = reopened.GetHead("main");
+            CommitId selected = reopened.ResolveTag("start");
+            Assert.Equal(old, selected);
+            Assert.Equal(eventFirst ? CommitKind.Event : CommitKind.State, reopened.ReadCommitInfo(selected).Kind);
+            Assert.Equal((byte)1, Assert.IsType<Node>(eventFirst ? reopened.LoadEvent(selected) : reopened.LoadState(selected)).Value);
+            CommitId sourceHead = reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id;
             Assert.NotEqual(selected, sourceHead);
-            Assert.Equal(selected, reopened.CreateBranch("from-tag", selected));
-            using BranchCheckout checkout = reopened.CheckoutShared("from-tag");
-            using BranchCheckout fork = reopened.ForkShared("fork-from-tag", selected);
-            Assert.Equal(selected, checkout.Head);
-            Assert.Equal(selected, fork.Head);
+            BranchInfo fromTag = reopened.ForkBranch(selected, "from-tag");
+            Assert.Equal(selected, reopened.ReadCurrentCommit(fromTag.Id).Commit.Id);
+            using WorkingCopy checkout = reopened.OpenWorkingCopy(BranchNamed(reopened, "from-tag"));
+            using WorkingCopy fork = reopened.OpenWorkingCopy(reopened.ForkBranch(selected, "fork-from-tag").Id);
+            Assert.Equal(selected, checkout.BaseCommitId);
+            Assert.Equal(selected, fork.BaseCommitId);
             if (eventFirst) {
                 Assert.Null(checkout.State);
                 Assert.Null(fork.State);
@@ -53,44 +53,46 @@ public sealed class RepositoryTagTests : IDisposable {
                 Assert.Equal((byte)1, Assert.IsType<Node>(fork.State).Value);
                 Assert.NotSame(checkout.State, fork.State);
             }
-            Assert.Equal(selected.Address, checkout.CommitState(new Node { Value = 8 }, NoRebase).Parent);
-            CheckpointAddress nextEvent = fork.CommitEvent(new Node { Value = 7 }, NoRebase);
-            Assert.Equal(selected.Address, nextEvent.Parent);
-            Assert.Equal(nextEvent.Address, fork.CommitState(new Node { Value = 9 }, NoRebase).Parent);
+            CommitId saved = checkout.CommitState(new Node { Value = 8 }, parameters: NoRebase).Id;
+            Assert.Equal(selected.Value, Resources(reopened).ReadPrevious(saved.Value)!.Id);
+            CommitId nextEvent = fork.CommitEvent(new Node { Value = 7 }, parameters: NoRebase).Id;
+            Assert.Equal(selected.Value, Resources(reopened).ReadPrevious(nextEvent.Value)!.Id);
+            CommitId nextState = fork.CommitState(new Node { Value = 9 }, parameters: NoRebase).Id;
+            Assert.Equal(nextEvent.Value, Resources(reopened).ReadPrevious(nextState.Value)!.Id);
             Assert.Equal(selected, reopened.ResolveTag("start"));
-            Assert.Equal(sourceHead, reopened.GetHead("main"));
+            Assert.Equal(sourceHead, reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id);
         }
         using Repository verify = Repository.OpenReadOnlyExisting(_root, SharedReadModel.Models());
-        Assert.Equal(old.Address, verify.ResolveTag("start").Address);
-        Assert.Equal((byte)8, Assert.IsType<Node>(verify.ReadState(verify.GetHead("from-tag"))).Value);
-        Assert.Equal((byte)9, Assert.IsType<Node>(verify.ReadState(verify.GetHead("fork-from-tag"))).Value);
+        Assert.Equal(old, verify.ResolveTag("start"));
+        Assert.Equal((byte)8, Assert.IsType<Node>(verify.LoadState(verify.ReadCurrentCommit(BranchNamed(verify, "from-tag")).Commit.Id)).Value);
+        Assert.Equal((byte)9, Assert.IsType<Node>(verify.LoadState(verify.ReadCurrentCommit(BranchNamed(verify, "fork-from-tag")).Commit.Id)).Value);
     }
 
     [Fact]
     public void TagsUseIndependentOrdinalNamesAndDuplicateCreationNeverWritesOrFaults() {
         using (Repository seed = Create()) {
-            using BranchCheckout branch = seed.CreateSharedBranch("same", new Node { Value = 1 }, NoRebase);
-            seed.CreateTag("same", branch.Head);
-            CheckpointAddress next = branch.CommitState(new Node { Value = 2 }, NoRebase);
+            using WorkingCopy branch = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("same", new Node { Value = 1 }, parameters: NoRebase).Id);
+            seed.CreateTag("same", branch.BaseCommitId);
+            CommitId next = branch.CommitState(new Node { Value = 2 }, parameters: NoRebase).Id;
             seed.CreateTag("same-other", next);
             // The tag namespace also does not reserve future branch names.
             seed.CreateTag("future-branch", next);
-            seed.CreateBranch("future-branch", next);
-            Assert.Equal(new[] { "future-branch", "same" }, seed.ListBranches().Order());
+            seed.ForkBranch(next, "future-branch");
+            Assert.Equal(new[] { "future-branch", "same" }, seed.ListBranches().Select(branch => branch.DisplayLabel).Order());
         }
         var before = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
-            CheckpointAddress lower = repository.ResolveTag("same"), upper = repository.ResolveTag("same-other");
+            CommitId lower = repository.ResolveTag("same"), upper = repository.ResolveTag("same-other");
             Assert.NotEqual(lower, upper);
-            Assert.Equal((byte)1, Assert.IsType<Node>(repository.ReadState(lower)).Value);
-            Assert.Equal((byte)2, Assert.IsType<Node>(repository.ReadState(upper)).Value);
+            Assert.Equal((byte)1, Assert.IsType<Node>(repository.LoadState(lower)).Value);
+            Assert.Equal((byte)2, Assert.IsType<Node>(repository.LoadState(upper)).Value);
             AssertOrdinaryFailure("DuplicateTagName", () => repository.CreateTag("same", lower));
             AssertOrdinaryFailure("DuplicateTagName", () => repository.CreateTag("same", upper));
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("SAME"));
             Assert.False(repository.IsFaulted);
             Assert.Equal(lower, repository.ResolveTag("same"));
             Assert.Equal(upper, repository.ResolveTag("same-other"));
-            Assert.Equal(upper, repository.GetHead("same"));
+            Assert.Equal(upper, repository.ReadCurrentCommit(BranchNamed(repository, "same")).Commit.Id);
         }
         AssertFiles(before);
     }
@@ -98,13 +100,13 @@ public sealed class RepositoryTagTests : IDisposable {
     [Fact]
     public void MissingTagIsExplicitAndDoesNotFallBackToSameNamedBranch() {
         using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node(), NoRebase);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
         }
         var before = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("main"));
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("missing"));
-            Assert.Equal("main", Assert.Single(repository.ListBranches()));
+            Assert.Equal("main", Assert.Single(repository.ListBranches()).DisplayLabel);
             Assert.False(repository.IsFaulted);
             Assert.Null(repository.PreparedStateEntry);
         }
@@ -112,16 +114,16 @@ public sealed class RepositoryTagTests : IDisposable {
     }
 
     [Fact]
-    public void CreatingTagWithEmptyRegistryChangesOnlyBookmarkHead() {
+    public void CreatingTagWithEmptyRegistryAppendsManagementGraphAndPublishesOnlyBookmarkHead() {
         using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
         }
         var before = SnapshotFiles();
         using (Repository metadata = Repository.OpenExisting(_root, new StateModelRegistry())) {
-            CheckpointAddress head = metadata.GetHead("main");
+            CommitId head = metadata.ReadCurrentCommit(BranchNamed(metadata, "main")).Commit.Id;
             metadata.CreateTag("saved", head);
             Assert.Equal(head, metadata.ResolveTag("saved"));
-            Assert.Equal(head, metadata.GetHead("main"));
+            Assert.Equal(head, metadata.ReadCurrentCommit(BranchNamed(metadata, "main")).Commit.Id);
             Assert.Null(metadata.PreparedStateEntry);
         }
         string bookmarkFile = Path.Combine(_root, "versions", "refs", "00000003.rbf");
@@ -131,36 +133,39 @@ public sealed class RepositoryTagTests : IDisposable {
             if (pair.Key == bookmarkFile) {
                 Assert.True(after[pair.Key].Length > pair.Value.Length);
                 Assert.Equal(pair.Value, after[pair.Key][..pair.Value.Length]);
+            } else if (pair.Key.StartsWith(Path.Combine(_root, "data"), StringComparison.Ordinal)) {
+                Assert.True(after[pair.Key].Length >= pair.Value.Length);
+                Assert.Equal(pair.Value, after[pair.Key][..pair.Value.Length]);
             } else { Assert.Equal(pair.Value, after[pair.Key]); }
         }
         using Repository verify = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
-        Assert.Single(verify.ReadFrames("main"));
+        Assert.Single(verify.ReadFrames(BranchNamed(verify, "main")));
     }
 
     [Fact]
-    public void OldForeignAndNullHandlesRejectBeforeTagPublicationAndNewResolutionIsUsable() {
-        CheckpointAddress old;
+    public void OldHandleSurvivesReopenWhileForeignAndDefaultHandlesRejectBeforeTagPublication() {
+        CommitId old;
         using (Repository seed = Create()) {
-            using BranchCheckout branch = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
-            old = branch.Head;
+            using WorkingCopy branch = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+            old = branch.BaseCommitId;
             seed.CreateTag("saved", old);
         }
         var before = SnapshotFiles();
         using Repository foreign = Repository.CreateNew(_root + "-foreign", SharedReadModel.Models());
-        using BranchCheckout foreignBranch = foreign.CreateSharedBranch("main", new Node { Value = 2 }, NoRebase);
+        using WorkingCopy foreignBranch = foreign.OpenWorkingCopy(foreign.CreateRootBranchFromState("main", new Node { Value = 2 }, parameters: NoRebase).Id);
         using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
-            CheckpointAddress current = repository.ResolveTag("saved");
-            Assert.NotEqual(old, current);
-            Assert.NotEqual(foreignBranch.Head, current);
-            Assert.Throws<ArgumentException>(() => repository.CreateTag("stale", old));
-            Assert.Throws<ArgumentException>(() => repository.CreateTag("foreign", foreignBranch.Head));
-            Assert.Throws<ArgumentNullException>(() => repository.CreateTag("null", null!));
+            CommitId current = repository.ResolveTag("saved");
+            Assert.Equal(old, current);
+            Assert.NotEqual(foreignBranch.BaseCommitId, current);
+            Assert.Equal(current, old); // Value handles remain valid after closing and reopening their repository.
+            Assert.Throws<KeyNotFoundException>(() => repository.CreateTag("foreign", foreignBranch.BaseCommitId));
+            Assert.Throws<ArgumentException>(() => repository.CreateTag("null", default));
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("stale"));
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("foreign"));
             AssertOrdinaryFailure("TagNotFound", () => repository.ResolveTag("null"));
             Assert.False(repository.IsFaulted);
-            Assert.Equal((byte)1, Assert.IsType<Node>(repository.ReadState(current)).Value);
-            Assert.Equal(current, repository.GetHead("main"));
+            Assert.Equal((byte)1, Assert.IsType<Node>(repository.LoadState(current)).Value);
+            Assert.Equal(current, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
         }
         AssertFiles(before);
     }
@@ -169,23 +174,23 @@ public sealed class RepositoryTagTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void ReadonlyEmptyRegistryResolvesTagsWithoutMaterializationOrDiskMutation(bool eventFirst) {
-        CheckpointAddress old;
+        CommitId old;
         using (Repository seed = Create()) {
-            using BranchCheckout branch = eventFirst
-                ? seed.CreateSharedBranchFromEvent("main", new Node { Value = 5 }, NoRebase)
-                : seed.CreateSharedBranch("main", new Node { Value = 5 }, NoRebase);
-            old = branch.Head;
+            using WorkingCopy branch = eventFirst
+                ? seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", new Node { Value = 5 }, parameters: NoRebase).Id)
+                : seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 5 }, parameters: NoRebase).Id);
+            old = branch.BaseCommitId;
             seed.CreateTag("saved", old);
         }
         var before = SnapshotFiles();
         using (Repository readOnly = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry())) {
             GraphReadStatistics statistics = new();
             readOnly.RestorationStatistics = statistics;
-            CheckpointAddress current = readOnly.ResolveTag("saved");
-            Assert.NotEqual(old, current);
-            Assert.Equal(old.Address, current.Address);
-            Assert.Equal(readOnly.GetHead("main"), current);
-            Assert.Equal(eventFirst ? CheckpointKind.Event : CheckpointKind.State, current.Kind);
+            CommitId current = readOnly.ResolveTag("saved");
+            Assert.Equal(old, current);
+            Assert.Equal(old, current);
+            Assert.Equal(readOnly.ReadCurrentCommit(BranchNamed(readOnly, "main")).Commit.Id, current);
+            Assert.Equal(eventFirst ? CommitKind.Event : CommitKind.State, readOnly.ReadCommitInfo(current).Kind);
             Assert.Throws<InvalidOperationException>(() => readOnly.CreateTag("blocked", current));
             AssertOrdinaryFailure("TagNotFound", () => readOnly.ResolveTag("missing"));
             Assert.False(readOnly.IsFaulted);
@@ -203,9 +208,9 @@ public sealed class RepositoryTagTests : IDisposable {
         using Repository repository = Create(SharedReadModel.Models(
             allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++,
             prepareBase: (in State state) => { bodyPreparations++; return SharedReadModel.Base(state); }));
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 1, Next = new Node { Value = 2 } }, NoRebase);
-        CheckpointAddress stateAddress = main.Head;
-        using BranchCheckout other = repository.ForkShared("other", stateAddress);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1, Next = new Node { Value = 2 } }, parameters: NoRebase).Id);
+        CommitId stateAddress = main.BaseCommitId;
+        using WorkingCopy other = repository.OpenWorkingCopy(repository.ForkBranch(stateAddress, "other").Id);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         NormalizedGraphState baseline = main.Baseline!, otherBaseline = other.Baseline!;
         Node mainState = Assert.IsType<Node>(main.State), otherState = Assert.IsType<Node>(other.State);
@@ -215,27 +220,27 @@ public sealed class RepositoryTagTests : IDisposable {
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
         repository.CreateTag("main", stateAddress);
-        repository.CreateTag("other", other.Head);
+        repository.CreateTag("other", other.BaseCommitId);
         Assert.Equal(stateAddress, repository.ResolveTag("main"));
-        Assert.Equal(other.Head, repository.ResolveTag("other"));
+        Assert.Equal(other.BaseCommitId, repository.ResolveTag("other"));
         Assert.Same(entry, repository.PreparedStateEntry);
         Assert.Same(baseline, main.Baseline);
         Assert.Same(otherBaseline, other.Baseline);
         Assert.Same(mainState, main.State);
         Assert.Same(otherState, other.State);
-        Assert.Equal(stateAddress, main.Head);
-        Assert.Equal(stateAddress, other.Head);
+        Assert.Equal(stateAddress, main.BaseCommitId);
+        Assert.Equal(stateAddress, other.BaseCommitId);
         Assert.Equal(allocated, allocations);
         Assert.Equal(hydrated, hydrations);
         Assert.Equal(prepared, bodyPreparations);
         AssertNoGraphWork(statistics);
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("other"));
-        CheckpointAddress savedMain = main.CommitState(NoRebase), savedOther = other.CommitState(NoRebase);
-        Assert.Equal(stateAddress.Address, savedMain.Parent);
-        Assert.Equal(stateAddress.Address, savedOther.Parent);
-        Assert.Equal((byte)3, Assert.IsType<Node>(repository.ReadState(savedMain)).Value);
-        Assert.Equal((byte)4, Assert.IsType<Node>(repository.ReadState(savedOther)).Value);
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "other")));
+        CommitId savedMain = main.CommitState(parameters: NoRebase).Id, savedOther = other.CommitState(parameters: NoRebase).Id;
+        Assert.Equal(stateAddress.Value, Resources(repository).ReadPrevious(savedMain.Value)!.Id);
+        Assert.Equal(stateAddress.Value, Resources(repository).ReadPrevious(savedOther.Value)!.Id);
+        Assert.Equal((byte)3, Assert.IsType<Node>(repository.LoadState(savedMain)).Value);
+        Assert.Equal((byte)4, Assert.IsType<Node>(repository.LoadState(savedOther)).Value);
         Assert.Equal(stateAddress, repository.ResolveTag("main"));
         Assert.Equal(stateAddress, repository.ResolveTag("other"));
     }
@@ -243,10 +248,10 @@ public sealed class RepositoryTagTests : IDisposable {
     [Fact]
     public void TagCallsRejectDisposedRepository() {
         Repository repository = Create();
-        CheckpointAddress address;
+        CommitId address;
         try {
-            using BranchCheckout main = repository.CreateSharedBranch("main", new Node(), NoRebase);
-            address = main.Head;
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
+            address = main.BaseCommitId;
             repository.CreateTag("saved", address);
         } finally { repository.Dispose(); }
         var before = SnapshotFiles();
@@ -259,16 +264,16 @@ public sealed class RepositoryTagTests : IDisposable {
     public void InvalidTagNamesRejectWithoutWritingWhileLengthBoundariesPersist() {
         string longest = new('a', RepositoryResources.MaxBookmarkNameCodeUnits);
         using (Repository seed = Create()) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node(), NoRebase);
-            seed.CreateTag("a", main.Head);
-            seed.CreateTag(longest, main.Head);
-            seed.CreateTag("Uppercase", main.Head);
-            seed.CreateTag("trailing.lock", main.Head);
-            seed.CreateTag("标签/正文", main.Head);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
+            seed.CreateTag("a", main.BaseCommitId);
+            seed.CreateTag(longest, main.BaseCommitId);
+            seed.CreateTag("Uppercase", main.BaseCommitId);
+            seed.CreateTag("trailing.lock", main.BaseCommitId);
+            seed.CreateTag("标签/正文", main.BaseCommitId);
         }
         var before = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
-            CheckpointAddress address = repository.GetHead("main");
+            CommitId address = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
             Assert.Equal(address, repository.ResolveTag("a"));
             Assert.Equal(address, repository.ResolveTag(longest));
             string?[] invalidNames = [null, "", "\uD800", "\uDC00", new string('a', RepositoryResources.MaxBookmarkNameCodeUnits + 1)];

@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using Atelia.FrameStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
@@ -11,33 +12,33 @@ public sealed class DB078EventQueryTests : IDisposable {
     [Fact]
     public void MetadataQueryWithEmptyModelsCrossesStatesAndIgnoresPhysicalSiblingRecords() {
         using (Repository repository = Create()) {
-            CheckpointAddress e0;
-            using (BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase)) {
-                e0 = branch.Head;
-                branch.CommitState(new Node { Value = 2 }, NoRebase);
-                branch.CommitEvent(new Node { Value = 3 }, NoRebase);
+            CommitId e0;
+            using (WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id)) {
+                e0 = branch.BaseCommitId;
+                branch.CommitState(new Node { Value = 2 }, parameters: NoRebase);
+                branch.CommitEvent(new Node { Value = 3 }, parameters: NoRebase);
             }
-            repository.CreateBranch("sibling", e0);
-            using (BranchCheckout sibling = repository.CheckoutShared("sibling")) {
-                sibling.CommitEvent(new Node { Value = 99 }, NoRebase);
+            repository.ForkBranch(e0, "sibling");
+            using (WorkingCopy sibling = repository.OpenWorkingCopy(BranchNamed(repository, "sibling"))) {
+                sibling.CommitEvent(new Node { Value = 99 }, parameters: NoRebase);
             }
-            using (BranchCheckout main = repository.CheckoutShared("main")) {
-                main.CommitState(NoRebase);
-                main.CommitEvent(new Node { Value = 4 }, NoRebase);
-                main.CommitState(NoRebase);
+            using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
+                main.CommitState(parameters: NoRebase);
+                main.CommitEvent(new Node { Value = 4 }, parameters: NoRebase);
+                main.CommitState(parameters: NoRebase);
             }
         }
         using Repository empty = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
-        var frames = empty.ReadFrames("main");
-        CheckpointAddress[] expected = frames.Where(frame => frame.Kind == CheckpointKind.Event).ToArray();
+        var frames = empty.ReadFrames(BranchNamed(empty, "main"));
+        CommitId[] expected = frames.Where(frame => frame.Kind == CommitKind.Event).Select(frame => frame.Id).ToArray();
         Assert.Equal(3, expected.Length);
-        Assert.Equal(expected.Reverse(), empty.EnumerateEvents(empty.GetHead("main")));
-        Assert.Equal(expected, empty.EnumerateEvents(empty.GetHead("main"), HistoryOrder.OldestFirst));
-        Assert.Equal(new[] { expected[2], expected[1] }, empty.EnumerateEvents(frames[^1], afterExclusive: frames[1]));
-        Assert.Equal(new[] { expected[1] }, empty.EnumerateEvents(expected[1], afterExclusive: expected[0]));
-        Assert.Empty(empty.EnumerateEvents(frames[^1], afterExclusive: frames[^1]));
-        Assert.Empty(empty.EnumerateEvents(frames[1], afterExclusive: expected[0]));
-        Assert.Equal(expected[2], empty.EnumerateEvents(frames[^1]).First());
+        Assert.Equal(expected.Reverse(), empty.EnumerateEvents(empty.ReadCurrentCommit(BranchNamed(empty, "main")).Commit.Id).Select(commit => commit.Id));
+        Assert.Equal(expected, empty.EnumerateEvents(empty.ReadCurrentCommit(BranchNamed(empty, "main")).Commit.Id, HistoryOrder.OldestFirst).Select(commit => commit.Id));
+        Assert.Equal(new[] { expected[2], expected[1] }, empty.EnumerateEvents(frames[^1].Id, afterExclusive: frames[1].Id).Select(commit => commit.Id));
+        Assert.Equal(new[] { expected[1] }, empty.EnumerateEvents(expected[1], afterExclusive: expected[0]).Select(commit => commit.Id));
+        Assert.Empty(empty.EnumerateEvents(frames[^1].Id, afterExclusive: frames[^1].Id).Select(commit => commit.Id));
+        Assert.Empty(empty.EnumerateEvents(frames[1].Id, afterExclusive: expected[0]).Select(commit => commit.Id));
+        Assert.Equal(expected[2], empty.EnumerateEvents(frames[^1].Id).Select(commit => commit.Id).First());
     }
 
     [Theory]
@@ -45,80 +46,80 @@ public sealed class DB078EventQueryTests : IDisposable {
     [InlineData(HistoryOrder.OldestFirst)]
     public void InvalidBoundsFailBeforeAnyItemCanEscape(HistoryOrder order) {
         using Repository repository = Create();
-        CheckpointAddress initial, end, sibling;
-        using (BranchCheckout main = repository.CreateSharedBranchFromEvent("main", new Node(), NoRebase)) {
-            initial = main.Head;
-            end = main.CommitEvent(new Node(), NoRebase);
+        CommitId initial, end, sibling;
+        using (WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id)) {
+            initial = main.BaseCommitId;
+            end = main.CommitEvent(new Node(), parameters: NoRebase).Id;
         }
-        repository.CreateBranch("sibling", initial);
-        using (BranchCheckout other = repository.CheckoutShared("sibling")) {
-            sibling = other.CommitEvent(new Node(), NoRebase);
+        repository.ForkBranch(initial, "sibling");
+        using (WorkingCopy other = repository.OpenWorkingCopy(BranchNamed(repository, "sibling"))) {
+            sibling = other.CommitEvent(new Node(), parameters: NoRebase).Id;
         }
-        foreach ((CheckpointAddress selected, CheckpointAddress lower) in new[] { (end, sibling), (initial, end) }) {
+        foreach ((CommitId selected, CommitId lower) in new[] { (end, sibling), (initial, end) }) {
             int delivered = 0;
             Assert.Throws<ArgumentException>(() => {
-                foreach (CheckpointAddress _ in repository.EnumerateEvents(selected, order, lower)) { delivered++; }
+                foreach (CommitId _ in repository.EnumerateEvents(selected, order, lower).Select(commit => commit.Id)) { delivered++; }
             });
             Assert.Equal(0, delivered);
         }
-        Assert.Equal(new[] { end, initial }, repository.EnumerateEvents(end));
+        Assert.Equal(new[] { end, initial }, repository.EnumerateEvents(end).Select(commit => commit.Id));
     }
 
     [Fact]
-    public void InvalidNullForeignAndReopenedAddressesAreRejectedWithoutMaterialization() {
+    public void DefaultAndForeignIdsAreRejectedWhilePersistedIdsRemainQueryable() {
         int allocations = 0;
-        CheckpointAddress stale;
+        CommitId stale;
         using (Repository repository = Create()) {
-            using BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node(), NoRebase);
-            stale = branch.Head;
+            using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id);
+            stale = branch.BaseCommitId;
         }
         using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }));
         using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models());
-        using BranchCheckout other = foreign.CreateSharedBranchFromEvent("main", new Node(), NoRebase);
-        CheckpointAddress valid = reopened.GetHead("main");
-        foreach (CheckpointAddress bad in new[] { stale, other.Head }) {
-            Assert.Throws<ArgumentException>(() => reopened.ReadCheckpoint(bad));
-            Assert.Throws<ArgumentException>(() => reopened.EnumerateEvents(bad).ToArray());
-            Assert.Throws<ArgumentException>(() => reopened.EnumerateEvents(valid, afterExclusive: bad).ToArray());
+        using WorkingCopy other = foreign.OpenWorkingCopy(foreign.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id);
+        CommitId valid = reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id;
+        Assert.Equal(stale, valid);
+        foreach (CommitId bad in new[] { default(CommitId), other.BaseCommitId }) {
+            Assert.ThrowsAny<Exception>(() => reopened.ReadCheckpoint(bad));
+            Assert.ThrowsAny<Exception>(() => reopened.EnumerateEvents(bad).Select(commit => commit.Id).ToArray());
+            Assert.ThrowsAny<Exception>(() => reopened.EnumerateEvents(valid, afterExclusive: bad).Select(commit => commit.Id).ToArray());
         }
-        Assert.Throws<ArgumentNullException>(() => reopened.ReadCheckpoint(null!));
-        Assert.Throws<ArgumentNullException>(() => reopened.EnumerateEvents(null!).ToArray());
-        Assert.Throws<ArgumentOutOfRangeException>(() => reopened.EnumerateEvents(valid, (HistoryOrder)37).ToArray());
+        Assert.Throws<ArgumentOutOfRangeException>(() => reopened.EnumerateEvents(valid, (HistoryOrder)37).Select(commit => commit.Id).ToArray());
         Assert.Equal(0, allocations);
         Assert.False(reopened.IsFaulted);
-        Assert.Single(reopened.EnumerateEvents(valid));
+        Assert.Single(reopened.EnumerateEvents(valid).Select(commit => commit.Id));
     }
 
     [Theory]
     [InlineData(HistoryOrder.NewestFirst)]
     [InlineData(HistoryOrder.OldestFirst)]
-    public void IteratorKeepsCapturedEndAcrossCommitsAndRefMovesAndAllowsReadsInLoop(HistoryOrder order) {
+    public void IteratorKeepsCapturedEndAcrossCommitsAndForksAndAllowsReadsInLoop(HistoryOrder order) {
         using Repository repository = Create();
-        BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
-        CheckpointAddress e0 = branch.Head;
-        branch.CommitState(new Node { Value = 8 }, NoRebase);
-        CheckpointAddress e1 = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
-        CheckpointAddress e2 = branch.CommitEvent(new Node { Value = 3 }, NoRebase);
-        IEnumerable<CheckpointAddress> query = repository.EnumerateEvents(e2, order);
-        branch.CommitEvent(new Node { Value = 4 }, NoRebase);
-        using IEnumerator<CheckpointAddress> iterator = query.GetEnumerator();
-        List<CheckpointAddress> addresses = [];
+        WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+        CommitId e0 = branch.BaseCommitId;
+        branch.CommitState(new Node { Value = 8 }, parameters: NoRebase);
+        CommitId e1 = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+        CommitId e2 = branch.CommitEvent(new Node { Value = 3 }, parameters: NoRebase).Id;
+        IEnumerable<CommitId> query = repository.EnumerateEvents(e2, order).Select(commit => commit.Id);
+        branch.CommitEvent(new Node { Value = 4 }, parameters: NoRebase);
+        using IEnumerator<CommitId> iterator = query.GetEnumerator();
+        List<CommitId> addresses = [];
         Assert.True(iterator.MoveNext());
         addresses.Add(iterator.Current);
-        Assert.IsType<Node>(repository.ReadEvent(iterator.Current));
-        CheckpointAddress latest = branch.CommitEvent(new Node { Value = 5 }, NoRebase);
+        Assert.IsType<Node>(repository.LoadEvent(iterator.Current));
+        CommitId latest = branch.CommitEvent(new Node { Value = 5 }, parameters: NoRebase).Id;
         branch.Dispose();
-        repository.MoveBranch("main", latest, e0);
+        BranchInfo fork = repository.ForkBranch(e0, "old-point");
+        Assert.Equal(e0, repository.ReadCurrentCommit(fork.Id).Commit.Id);
         while (iterator.MoveNext()) {
             addresses.Add(iterator.Current);
-            Assert.IsType<Node>(repository.ReadEvent(iterator.Current));
+            Assert.IsType<Node>(repository.LoadEvent(iterator.Current));
         }
-        CheckpointAddress[] expected = order == HistoryOrder.NewestFirst ? [e2, e1, e0] : [e0, e1, e2];
+        CommitId[] expected = order == HistoryOrder.NewestFirst ? [e2, e1, e0] : [e0, e1, e2];
         Assert.Equal(expected, addresses);
-        // A second enumerator uses the same selected end even after the branch moved.
+        // A second enumerator uses the same selected end even after creating a fork.
         Assert.Equal(expected, query);
-        Assert.Equal(e0, repository.GetHead("main"));
-        foreach (CheckpointAddress address in query) { Assert.IsType<Node>(repository.ReadEvent(address)); }
+        Assert.Equal(latest, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
+        foreach (CommitId address in query) { Assert.IsType<Node>(repository.LoadEvent(address)); }
     }
 
     [Theory]
@@ -140,10 +141,10 @@ public sealed class DB078EventQueryTests : IDisposable {
     [InlineData(HistoryOrder.OldestFirst, true, 3)]
     public void EveryMoveNextChecksRepositoryEvenBeforeStartOrAfterExhaustion(HistoryOrder order, bool fault, int iteratorState) {
         using Repository repository = Create();
-        using BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
-        CheckpointAddress first = branch.Head;
-        CheckpointAddress end = branch.CommitEvent(new Node { Value = 2 }, NoRebase);
-        using IEnumerator<CheckpointAddress> iterator = repository.EnumerateEvents(end, order,
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+        CommitId first = branch.BaseCommitId;
+        CommitId end = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+        using IEnumerator<CommitInfo> iterator = repository.EnumerateEvents(end, order,
             afterExclusive: iteratorState == 3 ? end : null).GetEnumerator();
         if (iteratorState == 1) { Assert.True(iterator.MoveNext()); }
         if (iteratorState == 2) {
@@ -156,7 +157,7 @@ public sealed class DB078EventQueryTests : IDisposable {
             repository.SaveStageObserver = point => {
                 if (point == RepositorySaveStage.AfterBusinessAppend) { throw new IOException("Injected publication failure."); }
             };
-            Assert.Throws<RepositoryPublicationException>(() => branch.CommitEvent(new Node(), NoRebase));
+            Assert.Throws<RepositoryPublicationException>(() => branch.CommitEvent(new Node(), parameters: NoRebase).Id);
             Assert.True(repository.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());
             Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());

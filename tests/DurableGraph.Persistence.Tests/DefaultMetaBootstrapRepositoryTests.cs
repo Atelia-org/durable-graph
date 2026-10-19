@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers.Binary;
 
 using Atelia.DurableGraph.Schema;
@@ -22,24 +23,26 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         FrameImage[] completed;
         using (Repository repository = Repository.CreateNew(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0)) {
             DB087Widget root = Ring();
-            using BranchCheckout main = repository.CreateSharedBranch("main", root);
-            initialState = main.Head.RevisionAddress;
+            BranchInfo branch = repository.CreateRootBranchFromState("main", root);
+            using WorkingCopy main = repository.OpenWorkingCopy(branch.Id);
+            root = Assert.IsType<DB087Widget>(main.State);
+            initialState = Describe(repository, main.BaseCommitId).Address;
             initialSchema = repository.SharedSchemaRoot!.Value;
-            StoredGraphRevision first = repository.GraphStore.ReadGraph(initialState);
+            StoredGraphRevision first = repository.GraphStore.ReadBusinessGraph(initialState, null);
             Assert.Equal(StoredGraphKind.State, first.Kind);
             Assert.Equal(initialSchema, first.SchemaRoot);
             Assert.Equal(3, first.ObjectHeads.Count);
             Assert.Single(SchemaCatalogView.Load(repository.GraphStore, initialSchema).Schemas);
             AssertPublished(repository, initialState, initialSchema);
-            repository.CreateTag("initial", main.Head);
+            repository.CreateTag("initial", main.BaseCommitId);
             NormalizedGraphState baseline = main.Baseline!;
             listId = Assert.Single(baseline.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
 
             // Capture discovers the second Schema through a real Event root; no catalog edit seam is used.
             root.Numbers[7] = 200;
             DB087EnvelopeRoot domainEvent = new() { Link = root, Numbers = root.Numbers };
-            CheckpointAddress publishedEvent = main.CommitEvent(domainEvent);
-            eventAddress = publishedEvent.RevisionAddress;
+            CommitInfo publishedEvent = main.CommitEvent(domainEvent);
+            eventAddress = Describe(repository, publishedEvent.Id).Address;
             acceptedSchema = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(initialSchema, acceptedSchema);
             Assert.Equal(2, SchemaCatalogView.Load(repository.GraphStore, acceptedSchema).Schemas.Count);
@@ -47,21 +50,21 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             Assert.Same(baseline, main.Baseline);
             Assert.Equal(initialState, main.StateRevisionAddress);
             Assert.Same(root, main.State);
-            Assert.Equal(initialState, ResourcesOf(repository).GetBranchStateHead("main"));
-            StoredGraphRevision actualEvent = repository.GraphStore.ReadGraph(eventAddress);
+            Assert.Equal(initialState, ResourcesOf(repository).FindNearestState(main.BaseCommitId.Value, inclusive: true)?.Address);
+            StoredGraphRevision actualEvent = Snapshot(repository, publishedEvent.Id);
             Assert.Equal(StoredGraphKind.Event, actualEvent.Kind);
-            Assert.Equal(initialState, actualEvent.Parent);
+            Assert.Equal(initialState, ResourcesOf(repository).ReadPrevious(publishedEvent.Id.Value)!.Address);
             Assert.Equal(initialState, actualEvent.SourceGraph);
             Assert.Equal(acceptedSchema, actualEvent.SchemaRoot);
             Assert.Equal(4, actualEvent.ObjectHeads.Count);
             AssertPublished(repository, eventAddress, acceptedSchema);
-            repository.CreateTag("event", publishedEvent);
+            repository.CreateTag("event", publishedEvent.Id);
 
             HeadEntry sharedBefore = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
             root.Numbers[7] = 201;
-            savedState = main.CommitState().RevisionAddress;
-            StoredGraphRevision saved = repository.GraphStore.ReadGraph(savedState);
-            Assert.Equal(eventAddress, saved.Parent);
+            savedState = Describe(repository, main.CommitState().Id).Address;
+            StoredGraphRevision saved = repository.GraphStore.ReadBusinessGraph(savedState, initialState);
+            Assert.Equal(eventAddress, ResourcesOf(repository).ReadPrevious(main.BaseCommitId.Value)!.Address);
             Assert.Equal(initialState, saved.SourceGraph);
             Assert.Equal(acceptedSchema, saved.SchemaRoot);
             Assert.Equal(3, saved.ObjectHeads.Count);
@@ -89,25 +92,25 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         }
         using (Repository reader = Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: 0)) {
             AssertPublished(reader, savedState, acceptedSchema);
-            AssertRing(reader.ReadState(reader.ResolveTag("initial")), 7);
-            DB087EnvelopeRoot loadedEvent = Assert.IsType<DB087EnvelopeRoot>(reader.ReadEvent(reader.ResolveTag("event")));
+            AssertRing(reader.LoadState(reader.ResolveTag("initial")), 7);
+            DB087EnvelopeRoot loadedEvent = Assert.IsType<DB087EnvelopeRoot>(reader.LoadEvent(reader.ResolveTag("event")));
             DB087Widget eventRoot = AssertRing(loadedEvent.Link, 200);
             Assert.Same(eventRoot.Numbers, loadedEvent.Numbers);
-            AssertRing(reader.ReadState(reader.GetHead("main")), 201);
+            AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id), 201);
             AssertFrameImages(reader, completed);
         }
         AssertFilesUnchanged(readOnlyImages, SnapshotFiles(path));
 
         using (Repository reopened = Repository.OpenExisting(path, Models(), SmallRotationThreshold, readCacheBudgetBytes: 0)) {
-            using BranchCheckout cold = reopened.CheckoutShared("main");
+            using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
             DB087Widget root = AssertRing(cold.State, 201);
             Assert.Equal(savedState, cold.StateRevisionAddress);
             Assert.Equal(savedList, cold.Baseline!.Objects[listId].Storage);
             HeadEntry sharedBefore = ResourcesOf(reopened).Heads.ReadHead(2).Unwrap();
             root.Numbers[8] = 202;
-            continuedState = cold.CommitState().RevisionAddress;
-            StoredGraphRevision continued = reopened.GraphStore.ReadGraph(continuedState);
-            Assert.Equal(savedState, continued.Parent);
+            continuedState = Describe(reopened, cold.CommitState().Id).Address;
+            StoredGraphRevision continued = reopened.GraphStore.ReadBusinessGraph(continuedState, savedState);
+            Assert.Equal(savedState, ResourcesOf(reopened).ReadPrevious(cold.BaseCommitId.Value)!.Address);
             Assert.Equal(savedState, continued.SourceGraph);
             Assert.Equal(acceptedSchema, continued.SchemaRoot);
             ObjectVersionRecord delta = Assert.Single(reopened.GraphStore.ReadBatch(continued.OwnedBatch!.Value).Records);
@@ -129,8 +132,8 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         readOnlyImages = SnapshotFiles(path);
         using (Repository fresh = Repository.OpenReadOnlyExisting(path, Models())) {
             AssertPublished(fresh, continuedState, acceptedSchema);
-            AssertRing(fresh.ReadState(fresh.GetHead("main")), 201, 202);
-            AssertRing(fresh.ReadState(fresh.ResolveTag("initial")), 7);
+            AssertRing(fresh.LoadState(fresh.ReadCurrentCommit(BranchNamed(fresh, "main")).Commit.Id), 201, 202);
+            AssertRing(fresh.LoadState(fresh.ResolveTag("initial")), 7);
             AssertFrameImages(fresh, completed);
         }
         AssertFilesUnchanged(readOnlyImages, SnapshotFiles(path));
@@ -143,17 +146,17 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
         string path = NewPath();
         FrameAddress saved;
         using (Repository seed = Repository.CreateNew(path, Models(), readCacheBudgetBytes: budget)) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
-            saved = main.Head.RevisionAddress;
+            BranchInfo branch = seed.CreateRootBranchFromState("main", Ring());
+            saved = Describe(seed, seed.ReadCurrentCommit(branch.Id).Commit.Id).Address;
         }
         Dictionary<string, byte[]> images = SnapshotFiles(path);
         GraphRecordStore retained;
         ObjectVersionBatch owned;
         using (Repository reader = Repository.OpenReadOnlyExisting(path, Models(), readCacheBudgetBytes: budget)) {
             retained = reader.GraphStore;
-            DB087Widget first = AssertRing(reader.ReadState(reader.GetHead("main")), 7);
+            DB087Widget first = AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id), 7);
             GraphPhysicalReadStatistics before = retained.ReadCacheStatistics;
-            DB087Widget second = AssertRing(reader.ReadState(reader.GetHead("main")), 7);
+            DB087Widget second = AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id), 7);
             GraphPhysicalReadStatistics after = retained.ReadCacheStatistics;
             Assert.NotSame(first, second);
             Assert.NotSame(first.Numbers, second.Numbers);
@@ -173,11 +176,11 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
                 Assert.InRange(after.ResidentChargeBytes, 1, budget);
                 Assert.InRange(after.PeakResidentChargeBytes, 1, budget);
             }
-            StoredGraphRevision graph = retained.ReadGraph(saved);
+            StoredGraphRevision graph = retained.ReadBusinessGraph(saved, null);
             owned = retained.ReadBatch(graph.OwnedBatch!.Value);
         }
         AssertFilesUnchanged(images, SnapshotFiles(path));
-        Assert.Throws<ObjectDisposedException>(() => retained.ReadGraph(saved));
+        Assert.Throws<ObjectDisposedException>(() => retained.ReadBusinessGraph(saved, null));
         Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
         Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
         Assert.Equal(3, owned.Records.Count); // Already delivered owned values outlive the closed cache owner.
@@ -220,14 +223,18 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     }
     private static void AssertPublished(Repository repository, FrameAddress head, FrameAddress schema) {
         RepositoryResources resources = ResourcesOf(repository);
-        HeadEntry branch = resources.Heads.ReadHead(1).Unwrap(), shared = resources.Heads.ReadHead(2).Unwrap();
-        Assert.True(branch.Payload.StartsWith("P0R2"u8));
+        HeadEntry directory = resources.Heads.ReadHead(1).Unwrap(), shared = resources.Heads.ReadHead(2).Unwrap();
+        Assert.True(directory.Payload.StartsWith("P0R3"u8));
+        Assert.Equal(17, directory.Payload.Length);
+        Assert.NotNull(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, directory.Payload));
+        var member = Assert.Single(resources.ListBranches());
+        Assert.Equal("main", member.Value);
+        HeadEntry business = resources.Heads.ReadHead(member.Key).Unwrap();
+        Assert.Equal(head, BusinessEntryPayloadCodec.Decode(business.Payload).Graph);
         Assert.True(shared.Payload.StartsWith("P0S1"u8));
-        Assert.Equal(head, Assert.Single(NamedFrameMapCodec.Decode(branch.Payload[4..]).Unwrap()).Value);
-        Assert.Equal("branch/main", Assert.Single(NamedFrameMapCodec.Decode(branch.Payload[4..]).Unwrap()).Key);
         Assert.Equal(schema, Assert.Single(NamedFrameMapCodec.Decode(shared.Payload[4..]).Unwrap()).Value);
         Assert.Equal("schema", Assert.Single(NamedFrameMapCodec.Decode(shared.Payload[4..]).Unwrap()).Key);
-        Assert.Equal(head, repository.GetHead("main").RevisionAddress);
+        Assert.Equal(head, resources.ReadCurrent(member.Key).Address);
         Assert.Equal(schema, repository.SharedSchemaRoot);
     }
     private sealed record FrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool IsTombstone, byte[] PayloadAndMeta);

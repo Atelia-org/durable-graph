@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 
@@ -143,7 +144,7 @@ public sealed class CrossAssemblyNominalBindingTests {
                 catalog.Set(owner);
                 catalog.Set(remote);
                 PreparedSchemaCatalogWrite prepared = catalog.Prepare();
-                using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State, new(null, new(1), [
+                using PendingRepositorySave pending = MechanismFixture.Prepare(writer, "main", StoredGraphKind.State, new(null, new(1), [
                     ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(owner), new PreparedBaseBody([2]), prepared.View)),
                     ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(remote), new PreparedBaseBody([37]), prepared.View)),
                 ]), prepared.Write);
@@ -172,10 +173,10 @@ public sealed class CrossAssemblyNominalBindingTests {
                     static (in byte state, IStateReferenceVisitor visitor) => { })));
             long schemaTail = DataBytes(file.Data);
             if (omitOldTargetReader) {
-                Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(file.Store, revision, readers));
+                Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(file.Store, MechanismFixture.Snapshot(file.Store, revision), (readers).FreezeConfiguration()));
                 Assert.Equal(0, targetReads);
             } else {
-                DecodedRevision decoded = DecodedRevision.ReadStoredGraph(file.Store, revision, readers);
+                DecodedRevision decoded = DecodedRevision.ReadStoredGraph(file.Store, MechanismFixture.Snapshot(file.Store, revision), (readers).FreezeConfiguration());
                 Assert.Equal(new ObjectId(2), decoded.GetRequired(new ObjectId(1)).GetState<Owner2<ObjectId>>().Value);
                 Assert.Equal((byte)37, decoded.GetRequired(new ObjectId(2)).GetState<byte>());
                 Assert.Equal(1, targetReads);

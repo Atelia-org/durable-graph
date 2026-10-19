@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -47,7 +48,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         Directory.CreateDirectory(_path);
         using (DataStore data = DataStore.Create(DataPath))
         using (PublicationStore heads = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 2)) {
-            heads.CreateHead(1, EmptyRootPayload("P0R2"u8), out _).Unwrap();
+            heads.CreateHead(1, EmptyRootPayload("P0R3"u8), out _).Unwrap();
             heads.CreateHead(2, EmptyRootPayload("P0S1"u8), out _).Unwrap();
         }
         var before = SnapshotTree(_path);
@@ -59,7 +60,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     [Fact]
     public void SingleFormalRootFreshReadOnlyAndWritableOpenRejectWithoutCompletingOrRemovingContent() {
         Directory.CreateDirectory(_path);
-        byte[] branches = EmptyRootPayload("P0R2"u8);
+        byte[] branches = EmptyRootPayload("P0R3"u8);
         FrameAddress sentinel;
         HeadEntryId first;
         using (DataStore data = DataStore.Create(DataPath))
@@ -87,14 +88,14 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     public void LowerSecondCreateRefFailureFreshDgOpenFollowsFormalRootsAndReportedOutcome(
         string stage, PublicationOutcome expectedOutcome, bool bothFormal) {
         Directory.CreateDirectory(_path);
-        byte[] branches = EmptyRootPayload("P0R2"u8), shared = EmptyRootPayload("P0S1"u8);
+        byte[] branches = EmptyRootPayload("P0R3"u8), shared = EmptyRootPayload("P0S1"u8);
         FrameAddress sentinel;
         HeadEntryId first;
         using (DataStore data = DataStore.Create(DataPath))
         using (PublicationStore versions = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 3)) {
             sentinel = data.Append(SentinelTag, SentinelBody, SentinelMetadata).Unwrap();
             // Isolate the existing second-Head failure window; direct factory order is tested above.
-            versions.CreateHead(3, EmptyRootPayload("P0T1"u8), out _).Unwrap();
+            versions.CreateHead(3, EmptyRootPayload("P0T2"u8), out _).Unwrap();
             int hookCalls = 0;
             InstallPublicationFault(versions, stage, () => {
                 if (++hookCalls == 2) { throw new IOException("Second lower CreateHead publication window."); }
@@ -155,19 +156,20 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         Dictionary<ObjectId, ObjectStorageInfo> storage;
         using (Repository seed = Repository.OpenStorageExisting(_path, Models())) {
             seed.PreparedStateReuseEnabled = false;
-            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
-            state0 = main.Head.RevisionAddress;
+            BranchInfo branch = seed.CreateRootBranchFromState("main", Ring());
+            using WorkingCopy main = seed.OpenWorkingCopy(branch.Id);
+            state0 = Describe(seed, main.BaseCommitId).Address;
             schemaRoot = seed.SharedSchemaRoot!.Value;
-            seed.CreateTag("initial", main.Head);
+            seed.CreateTag("initial", main.BaseCommitId);
             listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
             storage = main.Baseline.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);
             Assert.Equal(3, storage.Count);
-            StoredGraphRevision graph = seed.GraphStore.ReadGraph(state0);
+            StoredGraphRevision graph = seed.GraphStore.ReadBusinessGraph(state0, null);
             Assert.Equal(schemaRoot, graph.SchemaRoot);
             foreach ((ObjectId id, ObjectStorageInfo info) in storage) {
                 Assert.Equal(info.Head, graph.ObjectHeads[id.Value]);
                 Assert.Equal(info.ReconstructionPayloadBytes,
-                    seed.GraphStore.ReadObjectChain(state0, id.Value).ReconstructionPayloadBytes);
+                    seed.GraphStore.ReadObjectChain(graph, id.Value).ReconstructionPayloadBytes);
             }
             Assert.NotEqual(state0, storage[listId].Head);
             AssertSentinel(ResourcesOf(seed).Data, sentinel);
@@ -177,9 +179,9 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         ObjectStorageInfo continuedStorage;
         using (Repository reopened = Repository.OpenStorageExisting(_path, Models())) {
             reopened.PreparedStateReuseEnabled = false;
-            Assert.Equal(state0, reopened.GetHead("main").RevisionAddress);
+            Assert.Equal(state0, Describe(reopened, reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id).Address);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
-            using BranchCheckout cold = reopened.CheckoutShared("main");
+            using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
             DB087Widget root = AssertRing(cold.State, 7);
             Assert.Equal(state0, cold.StateRevisionAddress);
             Assert.Equal(storage.Keys.Order(), cold.Baseline!.Objects.Keys.Order());
@@ -187,9 +189,9 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
                 Assert.Equal(info, cold.Baseline.Objects[id].Storage);
             }
             root.Numbers[7] = 200;
-            CheckpointAddress next = cold.CommitState();
-            state1 = next.RevisionAddress;
-            StoredGraphRevision graph = reopened.GraphStore.ReadGraph(state1);
+            CommitInfo next = cold.CommitState();
+            state1 = Describe(reopened, next.Id).Address;
+            StoredGraphRevision graph = reopened.GraphStore.ReadBusinessGraph(state1, state0);
             Assert.Equal(state0, graph.SourceGraph);
             Assert.Equal(schemaRoot, graph.SchemaRoot);
             Assert.NotNull(graph.OwnedBatch);
@@ -208,21 +210,21 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             Assert.Equal(storage[listId].ReconstructionPayloadBytes + delta.EncodedPayloadBytes!.Value,
                 continuedStorage.ReconstructionPayloadBytes);
             Assert.Equal(continuedStorage.ReconstructionPayloadBytes,
-                reopened.GraphStore.ReadObjectChain(state1, listId.Value).ReconstructionPayloadBytes);
+                reopened.GraphStore.ReadObjectChain(graph, listId.Value).ReconstructionPayloadBytes);
             foreach ((ObjectId id, ObjectStorageInfo info) in storage.Where(pair => pair.Key != listId)) {
                 Assert.Equal(info, cold.Baseline.Objects[id].Storage);
                 Assert.Equal(info.Head, graph.ObjectHeads[id.Value]);
             }
-            AssertRing(reopened.ReadState(next), 200);
-            AssertRing(reopened.ReadState(reopened.ResolveTag("initial")), 7);
+            AssertRing(reopened.LoadState(next.Id), 200);
+            AssertRing(reopened.LoadState(reopened.ResolveTag("initial")), 7);
             AssertSentinel(ResourcesOf(reopened).Data, sentinel);
         }
         using Repository final = Repository.OpenStorageReadOnlyExisting(_path, Models());
-        Assert.Equal(state1, final.GetHead("main").RevisionAddress);
+        Assert.Equal(state1, Describe(final, final.ReadCurrentCommit(BranchNamed(final, "main")).Commit.Id).Address);
         Assert.Equal(schemaRoot, final.SharedSchemaRoot);
-        AssertRing(final.ReadState(final.GetHead("main")), 200);
-        AssertRing(final.ReadState(final.ResolveTag("initial")), 7);
-        ObjectVersionChain chain = final.GraphStore.ReadObjectChain(state1, listId.Value);
+        AssertRing(final.LoadState(final.ReadCurrentCommit(BranchNamed(final, "main")).Commit.Id), 200);
+        AssertRing(final.LoadState(final.ResolveTag("initial")), 7);
+        ObjectVersionChain chain = final.GraphStore.ReadObjectChain(final.GraphStore.ReadBusinessGraph(state1, state0), listId.Value);
         Assert.Equal(continuedStorage.Head, chain.Head);
         Assert.Equal(continuedStorage.ReconstructionPayloadBytes, chain.ReconstructionPayloadBytes);
         AssertSentinel(ResourcesOf(final).Data, sentinel);
@@ -262,7 +264,9 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     }
 
     private static byte[] EmptyRootPayload(ReadOnlySpan<byte> magic) =>
-        [.. magic, .. NamedFrameMapCodec.Encode(new Dictionary<string, FrameAddress>()).Unwrap()];
+        magic.SequenceEqual("P0S1"u8)
+            ? [.. magic, .. NamedFrameMapCodec.Encode(new Dictionary<string, FrameAddress>()).Unwrap()]
+            : [.. magic, 0];
     private static Dictionary<string, byte[]> SnapshotTree(string root) => Directory.GetFiles(root, "*", SearchOption.AllDirectories)
         .ToDictionary(path => Path.GetRelativePath(root, path), File.ReadAllBytes);
     private static void AssertFilesEqual(Dictionary<string, byte[]> expected, Dictionary<string, byte[]> actual) {

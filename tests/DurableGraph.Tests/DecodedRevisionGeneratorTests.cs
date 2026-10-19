@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.Tests;
 using Atelia.DurableGraph.Schema;
 using System.Reflection;
 using Atelia.DurableGraph.Build;
@@ -63,7 +64,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaCatalogWorkspace catalog = new(repository.EnsureEditingAllowed);
             foreach (DurableSchema schema in new[] { oldSchema, currentSchema, otherSchema }) { catalog.Set(schema); }
             PreparedSchemaCatalogWrite preparedCatalog = catalog.Prepare();
-            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, new(null, new(1), [
+            using (PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State, new PreparedGraphWrite(null, new(1), [
                 Durable(preparedCatalog.View, 1, oldSchema, original),
                 Durable(preparedCatalog.View, 2, currentSchema, [7, 8, 12]),
                 Text(10, "same"), Text(11, "same"), Text(12, ""), Text(13, ""),
@@ -74,24 +75,24 @@ public sealed partial class DurableSchemaGeneratorTests {
                 first = saved.Business.Address;
                 schemaRoot = saved.Meta!.Address;
             }
-            Assert.Equal(first, repository.GetHead("main"));
+            Assert.Equal(first, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
             Assert.Same(preparedCatalog.View, catalog.Accepted);
-            check(DecodedRevision.ReadStoredGraph(store, first, register(true)), 0);
+            check(DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(repository, first), register(true).FreezeConfiguration()), 0);
 
             FrameAddress Save(PreparedGraphWrite write) {
-                using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, write);
+                using PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State, write);
                 RepositorySaveResult saved = repository.Commit(pending);
-                Assert.Equal(saved.Business.Address, repository.GetHead("main"));
+                Assert.Equal(saved.Business.Address, MechanismFixture.Current(repository, "main").Address);
                 Assert.Equal(schemaRoot, saved.Business.SchemaRoot);
                 Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
                 return saved.Business.Address;
             }
             // Object priors identify their actual batch, independently of the business graph address.
-            FrameAddress firstHead = store.ReadGraph(first).ObjectHeads[1];
+            FrameAddress firstHead = MechanismFixture.Snapshot(repository, first).ObjectHeads[1];
             Assert.NotEqual(first, firstHead);
             second = Save(new(first, new(1), [ObjectVersionRecord.CreateDelta(1, firstHead, firstDelta.Body)]));
-            FrameAddress secondHead = store.ReadGraph(second).ObjectHeads[1];
+            FrameAddress secondHead = MechanismFixture.Snapshot(repository, second).ObjectHeads[1];
             Assert.NotEqual(second, secondHead);
             third = Save(new(second, new(1), [ObjectVersionRecord.CreateDelta(1, secondHead, secondDelta.Body)]));
             newBase = Save(new(third, new(1), [Durable(preparedCatalog.View, 1, oldSchema, [11, 6, 12])]));
@@ -100,11 +101,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             // They are bounded internal corruption fixtures, not publishable business candidates.
             // Only the removed CLR ancestor's slot refers to ID 10 in this parent.
             // Checking only current or leaf-declared slots would incorrectly accept these views.
-            missingString = store.Append(StoredGraphKind.State, second, schemaRoot, new(second, new(1), [], [10])).Address;
-            wrongKind = store.Append(StoredGraphKind.State, second, schemaRoot,
+            missingString = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot, new(second, new(1), [], [10])).Address;
+            wrongKind = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot,
                 new(second, new(1), [Durable(preparedCatalog.View, 10, currentSchema, [7, 8, 12])])).Address;
             // ID 99 is last: all earlier objects have decoded before this trailing-byte error.
-            malformed = store.Append(StoredGraphKind.State, third, schemaRoot,
+            malformed = store.AppendBusiness(StoredGraphKind.State, third, schemaRoot,
                 new(third, new(1), [Durable(preparedCatalog.View, 99, otherSchema, [11, 18, 13, 0])])).Address;
 
             // Equal leaf key and declared fields cannot hide a changed complete ancestor layout.
@@ -115,11 +116,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaCatalogWorkspace incompatible = new(repository.EnsureEditingAllowed);
             foreach (DurableSchema schema in new[] { differentLeaf, currentSchema, otherSchema }) { incompatible.Set(schema); }
             PreparedSchemaCatalogWrite incompatibleCatalog = incompatible.Prepare();
-            FrameAddress incompatibleRoot = store.Append(StoredGraphKind.Meta, null, null, incompatibleCatalog.Write!).Address;
+            FrameAddress incompatibleRoot = store.AppendMeta(null, incompatibleCatalog.Write!).Address;
             Assert.Equal(differentLeaf, SchemaCatalogView.Load(store, incompatibleRoot).Schemas[new(oldSchema.Type, oldSchema.Version)]);
-            mismatchedBase = store.Append(StoredGraphKind.State, third, incompatibleRoot, new(third, new(1), [])).Address;
-            Assert.Equal(schemaRoot, store.ReadObjectChain(mismatchedBase, 1).Entries[0].SchemaRoot);
-            Assert.Equal(newBase, repository.GetHead("main"));
+            mismatchedBase = store.AppendBusiness(StoredGraphKind.State, third, incompatibleRoot, new(third, new(1), [])).Address;
+            Assert.Equal(schemaRoot, store.ReadObjectChain(store.ReadBusinessGraph(mismatchedBase, third), 1).Entries[0].SchemaRoot);
+            Assert.Equal(newBase, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
             resources.Data.ConfirmDurable();
         }
@@ -133,22 +134,22 @@ public sealed partial class DurableSchemaGeneratorTests {
         DecodedRevision[] retained;
         using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path)) {
             GraphRecordStore store = reopened.Store;
-            Assert.Equal(newBase, reopened.GetHead("main"));
+            Assert.Equal(newBase, MechanismFixture.Current(reopened, "main").Address);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
             StateModelRegistry readers = register(true);
             retained = new[] { first, second, third, newBase }
-                .Select(address => DecodedRevision.ReadStoredGraph(store, address, readers)).ToArray();
+                .Select(address => DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(reopened, address), readers.FreezeConfiguration())).ToArray();
             for (int stage = 0; stage < retained.Length; stage++) {
                 check(retained[stage], stage);
                 Assert.Equal(new[] { first, second, third, newBase }[stage], retained[stage].RevisionAddress);
                 Assert.Equal<uint>([1, 2, 10, 11, 12, 13, 99], retained[stage].Objects.Select(row => row.Id).Select(id => id.Value));
             }
-            Assert.Equal(3, store.ReadObjectChain(third, 1).Entries.Count);
-            Assert.Single(store.ReadObjectChain(newBase, 1).Entries);
+            Assert.Equal(3, store.ReadObjectChain(MechanismFixture.Snapshot(reopened, third), 1).Entries.Count);
+            Assert.Single(store.ReadObjectChain(MechanismFixture.Snapshot(reopened, newBase), 1).Entries);
 
             foreach (FrameAddress bad in new[] { missingString, wrongKind, malformed, mismatchedBase }) {
                 DecodedRevision? delivered = null;
-                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(store, bad, readers));
+                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(bad, bad == missingString || bad == wrongKind ? second : third), readers.FreezeConfiguration()));
                 Assert.Null(delivered);
                 check(retained[2], 2);
             }
@@ -156,9 +157,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             // Missing ID 99's reader cannot fall back to the same-shaped historical Leaf DTO.
             StateModelRegistry missingReader = register(false);
             DecodedRevision? partial = null;
-            Assert.Throws<InvalidDataException>(() => partial = DecodedRevision.ReadStoredGraph(store, third, missingReader));
+            Assert.Throws<InvalidDataException>(() => partial = DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(reopened, third), missingReader.FreezeConfiguration()));
             Assert.Null(partial);
-            check(DecodedRevision.ReadStoredGraph(store, first, readers), 0);
+            check(DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(reopened, first), readers.FreezeConfiguration()), 0);
             check(retained[2], 2);
         }
         // Decoded DTOs and the identity table own their content beyond file/store lifetimes.

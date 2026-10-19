@@ -64,12 +64,12 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
                 ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.ForArray(matrix), new(raw)))]).Address;
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal(good, reader.GetStateHead("good"));
-        Assert.Equal(bad, reader.GetStateHead("bad"));
+        Assert.Equal(good, MechanismFixture.State(reader, "good")?.Address);
+        Assert.Equal(bad, MechanismFixture.State(reader, "bad")?.Address);
         Assert.Null(reader.SharedSchemaRoot);
-        Assert.Equal(new[] { 0 }, StoredGraphDecoder.Read(reader.Store, good, NoSchemas()).Rows[new(2)].GetArrayState<int>().Elements.ToArray());
-        Assert.Equal(2, reader.Store.ReadGraph(bad).ObjectHeads.Count);
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, bad, NoSchemas()));
+        Assert.Equal(new[] { 0 }, StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, good), NoSchemas()).Rows[new(2)].GetArrayState<int>().Elements.ToArray());
+        Assert.Equal(2, MechanismFixture.Snapshot(reader, bad).ObjectHeads.Count);
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, bad), NoSchemas()));
     }
 
     [Theory]
@@ -107,7 +107,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         }
         FrameAddress meta = WriteMeta(original.RootId, rows);
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal((byte)4, StoredGraphDecoder.Read(reader.Store, meta).Rows[id].GetState<DescriptorDto>().Segment0Field1);
+        Assert.Equal((byte)4, StoredGraphDecoder.ReadMeta(reader.Store, meta).Rows[id].GetState<DescriptorDto>().Segment0Field1);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
     }
 
@@ -159,7 +159,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         catalog.Set(root);
         PreparedSchemaCatalogWrite initial = catalog.PrepareOwned([arrayA]);
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+        using (PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1,
                 TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(root), new PreparedBaseBody([2]), initial.View)),
                 ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(arrayA, new PreparedBaseBody([1, 0]), initial.View))]), initial.Write)) {
@@ -182,11 +182,11 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         SchemaCatalogWorkspace catalog = new(static () => { });
         PreparedSchemaCatalogWrite abandoned = catalog.PrepareOwned([arrayA]);
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        using (PendingRepositorySave pending = repository.Prepare("discarded", StoredGraphKind.State,
+        using (PendingRepositorySave pending = MechanismFixture.Prepare(repository, "discarded", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1,
                 TypedBaseBodyCodec.Encode(arrayA, new PreparedBaseBody([1, 0]), abandoned.View))]), abandoned.Write)) { }
         Assert.Equal(0, repository.Store.AppendedFrames);
-        Assert.Null(repository.GetHead("discarded"));
+        Assert.Null(MechanismFixture.FindCurrent(repository, "discarded")?.Address);
         Assert.Null(catalog.Accepted);
         Assert.Equal(0, catalog.DirtyCount);
         PreparedSchemaCatalogWrite corrected = catalog.PrepareOwned([arrayB]);
@@ -236,7 +236,7 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         Replace(rows, d.Segment0Field5, new FieldDto(1, (byte)TypeTag.Int32, default, default, default));
         FrameAddress meta = WriteMeta(original.RootId, rows);
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal((byte)4, StoredGraphDecoder.Read(reader.Store, meta).Rows[descriptor].GetState<DescriptorDto>().Segment0Field1);
+        Assert.Equal((byte)4, StoredGraphDecoder.ReadMeta(reader.Store, meta).Rows[descriptor].GetState<DescriptorDto>().Segment0Field1);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
     }
 
@@ -276,12 +276,12 @@ public sealed class MetaBootstrapArrayTests : IDisposable {
         });
         if (extra is not null) { records = records.Append(extra); }
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        FrameAddress graph = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, root, records)).Address;
+        FrameAddress graph = repository.Store.AppendMeta(null, new(null, root, records)).Address;
         repository.Data.ConfirmDurable();
         return graph;
     }
     private static StoredGraphRevision Publish(RepositoryStorageFacade repository, string branch, IEnumerable<ObjectVersionRecord> records) {
-        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State, new(null, new(1), records));
+        using PendingRepositorySave pending = MechanismFixture.Prepare(repository, branch, StoredGraphKind.State, new(null, new(1), records));
         return repository.Commit(pending).Business;
     }
     private sealed class SingleBody(byte[] body) : IStateBodySource {

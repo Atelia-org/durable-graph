@@ -36,10 +36,10 @@ public sealed class SplitExactDecodingTests : IDisposable {
         using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
             long before = DataBytes(reader.Data);
             var configuration = Nodes().FreezeConfiguration();
-            DecodedRevision original = DecodedRevision.ReadStoredGraph(reader.Store, first, configuration);
-            decoded = DecodedRevision.ReadStoredGraph(reader.Store, changed, configuration, original.BindingEnvironment);
+            DecodedRevision original = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, first), configuration);
+            decoded = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, changed), configuration, original.BindingEnvironment);
             Assert.Equal(new NodeState(4, new(3)), original.GetRequired(new(1)).GetState<NodeState>());
-            ObjectVersionChain chain = reader.Store.ReadObjectChain(changed, 1);
+            ObjectVersionChain chain = reader.Store.ReadObjectChain(MechanismFixture.Snapshot(reader, changed), 1);
             Assert.Equal(2, chain.Entries.Count);
             Assert.Equal(original.ObjectHeads[new(1)], chain.Entries[1].Record.PriorAddress);
             Assert.Equal(new byte[] { 1, 9 }, chain.Entries[1].Record.Body.ToArray());
@@ -89,7 +89,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         }));
 
         DecodedRevision? decoded = null;
-        Assert.ThrowsAny<InvalidOperationException>(() => decoded = DecodedRevision.ReadStoredGraph(retained, graph.Address, models));
+        Assert.ThrowsAny<InvalidOperationException>(() => decoded = DecodedRevision.ReadStoredGraph(retained, graph, models.FreezeConfiguration()));
         Assert.Equal(1, reads);
         Assert.Null(decoded);
         Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
@@ -106,13 +106,13 @@ public sealed class SplitExactDecodingTests : IDisposable {
         StoredGraphRevision invalid = Publish(repository, new(initial.Address, new(1),
             wrongKind ? [Durable(catalog.View, 2, NumberSchema, [7])] : [], wrongKind ? [] : [2]));
         var configuration = Nodes(NumberSchema).FreezeConfiguration();
-        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration);
+        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, initial.Address), configuration);
         Assert.Equal(initial.ObjectHeads[1], invalid.ObjectHeads[1]);
         Assert.Equal("value", previous.Strings.ResolveString(new(2)));
         DecodedRevision? result = null;
-        Assert.Throws<InvalidDataException>(() => result = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => result = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, invalid.Address), configuration, previous.BindingEnvironment));
         Assert.Null(result);
-        Assert.Equal("value", DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration, previous.BindingEnvironment).Strings.ResolveString(new(2)));
+        Assert.Equal("value", DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, initial.Address), configuration, previous.BindingEnvironment).Strings.ResolveString(new(2)));
         Assert.False(repository.IsFaulted);
     }
 
@@ -134,11 +134,11 @@ public sealed class SplitExactDecodingTests : IDisposable {
         RegisterExact(models, derived, schema => ByteReader(schema));
         RegisterExact(models, other, schema => ByteReader(schema));
         var configuration = models.FreezeConfiguration();
-        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration);
+        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, initial.Address), configuration);
         Assert.Equal(new ObjectId(2), previous.GetRequired(new(1)).GetState<ObjectId>());
         Assert.Equal(initial.ObjectHeads[1], invalid.ObjectHeads[1]);
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, invalid.Address), configuration, previous.BindingEnvironment));
         Assert.Null(decoded);
         Assert.Equal((byte)7, previous.GetRequired(new(2)).GetState<byte>());
     }
@@ -167,7 +167,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         int matchingCalls = 0;
         StateModelRegistry matching = new();
         RegisterExact(matching, stored, schema => ByteReader(schema, () => matchingCalls++));
-        DecodedRevision positive = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, matching);
+        DecodedRevision positive = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, graph.Address), matching.FreezeConfiguration());
         Assert.Equal((byte)7, positive.GetRequired(new(1)).GetState<byte>());
         Assert.Equal(stored, positive.GetRequired(new(1)).Schema);
         Assert.Equal(1, matchingCalls);
@@ -175,7 +175,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         StateModelRegistry models = new();
         RegisterExact(models, wrong, _ => ByteReader(wrong, () => calls++));
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, models));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, graph.Address), models.FreezeConfiguration()));
         Assert.Null(decoded);
         Assert.Equal(0, calls);
     }
@@ -193,7 +193,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         StateModelRegistry models = new();
         if (missing == 1) { models.Register(Definition(NumberSchema)); }
         if (missing == 2) { models.Register(Definition(NumberSchema, schema => ByteReader(schema, () => calls++))); }
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, models));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, graph.Address), models.FreezeConfiguration()));
         Assert.Equal(0, calls);
         Assert.False(repository.IsFaulted);
     }
@@ -212,10 +212,10 @@ public sealed class SplitExactDecodingTests : IDisposable {
             if (calls == 1) { registry.Register(late); }
         })));
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, registry));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, graph.Address), registry.FreezeConfiguration()));
         Assert.Null(decoded);
         Assert.Equal(1, calls); // Pure earlier callbacks may run, but code registration is frozen for this operation.
-        DecodedRevision retry = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, registry);
+        DecodedRevision retry = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, graph.Address), registry.FreezeConfiguration());
         Assert.Equal((byte)8, retry.GetRequired(new(2)).GetState<byte>());
         Assert.Equal(2, calls);
         Assert.False(repository.IsFaulted);
@@ -247,9 +247,9 @@ public sealed class SplitExactDecodingTests : IDisposable {
         for (int attempt = 0; attempt < 2; attempt++) {
             DecodedRevision? decoded = null;
             if (malformed == 1) {
-                Assert.Throws<EndOfStreamException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, models));
+                Assert.Throws<EndOfStreamException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, invalid.Address), models.FreezeConfiguration()));
             } else {
-                Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, models));
+                Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, invalid.Address), models.FreezeConfiguration()));
             }
             Assert.Null(decoded);
         }
@@ -277,7 +277,7 @@ public sealed class SplitExactDecodingTests : IDisposable {
         int calls = 0;
         StateModelRegistry models = new();
         RegisterExact(models, NumberSchema, _ => ByteReader(NumberSchema, () => calls++));
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, models));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, graph.Address), models.FreezeConfiguration()));
         Assert.Equal(0, calls);
         Assert.False(repository.IsFaulted);
     }
@@ -302,13 +302,13 @@ public sealed class SplitExactDecodingTests : IDisposable {
         StateModelRegistry models = new();
         RegisterExact(models, NumberSchema, _ => ByteReader(NumberSchema));
         var configuration = models.FreezeConfiguration();
-        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration);
+        DecodedRevision previous = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, initial.Address), configuration);
         Assert.Equal(2, previous.GetRequired(new(10)).GetDictionaryState<ObjectId, int>().Count);
         DecodedRevision? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, invalid.Address, configuration, previous.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => decoded = DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, invalid.Address), configuration, previous.BindingEnvironment));
         Assert.Null(decoded);
         Assert.Equal("right", previous.Strings.ResolveString(new(3)));
-        Assert.Equal("right", DecodedRevision.ReadStoredGraph(repository.Store, initial.Address, configuration, previous.BindingEnvironment).Strings.ResolveString(new(3)));
+        Assert.Equal("right", DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository, initial.Address), configuration, previous.BindingEnvironment).Strings.ResolveString(new(3)));
         Assert.False(repository.IsFaulted);
     }
 
@@ -355,7 +355,11 @@ public sealed class SplitExactDecodingTests : IDisposable {
     }
 
     private static StoredGraphRevision Publish(RepositoryStorageFacade repository, PreparedGraphWrite write, PreparedSchemaCatalogWrite? catalog = null) {
-        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, write, catalog?.Write);
+        var matches = MechanismFixture.Resources(repository).ListBranches().Where(pair => pair.Value == "main").ToArray();
+        HistoryGraphRecord? current = matches.Length == 0 ? null : repository.ReadCurrent(matches.Single().Key);
+        using PendingRepositorySave pending = repository.PrepareFrom(
+            current is null ? null : matches.Single().Key, current?.Id, current is null ? "main" : null,
+            StoredGraphKind.State, default, () => (write, catalog?.Write));
         return repository.Commit(pending).Business;
     }
 

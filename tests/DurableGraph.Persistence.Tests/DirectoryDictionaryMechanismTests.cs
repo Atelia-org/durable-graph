@@ -42,19 +42,19 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
             PreparedBaseBody body = DictionaryStateBody<uint, ObjectId, UInt32StateOps, StringIdStateOps>
                 .PrepareBase(Freeze(entries), Layout);
             rows.Add(ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(Layout), body)));
-            StoredGraphRevision directory = store.Graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), rows));
+            StoredGraphRevision directory = store.Graphs.AppendMeta(null, new(null, new(1), rows));
             d0 = directory.Address;
             originalLabels = directory.ObjectHeads.Where(pair => pair.Key != 1).ToDictionary();
-            Assert.Equal(ObjectVersionKind.Base, Assert.Single(store.Graphs.ReadObjectChain(d0, 1).Entries).Record.Kind);
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(store.Graphs.ReadObjectChain(store.Graphs.ReadMetaGraph(d0), 1).Entries).Record.Kind);
 
             SchemaCatalogWorkspace catalog = new(static () => { });
             catalog.Set(SeedSchema);
             PreparedSchemaCatalogWrite prepared = catalog.Prepare();
-            StoredGraphRevision schema = store.Graphs.Append(StoredGraphKind.Meta, null, null, prepared.Write!);
+            StoredGraphRevision schema = store.Graphs.AppendMeta(null, prepared.Write!);
             s0 = schema.Address;
             store.Heads.CreateHead(1, Pointer(d0), out _).Unwrap();
             store.Heads.CreateHead(2, Pointer(s0), out _).Unwrap();
-            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(store.Graphs, d0));
+            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(store.Graphs, store.Graphs.ReadMetaGraph(d0)));
             AssertDirectory(store, d0, expected);
         }
 
@@ -76,7 +76,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
             SchemaCatalogWorkspace catalog = new(static () => { }, accepted);
             catalog.Set(AddedSchema);
             PreparedSchemaCatalogWrite prepared = catalog.Prepare();
-            StoredGraphRevision schema = store.Graphs.Append(StoredGraphKind.Meta, s0, null, prepared.Write!);
+            StoredGraphRevision schema = store.Graphs.AppendMeta(s0, prepared.Write!);
             s1 = schema.Address;
             prepared.PrepareInstall(schema);
             HeadEntry oldD = store.Heads.ReadHead(1).Unwrap(), oldS = store.Heads.ReadHead(2).Unwrap();
@@ -101,7 +101,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
             DecodedGraphRows before = AssertDirectory(store, ReadPointer(store.Heads.ReadHead(1).Unwrap()), expected);
             SchemaCatalogView catalog = SchemaCatalogView.Load(store.Graphs, ReadPointer(store.Heads.ReadHead(2).Unwrap()));
             Assert.Equal(AddedSchema, catalog.Schemas[new(AddedSchema.Type, 1)]);
-            AssertExactDelta(store, d1, d0, store.Graphs.ReadGraph(d0).ObjectHeads[1], count: 2);
+            AssertExactDelta(store, d1, d0, store.Graphs.ReadMetaGraph(d0).ObjectHeads[1], count: 2);
             HeadId branch = store.Heads.CreateHead("business fixture"u8.ToArray(), out _).Unwrap().HeadId;
             expected.Add(Encode(branch), "背叛魔教");
             StoredGraphRevision directory = Add(store, before, Encode(branch), new(19), expected[Encode(branch)]);
@@ -122,7 +122,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
             SchemaCatalogWorkspace pendingCatalog = new(static () => { }, catalog);
             pendingCatalog.Set(UnpublishedSchema);
             PreparedSchemaCatalogWrite pending = pendingCatalog.Prepare();
-            abandonedSchema = store.Graphs.Append(StoredGraphKind.Meta, s1, null, pending.Write!).Address;
+            abandonedSchema = store.Graphs.AppendMeta(s1, pending.Write!).Address;
             store.Data.ConfirmDurable();
             Assert.Equal(d2, ReadPointer(store.Heads.ReadHead(1).Unwrap()));
             Assert.Equal(s1, ReadPointer(store.Heads.ReadHead(2).Unwrap()));
@@ -160,7 +160,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
             FrozenDictionaryState<ObjectId, ObjectId> map = new(DictionaryComparerKind.StringOrdinal, [new(new(2), new(3))]);
             PreparedBaseBody mapBody = DictionaryStateBody<ObjectId, ObjectId, StringIdStateOps, ObjectIdStateOps>.PrepareBase(map, bookmarks);
             PreparedBaseBody bytesBody = ArrayStateBody<byte, ByteStateOps>.PrepareBase(new(new(HeadEntryId.EncodedSize), encoded), bytesLayout);
-            t0 = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [
+            t0 = graphs.AppendMeta(null, new(null, new(1), [
                 ObjectVersionRecord.CreateBase(1, TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(bookmarks), mapBody)),
                 Label(2, "拾取英雄之剑之前"),
                 ObjectVersionRecord.CreateBase(3, TypedBaseBodyCodec.Encode(ObjectLayout.ForArray(bytesLayout), bytesBody))
@@ -171,8 +171,8 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
         using (PublicationStore heads = PublicationStore.Open(headsPath, data)) {
             Assert.Equal(t0, ReadPointer(heads.ReadHead(1).Unwrap()));
             using GraphRecordStore graphs = new(data);
-            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, t0));
-            DecodedGraphRows decoded = StoredGraphDecoder.Read(graphs, t0, InternalModels());
+            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, graphs.ReadMetaGraph(t0)));
+            DecodedGraphRows decoded = StoredGraphDecoder.Read(graphs, graphs.ReadMetaGraph(t0), InternalModels());
             Assert.Null(decoded.Snapshot.SchemaRoot);
             DictionaryEntryState<ObjectId, ObjectId> entry = Assert.Single(decoded.Rows[new(1)].GetDictionaryState<ObjectId, ObjectId>().Entries.ToArray());
             Assert.Equal("拾取英雄之剑之前", decoded.Rows[entry.Key].StringContent);
@@ -207,14 +207,14 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(planned.Records, static row => row.ObjectId == 1).Kind);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(planned.Records, row => row.ObjectId == labelId.Value).Kind);
         PreparedGraphWrite write = new(before.Snapshot.Address, new(1), planned.Records);
-        return store.Graphs.Append(StoredGraphKind.Meta, before.Snapshot.Address, null, write);
+        return store.Graphs.AppendMeta(before.Snapshot.Address, write);
     }
 
     private static void AssertExactDelta(Fixture store, FrameAddress address, FrameAddress source, FrameAddress prior, int count) {
-        StoredGraphRevision graph = store.Graphs.ReadGraph(address);
+        StoredGraphRevision graph = store.Graphs.ReadMetaGraph(address);
         Assert.Equal(StoredGraphKind.Meta, graph.Kind);
         Assert.Null(graph.SchemaRoot);
-        Assert.Equal(source, graph.Parent);
+        Assert.Equal(source, graph.PreviousMeta);
         Assert.Equal(source, graph.SourceGraph);
         ObjectVersionBatch batch = store.Graphs.ReadBatch(graph.OwnedBatch!.Value);
         Assert.Equal(source, batch.SourceGraph);
@@ -222,7 +222,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
         ObjectVersionRecord row = Assert.Single(batch.Records, static row => row.ObjectId == 1);
         Assert.Equal(ObjectVersionKind.Delta, row.Kind);
         Assert.Equal(prior, row.PriorAddress);
-        ObjectVersionChain chain = store.Graphs.ReadObjectChain(address, 1);
+        ObjectVersionChain chain = store.Graphs.ReadObjectChain(store.Graphs.ReadMetaGraph(address), 1);
         Assert.Equal(count, chain.Entries.Count);
         Assert.Equal(source, chain.Entries[^1].SourceGraph);
         Assert.Equal(prior, chain.Entries[^1].Record.PriorAddress);
@@ -244,7 +244,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
         return decoded;
     }
 
-    private static DecodedGraphRows ReadDirectory(Fixture store, FrameAddress address) => StoredGraphDecoder.Read(store.Graphs, address, InternalModels());
+    private static DecodedGraphRows ReadDirectory(Fixture store, FrameAddress address) => StoredGraphDecoder.Read(store.Graphs, store.Graphs.ReadMetaGraph(address), InternalModels());
     private static ModelExecutionEnvironment InternalModels() => new StateModelRegistry().CreateEnvironment(
         schemaLookup: _ => throw new InvalidOperationException("Internal builtin directory must not query application Schema."));
     private static void AssertLabelsReused(StoredGraphRevision graph, Dictionary<uint, FrameAddress> original) {

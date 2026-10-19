@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：当前位于隔离实现分支 `db096/branch-repository-cutover`，起点 `866ce89`，Storage pin `f8868b5`。真实 Repository 已接一 Branch 一 Head、D/T 增量管理图、HS 历史来源与新 Branch/Commit/WorkingCopy API，业务 Parent 已删除。新公开调用的冷重开纵切和有限错源/故障反例通过；根 solution 仍被未迁移的旧测试/链接消费者阻断，尚未合回 master。准确资格和下一步查[B2 施工记录 §8](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#8-b2-隔离分支首段纵切)，活动队列只维护在[DB-096工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。下一片迁移旧测试原意及消费者，恢复全套构建/回归；定向 origin 仍为正式合入门槛。不要把下面旧阶段记录和旧普通包资格外推到本分支。
+2026-10-19：当前位于隔离实现分支 `db096/branch-repository-cutover`，Storage pin `f8868b5`。真实 Repository 已接一 Branch 一 Head、D/T 增量管理图、HS 历史来源与 Branch/Commit/WorkingCopy，业务 Parent 已删除。根 solution 调用闭包及原 Persistence/Runtime 回归已恢复，README 和链接 PendingRecovery 已迁移；产品 API/格式本轮未再改变。准确源码资格见[B2 施工记录 §9](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#9-b2-调用闭包与回归迁移)，当前队列只维护在[DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。下一片选一个读取成本收窄问题；定向 origin、剩余包消费者/普通包验证和术语导航仍待闭合，未合回 master。下面未逐项改写的旧阶段记录只保其历史基线，不外推旧包资格。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下已回归，新历史模型另需真实纵切，不把它们混为同一次验收。
 
@@ -166,7 +166,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；新 Branch/Commit/WorkingCopy、组提交和操作内 Catalog 候选尚待实施 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy 已在隔离分支通过原回归；定向 origin/包闭包待完成，组提交和操作内 Catalog 候选尚待实施 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 

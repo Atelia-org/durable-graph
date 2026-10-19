@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.Tests;
 using Atelia.DurableGraph.Persistence;
 
 using Atelia.Binary;
@@ -55,38 +56,38 @@ public sealed partial class DurableSchemaGeneratorTests {
                     new(body ?? record.Body), preparedCatalog.View));
 
             // These captured SG bodies explicitly select Base; this is not a planner-policy witness.
-            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
-                new(null, new(firstOwner), input.First.Reverse().Select(record => Encode(record))), preparedCatalog.Write)) {
+            using (PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State,
+                new PreparedGraphWrite(null, new(firstOwner), input.First.Reverse().Select(record => Encode(record))), preparedCatalog.Write)) {
                 RepositorySaveResult saved = repository.Commit(pending, installMeta: preparedCatalog.Install,
                     prepareMeta: preparedCatalog.PrepareInstall);
                 first = saved.Business.Address;
                 schemaRoot = saved.Meta!.Address;
                 Assert.Equal(new ObjectId(firstOwner), saved.Business.RootId);
             }
-            using (PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
-                new(first, new(firstOwner), [Encode(input.Second.Single(record => record.Id == firstOwner))]))) {
+            using (PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State,
+                new PreparedGraphWrite(first, new(firstOwner), [Encode(input.Second.Single(record => record.Id == firstOwner))]))) {
                 RepositorySaveResult saved = repository.Commit(pending);
                 second = saved.Business.Address;
                 Assert.Equal(new ObjectId(firstOwner), saved.Business.RootId);
                 Assert.Equal(schemaRoot, saved.Business.SchemaRoot);
             }
-            Assert.Equal(second, repository.GetHead("main"));
+            Assert.Equal(second, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
-            Assert.True(validateDecoded(input.Roots, DecodedRevision.ReadStoredGraph(store, first, models), 7));
-            Assert.True(validateDecoded(input.Roots, DecodedRevision.ReadStoredGraph(store, second, models), 8));
+            Assert.True(validateDecoded(input.Roots, DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(repository, first), models.FreezeConfiguration()), 7));
+            Assert.True(validateDecoded(input.Roots, DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(repository, second), models.FreezeConfiguration()), 8));
 
             // Unpublished internal corruption fixtures preserve completed frames. Their raw append
             // bypasses the public typed writer; ReadStoredGraph must validate every live row before delivery.
             byte[] missing = input.Second.Single(record => record.Id == secondOwner).Body.ToArray();
             Assert.InRange(missing[0], (byte)1, (byte)127); // The fixture's first reference is one byte.
             missing[0] = 127;
-            missingString = store.Append(StoredGraphKind.State, second, schemaRoot,
+            missingString = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot,
                 new(second, new(firstOwner), [Encode(input.Second.Single(record => record.Id == secondOwner), missing)])).Address;
             byte[] nonString = input.Second.Single(record => record.Id == firstOwner).Body.ToArray();
             nonString[0] = checked((byte)secondOwner);
-            wrongKind = store.Append(StoredGraphKind.State, second, schemaRoot,
+            wrongKind = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot,
                 new(second, new(firstOwner), [Encode(input.Second.Single(record => record.Id == firstOwner), nonString)])).Address;
-            Assert.Equal(second, repository.GetHead("main"));
+            Assert.Equal(second, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
             resources.Data.ConfirmDurable();
         }
@@ -103,9 +104,11 @@ public sealed partial class DurableSchemaGeneratorTests {
         DecodedRevision oldView, newView;
         using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path)) {
             GraphRecordStore cold = reopened.Store;
-            Assert.Equal(second, reopened.GetHead("main"));
+            StoredGraphRevision Snapshot(FrameAddress address) => address == missingString || address == wrongKind
+                ? cold.ReadBusinessGraph(address, second) : MechanismFixture.Snapshot(reopened, address);
+            Assert.Equal(second, MechanismFixture.Current(reopened, "main").Address);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
-            StoredGraphRevision firstGraph = cold.ReadGraph(first), secondGraph = cold.ReadGraph(second);
+            StoredGraphRevision firstGraph = Snapshot(first), secondGraph = Snapshot(second);
             Assert.Equal(new ObjectId(firstOwner), firstGraph.RootId);
             Assert.Equal(firstGraph.RootId, secondGraph.RootId);
             Assert.Equal(schemaRoot, firstGraph.SchemaRoot);
@@ -117,15 +120,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotEqual(firstBatch, secondBatch);
             Assert.Equal(secondBatch, secondGraph.ObjectHeads[firstOwner]);
             Assert.Equal(firstBatch, secondGraph.ObjectHeads[secondOwner]);
-            Dictionary<uint, byte[]> ReadBodies(FrameAddress graph) => cold.ReadGraph(graph).ObjectHeads.Keys.Reverse()
+            Dictionary<uint, byte[]> ReadBodies(FrameAddress graph) => Snapshot(graph).ObjectHeads.Keys.Reverse()
                 .ToDictionary(id => id, id => {
-                    ObjectVersionChainEntry entry = Assert.Single(cold.ReadObjectChain(graph, id).Entries);
+                    ObjectVersionChainEntry entry = Assert.Single(cold.ReadObjectChain(Snapshot(graph), id).Entries);
                     SchemaCatalogView source = SchemaCatalogView.Load(cold, entry.SchemaRoot!.Value);
                     return TypedBaseBodyCodec.Decode(entry.Record.Body, source).Body;
                 });
 
-            oldView = DecodedRevision.ReadStoredGraph(cold, first, models);
-            newView = DecodedRevision.ReadStoredGraph(cold, second, models);
+            oldView = DecodedRevision.ReadStoredGraph(cold, Snapshot(first), models.FreezeConfiguration());
+            newView = DecodedRevision.ReadStoredGraph(cold, Snapshot(second), models.FreezeConfiguration());
             Assert.True(validateDecoded(input.Roots, oldView, 7));
             Assert.True(validateDecoded(input.Roots, newView, 8));
             Assert.Equal(firstGraph.ObjectHeads.Select(pair => (new ObjectId(pair.Key), pair.Value)),
@@ -144,7 +147,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             foreach (FrameAddress bad in new[] { missingString, wrongKind }) {
                 DecodedRevision? partial = null;
-                Assert.Throws<InvalidDataException>(() => partial = DecodedRevision.ReadStoredGraph(cold, bad, models));
+                Assert.Throws<InvalidDataException>(() => partial = DecodedRevision.ReadStoredGraph(cold, Snapshot(bad), models.FreezeConfiguration()));
                 Assert.Null(partial);
                 Assert.Throws<InvalidDataException>(() => validate(input.Roots, metadata, ReadBodies(bad), 8));
                 Assert.True(validateDecoded(input.Roots, oldView, 7));

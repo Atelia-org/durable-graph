@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Diagnostics;
 using System.Text.Json;
@@ -35,7 +36,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
             Framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             OperatingSystem = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
             Architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
-            Timer = "Fork entry through returned checkout, including durable named-ref publication; excludes Dispose and assertions",
+            Timer = "Fork entry through returned checkout, including durable branch registration and explicit OpenWorkingCopy; excludes Dispose and assertions",
             Allocation = "GC.GetAllocatedBytesForCurrentThread; excludes other threads and native memory",
             Pairing = "Fresh repository per cell/sample; same seeded model/history; enabled-first order alternates by sample",
             Cache = "Store and OS caches not disabled; prepared-slot toggle is the only product-path difference",
@@ -59,7 +60,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
         try {
             using Repository repository = Repository.CreateNew(path, Models(family));
             repository.PreparedStateReuseEnabled = enabled;
-            CheckpointAddress[] requests = Seed(repository, containers, scenario);
+            CommitId[] requests = Seed(repository, containers, scenario);
             GraphReadStatistics statistics = new();
             repository.RestorationStatistics = statistics;
             List<object> operations = [];
@@ -70,13 +71,13 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
                 string name = $"fork-{index}";
                 long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
                 long start = Stopwatch.GetTimestamp();
-                BranchCheckout fork = repository.ForkShared(name, requests[index]);
+                WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(requests[index], name).Id);
                 long end = Stopwatch.GetTimestamp();
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
                 double milliseconds = Stopwatch.GetElapsedTime(start, end).TotalMilliseconds;
                 using (fork) {
-                    Assert.Equal(requests[index], fork.Head);
-                    Assert.Equal(requests[index], repository.GetHead(name));
+                    Assert.Equal(requests[index], fork.BaseCommitId);
+                    Assert.Equal(requests[index], repository.ReadCurrentCommit(BranchNamed(repository, name)).Commit.Id);
                     if (scenario == "event-only") {
                         Assert.Null(fork.State);
                     } else {
@@ -112,21 +113,20 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
         }
     }
 
-    private static CheckpointAddress[] Seed(Repository repository, bool containers, string scenario) {
+    private static CommitId[] Seed(Repository repository, bool containers, string scenario) {
         Node root = Graph(containers);
-        using BranchCheckout branch = scenario == "event-only"
-            ? repository.CreateSharedBranchFromEvent("main", root, NoRebase)
-            : repository.CreateSharedBranch("main", root, NoRebase);
-        CheckpointAddress first = branch.Head;
-        CheckpointAddress[] requests = new CheckpointAddress[Forks];
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", root, parameters: NoRebase).Id);
+        if (scenario != "event-only") { branch.CommitState(root, parameters: NoRebase); }
+        CommitId first = branch.BaseCommitId;
+        CommitId[] requests = new CommitId[Forks];
         if (scenario == "alternating-state") {
             root.Value = 1000;
-            CheckpointAddress second = branch.CommitState(NoRebase);
+            CommitId second = branch.CommitState(parameters: NoRebase).Id;
             for (int index = 0; index < Forks; index++) { requests[index] = index % 2 == 0 ? first : second; }
         } else if (scenario is "events-share-state" or "event-only") {
             requests[0] = first;
             for (int index = 1; index < Forks; index++) {
-                requests[index] = branch.CommitEvent(new Node { Value = index }, NoRebase);
+                requests[index] = branch.CommitEvent(new Node { Value = index }, parameters: NoRebase).Id;
             }
         } else {
             Array.Fill(requests, first);

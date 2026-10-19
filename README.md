@@ -1,6 +1,6 @@
 # DurableGraph
 
-> 当前实现分支 `db096/branch-repository-cutover` 正在迁移新 Branch/Commit API；下文旧 QuickStart 与消费者尚待迁移，当前可运行入口见[真实纵切 Probe](experiments/RepositoryBranchVerticalProbe/README.md)，剩余工作见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#8-b2-隔离分支首段纵切)。本分支尚未整体合入主线。
+> 当前实现分支 `db096/branch-repository-cutover` 已采用下文的 Branch/Commit API，根 solution 构建及 Persistence/Runtime 回归已通过；定向 origin 和普通包闭包仍待完成，尚未整体合入主线。实现进度与合入边界见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。
 > 当前存储依赖已升级至 HeadStore 非兼容重构；本轮 feed 尚未制作，先用[源码联调](docs/storage-dependency.md#显式源码联调)。旧存档不自动迁移，包模式需待准确候选准备完成。
 
 [MIT License](LICENSE)
@@ -14,9 +14,9 @@ DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以
 目前是快速演进的 **.NET 10 原型**，API 和格式尚未冻结。本文面向首次接入的应用开发者和 Coding Agent，
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
-公开入口是非泛型 `Repository` / `BranchCheckout`：状态型应用直接连续提交 State，无需先提交 Event。
+公开入口是非泛型 `Repository` / `WorkingCopy`：状态型应用直接连续提交 State，无需先提交 Event。
 需要记录业务事件时，可以另外提交 Event 快照；历史允许任意 E/S 排列。
-HeadStore 共同发布共享 Schema 根与命名分支目录；恢复读取已保存的结果，不重新执行历史业务处理器。
+每条业务分支对应一个 HeadStore Head；普通提交共同发布该分支与所需的新 Schema 根。分支目录另行管理，显示标签可重复。恢复读取已保存的结果，不重新执行历史业务处理器。
 
 ## 最短接入路径
 
@@ -49,8 +49,8 @@ HeadStore 共同发布共享 Schema 根与命名分支目录；恢复读取已�
 
 交付项目已固定版本，无需在每条命令重复传入；正式接入也可用项目属性或统一包版本文件固定版本。
 `Atelia.DurableGraph` 包同时携带 Runtime、Source Generator 和 history 构建集成；Persistence 包提供持久化工作副本外观。
-本文说明文字遵循[项目术语表](docs/DurableGraph-glossary.md)，称 `BranchCheckout` 为“分支工作副本”，签出操作为 `Checkout`。
-`Repository` 与 `BranchCheckout` 位于根命名空间 `Atelia.DurableGraph`，实现仍由 Persistence 包提供。
+`BranchId` 选择继续编辑的分支，`CommitId` 定位一次准确保存，`WorkingCopy` 是分支工作副本。
+这些类型与 `Repository` 位于根命名空间 `Atelia.DurableGraph`，实现仍由 Persistence 包提供。
 声明模型的每个项目都应**直接引用 Runtime 包**。无需手工添加 Analyzer、AdditionalFiles 或 Import，
 也不要仅以 Runtime 项目的 ProjectReference 代替完整包接入。
 
@@ -128,9 +128,12 @@ Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
 using var repository = Directory.Exists(path)
     ? Repository.OpenExisting(path, models)
     : Repository.CreateNew(path, models);
-using var session = repository.ListBranches().Contains("main")
-    ? repository.CheckoutShared("main")
-    : repository.CreateSharedBranch("main", NewWorld()); // 已保存初始 S0。
+// 这个示例只有一个根分支；应用通常保存并复用所选 BranchId。
+BranchInfo[] branches = repository.ListBranches();
+BranchId mainId = branches.Length == 0
+    ? repository.CreateRootBranchFromState("main", NewWorld()).Id // 已保存初始 S0。
+    : branches.Single(branch => branch.ForkedFromCommitId is null).Id;
+using var session = repository.OpenWorkingCopy(mainId);
 
 World world = (World)session.State!;
 world.RebuildTransient(); // Load 不调用构造器/字段初始化器，也不自动执行此方法。
@@ -140,8 +143,8 @@ if (!ReferenceEquals(world.Hero, world.Characters[0]) ||
 }
 
 world.Hero.Hp -= 1;
-var frame = session.CommitState();
-Console.WriteLine($"{world.Find("Alice").Name}: Hp={world.Hero.Hp}; Revision={frame.RevisionAddress}");
+var commit = session.CommitState();
+Console.WriteLine($"{world.Find("Alice").Name}: Hp={world.Hero.Hp}; CommitKind={commit.Kind}");
 
 static World NewWorld() {
     var alice = new Character { Name = "Alice", Hp = 100 };
@@ -161,8 +164,10 @@ dotnet run --project QuickStart/QuickStart.csproj --no-restore -- ./quickstart-w
 ```
 
 从新目录开始，第一次输出 `Hp=99`，第二个进程重开后输出 `Hp=98`；业务历史为 `S0(100) → S1(99) → S2(98)`，没有 Event。
-`CreateSharedBranch` 已经保存初始 S0。后续修改继续使用同一个工作副本的 `State`；
-成功提交 State 保留领域实例及比较基线。`Checkout` 保持分支精确 Head，只恢复最近的 State，不物化 Event 或自动重放。
+`CreateRootBranchFromState` 保存初始 S0，返回 `BranchInfo`；它不占用工作副本。`OpenWorkingCopy(mainId)` 恢复新的领域实例，
+因此后续修改应使用 `session.State`，不能继续修改传给创建方法的原始对象并期待它自动保存。
+成功提交 State 保留当前工作副本的领域实例及比较基线。`BaseCommitId` 指向当前准确提交，
+`StateSourceCommitId` 指向所恢复的最近 State；打开不物化 Event 或自动重放。
 Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)` 允许替换为不同实际类型的根，成功后安装传入实例。
 重新运行会再扣一次 HP，是一次新业务操作；保存异常后不能把它当透明重试。
 发布失败的 outcome/fault 与重开边界见[事件快照与失败恢复](#事件快照与失败恢复)，纯 State 应用同样适用。
@@ -178,57 +183,79 @@ Dispose **不自动保存，也不撤销领域修改**。`CommitState(nextState)
 
 ```csharp
 using (var history = Repository.OpenReadOnlyExisting(path, models)) {
-    foreach (var frame in history.ReadFrames("main")) { // 从旧到新；此例只有 State。
-        var saved = (World)history.ReadState(frame);
+    BranchId mainId = history.ListBranches().Single(branch => branch.ForkedFromCommitId is null).Id;
+    foreach (var commit in history.ReadFrames(mainId)) { // 从旧到新；此例只有 State。
+        var saved = (World)history.LoadState(commit.Id);
         Console.WriteLine($"History: Hp={saved.Hero.Hp}"); // 100、99、98。
     }
 }
 ```
 
-`ReadFrames` 返回所选分支从旧到新的完整 E/S 元数据链，有全量成本；它本身不恢复领域对象。
-混合历史需先按 `frame.Kind` 选择 `ReadState` 或 `ReadEvent`。每次读取需要相应的 reader/Upgrade；
-修改独立读取的对象不会自动写盘。`OpenReadOnlyExisting` 用于零写入浏览。
+`ReadFrames` 返回所选分支从旧到新的完整 State/Event 描述，有全量成本；它本身不恢复领域对象。
+混合历史需先按 `commit.Kind` 选择 `LoadState(commit.Id)` 或 `LoadEvent(commit.Id)`。这两个入口要求准确角色；
+需要“截至此处最近的 State”时用 `LoadLatestSavedState(commitId)`，其 `StateCommitId` 和 `State` 可以为 null。
+每次加载需要相应的 reader/Upgrade；修改独立加载的对象不会写盘。`OpenReadOnlyExisting` 用于零写入浏览。
 
-可写仓库支持 `ForkShared(name, selectedFrame)`，从已提交位置取得独立、可继续保存的工作副本。
-下面接续同一数据库，选择 S1（HP99）；`alternate` 须尚未存在。关闭第一段仓库后重开，继续保存该分支：
+`ForkBranch(selectedCommitId, displayLabel)` 创建可重开的分支，返回 `BranchInfo`；再 `OpenWorkingCopy` 继续编辑。
+下面选择 S1（HP99），保存新分支的 `BranchId`，关闭后直接用它重开：
 
 ```csharp
+BranchId mainId, alternateId;
 using (var branches = Repository.OpenExisting(path, models)) {
-    var selected = branches.ReadFrames("main")[1]; // S1，不是 main 的最新 Head。
-    using var alternate = branches.ForkShared("alternate", selected);
+    mainId = branches.ListBranches().Single(branch => branch.ForkedFromCommitId is null).Id;
+    CommitId selected = branches.ReadFrames(mainId)[1].Id; // S1，不是最新提交。
+    alternateId = branches.ForkBranch(selected, "alternate").Id;
+    using var alternate = branches.OpenWorkingCopy(alternateId);
     var world = (World)alternate.State!;
     world.Hero.Hp -= 10;
     alternate.CommitState(); // alternate: 99 -> 89，main 仍为 98。
 }
 using (var reopened = Repository.OpenExisting(path, models)) {
-    using var alternate = reopened.CheckoutShared("alternate");
+    using var alternate = reopened.OpenWorkingCopy(alternateId);
     var world = (World)alternate.State!;
     world.Hero.Hp -= 1;
     alternate.CommitState(); // 冷开后继续：89 -> 88。
-    var original = (World)reopened.ReadState(reopened.GetHead("main"));
+    var original = (World)reopened.LoadState(reopened.ReadCurrentCommit(mainId).Commit.Id);
     Console.WriteLine($"Branches: main={original.Hero.Hp}, alternate={world.Hero.Hp}"); // 98、88。
 }
 ```
 
-每个 branch 至多一个活动工作副本；不同 branch 可同时保留，所有仓库操作仍须串行。
-显式 Dispose 释放该 branch 后可再次 `Checkout`；`MoveBranch(name, expectedHead, targetFrame)` 只要求目标 branch 没有活动工作副本。
-ref-only `CreateBranch("fork", selectedFrame)` 只建立持久引用，不恢复领域图或占用工作副本。
-Fork 自身只发布新 ref，不新增历史检查点；Event 地址仍只恢复最近 State，纯 Event 前缀则返回 `State == null`。
-消息处理和外部效果去重由应用负责；两个孩子从同一 Event 开始不表示库已经领取或完成该事件。
-handle 从 `GetHead`、`ReadFrames` 或提交结果取得，只能用于签发它的这一次打开实例；不要跨库或跨重开复用。
-位置统一使用 `CheckpointAddress`；它只用于本次打开，不是可序列化的外部地址。
-跨重开保存位置可使用不可变 tag：`repo.CreateTag("before-experiment", selectedFrame)`；
-关闭重开后用 `reopened.ResolveTag("before-experiment")` 取得当前打开的地址，再 ReadCheckpoint 或 Fork。
-tag 可指向 State 或尚无 State 的 Event；分支提交或移动不改变它，同名 tag 创建一律拒绝。
-tag 与 branch 名称空间独立。tag 名称使用 1–1024 个 UTF-16 code units 的有效 Unicode，按 Ordinal 比较；branch 名称仍使用 1–128 个 ASCII 字符，匹配 `[a-z0-9][a-z0-9._-]*`，不能以 `.` 或 `.lock` 结尾。
-只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析均不推进分支或物化领域图。
-真实包和跨进程示例见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)。
-历史可为纯 State 的 `S0 → S1 → S2`，也可为 `S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
-业务 Parent 始终是前一 Head；图 Revision Parent 是提交前最近 State，没有 State 时为 null。
-Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖先中的最近 State，纯 Event 前缀返回 null。
+每个分支至多一个活动工作副本；不同分支可同时保留，仓库操作仍须串行。Dispose 释放占用后可再次 `OpenWorkingCopy`。
+标签只用于显示，可以重复；`ListBranches` 只列正式业务分支，应用选择、打开和持久化导航均用 ID。
+当前分支只追加；从旧位置续写应 fork，没有移动当前分支或 rewind 入口。
+
+fork 不新增业务提交：新分支的当前 `CommitId` 可以仍属于父分支，首次提交才取得新分支自己的提交 ID。
+因此使用 `WorkingCopy.BranchId` 继续原来的世界线，使用 `CommitId` 查看固定存档；不要由当前 Commit 的归属推断写入目标。
+打开从 Event fork 的工作副本会恢复最近 State；纯 Event 前缀得到 `State == null`。消息处理和外部效果去重由应用负责。
+
+`BranchId` 和 `CommitId` 是可跨重开保存的值，分别有 4 字节和 12 字节 codec。例如编码后存入应用自己的导航配置：
+
+```csharp
+byte[] encodedBranch = new byte[BranchId.EncodedSize];
+if (!alternateId.TryWrite(encodedBranch) || !BranchId.TryRead(encodedBranch, out BranchId restoredId)) {
+    throw new InvalidDataException("Invalid branch ID.");
+}
+// 下次打开同一个 repository 后，使用 OpenWorkingCopy(restoredId)。
+```
+
+`CommitId` 使用相同的 `EncodedSize` / `TryWrite` / `TryRead` 形状。应用同时保存所选仓库路径或其他定位信息；
+ID 不是全局身份，解码成功也不证明所选库中存在该位置，跨库误用检出只是开发期概率诊断。
+这些 ID 暂不作为可直接标注的 Durable 模型字段。
+
+不可变 tag 适合命名固定存档：`repo.CreateTag("before-experiment", selectedCommitId)`，
+重开后 `ResolveTag` 返回同一 `CommitId`，可用于 Load、ReadCheckpoint 或 ForkBranch。
+tag 可指向 State 或纯 Event 前缀；后续提交不改变它，同名 tag 创建一律拒绝。
+tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1–1024 个 UTF-16 code units，tag 按 Ordinal 比较。
+只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析 tag 不推进业务分支。
+包消费者源码见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)；当前候选包资格仍以本页顶部说明为准。
+
+历史可为 `S0 → S1 → S2`、`S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
+业务前后关系由 HeadStore 的继承历史表达；State/Event 图不另存业务 Parent。
+增量来源始终是该提交之前最近的 State，Event 不推进 State 基线。
+`GetPreviousState(eventCommitId)` 寻找严格祖先中的最近 State；纯 Event 前缀返回 null。
 
 `ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
-默认返回两个 `IDurableObject`，保留各自实际类型；通过输入 frame 的 `Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
+默认返回两个 `IDurableObject`，保留各自实际类型；通过 `ReadCommitInfo(commitId).Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
 两个输入无需相邻，也不要求一份 State、一份 Event；调用方用显式转换或模式匹配取得领域类型。
 它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
 **两份结果及其可达对象都必须按只读快照使用，包括会影响观察结果的 Transient 写入**。
@@ -236,21 +263,21 @@ Event 不成为 State 的增量比较基线。`GetPreviousState` 寻找严格祖
 `WorldView` / 索引持有。即使两个视图引用同一个 Actor，各自的查询仍使用各自的世界上下文。
 不能只用全局 Actor→context 表代替视图：共享的 Actor 会命中同一个 key。
 不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
-需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `ReadState` / `ReadEvent`，不需要开启 writer；
-持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `Checkout`。
+需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `LoadState` / `LoadEvent`，不需要开启 writer；
+持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `OpenWorkingCopy`。
 图外视图与共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)。
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
-Checkout 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
+OpenWorkingCopy 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
 ## 工作副本与统一 Schema Catalog
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
-Open 负责资源读写；`CreateSharedBranch`、`CreateSharedBranchFromEvent`、`CheckoutShared` 和 `ForkShared` 取得可提交的工作副本。所有 `CommitState` / `CommitEvent` 共用仓库的 Schema Catalog；不同类型及正常版本可以共存，同 SchemaKey 的已接受完整定义不可改形。
+Open 负责资源读写；`CreateRootBranchFromState/Event` 和 `ForkBranch` 发布分支，`OpenWorkingCopy(branchId)` 取得可提交的工作副本。所有 `CommitState` / `CommitEvent` 共用仓库的 Schema Catalog；不同类型及正常版本可以共存，同 SchemaKey 的已接受完整定义不可改形。
 `IsReadOnly` 表示底层资源是否只读。一个可写 Repository 可同时保有不同分支的工作副本并串行操作；业务分支不创建独立的 Schema 接纳路线。
-读取按所选图的准确 Schema 视图闭合执行能力。checkout 固定创建／恢复时的执行环境：有 State 取 State 所 pin 的 Schema，普通 checkout 无 State 取创建时 shared；普通模型与 Family 按需闭合。State 提交可以推进持久 Schema 视图和保存基线，仍保留工作副本的执行环境；Event 不安装 State。V2 程序签出 V1 数据时已执行显式 Upgrade，得到 V2 内存对象，可以连续增量保存，无需每次提交后重新签出。
-独立 `ReadState` / `ReadEvent` 按被读图自己的准确 Schema 视图恢复。Dispose 后重新 Checkout 取得新的领域实例；有 State 时仍选择最近 State 的视图，不追到最新 shared 或 Event 的目录，也不重载代码配置。
+读取按所选图的准确 Schema 视图闭合执行能力。工作副本固定恢复时的执行环境：有 State 取 State 所 pin 的 Schema，无 State 取打开工作副本时的共享 Catalog；普通模型与 Family 按需闭合。State 提交可以推进持久 Schema 视图和保存基线，仍保留工作副本的执行环境；Event 不安装 State。V2 程序签出 V1 数据时已执行显式 Upgrade，得到 V2 内存对象，可以连续增量保存，无需每次提交后重新签出。
+独立 `LoadState` / `LoadEvent` 按被读图自己的准确 Schema 视图恢复。Dispose 后重新 OpenWorkingCopy 取得新的领域实例；有 State 时仍选择最近 State 的视图，不追到最新 shared 或 Event 的目录，也不重载代码配置。
 
-新增模型、reader、Upgrade 或策略应在 Open 前登记。运行中修改 registry 后，需要关闭全部工作副本和 Repository，再用新配置 Open、重新解析 head/tag 并签出。未提交修改先由应用明确保存当前配置支持的内容，或自行保留／重建；Dispose 不保存、不撤销修改，旧地址和 CLR 引用不会跟随新签出。
+新增模型、reader、Upgrade 或策略应在 Open 前登记。运行中修改 registry 后，需要关闭全部工作副本和 Repository，再用新配置 Open，使用 BranchId 重新打开工作副本或按 CommitId/tag 加载历史。未提交修改先由应用明确保存当前配置支持的内容，或自行保留／重建；Dispose 不保存、不撤销修改，已有 CLR 引用不会跟随新工作副本。
 
 对于相同持久输入和 ObjectId 等明确调用输入，在同一代码配置、准确源／目标布局及显式依赖成立时，Normalize/Upgrade 和恢复的持久结果应稳定；不能因无关 Schema 是否登记、memo 命中或调用次数而改变业务值。准确目录仍用于布局解析和验证，缺失／冲突或缺少 reader 能力可以使操作拒绝。配置冻结保留委托／比较器引用，不复制它们捕获的外部状态；调用者负责行为稳定。
 `StateBindingContext.TryGetSchema` 是供核心准确解析／验证使用的 protected 实现接缝；普通 factory 通过 `BindSchema`／`ResolveReader` 等公开服务闭合能力。外部派生 context 可以 override 并在自身方法内调用；访问范围收窄只减少默认查询能力，不能验证用户闭包的行为。长期约束见[模型执行环境与 factory 行为](docs/DurableGraph-target-design-v0.md#模型执行环境与-factory-行为)。
@@ -258,7 +285,10 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 
 新增 Schema 与业务提交共同原子发布；无新增定义时复用当前 Catalog。历史读取仍使用所选图和对象 batch 的准确 Schema，不能用最新目录替换历史解释。普通 Upgrade 保留存活对象身份、共享和循环，改型布局保存为新 Base；Event 不推进 State 基线。
 
-未定稿的同版本异形模型使用关闭后的完整 Repository 副本隔离，流程见[开发尚未定稿的 Schema](#开发尚未定稿的-schema)。`CheckoutPrivate` 和 `Commit...ToShared` 已删除，直接使用普通签出和提交。分支目录格式标识由 `P0R1` 改为 `P0R2`；读写和只读打开均拒绝旧库，不自动导入旧 Private 历史。实验数据可重建；需要保留旧数据时应先用对应旧版本另行导出。范围和验收见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)。
+未定稿的同版本异形模型使用关闭后的完整 Repository 副本隔离，流程见[开发尚未定稿的 Schema](#开发尚未定稿的-schema)。
+当前只有统一 Catalog，没有 Private Schema 或 ToShared 路线。新分支目录/业务图格式为 `P0R3` / `P0G2`；
+读写和只读打开都不兼容旧布局，实验数据可重建，需要旧数据时先用对应版本另行导出。
+Schema 简化背景见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)，当前布局见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)。
 
 ## 调整保存策略
 
@@ -281,7 +311,7 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 **重建 payload 减少 33.3% 不等于读取快 33.3%**，写入比例也不是整个仓库的磁盘空间保证。
 当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
 
-在 CreateSharedBranch、CreateSharedBranchFromEvent、CommitEvent 或 CommitState 的 `parameters` 参数传入配置即可。
+在 CreateRootBranchFromState、CreateRootBranchFromEvent、CommitEvent 或 CommitState 的 `parameters` 参数传入配置即可。
 例如，在第 2 节的输出语句之前插入下面代码，再保存一次状态：
 
 ```csharp
@@ -292,7 +322,7 @@ world.Hero.Hp -= 1;
 session.CommitState(parameters: savePolicy);
 ```
 
-需要偏向冷读时将 `11` 改为 `3`。**覆盖只对该次调用生效**，包括 CreateBranch；后续省略参数或传 `null`
+需要偏向冷读时将 `11` 改为 `3`。**覆盖只对该次调用生效**，包括根分支创建；后续省略参数或传 `null`
 都会重新使用库默认值，不继承上次覆盖。应用若要固定自己的策略，应共享一个参数值并在每次保存时显式传入。
 当前默认可能随原型演进调整；它选择了模型中约 25% 的额外 Base 摊销开销，尚非实测最优值。
 公式、选择依据和适用边界见 [DB-070](docs/design-branches/0070-read-amplification-default/README.md)，
@@ -320,7 +350,8 @@ public partial class DamageEvent : IDurableObject {
 
 ```csharp
 using (var events = Repository.OpenExisting(path, models)) {
-    using var session = events.CheckoutShared("main");
+    BranchId mainId = events.ListBranches().Single(branch => branch.ForkedFromCommitId is null).Id;
+    using var session = events.OpenWorkingCopy(mainId);
     var world = (World)session.State!;
     var damage = new DamageEvent { Amount = 1 };
     session.CommitEvent(damage);
@@ -328,30 +359,32 @@ using (var events = Repository.OpenExisting(path, models)) {
     session.CommitState();
 }
 using var history = Repository.OpenReadOnlyExisting(path, models);
-var end = history.GetHead("main");
+BranchId rootId = history.ListBranches().Single(branch => branch.ForkedFromCommitId is null).Id;
+CommitId end = history.ReadCurrentCommit(rootId).Commit.Id;
 foreach (var eventFrame in history.EnumerateEvents(end, HistoryOrder.OldestFirst)) {
-    var damage = (DamageEvent)history.ReadEvent(eventFrame);
+    var damage = (DamageEvent)history.LoadEvent(eventFrame.Id);
     Console.WriteLine(damage.Amount);
 }
 var lastEvent = history.EnumerateEvents(end).First(); // 上面刚保存过事件。
-var checkpoint = (EventCheckpoint)history.ReadCheckpoint(lastEvent);
+var checkpoint = (EventCheckpoint)history.ReadCheckpoint(lastEvent.Id);
 var occurrence = (DamageEvent)checkpoint.Event;
 var before = (World)checkpoint.PreviousState!; // 此例从 State 开始。
 Console.WriteLine($"Event: amount={occurrence.Amount}; beforeHp={before.Hero.Hp}");
 ```
 
-`EnumerateEvents(end)` 沿固定的逻辑祖先链从新到旧返回事件地址，允许提前停止，跨过 State 时不恢复其领域图。
-后续分支推进或移动不改变所选结尾；循环内可以调用 `ReadEvent`。`HistoryOrder.OldestFirst` 先准备范围内的轻量地址，再从旧到新输出。
+`EnumerateEvents(end)` 沿固定的逻辑祖先链从新到旧返回 CommitInfo，允许提前停止，跨过 State 时不恢复其领域图。
+后续分支提交不改变所选结尾；循环内可以调用 `LoadEvent(eventFrame.Id)`。`HistoryOrder.OldestFirst` 先准备范围内的轻量描述，再从旧到新输出。
 可选 `afterExclusive` 排除下界及其更早历史；同点得到空范围，非祖先下界在交付首项前拒绝。这个校验可能需要完整范围的元数据回溯。
 
 `ReadCheckpoint` 一次恢复当前图与最近严格祖先中另一角色的图，最多两份，全部成功才返回。
-`EventCheckpoint` 提供 `Event` / `PreviousState`；`StateCheckpoint` 提供 `State` / `PreviousEvent`，前驱另有对应地址。
-不存在相应祖先时，前驱根和地址同时为 null，包括首 State 之前的 Event。
+`EventCheckpoint` 提供 `Event` / `PreviousState`；`StateCheckpoint` 提供 `State` / `PreviousEvent`，前驱分别以 `PreviousStateCommit` / `PreviousEventCommit` 提供 CommitInfo。
+不存在相应祖先时，前驱根和描述同时为 null，包括首 State 之前的 Event。
 这些图彼此独立，也与其他读取和工作副本的可变对象隔离；重复 getter 保留同一实例及你的本地修改。
 `PreviousEvent` 仅表示历史中的邻近事件，不能证明它已经处理或是本次 State 的唯一原因。消息处理进度由应用 State 表达。
-这些历史恢复结果不安装保存基线，修改它们不会自动写盘。只需要事件时仍使用 `ReadEvent`，避免额外恢复前置 State。
+这些历史恢复结果不安装保存基线，修改它们不会自动写盘。只需要事件时仍使用 `LoadEvent`，避免额外恢复前置 State。
 
-`CreateSharedBranchFromEvent("main", firstEvent)` 可直接发布首个 Event 并返回 `State == null` 的工作副本；
+`CreateRootBranchFromEvent("main", firstEvent)` 直接发布首个 Event，返回 BranchInfo；
+随后 `OpenWorkingCopy(branch.Id)` 的 `State` 为 null。
 继续 `CommitEvent` 不改变这一状态，直到 `CommitState(nonNullRoot)` 发布首个 State。
 无 State 时，无参 `CommitState()` 会在捕获或追加前拒绝。已有 State 的读取失败会传播，不会转换成 null。
 
@@ -360,11 +393,11 @@ Console.WriteLine($"Event: amount={occurrence.Amount}; beforeHp={before.Hero.Hp}
 领域采用不可变对象替换时，也可以让事件保留旧对象，不必额外维护一套快照类型。
 
 [可运行的快照与恢复示例](experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md) 展示
-`E1.TargetSnapshot.Hp == 10`、`S1` 中角色 HP 为 7，热处理、冷 Checkout 和独立浏览都保持事件观察值。
+`E1.TargetSnapshot.Hp == 10`、`S1` 中角色 HP 为 7，热处理、冷 OpenWorkingCopy 和独立浏览都保持事件观察值。
 恢复由应用持久化的事件标识和处理进度决定；库不提供 PendingEvent，也不赋予 E/S 邻接关系“已处理”的含义。
 
 例如，为事件保存单调业务序号，并在 State 中保存最后成功应用的序号，处理结果与进度一起 CommitState。
-失败后先结束当前尝试，关闭工作副本/Repository，再 OpenExisting、`Checkout` 并按应用协议恢复：
+失败后先结束当前尝试，关闭工作副本/Repository，再 OpenExisting、`OpenWorkingCopy` 并按应用协议恢复：
 
 - 从所选历史读取业务事件，对照 State 中的处理进度，只应用尚未处理的事件，再保存结果与新进度。
 - 若进度已包含目标请求，则不重复应用；State 可能已发布，只是调用方没收到成功返回。
@@ -440,7 +473,7 @@ Build 工具会协调同目录的 Publish/Verify 操作，防止重叠发布写�
 定稿时再显式 `Publish`，随后 Clean／Rebuild 并 `Verify`。无需删除此前已发布的 history。
 
 复现用户场景时，关闭 baseline 的所有工作副本、Repository 和底层资源，再复制整个仓库目录。
-每个草稿使用自己的数据副本、模型代码、编译 history 与输出目录；用 `CheckoutShared` 和普通
+每个草稿使用自己的数据副本、模型代码、编译 history 与输出目录；用 `OpenWorkingCopy` 和普通
 `CommitState` / `CommitEvent` 开发。重要模型调整后从干净 baseline 重建试验副本；需要继承
 上次已保存草稿再改型时，应递增 Schema 版本，并保留相邻模板与 Upgrade。
 
@@ -473,7 +506,7 @@ record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分�
 容器子类/接口字段不自动当作 BCL 内容对象。string 保留非空实例的引用身份，空串统一为 `string.Empty`。
 
 恢复不执行领域类/struct 的构造器、实例字段初始化器、属性 getter/setter；不要求无参构造器。
-Transient 索引/缓存由应用在恢复交付完整图后重建：`Checkout` 或独立 `ReadState` / `ReadEvent` 的结果
+Transient 索引/缓存由应用在恢复交付完整图后重建：`OpenWorkingCopy` 或独立 `LoadState` / `LoadEvent` 的结果
 可以做应用侧初始化；`ReadPair` 的视图专属状态必须放在图外，不能原位修改可能共享的节点。
 Transient 只表示不参与持久化，并不表示修改没有可见影响。自定义字典 comparer 使用当前业务代码，
 不得依赖尚未重建的 Transient 或尚未完成填充的引用目标内容。
@@ -484,17 +517,17 @@ Transient 只表示不参与持久化，并不表示修改没有可见影响。�
 宿主在 CreateNew/OpenExisting/OpenReadOnlyExisting 前登记所需模型库；不依赖程序集自动扫描，也不把别人的 `.dgschema` 复制到本库。
 跨库接法见 [跨库继承模型资产](experiments/PackageConsumerProbe/InheritanceLibraryConsumer/README.md)。
 
-当前外层 API 是**一个 Repository、每个分支至多一个活动 `BranchCheckout` 工作副本、单 writer**；每份已保存的 Event/State 图选一个非空 durable 根。
+当前外层 API 是**一个 Repository、每个分支至多一个活动 `WorkingCopy` 工作副本、单 writer**；每份已保存的 Event/State 图选一个非空 durable 根。
 State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CLR 类型也可承担任一角色。
 [DB-078-A](docs/design-branches/0078-editable-checkpoint-fork-slice/0078-editable-checkpoint-fork-slice.md#11-078-a非泛型公共基础与自由历史) 已交付自由 E/S 历史和跨类型 State 替换。
-[DB-083](docs/design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、named Fork 与不可变 tag 已接入。
+[DB-083](docs/design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) 的独立 Checkpoint、固定历史枚举、多分支同时签出、带显示标签的 fork 与不可变 tag 已接入（当前签名以本文为准）。
 同步 Commit 期间宿主须停止对领域图的并发修改；DTO 冻结不提供任意并发读写下的快照隔离。
 正常打开由 FrameStore/HeadStore 恢复不完整尾部，只读打开不写不修；不承诺完整 OS crash/power-loss 保证。仓库使用共享 `data/` 与发布 `versions/`，不另建 repository.lock。
 当前运行时只支持新建的新存储格式库；模型程序集需要重编译，模型的 accepted history 与显式 Upgrade 继续保留。
 
 保存失败时不要一律重试：`RepositoryPublicationException.Outcome` 区分 NotPublished / Unknown / Published，
 同时检查仓库与工作副本的 `IsFaulted`。Unknown/Published 不可透明重试；faulted 实例须 Dispose 后重开，
-按持久 head 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。应用通过 Repository 保存；必要 Schema 由真实图捕获进入共同候选，不需要独立调用 SchemaStore 登记或操作发布日志。
+按 `ReadCurrentCommit(branchId)` 判断结果；tag 创建则按原名字 ResolveTag 检查绑定。错误与现有领域修改不会自动回滚。应用通过 Repository 保存；必要 Schema 由真实图捕获进入共同候选，不需要独立调用 SchemaStore 登记或操作发布日志。
 
 ## 从源码打包
 

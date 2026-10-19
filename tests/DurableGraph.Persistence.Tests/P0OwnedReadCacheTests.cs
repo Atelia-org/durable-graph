@@ -16,21 +16,22 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     [Fact]
     public void WarmRolesReuseOwnedFramesAndCompleteDirectoriesWithActualPayloadH() {
         string path = NewPath();
-        FrameAddress graph, directory, batch;
+        FrameAddress graph, directory, batch, expectedSource;
         long expectedH;
         using (Frames frames = Frames.Create(path)) {
             using GraphRecordStore writer = new(frames) { DirectoryReadAmplificationThreshold = 100 };
-            StoredGraphRevision first = writer.Append(StoredGraphKind.State, null, null,
+            StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null,
                 new(null, new(1), Enumerable.Range(1, 64).Select(id => B((uint)id, [(byte)id]))));
-            StoredGraphRevision second = writer.Append(StoredGraphKind.State, first.Address, null,
+            StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, first.Address, null,
                 new(first.Address, new(1), [D(1, first.ObjectHeads[1], [65, 66])]));
             Assert.Equal(ObjectVersionKind.Delta, writer.ReadDirectoryVersion(second.DirectoryRoot).Kind);
             graph = second.Address;
+            expectedSource = first.Address;
             directory = second.DirectoryRoot;
             batch = second.OwnedBatch!.Value;
             expectedH = writer.ReadDirectoryVersion(first.DirectoryRoot).PayloadBytes +
                 writer.ReadDirectoryVersion(directory).PayloadBytes;
-            // Append's final actual ReadGraph is allowed to populate the physical cache.
+            // AppendBusiness's final qualified read is allowed to populate the physical cache.
             Assert.True(writer.ReadCacheStatistics.BatchDecodes > 0);
             Assert.NotNull(writer.ReadBatch(batch).Records[0].EncodedPayloadBytes);
             frames.ConfirmDurable();
@@ -44,21 +45,21 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Equal(0, reader.ReadCacheStatistics.DirectoryMaterializations);
         Assert.Equal(0, reader.ReadCacheStatistics.DirectoryPayloadHits); // H-only misses do not admit an incomplete map.
         Assert.True(reader.ReadCacheStatistics.DirectoryReplayFrames > costOnly.DirectoryReplayFrames);
-        StoredGraphRevision firstRead = reader.ReadGraph(graph);
+        StoredGraphRevision firstRead = reader.ReadBusinessGraph(graph, expectedSource);
         IReadOnlyDictionary<uint, FrameAddress> heads = reader.ReadDirectory(directory);
         ObjectVersionBatch ownedBatch = reader.ReadBatch(batch);
         ObjectHeadDirectoryVersion version = reader.ReadDirectoryVersion(directory);
-        ObjectVersionChain chain = reader.ReadObjectChain(graph, 1);
+        ObjectVersionChain chain = reader.ReadObjectChain(firstRead, 1);
         Assert.Equal(2, chain.Entries.Count);
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(1) +
             ObjectVersionPayloadSize.GetDeltaPayloadBytes(2, chain.Entries[0].ContainingBatch), chain.ReconstructionPayloadBytes);
         Assert.Equal(expectedH, reader.ReadDirectoryPayloadBytes(directory));
         GraphPhysicalReadStatistics before = reader.ReadCacheStatistics;
-        Assert.Equal(firstRead.ObjectHeads.OrderBy(row => row.Key), reader.ReadGraph(graph).ObjectHeads.OrderBy(row => row.Key));
+        Assert.Equal(firstRead.ObjectHeads.OrderBy(row => row.Key), reader.ReadBusinessGraph(graph, expectedSource).ObjectHeads.OrderBy(row => row.Key));
         Assert.Same(heads, reader.ReadDirectory(directory));
         Assert.Same(ownedBatch, reader.ReadBatch(batch));
         Assert.Same(version, reader.ReadDirectoryVersion(directory));
-        Assert.Equal(chain.ReconstructionPayloadBytes, reader.ReadObjectChain(graph, 1).ReconstructionPayloadBytes);
+        Assert.Equal(chain.ReconstructionPayloadBytes, reader.ReadObjectChain(firstRead, 1).ReconstructionPayloadBytes);
         Assert.Equal(expectedH, reader.ReadDirectoryPayloadBytes(directory));
         GraphPhysicalReadStatistics after = reader.ReadCacheStatistics;
         AssertPhysicalProductionEqual(before, after);
@@ -74,7 +75,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         using Frames frames = Frames.Create(NewPath());
         FrameAddress batchAddress = RawBatch(frames, null, [B(1, [10])]);
         FrameAddress directoryAddress = RawDirectory(frames, null, ObjectVersionKind.Base, null, Map((1u, batchAddress)));
-        FrameAddress graphAddress = RawGraph(frames, null, directoryAddress, null);
+        FrameAddress graphAddress = RawGraph(frames, directoryAddress, null);
         long directoryEntry, batchEntry, graphEntry;
         using (GraphRecordStore probe = new(frames)) {
             directoryEntry = GraphPhysicalReadCache.EntryOverheadBytes + GraphPhysicalReadCache.GetDirectoryVersionCharge(probe.ReadDirectoryVersion(directoryAddress)) +
@@ -163,7 +164,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         var original = new SortedDictionary<uint, FrameAddress>(records.ToDictionary(row => row.ObjectId, _ => firstBatch));
         var changed = new SortedDictionary<uint, FrameAddress>(records.ToDictionary(row => row.ObjectId, _ => secondBatch));
         FrameAddress baseDirectory = RawDirectory(frames, null, ObjectVersionKind.Base, null, original);
-        FrameAddress hotGraph = RawGraph(frames, null, baseDirectory, null);
+        FrameAddress hotGraph = RawGraph(frames, baseDirectory, null);
         FrameAddress directory = mapFirst
             ? frames.Append(GraphFrameCodec.DirectoryTag, GraphFrameCodec.EncodeDirectory(hotGraph, ObjectVersionKind.Delta,
                 baseDirectory, ObjectHeadDirectoryCodec.PrepareDelta(original, changed).Body)).Unwrap()
@@ -249,7 +250,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         FrameAddress rejected, healthyBatch;
         using (Frames frames = Frames.Create(path)) {
             using GraphRecordStore writer = new(frames);
-            StoredGraphRevision first = writer.Append(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
+            StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
             rejected = role switch {
                 "graph" => first.Address,
                 "batch" => first.OwnedBatch!.Value,
@@ -257,7 +258,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
                 _ => throw new InvalidOperationException(role),
             };
             // A later independent complete graph keeps normal EOF admission healthy.
-            StoredGraphRevision second = writer.Append(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [42])]));
+            StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [42])]));
             healthyBatch = second.OwnedBatch!.Value;
             frames.ConfirmDurable();
         }
@@ -327,55 +328,55 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     public void WarmValidDirectoryCannotQualifyAnInvalidGraphRelationship(string error) {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore reader = new(frames);
-        StoredGraphRevision first = reader.Append(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
-        StoredGraphRevision second = reader.Append(StoredGraphKind.State, first.Address, null, new(first.Address, new(1), [B(1, [20])]));
-        FrameAddress directory, owned, parent;
+        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
+        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, first.Address, null, new(first.Address, new(1), [B(1, [20])]));
+        FrameAddress directory, owned, expectedSource;
         if (error == "owned") {
             directory = first.DirectoryRoot;
             owned = RawBatch(frames, first.Address, [B(1, [30])]);
-            parent = first.Address;
+            expectedSource = first.Address;
         } else {
             directory = RawDirectory(frames, first.Address, ObjectVersionKind.Base, null, second.ObjectHeads);
             owned = second.OwnedBatch!.Value;
-            parent = second.Address;
+            expectedSource = second.Address;
         }
-        FrameAddress bad = RawGraph(frames, parent, directory, error == "owned" ? owned : null);
-        reader.ReadGraph(first.Address);
-        reader.ReadGraph(second.Address);
+        FrameAddress bad = RawGraph(frames, directory, error == "owned" ? owned : null);
+        reader.ReadBusinessGraph(first.Address, null);
+        reader.ReadBusinessGraph(second.Address, first.Address);
         reader.ReadBatch(owned);
         reader.ReadDirectoryVersion(directory);
         reader.ReadDirectory(directory);
         reader.ReadMetadata(bad);
         GraphPhysicalReadStatistics before = reader.ReadCacheStatistics;
-        Assert.Throws<InvalidDataException>(() => reader.ReadGraph(bad));
-        Assert.Throws<InvalidDataException>(() => reader.ReadGraph(bad));
+        Assert.Throws<InvalidDataException>(() => reader.ReadBusinessGraph(bad, expectedSource));
+        Assert.Throws<InvalidDataException>(() => reader.ReadBusinessGraph(bad, expectedSource));
         AssertPhysicalProductionEqual(before, reader.ReadCacheStatistics);
         Assert.True(reader.ReadCacheStatistics.GraphHits > before.GraphHits);
         Assert.True(reader.ReadCacheStatistics.ResidentChargeBytes > 0); // Ordinary semantic rejection retains correct raw/map values.
         if (error == "creator") {
-            FrameAddress positive = RawGraph(frames, first.Address, directory, owned);
-            Assert.Equal(second.ObjectHeads[1], reader.ReadGraph(positive).ObjectHeads[1]);
-        } else { Assert.Equal(first.ObjectHeads[1], reader.ReadGraph(first.Address).ObjectHeads[1]); }
+            FrameAddress positive = RawGraph(frames, directory, owned);
+            Assert.Equal(second.ObjectHeads[1], reader.ReadBusinessGraph(positive, first.Address).ObjectHeads[1]);
+        } else { Assert.Equal(first.ObjectHeads[1], reader.ReadBusinessGraph(first.Address, null).ObjectHeads[1]); }
     }
 
     [Fact]
     public void WarmBadPriorAndFailedDirectoryReplayStayRejectedWhileNewBaseCutsBadContent() {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore reader = new(frames);
-        StoredGraphRevision first = reader.Append(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
-        StoredGraphRevision second = reader.Append(StoredGraphKind.State, first.Address, null, new(first.Address, new(1), [D(1, first.ObjectHeads[1], [20])]));
+        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
+        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, first.Address, null, new(first.Address, new(1), [D(1, first.ObjectHeads[1], [20])]));
         FrameAddress wrongBatch = RawBatch(frames, second.Address, [D(1, first.ObjectHeads[1], [30])]);
         FrameAddress wrongDirectory = RawDirectory(frames, second.Address, ObjectVersionKind.Base, null, Map((1u, wrongBatch)));
-        FrameAddress retained = RawGraph(frames, second.Address, wrongDirectory, null);
-        Assert.Equal(wrongBatch, reader.ReadGraph(retained).ObjectHeads[1]); // This external-head declaration is intentionally shallow.
+        FrameAddress retained = RawGraph(frames, wrongDirectory, null);
+        Assert.Equal(wrongBatch, reader.ReadBusinessGraph(retained, second.Address).ObjectHeads[1]); // This external-head declaration is intentionally shallow.
         reader.ReadDirectory(second.DirectoryRoot);
         reader.ReadBatch(wrongBatch);
         GraphPhysicalReadStatistics before = reader.ReadCacheStatistics;
-        Assert.Throws<InvalidDataException>(() => reader.ReadObjectChain(retained, 1));
-        Assert.Throws<InvalidDataException>(() => reader.ReadObjectChain(retained, 1));
+        Assert.Throws<InvalidDataException>(() => reader.ReadObjectChain(reader.ReadBusinessGraph(retained, second.Address), 1));
+        Assert.Throws<InvalidDataException>(() => reader.ReadObjectChain(reader.ReadBusinessGraph(retained, second.Address), 1));
         AssertPhysicalProductionEqual(before, reader.ReadCacheStatistics);
-        StoredGraphRevision reset = reader.Append(StoredGraphKind.State, retained, null, new(retained, new(1), [B(1, [])]));
-        ObjectVersionChain resetChain = reader.ReadObjectChain(reset.Address, 1);
+        StoredGraphRevision reset = reader.AppendBusiness(StoredGraphKind.State, retained, null, new(retained, new(1), [B(1, [])]));
+        ObjectVersionChain resetChain = reader.ReadObjectChain(reset, 1);
         Assert.Single(resetChain.Entries);
         Assert.Equal(reset.OwnedBatch, resetChain.Head);
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(0), resetChain.ReconstructionPayloadBytes);
@@ -440,12 +441,10 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     [InlineData("VersionsClose")]
     public void WarmBorrowedReadsRejectClosedOrFaultedResourcesAndReleaseResidency(string stop) {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath());
-        using RepositoryStorageFacade facade = new(resources);
-        using (PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
-            new(null, new(1), [B(1, [10])]), new(null, new(1), [B(1, [0])]))) { facade.Commit(pending); }
-        GraphRecordStore retained = facade.Store;
-        FrameAddress address = facade.GetHead("main")!.Value;
-        StoredGraphRevision graph = retained.ReadGraph(address);
+        GraphRecordStore retained = resources.GraphStore;
+        StoredGraphRevision graph = retained.AppendBusiness(StoredGraphKind.State, null, null,
+            new(null, new(1), [B(1, [10])]));
+        FrameAddress address = graph.Address;
         ObjectVersionBatch batch = retained.ReadBatch(graph.OwnedBatch!.Value);
         ObjectHeadDirectoryVersion directory = retained.ReadDirectoryVersion(graph.DirectoryRoot);
         IReadOnlyDictionary<uint, FrameAddress> heads = retained.ReadDirectory(graph.DirectoryRoot);
@@ -463,8 +462,8 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadDirectoryVersion(graph.DirectoryRoot));
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadDirectory(graph.DirectoryRoot));
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadDirectoryPayloadBytes(graph.DirectoryRoot));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadGraph(address));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadObjectChain(address, 1));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(address, null));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadObjectChain(graph, 1));
         Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
         Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
         Assert.Equal(graph.ObjectHeads[1], heads[1]);
@@ -490,9 +489,10 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     public void BulkIteratorRejectsTheNextChainAfterResourcesStopAndKeepsTheDeliveredOwnedChain(string stop, long cacheBudget) {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath(), readCacheBudgetBytes: cacheBudget);
         GraphRecordStore retained = resources.GraphStore;
-        StoredGraphRevision written = retained.Append(StoredGraphKind.State, null, null,
+        StoredGraphRevision written = retained.AppendBusiness(StoredGraphKind.State, null, null,
             new(null, new(1), [B(1, [10]), B(2, [20])]));
-        using IEnumerator<ObjectVersionChain> iterator = retained.ReadObjectChains(written.Address, out StoredGraphRevision snapshot).GetEnumerator();
+        StoredGraphRevision snapshot = retained.ReadBusinessGraph(written.Address, null);
+        using IEnumerator<ObjectVersionChain> iterator = retained.ReadObjectChains(snapshot).GetEnumerator();
         Assert.True(iterator.MoveNext());
         ObjectVersionChain first = iterator.Current;
         Assert.Equal(1u, first.ObjectId);
@@ -536,8 +536,8 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     private static FrameAddress RawDirectory(Frames frames, FrameAddress? source, ObjectVersionKind kind, FrameAddress? prior,
         IReadOnlyDictionary<uint, FrameAddress> heads) => frames.Append(GraphFrameCodec.DirectoryTag,
         GraphFrameCodec.EncodeDirectory(source, kind, prior, ObjectHeadDirectoryCodec.PrepareBase(heads).Body)).Unwrap();
-    private static FrameAddress RawGraph(Frames frames, FrameAddress? parent, FrameAddress directory, FrameAddress? batch) =>
-        frames.Append(GraphFrameCodec.GraphTag, GraphFrameCodec.EncodeGraph(StoredGraphKind.State, parent, new(1), directory, null, batch)).Unwrap();
+    private static FrameAddress RawGraph(Frames frames, FrameAddress directory, FrameAddress? batch) =>
+        frames.Append(GraphFrameCodec.GraphTag, GraphFrameCodec.EncodeGraph(StoredGraphKind.State, null, new(1), directory, null, batch)).Unwrap();
     private static void AssertPhysicalProductionEqual(GraphPhysicalReadStatistics expected, GraphPhysicalReadStatistics actual) {
         Assert.Equal(expected.GraphDecodes, actual.GraphDecodes);
         Assert.Equal(expected.BatchDecodes, actual.BatchDecodes);

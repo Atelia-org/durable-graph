@@ -38,40 +38,40 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path))
         {
             var states = segments.GraphStore;
-            var initial = states.ReadGraph(first);
-            Assert.All(DefaultRecords(states, initial.Address), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
-            Assert.Empty(DefaultRecords(states, unchanged));
-            Assert.Empty(DefaultRemoved(states, unchanged));
-            ObjectVersionRecord vectorDelta = Assert.Single(DefaultRecords(states, vectorChange));
+            var initial = PublishedGraph(segments, first);
+            Assert.All(DefaultRecords(states, PublishedGraph(segments, initial.Address)), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, unchanged)));
+            Assert.Empty(PublishedRemoved(segments, unchanged));
+            ObjectVersionRecord vectorDelta = Assert.Single(DefaultRecords(states, PublishedGraph(segments, vectorChange)));
             Assert.Equal(ObjectVersionKind.Delta, vectorDelta.Kind);
             Assert.NotEqual(worldId.Value, vectorDelta.ObjectId);
-            Assert.Equal(2, states.ReadObjectChain(vectorChange, vectorDelta.ObjectId).Entries.Count);
-            Assert.Equal(initial.ObjectHeads.Keys.Order(), states.ReadGraph(compositeChange).ObjectHeads.Keys.Order());
-            Assert.All(DefaultRecords(states, compositeChange), row => Assert.NotEqual(worldId.Value, row.ObjectId));
-            Assert.NotEmpty(DefaultRecords(states, compositeChange));
-            Assert.Empty(DefaultRemoved(states, compositeChange));
-            uint hyperId = Assert.Single(DefaultRecords(states, initial.Address), row => {
-                ArrayLayout? layout = DefaultLayout(states, first, row.ObjectId).Array;
+            Assert.Equal(2, states.ReadObjectChain(PublishedGraph(segments, vectorChange), vectorDelta.ObjectId).Entries.Count);
+            Assert.Equal(initial.ObjectHeads.Keys.Order(), PublishedGraph(segments, compositeChange).ObjectHeads.Keys.Order());
+            Assert.All(DefaultRecords(states, PublishedGraph(segments, compositeChange)), row => Assert.NotEqual(worldId.Value, row.ObjectId));
+            Assert.NotEmpty(DefaultRecords(states, PublishedGraph(segments, compositeChange)));
+            Assert.Empty(PublishedRemoved(segments, compositeChange));
+            uint hyperId = Assert.Single(DefaultRecords(states, PublishedGraph(segments, initial.Address)), row => {
+                ArrayLayout? layout = DefaultLayout(states, PublishedGraph(segments, first), row.ObjectId).Array;
                 return layout?.Rank == 4 && layout.ElementSlot.TypeTag == TypeTag.String;
             }).ObjectId;
             Assert.Equal(ObjectVersionKind.Delta,
-                Assert.Single(DefaultRecords(states, compositeChange), row => row.ObjectId == hyperId).Kind);
+                Assert.Single(DefaultRecords(states, PublishedGraph(segments, compositeChange)), row => row.ObjectId == hyperId).Kind);
 
-            var replacement = states.ReadGraph(replaced);
-            uint retired = Assert.Single(DefaultRemoved(states, replacement.Address));
+            var replacement = PublishedGraph(segments, replaced);
+            uint retired = Assert.Single(PublishedRemoved(segments, replacement.Address));
             Assert.Contains(retired, initial.ObjectHeads.Keys);
-            ObjectVersionRecord newArray = Assert.Single(DefaultRecords(states, replacement.Address), row => row.Kind == ObjectVersionKind.Base);
+            ObjectVersionRecord newArray = Assert.Single(DefaultRecords(states, PublishedGraph(segments, replacement.Address)), row => row.Kind == ObjectVersionKind.Base);
             Assert.True(newArray.ObjectId > initial.ObjectHeads.Keys.Max());
-            Assert.Equal(2, DefaultRecords(states, replacement.Address).Count); // World reference slot and the new array.
-            Assert.Equal(2, DefaultRemoved(states, removed).Count); // Cyclic Node[] plus its sole Node.
-            Assert.All(DefaultRemoved(states, removed), id => Assert.Contains(id, initial.ObjectHeads.Keys));
-            Assert.Contains(retired, states.ReadGraph(first).ObjectHeads.Keys);
-            Assert.DoesNotContain(retired, states.ReadGraph(removed).ObjectHeads.Keys);
+            Assert.Equal(2, DefaultRecords(states, PublishedGraph(segments, replacement.Address)).Count); // World reference slot and the new array.
+            Assert.Equal(2, PublishedRemoved(segments, removed).Count); // Cyclic Node[] plus its sole Node.
+            Assert.All(PublishedRemoved(segments, removed), id => Assert.Contains(id, initial.ObjectHeads.Keys));
+            Assert.Contains(retired, PublishedGraph(segments, first).ObjectHeads.Keys);
+            Assert.DoesNotContain(retired, PublishedGraph(segments, removed).ObjectHeads.Keys);
 
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, first, fixture.Models()), 0, false, false);
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, vectorChange, fixture.Models()), 1, false, false);
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, compositeChange, fixture.Models()), 2, false, false);
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, removed, fixture.Models()), 2, true, true);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, first), fixture.Models()), 0, false, false);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, vectorChange), fixture.Models()), 1, false, false);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, compositeChange), fixture.Models()), 2, false, false);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, removed), fixture.Models()), 2, true, true);
         }
 
         FrameAddress reopened;
@@ -86,9 +86,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var states = segments.GraphStore;
-            Assert.Equal(removed, states.ReadGraph(reopened).SourceGraph);
-            Assert.Empty(DefaultRecords(states, reopened));
-            Assert.Empty(DefaultRemoved(states, reopened));
+            Assert.Equal(removed, PublishedGraph(segments, reopened).SourceGraph);
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, reopened)));
+            Assert.Empty(PublishedRemoved(segments, reopened));
         }
     }
 
@@ -113,15 +113,15 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var states = segments.GraphStore;
-        ObjectVersionRecord delta = Assert.Single(DefaultRecords(states, sparse));
-        ObjectVersionRecord replacementBase = Assert.Single(DefaultRecords(states, dense));
+        ObjectVersionRecord delta = Assert.Single(DefaultRecords(states, PublishedGraph(segments, sparse)));
+        ObjectVersionRecord replacementBase = Assert.Single(DefaultRecords(states, PublishedGraph(segments, dense)));
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         Assert.Equal(ObjectVersionKind.Base, replacementBase.Kind);
         Assert.Equal(delta.ObjectId, replacementBase.ObjectId);
-        Assert.Contains(delta.ObjectId, states.ReadGraph(first).ObjectHeads.Keys);
-        Assert.Empty(DefaultRemoved(states, dense));
-        Assert.Equal(2, states.ReadObjectChain(sparse, delta.ObjectId).Entries.Count);
-        var baseChain = states.ReadObjectChain(dense, delta.ObjectId);
+        Assert.Contains(delta.ObjectId, PublishedGraph(segments, first).ObjectHeads.Keys);
+        Assert.Empty(PublishedRemoved(segments, dense));
+        Assert.Equal(2, states.ReadObjectChain(PublishedGraph(segments, sparse), delta.ObjectId).Entries.Count);
+        var baseChain = states.ReadObjectChain(PublishedGraph(segments, dense), delta.ObjectId);
         Assert.Single(baseChain.Entries);
 
         var decoded = TypedBaseBodyCodec.Decode(replacementBase.Body, null);
@@ -135,9 +135,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         long actualH = baseChain.ReconstructionPayloadBytes;
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(replacementBase.Body.Length), actualH);
         Assert.True(actualH > ObjectVersionPayloadSize.GetBasePayloadBytes(decoded.Body.Length));
-        fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, first, fixture.Models()), 0, false, false);
-        fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, sparse, fixture.Models()), 1, false, false);
-        fixture.CheckFilled(BusinessPersistenceAdapter.ReadRoot(states, dense, fixture.Models()), 9);
+        fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, first), fixture.Models()), 0, false, false);
+        fixture.Check(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, sparse), fixture.Models()), 1, false, false);
+        fixture.CheckFilled(BusinessPersistenceAdapter.ReadRoot(states, PublishedGraph(segments, dense), fixture.Models()), 9);
     }
 
     [Fact]
@@ -155,13 +155,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 fixture.Detach(world);
                 mutated = true;
             };
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)world);
+            repository.CreateRootBranchFromState("main", (IDurableObject)world);
             Assert.True(mutated);
-            Assert.Same(world, checkout.State);
             fixture.Check(world, 2, true, true);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, fixture.Models());
-        fixture.Check(reopened.ReadState(reopened.GetHead("main")), 0, false, false);
+        fixture.Check(reopened.LoadState(reopened.ReadCurrentCommit(EvidenceBranch(reopened, "main")).Commit.Id), 0, false, false);
     }
 
     [Theory]
@@ -185,10 +184,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var states = segments.GraphStore;
-        var revision = states.ReadGraph(recovered);
+        var revision = PublishedGraph(segments, recovered);
         Assert.Equal(first, revision.SourceGraph);
-        Assert.Empty(DefaultRecords(states, revision.Address));
-        Assert.Empty(DefaultRemoved(states, revision.Address));
+        Assert.Empty(DefaultRecords(states, PublishedGraph(segments, revision.Address)));
+        Assert.Empty(PublishedRemoved(segments, revision.Address));
     }
 
     private static ArrayGraphFixture CompileArrayGraph() {

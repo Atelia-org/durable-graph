@@ -30,9 +30,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             WarmupSamples = 1, Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
             ModelOptimization = "Release, actual generated binary and forced-Family models",
-            Timing = "Complete named Fork includes durable ref publication, leaf-table construction and identity import; Dispose/checks/heap sampling excluded",
+            Timing = "Complete ForkBranch + OpenWorkingCopy includes durable branch registration, leaf-table construction and identity import; Dispose/checks/heap sampling excluded",
             Materialization = "GraphReadStatistics.MaterializationElapsedTicks: shared-core registration, Allocate, ObjectReadTable and Hydrate; subtotal, not full Fork",
-            Allocation = "Current-thread managed allocation around Fork only, excludes other threads and native memory",
+            Allocation = "Current-thread managed allocation around ForkBranch + OpenWorkingCopy only, excludes other threads and native memory",
             Peak = "Sampled GC.GetTotalMemory(false) after each Fork is an occupied-managed-heap proxy, not exact live/peak or cache bytes. Process.PeakWorkingSet64 is process-lifetime cumulative, includes JIT/generator/earlier cells, not attributable to this cell.",
             Residency = "Forced-GC endpoint deltas are approximate process-wide managed live-heap observations, not isolated cache size. Logical leaf payload omits headers, table, DTO, certificate and model overhead.",
             Pairing = "Fresh equally seeded repository per sample; A/B order alternates; 8 checkouts remain alive until batch end; DB080 enabled both sides; no DB081 hot admission"
@@ -112,18 +112,18 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (CheckpointAddress[] Requests, long[] Checksums) SeedLeafMeasurement(
+    private static (CommitId[] Requests, long[] Checksums) SeedLeafMeasurement(
         Repository repository, LeafMeasurementModel model, string scenario) {
         IDurableObject root = model.Create(scenario);
-        using BranchCheckout source = repository.CreateSharedBranch("main", root, LeafMeasurePolicy);
-        CheckpointAddress first = source.Head;
-        long firstChecksum = model.Check(root, scenario);
-        CheckpointAddress second = first;
+        using WorkingCopy source = DB082SeedWorkingCopy(repository, root, LeafMeasurePolicy);
+        CommitId first = source.BaseCommitId;
+        long firstChecksum = model.Check(source.State!, scenario);
+        CommitId second = first;
         long secondChecksum = firstChecksum;
         if (scenario == "deep-low-reuse") {
-            model.Mutate(root);
-            second = source.CommitState(LeafMeasurePolicy);
-            secondChecksum = model.Check(root, scenario);
+            model.Mutate(source.State!);
+            second = source.CommitState(parameters: LeafMeasurePolicy).Id;
+            secondChecksum = model.Check(source.State!, scenario);
         }
         return (Enumerable.Range(0, LeafMeasureForks).Select(index => index % 2 == 0 ? first : second).ToArray(),
             Enumerable.Range(0, LeafMeasureForks).Select(index => index % 2 == 0 ? firstChecksum : secondChecksum).ToArray());
@@ -132,8 +132,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     // Keep all domain references in this non-inlined scope so the subsequent heap sample retains only repo-owned material.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static LeafMeasurementBatch ForkLeafMeasurementBatch(Repository repository, LeafMeasurementModel model,
-        string scenario, (CheckpointAddress[] Requests, long[] Checksums) seed, long baselineHeap) {
-        List<BranchCheckout> checkouts = [];
+        string scenario, (CommitId[] Requests, long[] Checksums) seed, long baselineHeap) {
+        List<WorkingCopy> checkouts = [];
         List<object> operations = [];
         double totalMilliseconds = 0;
         long totalAllocatedBytes = 0;
@@ -143,13 +143,13 @@ public sealed partial class DurableSchemaGeneratorTests {
                 string name = $"fork-{index}";
                 long allocationStart = GC.GetAllocatedBytesForCurrentThread();
                 long start = Stopwatch.GetTimestamp();
-                BranchCheckout checkout = repository.ForkShared(name, seed.Requests[index]);
+                WorkingCopy checkout = repository.OpenWorkingCopy(repository.ForkBranch(seed.Requests[index], name).Id);
                 long stop = Stopwatch.GetTimestamp();
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - allocationStart;
                 double milliseconds = Stopwatch.GetElapsedTime(start, stop).TotalMilliseconds;
                 checkouts.Add(checkout);
-                Assert.Equal(seed.Requests[index], checkout.Head);
-                Assert.Equal(seed.Requests[index], repository.GetHead(name));
+                Assert.Equal(seed.Requests[index], checkout.BaseCommitId);
+                Assert.Equal(seed.Requests[index], repository.ReadCurrentCommit(checkout.BranchId).Commit.Id);
                 Assert.Equal(seed.Checksums[index], model.Check(checkout.State!, scenario));
                 if (index > 0 && scenario != "pure-leaf") { Assert.NotSame(checkouts[0].State, checkout.State); }
                 peak = Math.Max(peak, GC.GetTotalMemory(forceFullCollection: false));
@@ -161,7 +161,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             GC.KeepAlive(checkouts);
             return new(totalMilliseconds, totalAllocatedBytes, peak, live, operations);
         } finally {
-            foreach (BranchCheckout checkout in checkouts) { checkout.Dispose(); }
+            foreach (WorkingCopy checkout in checkouts) { checkout.Dispose(); }
         }
     }
 

@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 
 using Atelia.DurableGraph.Runtime;
@@ -22,17 +23,17 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Seed();
         Counts counts = new();
         StateModelRegistry models = Models(counts);
-        CheckpointAddress stale;
+        CommitId stale;
         using (Repository repository = Repository.OpenStorageExisting(_path, models)) {
             Assert.Empty(counts.NextLookups);
             models.Register(LateModel());
-            using BranchCheckout checkout = repository.CheckoutShared("main");
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.False(checkout.Models.TryGetCurrentModel(typeof(LateRoot), out _));
-            stale = checkout.Head;
+            stale = checkout.BaseCommitId;
             FrameAddress? schema = repository.SharedSchemaRoot;
             long frames = repository.GraphStore.AppendedFrames;
             Assert.Throws<ArgumentException>(() => checkout.CommitEvent(new LateRoot { Value = 4 }));
-            Assert.Equal(stale, checkout.Head);
+            Assert.Equal(stale, checkout.BaseCommitId);
             Assert.Equal(schema, repository.SharedSchemaRoot);
             Assert.Equal(frames, repository.GraphStore.AppendedFrames);
             Assert.False(repository.IsFaulted);
@@ -42,12 +43,12 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             checkout.CommitState(); // The rejected late type did not poison this checkout or leave a pending save.
         }
         using Repository reopened = Repository.OpenStorageExisting(_path, models);
-        using BranchCheckout restored = reopened.CheckoutShared("main");
+        using WorkingCopy restored = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         Assert.True(restored.Models.TryGetCurrentModel(typeof(LateRoot), out _));
-        CheckpointAddress accepted = restored.CommitEvent(new LateRoot { Value = 4 });
-        Assert.Equal(4, Assert.IsType<LateRoot>(reopened.ReadEvent(accepted)).Value);
+        CommitId accepted = restored.CommitEvent(new LateRoot { Value = 4 }).Id;
+        Assert.Equal(4, Assert.IsType<LateRoot>(reopened.LoadEvent(accepted)).Value);
         AssertWidget(restored.State, 1);
-        Assert.Throws<ArgumentException>(() => reopened.ReadState(stale));
+        AssertWidget(reopened.LoadState(stale), 0);
         Assert.False(reopened.IsFaulted);
     }
 
@@ -58,7 +59,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         FrameAddress oldState, finalState, currentSchema;
         ObjectId oldRootId, listId;
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(counts))) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             DB087Widget original = AssertWidget(checkout.State, 0);
             oldState = checkout.StateRevisionAddress!.Value;
             oldRootId = checkout.StateId!.Value;
@@ -71,18 +72,18 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             listId = Assert.Single(baseline0.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
 
             checkout.Catalog.Set(Extra);
-            CheckpointAddress head0 = checkout.Head;
+            CommitId head0 = checkout.BaseCommitId;
             long frames = repository.GraphStore.AppendedFrames;
             checkout.PrepareAndDiscard(original);
             Assert.Equal(frames, repository.GraphStore.AppendedFrames);
-            Assert.Equal(head0, checkout.Head);
+            Assert.Equal(head0, checkout.BaseCommitId);
             Assert.Equal(schema0, repository.SharedSchemaRoot);
             Assert.Same(baseline0, checkout.Baseline);
             Assert.Same(models0, checkout.Models);
             Assert.Same(environment0, checkout.BindingEnvironment);
             Assert.Equal(1, checkout.Catalog.DirtyCount);
 
-            CheckpointAddress event1 = checkout.CommitEvent(original);
+            CommitId event1 = checkout.CommitEvent(original).Id;
             FrameAddress schema1 = repository.SharedSchemaRoot!.Value;
             Assert.NotEqual(schema0, schema1);
             Assert.Same(original, checkout.State);
@@ -93,21 +94,21 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Equal(0, checkout.Catalog.DirtyCount);
             Assert.Equal(schema1, checkout.Catalog.Accepted!.Snapshot!.Address);
             Assert.False(checkout.BindingEnvironment!.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
-            Assert.Equal(schema0, repository.GraphStore.ReadGraph(oldState).SchemaRoot);
-            Assert.Equal(schema1, repository.GraphStore.ReadGraph(event1.RevisionAddress).SchemaRoot);
+            Assert.Equal(schema0, repository.GraphStore.ReadBusinessGraph(oldState, null).SchemaRoot);
+            Assert.Equal(schema1, Snapshot(repository, event1).SchemaRoot);
 
             // Give the side branch a real Event head pinning S1, while its nearest State still pins S0.
-            CheckpointAddress sideEvent;
-            using (BranchCheckout side = repository.CheckoutShared("side")) {
+            CommitId sideEvent;
+            using (WorkingCopy side = repository.OpenWorkingCopy(BranchNamed(repository, "side"))) {
                 Assert.Equal(schema0, side.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
                 Assert.False(side.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
                 AssertWidget(side.State, 0);
-                sideEvent = side.CommitEvent(side.State!);
-                Assert.Equal(schema1, repository.GraphStore.ReadGraph(sideEvent.RevisionAddress).SchemaRoot);
+                sideEvent = side.CommitEvent(side.State!).Id;
+                Assert.Equal(schema1, Snapshot(repository, sideEvent).SchemaRoot);
             }
-            using (BranchCheckout side = repository.CheckoutShared("side")) {
-                Assert.Equal(sideEvent, side.Head);
-                Assert.Equal(CheckpointKind.Event, side.Head.Kind);
+            using (WorkingCopy side = repository.OpenWorkingCopy(BranchNamed(repository, "side"))) {
+                Assert.Equal(sideEvent, side.BaseCommitId);
+                Assert.Equal(CommitKind.Event, repository.ReadCommitInfo(side.BaseCommitId).Kind);
                 Assert.Equal(schema0, side.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
                 Assert.False(side.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
                 AssertWidget(side.State, 0);
@@ -118,12 +119,12 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             checkout.PrepareAndDiscard(next); // The first lazy closure may be retained; the candidate's identities may not.
             Assert.Equal(new[] { false }, counts.NextLookups);
             Assert.Same(baseline0, checkout.Baseline);
-            CheckpointAddress event2 = checkout.CommitEvent(next);
+            CommitId event2 = checkout.CommitEvent(next).Id;
             Assert.Equal(new[] { false }, counts.NextLookups);
             Assert.Same(baseline0, checkout.Baseline);
             Assert.Equal(oldRootId, checkout.StateId);
-            CheckpointAddress state = checkout.CommitState(next);
-            Assert.NotEqual(event2.RootId, state.RootId);
+            CommitId state = checkout.CommitState(next).Id;
+            Assert.NotEqual(Describe(repository, event2).RootId, Describe(repository, state).RootId);
             Assert.Same(next, checkout.State);
             Assert.Same(original, next.Link);
             Assert.Same(models0, checkout.Models);
@@ -137,15 +138,15 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             }
             Assert.Equal(new[] { false }, counts.NextLookups); // Same checkout/environment memo, including after Discard.
 
-            StoredGraphRevision before = repository.GraphStore.ReadGraph(state.RevisionAddress);
+            StoredGraphRevision before = Snapshot(repository, state);
             frames = repository.GraphStore.AppendedFrames;
-            CheckpointAddress unchanged = checkout.CommitState();
-            StoredGraphRevision saved = repository.GraphStore.ReadGraph(unchanged.RevisionAddress);
+            CommitId unchanged = checkout.CommitState().Id;
+            StoredGraphRevision saved = Snapshot(repository, unchanged);
             Assert.Null(saved.OwnedBatch);
             Assert.Equal(before.DirectoryRoot, saved.DirectoryRoot);
             Assert.Equal(frames + 1, repository.GraphStore.AppendedFrames);
-            finalState = unchanged.RevisionAddress;
-            NextRoot independent = Assert.IsType<NextRoot>(repository.ReadState(unchanged));
+            finalState = Describe(repository, unchanged).Address;
+            NextRoot independent = Assert.IsType<NextRoot>(repository.LoadState(unchanged));
             Assert.Equal(9, independent.Value);
             AssertWidget(independent.Link, 0);
             Assert.NotSame(next, independent);
@@ -157,19 +158,19 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Counts readOnlyCounts = new();
         using (Repository repository = Repository.OpenStorageReadOnlyExisting(_path, Models(readOnlyCounts))) {
             Assert.Empty(readOnlyCounts.NextLookups);
-            NextRoot root = Assert.IsType<NextRoot>(repository.ReadState(repository.GetHead("main")));
+            NextRoot root = Assert.IsType<NextRoot>(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id));
             Assert.Equal(9, root.Value);
             AssertWidget(root.Link, 0);
             Assert.Equal(new[] { true }, readOnlyCounts.NextLookups);
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-            Assert.Throws<InvalidOperationException>(() => repository.CreateSharedBranch("forbidden", Ring()));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.CreateRootBranchFromState("forbidden", Ring()).Id));
             Assert.Equal(0, repository.GraphStore.AppendedFrames);
         }
         AssertFilesEqual(files);
 
         Counts coldCounts = new();
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(coldCounts))) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.Equal(finalState, checkout.StateRevisionAddress);
             Assert.Equal(currentSchema, checkout.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
             Assert.Equal(new[] { true }, coldCounts.NextLookups);
@@ -178,8 +179,8 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             IReadOnlyDictionary<ObjectId, NormalizedObject> previous = checkout.Baseline!.Objects;
             ObjectStorageInfo prior = previous[listId].Storage!.Value;
             root.Link!.Numbers[7] = 3;
-            CheckpointAddress continued = checkout.CommitState();
-            StoredGraphRevision graph = repository.GraphStore.ReadGraph(continued.RevisionAddress);
+            CommitId continued = checkout.CommitState().Id;
+            StoredGraphRevision graph = Snapshot(repository, continued);
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -190,9 +191,9 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
                 Assert.Equal(row.Storage, checkout.Baseline.Objects[id].Storage);
             }
             Assert.Equal(currentSchema, graph.SchemaRoot);
-            AssertWidget(Assert.IsType<NextRoot>(repository.ReadState(continued)).Link, 3);
-            AssertWidget(BusinessPersistenceAdapter.ReadRoot(repository.GraphStore, oldState, Models(new())), 0);
-            Assert.Equal(oldRootId, repository.GraphStore.ReadGraph(oldState).RootId);
+            AssertWidget(Assert.IsType<NextRoot>(repository.LoadState(continued)).Link, 3);
+            AssertWidget(BusinessPersistenceAdapter.ReadRoot(repository.GraphStore, repository.GraphStore.ReadBusinessGraph(oldState, null), Models(new())), 0);
+            Assert.Equal(oldRootId, repository.GraphStore.ReadBusinessGraph(oldState, null).RootId);
         }
     }
 
@@ -200,31 +201,33 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
     public void CheckoutFailuresReleaseOccupancyAndAnOldDisposeDoesNotReleaseItsSuccessor() {
         Seed();
         using (Repository inspector = Repository.OpenStorageExisting(_path, new())) {
-            Assert.Throws<KeyNotFoundException>(() => inspector.CheckoutShared("missing"));
-            Assert.Throws<KeyNotFoundException>(() => inspector.CheckoutShared("missing"));
-            Assert.Throws<InvalidDataException>(() => inspector.CheckoutShared("main"));
-            Assert.Throws<InvalidDataException>(() => inspector.CheckoutShared("main")); // Not an occupancy failure left by the first attempt.
+            Assert.Throws<ArgumentException>(() => inspector.OpenWorkingCopy(default));
+            Assert.Throws<ArgumentException>(() => inspector.OpenWorkingCopy(default));
+            Assert.Throws<InvalidDataException>(() => inspector.OpenWorkingCopy(BranchNamed(inspector, "main")));
+            Assert.Throws<InvalidDataException>(() => inspector.OpenWorkingCopy(BranchNamed(inspector, "main"))); // Not an occupancy failure left by the first attempt.
             Assert.False(inspector.IsFaulted);
         }
-        CheckpointAddress stale;
+        CommitId stale;
         GraphRecordStore retained;
+        FrameAddress staleAddress;
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(new()))) {
-            BranchCheckout old = repository.CheckoutShared("main");
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+            WorkingCopy old = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
             old.Dispose();
-            using BranchCheckout successor = repository.CheckoutShared("main");
+            using WorkingCopy successor = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             old.Dispose();
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
             Assert.Throws<ObjectDisposedException>(() => old.CommitState());
             DB087Widget root = AssertWidget(successor.State, 0);
             root.Numbers[7] = 2;
-            stale = successor.CommitState();
+            stale = successor.CommitState().Id;
             retained = repository.GraphStore;
+            staleAddress = Describe(repository, stale).Address;
         }
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadGraph(stale.RevisionAddress));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(staleAddress, null));
         using Repository reopened = Repository.OpenStorageExisting(_path, Models(new()));
-        Assert.Throws<ArgumentException>(() => reopened.ReadState(stale));
-        AssertWidget(reopened.ReadState(reopened.GetHead("main")), 2);
+        AssertWidget(reopened.LoadState(stale), 2);
+        AssertWidget(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id), 2);
     }
 
     [Fact]
@@ -232,30 +235,30 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Seed(withSide: true);
         Counts counts = new();
         using Repository repository = Repository.OpenStorageExisting(_path, Models(counts));
-        using BranchCheckout checkout = repository.CheckoutShared("main");
-        CheckpointAddress before = checkout.Head;
+        using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+        CommitId before = checkout.BaseCommitId;
         DB087Widget original = AssertWidget(checkout.State, 0);
         bool reached = false;
         counts.OnCapture = () => {
             reached = true;
-            Assert.Throws<InvalidOperationException>(() => repository.ReadState(before));
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("side"));
+            Assert.Throws<InvalidOperationException>(() => repository.LoadState(before));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "side")));
             Assert.Throws<InvalidOperationException>(repository.Dispose);
             Assert.Throws<InvalidOperationException>(checkout.Dispose);
             Assert.Throws<InvalidOperationException>(() => checkout.Catalog.Set(Extra));
         };
         NextRoot candidate = new() { Value = 8, Link = original };
-        CheckpointAddress installed = checkout.CommitState(candidate);
+        CommitId installed = checkout.CommitState(candidate).Id;
         counts.OnCapture = null;
         Assert.True(reached);
         Assert.Same(candidate, checkout.State);
-        Assert.Equal(installed, repository.GetHead("main"));
+        Assert.Equal(installed, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
         Assert.False(repository.IsFaulted);
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-        using BranchCheckout side = repository.CheckoutShared("side");
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+        using WorkingCopy side = repository.OpenWorkingCopy(BranchNamed(repository, "side"));
         AssertWidget(side.State, 0);
-        CheckpointAddress unchanged = checkout.CommitState();
-        Assert.Null(repository.GraphStore.ReadGraph(unchanged.RevisionAddress).OwnedBatch);
+        CommitId unchanged = checkout.CommitState().Id;
+        Assert.Null(Snapshot(repository, unchanged).OwnedBatch);
     }
 
     [Fact]
@@ -263,13 +266,13 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Seed();
         Counts counts = new();
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(counts))) {
-            using (BranchCheckout main = repository.CheckoutShared("main")) {
+            using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
                 main.Catalog.Set(Extra);
                 main.CommitEvent(main.State!);
             }
-            FrameAddress atCreation = repository.SharedSchemaRoot!.Value;
             NextRoot first = new() { Value = 5, Link = Ring() };
-            using BranchCheckout eventOnly = repository.CreateSharedBranchFromEvent("event-only", first);
+            using WorkingCopy eventOnly = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("event-only", first).Id);
+            FrameAddress atCreation = repository.SharedSchemaRoot!.Value;
             Assert.Null(eventOnly.State);
             Assert.Null(eventOnly.StateId);
             Assert.Null(eventOnly.StateRevisionAddress);
@@ -277,23 +280,23 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Equal(atCreation, eventOnly.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
             Assert.True(eventOnly.BindingEnvironment.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
             Assert.Equal(new[] { true }, counts.NextLookups);
-            CheckpointAddress before = eventOnly.Head;
+            CommitId before = eventOnly.BaseCommitId;
             long frames = repository.GraphStore.AppendedFrames;
             eventOnly.PrepareAndDiscard(first);
-            Assert.Equal(before, eventOnly.Head);
+            Assert.Equal(before, eventOnly.BaseCommitId);
             Assert.Equal(frames, repository.GraphStore.AppendedFrames);
             Assert.Null(eventOnly.State);
-            CheckpointAddress initialState = eventOnly.CommitState(first);
-            Assert.NotEqual(before.RootId, initialState.RootId);
+            CommitId initialState = eventOnly.CommitState(first).Id;
+            Assert.NotEqual(Describe(repository, before).RootId, Describe(repository, initialState).RootId);
             Assert.Same(first, eventOnly.State);
-            Assert.Equal(initialState.RootId, eventOnly.StateId);
+            Assert.Equal(Describe(repository, initialState).RootId, eventOnly.StateId);
             Assert.Equal(atCreation, eventOnly.BindingEnvironment.SelectedSchemaView.Snapshot!.Address);
             Assert.Equal(5, Assert.IsType<NextRoot>(repository.ReadPair(initialState, initialState).First).Value);
-            Assert.Equal(initialState, repository.GetHead("event-only"));
+            Assert.Equal(initialState, repository.ReadCurrentCommit(BranchNamed(repository, "event-only")).Commit.Id);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         using (Repository publicDefault = Repository.OpenReadOnlyExisting(_path, Models(new()))) {
-            Assert.Equal(5, Assert.IsType<NextRoot>(publicDefault.ReadState(publicDefault.GetHead("event-only"))).Value);
+            Assert.Equal(5, Assert.IsType<NextRoot>(publicDefault.LoadState(publicDefault.ReadCurrentCommit(BranchNamed(publicDefault, "event-only")).Commit.Id)).Value);
         }
         AssertFilesEqual(files);
         string legacyPath = _path + "-legacy";
@@ -308,7 +311,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Assert.Equal(incompatibleFiles.Keys.Order(), Directory.GetFiles(legacyPath, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] bytes) in incompatibleFiles) { Assert.Equal(bytes, File.ReadAllBytes(path)); }
         using Repository positive = Repository.OpenReadOnlyExisting(_path, Models(new()));
-        Assert.Equal(5, Assert.IsType<NextRoot>(positive.ReadState(positive.GetHead("event-only"))).Value);
+        Assert.Equal(5, Assert.IsType<NextRoot>(positive.LoadState(positive.ReadCurrentCommit(BranchNamed(positive, "event-only")).Commit.Id)).Value);
     }
 
     [Theory]
@@ -318,9 +321,9 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         Seed();
         FrameAddress old, actual;
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(new()))) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
-            CheckpointAddress before = checkout.Head;
-            old = before.RevisionAddress;
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            CommitId before = checkout.BaseCommitId;
+            old = Describe(repository, before).Address;
             NormalizedGraphState baseline = checkout.Baseline!;
             FrameAddress? schema = repository.SharedSchemaRoot;
             DB087Widget root = AssertWidget(checkout.State, 0);
@@ -334,7 +337,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
                 Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
                 Assert.True(repository.IsFaulted);
                 Assert.Same(baseline, checkout.Baseline);
-                Assert.Equal(before, checkout.Head);
+                Assert.Equal(before, checkout.BaseCommitId);
                 Assert.Throws<InvalidOperationException>(() => checkout.CommitState());
                 actual = error.CandidateRevisionAddress!.Value;
             } else {
@@ -342,24 +345,24 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
                 Assert.Same(failure, Assert.Throws<IOException>(() => checkout.CommitState()));
                 Assert.False(repository.IsFaulted);
                 Assert.Same(baseline, checkout.Baseline);
-                Assert.Equal(before, checkout.Head);
-                Assert.Equal(before, repository.GetHead("main"));
+                Assert.Equal(before, checkout.BaseCommitId);
+                Assert.Equal(before, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
                 Assert.Equal(schema, repository.SharedSchemaRoot);
                 Assert.Equal(frames, repository.GraphStore.AppendedFrames);
                 repository.OperationStageObserver = null;
-                actual = checkout.CommitState().RevisionAddress;
+                actual = Describe(repository, checkout.CommitState().Id).Address;
             }
         }
         using Repository reopened = Repository.OpenStorageReadOnlyExisting(_path, Models(new()));
-        Assert.Equal(actual, reopened.GetHead("main").RevisionAddress);
-        AssertWidget(reopened.ReadState(reopened.GetHead("main")), 1);
-        AssertWidget(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, old, Models(new())), 0);
+        Assert.Equal(actual, Describe(reopened, reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id).Address);
+        AssertWidget(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id), 1);
+        AssertWidget(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, reopened.GraphStore.ReadBusinessGraph(old, null), Models(new())), 0);
     }
 
     private void Seed(bool withSide = false) {
         using Repository repository = Repository.CreateStorageNew(_path, Models(new()));
-        using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
-        if (withSide) { using BranchCheckout side = repository.CreateSharedBranch("side", Ring()); }
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id);
+        if (withSide) { using WorkingCopy side = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("side", Ring()).Id); }
     }
 
     private static DB087Widget Ring() {

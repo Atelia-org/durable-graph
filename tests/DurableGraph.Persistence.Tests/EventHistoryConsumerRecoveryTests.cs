@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using EventHistoryRecovery;
 
@@ -13,7 +14,8 @@ public sealed partial class EventHistoryRepositoryTests {
     public void ConsumerRecoveryUsesFreshPendingOrSkipsAlreadyPublishedState(int point, bool published) {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         using (Repository repository = CreateRepository()) {
-            using var session = repository.CreateSharedBranch("main", oldState);
+            using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", oldState).Id);
+            oldState = (Node)session.State!;
             session.CommitEvent(oldEvent);
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("State commit interrupted");
@@ -27,15 +29,15 @@ public sealed partial class EventHistoryRepositoryTests {
 
         var beforeRecovery = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
-            using var session = repository.CheckoutShared("main");
+            using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.NotSame(oldState, ((Node)session.State!));
             Assert.Equal(published ? (byte)7 : (byte)10, ((Node)session.State!).Value);
-            if (published) Assert.Equal(CheckpointKind.State, session.Head.Kind);
+            if (published) Assert.Equal(CommitKind.State, WorkTestAccess.Kind(session));
             else {
-                Assert.NotSame(oldEvent, repository.ReadEvent(session.Head));
-                Assert.Equal((byte)3, ((Node)repository.ReadEvent(session.Head)).Value);
+                Assert.NotSame(oldEvent, repository.LoadEvent(session.BaseCommitId));
+                Assert.Equal((byte)3, ((Node)repository.LoadEvent(session.BaseCommitId)).Value);
             }
-            var head = session.Head.RevisionAddress;
+            var head = WorkTestAccess.Address(session, session.BaseCommitId);
             int rebuilds = 0, applications = 0;
             // This application index belongs to this fresh attempt, never to the abandoned graph.
             Dictionary<string, Node> transientIndex = new();
@@ -53,19 +55,19 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(1, rebuilds); // Even a State head needs its application Transient rebuilt.
             Assert.Equal(published ? 0 : 1, applications);
             Assert.Equal((byte)7, ((Node)session.State!).Value);
-            Assert.Equal(CheckpointKind.State, session.Head.Kind);
+            Assert.Equal(CommitKind.State, WorkTestAccess.Kind(session));
             if (published) {
-                Assert.Equal(head, session.Head.RevisionAddress);
+                Assert.Equal(head, WorkTestAccess.Address(session, session.BaseCommitId));
             }
         }
         // Sample only while closed: the backing-store owner holds its locks.
         if (published) AssertFiles(beforeRecovery); // No replacement Event, extra State or physical append.
         using Repository verification = Repository.OpenExisting(_root, Models());
-        using var verified = verification.CheckoutShared("main");
+        using var verified = verification.OpenWorkingCopy(BranchNamed(verification, "main"));
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
-        Assert.Equal(CheckpointKind.State, verified.Head.Kind);
-        Assert.Equal(3, verification.ReadFrames("main").Count());
-        Assert.Single(verification.EnumerateEvents(verification.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
+        Assert.Equal(CommitKind.State, WorkTestAccess.Kind(verified));
+        Assert.Equal(3, verification.ReadFrames(BranchNamed(verification, "main")).Count());
+        Assert.Single(verification.EnumerateEvents(verification.ReadCurrentCommit(BranchNamed(verification, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray());
     }
 
     [Theory]
@@ -75,14 +77,15 @@ public sealed partial class EventHistoryRepositoryTests {
         Node oldState = new() { Value = 10 }, oldEvent = new() { Value = 3 };
         InvalidOperationException original = new("Application or preparation failure");
         using (Repository repository = CreateRepository()) {
-            using var session = repository.CreateSharedBranch("main", oldState);
+            using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", oldState).Id);
+            oldState = (Node)session.State!;
             session.CommitEvent(oldEvent);
         }
         var beforeAttempt = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
-            using var session = repository.CheckoutShared("main");
+            using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             oldState = ((Node)session.State!);
-            oldEvent = ((Node)repository.ReadEvent(session.Head));
+            oldEvent = ((Node)repository.LoadEvent(session.BaseCommitId));
             if (failDuringPrepare) repository.OperationStageObserver = checkpoint => {
                 if (checkpoint == RepositoryOperationStage.AfterPrepare) throw original;
             };
@@ -94,15 +97,15 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Same(original, thrown);
             Assert.False(repository.IsFaulted);
             Assert.Equal((byte)7, oldState.Value);
-            Assert.Equal((byte)3, ((Node)repository.ReadEvent(session.Head)).Value);
+            Assert.Equal((byte)3, ((Node)repository.LoadEvent(session.BaseCommitId)).Value);
             // End the attempt despite a healthy repository: blindly applying again here would yield 4.
         }
         AssertFiles(beforeAttempt);
 
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
-            using var session = repository.CheckoutShared("main");
+            using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.NotSame(oldState, ((Node)session.State!));
-            Assert.NotSame(oldEvent, repository.ReadEvent(session.Head));
+            Assert.NotSame(oldEvent, repository.LoadEvent(session.BaseCommitId));
             Assert.Equal((byte)10, ((Node)session.State!).Value);
             Node? rebuilt = null;
             int applications = 0;
@@ -113,13 +116,13 @@ public sealed partial class EventHistoryRepositoryTests {
             }));
             Assert.Equal(1, applications);
             Assert.Equal((byte)7, ((Node)session.State!).Value);
-            Assert.Equal(CheckpointKind.State, session.Head.Kind);
-            Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
-            Assert.Equal(3, repository.ReadFrames("main").Count());
+            Assert.Equal(CommitKind.State, WorkTestAccess.Kind(session));
+            Assert.Single(repository.EnumerateEvents(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray());
+            Assert.Equal(3, repository.ReadFrames(BranchNamed(repository, "main")).Count());
         }
         using Repository verification = Repository.OpenExisting(_root, Models());
-        using var verified = verification.CheckoutShared("main");
+        using var verified = verification.OpenWorkingCopy(BranchNamed(verification, "main"));
         Assert.Equal((byte)7, ((Node)verified.State!).Value);
-        Assert.Equal(CheckpointKind.State, verified.Head.Kind);
+        Assert.Equal(CommitKind.State, WorkTestAccess.Kind(verified));
     }
 }

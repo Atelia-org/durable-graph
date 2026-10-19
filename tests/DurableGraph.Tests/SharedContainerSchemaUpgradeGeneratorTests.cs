@@ -36,73 +36,75 @@ public sealed partial class DurableSchemaGeneratorTests {
         EvidenceFrameImage[] oldFrames;
         EvidenceRefImage shared;
         using (Repository repository = Repository.CreateNew(directory.Path, old.Models())) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
+            BranchId mainId = repository.CreateRootBranchFromState("main", old.Create()).Id;
+            using WorkingCopy main = repository.OpenWorkingCopy(mainId);
             // Consume the empty-session allocation range before fixing the user snapshot.
             main.CommitState(old.Create());
-            baseline = main.Head.RevisionAddress;
+            baseline = EvidenceAddress(repository, main.BaseCommitId);
             root = main.StateId!.Value;
             ids = main.Baseline!.Objects.Keys.Select(id => id.Value).Order().ToArray();
             Assert.All(ids, id => Assert.True(id > 4));
-            repository.CreateTag("baseline", main.Head);
+            repository.CreateTag("baseline", main.BaseCommitId);
             oldFrames = EvidenceReadFrames(EvidenceResources(repository).Data);
             shared = EvidenceReadRef(repository, 2);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, missing.Models())) {
-            CheckpointAddress checkpoint = repository.ResolveTag("baseline");
-            repository.CreateBranch("upgraded", checkpoint);
+            CommitId checkpoint = repository.ResolveTag("baseline");
+            repository.ForkBranch(checkpoint, "upgraded");
             EvidencePublicationImage before = EvidencePublication(repository);
-            Assert.ThrowsAny<InvalidDataException>(() => repository.CheckoutShared("upgraded"));
+            Assert.ThrowsAny<InvalidDataException>(() => repository.OpenWorkingCopy(EvidenceBranch(repository, "upgraded")));
             EvidenceAssertPublicationUnchanged(repository, before);
-            Assert.Equal(checkpoint, repository.GetHead("upgraded"));
+            Assert.Equal(checkpoint, repository.ReadCurrentCommit(EvidenceBranch(repository, "upgraded")).Commit.Id);
             // A second preflight must reach the same data error, rather than occupancy rejection.
-            Assert.ThrowsAny<InvalidDataException>(() => repository.CheckoutShared("upgraded"));
+            Assert.ThrowsAny<InvalidDataException>(() => repository.OpenWorkingCopy(EvidenceBranch(repository, "upgraded")));
             EvidenceAssertPublicationUnchanged(repository, before);
             Assert.False(repository.IsFaulted);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
-            using BranchCheckout branch = repository.CheckoutShared("upgraded");
+            using WorkingCopy branch = repository.OpenWorkingCopy(EvidenceBranch(repository, "upgraded"));
             current.Check(branch.State!, 1);
             Assert.Equal(root, branch.StateId);
             Assert.Equal(ids, branch.Baseline!.Objects.Keys.Select(id => id.Value).Order().ToArray());
             Assert.Equal(3, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
-            firstSaved = branch.CommitState().RevisionAddress;
+            firstSaved = EvidenceAddress(repository, branch.CommitState().Id);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            StoredGraphRevision saved = store.ReadGraph(firstSaved);
-            Assert.Equal(baseline, saved.Parent);
+            StoredGraphRevision saved = PublishedGraph(EvidenceResources(repository), firstSaved);
+
+            Assert.Equal(baseline, EvidenceResources(repository).ReadPrevious(branch.BaseCommitId.Value)!.Address);
             Assert.Equal(baseline, saved.SourceGraph);
             Assert.Equal(ids, saved.ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(root, saved.RootId);
-            Assert.Equal(3, DefaultRecords(store, firstSaved).Count);
-            Assert.All(DefaultRecords(store, firstSaved), record => {
+            Assert.Equal(3, DefaultRecords(store, PublishedGraph(EvidenceResources(repository), firstSaved)).Count);
+            Assert.All(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), firstSaved)), record => {
                 Assert.Equal(ObjectVersionKind.Base, record.Kind);
                 Assert.Null(record.PriorAddress);
             });
-            Assert.Equal(store.ReadGraph(baseline).ObjectHeads[root.Value], saved.ObjectHeads[root.Value]);
+            Assert.Equal(PublishedGraph(EvidenceResources(repository), baseline).ObjectHeads[root.Value], saved.ObjectHeads[root.Value]);
             AssertBootstrapContainerUpgradeCatalog(branch.Catalog.Accepted!, ExpectedBootstrapContainerUpgrade(1), ExpectedBootstrapContainerUpgrade(2));
             Assert.Equal(saved.SchemaRoot, repository.SharedSchemaRoot);
             shared = EvidenceReadRef(repository, 2);
             EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, oldFrames);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, current.Models())) {
-            using BranchCheckout branch = repository.CheckoutShared("upgraded");
+            using WorkingCopy branch = repository.OpenWorkingCopy(EvidenceBranch(repository, "upgraded"));
             current.Check(branch.State!, 1);
             Assert.Equal(root, branch.StateId);
             Dictionary<ObjectId, ObjectStorageInfo> previous = branch.Baseline!.Objects
                 .ToDictionary(row => row.Key, row => row.Value.Storage!.Value);
             current.Change(branch.State!);
-            FrameAddress next = branch.CommitState().RevisionAddress;
+            FrameAddress next = EvidenceAddress(repository, branch.CommitState().Id);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(firstSaved, store.ReadGraph(next).SourceGraph);
-            Assert.Equal(ids, store.ReadGraph(next).ObjectHeads.Keys.Order().ToArray());
-            Assert.Equal(3, DefaultRecords(store, next).Count);
-            Assert.All(DefaultRecords(store, next), record => {
+            Assert.Equal(firstSaved, PublishedGraph(EvidenceResources(repository), next).SourceGraph);
+            Assert.Equal(ids, PublishedGraph(EvidenceResources(repository), next).ObjectHeads.Keys.Order().ToArray());
+            Assert.Equal(3, DefaultRecords(store, PublishedGraph(EvidenceResources(repository), next)).Count);
+            Assert.All(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), next)), record => {
                 Assert.Equal(ObjectVersionKind.Delta, record.Kind);
                 Assert.Equal(previous[new(record.ObjectId)].Head, record.PriorAddress);
-                ObjectVersionChain chain = store.ReadObjectChain(next, record.ObjectId);
+                ObjectVersionChain chain = store.ReadObjectChain(PublishedGraph(EvidenceResources(repository), next), record.ObjectId);
                 Assert.Equal(previous[new(record.ObjectId)].ReconstructionPayloadBytes + chain.Entries[^1].PayloadBytes,
                     branch.Baseline!.Objects[new(record.ObjectId)].Storage!.Value.ReconstructionPayloadBytes);
             });
-            current.Check(repository.ReadState(branch.Head), 2);
+            current.Check(repository.LoadState(branch.BaseCommitId), 2);
             EvidenceAssertSameRef(shared, EvidenceReadRef(repository, 2));
             EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, oldFrames);
         }

@@ -186,7 +186,7 @@ try {
     $receipt.OriginalCommands = [ordered]@{ Text = $shell; Script = $literalScript; Sha256 = (Get-FileHash -LiteralPath $literalScript).Hash }
     $shellExecutable = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
     $entry = Execute $shellExecutable @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $literalScript) $moved (Join-Path $workRoot 'documented-commands.log')
-    $hp = @([regex]::Matches($entry.Output, 'Alice: Hp=(\d+); Revision=') | ForEach-Object { $_.Groups[1].Value })
+    $hp = @([regex]::Matches($entry.Output, 'Alice: Hp=(\d+); CommitKind=State') | ForEach-Object { $_.Groups[1].Value })
     if (($hp -join ',') -cne '99,98') { throw "Documented commands must cold-run twice, producing HP 99,98; got $($hp -join ',')." }
     $accepted = @(Images $history '*.dgschema')
     if ($accepted.Count -ne 2) { throw 'Expected only Character and World V1 histories; no Event model in QuickStart.' }
@@ -210,12 +210,13 @@ try {
     $prefix = "using Atelia.DurableGraph;`nusing Atelia.DurableGraph.Persistence;`nusing QuickStart;`n" +
         "string path = args[0];`nvar models = new StateModelRegistry();`n" +
         "Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);`n"
-    $browse = $prefix + (Get-Example 'csharp' 'foreach (var frame in history.ReadFrames("main"))') + @'
+    $browse = $prefix + (Get-Example 'csharp' 'foreach (var commit in history.ReadFrames(mainId))') + @'
 using (var check = Repository.OpenReadOnlyExisting(path, models)) {
-    var frames = check.ReadFrames("main");
-    if (frames.Count != 3 || frames.Any(frame => frame.Kind != CheckpointKind.State) ||
-        check.EnumerateEvents(check.GetHead("main")).Any() ||
-        !frames.Select(frame => ((World)check.ReadState(frame)).Hero.Hp).SequenceEqual(new[] { 100, 99, 98 })) {
+    BranchId mainId = check.ListBranches().Single(branch => branch.ForkedFromCommitId is null).Id;
+    var frames = check.ReadFrames(mainId);
+    if (frames.Count != 3 || frames.Any(frame => frame.Kind != CommitKind.State) ||
+        check.EnumerateEvents(check.ReadCurrentCommit(mainId).Commit.Id).Any() ||
+        !frames.Select(frame => ((World)check.LoadState(frame.Id)).Hero.Hp).SequenceEqual(new[] { 100, 99, 98 })) {
         throw new InvalidOperationException("Expected S0/S1/S2 only, with HP100/99/98 and no Event.");
     }
 }
@@ -234,13 +235,16 @@ using (var check = Repository.OpenReadOnlyExisting(path, models)) {
     if ($forkResult.Output -notmatch 'Branches: main=98, alternate=88') { throw 'README historical-State fork and cold continuation failed.' }
     $verifyFork = $prefix + @'
 using var check = Repository.OpenReadOnlyExisting(path, models);
-var main = check.ReadFrames("main");
-var alternate = check.ReadFrames("alternate");
-if (main.Count != 3 || alternate.Count != 4 || !main.Take(2).SequenceEqual(alternate.Take(2)) ||
-    main.Concat(alternate).Any(frame => frame.Kind != CheckpointKind.State) ||
-    check.EnumerateEvents(check.GetHead("main")).Any() || check.EnumerateEvents(check.GetHead("alternate")).Any() ||
-    !main.Select(frame => ((World)check.ReadState(frame)).Hero.Hp).SequenceEqual(new[] { 100, 99, 98 }) ||
-    !alternate.Select(frame => ((World)check.ReadState(frame)).Hero.Hp).SequenceEqual(new[] { 100, 99, 89, 88 })) {
+var branches = check.ListBranches();
+BranchId mainId = branches.Single(branch => branch.ForkedFromCommitId is null).Id;
+BranchId alternateId = branches.Single(branch => branch.ForkedFromCommitId is not null).Id;
+var main = check.ReadFrames(mainId);
+var alternate = check.ReadFrames(alternateId);
+if (main.Count != 3 || alternate.Count != 4 || !main.Take(2).Select(commit => commit.Id).SequenceEqual(alternate.Take(2).Select(commit => commit.Id)) ||
+    main.Concat(alternate).Any(frame => frame.Kind != CommitKind.State) ||
+    check.EnumerateEvents(check.ReadCurrentCommit(mainId).Commit.Id).Any() || check.EnumerateEvents(check.ReadCurrentCommit(alternateId).Commit.Id).Any() ||
+    !main.Select(frame => ((World)check.LoadState(frame.Id)).Hero.Hp).SequenceEqual(new[] { 100, 99, 98 }) ||
+    !alternate.Select(frame => ((World)check.LoadState(frame.Id)).Hero.Hp).SequenceEqual(new[] { 100, 99, 89, 88 })) {
     throw new InvalidOperationException("Fork/cold save must preserve the shared ancestors, old State and main branch without Events.");
 }
 Console.WriteLine("StateOnly:main=100,99,98;alternate=100,99,89,88;events=0");
@@ -255,9 +259,9 @@ Console.WriteLine("StateOnly:main=100,99,98;alternate=100,99,89,88;events=0");
 
     $configured = $prefix +
         "using var repository = Repository.OpenExisting(path, models);`n" +
-        "using var session = repository.CheckoutShared(""main"");`nWorld world = (World)session.State!;`n" +
+        "using var session = repository.OpenWorkingCopy(repository.ListBranches().Single(branch => branch.ForkedFromCommitId is null).Id);`nWorld world = (World)session.State!;`n" +
         (Get-Example 'csharp' 'var savePolicy = new ReadAmplificationBaseBudgetParameters(') +
-        "`nif (world.Hero.Hp != 97 || !ReferenceEquals(world, session.State) || repository.EnumerateEvents(session.Head).Any()) { throw new InvalidOperationException(); }`n" +
+        "`nif (world.Hero.Hp != 97 || !ReferenceEquals(world, session.State) || repository.EnumerateEvents(session.BaseCommitId).Any()) { throw new InvalidOperationException(); }`n" +
         "Console.WriteLine(""ReadmePolicyOverride:Hp=97:Threshold=11:Budget=5"");`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $configured, $utf8)
     $null = Run-DotNet 'policy' @('run', '--project', $project, '--no-restore', '--', $database)
@@ -267,11 +271,11 @@ Console.WriteLine("StateOnly:main=100,99,98;alternate=100,99,89,88;events=0");
     [IO.File]::WriteAllText((Join-Path $projectRoot 'Events.cs'), (Get-Example 'csharp' 'public partial class DamageEvent'), $utf8)
     $events = $prefix + (Get-Example 'csharp' 'using (var events = Repository.OpenExisting(') +
         "`nif (history.EnumerateEvents(end).Count() != 1 || occurrence.Amount != 1 || before.Hero.Hp != 97 ||`n" +
-        "    !ReferenceEquals(before, checkpoint.PreviousState) || ((World)history.ReadState(checkpoint.PreviousStateAddress!)).Hero.Hp != 97 ||`n" +
-        "    ((World)history.ReadState(end)).Hero.Hp != 96) { throw new InvalidOperationException(); }`n" +
+        "    !ReferenceEquals(before, checkpoint.PreviousState) || ((World)history.LoadState(checkpoint.PreviousStateCommit!.Id)).Hero.Hp != 97 ||`n" +
+        "    ((World)history.LoadState(end)).Hero.Hp != 96) { throw new InvalidOperationException(); }`n" +
         "before.Hero.Hp = 100;`n" +
         "if (!ReferenceEquals(before, checkpoint.PreviousState) || checkpoint.PreviousState is not World { Hero.Hp: 100 } ||`n" +
-        "    ((World)history.ReadState(checkpoint.PreviousStateAddress!)).Hero.Hp != 97) { throw new InvalidOperationException(); }`n"
+        "    ((World)history.LoadState(checkpoint.PreviousStateCommit!.Id)).Hero.Hp != 97) { throw new InvalidOperationException(); }`n"
     [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $events, $utf8)
     $null = Run-DotNet 'optional-events' @('run', '--project', $project, '--no-restore', '--', $database)
     $beforeUpgrade = @(Images $history '*.dgschema')
@@ -294,7 +298,7 @@ Console.WriteLine("StateOnly:main=100,99,98;alternate=100,99,89,88;events=0");
     $checkedProgram = $program.Replace('world.RebuildTransient();', 'if (world.Day != 1) { throw new InvalidOperationException("Upgrade did not initialize Day."); }' + "`nworld.RebuildTransient();")
     [IO.File]::WriteAllText((Join-Path $projectRoot 'Program.cs'), $checkedProgram, $utf8)
     $upgrade = Run-DotNet 'upgrade' @('run', '--project', $project, '--no-restore', '--', $database)
-    if ($upgrade.Output -notmatch 'Alice: Hp=95; Revision=') { throw 'README V2 must produce HP95 after the optional Event story.' }
+    if ($upgrade.Output -notmatch 'Alice: Hp=95; CommitKind=State') { throw 'README V2 must produce HP95 after the optional Event story.' }
     if (@(Images $history '*.dgschema').Count -ne 4) { throw 'Expected only one additional World V2 history.' }
     foreach ($entry in $beforeUpgrade) {
         if ((Get-FileHash -LiteralPath (Join-Path $history $entry.File)).Hash -cne $entry.Sha256) { throw 'Upgrade changed accepted V1 history.' }

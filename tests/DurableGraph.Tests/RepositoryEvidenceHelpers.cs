@@ -7,6 +7,17 @@ using Frames = Atelia.FrameStore.FrameStore;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
+    // Labels are unique only in these fixtures; product selection always uses the returned ID.
+    private static BranchId EvidenceBranch(Repository repository, string label) =>
+        Assert.Single(repository.ListBranches(), branch => branch.DisplayLabel == label).Id;
+    private static StoredGraphRevision EvidenceGraph(Repository repository, CommitId commit) {
+        RepositoryResources resources = EvidenceResources(repository);
+        HistoryGraphRecord selected = resources.ReadDescriptor(commit.Value);
+        FrameAddress? source = resources.FindNearestState(commit.Value, inclusive: false)?.Address;
+        return resources.GraphStore.ReadBusinessGraph(selected.Address, source);
+    }
+    private static FrameAddress EvidenceAddress(Repository repository, CommitId commit) =>
+        EvidenceResources(repository).ReadDescriptor(commit.Value).Address;
     private sealed record EvidenceFrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool Tombstone, byte[] Bytes);
     private sealed record EvidenceRefImage(HeadEntryId Revision, byte[] Bytes);
     private sealed record EvidencePublicationImage(EvidenceRefImage Branches, EvidenceRefImage Shared, EvidenceFrameImage[] Frames, long Appended);

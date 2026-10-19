@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -52,14 +53,14 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore states = file.GraphStore;
             Assert.Empty(Records(states, reordered));
-            StoredGraphRevision original = states.ReadGraph(revisions[0].Address);
-            StoredGraphRevision permutation = states.ReadGraph(reordered);
+            StoredGraphRevision original = MechanismFixture.Snapshot(states, revisions[0].Address);
+            StoredGraphRevision permutation = MechanismFixture.Snapshot(states, reordered);
             Assert.Equal(original.DirectoryRoot, permutation.DirectoryRoot);
             Assert.Equal(original.ObjectHeads, permutation.ObjectHeads);
-            ObjectId mapId = Assert.Single(DecodedRevision.ReadStoredGraph(states, revisions[0].Address, Models()).Objects,
+            ObjectId mapId = Assert.Single(DecodedRevision.ReadStoredGraph(states, MechanismFixture.Snapshot(states, revisions[0].Address), (Models()).FreezeConfiguration()).Objects,
                 row => row.Kind == ObjectStateKind.Dictionary).Id;
             foreach ((FrameAddress address, Dictionary<string, int> expected) in revisions) {
-                DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, address, Models());
+                DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, MechanismFixture.Snapshot(states, address), (Models()).FreezeConfiguration());
                 FrozenDictionaryState<ObjectId, int> frozen = exact.GetRequired(mapId).GetDictionaryState<ObjectId, int>();
                 Dictionary<string, int> actual = frozen.Entries.ToArray().ToDictionary(
                     entry => exact.GetRequired(entry.Key).StringContent, entry => entry.Value);
@@ -115,7 +116,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         using RepositoryResources file = RepositoryResources.OpenExisting(_root);
         GraphRecordStore states = file.GraphStore;
         Assert.Single(Records(states, childOnly));
-        Assert.Equal(2, states.ReadGraph(childOnly).ObjectHeads.Keys.Except(states.ReadGraph(removed).ObjectHeads.Keys).Count());
+        Assert.Equal(2, MechanismFixture.Snapshot(states, childOnly).ObjectHeads.Keys.Except(MechanismFixture.Snapshot(states, removed).ObjectHeads.Keys).Count());
     }
 
     [Fact]
@@ -180,11 +181,11 @@ public sealed class DictionaryRepositoryTests : IDisposable {
             TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(Schema), Base(in empty), catalog.View)),
             ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(ObjectLayout.ForDictionary(layout), new(bytes.WrittenSpan), catalog.View)),
             Text(3, first), Text(4, second)];
-        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State, new(null, new(1), rows), catalog.Write);
+        using PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State, new(null, new(1), rows), catalog.Write);
         FrameAddress address = repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, address, Models()));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, MechanismFixture.Snapshot(repository.Store, address), (Models()).FreezeConfiguration()));
         int normalizations = 0;
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.LoadState(repository.Store, address,
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.LoadState(repository.Store, MechanismFixture.Snapshot(repository, address),
             Models(() => normalizations++)));
         Assert.Equal(0, normalizations);
     }
@@ -286,7 +287,7 @@ public sealed class DictionaryRepositoryTests : IDisposable {
         ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(value)));
     private StateSaveHarness CreateRepository(StateModelRegistry? models = null) => StateSaveHarness.CreateNew(_root, models ?? Models());
     private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
-        store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
+        MechanismFixture.Snapshot(store, address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 
     public void Dispose() {
         string resolved = Path.GetFullPath(_root);

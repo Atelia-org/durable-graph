@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Reflection;
 using Atelia.Data;
 using Atelia.HeadStore;
@@ -15,13 +16,13 @@ public sealed class RepositoryTagFailureTests : IDisposable {
 
     [Fact]
     public void ClosedUpstreamBeforeTagOutputIsNotPublishedAndRequiresReopen() {
-        Atelia.FrameStore.FrameAddress revision;
+        CommitId revision;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
-            CheckpointAddress address = main.Head;
-            revision = address.RevisionAddress;
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 17 }).Id);
+            CommitId address = main.BaseCommitId;
+            revision = address;
             repository.CreateTag("stable", address);
-            using BranchCheckout warm = repository.ForkShared("warm", address);
+            using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(address, "warm").Id);
             Assert.NotNull(repository.PreparedStateEntry);
             repository.OperationStageObserver = point => {
                 if (point == RepositoryOperationStage.BeforePublication) { ResourcesOf(repository).Heads.Dispose(); }
@@ -38,8 +39,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             AssertFaultedOperations(repository, main, address);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
-        Assert.Equal(revision, reopened.ResolveTag("stable").RevisionAddress);
-        Assert.Equal(reopened.GetHead("main"), reopened.ResolveTag("stable"));
+        Assert.Equal(revision, reopened.ResolveTag("stable"));
+        Assert.Equal(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id, reopened.ResolveTag("stable"));
         InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() => reopened.ResolveTag("candidate"));
         Assert.Contains("[DurableGraph.TagNotFound]", missing.Message);
     }
@@ -49,12 +50,12 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     public void RepositoryPublicationGatePreservesNotPublishedVersusPublished(bool afterPublication) {
-        Atelia.FrameStore.FrameAddress revision;
+        CommitId revision;
         using (Repository repository = Create()) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
-            CheckpointAddress address = main.Head;
-            revision = address.RevisionAddress;
-            using BranchCheckout warm = repository.ForkShared("warm", address);
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 17 }).Id);
+            CommitId address = main.BaseCommitId;
+            revision = address;
+            using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(address, "warm").Id);
             PreparedStateRestoration entry = repository.PreparedStateEntry!;
             IOException injected = new("DG publication checkpoint");
             repository.OperationStageObserver = point => {
@@ -82,25 +83,25 @@ public sealed class RepositoryTagFailureTests : IDisposable {
             }
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
-        Assert.Equal(revision, reopened.ResolveTag("candidate").RevisionAddress);
-        Assert.Equal(reopened.GetHead("main"), reopened.ResolveTag("candidate"));
+        Assert.Equal(revision, reopened.ResolveTag("candidate"));
+        Assert.Equal(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id, reopened.ResolveTag("candidate"));
     }
 
     [Fact]
     public void TagPublicationRejectsReentryAndBusyDisposalWithoutDamagingOuterOperation() {
         using Repository repository = Create();
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
-        CheckpointAddress address = main.Head;
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 17 }).Id);
+        CommitId address = main.BaseCommitId;
         repository.CreateTag("stable", address);
-        using BranchCheckout warm = repository.ForkShared("warm", address);
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(address, "warm").Id);
         PreparedStateRestoration entry = repository.PreparedStateEntry!;
         int checks = 0;
         InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => {
             checks++;
             Assert.Throws<InvalidOperationException>(() => repository.CreateTag("nested", address));
             Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("stable"));
-            Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
-            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("nested-fork", address));
+            Assert.Throws<InvalidOperationException>(() => repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.ForkBranch(address, "nested-fork").Id));
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
             Assert.Throws<InvalidOperationException>(() => main.Dispose());
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
@@ -111,10 +112,10 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         Assert.Equal(address, repository.ResolveTag("outer"));
         Assert.False(repository.IsFaulted);
         Assert.Same(entry, repository.PreparedStateEntry);
-        Assert.DoesNotContain("nested-fork", repository.ListBranches());
+        Assert.DoesNotContain(repository.ListBranches(), branch => branch.DisplayLabel == "nested-fork");
         Assert.Contains("[DurableGraph.TagNotFound]", Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("nested")).Message);
         // Rejected disposal did not release this branch's editing occupancy.
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
         main.CommitState();
         Assert.Equal(address, repository.ResolveTag("outer"));
     }
@@ -122,31 +123,32 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     [Fact]
     public void TagOperationsRejectReentryFromDomainMaterialization() {
         Repository? active = null;
-        CheckpointAddress? target = null;
+        CommitId? target = null;
         int checks = 0;
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(hydrate: _ => {
+            if (target is null) { return; }
             checks++;
             Assert.Throws<InvalidOperationException>(() => active!.ResolveTag("stable"));
-            Assert.Throws<InvalidOperationException>(() => active!.CreateTag("nested", target!));
+            Assert.Throws<InvalidOperationException>(() => active!.CreateTag("nested", target!.Value));
         }));
         active = repository;
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 17 });
-        target = main.Head;
-        repository.CreateTag("stable", main.Head);
-        using BranchCheckout fork = repository.ForkShared("fork", main.Head);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 17 }).Id);
+        target = main.BaseCommitId;
+        repository.CreateTag("stable", main.BaseCommitId);
+        using WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "fork").Id);
         Assert.Equal(1, checks);
-        Assert.Equal(main.Head, repository.ResolveTag("stable"));
+        Assert.Equal(main.BaseCommitId, repository.ResolveTag("stable"));
         Assert.False(repository.IsFaulted);
     }
 
     [Fact]
     public void ReadonlyResolvesWithoutWritesAndDisposedInstanceRejectsBothOperations() {
-        CheckpointAddress oldAddress;
+        CommitId oldAddress;
         using (Repository writer = Create()) {
-            using BranchCheckout main = writer.CreateSharedBranch("main", new Node { Value = 17 });
-            oldAddress = main.Head;
+            using WorkingCopy main = writer.OpenWorkingCopy(writer.CreateRootBranchFromState("main", new Node { Value = 17 }).Id);
+            oldAddress = main.BaseCommitId;
             writer.CreateTag("stable", oldAddress);
-            using BranchCheckout warm = writer.ForkShared("warm", oldAddress);
+            using WorkingCopy warm = writer.OpenWorkingCopy(writer.ForkBranch(oldAddress, "warm").Id);
             Assert.NotNull(writer.PreparedStateEntry);
             writer.Dispose();
             Assert.Null(writer.PreparedStateEntry);
@@ -156,10 +158,8 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         }
         Dictionary<string, byte[]> before = Snapshot();
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry())) {
-            CheckpointAddress address = reader.ResolveTag("stable");
-            Assert.Equal(oldAddress.RevisionAddress, address.RevisionAddress);
-            Assert.Equal(oldAddress.RootId, address.RootId);
-            Assert.NotEqual(oldAddress, address);
+            CommitId address = reader.ResolveTag("stable");
+            Assert.Equal(oldAddress, address);
             Assert.Throws<InvalidOperationException>(() => reader.CreateTag("readonly", address));
             Assert.False(reader.IsFaulted);
             Assert.Equal(address, reader.ResolveTag("stable"));
@@ -170,15 +170,15 @@ public sealed class RepositoryTagFailureTests : IDisposable {
     private Repository Create() => Repository.CreateNew(_root, SharedReadModel.Models());
     private static T Field<T>(object instance, string name) =>
         (T)instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
-    private static void AssertFaultedOperations(Repository repository, BranchCheckout main, CheckpointAddress address) {
+    private static void AssertFaultedOperations(Repository repository, WorkingCopy main, CommitId address) {
         Assert.True(main.IsFaulted);
         Assert.Throws<InvalidOperationException>(() => repository.CreateTag("blocked", address));
         Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("stable"));
-        Assert.Throws<InvalidOperationException>(() => repository.GetHead("main"));
+        Assert.Throws<InvalidOperationException>(() => repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
         Assert.Throws<InvalidOperationException>(() => repository.ListBranches());
         Assert.Throws<InvalidOperationException>(() => repository.ReadCheckpoint(address));
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-        Assert.Throws<InvalidOperationException>(() => repository.ForkShared("blocked", address));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.ForkBranch(address, "blocked").Id));
         Assert.Throws<InvalidOperationException>(() => main.CommitState());
         Assert.Throws<InvalidOperationException>(() => main.CommitEvent(new Node()));
     }

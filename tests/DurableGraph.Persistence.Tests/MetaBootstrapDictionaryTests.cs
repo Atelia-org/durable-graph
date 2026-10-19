@@ -42,19 +42,19 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
             bad = Publish(repository, "bad", LookupRows(prepared.View, layout, raw, first, second)).Address;
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal(good, reader.GetStateHead("good"));
-        Assert.Equal(bad, reader.GetStateHead("bad"));
-        Assert.Equal(4, reader.Store.ReadGraph(bad).ObjectHeads.Count);
+        Assert.Equal(good, MechanismFixture.State(reader, "good")?.Address);
+        Assert.Equal(bad, MechanismFixture.State(reader, "bad")?.Address);
+        Assert.Equal(4, MechanismFixture.Snapshot(reader, bad).ObjectHeads.Count);
         int normalized = 0;
         StateModelRegistry models = RootModels(() => normalized++);
-        LookupRoot positive = Assert.IsType<LookupRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, good, models));
+        LookupRoot positive = Assert.IsType<LookupRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, good), models));
         Assert.Equal((byte)7, positive.Value);
         Assert.Equal(1, normalized); // V1 -> V2 actually invokes the delegate; this counter is not vacuous.
         normalized = 0;
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, bad, models));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, bad), models));
         Assert.Equal(0, normalized);
-        SchemaCatalogView selected = SchemaCatalogView.Load(reader.Store, reader.Store.ReadGraph(bad).SchemaRoot!.Value);
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, bad,
+        SchemaCatalogView selected = SchemaCatalogView.Load(reader.Store, reader.Store.ReadMetadata(bad).SchemaRoot!.Value);
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, bad),
             models.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key)), selected));
         Assert.Equal(0, reader.Store.AppendedFrames);
     }
@@ -82,19 +82,19 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             StoredGraphRevision seed = Publish(repository, "main", [ObjectVersionRecord.CreateBase(1, bytes)]);
             s0 = seed.Address;
-            using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+            using PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State,
                 new(s0, new(1), [ObjectVersionRecord.CreateDelta(1, seed.ObjectHeads[1], delta.Body)]));
             s1 = repository.Commit(pending).Business.Address;
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal(s1, reader.GetStateHead("main"));
+        Assert.Equal(s1, MechanismFixture.State(reader, "main")?.Address);
         Assert.Null(reader.SharedSchemaRoot);
-        Assert.Null(reader.Store.ReadGraph(s1).SchemaRoot);
-        Assert.Equal(before.Entries.ToArray(), StoredGraphDecoder.Read(reader.Store, s0, NoSchemas()).Rows[new(1)]
+        Assert.Null(reader.Store.ReadMetadata(s1).SchemaRoot);
+        Assert.Equal(before.Entries.ToArray(), StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, s0), NoSchemas()).Rows[new(1)]
             .GetDictionaryState<int, NullableState<long>>().Entries.ToArray());
-        Assert.Equal(after.Entries.ToArray(), StoredGraphDecoder.Read(reader.Store, s1, NoSchemas()).Rows[new(1)]
+        Assert.Equal(after.Entries.ToArray(), StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, s1), NoSchemas()).Rows[new(1)]
             .GetDictionaryState<int, NullableState<long>>().Entries.ToArray());
-        Assert.Equal(2, reader.Store.ReadObjectChain(s1, 1).Entries.Count);
+        Assert.Equal(2, reader.Store.ReadObjectChain(MechanismFixture.Snapshot(reader, s1), 1).Entries.Count);
     }
 
     [Theory]
@@ -114,7 +114,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         int resolutions = 0;
         StateModelRegistry registry = new();
         registry.UseDictionaryComparerResolver(_ => { resolutions++; throw new InvalidOperationException("Stored lookup must not execute a current comparer."); });
-        FrozenDictionaryState<float, int> decoded = StoredGraphDecoder.Read(reader.Store, graph, registry.CreateEnvironment()).Rows[new(1)].GetDictionaryState<float, int>();
+        FrozenDictionaryState<float, int> decoded = StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, graph), registry.CreateEnvironment()).Rows[new(1)].GetDictionaryState<float, int>();
         Assert.Equal(mode, decoded.ComparerKind);
         Assert.Equal(0, BitConverter.SingleToInt32Bits(decoded[0].Key));
         Assert.Equal(unchecked((int)0x80000000), BitConverter.SingleToInt32Bits(decoded[1].Key));
@@ -162,7 +162,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         }
         FrameAddress meta = WriteMeta(original.RootId, rows);
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal((byte)5, StoredGraphDecoder.Read(reader.Store, meta).Rows[id].GetState<DescriptorDto>().Segment0Field1);
+        Assert.Equal((byte)5, StoredGraphDecoder.ReadMeta(reader.Store, meta).Rows[id].GetState<DescriptorDto>().Segment0Field1);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
     }
 
@@ -202,11 +202,11 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         SchemaCatalogWorkspace catalog = new(static () => { });
         PreparedSchemaCatalogWrite abandoned = catalog.PrepareOwned([first]);
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        using (PendingRepositorySave pending = repository.Prepare("discarded", StoredGraphKind.State,
+        using (PendingRepositorySave pending = MechanismFixture.Prepare(repository, "discarded", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1,
                 TypedBaseBodyCodec.Encode(first, new PreparedBaseBody([4, 0]), abandoned.View))]), abandoned.Write)) { }
         Assert.Equal(0, repository.Store.AppendedFrames);
-        Assert.Null(repository.GetHead("discarded"));
+        Assert.Null(MechanismFixture.FindCurrent(repository, "discarded")?.Address);
         Assert.Null(catalog.Accepted);
         Assert.Equal(0, catalog.DirtyCount);
         PreparedSchemaCatalogWrite corrected = catalog.PrepareOwned([next]);
@@ -255,7 +255,7 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         Replace(rows, keyField, new FieldDto(1, (byte)TypeTag.Int32, default, default, default));
         FrameAddress meta = WriteMeta(original.RootId, rows);
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal((byte)5, StoredGraphDecoder.Read(reader.Store, meta).Rows[id].GetState<DescriptorDto>().Segment0Field1);
+        Assert.Equal((byte)5, StoredGraphDecoder.ReadMeta(reader.Store, meta).Rows[id].GetState<DescriptorDto>().Segment0Field1);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
     }
 
@@ -325,12 +325,12 @@ public sealed class MetaBootstrapDictionaryTests : IDisposable {
         });
         if (extra is not null) { records = records.Append(extra); }
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        FrameAddress graph = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, root, records)).Address;
+        FrameAddress graph = repository.Store.AppendMeta(null, new(null, root, records)).Address;
         repository.Data.ConfirmDurable();
         return graph;
     }
     private static StoredGraphRevision Publish(RepositoryStorageFacade repository, string branch, IEnumerable<ObjectVersionRecord> records, PreparedSchemaCatalogWrite? catalog = null) {
-        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State, new(null, new(1), records), catalog?.Write);
+        using PendingRepositorySave pending = MechanismFixture.Prepare(repository, branch, StoredGraphKind.State, new(null, new(1), records), catalog?.Write);
         return repository.Commit(pending, catalog is null ? null : catalog.Install,
             prepareMeta: catalog is null ? null : catalog.PrepareInstall).Business;
     }

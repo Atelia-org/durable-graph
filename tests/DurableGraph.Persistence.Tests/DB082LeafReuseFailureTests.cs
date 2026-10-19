@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -27,10 +28,11 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Controls control = new();
         using Repository repository = Create(control);
         repository.ImmutableLeafReuseEnabled = !backfill;
-        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", Graph()).Id);
+        main.CommitState(Graph());
         PreparedStateRestoration? previous = null;
         if (backfill) {
-            using BranchCheckout disabled = repository.ForkShared("disabled", main.Head);
+            using WorkingCopy disabled = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "disabled").Id);
             previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
             Assert.Equal(0, previous.ImmutableLeafCount);
@@ -38,16 +40,16 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         }
         control.FailTail = true;
         int hydrated = control.LeafHydrates;
-        BranchCheckout? delivered = null;
-        Assert.Same(control.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("retry", main.Head)));
+        WorkingCopy? delivered = null;
+        Assert.Same(control.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "retry").Id)));
         Assert.Null(delivered);
         Assert.Equal(hydrated + 1, control.LeafHydrates); // The leaf actually completed before the tail failed.
         Assert.Same(previous, repository.PreparedStateEntry);
-        Assert.DoesNotContain("retry", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "retry");
         Assert.False(repository.IsFaulted);
 
         control.FailTail = false;
-        using BranchCheckout successful = repository.ForkShared("retry", main.Head);
+        using WorkingCopy successful = repository.OpenWorkingCopy(BranchNamed(repository, "retry"));
         Assert.Equal(hydrated + 2, control.LeafHydrates);
         PreparedStateRestoration installed = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, installed.ImmutableLeafCount);
@@ -56,14 +58,14 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         int allocations = control.LeafAllocations;
         hydrated = control.LeafHydrates;
         repository.RestorationStatistics = new();
-        Assert.Throws<InvalidDataException>(() => repository.ForkShared("failed-hit", main.Head));
+        Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "failed-hit").Id));
         Assert.Equal(allocations, control.LeafAllocations);
         Assert.Equal(hydrated, control.LeafHydrates);
         Assert.Equal(1, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal((byte)7, leaf.Value);
         Assert.Same(installed, repository.PreparedStateEntry);
         control.FailTail = false;
-        using BranchCheckout afterFailure = repository.ForkShared("after-failure", main.Head);
+        using WorkingCopy afterFailure = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "after-failure").Id);
         Assert.Same(leaf, Assert.IsType<Owner>(afterFailure.State).First);
         Assert.Equal(hydrated, control.LeafHydrates);
     }
@@ -72,8 +74,9 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void AllCachedInstancesAreRegisteredBeforeAnEarlierObjectIdAllocates() {
         Controls control = new();
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Owner { First = new(7), Second = new(8) });
-        using BranchCheckout warm = repository.ForkShared("warm", main.Head);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Owner { First = new(7), Second = new(8) }).Id);
+        main.CommitState(new Owner { First = new(7), Second = new(8) });
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "warm").Id);
         PreparedGraphSelection selection = repository.PreparedStateEntry!.Selection;
         ObjectId[] ids = selection.Reachable.Where(id => selection.Normalized.Objects[id].Model.DomainType == typeof(Leaf)).ToArray();
         Assert.Equal(2, ids.Length);
@@ -101,40 +104,41 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void LeafCallbackRequirementsSurviveColdCollectionAndHitBackfill(bool duringAllocate, bool backfill) {
         Controls control = new() { DependencyDuringAllocate = duringAllocate, CheckDependency = true };
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
-        CheckpointAddress original = main.Head;
-        CheckpointAddress eventAddress;
-        using (BranchCheckout events = repository.CreateSharedBranchFromEvent("events", Graph(9))) { eventAddress = events.Head; }
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", Graph()).Id);
+        main.CommitState(Graph());
+        CommitId original = main.BaseCommitId;
+        CommitId eventAddress;
+        using (WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", Graph(9)).Id)) { eventAddress = events.BaseCommitId; }
         if (backfill) {
             repository.ImmutableLeafReuseEnabled = false;
-            using BranchCheckout disabled = repository.ForkShared("disabled", original);
+            using WorkingCopy disabled = repository.OpenWorkingCopy(repository.ForkBranch(original, "disabled").Id);
             Assert.Equal(0, repository.PreparedStateEntry!.ImmutableLeafCount);
         }
         repository.ImmutableLeafReuseEnabled = true;
-        using BranchCheckout warm = repository.ForkShared("warm", original);
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(original, "warm").Id);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, entry.ImmutableLeafCount);
         Assert.True(control.DependencyChecks > 0);
         int allocations = control.LeafAllocations, hydrates = control.LeafHydrates;
         main.Catalog.Set(new DurableSchema(Dependency.SchemaId, 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
-        CheckpointAddress catalogEvent = main.CommitEvent(main.State!);
+        CommitId catalogEvent = main.CommitEvent(main.State!).Id;
         var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
         var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
-            configuration, repository.GraphStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+            configuration, repository.GraphStore.ReadMetadata(Describe(repository, catalogEvent).Address).SchemaRoot!.Value);
         InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => entry.Requirements.Validate(wrongEnvironment.Models));
         Assert.Contains(Dependency.SchemaId, conflict.Message);
         Assert.Equal(allocations, control.LeafAllocations);
         Assert.Equal(hydrates, control.LeafHydrates);
         repository.RestorationStatistics = new();
         // Event-only requests still bypass the State certificate and leaf table.
-        using (BranchCheckout events = repository.CheckoutShared("events")) {
+        using (WorkingCopy events = repository.OpenWorkingCopy(BranchNamed(repository, "events"))) {
             Assert.Null(events.State);
-            Assert.Equal(eventAddress, events.Head);
+            Assert.Equal(eventAddress, events.BaseCommitId);
         }
-        using (BranchCheckout eventFork = repository.ForkShared("event-only", eventAddress)) {
+        using (WorkingCopy eventFork = repository.OpenWorkingCopy(repository.ForkBranch(eventAddress, "event-only").Id)) {
             Assert.Null(eventFork.State);
-            Assert.Equal(eventAddress, eventFork.Head);
+            Assert.Equal(eventAddress, eventFork.BaseCommitId);
         }
         Assert.Same(entry, repository.PreparedStateEntry);
         Assert.Equal(1, entry.ImmutableLeafCount);
@@ -142,7 +146,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Equal(0, repository.RestorationStatistics.PreparedStateMisses);
         Assert.Equal(0, repository.RestorationStatistics.AllocatedObjects);
         Assert.Equal(0, repository.RestorationStatistics.HydratedObjects);
-        using BranchCheckout oldHit = repository.ForkShared("old-hit", original);
+        using WorkingCopy oldHit = repository.OpenWorkingCopy(repository.ForkBranch(original, "old-hit").Id);
         Assert.Same(Assert.IsType<Owner>(warm.State).First, Assert.IsType<Owner>(oldHit.State).First);
         Assert.Equal(1, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal(0, repository.RestorationStatistics.DecodedObjects);
@@ -152,14 +156,14 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
 
         // The actual new State selects S1. Its first complete materialization
         // must check the callback dependency and must not install a partial table.
-        CheckpointAddress newer = main.CommitState();
+        CommitId newer = main.CommitState().Id;
         int reused = repository.RestorationStatistics.ReusedImmutableLeaves;
-        Assert.Throws<InvalidDataException>(() => repository.ForkShared("rejected", newer));
+        Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(repository.ForkBranch(newer, "rejected").Id));
         Assert.Equal(reused, repository.RestorationStatistics.ReusedImmutableLeaves);
         Assert.Equal(allocations + 1, control.LeafAllocations);
         Assert.Equal(hydrates + (duringAllocate ? 0 : 1), control.LeafHydrates);
         Assert.Same(entry, repository.PreparedStateEntry);
-        Assert.DoesNotContain("rejected", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "rejected");
         Assert.False(repository.IsFaulted);
     }
 
@@ -170,11 +174,12 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void PublicationFailureNeverInstallsCandidateLeafTable(string phase) {
         Controls control = new();
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
-        using BranchCheckout warm = repository.ForkShared("warm", main.Head);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", Graph()).Id);
+        main.CommitState(Graph());
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "warm").Id);
         PreparedStateRestoration previous = repository.PreparedStateEntry!;
         Leaf deliveredLeaf = Assert.IsType<Owner>(warm.State).First!;
-        CheckpointAddress newer = main.CommitState(Graph(9));
+        CommitId newer = main.CommitState(Graph(9)).Id;
         int hydrates = control.LeafHydrates;
         if (phase == "unknown") {
             InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => throw new IOException("Unknown after actual root append"));
@@ -184,24 +189,27 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
                 throw new IOException("Publication interruption");
             }
         };
-        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.ForkShared("candidate", newer));
-        Assert.Equal(hydrates + 1, control.LeafHydrates);
-        Assert.Equal(phase == "before" ? RepositoryPublicationOutcome.NotPublished :
-            phase == "after" ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.Unknown, error.Outcome);
+        if (phase == "before") {
+            Assert.Throws<IOException>(() => repository.ForkBranch(newer, "candidate"));
+        } else {
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.ForkBranch(newer, "candidate"));
+            Assert.Equal(phase == "after" ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.Unknown, error.Outcome);
+        }
+        Assert.Equal(hydrates, control.LeafHydrates); // Fork publishes before any restoration.
         Assert.Equal((byte)7, deliveredLeaf.Value);
         repository.OperationStageObserver = null;
         if (phase == "before") {
             Assert.False(repository.IsFaulted);
             Assert.Same(previous, repository.PreparedStateEntry);
-            Assert.DoesNotContain("candidate", repository.ListBranches());
-            using BranchCheckout retry = repository.ForkShared("candidate", newer);
-            Assert.Equal(hydrates + 2, control.LeafHydrates);
+            Assert.DoesNotContain(repository.ListBranches(), branch => branch.DisplayLabel == "candidate");
+            using WorkingCopy retry = repository.OpenWorkingCopy(repository.ForkBranch(newer, "candidate").Id);
+            Assert.Equal(hydrates + 1, control.LeafHydrates);
             Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
             Assert.NotSame(deliveredLeaf, Assert.IsType<Owner>(retry.State).First);
         } else {
             Assert.True(repository.IsFaulted);
             Assert.Null(repository.PreparedStateEntry);
-            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("blocked", newer));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.ForkBranch(newer, "blocked").Id));
         }
     }
 
@@ -212,19 +220,20 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     public void SlotLifetimeReleasesItsOnlyStrongLeafReference(string finish) {
         Controls control = new();
         using Repository repository = Create(control);
-        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
-        WeakReference<Leaf> leaf = WarmWeak(repository, main.Head);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", Graph()).Id);
+        main.CommitState(Graph());
+        WeakReference<Leaf> leaf = WarmWeak(repository, main.BaseCommitId);
         Assert.True(IsAlive(leaf));
         if (finish == "evict") {
-            CheckpointAddress newer = main.CommitState(Graph(9));
-            using BranchCheckout replacement = repository.ForkShared("replacement", newer);
+            CommitId newer = main.CommitState(Graph(9)).Id;
+            using WorkingCopy replacement = repository.OpenWorkingCopy(repository.ForkBranch(newer, "replacement").Id);
         } else if (finish == "dispose") {
             repository.Dispose();
         } else {
             repository.OperationStageObserver = point => {
                 if (point == RepositoryOperationStage.AfterPublication) { throw new IOException("fault"); }
             };
-            Assert.Throws<RepositoryPublicationException>(() => repository.ForkShared("fault", main.Head));
+            Assert.Throws<RepositoryPublicationException>(() => repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "fault").Id));
             Assert.True(repository.IsFaulted);
         }
         if (finish != "evict") { Assert.Null(repository.PreparedStateEntry); }
@@ -238,14 +247,15 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     [Fact]
     public void LiveCheckoutRetainsLeafAndSavingSourceWithoutKeepingEvictedEntryAlive() {
         using Repository repository = Create(new());
-        using BranchCheckout main = repository.CreateSharedBranch("main", Graph());
-        CheckpointAddress original = main.Head;
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", Graph()).Id);
+        main.CommitState(Graph());
+        CommitId original = main.BaseCommitId;
         var retained = WarmLive(repository, original);
-        using BranchCheckout live = retained.Checkout;
+        using WorkingCopy live = retained.Checkout;
         Owner root = Assert.IsType<Owner>(live.State);
         Leaf leaf = root.First!;
-        CheckpointAddress newer = main.CommitState(Graph(9));
-        using BranchCheckout replacement = repository.ForkShared("replacement", newer);
+        CommitId newer = main.CommitState(Graph(9)).Id;
+        using WorkingCopy replacement = repository.OpenWorkingCopy(repository.ForkBranch(newer, "replacement").Id);
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -254,10 +264,10 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Assert.Same(leaf, root.First);
 
         root.Second = new Leaf(11);
-        CheckpointAddress saved = live.CommitState();
-        Assert.Equal(original.Address, saved.Parent);
-        Assert.Equal(original.RootId, saved.RootId);
-        Owner restored = Assert.IsType<Owner>(repository.ReadState(saved));
+        CommitId saved = live.CommitState().Id;
+        Assert.Equal(original, Previous(repository, saved));
+        Assert.Equal(Describe(repository, original).RootId, Describe(repository, saved).RootId);
+        Owner restored = Assert.IsType<Owner>(repository.LoadState(saved));
         Assert.Equal((byte)7, restored.First!.Value);
         Assert.Equal((byte)11, restored.Second!.Value);
         Assert.Same(leaf, root.First);
@@ -265,17 +275,17 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (BranchCheckout Checkout, WeakReference<PreparedStateRestoration> Entry) WarmLive(
-        Repository repository, CheckpointAddress address) {
-        BranchCheckout checkout = repository.ForkShared("live", address);
+    private static (WorkingCopy Checkout, WeakReference<PreparedStateRestoration> Entry) WarmLive(
+        Repository repository, CommitId address) {
+        WorkingCopy checkout = repository.OpenWorkingCopy(repository.ForkBranch(address, "live").Id);
         return (checkout, new(repository.PreparedStateEntry!));
     }
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool EntryIsAlive(WeakReference<PreparedStateRestoration> weak) => weak.TryGetTarget(out _);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WeakReference<Leaf> WarmWeak(Repository repository, CheckpointAddress address) {
-        using BranchCheckout fork = repository.ForkShared("warm", address);
+    private static WeakReference<Leaf> WarmWeak(Repository repository, CommitId address) {
+        using WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(address, "warm").Id);
         return new(Assert.IsType<Owner>(fork.State).First!);
     }
     [MethodImpl(MethodImplOptions.NoInlining)]

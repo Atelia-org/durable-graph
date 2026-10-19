@@ -49,20 +49,20 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverseRegistration);
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
-        var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], registry);
+        var initial = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[0]), registry.FreezeConfiguration());
         ObjectStateRecord root = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.World");
         ObjectStateRecord node = Assert.Single(initial.Objects, row => row.Schema?.SchemaId == "inline.Node");
         foreach (int index in new[] { 1, 4, 5 }) {
-            Assert.Empty(DefaultRecords(states, addresses[index]));
-            Assert.Empty(DefaultRemoved(states, addresses[index]));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[index])));
+            Assert.Empty(PublishedRemoved(segments, addresses[index]));
         }
-        var childChange = Assert.Single(DefaultRecords(states, addresses[2]));
+        var childChange = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[2])));
         Assert.Equal(node.Id.Value, childChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, childChange.Kind);
-        var inlineChange = Assert.Single(DefaultRecords(states, addresses[3]));
+        var inlineChange = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[3])));
         Assert.Equal(root.Id.Value, inlineChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, inlineChange.Kind);
-        Assert.Equal(initial.Objects.Count, DecodedRevision.ReadStoredGraph(states, addresses[^1], registry).Objects.Count);
+        Assert.Equal(initial.Objects.Count, DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[^1]), registry.FreezeConfiguration()).Objects.Count);
     }
 
     private const string CrossInlineValues = """

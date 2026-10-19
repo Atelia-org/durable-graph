@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -31,9 +32,9 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.NotNull(previous);
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        BranchCheckout? delivered = null;
+        WorkingCopy? delivered = null;
 
-        InvalidDataException failure = Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("rejected", scenario.Selected));
+        InvalidDataException failure = Assert.Throws<InvalidDataException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(scenario.Selected, "rejected").Id));
 
         Assert.Contains(Dependency.SchemaId, failure.Message);
         Assert.Null(delivered);
@@ -47,12 +48,12 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Equal(0, statistics.AllocatedObjects);
         Assert.Equal(0, statistics.HydratedObjects);
         Assert.Same(previous, repository.PreparedStateEntry);
-        Assert.DoesNotContain("rejected", repository.ListBranches());
-        Assert.Equal(scenario.Selected, repository.GetHead("main"));
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "rejected");
+        Assert.Equal(scenario.Selected, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
         Assert.False(repository.IsFaulted);
         // The failed request neither poisons a different State certificate nor faults the repository.
         repository.RestorationStatistics = new();
-        using BranchCheckout unrelated = repository.ForkShared("unrelated-again", scenario.Warm.Head);
+        using WorkingCopy unrelated = repository.OpenWorkingCopy(repository.ForkBranch(scenario.Warm.BaseCommitId, "unrelated-again").Id);
         Assert.Equal(1, repository.RestorationStatistics.PreparedStateHits);
         Assert.Equal((byte)31, Assert.IsType<SharedReadModel.Node>(unrelated.State).Value);
     }
@@ -69,7 +70,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         // The persisted candidate must not follow later edits to the original CLR instance.
         Assert.IsType<Root>(scenario.Main.State).Value = 77;
         repository.RestorationStatistics = new();
-        using BranchCheckout first = repository.ForkShared("first", scenario.Selected);
+        using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(scenario.Selected, "first").Id);
         Assert.Equal(committed, Assert.IsType<Root>(first.State).Value);
         Assert.Equal(1, repository.RestorationStatistics.PreparedStateMisses);
         Assert.Equal(0, repository.RestorationStatistics.PreparedStateHits);
@@ -79,11 +80,11 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Equal(1, scenario.Counts.Allocations);
         Assert.Equal(1, scenario.Counts.Hydrations);
         PreparedStateRestoration prepared = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
-        Assert.Equal(scenario.Selected, prepared.StateCheckpoint);
+        Assert.Equal(scenario.Selected, new CommitId(prepared.StateCheckpoint.Id));
 
         Assert.IsType<Root>(first.State).Value = 91;
         repository.RestorationStatistics = new();
-        using BranchCheckout second = repository.ForkShared("second", scenario.Selected);
+        using WorkingCopy second = repository.OpenWorkingCopy(repository.ForkBranch(scenario.Selected, "second").Id);
         Assert.Equal(committed, Assert.IsType<Root>(second.State).Value);
         Assert.NotSame(first.State, second.State);
         Assert.NotSame(scenario.Main.State, second.State);
@@ -97,10 +98,10 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Equal(2, scenario.Counts.Hydrations);
         Assert.Same(prepared, repository.PreparedStateEntry);
 
-        CheckpointAddress saved = first.CommitState(NoRebase);
-        Assert.Equal(scenario.Selected.Address, saved.Parent);
-        Assert.Equal(scenario.Selected.RootId, saved.RootId);
-        Assert.Equal(91, Assert.IsType<Root>(repository.ReadState(saved)).Value);
+        CommitId saved = first.CommitState(parameters: NoRebase).Id;
+        Assert.Equal(Describe(repository, scenario.Selected).Address, Snapshot(repository, saved).SourceGraph);
+        Assert.Equal(Describe(repository, scenario.Selected).RootId, Describe(repository, saved).RootId);
+        Assert.Equal(91, Assert.IsType<Root>(repository.LoadState(saved)).Value);
         Assert.Equal(committed, Assert.IsType<Root>(second.State).Value);
         Assert.Equal(77, Assert.IsType<Root>(scenario.Main.State).Value);
     }
@@ -109,14 +110,18 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     public void PriorSuccessfulReadOfSameReaderDoesNotProveNewValuesConditionalDependency() {
         Counters counts = new();
         using Repository repository = Repository.CreateNew(_path, Models(DependencyMode.BaseForSeven, counts));
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Root { Value = 1 }, NoRebase);
-        using BranchCheckout first = repository.ForkShared("first", main.Head);
+        // An Event-only opening followed by State capture leaves this State unread;
+        // creating a State root and opening it would already earn a read certificate.
+        IDurableObject mainInitial = new Root { Value = 1 };
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node(), parameters: NoRebase).Id);
+        main.CommitState(mainInitial, parameters: NoRebase);
+        using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "first").Id);
         Assert.Equal(1, counts.BaseReads);
         Assert.Equal(0, counts.DependencyChecks);
         PreparedStateRestoration old = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         main.Catalog.Set(WrongDependency);
         Assert.IsType<Root>(main.State).Value = 7;
-        CheckpointAddress newer = main.CommitState(NoRebase);
+        CommitId newer = main.CommitState(parameters: NoRebase).Id;
         Assert.Equal(1, counts.BaseReads);
         Assert.Equal(0, counts.DeltaReads);
         Assert.Equal(0, counts.DependencyChecks);
@@ -129,16 +134,16 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         // the normal cost selector consequently stores a Base.
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(repository, newer)).Kind);
         repository.RestorationStatistics = new();
-        Assert.Throws<InvalidDataException>(() => repository.ForkShared("rejected", newer));
+        Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(repository.ForkBranch(newer, "rejected").Id));
         Assert.Equal(2, counts.BaseReads);
         Assert.Equal(1, counts.DependencyChecks);
         Assert.Equal(1, counts.Allocations);
         Assert.Equal(1, counts.Hydrations);
         Assert.Same(old, repository.PreparedStateEntry);
-        Assert.DoesNotContain("rejected", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "rejected");
         Assert.False(repository.IsFaulted);
         repository.RestorationStatistics = new();
-        using BranchCheckout older = repository.ForkShared("older", old.StateCheckpoint);
+        using WorkingCopy older = repository.OpenWorkingCopy(repository.ForkBranch(new CommitId(old.StateCheckpoint.Id), "older").Id);
         Assert.Equal(1, repository.RestorationStatistics.PreparedStateHits);
         Assert.Equal(1, Assert.IsType<Root>(older.State).Value);
     }
@@ -148,24 +153,28 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Repository repository = Repository.CreateNew(_path, Models(
             delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts));
         try {
-            using BranchCheckout unrelated = repository.CreateSharedBranch("unrelated", new SharedReadModel.Node { Value = 31 }, NoRebase);
-            BranchCheckout warm = repository.ForkShared("warm", unrelated.Head);
+            IDurableObject unrelatedInitial = new SharedReadModel.Node { Value = 31 };
+            using WorkingCopy unrelated = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("unrelated", unrelatedInitial, parameters: NoRebase).Id);
+            unrelated.CommitState(unrelatedInitial, parameters: NoRebase);
+            WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(unrelated.BaseCommitId, "warm").Id);
             var previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
             if (conflict) {
                 warm.Catalog.Set(WrongDependency);
-                warm.CommitEvent(warm.State!, NoRebase);
+                warm.CommitEvent(warm.State!, parameters: NoRebase);
             }
-            BranchCheckout main = repository.CreateSharedBranch("main", new Root { Value = 7 }, NoRebase);
+            IDurableObject mainInitial = new Root { Value = 7 };
+            WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node(), parameters: NoRebase).Id);
+            main.CommitState(mainInitial, parameters: NoRebase);
             // This is the actual checkout's frozen execution environment. Explicit
             // preclosure still does not execute ReadBase/ReadDelta's body checks.
             if (preclose) { main.Models.ResolveReader(Owner); }
             Assert.Equal(1, counts.ReaderFactories);
             Assert.Equal(0, counts.DependencyChecks);
-            CheckpointAddress selected = main.Head;
+            CommitId selected = main.BaseCommitId;
             if (delta) {
                 Assert.IsType<Root>(main.State).Value = 8;
-                selected = main.CommitState(NoRebase);
+                selected = main.CommitState(parameters: NoRebase).Id;
                 Assert.Equal(ObjectVersionKind.Delta, Assert.Single(Records(repository, selected)).Kind);
             }
             Assert.Equal(delta ? 2 : 1, counts.Captures);
@@ -175,7 +184,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
             Assert.Equal(0, counts.Allocations);
             Assert.Equal(0, counts.Hydrations);
             Assert.Same(previous, repository.PreparedStateEntry);
-            Assert.Equal(selected, repository.GetHead("main"));
+            Assert.Equal(selected, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
             Assert.False(repository.IsFaulted);
             return new(repository, main, warm, selected, counts);
         } catch {
@@ -246,8 +255,8 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     }
     private static readonly DurableSchema WrongDependency = new(Dependency.SchemaId, 1, SchemaKind.InlineValue,
         new DurableFieldInfo(1, TypeTag.Int64));
-    private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CheckpointAddress address) {
-        StoredGraphRevision graph = repository.GraphStore.ReadGraph(address.Address);
+    private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CommitId address) {
+        StoredGraphRevision graph = Snapshot(repository, address);
         return graph.OwnedBatch is { } batch ? repository.GraphStore.ReadBatch(batch).Records : [];
     }
     private enum DependencyMode { BaseAlways, DeltaAlways, BaseForSeven }
@@ -256,8 +265,8 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
     private sealed class Counters {
         internal int ReaderFactories, Captures, BaseReads, DeltaReads, DependencyChecks, Allocations, Hydrations;
     }
-    private sealed record Scenario(Repository Repository, BranchCheckout Main, BranchCheckout Warm,
-        CheckpointAddress Selected, Counters Counts) : IDisposable {
+    private sealed record Scenario(Repository Repository, WorkingCopy Main, WorkingCopy Warm,
+        CommitId Selected, Counters Counts) : IDisposable {
         public void Dispose() {
             Main.Dispose();
             Warm.Dispose();

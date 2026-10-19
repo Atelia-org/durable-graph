@@ -39,28 +39,28 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path))
         {
             var store = segments.GraphStore;
-            var initial = store.ReadGraph(first);
-            Assert.Equal(4, DefaultRecords(store, initial.Address).Count); // World, Child, two distinct equal strings; no value rows.
-            Assert.All(DefaultRecords(store, initial.Address), record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
-            uint childId = Assert.Single(initial.ObjectHeads.Keys, id => DefaultLayout(store, first, id).Schema?.SchemaId == "inline.graph.child");
-            Assert.Equal(first, store.ReadGraph(unchanged).SourceGraph);
-            Assert.Empty(DefaultRecords(store, unchanged));
-            Assert.Empty(DefaultRemoved(store, unchanged));
-            ObjectVersionRecord ownerDelta = Assert.Single(DefaultRecords(store, nested));
+            var initial = PublishedGraph(segments, first);
+            Assert.Equal(4, DefaultRecords(store, PublishedGraph(segments, initial.Address)).Count); // World, Child, two distinct equal strings; no value rows.
+            Assert.All(DefaultRecords(store, PublishedGraph(segments, initial.Address)), record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
+            uint childId = Assert.Single(initial.ObjectHeads.Keys, id => DefaultLayout(store, PublishedGraph(segments, first), id).Schema?.SchemaId == "inline.graph.child");
+            Assert.Equal(first, PublishedGraph(segments, unchanged).SourceGraph);
+            Assert.Empty(DefaultRecords(store, PublishedGraph(segments, unchanged)));
+            Assert.Empty(PublishedRemoved(segments, unchanged));
+            ObjectVersionRecord ownerDelta = Assert.Single(DefaultRecords(store, PublishedGraph(segments, nested)));
             Assert.Equal(worldId.Value, ownerDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, ownerDelta.Kind);
             // Owner field 1 -> Envelope field 1 -> Leaf field 1 -> signed int 8.
             Assert.Equal<byte>([1, 1, 1, 16], ownerDelta.Body.ToArray());
-            ObjectVersionRecord childDelta = Assert.Single(DefaultRecords(store, childOnly));
+            ObjectVersionRecord childDelta = Assert.Single(DefaultRecords(store, PublishedGraph(segments, childOnly)));
             Assert.Equal(childId, childDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, childDelta.Kind);
-            Assert.Equal(new[] { childId }, DefaultRemoved(store, removed));
-            Assert.DoesNotContain(childId, store.ReadGraph(removed).ObjectHeads.Keys);
-            Assert.Contains(childId, store.ReadGraph(first).ObjectHeads.Keys);
-            Assert.Equal(4, store.ReadGraph(first).ObjectHeads.Count);
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, first, fixture.Models()), 7, 11, true);
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, childOnly, fixture.Models()), 8, 12, true);
-            fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, removed, fixture.Models()), 8, -1, true);
+            Assert.Equal(new[] { childId }, PublishedRemoved(segments, removed));
+            Assert.DoesNotContain(childId, PublishedGraph(segments, removed).ObjectHeads.Keys);
+            Assert.Contains(childId, PublishedGraph(segments, first).ObjectHeads.Keys);
+            Assert.Equal(4, PublishedGraph(segments, first).ObjectHeads.Count);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, PublishedGraph(segments, first), fixture.Models()), 7, 11, true);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, PublishedGraph(segments, childOnly), fixture.Models()), 8, 12, true);
+            fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, PublishedGraph(segments, removed), fixture.Models()), 8, -1, true);
         }
 
         FrameAddress reopenedNoChange;
@@ -74,9 +74,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var store = segments.GraphStore;
-            Assert.Equal(removed, store.ReadGraph(reopenedNoChange).SourceGraph);
-            Assert.Empty(DefaultRecords(store, reopenedNoChange));
-            Assert.Empty(DefaultRemoved(store, reopenedNoChange));
+            Assert.Equal(removed, PublishedGraph(segments, reopenedNoChange).SourceGraph);
+            Assert.Empty(DefaultRecords(store, PublishedGraph(segments, reopenedNoChange)));
+            Assert.Empty(PublishedRemoved(segments, reopenedNoChange));
         }
     }
 
@@ -101,9 +101,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var store = segments.GraphStore;
-        Assert.Equal(first, store.ReadGraph(retry).SourceGraph);
-        Assert.Empty(DefaultRecords(store, retry));
-        Assert.Empty(DefaultRemoved(store, retry));
+        Assert.Equal(first, PublishedGraph(segments, retry).SourceGraph);
+        Assert.Empty(DefaultRecords(store, PublishedGraph(segments, retry)));
+        Assert.Empty(PublishedRemoved(segments, retry));
     }
 
     [Fact]
@@ -120,13 +120,12 @@ public sealed partial class DurableSchemaGeneratorTests {
                 fixture.Detach(world);
                 mutated = true;
             };
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)world);
+            repository.CreateRootBranchFromState("main", (IDurableObject)world);
             Assert.True(mutated);
-            Assert.Same(world, checkout.State);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, fixture.Models());
-        fixture.Check(reopened.ReadState(reopened.GetHead("main")), 7, 11, true);
-        Assert.Equal(4, reopened.GraphStore.ReadGraph(reopened.GetHead("main").RevisionAddress).ObjectHeads.Count);
+        fixture.Check(reopened.LoadState(reopened.ReadCurrentCommit(EvidenceBranch(reopened, "main")).Commit.Id), 7, 11, true);
+        Assert.Equal(4, EvidenceGraph(reopened, reopened.ReadCurrentCommit(EvidenceBranch(reopened, "main")).Commit.Id).ObjectHeads.Count);
     }
 
     [Theory]
@@ -137,37 +136,37 @@ public sealed partial class DurableSchemaGeneratorTests {
         using RawBaseDirectory directory = new();
         FrameAddress first;
         using (Repository repository = Repository.CreateNew(directory.Path, fixture.Models())) {
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)fixture.NewWorld());
-            first = checkout.StateRevisionAddress!.Value;
+            BranchId branch = repository.CreateRootBranchFromState("main", (IDurableObject)fixture.NewWorld()).Id;
+            first = EvidenceAddress(repository, repository.ReadCurrentCommit(branch).Commit.Id);
         }
         using RepositoryResources resources = RepositoryResources.OpenExisting(directory.Path);
         GraphRecordStore store = resources.GraphStore;
-        StoredGraphRevision initial = store.ReadGraph(first);
+        StoredGraphRevision initial = PublishedGraph(resources, first);
         SchemaCatalogView catalog = SchemaCatalogView.Load(store, initial.SchemaRoot!.Value);
-        ObjectVersionRecord owner = Assert.Single(DefaultRecords(store, first),
+        ObjectVersionRecord owner = Assert.Single(DefaultRecords(store, PublishedGraph(resources, first)),
             record => record.ObjectId == initial.RootId.Value);
         var envelope = TypedBaseBodyCodec.Decode(owner.Body, catalog);
         byte[] body = envelope.Body;
         uint childId = Assert.Single(initial.ObjectHeads.Keys, id =>
-            DefaultLayout(store, first, id).Schema?.SchemaId == "inline.graph.child");
+            DefaultLayout(store, PublishedGraph(resources, first), id).Schema?.SchemaId == "inline.graph.child");
         Assert.Equal(14, body[0]); // Envelope.Inner.X = 7, followed by the nested Child ID.
         Assert.Equal(childId, (uint)body[1]);
         uint replacement = wrongKind
-            ? initial.ObjectHeads.Keys.First(id => DefaultLayout(store, first, id).Kind == ObjectStateKind.String)
+            ? initial.ObjectHeads.Keys.First(id => DefaultLayout(store, PublishedGraph(resources, first), id).Kind == ObjectStateKind.String)
             : initial.ObjectHeads.Keys.Max() + 1;
         Assert.InRange(replacement, 1u, 127u);
         body[1] = (byte)replacement; // Canonical one-byte ID; framing remains valid.
         ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.RootId.Value,
             TypedBaseBodyCodec.Encode(envelope.Layout, new(body), catalog));
-        StoredGraphRevision invalid = store.Append(StoredGraphKind.State, first, initial.SchemaRoot,
+        StoredGraphRevision invalid = store.AppendBusiness(StoredGraphKind.State, first, initial.SchemaRoot,
             new PreparedGraphWrite(first, initial.RootId, [invalidOwner]));
         Assert.Equal(initial.SchemaRoot, invalid.SchemaRoot);
         Assert.Equal(initial.ObjectHeads.Keys, invalid.ObjectHeads.Keys);
 
         // Exact DTO reading must reject before domain Hydrate; a valid sibling is the positive control.
-        fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, first, fixture.Models()), 7, 11, true);
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, invalid.Address, fixture.Models()));
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(store, invalid.Address, fixture.Models()));
+        fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, PublishedGraph(resources, first), fixture.Models()), 7, 11, true);
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(invalid.Address, first), fixture.Models().FreezeConfiguration()));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(store, store.ReadBusinessGraph(invalid.Address, first), fixture.Models()));
     }
 
     private static InlineGraphFixture CompileInlineGraph() {

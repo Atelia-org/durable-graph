@@ -36,23 +36,23 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             Assert.Equal(0, installed);
             candidate = error.CandidateRevisionAddress;
             Assert.NotNull(candidate);
-            Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
+            Assert.ThrowsAny<Exception>(() => MechanismFixture.FindCurrent(repository, "main")?.Address);
         }
 
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.True(DataBytes(reopened.Data) > before); // Completed candidate data survives either publication result.
-        FrameAddress business = reopened.GetHead("main")!.Value;
+        FrameAddress business = MechanismFixture.Current(reopened, "main").Address;
         FrameAddress meta = reopened.SharedSchemaRoot!.Value;
         Assert.Equal(visible ? candidate!.Value : oldBusiness, business);
         Assert.Equal(visible, meta != oldMeta);
-        Assert.Equal(business, reopened.GetStateHead("main"));
+        Assert.Equal(business, MechanismFixture.State(reopened, "main")?.Address);
         // Follow the actual newly opened graph/directory, not saved candidate bytes.
-        Assert.Equal((byte)(visible ? 2 : 1), reopened.Store.ReadObjectChain(business, 1).Entries.Last().Record.Body[0]);
-        Assert.Equal((byte)(visible ? 2 : 1), reopened.Store.ReadObjectChain(meta, 1).Entries.Last().Record.Body[0]);
-        Assert.Equal((byte)1, reopened.Store.ReadObjectChain(oldBusiness, 1).Entries.Last().Record.Body[0]);
-        Assert.Equal((byte)1, reopened.Store.ReadObjectChain(oldMeta, 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)(visible ? 2 : 1), reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, business), 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)(visible ? 2 : 1), reopened.Store.ReadObjectChain(reopened.Store.ReadMetaGraph(meta), 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)1, reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, oldBusiness), 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)1, reopened.Store.ReadObjectChain(reopened.Store.ReadMetaGraph(oldMeta), 1).Entries.Last().Record.Body[0]);
         var continued = Save(reopened, 3);
-        Assert.Equal(continued.Business.Address, reopened.GetHead("main"));
+        Assert.Equal(continued.Business.Address, MechanismFixture.FindCurrent(reopened, "main")?.Address);
     }
 
     [Fact]
@@ -69,13 +69,13 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             Assert.Equal(1, metaInstalls);
             Assert.True(repository.IsFaulted);
             candidate = error.CandidateRevisionAddress!.Value;
-            Assert.ThrowsAny<Exception>(() => repository.GetHead("main"));
+            Assert.ThrowsAny<Exception>(() => MechanismFixture.FindCurrent(repository, "main")?.Address);
         }
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         Assert.NotEqual(oldBusiness, candidate);
-        Assert.Equal(candidate, reopened.GetHead("main"));
+        Assert.Equal(candidate, MechanismFixture.FindCurrent(reopened, "main")?.Address);
         Assert.NotEqual(oldMeta, reopened.SharedSchemaRoot);
-        Assert.Equal((byte)2, reopened.Store.ReadObjectChain(reopened.SharedSchemaRoot!.Value, 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)2, reopened.Store.ReadObjectChain(reopened.Store.ReadMetaGraph(reopened.SharedSchemaRoot!.Value), 1).Entries.Last().Record.Body[0]);
     }
 
     [Theory]
@@ -96,10 +96,10 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             Assert.Equal(RepositoryPublicationOutcome.NotPublished, error.Outcome);
         }
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
-        Assert.Equal(oldBusiness, reopened.GetHead("main"));
+        Assert.Equal(oldBusiness, MechanismFixture.FindCurrent(reopened, "main")?.Address);
         Assert.Equal(oldMeta, reopened.SharedSchemaRoot);
         Assert.True(DataBytes(reopened.Data) > before);
-        Assert.Equal((byte)1, reopened.Store.ReadObjectChain(oldMeta, 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)1, reopened.Store.ReadObjectChain(reopened.Store.ReadMetaGraph(oldMeta), 1).Entries.Last().Record.Body[0]);
         Assert.NotEqual(oldBusiness, Save(reopened, 3).Business.Address);
     }
 
@@ -113,14 +113,14 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
             var result = repository.Commit(pending, _ => metaInstalls++, _ => stateInstalls++);
             Assert.Equal(1, metaInstalls);
             Assert.Equal(0, stateInstalls);
-            Assert.Equal(result.Business.Address, repository.GetHead("main"));
-            Assert.Equal(state, repository.GetStateHead("main"));
+            Assert.Equal(result.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
+            Assert.Equal(state, MechanismFixture.State(repository, "main")?.Address);
             Assert.Equal(result.Meta!.Address, repository.SharedSchemaRoot);
         }
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
-        Assert.Equal(state, reopened.GetStateHead("main"));
-        Assert.NotEqual(state, reopened.GetHead("main"));
-        Assert.Equal((byte)2, reopened.Store.ReadObjectChain(reopened.SharedSchemaRoot!.Value, 1).Entries.Last().Record.Body[0]);
+        Assert.Equal(state, MechanismFixture.State(reopened, "main")?.Address);
+        Assert.NotEqual(state, MechanismFixture.FindCurrent(reopened, "main")?.Address);
+        Assert.Equal((byte)2, reopened.Store.ReadObjectChain(reopened.Store.ReadMetaGraph(reopened.SharedSchemaRoot!.Value), 1).Entries.Last().Record.Body[0]);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
         }
         var result = repository.Commit(corrected);
         Assert.Throws<InvalidOperationException>(() => repository.Commit(corrected));
-        Assert.Equal((byte)3, repository.Store.ReadObjectChain(result.Business.Address, 1).Entries.Last().Record.Body[0]);
+        Assert.Equal((byte)3, repository.Store.ReadObjectChain(MechanismFixture.Snapshot(repository, result.Business.Address), 1).Entries.Last().Record.Body[0]);
     }
 
     private static RepositorySaveResult Save(RepositoryStorageFacade repository, byte value) {
@@ -166,13 +166,13 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
         var saved = repository.Commit(pending);
         Assert.True(reached);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(saved.Business.Address, repository.GetHead("main"));
+        Assert.Equal(saved.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
         Assert.False(repository.HasPending);
     }
 
     private static PendingRepositorySave Prepare(RepositoryStorageFacade repository, byte value, StoredGraphKind kind = StoredGraphKind.State) =>
-        repository.Prepare("main", kind,
-            new PreparedGraphWrite(repository.GetStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])], []),
+        MechanismFixture.Prepare(repository, "main", kind,
+            new PreparedGraphWrite(MechanismFixture.State(repository, "main")?.Address, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []),
             new PreparedGraphWrite(repository.SharedSchemaRoot, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []));
 
     public void Dispose() => SharedReadModel.DeleteFixture(_path, "dg-bootstrap-publication-");

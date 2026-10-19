@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using System.Buffers;
 using Atelia.DurableGraph.Runtime;
@@ -22,110 +23,110 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void PublicFoundationIsNonGenericAndDoesNotRetainOldSessionOrPendingEventSurface() {
         Assert.Equal("Atelia.DurableGraph", typeof(Repository).Namespace);
-        Assert.Equal("Atelia.DurableGraph", typeof(BranchCheckout).Namespace);
-        Assert.Equal("Atelia.DurableGraph", typeof(CheckpointAddress).Namespace);
-        foreach (Type type in new[] { typeof(Repository), typeof(BranchCheckout) }) {
+        Assert.Equal("Atelia.DurableGraph", typeof(WorkingCopy).Namespace);
+        Assert.Equal("Atelia.DurableGraph", typeof(CommitId).Namespace);
+        foreach (Type type in new[] { typeof(Repository), typeof(WorkingCopy) }) {
             Assert.False(type.IsGenericType);
             Assert.DoesNotContain(type.GetMethods(), method => method.IsGenericMethod);
             Assert.DoesNotContain(type.GetMembers(), member => member.Name.Contains("PendingEvent", StringComparison.Ordinal));
         }
-        Assert.Empty(typeof(CheckpointAddress).GetConstructors());
+        Assert.Empty(typeof(CommitId).GetConstructors());
         Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.EventHistoryRepository"));
         Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.EventHistorySession`1"));
         Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.GraphFrame"));
     }
 
     [Fact]
-    public void ConsecutiveEventsAndStatesUseExactJournalHeadAndNearestStateGraphParent() {
-        CheckpointAddress s0, e1, e2, s1, s2;
+    public void ConsecutiveEventsAndStatesUseExactHeadHistoryAndNearestStateSource() {
+        CommitId s0, e1, e2, s1, s2;
         Alpha root = new() { Value = 1 };
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", root, NoRebase);
-            s0 = checkout.Head;
-            e1 = checkout.CommitEvent(new Message { Value = 11 }, NoRebase);
-            e2 = checkout.CommitEvent(new Message { Value = 12 }, NoRebase);
-            Assert.Same(root, checkout.State);
-            Assert.Equal(s0.RevisionAddress, checkout.StateRevisionAddress);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", root, parameters: NoRebase).Id);
+            s0 = checkout.BaseCommitId;
+            e1 = checkout.CommitEvent(new Message { Value = 11 }, parameters: NoRebase).Id;
+            e2 = checkout.CommitEvent(new Message { Value = 12 }, parameters: NoRebase).Id;
+            root = Assert.IsType<Alpha>(checkout.State);
+            Assert.Equal(s0, checkout.StateSourceCommitId);
             root.Value = 2;
-            s1 = checkout.CommitState(NoRebase);
+            s1 = checkout.CommitState(parameters: NoRebase).Id;
             root.Value = 3;
-            s2 = checkout.CommitState(NoRebase);
-            Assert.Null(s0.Parent);
-            Assert.Equal(s0.Address, e1.Parent);
-            Assert.Equal(e1.Address, e2.Parent);
-            Assert.Equal(e2.Address, s1.Parent);
-            Assert.Equal(s1.Address, s2.Parent);
+            s2 = checkout.CommitState(parameters: NoRebase).Id;
+            Assert.Null(Previous(repository, s0));
+            Assert.Equal(s0, Previous(repository, e1));
+            Assert.Equal(e1, Previous(repository, e2));
+            Assert.Equal(e2, Previous(repository, s1));
+            Assert.Equal(s1, Previous(repository, s2));
             Assert.Equal(s0, repository.GetPreviousState(e2));
-            Assert.Equal(5, repository.ReadFrames("main").Count);
-            Assert.Equal(2, repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().Length);
-            Assert.Equal((byte)1, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
+            Assert.Equal(5, repository.ReadFrames(BranchNamed(repository, "main")).Count);
+            Assert.Equal(2, repository.EnumerateEvents(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray().Length);
+            Assert.Equal((byte)1, Assert.IsType<Alpha>(repository.LoadState(s0)).Value);
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            Assert.Null(states.ReadGraph(s0.RevisionAddress).SourceGraph);
-            foreach (CheckpointAddress address in new[] { e1, e2, s1 }) {
-                Assert.Equal(s0.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
+            Assert.Null(Snapshot(resources, s0).SourceGraph);
+            foreach (CommitId address in new[] { e1, e2, s1 }) {
+                Assert.Equal(Describe(resources, s0).Address, Snapshot(resources, address).SourceGraph);
             }
-            Assert.Equal(s1.RevisionAddress, states.ReadGraph(s2.RevisionAddress).SourceGraph);
+            Assert.Equal(Describe(resources, s1).Address, Snapshot(resources, s2).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using BranchCheckout cold = reopened.CheckoutShared("main");
+        using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         Assert.Equal((byte)3, Assert.IsType<Alpha>(cold.State).Value);
-        Assert.Equal(s2.RevisionAddress, cold.Head.RevisionAddress);
-        CheckpointAddress nextEvent = cold.CommitEvent(new Message(), NoRebase);
-        Assert.Equal(s2.Address, nextEvent.Parent);
-        Assert.Equal(s2.RevisionAddress, cold.StateRevisionAddress);
+        Assert.Equal(s2, cold.BaseCommitId);
+        CommitId nextEvent = cold.CommitEvent(new Message(), parameters: NoRebase).Id;
+        Assert.Equal(s2, Previous(reopened, nextEvent));
+        Assert.Equal(s2, cold.StateSourceCommitId);
     }
 
     [Fact]
     public void EventOnlyColdCheckoutNeedsNoModelsAndFirstStateCanReplaceTypeAndSaveAgain() {
-        CheckpointAddress e0, e1, s0, s1, s2;
+        CommitId e0, e1, s0, s1, s2;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message { Value = 7 }, NoRebase);
-            e0 = checkout.Head;
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 7 }, parameters: NoRebase).Id);
+            e0 = checkout.BaseCommitId;
             Assert.Null(checkout.State);
             Assert.Null(checkout.StateId);
             Assert.Null(checkout.StateRevisionAddress);
-            e1 = checkout.CommitEvent(new Message { Value = 8 }, NoRebase);
+            e1 = checkout.CommitEvent(new Message { Value = 8 }, parameters: NoRebase).Id;
             Assert.Null(repository.GetPreviousState(e1));
         }
         using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
-            using BranchCheckout empty = repository.CheckoutShared("main");
+            using WorkingCopy empty = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.Null(empty.State);
-            Assert.Equal(e1.RevisionAddress, empty.Head.RevisionAddress);
-            Assert.ThrowsAny<Exception>(() => repository.ReadEvent(empty.Head));
+            Assert.Equal(e1, empty.BaseCommitId);
+            Assert.ThrowsAny<Exception>(() => repository.LoadEvent(empty.BaseCommitId));
             Assert.False(repository.IsFaulted);
         }
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Alpha alpha = new() { Value = 20 };
-            s0 = checkout.CommitState(alpha, NoRebase);
+            s0 = checkout.CommitState(alpha, parameters: NoRebase).Id;
             Assert.Same(alpha, checkout.State);
             // A cold Event-only checkout starts a fresh capture cursor; prior Event IDs are not imported.
-            Assert.Equal(e0.RootId, s0.RootId);
+            Assert.Equal(Describe(repository, e0).RootId, Describe(repository, s0).RootId);
             Beta beta = new() { Value = 30 };
-            s1 = checkout.CommitState(beta, NoRebase);
+            s1 = checkout.CommitState(beta, parameters: NoRebase).Id;
             Assert.Same(beta, checkout.State);
-            Assert.NotEqual(s0.RootId, s1.RootId);
+            Assert.NotEqual(Describe(repository, s0).RootId, Describe(repository, s1).RootId);
             beta.Value = 31;
-            s2 = checkout.CommitState(NoRebase);
-            Assert.Equal(s1.RootId, s2.RootId);
-            Assert.Equal((byte)7, Assert.IsType<Message>(repository.ReadEvent(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray().First())).Value);
-            Assert.Equal((byte)20, Assert.IsType<Alpha>(repository.ReadState(s0)).Value);
+            s2 = checkout.CommitState(parameters: NoRebase).Id;
+            Assert.Equal(Describe(repository, s1).RootId, Describe(repository, s2).RootId);
+            Assert.Equal((byte)7, Assert.IsType<Message>(repository.LoadEvent(repository.EnumerateEvents(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray().First().Id)).Value);
+            Assert.Equal((byte)20, Assert.IsType<Alpha>(repository.LoadState(s0)).Value);
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            foreach (CheckpointAddress address in new[] { e0, e1, s0 }) {
-                Assert.Null(states.ReadGraph(address.RevisionAddress).SourceGraph);
-                Assert.All(StorageTestData.LocalRecords(states, address.RevisionAddress), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            foreach (CommitId address in new[] { e0, e1, s0 }) {
+                Assert.Null(Snapshot(resources, address).SourceGraph);
+                Assert.All(StorageTestData.LocalRecords(states, Describe(resources, address).Address), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             }
-            Assert.Equal(s0.RevisionAddress, states.ReadGraph(s1.RevisionAddress).SourceGraph);
-            Assert.Equal(s1.RevisionAddress, states.ReadGraph(s2.RevisionAddress).SourceGraph);
+            Assert.Equal(Describe(resources, s0).Address, Snapshot(resources, s1).SourceGraph);
+            Assert.Equal(Describe(resources, s1).Address, Snapshot(resources, s2).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using BranchCheckout cold = reopened.CheckoutShared("main");
+        using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         Assert.Equal((byte)31, Assert.IsType<Beta>(cold.State).Value);
-        Assert.Equal(s2.RootId, cold.StateId);
+        Assert.Equal(Describe(reopened, s2).RootId, cold.StateId);
     }
 
     [Fact]
@@ -133,47 +134,49 @@ public sealed partial class DB078HistoryTests : IDisposable {
         Alpha alpha = new() { Value = 1 };
         Beta beta = new() { Value = 2, Child = alpha };
         alpha.Child = beta;
-        CheckpointAddress original, promoted, removed;
+        CommitId original, promoted, removed;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", alpha, NoRebase);
-            original = checkout.Head;
-            promoted = checkout.CommitState(beta, NoRebase);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", alpha, parameters: NoRebase).Id);
+            original = checkout.BaseCommitId;
+            alpha = Assert.IsType<Alpha>(checkout.State);
+            beta = alpha.Child!;
+            promoted = checkout.CommitState(beta, parameters: NoRebase).Id;
             Assert.Same(beta, checkout.State);
             Assert.Same(alpha, Assert.IsType<Beta>(checkout.State).Child);
-            Assert.NotEqual(original.RootId, promoted.RootId);
-            Beta read = Assert.IsType<Beta>(repository.ReadState(promoted));
+            Assert.NotEqual(Describe(repository, original).RootId, Describe(repository, promoted).RootId);
+            Beta read = Assert.IsType<Beta>(repository.LoadState(promoted));
             Assert.Same(read, read.Child!.Child);
             beta.Child = null;
-            removed = checkout.CommitState(NoRebase);
-            Assert.Equal(promoted.RootId, removed.RootId);
+            removed = checkout.CommitState(parameters: NoRebase).Id;
+            Assert.Equal(Describe(repository, promoted).RootId, Describe(repository, removed).RootId);
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            var originalIds = states.ReadGraph(original.RevisionAddress).ObjectHeads.Keys.Order().ToArray();
-            Assert.Contains(promoted.RootId.Value, originalIds);
-            Assert.Equal(originalIds, states.ReadGraph(promoted.RevisionAddress).ObjectHeads.Keys.Order());
-            Assert.Empty(StorageTestData.LocalRecords(states, promoted.RevisionAddress));
+            var originalIds = Snapshot(resources, original).ObjectHeads.Keys.Order().ToArray();
+            Assert.Contains(Describe(resources, promoted).RootId.Value, originalIds);
+            Assert.Equal(originalIds, Snapshot(resources, promoted).ObjectHeads.Keys.Order());
+            Assert.Empty(StorageTestData.LocalRecords(states, Describe(resources, promoted).Address));
             // A smaller full head map may encode removal by absence rather than a Delta Remove row.
-            Assert.Equal(new[] { promoted.RootId.Value }, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
-            Assert.DoesNotContain(original.RootId.Value, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
+            Assert.Equal(new[] { Describe(resources, promoted).RootId.Value }, Snapshot(resources, removed).ObjectHeads.Keys);
+            Assert.DoesNotContain(Describe(resources, original).RootId.Value, Snapshot(resources, removed).ObjectHeads.Keys);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using BranchCheckout cold = reopened.CheckoutShared("main");
+        using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         Assert.Null(Assert.IsType<Beta>(cold.State).Child);
-        Assert.Equal(promoted.RootId, cold.StateId);
-        Assert.Equal(promoted.RootId, cold.CommitState(NoRebase).RootId);
+        Assert.Equal(Describe(reopened, promoted).RootId, cold.StateId);
+        Assert.Equal(Describe(reopened, promoted).RootId, Describe(reopened, cold.CommitState(parameters: NoRebase).Id).RootId);
     }
 
     [Fact]
     public void SameClrTypeMayTakeEitherRoleAndReadPairPreservesArgumentOrder() {
         using Repository repository = Create();
-        using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
-        CheckpointAddress e = checkout.Head;
-        CheckpointAddress s = checkout.CommitState(new Message { Value = 2 }, NoRebase);
-        Assert.Equal(CheckpointKind.Event, e.Kind);
-        Assert.Equal(CheckpointKind.State, s.Kind);
-        Assert.Throws<ArgumentException>(() => repository.ReadState(e));
-        Assert.Throws<ArgumentException>(() => repository.ReadEvent(s));
+        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }, parameters: NoRebase).Id);
+        CommitId e = checkout.BaseCommitId;
+        CommitId s = checkout.CommitState(new Message { Value = 2 }, parameters: NoRebase).Id;
+        Assert.Equal(CommitKind.Event, repository.ReadCommitInfo(e).Kind);
+        Assert.Equal(CommitKind.State, repository.ReadCommitInfo(s).Kind);
+        Assert.Throws<ArgumentException>(() => repository.LoadState(e));
+        Assert.Throws<ArgumentException>(() => repository.LoadEvent(s));
         var pair = repository.ReadPair(s, e);
         Assert.Equal((byte)2, Assert.IsType<Message>(pair.First).Value);
         Assert.Equal((byte)1, Assert.IsType<Message>(pair.Second).Value);
@@ -182,18 +185,18 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void CheckpointPreservesActualRootTypesAcrossStateReplacement() {
         using Repository repository = Create();
-        using BranchCheckout checkout = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase);
-        CheckpointAddress first = checkout.Head;
-        CheckpointAddress message = checkout.CommitEvent(new Message { Value = 2 }, NoRebase);
-        CheckpointAddress replacement = checkout.CommitState(new Beta { Value = 3 }, NoRebase);
+        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 1 }, parameters: NoRebase).Id);
+        CommitId first = checkout.BaseCommitId;
+        CommitId message = checkout.CommitEvent(new Message { Value = 2 }, parameters: NoRebase).Id;
+        CommitId replacement = checkout.CommitState(new Beta { Value = 3 }, parameters: NoRebase).Id;
         EventCheckpoint eventView = Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(message));
         Assert.Equal((byte)2, Assert.IsType<Message>(eventView.Event).Value);
         Assert.Equal((byte)1, Assert.IsType<Alpha>(eventView.PreviousState).Value);
-        Assert.Equal(first, eventView.PreviousStateAddress);
+        Assert.Equal(first, eventView.PreviousStateCommit?.Id);
         StateCheckpoint stateView = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(replacement));
         Assert.Equal((byte)3, Assert.IsType<Beta>(stateView.State).Value);
         Assert.Equal((byte)2, Assert.IsType<Message>(stateView.PreviousEvent).Value);
-        Assert.Equal(message, stateView.PreviousEventAddress);
+        Assert.Equal(message, stateView.PreviousEventCommit?.Id);
         Assert.NotSame(checkout.State, stateView.State);
         Assert.NotSame(eventView.Event, stateView.PreviousEvent);
     }
@@ -201,160 +204,141 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void MissingPreviousEventModelFailsCheckpointEvenWhenCurrentStateIsReadable() {
         using (Repository repository = Create()) {
-            using BranchCheckout branch = repository.CreateSharedBranchFromEvent("main", new Message { Value = 1 }, NoRebase);
-            branch.CommitState(new Alpha { Value = 2 }, NoRebase);
+            using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }, parameters: NoRebase).Id);
+            branch.CommitState(new Alpha { Value = 2 }, parameters: NoRebase);
         }
         using Repository stateOnly = Repository.OpenReadOnlyExisting(_root, Models(includeMessage: false));
-        CheckpointAddress state = stateOnly.GetHead("main");
-        Assert.Equal((byte)2, Assert.IsType<Alpha>(stateOnly.ReadState(state)).Value);
+        CommitId state = stateOnly.ReadCurrentCommit(BranchNamed(stateOnly, "main")).Commit.Id;
+        Assert.Equal((byte)2, Assert.IsType<Alpha>(stateOnly.LoadState(state)).Value);
         Checkpoint? delivered = null;
         Assert.ThrowsAny<Exception>(() => delivered = stateOnly.ReadCheckpoint(state));
         Assert.Null(delivered);
         Assert.False(stateOnly.IsFaulted);
-        Assert.Equal((byte)2, Assert.IsType<Alpha>(stateOnly.ReadState(state)).Value);
+        Assert.Equal((byte)2, Assert.IsType<Alpha>(stateOnly.LoadState(state)).Value);
     }
 
     [Fact]
     public void StateOnlyCatalogRestoresFromConsecutiveEventHeadButMissingStateNeverBecomesNull() {
-        CheckpointAddress e2;
+        CommitId e2;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", new Alpha { Value = 4 }, NoRebase);
-            checkout.CommitEvent(new Message { Value = 5 }, NoRebase);
-            e2 = checkout.CommitEvent(new Message { Value = 6 }, NoRebase);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 4 }, parameters: NoRebase).Id);
+            checkout.CommitEvent(new Message { Value = 5 }, parameters: NoRebase);
+            e2 = checkout.CommitEvent(new Message { Value = 6 }, parameters: NoRebase).Id;
         }
         using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false))) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
-            Assert.Equal(e2.RevisionAddress, checkout.Head.RevisionAddress);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            Assert.Equal(e2, checkout.BaseCommitId);
             Assert.Equal((byte)4, Assert.IsType<Alpha>(checkout.State).Value);
-            Assert.ThrowsAny<Exception>(() => repository.ReadEvent(checkout.Head));
-            Assert.Equal(CheckpointKind.State, checkout.CommitState(NoRebase).Kind);
+            Assert.ThrowsAny<Exception>(() => repository.LoadEvent(checkout.BaseCommitId));
+            Assert.Equal(CommitKind.State, checkout.CommitState(parameters: NoRebase).Kind);
         }
         using Repository missing = Repository.OpenExisting(_root, new StateModelRegistry());
-        Assert.ThrowsAny<Exception>(() => missing.CheckoutShared("main"));
+        Assert.ThrowsAny<Exception>(() => missing.OpenWorkingCopy(BranchNamed(missing, "main")));
         Assert.False(missing.IsFaulted);
-        Assert.Equal(CheckpointKind.State, missing.GetHead("main").Kind);
+        Assert.Equal(CommitKind.State, missing.ReadCurrentCommit(BranchNamed(missing, "main")).Commit.Kind);
     }
 
     [Fact]
     public void PredictableMissingRootAndNoStateFailuresDoNotCaptureOrWrite() {
         int captures = 0;
         using (Repository repository = Create(Models(onCapture: () => captures++))) {
-            using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message(), NoRebase);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message(), parameters: NoRebase).Id);
         }
         int captured = captures;
         var before = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, Models(onCapture: () => captures++))) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
-            CheckpointAddress original = checkout.Head;
-            Assert.Throws<InvalidOperationException>(() => checkout.CommitState(NoRebase));
-            Assert.Throws<ArgumentNullException>(() => checkout.CommitState(null!, NoRebase));
-            Assert.Throws<ArgumentNullException>(() => checkout.CommitEvent(null!, NoRebase));
-            Assert.ThrowsAny<Exception>(() => checkout.CommitState(new Unregistered(), NoRebase));
-            Assert.ThrowsAny<Exception>(() => checkout.CommitEvent(new Unregistered(), NoRebase));
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            CommitId original = checkout.BaseCommitId;
+            Assert.Throws<InvalidOperationException>(() => checkout.CommitState(parameters: NoRebase).Id);
+            Assert.Throws<ArgumentNullException>(() => checkout.CommitState(nextState: null!, parameters: NoRebase).Id);
+            Assert.Throws<ArgumentNullException>(() => checkout.CommitEvent(null!, parameters: NoRebase).Id);
+            Assert.ThrowsAny<Exception>(() => checkout.CommitState(new Unregistered(), parameters: NoRebase).Id);
+            Assert.ThrowsAny<Exception>(() => checkout.CommitEvent(new Unregistered(), parameters: NoRebase).Id);
             Assert.Equal(captured, captures);
             Assert.Null(checkout.State);
-            Assert.Equal(original, checkout.Head);
+            Assert.Equal(original, checkout.BaseCommitId);
             Assert.False(repository.IsFaulted);
         }
         AssertFiles(before);
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
-            checkout.CommitState(new Alpha(), NoRebase);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            checkout.CommitState(new Alpha(), parameters: NoRebase);
         }
         before = SnapshotFiles();
         using (Repository repository = Repository.OpenExisting(_root, Models(onCapture: () => captures++))) {
-            using BranchCheckout checkout = repository.CheckoutShared("main");
+            using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             IDurableObject root = checkout.State!;
-            CheckpointAddress original = checkout.Head;
-            Assert.ThrowsAny<Exception>(() => checkout.CommitState(new Unregistered(), NoRebase));
-            Assert.Same(root, checkout.State);
-            Assert.Equal(original, checkout.Head);
+            CommitId original = checkout.BaseCommitId;
+            Assert.ThrowsAny<Exception>(() => checkout.CommitState(new Unregistered(), parameters: NoRebase).Id);
+            root = Assert.IsType<Alpha>(checkout.State);
+            Assert.Equal(original, checkout.BaseCommitId);
             Assert.Equal(captured, captures);
         }
         AssertFiles(before);
     }
 
     [Fact]
-    public void AddressesHaveOwnerScopedValueEqualityAndRefOnlyOperationsNeedNoModels() {
-        CheckpointAddress old;
+    public void CommitIdsPersistAcrossOwnersAndForkDescriptionsNeedNoModels() {
+        CommitId saved;
+        BranchId branch;
         using (Repository repository = Create()) {
-            using BranchCheckout checkout = repository.CreateSharedBranchFromEvent("main", new Message(), NoRebase);
-            old = checkout.Head;
-            Assert.Equal(old, repository.GetHead("main"));
-            Assert.True(old == repository.GetHead("main"));
-            Assert.False(old != repository.GetHead("main"));
-            Assert.Equal(old.GetHashCode(), repository.GetHead("main").GetHashCode());
-            Assert.Single(new HashSet<CheckpointAddress> { old, repository.GetHead("main"), repository.ReadFrames("main")[0] });
+            branch = repository.CreateRootBranchFromEvent("main", new Message(), parameters: NoRebase).Id;
+            saved = repository.ReadCurrentCommit(branch).Commit.Id;
+            Assert.Equal(saved, repository.ReadCommitInfo(saved).Id);
+            Assert.Single(new HashSet<CommitId> { saved, repository.ReadFrames(branch)[0].Id });
         }
-        using (Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry())) {
-            CheckpointAddress current = reopened.GetHead("main");
-            Assert.NotEqual(old, current);
-            Assert.Equal(current, reopened.CreateBranch("copy", current));
-            Assert.Equal(current, reopened.GetHead("copy"));
-            reopened.MoveBranch("copy", current, current);
-        }
-        var before = SnapshotFiles();
-        using (Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry())) {
-            CheckpointAddress current = reopened.GetHead("main");
-            Assert.Throws<ArgumentException>(() => reopened.ReadEvent(old));
-            Assert.Throws<ArgumentException>(() => reopened.CreateBranch("old", old));
-            Assert.Throws<ArgumentException>(() => reopened.MoveBranch("copy", current, old));
-            Assert.Throws<ArgumentException>(() => reopened.MoveBranch("copy", old, current));
-            Assert.Throws<ArgumentException>(() => reopened.ReadState(old));
-            Assert.Throws<ArgumentException>(() => reopened.ReadPair(current, old));
-            Assert.Throws<ArgumentException>(() => reopened.ReadPair(old, current));
-            Assert.Throws<ArgumentException>(() => reopened.GetPreviousState(old));
-            Assert.Throws<ArgumentNullException>(() => reopened.ReadEvent(null!));
-            Assert.Throws<ArgumentNullException>(() => reopened.ReadState(null!));
-            Assert.Throws<ArgumentNullException>(() => reopened.GetPreviousState(null!));
-            Assert.Throws<ArgumentNullException>(() => reopened.ReadPair(current, null!));
-            Assert.Throws<ArgumentNullException>(() => reopened.ReadPair(null!, current));
-            Assert.Throws<ArgumentNullException>(() => reopened.CreateBranch("null", (CheckpointAddress)null!));
-            Assert.Throws<ArgumentNullException>(() => reopened.MoveBranch("copy", null!, current));
-            Assert.Throws<ArgumentNullException>(() => reopened.MoveBranch("copy", current, null!));
-            using BranchCheckout checkout2 = reopened.CheckoutShared("copy");
-            Assert.Null(checkout2.State);
-        }
-        AssertFiles(before);
+        using Repository reopened = Repository.OpenExisting(_root, new StateModelRegistry());
+        Assert.Equal(saved, reopened.ReadCurrentCommit(branch).Commit.Id);
+        Assert.Equal(saved.GetHashCode(), reopened.ReadCommitInfo(saved).Id.GetHashCode());
+        BranchInfo copy = reopened.ForkBranch(saved, "copy");
+        Assert.Equal(saved, reopened.ReadCurrentCommit(copy.Id).Commit.Id);
+        using WorkingCopy checkout = reopened.OpenWorkingCopy(copy.Id);
+        Assert.Null(checkout.State);
+        Assert.ThrowsAny<ArgumentException>(() => reopened.LoadEvent(default));
+        Assert.ThrowsAny<ArgumentException>(() => reopened.LoadState(default));
+        Assert.ThrowsAny<ArgumentException>(() => reopened.GetPreviousState(default));
+        Assert.ThrowsAny<ArgumentException>(() => reopened.ReadPair(saved, default));
+        Assert.ThrowsAny<ArgumentException>(() => reopened.ReadPair(default, saved));
+        Assert.ThrowsAny<ArgumentException>(() => reopened.ForkBranch(default, "invalid"));
     }
 
     [Fact]
     public void PhysicallyInterleavedBranchesFollowTheirOwnLogicalStateAncestors() {
-        CheckpointAddress root, mainEvent, otherState, mainEvent2, mainState;
+        CommitId root, mainEvent, otherState, mainEvent2, mainState;
         using (Repository repository = Create()) {
-            using (BranchCheckout checkout = repository.CreateSharedBranch("main", new Alpha { Value = 1 }, NoRebase)) {
-                root = checkout.Head;
-                mainEvent = checkout.CommitEvent(new Message { Value = 2 }, NoRebase);
+            using (WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 1 }, parameters: NoRebase).Id)) {
+                root = checkout.BaseCommitId;
+                mainEvent = checkout.CommitEvent(new Message { Value = 2 }, parameters: NoRebase).Id;
             }
-            repository.CreateBranch("other", root);
-            using (BranchCheckout other = repository.CheckoutShared("other")) {
-                otherState = other.CommitState(new Beta { Value = 8 }, NoRebase);
+            repository.ForkBranch(root, "other");
+            using (WorkingCopy other = repository.OpenWorkingCopy(BranchNamed(repository, "other"))) {
+                otherState = other.CommitState(new Beta { Value = 8 }, parameters: NoRebase).Id;
             }
-            using (BranchCheckout main = repository.CheckoutShared("main")) {
-                mainEvent2 = main.CommitEvent(new Message { Value = 3 }, NoRebase);
-                mainState = main.CommitState(NoRebase);
+            using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
+                mainEvent2 = main.CommitEvent(new Message { Value = 3 }, parameters: NoRebase).Id;
+                mainState = main.CommitState(parameters: NoRebase).Id;
             }
-            Assert.Equal(mainEvent.Address, mainEvent2.Parent);
-            Assert.Equal(mainEvent2.Address, mainState.Parent);
+            Assert.Equal(mainEvent, Previous(repository, mainEvent2));
+            Assert.Equal(mainEvent2, Previous(repository, mainState));
             Assert.Equal(root, repository.GetPreviousState(mainEvent2));
             StateCheckpoint mainView = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(mainState));
-            Assert.Equal(mainEvent2, mainView.PreviousEventAddress);
+            Assert.Equal(mainEvent2, mainView.PreviousEventCommit?.Id);
             Assert.Equal((byte)3, Assert.IsType<Message>(mainView.PreviousEvent).Value);
             StateCheckpoint siblingView = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(otherState));
             Assert.Null(siblingView.PreviousEvent);
-            Assert.Null(siblingView.PreviousEventAddress);
+            Assert.Null(siblingView.PreviousEventCommit?.Id);
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            foreach (CheckpointAddress address in new[] { otherState, mainEvent2, mainState }) {
-                Assert.Equal(root.RevisionAddress, states.ReadGraph(address.RevisionAddress).SourceGraph);
+            foreach (CommitId address in new[] { otherState, mainEvent2, mainState }) {
+                Assert.Equal(Describe(resources, root).Address, Snapshot(resources, address).SourceGraph);
             }
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using (BranchCheckout main = reopened.CheckoutShared("main")) {
+        using (WorkingCopy main = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"))) {
             Assert.Equal((byte)1, Assert.IsType<Alpha>(main.State).Value);
         }
-        using BranchCheckout otherCold = reopened.CheckoutShared("other");
+        using WorkingCopy otherCold = reopened.OpenWorkingCopy(BranchNamed(reopened, "other"));
         Assert.Equal((byte)8, Assert.IsType<Beta>(otherCold.State).Value);
     }
 

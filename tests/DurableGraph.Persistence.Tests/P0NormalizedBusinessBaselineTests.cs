@@ -15,9 +15,9 @@ public sealed partial class P0BusinessPlanningAccountingTests {
         FrameAddress initial, changed;
         ObjectId rootId, oldChildId, rootListId, childListId, newChildId;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
-            BranchSaveSession session = new(repository, "main", Models());
+            BranchSaveSessionFixture session = new(repository, "main", Models());
             DB087Widget root = TwoListRing();
-            using (PreparedBranchSave save = session.Prepare(root)) { initial = save.Commit().Business.Address; }
+            using (PreparedFixtureSave save = session.Prepare(root)) { initial = save.Commit().Business.Address; }
             NormalizedGraphState source = Baseline(session);
             AssertAccounting(repository, session);
             Assert.Equal(4, source.Objects.Count);
@@ -32,7 +32,7 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             List<int> childNumbers = root.Child!.Numbers;
             root.Child = new() { Value = 3, Numbers = childNumbers, Child = root };
             childNumbers[7] = 9;
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.Equal(oldChildId.Value, Assert.Single(save.Business.Write.RemovedIds));
                 Assert.Equal(3, save.Business.Write.Records.Count);
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records, row => row.ObjectId == childListId.Value);
@@ -60,19 +60,19 @@ public sealed partial class P0BusinessPlanningAccountingTests {
                 }
                 AssertAccounting(repository, session);
             }
-            CheckTwoListRing(Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, initial, Models())), 2, 0);
+            CheckTwoListRing(Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, initial), Models())), 2, 0);
             CheckTwoListRing(root, 3, 9);
         }
 
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(_path)) {
-            BranchSaveSession session = new(repository, "main", Models());
+            BranchSaveSessionFixture session = new(repository, "main", Models());
             Assert.Equal(changed, Baseline(session).RevisionAddress);
             AssertAccounting(repository, session);
             DB087Widget root = Assert.IsType<DB087Widget>(session.State);
             CheckTwoListRing(root, 3, 9);
             ObjectStorageInfo prior = Baseline(session).Objects[childListId].Storage!.Value;
             root.Child!.Numbers[8] = 9;
-            using PreparedBranchSave save = session.Prepare(root);
+            using PreparedFixtureSave save = session.Prepare(root);
             ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
             Assert.Equal(childListId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -82,8 +82,8 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             Assert.Equal(prior.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior.Head),
                 Baseline(session).Objects[childListId].Storage!.Value.ReconstructionPayloadBytes);
             AssertAccounting(repository, session);
-            CheckTwoListRing(Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, changed, Models())), 3, 9);
-            Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, result.Business.Address, Models())).Child!.Numbers[8]);
+            CheckTwoListRing(Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, changed), Models())), 3, 9);
+            Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, result.Business.Address), Models())).Child!.Numbers[8]);
         }
     }
 
@@ -92,9 +92,9 @@ public sealed partial class P0BusinessPlanningAccountingTests {
     [InlineData("graphHead")]
     public void P0NormalizedBaselineChecksStorageOfSourceMembersThatWillBeRemoved(string corruption) {
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path);
-        BranchSaveSession session = new(repository, "main", Models());
+        BranchSaveSessionFixture session = new(repository, "main", Models());
         DB087Widget root = TwoListRing();
-        using (PreparedBranchSave save = session.Prepare(root)) { save.Commit(); }
+        using (PreparedFixtureSave save = session.Prepare(root)) { save.Commit(); }
         NormalizedGraphState baseline = Baseline(session);
         ObjectId childId = baseline.Objects[session.StateSource!.RootId].Current.GetState<WidgetState>().Segment0Field3;
         Dictionary<ObjectId, NormalizedObject> rows = MutableRows(baseline);
@@ -106,9 +106,9 @@ public sealed partial class P0BusinessPlanningAccountingTests {
         Assert.Equal(frames, repository.Store.AppendedFrames);
         Assert.False(repository.HasPending);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(baseline.RevisionAddress, repository.GetHead("main"));
+        Assert.Equal(baseline.RevisionAddress, MechanismFixture.FindCurrent(repository, "main")?.Address);
         rows[childId] = child;
-        using PreparedBranchSave valid = session.Prepare(root); // Positive control still removes the complete old members.
+        using PreparedFixtureSave valid = session.Prepare(root); // Positive control still removes the complete old members.
         Assert.Contains(childId.Value, valid.Business.Write.RemovedIds);
         valid.Commit();
         Assert.DoesNotContain(childId, Baseline(session).Objects.Keys);
@@ -118,8 +118,8 @@ public sealed partial class P0BusinessPlanningAccountingTests {
     [Fact]
     public void P0NormalizedBaselineCannotBeBorrowedFromAnotherOwnerWithTheSameRealAddresses() {
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
-            BranchSaveSession session = new(repository, "main", Models());
-            using PreparedBranchSave seed = session.Prepare(TwoListRing());
+            BranchSaveSessionFixture session = new(repository, "main", Models());
+            using PreparedFixtureSave seed = session.Prepare(TwoListRing());
             seed.Commit();
         }
         string copy = _path + "-copy";
@@ -135,7 +135,7 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             }
             using RepositoryStorageFacade first = RepositoryStorageFacade.OpenExisting(_path);
             using RepositoryStorageFacade second = RepositoryStorageFacade.OpenExisting(copy);
-            BranchSaveSession firstSession = new(first, "main", Models()), secondSession = new(second, "main", Models());
+            BranchSaveSessionFixture firstSession = new(first, "main", Models()), secondSession = new(second, "main", Models());
             NormalizedGraphState foreign = Baseline(firstSession), owned = Baseline(secondSession);
             Assert.Same(first.Store, foreign.SourceSnapshot!.SourceOwner);
             Assert.Same(second.Store, owned.SourceSnapshot!.SourceOwner);
@@ -147,7 +147,7 @@ public sealed partial class P0BusinessPlanningAccountingTests {
                 second.Store, foreign.SourceSnapshot!, Models().FreezeConfiguration()));
             Assert.Throws<InvalidDataException>(() => second.Store.ReadObjectChains(foreign.SourceSnapshot!).ToArray());
             SchemaCatalogView catalog = SchemaCatalogView.Load(first.Store, first.SharedSchemaRoot!.Value);
-            DecodedGraphRows typed = StoredGraphDecoder.Read(first.Store, foreign.RevisionAddress, foreign.SourceModels!, catalog);
+            DecodedGraphRows typed = StoredGraphDecoder.Read(first.Store, MechanismFixture.Snapshot(first, foreign.RevisionAddress), foreign.SourceModels!, catalog);
             DecodedRevision syntheticDecoded = typed.ToDecodedRevision();
             Assert.Null(syntheticDecoded.SourceSnapshot);
             NormalizedGraphState synthetic = NormalizedGraphState.Create(syntheticDecoded, foreign.SourceModels!);
@@ -171,9 +171,9 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             Assert.Equal(frames, second.Store.AppendedFrames);
             Assert.False(second.IsFaulted);
             Assert.False(second.HasPending);
-            Assert.Equal(owned.RevisionAddress, second.GetHead("main"));
+            Assert.Equal(owned.RevisionAddress, MechanismFixture.FindCurrent(second, "main")?.Address);
             field.SetValue(Business(secondSession), owned);
-            using PreparedBranchSave valid = secondSession.Prepare(secondSession.State!);
+            using PreparedFixtureSave valid = secondSession.Prepare(secondSession.State!);
             Assert.Empty(valid.Business.Write.Records);
         }
         finally { SharedReadModel.DeleteFixture(copy, Prefix); }
@@ -183,24 +183,26 @@ public sealed partial class P0BusinessPlanningAccountingTests {
     public void P0InstallationPreparationFailureKeepsRefsAndBaselineAndPreservesCompleteOrphans() {
         FrameAddress oldState, oldMeta, orphan;
         HeadEntryId branchRevision, sharedRevision;
+        HeadId branchId;
         byte[] branchPayload, sharedPayload;
         long before;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
-            BranchSaveSession session = new(repository, "main", Models());
+            BranchSaveSessionFixture session = new(repository, "main", Models());
             DB087Widget root = TwoListRing();
-            using (PreparedBranchSave seed = session.Prepare(root)) { oldState = seed.Commit().Business.Address; }
+            using (PreparedFixtureSave seed = session.Prepare(root)) { oldState = seed.Commit().Business.Address; }
             oldMeta = repository.SharedSchemaRoot!.Value;
             NormalizedGraphState source = Baseline(session);
             SchemaCatalogView accepted = session.Catalog.Accepted!;
             ObjectId childId = source.Objects[session.StateSource!.RootId].Current.GetState<WidgetState>().Segment0Field3;
-            var branches = repository.Heads.ReadHead(1).Unwrap();
+            branchId = MechanismFixture.Branch(repository, "main");
+            var branches = repository.Heads.ReadHead(branchId).Unwrap();
             var shared = repository.Heads.ReadHead(2).Unwrap();
             branchRevision = branches.Id; sharedRevision = shared.Id;
             branchPayload = branches.Payload.ToArray(); sharedPayload = shared.Payload.ToArray();
             before = DataBytes(repository.Data);
             root.Numbers[7] = 9;
             session.Catalog.Set(new DurableSchema("Unpublished.InstallationFailure", 1, new DurableFieldInfo(1, TypeTag.Int32)));
-            using PreparedBranchSave save = session.Prepare(root);
+            using PreparedFixtureSave save = session.Prepare(root);
             bool reached = false, publicationReached = false;
             repository.SaveStageObserver = point => {
                 if (point == RepositorySaveStage.BeforePublication) { publicationReached = true; }
@@ -225,26 +227,26 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             Assert.Equal(1, session.Catalog.DirtyCount);
         }
         using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenExisting(_path);
-        var reopenedBranches = reopened.Heads.ReadHead(1).Unwrap();
+        var reopenedBranches = reopened.Heads.ReadHead(branchId).Unwrap();
         var reopenedShared = reopened.Heads.ReadHead(2).Unwrap();
         Assert.Equal(branchRevision, reopenedBranches.Id);
         Assert.Equal(sharedRevision, reopenedShared.Id);
         Assert.Equal(branchPayload, reopenedBranches.Payload.ToArray());
         Assert.Equal(sharedPayload, reopenedShared.Payload.ToArray());
-        Assert.Equal(oldState, reopened.GetHead("main"));
+        Assert.Equal(oldState, MechanismFixture.FindCurrent(reopened, "main")?.Address);
         Assert.Equal(oldMeta, reopened.SharedSchemaRoot);
         Assert.True(DataBytes(reopened.Data) > before);
-        StoredGraphRevision completed = reopened.Store.ReadGraph(orphan);
+        StoredGraphRevision completed = reopened.Store.ReadBusinessGraph(orphan, oldState);
         Assert.Equal(4, completed.ObjectHeads.Count);
         Assert.NotEqual(oldMeta, completed.SchemaRoot);
         SchemaCatalogView orphanMeta = SchemaCatalogView.Load(reopened.Store, completed.SchemaRoot!.Value);
         Assert.Contains(new SchemaKey("Unpublished.InstallationFailure", 1), orphanMeta.Schemas.Keys);
-        Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, orphan, Models())).Numbers[7]);
-        Assert.Equal(0, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, oldState, Models())).Numbers[7]);
-        BranchSaveSession continuation = new(reopened, "main", Models());
+        Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(orphan, oldState), Models())).Numbers[7]);
+        Assert.Equal(0, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, oldState), Models())).Numbers[7]);
+        BranchSaveSessionFixture continuation = new(reopened, "main", Models());
         DB087Widget rootAgain = Assert.IsType<DB087Widget>(continuation.State);
         rootAgain.Numbers[8] = 9;
-        using PreparedBranchSave next = continuation.Prepare(rootAgain);
+        using PreparedFixtureSave next = continuation.Prepare(rootAgain);
         next.Commit();
         AssertAccounting(reopened, continuation);
     }
@@ -254,11 +256,11 @@ public sealed partial class P0BusinessPlanningAccountingTests {
     [InlineData((int)RepositorySaveStage.BeforeInstall)]
     public void RejectedTypedCommitAndDisposeReentryDoesNotReleaseTheOuterCapture(int checkpoint) {
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path);
-        BranchSaveSession session = new(repository, "main", Models());
+        BranchSaveSessionFixture session = new(repository, "main", Models());
         DB087Widget root = TwoListRing();
-        using (PreparedBranchSave seed = session.Prepare(root)) { seed.Commit(); }
+        using (PreparedFixtureSave seed = session.Prepare(root)) { seed.Commit(); }
         root.Numbers[7] = 9;
-        using PreparedBranchSave save = session.Prepare(root);
+        using PreparedFixtureSave save = session.Prepare(root);
         bool reached = false;
         repository.SaveStageObserver = point => {
             if ((int)point != checkpoint) { return; }
@@ -270,13 +272,13 @@ public sealed partial class P0BusinessPlanningAccountingTests {
         RepositorySaveResult result = save.Commit();
         Assert.True(reached);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(result.Business.Address, repository.GetHead("main"));
+        Assert.Equal(result.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
         Assert.Equal(result.Business.Address, Baseline(session).RevisionAddress);
         AssertAccounting(repository, session);
         repository.SaveStageObserver = null;
-        using PreparedBranchSave unchanged = session.Prepare(root);
+        using PreparedFixtureSave unchanged = session.Prepare(root);
         Assert.Empty(unchanged.Business.Write.Records);
-        Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, result.Business.Address, Models())).Numbers[7]);
+        Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, result.Business.Address), Models())).Numbers[7]);
     }
 
     private static Dictionary<ObjectId, NormalizedObject> MutableRows(NormalizedGraphState baseline) =>

@@ -9,43 +9,45 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RequiredGraphReadChecksRevisionParentEvenForCompleteBase(bool state, bool orphan) {
+    public void RequiredGraphReadChecksHistorySourceEvenForCompleteBase(bool state, bool orphan) {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
-            first = main.Head.RevisionAddress;
-            root = main.Head.RootId;
+            BranchInfo main = seed.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase);
+            HistoryGraphRecord current = DB096TestAccess.Describe(seed, seed.ReadCurrentCommit(main.Id).Commit.Id);
+            first = current.Address;
+            root = current.RootId;
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            // A complete Base graph with business parent S0 must still name S0 as its
+            // A complete Base graph following S0 in Head history must still name S0 as its
             // content source. A new well-framed batch/directory falsely claims no source.
             GraphRecordStore store = resources.GraphStore;
-            FrameAddress invalid = AppendInvalidSource(resources, first, null, root,
+            FrameAddress invalid = AppendInvalidSource(resources, null, root,
                 state ? StoredGraphKind.State : StoredGraphKind.Event, StorageTestData.LocalRecords(store, first));
-            if (!orphan) { resources.PublishBranchRoot(resources.PrepareBranchRoot("main", invalid), out _); }
+            if (!orphan) { resources.Heads.PublishHead(resources.ListBranches().Single().Key, BusinessEntryPayloadCodec.Encode(invalid, default), out _).Unwrap(); }
             else { resources.Data.ConfirmDurable(); }
         }
         var before = SnapshotFiles();
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
-            var head = reader.GetHead("main");
-            if (orphan) { Assert.Equal(first, head.RevisionAddress); Assert.NotNull(reader.ReadState(head)); }
+            var head = reader.ReadCurrentCommit(DB096TestAccess.BranchNamed(reader, "main")).Commit;
+            if (orphan) { Assert.Equal(first, DB096TestAccess.Describe(reader, head.Id).Address); Assert.NotNull(reader.LoadState(head.Id)); }
             else {
-                Assert.Throws<InvalidDataException>(() => reader.ReadCheckpoint(head));
-                Assert.Throws<InvalidDataException>(() => reader.ReadPair(head, head));
-                if (state) { Assert.Throws<InvalidDataException>(() => reader.ReadState(head)); }
-                else { Assert.Throws<InvalidDataException>(() => reader.ReadEvent(head)); }
+                Assert.Throws<InvalidDataException>(() => reader.ReadCheckpoint(head.Id));
+                Assert.Throws<InvalidDataException>(() => reader.ReadPair(head.Id, head.Id));
+                if (state) { Assert.Throws<InvalidDataException>(() => reader.LoadState(head.Id)); }
+                else { Assert.Throws<InvalidDataException>(() => reader.LoadEvent(head.Id)); }
                 Assert.False(reader.IsFaulted);
             }
         }
         AssertFiles(before);
         if (!orphan) {
             using Repository writer = Repository.OpenExisting(_root, Models());
-            var head = writer.GetHead("main");
-            Assert.Throws<InvalidDataException>(() => writer.CheckoutShared("main"));
-            Assert.Throws<InvalidDataException>(() => writer.ForkShared("invalid-fork", head));
+            var head = writer.ReadCurrentCommit(DB096TestAccess.BranchNamed(writer, "main")).Commit;
+            Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main")));
+            BranchInfo child = writer.ForkBranch(head.Id, "invalid-fork");
+            Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(child.Id));
             Assert.False(writer.IsFaulted);
-            Assert.DoesNotContain("invalid-fork", writer.ListBranches());
+            Assert.Contains(writer.ListBranches(), branch => branch.Id == child.Id);
         }
     }
 
@@ -56,38 +58,39 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = seed.CreateSharedBranchFromEvent("main", new Node { Value = 1 }, NoRebase);
-            first = main.Head.RevisionAddress;
-            root = main.Head.RootId;
+            BranchInfo main = seed.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase);
+            HistoryGraphRecord current = DB096TestAccess.Describe(seed, seed.ReadCurrentCommit(main.Id).Commit.Id);
+            first = current.Address;
+            root = current.RootId;
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
-            FrameAddress invalid = AppendInvalidSource(resources, first, first, root, state ? StoredGraphKind.State : StoredGraphKind.Event,
+            FrameAddress invalid = AppendInvalidSource(resources, first, root, state ? StoredGraphKind.State : StoredGraphKind.Event,
                 StorageTestData.LocalRecords(store, first));
-            resources.PublishBranchRoot(resources.PrepareBranchRoot("main", invalid), out _);
+            resources.Heads.PublishHead(resources.ListBranches().Single().Key, BusinessEntryPayloadCodec.Encode(invalid, default), out _).Unwrap();
         }
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
-            CheckpointAddress head = reader.GetHead("main"); // Metadata navigation does not replay the bad directory.
-            Assert.Equal(state ? CheckpointKind.State : CheckpointKind.Event, head.Kind);
-            if (state) { Assert.Throws<InvalidDataException>(() => reader.ReadState(head)); }
-            else { Assert.Throws<InvalidDataException>(() => reader.ReadEvent(head)); }
+            CommitInfo head = reader.ReadCurrentCommit(DB096TestAccess.BranchNamed(reader, "main")).Commit; // Metadata navigation does not replay the bad directory.
+            Assert.Equal(state ? CommitKind.State : CommitKind.Event, head.Kind);
+            if (state) { Assert.Throws<InvalidDataException>(() => reader.LoadState(head.Id)); }
+            else { Assert.Throws<InvalidDataException>(() => reader.LoadEvent(head.Id)); }
             Assert.False(reader.IsFaulted);
         }
         using Repository writer = Repository.OpenExisting(_root, Models());
-        CheckpointAddress selected = writer.GetHead("main");
-        Assert.Throws<InvalidDataException>(() => writer.CheckoutShared("main"));
-        Assert.Throws<InvalidDataException>(() => writer.ForkShared("invalid-fork", selected));
+        CommitInfo selected = writer.ReadCurrentCommit(DB096TestAccess.BranchNamed(writer, "main")).Commit;
+        Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main")));
+        BranchInfo child = writer.ForkBranch(selected.Id, "invalid-fork");
+        Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(child.Id));
         Assert.False(writer.IsFaulted);
-        Assert.Equal(new[] { "main" }, writer.ListBranches());
+        Assert.Equal(new[] { "invalid-fork", "main" }, writer.ListBranches().Select(branch => branch.DisplayLabel).Order());
     }
 
-    private static FrameAddress AppendInvalidSource(RepositoryResources resources, FrameAddress parent,
-        FrameAddress? source, ObjectId root, StoredGraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
+    private static FrameAddress AppendInvalidSource(RepositoryResources resources, FrameAddress? source, ObjectId root, StoredGraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
         FrameAddress? schema = resources.SharedSchemaRoot;
         FrameAddress batch = resources.Data.Append(GraphFrameCodec.BatchTag, GraphFrameCodec.EncodeBatch(source, schema, records)).Unwrap();
         var heads = records.ToDictionary(row => row.ObjectId, _ => batch);
         FrameAddress directory = resources.Data.Append(GraphFrameCodec.DirectoryTag,
             GraphFrameCodec.EncodeDirectory(source, ObjectVersionKind.Base, null, ObjectHeadDirectoryCodec.PrepareBase(heads).Body)).Unwrap();
-        return resources.Data.Append(GraphFrameCodec.GraphTag, GraphFrameCodec.EncodeGraph(kind, parent, root, directory, schema, batch)).Unwrap();
+        return resources.Data.Append(GraphFrameCodec.GraphTag, GraphFrameCodec.EncodeGraph(kind, null, root, directory, schema, batch)).Unwrap();
     }
 }

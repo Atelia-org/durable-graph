@@ -105,19 +105,19 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
             bad = Publish(repository, "bad", [Base(1, outer, rawOuter), Base(2, longs, rawLong)]).Address;
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Equal(good, reader.GetStateHead("good"));
-        Assert.Equal(bad, reader.GetStateHead("bad"));
+        Assert.Equal(good, MechanismFixture.State(reader, "good")?.Address);
+        Assert.Equal(bad, MechanismFixture.State(reader, "bad")?.Address);
         Assert.Null(reader.SharedSchemaRoot);
-        Assert.Null(reader.Store.ReadGraph(good).SchemaRoot);
-        DecodedGraphRows valid = StoredGraphDecoder.Read(reader.Store, good, NoSchemas());
+        Assert.Null(reader.Store.ReadMetadata(good).SchemaRoot);
+        DecodedGraphRows valid = StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, good), NoSchemas());
         Assert.Equal(new ObjectId[] { new(2), new(2) }, valid.Rows[new(1)].GetListState<ObjectId>().Elements.ToArray());
         Assert.Equal(new[] { 17, -29 }, valid.Rows[new(2)].GetListState<int>().Elements.ToArray());
-        Assert.Equal(2, reader.Store.ReadGraph(bad).ObjectHeads.Count);
-        ObjectVersionChain inner = reader.Store.ReadObjectChain(bad, 2);
+        Assert.Equal(2, MechanismFixture.Snapshot(reader, bad).ObjectHeads.Count);
+        ObjectVersionChain inner = reader.Store.ReadObjectChain(MechanismFixture.Snapshot(reader, bad), 2);
         var decoded = TypedBaseBodyCodec.Decode(inner.Entries[0].Record.Body, null);
         Assert.Equal(new long[] { 17, -29 }, BootstrapBindings.Reader(decoded.Layout, NoSchemas())
             .Read(new(2), new SingleBody(decoded.Body)).GetListState<long>().Elements.ToArray());
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, bad, NoSchemas()));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, bad), NoSchemas()));
         Assert.Equal(0, reader.Store.AppendedFrames);
     }
 
@@ -133,7 +133,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
             .GetListState<long>().Elements.ToArray());
         FrameAddress meta;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            meta = repository.Store.Append(StoredGraphKind.Meta, null, null,
+            meta = repository.Store.AppendMeta(null,
                 new(null, catalog.View.RootId, catalog.Write!.Records.Append(extra))).Address;
             repository.Data.ConfirmDurable();
         }
@@ -162,11 +162,11 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         }).ToArray();
         FrameAddress meta;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            meta = repository.Store.Append(StoredGraphKind.Meta, null, null, new(null, view.RootId, records)).Address;
+            meta = repository.Store.AppendMeta(null, new(null, view.RootId, records)).Address;
             repository.Data.ConfirmDurable();
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        DecodedGraphRows decoded = StoredGraphDecoder.Read(reader.Store, meta);
+        DecodedGraphRows decoded = StoredGraphDecoder.ReadMeta(reader.Store, meta);
         Assert.Equal((byte)2, decoded.Rows[descriptor].GetState<DescriptorDto>().Segment0Field1);
         Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
     }
@@ -234,7 +234,7 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         ObjectVersionRecord.CreateBase(id, TypedBaseBodyCodec.Encode(ObjectLayout.ForList(layout), raw));
 
     private static StoredGraphRevision Publish(RepositoryStorageFacade repository, string branch, IEnumerable<ObjectVersionRecord> records) {
-        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State, new(null, new(1), records));
+        using PendingRepositorySave pending = MechanismFixture.Prepare(repository, branch, StoredGraphKind.State, new(null, new(1), records));
         return repository.Commit(pending).Business;
     }
 

@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.Tests;
 using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -8,64 +9,62 @@ using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Tests;
 
-// Test-only adapter for existing generated model/history witnesses. Each old Save operation
-// maps to initial S0 or explicit marker E + S. It preserves the graph assertions without
-// retaining a product compatibility facade. Public API acceptance uses Repository directly.
+// Generator mechanisms use the real internal capture/install pipeline so their initial
+// CLR identity remains stable. Public creation/restoration has separate API tests.
 public sealed class FixtureGraphRepository : IDisposable {
-    private readonly Repository _repository;
+    private readonly RepositoryStorageFacade _facade;
+    private readonly StateModelRegistry _models;
     private FrameAddress? _stateAddress;
-    private FixtureGraphRepository(Repository repository, bool existing) {
-        _repository = repository;
-        if (existing) { _stateAddress = repository.GetHead("main").RevisionAddress; }
+    private FixtureGraphRepository(RepositoryStorageFacade facade, StateModelRegistry models, bool existing) {
+        _facade = facade;
+        _models = models;
+        if (existing) { _stateAddress = MechanismFixture.State(facade, "main")?.Address; }
     }
     public static FixtureGraphRepository CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
+        return new(new RepositoryStorageFacade(RepositoryResources.CreateNew(path, rotationThresholdBytes)), models, false);
     }
     public static FixtureGraphRepository OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         FixtureMarker.Register(models);
-        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
+        return new(new RepositoryStorageFacade(RepositoryResources.OpenExisting(path, rotationThresholdBytes)), models, true);
     }
     public FrameAddress? HeadRevisionAddress => _stateAddress;
-    public bool IsFaulted => _repository.IsFaulted;
-    public FixtureGraphSession<T> Create<T>(T state) where T : class, IDurableObject {
-        return new(this, state);
-    }
+    public bool IsFaulted => _facade.IsFaulted;
+    public FixtureGraphSession<T> Create<T>(T state) where T : class, IDurableObject => new(this, NewSession(), state);
     public FixtureGraphSession<T> Load<T>() where T : class, IDurableObject {
-        return new(this, _repository.CheckoutShared("main"));
+        BranchSaveSessionFixture session = NewSession();
+        return new(this, session, (T)session.State!);
     }
-    internal BranchCheckout Initialize<T>(T state,
-        ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject =>
-        _repository.CreateSharedBranch("main", state, parameters);
+    private BranchSaveSessionFixture NewSession() => new(_facade, "main", _models);
     internal void Accept(FrameAddress address) => _stateAddress = address;
-    public void Dispose() => _repository.Dispose();
+    public void Dispose() {
+        RepositoryResources resources = MechanismFixture.Resources(_facade);
+        _facade.Dispose();
+        resources.Dispose();
+    }
 }
 
 public sealed class FixtureGraphSession<T> : IDisposable where T : class, IDurableObject {
     private readonly FixtureGraphRepository _repository;
+    private readonly BranchSaveSessionFixture _session;
     private readonly T _initial;
-    private BranchCheckout? _session;
-    internal FixtureGraphSession(FixtureGraphRepository repository, T initial) {
-        _repository = repository; _initial = initial;
+    internal FixtureGraphSession(FixtureGraphRepository repository, BranchSaveSessionFixture session, T initial) {
+        _repository = repository; _session = session; _initial = initial;
     }
-    internal FixtureGraphSession(FixtureGraphRepository repository, BranchCheckout session) {
-        _repository = repository; _initial = ((T)session.State!); _session = session;
-    }
-    public T World => _session is null ? _initial : ((T)_session.State!);
-    public ObjectId? WorldId => _session?.StateId;
-    public FrameAddress? ParentRevisionAddress => _session?.StateRevisionAddress;
+    public T World => (T?)_session.State ?? _initial;
+    public ObjectId? WorldId => _session.State is null ? null : _session.RootId;
+    public FrameAddress? ParentRevisionAddress => _session.StateSource?.Address;
     public FrameAddress Commit(ReadAmplificationBaseBudgetParameters parameters) {
-        if (_session is null) {
-            _session = _repository.Initialize(_initial, parameters);
-        } else {
-            if (_session.Head.Kind == CheckpointKind.State) { _session.CommitEvent(new FixtureMarker(), parameters); }
-            _session.CommitState(parameters);
+        if (_session.State is not null) {
+            using var marker = _session.Prepare(new FixtureMarker(), StoredGraphKind.Event, parameters);
+            marker.Commit();
         }
-        FrameAddress address = _session.StateRevisionAddress!.Value;
+        using var pending = _session.Prepare(World, StoredGraphKind.State, parameters);
+        FrameAddress address = pending.Commit().Business.Address;
         _repository.Accept(address);
         return address;
     }
-    public void Dispose() => _session?.Dispose();
+    public void Dispose() { }
 }
 
 internal sealed class FixtureMarker : IDurableObject {

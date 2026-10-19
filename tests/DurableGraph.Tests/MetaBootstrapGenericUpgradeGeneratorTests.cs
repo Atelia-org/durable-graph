@@ -1,3 +1,4 @@
+using Atelia.DurableGraph.Persistence.Tests;
 using System.Security.Cryptography;
 using Atelia.DurableGraph.Build;
 using Atelia.DurableGraph.Persistence;
@@ -22,10 +23,10 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress s0, s1, s2, s3, meta0, meta1;
         uint[] ids;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
-            BranchSaveSession session = new(repository, "main", oldHost.Models(0));
+            BranchSaveSessionFixture session = new(repository, "main", oldHost.Models(0));
             IDurableObject root = oldHost.Create("root");
             oldHost.Check(root, 0);
-            using PreparedBranchSave save = session.Prepare(root);
+            using PreparedFixtureSave save = session.Prepare(root);
             AssertBootstrapGenericUpgradeCatalog(save.Catalog.View, old);
             Assert.Equal(3, save.Business.Write.Records.Count);
             Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
@@ -46,10 +47,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             DecodedGraphRows decoded = ReadBootstrapGenericUpgradeRows(repository, s0, currentHost.Models(0));
             currentHost.CheckStored(decoded.Rows.Values.ToArray(), 1, 0);
             Assert.Equal(0, currentHost.CallCount()); // Real historical DTOs from the current independent assembly.
-            IDurableObject restored = BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, currentHost.Models(0));
+            IDurableObject restored = BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s0), currentHost.Models(0));
             currentHost.Check(restored, 1);
             currentHost.CheckCalls(ids.Skip(1).ToArray()); // Open int and closed Point must both run, once each.
-            Assert.Equal(s0, repository.GetHead("main"));
+            Assert.Equal(s0, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(meta0, repository.SharedSchemaRoot);
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
@@ -57,13 +58,13 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(files.Path)) {
             StateModelRegistry models = currentHost.Models(0);
-            BranchSaveSession session = new(repository, "main", models);
+            BranchSaveSessionFixture session = new(repository, "main", models);
             IDurableObject root = session.State!;
             currentHost.Check(root, 1);
             object[] identities = currentHost.Objects(root);
             StoredGraphRevision source = session.StateSource!;
             Assert.Equal(s0, source.Address);
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.NotNull(save.Catalog.Write);
                 AssertBootstrapGenericUpgradeCatalog(save.Catalog.View, old.Concat(current).Distinct().ToArray());
                 Assert.Equal(s0, save.Business.Write.SourceGraph);
@@ -75,7 +76,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 meta1 = result.Meta!.Address;
                 Assert.NotEqual(meta0, meta1);
                 Assert.Equal(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
-                foreach (uint id in ids.Skip(1)) { Assert.Single(repository.Store.ReadObjectChain(s1, id).Entries); }
+                foreach (uint id in ids.Skip(1)) { Assert.Single(repository.Store.ReadObjectChain(MechanismFixture.Snapshot(repository, s1), id).Entries); }
             }
             Assert.Equal(s1, session.StateSource!.Address);
             Assert.Equal(meta1, repository.SharedSchemaRoot);
@@ -89,7 +90,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             currentHost.Change(root);
             currentHost.Check(root, 2);
             StoredGraphRevision prior = session.StateSource!;
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Catalog.EncodedIds);
                 Assert.Equal(s1, save.Business.Write.SourceGraph);
@@ -103,7 +104,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(meta1, result.Meta!.Address);
                 Assert.Equal(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
                 foreach (uint id in ids.Skip(1)) {
-                    ObjectVersionChain chain = repository.Store.ReadObjectChain(s2, id);
+                    ObjectVersionChain chain = repository.Store.ReadObjectChain(MechanismFixture.Snapshot(repository, s2), id);
                     Assert.Equal(2, chain.Entries.Count);
                     Assert.Equal(meta1, chain.Entries[0].SchemaRoot);
                     Assert.Equal(ObjectVersionKind.Delta, chain.Entries[^1].Record.Kind);
@@ -113,7 +114,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             for (int index = 0; index < identities.Length; index++) { Assert.Same(identities[index], after[index]); }
             currentHost.CheckStored(ReadBootstrapGenericUpgradeRows(repository, s2, models).Rows.Values.ToArray(), 2, 2);
             prior = session.StateSource!;
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Business.Write.Records);
                 RepositorySaveResult result = save.Commit();
@@ -126,16 +127,16 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         before = BootstrapGenericUpgradeFileHashes(files.Path);
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(files.Path)) {
-            Assert.Equal(s3, repository.GetStateHead("main"));
+            Assert.Equal(s3, MechanismFixture.State(repository, "main")?.Address);
             Assert.Equal(meta1, repository.SharedSchemaRoot);
             AssertBootstrapGenericUpgradeCatalog(SchemaCatalogView.Load(repository.Store, meta0), old);
             AssertBootstrapGenericUpgradeCatalog(SchemaCatalogView.Load(repository.Store, meta1), old.Concat(current).Distinct().ToArray());
-            oldHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, oldHost.Models(0)), 0);
-            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s0, currentHost.Models(0)), 1);
-            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s1, currentHost.Models(0)), 1);
-            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s2, currentHost.Models(0)), 2);
-            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, s3, currentHost.Models(0)), 2);
-            Assert.Equal(meta0, repository.Store.ReadGraph(s0).SchemaRoot);
+            oldHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s0), oldHost.Models(0)), 0);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s0), currentHost.Models(0)), 1);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s1), currentHost.Models(0)), 1);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s2), currentHost.Models(0)), 2);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s3), currentHost.Models(0)), 2);
+            Assert.Equal(meta0, MechanismFixture.Snapshot(repository, s0).SchemaRoot);
             Assert.Equal(0, repository.Store.AppendedFrames);
         }
         AssertBootstrapGenericUpgradeFilesUnchanged(before, files.Path);
@@ -152,8 +153,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress source, schema;
         uint ownerId;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(files.Path)) {
-            BranchSaveSession session = new(repository, "main", oldHost.Models(0));
-            using PreparedBranchSave save = session.Prepare(oldHost.Create(rootKind));
+            BranchSaveSessionFixture session = new(repository, "main", oldHost.Models(0));
+            using PreparedFixtureSave save = session.Prepare(oldHost.Create(rootKind));
             RepositorySaveResult result = save.Commit();
             source = result.Business.Address;
             schema = result.Meta!.Address;
@@ -165,7 +166,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             var branch = repository.Heads.ReadHead(1).Unwrap();
             var shared = repository.Heads.ReadHead(2).Unwrap();
             currentHost.ResetCalls();
-            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, source, currentHost.Models(0)), 1);
+            currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, source), currentHost.Models(0)), 1);
             currentHost.CheckCalls([ownerId]); // The same physical source succeeds with complete capabilities.
 
             currentHost.ResetCalls();
@@ -174,11 +175,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             currentHost.CheckStored(decoded.Rows.Values.ToArray(), 1, 0);
             Assert.Equal(0, currentHost.CallCount()); // Endpoint changes do not revoke the real historical reader.
             InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
-                BusinessPersistenceAdapter.ReadRoot(repository.Store, source, rejected));
+                BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, source), rejected));
             Assert.Contains(message, error.Message);
             Assert.Equal(0, currentHost.CallCount());
             Assert.False(repository.IsFaulted);
-            Assert.Equal(source, repository.GetHead("main"));
+            Assert.Equal(source, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schema, repository.SharedSchemaRoot);
             Assert.Equal(branch.Id, repository.Heads.ReadHead(1).Unwrap().Id);
             Assert.Equal(shared.Id, repository.Heads.ReadHead(2).Unwrap().Id);
@@ -211,8 +212,8 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static DecodedGraphRows ReadBootstrapGenericUpgradeRows(RepositoryStorageFacade repository, FrameAddress graph, StateModelRegistry models) {
-        SchemaCatalogView selected = SchemaCatalogView.Load(repository.Store, repository.Store.ReadGraph(graph).SchemaRoot!.Value);
-        return StoredGraphDecoder.Read(repository.Store, graph, models.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key)), selected);
+        SchemaCatalogView selected = SchemaCatalogView.Load(repository.Store, MechanismFixture.Snapshot(repository, graph).SchemaRoot!.Value);
+        return StoredGraphDecoder.Read(repository.Store, MechanismFixture.Snapshot(repository, graph), models.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key)), selected);
     }
 
     private static DurableSchema[] ExpectedBootstrapGenericUpgradeSchemas(int version) {

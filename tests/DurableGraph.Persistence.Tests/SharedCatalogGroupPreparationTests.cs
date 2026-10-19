@@ -28,7 +28,7 @@ public sealed class SharedCatalogGroupPreparationTests : IDisposable {
             SchemaCatalogWorkspace initial = new(static () => { });
             initial.Set(established);
             PreparedSchemaCatalogWrite seed = initial.Prepare();
-            StoredGraphRevision seedGraph = repository.Store.Append(StoredGraphKind.Meta, null, null, seed.Write!);
+            StoredGraphRevision seedGraph = repository.Store.AppendMeta(null, seed.Write!);
             seed.PrepareInstall(seedGraph);
             seed.Install(seedGraph);
             establishedDescriptor = seed.View.DescriptorId(ObjectLayout.ForDurable(established));
@@ -47,10 +47,10 @@ public sealed class SharedCatalogGroupPreparationTests : IDisposable {
             using PreparedBusinessWrite worldWrite = worldAdapter.PrepareOwned(worldCapture, common.View);
             using PreparedBusinessWrite playerWrite = playerAdapter.PrepareOwned(playerCapture, common.View);
             // Both business writes are encoded only after the common descriptor domain exists.
-            StoredGraphRevision meta = repository.Store.Append(StoredGraphKind.Meta, seedGraph.Address, null, common.Write!);
+            StoredGraphRevision meta = repository.Store.AppendMeta(seedGraph.Address, common.Write!);
             schemaAddress = meta.Address;
-            worldAddress = repository.Store.Append(StoredGraphKind.State, null, meta.Address, worldWrite.Write).Address;
-            playerAddress = repository.Store.Append(StoredGraphKind.State, null, meta.Address, playerWrite.Write).Address;
+            worldAddress = repository.Store.AppendBusiness(StoredGraphKind.State, null, meta.Address, worldWrite.Write).Address;
+            playerAddress = repository.Store.AppendBusiness(StoredGraphKind.State, null, meta.Address, playerWrite.Write).Address;
             repository.Data.ConfirmDurable();
         }
 
@@ -62,8 +62,8 @@ public sealed class SharedCatalogGroupPreparationTests : IDisposable {
         Assert.NotSame(worldOnly, coldCatalog.Schemas[new(worldOnly.Type, worldOnly.Version)]);
         Assert.Equal(schemaAddress, reopened.Store.ReadMetadata(worldAddress).SchemaRoot);
         Assert.Equal(schemaAddress, reopened.Store.ReadMetadata(playerAddress).SchemaRoot);
-        DB087Widget restoredWorld = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, worldAddress, Models()));
-        DB087EnvelopeRoot restoredPlayer = Assert.IsType<DB087EnvelopeRoot>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, playerAddress, Models()));
+        DB087Widget restoredWorld = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(worldAddress, null), Models()));
+        DB087EnvelopeRoot restoredPlayer = Assert.IsType<DB087EnvelopeRoot>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(playerAddress, null), Models()));
         Assert.Equal(58, restoredWorld.Value);
         Assert.Equal(new[] { 4, 8, 15 }, restoredWorld.Numbers);
         Assert.Same(restoredWorld, restoredWorld.Child);
@@ -80,7 +80,7 @@ public sealed class SharedCatalogGroupPreparationTests : IDisposable {
         using var repository = RepositoryStorageFacade.CreateNew(_path);
         SchemaCatalogWorkspace initial = new(static () => { });
         PreparedSchemaCatalogWrite seed = initial.Prepare();
-        StoredGraphRevision meta = repository.Store.Append(StoredGraphKind.Meta, null, null, seed.Write!);
+        StoredGraphRevision meta = repository.Store.AppendMeta(null, seed.Write!);
         seed.PrepareInstall(meta);
         seed.Install(meta);
         long framesBefore = repository.Store.AppendedFrames;

@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers.Binary;
 
 using Atelia.DurableGraph.Runtime;
@@ -40,7 +41,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
             Assert.Equal(fileId, report.Key);
             AssertTruncated(report.Value, completeLength);
             Assert.Empty(resources.Heads.RecoveryReports);
-            Assert.Equal(seed.Head, recovered.GetHead("main").RevisionAddress);
+            Assert.Equal(seed.Head, Describe(recovered, recovered.ReadCurrentCommit(seed.Branch).Commit.Id).Address);
             Assert.Equal(seed.SchemaRoot, recovered.SharedSchemaRoot);
             AssertHistory(recovered, seed);
             AssertCompletedFrames(resources.Data, seed.Frames);
@@ -52,35 +53,35 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         FrameAddress continued;
         using (Repository writer = Repository.OpenStorageExisting(_path, Models())) {
             AssertHealthyActive(ResourcesOf(writer).Data, fileId, completeLength);
-            using BranchCheckout checkout = writer.CheckoutShared("main");
+            using WorkingCopy checkout = writer.OpenWorkingCopy(seed.Branch);
             DB087Widget root = AssertRing(checkout.State, 201);
             Assert.Equal(seed.Head, checkout.StateRevisionAddress);
             Assert.Equal(seed.RootId, checkout.StateId);
             Assert.Equal(seed.Storage.Keys.OrderBy(id => id.Value), checkout.Baseline!.Objects.Keys.OrderBy(id => id.Value));
             foreach ((ObjectId id, ObjectStorageInfo storage) in seed.Storage) { Assert.Equal(storage, checkout.Baseline.Objects[id].Storage); }
             root.Numbers[8] = 202;
-            CheckpointAddress saved = checkout.CommitState();
-            continued = saved.RevisionAddress;
-            StoredGraphRevision graph = writer.GraphStore.ReadGraph(continued);
+            CommitInfo saved = checkout.CommitState();
+            continued = Describe(writer, saved.Id).Address;
+            StoredGraphRevision graph = Snapshot(writer, saved.Id);
             ObjectVersionRecord delta = Assert.Single(writer.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             ObjectStorageInfo prior = seed.Storage[seed.ListId];
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(seed.ListId.Value, delta.ObjectId);
             Assert.Equal(prior.Head, delta.PriorAddress);
             Assert.Equal(seed.Head, graph.SourceGraph);
-            Assert.Equal(seed.Head, graph.Parent);
+            Assert.Equal(seed.History.Last(), Describe(writer, new CommitId(ResourcesOf(writer).ReadPrevious(saved.Id.Value)!.Id)).Address);
             Assert.Equal(prior.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior.Head),
                 checkout.Baseline!.Objects[seed.ListId].Storage!.Value.ReconstructionPayloadBytes);
             AssertCompletedFrames(ResourcesOf(writer).Data, seed.Frames, allowAppended: true);
         }
         using Repository fresh = Repository.OpenStorageReadOnlyExisting(_path, Models());
-        Assert.Equal(continued, fresh.GetHead("main").RevisionAddress);
-        AssertRing(fresh.ReadState(fresh.GetHead("main")), 201, 202);
-        CheckpointAddress[] history = fresh.ReadFrames("main").ToArray();
-        Assert.Equal(seed.History, history.Take(seed.History.Length).Select(frame => frame.RevisionAddress));
-        AssertRing(fresh.ReadState(history[0]), 7);
-        AssertRing(fresh.ReadEvent(history[1]), 200);
-        AssertRing(fresh.ReadState(history[2]), 201);
+        Assert.Equal(continued, Describe(fresh, fresh.ReadCurrentCommit(seed.Branch).Commit.Id).Address);
+        AssertRing(fresh.LoadState(fresh.ReadCurrentCommit(seed.Branch).Commit.Id), 201, 202);
+        CommitInfo[] history = fresh.ReadFrames(seed.Branch).ToArray();
+        Assert.Equal(seed.History, history.Take(seed.History.Length).Select(frame => Describe(fresh, frame.Id).Address));
+        AssertRing(fresh.LoadState(history[0].Id), 7);
+        AssertRing(fresh.LoadEvent(history[1].Id), 200);
+        AssertRing(fresh.LoadState(history[2].Id), 201);
         AssertCompletedFrames(ResourcesOf(fresh).Data, seed.Frames, allowAppended: true);
         Assert.Empty(ResourcesOf(fresh).Data.RecoveryReports);
     }
@@ -93,14 +94,14 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         using (Repository owner = Repository.OpenStorageExisting(_path, Models())) {
             var versions = ResourcesOf(owner).Heads;
             // DG reserves 1/2/3. The explicit-ID CreateHead overload cannot create
-            // ordinary head4; automatic H+1 is the actual public HeadStore route.
+            // ordinary head5; automatic H+1 is the actual public HeadStore route.
             HeadEntryId created = versions.CreateHead(new byte[] { 10, 20 }, out PublicationOutcome createdOutcome).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, createdOutcome);
-            Assert.Equal(4u, versions.GetLocalHeadId(created.HeadId).Unwrap());
+            Assert.Equal(5u, versions.GetLocalHeadId(created.HeadId).Unwrap());
             ordinaryRevision = versions.PublishHead(created.HeadId, ordinaryPayload, out PublicationOutcome published).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, published);
         }
-        string refPath = Path.Combine(_path, "versions", "refs", "00000004.rbf");
+        string refPath = Path.Combine(_path, "versions", "refs", "00000005.rbf");
         uint dataFileId = FileIdOf(seed.Head);
         long dataLength = new FileInfo(Path.Combine(_path, "data", "active", dataFileId.ToString("x8") + ".rbf")).Length;
         byte[] completeRef = File.ReadAllBytes(refPath);
@@ -113,7 +114,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
             var versions = ResourcesOf(readonlyOwner).Heads;
             Assert.Empty(versions.RecoveryReports);
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));
-            Assert.Equal(seed.Head, readonlyOwner.GetHead("main").RevisionAddress);
+            Assert.Equal(seed.Head, Describe(readonlyOwner, readonlyOwner.ReadCurrentCommit(seed.Branch).Commit.Id).Address);
             AssertHistory(readonlyOwner, seed);
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));
             Assert.Empty(versions.RecoveryReports);
@@ -129,16 +130,16 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
             Assert.Equal(incompleteRef, File.ReadAllBytes(refPath));
             Assert.Empty(reports);
             AssertHealthyActive(resources.Data, dataFileId, dataLength);
-            HeadEntry actual = resources.Heads.ReadHead(4).Unwrap();
+            HeadEntry actual = resources.Heads.ReadHead(5).Unwrap();
             Assert.Equal(ordinaryRevision, actual.Id);
             Assert.Equal(ordinaryPayload, actual.Payload.ToArray());
             HeadStoreRecoveryReport report = Assert.Single(reports);
             Assert.Equal(HeadStoreRecoveryFileKind.Head, report.FileKind);
-            Assert.Equal(4u, report.LocalId);
+            Assert.Equal(5u, report.LocalId);
             AssertTruncated(report.Recovery, completeRef.Length);
-            Assert.Equal(ordinaryRevision, resources.Heads.ReadHead(4).Unwrap().Id);
+            Assert.Equal(ordinaryRevision, resources.Heads.ReadHead(5).Unwrap().Id);
             Assert.Equal(report, Assert.Single(reports)); // A successful repeated read does not produce another recovery action.
-            Assert.Equal(seed.Head, writer.GetHead("main").RevisionAddress);
+            Assert.Equal(seed.Head, Describe(writer, writer.ReadCurrentCommit(seed.Branch).Commit.Id).Address);
             Assert.Equal(seed.SchemaRoot, writer.SharedSchemaRoot);
             AssertCompletedFrames(resources.Data, seed.Frames);
             Assert.Equal(0, writer.GraphStore.AppendedFrames);
@@ -147,7 +148,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         Dictionary<string, byte[]> expected = new(damagedFiles) { [Path.GetRelativePath(_path, refPath)] = completeRef };
         AssertFilesEqual(expected, SnapshotFiles());
         using Repository fresh = Repository.OpenStorageReadOnlyExisting(_path, Models());
-        HeadEntry coldRef = ResourcesOf(fresh).Heads.ReadHead(4).Unwrap();
+        HeadEntry coldRef = ResourcesOf(fresh).Heads.ReadHead(5).Unwrap();
         Assert.Equal(ordinaryRevision, coldRef.Id);
         Assert.Equal(ordinaryPayload, coldRef.Payload.ToArray());
         Assert.Empty(ResourcesOf(fresh).Heads.RecoveryReports);
@@ -158,32 +159,34 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
     private SeedResult Seed() {
         using Repository seed = Repository.CreateStorageNew(_path, Models());
         DB087Widget root = Ring();
-        using BranchCheckout main = seed.CreateSharedBranch("main", root);
+        BranchInfo branch = seed.CreateRootBranchFromState("main", root);
+        using WorkingCopy main = seed.OpenWorkingCopy(branch.Id);
+        root = Assert.IsType<DB087Widget>(main.State);
         main.Catalog.Set(Extra);
         root.Numbers[7] = 200;
         main.CommitEvent(root);
         root.Numbers[7] = 201;
-        CheckpointAddress state = main.CommitState();
+        CommitInfo state = main.CommitState();
         ObjectId listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
         var storage = main.Baseline.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);
-        return new(state.RevisionAddress, state.RootId, listId, seed.SharedSchemaRoot!.Value,
-            seed.ReadFrames("main").Select(frame => frame.RevisionAddress).ToArray(), storage, ReadFrames(ResourcesOf(seed).Data));
+        return new(branch.Id, Describe(seed, state.Id).Address, main.StateId!.Value, listId, seed.SharedSchemaRoot!.Value,
+            seed.ReadFrames(branch.Id).Select(frame => Describe(seed, frame.Id).Address).ToArray(), storage, ReadFrames(ResourcesOf(seed).Data));
     }
     private static void AssertHistory(Repository repository, SeedResult seed) {
-        Assert.Equal(seed.Head, repository.GetHead("main").RevisionAddress);
+        Assert.Equal(seed.Head, Describe(repository, repository.ReadCurrentCommit(seed.Branch).Commit.Id).Address);
         Assert.Equal(seed.SchemaRoot, repository.SharedSchemaRoot);
-        CheckpointAddress[] frames = repository.ReadFrames("main").ToArray();
-        Assert.Equal(seed.History, frames.Select(frame => frame.RevisionAddress));
-        Assert.Equal(new[] { CheckpointKind.State, CheckpointKind.Event, CheckpointKind.State }, frames.Select(frame => frame.Kind));
-        AssertRing(repository.ReadState(frames[0]), 7);
-        AssertRing(repository.ReadEvent(frames[1]), 200);
-        AssertRing(repository.ReadState(frames[2]), 201);
-        Assert.Equal(seed.RootId, frames[2].RootId);
-        StoredGraphRevision graph = repository.GraphStore.ReadGraph(seed.Head);
+        CommitInfo[] frames = repository.ReadFrames(seed.Branch).ToArray();
+        Assert.Equal(seed.History, frames.Select(frame => Describe(repository, frame.Id).Address));
+        Assert.Equal(new[] { CommitKind.State, CommitKind.Event, CommitKind.State }, frames.Select(frame => frame.Kind));
+        AssertRing(repository.LoadState(frames[0].Id), 7);
+        AssertRing(repository.LoadEvent(frames[1].Id), 200);
+        AssertRing(repository.LoadState(frames[2].Id), 201);
+        Assert.Equal(seed.RootId, Describe(repository, frames[2].Id).RootId);
+        StoredGraphRevision graph = Snapshot(repository, frames[2].Id);
         Assert.Equal(seed.Storage.Keys.Select(id => id.Value).Order(), graph.ObjectHeads.Keys.Order());
         foreach ((ObjectId id, ObjectStorageInfo storage) in seed.Storage) {
             Assert.Equal(storage.Head, graph.ObjectHeads[id.Value]);
-            Assert.Equal(storage.ReconstructionPayloadBytes, repository.GraphStore.ReadObjectChain(seed.Head, id.Value).ReconstructionPayloadBytes);
+            Assert.Equal(storage.ReconstructionPayloadBytes, repository.GraphStore.ReadObjectChain(graph, id.Value).ReconstructionPayloadBytes);
         }
     }
     private static FrameImage[] ReadFrames(DataStore data) {
@@ -264,7 +267,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
         foreach ((string name, byte[] bytes) in expected) { Assert.Equal(bytes, actual[name]); }
     }
     private sealed record FrameImage(FrameAddress Address, uint Tag, int TailMetaLength, bool IsTombstone, byte[] PayloadAndMeta);
-    private sealed record SeedResult(FrameAddress Head, ObjectId RootId, ObjectId ListId, FrameAddress SchemaRoot,
+    private sealed record SeedResult(BranchId Branch, FrameAddress Head, ObjectId RootId, ObjectId ListId, FrameAddress SchemaRoot,
         FrameAddress[] History, Dictionary<ObjectId, ObjectStorageInfo> Storage, FrameImage[] Frames);
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);
 }

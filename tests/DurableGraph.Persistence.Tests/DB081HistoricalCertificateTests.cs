@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Reflection;
 using Atelia.DurableGraph.Runtime;
@@ -21,43 +22,47 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
     [Fact]
     public void CurrentStateDropsHistoricalOnlyCertificateWhileEventsPreserveRewriteAndDoNotRepopulateSlot() {
         using (Repository seed = Repository.CreateNew(_root, Models(current: false, new()))) {
-            using BranchCheckout initial = seed.CreateSharedBranch("main", new Root { Value = 17 }, NoRebase);
+            seed.CreateRootBranchFromState("main", new Root { Value = 17 }, parameters: NoRebase);
         }
         Counters counts = new();
         using Repository repository = Repository.OpenExisting(_root, Models(current: true, counts));
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        CheckpointAddress oldAddress = repository.GetHead("main");
-        using BranchCheckout upgraded = repository.CheckoutShared("main");
+        CommitId oldAddress = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+        using WorkingCopy upgraded = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
         PreparedStateRestoration oldEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, counts.Normalizes);
         Assert.Equal(17, Assert.IsType<Root>(upgraded.State).Value);
         Assert.True(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
 
-        using BranchCheckout other = repository.CreateSharedBranch("other", new Root { Value = 44 }, NoRebase);
-        using BranchCheckout otherFork = repository.ForkShared("other-fork", other.Head);
+        // An Event-only opening followed by State capture leaves this State unread;
+        // creating a State root and opening it would already earn a read certificate.
+        IDurableObject otherInitial = new Root { Value = 44 };
+        using WorkingCopy other = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("other", otherInitial, parameters: NoRebase).Id);
+        other.CommitState(otherInitial, parameters: NoRebase);
+        using WorkingCopy otherFork = repository.OpenWorkingCopy(repository.ForkBranch(other.BaseCommitId, "other-fork").Id);
         PreparedStateRestoration otherEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.NotSame(oldEntry, otherEntry);
         NormalizedGraphState originalBaseline = Baseline(upgraded);
         var beforeEvent = Counts(statistics);
-        CheckpointAddress eventAddress = upgraded.CommitEvent(upgraded.State!, NoRebase);
+        CommitId eventAddress = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
         Assert.Same(otherEntry, repository.PreparedStateEntry);
         Assert.Equal(beforeEvent, Counts(statistics));
         Assert.Same(originalBaseline, Baseline(upgraded));
         Assert.True(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
 
         int misses = statistics.PreparedStateMisses;
-        using BranchCheckout eventFork = repository.ForkShared("event-fork", eventAddress);
-        Assert.Equal(eventAddress, eventFork.Head);
-        Assert.Equal(oldAddress.RevisionAddress, eventFork.StateRevisionAddress);
+        using WorkingCopy eventFork = repository.OpenWorkingCopy(repository.ForkBranch(eventAddress, "event-fork").Id);
+        Assert.Equal(eventAddress, eventFork.BaseCommitId);
+        Assert.Equal(Describe(repository, oldAddress).Address, eventFork.StateRevisionAddress);
         Assert.Equal(misses + 1, statistics.PreparedStateMisses);
         Assert.Equal(2, counts.Normalizes);
         PreparedStateRestoration renewedOldEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.NotSame(oldEntry, renewedOldEntry);
 
-        CheckpointAddress newAddress = upgraded.CommitState(NoRebase);
-        StoredGraphRevision saved = repository.GraphStore.ReadGraph(newAddress.Address);
-        Assert.Equal(oldAddress.Address, saved.SourceGraph);
+        CommitId newAddress = upgraded.CommitState(parameters: NoRebase).Id;
+        StoredGraphRevision saved = Snapshot(repository, newAddress);
+        Assert.Equal(Describe(repository, oldAddress).Address, saved.SourceGraph);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).Records).Kind);
         Assert.False(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
         // DB-080 has no hot admission. Retaining this old entry is valid; installing
@@ -65,25 +70,25 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         Assert.Same(renewedOldEntry, repository.PreparedStateEntry);
         upgraded.Catalog.Set(new DurableSchema(Intermediate, 5, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
-        CheckpointAddress catalogEvent = upgraded.CommitEvent(upgraded.State!, NoRebase);
+        CommitId catalogEvent = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
         var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
         var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore, configuration,
-            repository.GraphStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+            repository.GraphStore.ReadMetadata(Describe(repository, catalogEvent).Address).SchemaRoot!.Value);
         InvalidDataException conflict = Assert.Throws<InvalidDataException>(() => renewedOldEntry.Requirements.Validate(wrongEnvironment.Models));
         Assert.Contains(Intermediate, conflict.Message);
 
         int normalized = counts.Normalizes;
         misses = statistics.PreparedStateMisses;
-        using BranchCheckout currentCold = repository.ForkShared("current-cold", newAddress);
+        using WorkingCopy currentCold = repository.OpenWorkingCopy(repository.ForkBranch(newAddress, "current-cold").Id);
         Assert.Equal(17, Assert.IsType<Root>(currentCold.State).Value);
-        Assert.Equal(newAddress.RevisionAddress, currentCold.StateRevisionAddress);
+        Assert.Equal(Describe(repository, newAddress).Address, currentCold.StateRevisionAddress);
         Assert.Equal(misses + 1, statistics.PreparedStateMisses);
         Assert.Equal(normalized, counts.Normalizes);
         PreparedStateRestoration currentEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.NotSame(renewedOldEntry, currentEntry);
-        Assert.Equal(newAddress, currentEntry.StateCheckpoint);
+        Assert.Equal(newAddress, new CommitId(currentEntry.StateCheckpoint.Id));
         int decoded = statistics.DecodedObjects, hits = statistics.PreparedStateHits;
-        using BranchCheckout currentHit = repository.ForkShared("current-hit", newAddress);
+        using WorkingCopy currentHit = repository.OpenWorkingCopy(repository.ForkBranch(newAddress, "current-hit").Id);
         Assert.Equal(hits + 1, statistics.PreparedStateHits);
         Assert.Equal(decoded, statistics.DecodedObjects);
         Assert.Equal(normalized, counts.Normalizes);
@@ -95,7 +100,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         // historical read still uses its own immutable S and remains valid.
         Assert.True(renewedOldEntry.SchemaRequirementCount > currentEntry.SchemaRequirementCount);
         currentEntry.Requirements.Validate(wrongEnvironment.Models);
-        using BranchCheckout oldAgain = repository.ForkShared("old-again", oldAddress);
+        using WorkingCopy oldAgain = repository.OpenWorkingCopy(repository.ForkBranch(oldAddress, "old-again").Id);
         Assert.Equal(17, Assert.IsType<Root>(oldAgain.State).Value);
         Assert.True(Baseline(oldAgain).Objects[oldAgain.StateId!.Value].RequiresRewrite);
         Assert.False(repository.IsFaulted);
@@ -139,7 +144,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
     private static void Keep(in int prior, out int next, UpgradeContext _) => next = prior;
     private static MethodInfo Method(string name) => typeof(DB081HistoricalCertificateTests).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
-    private static NormalizedGraphState Baseline(BranchCheckout branch) => branch.Baseline!;
+    private static NormalizedGraphState Baseline(WorkingCopy branch) => branch.Baseline!;
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>
         (stats.DecodedObjects, stats.NormalizedObjects, stats.PreparedGraphs, stats.AllocatedObjects, stats.HydratedObjects,
             stats.PreparedStateHits, stats.PreparedStateMisses);

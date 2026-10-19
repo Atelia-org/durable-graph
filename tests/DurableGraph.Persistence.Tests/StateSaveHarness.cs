@@ -10,50 +10,53 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 /// <summary>
 /// Test-only adapter for codec/history mechanism fixtures that describe successive State saves.
 /// First save publishes S0; later saves publish a trivial Event then the next State through
-/// the real Repository. The marker is a fixture convention; product history permits E/E and S/S.
+/// the real Repository save owner. This mechanism fixture retains supplied CLR instances;
+/// public creation tests separately cover CreateRootBranch followed by a restoring OpenWorkingCopy.
+/// The marker is a fixture convention; product history permits E/E and S/S.
 /// </summary>
 internal sealed class StateSaveHarness : IDisposable {
     private readonly Repository _repository;
-    private CheckpointAddress? _stateHead;
+    private readonly RepositoryStorageFacade _facade;
+    private FrameAddress? _stateHead;
+    private ObjectId? _worldId;
     private StateSaveHarness(Repository repository, bool hasHead) {
         _repository = repository;
+        _facade = new(StorageTestData.ResourcesOf(repository));
         if (hasHead) {
-            CheckpointAddress head = repository.GetHead("main");
-            _stateHead = head.Kind == CheckpointKind.State ? head : repository.GetPreviousState(head);
+            HistoryGraphRecord? state = MechanismFixture.State(_facade, "main");
+            _stateHead = state?.Address;
+            _worldId = state?.RootId;
         }
     }
     internal static StateSaveHarness CreateNew(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false);
+        return new(Repository.CreateNew(path, models, rotationThresholdBytes), false) { Models = models };
     }
     internal static StateSaveHarness OpenExisting(string path, StateModelRegistry models, long rotationThresholdBytes = 64L * 1024 * 1024 * 1024) {
         models.Register(MarkerModel);
-        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true);
+        return new(Repository.OpenExisting(path, models, rotationThresholdBytes), true) { Models = models };
     }
-    internal FrameAddress? HeadRevisionAddress => _stateHead?.RevisionAddress;
-    internal ObjectId? WorldId => _stateHead?.RootId;
+    private StateModelRegistry Models { get; init; } = null!;
+    internal FrameAddress? HeadRevisionAddress => _stateHead;
+    internal ObjectId? WorldId => _worldId;
     internal bool IsFaulted => _repository.IsFaulted;
-    internal Action<RepositoryOperationStage>? OperationStageObserver { get => _repository.OperationStageObserver; set => _repository.OperationStageObserver = value; }
+    internal Action<RepositoryOperationStage>? OperationStageObserver { get; set; }
     internal Action<RepositorySaveStage>? SaveStageObserver {
         get => _repository.SaveStageObserver;
         set => _repository.SaveStageObserver = value;
     }
-    internal StateSaveSession<T> Create<T>(T world) where T : class, IDurableObject {
-        return new(this, world, null);
-    }
+    internal StateSaveSession<T> Create<T>(T world) where T : class, IDurableObject =>
+        new(this, world, new(_facade, "main", Models));
     internal StateSaveSession<T> Load<T>() where T : class, IDurableObject {
-        BranchCheckout session = _repository.CheckoutShared("main");
-        return new(this, ((T)session.State!), session);
+        BranchSaveSessionFixture session = new(_facade, "main", Models);
+        return new(this, (T)session.State!, session);
     }
-    internal BranchCheckout Initialize<T>(T world,
-        ReadAmplificationBaseBudgetParameters parameters) where T : class, IDurableObject {
-        BranchCheckout session = _repository.CreateSharedBranch("main", world, parameters);
-        _stateHead = session.Head;
-        return session;
+    internal void Installed(RepositorySaveResult result) {
+        _stateHead = result.Business.Address;
+        _worldId = result.Business.RootId;
     }
-    internal void Installed(CheckpointAddress frame) => _stateHead = frame;
     internal static IDurableObject NewMarker() => new Marker();
-    public void Dispose() => _repository.Dispose();
+    public void Dispose() { _facade.Dispose(); _repository.Dispose(); }
 
     private sealed class Marker : IDurableObject { }
     private static readonly DurableSchema MarkerSchema = new("StateSaveHarness.Marker", 1);
@@ -69,30 +72,32 @@ internal sealed class StateSaveHarness : IDisposable {
 }
 
 internal sealed class StateSaveSession<T>(StateSaveHarness repository, T initial,
-    BranchCheckout? session) : IDisposable where T : class, IDurableObject {
+    BranchSaveSessionFixture session) : IDisposable where T : class, IDurableObject {
     internal bool IsFaulted => repository.IsFaulted;
-    internal T World => session is null ? initial : ((T)session.State!);
-    internal ObjectId? WorldId => session?.StateId;
-    internal FrameAddress? ParentRevisionAddress => session?.StateRevisionAddress;
+    internal T World => (T)(session.State ?? initial);
+    internal ObjectId? WorldId => session.State is null ? null : session.RootId;
+    internal FrameAddress? ParentRevisionAddress => session.StateSource?.Address;
     internal FrameAddress Commit(ReadAmplificationBaseBudgetParameters parameters) {
-        if (session is null) {
-            session = repository.Initialize(initial, parameters);
-            return session.StateRevisionAddress!.Value;
-        }
-        if (session.Head.Kind == CheckpointKind.State) {
-            Action<RepositoryOperationStage>? checkpoint = repository.OperationStageObserver;
-            Action<RepositorySaveStage>? splitCheckpoint = repository.SaveStageObserver;
-            repository.OperationStageObserver = null;
+        if (session.StateSource is not null) {
+            Action<RepositorySaveStage>? checkpoint = repository.SaveStageObserver;
             repository.SaveStageObserver = null;
-            try { session.CommitEvent(StateSaveHarness.NewMarker(), parameters); }
-            finally {
-                repository.OperationStageObserver = checkpoint;
-                repository.SaveStageObserver = splitCheckpoint;
-            }
+            try {
+                using PreparedFixtureSave marker = session.Prepare(StateSaveHarness.NewMarker(), StoredGraphKind.Event, parameters);
+                marker.Commit();
+            } finally { repository.SaveStageObserver = checkpoint; }
         }
-        CheckpointAddress frame = session.CommitState(parameters);
-        repository.Installed(frame);
-        return frame.RevisionAddress;
+        using PreparedFixtureSave pending = session.Prepare(World, parameters: parameters);
+        repository.OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
+        RepositorySaveResult result = pending.Commit();
+        repository.Installed(result);
+        return result.Business.Address;
     }
-    public void Dispose() => session?.Dispose();
+    public void Dispose() { }
+}
+
+internal static class WorkTestAccess {
+    internal static Repository Owner(WorkingCopy work) =>
+        (Repository)typeof(WorkingCopy).GetField("_repository", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(work)!;
+    internal static CommitKind Kind(WorkingCopy work) => Owner(work).ReadCommitInfo(work.BaseCommitId).Kind;
+    internal static FrameAddress Address(WorkingCopy work, CommitId id) => DB096TestAccess.Describe(Owner(work), id).Address;
 }

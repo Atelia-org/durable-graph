@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Testing;
@@ -54,16 +55,16 @@ public sealed partial class EventHistoryRepositoryTests {
     [Fact]
     public void ErasedEventBoundaryRejectsBoxedAndUnregisteredMarkersBeforePublication() {
         using Repository repository = CreateRepository();
-        using BranchCheckout session = repository.CreateSharedBranch("main", new Node(), TestSavePolicies.Baseline);
-        CheckpointAddress initial = session.Head;
+        using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node(), parameters: TestSavePolicies.Baseline).Id);
+        CommitId initial = session.BaseCommitId;
         IDurableObject boxed = new BoxedMarker();
-        Assert.Throws<ArgumentException>(() => session.CommitEvent(boxed, TestSavePolicies.Baseline));
-        Assert.Throws<ArgumentException>(() => session.CommitEvent(new UnregisteredMarker(), TestSavePolicies.Baseline));
-        Assert.Same(initial, session.Head);
-        Assert.Equal(CheckpointKind.State, session.Head.Kind);
+        Assert.Throws<ArgumentException>(() => session.CommitEvent(boxed, parameters: TestSavePolicies.Baseline).Id);
+        Assert.Throws<ArgumentException>(() => session.CommitEvent(new UnregisteredMarker(), parameters: TestSavePolicies.Baseline).Id);
+        Assert.Equal(initial, session.BaseCommitId);
+        Assert.Equal(CommitKind.State, WorkTestAccess.Kind(session));
         Assert.False(session.IsFaulted);
-        session.CommitEvent(new Node { Value = 7 }, TestSavePolicies.Baseline);
-        Assert.Equal((byte)7, ((Node)repository.ReadEvent(session.Head)).Value);
+        session.CommitEvent(new Node { Value = 7 }, parameters: TestSavePolicies.Baseline);
+        Assert.Equal((byte)7, ((Node)repository.LoadEvent(session.BaseCommitId)).Value);
     }
 
     private struct BoxedMarker : IDurableObject { }

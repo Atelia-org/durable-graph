@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Reflection;
 using Atelia.DurableGraph.Runtime;
@@ -43,9 +44,13 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
                 static (ref BareValueReader reader, in int _) => reader.ReadVarInt32(),
                 static (in int _, IStateReferenceVisitor _) => { })));
         using Repository repository = Repository.CreateNew(_path, models);
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Root { Value = 7 });
-        CheckpointAddress original = main.Head;
-        using (BranchCheckout first = repository.ForkShared("first", original)) {
+        // An Event-only opening followed by State capture leaves this State unread;
+        // creating a State root and opening it would already earn a read certificate.
+        IDurableObject mainInitial = new Root { Value = 7 };
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
+        main.CommitState(mainInitial);
+        CommitId original = main.BaseCommitId;
+        using (WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(original, "first").Id)) {
             Assert.Equal(7, Assert.IsType<Root>(first.State).Value);
         }
         Assert.Equal(1, allocations);
@@ -54,15 +59,15 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
         Assert.Equal(2, prepared.SchemaRequirementCount); // Owner plus Allocate/Hydrate-only dependency.
 
         main.Catalog.Set(wrongDependency); // The key is absent from S0; a later S may declare it.
-        CheckpointAddress catalogEvent = main.CommitEvent(main.State!);
+        CommitId catalogEvent = main.CommitEvent(main.State!).Id;
         var configuration = (StateModelRegistry.FrozenConfiguration)typeof(Repository)
             .GetField("_modelConfiguration", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(repository)!;
         var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
-            configuration, repository.GraphStore.ReadMetadata(catalogEvent.Address).SchemaRoot!.Value);
+            configuration, repository.GraphStore.ReadMetadata(Describe(repository, catalogEvent).Address).SchemaRoot!.Value);
         Assert.Throws<InvalidDataException>(() => prepared.Requirements.Validate(wrongEnvironment.Models));
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        using BranchCheckout oldHit = repository.ForkShared("old-hit", original);
+        using WorkingCopy oldHit = repository.OpenWorkingCopy(repository.ForkBranch(original, "old-hit").Id);
         Assert.Equal(1, statistics.PreparedStateHits);
         Assert.Equal(0, statistics.DecodedObjects);
         Assert.Equal(0, statistics.NormalizedObjects);
@@ -72,13 +77,13 @@ public sealed class DB080MaterializationRequirementTests : IDisposable {
 
         // The new State selects actual S1. Neither successful capture nor the old
         // certificate proves its first materialization's callback requirements.
-        CheckpointAddress newer = main.CommitState();
+        CommitId newer = main.CommitState().Id;
         int allocated = allocations, hydrated = hydrations;
-        Assert.Throws<InvalidDataException>(() => repository.ForkShared("rejected", newer));
+        Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(repository.ForkBranch(newer, "rejected").Id));
         Assert.Equal(allocated + 1, allocations);
         Assert.Equal(hydrated + (duringAllocate ? 0 : 1), hydrations);
         Assert.Same(prepared, repository.PreparedStateEntry);
-        Assert.DoesNotContain("rejected", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "rejected");
         Assert.False(repository.IsFaulted);
     }
 

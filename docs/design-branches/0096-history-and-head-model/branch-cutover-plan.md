@@ -1,6 +1,6 @@
 # DB-096：真实 Branch 历史的一次切换计划
 
-> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；全部调用迁移与正式合入尚未完成，见 §8**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
+> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；根 solution 调用闭包已迁移，正式合入尚未完成，见 §9**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
 
 ## 1. 收窄结果
 
@@ -181,8 +181,53 @@ Persistence 构建成功；修复 XML 注释后根构建没有警告，CLI 空�
 3. 根或 fork 的物理创建已成功、最终登记被拒绝时，目前可能保守 fault owner；NotPublished 仍表示未登记，不能从结果推健康。健康拒绝重试、Unknown、全部安装/清理窗口仍须专门验收。
 4. 旧 suite 中的热材料、immutable leaf、升级/准确历史 Schema、独立可变图、无关损坏隔离等尚未重新资格化。本段保留其代码路径，不宣称迁移完整。
 
-### 下一片的具体顺序
+### 当时的下一片
 
-先在本隔离分支恢复调用闭包：物理测试显式给 expectedSource、Meta 走 Meta 入口；Repository 测试改真实 BranchId/CommitId，不让 candidate 自报来源代替 HS 历史。同步迁移生成模型 fixture 和链接 PendingRecovery；保测试原意，区分创建后另打开与原实例保留的差异。随后运行完整 Persistence/受影响 Runtime 回归，迁移 README/包消费者以及尚未对齐的源码术语导航。CLI 当前无业务入口，无额外迁移工单。
+下述调用迁移由 §9 接续；此段保首段交付时的范围。先在本隔离分支恢复调用闭包：物理测试显式给 expectedSource、Meta 走 Meta 入口；Repository 测试改真实 BranchId/CommitId，不让 candidate 自报来源代替 HS 历史。同步迁移生成模型 fixture 和链接 PendingRecovery；保测试原意，区分创建后另打开与原实例保留的差异。随后运行完整 Persistence/受影响 Runtime 回归，迁移 README/包消费者以及尚未对齐的源码术语导航。CLI 当前无业务入口，无额外迁移工单。
 
 上述通过后，再做重复历史扫描的局部收窄、定向 origin 接入及其隔离反例，按 §7 决定是否整体合入。之后才推进组内核、根/子树和分页；不要下一轮重新搭一个健康目录或 Branch 实验协调器。
+
+
+## 9. B2 调用闭包与回归迁移
+
+2026-10-19，以 `f6075d3` 为起点继续同一隔离分支。**根 solution 的两个测试项目及链接 PendingRecovery 已迁移，新布局下的完整原回归重新执行；产品 API 签名和持久格式本轮没有再改变。**本段接替 §8 的“旧测试尚不能编译”停点，仍不构成正式合入或普通包交付。
+
+### 迁移与设计裁决
+
+工作按物理/Meta、公开历史及材料复用、Split/Tag、生成模型调用和其余 Repository 行为分为五个主包，并在包内有限再委派。主线程协调共享夹具、迁移初始化/恢复/根格式夹具、独立检查跨包语义并执行集中构建和测试。
+
+- **公开调用按新职责验证。**`CreateRootBranchFromState/Event` 发布后另 `OpenWorkingCopy`，恢复对象不保创建输入实例；后续 State 提交继续保工作副本当前实例。Fork 先登记，模型恢复在 Open，恢复失败保留已登记 Branch 并释放编辑占用。重复标签合法、同库 CommitId 跨重开有效；取消的 Move 场景改为旧点另 fork 并证明父线不动。
+- **机制夹具不改变产品合同。**原 codec/生成模型试验需要保持 capture/install 的同一实例，使用测试专用 `BranchSaveSessionFixture` 组合真实内部准备、提交和实际 Entry 推进；root 安装后仅在测试内取得实际 business adapter，绑定真实 Branch/Entry 后续写。没有向产品补旧入口。已发布物理图的 snapshot 从真实 HS 历史选择严格前 State；未发布/损坏 fixture 明确提供预期 source，不从图 payload 自报来源。
+- **保住原来的判别力。**Meta 夹具按 P0G2 补齐仅 Meta 存在的 PreviousMeta；业务 Parent 断言迁为 HS 前项或准确内容来源。Schema 故障测试同时检查真实业务 Entry，避免“D 未变”掩盖 B 已变。Fork/Tag 可以追加管理图，仍逐字节验证既有完整文件前缀或完整 Frame。事件枚举直接检查原 Enumerator，避免 LINQ 在耗尽后遮住寿命检查。目录 Delta 见证调整有限数据量，继续明确要求 Base/Delta，不将断言放宽为任意编码选择。
+- **目录限制按实际存储重定。**T 的350个长中文名称超过旧整表 Head payload 容量，控制入口仍17B，冷开首末绑定正确。根目录旧整表容量拒绝测试改验实际标签/summary 输入限制和写前健康拒绝；固定指针与 Dictionary 的局部预算各自保持。
+- **没有为了统一异常外观增加机制。**Fork 操作 hook 在任何物理创建前失败，仍允许原 IOException；真实登记阶段失败继续报告 publication outcome。NotPublished 与 owner health 分开。`CommitState(nextState: null!, ...)` 明确选择根参数重载，避免测试的裸 null 被绑定到 summary 重载。
+
+README 的纯 State、旧点 fork/冷续写、ID codec、可选 Event 和策略片段已对齐新 API；原文 runner 的提取标记和隐藏断言同步更新。普通包消费者目录的其他项目、旧资格记录和包模式执行尚未整体迁移，不能据此宣称候选包可交付。
+
+### 验证与限度
+
+集中构建使用同一固定 Storage `f8868b5` 独立 worktree，未改 pin、上游或 feed：
+
+```powershell
+$b2Storage = (Resolve-Path .artifacts/db096-head-mechanism/storage-f8868b5).Path
+dotnet build DurableGraph.slnx -p:UseStorageSources=true "-p:StorageSourceRoot=$b2Storage"
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj --no-build --no-restore `
+  -p:UseStorageSources=true "-p:StorageSourceRoot=$b2Storage"
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --no-restore `
+  -p:UseStorageSources=true "-p:StorageSourceRoot=$b2Storage"
+```
+
+根 build 已通过，0警告/0错误。Persistence 首次974条中11条迁移夹具失败，经明确原因修复后完整重跑 **974/974，通过且0跳过**。Runtime/生成器在最后尾修后完整重跑 **1724/1724，通过且0跳过**。没有禁用测试或用放宽不变量断言来换通过；已退出的 Move、唯一标签、owner-bound 旧句柄和目录整表容量假设按上面的新合同替换；Persistence 数量相对切换前970增加4，来自根格式及输入边界的理论用例。
+
+测试覆盖原内容来源/prior/H、准确历史 Schema 与升级、冷热恢复材料、独立可变图/Pair、immutable leaf 正误例、reentry、清理、正常尾恢复与原有 publication outcome 注入。恢复这些用例不等于性能基准、全部登记故障窗口或掉电资格；部分测量型测试的默认路径不启动其 opt-in 测量。上一段98条独立 Probe 证据保其原运行，不重复报作本轮新结果。
+
+.NET 结果由主线程检查实际日志及 TRX；变更 Markdown 的605个本地链接/锚点检查无错误，`git diff --check`通过。
+
+本机证据：`.artifacts/db096-branch-vertical/migration-build-5.log`、`{persistence,runtime}-migration-2.{log,trx}`；初轮故障与修复前记录保 `*-migration-1`。README source 项目位于同目录 `readme-source/`，使用显式 ProjectReference/Generator 验证，不等于普通包/Build history/候选搬迁资格。从当前 README 原文提取的 source 验证已在新库运行：两个独立进程得到 HP99/98，浏览100/99/98，旧点 fork 并冷续写后 main98/alternate88，4B ID codec 往返成功，可选 Event 读回 Amount1/PreviousState HP98。日志为 `readme-verified-{initial,reopen,browse,fork,events-program}.log`；每步重写 Program 并核对预期输出，防止增量构建误跑旧样例。未执行普通包 runner 或 Schema history/升级流程的重新资格化。
+
+### 下一片：先限制读取范围，再补交付闭包
+
+1. **已完成的根测试迁移不再作为下一轮任务。**在现有 Repository 上选择一个窄效率问题：优先消除每条描述的重复 D 枚举/构造，或重复的最近 State 扫描；使用已接受目录/session材料及准确 expected Entry，不添加持久索引、另一套来源权威或 proof 框架。先用计数反例明确改动不扩大读取范围，保持所有 source/Schema/fault 检查。
+2. **定向 origin 仍为正式合入门槛。**本轮只读核对上游仍为 `f8868b5`，窄请求仍未交付，也未代用户发送。交付后另接 pin 并验证坏目标/无关未登记坏 Head 的隔离；当前全量 adapter 不能作为最终 ReadBranchInfo 产品资格。
+3. **补齐仓库外层交付。**剩余 PackageConsumerProbe 项目、打包脚本/普通包原文流程以及术语导航按新 API 迁移，包来源独立资格化；不要把本轮 source build 或新测试数字借给旧包。
+4. 此后按 §7 重核是否可整体合入，再接 CommitRequest 组内核、根/子树和分页。它们没有因本轮恢复原回归而变成已实施；不再重新搭健康 Branch/目录实验协调器。

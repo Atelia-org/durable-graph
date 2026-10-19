@@ -25,12 +25,12 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         using RepositoryStorageFacade repository = new(resources);
         StateModelRegistry writes = new();
         writes.Register(Model(StoredRoot, [Reader(StoredRoot)], static row => row.GetState<int>()));
-        BranchSaveSession writer = new(repository, "main", writes);
+        BranchSaveSessionFixture writer = new(repository, "main", writes);
         ProbeRoot root = new() { Value = 7 };
         StoredGraphRevision s0, s1;
-        using (PreparedBranchSave save = writer.Prepare(root)) { s0 = save.Commit().Business; }
+        using (PreparedFixtureSave save = writer.Prepare(root)) { s0 = save.Commit().Business; }
         writer.Catalog.Set(Extra);
-        using (PreparedBranchSave save = writer.Prepare(root)) {
+        using (PreparedFixtureSave save = writer.Prepare(root)) {
             Assert.Empty(save.Business.Write.Records);
             s1 = save.Commit().Business;
         }
@@ -45,8 +45,8 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         StateModelRegistry reads = ProbeModels(delayedLookup, counts);
         StateModelRegistry.FrozenConfiguration frozen = reads.FreezeConfiguration();
         // Both sources are issued by the concrete reader from real graphs and their own pinned S.
-        DecodedRevision source0 = DecodedRevision.ReadStoredGraph(repository.Store, s0.Address, frozen);
-        DecodedRevision source1 = DecodedRevision.ReadStoredGraph(repository.Store, s1.Address, frozen);
+        DecodedRevision source0 = DecodedRevision.ReadStoredGraph(repository.Store, s0, frozen);
+        DecodedRevision source1 = DecodedRevision.ReadStoredGraph(repository.Store, s1, frozen);
         Assert.Same(repository.Store, source0.GraphStore);
         Assert.Same(repository.Store, source1.GraphStore);
         Assert.Equal(s0.SchemaRoot, source0.SelectedSchemaView!.Snapshot!.Address);
@@ -68,8 +68,8 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         Assert.Equal(delayedLookup ? [] : new[] { false, true }, counts.FactoryLookups);
         Assert.Throws<InvalidDataException>(() => NormalizedGraphState.Create(source1, source0.SourceModels));
         Assert.Throws<InvalidDataException>(() => NormalizedGraphState.Create(source0, source1.SourceModels));
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, s1.Address, frozen, source0.BindingEnvironment));
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, s0.Address, frozen, source1.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, s1, frozen, source0.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(repository.Store, s0, frozen, source1.BindingEnvironment));
         Assert.Equal(0, counts.Normalizes); // Product rejects misissued models before invoking either delegate.
         ProbeRoot restored0 = GraphReader.ReadRoot<ProbeRoot>(source0, s0.RootId, new(source0.SourceModels));
         ProbeRoot restored1 = GraphReader.ReadRoot<ProbeRoot>(source1, s1.RootId, new(source1.SourceModels));
@@ -91,7 +91,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         // Fresh per-S closure is the positive control for both query timings.
         foreach ((StoredGraphRevision graph, int expected) in new[] { (s0, 7), (s1, 107) }) {
             Counts fresh = new();
-            DecodedRevision source = DecodedRevision.ReadStoredGraph(repository.Store, graph.Address, ProbeModels(delayedLookup, fresh));
+            DecodedRevision source = DecodedRevision.ReadStoredGraph(repository.Store, graph, ProbeModels(delayedLookup, fresh).FreezeConfiguration());
             ProbeRoot restored = GraphReader.ReadRoot<ProbeRoot>(source, graph.RootId, new(source.SourceModels!));
             Assert.Equal(expected, restored.Value);
             Assert.Equal(1, fresh.Factories);
@@ -99,8 +99,8 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             Assert.Equal(expected == 107, Assert.Single(delayedLookup ? fresh.NormalizeLookups : fresh.FactoryLookups));
         }
         Assert.Equal(frames, repository.Store.AppendedFrames);
-        Assert.Equal(s1.Address, repository.GetHead("main"));
-        Assert.Equal(s1.Address, repository.GetStateHead("main"));
+        Assert.Equal(s1.Address, repository.ReadCurrent(Assert.Single(resources.ListBranches()).Key).Address);
+        Assert.Equal(s1.Address, repository.FindNearestState(repository.ReadCurrent(Assert.Single(resources.ListBranches()).Key).Id, true)!.Address);
         Assert.Equal(s1.SchemaRoot, repository.SharedSchemaRoot);
         Assert.Equal(7, source0.GetRequired(s0.RootId).GetState<int>());
         Assert.Equal(7, source1.GetRequired(s1.RootId).GetState<int>());
@@ -115,16 +115,16 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             StateModelRegistry models = new();
             models.Register(MapModel(ReaderId(MapRootSchema)));
             models.UseDictionaryComparerResolver(static _ => StringComparer.Ordinal);
-            BranchSaveSession writer = new(repository, "main", models);
+            BranchSaveSessionFixture writer = new(repository, "main", models);
             MapRoot root = new() { Values = new(new StringProxy()) { ["key"] = 7 } };
-            using (PreparedBranchSave save = writer.Prepare(root)) {
+            using (PreparedFixtureSave save = writer.Prepare(root)) {
                 StoredGraphRevision graph = save.Commit().Business;
                 first = graph.Address;
                 schema = graph.SchemaRoot!.Value;
                 rootId = graph.RootId;
             }
             root.Values["key"] = 8;
-            using (PreparedBranchSave save = writer.Prepare(root)) {
+            using (PreparedFixtureSave save = writer.Prepare(root)) {
                 Assert.Null(save.Catalog.Write);
                 StoredGraphRevision graph = save.Commit().Business;
                 second = graph.Address;
@@ -146,7 +146,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         Dictionary<string, byte[]> before = SnapshotFiles(_path);
         using (RepositoryResources resources = RepositoryResources.OpenStorageReadOnlyExisting(_path)) {
             GraphRecordStore store = resources.GraphStore;
-            DecodedRevision source1 = DecodedRevision.ReadStoredGraph(store, first, frozen);
+            DecodedRevision source1 = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), frozen);
             Assert.NotNull(source1.BindingEnvironment);
             Assert.Equal(0, counts.Factories);
             Assert.Equal(0, counts.Comparers);
@@ -158,7 +158,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             Assert.Equal(1, counts.Factories);
             Assert.Equal(1, counts.Comparers);
 
-            DecodedRevision source2 = DecodedRevision.ReadStoredGraph(store, second, frozen, source1.BindingEnvironment);
+            DecodedRevision source2 = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(second, first), frozen, source1.BindingEnvironment);
             Assert.Same(source1.BindingEnvironment, source2.BindingEnvironment);
             Assert.Same(source1.SourceModels, source2.SourceModels);
             Assert.Same(source1.SelectedSchemaView, source2.SelectedSchemaView);
@@ -170,29 +170,29 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             Assert.Equal(1, counts.Factories);
             Assert.Equal(1, counts.Comparers); // Successful lazy factory/comparer closures belong to this exact-S environment.
 
-            DecodedRevision fresh = DecodedRevision.ReadStoredGraph(store, first, frozen);
+            DecodedRevision fresh = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), frozen);
             Assert.NotSame(source1.BindingEnvironment, fresh.BindingEnvironment);
             Assert.NotSame(source1.SourceModels, fresh.SourceModels);
             Assert.Equal(7, GraphReader.ReadRoot<MapRoot>(fresh, rootId, new(fresh.SourceModels!)).Values!["key"]);
             Assert.Equal(2, counts.Factories);
             Assert.Equal(2, counts.Comparers); // No implicit all-history or owner-wide model cache.
 
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, first, changed, source1.BindingEnvironment));
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), changed, source1.BindingEnvironment));
             Assert.Equal(2, counts.Factories);
             Assert.Equal(2, counts.Comparers);
-            DecodedRevision newConfiguration = DecodedRevision.ReadStoredGraph(store, first, changed);
+            DecodedRevision newConfiguration = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), changed);
             Assert.True(newConfiguration.SourceModels!.TryGetCurrentModel(typeof(LateRoot), out _));
             MapRoot newChoice = GraphReader.ReadRoot<MapRoot>(newConfiguration, rootId, new(newConfiguration.SourceModels));
             Assert.Equal(7, newChoice.Values!["KEY"]); // The new freeze really observes the exact new comparer.
             Assert.Equal(ListDeltaAlgorithm.LocalResync, BindList(newConfiguration.SourceModels).DeltaAlgorithm);
             Assert.Equal(3, counts.Factories);
             Assert.Equal(2, counts.Comparers); // An exact comparer supersedes the frozen fallback resolver.
-            Assert.Equal(second, resources.GetBranchHead("main"));
-            Assert.Equal(second, resources.GetBranchStateHead("main"));
+            Assert.Equal(second, resources.ReadCurrent(Assert.Single(resources.ListBranches()).Key).Address);
+            Assert.Equal(second, resources.FindNearestState(resources.ReadCurrent(Assert.Single(resources.ListBranches()).Key).Id, true)!.Address);
             Assert.Equal(schema, resources.SharedSchemaRoot);
 
             resources.Dispose();
-            Assert.ThrowsAny<InvalidOperationException>(() => DecodedRevision.ReadStoredGraph(store, second, frozen, source1.BindingEnvironment));
+            Assert.ThrowsAny<InvalidOperationException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(second, first), frozen, source1.BindingEnvironment));
             Assert.Equal(3, counts.Factories);
             Assert.Equal(2, counts.Comparers);
         }
@@ -203,14 +203,14 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         CopyClosedRepository(_path, otherPath);
         using RepositoryResources firstOwner = RepositoryResources.OpenStorageReadOnlyExisting(_path);
         using RepositoryResources otherOwner = RepositoryResources.OpenStorageReadOnlyExisting(otherPath);
-        DecodedRevision owned = DecodedRevision.ReadStoredGraph(firstOwner.GraphStore, first, frozen);
+        DecodedRevision owned = DecodedRevision.ReadStoredGraph(firstOwner.GraphStore, firstOwner.GraphStore.ReadBusinessGraph(first, null), frozen);
         Assert.Equal(7, GraphReader.ReadRoot<MapRoot>(owned, rootId, new(owned.SourceModels!)).Values!["key"]);
         int factories = counts.Factories, comparers = counts.Comparers;
-        Assert.Equal(schema, otherOwner.GraphStore.ReadGraph(first).SchemaRoot);
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, first, frozen, owned.BindingEnvironment));
+        Assert.Equal(schema, otherOwner.GraphStore.ReadBusinessGraph(first, null).SchemaRoot);
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, otherOwner.GraphStore.ReadBusinessGraph(first, null), frozen, owned.BindingEnvironment));
         Assert.Equal(factories, counts.Factories);
         Assert.Equal(comparers, counts.Comparers);
-        DecodedRevision independent = DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, first, frozen);
+        DecodedRevision independent = DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, otherOwner.GraphStore.ReadBusinessGraph(first, null), frozen);
         MapRoot other = GraphReader.ReadRoot<MapRoot>(independent, rootId, new(independent.SourceModels!));
         Assert.Equal(7, other.Values!["key"]);
         Assert.False(other.Values.ContainsKey("KEY"));
@@ -225,18 +225,18 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         using RepositoryStorageFacade repository = new(resources);
         StateModelRegistry writes = new();
         writes.Register(Model(StoredRoot, [Reader(StoredRoot)], static row => row.GetState<int>()));
-        BranchSaveSession writer = new(repository, "main", writes);
+        BranchSaveSessionFixture writer = new(repository, "main", writes);
         ProbeRoot root = new() { Value = 7 };
         StoredGraphRevision good, bad;
-        using (PreparedBranchSave save = writer.Prepare(root)) { good = save.Commit().Business; }
+        using (PreparedFixtureSave save = writer.Prepare(root)) { good = save.Commit().Business; }
         writer.Catalog.Set(new DurableSchema(CurrentRoot.Type, CurrentRoot.Version, new DurableFieldInfo(1, TypeTag.Int64)));
-        using (PreparedBranchSave save = writer.Prepare(root)) { bad = save.Commit().Business; }
+        using (PreparedFixtureSave save = writer.Prepare(root)) { bad = save.Commit().Business; }
         Counts counts = new();
         StateModelRegistry.FrozenConfiguration frozen = ProbeModels(delayedLookup: true, counts).FreezeConfiguration();
-        DecodedRevision old = DecodedRevision.ReadStoredGraph(repository.Store, good.Address, frozen);
+        DecodedRevision old = DecodedRevision.ReadStoredGraph(repository.Store, good, frozen);
         Assert.Equal(7, GraphReader.ReadRoot<ProbeRoot>(old, good.RootId, new(old.SourceModels!)).Value);
         int normalizes = counts.Normalizes;
-        DecodedRevision conflict = DecodedRevision.ReadStoredGraph(repository.Store, bad.Address, frozen);
+        DecodedRevision conflict = DecodedRevision.ReadStoredGraph(repository.Store, bad, frozen);
         Assert.Throws<InvalidDataException>(() => GraphReader.ReadRoot<ProbeRoot>(conflict, bad.RootId, new(conflict.SourceModels!)));
         Assert.Equal(normalizes, counts.Normalizes);
         // A newer positive lookup cannot make an older graph's missing target borrow the latest S.

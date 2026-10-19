@@ -1,3 +1,5 @@
+using Atelia.HeadStore;
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 
 using Atelia.DurableGraph.Serialization;
@@ -11,31 +13,20 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void FullBookmarkDirectoryRejectsBeforePublicationAndPreservesExistingBindings() {
-        using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
+    public void BookmarkDirectoryCanExceedHeadPayloadLimitWhileItsPublishedPointerRemainsSmall() {
+        CommitId target;
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            BranchInfo main = repository.CreateRootBranchFromState("main", new Node());
+            target = repository.ReadCurrentCommit(main.Id).Commit.Id;
+            // The retired whole-table format could not hold these UTF-8 names in one 1 MiB payload.
+            for (int i = 0; i < 350; i++) { repository.CreateTag(Name(i), target); }
+            var pointer = Resources(repository).Heads.ReadHead(3).Unwrap();
+            Assert.Equal(5 + FrameAddress.EncodedSize, pointer.Payload.Length);
         }
-        string first = "0000" + new string('x', 1020);
-        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            FrameAddress address = resources.GetBranchHead("main")!.Value;
-            var map = new Dictionary<string, FrameAddress>(StringComparer.Ordinal);
-            byte[] accepted = [.. "P0T1"u8, 0];
-            for (int i = 0; ; i++) {
-                map.Add(i.ToString("D4") + new string('x', 1020), address);
-                var encoded = Atelia.HeadStore.NamedFrameMapCodec.Encode(map);
-                if (encoded.IsFailure || encoded.Unwrap().Length + 4 > Atelia.HeadStore.HeadStore.MaxHeadEntryPayloadLength) { break; }
-                accepted = [.. "P0T1"u8, .. encoded.Unwrap()];
-            }
-            resources.Heads.PublishHead(resources.Heads.ReadHead(3).Unwrap().Id.HeadId, accepted, out _).Unwrap();
-        }
-        var before = Snapshot();
-        using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
-            var address = repository.GetHead("main");
-            Assert.Throws<InvalidOperationException>(() => repository.CreateTag(new string('z', 1024), address));
-            Assert.False(repository.IsFaulted);
-            Assert.Equal(address, repository.ResolveTag(first));
-        }
-        AssertSnapshot(before);
+        using Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
+        Assert.Equal(target, reopened.ResolveTag(Name(0)));
+        Assert.Equal(target, reopened.ResolveTag(Name(349)));
+        static string Name(int index) => index.ToString("D4") + new string('界', 1020);
     }
 
     [Theory]
@@ -43,21 +34,26 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     [InlineData("metadata")]
     public void SelectedGraphMetadataIsCheckedWithoutStartupTargetAudit(string damage) {
         using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
-            seed.CreateTag("good", main.Head);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node()).Id);
+            seed.CreateTag("good", main.BaseCommitId);
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             FrameAddress bad = damage == "metadata"
                 ? resources.Data.Append(GraphFrameCodec.GraphTag, [255]).Unwrap()
                 : TestAddress(uint.MaxValue);
+            HeadEntryId badEntry = resources.Heads.PublishHead(Assert.Single(resources.ListBranches()).Key,
+                BusinessEntryPayloadCodec.Encode(bad, []), out _).Unwrap();
             var head = resources.Heads.ReadHead(3).Unwrap();
-            var map = new Dictionary<string, FrameAddress>(Atelia.HeadStore.NamedFrameMapCodec.Decode(head.Payload[4..]).Unwrap()) { ["invalid"] = bad };
-            byte[] payload = [.. "P0T1"u8, .. Atelia.HeadStore.NamedFrameMapCodec.Encode(map).Unwrap()];
-            resources.Heads.PublishHead(head.Id.HeadId, payload, out _).Unwrap();
+            FrameAddress accepted = ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Bookmarks, head.Payload)!.Value;
+            DecodedGraphRows rows = ManagementDirectoryReader.ReadBookmarks(resources.GraphStore, accepted);
+            PreparedDirectoryWrite candidate = ManagementDirectoryWriter.PrepareBookmarkAddition(resources.GraphStore, rows, "invalid", badEntry);
+            StoredGraphRevision graph = resources.GraphStore.AppendMeta(accepted, candidate.Write);
+            resources.Heads.PublishHead(head.Id.HeadId,
+                ManagementDirectoryPointer.Encode(ManagementDirectoryKind.Bookmarks, graph.Address), out _).Unwrap();
         }
         var before = Snapshot();
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry())) {
-            Assert.Equal(reader.GetHead("main"), reader.ResolveTag("good"));
+            Assert.Equal(CommitKind.State, reader.ReadCommitInfo(reader.ResolveTag("good")).Kind);
             Assert.ThrowsAny<Exception>(() => reader.ResolveTag("invalid"));
             Assert.False(reader.IsFaulted);
         }
@@ -68,19 +64,18 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     [InlineData("magic")]
     [InlineData("short")]
     [InlineData("trailing")]
-    [InlineData("name")]
+    [InlineData("wrong-role")]
     public void MalformedBookmarkDirectoryRejectsOpenWithoutRepair(string damage) {
         using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node()).Id);
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             var head = resources.Heads.ReadHead(3).Unwrap();
             byte[] payload = damage switch {
                 "magic" => [.. "BAD1"u8, 0],
-                "short" => [.. "P0T1"u8],
-                "trailing" => [.. "P0T1"u8, 0, 0],
-                _ => [.. "P0T1"u8, .. Atelia.HeadStore.NamedFrameMapCodec.Encode(
-                    new Dictionary<string, FrameAddress> { [""] = resources.GetBranchHead("main")!.Value }).Unwrap()]
+                "short" => [.. "P0T2"u8],
+                "trailing" => [.. "P0T2"u8, 0, 0],
+                _ => ManagementDirectoryPointer.Encode(ManagementDirectoryKind.Bookmarks, resources.SharedSchemaRoot)
             };
             resources.Heads.PublishHead(head.Id.HeadId, payload, out _).Unwrap();
         }
@@ -93,7 +88,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
     [Fact]
     public void TagMetadataCanResolveBeforeSelectedGraphRejectsUnknownSchema() {
         using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node()).Id);
         }
         FrameAddress frame;
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
@@ -103,33 +98,34 @@ public sealed class RepositoryTagStorageTests : IDisposable {
             writer.WriteByte(1);
             writer.WriteVarUInt32(123456); // A missing descriptor in the actual pinned S.
             writer.WriteByte(7);
-            frame = resources.GraphStore.Append(StoredGraphKind.State, null, resources.SharedSchemaRoot,
-                new(null, new(1), [ObjectVersionRecord.CreateBase(1, bytes.WrittenSpan)])).Address;
-            byte[] payload = new byte[FrameAddress.EncodedSize];
-            frame.TryWrite(payload);
-            resources.CreateStoredTag("unknown-schema", frame, out _);
+            HeadId branch = Assert.Single(resources.ListBranches()).Key;
+            FrameAddress source = resources.ReadCurrent(branch).Address;
+            frame = resources.GraphStore.AppendBusiness(StoredGraphKind.State, source, resources.SharedSchemaRoot,
+                new(source, new(1), [ObjectVersionRecord.CreateBase(1, bytes.WrittenSpan)])).Address;
+            HeadEntryId entry = resources.Heads.PublishHead(branch, BusinessEntryPayloadCodec.Encode(frame, []), out _).Unwrap();
+            resources.CreateStoredTag("unknown-schema", entry, out _);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(_root, SharedReadModel.Models());
-        CheckpointAddress checkpoint = reader.ResolveTag("unknown-schema");
-        Assert.Equal(frame, checkpoint.RevisionAddress);
-        Assert.Throws<InvalidDataException>(() => reader.ReadState(checkpoint));
+        CommitId checkpoint = reader.ResolveTag("unknown-schema");
+        Assert.Equal(frame, Describe(reader, checkpoint).Address);
+        Assert.Throws<InvalidDataException>(() => reader.LoadState(checkpoint));
         Assert.False(reader.IsFaulted);
     }
 
     [Fact]
     public void RequiredBookmarkHeadTailRecoversBeforeDirectoryLoad() {
-        FrameAddress saved;
+        CommitId saved;
         using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node());
-            saved = main.Head.RevisionAddress;
-            seed.CreateTag("bookmark", main.Head);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node()).Id);
+            saved = main.BaseCommitId;
+            seed.CreateTag("bookmark", main.BaseCommitId);
         }
         string bucket = Path.Combine(_root, "versions", "refs", "00000003.rbf");
         byte[] complete = File.ReadAllBytes(bucket);
         File.WriteAllBytes(bucket, [.. complete, 1]);
         using (Repository writable = Repository.OpenExisting(_root, new StateModelRegistry())) {
             Assert.Equal(complete.Length, new FileInfo(bucket).Length);
-            Assert.Equal(saved, writable.ResolveTag("bookmark").RevisionAddress);
+            Assert.Equal(saved, writable.ResolveTag("bookmark"));
             Assert.Contains(ResourcesOf(writable).Heads.RecoveryReports,
                 report => report.FileKind == Atelia.HeadStore.HeadStoreRecoveryFileKind.Head &&
                     report.Recovery.Action == Atelia.Rbf.RbfTailRecoveryAction.Truncated);

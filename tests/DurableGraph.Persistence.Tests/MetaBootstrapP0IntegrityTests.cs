@@ -34,8 +34,8 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         FrameAddress bad = fixture.Graph(StoredGraphKind.State, updated.Address, 1, directory, batch);
 
         fixture.Cold(store => {
-            Assert.Equal(updated.ObjectHeads[1], store.ReadGraph(updated.Address).ObjectHeads[1]);
-            Assert.Throws<InvalidDataException>(() => store.ReadGraph(bad));
+            Assert.Equal(updated.ObjectHeads[1], fixture.Read(store, updated.Address).ObjectHeads[1]);
+            Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
         });
     }
 
@@ -58,7 +58,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         fixture.Cold(store => {
             Assert.Equal(heads.OrderBy(static pair => pair.Key).ToArray(),
                 store.ReadDirectory(directory).OrderBy(static pair => pair.Key).ToArray());
-            Assert.Throws<InvalidDataException>(() => store.ReadGraph(bad));
+            Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
         });
     }
 
@@ -85,11 +85,11 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         FrameAddress retained = fixture.Graph(StoredGraphKind.State, external, 1, directory, null);
 
         fixture.Cold(store => {
-            Assert.Equal(batch, store.ReadGraph(external).ObjectHeads[1]);
-            Assert.Equal(batch, store.ReadGraph(retained).ObjectHeads[1]);
-            Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(retained, 1));
+            Assert.Equal(batch, fixture.Read(store, external).ObjectHeads[1]);
+            Assert.Equal(batch, fixture.Read(store, retained).ObjectHeads[1]);
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(fixture.Read(store, retained), 1));
             for (int attempt = 0; attempt < 2; attempt++) {
-                Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(retained, out _).ToArray());
+                Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(fixture.Read(store, retained)).ToArray());
             }
         });
     }
@@ -105,7 +105,8 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
 
         fixture.Cold(store => {
             for (int attempt = 0; attempt < 2; attempt++) {
-                IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(retained, out StoredGraphRevision snapshot);
+                StoredGraphRevision snapshot = fixture.Read(store, retained);
+                IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(snapshot);
                 Assert.Equal(batch, snapshot.ObjectHeads[1]); // The external head itself is a valid shallow declaration.
                 InvalidDataException error = Assert.Throws<InvalidDataException>(() => chains.ToArray());
                 Assert.Contains("Content source", error.Message);
@@ -120,17 +121,19 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         StoredGraphRevision initial = fixture.State(null, [B(1, [10])]);
         StoredGraphRevision updated = fixture.State(initial.Address, [D(1, initial.ObjectHeads[1], [20])]);
         StoredGraphRevision firstEvent = fixture.Append(StoredGraphKind.Event, updated.Address, 1, []);
-        StoredGraphRevision secondEvent = fixture.Append(StoredGraphKind.Event, firstEvent.Address, 1, []);
-        StoredGraphRevision unchanged = fixture.State(secondEvent.Address, []);
+        StoredGraphRevision secondEvent = fixture.Append(StoredGraphKind.Event, updated.Address, 1, []);
+        StoredGraphRevision unchanged = fixture.State(updated.Address, []);
 
         fixture.Cold(store => {
-            StoredGraphRevision restored = store.ReadGraph(unchanged.Address);
-            Assert.Equal(secondEvent.Address, restored.Parent);
+            StoredGraphRevision restored = fixture.Read(store, unchanged.Address);
+            Assert.Null(restored.PreviousMeta);
+            Assert.Equal(updated.Address, fixture.Read(store, firstEvent.Address).SourceGraph);
+            Assert.Equal(updated.Address, fixture.Read(store, secondEvent.Address).SourceGraph);
             Assert.Equal(updated.Address, restored.SourceGraph);
             Assert.Equal(updated.DirectoryRoot, restored.DirectoryRoot);
             Assert.Null(restored.OwnedBatch);
             foreach (ObjectVersionChain chain in new[] {
-                store.ReadObjectChain(unchanged.Address, 1), Assert.Single(store.ReadObjectChains(unchanged.Address, out _))
+                store.ReadObjectChain(fixture.Read(store, unchanged.Address), 1), Assert.Single(store.ReadObjectChains(fixture.Read(store, unchanged.Address)))
             }) {
                 Assert.Equal(new[] { initial.OwnedBatch!.Value, updated.OwnedBatch!.Value },
                     chain.Entries.Select(static entry => entry.ContainingBatch).ToArray());
@@ -163,7 +166,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         };
         FrameAddress bad = fixture.Graph(StoredGraphKind.State, updated.Address, 1, directory, null);
 
-        fixture.Cold(store => Assert.Throws<InvalidDataException>(() => store.ReadGraph(bad)));
+        fixture.Cold(store => Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad)));
     }
 
     [Fact]
@@ -175,14 +178,14 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         FrameAddress bad = fixture.Graph(StoredGraphKind.State, initial.Address, 1, initial.DirectoryRoot, batch);
 
         fixture.Cold(store => {
-            StoredGraphRevision restored = store.ReadGraph(reused);
+            StoredGraphRevision restored = fixture.Read(store, reused);
             Assert.Equal(new ObjectId(2), restored.RootId);
             Assert.Equal(initial.Address, restored.SourceGraph);
             Assert.Equal(initial.DirectoryRoot, restored.DirectoryRoot);
             Assert.Null(restored.OwnedBatch);
             Assert.Null(store.ReadDirectoryVersion(restored.DirectoryRoot).SourceGraph);
-            Assert.Equal(new byte[] { 20 }, Assert.Single(store.ReadObjectChain(reused, 2).Entries).Record.Body.ToArray());
-            Assert.Throws<InvalidDataException>(() => store.ReadGraph(bad));
+            Assert.Equal(new byte[] { 20 }, Assert.Single(store.ReadObjectChain(fixture.Read(store, reused), 2).Entries).Record.Body.ToArray());
+            Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
         });
     }
 
@@ -204,7 +207,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
 
         fixture.Cold(store => {
             Assert.Equal(wrongHead, store.ReadDirectory(directory)[1]);
-            Assert.Throws<InvalidDataException>(() => store.ReadGraph(bad));
+            Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
         });
     }
 
@@ -232,13 +235,13 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         FrameAddress extending = fixture.Graph(StoredGraphKind.State, bad, 1, extendingDirectory, extendingBatch);
 
         fixture.Cold(store => {
-            Assert.Throws<InvalidDataException>(() => store.ReadGraph(bad));
-            StoredGraphRevision restored = store.ReadGraph(reset);
-            Assert.Equal(bad, restored.Parent);
+            Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
+            StoredGraphRevision restored = fixture.Read(store, reset);
+            Assert.Null(restored.PreviousMeta);
             Assert.Equal(bad, restored.SourceGraph);
             Assert.Equal(ObjectVersionKind.Base, store.ReadDirectoryVersion(resetDirectory).Kind);
             foreach (ObjectVersionChain chain in new[] {
-                store.ReadObjectChain(reset, 1), Assert.Single(store.ReadObjectChains(reset, out _))
+                store.ReadObjectChain(fixture.Read(store, reset), 1), Assert.Single(store.ReadObjectChains(fixture.Read(store, reset)))
             }) {
                 ObjectVersionChainEntry only = Assert.Single(chain.Entries);
                 Assert.Equal(resetBatch, only.ContainingBatch);
@@ -247,8 +250,8 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
                 Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(0), chain.ReconstructionPayloadBytes);
             }
             // The same older dependency must remain invalid when actually needed.
-            Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(extending, 1));
-            Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(extending, out _).ToArray());
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(fixture.Read(store, extending), 1));
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(fixture.Read(store, extending)).ToArray());
         });
     }
 
@@ -265,13 +268,13 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         StoredGraphRevision latest = fixture.State(fresh.Address, [D(1, fresh.ObjectHeads[1], [91])]);
 
         fixture.Cold(store => {
-            Assert.False(store.ReadGraph(removed.Address).ObjectHeads.ContainsKey(1));
-            Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(bad, 1));
-            ObjectVersionChain chain = store.ReadObjectChain(latest.Address, 1);
+            Assert.False(fixture.Read(store, removed.Address).ObjectHeads.ContainsKey(1));
+            Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(fixture.Read(store, bad), 1));
+            ObjectVersionChain chain = store.ReadObjectChain(fixture.Read(store, latest.Address), 1);
             Assert.Equal(new[] { fresh.OwnedBatch!.Value, latest.OwnedBatch!.Value },
                 chain.Entries.Select(static entry => entry.ContainingBatch).ToArray());
             Assert.Equal(new byte[] { 90 }, chain.Entries[0].Record.Body.ToArray());
-            Assert.Equal(new byte[] { 10 }, Assert.Single(store.ReadObjectChain(initial.Address, 1).Entries).Record.Body.ToArray());
+            Assert.Equal(new byte[] { 10 }, Assert.Single(store.ReadObjectChain(fixture.Read(store, initial.Address), 1).Entries).Record.Body.ToArray());
         });
     }
 
@@ -284,7 +287,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         var cycle = fixture.AppendCycle(objectPrior);
         fixture.Cold(store => {
             if (objectPrior) {
-                Assert.Equal(cycle.First, store.ReadGraph(cycle.Selection).ObjectHeads[1]);
+                Assert.Equal(cycle.First, fixture.Read(store, cycle.Selection).ObjectHeads[1]);
                 Assert.Equal(cycle.Second, Assert.Single(store.ReadBatch(cycle.First).Records).PriorAddress);
                 Assert.Equal(cycle.First, Assert.Single(store.ReadBatch(cycle.Second).Records).PriorAddress);
             } else {
@@ -293,15 +296,15 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             }
             for (int attempt = 0; attempt < 2; attempt++) {
                 InvalidDataException error = objectPrior
-                    ? Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(cycle.Selection, 1))
+                    ? Assert.Throws<InvalidDataException>(() => store.ReadObjectChain(fixture.Read(store, cycle.Selection), 1))
                     : Assert.Throws<InvalidDataException>(() => store.ReadDirectory(cycle.First));
                 Assert.Contains("cycle", error.Message, StringComparison.OrdinalIgnoreCase);
                 if (objectPrior) {
-                    InvalidDataException bulk = Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(cycle.Selection, out _).ToArray());
+                    InvalidDataException bulk = Assert.Throws<InvalidDataException>(() => store.ReadObjectChains(fixture.Read(store, cycle.Selection)).ToArray());
                     Assert.Contains("cycle", bulk.Message, StringComparison.OrdinalIgnoreCase);
                 }
             }
-            Assert.Equal(new byte[] { 10 }, Assert.Single(store.ReadObjectChain(positive.Address, 1).Entries).Record.Body.ToArray());
+            Assert.Equal(new byte[] { 10 }, Assert.Single(store.ReadObjectChain(fixture.Read(store, positive.Address), 1).Entries).Record.Body.ToArray());
             Assert.Equal(0, store.AppendedFrames);
         });
     }
@@ -325,7 +328,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         fixture.Cold(store => {
             for (int attempt = 0; attempt < 2; attempt++) {
                 foreach (ObjectVersionChain chain in new[] {
-                    store.ReadObjectChain(graph, 1), Assert.Single(store.ReadObjectChains(graph, out _))
+                    store.ReadObjectChain(fixture.Read(store, graph), 1), Assert.Single(store.ReadObjectChains(fixture.Read(store, graph)))
                 }) {
                     ObjectVersionChainEntry entry = Assert.Single(chain.Entries);
                     Assert.Equal(batch, chain.Head);
@@ -402,6 +405,8 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         private readonly string _path;
         private readonly Frames _frames;
         private bool _closed;
+        // Explicit fixture inputs survive cold reopen; no payload infers the business source.
+        private readonly Dictionary<FrameAddress, FrameAddress?> _expectedSources = [];
 
         internal Fixture(string path) {
             _path = path;
@@ -419,13 +424,19 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         internal GraphRecordStore Store { get; }
         internal FrameAddress SchemaRoot { get; }
 
-        internal StoredGraphRevision State(FrameAddress? parent, ObjectVersionRecord[] records) =>
-            Append(StoredGraphKind.State, parent, 1, records);
+        internal StoredGraphRevision State(FrameAddress? expectedSource, ObjectVersionRecord[] records) =>
+            Append(StoredGraphKind.State, expectedSource, 1, records);
 
-        internal StoredGraphRevision Append(StoredGraphKind kind, FrameAddress? parent, uint rootId,
-            ObjectVersionRecord[] records, uint[]? removed = null) =>
-            Store.Append(kind, parent, SchemaRoot,
-                new(Store.ResolveContentSource(kind, parent), new(rootId), records, removed));
+        internal StoredGraphRevision Append(StoredGraphKind kind, FrameAddress? expectedSource, uint rootId,
+            ObjectVersionRecord[] records, uint[]? removed = null) {
+            StoredGraphRevision result = Store.AppendBusiness(kind, expectedSource, SchemaRoot,
+                new(expectedSource, new(rootId), records, removed));
+            _expectedSources.Add(result.Address, expectedSource);
+            return result;
+        }
+
+        internal StoredGraphRevision Read(GraphRecordStore store, FrameAddress address) =>
+            store.ReadBusinessGraph(address, _expectedSources[address]);
 
         internal FrameAddress Batch(FrameAddress? source, ObjectVersionRecord[] records) =>
             _frames.Append(GraphFrameCodec.BatchTag, GraphFrameCodec.EncodeBatch(source, SchemaRoot, records)).Unwrap();
@@ -437,6 +448,8 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             byte[] graphTemplate = GraphFrameCodec.EncodeGraph(StoredGraphKind.State, null, new(1), witness, SchemaRoot, null);
             using FrameBuilder firstGraphBuilder = _frames.BeginAppend(graphTemplate.Length, 0, out FrameAddress firstGraph);
             using FrameBuilder secondGraphBuilder = _frames.BeginAppend(graphTemplate.Length, 0, out FrameAddress secondGraph);
+            _expectedSources.Add(firstGraph, null);
+            _expectedSources.Add(secondGraph, null);
             if (objectPrior) {
                 int length = GraphFrameCodec.EncodeBatch(witness, SchemaRoot, [D(1, witness, [])]).Length;
                 using FrameBuilder firstBuilder = _frames.BeginAppend(length, 0, out FrameAddress first);
@@ -486,10 +499,13 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             FrameAddress? prior, ReadOnlySpan<byte> body) =>
             _frames.Append(GraphFrameCodec.DirectoryTag, GraphFrameCodec.EncodeDirectory(source, kind, prior, body)).Unwrap();
 
-        internal FrameAddress Graph(StoredGraphKind kind, FrameAddress? parent, uint rootId,
-            FrameAddress directory, FrameAddress? ownedBatch) =>
-            _frames.Append(GraphFrameCodec.GraphTag,
-                GraphFrameCodec.EncodeGraph(kind, parent, new(rootId), directory, SchemaRoot, ownedBatch)).Unwrap();
+        internal FrameAddress Graph(StoredGraphKind kind, FrameAddress? expectedSource, uint rootId,
+            FrameAddress directory, FrameAddress? ownedBatch) {
+            FrameAddress address = _frames.Append(GraphFrameCodec.GraphTag,
+                GraphFrameCodec.EncodeGraph(kind, null, new(rootId), directory, SchemaRoot, ownedBatch)).Unwrap();
+            _expectedSources.Add(address, expectedSource);
+            return address;
+        }
 
         internal void Cold(Action<GraphRecordStore> verify) {
             _frames.ConfirmDurable();

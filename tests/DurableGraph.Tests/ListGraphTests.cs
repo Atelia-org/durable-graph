@@ -47,21 +47,21 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path))
         {
             var states = segments.GraphStore;
-            Assert.Empty(DefaultRecords(states, unchanged));
-            ObjectVersionRecord resize = Assert.Single(DefaultRecords(states, appended));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, unchanged)));
+            ObjectVersionRecord resize = Assert.Single(DefaultRecords(states, PublishedGraph(segments, appended)));
             Assert.Equal(ObjectVersionKind.Delta, resize.Kind);
-            Assert.Equal(ObjectStateKind.List, DefaultLayout(states, first, resize.ObjectId).Kind);
-            ObjectVersionRecord child = Assert.Single(DefaultRecords(states, childOnly));
+            Assert.Equal(ObjectStateKind.List, DefaultLayout(states, PublishedGraph(segments, first), resize.ObjectId).Kind);
+            ObjectVersionRecord child = Assert.Single(DefaultRecords(states, PublishedGraph(segments, childOnly)));
             Assert.NotEqual(resize.ObjectId, child.ObjectId);
-            Assert.Equal(ObjectStateKind.Durable, DefaultLayout(states, first, child.ObjectId).Kind);
-            var replacement = states.ReadGraph(replaced);
-            Assert.Single(DefaultRemoved(states, replacement.Address));
-            ObjectVersionRecord newList = Assert.Single(DefaultRecords(states, replacement.Address),
+            Assert.Equal(ObjectStateKind.Durable, DefaultLayout(states, PublishedGraph(segments, first), child.ObjectId).Kind);
+            var replacement = PublishedGraph(segments, replaced);
+            Assert.Single(PublishedRemoved(segments, replacement.Address));
+            ObjectVersionRecord newList = Assert.Single(DefaultRecords(states, PublishedGraph(segments, replacement.Address)),
                 row => row.Kind == ObjectVersionKind.Base && row.ObjectId != child.ObjectId &&
-                    DefaultLayout(states, replaced, row.ObjectId).Kind == ObjectStateKind.List);
+                    DefaultLayout(states, PublishedGraph(segments, replaced), row.ObjectId).Kind == ObjectStateKind.List);
             Assert.NotEqual(resize.ObjectId, newList.ObjectId);
-            Assert.Equal(2, DefaultRemoved(states, removed).Count); // List and cyclic Node island.
-            Assert.Equal(states.ReadGraph(first).ObjectHeads.Count - 2, states.ReadGraph(removed).ObjectHeads.Count);
+            Assert.Equal(2, PublishedRemoved(segments, removed).Count); // List and cyclic Node island.
+            Assert.Equal(PublishedGraph(segments, first).ObjectHeads.Count - 2, PublishedGraph(segments, removed).ObjectHeads.Count);
         }
         FrameAddress resumed;
         using (FixtureGraphRepository repository = FixtureGraphRepository.OpenExisting(directory.Path, Method<Func<StateModelRegistry>>("Models")())) {
@@ -73,8 +73,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var states = segments.GraphStore;
-            Assert.Empty(DefaultRecords(states, resumed));
-            Assert.Empty(DefaultRemoved(states, resumed));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, resumed)));
+            Assert.Empty(PublishedRemoved(segments, resumed));
         }
     }
 
@@ -95,12 +95,11 @@ public sealed partial class DurableSchemaGeneratorTests {
                 mutate(world);
                 mutated = true;
             };
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", (IDurableObject)world);
+            repository.CreateRootBranchFromState("main", (IDurableObject)world);
             Assert.True(mutated);
-            Assert.Same(world, checkout.State);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, models());
-        check(reopened.ReadState(reopened.GetHead("main")), 0);
+        check(reopened.LoadState(reopened.ReadCurrentCommit(EvidenceBranch(reopened, "main")).Commit.Id), 0);
     }
 
     private const string ListGraphSource = """

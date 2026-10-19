@@ -1,59 +1,54 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class EventHistoryRepositoryTests {
     [Fact]
-    public void MultipleBranchCreatorsAndRefOperationsOnlyExcludeTheirOwnActiveBranch() {
-        int captures = 0, hydrations = 0;
-        using Repository repository = CreateRepository(Models(onCapture: _ => captures++, onHydrate: _ => hydrations++));
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
-        using BranchCheckout other = repository.CreateSharedBranch("other", new Node { Value = 2 }, NoRebase);
-        using BranchCheckout eventOnly = repository.CreateSharedBranchFromEvent("events", new Node { Value = 3 }, NoRebase);
-        CheckpointAddress initial = main.Head;
-        repository.CreateBranch("movable", initial);
-        CheckpointAddress next = main.CommitEvent(new Node(), NoRebase);
-        var before = SnapshotLiveFiles();
-        int priorCaptures = captures, priorHydrations = hydrations;
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-        Assert.Throws<InvalidOperationException>(() => repository.CreateSharedBranch("main", new Node(), NoRebase));
-        Assert.Throws<InvalidOperationException>(() => repository.CreateSharedBranchFromEvent("main", new Node(), NoRebase));
-        Assert.Throws<InvalidOperationException>(() => repository.ForkShared("main", initial));
-        Assert.Throws<InvalidOperationException>(() => repository.MoveBranch("main", next, initial));
-        Assert.Throws<InvalidOperationException>(() => repository.MoveBranch("movable", next, initial));
-        Assert.Equal(priorCaptures, captures);
-        Assert.Equal(priorHydrations, hydrations);
-        AssertLiveFiles(before);
-        repository.MoveBranch("movable", initial, next);
-        Assert.Equal(next, repository.GetHead("movable"));
-        main.CommitState(NoRebase);
-        other.CommitEvent(new Node(), NoRebase);
-        eventOnly.CommitState(new Node(), NoRebase);
+    public void BranchIdentityOccupancyAllowsDuplicateLabelsAndIndependentForks() {
+        using Repository repository = CreateRepository();
+        BranchInfo mainInfo = repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase);
+        using WorkingCopy main = repository.OpenWorkingCopy(mainInfo.Id);
+        BranchInfo otherInfo = repository.CreateRootBranchFromState("main", new Node { Value = 2 }, parameters: NoRebase);
+        using WorkingCopy other = repository.OpenWorkingCopy(otherInfo.Id);
+        BranchInfo eventInfo = repository.CreateRootBranchFromEvent("events", new Node(), parameters: NoRebase);
+        using WorkingCopy eventOnly = repository.OpenWorkingCopy(eventInfo.Id);
+        CommitId initial = main.BaseCommitId;
+        BranchInfo fork = repository.ForkBranch(initial, "main");
+        using WorkingCopy child = repository.OpenWorkingCopy(fork.Id);
+        Assert.Equal(3, repository.ListBranches().Count(branch => branch.DisplayLabel == "main"));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(mainInfo.Id));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(otherInfo.Id));
+        main.CommitEvent(new Node(), parameters: NoRebase);
+        child.CommitState(parameters: NoRebase);
+        Assert.NotEqual(main.BaseCommitId, child.BaseCommitId);
+        other.CommitEvent(new Node(), parameters: NoRebase);
+        eventOnly.CommitState(new Node(), parameters: NoRebase);
+        CommitId latest = main.BaseCommitId;
         main.Dispose();
-        repository.MoveBranch("main", main.Head, initial);
-        using BranchCheckout replacement = repository.CheckoutShared("main");
-        Assert.Equal(initial, replacement.Head);
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("other"));
+        using WorkingCopy replacement = repository.OpenWorkingCopy(mainInfo.Id);
+        Assert.Equal(latest, replacement.BaseCommitId);
+        Assert.Equal(initial, repository.ReadBranchInfo(fork.Id).ForkedFromCommitId);
     }
 
     [Fact]
-    public void FailedCheckoutRecoveryAndMissingBranchDoNotLeakOccupancy() {
+    public void FailedCheckoutRecoveryAndInvalidBranchDoNotLeakOccupancy() {
         bool fail = false;
         using Repository repository = CreateRepository(Models(onHydrate: _ => {
             if (fail) throw new InvalidDataException("restore failed");
         }));
-        using BranchCheckout source = repository.CreateSharedBranch("source", new Node(), NoRebase);
-        repository.CreateBranch("retry", source.Head);
+        using WorkingCopy source = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("source", new Node(), parameters: NoRebase).Id);
+        repository.ForkBranch(source.BaseCommitId, "retry");
         fail = true;
         var before = SnapshotLiveFiles();
-        Assert.Throws<InvalidDataException>(() => repository.CheckoutShared("retry"));
-        Assert.ThrowsAny<Exception>(() => repository.CheckoutShared("missing"));
+        Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "retry")));
+        Assert.Throws<ArgumentException>(() => repository.OpenWorkingCopy(default));
         Assert.False(repository.IsFaulted);
         AssertLiveFiles(before);
         fail = false;
-        using BranchCheckout retry = repository.CheckoutShared("retry");
-        using BranchCheckout formerlyMissing = repository.ForkShared("missing", source.Head);
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("retry"));
-        source.CommitState(NoRebase);
-        retry.CommitState(NoRebase);
+        using WorkingCopy retry = repository.OpenWorkingCopy(BranchNamed(repository, "retry"));
+        using WorkingCopy formerlyMissing = repository.OpenWorkingCopy(repository.ForkBranch(source.BaseCommitId, "missing").Id);
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "retry")));
+        source.CommitState(parameters: NoRebase);
+        retry.CommitState(parameters: NoRebase);
     }
 
     [Theory]
@@ -64,38 +59,38 @@ public sealed partial class EventHistoryRepositoryTests {
         using Repository repository = CreateRepository(Models(onCapture: _ => {
             if (fail) throw new InvalidDataException("capture failed");
         }));
-        using BranchCheckout source = repository.CreateSharedBranch("source", new Node(), NoRebase);
+        using WorkingCopy source = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("source", new Node(), parameters: NoRebase).Id);
         fail = true;
         var before = SnapshotLiveFiles();
         Assert.Throws<InvalidDataException>(() => {
-            if (eventFirst) repository.CreateSharedBranchFromEvent("retry", new Node(), NoRebase);
-            else repository.CreateSharedBranch("retry", new Node(), NoRebase);
+            if (eventFirst) repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("retry", new Node(), parameters: NoRebase).Id);
+            else repository.OpenWorkingCopy(repository.CreateRootBranchFromState("retry", new Node(), parameters: NoRebase).Id);
         });
         Assert.False(repository.IsFaulted);
         AssertLiveFiles(before);
         fail = false;
-        using BranchCheckout retry = eventFirst
-            ? repository.CreateSharedBranchFromEvent("retry", new Node(), NoRebase)
-            : repository.CreateSharedBranch("retry", new Node(), NoRebase);
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("source"));
-        source.CommitState(NoRebase);
-        retry.CommitState(new Node(), NoRebase);
+        using WorkingCopy retry = eventFirst
+            ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("retry", new Node(), parameters: NoRebase).Id)
+            : repository.OpenWorkingCopy(repository.CreateRootBranchFromState("retry", new Node(), parameters: NoRebase).Id);
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "source")));
+        source.CommitState(parameters: NoRebase);
+        retry.CommitState(new Node(), parameters: NoRebase);
     }
 
     [Fact]
     public void RepeatedOldCheckoutDisposeCannotReleaseItsSuccessorOrOtherBranches() {
         using Repository repository = CreateRepository();
-        BranchCheckout old = repository.CreateSharedBranch("main", new Node(), NoRebase);
-        using BranchCheckout other = repository.ForkShared("other", old.Head);
+        WorkingCopy old = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
+        using WorkingCopy other = repository.OpenWorkingCopy(repository.ForkBranch(old.BaseCommitId, "other").Id);
         old.Dispose();
-        using BranchCheckout successor = repository.CheckoutShared("main");
+        using WorkingCopy successor = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
         old.Dispose();
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("other"));
-        Assert.Throws<ObjectDisposedException>(() => old.CommitState(NoRebase));
-        Assert.Throws<InvalidOperationException>(() => repository.Commit(old, null, new Node(), NoRebase));
-        successor.CommitState(NoRebase);
-        other.CommitState(NoRebase);
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "other")));
+        Assert.Throws<ObjectDisposedException>(() => old.CommitState(parameters: NoRebase).Id);
+        Assert.Throws<InvalidOperationException>(() => repository.Commit(old, null, new Node(), default, NoRebase));
+        successor.CommitState(parameters: NoRebase);
+        other.CommitState(parameters: NoRebase);
     }
 
     [Theory]
@@ -108,16 +103,15 @@ public sealed partial class EventHistoryRepositoryTests {
         using Repository repository = CreateRepository(Models(
             onHydrate: _ => duringHydrate?.Invoke(),
             allocate: () => { duringAllocate?.Invoke(); return new Node(); }));
-        using BranchCheckout source = repository.CreateSharedBranch("main", new Node(), NoRebase);
-        CheckpointAddress initial = source.Head;
+        using WorkingCopy source = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
+        CommitId initial = source.BaseCommitId;
         int callbackCount = 0;
         void Reenter() {
             callbackCount++;
-            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("nested", initial));
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-            Assert.Throws<InvalidOperationException>(() => repository.CreateBranch("ref", initial));
-            Assert.Throws<InvalidOperationException>(() => repository.MoveBranch("main", initial, initial));
-            Assert.Throws<InvalidOperationException>(() => source.CommitState(NoRebase));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.ForkBranch(initial, "nested").Id));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+            Assert.Throws<InvalidOperationException>(() => repository.ForkBranch(initial, "ref"));
+            Assert.Throws<InvalidOperationException>(() => source.CommitState(parameters: NoRebase).Id);
             Assert.Throws<InvalidOperationException>(() => source.Dispose());
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
         }
@@ -127,69 +121,69 @@ public sealed partial class EventHistoryRepositoryTests {
             if (phase == "before-publication" && point == RepositoryOperationStage.BeforePublication ||
                 phase == "after-publication" && point == RepositoryOperationStage.AfterPublication) Reenter();
         };
-        using BranchCheckout child = repository.ForkShared("child", initial);
+        using WorkingCopy child = repository.OpenWorkingCopy(repository.ForkBranch(initial, "child").Id);
         Assert.True(callbackCount > 0);
         duringAllocate = duringHydrate = null;
         repository.OperationStageObserver = null;
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("child"));
-        Assert.DoesNotContain("nested", repository.ListBranches());
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "child")));
+        Assert.DoesNotContain("nested", repository.ListBranches().Select(branch => branch.DisplayLabel));
         Assert.False(repository.IsFaulted);
-        source.CommitState(NoRebase);
-        child.CommitState(NoRebase);
+        source.CommitState(parameters: NoRebase);
+        child.CommitState(parameters: NoRebase);
     }
 
     [Fact]
     public void DisposedRepositoryAndOldCheckoutsCannotInterfereWithFreshOpen() {
         Repository oldRepository = CreateRepository();
-        BranchCheckout oldMain = oldRepository.CreateSharedBranch("main", new Node(), NoRebase);
-        BranchCheckout oldOther = oldRepository.ForkShared("other", oldMain.Head);
-        CheckpointAddress oldAddress = oldMain.Head;
+        WorkingCopy oldMain = oldRepository.OpenWorkingCopy(oldRepository.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
+        WorkingCopy oldOther = oldRepository.OpenWorkingCopy(oldRepository.ForkBranch(oldMain.BaseCommitId, "other").Id);
+        CommitId oldAddress = oldMain.BaseCommitId;
         oldRepository.Dispose();
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using BranchCheckout current = reopened.CheckoutShared("main");
-        using BranchCheckout currentOther = reopened.CheckoutShared("other");
-        Assert.Throws<ObjectDisposedException>(() => oldMain.CommitState(NoRebase));
-        Assert.Throws<ObjectDisposedException>(() => oldOther.CommitEvent(new Node(), NoRebase));
-        Assert.Throws<ArgumentException>(() => reopened.ForkShared("stale", oldAddress));
-        Assert.Throws<InvalidOperationException>(() => reopened.Commit(oldMain, null, new Node(), NoRebase));
+        using WorkingCopy current = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
+        using WorkingCopy currentOther = reopened.OpenWorkingCopy(BranchNamed(reopened, "other"));
+        Assert.Throws<ObjectDisposedException>(() => oldMain.CommitState(parameters: NoRebase).Id);
+        Assert.Throws<ObjectDisposedException>(() => oldOther.CommitEvent(new Node(), parameters: NoRebase).Id);
+        using WorkingCopy inherited = reopened.OpenWorkingCopy(reopened.ForkBranch(oldAddress, "persisted").Id);
+        Assert.Equal(oldAddress, inherited.BaseCommitId);
+        Assert.Throws<InvalidOperationException>(() => reopened.Commit(oldMain, null, new Node(), default, NoRebase));
         oldMain.Dispose();
         oldOther.Dispose();
         oldRepository.Dispose();
-        Assert.Throws<InvalidOperationException>(() => reopened.CheckoutShared("main"));
-        Assert.Throws<InvalidOperationException>(() => reopened.CheckoutShared("other"));
-        current.CommitState(NoRebase);
-        currentOther.CommitState(NoRebase);
+        Assert.Throws<InvalidOperationException>(() => reopened.OpenWorkingCopy(BranchNamed(reopened, "main")));
+        Assert.Throws<InvalidOperationException>(() => reopened.OpenWorkingCopy(BranchNamed(reopened, "other")));
+        current.CommitState(parameters: NoRebase);
+        currentOther.CommitState(parameters: NoRebase);
     }
 
     [Fact]
-    public void ForkRejectsForeignNullInvalidDuplicateAndReadonlyRequestsBeforeRestoreOrWrites() {
-        CheckpointAddress old;
+    public void ForkUsesPersistentIdsAndRejectsDefaultForeignAndReadonlyRequestsBeforeRestore() {
+        CommitId old;
         using (Repository repository = CreateRepository()) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", new Node(), NoRebase);
-            old = main.Head;
+            BranchInfo main = repository.CreateRootBranchFromState("main", new Node(), parameters: NoRebase);
+            old = repository.ReadCurrentCommit(main.Id).Commit.Id;
         }
         int hydrations = 0;
         using (Repository repository = Repository.OpenExisting(_root, Models(onHydrate: _ => hydrations++))) {
-            CheckpointAddress current = repository.GetHead("main");
             var before = SnapshotLiveFiles();
-            Assert.Throws<ArgumentNullException>(() => repository.ForkShared("null", null!));
-            Assert.Throws<ArgumentException>(() => repository.ForkShared("old", old));
-            Assert.ThrowsAny<ArgumentException>(() => repository.ForkShared("bad/name", current));
-            Assert.Throws<InvalidOperationException>(() => repository.ForkShared("main", current));
+            Assert.ThrowsAny<ArgumentException>(() => repository.ForkBranch(default, "invalid"));
             Assert.Equal(0, hydrations);
             AssertLiveFiles(before);
             using EventHistoryRepositoryTests foreignFixture = new();
             using Repository foreign = foreignFixture.CreateRepository();
-            using BranchCheckout foreignCheckout = foreign.CreateSharedBranch("main", new Node(), NoRebase);
-            Assert.Throws<ArgumentException>(() => repository.ForkShared("foreign", foreignCheckout.Head));
+            BranchInfo foreignBranch = foreign.CreateRootBranchFromState("main", new Node(), parameters: NoRebase);
+            Assert.ThrowsAny<Exception>(() => repository.ForkBranch(foreign.ReadCurrentCommit(foreignBranch.Id).Commit.Id, "foreign"));
             AssertLiveFiles(before);
-            using BranchCheckout valid = repository.ForkShared("valid", current);
+            BranchInfo duplicate = repository.ForkBranch(old, "main");
+            Assert.Equal(0, hydrations);
+            Assert.Equal(old, repository.ReadCurrentCommit(duplicate.Id).Commit.Id);
+            using WorkingCopy valid = repository.OpenWorkingCopy(duplicate.Id);
             Assert.Equal(1, hydrations);
         }
         var readOnlyBefore = SnapshotFiles();
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
-            Assert.Throws<InvalidOperationException>(() => reader.ForkShared("forbidden", reader.GetHead("main")));
+            Assert.Throws<InvalidOperationException>(() => reader.ForkBranch(old, "forbidden"));
         }
         AssertFiles(readOnlyBefore);
     }

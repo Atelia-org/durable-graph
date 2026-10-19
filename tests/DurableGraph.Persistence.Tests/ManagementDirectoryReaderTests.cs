@@ -21,13 +21,13 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         using (DataStore data = DataStore.Create(_path))
         using (GraphRecordStore graphs = new(data)) {
             FrozenDictionaryState<uint, ObjectId> first = BranchMap((42, 2));
-            StoredGraphRevision initial = graphs.Append(StoredGraphKind.Meta, null, null,
+            StoredGraphRevision initial = graphs.AppendMeta(null,
                 new(null, new(1), [BranchRow(1, first), Text(2, "世界线😀")]));
             prior = initial.Address;
             labelHead = initial.ObjectHeads[2];
             PreparedDeltaBody delta = DictionaryStateBody<uint, ObjectId, UInt32StateOps, StringIdStateOps>
                 .PrepareDelta(first, BranchMap((42, 2), (43, 3)), Branches);
-            current = graphs.Append(StoredGraphKind.Meta, prior, null, new(prior, new(1), [
+            current = graphs.AppendMeta(prior, new(prior, new(1), [
                 ObjectVersionRecord.CreateDelta(1, initial.ObjectHeads[1], delta.Body), Text(3, "世界线😀"),
                 Text(4, "") // An unreferenced leaf is not a label.
             ])).Address;
@@ -42,12 +42,12 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
             Assert.Equal(labelHead, decoded.Snapshot.ObjectHeads[2]);
             Assert.Equal(2, decoded.Rows[new(1)].GetDictionaryState<uint, ObjectId>().Count);
             Assert.Equal(decoded.Rows[new(2)].StringContent, decoded.Rows[new(3)].StringContent);
-            ObjectVersionChain chain = graphs.ReadObjectChain(current, 1);
+            ObjectVersionChain chain = graphs.ReadObjectChain(graphs.ReadMetaGraph(current), 1);
             Assert.Equal(2, chain.Entries.Count);
             Assert.Equal(ObjectVersionKind.Delta, chain.Entries[1].Record.Kind);
             Assert.Equal(chain.ReconstructionPayloadBytes, decoded.Storage[new(1)].ReconstructionPayloadBytes);
             Assert.Equal(chain.Head, decoded.Storage[new(1)].Head);
-            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, current));
+            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, graphs.ReadMetaGraph(current)));
         }
     }
 
@@ -58,11 +58,11 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         using (DataStore data = DataStore.Create(_path))
         using (GraphRecordStore graphs = new(data)) {
             FrozenDictionaryState<ObjectId, ObjectId> first = BookmarkMap((2, 3));
-            StoredGraphRevision initial = graphs.Append(StoredGraphKind.Meta, null, null,
+            StoredGraphRevision initial = graphs.AppendMeta(null,
                 new(null, new(1), [BookmarkRow(1, first), Text(2, "Save"), ByteRow(3, entry)]));
             PreparedDeltaBody delta = DictionaryStateBody<ObjectId, ObjectId, StringIdStateOps, ObjectIdStateOps>
                 .PrepareDelta(first, BookmarkMap((2, 3), (4, 5)), Bookmarks);
-            current = graphs.Append(StoredGraphKind.Meta, initial.Address, null, new(initial.Address, new(1), [
+            current = graphs.AppendMeta(initial.Address, new(initial.Address, new(1), [
                 ObjectVersionRecord.CreateDelta(1, initial.ObjectHeads[1], delta.Body), Text(4, "save"), ByteRow(5, entry),
                 Text(6, ""), ByteRow(7, []) // Unreferenced builtin leaves need no bookmark role.
             ])).Address;
@@ -78,7 +78,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
             Assert.True(HeadEntryId.TryRead(decoded.Rows[new(3)].GetArrayState<byte>().Elements, out _));
             entry[0] ^= 0xFF;
             Assert.NotEqual(entry, decoded.Rows[new(3)].GetArrayState<byte>().Elements.ToArray());
-            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, current));
+            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, graphs.ReadMetaGraph(current)));
         }
     }
 
@@ -89,13 +89,15 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         using DataStore data = DataStore.Create(_path);
         using GraphRecordStore graphs = new(data);
         ObjectVersionRecord map = bookmark ? BookmarkRow(1, BookmarkMap()) : BranchRow(1, BranchMap());
-        StoredGraphRevision business = graphs.Append(StoredGraphKind.State, null, null, new(null, new(1), [map]));
-        Assert.Contains("Schema-free Meta", Assert.Throws<InvalidDataException>(() => Read(graphs, business.Address, bookmark)).Message);
-        StoredGraphRevision wrongRoot = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(2), [map, Text(2, "text root")]));
+        StoredGraphRevision business = graphs.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [map]));
+        Assert.Contains("Meta", Assert.Throws<InvalidDataException>(() => Read(graphs, business.Address, bookmark)).Message);
+        StoredGraphRevision wrongRoot = graphs.AppendMeta(null, new(null, new(2), [map, Text(2, "text root")]));
         Assert.Contains("exact Dictionary root", Assert.Throws<InvalidDataException>(() => Read(graphs, wrongRoot.Address, bookmark)).Message);
         byte[] malformed = GraphFrameCodec.EncodeGraph(StoredGraphKind.State,
             null, new(1), wrongRoot.DirectoryRoot, business.Address, wrongRoot.OwnedBatch);
-        malformed[4] = (byte)StoredGraphKind.Meta; // Bypass the writer's Meta/Schema guard, retaining valid frame CRC.
+        // Meta has an extra optional PreviousMeta field; preserve the P0G2 wire shape before changing role.
+        malformed = [.. malformed.AsSpan(0, 5), (byte)0, .. malformed.AsSpan(5)];
+        malformed[4] = (byte)StoredGraphKind.Meta; // Bypass only the writer's Meta/Schema guard, retaining valid frame CRC.
         FrameAddress withSchema = data.Append(GraphFrameCodec.GraphTag, malformed).Unwrap();
         Assert.Throws<InvalidDataException>(() => Read(graphs, withSchema, bookmark));
     }
@@ -113,8 +115,8 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         dRows.Add(BranchRow(1, BranchMap((1, 2), (2, 3), (3, 4), (4, 5))));
         tRows.Add(BookmarkRow(1, BookmarkMap((2, 6), (3, 6), (4, 6), (5, 6))));
         tRows.Add(ByteRow(6, EntryBytes()));
-        StoredGraphRevision d = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), dRows));
-        StoredGraphRevision t = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), tRows));
+        StoredGraphRevision d = graphs.AppendMeta(null, new(null, new(1), dRows));
+        StoredGraphRevision t = graphs.AppendMeta(null, new(null, new(1), tRows));
         DecodedGraphRows decodedD = ManagementDirectoryReader.ReadBranches(graphs, d.Address);
         DecodedGraphRows decodedT = ManagementDirectoryReader.ReadBookmarks(graphs, t.Address);
         for (uint i = 0; i < texts.Length; i++) {
@@ -151,8 +153,8 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
 
         // Physical relations are valid and selected Schema is null. Preload only the
         // actual chain, so a SchemaCatalogView.Load(poison) would add a GraphMiss.
-        Assert.Null(graphs.ReadGraph(selected).SchemaRoot);
-        ObjectVersionChain chain = graphs.ReadObjectChain(selected, 1);
+        Assert.Null(graphs.ReadMetaGraph(selected).SchemaRoot);
+        ObjectVersionChain chain = graphs.ReadObjectChain(graphs.ReadMetaGraph(selected), 1);
         Assert.Equal(poison, chain.Entries[deltaSchema ? 1 : 0].SchemaRoot);
         long graphMisses = graphs.ReadCacheStatistics.GraphMisses;
         InvalidDataException error = Assert.Throws<InvalidDataException>(() => Read(graphs, selected, bookmark));
@@ -160,7 +162,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         Assert.Equal(graphMisses, graphs.ReadCacheStatistics.GraphMisses);
         if (!deltaSchema) {
             // The formerly proposed builtin-only environment really attempts that read.
-            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, selected, new StateModelRegistry().CreateEnvironment()));
+            Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(graphs, graphs.ReadMetaGraph(selected), new StateModelRegistry().CreateEnvironment()));
             Assert.Equal(graphMisses + 1, graphs.ReadCacheStatistics.GraphMisses);
         }
     }
@@ -176,7 +178,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         // diagnostic proves rejection precedes executing that employee/container reader.
         ObjectLayout employee = BootstrapBindings.Layout(typeof(SchemaCatalogRecord));
         foreach (ObjectLayout outside in new[] { employee, ObjectLayout.ForArray(new(TypeExprKind.VectorArray, new(1, TypeTag.Int32))) }) {
-            StoredGraphRevision graph = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [root,
+            StoredGraphRevision graph = graphs.AppendMeta(null, new(null, new(1), [root,
                 ObjectVersionRecord.CreateBase(2, TypedBaseBodyCodec.Encode(outside, new(new byte[] { 0xFF })))
             ]));
             Assert.Contains("fixed closure", Assert.Throws<InvalidDataException>(() => Read(graphs, graph.Address, bookmark)).Message);
@@ -192,7 +194,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         ObjectVersionRecord root = bookmark ? BookmarkRow(1, BookmarkMap()) : BranchRow(1, BranchMap());
         ObjectVersionRecord bad = bookmark ? BookmarkRow(2, new(DictionaryComparerKind.StringOrdinalIgnoreCase, []))
             : BranchRow(2, new(DictionaryComparerKind.Application, []));
-        StoredGraphRevision graph = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [root, bad]));
+        StoredGraphRevision graph = graphs.AppendMeta(null, new(null, new(1), [root, bad]));
         Assert.Contains(bookmark ? "StringOrdinal" : "ScalarDefault",
             Assert.Throws<InvalidDataException>(() => Read(graphs, graph.Address, bookmark)).Message);
     }
@@ -207,11 +209,11 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         string text = error switch { "empty" => "", "long" => new('中', 1025), "high" => "\uD800", "low" => "\uDC00", _ => "\uD800x" };
         using DataStore data = DataStore.Create(_path);
         using GraphRecordStore graphs = new(data);
-        StoredGraphRevision d = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [
+        StoredGraphRevision d = graphs.AppendMeta(null, new(null, new(1), [
             BranchRow(1, BranchMap()), BranchRow(2, BranchMap((42, 3))), Text(3, text)
         ]));
         Assert.Throws<InvalidDataException>(() => ManagementDirectoryReader.ReadBranches(graphs, d.Address));
-        StoredGraphRevision t = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [
+        StoredGraphRevision t = graphs.AppendMeta(null, new(null, new(1), [
             BookmarkRow(1, BookmarkMap()), BookmarkRow(2, BookmarkMap((3, 4))), Text(3, text), ByteRow(4, EntryBytes())
         ]));
         Assert.Throws<InvalidDataException>(() => ManagementDirectoryReader.ReadBookmarks(graphs, t.Address));
@@ -227,7 +229,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         using GraphRecordStore graphs = new(data);
         uint label = error == "nullLabel" ? 0u : error == "missingLabel" ? 99u : 3u;
         ObjectVersionRecord target = error == "wrongLabelLayout" ? BranchRow(3, BranchMap()) : Text(3, "有效");
-        StoredGraphRevision graph = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [
+        StoredGraphRevision graph = graphs.AppendMeta(null, new(null, new(1), [
             BranchRow(1, BranchMap()), BranchRow(2, BranchMap((error == "headId" ? 0u : 42u, label))), target
         ]));
         Assert.Throws<InvalidDataException>(() => ManagementDirectoryReader.ReadBranches(graphs, graph.Address));
@@ -249,7 +251,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         using DataStore data = DataStore.Create(_path);
         using GraphRecordStore graphs = new(data);
         var entries = error == "duplicateNames" ? BookmarkMap((3, 4), (5, 4)) : BookmarkMap((3, error == "nullValue" ? 0u : 4u));
-        StoredGraphRevision graph = graphs.Append(StoredGraphKind.Meta, null, null, new(null, new(1), [
+        StoredGraphRevision graph = graphs.AppendMeta(null, new(null, new(1), [
             BookmarkRow(1, BookmarkMap()), BookmarkRow(2, entries), Text(3, "same"), ByteRow(4, bytes), Text(5, "same")
         ]));
         Assert.Throws<InvalidDataException>(() => ManagementDirectoryReader.ReadBookmarks(graphs, graph.Address));

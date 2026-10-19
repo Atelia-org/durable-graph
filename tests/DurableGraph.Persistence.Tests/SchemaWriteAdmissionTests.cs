@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using Atelia.Binary;
 
@@ -23,17 +24,17 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             Assert.False(repository.IsReadOnly);
             PublicationSnapshot before = Snapshot(repository);
             Assert.Empty(before.Frames);
-            Assert.Empty(NamedFrameMapCodec.Decode(before.Branches.Payload[4..]).Unwrap());
+            Assert.Null(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, before.Branches.Payload));
             Assert.Empty(NamedFrameMapCodec.Decode(before.Shared.Payload[4..]).Unwrap());
-            using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
-            using BranchCheckout eventOnly = repository.CreateSharedBranchFromEvent("event-only", Ring());
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id);
+            using WorkingCopy eventOnly = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("event-only", Ring()).Id);
             AssertRing(main.State, 7);
             Assert.Null(eventOnly.State);
-            Assert.Equal(CheckpointKind.Event, eventOnly.Head.Kind);
+            Assert.Equal(CommitKind.Event, WorkTestAccess.Kind(eventOnly));
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, Models());
-        AssertRing(reader.ReadState(reader.GetHead("main")), 7);
-        AssertRing(reader.ReadEvent(reader.GetHead("event-only")), 7);
+        AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id), 7);
+        AssertRing(reader.LoadEvent(reader.ReadCurrentCommit(BranchNamed(reader, "event-only")).Commit.Id), 7);
     }
 
     [Fact]
@@ -44,9 +45,9 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
         ObjectStorageInfo originalList;
         FrameImage[] completed;
         using (Repository repository = Repository.CreateNew(path, Models())) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
-            repository.CreateTag("initial", main.Head);
-            seed = main.Head.RevisionAddress;
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id);
+            repository.CreateTag("initial", main.BaseCommitId);
+            seed = Describe(repository, main.BaseCommitId).Address;
             schema = repository.SharedSchemaRoot!.Value;
             rootId = main.StateId!.Value;
             listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
@@ -56,15 +57,16 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
 
         FrameAddress continued;
         using (Repository repository = Repository.OpenExisting(path, Models())) {
-            using BranchCheckout main = repository.CheckoutShared("main");
+            using WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             DB087Widget root = AssertRing(main.State, 7);
             Assert.Equal(rootId, main.StateId);
             Assert.Equal(originalList, main.Baseline!.Objects[listId].Storage);
             HeadEntry sharedBefore = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
             root.Numbers[7] = 201;
-            continued = main.CommitState().RevisionAddress;
-            StoredGraphRevision graph = repository.GraphStore.ReadGraph(continued);
-            Assert.Equal(seed, graph.Parent);
+            CommitInfo saved = main.CommitState();
+            continued = Describe(repository, saved.Id).Address;
+            StoredGraphRevision graph = DB096TestAccess.Snapshot(repository, saved.Id);
+            Assert.Equal(seed, ResourcesOf(repository).ReadPrevious(saved.Id.Value)?.Address);
             Assert.Equal(seed, graph.SourceGraph);
             Assert.Equal(schema, graph.SchemaRoot);
             Assert.Equal(rootId, graph.RootId);
@@ -79,9 +81,9 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             AssertFramesPreserved(ResourcesOf(repository).Data, completed);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, Models());
-        AssertRing(reader.ReadState(reader.ResolveTag("initial")), 7);
-        AssertRing(reader.ReadState(reader.GetHead("main")), 201);
-        Assert.Equal(continued, reader.GetHead("main").RevisionAddress);
+        AssertRing(reader.LoadState(reader.ResolveTag("initial")), 7);
+        AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id), 201);
+        Assert.Equal(continued, Describe(reader, reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id).Address);
         AssertFramesPreserved(ResourcesOf(reader).Data, completed);
     }
 
@@ -90,12 +92,12 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
         string path = NewPath();
         int captures = 0;
         using (Repository seed = Repository.CreateNew(path, CaptureModels(() => captures++))) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new CaptureRoot { Value = 17 });
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new CaptureRoot { Value = 17 }).Id);
         }
         Assert.Equal(1, captures);
         captures = 0;
         using Repository repository = Repository.OpenExisting(path, CaptureModels(() => captures++));
-        using BranchCheckout checkout = repository.CheckoutShared("main");
+        using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
         CaptureRoot root = Assert.IsType<CaptureRoot>(checkout.State);
         Assert.Equal(17, root.Value);
         Assert.Equal(0, captures);
@@ -111,9 +113,9 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
         Assert.Equal(4, captures);
         checkout.PrepareAndDiscard(root);
         Assert.Equal(5, captures);
-        using BranchCheckout newState = repository.CreateSharedBranch("new-state", root);
+        using WorkingCopy newState = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("new-state", root).Id);
         Assert.Equal(6, captures);
-        using BranchCheckout newEvent = repository.CreateSharedBranchFromEvent("new-event", root);
+        using WorkingCopy newEvent = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("new-event", root).Id);
         Assert.Equal(7, captures);
         checkout.Catalog.Set(Extra);
         checkout.Catalog.Set(ObjectLayout.ForDurable(Extra));
@@ -122,71 +124,78 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
     }
 
     [Fact]
-    public void WritableOwnerRefOnlyOperationsDoNotAppendBusinessOrSchemaFrames() {
+    public void WritableOwnerForkAndTagOperationsPreserveBusinessAndSharedSchema() {
         string path = NewPath();
         FrameAddress initial, current, schema;
         using (Repository seed = Repository.CreateNew(path, Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
-            initial = main.Head.RevisionAddress;
-            seed.CreateTag("initial", main.Head);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", Ring()).Id);
+            initial = Describe(seed, main.BaseCommitId).Address;
+            seed.CreateTag("initial", main.BaseCommitId);
             AssertRing(main.State, 7).Numbers[7] = 201;
-            current = main.CommitState().RevisionAddress;
+            current = Describe(seed, main.CommitState().Id).Address;
             schema = seed.SharedSchemaRoot!.Value;
         }
         using (Repository repository = Repository.OpenExisting(path, Models())) {
 
-            CheckpointAddress old = repository.ResolveTag("initial"), latest = repository.GetHead("main");
-            Assert.Equal(initial, old.RevisionAddress);
-            Assert.Equal(current, latest.RevisionAddress);
+            CommitId old = repository.ResolveTag("initial"), latest = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+            Assert.Equal(initial, Describe(repository, old).Address);
+            Assert.Equal(current, Describe(repository, latest).Address);
             PublicationSnapshot before = Snapshot(repository);
-            using (BranchCheckout main = repository.CheckoutShared("main")) {
+            using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
                 AssertRing(main.State, 201);
-                Assert.Equal(old, repository.CreateBranch("plain", old));
-                using BranchCheckout fork = repository.ForkShared("fork", old);
+                BranchInfo plain = repository.ForkBranch(old, "plain");
+                Assert.Equal(old, plain.ForkedFromCommitId);
+                Assert.Equal(old, repository.ReadCurrentCommit(plain.Id).Commit.Id);
+                using WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(old, "fork").Id);
                 AssertRing(fork.State, 7);
-                Assert.Equal(old, fork.Head);
+                Assert.Equal(old, fork.BaseCommitId);
                 Assert.NotSame(main.State, fork.State);
                 Assert.Equal(current, main.StateRevisionAddress);
             }
-            repository.MoveBranch("plain", old, latest);
             repository.CreateTag("bookmark", latest);
-            Assert.Equal(latest, repository.GetHead("main"));
-            Assert.Equal(latest, repository.GetHead("plain"));
-            Assert.Equal(old, repository.GetHead("fork"));
+            Assert.Equal(latest, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
+            Assert.Equal(old, repository.ReadCurrentCommit(BranchNamed(repository, "plain")).Commit.Id);
+            Assert.Equal(old, repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id);
             Assert.Equal(latest, repository.ResolveTag("bookmark"));
             Assert.Equal(schema, repository.SharedSchemaRoot);
             AssertSameRef(before.Shared, ResourcesOf(repository).Heads.ReadHead(2).Unwrap());
-            AssertExactFrames(before.Frames, ReadFrames(ResourcesOf(repository).Data));
-            Assert.Equal(before.Appended, repository.GraphStore.AppendedFrames);
+            AssertFramesPreserved(ResourcesOf(repository).Data, before.Frames);
+            FrameImage[] added = ReadFrames(ResourcesOf(repository).Data)
+                .Where(frame => !before.Frames.Any(old => old.Address == frame.Address)).ToArray();
+            Assert.NotEmpty(added);
+            FrameImage[] addedGraphs = added.Where(frame => frame.Tag == GraphFrameCodec.GraphTag).ToArray();
+            Assert.NotEmpty(addedGraphs);
+            Assert.All(addedGraphs, frame =>
+                Assert.Equal(StoredGraphKind.Meta, repository.GraphStore.ReadMetadata(frame.Address).Kind));
+            Assert.True(repository.GraphStore.AppendedFrames > before.Appended);
             Assert.False(repository.IsFaulted);
             Assert.False(ResourcesOf(repository).HasPendingSave);
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, Models());
-        Assert.Equal(current, reader.ResolveTag("bookmark").RevisionAddress);
-        AssertRing(reader.ReadState(reader.GetHead("plain")), 201);
-        AssertRing(reader.ReadState(reader.GetHead("fork")), 7);
+        Assert.Equal(current, Describe(reader, reader.ResolveTag("bookmark")).Address);
+        AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "plain")).Commit.Id), 7);
+        AssertRing(reader.LoadState(reader.ReadCurrentCommit(BranchNamed(reader, "fork")).Commit.Id), 7);
     }
 
     [Fact]
     public void ReadonlyGuardStillRejectsAllGraphRefAndTagWritesWithoutMutation() {
         string path = NewPath();
         using (Repository seed = Repository.CreateNew(path, Models())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", Ring()).Id);
         }
         Dictionary<string, byte[]> files = ReadFiles(path);
         using (Repository reader = Repository.OpenReadOnlyExisting(path, Models())) {
             Assert.True(reader.IsReadOnly);
 
-            CheckpointAddress head = reader.GetHead("main");
-            AssertRing(reader.ReadState(head), 7);
+            CommitId head = reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id;
+            AssertRing(reader.LoadState(head), 7);
             PublicationSnapshot before = Snapshot(reader);
             Action[] writes = [
-                () => reader.CheckoutShared("main"),
-                () => reader.CreateSharedBranch("state", Ring()),
-                () => reader.CreateSharedBranchFromEvent("event", Ring()),
-                () => reader.CreateBranch("plain", head),
-                () => reader.ForkShared("fork", head),
-                () => reader.MoveBranch("main", head, head),
+                () => reader.OpenWorkingCopy(BranchNamed(reader, "main")),
+                () => reader.OpenWorkingCopy(reader.CreateRootBranchFromState("state", Ring()).Id),
+                () => reader.OpenWorkingCopy(reader.CreateRootBranchFromEvent("event", Ring()).Id),
+                () => reader.ForkBranch(head, "plain"),
+                () => reader.OpenWorkingCopy(reader.ForkBranch(head, "fork").Id),
                 () => reader.CreateTag("tag", head),
             ];
             foreach (Action write in writes) {

@@ -74,8 +74,9 @@ internal static class StorageTestData {
         return frame.Payload.ToArray();
     }
 
+    // Physical fixture inspection only: this does not qualify a business graph against Head history.
     // A graph frame and its owned object batch have different addresses in the split format.
     internal static IReadOnlyList<ObjectVersionRecord> LocalRecords(GraphRecordStore store, FrameAddress graph) =>
-        store.ReadGraph(graph).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
+        store.ReadMetadata(graph).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
 
 }

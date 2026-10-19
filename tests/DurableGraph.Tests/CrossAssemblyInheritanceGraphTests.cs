@@ -30,7 +30,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, reverse);
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
-        var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
+        var initial = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[0]), models.FreezeConfiguration());
         var leaf = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Leaf");
         var other = Assert.Single(initial.Objects, item => item.Schema?.SchemaId == "inherit.Other");
         Assert.Equal(3, initial.Objects.Count); // Two actual leaves and their shared List; no base/inline object rows.
@@ -38,22 +38,22 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal("inherit.Middle", leaf.Schema.BaseSchema.BaseSchema!.SchemaId);
         Assert.Equal("inherit.Base", leaf.Schema.BaseSchema.BaseSchema.BaseSchema!.SchemaId);
         foreach (int index in new[] { 1, 6, 7 }) {
-            Assert.Empty(DefaultRecords(states, addresses[index]));
-            Assert.Empty(DefaultRemoved(states, addresses[index]));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[index])));
+            Assert.Empty(PublishedRemoved(segments, addresses[index]));
         }
-        var child = Assert.Single(DefaultRecords(states, addresses[2]));
+        var child = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[2])));
         Assert.Equal(other.Id.Value, child.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, child.Kind);
         // Eleven flattened fields require one two-byte bitmap. Base and leaf segments
         // must never be encoded as separate Delta bodies, even across assembly boundaries.
         byte[][] goldens = [[0x10, 0x00, 22], [0x00, 0x04, 90], [0x10, 0x04, 24, 92]];
         for (int index = 0; index < goldens.Length; index++) {
-            var delta = Assert.Single(DefaultRecords(states, addresses[index + 3]));
+            var delta = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[index + 3])));
             Assert.Equal(leaf.Id.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(goldens[index], delta.Body.ToArray());
         }
-        var final = DecodedRevision.ReadStoredGraph(states, addresses[^1], models);
+        var final = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[^1]), models.FreezeConfiguration());
         Assert.Equal(initial.Objects.Select(item => item.Id).OrderBy(id => id.Value), final.Objects.Select(item => item.Id).OrderBy(id => id.Value));
     }
 

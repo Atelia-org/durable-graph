@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -26,11 +27,11 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     [InlineData(true)]
     public void DifferentEventHeadsReuseOneStateButKeepMutableGraphsAndColdDeltaSourcesIndependent(bool reuse) {
         using (Repository seed = Repository.CreateStorageNew(_path, GeneratedModels())) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", Ring());
-            seed.CreateTag("state", main.Head);
-            seed.CreateTag("event1", main.CommitEvent(new DB087Widget { Value = 51 }));
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", Ring()).Id);
+            seed.CreateTag("state", main.BaseCommitId);
+            seed.CreateTag("event1", main.CommitEvent(new DB087Widget { Value = 51 }).Id);
             main.Catalog.Set(Extra);
-            seed.CreateTag("event2", main.CommitEvent(new DB087Widget { Value = 52 }));
+            seed.CreateTag("event2", main.CommitEvent(new DB087Widget { Value = 52 }).Id);
         }
         FrameAddress saved;
         ObjectId listId;
@@ -38,13 +39,13 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         using (Repository repository = Repository.OpenStorageExisting(_path, GeneratedModels())) {
             repository.PreparedStateReuseEnabled = reuse;
             Assert.Null(repository.PreparedStateEntry);
-            CheckpointAddress state = repository.ResolveTag("state"), e1 = repository.ResolveTag("event1"), e2 = repository.ResolveTag("event2");
+            CommitId state = repository.ResolveTag("state"), e1 = repository.ResolveTag("event1"), e2 = repository.ResolveTag("event2");
             GraphReadStatistics firstStats = Observe(repository);
-            using BranchCheckout first = repository.ForkShared("first", e1);
+            using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(e1, "first").Id);
             AssertCold(firstStats);
             PreparedStateRestoration? entry = repository.PreparedStateEntry;
             GraphReadStatistics secondStats = Observe(repository);
-            using BranchCheckout second = repository.ForkShared("second", e2);
+            using WorkingCopy second = repository.OpenWorkingCopy(repository.ForkBranch(e2, "second").Id);
             AssertRepeat(secondStats, reuse);
             DB087Widget firstRoot = AssertRing(first.State), secondRoot = AssertRing(second.State);
             Assert.NotSame(firstRoot, secondRoot);
@@ -53,11 +54,11 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(3, secondStats.AllocatedObjects);
             Assert.Equal(firstStats.AllocatedObjects, secondStats.AllocatedObjects);
             Assert.Equal(firstStats.HydratedObjects, secondStats.HydratedObjects);
-            Assert.Equal(e1, first.Head);
-            Assert.Equal(e2, second.Head);
-            Assert.Equal(state.RevisionAddress, second.StateRevisionAddress);
-            Assert.Equal(state.RootId, second.StateId);
-            Assert.Equal(repository.GraphStore.ReadMetadata(state.RevisionAddress).SchemaRoot,
+            Assert.Equal(e1, first.BaseCommitId);
+            Assert.Equal(e2, second.BaseCommitId);
+            Assert.Equal(Describe(repository, state).Address, second.StateRevisionAddress);
+            Assert.Equal(Describe(repository, state).RootId, second.StateId);
+            Assert.Equal(repository.GraphStore.ReadMetadata(Describe(repository, state).Address).SchemaRoot,
                 second.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address);
             Assert.NotEqual(repository.SharedSchemaRoot, second.BindingEnvironment.SelectedSchemaView.Snapshot.Address);
             Assert.Equal(first.Baseline!.Objects.Keys.OrderBy(id => id.Value), second.Baseline!.Objects.Keys.OrderBy(id => id.Value));
@@ -68,11 +69,11 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             listId = Assert.Single(second.Baseline.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
             ObjectStorageInfo prior = second.Baseline.Objects[listId].Storage!.Value;
             secondRoot.Numbers[7] = 200;
-            CheckpointAddress next = second.CommitState();
-            saved = next.RevisionAddress;
-            StoredGraphRevision graph = repository.GraphStore.ReadGraph(saved);
-            Assert.Equal(e2.RevisionAddress, graph.Parent);
-            Assert.Equal(state.RevisionAddress, graph.SourceGraph);
+            CommitId next = second.CommitState().Id;
+            saved = Describe(repository, next).Address;
+            StoredGraphRevision graph = Snapshot(repository, next);
+            Assert.Equal(e2.Value, ResourcesOf(repository).ReadPrevious(next.Value)!.Id);
+            Assert.Equal(Describe(repository, state).Address, graph.SourceGraph);
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -81,104 +82,104 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(prior.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior.Head),
                 savedStorage.ReconstructionPayloadBytes);
             Assert.Equal(7, firstRoot.Numbers[7]);
-            Assert.Equal(state.RevisionAddress, first.StateRevisionAddress);
+            Assert.Equal(Describe(repository, state).Address, first.StateRevisionAddress);
             // A hot confirmed State must not install a new preparation certificate (DB-081).
             Assert.Same(entry, repository.PreparedStateEntry);
-            using BranchCheckout replacement = repository.ForkShared("replacement", next);
+            using WorkingCopy replacement = repository.OpenWorkingCopy(repository.ForkBranch(next, "replacement").Id);
             if (reuse) { Assert.NotSame(entry, repository.PreparedStateEntry); }
             firstRoot.Numbers[8] = 201;
-            CheckpointAddress oldSave = first.CommitState(); // Eviction does not invalidate the previously delivered workspace.
-            StoredGraphRevision oldGraph = repository.GraphStore.ReadGraph(oldSave.RevisionAddress);
-            Assert.Equal(state.RevisionAddress, oldGraph.SourceGraph);
-            Assert.Equal(e1.RevisionAddress, oldGraph.Parent);
+            CommitId oldSave = first.CommitState().Id; // Eviction does not invalidate the previously delivered workspace.
+            StoredGraphRevision oldGraph = Snapshot(repository, oldSave);
+            Assert.Equal(Describe(repository, state).Address, oldGraph.SourceGraph);
+            Assert.Equal(e1.Value, ResourcesOf(repository).ReadPrevious(oldSave.Value)!.Id);
             Assert.Equal(prior.Head, Assert.Single(repository.GraphStore.ReadBatch(oldGraph.OwnedBatch!.Value).Records).PriorAddress);
         }
         using Repository reopened = Repository.OpenStorageExisting(_path, GeneratedModels());
         Assert.Null(reopened.PreparedStateEntry);
-        using BranchCheckout cold = reopened.CheckoutShared("second");
+        using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "second"));
         DB087Widget coldRoot = AssertRing(cold.State, changedIndex: 7, changedValue: 200);
         Assert.Equal(saved, cold.StateRevisionAddress);
         Assert.Equal(listId, Assert.Single(cold.Baseline!.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key);
         Assert.Equal(savedStorage, cold.Baseline.Objects[listId].Storage);
         coldRoot.Numbers[8] = 202;
-        CheckpointAddress continued = cold.CommitState();
-        StoredGraphRevision continuedGraph = reopened.GraphStore.ReadGraph(continued.RevisionAddress);
+        CommitId continued = cold.CommitState().Id;
+        StoredGraphRevision continuedGraph = Snapshot(reopened, continued);
         ObjectVersionRecord continuedDelta = Assert.Single(reopened.GraphStore.ReadBatch(continuedGraph.OwnedBatch!.Value).Records);
         Assert.Equal(ObjectVersionKind.Delta, continuedDelta.Kind);
         Assert.Equal(savedStorage.Head, continuedDelta.PriorAddress);
         Assert.Equal(saved, continuedGraph.SourceGraph);
-        DB087Widget continuedRead = Assert.IsType<DB087Widget>(reopened.ReadState(continued));
+        DB087Widget continuedRead = Assert.IsType<DB087Widget>(reopened.LoadState(continued));
         Assert.Equal(200, continuedRead.Numbers[7]);
         Assert.Equal(202, continuedRead.Numbers[8]);
-        AssertRing(reopened.ReadState(reopened.ResolveTag("state")));
+        AssertRing(reopened.LoadState(reopened.ResolveTag("state")));
     }
 
     [Fact]
     public void EventOnlyHeadsBypassTheSlotAndReadonlyQueriesNeverSeedOrReplaceIt() {
         using Repository repository = Repository.CreateStorageNew(_path, GeneratedModels());
-        using BranchCheckout main = repository.CreateSharedBranch("main", Ring());
-        CheckpointAddress state = main.Head;
-        repository.ReadState(state);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id);
+        CommitId state = main.BaseCommitId;
+        repository.LoadState(state);
         repository.ReadPair(state, state);
         repository.ReadCheckpoint(state);
-        Assert.Null(repository.PreparedStateEntry);
-        using BranchCheckout warm = repository.ForkShared("warm", state);
+        PreparedStateRestoration initial = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(state, "warm").Id);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
-        using BranchCheckout events = repository.CreateSharedBranchFromEvent("events", new DB087Widget { Value = 50 });
-        CheckpointAddress e2 = events.CommitEvent(new DB087Widget { Value = 51 });
-        repository.CreateBranch("event-copy", e2);
+        using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", new DB087Widget { Value = 50 }).Id);
+        CommitId e2 = events.CommitEvent(new DB087Widget { Value = 51 }).Id;
+        repository.ForkBranch(e2, "event-copy");
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout emptyFork = repository.ForkShared("event-fork", e2);
-        using BranchCheckout emptyCheckout = repository.CheckoutShared("event-copy");
+        using WorkingCopy emptyFork = repository.OpenWorkingCopy(repository.ForkBranch(e2, "event-fork").Id);
+        using WorkingCopy emptyCheckout = repository.OpenWorkingCopy(BranchNamed(repository, "event-copy"));
         Assert.Null(emptyFork.State);
         Assert.Null(emptyCheckout.State);
         Assert.Null(emptyFork.Baseline);
-        Assert.Equal(e2, emptyFork.Head);
+        Assert.Equal(e2, emptyFork.BaseCommitId);
         AssertNoGraphWork(stats);
         Assert.Same(entry, repository.PreparedStateEntry);
-        repository.ReadState(state);
+        repository.LoadState(state);
         repository.ReadPair(state, state);
         repository.ReadCheckpoint(e2);
         Assert.Same(entry, repository.PreparedStateEntry);
         stats = Observe(repository);
-        CheckpointAddress firstState = emptyFork.CommitState(Ring());
+        CommitId firstState = emptyFork.CommitState(Ring()).Id;
         Assert.Same(entry, repository.PreparedStateEntry); // Capture/confirmed save is not cold State admission.
-        using BranchCheckout firstStateFork = repository.ForkShared("first-state", firstState);
+        using WorkingCopy firstStateFork = repository.OpenWorkingCopy(repository.ForkBranch(firstState, "first-state").Id);
         AssertCold(stats);
         Assert.NotSame(entry, repository.PreparedStateEntry);
-        Assert.Null(repository.GraphStore.ReadGraph(firstState.RevisionAddress).SourceGraph);
+        Assert.Null(Snapshot(repository, firstState).SourceGraph);
     }
 
     [Theory]
     [InlineData("body")]
     [InlineData("normalize")]
     [InlineData("hydrate")]
-    public void FailedColdReplacementKeepsOldPreparationAndSameNameRetryRemainsCold(string phase) {
+    public void FailedColdReplacementKeepsOldPreparationAndSameBranchRetryRemainsCold(string phase) {
         SeedProbes();
         Controls controls = new();
         using Repository repository = Repository.OpenStorageExisting(_path, ProbeModels(2, controls));
-        using BranchCheckout warm = repository.ForkShared("warm", repository.GetHead("main"));
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, "warm").Id);
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         controls.FailPhase = phase;
         GraphReadStatistics failed = Observe(repository);
-        BranchCheckout? delivered = null;
-        Assert.Same(controls.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("retry", repository.GetHead("other"))));
+        WorkingCopy? delivered = null;
+        Assert.Same(controls.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "other")).Commit.Id, "retry").Id)));
         Assert.Null(delivered);
         Assert.Same(entry, repository.PreparedStateEntry);
         Assert.Equal(1, failed.PreparedStateMisses);
-        Assert.DoesNotContain("retry", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), b => b.DisplayLabel == "retry");
         Assert.False(repository.IsFaulted);
         if (phase is "body" or "normalize") { Assert.Equal(0, failed.AllocatedObjects); }
         controls.FailPhase = null;
         GraphReadStatistics retryStats = Observe(repository);
-        using BranchCheckout retry = repository.ForkShared("retry", repository.GetHead("other"));
+        using WorkingCopy retry = repository.OpenWorkingCopy(BranchNamed(repository, "retry"));
         AssertCold(retryStats);
         Assert.Equal(8, Assert.IsType<ProbeRoot>(retry.State).Value);
         Assert.NotSame(entry, repository.PreparedStateEntry);
         Assert.Equal(7, Assert.IsType<ProbeRoot>(warm.State).Value);
-        CheckpointAddress savedWarm = warm.CommitState();
+        CommitId savedWarm = warm.CommitState().Id;
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(repository.GraphStore.ReadBatch(
-            repository.GraphStore.ReadGraph(savedWarm.RevisionAddress).OwnedBatch!.Value).Records).Kind);
+            Snapshot(repository, savedWarm).OwnedBatch!.Value).Records).Kind);
     }
 
     [Theory]
@@ -187,7 +188,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
     public void ForkPublicationFailureDoesNotInstallUndeliveredStateMaterial(bool afterPublication) {
         SeedProbes();
         using Repository repository = Repository.OpenStorageExisting(_path, ProbeModels(1, new()));
-        using BranchCheckout warm = repository.ForkShared("warm", repository.GetHead("main"));
+        using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, "warm").Id);
         PreparedStateRestoration previous = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         var before = ResourcesOf(repository).Heads.ReadHead(1).Unwrap();
         repository.OperationStageObserver = point => {
@@ -195,10 +196,14 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
                 throw new IOException("split preparation Fork publication window");
             }
         };
-        BranchCheckout? delivered = null;
-        RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.ForkShared("retry", repository.GetHead("other")));
+        WorkingCopy? delivered = null;
+        if (afterPublication) {
+            RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "other")).Commit.Id, "retry").Id));
+            Assert.Equal(RepositoryPublicationOutcome.Published, error.Outcome);
+        } else {
+            Assert.Throws<IOException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "other")).Commit.Id, "retry").Id));
+        }
         Assert.Null(delivered);
-        Assert.Equal(afterPublication ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, error.Outcome);
         Assert.Equal(afterPublication, repository.IsFaulted);
         repository.OperationStageObserver = null;
         if (afterPublication) {
@@ -210,7 +215,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(before.Id, unchanged.Id);
             Assert.Equal(before.Payload.ToArray(), unchanged.Payload.ToArray());
             GraphReadStatistics stats = Observe(repository);
-            using BranchCheckout retry = repository.ForkShared("retry", repository.GetHead("other"));
+            using WorkingCopy retry = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "other")).Commit.Id, "retry").Id);
             AssertCold(stats);
             Assert.NotSame(previous, repository.PreparedStateEntry);
         }
@@ -231,58 +236,58 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         StateModelRegistry registry = ProbeModels(1, controls);
         try {
             using Repository repository = Repository.OpenStorageExisting(_path, registry);
-            CheckpointAddress state = repository.GetHead("main");
-            using BranchCheckout warm = repository.ForkShared("warm", state);
+            CommitId state = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+            using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(state, "warm").Id);
             PreparedStateRestoration prepared = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
             Assert.True(controls.BodyDependencyChecks > 0);
             Assert.DoesNotContain(prepared.Selection.Normalized.Objects.Values, row => row.SourceLayout.Schema?.SchemaId == BodyDependency.SchemaId ||
                 row.Current.Schema?.SchemaId == BodyDependency.SchemaId);
             var configuration = ConfigurationOf(repository);
             GraphReadContext context = new(prepared.Selection.Models);
-            prepared.ValidateStoredSource(repository.GraphStore, configuration, state, context);
+            prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), null, context);
             using Repository foreign = Repository.OpenStorageReadOnlyExisting(clone, registry);
-            Assert.Equal(state.RevisionAddress, foreign.GetHead("main").RevisionAddress); // Physical addresses match in another actual owner.
-            BusinessPersistenceAdapter foreignBusiness = BusinessPersistenceAdapter.LoadState(foreign.GraphStore, state.RevisionAddress, configuration);
+            Assert.Equal(Describe(foreign, state).Address, Describe(foreign, foreign.ReadCurrentCommit(BranchNamed(foreign, "main")).Commit.Id).Address); // Physical addresses match in another actual owner.
+            BusinessPersistenceAdapter foreignBusiness = BusinessPersistenceAdapter.LoadState(foreign.GraphStore, Snapshot(foreign, state), configuration);
             long appended = repository.GraphStore.AppendedFrames;
             using RepositoryStorageFacade borrowed = new(ResourcesOf(repository));
-            Assert.Throws<InvalidDataException>(() => new BranchSaveSession(borrowed, "warm", foreignBusiness, static () => { }));
+            Assert.Throws<InvalidDataException>(() => new BranchSaveSession(borrowed, warm.BranchId.Value, warm.BaseCommitId.Value, configuration, static () => { }, foreignBusiness));
             Assert.Equal(appended, repository.GraphStore.AppendedFrames);
-            BusinessPersistenceAdapter ownBusiness = BusinessPersistenceAdapter.LoadState(repository.GraphStore, state.RevisionAddress, configuration);
-            BranchSaveSession positive = new(borrowed, "warm", ownBusiness, static () => { });
-            Assert.Equal(state.RevisionAddress, positive.StateSource!.Address);
+            BusinessPersistenceAdapter ownBusiness = BusinessPersistenceAdapter.LoadState(repository.GraphStore, Snapshot(repository, state), configuration);
+            BranchSaveSession positive = new(borrowed, warm.BranchId.Value, warm.BaseCommitId.Value, configuration, static () => { }, ownBusiness);
+            Assert.Equal(Describe(foreign, state).Address, positive.StateSource!.Address);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(positive.State).Value);
             Assert.Equal(appended, repository.GraphStore.AppendedFrames);
             int allocations = controls.Allocations, bodyReads = controls.BodyReads;
-            Assert.Throws<ArgumentException>(() => repository.ForkShared("foreign", foreign.GetHead("main")));
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(foreign.GraphStore, configuration, state, context));
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, registry.FreezeConfiguration(), state, context));
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, state,
+            Assert.Equal(state, foreign.ReadCurrentCommit(BranchNamed(foreign, "main")).Commit.Id); // A copied repository retains compact IDs; owner qualification remains on snapshots.
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(foreign.GraphStore, configuration, Describe(repository, state), null, context));
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, registry.FreezeConfiguration(), Describe(repository, state), null, context));
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), null,
                 new(configuration.CreateEnvironment())));
             Assert.Equal(allocations, controls.Allocations);
             Assert.Equal(bodyReads, controls.BodyReads);
 
             warm.Catalog.Set(WrongBodyDependency); // Absent from old S; this new S may legally declare the unknown key.
-            CheckpointAddress newState = warm.CommitState();
+            CommitId newState = warm.CommitState().Id;
             Assert.Same(prepared, repository.PreparedStateEntry);
-            FrameAddress newSchema = repository.GraphStore.ReadMetadata(newState.RevisionAddress).SchemaRoot!.Value;
+            FrameAddress newSchema = repository.GraphStore.ReadMetadata(Describe(repository, newState).Address).SchemaRoot!.Value;
             var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore, configuration, newSchema);
             InvalidDataException dependencyError = Assert.Throws<InvalidDataException>(() => prepared.Requirements.Validate(wrongEnvironment.Models));
             Assert.Contains(BodyDependency.SchemaId, dependencyError.Message);
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, state,
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), null,
                 new(wrongEnvironment.Models)));
             Assert.Equal(allocations, controls.Allocations);
             Assert.Equal(bodyReads, controls.BodyReads);
             // This product request selects the real new S. Its body-only dependency fails;
             // an old valid certificate cannot be retagged for the new State.
-            BranchCheckout? delivered = null;
-            Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("wrong-schema", newState));
+            WorkingCopy? delivered = null;
+            Assert.Throws<InvalidDataException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(newState, "wrong-schema").Id));
             Assert.Null(delivered);
             Assert.Same(prepared, repository.PreparedStateEntry);
-            Assert.DoesNotContain("wrong-schema", repository.ListBranches());
+            Assert.Contains(repository.ListBranches(), b => b.DisplayLabel == "wrong-schema");
             Assert.Equal(allocations, controls.Allocations);
             Assert.False(repository.IsFaulted);
             GraphReadStatistics hit = Observe(repository);
-            using BranchCheckout oldAgain = repository.ForkShared("old-again", state);
+            using WorkingCopy oldAgain = repository.OpenWorkingCopy(repository.ForkBranch(state, "old-again").Id);
             AssertRepeat(hit, true);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(oldAgain.State).Value);
         } finally { SharedReadModel.DeleteFixture(clone, Prefix); }
@@ -293,13 +298,13 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         SeedProbes();
         Controls controls = new();
         using (Repository repository = Repository.OpenStorageExisting(_path, ProbeModels(2, controls))) {
-            CheckpointAddress original = repository.GetHead("main");
-            using BranchCheckout first = repository.ForkShared("first", original);
+            CommitId original = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+            using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(original, "first").Id);
             PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
             int normalized = controls.Normalizes;
             int bodyReads = controls.BodyReads;
             GraphReadStatistics hit = Observe(repository);
-            using BranchCheckout second = repository.ForkShared("second", original);
+            using WorkingCopy second = repository.OpenWorkingCopy(repository.ForkBranch(original, "second").Id);
             AssertRepeat(hit, true);
             Assert.Equal(normalized, controls.Normalizes);
             Assert.Equal(bodyReads, controls.BodyReads);
@@ -311,30 +316,30 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             StoredGraphRevision inheritedSnapshot = Assert.IsType<StoredGraphRevision>(second.Baseline.SourceSnapshot);
             Assert.Same(entry.Selection.Normalized.SourceSnapshot, inheritedSnapshot);
             Assert.Same(first.Baseline!.SourceSnapshot, inheritedSnapshot);
-            Assert.Equal(original.RevisionAddress, inheritedSnapshot.Address);
+            Assert.Equal(Describe(repository, original).Address, inheritedSnapshot.Address);
             Assert.Equal(second.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address, inheritedSnapshot.SchemaRoot);
             ObjectStorageInfo oldRoot = second.Baseline.Objects[rootId].Storage!.Value;
             second.PrepareAndDiscard(root);
             Assert.True(second.Baseline.Objects[rootId].RequiresRewrite);
-            CheckpointAddress e1 = second.CommitEvent(root), e2 = second.CommitEvent(root);
-            foreach (CheckpointAddress address in new[] { e1, e2 }) {
-                StoredGraphRevision graph = repository.GraphStore.ReadGraph(address.RevisionAddress);
-                Assert.Equal(original.RevisionAddress, graph.SourceGraph);
+            CommitId e1 = second.CommitEvent(root).Id, e2 = second.CommitEvent(root).Id;
+            foreach (CommitId address in new[] { e1, e2 }) {
+                StoredGraphRevision graph = Snapshot(repository, address);
+                Assert.Equal(Describe(repository, original).Address, graph.SourceGraph);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records).Kind);
             }
             Assert.True(second.Baseline.Objects[rootId].RequiresRewrite);
             Assert.Equal(oldRoot, second.Baseline.Objects[rootId].Storage);
             Assert.Same(inheritedSnapshot, second.Baseline.SourceSnapshot);
             Assert.Same(entry, repository.PreparedStateEntry);
-            CheckpointAddress confirmed = second.CommitState();
-            StoredGraphRevision written = repository.GraphStore.ReadGraph(confirmed.RevisionAddress);
+            CommitId confirmed = second.CommitState().Id;
+            StoredGraphRevision written = Snapshot(repository, confirmed);
             ObjectVersionRecord @base = Assert.Single(repository.GraphStore.ReadBatch(written.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Base, @base.Kind);
             Assert.Equal(rootId.Value, @base.ObjectId);
             Assert.False(second.Baseline!.Objects[rootId].RequiresRewrite);
             StoredGraphRevision installedSnapshot = Assert.IsType<StoredGraphRevision>(second.Baseline.SourceSnapshot);
-            Assert.Equal(confirmed.RevisionAddress, installedSnapshot.Address);
-            Assert.Equal(original.RevisionAddress, installedSnapshot.SourceGraph);
+            Assert.Equal(Describe(repository, confirmed).Address, installedSnapshot.Address);
+            Assert.Equal(Describe(repository, original).Address, installedSnapshot.SourceGraph);
             Assert.Equal(written.SchemaRoot, installedSnapshot.SchemaRoot);
             Assert.NotEqual(inheritedSnapshot.SchemaRoot, installedSnapshot.SchemaRoot);
             Assert.Same(entry, repository.PreparedStateEntry); // No hot preparation admission.
@@ -342,14 +347,14 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             ObjectId listId = Assert.Single(second.Baseline.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
             ObjectStorageInfo prior = second.Baseline.Objects[listId].Storage!.Value;
             root.Padding[7] = 200;
-            CheckpointAddress interveningEvent = second.CommitEvent(root);
+            CommitId interveningEvent = second.CommitEvent(root).Id;
             Assert.Same(installedSnapshot, second.Baseline.SourceSnapshot);
-            CheckpointAddress deltaState = second.CommitState();
-            StoredGraphRevision deltaGraph = repository.GraphStore.ReadGraph(deltaState.RevisionAddress);
-            Assert.Equal(interveningEvent.RevisionAddress, deltaGraph.Parent);
-            Assert.Equal(confirmed.RevisionAddress, deltaGraph.SourceGraph);
+            CommitId deltaState = second.CommitState().Id;
+            StoredGraphRevision deltaGraph = Snapshot(repository, deltaState);
+            Assert.Equal(interveningEvent.Value, ResourcesOf(repository).ReadPrevious(deltaState.Value)!.Id);
+            Assert.Equal(Describe(repository, confirmed).Address, deltaGraph.SourceGraph);
             Assert.Equal(installedSnapshot.SchemaRoot, deltaGraph.SchemaRoot);
-            Assert.Equal(deltaState.RevisionAddress, second.Baseline!.SourceSnapshot!.Address);
+            Assert.Equal(Describe(repository, deltaState).Address, second.Baseline!.SourceSnapshot!.Address);
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(deltaGraph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(listId.Value, delta.ObjectId);
@@ -359,44 +364,44 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(7, Assert.IsType<ProbeRoot>(first.State).Padding[7]);
         }
         using Repository reopened = Repository.OpenStorageExisting(_path, ProbeModels(2, new()));
-        using BranchCheckout cold = reopened.CheckoutShared("second");
+        using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "second"));
         ProbeRoot coldRoot = Assert.IsType<ProbeRoot>(cold.State);
         Assert.Equal(7, coldRoot.Value);
         Assert.Equal(200, coldRoot.Padding[7]);
         ObjectId coldList = Assert.Single(cold.Baseline!.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
         ObjectStorageInfo coldPrior = cold.Baseline.Objects[coldList].Storage!.Value;
         coldRoot.Padding[8] = 201;
-        CheckpointAddress continued = cold.CommitState();
-        StoredGraphRevision graphAfterCold = reopened.GraphStore.ReadGraph(continued.RevisionAddress);
+        CommitId continued = cold.CommitState().Id;
+        StoredGraphRevision graphAfterCold = Snapshot(reopened, continued);
         ObjectVersionRecord continuation = Assert.Single(reopened.GraphStore.ReadBatch(graphAfterCold.OwnedBatch!.Value).Records);
         Assert.Equal(ObjectVersionKind.Delta, continuation.Kind);
         Assert.Equal(coldPrior.Head, continuation.PriorAddress);
-        Assert.Equal(7, Assert.IsType<ProbeRoot>(reopened.ReadState(reopened.GetHead("main"))).Padding[7]);
-        Assert.Equal(7, Assert.IsType<ProbeRoot>(reopened.ReadState(reopened.ResolveTag("rewritten"))).Padding[7]);
+        Assert.Equal(7, Assert.IsType<ProbeRoot>(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id)).Padding[7]);
+        Assert.Equal(7, Assert.IsType<ProbeRoot>(reopened.LoadState(reopened.ResolveTag("rewritten"))).Padding[7]);
     }
 
     [Fact]
     public void OptionalLeafReuseBackfillsOnlyAfterSuccessAndRegistersTrustedLeavesBeforeOtherAllocation() {
         LeafControls controls = new();
         using Repository repository = Repository.CreateStorageNew(_path, LeafModels(controls));
-        using BranchCheckout main = repository.CreateSharedBranch("main", new LeafOwner { First = new(7), Second = new(8) });
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new LeafOwner { First = new(7), Second = new(8) }).Id);
         Assert.False(repository.ImmutableLeafReuseEnabled);
-        using BranchCheckout disabled = repository.ForkShared("disabled", main.Head);
+        using WorkingCopy disabled = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "disabled").Id);
         PreparedStateRestoration original = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.False(original.ImmutableLeavesCollected);
         repository.ImmutableLeafReuseEnabled = true;
         controls.FailHydrateValue = 8;
         int beforeBackfill = controls.LeafHydrates;
-        BranchCheckout? delivered = null;
-        Assert.Same(controls.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("enabled", main.Head)));
+        WorkingCopy? delivered = null;
+        Assert.Same(controls.Failure, Assert.Throws<InvalidDataException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "enabled").Id)));
         Assert.Null(delivered);
         Assert.Equal(beforeBackfill + 2, controls.LeafHydrates); // First leaf completed; the second leaf rejected backfill.
         Assert.Same(original, repository.PreparedStateEntry);
         Assert.False(original.ImmutableLeavesCollected);
-        Assert.DoesNotContain("enabled", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), b => b.DisplayLabel == "enabled");
         Assert.False(repository.IsFaulted);
         controls.FailHydrateValue = null;
-        using BranchCheckout enabled = repository.ForkShared("enabled", main.Head);
+        using WorkingCopy enabled = repository.OpenWorkingCopy(BranchNamed(repository, "enabled"));
         PreparedStateRestoration filled = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.NotSame(original, filled);
         Assert.True(filled.ImmutableLeavesCollected);
@@ -404,7 +409,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         LeafOwner enabledRoot = Assert.IsType<LeafOwner>(enabled.State);
         Assert.NotSame(Assert.IsType<LeafOwner>(disabled.State).First, enabledRoot.First);
         GraphReadStatistics stats = Observe(repository);
-        using BranchCheckout hit = repository.ForkShared("hit", main.Head);
+        using WorkingCopy hit = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "hit").Id);
         LeafOwner hitRoot = Assert.IsType<LeafOwner>(hit.State);
         Assert.NotSame(enabledRoot, hitRoot);
         Assert.Same(enabledRoot.First, hitRoot.First);
@@ -427,14 +432,14 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         Assert.Equal((byte)8, cached.Value);
         Assert.Same(filled, repository.PreparedStateEntry);
         controls.Singleton = null;
-        using BranchCheckout valid = repository.ForkShared("valid", main.Head);
+        using WorkingCopy valid = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "valid").Id);
         Assert.Same(cached, Assert.IsType<LeafOwner>(valid.State).Second);
     }
 
     private void SeedProbes() {
         using Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()));
-        using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
-        using BranchCheckout other = seed.CreateSharedBranch("other", new ProbeRoot { Value = 8 });
+        using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
+        using WorkingCopy other = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("other", new ProbeRoot { Value = 8 }).Id);
     }
     private static DurableSchema ProbeSchema(int version) => new("SplitPreparedProbe", version,
         new DurableFieldInfo(1, TypeTag.Int32), DurableFieldInfo.Reference(2, PaddingType));

@@ -26,34 +26,34 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             Assert.Same(resources.Data, facade.Data);
             Assert.Same(resources.Heads, facade.Heads);
             StateModelRegistry models = Models();
-            BranchSaveSession session = new(facade, "main", models);
+            BranchSaveSessionFixture session = new(facade, "main", models);
             List<int> numbers = Enumerable.Repeat(0, 128).ToList();
             DB087Widget root = new() { Value = 1, Numbers = numbers };
             root.Child = new() { Value = 2, Numbers = numbers, Child = root };
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.Same(resources, save.Pending.Owner);
                 RepositorySaveResult saved = save.Commit();
                 state0 = saved.Business.Address;
                 schema0 = saved.SharedSchemaRoot!.Value;
                 rootId = saved.Business.RootId;
                 Assert.Equal(3, saved.Business.ObjectHeads.Count);
-                Assert.Equal(state0, resources.GetBranchHead("main"));
-                Assert.Equal(state0, resources.GetBranchStateHead("main"));
+                Assert.Equal(state0, resources.ReadCurrent(MechanismFixture.Branch(facade, "main")).Address);
+                Assert.Equal(state0, MechanismFixture.State(facade, "main")?.Address);
                 Assert.Equal(schema0, resources.SharedSchemaRoot);
                 Assert.Same(resources.GraphStore, facade.Store);
             }
-            StoredGraphRevision s0 = facade.Store.ReadGraph(state0);
-            DecodedGraphRows rows = StoredGraphDecoder.Read(facade.Store, state0, models.CreateEnvironment(), session.Catalog.Accepted!);
+            StoredGraphRevision s0 = MechanismFixture.Snapshot(facade, state0);
+            DecodedGraphRows rows = StoredGraphDecoder.Read(facade.Store, MechanismFixture.Snapshot(facade, state0), models.CreateEnvironment(), session.Catalog.Accepted!);
             listId = Assert.Single(rows.Rows.Values, row => row.Kind == ObjectStateKind.List).Id;
             childId = Assert.Single(rows.Rows.Keys, id => id != rootId && id != listId);
             listHead0 = s0.ObjectHeads[listId.Value];
             rootHead0 = s0.ObjectHeads[rootId.Value];
             childHead0 = s0.ObjectHeads[childId.Value];
-            h0 = facade.Store.ReadObjectChain(state0, listId.Value).ReconstructionPayloadBytes;
+            h0 = facade.Store.ReadObjectChain(MechanismFixture.Snapshot(facade, state0), listId.Value).ReconstructionPayloadBytes;
 
             session.Catalog.Set(extra); // The new descriptor has no business CLR registration.
             root.Numbers[7] = 1;
-            using (PreparedBranchSave save = session.Prepare(root, StoredGraphKind.Event)) {
+            using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.Same(resources, save.Pending.Owner);
                 Assert.NotNull(save.Catalog.Write);
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
@@ -72,14 +72,14 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             Assert.Same(root, session.State);
             Assert.Equal(0, session.Catalog.DirtyCount);
             Assert.Equal(schema1, session.Catalog.Accepted!.Snapshot!.Address);
-            Assert.Equal(event1, facade.GetHead("main"));
-            Assert.Equal(state0, facade.GetStateHead("main"));
+            Assert.Equal(event1, MechanismFixture.FindCurrent(facade, "main")?.Address);
+            Assert.Equal(state0, MechanismFixture.State(facade, "main")?.Address);
             Assert.Equal(schema1, facade.SharedSchemaRoot);
-            Assert.Equal(event1, resources.GetBranchHead("main"));
-            Assert.Equal(state0, resources.GetBranchStateHead("main"));
+            Assert.Equal(event1, resources.ReadCurrent(MechanismFixture.Branch(facade, "main")).Address);
+            Assert.Equal(state0, MechanismFixture.State(facade, "main")?.Address);
             Assert.Equal(schema1, resources.SharedSchemaRoot);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, state0, models), 0);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, event1, models), 1);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, state0), models), 0);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, event1), models), 1);
         }
 
         Dictionary<string, byte[]> beforeReadOnly = SnapshotFiles();
@@ -90,27 +90,27 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             SchemaCatalogView catalog = SchemaCatalogView.Load(facade.Store, facade.SharedSchemaRoot!.Value);
             Assert.Equal(extra, catalog.Schemas[new(extra.Type, extra.Version)]);
             Assert.Equal(widget, catalog.Schemas[new(widget.Type, widget.Version)]);
-            Assert.Equal(event1, facade.GetHead("main"));
-            Assert.Equal(state0, facade.GetStateHead("main"));
-            Assert.Equal(schema0, facade.Store.ReadGraph(state0).SchemaRoot);
-            Assert.Equal(schema1, facade.Store.ReadGraph(event1).SchemaRoot);
+            Assert.Equal(event1, MechanismFixture.FindCurrent(facade, "main")?.Address);
+            Assert.Equal(state0, MechanismFixture.State(facade, "main")?.Address);
+            Assert.Equal(schema0, facade.Store.ReadMetadata(state0).SchemaRoot);
+            Assert.Equal(schema1, facade.Store.ReadMetadata(event1).SchemaRoot);
             Assert.Throws<InvalidOperationException>(facade.EnsureEditingAllowed);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, state0, Models()), 0);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, event1, Models()), 1);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, state0), Models()), 0);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, event1), Models()), 1);
         }
         AssertFilesEqual(beforeReadOnly);
 
         using (RepositoryResources resources = RepositoryResources.OpenStorageExisting(_path)) {
             using RepositoryStorageFacade facade = new(resources);
-            BranchSaveSession session = new(facade, "main", Models());
+            BranchSaveSessionFixture session = new(facade, "main", Models());
             DB087Widget root = AssertRing(session.State, 0); // E1's content is not editable State.
             Assert.Equal(state0, session.StateSource!.Address);
             Assert.Equal(schema0, session.StateSource.SchemaRoot);
             Assert.Equal(schema1, session.Catalog.Accepted!.Snapshot!.Address);
-            Assert.Equal(h0, facade.Store.ReadObjectChain(state0, listId.Value).ReconstructionPayloadBytes);
+            Assert.Equal(h0, facade.Store.ReadObjectChain(MechanismFixture.Snapshot(facade, state0), listId.Value).ReconstructionPayloadBytes);
             root.Numbers[7] = 2;
             long d;
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Equal(state0, save.Business.Write.SourceGraph);
                 ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
@@ -120,19 +120,19 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
                 d = ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, listHead0);
                 RepositorySaveResult saved = save.Commit();
                 state1 = saved.Business.Address;
-                Assert.Equal(event1, saved.Business.Parent);
+                Assert.Equal(event1, resources.ReadPrevious(saved.CommitId)?.Address);
                 Assert.Equal(state0, saved.Business.SourceGraph);
                 Assert.Equal(schema1, saved.Business.SchemaRoot);
                 Assert.Equal(rootHead0, saved.Business.ObjectHeads[rootId.Value]);
                 Assert.Equal(childHead0, saved.Business.ObjectHeads[childId.Value]);
             }
-            Assert.Equal(h0 + d, facade.Store.ReadObjectChain(state1, listId.Value).ReconstructionPayloadBytes);
-            Assert.Equal(state1, facade.GetStateHead("main"));
-            Assert.Equal(state1, facade.GetHead("main"));
+            Assert.Equal(h0 + d, facade.Store.ReadObjectChain(MechanismFixture.Snapshot(facade, state1), listId.Value).ReconstructionPayloadBytes);
+            Assert.Equal(state1, MechanismFixture.State(facade, "main")?.Address);
+            Assert.Equal(state1, MechanismFixture.FindCurrent(facade, "main")?.Address);
             Assert.Equal(schema1, facade.SharedSchemaRoot);
             StoredGraphRevision s1 = session.StateSource!;
             long before = facade.Store.AppendedFrames;
-            using (PreparedBranchSave save = session.Prepare(root)) {
+            using (PreparedFixtureSave save = session.Prepare(root)) {
                 Assert.Null(save.Catalog.Write);
                 Assert.Empty(save.Business.Write.Records);
                 Assert.Empty(save.Business.Write.RemovedIds);
@@ -145,13 +145,13 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         }
         using (RepositoryResources resources = RepositoryResources.OpenStorageReadOnlyExisting(_path)) {
             using RepositoryStorageFacade facade = new(resources);
-            Assert.Equal(state2, facade.GetHead("main"));
-            Assert.Equal(state2, facade.GetStateHead("main"));
+            Assert.Equal(state2, MechanismFixture.FindCurrent(facade, "main")?.Address);
+            Assert.Equal(state2, MechanismFixture.State(facade, "main")?.Address);
             Assert.Equal(schema1, facade.SharedSchemaRoot);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, state0, Models()), 0);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, event1, Models()), 1);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, state1, Models()), 2);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, state2, Models()), 2);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, state0), Models()), 0);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, event1), Models()), 1);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, state1), Models()), 2);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, state2), Models()), 2);
         }
     }
 
@@ -164,13 +164,14 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         using RepositoryStorageFacade facade = new(resources);
         using (PendingRepositorySave seed = PrepareRaw(facade, 1)) { facade.Commit(seed); }
-        FrameAddress address = facade.GetHead("main")!.Value;
+        FrameAddress address = MechanismFixture.Current(facade, "main").Address;
         FrameAddress schema = facade.SharedSchemaRoot!.Value;
         GraphRecordStore retained = facade.Store;
-        StoredGraphRevision graph = retained.ReadGraph(address);
-        ObjectVersionChain chain = retained.ReadObjectChain(address, 1);
+        StoredGraphRevision graph = MechanismFixture.Snapshot(facade, address);
+        ObjectVersionChain chain = retained.ReadObjectChain(graph, 1);
         using PendingRepositorySave pending = PrepareRaw(facade, 2);
         Assert.Same(resources, pending.Owner);
+        var branch = MechanismFixture.Branch(facade, "main");
         switch (stop) {
             case "Fault": resources.MarkFaulted(); break;
             case "Dispose": resources.Dispose(); break;
@@ -179,13 +180,13 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             default: throw new InvalidOperationException(stop);
         }
         Assert.ThrowsAny<InvalidOperationException>(resources.RequireAvailable);
-        Assert.ThrowsAny<InvalidOperationException>(() => resources.GetBranchHead("main"));
-        Assert.ThrowsAny<InvalidOperationException>(() => facade.GetHead("main"));
+        Assert.ThrowsAny<InvalidOperationException>(() => resources.ReadCurrent(branch));
+        Assert.ThrowsAny<InvalidOperationException>(() => MechanismFixture.FindCurrent(facade, "main")?.Address);
         Assert.ThrowsAny<InvalidOperationException>(facade.EnsureEditingAllowed);
         Assert.ThrowsAny<InvalidOperationException>(() => facade.Commit(pending));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadGraph(address));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadObjectChain(address, 1));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.Append(StoredGraphKind.State, address,
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(address, null));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadObjectChain(graph, 1));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.AppendBusiness(StoredGraphKind.State, address,
             schema, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [3])])));
         if (stop == "Fault") {
             // Fault blocks Store/publication operations, but the inactive owned pending can still be released.
@@ -221,24 +222,24 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         first.Dispose();
         resources.RequireAvailable();
         Assert.True(second.HasPending);
-        Assert.Throws<ObjectDisposedException>(() => first.GetHead("main"));
+        Assert.Throws<ObjectDisposedException>(() => MechanismFixture.FindCurrent(first, "main")?.Address);
         RepositorySaveResult saved = second.Commit(pending);
         Assert.False(second.HasPending);
         Assert.False(resources.IsFaulted);
-        Assert.Equal(saved.Business.Address, second.GetHead("main"));
-        Assert.Equal((byte)1, Assert.Single(second.Store.ReadObjectChain(saved.Business.Address, 1).Entries).Record.Body[0]);
+        Assert.Equal(saved.Business.Address, MechanismFixture.FindCurrent(second, "main")?.Address);
+        Assert.Equal((byte)1, Assert.Single(second.Store.ReadObjectChain(MechanismFixture.Snapshot(second, saved.Business.Address), 1).Entries).Record.Body[0]);
 
         // Rejections did not consume or fault the shared owner; a valid next save still publishes.
-        using PendingRepositorySave next = resources.PrepareSave("main", StoredGraphKind.State,
-            new(resources.GetBranchStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [2])]),
+        using PendingRepositorySave next = MechanismFixture.Prepare(second, "main", StoredGraphKind.State,
+            new(MechanismFixture.State(second, "main")?.Address, new(1), [ObjectVersionRecord.CreateBase(1, [2])]),
             new(resources.SharedSchemaRoot, new(1), [ObjectVersionRecord.CreateBase(1, [2])]));
         RepositorySaveResult continued = resources.CommitSave(next);
-        Assert.Equal(continued.Business.Address, second.GetStateHead("main"));
+        Assert.Equal(continued.Business.Address, MechanismFixture.State(second, "main")?.Address);
         Assert.False(resources.IsFaulted);
     }
 
-    private static PendingRepositorySave PrepareRaw(RepositoryStorageFacade facade, byte value) => facade.Prepare("main", StoredGraphKind.State,
-        new(facade.GetStateHead("main"), new(1), [ObjectVersionRecord.CreateBase(1, [value])]),
+    private static PendingRepositorySave PrepareRaw(RepositoryStorageFacade facade, byte value) => MechanismFixture.Prepare(facade, "main", StoredGraphKind.State,
+        new(MechanismFixture.State(facade, "main")?.Address, new(1), [ObjectVersionRecord.CreateBase(1, [value])]),
         new(facade.SharedSchemaRoot, new(1), [ObjectVersionRecord.CreateBase(1, [value])]));
 
     private static DB087Widget AssertRing(IDurableObject? value, int number) {

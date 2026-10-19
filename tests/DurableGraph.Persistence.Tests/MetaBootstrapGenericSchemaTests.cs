@@ -24,7 +24,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         PreparedSchemaCatalogWrite prepared = Prepare(schemas);
         FrameAddress graph;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            graph = repository.Store.Append(StoredGraphKind.Meta, null, null, prepared.Write!).Address;
+            graph = repository.Store.AppendMeta(null, prepared.Write!).Address;
             repository.Data.ConfirmDurable();
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
@@ -50,7 +50,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         PreparedSchemaCatalogWrite prepared = Prepare(box1, box2, nullableBox, references);
         FrameAddress graph;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
-            graph = repository.Store.Append(StoredGraphKind.Meta, null, null, prepared.Write!).Address;
+            graph = repository.Store.AppendMeta(null, prepared.Write!).Address;
             repository.Data.ConfirmDurable();
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
@@ -90,9 +90,9 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         Assert.Equal(box2, next.View.Schemas[new(box2.Type, 2)]);
         RepositorySaveResult second = Publish(repository, "other", next, box2, UnsignedBody(65535));
         Assert.NotEqual(originalSchema, second.Business.SchemaRoot);
-        Assert.Equal(originalSchema, repository.Store.ReadGraph(first.Business.Address).SchemaRoot);
+        Assert.Equal(originalSchema, repository.Store.ReadMetadata(first.Business.Address).SchemaRoot);
         Assert.Equal(second.Business.SchemaRoot, repository.SharedSchemaRoot);
-        ObjectVersionChain old = repository.Store.ReadObjectChain(first.Business.Address, 1);
+        ObjectVersionChain old = repository.Store.ReadObjectChain(MechanismFixture.Snapshot(repository, first.Business.Address), 1);
         SchemaCatalogView origin = SchemaCatalogView.Load(repository.Store, old.Entries[0].SchemaRoot!.Value);
         Assert.Equal(ObjectLayout.ForDurable(box1), TypedBaseBodyCodec.Decode(old.Entries[0].Record.Body, origin).Layout);
         Assert.False(origin.Schemas.ContainsKey(new(box2.Type, 2)));
@@ -119,10 +119,10 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
         Assert.Equal(sourceMode, selected.Schemas[new(sourceMode.Type, 1)]); // Metadata is valid without a CLR enum claim.
         int wrongReads = 0;
         StateReaderBinding badReader = IntegerReader(wrong, () => wrongReads++);
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, graph, Readers(badReader), selected));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, graph), Readers(badReader), selected));
         Assert.Equal(0, wrongReads);
         int validReads = 0;
-        DecodedGraphRows decoded = StoredGraphDecoder.Read(reader.Store, graph, Readers(IntegerReader(source, () => validReads++)), selected);
+        DecodedGraphRows decoded = StoredGraphDecoder.Read(reader.Store, MechanismFixture.Snapshot(reader, graph), Readers(IntegerReader(source, () => validReads++)), selected);
         Assert.Equal(1, validReads);
         Assert.Equal((ushort)65535, decoded.Rows[new(1)].GetState<ushort>());
     }
@@ -148,18 +148,19 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
     public void A_retained_base_cannot_be_reinterpreted_by_a_selected_view_with_another_closed_argument() {
         DurableSchema first = Plain(TypeExpr.Named("Generic.Phantom", TypeExpr.Builtin(TypeTag.Int32)), 1);
         DurableSchema second = Plain(TypeExpr.Named("Generic.Phantom", TypeExpr.Builtin(TypeTag.Int64)), 1);
-        FrameAddress retained;
+        FrameAddress retained, originalAddress;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             RepositorySaveResult original = Publish(repository, "main", Prepare(first), first, new PreparedBaseBody([0]));
+            originalAddress = original.Business.Address;
             PreparedSchemaCatalogWrite other = Prepare(second);
-            StoredGraphRevision otherView = repository.Store.Append(StoredGraphKind.Meta, null, null, other.Write!);
-            retained = repository.Store.Append(StoredGraphKind.State, original.Business.Address, otherView.Address,
+            StoredGraphRevision otherView = repository.Store.AppendMeta(null, other.Write!);
+            retained = repository.Store.AppendBusiness(StoredGraphKind.State, original.Business.Address, otherView.Address,
                 new(original.Business.Address, new(1), [])).Address;
             repository.Data.ConfirmDurable();
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        StoredGraphRevision graph = reader.Store.ReadGraph(retained);
-        ObjectVersionChain originalChain = reader.Store.ReadObjectChain(retained, 1);
+        StoredGraphRevision graph = reader.Store.ReadBusinessGraph(retained, originalAddress);
+        ObjectVersionChain originalChain = reader.Store.ReadObjectChain(reader.Store.ReadBusinessGraph(retained, originalAddress), 1);
         SchemaCatalogView origin = SchemaCatalogView.Load(reader.Store, originalChain.Entries[0].SchemaRoot!.Value);
         SchemaCatalogView selected = SchemaCatalogView.Load(reader.Store, graph.SchemaRoot!.Value);
         Assert.Equal(first, origin.Schemas[new(first.Type, 1)]);
@@ -171,7 +172,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             (ref BareValueReader bytes) => { bodyReads++; return bytes.ReadVarInt32(); },
             static (ref BareValueReader bytes, in int prior) => bytes.ReadVarInt32(),
             static (in int value, IStateReferenceVisitor visitor) => { });
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, retained, Readers(binding), selected));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, reader.Store.ReadBusinessGraph(retained, originalAddress), Readers(binding), selected));
         Assert.Equal(0, bodyReads);
     }
 
@@ -193,7 +194,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
     private static RepositorySaveResult Publish(RepositoryStorageFacade repository, string branch, PreparedSchemaCatalogWrite catalog,
         DurableSchema schema, PreparedBaseBody raw) {
         byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), raw, catalog.View);
-        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State,
+        using PendingRepositorySave pending = MechanismFixture.Prepare(repository, branch, StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)]), catalog.Write);
         return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall);
     }

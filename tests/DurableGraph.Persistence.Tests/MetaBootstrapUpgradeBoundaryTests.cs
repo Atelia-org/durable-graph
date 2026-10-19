@@ -42,14 +42,14 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
                     Assert.Equal(2, meta.Schemas.Count);
                     Assert.False(meta.Schemas.ContainsKey(new(Current.Type, 2)));
                     BoundaryRoot root = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store,
-                        state, Registry(Model(Current, Old, cutText: true))));
+                        MechanismFixture.Snapshot(reader, state), Registry(Model(Current, Old, cutText: true))));
                     Assert.Equal((byte)1, root.Generation);
                     Assert.Null(root.Text);
                     Assert.Equal(schema, reader.SharedSchemaRoot);
                 }
                 FrameAddress current;
                 using (var repository = RepositoryStorageFacade.OpenExisting(path)) {
-                    var session = new BranchSaveSession(repository, "main", Registry(Model(Current, Old, cutText: true)));
+                    var session = new BranchSaveSessionFixture(repository, "main", Registry(Model(Current, Old, cutText: true)));
                     BoundaryRoot root = Assert.IsType<BoundaryRoot>(session.State);
                     for (int mutation = 0; mutation < 2; mutation++) {
                         session.Catalog.Set(new DurableSchema(name + $".Added{mutation}", 1, new DurableFieldInfo(1, TypeTag.Byte)));
@@ -60,14 +60,14 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
                         SchemaCatalogView accepted = SchemaCatalogView.Load(repository.Store, repository.SharedSchemaRoot!.Value);
                         Assert.Equal(4 + mutation, accepted.Schemas.Count); // V1, V2, seed and this owner's additions.
                         Assert.True(accepted.Schemas.ContainsKey(new(name + $".Added{mutation}", 1)));
-                        Assert.Equal(schema, repository.Store.ReadGraph(state).SchemaRoot);
+                        Assert.Equal(schema, repository.Store.ReadMetadata(state).SchemaRoot);
                     }
-                    current = repository.GetHead("main")!.Value;
+                    current = MechanismFixture.Current(repository, "main").Address;
                 }
                 using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(path)) {
                     StateModelRegistry models = Registry(Model(Current, Old, cutText: true));
-                    BoundaryRoot latest = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, current, models));
-                    BoundaryRoot historical = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, state, models));
+                    BoundaryRoot latest = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, current), models));
+                    BoundaryRoot historical = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, state), models));
                     Assert.Equal((byte)7, latest.Value);
                     Assert.Equal((byte)5, historical.Value);
                     Assert.Equal((byte)1, latest.Generation);
@@ -82,7 +82,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
     [Fact]
     public void Capture_cannot_reenter_the_same_publication_owner_through_another_session() {
         using var repository = RepositoryStorageFacade.CreateNew(_path);
-        BranchSaveSession? inner = null;
+        BranchSaveSessionFixture? inner = null;
         bool attemptReentry = true;
         int rejected = 0;
         StateModelRegistry models = Registry(Model(Old, Old, onCapture: () => {
@@ -93,19 +93,19 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             });
             rejected++;
         }));
-        var outer = new BranchSaveSession(repository, "main", models);
-        inner = new BranchSaveSession(repository, "other", models);
+        var outer = new BranchSaveSessionFixture(repository, "main", models);
+        inner = new BranchSaveSessionFixture(repository, "other", models);
         outer.Catalog.Set(Old);
         inner.Catalog.Set(Old);
 
         BoundaryRoot root = new() { Value = 7 };
         using (var save = outer.Prepare(root)) {
             Assert.Equal(1, rejected);
-            Assert.Null(repository.GetHead("main"));
-            Assert.Null(repository.GetHead("other"));
+            Assert.Null(MechanismFixture.FindCurrent(repository, "main")?.Address);
+            Assert.Null(MechanismFixture.FindCurrent(repository, "other")?.Address);
             RepositorySaveResult result = save.Commit();
-            Assert.Equal(result.Business.Address, repository.GetHead("main"));
-            Assert.Null(repository.GetHead("other"));
+            Assert.Equal(result.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
+            Assert.Null(MechanismFixture.FindCurrent(repository, "other")?.Address);
             Assert.Same(root, outer.State);
         }
         Assert.False(repository.HasPending);
@@ -113,9 +113,9 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
 
         attemptReentry = false;
         using var later = inner.Prepare(new BoundaryRoot { Value = 11 });
-        Assert.Equal(later.Commit().Business.Address, repository.GetHead("other"));
+        Assert.Equal(later.Commit().Business.Address, MechanismFixture.FindCurrent(repository, "other")?.Address);
         Assert.Equal((byte)7, Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(repository.Store,
-            repository.GetHead("main")!.Value, models)).Value);
+            MechanismFixture.Snapshot(repository, MechanismFixture.Current(repository, "main").Address), models)).Value);
     }
 
     [Fact]
@@ -127,9 +127,9 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             SchemaCatalogWorkspace wrong = new(static () => { });
             wrong.Set(wrongSource);
             PreparedSchemaCatalogWrite meta = wrong.Prepare();
-            StoredGraphRevision schema = repository.Store.Append(StoredGraphKind.Meta, null, null, meta.Write!);
+            StoredGraphRevision schema = repository.Store.AppendMeta(null, meta.Write!);
             byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(wrongSource), Base(new(5, default, 0)), meta.View);
-            badGraph = repository.Store.Append(StoredGraphKind.State, null, schema.Address,
+            badGraph = repository.Store.AppendBusiness(StoredGraphKind.State, null, schema.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
             repository.Data.ConfirmDurable();
         }
@@ -139,7 +139,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
             StateModelRegistry models = Registry(Model(Current, Old,
                 onRead: () => reads++, onUpgrade: () => upgrades++));
-            Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, badGraph, models));
+            Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, reader.Store.ReadBusinessGraph(badGraph, null), models));
             Assert.Equal(0, reads);
             Assert.Equal(0, upgrades);
             Assert.Equal(Old, SchemaCatalogView.Load(reader.Store, reader.SharedSchemaRoot!.Value).Schemas[new(Old.Type, 1)]);
@@ -154,10 +154,10 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         Dictionary<string, byte[]> before = Files();
         using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
             StateModelRegistry models = Registry(Model(Current, Old, onUpgrade: () => upgrades++));
-            Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, source.State, models));
+            Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, source.State), models));
             Assert.Equal(0, upgrades);
             Assert.Equal(source.Schema, reader.SharedSchemaRoot);
-            Assert.Equal(source.State, reader.GetHead("main"));
+            Assert.Equal(source.State, MechanismFixture.FindCurrent(reader, "main")?.Address);
         }
         AssertFilesUnchanged(before);
     }
@@ -178,7 +178,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         Assert.False(stored.Schemas.ContainsKey(new(target.Type, target.Version)));
         Assert.Equal(SchemaKind.ReferenceObject, stored.Schemas[new(point.Type, 1)].Kind);
         StateModelRegistry models = Registry(Model(target, Old, onUpgrade: () => upgrades++));
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, source.State, models));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, source.State), models));
         Assert.Equal(0, upgrades);
         Assert.Equal(source.Schema, reader.SharedSchemaRoot);
     }
@@ -192,7 +192,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             var branches = reader.Heads.ReadHead(1).Unwrap();
             var shared = reader.Heads.ReadHead(2).Unwrap();
             StateModelRegistry models = Registry(Model(Current, Old, onUpgrade: () => upgrades++));
-            BoundaryRoot restored = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, source.State, models));
+            BoundaryRoot restored = Assert.IsType<BoundaryRoot>(BusinessPersistenceAdapter.ReadRoot(reader.Store, MechanismFixture.Snapshot(reader, source.State), models));
             Assert.Equal((byte)5, restored.Value);
             Assert.Equal((byte)1, restored.Generation);
             Assert.Equal(1, upgrades);
@@ -204,7 +204,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             Assert.Equal(branches.Payload.ToArray(), reader.Heads.ReadHead(1).Unwrap().Payload.ToArray());
             Assert.Equal(shared.Payload.ToArray(), reader.Heads.ReadHead(2).Unwrap().Payload.ToArray());
             Assert.Equal(source.Schema, reader.SharedSchemaRoot);
-            Assert.Equal(source.State, reader.GetHead("main"));
+            Assert.Equal(source.State, MechanismFixture.FindCurrent(reader, "main")?.Address);
         }
         AssertFilesUnchanged(before);
     }
@@ -218,9 +218,9 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             acceptedSchema = source.Schema;
             SchemaCatalogView accepted = SchemaCatalogView.Load(repository.Store, acceptedSchema);
             PreparedSchemaCatalogWrite empty = new SchemaCatalogWorkspace(static () => { }).Prepare();
-            StoredGraphRevision missing = repository.Store.Append(StoredGraphKind.Meta, null, null, empty.Write!);
+            StoredGraphRevision missing = repository.Store.AppendMeta(null, empty.Write!);
             byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(Old), Base(new(5, default, 0)), accepted);
-            malformed = repository.Store.Append(StoredGraphKind.State, null, missing.Address,
+            malformed = repository.Store.AppendBusiness(StoredGraphKind.State, null, missing.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
             repository.Data.ConfirmDurable();
         }
@@ -230,7 +230,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         Assert.Equal(Old, SchemaCatalogView.Load(reader.Store, acceptedSchema).Schemas[new(Old.Type, 1)]);
         StateModelRegistry models = Registry(Model(Current, Old,
             onRead: () => reads++, onUpgrade: () => upgrades++));
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, malformed, models));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, reader.Store.ReadBusinessGraph(malformed, null), models));
         Assert.Equal(0, reads);
         Assert.Equal(0, upgrades);
     }
@@ -239,7 +239,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
     public void Cold_upgrade_rewrite_and_full_source_id_cursor_survive_event_and_discard_until_state_is_confirmed() {
         var source = Seed(textId: 100);
         using var repository = RepositoryStorageFacade.OpenExisting(_path);
-        var session = new BranchSaveSession(repository, "main", Registry(Model(Current, Old, cutText: true)));
+        var session = new BranchSaveSessionFixture(repository, "main", Registry(Model(Current, Old, cutText: true)));
         BoundaryRoot root = Assert.IsType<BoundaryRoot>(session.State);
         Assert.Null(root.Text);
         Assert.Equal((byte)1, root.Generation);
@@ -251,7 +251,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             Assert.NotNull(saveEvent.Catalog.Write); // V2 was not published by opening or upgrading.
             eventResult = saveEvent.Commit();
         }
-        Assert.Equal(eventResult.Business.Address, repository.GetHead("main"));
+        Assert.Equal(eventResult.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
         Assert.Equal(source.State, session.StateSource!.Address);
         Assert.Equal(eventResult.Business.SchemaRoot, session.Catalog.Accepted!.Snapshot!.Address);
         Assert.True(session.Catalog.Accepted.Schemas.ContainsKey(new(Current.Type, 2)));
@@ -261,7 +261,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             AssertRewrite(discarded, source.State);
             Assert.Null(discarded.Catalog.Write); // Confirmed Event accepted only the meta candidate.
         }
-        Assert.Equal(eventResult.Business.Address, repository.GetHead("main"));
+        Assert.Equal(eventResult.Business.Address, MechanismFixture.FindCurrent(repository, "main")?.Address);
         Assert.Equal(source.State, session.StateSource!.Address);
         Assert.False(repository.HasPending);
 
@@ -280,31 +280,31 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         using var newObject = session.Prepare(root);
         uint newId = Assert.Single(newObject.Business.Write.Records, record => record.ObjectId != 1).ObjectId;
         Assert.True(newId > 100); // Complete source membership, not current reachability, owns the cursor.
-        Assert.Equal(source.Schema, repository.Store.ReadGraph(source.State).SchemaRoot);
-        Assert.Contains(100u, repository.Store.ReadGraph(source.State).ObjectHeads.Keys);
+        Assert.Equal(source.Schema, repository.Store.ReadMetadata(source.State).SchemaRoot);
+        Assert.Contains(100u, MechanismFixture.Snapshot(repository, source.State).ObjectHeads.Keys);
     }
 
     [Fact]
     public void A_cold_workspace_rechecks_latest_shared_target_conflicts_before_any_save_append() {
         var source = Seed();
         using var repository = RepositoryStorageFacade.OpenExisting(_path);
-        var first = new BranchSaveSession(repository, "main", Registry(Model(Current, Old)));
+        var first = new BranchSaveSessionFixture(repository, "main", Registry(Model(Current, Old)));
         BoundaryRoot upgraded = Assert.IsType<BoundaryRoot>(first.State);
-        var other = new BranchSaveSession(repository, "other", Registry(Model(Old, Old)));
+        var other = new BranchSaveSessionFixture(repository, "other", Registry(Model(Old, Old)));
         other.Catalog.Set(Schema(2, wideValue: true));
         using (var publishConflict = other.Prepare(new BoundaryRoot { Value = 9 })) { publishConflict.Commit(); }
         FrameAddress shared = repository.SharedSchemaRoot!.Value;
         long appended = repository.Store.AppendedFrames;
         Assert.Throws<SchemaConflictException>(() => first.Prepare(upgraded));
         Assert.Equal(appended, repository.Store.AppendedFrames);
-        Assert.Equal(source.State, repository.GetHead("main"));
+        Assert.Equal(source.State, MechanismFixture.FindCurrent(repository, "main")?.Address);
         Assert.Equal(source.State, first.StateSource!.Address);
         Assert.Equal(shared, repository.SharedSchemaRoot);
         Assert.False(repository.HasPending);
         Assert.False(repository.IsFaulted);
     }
 
-    private static void AssertRewrite(PreparedBranchSave save, FrameAddress source) {
+    private static void AssertRewrite(PreparedFixtureSave save, FrameAddress source) {
         Assert.Equal(source, save.Business.Write.SourceGraph);
         ObjectVersionRecord record = Assert.Single(save.Business.Write.Records);
         Assert.Equal(1u, record.ObjectId);
@@ -329,7 +329,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             records.Add(ObjectVersionRecord.CreateBase(textId,
                 TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("old source string"))));
         }
-        using PendingRepositorySave pending = repository.Prepare("main", StoredGraphKind.State,
+        using PendingRepositorySave pending = MechanismFixture.Prepare(repository, "main", StoredGraphKind.State,
             new(null, new(1), records), meta.Write);
         RepositorySaveResult saved = repository.Commit(pending);
         return (saved.Business.Address, saved.Meta!.Address);

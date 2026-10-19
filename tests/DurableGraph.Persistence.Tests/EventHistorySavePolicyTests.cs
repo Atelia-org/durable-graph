@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using System.Reflection;
 using Atelia.DurableGraph.Storage;
@@ -34,28 +35,29 @@ public sealed partial class EventHistoryRepositoryTests {
         using (var repository = Repository.CreateNew(path, Models())) {
             Node state = new();
             using var session = includeOverrides
-                ? repository.CreateSharedBranch("main", state, NoRebase)
-                : omitPolicy ? repository.CreateSharedBranch("main", state)
-                : repository.CreateSharedBranch("main", state, currentDefault);
+                ? repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", state, parameters: NoRebase).Id)
+                : omitPolicy ? repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", state).Id)
+                : repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", state, parameters: currentDefault).Id);
+            state = (Node)session.State!;
             addresses.Add(session.StateRevisionAddress!.Value);
             // Long enough to exercise both Base and Delta for the proposed 3x/5x/10x
             // defaults; a materially different policy may need a different workload.
             for (int i = 1; i <= 40; i++) {
                 if (i % 4 != 0) { state.Value++; }
-                CheckpointAddress domainEvent = includeOverrides && i == 1
-                    ? session.CommitEvent(state, new(1, 100))
-                    : omitPolicy ? session.CommitEvent(state)
-                    : session.CommitEvent(state, currentDefault);
-                addresses.Add(domainEvent.RevisionAddress);
-                CheckpointAddress saved = includeOverrides && i == 2
-                    ? session.CommitState(NoRebase)
-                    : omitPolicy ? session.CommitState()
-                    : session.CommitState(currentDefault);
-                addresses.Add(saved.RevisionAddress);
+                CommitId domainEvent = includeOverrides && i == 1
+                    ? session.CommitEvent(state, parameters: new(1, 100)).Id
+                    : omitPolicy ? session.CommitEvent(state).Id
+                    : session.CommitEvent(state, parameters: currentDefault).Id;
+                addresses.Add(Describe(repository, domainEvent).Address);
+                CommitId saved = includeOverrides && i == 2
+                    ? session.CommitState(parameters: NoRebase).Id
+                    : omitPolicy ? session.CommitState().Id
+                    : session.CommitState(parameters: currentDefault).Id;
+                addresses.Add(Describe(repository, saved).Address);
             }
         }
         using (var repository = Repository.OpenReadOnlyExisting(path, Models())) {
-            Assert.Equal((byte)30, ((Node)repository.ReadState(repository.GetHead("main"))).Value);
+            Assert.Equal((byte)30, ((Node)repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id)).Value);
         }
         using RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(path);
         GraphRecordStore store = resources.GraphStore;

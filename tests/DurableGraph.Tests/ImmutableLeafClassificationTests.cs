@@ -422,7 +422,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 public static IDurableObject Create() => new World();
                 public static void Save(string path, IDurableObject world, StateModelRegistry models, ReadAmplificationBaseBudgetParameters parameters) {
                     using var repository = Repository.CreateNew(path, models);
-                    using var session = repository.CreateSharedBranch("main", (World)world, parameters);
+                    repository.CreateRootBranchFromState("main", (World)world, parameters: parameters);
                 }
             }
             """);
@@ -434,7 +434,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         host.GetMethod("Save")!.CreateDelegate<Action<string, IDurableObject, StateModelRegistry, ReadAmplificationBaseBudgetParameters>>()(
             directory.Path, world, models, TestSavePolicies.Baseline);
         using (var repository = Repository.OpenReadOnlyExisting(directory.Path, models)) {
-            CheckpointAddress frame = Assert.Single(repository.ReadFrames("main"));
+            CommitId frame = Assert.Single(repository.ReadFrames(Assert.Single(repository.ListBranches()).Id)).Id;
             (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame);
             Assert.Same(first, second);
         }

@@ -19,35 +19,38 @@ public sealed partial class DurableSchemaGeneratorTests {
         DurableSchema conflicting = new(requested.Type, requested.Version, []);
         using RawBaseDirectory directory = new();
         using (Repository repository = Repository.CreateNew(directory.Path, models)) {
-            using BranchCheckout checkout = repository.CreateSharedBranch("main", original);
-            CheckpointAddress head = checkout.Head;
-            FrameAddress? schemaRoot = repository.SharedSchemaRoot;
-            long appended = repository.GraphStore.AppendedFrames;
+            BranchInfo branch = repository.CreateRootBranchFromState("main", original);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(branch.Id);
+            IDurableObject acceptedState = checkout.State!;
+            CommitId head = checkout.BaseCommitId;
+            FrameAddress? schemaRoot = DB082Resources(repository).SharedSchemaRoot;
+            long appended = DB082Resources(repository).GraphStore.AppendedFrames;
             checkout.Catalog.Set(conflicting);
 
             Assert.Throws<SchemaConflictException>(() => checkout.CommitState(replacement));
-            Assert.Equal(head, checkout.Head);
-            Assert.Equal(head, repository.GetHead("main"));
-            Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
-            Assert.Equal(appended, repository.GraphStore.AppendedFrames);
-            Assert.Same(original, checkout.State);
+            Assert.Equal(head, checkout.BaseCommitId);
+            Assert.Equal(head, repository.ReadCurrentCommit(checkout.BranchId).Commit.Id);
+            Assert.Equal(schemaRoot, DB082Resources(repository).SharedSchemaRoot);
+            Assert.Equal(appended, DB082Resources(repository).GraphStore.AppendedFrames);
+            Assert.Same(acceptedState, checkout.State);
             Assert.False(repository.IsFaulted);
             Assert.Equal(1, checkout.Catalog.DirtyCount);
-            Assert.NotEmpty(repository.GraphStore.ReadGraph(head.RevisionAddress).ObjectHeads);
+            Assert.NotEmpty(DB082Graph(repository, head).ObjectHeads);
 
             // The same logical request can be corrected after failed capture/closure preparation.
             checkout.Catalog.Set(requested);
-            CheckpointAddress corrected = checkout.CommitState(replacement);
+            CommitId corrected = checkout.CommitState(replacement).Id;
             Assert.NotEqual(head, corrected);
             Assert.Same(replacement, checkout.State);
             Assert.Equal(0, checkout.Catalog.DirtyCount);
             Assert.Equal(requested, checkout.Catalog.Accepted!.Schemas[new(requested.Type, requested.Version)]);
         }
         using Repository reopened = Repository.OpenReadOnlyExisting(directory.Path, models);
-        IDurableObject restored = reopened.ReadState(reopened.GetHead("main"));
+        CommitId latest = reopened.ReadCurrentCommit(Assert.Single(reopened.ListBranches()).Id).Commit.Id;
+        IDurableObject restored = reopened.LoadState(latest);
         Assert.Equal(replacement.GetType(), restored.GetType());
-        StoredGraphRevision graph = reopened.GraphStore.ReadGraph(reopened.GetHead("main").RevisionAddress);
-        Assert.Equal(requested, SchemaCatalogView.Load(reopened.GraphStore, graph.SchemaRoot!.Value)
+        StoredGraphRevision graph = DB082Graph(reopened, latest);
+        Assert.Equal(requested, SchemaCatalogView.Load(DB082Resources(reopened).GraphStore, graph.SchemaRoot!.Value)
             .Schemas[new(requested.Type, requested.Version)]);
     }
 }

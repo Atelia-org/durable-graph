@@ -49,8 +49,8 @@ public sealed class ManagementDirectoryPublicationTests : IDisposable {
             SchemaCatalogWorkspace catalog = new(static () => { }, acceptedS);
             catalog.Set(definitions[pass]);
             PreparedSchemaCatalogWrite schema = catalog.Prepare();
-            StoredGraphRevision actualD = store.Graphs.Append(StoredGraphKind.Meta, acceptedD?.Snapshot.Address, null, directory.Write);
-            StoredGraphRevision actualS = store.Graphs.Append(StoredGraphKind.Meta, acceptedS?.Snapshot?.Address, null, schema.Write!);
+            StoredGraphRevision actualD = store.Graphs.AppendMeta(acceptedD?.Snapshot.Address, directory.Write);
+            StoredGraphRevision actualS = store.Graphs.AppendMeta(acceptedS?.Snapshot?.Address, schema.Write!);
             directory.PrepareInstall(actualD);
             schema.PrepareInstall(actualS);
             Assert.Same(acceptedS, catalog.Accepted);
@@ -76,7 +76,7 @@ public sealed class ManagementDirectoryPublicationTests : IDisposable {
             if (pass == 0) {
                 bookmarkTarget = store.Heads.ReadHead(branch).Unwrap().Id;
                 PreparedDirectoryWrite tag = ManagementDirectoryWriter.PrepareBookmarkAddition(store.Graphs, acceptedT, "固定存档", bookmarkTarget);
-                StoredGraphRevision actualT = store.Graphs.Append(StoredGraphKind.Meta, null, null, tag.Write);
+                StoredGraphRevision actualT = store.Graphs.AppendMeta(null, tag.Write);
                 tag.PrepareInstall(actualT);
                 HeadEntry oldT = store.Heads.ReadHead(3).Unwrap();
                 publishedT = store.Heads.PublishHead(oldT.Id.HeadId,
@@ -87,16 +87,16 @@ public sealed class ManagementDirectoryPublicationTests : IDisposable {
                 // Fully prepare all three graphs, but publish none of their pointers.
                 HeadId unregistered = store.Heads.CreateHead("unregistered fixture"u8.ToArray(), out _).Unwrap().HeadId;
                 PreparedDirectoryWrite pendingD = ManagementDirectoryWriter.PrepareBranchAddition(store.Graphs, acceptedD, unregistered, "未发布");
-                StoredGraphRevision nextD = store.Graphs.Append(StoredGraphKind.Meta, d, null, pendingD.Write);
+                StoredGraphRevision nextD = store.Graphs.AppendMeta(d, pendingD.Write);
                 pendingD.PrepareInstall(nextD);
                 abandonedD = nextD.Address;
                 catalog.Set(new DurableSchema("DirectoryPublication.Abandoned", 1, new DurableFieldInfo(1, TypeTag.Int32)));
                 PreparedSchemaCatalogWrite pendingS = catalog.Prepare();
-                StoredGraphRevision nextS = store.Graphs.Append(StoredGraphKind.Meta, s, null, pendingS.Write!);
+                StoredGraphRevision nextS = store.Graphs.AppendMeta(s, pendingS.Write!);
                 pendingS.PrepareInstall(nextS);
                 abandonedS = nextS.Address;
                 PreparedDirectoryWrite pendingT = ManagementDirectoryWriter.PrepareBookmarkAddition(store.Graphs, acceptedT, "未发布书签", bookmarkTarget);
-                StoredGraphRevision nextT = store.Graphs.Append(StoredGraphKind.Meta, acceptedT!.Snapshot.Address, null, pendingT.Write);
+                StoredGraphRevision nextT = store.Graphs.AppendMeta(acceptedT!.Snapshot.Address, pendingT.Write);
                 pendingT.PrepareInstall(nextT);
                 abandonedT = nextT.Address;
                 store.Data.ConfirmDurable();

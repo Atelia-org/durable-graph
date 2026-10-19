@@ -31,22 +31,22 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<bool, StateModelRegistry>>()(reverseRegistration);
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
-        var initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
+        var initial = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[0]), models.FreezeConfiguration());
         ObjectStateRecord world = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.World");
         ObjectStateRecord special = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Special");
         ObjectStateRecord dropped = Assert.Single(initial.Objects, r => r.Schema?.SchemaId == "cross.Node");
         foreach (int index in new[] { 1, 4, 6 }) {
-            Assert.Empty(DefaultRecords(states, addresses[index]));
-            Assert.Empty(DefaultRemoved(states, addresses[index]));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[index])));
+            Assert.Empty(PublishedRemoved(segments, addresses[index]));
         }
-        ObjectVersionRecord childChange = Assert.Single(DefaultRecords(states, addresses[2]));
+        ObjectVersionRecord childChange = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[2])));
         Assert.Equal(special.Id.Value, childChange.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, childChange.Kind);
-        Assert.DoesNotContain(DefaultRecords(states, addresses[2]), r => r.ObjectId == world.Id.Value);
-        Assert.Equal(dropped.Id.Value, Assert.Single(DefaultRemoved(states, addresses[3])));
-        Assert.NotEmpty(DefaultRecords(states, addresses[5]));
-        Assert.All(DefaultRecords(states, addresses[5]), r => Assert.Equal(ObjectVersionKind.Delta, r.Kind));
-        var final = DecodedRevision.ReadStoredGraph(states, addresses[^1], models);
+        Assert.DoesNotContain(DefaultRecords(states, PublishedGraph(segments, addresses[2])), r => r.ObjectId == world.Id.Value);
+        Assert.Equal(dropped.Id.Value, Assert.Single(PublishedRemoved(segments, addresses[3])));
+        Assert.NotEmpty(DefaultRecords(states, PublishedGraph(segments, addresses[5])));
+        Assert.All(DefaultRecords(states, PublishedGraph(segments, addresses[5])), r => Assert.Equal(ObjectVersionKind.Delta, r.Kind));
+        var final = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[^1]), models.FreezeConfiguration());
         Assert.DoesNotContain(final.Objects, r => r.Id == dropped.Id);
         Assert.Contains(final.Objects, r => r.Id == special.Id);
         Assert.Contains(final.Objects, r => r.Id == world.Id);

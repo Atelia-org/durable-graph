@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
@@ -24,6 +25,10 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         DB087Widget child = new() { Value = 2, Numbers = numbers, Child = original };
         original.Child = child;
         using (Backend backend = Backend.Create(_path, original)) {
+            Assert.NotSame(original, backend.State);
+            original = (DB087Widget)backend.State;
+            child = original.Child!;
+            numbers = original.Numbers;
             initial = backend.Initial;
             Assert.Equal(3, initial.Records.Length);
             Assert.All(initial.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
@@ -190,12 +195,12 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
     // One real public Repository/checkout; diagnostics read its actual split writer results.
     private sealed class Backend : IDisposable {
         private readonly Repository _repository;
-        private readonly BranchCheckout _checkout;
+        private readonly WorkingCopy _checkout;
         internal Saved Initial { get; }
         private Backend(string path, DB087Widget? initial) {
             _repository = initial is not null ? Repository.CreateNew(path, Models()) : Repository.OpenExisting(path, Models());
-            _checkout = initial is not null ? _repository.CreateSharedBranch("main", initial) : _repository.CheckoutShared("main");
-            Initial = ReadSaved(_checkout.Head.Address);
+            _checkout = initial is not null ? _repository.OpenWorkingCopy(_repository.CreateRootBranchFromState("main", initial).Id) : _repository.OpenWorkingCopy(BranchNamed(_repository, "main"));
+            Initial = ReadSaved(Describe(_repository, _checkout.BaseCommitId).Address);
         }
         internal static Backend Create(string path, DB087Widget initial) => new(path, initial);
         internal static Backend Open(string path) => new(path, null);
@@ -204,16 +209,16 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         internal NormalizedGraphState Baseline => _checkout.Baseline!;
         internal long AppendedFrames => _repository.GraphStore.AppendedFrames;
         internal Saved Save(IDurableObject root, bool isEvent = false) {
-            CheckpointAddress committed = isEvent ? _checkout.CommitEvent(root) : _checkout.CommitState(root);
-            Assert.Equal(committed, _repository.GetHead("main"));
-            return ReadSaved(committed.Address);
+            CommitId committed = isEvent ? _checkout.CommitEvent(root).Id : _checkout.CommitState(root).Id;
+            Assert.Equal(committed, _repository.ReadCurrentCommit(_checkout.BranchId).Commit.Id);
+            return ReadSaved(Describe(_repository, committed).Address);
         }
         internal ObjectId Discard(IDurableObject root) {
-            CheckpointAddress head = _checkout.Head;
+            CommitId head = _checkout.BaseCommitId;
             long frames = AppendedFrames;
             ObjectId rootId;
             using (PreparedBranchSave save = _checkout.SaveSession.Prepare(root)) { rootId = save.Business.Write.RootId; }
-            Assert.Equal(head, _repository.GetHead("main"));
+            Assert.Equal(head, _repository.ReadCurrentCommit(_checkout.BranchId).Commit.Id);
             Assert.Equal(frames, AppendedFrames);
             return rootId;
         }
@@ -222,23 +227,23 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         internal void AssertStoredBaseline() {
             GraphRecordStore store = _repository.GraphStore;
             NormalizedGraphState baseline = Baseline;
-            IReadOnlyDictionary<uint, FrameAddress> heads = store.ReadGraph(baseline.RevisionAddress).ObjectHeads;
+            IReadOnlyDictionary<uint, FrameAddress> heads = MechanismFixture.Snapshot(store, baseline.RevisionAddress).ObjectHeads;
             Assert.Equal(baseline.Objects.Keys.Select(id => id.Value).Order(), heads.Keys.Order());
             foreach ((ObjectId id, NormalizedObject row) in baseline.Objects) {
                 ObjectStorageInfo info = row.Storage!.Value;
                 Assert.Equal(heads[id.Value], info.Head);
-                Assert.Equal(store.ReadObjectChain(baseline.RevisionAddress, id.Value).ReconstructionPayloadBytes,
+                Assert.Equal(store.ReadObjectChain(MechanismFixture.Snapshot(store, baseline.RevisionAddress), id.Value).ReconstructionPayloadBytes,
                     info.ReconstructionPayloadBytes);
             }
         }
         internal IDurableObject Read(Saved saved) =>
-            BusinessPersistenceAdapter.ReadRoot(_repository.GraphStore, saved.Address, Models());
+            BusinessPersistenceAdapter.ReadRoot(_repository.GraphStore, MechanismFixture.Snapshot(_repository.GraphStore, saved.Address), Models());
         private Saved ReadSaved(FrameAddress address) {
             GraphRecordStore store = _repository.GraphStore;
-            StoredGraphRevision graph = store.ReadGraph(address);
+            StoredGraphRevision graph = MechanismFixture.Snapshot(store, address);
             ObjectVersionRecord[] records = graph.OwnedBatch is { } batch ? store.ReadBatch(batch).Records.ToArray() : [];
             uint[] removed = graph.SourceGraph is { } source
-                ? store.ReadGraph(source).ObjectHeads.Keys.Except(graph.ObjectHeads.Keys).ToArray() : [];
+                ? MechanismFixture.Snapshot(store, source).ObjectHeads.Keys.Except(graph.ObjectHeads.Keys).ToArray() : [];
             return new(address, graph.RootId, records, removed, graph.DirectoryRoot, graph.OwnedBatch);
         }
         public void Dispose() {

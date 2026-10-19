@@ -41,8 +41,8 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         BusinessPersistenceAdapter loaded = Load(source, clearedOwner);
         Assert.Null(((World)loaded.State!).Next);
         Assert.Equal(0, targetAllocations);
-        BranchSaveSession session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
-        using PreparedBranchSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
+        BranchSaveSessionFixture session = new(_repository, "main", clearedOwner, loaded);
+        using PreparedFixtureSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(prepared.Business.Write.Records).Kind);
         Assert.Equal(new uint[] { 1 }, prepared.Commit().Business.ObjectHeads.Keys);
     }
@@ -77,8 +77,8 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             Assert.Throws<InvalidDataException>(() => Load(source, models));
         } else {
             BusinessPersistenceAdapter loaded = Load(source, models);
-            BranchSaveSession session = new(_repository, "main", loaded, _repository.EnsureEditingAllowed);
-            using PreparedBranchSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
+            BranchSaveSessionFixture session = new(_repository, "main", models, loaded);
+            using PreparedFixtureSave prepared = session.Prepare(loaded.State!, parameters: NoRebase);
             Assert.Equal(new uint[] { 9 }, prepared.Business.Write.RemovedIds);
         }
     }
@@ -169,11 +169,11 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void UnchangedOwnerReferencesAreValidatedAgainstQueriedRevisionMembership() {
         DurableSchema schema = Schema("World", 1, "World");
         FrameAddress original = Seed((1, schema, new State(2, 1)), (2, schema, new State(0, 2)));
-        FrameAddress removed = Store.Append(StoredGraphKind.State, original, Store.ReadGraph(original).SchemaRoot,
+        FrameAddress removed = Store.AppendBusiness(StoredGraphKind.State, original, MechanismFixture.Snapshot(_repository, original).SchemaRoot,
             new(original, new(1), [], [2])).Address;
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));
-        Assert.Throws<InvalidDataException>(() => Load(removed, models));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.LoadState(Store, Store.ReadBusinessGraph(removed, original), models));
         Assert.Equal(0, allocations);
         BusinessPersistenceAdapter oldView = Load(original, models);
         Assert.Equal((byte)2, Assert.IsType<World>(((World)oldView.State!).Next).Value);
@@ -195,14 +195,14 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             }));
         long schemaTail = DataBytes(_repository.Data);
         long stateTail = Tail();
-        BranchSaveSession session = new(_repository, "main", models);
+        BranchSaveSessionFixture session = new(_repository, "main", models);
         Assert.Throws<InvalidDataException>(() => session.Prepare(world, parameters: NoRebase));
         Assert.Equal(3, captures);
         Assert.Equal(schemaTail, DataBytes(_repository.Data));
         Assert.Equal(stateTail, Tail());
 
         lateChild.Value = 3;
-        using PreparedBranchSave repaired = session.Prepare(world, parameters: NoRebase);
+        using PreparedFixtureSave repaired = session.Prepare(world, parameters: NoRebase);
         Assert.Equal(6, captures);
         Assert.Null(repaired.Business.Write.SourceGraph);
         Assert.Equal(3, repaired.Business.Write.Records.Count);
@@ -287,7 +287,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         return registry;
     }
     private BusinessPersistenceAdapter Load(FrameAddress source, StateModelRegistry models) =>
-        BusinessPersistenceAdapter.LoadState(Store, source, models);
+        BusinessPersistenceAdapter.LoadState(Store, MechanismFixture.Snapshot(_repository, source), models);
     private FrameAddress Seed(params (uint Id, DurableSchema Schema, State State)[] rows) {
         PreparedSchemaCatalogWrite catalog = PrepareCatalog(rows.Select(static row => row.Schema));
         return Publish(catalog, rows.Select(row => Durable(catalog.View, row.Id, row.Schema, row.State)));
@@ -298,7 +298,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
         return catalog.Prepare();
     }
     private FrameAddress Publish(PreparedSchemaCatalogWrite catalog, IEnumerable<ObjectVersionRecord> records) {
-        using PendingRepositorySave pending = _repository.Prepare("main", StoredGraphKind.State, new(null, new(1), records), catalog.Write);
+        using PendingRepositorySave pending = MechanismFixture.Prepare(_repository, "main", StoredGraphKind.State, new(null, new(1), records), catalog.Write);
         return _repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
     }
     private static ObjectVersionRecord Durable(SchemaCatalogView catalog, uint id, DurableSchema schema, State state) =>

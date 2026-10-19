@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Reflection;
 using Atelia.DurableGraph.Runtime;
@@ -20,12 +21,20 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         Counts writes = new();
         StateModelRegistry writerModels = Models(family, writes);
         using (Repository repository = Create(writerModels)) {
-            using (var session = repository.CreateSharedBranch("main", Root(7))) {
-                session.CommitEvent(Root(9));
-                session.CommitState();
-            }
+            BranchInfo branch = repository.CreateRootBranchFromState("main", Root(7));
             Assert.Equal(family ? 1 : 0, writes.Factories);
             Assert.Equal(1, writes.Comparers);
+            using (var session = repository.OpenWorkingCopy(branch.Id)) {
+                // Creation publishes without retaining the application's object/environment.
+                // Opening restores a fresh execution environment, which subsequent saves reuse.
+                int factories = writes.Factories, comparers = writes.Comparers;
+                Assert.Equal(family ? 2 : 0, factories);
+                Assert.Equal(2, comparers);
+                session.CommitEvent(Root(9));
+                session.CommitState();
+                Assert.Equal(factories, writes.Factories);
+                Assert.Equal(comparers, writes.Comparers);
+            }
         }
 
         Counts reads = new();
@@ -33,21 +42,21 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         using (Repository repository = Repository.OpenExisting(_root, models)) {
             Assert.Equal(0, reads.Factories);
             Assert.Equal(0, reads.Comparers);
-            CheckpointAddress head = repository.GetHead("main");
-            CheckpointAddress domainEvent = Assert.Single(repository.EnumerateEvents(repository.GetHead("main"), HistoryOrder.OldestFirst).ToArray());
+            CommitId head = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+            CommitId domainEvent = Assert.Single(repository.EnumerateEvents(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray()).Id;
             for (int iteration = 0; iteration < 2; iteration++) {
-                Assert.Equal(7, ((RootModel)repository.ReadState(head)).Values!["key"]);
-                Assert.Equal(9, ((RootModel)repository.ReadEvent(domainEvent)).Values!["key"]);
+                Assert.Equal(7, ((RootModel)repository.LoadState(head)).Values!["key"]);
+                Assert.Equal(9, ((RootModel)repository.LoadEvent(domainEvent)).Values!["key"]);
                 var pair = (((RootModel First, RootModel Second))repository.ReadPair(head, domainEvent));
                 Assert.Equal(7, pair.First.Values!["key"]);
                 Assert.Equal(9, pair.Second.Values!["key"]);
-                using var session = repository.CheckoutShared("main");
+                using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
                 Assert.Equal(7, ((RootModel)session.State!).Values!["key"]);
             }
             // Independent reads may close independent exact-S environments. The resident
             // State environment is reused by another checkout of the same State.
             int factories = reads.Factories, comparers = reads.Comparers;
-            using var resumed = repository.CheckoutShared("main");
+            using var resumed = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.Equal(7, ((RootModel)resumed.State!).Values!["key"]);
             Assert.Equal(factories, reads.Factories);
             Assert.Equal(comparers, reads.Comparers);
@@ -56,7 +65,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         }
         int previousFactories = reads.Factories, previousComparers = reads.Comparers;
         using (Repository repository = Repository.OpenReadOnlyExisting(_root, models)) {
-            Assert.Equal(7, ((RootModel)repository.ReadState(repository.GetHead("main"))).Values!["key"]);
+            Assert.Equal(7, ((RootModel)repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id)).Values!["key"]);
         }
         Assert.Equal(previousFactories + (family ? 1 : 0), reads.Factories);
         Assert.Equal(previousComparers + 1, reads.Comparers);
@@ -67,18 +76,18 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         StateModelRegistry models = Models();
         using (Repository repository = Create(models)) {
             models.Register(Model<EventModel>(EventSchema));
-            using var session = repository.CreateSharedBranch("main", Root(7));
-            CheckpointAddress before = session.Head;
-            Assert.Throws<ArgumentException>(() => session.CommitEvent(new EventModel()));
-            Assert.Equal(before, session.Head);
+            using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Root(7)).Id);
+            CommitId before = session.BaseCommitId;
+            Assert.Throws<ArgumentException>(() => session.CommitEvent(new EventModel()).Id);
+            Assert.Equal(before, session.BaseCommitId);
             Assert.False(repository.IsFaulted);
         }
         using (Repository repository = Repository.OpenExisting(_root, models)) {
-            using var session = repository.CheckoutShared("main");
+            using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             session.CommitEvent(new EventModel());
         }
         using Repository reader = Repository.OpenReadOnlyExisting(_root, models);
-        Assert.IsType<EventModel>(((IDurableObject)reader.ReadEvent(reader.GetHead("main"))));
+        Assert.IsType<EventModel>(((IDurableObject)reader.LoadEvent(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id)));
     }
 
     [Fact]
@@ -86,38 +95,38 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         StateModelRegistry all = Models();
         all.Register(Model<EventModel>(EventSchema));
         using (Repository repository = Create(all)) {
-            using var session = repository.CreateSharedBranch("main", Root(7));
+            using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Root(7)).Id);
             session.CommitEvent(new EventModel());
         }
         var before = SnapshotFiles();
         using (Repository repository = Repository.OpenReadOnlyExisting(_root, new())) {
-            Assert.Equal("main", Assert.Single(repository.ListBranches()));
-            Assert.Equal(2, repository.ReadFrames("main").Count);
-            Assert.Throws<InvalidDataException>(() => ((IDurableObject)repository.ReadEvent(repository.GetHead("main"))));
+            Assert.Equal("main", Assert.Single(repository.ListBranches()).DisplayLabel);
+            Assert.Equal(2, repository.ReadFrames(BranchNamed(repository, "main")).Count);
+            Assert.Throws<InvalidDataException>(() => ((IDurableObject)repository.LoadEvent(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id)));
         }
         StateModelRegistry events = new();
         events.Register(Model<EventModel>(EventSchema));
         using (Repository repository = Repository.OpenReadOnlyExisting(_root, events)) {
-            CheckpointAddress head = repository.GetHead("main");
-            Assert.IsType<EventModel>(((IDurableObject)repository.ReadEvent(head)));
-            Assert.Throws<InvalidDataException>(() => ((IDurableObject)repository.ReadState(Assert.IsType<CheckpointAddress>(repository.GetPreviousState(head)))));
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+            CommitId head = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+            Assert.IsType<EventModel>(((IDurableObject)repository.LoadEvent(head)));
+            Assert.Throws<InvalidDataException>(() => ((IDurableObject)repository.LoadState(Assert.IsType<CommitId>(repository.GetPreviousState(head)))));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
         }
         AssertFiles(before);
         using (Repository repository = Repository.OpenExisting(_root, events)) {
-            Assert.Throws<InvalidDataException>(() => repository.CheckoutShared("main"));
+            Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
             Assert.False(repository.IsFaulted);
-            Assert.IsType<EventModel>(((IDurableObject)repository.ReadEvent(repository.GetHead("main"))));
+            Assert.IsType<EventModel>(((IDurableObject)repository.LoadEvent(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id)));
         }
         using Repository reopened = Repository.OpenExisting(_root, all);
-        using var restored = reopened.CheckoutShared("main");
+        using var restored = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         Assert.Equal(7, ((RootModel)restored.State!).Values!["key"]);
     }
 
     [Fact]
     public void HistoricalReadKeepsExactSAndSaveRejectsLatestCatalogConflict() {
         using (Repository repository = Create(Models())) {
-            using var session = repository.CreateSharedBranch("main", Root(7));
+            using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Root(7)).Id);
         }
         DurableSchema current = new(RootSchema.SchemaId, 2, DurableFieldInfo.Reference(1, MapType));
         StateModelRegistry models = new();
@@ -125,16 +134,16 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         models.Register(Model<EventModel>(EventSchema));
         models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
         using Repository reader = Repository.OpenExisting(_root, models);
-        CheckpointAddress head = reader.GetHead("main");
-        Assert.Equal(7, ((RootModel)reader.ReadState(head)).Values!["key"]);
+        CommitId head = reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id;
+        Assert.Equal(7, ((RootModel)reader.LoadState(head)).Values!["key"]);
         // Publish the additional declaration jointly with an unrelated Event. Historical
         // reads retain S0; the next Save must still qualify its captured V2 against latest S.
-        using BranchCheckout checkout = reader.CheckoutShared("main");
+        using WorkingCopy checkout = reader.OpenWorkingCopy(BranchNamed(reader, "main"));
         checkout.Catalog.Set(new DurableSchema(RootSchema.SchemaId, 2, new DurableFieldInfo(1, TypeTag.Int32)));
         checkout.CommitEvent(new EventModel());
-        Assert.Equal(7, ((RootModel)reader.ReadState(head)).Values!["key"]);
+        Assert.Equal(7, ((RootModel)reader.LoadState(head)).Values!["key"]);
         long frames = reader.GraphStore.AppendedFrames;
-        Assert.Throws<SchemaConflictException>(() => checkout.CommitState());
+        Assert.Throws<SchemaConflictException>(() => checkout.CommitState().Id);
         Assert.Equal(frames, reader.GraphStore.AppendedFrames);
         Assert.False(reader.IsFaulted);
     }
@@ -158,7 +167,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
     [Fact]
     public void FailedRootOpenReleasesPreviouslyAcquiredBackingResources() {
         using (Repository repository = Create(Models())) {
-            using var session = repository.CreateSharedBranch("main", Root(7));
+            using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Root(7)).Id);
         }
         string schema = Directory.GetFiles(Path.Combine(_root, "versions", "refs"), "*.rbf", SearchOption.AllDirectories)
             .Order(StringComparer.Ordinal).First();
@@ -170,7 +179,7 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             File.Move(saved, schema);
         }
         using Repository repositoryAfterFailure = Repository.OpenExisting(_root, Models());
-        using var resumed = repositoryAfterFailure.CheckoutShared("main");
+        using var resumed = repositoryAfterFailure.OpenWorkingCopy(BranchNamed(repositoryAfterFailure, "main"));
         Assert.Equal(7, ((RootModel)resumed.State!).Values!["key"]);
     }
 

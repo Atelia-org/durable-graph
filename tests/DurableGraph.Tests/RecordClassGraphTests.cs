@@ -19,28 +19,29 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
-        DecodedRevision first = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
-        DecodedRevision final = DecodedRevision.ReadStoredGraph(states, addresses[3], models);
+        DecodedRevision first = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[0]), models.FreezeConfiguration());
+        DecodedRevision final = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[3]), models.FreezeConfiguration());
         ObjectStateRecord[] oldFacts = first.Objects.Where(row => row.Schema?.Type == TypeExpr.Named("Damage")).ToArray();
         ObjectStateRecord[] newFacts = final.Objects.Where(row => row.Schema?.Type == TypeExpr.Named("Damage")).ToArray();
         Assert.Equal(2, oldFacts.Length); // Two equal records, not one equality-interned record.
         Assert.Equal(3, newFacts.Length); // with creates a third identity; the original remains reachable.
         Assert.All(oldFacts, old => Assert.Contains(newFacts, current => current.Id == old.Id));
-        Assert.Empty(DefaultRecords(states, addresses[1])); // Only Transient changed, despite business inequality.
-        ObjectVersionRecord changed = Assert.Single(DefaultRecords(states, addresses[2]));
+        Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[1]))); // Only Transient changed, despite business inequality.
+        ObjectVersionRecord changed = Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[2])));
         ObjectId ignoredId = Assert.Single(first.Objects, row => row.Schema?.Type == TypeExpr.Named("Ignored")).Id;
         Assert.Equal(ignoredId.Value, changed.ObjectId);
-        AssertRecordTypedDeltaCost(states, addresses[1], addresses[2], ignoredId, models,
+        AssertRecordTypedDeltaCost(segments, addresses[1], addresses[2], ignoredId, models,
             assembly.GetType("RecordClasses.Ignored")!);
-        Assert.Contains(DefaultRecords(states, addresses[3]),
+        Assert.Contains(DefaultRecords(states, PublishedGraph(segments, addresses[3])),
             row => row.Kind == ObjectVersionKind.Base && !oldFacts.Any(old => old.Id.Value == row.ObjectId));
-        Assert.Empty(DefaultRecords(states, addresses[4])); // Cold materialization recaptures the same complete state.
-        Assert.Empty(DefaultRemoved(states, addresses[4]));
+        Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[4]))); // Cold materialization recaptures the same complete state.
+        Assert.Empty(PublishedRemoved(segments, addresses[4]));
     }
 
-    private static void AssertRecordTypedDeltaCost(GraphRecordStore store, FrameAddress priorGraph,
+    private static void AssertRecordTypedDeltaCost(RepositoryResources segments, FrameAddress priorGraph,
         FrameAddress currentGraph, ObjectId id, StateModelRegistry models, Type domainType) {
-        DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, currentGraph, models);
+        GraphRecordStore store = segments.GraphStore;
+        DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, PublishedGraph(segments, currentGraph), models.FreezeConfiguration());
         ObjectStateRecord stored = decoded.GetRequired(id);
         StateModelBinding model = decoded.SourceModels!.ResolveCurrentModel(domainType);
         Assert.Equal(stored.Layout, model.CurrentLayout); // Ordinary same-layout update, not an Upgrade rewrite.
@@ -50,9 +51,9 @@ public sealed partial class DurableSchemaGeneratorTests {
         byte[] typedBase = TypedBaseBodyCodec.Encode(current.Layout, rawBase, decoded.SelectedSchemaView);
         Assert.True(typedBase.Length - rawBase.Body.Length >= 3); // ABI5 + dynamic route + descriptor metaObjectId.
         long b = ObjectVersionPayloadSize.GetBasePayloadBytes(typedBase.Length);
-        var prior = store.ReadObjectChain(priorGraph, id.Value);
-        var chain = store.ReadObjectChain(currentGraph, id.Value);
-        Assert.Equal(current.Layout, DefaultLayout(store, priorGraph, id.Value));
+        var prior = store.ReadObjectChain(PublishedGraph(segments, priorGraph), id.Value);
+        var chain = store.ReadObjectChain(PublishedGraph(segments, currentGraph), id.Value);
+        Assert.Equal(current.Layout, DefaultLayout(store, PublishedGraph(segments, priorGraph), id.Value));
         var delta = chain.Entries[^1];
         Assert.Equal(ObjectVersionKind.Delta, delta.Record.Kind);
         Assert.Equal(prior.Head, delta.Record.PriorAddress);

@@ -22,6 +22,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Compile Include="..\Shared\TestSavePolicies.cs" Link="TestSavePolicies.cs" />
+    <Compile Include="..\Shared\BranchSaveSessionFixture.cs" Link="BranchSaveSessionFixture.cs" />
     <Compile Include="..\..\experiments\PackageConsumerProbe\EventHistoryRecoveryConsumer\PendingRecovery.cs" Link="Examples\PendingRecovery.cs" />
   </ItemGroup>
 

@@ -17,22 +17,22 @@ public sealed partial class DurableSchemaGeneratorTests {
         StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
         var states = segments.GraphStore;
-        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, addresses[0], models);
+        DecodedRevision initial = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, addresses[0]), models.FreezeConfiguration());
         ObjectStateRecord primary = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             row.Layout.Dictionary!.KeySlot.InlineSchema?.Type == TypeExpr.Named("record.Key", TypeExpr.Builtin(TypeTag.Int32)) &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.CurrentDefault);
         ObjectStateRecord application = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.Dictionary &&
             ((IFrozenDictionaryState)row.Content).ComparerKind == DictionaryComparerKind.Application);
         foreach (FrameAddress address in addresses) {
-            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(states, address, models);
+            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(states, PublishedGraph(segments, address), models.FreezeConfiguration());
             Assert.Equal(DictionaryComparerKind.CurrentDefault, ((IFrozenDictionaryState)decoded.GetRequired(primary.Id).Content).ComparerKind);
             Assert.Equal(DictionaryComparerKind.Application, ((IFrozenDictionaryState)decoded.GetRequired(application.Id).Content).ComparerKind);
         }
         foreach (int index in new[] { 1, 5, 7 }) {
-            Assert.Empty(DefaultRecords(states, addresses[index]));
-            Assert.Empty(DefaultRemoved(states, addresses[index]));
+            Assert.Empty(DefaultRecords(states, PublishedGraph(segments, addresses[index])));
+            Assert.Empty(PublishedRemoved(segments, addresses[index]));
         }
-        ObjectVersionRecord Local(int index) => Assert.Single(DefaultRecords(states, addresses[index]),
+        ObjectVersionRecord Local(int index) => Assert.Single(DefaultRecords(states, PublishedGraph(segments, addresses[index])),
             row => row.ObjectId == primary.Id.Value);
         foreach (int index in new[] { 2, 3, 4, 6 }) {
             Assert.Equal(ObjectVersionKind.Delta, Local(index).Kind);

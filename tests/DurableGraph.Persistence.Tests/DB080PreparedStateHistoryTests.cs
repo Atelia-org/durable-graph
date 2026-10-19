@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using System.Buffers;
 using System.Reflection;
@@ -40,13 +41,13 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
 
     private void VerifyPreclosedDependency(bool evict, string? extraFactory) {
         using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()))) {
-            using BranchCheckout state = seed.CreateSharedBranch("main", new HistoricalRoot { Value = 17 }, NoRebase);
-            using BranchCheckout events = seed.CreateSharedBranchFromEvent("events", new HistoricalRoot { Value = 29 }, NoRebase);
+            seed.CreateRootBranchFromState("main", new HistoricalRoot { Value = 17 }, parameters: NoRebase);
+            using WorkingCopy events = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("events", new HistoricalRoot { Value = 29 }, parameters: NoRebase).Id);
         }
         HistoryCounters counters = new();
         using Repository repository = Repository.OpenExisting(_root, HistoryModels(current: true, counters, extraFactory));
-        CheckpointAddress address = repository.GetHead("main");
-        CheckpointAddress eventAddress = repository.GetHead("events");
+        CommitId address = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+        CommitId eventAddress = repository.ReadCurrentCommit(BranchNamed(repository, "events")).Commit.Id;
         // A real readonly operation restores the historical root in its own exact
         // environment. It neither creates nor precloses the later editable State slot.
         StateCheckpoint preclosed = Assert.IsType<StateCheckpoint>(repository.ReadCheckpoint(address));
@@ -57,7 +58,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         counters.Normalizes = counters.Allocations = 0;
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        using BranchCheckout first = repository.CheckoutShared("main");
+        using WorkingCopy first = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
         PreparedStateRestoration original = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.Equal(1, counters.Normalizes);
         Assert.Equal(1, counters.Allocations);
@@ -65,17 +66,21 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         Assert.True(original.Selection.Normalized.Objects[first.StateId!.Value].RequiresRewrite);
 
         if (evict) {
-            using BranchCheckout replacement = repository.CreateSharedBranch("replacement", new HistoricalRoot { Value = 44 }, NoRebase);
-            using BranchCheckout replacementFork = repository.ForkShared("replacement-fork", replacement.Head);
+            // An Event-only opening followed by State capture leaves this State unread;
+            // creating a State root and opening it would already earn a read certificate.
+            IDurableObject replacementInitial = new HistoricalRoot { Value = 44 };
+            using WorkingCopy replacement = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("replacement", replacementInitial, parameters: NoRebase).Id);
+            replacement.CommitState(replacementInitial, parameters: NoRebase);
+            using WorkingCopy replacementFork = repository.OpenWorkingCopy(repository.ForkBranch(replacement.BaseCommitId, "replacement-fork").Id);
             Assert.NotSame(original, repository.PreparedStateEntry);
-            using BranchCheckout reloaded = repository.ForkShared("reloaded", address);
+            using WorkingCopy reloaded = repository.OpenWorkingCopy(repository.ForkBranch(address, "reloaded").Id);
             Assert.Equal(17, Assert.IsType<HistoricalRoot>(reloaded.State).Value);
             Assert.Equal(2, counters.Normalizes);
             Assert.NotSame(original, repository.PreparedStateEntry);
             // Eviction must not invalidate a live workspace's complete saving source.
-            CheckpointAddress saved = first.CommitState(NoRebase);
-            Assert.Equal(address.RevisionAddress, Resources(repository).GraphStore.ReadGraph(saved.RevisionAddress).SourceGraph);
-            Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(Resources(repository).GraphStore, saved.RevisionAddress)).Kind);
+            CommitId saved = first.CommitState(parameters: NoRebase).Id;
+            Assert.Equal(Describe(repository, address).Address, Snapshot(repository, saved).SourceGraph);
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(Resources(repository).GraphStore, Snapshot(repository, saved))).Kind);
         }
 
         PreparedStateRestoration entry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
@@ -89,7 +94,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         StateBindingContext.ExactSchemaRequirementSet recollected;
         using (var collection = environment.Models.BeginSchemaRequirementCollection()) {
             DecodedRevision exact = DecodedRevision.ReadStoredGraph(Resources(repository).GraphStore,
-                entry.RevisionAddress, configuration, environment);
+                Snapshot(repository, new CommitId(entry.StateCheckpoint.Id)), configuration, environment);
             PreparedGraphSelection replayed = GraphReader.PrepareState(exact, new(environment.Models), entry.RootId);
             Assert.Equal(entry.RevisionAddress, replayed.Normalized.RevisionAddress);
             recollected = collection.Complete();
@@ -102,21 +107,21 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         string conflictingId = extraFactory is null ? IntermediateId : FactoryDependencyId;
         first.Catalog.Set(new DurableSchema(conflictingId, 5, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
-        first.CommitEvent(new HistoricalRoot { Value = 55 }, NoRebase);
+        first.CommitEvent(new HistoricalRoot { Value = 55 }, parameters: NoRebase);
         // Controlled metadata acceptance advances latest shared S, but cannot reinterpret
         // the old State's exact S or poison its successful preparation certificate.
         int normalized = counters.Normalizes, allocated = counters.Allocations;
         var before = Counts(statistics);
-        using (BranchCheckout eventFork = repository.ForkShared("event-fork", eventAddress)) {
+        using (WorkingCopy eventFork = repository.OpenWorkingCopy(repository.ForkBranch(eventAddress, "event-fork").Id)) {
             Assert.Null(eventFork.State);
-            Assert.Equal(eventAddress, eventFork.Head);
+            Assert.Equal(eventAddress, eventFork.BaseCommitId);
         }
         Assert.Same(entry, repository.PreparedStateEntry);
         Assert.Equal(before, Counts(statistics));
         Assert.Equal(normalized, counters.Normalizes);
         Assert.Equal(allocated, counters.Allocations);
 
-        using (BranchCheckout old = repository.ForkShared("unpolluted", address)) {
+        using (WorkingCopy old = repository.OpenWorkingCopy(repository.ForkBranch(address, "unpolluted").Id)) {
             Assert.Equal(17, Assert.IsType<HistoricalRoot>(old.State).Value);
             Assert.NotSame(first.State, old.State);
             Assert.Same(entry, repository.PreparedStateEntry);
@@ -130,11 +135,11 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // Construct and publish a legitimate complete inherited State which explicitly
         // selects the new S. Only that selected view carries the dependency conflict.
         RepositoryResources resources = Resources(repository);
-        FrameAddress conflicting = resources.GraphStore.Append(StoredGraphKind.State,
-            address.RevisionAddress, resources.SharedSchemaRoot,
-            new(address.RevisionAddress, address.RootId, [])).Address;
-        resources.PublishBranchRoot(
-            resources.PrepareBranchRoot("conflicting-source", conflicting), out _);
+        FrameAddress conflicting = resources.GraphStore.AppendBusiness(StoredGraphKind.State,
+            Describe(repository, address).Address, resources.SharedSchemaRoot,
+            new(Describe(repository, address).Address, Describe(repository, address).RootId, [])).Address;
+        var conflictBranch = repository.ForkBranch(address, "conflicting-source");
+        resources.Heads.PublishHead(conflictBranch.Id.Value, BusinessEntryPayloadCodec.Encode(conflicting, default), out _).Unwrap();
         DecodedRevision.SchemaViewBindingEnvironment wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(
             resources.GraphStore, configuration, resources.SharedSchemaRoot!.Value);
         InvalidDataException certificateFailure = Assert.Throws<InvalidDataException>(() => recollected.Validate(wrongEnvironment.Models));
@@ -145,9 +150,9 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         Assert.Equal(hydrated, counters.Hydrates);
         Assert.Equal(upgrades, _upgradeCallbacks);
         before = Counts(statistics);
-        BranchCheckout? delivered = null;
+        WorkingCopy? delivered = null;
         InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
-            delivered = repository.ForkShared("rejected", repository.GetHead("conflicting-source")));
+            delivered = repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "conflicting-source")).Commit.Id, "rejected").Id));
         Assert.Contains(conflictingId, error.Message);
         Assert.Contains("v5", error.Message);
         Assert.Null(delivered);
@@ -164,7 +169,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         Assert.Equal(before.Normalized + wrappers, statistics.NormalizedObjects);
         Assert.Equal(before.Prepared + (extraFactory == "reader" ? 0 : 1), statistics.PreparedGraphs);
         Assert.False(repository.IsFaulted);
-        Assert.DoesNotContain("rejected", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "rejected");
     }
 
     [Theory]
@@ -175,19 +180,19 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         using Repository repository = Repository.OpenExisting(_root, ProvenanceModels());
         repository.PreparedStateReuseEnabled = enableReuse;
         repository.RestorationStatistics = new();
-        CheckpointAddress address = repository.GetHead("main");
-        using BranchCheckout first = repository.CheckoutShared("main");
-        using BranchCheckout second = repository.ForkShared("second", address);
+        CommitId address = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+        using WorkingCopy first = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+        using WorkingCopy second = repository.OpenWorkingCopy(repository.ForkBranch(address, "second").Id);
         Assert.NotSame(first.State, second.State);
         Assert.Equal(enableReuse ? 1 : 0, repository.RestorationStatistics.PreparedStateHits);
-        foreach (BranchCheckout branch in new[] { first, second }) {
+        foreach (WorkingCopy branch in new[] { first, second }) {
             NormalizedGraphState source = branch.Baseline!;
             Assert.Equal(new uint[] { 1, 3, 9, 100 }, source.Objects.Keys.Select(id => id.Value).Order());
             Assert.Same(Resources(repository).GraphStore, source.GraphStore);
             Assert.Same(branch.Models, source.SourceModels);
             Assert.Same(branch.BindingEnvironment!.SelectedSchemaView, source.SelectedSchemaView);
             foreach ((ObjectId id, NormalizedObject row) in source.Objects) {
-                ObjectVersionChain chain = Resources(repository).GraphStore.ReadObjectChain(source.RevisionAddress, id.Value);
+                ObjectVersionChain chain = Resources(repository).GraphStore.ReadObjectChain(Snapshot(repository, branch.StateSourceCommitId!.Value), id.Value);
                 Assert.Equal(new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes), row.Storage);
             }
             Assert.True(source.Objects[new(1)].RequiresRewrite);
@@ -196,28 +201,29 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             Assert.Null(root.Next);
             Assert.Same(string.Empty, root.Text);
             // An Event never installs a State baseline or clears pending rewrite.
-            branch.CommitEvent(root, NoRebase);
+            branch.CommitEvent(root, parameters: NoRebase);
             Assert.Same(source, branch.Baseline!);
-            FrameAddress rewritten = branch.CommitState(NoRebase).RevisionAddress;
+            CommitId rewrittenCommit = branch.CommitState(parameters: NoRebase).Id;
+            FrameAddress rewritten = Describe(repository, rewrittenCommit).Address;
             GraphRecordStore store = Resources(repository).GraphStore;
-            StoredGraphRevision revision = store.ReadGraph(rewritten);
-            Assert.Equal(address.RevisionAddress, revision.SourceGraph);
-            Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(store, rewritten)).Kind);
+            StoredGraphRevision revision = Snapshot(repository, rewrittenCommit);
+            Assert.Equal(Describe(repository, address).Address, revision.SourceGraph);
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(Records(store, revision)).Kind);
             Assert.Equal(new uint[] { 9, 100 }, source.Objects.Keys.Select(id => id.Value).Except(revision.ObjectHeads.Keys).Order());
             Assert.Equal(new uint[] { 1, 3 }, revision.ObjectHeads.Keys.Order());
             Assert.False(branch.Baseline!.Objects[new(1)].RequiresRewrite);
             root.Value++;
             root.Text = new string('n', 6);
-            CheckpointAddress changedAddress = branch.CommitState(NoRebase);
-            StoredGraphRevision changed = store.ReadGraph(changedAddress.RevisionAddress);
+            CommitId changedAddress = branch.CommitState(parameters: NoRebase).Id;
+            StoredGraphRevision changed = Snapshot(repository, changedAddress);
             Assert.Equal(rewritten, changed.SourceGraph);
             // Tiny varint bodies can legitimately choose Base even for a sparse Delta.
             // Saving semantics and cleared rewrite are independent of that cost decision.
-            Assert.Contains(Records(store, changed.Address), row => row.ObjectId == 1);
+            Assert.Contains(Records(store, changed), row => row.ObjectId == 1);
             Assert.False(branch.Baseline!.Objects[new(1)].RequiresRewrite);
-            Assert.Equal(ObjectVersionKind.Base, Records(store, changed.Address).Single(row => row.ObjectId == 101).Kind);
+            Assert.Equal(ObjectVersionKind.Base, Records(store, changed).Single(row => row.ObjectId == 101).Kind);
             Assert.Equal(new uint[] { 1, 101 }, changed.ObjectHeads.Keys.Order());
-            Node restored = Assert.IsType<Node>(repository.ReadState(changedAddress));
+            Node restored = Assert.IsType<Node>(repository.LoadState(changedAddress));
             Assert.Equal(root.Value, restored.Value);
             Assert.Equal(root.Text, restored.Text);
         }
@@ -225,7 +231,9 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
 
     private void SeedCompleteHistoricalSource() {
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
-        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node(), NoRebase);
+        IDurableObject branchInitial = new Node();
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", branchInitial, parameters: NoRebase).Id);
+        branch.CommitState(branchInitial, parameters: NoRebase);
         RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
         SchemaCatalogView catalog = SchemaCatalogView.Load(store, resources.SharedSchemaRoot!.Value);
@@ -235,11 +243,11 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase(string.Empty), catalog));
         // Persist a legitimate complete graph with two historical Empty identities and
         // a high reachable ID which becomes unreachable only after normalization.
-        FrameAddress prior = branch.Head.RevisionAddress;
-        FrameAddress revision = store.Append(StoredGraphKind.State, prior, catalog.Snapshot!.Address,
+        FrameAddress prior = Describe(repository, branch.BaseCommitId).Address;
+        FrameAddress revision = store.AppendBusiness(StoredGraphKind.State, prior, catalog.Snapshot!.Address,
             new(branch.StateRevisionAddress, new(1),
                 [Durable(1, new State(100, 100, 9, 7)), Empty(3), Empty(9), Durable(100, new State(0, 0, 0, 8))])).Address;
-        resources.PublishBranchRoot(resources.PrepareBranchRoot("main", revision), out _);
+        resources.Heads.PublishHead(branch.BranchId.Value, BusinessEntryPayloadCodec.Encode(revision, default), out _).Unwrap();
     }
 
     private static StateModelRegistry HistoryModels(bool current, HistoryCounters counts, string? extraFactory = null) {
@@ -366,8 +374,8 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     private static MethodInfo Method(string name) => typeof(DB080PreparedStateHistoryTests).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)!;
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
     private static RepositoryResources Resources(Repository repository) => Field<RepositoryResources>(repository, "_resources");
-    private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, FrameAddress address) =>
-        store.ReadGraph(address).OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
+    private static IReadOnlyList<ObjectVersionRecord> Records(GraphRecordStore store, StoredGraphRevision snapshot) =>
+        snapshot.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
     private static (int Decoded, int Normalized, int Prepared, int Allocated, int Hydrated, int Hits, int Misses) Counts(GraphReadStatistics stats) =>
         (stats.DecodedObjects, stats.NormalizedObjects, stats.PreparedGraphs, stats.AllocatedObjects, stats.HydratedObjects, stats.PreparedStateHits, stats.PreparedStateMisses);
     private sealed class HistoryCounters { internal int Normalizes; internal int Allocations; internal int Hydrates; internal int ExtraValidations; }

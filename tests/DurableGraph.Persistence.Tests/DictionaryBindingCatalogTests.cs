@@ -131,7 +131,7 @@ public sealed class DictionaryBindingCatalogTests {
                     SchemaCatalogWorkspace catalog = new(writer.EnsureEditingAllowed);
                     foreach (DurableSchema schema in schemas) { catalog.Set(schema); }
                     PreparedSchemaCatalogWrite candidate = catalog.Prepare();
-                    using PendingRepositorySave pending = writer.Prepare("main", StoredGraphKind.State,
+                    using PendingRepositorySave pending = MechanismFixture.Prepare(writer, "main", StoredGraphKind.State,
                         new(null, new(1), [ObjectVersionRecord.CreateBase(1,
                             TypedBaseBodyCodec.Encode(ObjectLayout.String, StringBodyPreparer.PrepareBase("catalog carrier")))]), candidate.Write);
                     selectedRoot = writer.Commit(pending).Business.SchemaRoot!.Value;

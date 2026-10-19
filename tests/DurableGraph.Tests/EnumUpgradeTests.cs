@@ -110,7 +110,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 workspace.Set(oldMode);
                 workspace.Set(EnumUpgradeMode(2));
                 PreparedSchemaCatalogWrite prepared = workspace.Prepare();
-                address = repository.Store.Append(StoredGraphKind.Meta, null, null, prepared.Write!).Address;
+                address = repository.Store.AppendMeta(null, prepared.Write!).Address;
                 Assert.Null(repository.SharedSchemaRoot);
                 repository.Data.ConfirmDurable();
             }

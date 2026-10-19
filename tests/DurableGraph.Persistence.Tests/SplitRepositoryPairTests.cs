@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 
 using Atelia.DurableGraph.Runtime;
@@ -22,20 +23,21 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     public void SameSchemaSharesStableGeneratedClosureAndChangedChildSplitsItsAncestors() {
         using (Repository seed = Repository.CreateStorageNew(_path, GeneratedModels())) {
             SplitPairEnvelope root = Envelope();
-            using BranchCheckout main = seed.CreateSharedBranch("main", root);
-            CheckpointAddress s0 = main.Head;
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", root).Id);
+            root = Assert.IsType<SplitPairEnvelope>(main.State);
+            CommitId s0 = main.BaseCommitId;
             seed.CreateTag("original", s0);
-            CheckpointAddress s1 = main.CommitState();
+            CommitId s1 = main.CommitState().Id;
             seed.CreateTag("stable", s1);
-            StoredGraphRevision first = seed.GraphStore.ReadGraph(s0.RevisionAddress);
-            StoredGraphRevision stable = seed.GraphStore.ReadGraph(s1.RevisionAddress);
+            StoredGraphRevision first = Snapshot(seed, s0);
+            StoredGraphRevision stable = Snapshot(seed, s1);
             Assert.Equal(7, first.ObjectHeads.Count); // Envelope, two Widgets, List, and three string IDs.
             Assert.Null(stable.OwnedBatch);
             Assert.Equal(first.DirectoryRoot, stable.DirectoryRoot);
             root.Widget!.Child!.Value = 20;
-            CheckpointAddress s2 = main.CommitState();
+            CommitId s2 = main.CommitState().Id;
             seed.CreateTag("changed", s2);
-            StoredGraphRevision changed = seed.GraphStore.ReadGraph(s2.RevisionAddress);
+            StoredGraphRevision changed = Snapshot(seed, s2);
             ObjectVersionRecord child = Assert.Single(seed.GraphStore.ReadBatch(changed.OwnedBatch!.Value).Records);
             Assert.NotEqual(first.ObjectHeads[child.ObjectId], changed.ObjectHeads[child.ObjectId]);
             Assert.Equal(first.ObjectHeads[main.StateId!.Value.Value], changed.ObjectHeads[main.StateId.Value.Value]);
@@ -46,9 +48,9 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, GeneratedModels())) {
-            CheckpointAddress original = reader.ResolveTag("original"), stable = reader.ResolveTag("stable"), changed = reader.ResolveTag("changed");
-            SplitPairEnvelope independentlyDecodedFirst = AssertEnvelope(reader.ReadState(original), 2);
-            SplitPairEnvelope independentlyDecodedSecond = AssertEnvelope(reader.ReadState(stable), 2);
+            CommitId original = reader.ResolveTag("original"), stable = reader.ResolveTag("stable"), changed = reader.ResolveTag("changed");
+            SplitPairEnvelope independentlyDecodedFirst = AssertEnvelope(reader.LoadState(original), 2);
+            SplitPairEnvelope independentlyDecodedSecond = AssertEnvelope(reader.LoadState(stable), 2);
             Assert.NotSame(independentlyDecodedFirst.Text, independentlyDecodedSecond.Text);
             Assert.NotSame(independentlyDecodedFirst.SameText, independentlyDecodedSecond.SameText);
             // Same physical heads yield distinct strings under separate ordinary reads;
@@ -71,7 +73,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             var reverse = reader.ReadPair(changed, original);
             AssertEnvelope(reverse.First, 20);
             AssertEnvelope(reverse.Second, 2);
-            SplitPairEnvelope independent = AssertEnvelope(reader.ReadState(original), 2);
+            SplitPairEnvelope independent = AssertEnvelope(reader.LoadState(original), 2);
             Assert.NotSame(oldRoot, independent);
             Assert.NotSame(oldRoot.Widget.Numbers, independent.Widget!.Numbers);
             Assert.Equal(0, reader.GraphStore.AppendedFrames);
@@ -82,13 +84,13 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     [Fact]
     public void DifferentSchemaHydrationClosuresKeepEqualCurrentDtosIndependentAndMatchSingleReads() {
         using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
-            seed.CreateTag("before", main.Head);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
+            seed.CreateTag("before", main.BaseCommitId);
             main.Catalog.Set(Extra);
-            CheckpointAddress next = main.CommitEvent(main.State!);
+            CommitId next = main.CommitEvent(main.State!).Id;
             seed.CreateTag("after", next);
-            StoredGraphRevision first = seed.GraphStore.ReadGraph(main.StateRevisionAddress!.Value);
-            StoredGraphRevision second = seed.GraphStore.ReadGraph(next.RevisionAddress);
+            StoredGraphRevision first = Snapshot(seed, main.StateSourceCommitId!.Value);
+            StoredGraphRevision second = Snapshot(seed, next);
             Assert.NotEqual(first.SchemaRoot, second.SchemaRoot);
             Assert.Equal(first.ObjectHeads[first.RootId.Value], second.ObjectHeads[second.RootId.Value]);
             Assert.Null(second.OwnedBatch);
@@ -97,12 +99,12 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         Counts counts = new() { HydrateFromSchema = true };
         StateModelRegistry registry = ProbeModels(1, counts);
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, registry)) {
-            CheckpointAddress first = reader.ResolveTag("before"), second = reader.ResolveTag("after");
-            DecodedRevision oldDto = DecodedRevision.ReadStoredGraph(reader.GraphStore, first.RevisionAddress, registry);
-            DecodedRevision newDto = DecodedRevision.ReadStoredGraph(reader.GraphStore, second.RevisionAddress, registry);
-            Assert.Equal(7, oldDto.GetRequired(first.RootId).GetState<int>());
-            Assert.Equal(oldDto.GetRequired(first.RootId).Schema, newDto.GetRequired(second.RootId).Schema);
-            Assert.Equal(7, newDto.GetRequired(second.RootId).GetState<int>());
+            CommitId first = reader.ResolveTag("before"), second = reader.ResolveTag("after");
+            DecodedRevision oldDto = DecodedRevision.ReadStoredGraph(reader.GraphStore, Snapshot(reader, first), registry.FreezeConfiguration());
+            DecodedRevision newDto = DecodedRevision.ReadStoredGraph(reader.GraphStore, Snapshot(reader, second), registry.FreezeConfiguration());
+            Assert.Equal(7, oldDto.GetRequired(Describe(reader, first).RootId).GetState<int>());
+            Assert.Equal(oldDto.GetRequired(Describe(reader, first).RootId).Schema, newDto.GetRequired(Describe(reader, second).RootId).Schema);
+            Assert.Equal(7, newDto.GetRequired(Describe(reader, second).RootId).GetState<int>());
             counts.ResetObservations();
             var pair = reader.ReadPair(first, second);
             ProbeRoot oldRoot = Assert.IsType<ProbeRoot>(pair.First), newRoot = Assert.IsType<ProbeRoot>(pair.Second);
@@ -112,8 +114,8 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(new[] { false, true }, counts.Lookups);
             Assert.Equal(2, counts.Hydrates);
             Assert.Equal(0, counts.Normalizes); // Both layouts are current; the difference exists only in Hydrate's environment.
-            Assert.Equal(oldRoot.Value, Assert.IsType<ProbeRoot>(reader.ReadState(first)).Value);
-            Assert.Equal(newRoot.Value, Assert.IsType<ProbeRoot>(reader.ReadEvent(second)).Value);
+            Assert.Equal(oldRoot.Value, Assert.IsType<ProbeRoot>(reader.LoadState(first)).Value);
+            Assert.Equal(newRoot.Value, Assert.IsType<ProbeRoot>(reader.LoadEvent(second)).Value);
             var reverse = reader.ReadPair(second, first);
             Assert.Equal(107, Assert.IsType<ProbeRoot>(reverse.First).Value);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(reverse.Second).Value);
@@ -126,19 +128,19 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     [Fact]
     public void HistoricalRewriteIsNotSharedEvenWithinOneEnvironmentAndConfirmedBaseBecomesEligible() {
         using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
-            seed.CreateTag("old", main.Head);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
+            seed.CreateTag("old", main.BaseCommitId);
         }
         Counts counts = new();
         StateModelRegistry registry = ProbeModels(2, counts);
         Dictionary<string, byte[]> files = SnapshotFiles();
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, registry)) {
-            CheckpointAddress old = reader.ResolveTag("old");
-            DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.GraphStore, old.RevisionAddress, registry);
+            CommitId old = reader.ResolveTag("old");
+            DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.GraphStore, Snapshot(reader, old), registry.FreezeConfiguration());
             NormalizedGraphState normalized = NormalizedGraphState.Create(source, source.SourceModels!);
-            Assert.Equal(ProbeV1, source.GetRequired(old.RootId).Schema);
-            Assert.Equal(ProbeV2, normalized.Objects[old.RootId].Current.Schema);
-            Assert.True(normalized.Objects[old.RootId].RequiresRewrite);
+            Assert.Equal(ProbeV1, source.GetRequired(Describe(reader, old).RootId).Schema);
+            Assert.Equal(ProbeV2, normalized.Objects[Describe(reader, old).RootId].Current.Schema);
+            Assert.True(normalized.Objects[Describe(reader, old).RootId].RequiresRewrite);
             counts.ResetObservations();
             var pair = reader.ReadPair(old, old);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(pair.First).Value);
@@ -150,17 +152,17 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         }
         AssertFilesEqual(files, SnapshotFiles());
         using (Repository writer = Repository.OpenStorageExisting(_path, registry)) {
-            using BranchCheckout main = writer.CheckoutShared("main");
-            CheckpointAddress current = main.CommitState();
-            StoredGraphRevision graph = writer.GraphStore.ReadGraph(current.RevisionAddress);
+            using WorkingCopy main = writer.OpenWorkingCopy(BranchNamed(writer, "main"));
+            CommitId current = main.CommitState().Id;
+            StoredGraphRevision graph = Snapshot(writer, current);
             ObjectVersionRecord rewritten = Assert.Single(writer.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Base, rewritten.Kind);
-            Assert.Equal(current.RootId.Value, rewritten.ObjectId);
-            Assert.False(main.Baseline!.Objects[current.RootId].RequiresRewrite);
+            Assert.Equal(Describe(writer, current).RootId.Value, rewritten.ObjectId);
+            Assert.False(main.Baseline!.Objects[Describe(writer, current).RootId].RequiresRewrite);
             var eligible = writer.ReadPair(current, current);
             Assert.Same(eligible.First, eligible.Second);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(eligible.First).Value);
-            CheckpointAddress old = writer.ResolveTag("old");
+            CommitId old = writer.ResolveTag("old");
             var mixed = writer.ReadPair(old, current);
             Assert.NotSame(mixed.First, mixed.Second);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(mixed.First).Value);
@@ -174,14 +176,14 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { FailValue = 8 };
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts))) {
-            CheckpointAddress first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
+            CommitId first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
             (IDurableObject First, IDurableObject Second)? delivered = null;
             Assert.Same(counts.Failure, Assert.Throws<InvalidDataException>(() => delivered = reader.ReadPair(first, second)));
             Assert.Null(delivered);
             Assert.Equal(2, counts.Allocations);
             Assert.Equal(2, counts.Hydrates); // The first callback can run; its object is still not delivered.
             Assert.False(reader.IsFaulted);
-            Assert.Equal(second, reader.GetHead("main"));
+            Assert.Equal(second, reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id);
             counts.FailValue = null;
             var success = reader.ReadPair(first, second);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(success.First).Value);
@@ -197,7 +199,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { Singleton = new ProbeRoot { Value = 100 } };
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts))) {
-            CheckpointAddress first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
+            CommitId first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
             (IDurableObject First, IDurableObject Second)? delivered = null;
             Assert.Throws<InvalidDataException>(() => delivered = reader.ReadPair(first, second));
             Assert.Null(delivered);
@@ -216,22 +218,23 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     }
 
     [Fact]
-    public void PairChecksOwnerAndLifetimeAndRejectsCallbackReentryWithoutDamagingOuterRead() {
-        CheckpointAddress stale = SeedProbePair();
+    public void PairAcceptsReopenedHandlesAndChecksLifetimeAndCallbackReentry() {
+        CommitId stale = SeedProbePair();
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new();
         Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts));
         try {
-            CheckpointAddress first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
-            Assert.Throws<ArgumentException>(() => reader.ReadPair(stale, second));
-            Assert.Throws<ArgumentException>(() => reader.ReadPair(first, stale));
-            Assert.Throws<ArgumentNullException>(() => reader.ReadPair(null!, second));
-            Assert.Throws<ArgumentNullException>(() => reader.ReadPair(first, null!));
+            CommitId first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.ReadPair(stale, second).First).Value);
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.ReadPair(first, stale).Second).Value);
+            counts.ResetObservations();
+            Assert.Throws<ArgumentException>(() => reader.ReadPair(default, second));
+            Assert.Throws<ArgumentException>(() => reader.ReadPair(first, default));
             Assert.Equal(0, counts.Allocations);
             counts.DuringHydrate = () => {
                 Assert.Throws<InvalidOperationException>(() => reader.ReadPair(first, second));
-                Assert.Throws<InvalidOperationException>(() => reader.ReadState(first));
-                Assert.Throws<InvalidOperationException>(() => reader.CheckoutShared("main"));
+                Assert.Throws<InvalidOperationException>(() => reader.LoadState(first));
+                Assert.Throws<InvalidOperationException>(() => reader.OpenWorkingCopy(BranchNamed(reader, "main")));
                 Assert.Throws<InvalidOperationException>(() => reader.Dispose());
             };
             var pair = reader.ReadPair(first, second);
@@ -239,7 +242,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(8, Assert.IsType<ProbeRoot>(pair.Second).Value);
             Assert.Equal(2, counts.Hydrates);
             counts.DuringHydrate = null;
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.ReadState(first)).Value);
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.LoadState(first)).Value);
             Assert.False(reader.IsFaulted);
             reader.Dispose();
             Assert.Throws<ObjectDisposedException>(() => reader.ReadPair(first, second));
@@ -249,16 +252,16 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         AssertFilesEqual(files, SnapshotFiles());
     }
 
-    private CheckpointAddress SeedProbePair() {
+    private CommitId SeedProbePair() {
         using Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()));
-        using BranchCheckout main = seed.CreateSharedBranch("main", new ProbeRoot { Value = 7 });
-        CheckpointAddress first = main.Head;
+        using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
+        CommitId first = main.BaseCommitId;
         seed.CreateTag("first", first);
         Assert.IsType<ProbeRoot>(main.State).Value = 8;
-        CheckpointAddress second = main.CommitState();
+        CommitId second = main.CommitState().Id;
         seed.CreateTag("second", second);
-        Assert.Equal(seed.GraphStore.ReadGraph(first.RevisionAddress).SchemaRoot,
-            seed.GraphStore.ReadGraph(second.RevisionAddress).SchemaRoot);
+        Assert.Equal(Snapshot(seed, first).SchemaRoot,
+            Snapshot(seed, second).SchemaRoot);
         return first;
     }
 

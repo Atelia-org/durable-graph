@@ -1,12 +1,12 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：A/B1/目录原语之后，B2 已在隔离分支 `db096/branch-repository-cutover` 接入真实新 API 与布局，首段纵切/有限完整性见证通过；旧测试和消费者调用迁移尚未完成，未合回主线。当前施工结果及合入限制只查[整体切换计划 §8](branch-cutover-plan.md#8-b2-隔离分支首段纵切)。文档对齐：2026-10-19。
+> 状态：A/B1/目录原语之后，B2 已在隔离分支 `db096/branch-repository-cutover` 接入真实新 API 与布局，首段纵切、根 solution 构建及 Persistence/Runtime 完整回归通过；剩余包消费者与定向 origin/正式合入尚未完成。当前施工结果及合入限制只查[整体切换计划 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
 **2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已实施并通过源码、新包与有限进程中止验收。组发布仍未实施；新历史模型的隔离分支限定资格见施工记录。
 
-**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。DG 登记已进入真实实现验证。以下早期现状对照保切换前基线；新分支的能力与限制以 §8 为准，不把草稿中全部 API 都当成已交付。
+**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。DG 登记已进入真实实现验证。以下早期现状对照保切换前基线；新分支的能力与限制以施工记录 §9 为准，不把草稿中全部 API 都当成已交付。
 
 **当前阶段转为收敛验证。** 用户认可已有 API 的清晰性与功能覆盖；后续先映射实际机制，再验证发布/创建、恢复材料和查询成本，寻找保留功能与易用性的简化。具体恢复顺序与最小产物集中在研究工作集，不继续默认扩展需求，也不将设计认可等同于实现验收。
 

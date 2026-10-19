@@ -30,7 +30,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(address));
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
-        Assert.Throws<ObjectDisposedException>(() => retained.Append(StoredGraphKind.State, address, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
+        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, address, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
         Assert.Throws<ObjectDisposedException>(resources.Heads.EnsureUsable);
         resources.Dispose();
@@ -105,7 +105,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
 
     private static StoredGraphRevision Seed(RepositoryResources resources) {
         using RepositoryStorageFacade facade = new(resources);
-        using PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
+        using PendingRepositorySave pending = MechanismFixture.Prepare(facade, "main", StoredGraphKind.State,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, [10])]));
         return facade.Commit(pending).Business;
     }

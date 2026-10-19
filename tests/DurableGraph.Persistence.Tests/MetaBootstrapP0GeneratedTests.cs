@@ -25,7 +25,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         uint listId;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             StateModelRegistry models = Models();
-            var session = new BranchSaveSession(repository, "main", models);
+            var session = new BranchSaveSessionFixture(repository, "main", models);
             SetWidgetLayouts(session, models);
             session.Catalog.Set(unknown); // Neither unknown name has a registered business CLR model.
             using var save = session.Prepare(original);
@@ -36,7 +36,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             Assert.Same(original, session.State);
             Assert.Equal(0, session.Catalog.DirtyCount);
             listId = LiveListId(repository, state, models);
-            ObjectVersionChain rootChain = repository.Store.ReadObjectChain(state, saved.Business.RootId.Value);
+            ObjectVersionChain rootChain = repository.Store.ReadObjectChain(MechanismFixture.Snapshot(repository, state), saved.Business.RootId.Value);
             BareValueReader header = new(rootChain.Entries[0].Record.Body);
             Assert.Equal((byte)5, header.ReadByte());
             Assert.Equal((byte)1, header.ReadByte()); // The dynamic route points directly to a meta descriptor ObjectId.
@@ -54,9 +54,9 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         Assert.Equal(unknown, coldMeta.Schemas[new(unknown.Type, unknown.Version)]);
         Assert.NotSame(unknown, coldMeta.Schemas[new(unknown.Type, unknown.Version)]);
         StateModelRegistry reopenedModels = Models();
-        DB087Widget independent = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, state, reopenedModels), 1, 1);
+        DB087Widget independent = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, state), reopenedModels), 1, 1);
         Assert.NotSame(original, independent);
-        var continued = new BranchSaveSession(reopened, "main", reopenedModels);
+        var continued = new BranchSaveSessionFixture(reopened, "main", reopenedModels);
         DB087Widget live = AssertRing(continued.State, 1, 1);
         Assert.NotSame(independent, live);
         Assert.NotSame(independent.Numbers, live.Numbers);
@@ -68,10 +68,10 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         RepositorySaveResult result = next.Commit();
         Assert.Equal(schema, reopened.SharedSchemaRoot);
         Assert.Equal(state, result.Business.SourceGraph);
-        Assert.Equal(ObjectVersionKind.Delta, reopened.Store.ReadObjectChain(result.Business.Address, listId).Entries.Last().Record.Kind);
-        DB087Widget latest = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, result.Business.Address, reopenedModels), 2, 1);
+        Assert.Equal(ObjectVersionKind.Delta, reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, result.Business.Address), listId).Entries.Last().Record.Kind);
+        DB087Widget latest = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, result.Business.Address), reopenedModels), 2, 1);
         Assert.Equal(10008, latest.Numbers[7]);
-        DB087Widget old = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, state, reopenedModels), 1, 1);
+        DB087Widget old = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, state), reopenedModels), 1, 1);
         Assert.Equal(8, old.Numbers[7]);
     }
 
@@ -82,7 +82,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         ObjectId[] oldDescriptors;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             StateModelRegistry models = Models();
-            var session = new BranchSaveSession(repository, "main", models);
+            var session = new BranchSaveSessionFixture(repository, "main", models);
             SetWidgetLayouts(session, models);
             for (int i = 0; i < 40; i++) { session.Catalog.Set(IntSchema($"Unknown.Seed{i:00}")); }
             DB087Widget root = Ring(1);
@@ -99,7 +99,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             ObjectVersionRecord listWrite = Assert.Single(update.Catalog.Write!.Records, record => record.ObjectId == listId.Value);
             Assert.Equal(ObjectVersionKind.Delta, listWrite.Kind);
             secondMeta = update.Commit().Meta!.Address;
-            ObjectVersionChain stored = repository.Store.ReadObjectChain(secondMeta, listId.Value);
+            ObjectVersionChain stored = repository.Store.ReadObjectChain(repository.Store.ReadMetaGraph(secondMeta), listId.Value);
             Assert.Equal(ObjectVersionKind.Delta, stored.Entries.Last().Record.Kind);
             Assert.Equal(baseline.Snapshot!.ObjectHeads[listId.Value], stored.Entries.Last().Record.PriorAddress);
         }
@@ -111,7 +111,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         Assert.Equal(oldDescriptors.Length + 1, current.DescriptorIds.Count);
         Assert.Equal(IntSchema("Unknown.Added"), current.Schemas[new("Unknown.Added", 1)]);
         Assert.False(old.Schemas.ContainsKey(new("Unknown.Added", 1)));
-        Assert.Equal(ObjectVersionKind.Delta, reopened.Store.ReadObjectChain(secondMeta, listId.Value).Entries.Last().Record.Kind);
+        Assert.Equal(ObjectVersionKind.Delta, reopened.Store.ReadObjectChain(reopened.Store.ReadMetaGraph(secondMeta), listId.Value).Entries.Last().Record.Kind);
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         FrameAddress state, event1, event2, lastState;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             StateModelRegistry models = Models();
-            var session = new BranchSaveSession(repository, "main", models);
+            var session = new BranchSaveSessionFixture(repository, "main", models);
             SetWidgetLayouts(session, models);
             DB087Widget root = Ring(1);
             using (var initial = session.Prepare(root)) { state = initial.Commit().Business.Address; }
@@ -132,7 +132,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
                 Assert.Equal(state, save.Business.Write.SourceGraph);
                 RepositorySaveResult saved = save.Commit();
                 event1 = saved.Business.Address;
-                Assert.Equal(state, saved.Business.Parent);
+                Assert.Equal(state, MechanismFixture.Resources(repository).ReadPrevious(saved.CommitId)?.Address);
                 Assert.Equal(state, saved.Business.SourceGraph);
                 Assert.NotEqual(meta0, repository.SharedSchemaRoot);
                 Assert.Equal(saved.Meta!.Address, session.Catalog.Accepted!.Snapshot!.Address);
@@ -140,7 +140,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             Assert.Equal(0, session.Catalog.DirtyCount);
             Assert.Equal(state, session.StateSource!.Address);
             Assert.Same(root, session.State);
-            Assert.Equal(state, repository.GetStateHead("main"));
+            Assert.Equal(state, MechanismFixture.State(repository, "main")?.Address);
 
             FrameAddress meta1 = repository.SharedSchemaRoot!.Value;
             session.Catalog.Set(IntSchema("Unknown.Event2"));
@@ -150,7 +150,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
                 Assert.NotEmpty(save.Business.Write.Records);
                 RepositorySaveResult saved = save.Commit();
                 event2 = saved.Business.Address;
-                Assert.Equal(event1, saved.Business.Parent);
+                Assert.Equal(event1, MechanismFixture.Resources(repository).ReadPrevious(saved.CommitId)?.Address);
                 Assert.Equal(state, saved.Business.SourceGraph);
                 Assert.NotEqual(meta1, repository.SharedSchemaRoot);
                 Assert.Equal(saved.Meta!.Address, session.Catalog.Accepted!.Snapshot!.Address);
@@ -158,9 +158,9 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             Assert.Equal(0, session.Catalog.DirtyCount);
             Assert.Equal(state, session.StateSource!.Address);
             Assert.Same(root, session.State);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, event1, models), 2, 200);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, event2, models), 2, 200);
-            AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, state, models), 1, 1);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, event1), models), 2, 200);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, event2), models), 2, 200);
+            AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, state), models), 1, 1);
 
             root.Value = 3;
             root.Numbers[0] = 300;
@@ -169,15 +169,15 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             Assert.Equal(state, final.Business.Write.SourceGraph);
             RepositorySaveResult finalResult = final.Commit();
             lastState = finalResult.Business.Address;
-            Assert.Equal(event2, finalResult.Business.Parent);
+            Assert.Equal(event2, MechanismFixture.Resources(repository).ReadPrevious(finalResult.CommitId)?.Address);
             Assert.Equal(state, finalResult.Business.SourceGraph);
             Assert.Equal(lastState, session.StateSource!.Address);
-            Assert.Equal(lastState, repository.GetStateHead("main"));
+            Assert.Equal(lastState, MechanismFixture.State(repository, "main")?.Address);
         }
 
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
-        Assert.Equal(lastState, reopened.GetStateHead("main"));
-        var cold = new BranchSaveSession(reopened, "main", Models());
+        Assert.Equal(lastState, MechanismFixture.State(reopened, "main")?.Address);
+        var cold = new BranchSaveSessionFixture(reopened, "main", Models());
         AssertRing(cold.State, 3, 300);
         Assert.True(cold.Catalog.Accepted!.Schemas.ContainsKey(new("Unknown.Event1", 1)));
         Assert.True(cold.Catalog.Accepted.Schemas.ContainsKey(new("Unknown.Event2", 1)));
@@ -187,7 +187,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
     public void DiscardRetainsLogicalDirtyKeysAndSameShapeNoChangeConsumesThemOnlyAfterCommit() {
         using var repository = RepositoryStorageFacade.CreateNew(_path);
         StateModelRegistry models = Models();
-        var session = new BranchSaveSession(repository, "main", models);
+        var session = new BranchSaveSessionFixture(repository, "main", models);
         SetWidgetLayouts(session, models);
         DB087Widget root = Ring(1);
         using (var initial = session.Prepare(root)) { initial.Commit(); }
@@ -241,18 +241,18 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         FrameAddress main, dev;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             StateModelRegistry models = Models();
-            var a = new BranchSaveSession(repository, "main", models);
+            var a = new BranchSaveSessionFixture(repository, "main", models);
             SetWidgetLayouts(a, models);
             DB087Widget aRoot = Ring(1), bRoot = Ring(90);
             using (var initial = a.Prepare(aRoot)) { initial.Commit(); }
-            var b = new BranchSaveSession(repository, "dev", models);
+            var b = new BranchSaveSessionFixture(repository, "dev", models);
             DurableSchema bSchema = IntSchema("Unknown.BranchB");
             b.Catalog.Set(bSchema);
             ObjectId provisional;
             using (var discarded = b.Prepare(bRoot)) {
                 provisional = discarded.Catalog.View.DescriptorId(ObjectLayout.ForDurable(bSchema));
             }
-            Assert.Null(repository.GetHead("dev"));
+            Assert.Null(MechanismFixture.FindCurrent(repository, "dev")?.Address);
             Assert.Equal(1, b.Catalog.DirtyCount);
 
             DurableSchema aSchema = IntSchema("Unknown.BranchA");
@@ -276,24 +276,24 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
                 dev = rebased.Commit().Business.Address;
             }
             Assert.Equal(0, b.Catalog.DirtyCount);
-            Assert.Equal(main, repository.GetHead("main"));
-            Assert.Equal(metaA, repository.Store.ReadGraph(main).SchemaRoot);
-            Assert.Equal(repository.SharedSchemaRoot, repository.Store.ReadGraph(dev).SchemaRoot);
+            Assert.Equal(main, MechanismFixture.FindCurrent(repository, "main")?.Address);
+            Assert.Equal(metaA, repository.Store.ReadMetadata(main).SchemaRoot);
+            Assert.Equal(repository.SharedSchemaRoot, repository.Store.ReadMetadata(dev).SchemaRoot);
         }
 
         using var reopened = RepositoryStorageFacade.OpenExisting(_path);
         SchemaCatalogView shared = SchemaCatalogView.Load(reopened.Store, reopened.SharedSchemaRoot!.Value);
         Assert.Equal(IntSchema("Unknown.BranchA"), shared.Schemas[new("Unknown.BranchA", 1)]);
         Assert.Equal(IntSchema("Unknown.BranchB"), shared.Schemas[new("Unknown.BranchB", 1)]);
-        AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, main, Models()), 1, 1);
-        AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, dev, Models()), 90, 1);
+        AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, main), Models()), 1, 1);
+        AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, dev), Models()), 90, 1);
     }
 
     [Fact]
     public void EventCaptureRemovesDetachedChildWithoutInstallingStateMembershipOrIdentity() {
         using var repository = RepositoryStorageFacade.CreateNew(_path);
         StateModelRegistry models = Models();
-        var session = new BranchSaveSession(repository, "main", models);
+        var session = new BranchSaveSessionFixture(repository, "main", models);
         SetWidgetLayouts(session, models);
         DB087Widget root = Ring(1), child = root.Child!;
         StoredGraphRevision initial;
@@ -309,7 +309,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         }
         Assert.False(removed.ObjectHeads.ContainsKey(childId));
         Assert.Equal(initial.Address, session.StateSource!.Address);
-        DB087Widget coldEvent = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, removed.Address, models));
+        DB087Widget coldEvent = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, removed.Address), models));
         Assert.Null(coldEvent.Child);
         Assert.Equal(1, coldEvent.Value);
         Assert.Equal(Enumerable.Range(1, 96).ToArray(), coldEvent.Numbers.ToArray());
@@ -320,13 +320,13 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         Assert.Empty(restored.Business.Write.RemovedIds);
         Assert.Empty(restored.Business.Write.Records);
         StoredGraphRevision saved = restored.Commit().Business;
-        Assert.Equal(removed.Address, saved.Parent);
+        Assert.Equal(removed.Address, MechanismFixture.Resources(repository).ReadPrevious(MechanismFixture.Current(repository, "main").Id)?.Address);
         Assert.Equal(initial.Address, saved.SourceGraph);
         Assert.Equal(initial.DirectoryRoot, saved.DirectoryRoot);
         Assert.Null(saved.OwnedBatch);
         Assert.Equal(initial.ObjectHeads[childId], saved.ObjectHeads[childId]);
-        AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, saved.Address, models), 1, 1);
-        AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, initial.Address, models), 1, 1);
+        AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, saved.Address), models), 1, 1);
+        AssertRing(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, initial.Address), models), 1, 1);
     }
 
     private static StateModelRegistry Models() {
@@ -335,7 +335,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         return models;
     }
 
-    private static void SetWidgetLayouts(BranchSaveSession session, StateModelRegistry models) {
+    private static void SetWidgetLayouts(BranchSaveSessionFixture session, StateModelRegistry models) {
         ModelExecutionEnvironment snapshot = models.CreateEnvironment();
         session.Catalog.Set(snapshot.ResolveCurrentModel(typeof(DB087Widget)).CurrentSchema);
         Assert.True(snapshot.TryGetCurrentObjectBinding(typeof(List<int>), out ObjectBinding? list));
@@ -364,9 +364,9 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
     }
 
     private static uint LiveListId(RepositoryStorageFacade repository, FrameAddress graph, StateModelRegistry models) {
-        StoredGraphRevision saved = repository.Store.ReadGraph(graph);
+        StoredGraphRevision saved = MechanismFixture.Snapshot(repository, graph);
         SchemaCatalogView catalog = SchemaCatalogView.Load(repository.Store, saved.SchemaRoot!.Value);
-        DecodedGraphRows decoded = StoredGraphDecoder.Read(repository.Store, graph, models.CreateEnvironment(), catalog);
+        DecodedGraphRows decoded = StoredGraphDecoder.Read(repository.Store, saved, models.CreateEnvironment(), catalog);
         return Assert.Single(decoded.Rows.Values, row => row.Kind == ObjectStateKind.List).Id.Value;
     }
 

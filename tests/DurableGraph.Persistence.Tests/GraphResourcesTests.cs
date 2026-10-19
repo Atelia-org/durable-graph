@@ -20,21 +20,21 @@ public sealed class GraphResourcesTests : IDisposable {
             Assert.True(reader.IsReadOnly);
             reader.RequireAvailable();
             AssertSchema(reader);
-            Assert.Equal(address, facade.GetHead("main"));
-            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(BusinessPersistenceAdapter.ReadRoot(facade.Store, address, SharedReadModel.Models())).Value);
+            Assert.Equal(address, MechanismFixture.FindCurrent(facade, "main")?.Address);
+            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(BusinessPersistenceAdapter.ReadRoot(facade.Store, MechanismFixture.Snapshot(facade, address), SharedReadModel.Models())).Value);
             Assert.Throws<InvalidOperationException>(reader.RequireWritable);
             Assert.Throws<InvalidOperationException>(facade.EnsureEditingAllowed);
-            BranchSaveSession readonlySession = new(facade, "main", SharedReadModel.Models());
+            BranchSaveSessionFixture readonlySession = new(facade, "main", SharedReadModel.Models());
             Assert.Throws<InvalidOperationException>(() => readonlySession.Catalog.Set(Schema));
-            Assert.Throws<InvalidOperationException>(() => facade.Prepare("other", StoredGraphKind.State,
+            Assert.Throws<InvalidOperationException>(() => MechanismFixture.Prepare(facade, "other", StoredGraphKind.State,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, [10])])));
             using RepositoryResources second = RepositoryResources.OpenReadOnlyExisting(_root);
-            Assert.Equal(address, second.GetBranchHead("main"));
+            Assert.Equal(address, second.ReadCurrent(second.ListBranches().Single(pair => pair.Value == "main").Key).Address);
             AssertSchema(second);
         }
         AssertUnchanged(before);
         using RepositoryResources reopened = RepositoryResources.OpenExisting(_root);
-        Assert.Equal(address, reopened.GetBranchHead("main"));
+        Assert.Equal(address, reopened.ReadCurrent(reopened.ListBranches().Single(pair => pair.Value == "main").Key).Address);
         AssertSchema(reopened);
     }
 
@@ -76,7 +76,9 @@ public sealed class GraphResourcesTests : IDisposable {
         using RepositoryResources reopened = RepositoryResources.OpenExisting(_root);
         AssertSchema(reopened);
         Assert.Throws<InvalidDataException>(() => reopened.GraphStore.ReadMetadata(orphan));
-        Assert.Throws<InvalidDataException>(() => reopened.ReadHistory(orphan));
+        var current = reopened.ReadCurrent(reopened.ListBranches().Single(pair => pair.Value == "main").Key);
+        Assert.Equal(current.Address, Assert.Single(reopened.ReadHistory(current.Id)).Address);
+        Assert.NotEqual(orphan, current.Address);
     }
 
     [Fact]
@@ -99,13 +101,13 @@ public sealed class GraphResourcesTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(address));
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
-        Assert.Throws<ObjectDisposedException>(() => retained.Append(StoredGraphKind.State, address, null,
+        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, address, null,
             new(address, new(7), [ObjectVersionRecord.CreateBase(7, [30])])));
         Assert.Equal(graph.OwnedBatch, heads[7]);
         Assert.Equal(new byte[] { 10, 20 }, Assert.Single(batch.Records).Body.ToArray());
         using RepositoryResources reopened = RepositoryResources.OpenReadOnlyExisting(_root);
         Assert.NotSame(batch, reopened.GraphStore.ReadBatch(graph.OwnedBatch.Value));
-        Assert.Equal(address, reopened.GetBranchHead("main"));
+        Assert.Equal(address, reopened.ReadCurrent(reopened.ListBranches().Single(pair => pair.Value == "main").Key).Address);
     }
 
     [Theory]
@@ -142,22 +144,22 @@ public sealed class GraphResourcesTests : IDisposable {
         using (RepositoryResources reopened = RepositoryResources.OpenExisting(_root)) {
             Assert.Contains(reopened.Data.RecoveryReports.Values, report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.Truncated);
             AssertSchema(reopened);
-            Assert.Equal(address, reopened.GetBranchHead("main"));
-            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, address, SharedReadModel.Models())).Value);
+            Assert.Equal(address, reopened.ReadCurrent(reopened.ListBranches().Single(pair => pair.Value == "main").Key).Address);
+            Assert.Equal((byte)7, Assert.IsType<SharedReadModel.Node>(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, MechanismFixture.Snapshot(reopened, address), SharedReadModel.Models())).Value);
         }
         Assert.Equal(complete, File.ReadAllBytes(active));
     }
 
     private static StoredGraphRevision SeedTyped(RepositoryResources resources) {
         using RepositoryStorageFacade facade = new(resources);
-        BranchSaveSession session = new(facade, "main", SharedReadModel.Models());
+        BranchSaveSessionFixture session = new(facade, "main", SharedReadModel.Models());
         session.Catalog.Set(Schema);
-        using PreparedBranchSave save = session.Prepare(new SharedReadModel.Node { Value = 7 });
+        using PreparedFixtureSave save = session.Prepare(new SharedReadModel.Node { Value = 7 });
         return save.Commit().Business;
     }
     private static StoredGraphRevision SeedRaw(RepositoryResources resources) {
         using RepositoryStorageFacade facade = new(resources);
-        using PendingRepositorySave pending = facade.Prepare("main", StoredGraphKind.State,
+        using PendingRepositorySave pending = MechanismFixture.Prepare(facade, "main", StoredGraphKind.State,
             new(null, new(7), [ObjectVersionRecord.CreateBase(7, [10, 20])]));
         return facade.Commit(pending).Business;
     }

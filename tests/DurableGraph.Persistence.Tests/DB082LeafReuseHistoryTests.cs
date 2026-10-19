@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -30,15 +31,15 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     public void HistoricalLeafReusePreservesFirstSaveRewriteIdentityAndStorageAcrossReopen(bool reuse) {
         Seed();
         ObjectId rootId, leafId;
-        CheckpointAddress saved;
+        CommitId saved;
         ObjectStorageInfo savedLeafStorage;
         using (Repository repository = Repository.OpenExisting(_root, Models(current: true, new()))) {
             repository.ImmutableLeafReuseEnabled = reuse;
             GraphReadStatistics statistics = new();
             repository.RestorationStatistics = statistics;
-            using BranchCheckout first = repository.CheckoutShared("main");
-            CheckpointAddress original = first.Head;
-            using BranchCheckout hit = repository.ForkShared("saved", original);
+            using WorkingCopy first = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            CommitId original = first.BaseCommitId;
+            using WorkingCopy hit = repository.OpenWorkingCopy(repository.ForkBranch(original, "saved").Id);
             Root firstRoot = Assert.IsType<Root>(first.State), hitRoot = Assert.IsType<Root>(hit.State);
             Assert.NotSame(firstRoot, hitRoot);
             Assert.Equal(reuse, ReferenceEquals(firstRoot.Leaf, hitRoot.Leaf));
@@ -53,10 +54,10 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
             AssertStorage(repository, hit);
 
             hitRoot.Value = 29;
-            saved = hit.CommitState(NoRebase);
-            StoredGraphRevision revision = repository.GraphStore.ReadGraph(saved.Address);
+            saved = hit.CommitState(parameters: NoRebase).Id;
+            StoredGraphRevision revision = Snapshot(repository, saved);
             IReadOnlyList<ObjectVersionRecord> records = Records(repository, saved);
-            Assert.Equal(original.Address, revision.SourceGraph);
+            Assert.Equal(Describe(repository, original).Address, revision.SourceGraph);
             Assert.Equal(ObjectVersionKind.Base, records.Single(row => row.ObjectId == leafId.Value).Kind);
             // This fixture's Delta contains a complete DTO; the planner may choose Base
             // when its framing is smaller. The changed owner must still be persisted.
@@ -68,9 +69,9 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
             Assert.Equal(17, firstRoot.Value);
             Assert.True(Baseline(first).Objects[leafId].RequiresRewrite);
 
-            CheckpointAddress unchanged = hit.CommitState(NoRebase);
+            CommitId unchanged = hit.CommitState(parameters: NoRebase).Id;
             Assert.Empty(Records(repository, unchanged));
-            Assert.Equal(saved.Address, repository.GraphStore.ReadGraph(unchanged.Address).SourceGraph);
+            Assert.Equal(Describe(repository, saved).Address, Snapshot(repository, unchanged).SourceGraph);
             Assert.Equal(savedLeafStorage, Baseline(hit).Objects[leafId].Storage);
             Assert.Equal(rootId, hit.StateId);
             Assert.Equal(leafId, LeafObjectId(hit));
@@ -79,11 +80,11 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         using Repository reopened = Repository.OpenExisting(_root, Models(current: true, new()));
         reopened.ImmutableLeafReuseEnabled = reuse;
         Assert.Null(reopened.PreparedStateEntry);
-        using BranchCheckout restored = reopened.CheckoutShared("saved");
+        using WorkingCopy restored = reopened.OpenWorkingCopy(BranchNamed(reopened, "saved"));
         Root restoredRoot = Assert.IsType<Root>(restored.State);
-        Assert.Equal(saved.RevisionAddress, restored.Head.RevisionAddress);
-        Assert.Equal(saved.RootId, restored.Head.RootId);
-        Assert.Equal(reopened.GetHead("saved"), restored.Head);
+        Assert.Equal(saved, restored.BaseCommitId);
+        Assert.Equal(Describe(reopened, saved).RootId, restored.StateId);
+        Assert.Equal(reopened.ReadCurrentCommit(BranchNamed(reopened, "saved")).Commit.Id, restored.BaseCommitId);
         Assert.Equal(29, restoredRoot.Value);
         Assert.Equal(41, restoredRoot.Leaf!.Value);
         Assert.Equal(rootId, restored.StateId);
@@ -98,25 +99,26 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         using Repository repository = Repository.CreateNew(_root, Models(current: true, new()));
         repository.ImmutableLeafReuseEnabled = true;
         Leaf live = new(41);
-        using BranchCheckout seed = repository.CreateSharedBranch("main", new Root { Value = 17, Leaf = live }, NoRebase);
-        using BranchCheckout first = repository.ForkShared("first", seed.Head);
+        using WorkingCopy seed = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Root { Value = 17, Leaf = live }, parameters: NoRebase).Id);
+        seed.CommitState(new Root { Value = 17, Leaf = live }, parameters: NoRebase);
+        using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(seed.BaseCommitId, "first").Id);
         Root firstRoot = Assert.IsType<Root>(first.State);
         Assert.NotSame(live, firstRoot.Leaf);
         PreparedStateRestoration oldEntry = repository.PreparedStateEntry!;
         ObjectId leafId = LeafObjectId(first);
         ObjectStorageInfo storage = Baseline(first).Objects[leafId].Storage!.Value;
         firstRoot.Value++;
-        CheckpointAddress next = first.CommitState(NoRebase);
+        CommitId next = first.CommitState(parameters: NoRebase).Id;
         Assert.Equal(storage, Baseline(first).Objects[leafId].Storage);
         Assert.Same(oldEntry, repository.PreparedStateEntry);
-        using BranchCheckout nextCold = repository.ForkShared("next-cold", next);
+        using WorkingCopy nextCold = repository.OpenWorkingCopy(repository.ForkBranch(next, "next-cold").Id);
         Root nextRoot = Assert.IsType<Root>(nextCold.State);
         Assert.NotSame(oldEntry, repository.PreparedStateEntry);
         Assert.NotSame(firstRoot.Leaf, nextRoot.Leaf);
         Assert.Equal(leafId, LeafObjectId(nextCold));
         Assert.Equal(storage, Baseline(nextCold).Objects[leafId].Storage);
         AssertStorage(repository, nextCold);
-        using BranchCheckout nextHit = repository.ForkShared("next-hit", next);
+        using WorkingCopy nextHit = repository.OpenWorkingCopy(repository.ForkBranch(next, "next-hit").Id);
         Assert.Same(nextRoot.Leaf, Assert.IsType<Root>(nextHit.State).Leaf);
         Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
     }
@@ -129,28 +131,28 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         repository.ImmutableLeafReuseEnabled = true;
         GraphReadStatistics statistics = new();
         repository.RestorationStatistics = statistics;
-        using BranchCheckout upgraded = repository.CheckoutShared("main");
-        CheckpointAddress oldAddress = upgraded.Head;
+        using WorkingCopy upgraded = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+        CommitId oldAddress = upgraded.BaseCommitId;
         PreparedStateRestoration oldEntry = repository.PreparedStateEntry!;
         Leaf oldLeaf = Assert.IsType<Root>(upgraded.State).Leaf!;
         Assert.Equal(1, oldEntry.ImmutableLeafCount);
         Assert.Equal(1, counts.Normalizes);
-        using (BranchCheckout oldHit = repository.ForkShared("old-hit", oldAddress)) {
+        using (WorkingCopy oldHit = repository.OpenWorkingCopy(repository.ForkBranch(oldAddress, "old-hit").Id)) {
             Assert.Same(oldLeaf, Assert.IsType<Root>(oldHit.State).Leaf);
             Assert.Equal(1, counts.LeafAllocations);
             Assert.Equal(1, counts.LeafHydrations);
         }
 
-        CheckpointAddress currentAddress = upgraded.CommitState(NoRebase);
+        CommitId currentAddress = upgraded.CommitState(parameters: NoRebase).Id;
         Assert.Same(oldEntry, repository.PreparedStateEntry); // DB-081 did not admit hot candidates.
         int misses = statistics.PreparedStateMisses, reused = statistics.ReusedImmutableLeaves;
-        using BranchCheckout currentCold = repository.ForkShared("current-cold", currentAddress);
+        using WorkingCopy currentCold = repository.OpenWorkingCopy(repository.ForkBranch(currentAddress, "current-cold").Id);
         PreparedStateRestoration currentEntry = repository.PreparedStateEntry!;
         Leaf currentLeaf = Assert.IsType<Root>(currentCold.State).Leaf!;
         Assert.NotSame(oldEntry, currentEntry);
         Assert.NotSame(oldLeaf, currentLeaf);
         Assert.Equal(1, currentEntry.ImmutableLeafCount);
-        Assert.Equal(currentAddress, currentEntry.StateCheckpoint);
+        Assert.Equal(currentAddress.Value, currentEntry.StateCheckpoint.Id);
         Assert.Equal(misses + 1, statistics.PreparedStateMisses);
         Assert.Equal(reused, statistics.ReusedImmutableLeaves);
         Assert.Equal(1, counts.Normalizes);
@@ -161,15 +163,15 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
         upgraded.Catalog.Set(new DurableSchema(IntermediateId, 5, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
-        CheckpointAddress intermediateEvent = upgraded.CommitEvent(upgraded.State!, NoRebase);
+        CommitId intermediateEvent = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
         var configuration = Field<StateModelRegistry.FrozenConfiguration>(repository, "_modelConfiguration");
         var intermediateEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
-            configuration, repository.GraphStore.ReadMetadata(intermediateEvent.Address).SchemaRoot!.Value);
+            configuration, repository.GraphStore.ReadMetadata(Describe(repository, intermediateEvent).Address).SchemaRoot!.Value);
         InvalidDataException oldConflict = Assert.Throws<InvalidDataException>(() => oldEntry.Requirements.Validate(intermediateEnvironment.Models));
         Assert.Contains(IntermediateId, oldConflict.Message);
         Assert.True(oldEntry.SchemaRequirementCount > currentEntry.SchemaRequirementCount);
         currentEntry.Requirements.Validate(intermediateEnvironment.Models);
-        using (BranchCheckout currentHit = repository.ForkShared("current-hit", currentAddress)) {
+        using (WorkingCopy currentHit = repository.OpenWorkingCopy(repository.ForkBranch(currentAddress, "current-hit").Id)) {
             Assert.Same(currentLeaf, Assert.IsType<Root>(currentHit.State).Leaf);
             Assert.Equal(reused + 1, statistics.ReusedImmutableLeaves);
             Assert.Equal(2, counts.LeafAllocations);
@@ -178,32 +180,33 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         Assert.Same(currentEntry, repository.PreparedStateEntry);
         upgraded.Catalog.Set(new DurableSchema(MaterializationId, 1, SchemaKind.InlineValue,
             new DurableFieldInfo(1, TypeTag.Int64)));
-        CheckpointAddress materializationEvent = upgraded.CommitEvent(upgraded.State!, NoRebase);
+        CommitId materializationEvent = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
         var materializationEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore,
-            configuration, repository.GraphStore.ReadMetadata(materializationEvent.Address).SchemaRoot!.Value);
+            configuration, repository.GraphStore.ReadMetadata(Describe(repository, materializationEvent).Address).SchemaRoot!.Value);
         InvalidDataException certificateConflict = Assert.Throws<InvalidDataException>(() => currentEntry.Requirements.Validate(materializationEnvironment.Models));
         Assert.Contains(MaterializationId, certificateConflict.Message);
-        CheckpointAddress incompatibleState = upgraded.CommitState(NoRebase);
+        CommitId incompatibleState = upgraded.CommitState(parameters: NoRebase).Id;
         int normalized = counts.Normalizes;
         int leafAllocations = counts.LeafAllocations;
         reused = statistics.ReusedImmutableLeaves;
-        InvalidDataException currentConflict = Assert.Throws<InvalidDataException>(() => repository.ForkShared("current-rejected", incompatibleState));
+        InvalidDataException currentConflict = Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(repository.ForkBranch(incompatibleState, "current-rejected").Id));
         Assert.Contains(MaterializationId, currentConflict.Message);
         Assert.Equal(normalized, counts.Normalizes);
         Assert.Equal(reused, statistics.ReusedImmutableLeaves);
         Assert.Equal(leafAllocations + 1, counts.LeafAllocations);
         Assert.Equal(2, counts.LeafHydrations); // Its callback rejected before hydration completed.
         Assert.Same(currentEntry, repository.PreparedStateEntry);
-        Assert.DoesNotContain("current-rejected", repository.ListBranches());
+        Assert.Contains(repository.ListBranches(), branch => branch.DisplayLabel == "current-rejected");
         Assert.False(repository.IsFaulted);
-        using BranchCheckout oldAgain = repository.ForkShared("old-again", oldAddress);
+        using WorkingCopy oldAgain = repository.OpenWorkingCopy(repository.ForkBranch(oldAddress, "old-again").Id);
         Assert.Equal(41, Assert.IsType<Root>(oldAgain.State).Leaf!.Value);
         Assert.True(Baseline(oldAgain).Objects[LeafObjectId(oldAgain)].RequiresRewrite);
     }
 
     private void Seed() {
         using Repository repository = Repository.CreateNew(_root, Models(current: false, new()));
-        using BranchCheckout branch = repository.CreateSharedBranch("main", new Root { Value = 17, Leaf = new(41) }, NoRebase);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Root { Value = 17, Leaf = new(41) }, parameters: NoRebase).Id);
+        branch.CommitState(new Root { Value = 17, Leaf = new(41) }, parameters: NoRebase);
     }
 
     private static StateModelRegistry Models(bool current, Counters counts) {
@@ -269,15 +272,15 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = nameof(Leaf.Value))]
     private static extern ref int LeafValue(Leaf leaf);
     private static T Field<T>(object instance, string name) => (T)instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
-    private static NormalizedGraphState Baseline(BranchCheckout branch) => branch.Baseline!;
-    private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CheckpointAddress address) {
-        StoredGraphRevision graph = repository.GraphStore.ReadGraph(address.Address);
+    private static NormalizedGraphState Baseline(WorkingCopy branch) => branch.Baseline!;
+    private static IReadOnlyList<ObjectVersionRecord> Records(Repository repository, CommitId address) {
+        StoredGraphRevision graph = Snapshot(repository, address);
         return graph.OwnedBatch is { } batch ? repository.GraphStore.ReadBatch(batch).Records : [];
     }
-    private static ObjectId LeafObjectId(BranchCheckout branch) => Baseline(branch).Objects.Single(row => row.Value.Current.Schema?.SchemaId == LeafId).Key;
-    private static void AssertStorage(Repository repository, BranchCheckout branch) {
+    private static ObjectId LeafObjectId(WorkingCopy branch) => Baseline(branch).Objects.Single(row => row.Value.Current.Schema?.SchemaId == LeafId).Key;
+    private static void AssertStorage(Repository repository, WorkingCopy branch) {
         foreach ((ObjectId id, NormalizedObject row) in Baseline(branch).Objects) {
-            ObjectVersionChain chain = repository.GraphStore.ReadObjectChain(branch.StateRevisionAddress!.Value, id.Value);
+            ObjectVersionChain chain = repository.GraphStore.ReadObjectChain(Snapshot(repository, branch.StateSourceCommitId!.Value), id.Value);
             Assert.Equal(new ObjectStorageInfo(chain.Head, chain.ReconstructionPayloadBytes), row.Storage);
         }
     }

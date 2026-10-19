@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using System.Diagnostics;
 using System.Text.Json;
@@ -21,24 +22,25 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                 for (byte i = 0; i < 16; i++) world.Links.Add(new() { Value = i, Text = world.Text });
                 world.Next = world.Alias = world.Links[0];
                 using (Repository repository = Repository.CreateNew(path, models)) {
-                    using BranchCheckout session = repository.CreateSharedBranch("main", world, NoRebase);
+                    using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", world, parameters: NoRebase).Id);
+            world = (Node)session.State!;
                     for (int step = 0; step < 3; step++) {
-                        session.CommitEvent(new Node { Value = 7 }, NoRebase);
-                        world.Links[step].Value++;
-                        session.CommitState(NoRebase);
+                        session.CommitEvent(new Node { Value = 7 }, parameters: NoRebase);
+                        world.Links![step].Value++;
+                        session.CommitState(parameters: NoRebase);
                     }
-                    session.CommitEvent(new Node { Value = 9, Links = world.Links }, NoRebase);
+                    session.CommitEvent(new Node { Value = 9, Links = world.Links }, parameters: NoRebase);
                 }
                 ulong expected = Checksum(world);
                 var open = Measure(() => Repository.OpenReadOnlyExisting(path, models));
                 using (Repository repository = open.Value) {
-                    CheckpointAddress pending = repository.GetHead("main");
-                    CheckpointAddress state = Assert.IsType<CheckpointAddress>(repository.GetPreviousState(pending));
+                    CommitId pending = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+                    CommitId state = Assert.IsType<CommitId>(repository.GetPreviousState(pending));
                     GraphRecordStore store = repository.GraphStore;
                     GraphPhysicalReadStatistics beforeReads = store.ReadCacheStatistics;
-                    var first = Measure(() => ((Node)repository.ReadState(state)));
+                    var first = Measure(() => ((Node)repository.LoadState(state)));
                     GraphPhysicalReadStatistics afterFirst = store.ReadCacheStatistics;
-                    var warm = Measure(() => ((Node)repository.ReadState(state)));
+                    var warm = Measure(() => ((Node)repository.LoadState(state)));
                     GraphPhysicalReadStatistics afterRepeated = store.ReadCacheStatistics;
                     Assert.True(afterFirst.BatchDecodes > beforeReads.BatchDecodes);
                     Assert.True(afterFirst.DirectoryMaterializations > beforeReads.DirectoryMaterializations);
@@ -68,13 +70,13 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
 
                 var writableOpen = Measure(() => Repository.OpenExisting(path, models));
                 using (Repository repository = writableOpen.Value) {
-                    var resume = Measure(() => repository.CheckoutShared("main"));
-                    using BranchCheckout session = resume.Value;
+                    var resume = Measure(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+                    using WorkingCopy session = resume.Value;
                     Node editableState = Assert.IsType<Node>(session.State);
                     Assert.NotNull(editableState.Links);
                     Assert.Equal(expected, Checksum(editableState));
-                    Assert.NotSame(editableState.Links, ((Node)repository.ReadEvent(session.Head)).Links);
-                    Assert.NotSame(editableState.Links![0], ((Node)repository.ReadEvent(session.Head)).Links![0]);
+                    Assert.NotSame(editableState.Links, ((Node)repository.LoadEvent(session.BaseCommitId)).Links);
+                    Assert.NotSame(editableState.Links![0], ((Node)repository.LoadEvent(session.BaseCommitId)).Links![0]);
                     editableState.Links[0].Value++;
                     ulong nextExpected = Checksum(editableState);
 
@@ -88,12 +90,12 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                         else if (checkpoint == RepositorySaveStage.AfterBusinessAppend) afterAppend = Stamp.Now();
                     };
                     Stamp start = Stamp.Now();
-                    CheckpointAddress committed = session.CommitState(NoRebase);
+                    CommitId committed = session.CommitState(parameters: NoRebase).Id;
                     Stamp end = Stamp.Now();
                     repository.OperationStageObserver = null;
                     repository.SaveStageObserver = null;
                     Assert.True(afterPrepare.Timestamp > 0 && beforeAppend.Timestamp > 0 && afterAppend.Timestamp > 0);
-                    Assert.Equal(nextExpected, Checksum(((Node)repository.ReadState(committed))));
+                    Assert.Equal(nextExpected, Checksum(((Node)repository.LoadState(committed))));
                     if (sample >= 0) Write(new { Kind = "product-write", Sample = sample,
                         OpenWritable = writableOpen.Cost, ResumeAfterOpen = resume.Cost,
                         PrepareIncludingEntryPreflight = Between(start, afterPrepare),

@@ -43,9 +43,9 @@ public sealed partial class SplitBusinessWorkspaceTests {
     public void GroupCleanupHandlesReadyEventAndStagingStateWithoutInstallingEventIdentity() {
         StateModelRegistry models = Registry(Model());
         World acceptedRoot = new() { Value = 10 };
-        BranchSaveSession seed = new(_repository, "main", models);
-        using (PreparedBranchSave save = seed.Prepare(acceptedRoot, parameters: NoRebase)) { save.Commit(); }
-        BusinessPersistenceAdapter eventMember = BusinessPersistenceAdapter.LoadState(Store, seed.StateSource!.Address, models);
+        BranchSaveSessionFixture seed = new(_repository, "main", models);
+        using (PreparedFixtureSave save = seed.Prepare(acceptedRoot, parameters: NoRebase)) { save.Commit(); }
+        BusinessPersistenceAdapter eventMember = BusinessPersistenceAdapter.LoadState(Store, seed.StateSource!, models.FreezeConfiguration());
         BusinessPersistenceAdapter stateMember = new(Store, models);
         IDurableObject acceptedInstance = eventMember.State!;
         NormalizedGraphState baseline = eventMember.Baseline!;
@@ -95,12 +95,12 @@ public sealed partial class SplitBusinessWorkspaceTests {
         SchemaCatalogWorkspace catalogOwner = new(_repository.EnsureEditingAllowed);
         catalogOwner.Set(Current);
         PreparedSchemaCatalogWrite catalog = catalogOwner.Prepare();
-        StoredGraphRevision meta = Store.Append(StoredGraphKind.Meta, null, null, catalog.Write!);
+        StoredGraphRevision meta = Store.AppendMeta(null, catalog.Write!);
         catalog.PrepareInstall(meta);
         catalog.Install(meta);
         BusinessSaveCandidate capture = member.CaptureOwned(root, StoredGraphKind.State);
         using PreparedBusinessWrite write = member.PrepareOwned(capture, catalog.View, NoRebase);
-        StoredGraphRevision graph = Store.Append(StoredGraphKind.State, null, meta.Address, write.Write);
+        StoredGraphRevision graph = Store.AppendBusiness(StoredGraphKind.State, null, meta.Address, write.Write);
         write.PrepareInstall(graph);
         write.Install(graph); // Internal installation primitive only; no publication claim.
         NormalizedGraphState baseline = member.Baseline!;

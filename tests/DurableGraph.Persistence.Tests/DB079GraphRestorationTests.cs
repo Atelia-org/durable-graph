@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -90,9 +91,10 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             hydrations++;
         }));
         Node state = Cycle(10, 20), message = Cycle(30, 40);
-        using BranchCheckout branch = repository.CreateSharedBranch("main", state, NoRebase);
-        CheckpointAddress stateAddress = branch.Head;
-        CheckpointAddress address = branch.CommitEvent(message, NoRebase);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", state, parameters: NoRebase).Id);
+        branch.CommitState(state, parameters: NoRebase);
+        CommitId stateAddress = branch.BaseCommitId;
+        CommitId address = branch.CommitEvent(message, parameters: NoRebase).Id;
         Checkpoint? delivered = null;
 
         if (failLastAllocation) {
@@ -100,7 +102,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             Assert.Null(delivered);
             Assert.Equal(4, allocations);
             Assert.Equal(0, hydrations);
-            Assert.Equal(address, repository.GetHead("main"));
+            Assert.Equal(address, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
             Assert.False(repository.IsFaulted);
             fail = false;
             allocations = 0;
@@ -110,7 +112,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Node restoredState = Assert.IsType<Node>(checkpoint.PreviousState);
         Assert.Equal(4, allocations);
         Assert.Equal(4, hydrations);
-        Assert.Equal(stateAddress, checkpoint.PreviousStateAddress);
+        Assert.Equal(stateAddress, checkpoint.PreviousStateCommit?.Id);
         Assert.Equal((byte)10, restoredState.Value);
         Assert.Equal((byte)30, restoredEvent.Value);
         AssertCycle(restoredState);
@@ -126,8 +128,9 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         int allocations = 0, hydrations = 0;
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(
             allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++));
-        using BranchCheckout branch = repository.CreateSharedBranch("main", new Node { Value = 10 }, NoRebase);
-        CheckpointAddress address = branch.CommitEvent(new Node { Value = 20 }, NoRebase);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 10 }, parameters: NoRebase).Id);
+        branch.CommitState(new Node { Value = 10 }, parameters: NoRebase);
+        CommitId address = branch.CommitEvent(new Node { Value = 20 }, parameters: NoRebase).Id;
         Checkpoint? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = repository.ReadCheckpoint(address));
@@ -137,14 +140,14 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Assert.Equal(0, hydrations);
         Assert.Equal((byte)0, singleton.Value);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(address, repository.GetHead("main"));
+        Assert.Equal(address, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
     }
 
     [Fact]
     public void CheckpointPreviousGraphPreparationFailsBeforeEitherGraphAllocates() {
         using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
-            using BranchCheckout branch = seed.CreateSharedBranch("main", new Node { Value = 10 }, NoRebase);
-            branch.CommitEvent(new Node { Value = 30 }, NoRebase);
+            using WorkingCopy branch = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 10 }, parameters: NoRebase).Id);
+            branch.CommitEvent(new Node { Value = 30 }, parameters: NoRebase);
         }
         int allocations = 0, hydrations = 0;
         bool failPrevious = true;
@@ -158,7 +161,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
                 if (state.Value == 10 && failPrevious) { throw failure; }
                 return state;
             }, allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++));
-        CheckpointAddress address = repository.GetHead("main");
+        CommitId address = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
         Checkpoint? delivered = null;
 
         Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = repository.ReadCheckpoint(address)));
@@ -168,9 +171,9 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Assert.Equal(0, allocations);
         Assert.Equal(0, hydrations);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(address, repository.GetHead("main"));
+        Assert.Equal(address, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
         // The current Event remains readable without preparing its PreviousState.
-        Assert.Equal((byte)30, Assert.IsType<Node>(repository.ReadEvent(address)).Value);
+        Assert.Equal((byte)30, Assert.IsType<Node>(repository.LoadEvent(address)).Value);
         Assert.Equal(1, allocations);
         Assert.Equal(1, hydrations);
         failPrevious = false;
@@ -201,15 +204,15 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         string branch = $"source-{_seedIndex++}";
         ObjectVersionRecord[] records = rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
             TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(SharedReadModel.Schema), SharedReadModel.Base(row.State), catalog.View))).ToArray();
-        using PendingRepositorySave pending = repository.Prepare(branch, StoredGraphKind.State,
-            new(null, new(1), records), catalog.Write);
+        using PendingRepositorySave pending = repository.PrepareFrom(null, null, branch, StoredGraphKind.State, default,
+            () => (new(null, new(1), records), catalog.Write));
         return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
     }
     private static (Node First, Node Second) ReadPair(RepositoryStorageFacade repository,
         FrameAddress first, ObjectId firstRoot, FrameAddress second, ObjectId secondRoot, StateModelRegistry models) {
         StateModelRegistry.FrozenConfiguration configuration = models.FreezeConfiguration();
-        DecodedRevision a = DecodedRevision.ReadStoredGraph(repository.Store, first, configuration);
-        DecodedRevision b = DecodedRevision.ReadStoredGraph(repository.Store, second, configuration,
+        DecodedRevision a = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(first, null), configuration);
+        DecodedRevision b = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(second, null), configuration,
             repository.Store.ReadMetadata(first).SchemaRoot == repository.Store.ReadMetadata(second).SchemaRoot ? a.BindingEnvironment : null);
         var pair = GraphReader.ReadPair(a, new(a.SourceModels!), firstRoot, b, new(b.SourceModels!), secondRoot);
         return ((Node)pair.First, (Node)pair.Second);

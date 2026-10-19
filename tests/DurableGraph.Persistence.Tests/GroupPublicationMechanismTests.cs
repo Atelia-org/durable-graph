@@ -6,10 +6,10 @@ using Atelia.HeadStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
-// DB-096 witness: real business candidates and one HS publication of the current
-// directory + catalog layout. This is not a Repository group coordinator or the
-// proposed one-business-Head-per-Branch layout. The old owner is closed after
-// direct HS publication because its cached publication baseline is then stale.
+// DB-096 witness: real business candidates share one catalog and publish their
+// two business Heads plus S in one HS transaction. D membership stays unchanged.
+// This is not a Repository group coordinator. The owner closes after direct HS
+// publication because its cached publication baseline is then stale.
 public sealed class GroupPublicationMechanismTests : IDisposable {
     private const string Prefix = "dg-group-publication-";
     private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
@@ -21,16 +21,16 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
         FrameAddress worldSeed, playerSeed, groupedWorld, groupedEvent, commonSchema, continuedWorld, continuedPlayer;
         uint worldList, playerList;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
-            BranchSaveSession worldSeedSession = new(repository, "world", Models());
-            BranchSaveSession playerSeedSession = new(repository, "player", Models());
-            using (PreparedBranchSave save = worldSeedSession.Prepare(NewWorld(10), parameters: NoRebase)) {
+            BranchSaveSessionFixture worldSeedSession = new(repository, "world", Models());
+            BranchSaveSessionFixture playerSeedSession = new(repository, "player", Models());
+            using (PreparedFixtureSave save = worldSeedSession.Prepare(NewWorld(10), parameters: NoRebase)) {
                 worldSeed = save.Commit().Business.Address;
             }
-            using (PreparedBranchSave save = playerSeedSession.Prepare(NewWorld(20), parameters: NoRebase)) {
+            using (PreparedFixtureSave save = playerSeedSession.Prepare(NewWorld(20), parameters: NoRebase)) {
                 playerSeed = save.Commit().Business.Address;
             }
-            BusinessPersistenceAdapter world = BusinessPersistenceAdapter.LoadState(repository.Store, worldSeed, Models());
-            BusinessPersistenceAdapter player = BusinessPersistenceAdapter.LoadState(repository.Store, playerSeed, Models());
+            BusinessPersistenceAdapter world = BusinessPersistenceAdapter.LoadState(repository.Store, MechanismFixture.Snapshot(repository, worldSeed), Models());
+            BusinessPersistenceAdapter player = BusinessPersistenceAdapter.LoadState(repository.Store, MechanismFixture.Snapshot(repository, playerSeed), Models());
             DB087Widget worldRoot = Assert.IsType<DB087Widget>(world.State);
             IDurableObject playerState = player.State!;
             NormalizedGraphState playerBaseline = player.Baseline!;
@@ -46,6 +46,8 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
             Assert.DoesNotContain(new SchemaKey("P0Envelope", 1), accepted.Schemas.Keys);
             HeadEntry oldDirectory = repository.Heads.ReadHead(1).Unwrap();
             HeadEntry oldSchema = repository.Heads.ReadHead(2).Unwrap();
+            HeadEntry oldWorld = repository.Heads.ReadHead(MechanismFixture.Branch(repository, "world")).Unwrap();
+            HeadEntry oldPlayer = repository.Heads.ReadHead(MechanismFixture.Branch(repository, "player")).Unwrap();
 
             BusinessSaveCandidate worldCapture = world.CaptureOwned(worldRoot, StoredGraphKind.State);
             BusinessSaveCandidate? eventCapture = null;
@@ -71,27 +73,32 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
                 Assert.Equal(worldListPrior, delta.PriorAddress);
                 Assert.Equal(worldSeed, stateWrite.Write.SourceGraph);
                 Assert.Equal(playerSeed, eventWrite.Write.SourceGraph);
-                StoredGraphRevision meta = repository.Store.Append(StoredGraphKind.Meta, accepted.Snapshot!.Address, null, common.Write!);
-                StoredGraphRevision state = repository.Store.Append(StoredGraphKind.State, worldSeed, meta.Address, stateWrite.Write);
-                StoredGraphRevision eventGraph = repository.Store.Append(StoredGraphKind.Event, playerSeed, meta.Address, eventWrite.Write);
+                StoredGraphRevision meta = repository.Store.AppendMeta(accepted.Snapshot!.Address, common.Write!);
+                StoredGraphRevision state = repository.Store.AppendBusiness(StoredGraphKind.State, worldSeed, meta.Address, stateWrite.Write);
+                StoredGraphRevision eventGraph = repository.Store.AppendBusiness(StoredGraphKind.Event, playerSeed, meta.Address, eventWrite.Write);
                 commonSchema = meta.Address;
                 groupedWorld = state.Address;
                 groupedEvent = eventGraph.Address;
                 common.PrepareInstall(meta);
                 stateWrite.PrepareInstall(state); // Events deliberately have no State installation.
 
-                byte[] directoryPayload = RootPayload("P0R2"u8, new() {
-                    ["branch/world"] = groupedWorld, ["branch/player"] = groupedEvent
-                });
+                byte[] worldPayload = BusinessEntryPayloadCodec.Encode(groupedWorld, []);
+                byte[] playerPayload = BusinessEntryPayloadCodec.Encode(groupedEvent, []);
                 byte[] schemaPayload = RootPayload("P0S1"u8, new() { ["schema"] = commonSchema });
                 IReadOnlyDictionary<HeadId, HeadEntryId> published = repository.Heads.PublishHeads(new Dictionary<HeadId, ReadOnlyMemory<byte>> {
-                    [oldDirectory.Id.HeadId] = directoryPayload, [oldSchema.Id.HeadId] = schemaPayload
+                    [oldWorld.Id.HeadId] = worldPayload,
+                    [oldPlayer.Id.HeadId] = playerPayload,
+                    [oldSchema.Id.HeadId] = schemaPayload
                 }, out PublicationOutcome outcome).Unwrap();
                 Assert.Equal(PublicationOutcome.Confirmed, outcome);
-                Assert.Equal(2, published.Count);
-                Assert.NotEqual(oldDirectory.Id, published[oldDirectory.Id.HeadId]);
+                Assert.Equal(3, published.Count);
+                Assert.NotEqual(oldWorld.Id, published[oldWorld.Id.HeadId]);
+                Assert.NotEqual(oldPlayer.Id, published[oldPlayer.Id.HeadId]);
                 Assert.NotEqual(oldSchema.Id, published[oldSchema.Id.HeadId]);
-                Assert.Equal(directoryPayload, repository.Heads.ReadHead(1).Unwrap().Payload.ToArray());
+                Assert.Equal(oldDirectory.Id, repository.Heads.ReadHead(1).Unwrap().Id);
+                Assert.Equal(oldDirectory.Payload.ToArray(), repository.Heads.ReadHead(1).Unwrap().Payload.ToArray());
+                Assert.Equal(worldPayload, repository.Heads.ReadHead(oldWorld.Id.HeadId).Unwrap().Payload.ToArray());
+                Assert.Equal(playerPayload, repository.Heads.ReadHead(oldPlayer.Id.HeadId).Unwrap().Payload.ToArray());
                 Assert.Equal(schemaPayload, repository.Heads.ReadHead(2).Unwrap().Payload.ToArray());
 
                 common.Install(meta);
@@ -116,21 +123,21 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
         }
 
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenExisting(_path)) {
-            Assert.Equal(groupedWorld, repository.GetHead("world"));
-            Assert.Equal(groupedEvent, repository.GetHead("player"));
-            Assert.Equal(playerSeed, repository.GetStateHead("player"));
+            Assert.Equal(groupedWorld, MechanismFixture.FindCurrent(repository, "world")?.Address);
+            Assert.Equal(groupedEvent, MechanismFixture.FindCurrent(repository, "player")?.Address);
+            Assert.Equal(playerSeed, MechanismFixture.State(repository, "player")?.Address);
             Assert.Equal(commonSchema, repository.SharedSchemaRoot);
             SchemaCatalogView coldCatalog = SchemaCatalogView.Load(repository.Store, commonSchema);
             Assert.Equal(declaration, coldCatalog.Schemas[new(declaration.Type, declaration.Version)]);
             Assert.Contains(new SchemaKey("P0Envelope", 1), coldCatalog.Schemas.Keys);
-            Assert.Equal(commonSchema, repository.Store.ReadGraph(groupedWorld).SchemaRoot);
-            Assert.Equal(commonSchema, repository.Store.ReadGraph(groupedEvent).SchemaRoot);
+            Assert.Equal(commonSchema, repository.Store.ReadMetadata(groupedWorld).SchemaRoot);
+            Assert.Equal(commonSchema, repository.Store.ReadMetadata(groupedEvent).SchemaRoot);
             DB087EnvelopeRoot restoredEvent = Assert.IsType<DB087EnvelopeRoot>(
-                BusinessPersistenceAdapter.ReadRoot(repository.Store, groupedEvent, Models()));
+                BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, groupedEvent), Models()));
             Assert.Equal(new[] { 31, 32 }, restoredEvent.Numbers);
             Assert.Null(restoredEvent.Link);
-            BranchSaveSession world = new(repository, "world", Models());
-            BranchSaveSession player = new(repository, "player", Models());
+            BranchSaveSessionFixture world = new(repository, "world", Models());
+            BranchSaveSessionFixture player = new(repository, "player", Models());
             Assert.Equal(groupedWorld, world.StateSource!.Address);
             Assert.Equal(playerSeed, player.StateSource!.Address); // Event did not become the baseline.
             Assert.Equal(worldList, ListId(world.Baseline!));
@@ -143,15 +150,15 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
             playerRoot.Numbers[3] = 22;
             continuedWorld = SaveDelta(world, worldRoot, worldList, groupedWorld);
             continuedPlayer = SaveDelta(player, playerRoot, playerList, playerSeed);
-            Assert.Equal(groupedWorld, repository.Store.ReadGraph(continuedWorld).Parent);
-            Assert.Equal(groupedEvent, repository.Store.ReadGraph(continuedPlayer).Parent);
+            Assert.Equal(groupedWorld, MechanismFixture.Resources(repository).ReadPrevious(MechanismFixture.Current(repository, "world").Id)?.Address);
+            Assert.Equal(groupedEvent, MechanismFixture.Resources(repository).ReadPrevious(MechanismFixture.Current(repository, "player").Id)?.Address);
             Assert.Equal(commonSchema, repository.SharedSchemaRoot); // Neither continuation grows Schema.
         }
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
-            Assert.Equal(continuedWorld, repository.GetHead("world"));
-            Assert.Equal(continuedPlayer, repository.GetHead("player"));
-            DB087Widget world = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, continuedWorld, Models()));
-            DB087Widget player = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, continuedPlayer, Models()));
+            Assert.Equal(continuedWorld, MechanismFixture.FindCurrent(repository, "world")?.Address);
+            Assert.Equal(continuedPlayer, MechanismFixture.FindCurrent(repository, "player")?.Address);
+            DB087Widget world = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, continuedWorld), Models()));
+            DB087Widget player = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, continuedPlayer), Models()));
             Assert.Equal(11, world.Numbers[2]);
             Assert.Equal(12, world.Numbers[3]);
             Assert.Equal(0, player.Numbers[2]);
@@ -161,10 +168,10 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
         }
     }
 
-    private static FrameAddress SaveDelta(BranchSaveSession session, DB087Widget root, uint listId, FrameAddress source) {
+    private static FrameAddress SaveDelta(BranchSaveSessionFixture session, DB087Widget root, uint listId, FrameAddress source) {
         FrameAddress prior = session.StateSource!.ObjectHeads[listId];
         long priorH = session.Baseline!.Objects[new(listId)].Storage!.Value.ReconstructionPayloadBytes;
-        using PreparedBranchSave save = session.Prepare(root, parameters: NoRebase);
+        using PreparedFixtureSave save = session.Prepare(root, parameters: NoRebase);
         ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         Assert.Equal(listId, delta.ObjectId);

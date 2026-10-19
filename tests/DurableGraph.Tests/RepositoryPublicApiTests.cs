@@ -14,14 +14,15 @@ public sealed class RepositoryPublicApiTests {
 
             public static class Consumer {
                 public static void Use(string path, StateModelRegistry models, IDurableObject state,
-                    IDurableObject domainEvent, CheckpointAddress source) {
+                    IDurableObject domainEvent, CommitId source) {
                     using var created = Repository.CreateNew(path, models,
                         rotationThresholdBytes: 4096, readCacheBudgetBytes: 0);
-                    using var initialState = created.CreateSharedBranch("main", state);
-                    using var initialEvent = created.CreateSharedBranchFromEvent("events", domainEvent);
-                    using var shared = created.CheckoutShared("shared");
-                    using var fork = created.ForkShared("fork", source);
-                    CheckpointAddress reference = created.CreateBranch("reference", source);
+                    var initialState = created.CreateRootBranchFromState("main", state);
+                    var initialEvent = created.CreateRootBranchFromEvent("events", domainEvent);
+                    using var shared = created.OpenWorkingCopy(initialState.Id);
+                    var fork = created.ForkBranch(source, "fork");
+                    using var forkWork = created.OpenWorkingCopy(fork.Id);
+                    CommitId reference = created.ReadCurrentCommit(fork.Id).Commit.Id;
                     shared.CommitState();
                     shared.CommitState(state);
                     shared.CommitEvent(domainEvent);
@@ -45,11 +46,14 @@ public sealed class RepositoryPublicApiTests {
     [InlineData("_ = Repository.CreateNew(path, models, [|schemaWriteMode|]: default);", "CS1739", "schemaWriteMode")]
     [InlineData("_ = Repository.OpenExisting(path, models, [|schemaWriteMode|]: default);", "CS1739", "schemaWriteMode")]
     [InlineData("_ = typeof(global::Atelia.DurableGraph.[|SchemaWriteMode|]);", "CS0234", "SchemaWriteMode")]
-    [InlineData("repository.CreateBranch(\"main\", [|state|]);", "CS1503", "CheckpointAddress")]
+    [InlineData("repository.[|CreateBranch|](\"main\", source);", "CS1061", "CreateBranch")]
+    [InlineData("repository.[|CheckoutShared|](\"main\");", "CS1061", "CheckoutShared")]
+    [InlineData("repository.[|ForkShared|](\"fork\", source);", "CS1061", "ForkShared")]
+    [InlineData("_ = typeof(global::Atelia.DurableGraph.[|CheckpointAddress|]);", "CS0234", "CheckpointAddress")]
     [InlineData("repository.[|CheckoutPrivate|](\"main\");", "CS1061", "CheckoutPrivate")]
-    [InlineData("repository.CheckoutShared(\"main\").[|CommitStateToShared|]();", "CS1061", "CommitStateToShared")]
-    [InlineData("repository.CheckoutShared(\"main\").[|CommitStateToShared|](state);", "CS1061", "CommitStateToShared")]
-    [InlineData("repository.CheckoutShared(\"main\").[|CommitEventToShared|](state);", "CS1061", "CommitEventToShared")]
+    [InlineData("repository.OpenWorkingCopy(default).[|CommitStateToShared|]();", "CS1061", "CommitStateToShared")]
+    [InlineData("repository.OpenWorkingCopy(default).[|CommitStateToShared|](state);", "CS1061", "CommitStateToShared")]
+    [InlineData("repository.OpenWorkingCopy(default).[|CommitEventToShared|](state);", "CS1061", "CommitEventToShared")]
     public void RemovedImplicitSelectionRequiresSpecificCompileError(
         string markedStatement, string expectedCode, string expectedTarget) {
         const string prefix = """
@@ -58,7 +62,7 @@ public sealed class RepositoryPublicApiTests {
 
             public static class Consumer {
                 public static void Use(Repository repository, string path, StateModelRegistry models,
-                    IDurableObject state, CheckpointAddress source) {
+                    IDurableObject state, CommitId source) {
 
             """;
         const string suffix = "\n    }\n}\n";

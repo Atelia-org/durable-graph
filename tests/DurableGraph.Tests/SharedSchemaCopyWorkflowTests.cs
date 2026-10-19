@@ -39,11 +39,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<ObjectId, ObjectStorageInfo> originalStorage;
         EvidenceFrameImage[] originalFrames;
         using (Repository repository = Repository.CreateNew(template.Path, old.Models())) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", old.Create());
+            BranchId mainId = repository.CreateRootBranchFromState("main", old.Create()).Id;
+            using WorkingCopy main = repository.OpenWorkingCopy(mainId);
             uint firstMaximum = main.Baseline!.Objects.Keys.Max(id => id.Value);
             main.CommitState(old.Create());
             IDurableObject child = old.Child(main.State!);
-            baseline = main.CommitState(child).RevisionAddress;
+            baseline = EvidenceAddress(repository, main.CommitState(child).Id);
             Assert.Same(child, main.State);
             rootId = main.StateId!.Value;
             Assert.All(main.Baseline!.Objects.Keys, id => Assert.True(id.Value > firstMaximum));
@@ -51,7 +52,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             originalStorage = DevelopmentStorage(main);
             Assert.Equal(3, originalStorage.Count);
             old.Check(main.State!, 2, 1, 7);
-            repository.CreateTag("user-v1", main.Head);
+            repository.CreateTag("user-v1", main.BaseCommitId);
             schemaV1 = repository.SharedSchemaRoot!.Value;
             originalFrames = EvidenceReadFrames(EvidenceResources(repository).Data);
         }
@@ -67,15 +68,15 @@ public sealed partial class DurableSchemaGeneratorTests {
         }) {
             FrameAddress upgraded, schema;
             using (Repository repository = Repository.OpenExisting(path, host.Models())) {
-                using BranchCheckout main = repository.CheckoutShared("main");
+                using WorkingCopy main = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
                 Assert.Equal(baseline, main.StateRevisionAddress);
                 Assert.Equal(schemaV1, repository.SharedSchemaRoot);
                 DevelopmentAssertIdentity(main, host, rootId, originalEdges);
                 Assert.Equal(2, main.Baseline!.Objects.Values.Count(row => row.RequiresRewrite));
-                upgraded = main.CommitState().RevisionAddress;
+                upgraded = EvidenceAddress(repository, main.CommitState().Id);
                 schema = repository.SharedSchemaRoot!.Value;
                 Assert.NotEqual(schemaV1, schema);
-                DevelopmentAssertUpgrade(ReferenceGraphStore(repository), main, host, baseline, baseline,
+                DevelopmentAssertUpgrade(repository, main, host, baseline, baseline,
                     schema, rootId, originalEdges, originalStorage);
                 SchemaCatalogView catalog = SchemaCatalogView.Load(ReferenceGraphStore(repository), schema);
                 Assert.Equal(2, catalog.Schemas.Count);
@@ -84,9 +85,9 @@ public sealed partial class DurableSchemaGeneratorTests {
             }
             ContinueSharedSchemaCopy(path, host, upgraded, schema, rootId, originalEdges, seven);
             using (Repository repository = Repository.OpenReadOnlyExisting(path, host.Models())) {
-                host.Check(repository.ReadState(repository.GetHead("main")), 2 + host.Offset, 1 + host.Offset, seven);
-                Assert.Equal(baseline, repository.ResolveTag("user-v1").RevisionAddress);
-                Assert.Equal(schemaV1, ReferenceGraphStore(repository).ReadGraph(baseline).SchemaRoot);
+                host.Check(repository.LoadState(repository.ReadCurrentCommit(EvidenceBranch(repository, "main")).Commit.Id), 2 + host.Offset, 1 + host.Offset, seven);
+                Assert.Equal(baseline, EvidenceAddress(repository, repository.ResolveTag("user-v1")));
+                Assert.Equal(schemaV1, PublishedGraph(EvidenceResources(repository), baseline).SchemaRoot);
                 EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, originalFrames);
             }
         }
@@ -99,7 +100,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }) {
             Dictionary<string, string> before = SharedCopyFileHashes(path);
             using (Repository repository = Repository.OpenReadOnlyExisting(path, wrongHost.Models())) {
-                Assert.ThrowsAny<InvalidDataException>(() => repository.ReadState(repository.GetHead("main")));
+                Assert.ThrowsAny<InvalidDataException>(() => repository.LoadState(repository.ReadCurrentCommit(EvidenceBranch(repository, "main")).Commit.Id));
                 Assert.False(repository.IsFaulted);
             }
             AssertSharedCopyHashes(before, SharedCopyFileHashes(path));
@@ -119,12 +120,12 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(b.Schema(), winner.Schema());
         FrameAddress finalState, finalSchema;
         using (Repository repository = Repository.OpenExisting(release.Path, winner.Models())) {
-            using BranchCheckout main = repository.CheckoutShared("main");
+            using WorkingCopy main = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
             Assert.Equal(baseline, main.StateRevisionAddress);
-            finalState = main.CommitState().RevisionAddress;
+            finalState = EvidenceAddress(repository, main.CommitState().Id);
             finalSchema = repository.SharedSchemaRoot!.Value;
             GraphRecordStore store = ReferenceGraphStore(repository);
-            DevelopmentAssertUpgrade(store, main, winner, baseline, baseline, finalSchema, rootId, originalEdges, originalStorage);
+            DevelopmentAssertUpgrade(repository, main, winner, baseline, baseline, finalSchema, rootId, originalEdges, originalStorage);
             SchemaCatalogView catalog = SchemaCatalogView.Load(store, finalSchema);
             Assert.Equal(2, catalog.Schemas.Count);
             Assert.Equal(old.Schema(), catalog.Schemas[new(old.Schema().Type, 1)]);
@@ -133,20 +134,20 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         ContinueSharedSchemaCopy(release.Path, winner, finalState, finalSchema, rootId, originalEdges, 9000);
         using (Repository repository = Repository.OpenReadOnlyExisting(release.Path, winner.Models())) {
-            winner.Check(repository.ReadState(repository.GetHead("main")), 202, 201, 9000);
-            winner.Check(repository.ReadState(repository.ResolveTag("user-v1")), 202, 201, 7);
+            winner.Check(repository.LoadState(repository.ReadCurrentCommit(EvidenceBranch(repository, "main")).Commit.Id), 202, 201, 9000);
+            winner.Check(repository.LoadState(repository.ResolveTag("user-v1")), 202, 201, 7);
             EvidenceAssertFramesPreserved(EvidenceResources(repository).Data, originalFrames);
         }
         // The repository's current catalog now contains V2, but an old host can
         // still read the bookmarked V1 with its own exact historical Schema.
         using (Repository repository = Repository.OpenReadOnlyExisting(release.Path, old.Models())) {
             Assert.Equal(finalSchema, repository.SharedSchemaRoot);
-            old.Check(repository.ReadState(repository.ResolveTag("user-v1")), 2, 1, 7);
+            old.Check(repository.LoadState(repository.ResolveTag("user-v1")), 2, 1, 7);
         }
         using (Repository repository = Repository.OpenReadOnlyExisting(template.Path, old.Models())) {
-            Assert.Equal(baseline, repository.GetHead("main").RevisionAddress);
+            Assert.Equal(baseline, EvidenceAddress(repository, repository.ReadCurrentCommit(EvidenceBranch(repository, "main")).Commit.Id));
             Assert.Equal(schemaV1, repository.SharedSchemaRoot);
-            old.Check(repository.ReadState(repository.GetHead("main")), 2, 1, 7);
+            old.Check(repository.LoadState(repository.ReadCurrentCommit(EvidenceBranch(repository, "main")).Commit.Id), 2, 1, 7);
         }
         AssertSharedCopyHashes(templateHashes, SharedCopyFileHashes(template.Path));
     }
@@ -155,13 +156,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress source, FrameAddress schema, ObjectId rootId,
         Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges, int seven) {
         using Repository repository = Repository.OpenExisting(path, host.Models());
-        using BranchCheckout main = repository.CheckoutShared("main");
+        using WorkingCopy main = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
         Assert.Equal(source, main.StateRevisionAddress);
         DevelopmentAssertIdentity(main, host, rootId, edges);
         Dictionary<ObjectId, ObjectStorageInfo> prior = DevelopmentStorage(main);
         ObjectId listId = edges[rootId].List;
         host.ChangeList(main.State!, seven);
-        FrameAddress saved = main.CommitState(new(int.MaxValue, 1)).RevisionAddress;
+        FrameAddress saved = EvidenceAddress(repository, main.CommitState(parameters: new(int.MaxValue, 1)).Id);
         DevelopmentAssertDelta(ReferenceGraphStore(repository), main, source, saved, schema, listId, prior[listId]);
         foreach ((ObjectId id, ObjectStorageInfo storage) in prior.Where(pair => pair.Key != listId)) {
             Assert.Equal(storage, main.Baseline!.Objects[id].Storage);

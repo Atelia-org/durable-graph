@@ -21,22 +21,24 @@ public sealed partial class DurableSchemaGeneratorTests {
         uint[] sourceIds;
         using (Repository repository = Repository.CreateNew(directory.Path, fixture.OldModels(), rotationThreshold)) {
             object root = fixture.CreateOld();
-            using BranchCheckout branch = repository.CreateSharedBranch("main", (IDurableObject)root, ReferenceGraphNoRebase);
-            first = branch.Head.Address;
+            BranchId mainId = repository.CreateRootBranchFromState("main", (IDurableObject)root, parameters: ReferenceGraphNoRebase).Id;
+            using WorkingCopy branch = repository.OpenWorkingCopy(mainId);
+            first = EvidenceAddress(repository, branch.BaseCommitId);
             rootId = branch.StateId!.Value;
-            repository.CreateTag("initial", branch.Head);
+            repository.CreateTag("initial", branch.BaseCommitId);
+            root = branch.State!;
             fixture.ChangeOld(root, 2);
-            second = branch.CommitState(ReferenceGraphNoRebase).Address;
+            second = EvidenceAddress(repository, branch.CommitState(parameters: ReferenceGraphNoRebase).Id);
             fixture.ChangeOld(root, 3);
-            third = branch.CommitState(ReferenceGraphNoRebase).Address;
-            repository.CreateTag("old-latest", branch.Head);
+            third = EvidenceAddress(repository, branch.CommitState(parameters: ReferenceGraphNoRebase).Id);
+            repository.CreateTag("old-latest", branch.BaseCommitId);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, second)).Kind);
-            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, third)).Kind);
-            Assert.Equal(3, store.ReadObjectChain(third, rootId.Value).Entries.Count);
-            DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, third, fixture.CurrentModels());
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), second))).Kind);
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), third))).Kind);
+            Assert.Equal(3, store.ReadObjectChain(PublishedGraph(EvidenceResources(repository), third), rootId.Value).Entries.Count);
+            DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, PublishedGraph(EvidenceResources(repository), third), fixture.CurrentModels().FreezeConfiguration());
             retiredId = Assert.Single(stored.Objects, row => row.Kind == ObjectStateKind.String && row.StringContent == "retired ancestor field").Id.Value;
-            sourceIds = store.ReadGraph(third).ObjectHeads.Keys.ToArray();
+            sourceIds = PublishedGraph(EvidenceResources(repository), third).ObjectHeads.Keys.ToArray();
             Assert.Equal(5, sourceIds.Length); // Root, retired string, two distinct equal strings and Empty.
             Assert.Equal(3, fixture.ReadStoredNumber(stored.GetRequired(rootId)));
             Assert.Equal(0, fixture.UpgradeCalls()); // Stored-exact reads do not Upgrade.
@@ -44,54 +46,54 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), rotationThreshold)) {
             fixture.ResetConstructors();
-            using BranchCheckout loaded = repository.CheckoutShared("main");
+            using WorkingCopy loaded = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
             fixture.Check(loaded.State!, 3);
             Assert.Equal(1, fixture.UpgradeCalls()); // Upgrade runs after both historical Deltas.
             Assert.Equal(rootId, loaded.StateId);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            rewritten = loaded.CommitState(ReferenceGraphNoRebase).Address;
-            Assert.Equal(third, store.ReadGraph(rewritten).SourceGraph);
-            Assert.Equal<uint>([retiredId], DefaultRemoved(store, rewritten));
-            ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, rewritten));
+            rewritten = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
+            Assert.Equal(third, PublishedGraph(EvidenceResources(repository), rewritten).SourceGraph);
+            Assert.Equal<uint>([retiredId], PublishedRemoved(EvidenceResources(repository), rewritten));
+            ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), rewritten)));
             Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
             Assert.Equal(rootId.Value, rewrite.ObjectId);
-            Assert.Equal(2, DefaultLayout(store, rewritten, rootId.Value).Schema!.Version);
-            Assert.Single(store.ReadObjectChain(rewritten, rootId.Value).Entries);
-            Assert.Equal(sourceIds.Where(id => id != retiredId).Order(), store.ReadGraph(rewritten).ObjectHeads.Keys.Order());
+            Assert.Equal(2, DefaultLayout(store, PublishedGraph(EvidenceResources(repository), rewritten), rootId.Value).Schema!.Version);
+            Assert.Single(store.ReadObjectChain(PublishedGraph(EvidenceResources(repository), rewritten), rootId.Value).Entries);
+            Assert.Equal(sourceIds.Where(id => id != retiredId).Order(), PublishedGraph(EvidenceResources(repository), rewritten).ObjectHeads.Keys.Order());
             fixture.Change(loaded.State!, 99);
-            fixture.Check(repository.ReadState(loaded.Head), 3);
+            fixture.Check(repository.LoadState(loaded.BaseCommitId), 3);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels(), rotationThreshold)) {
             fixture.ResetConstructors();
             int upgrades = fixture.UpgradeCalls();
-            using BranchCheckout loaded = repository.CheckoutShared("main");
+            using WorkingCopy loaded = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
             fixture.Check(loaded.State!, 3);
             Assert.Equal(upgrades, fixture.UpgradeCalls());
             Assert.Equal(rootId, loaded.StateId);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            unchanged = loaded.CommitState(ReferenceGraphNoRebase).Address;
-            Assert.Empty(DefaultRecords(store, unchanged));
-            Assert.Empty(DefaultRemoved(store, unchanged));
-            Assert.Equal(rewritten, store.ReadGraph(unchanged).SourceGraph);
+            unchanged = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
+            Assert.Empty(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), unchanged)));
+            Assert.Empty(PublishedRemoved(EvidenceResources(repository), unchanged));
+            Assert.Equal(rewritten, PublishedGraph(EvidenceResources(repository), unchanged).SourceGraph);
             fixture.Change(loaded.State!, 4);
-            changed = loaded.CommitState(ReferenceGraphNoRebase).Address;
-            Assert.Equal(unchanged, store.ReadGraph(changed).SourceGraph);
-            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, changed)).Kind);
+            changed = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
+            Assert.Equal(unchanged, PublishedGraph(EvidenceResources(repository), changed).SourceGraph);
+            Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), changed))).Kind);
         }
         var bytesBefore = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, File.ReadAllBytes);
         using (Repository repository = Repository.OpenReadOnlyExisting(directory.Path, fixture.CurrentModels())) {
             fixture.ResetConstructors();
-            fixture.Check(repository.ReadState(repository.GetHead("main")), 4);
-            fixture.Check(repository.ReadState(repository.ResolveTag("initial")), 1);
-            fixture.Check(repository.ReadState(repository.ResolveTag("old-latest")), 3);
+            fixture.Check(repository.LoadState(repository.ReadCurrentCommit(EvidenceBranch(repository, "main")).Commit.Id), 4);
+            fixture.Check(repository.LoadState(repository.ResolveTag("initial")), 1);
+            fixture.Check(repository.LoadState(repository.ResolveTag("old-latest")), 3);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(new[] { store.ReadGraph(rewritten).OwnedBatch, store.ReadGraph(changed).OwnedBatch },
-                store.ReadObjectChain(changed, rootId.Value).Entries.Select(row => (FrameAddress?)row.ContainingBatch));
-            Assert.Contains(retiredId, store.ReadGraph(third).ObjectHeads.Keys);
-            DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, third, fixture.CurrentModels());
+            Assert.Equal(new[] { PublishedGraph(EvidenceResources(repository), rewritten).OwnedBatch, PublishedGraph(EvidenceResources(repository), changed).OwnedBatch },
+                store.ReadObjectChain(PublishedGraph(EvidenceResources(repository), changed), rootId.Value).Entries.Select(row => (FrameAddress?)row.ContainingBatch));
+            Assert.Contains(retiredId, PublishedGraph(EvidenceResources(repository), third).ObjectHeads.Keys);
+            DecodedRevision stored = DecodedRevision.ReadStoredGraph(store, PublishedGraph(EvidenceResources(repository), third), fixture.CurrentModels().FreezeConfiguration());
             Assert.Equal(3, fixture.ReadStoredNumber(stored.GetRequired(rootId)));
-            Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(EvidenceBranch(repository, "main")));
         }
         Assert.Equal(bytesBefore.Keys.Order(), Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories).Order());
         foreach ((string path, byte[] contents) in bytesBefore) { Assert.Equal(contents, File.ReadAllBytes(path)); }
@@ -104,12 +106,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         FrameAddress original, merged;
         uint rootId, nameId, aliasId, emptyId;
         using (Repository repository = Repository.CreateNew(directory.Path, fixture.CurrentModels())) {
-            using BranchCheckout seed = repository.CreateSharedBranch("main", (IDurableObject)fixture.CreateCurrent(), ReferenceGraphNoRebase);
-            original = seed.Head.Address;
+            BranchId mainId = repository.CreateRootBranchFromState("main", (IDurableObject)fixture.CreateCurrent(), parameters: ReferenceGraphNoRebase).Id;
+            using WorkingCopy seed = repository.OpenWorkingCopy(mainId);
+            original = EvidenceAddress(repository, seed.BaseCommitId);
             rootId = seed.StateId!.Value.Value;
-            repository.CreateTag("original", seed.Head);
+            repository.CreateTag("original", seed.BaseCommitId);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            DecodedRevision source = DecodedRevision.ReadStoredGraph(store, original, fixture.CurrentModels());
+            DecodedRevision source = DecodedRevision.ReadStoredGraph(store, PublishedGraph(EvidenceResources(repository), original), fixture.CurrentModels().FreezeConfiguration());
             ObjectStateRecord[] names = source.Objects.Where(row => row.Kind == ObjectStateKind.String && row.StringContent == "same").ToArray();
             Assert.Equal(2, names.Length);
             nameId = names.Min(row => row.Id.Value);
@@ -119,33 +122,33 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels())) {
             fixture.ResetConstructors();
-            using BranchCheckout loaded = repository.CheckoutShared("main");
+            using WorkingCopy loaded = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
             fixture.CheckCurrent(loaded.State!, 3);
             Assert.Equal(0, fixture.UpgradeCalls());
             GraphRecordStore store = ReferenceGraphStore(repository);
-            CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
-            Assert.Empty(DefaultRecords(store, unchanged.Address));
-            Assert.Empty(DefaultRemoved(store, unchanged.Address));
+            CommitId unchanged = loaded.CommitState(parameters: ReferenceGraphNoRebase).Id;
+            Assert.Empty(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, unchanged))));
+            Assert.Empty(PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, unchanged)));
             fixture.MergeNames(loaded.State!);
-            merged = loaded.CommitState(ReferenceGraphNoRebase).Address;
-            Assert.Equal<uint>([aliasId], DefaultRemoved(store, merged));
-            ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, merged));
+            merged = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
+            Assert.Equal<uint>([aliasId], PublishedRemoved(EvidenceResources(repository), merged));
+            ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), merged)));
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(rootId, delta.ObjectId);
-            Assert.Equal(new[] { rootId, nameId, emptyId }.Order(), store.ReadGraph(merged).ObjectHeads.Keys.Order());
-            Assert.Equal(store.ReadGraph(original).ObjectHeads[nameId], store.ReadGraph(merged).ObjectHeads[nameId]);
-            Assert.Equal(store.ReadGraph(original).ObjectHeads[emptyId], store.ReadGraph(merged).ObjectHeads[emptyId]);
+            Assert.Equal(new[] { rootId, nameId, emptyId }.Order(), PublishedGraph(EvidenceResources(repository), merged).ObjectHeads.Keys.Order());
+            Assert.Equal(PublishedGraph(EvidenceResources(repository), original).ObjectHeads[nameId], PublishedGraph(EvidenceResources(repository), merged).ObjectHeads[nameId]);
+            Assert.Equal(PublishedGraph(EvidenceResources(repository), original).ObjectHeads[emptyId], PublishedGraph(EvidenceResources(repository), merged).ObjectHeads[emptyId]);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, fixture.CurrentModels())) {
             fixture.ResetConstructors();
-            fixture.CheckCurrent(repository.ReadState(repository.ResolveTag("original")), 3);
-            using BranchCheckout loaded = repository.CheckoutShared("main");
+            fixture.CheckCurrent(repository.LoadState(repository.ResolveTag("original")), 3);
+            using WorkingCopy loaded = repository.OpenWorkingCopy(EvidenceBranch(repository, "main"));
             fixture.CheckMerged(loaded.State!, 3);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(2, store.ReadObjectChain(merged, rootId).Entries.Count);
-            CheckpointAddress unchanged = loaded.CommitState(ReferenceGraphNoRebase);
-            Assert.Empty(DefaultRecords(store, unchanged.Address));
-            Assert.Empty(DefaultRemoved(store, unchanged.Address));
+            Assert.Equal(2, store.ReadObjectChain(PublishedGraph(EvidenceResources(repository), merged), rootId).Entries.Count);
+            CommitId unchanged = loaded.CommitState(parameters: ReferenceGraphNoRebase).Id;
+            Assert.Empty(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, unchanged))));
+            Assert.Empty(PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, unchanged)));
         }
     }
 

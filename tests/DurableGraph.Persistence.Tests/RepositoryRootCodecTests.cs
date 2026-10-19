@@ -1,4 +1,3 @@
-
 using Atelia.HeadStore;
 using Node = Atelia.DurableGraph.Persistence.Tests.SharedReadModel.Node;
 using PublicationStore = Atelia.HeadStore.HeadStore;
@@ -10,42 +9,49 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void RequiredBranchAndSharedRefsUseDistinctHeadersAndSelectedKeyGrammar() {
-        using RepositoryResources resources = RepositoryResources.CreateNew(_root);
+    public void RequiredControlsUseDistinctHeadersAndBranchLabelsAreSeparateFromIdentity() {
+        using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
+        RepositoryResources resources = ResourcesOf(repository);
         Assert.Equal(3u, resources.Heads.ReservedHeadIdUpperBound);
         var initialBranches = resources.Heads.ReadHead(1).Unwrap();
         var initialShared = resources.Heads.ReadHead(2).Unwrap();
-        Assert.Equal("P0R2"u8.ToArray(), initialBranches.Payload[..4].ToArray());
+        var initialBookmarks = resources.Heads.ReadHead(3).Unwrap();
+        Assert.Equal("P0R3"u8.ToArray(), initialBranches.Payload[..4].ToArray());
         Assert.Equal("P0S1"u8.ToArray(), initialShared.Payload[..4].ToArray());
-        Assert.Empty(NamedFrameMapCodec.Decode(initialBranches.Payload[4..]).Unwrap());
+        Assert.Equal("P0T2"u8.ToArray(), initialBookmarks.Payload[..4].ToArray());
+        Assert.Null(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, initialBranches.Payload));
+        Assert.Null(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Bookmarks, initialBookmarks.Payload));
         Assert.Empty(NamedFrameMapCodec.Decode(initialShared.Payload[4..]).Unwrap());
-        RepositoryResources.ValidateBranchName("main");
-        RepositoryResources.ValidateBranchName("branch-name.1");
-        FrameAddress head = Seed(resources);
-        var extra = resources.PrepareBranchRoot("branch-name.1", head);
-        resources.PublishBranchRoot(extra, out _);
-        var branches = NamedFrameMapCodec.Decode(resources.Heads.ReadHead(1).Unwrap().Payload[4..]).Unwrap();
-        Assert.Equal(new[] { "branch/branch-name.1", "branch/main" }, branches.Keys.Order());
-        Assert.All(branches.Values, address => Assert.Equal(head, address));
+        BranchInfo branch = repository.CreateRootBranchFromState("世界 / Main", new Node { Value = 7 });
+        CommitId source = repository.ReadCurrentCommit(branch.Id).Commit.Id;
+        BranchInfo fork = repository.ForkBranch(source, "世界 / Main");
+        Assert.NotEqual(branch.Id, fork.Id);
+        Assert.Equal(source, repository.ReadCurrentCommit(fork.Id).Commit.Id);
+        Assert.Equal(2, resources.ListBranches().Count);
+        Assert.All(resources.ListBranches().Values, label => Assert.Equal("世界 / Main", label));
+        var directory = resources.Heads.ReadHead(1).Unwrap();
+        Assert.Equal(17, directory.Payload.Length);
+        FrameAddress graph = ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, directory.Payload)!.Value;
+        Assert.Equal(StoredGraphKind.Meta, resources.GraphStore.ReadMetaGraph(graph).Kind);
         var shared = NamedFrameMapCodec.Decode(resources.Heads.ReadHead(2).Unwrap().Payload[4..]).Unwrap();
         Assert.Equal("schema", Assert.Single(shared).Key);
         Assert.Equal(resources.SharedSchemaRoot, shared["schema"]);
-        Assert.Equal(StoredGraphKind.Meta, resources.GraphStore.ReadMetadata(shared["schema"]).Kind);
+        Assert.Equal(StoredGraphKind.Meta, resources.GraphStore.ReadMetaGraph(shared["schema"]).Kind);
     }
 
-    [Fact]
-    public void Legacy_three_head_P0R1_repository_rejects_both_open_modes_without_mutation() {
+    [Theory]
+    [InlineData('1')]
+    [InlineData('2')]
+    public void LegacyThreeHeadDirectoryRejectsBothOpenModesWithoutMutation(char version) {
         byte[] payload;
-        using (RepositoryResources resources = RepositoryResources.CreateNew(_root)) {
-            Seed(resources);
-            payload = resources.Heads.ReadHead(1).Unwrap().Payload.ToArray();
-            Assert.True(payload.AsSpan().StartsWith("P0R2"u8));
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            repository.CreateRootBranchFromState("main", new Node { Value = 7 });
+            payload = ResourcesOf(repository).Heads.ReadHead(1).Unwrap().Payload.ToArray();
+            Assert.True(payload.AsSpan().StartsWith("P0R3"u8));
         }
-        // Publish a complete, otherwise valid legacy branch-directory root using
-        // only the backing stores, with every DG owner/cache already closed.
         using (var data = Atelia.FrameStore.FrameStore.Open(Path.Combine(_root, "data")))
         using (var heads = PublicationStore.Open(Path.Combine(_root, "versions"), data)) {
-            payload[3] = (byte)'1';
+            payload[3] = (byte)version;
             var branch = heads.ReadHead(1).Unwrap();
             heads.PublishHead(branch.Id.HeadId, payload, out PublicationOutcome outcome).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, outcome);
@@ -57,7 +63,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
                     ? Repository.OpenReadOnlyExisting(_root, SharedReadModel.Models())
                     : Repository.OpenExisting(_root, SharedReadModel.Models());
             });
-            Assert.Equal("Unknown P0 publication-root format.", error.Message);
+            Assert.Equal("Unknown management directory pointer format.", error.Message);
             AssertSnapshot(before);
         }
     }
@@ -66,35 +72,44 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     [InlineData(1u, "magic")]
     [InlineData(1u, "version")]
     [InlineData(1u, "header-role")]
-    [InlineData(1u, "unknown")]
-    [InlineData(1u, "schema")]
-    [InlineData(1u, "branch/")]
-    [InlineData(1u, "branch/Upper")]
-    [InlineData(1u, "branch/main.lock")]
-    [InlineData(1u, "branch/bad/name")]
+    [InlineData(1u, "presence")]
+    [InlineData(1u, "truncated")]
+    [InlineData(1u, "trailing")]
+    [InlineData(3u, "magic")]
+    [InlineData(3u, "header-role")]
+    [InlineData(3u, "presence")]
     [InlineData(2u, "magic")]
     [InlineData(2u, "version")]
     [InlineData(2u, "header-role")]
     [InlineData(2u, "unknown")]
     [InlineData(2u, "branch/main")]
     [InlineData(2u, "schema-extra")]
-    public void PersistedUnknownOrInvalidRootKeyRejectsOpenWithoutMutation(uint refId, string mutation) {
-        using (RepositoryResources resources = RepositoryResources.CreateNew(_root)) { Seed(resources); }
-        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            // HeadStore owns opaque bytes. These are complete valid VS publications
-            // whose required DG root grammar is deliberately invalid; there is no pending tail.
-            FrameAddress selected = refId == 1 ? resources.GetBranchHead("main")!.Value : resources.SharedSchemaRoot!.Value;
-            string validKey = refId == 1 ? "branch/main" : "schema";
-            string key = mutation is "magic" or "version" or "header-role" or "schema-extra" ? validKey : mutation;
-            Dictionary<string, FrameAddress> roots = new(StringComparer.Ordinal) { [key] = selected };
-            if (mutation == "schema-extra") { roots["extra"] = selected; }
-            byte[] map = NamedFrameMapCodec.Encode(roots).Unwrap();
-            byte[] magic = refId == 1 ? "P0R2"u8.ToArray() : "P0S1"u8.ToArray();
-            if (mutation == "header-role") { magic = refId == 1 ? "P0S1"u8.ToArray() : "P0R2"u8.ToArray(); }
-            byte[] payload = [.. magic, .. map];
-            if (mutation == "magic") { payload[0] = 0; }
-            if (mutation == "version") { payload[3] = (byte)'9'; }
-            resources.Heads.PublishHead(resources.Heads.ReadHead(refId).Unwrap().Id.HeadId, payload, out _).Unwrap();
+    public void PersistedInvalidControlPayloadRejectsOpenWithoutMutation(uint headId, string mutation) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            repository.CreateRootBranchFromState("main", new Node { Value = 7 });
+        }
+        // Publish complete malformed control data only after every DG owner/cache is closed.
+        using (var data = Atelia.FrameStore.FrameStore.Open(Path.Combine(_root, "data")))
+        using (var heads = PublicationStore.Open(Path.Combine(_root, "versions"), data)) {
+            HeadEntry selected = heads.ReadHead(headId).Unwrap();
+            byte[] payload = selected.Payload.ToArray();
+            if (headId == 2 && mutation is "unknown" or "branch/main" or "schema-extra") {
+                var roots = NamedFrameMapCodec.Decode(payload.AsSpan(4)).Unwrap();
+                FrameAddress schema = roots["schema"];
+                var bad = new Dictionary<string, FrameAddress>(StringComparer.Ordinal) { [mutation == "schema-extra" ? "schema" : mutation] = schema };
+                if (mutation == "schema-extra") { bad["extra"] = schema; }
+                payload = [.. "P0S1"u8, .. NamedFrameMapCodec.Encode(bad).Unwrap()];
+            } else {
+                switch (mutation) {
+                    case "magic": payload[0] = 0; break;
+                    case "version": payload[3] = (byte)'9'; break;
+                    case "header-role": (headId == 2 ? "P0R3"u8 : "P0S1"u8).CopyTo(payload); break;
+                    case "presence": payload[4] = 2; break;
+                    case "truncated": payload = payload[..^1]; break;
+                    case "trailing": payload = [.. payload, 0]; break;
+                }
+            }
+            heads.PublishHead(selected.Id.HeadId, payload, out _).Unwrap();
         }
         var before = Snapshot();
         Assert.Throws<InvalidDataException>(() => RepositoryResources.OpenReadOnlyExisting(_root));
@@ -103,68 +118,35 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         AssertSnapshot(before);
     }
 
-    [Fact]
-    public void RealColdRootCapacityRefusalPreservesPublishedRootAndHealthyOwner() {
-        using (RepositoryResources resources = RepositoryResources.CreateNew(_root)) { Seed(resources); }
-        HeadEntryId accepted;
-        HeadEntryId sharedAccepted;
-        byte[] acceptedPayload, sharedPayload;
-        string extraName;
-        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            var initial = NamedFrameMapCodec.Decode(resources.Heads.ReadHead(1).Unwrap().Payload[4..]).Unwrap();
-            FrameAddress head = resources.GetBranchHead("main")!.Value;
-            var shared = resources.Heads.ReadHead(2).Unwrap();
-            sharedAccepted = shared.Id;
-            sharedPayload = shared.Payload.ToArray();
-            int low = 0, high = 10_000;
-            while (high - low > 1) {
-                int count = low + (high - low) / 2;
-                var body = NamedFrameMapCodec.Encode(Candidate(count));
-                if (!body.IsFailure && body.Value!.Length + 4 <= PublicationStore.MaxHeadEntryPayloadLength) { low = count; }
-                else { high = count; }
-            }
-            acceptedPayload = [.. "P0R2"u8, .. NamedFrameMapCodec.Encode(Candidate(low)).Unwrap()];
-            extraName = Name(low);
-            RepositoryResources.ValidateBranchName(extraName);
-            Assert.True(acceptedPayload.Length <= PublicationStore.MaxHeadEntryPayloadLength);
-            var refused = NamedFrameMapCodec.Encode(Candidate(low + 1));
-            Assert.True(refused.IsFailure || refused.Value!.Length + 4 > PublicationStore.MaxHeadEntryPayloadLength);
-            accepted = resources.Heads.PublishHead(resources.Heads.ReadHead(1).Unwrap().Id.HeadId, acceptedPayload, out _).Unwrap();
-
-            Dictionary<string, FrameAddress> Candidate(int count) {
-                var roots = new Dictionary<string, FrameAddress>(initial, StringComparer.Ordinal);
-                for (int index = 0; index < count; index++) { roots["branch/" + Name(index)] = head; }
-                return roots;
-            }
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("long")]
+    [InlineData("unicode")]
+    [InlineData("summary")]
+    public void InvalidCreationInputRejectsBeforeAppendAndPreservesHealthyOwner(string invalid) {
+        using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
+            repository.CreateRootBranchFromState("main", new Node { Value = 7 });
         }
+        // The old whole-table 1 MiB directory cap no longer exists. The applicable limits
+        // are each label and Entry summary; the small D pointer stays constant-sized.
         var before = Snapshot();
-        using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            var branchBefore = resources.Heads.ReadHead(1).Unwrap();
-            Assert.Equal(accepted, branchBefore.Id);
-            FrameAddress head = resources.GetBranchHead("main")!.Value;
+        using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
+            RepositoryResources resources = ResourcesOf(repository);
+            HeadEntry directory = resources.Heads.ReadHead(1).Unwrap(), shared = resources.Heads.ReadHead(2).Unwrap();
             long appended = resources.GraphStore.AppendedFrames;
-            Assert.Throws<InvalidOperationException>(() => resources.PrepareBranchRoot(extraName, head));
-            Assert.False(resources.IsFaulted);
-            resources.RequireAvailable();
+            string label = invalid switch { "empty" => "", "long" => new string('a', 1025), "unicode" => new string((char)0xD800, 1), _ => "candidate" };
+            byte[] summary = invalid == "summary" ? new byte[BusinessEntryPayloadCodec.MaxSummaryLength + 1] : [];
+            Assert.ThrowsAny<ArgumentException>(() => repository.CreateRootBranchFromState(label, new Node { Value = 8 }, summary));
+            Assert.False(repository.IsFaulted);
             Assert.Equal(appended, resources.GraphStore.AppendedFrames);
-            Assert.Null(resources.GetBranchHead(extraName));
-            var current = resources.Heads.ReadHead(1).Unwrap();
-            Assert.Equal(accepted, current.Id);
-            Assert.Equal(acceptedPayload, current.Payload.ToArray());
-            var shared = resources.Heads.ReadHead(2).Unwrap();
-            Assert.Equal(sharedAccepted, shared.Id);
-            Assert.Equal(sharedPayload, shared.Payload.ToArray());
+            Assert.Single(resources.ListBranches());
+            Assert.Equal(directory.Id, resources.Heads.ReadHead(1).Unwrap().Id);
+            Assert.Equal(shared.Id, resources.Heads.ReadHead(2).Unwrap().Id);
+            Assert.Equal(17, resources.Heads.ReadHead(1).Unwrap().Payload.Length);
         }
         AssertSnapshot(before);
     }
 
-    private static string Name(int index) => new string('a', 120) + index.ToString("D8", System.Globalization.CultureInfo.InvariantCulture);
-    private static FrameAddress Seed(RepositoryResources resources) {
-        using RepositoryStorageFacade facade = new(resources);
-        BranchSaveSession session = new(facade, "main", SharedReadModel.Models());
-        using PreparedBranchSave save = session.Prepare(new Node { Value = 7 });
-        return save.Commit().Business.Address;
-    }
     private Dictionary<string, byte[]> Snapshot() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
     private void AssertSnapshot(Dictionary<string, byte[]> expected) {
         Assert.Equal(expected.Keys.Order(), Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order());

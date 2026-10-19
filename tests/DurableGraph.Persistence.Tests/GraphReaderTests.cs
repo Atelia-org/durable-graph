@@ -26,8 +26,8 @@ public sealed class GraphReaderTests : IDisposable {
         using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, second, configuration);
-        DecodedRevision firstSource = DecodedRevision.ReadStoredGraph(reader.Store, first, configuration, secondSource.BindingEnvironment);
+        DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, second), configuration);
+        DecodedRevision firstSource = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, first), configuration, secondSource.BindingEnvironment);
         Assert.Same(secondSource.BindingEnvironment, firstSource.BindingEnvironment);
 
         // Input roots can select durable subclasses; restoration uses their actual models.
@@ -52,8 +52,8 @@ public sealed class GraphReaderTests : IDisposable {
         using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision first = DecodedRevision.ReadStoredGraph(reader.Store, address, configuration);
-        DecodedRevision second = DecodedRevision.ReadStoredGraph(reader.Store, address, configuration, first.BindingEnvironment);
+        DecodedRevision first = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, address), configuration);
+        DecodedRevision second = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, address), configuration, first.BindingEnvironment);
         Assert.Same(first.BindingEnvironment, second.BindingEnvironment);
         var pair = GraphReader.ReadPair(first, new(first.SourceModels!), new(1), second, new(second.SourceModels!), new(1));
         FirstNode firstRoot = Assert.IsType<FirstNode>(pair.First);
@@ -79,8 +79,8 @@ public sealed class GraphReaderTests : IDisposable {
         using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision firstSource = DecodedRevision.ReadStoredGraph(reader.Store, first, configuration);
-        DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, second, configuration, firstSource.BindingEnvironment);
+        DecodedRevision firstSource = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, first), configuration);
+        DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, second), configuration, firstSource.BindingEnvironment);
         (IDurableObject First, IDurableObject Second)? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair(
@@ -98,7 +98,7 @@ public sealed class GraphReaderTests : IDisposable {
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => { allocations++; return new(); }));
         using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
-        DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.Store, address, registry);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, address), registry.FreezeConfiguration());
         Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(source, new(99), new(source.SourceModels!)));
         Assert.Throws<InvalidDataException>(() => GraphReader.Read<SecondNode>(source, new(1), new(source.SourceModels!)));
         Assert.Throws<InvalidDataException>(() => GraphReader.Read<Node>(source, new(1), new(source.SourceModels!), requireExactRootType: true));
@@ -110,16 +110,17 @@ public sealed class GraphReaderTests : IDisposable {
     [Fact]
     public void IndependentMembershipDoesNotRunUnrelatedParentReadersOrModels() {
         FrameAddress parent = Seed((1, FirstSchema, new(0, 0, 1)), (9, SecondSchema, new(0, 0, 9)));
-        StoredGraphRevision parentGraph = _writer.Store.ReadGraph(parent);
+        StoredGraphRevision parentGraph = MechanismFixture.Snapshot(_writer, parent);
         FrameAddress child;
         // The child has its own actual complete membership, retaining only first's
         // existing head. Directory reconstruction never invokes unrelated body readers.
-        using (PendingRepositorySave pending = _writer.Prepare("seed-0", StoredGraphKind.State,
-            new(parent, new(1), [], [9]))) {
+        using (PendingRepositorySave pending = _writer.PrepareFrom(MechanismFixture.Branch(_writer, "seed-0"),
+            MechanismFixture.Current(_writer, "seed-0").Id, null, StoredGraphKind.State, default,
+            () => (new(parent, new(1), [], [9]), null))) {
             child = _writer.Commit(pending).Business.Address;
         }
-        Assert.Equal(new uint[] { 1 }, _writer.Store.ReadGraph(child).ObjectHeads.Keys);
-        Assert.Equal(parentGraph.ObjectHeads[1], _writer.Store.ReadGraph(child).ObjectHeads[1]);
+        Assert.Equal(new uint[] { 1 }, MechanismFixture.Snapshot(_writer, child).ObjectHeads.Keys);
+        Assert.Equal(parentGraph.ObjectHeads[1], MechanismFixture.Snapshot(_writer, child).ObjectHeads[1]);
         // No SecondNode reader/model is registered. Reading the complete parent fails;
         // the selected child only restores its own membership and retained old first head.
         int hydrations = 0;
@@ -127,11 +128,11 @@ public sealed class GraphReaderTests : IDisposable {
         using RepositoryStorageFacade reader = OpenReader();
         long tail = DataBytes(reader.Data);
         StateModelRegistry.FrozenConfiguration configuration = registry.FreezeConfiguration();
-        DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.Store, child, configuration);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, child), configuration);
         FirstNode root = GraphReader.Read<FirstNode>(source, new(1), new(source.SourceModels!)).Root;
         Assert.Equal(1, root.Value);
         Assert.Equal(1, hydrations);
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reader.Store, parent, configuration, source.BindingEnvironment));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, parent), configuration, source.BindingEnvironment));
         Assert.Equal(1, hydrations);
         Assert.Equal(tail, DataBytes(reader.Data));
     }
@@ -188,9 +189,10 @@ public sealed class GraphReaderTests : IDisposable {
         ObjectVersionRecord[] records = rows.Select(row => ObjectVersionRecord.CreateBase(row.Id,
             TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(row.Schema), Base(row.State), meta.View))).ToArray();
         string branch = $"seed-{_seedIndex++}";
-        using PendingRepositorySave pending = _writer.Prepare(branch, StoredGraphKind.State, new(null, new(1), records), meta.Write);
+        using PendingRepositorySave pending = _writer.PrepareFrom(null, null, branch, StoredGraphKind.State, default,
+            () => (new(null, new(1), records), meta.Write));
         RepositorySaveResult saved = _writer.Commit(pending, meta.Install, prepareMeta: meta.PrepareInstall);
-        Assert.Equal(saved.Business.Address, _writer.GetHead(branch));
+        Assert.Equal(saved.Business.Address, MechanismFixture.Current(_writer, branch).Address);
         Assert.Equal(saved.Business.SchemaRoot, _writer.SharedSchemaRoot);
         return saved.Business.Address;
     }

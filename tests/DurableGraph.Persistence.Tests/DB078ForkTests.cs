@@ -1,3 +1,4 @@
+using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using System.Reflection;
 using Atelia.DurableGraph.Schema;
@@ -13,21 +14,23 @@ public sealed partial class EventHistoryRepositoryTests {
         Node island = new() { Value = 2 };
         island.Left = island;
         Node root = new() { Value = 1, Left = island, Right = island };
-        CheckpointAddress initial, childOnly, nextChildOnly, removed, otherHead, mainHead;
+        CommitId initial, childOnly, nextChildOnly, removed, otherHead, mainHead;
         using (Repository repository = CreateRepository()) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", root, NoRebase);
-            initial = main.Head;
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", root, parameters: NoRebase).Id);
+            initial = main.BaseCommitId;
+            root = Assert.IsType<Node>(main.State);
+            island = root.Left!;
             root.Value = 90;
             island.Value = 91;
             var beforeFork = ImmutableHistoryFiles();
-            using BranchCheckout a = repository.ForkShared("a", initial);
-            using BranchCheckout b = repository.ForkShared("b", initial);
+            using WorkingCopy a = repository.OpenWorkingCopy(repository.ForkBranch(initial, "a").Id);
+            using WorkingCopy b = repository.OpenWorkingCopy(repository.ForkBranch(initial, "b").Id);
             AssertHistoryFiles(beforeFork);
-            Assert.Equal(initial, a.Head);
-            Assert.Equal(initial, b.Head);
-            Assert.Equal(initial, main.Head);
-            Assert.Equal(initial.RootId, a.StateId);
-            Assert.Equal(initial.RootId, b.StateId);
+            Assert.Equal(initial, a.BaseCommitId);
+            Assert.Equal(initial, b.BaseCommitId);
+            Assert.Equal(initial, main.BaseCommitId);
+            Assert.Equal(Describe(repository, initial).RootId, a.StateId);
+            Assert.Equal(Describe(repository, initial).RootId, b.StateId);
             Node av = Assert.IsType<Node>(a.State), bv = Assert.IsType<Node>(b.State);
             Assert.Equal((byte)1, av.Value);
             Assert.Equal((byte)2, av.Left!.Value);
@@ -40,45 +43,45 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.NotSame(island, av.Left);
             Assert.NotSame(av.Left, bv.Left);
             av.Left.Value = 3;
-            childOnly = a.CommitState(NoRebase);
-            Assert.Equal(initial.Address, childOnly.Parent);
-            Assert.Equal(initial, b.Head);
+            childOnly = a.CommitState(parameters: NoRebase).Id;
+            Assert.Equal(initial, Previous(repository, childOnly));
+            Assert.Equal(initial, b.BaseCommitId);
             Assert.Equal((byte)2, bv.Left.Value);
             Assert.Equal((byte)91, island.Value);
-            b.CommitEvent(new Node { Value = 7 }, NoRebase);
+            b.CommitEvent(new Node { Value = 7 }, parameters: NoRebase);
             bv.Left.Value = 8;
-            otherHead = b.CommitState(NoRebase);
+            otherHead = b.CommitState(parameters: NoRebase).Id;
             av.Left.Value = 4;
-            nextChildOnly = a.CommitState(NoRebase);
+            nextChildOnly = a.CommitState(parameters: NoRebase).Id;
             av.Left = av.Right = null;
-            removed = a.CommitState(NoRebase);
-            mainHead = main.CommitState(NoRebase);
-            Assert.Equal((byte)8, Assert.IsType<Node>(repository.ReadState(otherHead)).Left!.Value);
+            removed = a.CommitState(parameters: NoRebase).Id;
+            mainHead = main.CommitState(parameters: NoRebase).Id;
+            Assert.Equal((byte)8, Assert.IsType<Node>(repository.LoadState(otherHead)).Left!.Value);
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            uint childId = Assert.Single(states.ReadGraph(initial.RevisionAddress).ObjectHeads.Keys, id => id != initial.RootId.Value);
-            ObjectVersionRecord firstWrite = Assert.Single(StorageTestData.LocalRecords(states, childOnly.RevisionAddress));
+            uint childId = Assert.Single(Snapshot(resources, initial).ObjectHeads.Keys, id => id != Describe(resources, initial).RootId.Value);
+            ObjectVersionRecord firstWrite = Assert.Single(StorageTestData.LocalRecords(states, Describe(resources, childOnly).Address));
             Assert.Equal(childId, firstWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, firstWrite.Kind);
-            Assert.Equal(initial.RevisionAddress, states.ReadGraph(childOnly.RevisionAddress).SourceGraph);
-            ObjectVersionRecord nextWrite = Assert.Single(StorageTestData.LocalRecords(states, nextChildOnly.RevisionAddress));
+            Assert.Equal(Describe(resources, initial).Address, Snapshot(resources, childOnly).SourceGraph);
+            ObjectVersionRecord nextWrite = Assert.Single(StorageTestData.LocalRecords(states, Describe(resources, nextChildOnly).Address));
             Assert.Equal(childId, nextWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, nextWrite.Kind);
-            Assert.Equal(states.ReadGraph(childOnly.RevisionAddress).ObjectHeads[childId], nextWrite.PriorAddress);
-            Assert.Equal(new[] { initial.RootId.Value }, states.ReadGraph(removed.RevisionAddress).ObjectHeads.Keys);
-            Assert.Equal(initial.RevisionAddress, states.ReadGraph(otherHead.RevisionAddress).SourceGraph);
-            Assert.Equal(initial.RevisionAddress, states.ReadGraph(mainHead.RevisionAddress).SourceGraph);
+            Assert.Equal(Snapshot(resources, childOnly).ObjectHeads[childId], nextWrite.PriorAddress);
+            Assert.Equal(new[] { Describe(resources, initial).RootId.Value }, Snapshot(resources, removed).ObjectHeads.Keys);
+            Assert.Equal(Describe(resources, initial).Address, Snapshot(resources, otherHead).SourceGraph);
+            Assert.Equal(Describe(resources, initial).Address, Snapshot(resources, mainHead).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using BranchCheckout coldMain = reopened.CheckoutShared("main");
-        using BranchCheckout coldA = reopened.CheckoutShared("a");
-        using BranchCheckout coldB = reopened.CheckoutShared("b");
+        using WorkingCopy coldMain = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
+        using WorkingCopy coldA = reopened.OpenWorkingCopy(BranchNamed(reopened, "a"));
+        using WorkingCopy coldB = reopened.OpenWorkingCopy(BranchNamed(reopened, "b"));
         Assert.Equal((byte)90, Assert.IsType<Node>(coldMain.State).Value);
         Assert.Equal((byte)91, Assert.IsType<Node>(coldMain.State).Left!.Value);
         Assert.Null(Assert.IsType<Node>(coldA.State).Left);
         Assert.Equal((byte)8, Assert.IsType<Node>(coldB.State).Left!.Value);
-        Assert.Equal(initial.RootId, coldA.CommitState(NoRebase).RootId);
+        Assert.Equal(Describe(reopened, initial).RootId, Describe(reopened, coldA.CommitState(parameters: NoRebase).Id).RootId);
     }
 
     [Theory]
@@ -86,35 +89,35 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData(true)]
     public void NamedForkMatchesRefOnlyThenCheckoutAtHistoricalStateOrEvent(bool selectEvent) {
         using Repository repository = CreateRepository();
-        using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
-        CheckpointAddress state = main.Head;
-        main.CommitEvent(new Node { Value = 6 }, NoRebase);
-        CheckpointAddress e2 = main.CommitEvent(new Node { Value = 7 }, NoRebase);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+        CommitId state = main.BaseCommitId;
+        main.CommitEvent(new Node { Value = 6 }, parameters: NoRebase);
+        CommitId e2 = main.CommitEvent(new Node { Value = 7 }, parameters: NoRebase).Id;
         Assert.IsType<Node>(main.State).Value = 9;
-        CheckpointAddress latest = main.CommitState(NoRebase);
-        CheckpointAddress source = selectEvent ? e2 : state;
-        repository.CreateBranch("reference", source);
-        using BranchCheckout reference = repository.CheckoutShared("reference");
+        CommitId latest = main.CommitState(parameters: NoRebase).Id;
+        CommitId source = selectEvent ? e2 : state;
+        repository.ForkBranch(source, "reference");
+        using WorkingCopy reference = repository.OpenWorkingCopy(BranchNamed(repository, "reference"));
         var before = ImmutableHistoryFiles();
-        using BranchCheckout fork = repository.ForkShared("named", source);
+        using WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(source, "named").Id);
         AssertHistoryFiles(before);
-        Assert.Equal(reference.Head, fork.Head);
+        Assert.Equal(reference.BaseCommitId, fork.BaseCommitId);
         Assert.Equal(reference.StateId, fork.StateId);
         Assert.Equal(reference.StateRevisionAddress, fork.StateRevisionAddress);
         Assert.Equal((byte)1, Assert.IsType<Node>(fork.State).Value);
         Assert.NotSame(reference.State, fork.State);
-        CheckpointAddress committed = fork.CommitEvent(new Node { Value = 8 }, NoRebase);
-        Assert.Equal(source.Address, committed.Parent);
-        Assert.Equal(state.RevisionAddress, fork.StateRevisionAddress);
-        Assert.Equal(latest, main.Head);
-        Assert.Equal(source, reference.Head);
+        CommitId committed = fork.CommitEvent(new Node { Value = 8 }, parameters: NoRebase).Id;
+        Assert.Equal(source, Previous(repository, committed));
+        Assert.Equal(state, fork.StateSourceCommitId);
+        Assert.Equal(latest, main.BaseCommitId);
+        Assert.Equal(source, reference.BaseCommitId);
     }
 
     [Theory]
     [InlineData("decode")]
     [InlineData("allocate")]
     [InlineData("hydrate")]
-    public void ForkRecoveryFailurePublishesNothingAndReleasesOnlyItsReservation(string phase) {
+    public void ForkRecoveryFailureKeepsRegisteredBranchAndReleasesOnlyItsOccupancy(string phase) {
         bool fail = false;
         int reads = 0, allocations = 0, hydrations = 0;
         StateModelRegistry models = Models(
@@ -122,46 +125,50 @@ public sealed partial class EventHistoryRepositoryTests {
             onHydrate: _ => { hydrations++; if (fail && phase == "hydrate" && hydrations == 2) throw new InvalidDataException("late hydrate"); },
             allocate: () => { allocations++; if (fail && phase == "allocate" && allocations == 2) throw new InvalidDataException("late allocate"); return new Node(); });
         using Repository repository = CreateRepository(models);
-        using BranchCheckout source = repository.CreateSharedBranch("main", new Node { Left = new Node { Value = 2 } }, NoRebase);
+        repository.PreparedStateReuseEnabled = false; // Exercise decoding even after opening the source WC.
+        using WorkingCopy source = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Left = new Node { Value = 2 } }, parameters: NoRebase).Id);
+        BranchInfo retryInfo = repository.ForkBranch(source.BaseCommitId, "retry");
         var before = SnapshotLiveFiles();
+        reads = allocations = hydrations = 0;
         fail = true;
-        BranchCheckout? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = repository.ForkShared("retry", source.Head));
+        WorkingCopy? delivered = null;
+        Assert.Throws<InvalidDataException>(() => delivered = repository.OpenWorkingCopy(retryInfo.Id));
         Assert.Null(delivered);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(new[] { "main" }, repository.ListBranches());
+        Assert.Equal(2, repository.ListBranches().Length);
         AssertLiveFiles(before);
         Assert.True(reads > 0);
         if (phase == "hydrate") Assert.Equal(2, hydrations);
-        Assert.Throws<InvalidOperationException>(() => repository.CheckoutShared("main"));
+        Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
         fail = false;
-        using BranchCheckout retry = repository.ForkShared("retry", source.Head);
+        using WorkingCopy retry = repository.OpenWorkingCopy(retryInfo.Id);
         Assert.Equal((byte)2, Assert.IsType<Node>(retry.State).Left!.Value);
-        source.CommitState(NoRebase);
-        retry.CommitState(NoRebase);
+        source.CommitState(parameters: NoRebase);
+        retry.CommitState(parameters: NoRebase);
     }
 
     [Fact]
-    public void ForkRejectsSingletonAllocatorWithinItsGraphWithoutPublishing() {
+    public void OpeningForkRejectsSingletonAllocatorWithoutLosingItsRegistration() {
         Node singleton = new();
         bool violate = false;
         using Repository repository = CreateRepository(Models(allocate: () => violate ? singleton : new Node()));
-        using BranchCheckout source = repository.CreateSharedBranch("main", new Node { Left = new Node() }, NoRebase);
+        using WorkingCopy source = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Left = new Node() }, parameters: NoRebase).Id);
+        BranchInfo childInfo = repository.ForkBranch(source.BaseCommitId, "child");
         var before = SnapshotLiveFiles();
         violate = true;
-        Assert.ThrowsAny<Exception>(() => repository.ForkShared("child", source.Head));
-        Assert.Equal(new[] { "main" }, repository.ListBranches());
+        Assert.ThrowsAny<Exception>(() => repository.OpenWorkingCopy(childInfo.Id));
+        Assert.Equal(2, repository.ListBranches().Length);
         Assert.False(repository.IsFaulted);
         AssertLiveFiles(before);
         violate = false;
-        using BranchCheckout child = repository.ForkShared("child", source.Head);
+        using WorkingCopy child = repository.OpenWorkingCopy(childInfo.Id);
         Assert.NotSame(child.State, Assert.IsType<Node>(child.State).Left);
     }
 
     [Fact]
-    public void ForkFailedUpgradePublishesNothingAndCanRetryWithItsOriginalName() {
+    public void OpeningForkFailedUpgradeCanRetryTheRegisteredIdentity() {
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
         }
         bool fail = true;
         int normalizationCalls = 0;
@@ -169,52 +176,65 @@ public sealed partial class EventHistoryRepositoryTests {
             normalizationCalls++;
             if (fail) throw new InvalidDataException("upgrade failed");
         }));
-        CheckpointAddress source = repository.GetHead("main");
+        CommitId source = repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id;
+        BranchInfo childInfo = repository.ForkBranch(source, "child");
         var before = SnapshotLiveFiles();
-        Assert.Throws<InvalidDataException>(() => repository.ForkShared("child", source));
+        Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(childInfo.Id));
         Assert.True(normalizationCalls > 0);
         Assert.False(repository.IsFaulted);
-        Assert.Equal(new[] { "main" }, repository.ListBranches());
+        Assert.Equal(2, repository.ListBranches().Length);
         AssertLiveFiles(before);
         fail = false;
-        using BranchCheckout child = repository.ForkShared("child", source);
+        using WorkingCopy child = repository.OpenWorkingCopy(childInfo.Id);
         Assert.Equal((byte)11, Assert.IsType<Node>(child.State).Value);
-        Assert.Equal(source, child.Head);
-        child.CommitState(NoRebase);
+        Assert.Equal(source, child.BaseCommitId);
+        child.CommitState(parameters: NoRebase);
     }
 
     [Theory]
     [InlineData((int)RepositoryOperationStage.BeforePublication, false)]
     [InlineData((int)RepositoryOperationStage.AfterPublication, true)]
     public void ForkRefPublicationOutcomesPreserveHistoryAndFaultAllCheckoutsWhenNeeded(int point, bool published) {
-        using (Repository repository = CreateRepository()) {
-            using BranchCheckout main = repository.CreateSharedBranch("main", new Node { Value = 1 }, NoRebase);
-            using BranchCheckout other = repository.ForkShared("other", main.Head);
-            var before = ImmutableHistoryFiles();
+        using (Repository seed = CreateRepository()) {
+            BranchInfo main = seed.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase);
+            seed.ForkBranch(seed.ReadCurrentCommit(main.Id).Commit.Id, "other");
+        }
+        // Compare complete existing bytes only with all owners closed. Registration may append D frames.
+        Dictionary<string, byte[]> before = ImmutableHistoryPaths().ToDictionary(path => path, File.ReadAllBytes);
+        using (Repository repository = Repository.OpenExisting(_root, Models())) {
+            using WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            using WorkingCopy other = repository.OpenWorkingCopy(BranchNamed(repository, "other"));
             repository.OperationStageObserver = checkpoint => { if (checkpoint == (RepositoryOperationStage)point) throw new IOException("fork interruption"); };
-            BranchCheckout? delivered = null;
-            RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.ForkShared("child", main.Head));
+            WorkingCopy? delivered = null;
+            if (published) {
+                RepositoryPublicationException failure = Assert.Throws<RepositoryPublicationException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "child").Id));
+                Assert.Null(failure.CandidateRevisionAddress);
+                Assert.Equal(RepositoryPublicationOutcome.Published, failure.Outcome);
+            } else {
+                // This hook runs before any physical creation or append attempt.
+                Assert.Throws<IOException>(() => delivered = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "child").Id));
+            }
             Assert.Null(delivered);
-            Assert.Null(failure.CandidateRevisionAddress);
-            Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
             Assert.Equal(published, repository.IsFaulted);
-            AssertHistoryFiles(before);
             repository.OperationStageObserver = null;
             if (published) {
                 Assert.True(main.IsFaulted);
                 Assert.True(other.IsFaulted);
-                Assert.Throws<InvalidOperationException>(() => main.CommitState(NoRebase));
-                Assert.Throws<InvalidOperationException>(() => other.CommitEvent(new Node(), NoRebase));
+                Assert.Throws<InvalidOperationException>(() => main.CommitState(parameters: NoRebase).Id);
+                Assert.Throws<InvalidOperationException>(() => other.CommitEvent(new Node(), parameters: NoRebase).Id);
             } else {
-                Assert.DoesNotContain("child", repository.ListBranches());
-                using BranchCheckout retry = repository.ForkShared("child", main.Head);
-                Assert.Equal(main.Head, retry.Head);
-                main.CommitState(NoRebase);
-                other.CommitState(NoRebase);
+                Assert.DoesNotContain(repository.ListBranches(), branch => branch.DisplayLabel == "child");
+                using WorkingCopy retry = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "child").Id);
+                Assert.Equal(main.BaseCommitId, retry.BaseCommitId);
+                main.CommitState(parameters: NoRebase);
+                other.CommitState(parameters: NoRebase);
             }
         }
+        foreach (var pair in before) {
+            Assert.Equal(pair.Value, File.ReadAllBytes(pair.Key).AsSpan(0, pair.Value.Length).ToArray());
+        }
         using Repository reopened = Repository.OpenExisting(_root, Models());
-        using BranchCheckout recovered = reopened.CheckoutShared("child");
+        using WorkingCopy recovered = reopened.OpenWorkingCopy(BranchNamed(reopened, "child"));
         Assert.Equal((byte)1, Assert.IsType<Node>(recovered.State).Value);
     }
 
@@ -235,32 +255,32 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.NotEmpty(before);
         Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data"), StringComparison.OrdinalIgnoreCase));
         Assert.Equal(before.Keys.Order(), after.Keys.Order());
-        foreach (var pair in before) Assert.Equal(pair.Value, after[pair.Key]);
+        foreach (var pair in before) Assert.True(after[pair.Key].Length >= pair.Value.Length);
     }
 
     [Theory]
     [InlineData("state")]
     [InlineData("event")]
     [InlineData("event-only")]
-    public void NamedForkOnlyChangesRefsAndPreservesAllImmutableFileBytesAcrossColdOpen(string sourceKind) {
+    public void NamedForkRegistersDirectoryWhilePreservingExistingFrameBytesAndInheritedCommit(string sourceKind) {
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = sourceKind == "event-only"
-                ? seed.CreateSharedBranchFromEvent("main", new Node(), NoRebase)
-                : seed.CreateSharedBranch("main", new Node(), NoRebase);
-            if (sourceKind == "event") main.CommitEvent(new Node(), NoRebase);
+            using WorkingCopy main = sourceKind == "event-only"
+                ? seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id)
+                : seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
+            if (sourceKind == "event") main.CommitEvent(new Node(), parameters: NoRebase);
         }
         Dictionary<string, byte[]> before = ImmutableHistoryPaths().ToDictionary(path => path, File.ReadAllBytes);
         Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data"), StringComparison.OrdinalIgnoreCase));
         Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
-            using BranchCheckout main = repository.CheckoutShared("main");
-            using BranchCheckout a = repository.ForkShared("a", main.Head);
-            using BranchCheckout b = repository.ForkShared("b", main.Head);
-            Assert.Equal(main.Head, a.Head);
-            Assert.Equal(main.Head, b.Head);
+            using WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            using WorkingCopy a = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "a").Id);
+            using WorkingCopy b = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "b").Id);
+            Assert.Equal(main.BaseCommitId, a.BaseCommitId);
+            Assert.Equal(main.BaseCommitId, b.BaseCommitId);
         }
         Assert.Equal(before.Keys.Order(), ImmutableHistoryPaths().Order());
-        foreach (var pair in before) Assert.Equal(pair.Value, File.ReadAllBytes(pair.Key));
+        foreach (var pair in before) Assert.Equal(pair.Value, File.ReadAllBytes(pair.Key).AsSpan(0, pair.Value.Length).ToArray());
     }
 
     [Theory]
@@ -268,9 +288,12 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData("normalize")]
     [InlineData("allocate")]
     [InlineData("hydrate")]
-    public void FailedForkRestorationPreservesAllPersistedBytesAcrossColdOpen(string phase) {
+    public void FailedOpeningRegisteredForkPreservesAllPersistedBytesAcrossColdOpen(string phase) {
         using (Repository seed = CreateRepository()) {
-            using BranchCheckout main = seed.CreateSharedBranch("main", new Node { Left = new Node() }, NoRebase);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Left = new Node() }, parameters: NoRebase).Id);
+        }
+        using (Repository registration = Repository.OpenExisting(_root, Models())) {
+            registration.ForkBranch(registration.ReadCurrentCommit(BranchNamed(registration, "main")).Commit.Id, "child");
         }
         var before = SnapshotFiles();
         StateModelRegistry models = Models(upgrade: phase == "normalize",
@@ -279,9 +302,9 @@ public sealed partial class EventHistoryRepositoryTests {
             allocate: () => phase == "allocate" ? throw new InvalidDataException("allocate failed") : new Node(),
             onHydrate: _ => { if (phase == "hydrate") throw new InvalidDataException("hydrate failed"); });
         using (Repository repository = Repository.OpenExisting(_root, models)) {
-            Assert.Throws<InvalidDataException>(() => repository.ForkShared("child", repository.GetHead("main")));
+            Assert.Throws<InvalidDataException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "child")));
             Assert.False(repository.IsFaulted);
-            Assert.Equal(new[] { "main" }, repository.ListBranches());
+            Assert.Equal(2, repository.ListBranches().Length);
         }
         AssertFiles(before);
     }

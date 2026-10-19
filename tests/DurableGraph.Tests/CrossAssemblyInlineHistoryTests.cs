@@ -32,8 +32,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             original = host.GetMethod("Seed")!.CreateDelegate<Func<string, bool, FrameAddress>>()(directory.Path, empty);
             var models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
             using RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path);
-            exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, original,
-                models).Objects, x => x.Schema?.SchemaId == "ExtWorld").Schema!;
+            exact = Assert.Single(DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), models.FreezeConfiguration()).Objects, x => x.Schema?.SchemaId == "ExtWorld").Schema!;
         }
 
         GeneratorTestRun library2 = RunCrossAssemblyGenerator(CrossInlineHistoryLibrary(2),
@@ -54,7 +53,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Type currentHost = current.Load(app2).GetType("InlineHistoryApp.Host")!;
         var currentModels = currentHost.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
         using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
-            var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, original, currentModels);
+            var decoded = DecodedRevision.ReadStoredGraph(segments.GraphStore, PublishedGraph(segments, original), currentModels.FreezeConfiguration());
             var world = Assert.Single(decoded.Objects, x => x.Schema?.SchemaId == "ExtWorld");
             Assert.Equal(exact, world.Schema);
             Assert.Equal(1, world.Schema!.Fields[0].InlineSchema!.Version);
@@ -64,10 +63,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             .CreateDelegate<Func<string, bool, FrameAddress[]>>()(directory.Path, empty);
         using (RepositoryResources segments = RepositoryResources.OpenReadOnlyExisting(directory.Path)) {
             var store = segments.GraphStore;
-            Assert.Equal(2, DefaultRecords(store, addresses[0]).Count);
-            Assert.All(DefaultRecords(store, addresses[0]), x => Assert.Equal(ObjectVersionKind.Base, x.Kind));
-            foreach (int index in new[] { 1, 3 }) { Assert.Empty(DefaultRecords(store, addresses[index])); }
-            var delta = Assert.Single(DefaultRecords(store, addresses[2]));
+            Assert.Equal(2, DefaultRecords(store, PublishedGraph(segments, addresses[0])).Count);
+            Assert.All(DefaultRecords(store, PublishedGraph(segments, addresses[0])), x => Assert.Equal(ObjectVersionKind.Base, x.Kind));
+            foreach (int index in new[] { 1, 3 }) { Assert.Empty(DefaultRecords(store, PublishedGraph(segments, addresses[index]))); }
+            var delta = Assert.Single(DefaultRecords(store, PublishedGraph(segments, addresses[2])));
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         }
     }

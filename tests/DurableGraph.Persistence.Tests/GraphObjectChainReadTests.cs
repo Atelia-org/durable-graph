@@ -20,17 +20,17 @@ public sealed class GraphObjectChainReadTests : IDisposable {
             .ToArray();
         StoredGraphRevision written;
         using (GraphRecordStore writer = new(frames)) {
-            written = writer.Append(StoredGraphKind.Meta, null, null, new(null, new(1), records));
+            written = writer.AppendMeta(null, new(null, new(1), records));
         }
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: cacheBudget);
-        DecodedGraphRows decoded = StoredGraphDecoder.Read(reader, written.Address);
+        DecodedGraphRows decoded = StoredGraphDecoder.ReadMeta(reader, written.Address);
         AssertComplete(decoded);
         GraphPhysicalReadStatistics first = reader.ReadCacheStatistics;
         Assert.Equal(1, first.GraphDecodes);
         Assert.Equal(1, first.DirectoryMaterializations);
         Assert.Equal(0, reader.AppendedFrames);
 
-        AssertComplete(StoredGraphDecoder.Read(reader, written.Address));
+        AssertComplete(StoredGraphDecoder.ReadMeta(reader, written.Address));
         GraphPhysicalReadStatistics second = reader.ReadCacheStatistics;
         if (cacheBudget == 0) {
             Assert.Equal(first.GraphDecodes + 1, second.GraphDecodes);
@@ -66,7 +66,7 @@ public sealed class GraphObjectChainReadTests : IDisposable {
     public void BulkReadRejectsAnUnreachableWrongRoleHeadBeforeReturningTheIterator(long cacheBudget) {
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore writer = new(frames);
-        StoredGraphRevision first = writer.Append(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null,
             new(null, new(1), [StringRecord(1, "root"), StringRecord(2, "unreachable")]));
         var heads = new Dictionary<uint, FrameAddress> {
             [1] = first.ObjectHeads[1],
@@ -76,20 +76,20 @@ public sealed class GraphObjectChainReadTests : IDisposable {
             GraphFrameCodec.EncodeDirectory(first.Address, ObjectVersionKind.Base, null,
                 ObjectHeadDirectoryCodec.PrepareBase(heads).Body)).Unwrap();
         FrameAddress bad = frames.Append(GraphFrameCodec.GraphTag,
-            GraphFrameCodec.EncodeGraph(StoredGraphKind.State, first.Address, new(1), directory, null, null)).Unwrap();
+            GraphFrameCodec.EncodeGraph(StoredGraphKind.State, null, new(1), directory, null, null)).Unwrap();
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: cacheBudget);
-        reader.ReadGraph(first.Address);
+        reader.ReadBusinessGraph(first.Address, null);
         reader.ReadMetadata(bad);
         reader.ReadDirectory(directory);
 
         IEnumerable<ObjectVersionChain>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = reader.ReadObjectChains(bad, out _));
+        Assert.Throws<InvalidDataException>(() => delivered = reader.ReadObjectChains(reader.ReadBusinessGraph(bad, first.Address)));
         Assert.Null(delivered);
         DecodedGraphRows? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = StoredGraphDecoder.Read(reader, bad));
+        Assert.Throws<InvalidDataException>(() => decoded = StoredGraphDecoder.Read(reader, reader.ReadBusinessGraph(bad, first.Address)));
         Assert.Null(decoded);
         Assert.Equal(0, reader.AppendedFrames);
-        Assert.Equal("root", StoredGraphDecoder.Read(reader, first.Address, new StateModelRegistry().CreateEnvironment())
+        Assert.Equal("root", StoredGraphDecoder.Read(reader, reader.ReadBusinessGraph(first.Address, null), new StateModelRegistry().CreateEnvironment())
             .Rows[new(1)].StringContent);
     }
 

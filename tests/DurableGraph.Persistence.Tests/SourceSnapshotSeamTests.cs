@@ -20,7 +20,7 @@ public sealed class SourceSnapshotSeamTests : IDisposable {
 
         for (int attempt = 0; attempt < 2; attempt++) {
             long before = store.BusinessGraphQualificationCount;
-            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, selected, configuration);
+            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(selected, selectEvent ? state : null), configuration);
             // Count complete qualification, not physical decode/cache misses. Meta loading is excluded.
             Assert.Equal(before + 1, store.BusinessGraphQualificationCount);
             StoredGraphRevision snapshot = Assert.IsType<StoredGraphRevision>(decoded.SourceSnapshot);
@@ -42,7 +42,7 @@ public sealed class SourceSnapshotSeamTests : IDisposable {
             }
 
             before = store.BusinessGraphQualificationCount;
-            DB087Widget root = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(store, selected, Models()));
+            DB087Widget root = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(store, store.ReadBusinessGraph(selected, selectEvent ? state : null), Models()));
             Assert.Equal(before + 1, store.BusinessGraphQualificationCount);
             Assert.Equal(selectEvent ? 51 : 7, root.Value);
         }
@@ -55,9 +55,9 @@ public sealed class SourceSnapshotSeamTests : IDisposable {
         (FrameAddress state, _) = Seed();
         using RepositoryResources resources = RepositoryResources.OpenStorageExisting(_path);
         using RepositoryStorageFacade repository = new(resources);
-        BranchSaveSession session = new(repository, "main", Models());
+        BranchSaveSessionFixture session = new(repository, "main", Models());
         GraphRecordStore store = repository.Store;
-        DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, state, Models());
+        DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(state, null), Models().FreezeConfiguration());
         StoredGraphRevision snapshot = Assert.IsType<StoredGraphRevision>(decoded.SourceSnapshot);
         NormalizedGraphState normalized = NormalizedGraphState.Create(decoded, decoded.SourceModels!);
         Assert.Same(snapshot, normalized.SourceSnapshot);
@@ -79,12 +79,12 @@ public sealed class SourceSnapshotSeamTests : IDisposable {
 
     private (FrameAddress State, FrameAddress Event) Seed() {
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path);
-        BranchSaveSession session = new(repository, "main", Models());
+        BranchSaveSessionFixture session = new(repository, "main", Models());
         FrameAddress state;
-        using (PreparedBranchSave save = session.Prepare(new DB087Widget { Value = 7, Numbers = Enumerable.Range(0, 128).ToList() })) {
+        using (PreparedFixtureSave save = session.Prepare(new DB087Widget { Value = 7, Numbers = Enumerable.Range(0, 128).ToList() })) {
             state = save.Commit().Business.Address;
         }
-        using PreparedBranchSave domainEvent = session.Prepare(new DB087Widget { Value = 51 }, StoredGraphKind.Event);
+        using PreparedFixtureSave domainEvent = session.Prepare(new DB087Widget { Value = 51 }, StoredGraphKind.Event);
         return (state, domainEvent.Commit().Business.Address);
     }
 
