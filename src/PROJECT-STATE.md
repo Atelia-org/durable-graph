@@ -19,9 +19,9 @@
 
 ## 当前焦点
 
-2026-10-19：当前位于隔离实现分支 `db096/branch-repository-cutover`，Storage pin `f8868b5`。真实 Repository 已接一 Branch 一 Head、D/T 增量管理图、HS 历史来源与 Branch/Commit/WorkingCopy，业务 Parent 已删除。根 solution 调用闭包及原 Persistence/Runtime 回归已恢复，README 和链接 PendingRecovery 已迁移；产品 API/格式本轮未再改变。准确源码资格见[B2 施工记录 §9](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#9-b2-调用闭包与回归迁移)，当前队列只维护在[DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。下一片选一个读取成本收窄问题；定向 origin、剩余包消费者/普通包验证和术语导航仍待闭合，未合回 master。下面未逐项改写的旧阶段记录只保其历史基线，不外推旧包资格。
+2026-10-19：当前位于隔离实现分支 `db096/branch-repository-cutover`，Storage pin `f8868b5`。真实 Repository 已接一 Branch 一 Head、D/T 增量管理图、HS 历史来源与 Branch/Commit/WorkingCopy，业务 Parent 已删除；根 solution 调用闭包与原回归见[B2 施工记录 §9](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。本轮在同一内核复用 accepted D 的只读成员查询投影，普通 B/S/T 保存不重建；公开签名/持久格式不变，准确结果见[目录查询切片](../docs/design-branches/0096-history-and-head-model/directory-persistence.md#已接受目录的查询投影)。下一片先补剩余包消费者/脚本/术语导航；定向 origin 与普通包资格仍待闭合，未合回 master。当前队列只维护在[DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)；下面旧阶段记录保其历史基线，不外推旧包资格。
 
-[DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下已回归，新历史模型另需真实纵切，不把它们混为同一次验收。
+[DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下的资格见 B1，新历史模型的真实纵切及迁移回归见 B2；两者不混为同一次验收。
 
 workshop 反馈 3 的纯 State 入门已完成：[README](../README.md#最短接入路径)以连续 State 保存、历史读取、旧 State 分叉及冷开续写为主路径，Event 为可选后续示例。源码与新 G 原文普通包验收通过，运行时/API/格式保持；准确 G/S、证据与范围见[验收记录](../docs/DurableGraph-lab-notebook.md#state-only-quickstart)，本片无剩余必经施工。
 

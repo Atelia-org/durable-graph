@@ -79,7 +79,7 @@ public sealed partial class Repository : IDisposable {
     public BranchInfo[] ListBranches() {
         RequireAvailable();
         _busy = true;
-        try { return _resources.ListBranches().Select(pair => ReadBranchInfoCore(new(pair.Key))).ToArray(); }
+        try { return _resources.ListBranches().Select(pair => ReadBranchInfoCore(new(pair.Key), pair.Value)).ToArray(); }
         finally { EndOperation(); }
     }
 
@@ -90,10 +90,10 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
-    private BranchInfo ReadBranchInfoCore(BranchId branchId) {
-        if (!_resources.ListBranches().TryGetValue(branchId.Value, out string? label)) {
-            throw new KeyNotFoundException("Branch is not registered in this repository.");
-        }
+    private BranchInfo ReadBranchInfoCore(BranchId branchId) =>
+        ReadBranchInfoCore(branchId, _resources.GetBranchLabel(branchId.Value));
+
+    private BranchInfo ReadBranchInfoCore(BranchId branchId, string label) {
         // Isolated B2 adapter. Formal merge requires a bounded target-origin query upstream.
         var origin = _resources.ReadOrigin(branchId.Value);
         return new(branchId, label, origin is { } source ? new(source) : null);

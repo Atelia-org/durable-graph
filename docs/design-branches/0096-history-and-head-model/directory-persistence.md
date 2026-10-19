@@ -90,6 +90,24 @@ T = "P0T2" + hasGraph[1] + (GraphAddress[12] if hasGraph == 1)
 
 原 [BranchWireFormatProbe](../../../experiments/BranchWireFormatProbe/README.md)的 D/T 整表编码与容量结论保留为已替代方案的对照，其 Entry 小描述/ID/摘要隔离部分仍适用；它不是本方案的运行资格。新[Dictionary 机制见证](../../../experiments/DirectoryDictionaryMechanismProbe/README.md)验证了 D 的真实 Meta/规划器 Delta/冷开续写和 D/S 共同发布，以及 T 的 Base 冷读；后继窄读取与候选接缝见 §6/§7。不能把这些原语组合或 source build 冒充新 Repository 已完成切换。
 
+### 已接受目录的查询投影
+
+后继窄优化问题：B2 的 `ReadBranchInfo` 每次重建全部 D 成员映射，`ListBranches` 又逐项调用它；业务历史中的每次成员检查也线性扫描 D。普通保存并不改变 D，这些重复工作可以从已有 accepted rows 派生的只读查询视图中消除。
+
+本片选择 owner 内按 **accepted `DecodedGraphRows` 对象身份**懒建 `HeadId → label` 查询字典。不是按每次保存都会替换的 `PublicationBaseline` 缓存；也不能直接在 frozen entries 上二分，因为容器合同不保证条目顺序，Delta 应用可在 prior 顺序后追加新 key。列表携已取得的标签生成描述，单点与历史成员检查复用同一视图。
+
+视图只从已接受 D 构造，完整构造后才替换；候选准备不推进它，公开读取仍先检查 owner/backing 寿命与 fault，实际 Entry、来源成员及图校验不省略。它不存 current、origin 或 summary，不产生持久索引或另一份可编辑目录。初次查询/新 D 后的查询允许 O(N) 投影和额外 O(N) 内存；未变化 D 的单点成员查找采用 Dictionary lookup。定向 origin 缺口独立存在，不能据此称完整 ListBranches 已成为 O(N)。
+
+最小验收：以实际投影条目计数证明重复单点/全列表查询不重新投影；普通 B、增长 S 和 T 保存保持同一视图；新登记后刷新而旧视图不变；冷开恢复、未登记/管理 Head 拒绝、登记失败与暖缓存 fault/关闭检查保持。
+
+**2026-10-19 实施与限定验收：**以 DG `2a58730` 为起点，Storage 仍为独立 `f8868b5` worktree。三个有界包分别负责候选/实现、判别回归、上游核对与独立质疑；主线程复核实际 diff 并统一构建和测试。产品仅改 [RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs) 与 [Repository](../../../src/DurableGraph.Persistence/Repository.cs)，公开签名、持久格式和发布协议保持。内部计数 `BranchDirectoryProjectedEntries` 只累计真正构造查询映射时的条目，不作为总 I/O 或时间指标。
+
+[12条新增回归](../../../tests/DurableGraph.Persistence.Tests/BranchDirectoryLookupTests.cs)在3/9条分支下验证：创建逐次接受新 D，累计投影为6/45；冷开首次查询只投影3/9，之后三轮全体单点与列表查询计数不再增加。根和空 fork 的重复标签、保留旧视图、不可变包装、B 保存/新增 Event Schema 的 B/S 保存/T 发布都通过。root/fork × 发布前/后抛错，均在安装前观察旧视图；冷开只认实际已发布 D。未登记物理 Head、三控制 Head、原 default 异常和四种 fault/关闭边界保持。既有父成员检查源码未删除；“已登记子 Head 指向未登记父 Head”的专门反例留给定向 origin 接入。
+
+主线程运行根 `dotnet build DurableGraph.slnx`：0警告/0错误；完整 Persistence **986/986**、Runtime 的 `RepositoryPublicApiTests` / `LoadedWorldGeneratorTests` / `PreparedRevisionGeneratorTests` **16/16**，均0跳过。均显式设置 `UseStorageSources=true` 和 `StorageSourceRoot` 为 `.artifacts/db096-head-mechanism/storage-f8868b5` 的绝对路径；测试使用本次 build 的 `--no-build --no-restore` 输出。实际日志及 TRX 在本机 `.artifacts/db096-directory-lookup/{build.log,persistence.log,persistence.trx,runtime-targeted.log,runtime-targeted.trx}`。未重跑全部 Runtime suite、普通包、进程中止或吞吐实验；没有上游改动或 feed 发布。
+
+本片到此收口。下一片的包调用闭包、定向 origin 和正式合入门槛只维护在[工作集](PROJECT-STATE.md)及[施工顺序](branch-cutover-plan.md#下一片先限制读取范围再补交付闭包)；不把 D 投影缓存扩大为通用查询缓存。
+
 ## 6. 窄管理读取切片
 
 本片问题：在不扩大 S 员工 reader、不调用应用模型或 Schema 的前提下，D/T 能否复用共同解码循环，拒绝错误角色和历史 Schema，并保留真实 snapshot/对象身份/H？最小判据是实际 Meta 图的冷读正例，以及历史 Base/Delta、根、闭包、比较器和条目反例；不接新 Repository 布局或候选发布。

@@ -36,11 +36,11 @@
 
 ## 当前焦点与下一步
 
-**当前停点：B2 真实内核及根 solution 调用闭包已在隔离分支 `db096/branch-repository-cutover` 通过回归，尚未合入 master。**本轮从 `f6075d3` 迁移原物理/Repository/生成模型测试及链接 PendingRecovery；根 build 0警告/0错误，完整 Persistence 974/974、Runtime/生成器1724/1724，均0跳过。产品内核/持久格式本轮未再修改；README 和原文 runner 已对齐新入口。准确证据与剩余交付范围只查[施工记录 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。
+**当前停点：B2 在隔离分支 `db096/branch-repository-cutover` 完成根 solution 调用迁移后，已接入 accepted D 的只读查询投影复用；尚未合入 master。**本片不改公开 API 或持久格式。单点标签、成员检查及列表不再反复构造完整成员表；普通 B/S/T 保存复用同一 D 投影。选择、计数验收与局限只查[目录查询切片](directory-persistence.md#已接受目录的查询投影)，原完整调用迁移结果仍查[施工记录 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。
 
-下一片继续同一内核的局部效率收窄，以及定向 origin/剩余包消费者闭包；不重新迁移已恢复的根测试，不搭另一套 Repository，不将 source 回归结果当作普通包资格。上游仍为 `f8868b5`，定向 origin 请求尚未交付，本轮未改上游或发布 feed。
+下一片优先闭合剩余 PackageConsumerProbe 调用及配套脚本/术语导航，再进行普通包资格；定向 origin 新交付可提前接入。上游只读核对仍为 `f8868b5`、没有新接口，本轮未改上游或发布 feed。不要重新迁移根测试或重复 D 优化，也不为等待 origin 再搭一套 Repository。
 
-**压缩后恢复顺序：完整读本文 → [施工记录 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移) → 实际 RepositoryResources 的 D 查询/历史选择及 [API B2 合同](api-sketch.md#b2-的具体值与迁移合同)。首选一个有明确计数反例的小效率片，或在 origin 新交付后接入固定 pin；组提交、树和分页仍在后续，不重复 A/B1/目录原语/健康纵切。**
+**压缩后恢复顺序：完整读本文 → [施工记录的剩余交付顺序](branch-cutover-plan.md#下一片先限制读取范围再补交付闭包) → PackageConsumerProbe 当前入口及 [API B2 合同](api-sketch.md#b2-的具体值与迁移合同)。定向 origin 仍是正式合入门槛；重复最近 State 扫描保留为独立计数实验候选，不让连续优化取代调用闭包。组提交、树和分页仍在后续。**
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -62,7 +62,7 @@
 
 1. **A 已完成：来源 snapshot 内部贯穿。**该历史切片当时仍由 Parent 签发；冷读一次完整资格、warm/安装再验证、fixture/owner/lifetime、历史 rewrite 和真实 Delta 均有[回归证据](history-source-seam.md#7-a-实施与验收)。不继续扩成 typed 缓存或免校验证书。
 2. **B1：新 Storage 源码接入。**已固定 `f8868b5`，当时保留旧 DG 布局；源码、进程窗口与包资格分开，见[接入记录](storage-handle-adaptation.md)。下一片不重复接依赖；若 origin 新交付改变 revision，再验收相应增量。
-3. **B2：原回归闭包已完成，合入门槛继续收窄。**真实 Branch/Commit/WorkingCopy 已恢复原冷暖/rewrite、Schema、Pair、对象隔离、guard/清理、发布和正常恢复回归。接下来优先从 D 成员/列表重复构造或最近 State 多次扫描中选一个窄问题；以实际读取计数和拒绝反例证明收益，保 source/Schema/fault 校验，不增加持久索引或 proof 框架。定向 origin 新交付后接 pin/隔离反例；剩余包消费者、打包原文流程和术语导航闭合后再按施工计划 §7 裁决合入。README 已更新，普通包尚未重新资格化。
+3. **B2：原回归与 D 查询收窄已完成，继续闭合交付。**accepted D 的 frozen rows 是唯一目录材料，owner 按其对象身份懒建只读查询字典；不按每次保存更换的 PublicationBaseline 缓存，不依赖 Dictionary 条目排序。下一片迁移剩余包消费者/脚本及术语导航；定向 origin 交付后接 pin 和坏目标/无关坏 Head/未登记父成员隔离反例，再按施工计划 §7 裁决合入。README 已更新，普通包尚未重新资格化。
 
 4. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断、根/子树与分页外观。内部每 checkout Catalog 可留到此时合并，不让它扩大 B2。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary 的基本 opaque bytes 随 B2，BLOB、ID durable 字段与成本测量后置，不先加索引。
 
@@ -70,17 +70,17 @@
 
 ## 已知未决项与明确延期
 
-待闭合：定向 origin、剩余 PackageConsumerProbe 项目/包模式交付、旧术语导航、新创建登记更完整的故障矩阵，以及普通包/进程资格。根 solution 回归已恢复，不再列为待迁移。已识别效率点：打开/保存重复扫描最近 State、RequireMember 线性查目录、ListBranches 临时逐项全量 origin 扫描；下一片只选一个，以已接受 D/session 材料和准确 expected Entry 去重，不加第二来源权威。组提交、分页/树查询、ID durable 字段与附件仍未实施。
+待闭合：定向 origin、剩余 PackageConsumerProbe 项目/包模式交付、旧术语导航、新创建登记更完整的故障矩阵，以及普通包/进程资格。根 solution 回归及 D 重复投影已完成，不再列为待做。打开/保存重复最近 State 扫描仍是效率候选；ListBranches 逐项全量 origin 扫描仍依赖上游收窄，因此不能将 D 投影改善称为整体线性查询。组提交、分页/树查询、ID durable 字段与附件仍未实施。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
 ## 本批完成边界
 
-本轮完成隔离分支的根 solution 回归闭包与 README 迁移，不是 B2 正式合入或包交付。证据只查[施工记录 §9](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)；首段98条 Probe 保其原运行。没有新 feed/包发布或上游改动。
+本轮完成 D 查询投影复用及其失败/lifetime 回归，验证结果集中于[目录查询切片](directory-persistence.md#已接受目录的查询投影)。没有改变公开签名、持久格式或发布协议；不是 B2 正式合入、完整查询性能或包交付。此前完整 Runtime/生成器1724项及98条 Probe 保各自运行，不作为本轮新结果。没有新 feed/包发布或上游改动。
 
 ## 实现与证据边界
 
-- B2 内核起点 `866ce89`，本轮调用迁移起点 `f6075d3`；本轮只读复核 Storage 主工作树及 pin 仍为 `f8868b5`，未发现 ReadHeadOrigin，未改上游。构建/测试显式使用独立 `f8868b5` worktree。六包候选 `0.1.3-dev.20261019.gf8868b5` 未制作feed，未来包交付须重新资格化。
+- B2 内核起点 `866ce89`，调用迁移起点 `f6075d3`，本轮 D 查询片起点 `2a58730`；本轮只读复核 Storage 主工作树及 pin 仍为 `f8868b5`，未发现 ReadHeadOrigin，未改上游。构建/测试显式使用独立 `f8868b5` worktree。六包候选 `0.1.3-dev.20261019.gf8868b5` 未制作feed，未来包交付须重新资格化。
 - 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
 - [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
 - [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**

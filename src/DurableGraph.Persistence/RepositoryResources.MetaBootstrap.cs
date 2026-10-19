@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.ObjectModel;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using Atelia.HeadStore;
@@ -12,6 +13,9 @@ public sealed partial class RepositoryResources {
     private const string SchemaKey = "schema";
     private static ReadOnlySpan<byte> SharedMagic => "P0S1"u8;
     private PublicationBaseline _baseline = null!;
+    private DecodedGraphRows? _projectedBranchDirectory;
+    private IReadOnlyDictionary<HeadId, string>? _branchLabels;
+    internal long BranchDirectoryProjectedEntries { get; private set; }
     private HeadEntryId _branchEntry, _sharedEntry;
     private PendingRepositorySave? _pending;
     private bool _preparing, _committing;
@@ -107,26 +111,40 @@ public sealed partial class RepositoryResources {
 
     private void RequireMember(HeadId branch) {
         RequireStorageAvailable();
-        uint encoded = EncodeHead(branch);
-        if (_baseline.Branches is { } directory) {
-            foreach (var pair in directory.Rows[directory.Snapshot.RootId].GetDictionaryState<uint, ObjectId>().Entries) {
-                if (pair.Key == encoded) { return; }
-            }
+        _ = EncodeHead(branch); // Preserve invalid/default ID rejection before membership lookup.
+        if (!ListBranches().ContainsKey(branch)) {
+            throw new KeyNotFoundException("The Head is not a registered DurableGraph Branch.");
         }
-        throw new KeyNotFoundException("The Head is not a registered DurableGraph Branch.");
+    }
+
+    internal string GetBranchLabel(HeadId branch) {
+        RequireStorageAvailable();
+        return ListBranches().TryGetValue(branch, out string? label) ? label
+            : throw new KeyNotFoundException("Branch is not registered in this repository.");
     }
 
     internal IReadOnlyDictionary<HeadId, string> ListBranches() {
         RequireStorageAvailable();
-        Dictionary<HeadId, string> members = [];
-        if (_baseline.Branches is not { } directory) { return members; }
-        Span<byte> bytes = stackalloc byte[HeadId.EncodedSize];
-        foreach (var pair in directory.Rows[directory.Snapshot.RootId].GetDictionaryState<uint, ObjectId>().Entries) {
-            BinaryPrimitives.WriteUInt32LittleEndian(bytes, pair.Key);
-            if (!HeadId.TryRead(bytes, out HeadId id)) { throw new InvalidDataException("Invalid branch ID."); }
-            members.Add(id, directory.Rows[pair.Value].StringContent);
+        DecodedGraphRows? directory = _baseline.Branches;
+        if (_branchLabels is not null && ReferenceEquals(_projectedBranchDirectory, directory)) {
+            return _branchLabels;
         }
-        return members;
+        // Only accepted D rows select this derived view. Ordinary B/S publications retain
+        // the same D instance; candidates do not replace it before successful installation.
+        Dictionary<HeadId, string> members = [];
+        if (directory is not null) {
+            Span<byte> bytes = stackalloc byte[HeadId.EncodedSize];
+            foreach (var pair in directory.Rows[directory.Snapshot.RootId].GetDictionaryState<uint, ObjectId>().Entries) {
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes, pair.Key);
+                if (!HeadId.TryRead(bytes, out HeadId id)) { throw new InvalidDataException("Invalid branch ID."); }
+                members.Add(id, directory.Rows[pair.Value].StringContent);
+                BranchDirectoryProjectedEntries++;
+            }
+        }
+        IReadOnlyDictionary<HeadId, string> labels = new ReadOnlyDictionary<HeadId, string>(members);
+        _projectedBranchDirectory = directory;
+        _branchLabels = labels;
+        return labels;
     }
 
     internal HistoryGraphRecord ReadCurrent(HeadId branch) {
