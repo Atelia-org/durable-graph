@@ -99,16 +99,77 @@ public sealed partial class Repository : IDisposable {
     public WorkingCopy OpenWorkingCopy(BranchId branchId) => CheckoutCore(branchId);
 
     /// <summary>Lists registered business branches and their fixed creation origins without restoring domain graphs.</summary>
-    /// <remarks>Internal management heads are excluded. Labels may repeat; no ordering is promised.</remarks>
+    /// <remarks>
+    /// Internal management and unregistered heads are excluded. Labels may repeat; no ordering is promised.
+    /// Reads the whole registered forest and validates current/source entry metadata and creation origins.
+    /// Business model registration is not required for this query; malformed metadata or origins still fail.
+    /// </remarks>
     public BranchInfo[] ListBranches() {
         RequireAvailable();
         _busy = true;
-        try {
-            BranchInfo[] branches = _resources.ListBranches().Select(pair => ReadBranchInfoCore(new(pair.Key), pair.Value)).ToArray();
-            ValidateBranchForest(branches);
-            return branches;
-        }
+        try { return ReadBranchForestCore(); }
         finally { EndOperation(); }
+    }
+
+    /// <summary>Lists registered branches that have no fork source.</summary>
+    /// <remarks>
+    /// Reads and validates the whole registered forest, including current/source entry metadata, without
+    /// restoring domain objects or requiring business model registrations. Internal and unregistered heads
+    /// are excluded. Missing or corrupt parents and cycles fail instead of being treated as roots.
+    /// Labels may repeat and result ordering is unspecified.
+    /// </remarks>
+    public BranchInfo[] ListRootBranches() {
+        RequireAvailable();
+        _busy = true;
+        try { return ReadBranchForestCore().Where(static branch => branch.ForkedFromCommitId is null).ToArray(); }
+        finally { EndOperation(); }
+    }
+
+    /// <summary>Lists the selected registered branch and all branches descended from it through fixed fork origins.</summary>
+    /// <param name="branchId">A registered business branch in this repository; an unknown or default ID fails.</param>
+    /// <remarks>
+    /// Includes the starting branch and forks with no local commits. Parentage follows the branch on which
+    /// the fork source commit was published, even if that commit was selected through another branch.
+    /// Reads and validates the whole registered forest; it does not restrict disk access to the requested
+    /// subtree. Temporary adjacency construction and traversal use linear memory and work in the number
+    /// of registered branches, apart from underlying metadata reads. No persistent index is created.
+    /// Does not restore domain objects or require business model registrations. Invalid origins anywhere
+    /// in the registered forest fail the query. Labels may repeat and result ordering is unspecified.
+    /// </remarks>
+    public BranchInfo[] ListBranchSubtree(BranchId branchId) {
+        RequireAvailable();
+        _busy = true;
+        try {
+            _ = _resources.GetBranchLabel(branchId.Value);
+            BranchInfo[] branches = ReadBranchForestCore();
+            Dictionary<BranchId, List<BranchInfo>> children = [];
+            BranchInfo? start = null;
+            foreach (BranchInfo branch in branches) {
+                if (branch.Id == branchId) { start = branch; }
+                if (branch.ForkedFromCommitId is not { } source) { continue; }
+                BranchId parent = new(source.Value.HeadId);
+                if (!children.TryGetValue(parent, out var siblings)) { children.Add(parent, siblings = []); }
+                siblings.Add(branch);
+            }
+            if (start is null) { throw new InvalidDataException("The registered branch is absent from the validated forest."); }
+            List<BranchInfo> result = [];
+            Stack<BranchInfo> pending = new();
+            pending.Push(start);
+            while (pending.TryPop(out BranchInfo? branch)) {
+                result.Add(branch);
+                if (children.TryGetValue(branch.Id, out var descendants)) {
+                    foreach (BranchInfo child in descendants) { pending.Push(child); }
+                }
+            }
+            return result.ToArray();
+        } finally { EndOperation(); }
+    }
+
+    // Each public list owns one operation guard; this shared reader never reenters the public facade.
+    private BranchInfo[] ReadBranchForestCore() {
+        BranchInfo[] branches = _resources.ListBranches().Select(pair => ReadBranchInfoCore(new(pair.Key), pair.Value)).ToArray();
+        ValidateBranchForest(branches);
+        return branches;
     }
 
     // A single-target header query does not validate the declared forest. Check only

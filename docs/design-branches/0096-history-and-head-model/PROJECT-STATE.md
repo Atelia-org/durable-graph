@@ -48,7 +48,7 @@
 
 **进程中止门禁已恢复。**[Crash迁移验收](process-crash-migration.md)保留6个保存窗口和3个初始化窗口，真实B/S定位、D/T不变、外部Kill与独立PID冷验证均通过。它只证明当前Windows/source/friend范围；不把一个B加S的矩阵外推到全部多Branch组合或掉电。
 
-**下一片：实现根/子树目录查询。**接通 `ListRootBranches()` 与包含起点的 `ListBranchSubtree(branchId)`，复用正式成员与已验证来源森林；返回轻量描述，不物化业务对象，不增加持久父关系或索引。最小判据为多根/重复标签、父子均继续、从继承祖先旧点fork挂到实际父、空fork冷重开即可列出、排除内部和未登记Head，以及无效成员/坏来源/环拒绝。随后补公开历史分页与最终交付。
+**当前实施中：根/子树目录查询，源码验收通过、普通包待验。**接通 `ListRootBranches()` 与包含起点的 `ListBranchSubtree(branchId)`，复用正式成员与已验证来源森林；返回轻量描述，不物化业务对象，不增加持久父关系或索引。最小判据为多根/重复标签、父子均继续、从继承祖先旧点fork挂到实际父、空fork冷重开即可列出、排除内部和未登记Head，以及无效成员/坏来源/环拒绝。主线程根构建、完整 Persistence 与相关 Runtime 已通过，见[树查询验收](branch-tree-queries.md)；下一步完成本片新 G 的 Split/Group 消费者，再补公开历史分页与最终交付。
 
 **压缩后恢复顺序：完整读本文 → API草图的目录合同 → 当前 Repository.ListBranches / ValidateBranchForest / ReadBranchInfoCore 与相关origin测试。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`；source模式显式restore/build，包模式使用完整feed。完成的组提交、origin及Kill门禁不重做；新产品变更按自身影响范围获得资格。
 

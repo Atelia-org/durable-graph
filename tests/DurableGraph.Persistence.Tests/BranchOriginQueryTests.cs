@@ -61,7 +61,10 @@ public sealed class BranchOriginQueryTests : IDisposable {
         using (Repository reopened = Repository.OpenStorageReadOnlyExisting(_path, Models())) {
             Assert.Null(reopened.ReadBranchInfo(healthy).ForkedFromCommitId);
             Assert.Equal(healthy, Assert.Single(reopened.ListBranches()).Id);
+            Assert.Equal(healthy, Assert.Single(reopened.ListRootBranches()).Id);
+            Assert.Equal(healthy, Assert.Single(reopened.ListBranchSubtree(healthy)).Id);
             Assert.Throws<KeyNotFoundException>(() => reopened.ReadBranchInfo(new(unrelated)));
+            Assert.Throws<KeyNotFoundException>(() => reopened.ListBranchSubtree(new(unrelated)));
             Assert.False(reopened.IsFaulted);
             Assert.Empty(DB096TestAccess.Resources(reopened).Heads.RecoveryReports);
         }
@@ -84,14 +87,21 @@ public sealed class BranchOriginQueryTests : IDisposable {
         else { DamageClosedHeadHeader(localId); }
         using Repository reopened = Repository.OpenStorageReadOnlyExisting(_path, Models());
         Assert.Null(reopened.ReadBranchInfo(healthy).ForkedFromCommitId);
+        Assert.Throws<KeyNotFoundException>(() => reopened.ListBranchSubtree(default));
         if (missing) {
             Assert.Throws<InvalidOperationException>(() => reopened.ReadBranchInfo(damaged));
             Assert.Throws<InvalidOperationException>(() => reopened.ListBranches());
+            Assert.Throws<InvalidOperationException>(() => reopened.ListRootBranches());
+            Assert.Throws<InvalidOperationException>(() => reopened.ListBranchSubtree(healthy));
         } else {
             Assert.Contains("Unsupported HeaderFence", Assert.Throws<InvalidDataException>(
                 () => reopened.ReadBranchInfo(damaged)).Message);
             Assert.Contains("Unsupported HeaderFence", Assert.Throws<InvalidDataException>(
                 () => reopened.ListBranches()).Message);
+            Assert.Contains("Unsupported HeaderFence", Assert.Throws<InvalidDataException>(
+                () => reopened.ListRootBranches()).Message);
+            Assert.Contains("Unsupported HeaderFence", Assert.Throws<InvalidDataException>(
+                () => reopened.ListBranchSubtree(healthy)).Message);
         }
     }
 
@@ -112,6 +122,8 @@ public sealed class BranchOriginQueryTests : IDisposable {
         Assert.Equal(new BranchId(child), reopened.ReadCurrentCommit(new(child)).Commit.CreatedOnBranchId);
         Assert.Throws<KeyNotFoundException>(() => reopened.ReadBranchInfo(new(child)));
         Assert.Throws<KeyNotFoundException>(() => reopened.ListBranches());
+        Assert.Throws<KeyNotFoundException>(() => reopened.ListRootBranches());
+        Assert.Throws<KeyNotFoundException>(() => reopened.ListBranchSubtree(healthy));
         Assert.Null(reopened.ReadBranchInfo(healthy).ForkedFromCommitId);
     }
 
@@ -141,6 +153,8 @@ public sealed class BranchOriginQueryTests : IDisposable {
         Assert.Equal(new BranchId(child), reopened.ReadCurrentCommit(new(child)).Commit.CreatedOnBranchId);
         Assert.Throws<InvalidDataException>(() => reopened.ReadBranchInfo(new(child)));
         Assert.Throws<InvalidDataException>(() => reopened.ListBranches());
+        Assert.Throws<InvalidDataException>(() => reopened.ListRootBranches());
+        Assert.Throws<InvalidDataException>(() => reopened.ListBranchSubtree(healthy));
         Assert.Null(reopened.ReadBranchInfo(healthy).ForkedFromCommitId);
     }
 
@@ -168,6 +182,8 @@ public sealed class BranchOriginQueryTests : IDisposable {
         Assert.Equal(secondTip, reopened.ReadBranchInfo(first).ForkedFromCommitId);
         Assert.Equal(firstTip, reopened.ReadBranchInfo(second).ForkedFromCommitId);
         Assert.Throws<InvalidDataException>(() => reopened.ListBranches());
+        Assert.Throws<InvalidDataException>(() => reopened.ListRootBranches());
+        Assert.Throws<InvalidDataException>(() => reopened.ListBranchSubtree(healthy));
         Assert.Null(reopened.ReadBranchInfo(healthy).ForkedFromCommitId);
     }
 

@@ -60,6 +60,9 @@ internal static class Program {
         Need(worldWork.StateSourceCommitId == worldWork.BaseCommitId && playerWork.StateSourceCommitId == playerWork.BaseCommitId, "State baselines must advance.");
         repo.CreateTag("world-transfer", saved[worldWork.BranchId].Id);
         repo.CreateTag("player-transfer", saved[playerWork.BranchId].Id);
+        BranchInfo alternate = repo.ForkBranch(saved[worldWork.BranchId].Id, "world-alternate");
+        Need(repo.ListRootBranches().Select(branch => branch.Id).ToHashSet().SetEquals([worldWork.BranchId, playerWork.BranchId]), "Only the two roots should be listed.");
+        Need(repo.ListBranchSubtree(worldWork.BranchId).Select(branch => branch.Id).ToHashSet().SetEquals([worldWork.BranchId, alternate.Id]), "An unedited fork must be in its parent subtree.");
         Rejected(() => repo.CommitBranches([worldRequest, playerRequest]));
         Need(!repo.IsFaulted, "Expired requests should leave the owner healthy.");
         Console.WriteLine("GroupSeed:TwoNewSchemas:DeferredCapture:OwnedSummary:AllBases");
@@ -82,6 +85,13 @@ internal static class Program {
         Console.WriteLine("GroupContinue:ColdState:MixedRoles:EventKeepsState:ExpiredRequest");
     }
     private static void Verify(string path) {
+        // Directory browsing does not need the business model registry.
+        using (var directory = Repository.OpenReadOnlyExisting(path, new StateModelRegistry())) {
+            BranchId world = Find(directory, "world"), player = Find(directory, "player"), alternate = Find(directory, "world-alternate");
+            Need(directory.ListRootBranches().Select(branch => branch.Id).ToHashSet().SetEquals([world, player]), "Cold roots changed.");
+            Need(directory.ListBranchSubtree(world).Select(branch => branch.Id).ToHashSet().SetEquals([world, alternate]), "Cold subtree lost the unedited fork.");
+            Need(directory.ReadCurrentCommit(alternate).Commit.Id == directory.ResolveTag("world-transfer"), "Parent advancement moved the fork's inherited commit.");
+        }
         using var repo = Repository.OpenReadOnlyExisting(path, Models());
         CommitId worldCurrent = repo.ReadCurrentCommit(Find(repo, "world")).Commit.Id;
         CommitId playerCurrent = repo.ReadCurrentCommit(Find(repo, "player")).Commit.Id;
@@ -91,6 +101,6 @@ internal static class Program {
         Need(savedPlayer.StateCommitId == repo.ResolveTag("player-transfer") && ((Player)savedPlayer.State!).Swords == 1, "Event persisted an uncommitted State edit.");
         Need(((World)repo.LoadState(repo.ResolveTag("world-transfer"))).Swords == 0, "Old World commit changed.");
         Need(repo.ReadCommitInfo(repo.ResolveTag("world-transfer")).Summary.Span.SequenceEqual(new byte[] { 1, 2, 3 }), "The durable summary changed.");
-        Console.WriteLine("GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState");
+        Console.WriteLine("GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState:Tree");
     }
 }

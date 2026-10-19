@@ -269,6 +269,8 @@ tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 OpenWorkingCopy 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
+多开局目录可用 `repo.ListRootBranches()` 取得根，再用 `repo.ListBranchSubtree(branchId)` 取得包含起点的平面子树。它们只返回正式业务 Branch 的标签和固定来源，不加载领域对象，也不要求登记业务模型；空 fork 可立即列出。结果无排序保证，应用自行排序和画树。首版会读取并验证整个已登记森林，不能将子树查询理解为只访问该子树的磁盘文件。
+
 ## 工作副本与统一 Schema Catalog
 
 `CreateNew` / `OpenExisting` / `OpenReadOnlyExisting` 在打开时冻结 `models` 的代码配置；修改 registry builder 只影响之后打开的仓库。
