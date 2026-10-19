@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施或冻结签名。旧布局真实混组发布/冷续写已获限定见证；下一片为来源 snapshot 内部贯穿，再接新历史布局。文档对齐：2026-10-19。
+> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施或冻结签名。来源 snapshot 内部接缝 A 已实施验收；下一片资格化新 Storage 并切换真实历史布局。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
@@ -12,7 +12,7 @@
 
 **首批机制调查已完成：**[API 到源码机制的映射](mechanism-feasibility.md)记录 Shared 共同准备、登记两层 outcome、最近 State 内容依赖、来源查询范围及目录容量估算；给出下一批最小实验。当前结论仍是候选与源码证据，未修改产品代码或运行新模型实验。
 
-**后继收窄与局部见证：**[组内核](group-kernel-design.md)明确一个 accepted Catalog、一次共同候选及阶段清理/安装；旧目录真实 State/Event 混组已完成一次发布、按角色安装和两线冷 Delta 续写，相关测试27/27。[Branch 纵切](branch-vertical-design.md)进一步选中[直接保留来源 snapshot](history-source-seam.md)，无需新 proof/token；先在现有格式接通材料，再切换 HS 历史及删除业务 Parent。旧布局原语见证到此收束，不复制正式组协调器。请求不设 Consumed，分页预算耗尽整次失败；[独立 HS Probe](../../../experiments/BranchHeadMechanismProbe/README.md)与[定向 origin 请求](headstore-origin-request.md)保其各自范围。
+**后继收窄与局部实施：**[组内核](group-kernel-design.md)明确一个 accepted Catalog、一次共同候选及阶段清理/安装；旧目录真实 State/Event 混组已有发布和冷 Delta 续写见证。现有格式下[来源 snapshot 接缝 A 已接通并验收](history-source-seam.md#7-a-实施与验收)，无需新 proof/token，保存仍复核实际图。下一步以[Branch 纵切](branch-vertical-design.md)切换 HS 历史及删除业务 Parent。旧布局不再复制正式组协调器。请求不设 Consumed，分页预算耗尽整次失败；[独立 HS Probe](../../../experiments/BranchHeadMechanismProbe/README.md)与[定向 origin 请求](headstore-origin-request.md)保其各自范围。
 
 需求依据见[用户故事与能力提炼](user-stories.md)，以 DramaBoard 多世界线明确对外行为，再用本文的分层模型比较实现。[已收敛的上游命名](storage-naming-candidates.md)与[DG 接入切片](headstore-adaptation.md)记录已完成边界。早期 NamedValue / HeadSnapshot 提案已被实际 `HeadSetTag` 取代，不再作为待选 API。
 

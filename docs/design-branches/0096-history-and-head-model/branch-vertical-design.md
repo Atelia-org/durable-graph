@@ -102,7 +102,7 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 
 ## 6. 查询和实验顺序
 
-**下一片先做[来源 snapshot 接缝 A](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)**：仅保留和传递已有实际图材料，仍以当前 Parent 取得来源资格，保格式/公开 API 与热复核；减少同次 decoder 的重复完整图校验。随后以同文 B 资格化新依赖并整体切换业务历史权威。下列真实纵切和登记判据保持，不以 A 替代新布局验收。
+**[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)**：保留和传递已有实际图材料，仍以当前 Parent 取得来源资格，保格式/公开 API 与热复核；消除同次 decoder 的重复完整图校验。下一片以同文 B 资格化新依赖并整体切换业务历史权威。下列真实纵切和登记判据保持，不以 A 替代新布局验收。
 
 成员目录只需小型直接编码，标签先固定；来源仍以 HS header 为准。`ListHeadOrigins` 在当前上游扫描物理全集，包含管理 Head/未登记产物，并验证整个来源图；它能做健康数据的功能见证，**不能证明只访问登记集合或忽略无关损坏的查询边界**。
 
@@ -110,7 +110,7 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 
 建议按以下两个见证推进，不一次覆盖全部 API：
 
-1. **恢复接缝见证**：真实 HS Entry/继承历史＋DG 小描述/图；覆盖 `S0,E1,E2` 从 E1 fork，及 `E0,E1` Event-only fork；冷重开、最近 State、未发布候选安装、子线首次保存、父线继续。保留错源、错误 prior、历史 Schema 升级/Delta 和 owner 失效反例。先完成最难证明的 Parent 替换闭环。
+1. **恢复接缝见证**：真实 HS Entry/继承历史＋DG 小描述/图；覆盖 `S0,E1,S1,E2`，父线推进 E3 后从准确旧点 E2 fork；冷恢复 S1 时证明其严格前源 S0，子线先 Event 后 State，再次 State 确实写 Delta。另覆盖唯一 S0 与 `E0,E1` Event-only 到根。保留图/batch/directory 一致自报 S0 而 HS 实际最近 State 为 S1 的错源反例，以及错误 prior、selected/origin Schema 和 owner 失效反例。完整判据只查[来源接缝 §6](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)，先完成 Parent 替换闭环。
 2. **登记见证**：在上述真实读写链上覆盖三条创建路径与各阶段中断；正式成员精确、空 fork 可预览、D/S 共同变化、未登记产物不展示，登记后交付异常能靠候选 BranchId 核对。补多根/子树、从 B 界面选择 A/a1 创建 C 挂 A 的断言。
 
 两者可以共用测试宿主，但不要公开两套 Repository 形状。实验若需要临时编码，标清版本和仅限见证；不得直接把它登记为产品 wire 已冻结。真实 cold reopen 必须关闭全部资源并重新取得 stores/caches；跨进程、故障进程、包消费者资格分别记录。
@@ -120,10 +120,10 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 ## 7. 本次源码证据与未验证项
 
 - [GraphRecordStore](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)：`Append`、`ReadGraph`、`ValidateMetadataRelations`、`ResolveContentSource`、`ReadObjectChainCore`、`ReadDirectoryChain`。业务内容来源确为最近 State；batch/directory 的局部 source/prior 检查与逻辑 Parent 不可一起删除。
-- [DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)：`ReadStoredGraph` 只接 FrameAddress 再读选中图；[StoredGraphDecoder](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs)通过 `ReadObjectChains` 又读取选中图。这两层须接收/保留来源材料。
+- [DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs) 与 [StoredGraphDecoder](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs) 已经 A 片接入 snapshot，地址入口读取一次选中图并传递；新增内部入口拒绝错误 owner/失效寿命。它仍是 Parent 来源，尚未成为 HS 签发材料。
 - [NormalizedGraphState](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)：`RequireStoredSource`、`PrepareGraphInstallation` 再读实际图并检查 owner、环境、Schema、成员、prior、实际写入；未发布候选不能依赖已有 CommitId。
 - [RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)：`PrepareSaveCore` 检查实际最近 State；`CommitSave` 当前在发布前准备安装、发布后安装并按阶段 fault。旧 name→graph 目录不是本稿一 Branch 一 Head 的实现。
 - [Repository 恢复入口](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)：`RestoreCheckout` 先对选中 Event 执行 `ValidateMetadataRelations`，再找最近 State 并物化；上述纵切保留该检查范围。
 - 上游 [ForkHead](../../../../atelia-storage/src/HeadStore/HeadStore.Fork.cs)准确重验来源后只写 header；[ReadEntryHistory](../../../../atelia-storage/src/HeadStore/HeadStore.History.cs)起点 inclusive，禁止活动 visitor 递归历史，正常停止不证明未访问历史健康；[ListHeadOrigins](../../../../atelia-storage/src/HeadStore/HeadStore.ForkQuery.cs)扫描完整物理集合。
 
-本稿对应的新 DG 布局未构建/运行；产品、上游或依赖未改。[独立 HeadStore Probe](../../../experiments/BranchHeadMechanismProbe/README.md)已用示意 payload 验证三条登记成功路径、空 fork、跨 fork 分页及旧起点后缀预算；它不引用 DG，不能替代本稿的准确图恢复与登记故障资格。仍未验证：材料贯穿真实恢复及安装所需改动量、三路径登记中断、长 Event 段成本、定向 origin 接入、整目录实际容量/累计写量。以上见证通过后再收敛产品字段、异常交付和实施顺序；现阶段无需新增需求边界询问。
+本稿对应的新 DG 布局未构建/运行；产品仅完成[同格式 snapshot 接缝 A](history-source-seam.md#7-a-实施与验收)，上游或依赖未改。[独立 HeadStore Probe](../../../experiments/BranchHeadMechanismProbe/README.md)已用示意 payload 验证三条登记成功路径、空 fork、跨 fork 分页及旧起点后缀预算；它不引用 DG，不能替代本稿的准确图恢复与登记故障资格。仍未验证：HS 来源签发及业务 Parent 删除后的真实恢复、三路径登记中断、长 Event 段成本、定向 origin 接入、整目录实际容量/累计写量。以上见证通过后再收敛产品字段、异常交付和实施顺序；现阶段无需新增需求边界询问。

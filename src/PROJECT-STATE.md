@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：[独立删除 Private/ToShared](../docs/design-branches/0096-history-and-head-model/private-removal.md)已实施并完成源码、新 G 普通包和有限进程中止验收（实现 `efdf61b`）。按[统一 Catalog 合同](../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)退出私有路线；保当前历史布局及 Shared 命名，不混入新 API/组提交。`P0R2` 根标记拒绝旧库，无兼容或自动导入。本片无剩余实施项；旧布局混组原语见证已收束，下一片为来源 snapshot 的内部贯穿，随后切换新历史布局。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，尚未实现组协调器或新历史模型。
+2026-10-19：[来源 snapshot 接缝 A](../docs/design-branches/0096-history-and-head-model/history-source-seam.md#7-a-实施与验收)已实施验收：真实材料贯穿 decoded/normalized/实际安装，冷读取不重复完整图资格检查，保存和安装仍重新核对实际图。保持公开 API、格式、Parent 权威和旧 Storage pin；下一片资格化新依赖并切换真实历史布局，再接组内核。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，尚未实现新 Branch API 或组协调器。[Private/ToShared 删除片](../docs/design-branches/0096-history-and-head-model/private-removal.md)保其已完成资格，`P0R2` 拒旧库；不重开私有路线。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有源码接入为三控制Head与独立书签目录，实际范围见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。后续设计从[DB-096研究工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)恢复：用户已确认只追加/旧点另开/fork立即可见，继承历史为首选候选；上游紧凑codec与准确历史已做独立消费者复核，开发期误用诊断足够，不增加每引用16B scope。DG仍固定旧依赖，新历史模型、包接入与产品回归尚未完成，不把上游或独立消费者资格当作DG产品资格。
 

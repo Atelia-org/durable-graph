@@ -142,7 +142,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。1000条分支的目录容量须按实际 payload/标签上限核算；不先假定整表方案合格，不新增 GC。
 
-旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。下一步先做[来源 snapshot 接缝 A](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)，再资格化新 Storage 并以[Branch 纵切](branch-vertical-design.md)证明 Parent 替换恢复/再保存，之后接入真正多业务 Head 组内核和登记故障验收。summary/BLOB、加载对象寿命、ID 字段支持与具体异常随后收敛。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
+旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，尚未提供本稿新外观。下一步资格化新 Storage 并以[Branch 纵切](branch-vertical-design.md)证明 Parent 替换恢复/再保存，之后接入真正多业务 Head 组内核和登记故障验收。summary/BLOB、加载对象寿命、ID 字段支持与具体异常随后收敛。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 
 ## 7. 多 Branch 联合提交：已选 CommitRequest 路线
 

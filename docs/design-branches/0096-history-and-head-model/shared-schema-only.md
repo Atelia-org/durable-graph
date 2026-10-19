@@ -92,4 +92,4 @@ dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.
 
 已选：同库统一 Catalog；新 API 无归属参数；开发试验复制完整关闭库。首选内部模型进一步收窄为仓库 accepted Catalog＋操作内共同候选，保各业务冻结执行环境与基线。两份机制见证支持该方向；产品删除进度与资格见[独立切片](private-removal.md)。
 
-删除片已完成；后继[组内核](group-kernel-design.md)的候选清理与真实混组发布/冷续写已有原语见证，旧目录不再增加正式组协调器。下一片先[贯穿现有来源 snapshot](history-source-seam.md)，再以[Branch 纵切](branch-vertical-design.md)切换并验证 Parent 替换后的准确来源；最终在新布局接共同 Catalog/组内核及故障验收。示意 Probe 与旧布局见证不代替新 DG 模型资格。
+删除片已完成；后继[组内核](group-kernel-design.md)的候选清理与真实混组发布/冷续写已有原语见证，旧目录不再增加正式组协调器。[现有来源 snapshot 已贯穿并验收](history-source-seam.md#7-a-实施与验收)，下一片以[Branch 纵切](branch-vertical-design.md)切换并验证 Parent 替换后的准确来源；最终在新布局接共同 Catalog/组内核及故障验收。示意 Probe 与旧布局见证不代替新 DG 模型资格。

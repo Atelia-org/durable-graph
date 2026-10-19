@@ -137,13 +137,21 @@ public sealed partial class P0BusinessPlanningAccountingTests {
             using RepositoryStorageFacade second = RepositoryStorageFacade.OpenExisting(copy);
             BranchSaveSession firstSession = new(first, "main", Models()), secondSession = new(second, "main", Models());
             NormalizedGraphState foreign = Baseline(firstSession), owned = Baseline(secondSession);
+            Assert.Same(first.Store, foreign.SourceSnapshot!.SourceOwner);
+            Assert.Same(second.Store, owned.SourceSnapshot!.SourceOwner);
             Assert.Equal(foreign.RevisionAddress, owned.RevisionAddress);
             foreach (ObjectId id in foreign.Objects.Keys) { Assert.Equal(foreign.Objects[id].Storage, owned.Objects[id].Storage); }
             foreign.RequireStoredSource(first.Store, foreign.SourceModels!); // Hold the real model/view constant: isolate owner lifetime.
             Assert.Throws<InvalidDataException>(() => foreign.RequireStoredSource(second.Store, foreign.SourceModels!));
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(
+                second.Store, foreign.SourceSnapshot!, Models().FreezeConfiguration()));
+            Assert.Throws<InvalidDataException>(() => second.Store.ReadObjectChains(foreign.SourceSnapshot!).ToArray());
             SchemaCatalogView catalog = SchemaCatalogView.Load(first.Store, first.SharedSchemaRoot!.Value);
             DecodedGraphRows typed = StoredGraphDecoder.Read(first.Store, foreign.RevisionAddress, foreign.SourceModels!, catalog);
-            NormalizedGraphState synthetic = NormalizedGraphState.Create(typed.ToDecodedRevision(), foreign.SourceModels!);
+            DecodedRevision syntheticDecoded = typed.ToDecodedRevision();
+            Assert.Null(syntheticDecoded.SourceSnapshot);
+            NormalizedGraphState synthetic = NormalizedGraphState.Create(syntheticDecoded, foreign.SourceModels!);
+            Assert.Null(synthetic.SourceSnapshot);
             Assert.Equal(foreign.RevisionAddress, synthetic.RevisionAddress);
             Assert.Equal(foreign.Objects.Keys.Order(), synthetic.Objects.Keys.Order());
             foreach (ObjectId id in foreign.Objects.Keys) {

@@ -308,6 +308,11 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.NotSame(Assert.IsType<ProbeRoot>(first.State).Padding, root.Padding);
             ObjectId rootId = second.StateId!.Value;
             Assert.True(second.Baseline!.Objects[rootId].RequiresRewrite);
+            StoredGraphRevision inheritedSnapshot = Assert.IsType<StoredGraphRevision>(second.Baseline.SourceSnapshot);
+            Assert.Same(entry.Selection.Normalized.SourceSnapshot, inheritedSnapshot);
+            Assert.Same(first.Baseline!.SourceSnapshot, inheritedSnapshot);
+            Assert.Equal(original.RevisionAddress, inheritedSnapshot.Address);
+            Assert.Equal(second.BindingEnvironment!.SelectedSchemaView.Snapshot!.Address, inheritedSnapshot.SchemaRoot);
             ObjectStorageInfo oldRoot = second.Baseline.Objects[rootId].Storage!.Value;
             second.PrepareAndDiscard(root);
             Assert.True(second.Baseline.Objects[rootId].RequiresRewrite);
@@ -319,6 +324,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             }
             Assert.True(second.Baseline.Objects[rootId].RequiresRewrite);
             Assert.Equal(oldRoot, second.Baseline.Objects[rootId].Storage);
+            Assert.Same(inheritedSnapshot, second.Baseline.SourceSnapshot);
             Assert.Same(entry, repository.PreparedStateEntry);
             CheckpointAddress confirmed = second.CommitState();
             StoredGraphRevision written = repository.GraphStore.ReadGraph(confirmed.RevisionAddress);
@@ -326,13 +332,24 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(ObjectVersionKind.Base, @base.Kind);
             Assert.Equal(rootId.Value, @base.ObjectId);
             Assert.False(second.Baseline!.Objects[rootId].RequiresRewrite);
+            StoredGraphRevision installedSnapshot = Assert.IsType<StoredGraphRevision>(second.Baseline.SourceSnapshot);
+            Assert.Equal(confirmed.RevisionAddress, installedSnapshot.Address);
+            Assert.Equal(original.RevisionAddress, installedSnapshot.SourceGraph);
+            Assert.Equal(written.SchemaRoot, installedSnapshot.SchemaRoot);
+            Assert.NotEqual(inheritedSnapshot.SchemaRoot, installedSnapshot.SchemaRoot);
             Assert.Same(entry, repository.PreparedStateEntry); // No hot preparation admission.
             repository.CreateTag("rewritten", confirmed);
             ObjectId listId = Assert.Single(second.Baseline.Objects, row => row.Value.Current.Kind == ObjectStateKind.List).Key;
             ObjectStorageInfo prior = second.Baseline.Objects[listId].Storage!.Value;
             root.Padding[7] = 200;
+            CheckpointAddress interveningEvent = second.CommitEvent(root);
+            Assert.Same(installedSnapshot, second.Baseline.SourceSnapshot);
             CheckpointAddress deltaState = second.CommitState();
             StoredGraphRevision deltaGraph = repository.GraphStore.ReadGraph(deltaState.RevisionAddress);
+            Assert.Equal(interveningEvent.RevisionAddress, deltaGraph.Parent);
+            Assert.Equal(confirmed.RevisionAddress, deltaGraph.SourceGraph);
+            Assert.Equal(installedSnapshot.SchemaRoot, deltaGraph.SchemaRoot);
+            Assert.Equal(deltaState.RevisionAddress, second.Baseline!.SourceSnapshot!.Address);
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(deltaGraph.OwnedBatch!.Value).Records);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(listId.Value, delta.ObjectId);

@@ -66,8 +66,12 @@ internal sealed class DecodedGraphRows {
 
 internal static class StoredGraphDecoder {
     internal static DecodedGraphRows Read(GraphRecordStore store, FrameAddress graph,
+        ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) =>
+        Read(store, store.ReadGraph(graph), models, selected);
+
+    internal static DecodedGraphRows Read(GraphRecordStore store, StoredGraphRevision snapshot,
         ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) {
-        IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(graph, out StoredGraphRevision snapshot);
+        IEnumerable<ObjectVersionChain> chains = store.ReadObjectChains(snapshot);
         Dictionary<ObjectId, ObjectStateRecord> rows = [];
         Dictionary<ObjectId, ObjectStorageInfo> storage = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Reader)> readers = [];

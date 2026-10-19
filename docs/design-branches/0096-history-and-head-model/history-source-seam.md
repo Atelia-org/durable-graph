@@ -1,6 +1,6 @@
 # DB-096：历史来源材料的最小接缝
 
-> 2026-10-19，源码调查与下一片建议，未实施。DG 起点 `35ae718`；产品仍固定 Storage `731eef7`。上游主工作树仍为 `f8868b57e8f012745413bb38a83d67f1dba29f26`，干净；本轮未发现 `ReadHeadOrigin` 的新交付。本文细化[Branch 纵切](branch-vertical-design.md)，不替代其需求、查询范围和登记协议。
+> 2026-10-19。A 的 snapshot 接缝已接入生产，实施起点 `4980426`；验收见 §7。B 的 HS 来源签发、业务 Parent 删除及新布局仍未实施。产品固定 Storage `731eef7`；本轮只读核对的上游仍为 `f8868b57e8f012745413bb38a83d67f1dba29f26`，干净，尚无 `ReadHeadOrigin`。本文细化[Branch 纵切](branch-vertical-design.md)，不替代其需求、查询范围和登记协议。
 
 ## 1. 结论：复用已有 snapshot，不另建证明体系
 
@@ -12,7 +12,9 @@
 
 保留 snapshot 会延长其中完整 heads 的驻留；`DecodedRevision` 当前已经复制 `ObjectHeads`，不能因此宣称总内存下降。先复用实际 snapshot 引用，不再生成第三份 heads 副本；是否去除已有重复 map 在测量及调用方核对后决定，不把来源重构扩成缓存优化。
 
-## 2. 当前实际调用链及遗漏风险
+## 2. 改造前调用链与 A/B 接点
+
+下表记录 A 实施前的源码调查；A 已闭合 snapshot 传递、保存再验证及安装接点，实际范围见 §7。Repository 导航和 expected source 的改造属于 B，不能把表中未来接点视为已完成。
 
 | 入口或阶段 | 当前调用链 | 必须改动的接点 |
 |---|---|---|
@@ -87,7 +89,7 @@ StoredGraphRevision AppendMeta(FrameAddress? previousMeta, PreparedGraphWrite wr
 
 ## 6. 可执行顺序：先接缝，再一次切换历史权威
 
-**A：同格式接缝整理，建议作为下一轮第一个真实实施步。** 在现行产品路径中保留 snapshot，改 decoder/normalized/安装参数；当前 `ReadGraph/Append` 与 Parent 仍是唯一来源生产者，不新增 expected-source 读取入口。其规模比直接切换 Branch/Commit 小，能独立检验最易漏掉的热安装/再保存传递。它不提供新 Branch API、不增加第二格式或第二 Parent，也不声称已验证 HS 来源。
+**A：同格式接缝整理，已实施，证据见 §7。** 在现行产品路径中保留 snapshot，改 decoder/normalized/安装参数；当前 `ReadGraph/Append` 与 Parent 仍是唯一来源生产者，不新增 expected-source 读取入口。其规模比直接切换 Branch/Commit 小，能独立检验最易漏掉的热安装/再保存传递。它不提供新 Branch API、不增加第二格式或第二 Parent，也不声称已验证 HS 来源。
 
 A 的合入门槛：
 
@@ -104,4 +106,31 @@ A 的合入门槛：
 
 B 的最小判据：真实 `S0,E1,S1,E2`，父线再推进 E3 后从准确旧点 **E2** fork，关闭所有 resources/caches 重开；恢复 S1 时证明前源 S0；子线 Event 后 State 使用正确 baseline，State 再次变更确实写 Delta，父线继续不改变子线历史。补一个只有 S0 的根证明和 Event-only 到根证明。反例至少包括“E2 图/batch/directory 一致自报 S0、HS 前源实际 S1”、错误 prior、错误 selected/origin Schema、snapshot 跨 owner/关闭后重用、已安装 State 下次保存丢失来源材料。登记中断与真实多成员 CU 在该闭环之后接入。
 
-本调查未改生产源码、依赖或运行新历史测试；没有将签名草图当成实现事实。独立复核确认 A/B 边界、冷热来源接点及物理 Delta 检查范围，未发现阻断；同轮另行运行的混组原语资格见[组内核 §8](group-kernel-design.md#8-真实混组发布与冷续写见证)，不作为本方案已实施的证据。下一步优先 A，之后 B；定向 origin 请求仍可独立推动，不阻断来源材料接线。
+下一步转入 B：先精确资格化新 Storage，再整体切换单成员真实纵切；定向 origin 请求可独立推动，不阻断来源材料接线。旧布局的[混组原语见证](group-kernel-design.md#8-真实混组发布与冷续写见证)保其原资格，不等于新布局或组内核已实现。
+
+## 7. A 实施与验收
+
+生产变更限于五个 Persistence 文件。`ReadStoredGraph(address)` 只完整资格化一次，把实际 snapshot 交给 decoder；`BusinessPersistenceAdapter.ReadRoot` 复用其已有 snapshot。`DecodedRevision` 与 `NormalizedGraphState` 保留同一来源引用，候选安装保留重新读取并校验所得的实际 snapshot。`ToDecodedRevision` 和 synthetic 构造仍不签发保存来源。
+
+`GraphRecordStore.Revalidate(snapshot)` 检查 owner/lifetime，执行完整 `ReadGraph`，再比对 metadata、source 与完整 heads。`RequireStoredSource` 和安装继续通过它复核；现有 prepared State 的准入仍走 `RequireStoredSource`。物理 Delta、origin/selected Schema、写入格式、公开 API 和依赖 pin 均保持。snapshot 入口仅是内部已资格化读取的延续，不是公共 capability；没有第三份 heads 副本，也没有声称减少总内存。
+
+| 判据 | 可执行证据 |
+|---|---|
+| State/Event 冷读和物理缓存温读均只完整资格化一次 | [SourceSnapshotSeamTests](../../../tests/DurableGraph.Persistence.Tests/SourceSnapshotSeamTests.cs)；internal `BusinessGraphQualificationCount` 在业务图完整检查成功后计数，Meta 不计，缓存命中仍计；`ReadRoot` 同样检查 |
+| 保存准入仍检查实际图 | 同测试中 `RequireStoredSource` 每次增加一次完整资格计数；不以 frame decode/miss 冒充资格次数 |
+| 冷恢复、prepared 槽、历史 rewrite、State/Event 后再次 Delta | [SplitPreparedStateReuseTests](../../../tests/DurableGraph.Persistence.Tests/SplitPreparedStateReuseTests.cs) 的 `CachedHistoricalRewriteSurvivesDiscardAndEventsUntilStateBaseThenColdContinuesDelta`：同 snapshot、准确旧 Schema、Event 保 rewrite、State 强制 Base/新 Schema、后继 Event 不替换 State 来源、再次 State 的真实 Delta/prior/H 和冷续写 |
+| wrong owner、synthetic、关闭/fault 不授保存能力 | [P0NormalizedBusinessBaselineTests](../../../tests/DurableGraph.Persistence.Tests/P0NormalizedBusinessBaselineTests.cs) 的真实复制库同地址反例；新增测试直接覆盖 snapshot decoder/chain 入口和保存拒绝，已交付 DTO 字段/list 仍可读 |
+| source/prior/selected/origin Schema 关系没有放松 | 原有 Integrity、SchemaClosure、ReadCache、prepared State 与生成模型回归；本片未改其物理关系检查 |
+
+主线程集成验收：根构建零警告/错误；Persistence 项目 **927/927**，生成模型相关筛选 **13/13**，均无失败/跳过。新增4个 Theory case，其余为既有或增强的回归。三位 subagent 分担实施、测试和独立复核，主线程审阅实际 diff 并执行上述构建/测试；复核发现的一处临时重载类型错误已在构建前修正，直接入口 owner/lifetime 负例已补齐。
+
+使用精确旧 pin 的独立源码工作树，未消费环境变量指向的新 sibling：
+
+```powershell
+$storageSources = (Resolve-Path .artifacts/db096-shared-schema/storage-731eef7).Path
+dotnet build DurableGraph.slnx -p:UseStorageSources=true "-p:StorageSourceRoot=$storageSources"
+dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj --no-build --no-restore -p:UseStorageSources=true "-p:StorageSourceRoot=$storageSources"
+dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --no-restore -p:UseStorageSources=true "-p:StorageSourceRoot=$storageSources" --filter 'FullyQualifiedName~DecodedRevisionGeneratorTests|FullyQualifiedName~PersistedDeltaChainGeneratorTests|FullyQualifiedName~MetaBootstrap|FullyQualifiedName~LoadedWorldGeneratorTests'
+```
+
+本机日志在 `.artifacts/db096-snapshot-seam/{build,persistence,generated-readers}.log`；TRX 在该目录 `results/`。本片不提供全 solution 测试、新 HeadStore、普通包、进程中止、性能吞吐或新历史布局资格。

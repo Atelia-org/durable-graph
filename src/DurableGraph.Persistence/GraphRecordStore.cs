@@ -37,6 +37,8 @@ internal sealed class GraphRecordStore : IDisposable {
         _readCache?.ResidentChargeBytes ?? 0, _readCache?.PeakResidentChargeBytes ?? 0, _readCache?.EntryCount ?? 0);
 
     internal long AppendedFrames { get; private set; }
+    // Completed business qualifications, including warm physical-cache hits; not frame decodes.
+    internal long BusinessGraphQualificationCount { get; private set; }
     internal int DirectoryReadAmplificationThreshold {
         get => _directoryThreshold;
         set {
@@ -135,7 +137,28 @@ internal sealed class GraphRecordStore : IDisposable {
         // Shallow external-head declarations stay shallow. These checks do not
         // reconstruct old Delta chains or authenticate global entity history.
         foreach ((uint id, FrameAddress head) in heads) { _ = FindRecord(ReadBatch(head), id); }
+        if (metadata.Kind is StoredGraphKind.State or StoredGraphKind.Event) { BusinessGraphQualificationCount++; }
         return new(address, metadata, source, heads, this);
+    }
+
+    // Saving and prepared-state reuse recheck the actual graph; a retained snapshot is
+    // source material, not permission to bypass the current owner's validation.
+    internal StoredGraphRevision Revalidate(StoredGraphRevision snapshot) {
+        RequireSnapshotOwner(snapshot);
+        StoredGraphRevision actual = ReadGraph(snapshot.Address);
+        if (actual.Metadata != snapshot.Metadata || actual.SourceGraph != snapshot.SourceGraph ||
+            !actual.ObjectHeads.SequenceEqual(snapshot.ObjectHeads)) {
+            throw new InvalidDataException("A stored source snapshot must match its actual graph, source and membership.");
+        }
+        return actual;
+    }
+
+    private void RequireSnapshotOwner(StoredGraphRevision snapshot) {
+        EnsureUsable();
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!ReferenceEquals(snapshot.SourceOwner, this)) {
+            throw new InvalidDataException("A stored graph snapshot requires its issuing Store.");
+        }
     }
 
     // Qualify a selected Event's source links without replaying its directory,
@@ -247,6 +270,13 @@ internal sealed class GraphRecordStore : IDisposable {
     // Qualify the complete selected graph before returning lazy per-object chains.
     internal IEnumerable<ObjectVersionChain> ReadObjectChains(FrameAddress graphAddress, out StoredGraphRevision snapshot) {
         snapshot = ReadGraph(graphAddress);
+        return ReadObjectChains(snapshot);
+    }
+
+    // Internal continuation of a concrete read, using its already-qualified snapshot.
+    // Long-lived save baselines must instead pass through Revalidate.
+    internal IEnumerable<ObjectVersionChain> ReadObjectChains(StoredGraphRevision snapshot) {
+        RequireSnapshotOwner(snapshot);
         return EnumerateObjectChains(snapshot);
     }
 

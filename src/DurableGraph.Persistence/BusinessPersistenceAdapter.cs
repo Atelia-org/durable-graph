@@ -106,7 +106,7 @@ internal sealed class BusinessPersistenceAdapter {
 
     internal static IDurableObject ReadRoot(GraphRecordStore store, FrameAddress graph, StateModelRegistry models) {
         StoredGraphRevision metadata = store.ReadGraph(graph);
-        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, graph, models);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, metadata, models.FreezeConfiguration());
         return GraphReader.ReadRoot<IDurableObject>(source, metadata.RootId, new(source.SourceModels!));
     }
 }

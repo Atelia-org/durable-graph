@@ -106,6 +106,6 @@ Unknown 的准确组位置发现仍是独立恢复合同，不由本页新增幂
 
 主线程显式使用固定 `731eef7` worktree，根 build 零警告/错误；筛选 `GroupPublicationMechanismTests|SplitBusinessWorkspaceTests|SharedCatalogGroupPreparationTests|MetaBootstrapP0PublicationTests|P0NormalizedBusinessBaselineTests` **27/27** 通过、零跳过。日志 `.artifacts/db096-next/root-build.log`、`mechanism-tests.log`，TRX `results/mechanism-tests.trx`。其中仅混组 Fact 为本轮新增；其余为实际重跑的既有回归。独立复核核对完整资源关闭、source/Parent 区别及断言范围。
 
-**旧布局原语见证到此收束。**下一片先实施[来源 snapshot 接缝 A](history-source-seam.md#6-可执行顺序先接缝再一次切换历史权威)，再在新布局接入真实组内核。§6 的重入、清理错误、组 Base 安装、Unknown/Published 和多业务 Head CU 判据仍保留，随真实内核验收；不为提前满足清单而复制旧协调器。本轮未改产品 C#、依赖或格式，未跑全套、包、进程中止或新 HS 产品资格。
+**旧布局原语见证到此收束。**后续[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，下一片转入新历史布局，再接入真实组内核。§6 的重入、清理错误、组 Base 安装、Unknown/Published 和多业务 Head CU 判据仍保留，随真实内核验收；不为提前满足清单而复制旧协调器。本节混组见证当轮未改产品 C#、依赖或格式，未跑全套、包、进程中止或新 HS 产品资格。
 
 本轮集成复核：10份受影响 Markdown 的557个本地链接、58个锚点检查通过，`git diff --check` 通过。续工入口、路线图和设计索引已改为 A→B→新布局组内核，不重复开启本轮已完成的原语见证。

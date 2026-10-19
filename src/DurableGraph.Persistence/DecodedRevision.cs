@@ -39,6 +39,7 @@ public sealed class DecodedRevision {
             source.Snapshot.ObjectHeads.ToDictionary(static pair => new ObjectId(pair.Key), static pair => pair.Value),
             objectStorage: source.Storage) {
         GraphStore = store;
+        SourceSnapshot = source.Snapshot;
         SelectedSchemaView = environment.SelectedSchemaView;
         SourceModels = environment.Models;
         BindingEnvironment = environment;
@@ -54,13 +55,26 @@ public sealed class DecodedRevision {
         StateModelRegistry.FrozenConfiguration configuration, SchemaViewBindingEnvironment? reuseEnvironment = null) {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(configuration);
-        StoredGraphRevision source = store.ReadGraph(graph);
+        return ReadStoredGraph(store, store.ReadGraph(graph), configuration, reuseEnvironment);
+    }
+
+    // Only concrete reads hand off an already-qualified snapshot. This overload
+    // neither invents save provenance for fixtures nor changes history authority.
+    internal static DecodedRevision ReadStoredGraph(GraphRecordStore store, StoredGraphRevision source,
+        StateModelRegistry.FrozenConfiguration configuration, SchemaViewBindingEnvironment? reuseEnvironment = null) {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(configuration);
+        store.EnsureUsable();
+        if (!ReferenceEquals(source.SourceOwner, store)) {
+            throw new InvalidDataException("A business read requires its issuing Store's snapshot.");
+        }
         if (source.Kind == StoredGraphKind.Meta || source.SchemaRoot is not { } schemaRoot) {
             throw new InvalidDataException("A business read requires its exact owner and selected Schema view.");
         }
         SchemaViewBindingEnvironment environment = reuseEnvironment ?? SchemaViewBindingEnvironment.Load(store, configuration, schemaRoot);
         environment.RequireMatches(store, configuration, schemaRoot);
-        return new(store, environment, StoredGraphDecoder.Read(store, graph, environment.Models, environment.SelectedSchemaView));
+        return new(store, environment, StoredGraphDecoder.Read(store, source, environment.Models, environment.SelectedSchemaView));
     }
 
     // Explicit same-S reuse, without an owner-wide history cache or externally supplied view.
@@ -103,6 +117,7 @@ public sealed class DecodedRevision {
     // These facts can seed an editable baseline only in the same stores' lifetimes.
     // Synthetic DTO views have no storage authority; their content remains usable.
     internal GraphRecordStore? GraphStore { get; }
+    internal StoredGraphRevision? SourceSnapshot { get; }
     internal SchemaCatalogView? SelectedSchemaView { get; }
     internal ModelExecutionEnvironment? SourceModels { get; }
     internal SchemaViewBindingEnvironment? BindingEnvironment { get; }
