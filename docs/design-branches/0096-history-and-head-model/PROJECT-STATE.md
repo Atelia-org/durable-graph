@@ -35,11 +35,11 @@
 
 ## 当前焦点与下一步
 
-**当前停点：B1 新 Storage 源码接入已验收，B2 整体切换计划已完成独立复核（2026-10-19）。**本轮起点 `2d118da`；依赖已接到 `f8868b5`，根构建、2817项测试、初始化3窗/保存6窗通过，准确源/包及故障边界只查[B1 记录](storage-handle-adaptation.md)。[B2 施工计划](branch-cutover-plan.md)补齐书签 CommitId、现有历史调用迁移、Unicode 重复标签、MetaPrevious 和合法目录复用；不新增第二布局或反查索引。产品仍是旧业务目录/Parent、每 checkout 内部 Catalog，尚未实施新 Branch API 或组内核。A/Private 删除资格保各自原版本记录。
+**当前停点：B2 的编码、公开值与操作停止条件已收窄，下一步进入隔离分支产品纵切（2026-10-19）。**本轮起点 `79cbf86`；[B2 施工计划](branch-cutover-plan.md)现有具体 D/T/Entry 格式与容量界限，[API 草图](api-sketch.md#b2-的具体值与迁移合同)补齐薄 ID codec、摘要隔离、空摘要缺省、创建后重开对象语义和发布异常的已知定位字段。独立审查发现并修正：最近两个 State 只够冷恢复，ReadCheckpoint/跨根 Pair 需要各自的准确 source；已加入操作矩阵与反例。独立[候选 codec Probe](../../../experiments/BranchWireFormatProbe/README.md)159项断言与根构建通过，均不证明新布局运行。产品仍是旧业务目录/Parent、每 checkout 内部 Catalog，新 Branch API 或组内核尚未实施。
 
 此前[首批机制调查](mechanism-feasibility.md)保留源码原语、创建/恢复/查询缺口与最小实验；其中 Private/Shared Schema 混组候选已退出，其余证据仍适用。
 
-**压缩后恢复顺序：完整读本文 → [B2 整体切换计划](branch-cutover-plan.md) → 按问题读[Branch 纵切](branch-vertical-design.md)的来源合同/源码。A 接缝与 B1 依赖接入分别有独立记录，不重做；不重开命名/故事、不再扩展旧目录协调器测试平台。**
+**压缩后恢复顺序：完整读本文 → [B2 整体切换计划](branch-cutover-plan.md)（尤其 §2 字节、§3.1 操作停止矩阵）→ [API B2 合同](api-sketch.md#b2-的具体值与迁移合同) → 按需查[Branch 纵切](branch-vertical-design.md)及源码。编码海选与只读调用审查已足够，下一轮不再以增加设计稿替代产品纵切。A 接缝与 B1 依赖接入不重做，不重开命名/故事、不再扩展旧目录协调器测试平台。**
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -61,24 +61,24 @@
 
 1. **A 已完成：来源 snapshot 内部贯穿。**当前 Parent 仍是唯一来源权威；冷读一次完整资格、warm/安装再验证、fixture/owner/lifetime、历史 rewrite 和真实 Delta 均有[回归证据](history-source-seam.md#7-a-实施与验收)。不继续扩成 typed 缓存或免校验证书。
 2. **B1：新 Storage 源码接入。**已固定 `f8868b5`，DG 仍用旧历史布局；源码、进程窗口与包资格分开，见[接入记录](storage-handle-adaptation.md)。下一片不重复接依赖；若 origin 新交付改变 revision，再验收相应增量。
-3. **B2：单布局整体切换。**按[施工计划](branch-cutover-plan.md)在隔离分支改一 Branch 一 Head、DG 登记、HS 来源签发与业务 Parent 删除；T 书签同步存 CommitId，保 Pair/Checkpoint/事件枚举等已有能力并迁移调用，MoveBranch 因只追加合同退出。先真实纵切，再闭合现有调用与回归后合入；不保两套产品布局。中文重复标签、同值新 Entry/目录复用、Meta Delta 和来源反例纳入门槛。协议号、标签/摘要编码和最小 ID codec 在该片开始时按推荐候选落实。
+3. **B2：单布局整体切换。**按[施工计划](branch-cutover-plan.md)在隔离分支改一 Branch 一 Head、DG 登记、HS 来源签发与业务 Parent 删除；T 书签同步存 CommitId，保 Pair/Checkpoint/事件枚举等已有能力并迁移调用，MoveBranch 因只追加合同退出。先接产品 codec/来源入口和真实恢复再保存纵切，再闭合现有调用与回归后合入；不保两套产品布局。使用已收窄的协议/codec 与操作停止矩阵；准确身份、中文重复标签、连续同值冷续写、Meta Delta、跨根 Pair 和来源反例纳入门槛。origin 未交付时只跑隔离健康纵切，正式定向查询仍有合入门槛。
 4. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断、根/子树与分页外观。内部每 checkout Catalog 可留到此时合并，不让它扩大 B2。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary 的基本 opaque bytes 随 B2，BLOB、ID durable 字段与成本测量后置，不先加索引。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
 ## 已知未决项与明确延期
 
-未决：组协调器的真实准备/安装接线及失败验收；用 HS 历史替换 Parent 来签发已有 snapshot；DG 登记中断与异常交付字段；定向 origin 上游接入；BranchId/CommitId 外部 codec 与 DG 字段表示、Event 摘要缺省、附件闭包/错误、加载寿命及历史组合恢复。直接 State 锚点仅在长 Event 成本证据后比较。请求无消费状态与分页预算整次失败已选；Private 新根/混组/promotion 已关闭，不重开冻结快照方案。
+未实施/待验证：组协调器真实准备/安装与失败；HS 历史签发 snapshot；DG 登记中断与已选异常字段接线；定向 origin 上游接入；ID 的 DG durable 字段表示、附件闭包/错误、加载寿命及历史组合恢复。ID 外部 codec、摘要空缺省/所有权与历史选择停止条件已有具体合同，转为实施验收，不继续挂为开放选型。直接 State 锚点仅在长 Event 成本证据后比较。请求无消费状态与分页预算整次失败已选；Private 新根/混组/promotion 已关闭，不重开冻结快照方案。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
 ## 本批完成边界
 
-本轮 B1 的源码全量回归与有限进程窗口资格集中于[接入记录](storage-handle-adaptation.md)；B2 只有源码设计/独立复核，尚无新布局执行资格。此前 A、旧布局混组和独立 HS Probe 保其原资格。不把新 Storage 下旧布局测试视为新 Branch、组内核或普通包交付；本轮没有新 feed/包发布。
+本轮只有候选编码实验与设计收窄：主线程复跑159项断言、根构建0警告/0错误，日志在 `.artifacts/db096-wire-contract/`；未改产品源码，未重跑全量测试/进程中止/包验收。B1 的2817项回归与有限进程窗口资格仍集中于[接入记录](storage-handle-adaptation.md)，不归给本轮。B2 尚无真实新布局恢复、发布或故障资格；后继应实施纵切，不再扩展纯 codec 平台。没有新 feed/包发布。
 
 ## 实现与证据边界
 
-- 本轮 DG 起点 `2d118da`；Storage主工作树仍 `f8868b5`，起点均干净且本轮未改上游。当前 pin 与其一致，根构建/测试仍显式使用干净独立 `f8868b5` worktree。旧 A / Private 删除的 `731eef7` 资格不重写；当前六包候选 `0.1.3-dev.20261019.gf8868b5` 尚未制作 feed，后续包交付必须重新资格化。
+- 本轮 DG 起点 `79cbf86`；Storage主工作树仍 `f8868b5`，起点均干净且本轮未改上游。当前 pin 与其一致，根构建/Probe 显式使用干净独立 `f8868b5` worktree。旧 A / Private 删除的 `731eef7` 资格不重写；当前六包候选 `0.1.3-dev.20261019.gf8868b5` 尚未制作 feed，后续包交付必须重新资格化。
 - 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
 - [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
 - [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**

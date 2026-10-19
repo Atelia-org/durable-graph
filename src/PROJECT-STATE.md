@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：[B1 新 Storage 源码接入](../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)已验收，当前依赖 `f8868b5`；上游格式4拒旧，DG 自身公开 API、`P0R2` 和业务 Parent 保持。此前 A 的真实 snapshot 贯穿与保存再验证已实现。下一片按[B2 整体切换计划](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)在隔离分支实施真实历史布局及旧调用迁移，再接组内核。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。新 Branch API、组协调器与当前 pin 的普通包资格仍未完成；Private/ToShared 删除保已完成状态。
+2026-10-19：[B1 新 Storage 源码接入](../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)已验收，当前依赖 `f8868b5`；上游格式4拒旧，DG 自身公开 API、`P0R2` 和业务 Parent 保持。此前 A 的真实 snapshot 贯穿与保存再验证已实现。[B2 整体切换计划](../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)现已收窄编码、公开值与按操作选择历史材料的合同；候选 codec 实验不改变产品资格。下一片在隔离分支实施真实历史布局及旧调用迁移，再接组内核。范围/判据只查 [DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。新 Branch API、组协调器与当前 pin 的普通包资格仍未完成；Private/ToShared 删除保已完成状态。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下已回归，新历史模型另需真实纵切，不把它们混为同一次验收。
 

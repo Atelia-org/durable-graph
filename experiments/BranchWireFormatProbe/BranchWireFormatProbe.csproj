@@ -1,0 +1,32 @@
+<Project>
+  <!-- Independent candidate codec witness, pinned to the qualified storage source. -->
+  <PropertyGroup>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <ProbeStorageRevision>f8868b57e8f012745413bb38a83d67f1dba29f26</ProbeStorageRevision>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(ProbeStorageRoot)/src/HeadStore/HeadStore.csproj" />
+  </ItemGroup>
+  <Target Name="CheckProbeStorage" BeforeTargets="CollectPackageReferences;PrepareForBuild">
+    <Error Condition="'$(ProbeStorageRoot)' == ''" Text="Supply an absolute ProbeStorageRoot at the witness revision." />
+    <Error Condition="'$(ProbeStorageRoot)' != '' and !$([System.IO.Path]::IsPathFullyQualified('$(ProbeStorageRoot)'))" Text="ProbeStorageRoot must be absolute." />
+    <Exec Command="git -C &quot;$(ProbeStorageRoot)&quot; rev-parse HEAD" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="ProbeActualRevision" />
+    </Exec>
+    <Error Condition="'@(ProbeActualRevision)' != '$(ProbeStorageRevision)'" Text="Probe requires storage $(ProbeStorageRevision), observed @(ProbeActualRevision)." />
+    <Exec Command="git -C &quot;$(ProbeStorageRoot)&quot; status --porcelain --untracked-files=no" ConsoleToMSBuild="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="ProbeStorageChanges" />
+    </Exec>
+    <Error Condition="'@(ProbeStorageChanges)' != ''" Text="Probe storage tracked source must be clean." />
+  </Target>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

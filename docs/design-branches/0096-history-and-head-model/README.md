@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施或冻结签名。来源 snapshot 内部接缝 A 已实施验收；新 Storage 已接入源码；下一片按[整体切换计划](branch-cutover-plan.md)实施真实历史布局。文档对齐：2026-10-19。
+> 状态：新外观以 [API 草图](api-sketch.md) 为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施。来源 snapshot 内部接缝 A 已实施验收；新 Storage 已接入源码；B2 编码候选、公开值与恢复停止条件已收窄并有[纯 codec 见证](../../../experiments/BranchWireFormatProbe/README.md)，下一片按[整体切换计划](branch-cutover-plan.md)实施真实历史布局。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
@@ -138,7 +138,7 @@ head-log 记录已接受的发布，不等于全部编辑动作、失败尝试�
 | `ObjectId` | 图解释上下文中的领域对象身份。 | 某个 checkpoint、head、存储位置，或跨独立仓库的全局对象身份。 |
 | branch / tag 字符串 | 当前仓库各自命名空间中的名称。 | 天生不变的逻辑身份；同拼写跨仓库不是同一对象。 |
 
-新设计已推荐 BranchId / CommitId 薄角色类型，分别对应紧凑 HeadId / HeadEntryId（4B / 12B）。这来自继续分支与固定书签的不同职责，不依赖改名或切换底层 Head；不另增 HistoryId 或完整库 scope。具体 codec 与 DG 标量适配仍待设计。上表中的 CheckpointAddress 和字符串仍是旧源码事实。
+新设计已选 BranchId / CommitId 薄角色类型，分别对应紧凑 HeadId / HeadEntryId（4B / 12B）。这来自继续分支与固定书签的不同职责，不依赖改名或切换底层 Head；不另增 HistoryId 或完整库 scope。最小 codec 见[API B2 合同](api-sketch.md#b2-的具体值与迁移合同)，DG durable 字段适配后置。上表中的 CheckpointAddress 和字符串仍是旧源码事实。
 
 ## 5. 四种关系不能统称 parent
 

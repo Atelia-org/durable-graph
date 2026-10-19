@@ -12,7 +12,7 @@
 | **Commit／提交记录** | 一次已接受的业务 State 或 Event 保存所产生的准确历史位置 | 不等于完整 State 快照、未完成的提交尝试或底层多 Head 事务；fork 和管理更新不产生业务 Commit |
 | **WorkingCopy／工作副本** | 绑定一个 Branch、持有可编辑 State 和保存基线的内存工作对象 | 每次 Commit 独立发布；Dispose 只释放编辑占用，不提交、不撤销已经发布的记录 |
 
-BranchId 对应紧凑 HeadId，CommitId 对应紧凑 HeadEntryId；推荐薄角色类型，持久编码仍分别为4B/12B，不额外附16B库身份。使用时由所选 Repository 校验成员和目标，解码本身不证明存在、健康或跨库全局唯一。codec 与 DG 标量适配尚待具体设计。
+BranchId 对应紧凑 HeadId，CommitId 对应紧凑 HeadEntryId；采用薄角色类型，持久编码仍分别为4B/12B，不额外附16B库身份。使用时由所选 Repository 校验成员和目标，解码本身不证明存在、健康或跨库全局唯一。B2 的最小 codec 形状见下文；DG durable 字段适配另片设计。
 
 一条分支只有 State Commit 完全合法，只有 Event Commit 也合法。CommitState/CommitEvent 是动词，Commit 是它们产生的业务记录；一次保存伴随 Schema 更新，仍只产生一个业务 Commit。同值再次提交保留不同 CommitId。
 
@@ -54,6 +54,48 @@ repo.CommitBranches(requests)                      → BranchId 到 CommitInfo �
 
 异步/取消/预算参数、实际泛型/根类型签名尚未定稿。本文是主要故事的设计面，不是现有所有 API 的迁移清单；Private/Schema promotion 已决定从新 API 删除，比较读取等其他未列能力不因省略而被决定删除。
 
+### B2 的具体值与迁移合同
+
+2026-10-19 收窄：以下为下一实施片的推荐签名，**尚非产品现状**。不用额外接口、文本解析体系或 public Storage 转换包住两个定位值：
+
+```csharp
+public readonly struct BranchId : IEquatable<BranchId> {
+    public const int EncodedSize = 4;
+    public bool TryWrite(Span<byte> destination);
+    public static bool TryRead(ReadOnlySpan<byte> source, out BranchId value);
+}
+public readonly struct CommitId : IEquatable<CommitId> {
+    public const int EncodedSize = 12;
+    public bool TryWrite(Span<byte> destination);
+    public static bool TryRead(ReadOnlySpan<byte> source, out CommitId value);
+}
+```
+
+委托上游同名 codec；相等/哈希与运算符按值。TryRead 必须恰好4B/12B，失败输出 default；TryWrite 接受更长目标、只写对应前缀，失败完全不修改目标。default 可以比较，不能编码或用于查询。外层应用容器声明角色与版本；不把 CLR padding 当格式。所选 Repository 仍重新查成员、发布资格与业务角色，不接受 ID 值本身作为缓存/内容准入证书。
+
+`CommitInfo.Kind` 采用 `CommitKind`（从既有 `CheckpointKind` 声明级改名，无需并存两个枚举）。summary 输入用 `ReadOnlyMemory<byte>`，立即提交、创建根及请求的缺省值均为空，**不自动继承旧摘要**。在操作准备时复制输入；CommitRequest 在创建请求时复制。CommitInfo 的 Summary 可返回 `ReadOnlyMemory<byte>`，但每次交付使用描述对象自有存储，不别名到调用者输入、HS 借用内存、内部缓存、待发布内容或另一查询结果。ReadOnlyMemory 不承诺防止调用者用 MemoryMarshal 取得数组后改动该描述自身；隔离要求是不能因此改动仓库状态或其他结果。无需新建 Summary 类型；Entry 总长在追加前检查。
+
+创建返回 BranchInfo，之后 `OpenWorkingCopy` **重新恢复**对象，不保留创建时 initialState 的 CLR 实例或 Transient 内容。调用方应继续编辑 `work.State`；不要为了旧 identity 断言加入隐式编辑 session 或创建缓存。与之不同，已打开 work 成功 `CommitState(nextState)` 仍按现有保存语义安装传入的对象实例。原有无参提交当前 State 的便利重载保留；它也使用该次显式/空 summary，不顺带保存前一提交的摘要。
+
+主草图未列出的现有历史能力按以下形状迁移，暂不为命名再开一轮设计：
+
+```text
+repo.ReadCheckpoint(commitId)                 → Checkpoint
+repo.ReadPair(firstCommitId, secondCommitId)    → (First, Second) 领域对象
+repo.GetPreviousState(eventCommitId)           → CommitId?
+repo.ReadFrames(branchId)                      → IReadOnlyList<CommitInfo>
+repo.EnumerateEvents(endInclusive, order = NewestFirst, afterExclusive = null)
+                                              → IEnumerable<CommitInfo>
+repo.CreateTag(name, commitId)                 → void
+repo.ResolveTag(name)                         → CommitId
+```
+
+Checkpoint 的所选位置用 `CommitInfo Commit`，对应 State/Event 结果的前序位置用 `PreviousEventCommit` / `PreviousStateCommit`，与其领域根同时为空或同时存在；不再塞 owner-bound CheckpointAddress。ReadCheckpoint 的两个对象图独立；ReadPair 可以读取不同根、兄弟分支或同一位置，保输入顺序及现有整对只读共享合同。ReadFrames 固定一次 current、完整物化旧到新列表。EnumerateEvents 保原上下界/方向/按需推进/寿命合同；不把完整扫描与分页混淆。具体停止条件与反例集中于[施工计划 §3.1](branch-cutover-plan.md#31-repository-的两个读取步骤)。ResolveTag 仍验证目标的成员/Entry/业务描述，不能只解码12B就宣布成功。
+
+沿用 `RepositoryPublicationException` 与三个 Outcome，仅补必要的已知定位字段：`TargetBranchId?`、`ExpectedBaseCommitId?`、`CandidateCommitId?`。普通保存前已知前两者；创建取得物理 Head 后，在登记及结果交付失败时保留 TargetBranchId。CandidateCommitId 仅填已经实际取得的新业务 Entry，不能预造；新根取得该 Entry 也不等于已登记为 DG Branch，fork 不产生新 Entry。Confirmed 异常仍可能拿不到新 CommitId。物理创建尚未返回 HeadId 时 TargetBranchId 可以为空；尚未尝试 D 登记时 DG 确知 NotPublished。Tag 失败可留这三个字段为空，由调用者持有的 tag name 查结果。保现有诊断 CandidateRevisionAddress，不把它变成存档句柄，也不新增通用操作结果框架。
+
+Outcome 不表示 owner 健康或业务对象回滚；前置错误不必全部包异常。持久 ID 能跨打开使用，不改变 WorkingCopy、source snapshot、prepared material 绑定当前 owner 的纪律。ID 相等不能替代 owner/lifetime/model 与实际 source 复核。
+
 ## 3. 定位值、描述与加载对象分开
 
 | 返回角色 | 推荐字段／职责 | 解释 |
@@ -83,7 +125,7 @@ OpenWorkingCopy 恢复分支当前内容和编辑基线，不切换 Repository �
 
 ## 4. 五个调用故事
 
-这些片段分别展示一个操作；`Encode/Decode` 代表定位值 codec，接口形式待定。summary 由应用显式提供或明确缺省，不自动继承另一条记录的摘要。
+这些片段分别展示一个操作；`Encode/Decode` 是上文 TryWrite/TryRead 的伪代码简写。summary 由应用显式提供或缺省为空，不自动继承另一条记录的摘要。
 
 ```text
 // 继续上次分支：应用另外保存仓库位置，标签不参与定位。
@@ -142,7 +184,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。1000条分支的目录容量须按实际 payload/标签上限核算；不先假定整表方案合格，不新增 GC。
 
-旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，尚未提供本稿新外观。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；下一步按[整体切换计划](branch-cutover-plan.md)以真实 Branch 证明 Parent 替换恢复/再保存，并迁移书签与现存历史读取，之后接入真正多业务 Head 组内核和登记故障验收。summary/BLOB、加载对象寿命、ID 字段支持与具体异常随后收敛。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
+旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，尚未提供本稿新外观。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；下一步按[整体切换计划](branch-cutover-plan.md)以真实 Branch 证明 Parent 替换恢复/再保存，并迁移书签与现存历史读取，之后接入真正多业务 Head 组内核和登记故障验收。基本 summary 与单成员异常字段随 B2；附件 BLOB、加载对象寿命与 ID 字段支持继续后置。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 
 ## 7. 多 Branch 联合提交：已选 CommitRequest 路线
 
