@@ -24,6 +24,19 @@ DG 的 [ReadOrigin](../../../src/DurableGraph.Persistence/RepositoryResources.Me
 
 ## 依赖与交付
 
-新 S 为 `0.1.3-dev.20261019.g70b406c`，准确 revision 只由 [StorageDependency.props](../../../eng/StorageDependency.props)维护。固定旧 worktree/feed 保其版本；本片新 worktree 为 `.artifacts/db096-targeted-origin/storage`。源码资格不能代替包资格：接下来从该干净上游提交制作六包，执行四个独立 public PackageReference smoke（HeadStore smoke 已加入新方法的实际调用），再准备 DG 新 G 验证受影响普通消费者。实际包结果在完成后记录于本节。
+新 S 为 `0.1.3-dev.20261019.g70b406c`，来源 `70b406cd8d1117733eee81a33e7f978399aa98b2`，准确依赖由 [StorageDependency.props](../../../eng/StorageDependency.props)维护。旧固定 worktree/feed 保持；本片新 worktree 为 `.artifacts/db096-targeted-origin/storage`，新六包和六份 symbols 位于同目录的 `storage-feed`。manifest 与 DG Prepare 校验通过，未公开发布。
+
+主线程已完成以下独立包验收：
+
+| 验收 | 来源与实际结果 | 限度 |
+|---|---|---|
+| Storage 普通包 | 干净 `70b406c` 打包；上游四个 public PackageReference smoke 全部通过；HeadStore 实际调用新 API，验证 root、空 fork、首次本地发布及两层冷重开 | metadata/PDB/静态 SourceLink 及170份本地源码 checksum 通过；未做远端 SourceLink 下载 |
+| DG 包模式根构建 | 完整新 S feed、独立 NuGet.Config/cache，Release Rebuild 0警告/0错误 | 不是源码模式的重复输出 |
+| DG Split | G `0.0.0-public-history-e2e.20261019084143.30708`，来源干净 `c9ad9351ce761b13f789e5aff9d42bdc051bf908`；五个独立进程场景通过，receipt `Passed=true` | 覆盖升级、rewrite、续写及验证，不代表所有故障窗口 |
+| DG Tag | 使用同一 G/feed；seed、metadata、continue、verify 四个进程均通过，runner exit 0 | 覆盖冷书签、Event-first、State fork、持久 ID 和只追加，不代表全套消费者重新资格化 |
+
+工件定位只保一处：`.artifacts/db096-targeted-origin/package-paths.json` 指向本次外部 `W:/TEMP/db096-origin-eff0825f2f624ab9b79a4349747de818/`。其中 `storage-smoke` 保各 smoke 日志和 `verified-packages.json`；`dg-split/result.json` 及其 `feed/dg-source-provenance.*.json` 保 G 来源和结果。DG 日志为本片目录的 `package-root-build.log`、`dg-package-split.log`、`dg-package-tag.log`；Tag 独立工件为 `experiments/PackageConsumerProbe/obj/tags-20261019084418-36156-7ffc9c41`。这些本机产物不随 Git 分发。
+
+上游主工作树 `main` 已快进至 `70b406c`，与 DG pin 一致；DG 实现提交为 `c9ad935`，仍在 `db096/branch-repository-cutover`，尚未正式合入。前片的11个普通包门禁见[原包迁移验收](package-cutover-validation.md)，仅证明其原 G/S；本片新 G/S 的资格严格限于上表与源码验收，未重跑完整 Runtime、Linux 或进程中止/掉电实验。
 
 本片不代表组提交、根/子树或分页已交付。完整目标、正式合入门槛及下一步只查 [PROJECT-STATE](PROJECT-STATE.md)。

@@ -1,12 +1,12 @@
 # HeadStore 请求：按 HeadId 读取固定创建来源
 
-> 2026-10-19；DG 设计收敛提出的窄请求，尚未向上游提交或实施。源码依据为 Storage `f8868b57e8f012745413bb38a83d67f1dba29f26`。本请求不改变已交付的引用初始化、紧凑身份和准确历史合同。
+> 2026-10-19；请求已交付并接入 DG。上游 `70b406c` 提供 `ReadHeadOrigin`，DG `c9ad935` 固定新依赖并替换全量 adapter；实际源码、回归及新版本包资格只查[定向 origin 接入记录](targeted-origin-integration.md)。下文保留请求合同与实施前调查，不改变引用初始化、紧凑身份和准确历史合同。
 
 ## 需求与最小能力
 
 DG 推荐以独立登记目录限定正式 Branch；内部 Schema Head 和创建中断留下的未登记 Head 不属于业务目录。`ReadBranchInfo`、`ListRootBranches`、`ListBranchSubtree` 需要读取这些**指定成员**的固定创建来源，用来源提交的实际 Head 建立森林；不需要遍历其 Commit 历史或物化 State。
 
-目前 [ListHeadOrigins](../../../../atelia-storage/src/HeadStore/HeadStore.ForkQuery.cs)检查全部正式物理 Head 的 header，再检查整图。先查全集再过滤虽然可供健康数据实验使用，却会将无关 Head 的访问量、预算和 header 错误带入 DG 目录查询。DG 不希望复制一份来源作为第二权威，也不要求新增可变 Head metadata 或持久子树索引。
+请求提出时，既有 [ListHeadOrigins](../../../../atelia-storage/src/HeadStore/HeadStore.ForkQuery.cs)检查全部正式物理 Head 的 header，再检查整图。先查全集再过滤虽然可供健康数据实验使用，却会将无关 Head 的访问量、预算和 header 错误带入 DG 目录查询。DG 不希望复制一份来源作为第二权威，也不要求新增可变 Head metadata 或持久子树索引。
 
 请求增加一个单 Head 查询，以下只是语义签名，具体命名/结果包装由上游决定：
 
@@ -26,7 +26,7 @@ store.ReadHeadOrigin(headId) → 已检查 header 声明的 HeadEntryId? 来源
 
 DG 在登记成员集合内检查父成员存在、来源自环和环；`ReadBranchInfo` 至少检查直接父成员，完整列表/子树建立森林时检查整个登记集合。固定 fork 来源必须指向实际发布分支，而不是发起操作的 UI 分支。准确读取或从旧点 fork 时再经 `ReadEntry` / `ForkHead` 检查来源 Entry 发布资格；物化业务图时继续 DG 的准确 Schema、内容来源和 prior 验证。
 
-单 Head 查询不保证父 Head 仍在磁盘上，也不替代上述 DG 检查；若返回结构仍有来源 Head 字段，它只表示所选 header 的声明。DG 不把坏来源降格成新根。
+单 Head 查询不保证父 Head 仍在磁盘上，也不替代上述 DG 检查；实际返回 `HeadOrigin.SourceEntryId` 只表示所选 header 的声明。DG 接入保留目标 current、直接父成员及准确来源 descriptor 的校验；`ListBranches` 另在正式登记集合内检查森林，单点 `ReadBranchInfo` 不扫描全部分支。DG 不把坏来源降格成新根。
 
 ## 建议验收
 
@@ -35,14 +35,16 @@ DG 在登记成员集合内检查父成员存在、来源自环和环；`ReadBra
 3. 缺失目标和非法目标失败；“源 Entry 不可读”不会被新 API 误报为已验证健康，也不要求为读 header 访问源 Entry。
 4. 只读/可写、取消（若提供）、临时资源清理与故障边界遵循现有查询纪律。
 
-这是产品目录访问范围的改进，不是 [Branch 机制 Probe](../../../experiments/BranchHeadMechanismProbe/README.md)健康数据组合验证的前置条件。上游交付后，DG 另做实际依赖接入与限定回归，不能用本请求或已有独立消费者结果替代产品资格。
+这是产品目录访问范围的改进，不是 [Branch 机制 Probe](../../../experiments/BranchHeadMechanismProbe/README.md)健康数据组合验证的前置条件。上游和 DG 现已分别完成限定验收，证据见[接入记录](targeted-origin-integration.md)；本请求自身不替代产品资格。
 
 ## 本地实施接点
 
-2026-10-19，只读核对 `f8868b5` 后，已找到可实施的窄路线；尚未修改上游。后续可在既有跨仓操作授权内另建隔离工作树实施，不必等外部调度。保留已资格化的固定 worktree/feed，不在其上改写源码。
+> 以下为实施前对 `f8868b5` 的只读调查，保留其候选和验收判据；不是当前待办。实际交付采用独立工作树，并由[接入记录](targeted-origin-integration.md)记录最终签名、依赖与验证。
+
+2026-10-19，只读核对 `f8868b5` 后，找到下述窄路线。当时尚未修改上游，建议在既有跨仓操作授权内另建隔离工作树实施，保留已资格化的固定 worktree/feed。
 
 `HeadStore.ForkQuery.cs` 已有 `ResolveHead` → `GetForkQueryHead` → `HeadRecordReader.CheckHeader` → `CloseForkQueryTemporary` / `CleanupErrors` 接点；可复用 owned/history 句柄，否则只临时打开指定目标。不能经 `ReadHead` 追当前/来源 Entry，也不能用把每个新访问文件长期收进 owner 的路线。采用现有累积异常、finally 清理、最后检查再交付的模式；try 内提前 return 可能漏掉清理失败。
 
 实际 `AteliaResult<T>` 要求非 null 成功值，不能直接照抄上面的 nullable 语义签名。首选候选为 `AteliaResult<HeadOrigin>`，小只读值的唯一属性 `HeadEntryId? SourceEntryId`：null 表示 root，非 null 表示 checked header 的声明定位值。比用 default ID 当 root 哨兵或放宽全局 Result 合同更明确；具体声明仍需在上游切片裁决。公开 codec 已允许未验证定位值，文档中旧“不得包装为 checked 源 EntryId”应澄清为不授发布资格，而不是禁止返回声明值；保持现有全集查询的较强语义。
 
-最小验收复用 ForkQuery/Fault fixture：root/空 fork/首存后来源不变，指定目标访问计数（不 List/Visit、不读 source），坏目标与无关坏文件隔离，来源不可读时仍只返回声明，owned/history 借用及临时关闭，主错误与 cleanup/fault 顺序，目标不完整尾的正常 RW 恢复及 RO 拒绝不改字节。之后才更新 DG pin，替换全量 adapter，验证正式目录父成员与坏来源拒绝。上述是源码调查和下一片判据，不是实现或测试通过报告。
+最小验收复用 ForkQuery/Fault fixture：root/空 fork/首存后来源不变，指定目标访问计数（不 List/Visit、不读 source），坏目标与无关坏文件隔离，来源不可读时仍只返回声明，owned/history 借用及临时关闭，主错误与 cleanup/fault 顺序，目标不完整尾的正常 RW 恢复及 RO 拒绝不改字节。之后才更新 DG pin，替换全量 adapter，验证正式目录父成员与坏来源拒绝。上述是当时的源码调查和候选验收判据；最终实现与测试结果以接入记录为准。

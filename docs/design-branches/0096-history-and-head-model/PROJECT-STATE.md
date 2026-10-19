@@ -13,9 +13,9 @@
 
 用户已将本设计设为持续目标：在无兼容性负担下，实现已接受的 Branch/Commit/WorkingCopy 功能族，补齐多分支原子提交、根/子树目录查询和历史分页，完成旧 API 替代、活动消费者迁移、源码与普通包验收、文档清理及正式合入。只完成其中一片不能宣称整体完成；BLOB、ID durable 字段等明确后置项不自动扩为本目标必经条件。
 
-每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：定向 origin、正式组提交及故障边界、根/子树和分页、最终文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
+每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：正式组提交及故障边界、根/子树和分页、最终文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
 
-活动消费者、独立 wire 检查器、新 API XML/术语导航及固定 S 本地 feed 已完成，11个活动门禁已在普通包模式通过，见[本片资格](package-cutover-validation.md)。剩余完整目标仍包括定向 origin、正式组提交及故障边界、根/子树、分页与最终合入；不得将包闭包完成当作整个0096完成。
+活动消费者迁移及原11个普通包门禁已完成，见[原片资格](package-cutover-validation.md)。[定向来源查询](targeted-origin-integration.md)已完成上游实施、DG 接入和新包增量验收；两个版本的证据不混用。只完成依赖和包闭包不等于0096整体完成。
 
 ## 已确认的需求与边界
 
@@ -44,13 +44,11 @@
 
 ## 当前焦点与下一步
 
-**当前切片进行中：定向 origin 接入。**上游已在独立 `dg-targeted-origin` 分支形成提交 `70b406cd8d1117733eee81a33e7f978399aa98b2`（工作树 `.artifacts/db096-targeted-origin/storage`），新增 HeadOrigin/ReadHeadOrigin，无格式变化；完整上游3608通过、10平台跳过，新29项全部通过。DG pin 已改为该 revision / `0.1.3-dev.20261019.g70b406c`，替换全量 adapter并保 current/直接source检查；ListBranches另做登记集合内存环检。DG根构建0/0，8个新反例、完整Persistence994/994、Runtime定向16/16均通过；首轮两处fixture错误已修，证据见[接入记录](targeted-origin-integration.md)。新S普通包、DG新G与上游main快进尚未完成；原固定worktree/feed保持。以下包闭包段保前一片资格，不代表新pin已经获得包资格。
+**当前停点：定向 origin 已完成。**隔离分支 `db096/branch-repository-cutover` 的实现提交 `c9ad935` 已替换全集 adapter：单 Branch 查询只访问目标及直接相关来源，完整列表在已登记集合中检查环。公开 DG 签名与持久格式不变。Storage pin 已到 `70b406c` / `0.1.3-dev.20261019.g70b406c`，上游 `main` 已快进；准确源码、反例及新 S/G 包验收只查[接入记录](targeted-origin-integration.md)。DG 尚未正式合入。
 
-**当前停点：B2 的真实 API、原根回归、D 查询收窄及活动包消费者闭包已在隔离分支 `db096/branch-repository-cutover` 完成，尚未合入 master。**本片源码迁移提交 `651e51c`；全部11个活动普通包门禁通过，source build 和 Storage package-mode 根 Rebuild 均0警告/0错误，完整根回归2879/2879。产品本片仅补 XML，公开签名/行为/持久格式保持；准确 G/S、各门禁限度与唯一 runner 尾修只查[包迁移验收](package-cutover-validation.md)。
+**下一片：公开 CommitRequest、owner 共同 Catalog 和真正多 Branch 提交共核。**先 Capture 全员，再统一准备 Schema、逐成员准备内容，一次发布 B₁…Bₙ 与必要 S；不更新 D。即时单提交复用单成员路径。成功必须推进全部 Base，State/Event 各自基线规则保持；输入枚举、准备、发布、安装、清理和交付都在同一操作边界内。实现接点与最小反例集中于[组内核 §9](group-kernel-design.md#9-新布局实际内核的施工接点)，不得用旧布局原语 Probe 代替正式接口验收。
 
-下一片处理定向 origin：先在准确上游基线上隔离实施单 Head header 查询和访问/清理/正常恢复反例，再固定新 Storage pin 接入 DG，并验证无关坏 Head 不阻断、坏目标与未登记父成员拒绝。用户已有跨仓操作授权，现有 helper 可复用，不应反复等待尚未发生的外部交付；具体实现备忘见[窄请求](headstore-origin-request.md#本地实施接点)。本轮没有修改上游或公开发布包。
-
-**压缩后恢复顺序：完整读本文 → [定向 origin 请求与实施接点](headstore-origin-request.md) → 上游实际 HEAD/工作树/AGENTS 与 HeadStore ForkQuery/helpers。保持旧固定 worktree/feed 不变，新切片另建隔离工作树；完成后接 DG pin，再按 B2 门槛推进组内核、根/子树与分页。不要重迁消费者、重做 D 优化或把包证据借给未来不同源码。**
+**压缩后恢复顺序：完整读本文 → 组内核 §9 与联合提交合同 → 当前 BranchSaveSession / RepositoryResources / WorkingCopy 源码。**用当前 pin 的源码根或完整新 feed；旧 `f8868b5` worktree/feed只保其原资格。不要重迁消费者、重做 D 优化或重新等待 origin 交付。
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -60,41 +58,28 @@
 - [创建方案](application-design.md)推荐 B：DG 登记决定正式成员；先准备 Head，再登记，允许不展示的未登记产物；普通保存不更新目录。上游不可变创建属性 A 留作对照，不作为前置依赖。新根不能假定 CreateHead 参加 PublishHeads。
 - [用户故事](user-stories.md)中 C4 密码门、C5 知识神器是验证参考，不要求全部产品化。应用幂等不保证组合不放大；稳定知识身份、独立向前保存与并集建议只约束同一批事实，不改变 DG 提交/重试合同。
 
-### 机制结论与下一片顺序
+### 机制结论与依赖顺序
 
-- **发布：**一个 accepted Catalog＋操作内共同候选。staging/ready 逐成员 AbortPreparation，installed 后无操作。真实混组见证已验证共同编码、一次旧 D/S 发布、State 安装/Event 丢弃、冷续写；直接 HS 发布后必须关旧 owner，不能继续使用其陈旧目录缓存。全组 Base/guard/清理故障仍须真实内核验收。实际 CommitId 确认后才取得，Published 失败也可能拿不到 ID。
-- **创建与目录：**真实新根/空 fork/Tag 已接 D/T Dictionary 候选，成功后接受；普通提交只发布 B 或 B/S，不更新 D。已见证新模型根的 D/S 登记前中断：旧 D/S 不变，物理 B 和完整候选保留，冷开不认领。缺控制 Head、T 故障及原有 outcome/安装窗口已随原回归通过；新登记协议的全部异常窗口仍未穷尽。
-- **恢复：**隔离分支已按 HS 历史选择 source，业务裸地址恢复入口退出，Meta 保 PreviousMeta。实际错源反例、严格前源、跨根/兄弟 Pair、Checkpoint 越过两个 State、冷续写和同目录复用已有有限证据。完整历史 Schema/rewrite/owner/cache 原回归已迁移通过；测量型 opt-in、普通包和全故障窗口仍另保边界。
-- **查询：**描述/fork 只做入口角色检查，内容恢复再验 source/prior/Schema；新 ForkBranch 不是会先恢复对象的旧 ForkShared 改名。Kind 暂从小图 envelope 取得，避免重复存储；成本待测。已写[定向 origin 请求](headstore-origin-request.md)，尚未实施；本轮已定位可直接复用的上游单目标/header/临时清理接点。它不阻挡隔离分支的健康纵切，但正式 ReadBranchInfo 合入须满足定向访问边界；不能把全量 adapter 偷换成产品合同，不复制来源权威。
-- **分页：**首版选页满成功、工作预算耗尽整次失败，不交付已收集前缀。示意 Probe 已覆盖跨 fork/Before/根后空页/真实部分预算失败；固定旧 anchor 的20项页在较新后缀0/100/10000下冷/热最小预算都45，仅为健康 SingleEntry 计数，不是恒定 I/O 资格。
-
-依赖顺序中 A、B1 分别验收，下一片推进 B2：
-
-1. **A 已完成：来源 snapshot 内部贯穿。**该历史切片当时仍由 Parent 签发；冷读一次完整资格、warm/安装再验证、fixture/owner/lifetime、历史 rewrite 和真实 Delta 均有[回归证据](history-source-seam.md#7-a-实施与验收)。不继续扩成 typed 缓存或免校验证书。
-2. **B1：新 Storage 源码接入。**已固定 `f8868b5`，当时保留旧 DG 布局；源码、进程窗口与包资格分开，见[接入记录](storage-handle-adaptation.md)。下一片不重复接依赖；若 origin 新交付改变 revision，再验收相应增量。
-3. **B2：回归、D 查询及包调用闭包已完成，剩余定向 origin 门槛。**accepted D 查询只读投影继续复用；README、全部活动 PackageConsumerProbe、脚本、XML 和术语表已迁移并限定验收。下一片实施/接入 origin，验证指定目标范围与失败隔离，再按施工计划 §7 重核 B2 合入门槛。新的 pin/产品版本仍须自己的增量资格，不外推当前包结果。
-
-4. **合流：**在新内核接仓库 accepted Catalog 与组提交，验真正多业务 Head CU、全部 Base 安装/guard/清理及 outcome 故障，再补登记中断、根/子树与分页外观。内部每 checkout Catalog 可留到此时合并，不让它扩大 B2。保留[组内核 §6](group-kernel-design.md#6-下一片的最小判别实验)未验收判据，但不在旧目录复制协调器。summary 的基本 opaque bytes 随 B2，BLOB、ID durable 字段与成本测量后置，不先加索引。
+- **已完成基础：**来源 snapshot 接缝 A、Storage B1、B2 新布局/外观、原回归迁移、D 查询投影、活动消费者与定向 origin。各片只证明其实际版本，历史记录不作为未完成工单。
+- **组提交优先：**一个 owner accepted Catalog、操作内共同候选和具体成员数组。staging/ready 逐成员 AbortPreparation，installed 后无操作；确认实际 CommitId 后才填结果。全组 Base、reentry、清理及 outcome 必须在新内核验收。现每 checkout Catalog 的移除属于该片，旧工作副本执行模型环境不能随 Catalog 增长刷新。
+- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核重构须保创建回归，并补剩余登记失败窗口。新根不能假定 CreateHead 参加 PublishHeads。
+- **树与历史页：**定向 origin 门槛已闭合；接下来补 ListRootBranches/ListBranchSubtree 和公开分页。历史固定准确 anchor，Before 排除重复首项；页满成功、工作预算耗尽整次失败。既有 Probe 只证明有限健康计数，不是完整 I/O 资格。
+- **最终交付：**完成以上功能、故障边界和调用示例，重核源码与普通包门禁、文档/旧 API 清理（包括 src/PROJECT-STATE 仍保留的旧 API 能力细节），再正式合入。新版本必须有自己的资格，不借用前片绿色记录。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
 ## 已知未决项与明确延期
 
-待闭合：定向 origin、真实组提交及全组 Base/清理/outcome、根/子树、分页、登记故障矩阵的剩余窗口，以及最终文档/正式合入。根 solution、活动包消费者、源码术语导航和 D 重复投影均已完成，不再列为待迁移。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选，不阻挡核心功能补齐。ListBranches 全量 origin adapter 尚在；ID durable 字段和附件仍明确后置。
+待闭合：真实组提交及全组 Base/清理/outcome、根/子树、分页、登记故障矩阵的剩余窗口，以及最终文档/正式合入。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
-## 本批完成边界
-
-本轮完成源码/活动包闭包，结果和限度集中于[包迁移验收](package-cutover-validation.md)。没有改运行行为、公开签名、持久格式或上游源码。S本地六包与两个合格G已准备；另一次单Runtime失败自打包G不作为资格来源。没有远端发布或正式合入；不宣称组提交/树/分页已经可用。
-
 ## 实现与证据边界
 
-- B2 内核起点 `866ce89`，调用迁移起点 `f6075d3`，D 查询片起点 `2a58730`，本轮包迁移起点 `0e638da`、产品包来源 `651e51c`；本轮只读复核 Storage 主工作树及 pin 仍为 `f8868b5`，未发现 ReadHeadOrigin，未改上游。构建/测试显式使用独立 `f8868b5` worktree。六包候选 `0.1.3-dev.20261019.gf8868b5` 已由准确干净源码在本机 `.artifacts/db096-package-cutover/storage-feed` 生成并保 manifest，对应 DG G 已完成普通包验收，准确版本和范围只查上述记录。
-- 既有交付复核的上游调查HEAD `3e1dc46`；包源码 `c6fb64a`，包 `0.8.0-persistenthandles-local.20261017105233`。该基线为格式4、HeadId.LocalId已改为owner.GetLocalHeadId，ReadEntryHistory已存在；不是对下一阶段实际HEAD的锁定。
-- [交付复核](headstore-delivery-review.md)：独立PackageReference消费者，2个进程、38个断言通过；不是DG产品suite或性能/断电验收。
-- [误用检出实验](handle-misuse-detection.md)：实际置换函数穷举相关16,777,216个key，确认存在性检查的额外收益。**最新身份裁决以此为准，旧完整scope建议已退出。**
-- 两份实验源码/receipt在本机`.artifacts`，不随Git克隆分发；详细路径见上述记录。上游既有未提交文件不属于本工作，不覆盖、不清理。
+- 当前定向 origin 的源码、测试、S/G 来源、包资格及 Git 边界见[接入记录](targeted-origin-integration.md)。新包只验受影响 Split/Tag 与上游四 smoke；没有把前片11门禁外推到新 G。
+- 原 B2 调用闭包、完整根回归及11个普通包消费者见[包迁移验收](package-cutover-validation.md)；来源/范围保持其原版本，后续不重复那次迁移。
+- [交付复核](headstore-delivery-review.md)是更早同库 Handle/历史能力的独立消费者证据；[误用检出实验](handle-misuse-detection.md)支持紧凑 ID 的开发期诊断边界，旧强 scope 建议已退出。二者不代替当前产品验收。
+- 组提交、根/子树和分页尚未作为公开产品能力交付；未公开发布包、未正式合入 DG。底层普通恢复、完整帧 append-only、owner/fault/lifetime 纪律保持。
 
 ## 按需阅读
 
@@ -114,7 +99,7 @@
 | B2 单布局、旧调用迁移与剩余合入门槛 | [整体切换计划](branch-cutover-plan.md) |
 | 活动消费者/脚本、公开 XML、普通包资格 | [包迁移验收](package-cutover-validation.md) |
 | D/T Dictionary 复用、固定读取边界和管理候选 | [目录持久化](directory-persistence.md) |
-| 定向读取已登记 Head 的创建来源 | [上游窄请求](headstore-origin-request.md) |
+| 定向读取已登记 Head 的创建来源 | [实现与验收](targeted-origin-integration.md)；[原请求](headstore-origin-request.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |
 | 上游实际交付、API和验收限度 | [交付复核](headstore-delivery-review.md) |
 | 原request与其已澄清身份要求 | [持久Handle请求](headstore-save-handles-request.md) |

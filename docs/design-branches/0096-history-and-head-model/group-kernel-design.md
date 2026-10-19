@@ -2,6 +2,8 @@
 
 > 2026-10-19；源码基线 `c077d1c`（Private 删除实现 `efdf61b`）。这是下一实施片的内部设计及判别实验，不是新 API、组发布或故障恢复已经通过的运行资格。公开调用合同见[联合提交](multi-branch-commits.md)，历史布局变化另由 Branch 纵切验证。
 
+> 当前施工入口为 [§9](#9-新布局实际内核的施工接点)，按产品 `c9ad935` 复核；§7–8 保留当时旧布局的证据范围，不再作为续工顺序。
+
 ## 1. 收窄结论
 
 推荐一个仓库 accepted Catalog，一次调用内的一份 Catalog 候选，以及各 WorkingCopy 独立的业务候选。单分支保存走同一内核的单成员路径。保留唯一仓库操作窗口；不把多个旧 `PendingRepositorySave` 同时塞入数组，也不为旧布局和新布局制造通用 publisher 框架。
@@ -109,3 +111,22 @@ Unknown 的准确组位置发现仍是独立恢复合同，不由本页新增幂
 **旧布局原语见证到此收束。**后续[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，下一片转入新历史布局，再接入真实组内核。§6 的重入、清理错误、组 Base 安装、Unknown/Published 和多业务 Head CU 判据仍保留，随真实内核验收；不为提前满足清单而复制旧协调器。本节混组见证当轮未改产品 C#、依赖或格式，未跑全套、包、进程中止或新 HS 产品资格。
 
 本轮集成复核：10份受影响 Markdown 的557个本地链接、58个锚点检查通过，`git diff --check` 通过。续工入口、路线图和设计索引已改为 A→B→新布局组内核，不重复开启本轮已完成的原语见证。
+
+## 9. 新布局实际内核的施工接点
+
+源码调查基线 `c9ad935`；[定向 origin 接入](targeted-origin-integration.md)已提供下一片所需的查询基础。这里记录施工建议，不构成组 API 或故障资格。下一片直接接通 `CreateStateCommitRequest` / `CreateEventCommitRequest` → `CommitBranches`，正常返回 BranchId→CommitInfo；公开合同仍以[联合提交设计](multi-branch-commits.md)为准，不再增加旧布局 Probe。
+
+| 当前源码事实 | 最小改动方向 |
+|---|---|
+| `BranchSaveSession` 各自加载 Catalog，`Prepare` 先 Rebase，再 Capture→Catalog→body | accepted Catalog 归 `RepositoryResources`，薄 facade 取同一 view；按 SharedRoot 惰性载入，发布后才接受。各 session 只保自己的业务身份、来源和模型环境；新根创建也使用共同 Catalog |
+| `SchemaCatalogWorkspace.PrepareOwned` 已做完整闭包、accepted 冲突检查和一次 Builder | 先 Capture 全员，再将所有布局一次交给现有准备原语，逐业务图使用同一 view 编码；不重写描述符分配器，不刷新旧 WC 的读 Schema/执行环境 |
+| `PendingRepositorySave` 只有一个业务成员；资源 owner 已有唯一 pending/prepare/commit 窗口 | 改为一个具体 pending，包含共同 baseline/Catalog 与成员数组；公开组仅收既有 Branch。单成员即时提交复用该内核，内部新根保留原有 Head 创建及 D/S 登记分支，不扩成批量创建事务 |
+| `CommitSave` 已把发布确认、安装和 deliver 包在 outcome catch 内；公开 deliver 推进 session/Base | 一次发布所有 B 和必要 S，普通保存不更新 D；先备齐安装材料/结果槽，确认实际返回键集和 ID，再安装全部 State/Base。Event 仅推进 Base，保留 State/source/rewrite |
+
+入口先设 Repository busy，再枚举输入；资源准备 guard 同样覆盖输入枚举至内容准备，防止用户枚举器或回调经借入 facade 重入。现 `RequireCheckoutWriter` 会经 `RequireAvailable` 拒绝 busy，不能在已进入组操作后逐项直接调用；应复用资源写权限及 `RequireCheckoutSource` 核心检查。每次枚举、Capture、body 后检查资源，失效后不得继续下一成员。
+
+固定成员槽立即接管每个成功 Capture，退出时逐一 `AbortPreparation`，覆盖 staging/ready，已安装者无操作。清理须尽力完成并纳入统一 outcome 分类，不能在 catch 外的 finally 覆盖 Published/Unknown。现 `RepositoryPublicationException` 只有单成员位置；实施时需交付全组 Branch、expected Base 和已知实际 ID 的失败信息，不能只留最后一项或猜造 ID。具体成员信息形状和故障注入接点仍待实施时确定；不新增 Consumed、持久 GroupId、兼容层或恢复权威。
+
+测试迁移注意：历史 Schema/rewrite 测试通过内部 `WorkingCopy.Catalog.Set` 注入显式声明，例如 `DB080MaterializationRequirementTests`、`DB081HistoricalCertificateTests`。保留这些反例的含义，将必要声明改为操作内内部输入/fixture；不要为少改测试保留 per-WC dirty 平台。独立 `SchemaCatalogWorkspace` 原语测试仍可直接使用该类型。
+
+验收以 §6 为准，落到真实 API 时至少包括：两成员各引入新 Schema 的 State/Event 混组及冷续写；第二 Capture、跨成员 Schema 冲突、第二 body 失败后的零追加和重捕；空组/重复/外国 owner/旧 Base/已 Dispose 在首次 Capture 前拒绝；输入枚举及回调的重入/资源失效；有无 Catalog 增长的组发布失败、第二成员安装失败和确认后缺结果。单 State/Event 与新根登记继续跑原回归，确保共核没有改变原先的 source、目录与故障边界。源码检查证明接点存在，不代替这些尚未运行的全组反例。

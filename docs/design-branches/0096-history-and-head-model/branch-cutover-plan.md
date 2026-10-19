@@ -1,6 +1,6 @@
 # DB-096：真实 Branch 历史的一次切换计划
 
-> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；根 solution 调用闭包已迁移，正式合入尚未完成，见 §9**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
+> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；根 solution、活动包调用闭包及定向 origin 已接入，下一片为真实多分支组内核；正式合入尚未完成，见 §9**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
 
 ## 1. 收窄结果
 
@@ -13,7 +13,7 @@
 
 隔离分支只是容纳暂时不能通过全体调用的工作，并不能减少协议依赖。B2 不顺带实现多成员 CommitRequest 协调器、BLOB 管理、持久索引或性能优化；一成员保存仍须使用真实业务 Head，不能继续更新旧 name→graph 目录。
 
-不改变公开面和现行布局的前置内部接缝可独立验收；[D/T 读取及候选原语](directory-persistence.md#7-目录候选与小入口切片)已属此类交付。其合入不代表 B2 的新 Repository 合入门槛已经满足；下一片直接将这些原语接入隔离分支的真实 owner/业务布局，不继续扩展独立目录 workspace 或发布协调器。
+不改变公开面和现行布局的前置内部接缝可独立验收；[D/T 读取及候选原语](directory-persistence.md#7-目录候选与小入口切片)已属此类交付。这些原语随后已接入隔离分支的真实 owner/业务布局，见 §8、§9；它们自身不代表完整目标的合入门槛已满足，不继续扩展独立目录 workspace 或发布协调器。
 
 ## 2. 最少协议选择
 
@@ -125,9 +125,9 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 
 ## 6. 真正依赖与可后置项
 
-**定向 origin 影响正式描述查询，不阻断图来源接缝。**上游尚缺[ReadHeadOrigin 窄接口](headstore-origin-request.md)时，可在隔离分支用既有全量 ListHeadOrigins 跑健康数据见证；不能以它为生产 `ReadBranchInfo` 的最终资格，因为无关孤儿损坏会扩散到本次查询。B2 合入前应取得窄接口并固定依赖，或由主线程显式重新裁决并记录较弱边界；不得暗中在 D 重存 origin、从最早 Entry 猜 origin，或将每次 Open 变成全库审计。
+**定向 origin 门槛已闭合。**[ReadHeadOrigin 窄接口](headstore-origin-request.md)已交付，DG 已固定新依赖并完成[定向接入](targeted-origin-integration.md)。历史全量 ListHeadOrigins adapter 已退出；当前保留目标 current 和直接来源 descriptor 校验，完整目录仅在 DG 正式成员内检查森林。不得在 D 重存 origin、从最早 Entry 猜 origin，或将每次 Open 变成全库审计。
 
-新图/Entry 标记、标签上限、summary 所有权与薄 ID codec 继续按 §2 和 API 草图施工；D/T 按[目录合同](directory-persistence.md)复用现有 Dictionary。内部读取、候选/小入口、自然 Delta/冷续写和健康 D/S 发布已有 §7 证据；下一片验收真实 Repository 接线及失败边界，不重复原语实验。附件、树索引和联合提交不是前置。若实际接线揭示必须偏离这些持久形状，再用证据更新本合同及对应反例。
+新图/Entry 标记、标签上限、summary 所有权与薄 ID codec 继续按 §2 和 API 草图施工；D/T 按[目录合同](directory-persistence.md)复用现有 Dictionary。内部原语和真实 Repository 接线的分段证据见目录合同、§8 与 §9；不重复原语实验。附件、树索引和联合提交不是 B2 前置，完整目标中的组提交、树查询与分页仍须后续实施验收。若实际接线揭示必须偏离这些持久形状，再用证据更新本合同及对应反例。
 
 没有发现需要回到用户故事层的新需求冲突。实际施工量仍需用首个纵切 diff 校准，尤其历史便利入口与包模板迁移；不能把“隔离分支”当成可以无限扩展范围的理由。
 
@@ -145,7 +145,7 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 
 B2 至少运行根 `dotnet build DurableGraph.slnx`、Persistence 全套和受影响生成模型/Runtime 回归；按当期精确 Storage pin 运行。README/包消费者模板同步编译或在独立任务包路径资格化，普通包、跨进程/kill 与掉电证据分别记录，源码通过不冒充包交付。测试 fixture 的 explicit expected source 只证明物理关系；来源最近性必须由上述真实 HS 集成反例证明。
 
-完成后继续依赖顺序：**真实多业务 Head 组内核 → 全组 Base/清理/outcome 与登记中断 → 根/子树及分页外观补齐、附件 BLOB 和 ID 字段适配 → 成本测量驱动的优化。**基本 summary 已随 B2。若定向 origin 先到，可提前补根/子树；不必等待组提交。后续工作状态仍只在[PROJECT-STATE](PROJECT-STATE.md)滚动维护，本文不累积逐轮日志。
+完成后继续依赖顺序：**真实多业务 Head 组内核 → 全组 Base/清理/outcome 与登记中断 → 根/子树及分页外观补齐 → 最终验收与合入。**基本 summary 已随 B2，定向 origin 亦已接入；附件 BLOB、ID 字段适配与无计数反例的效率优化继续后置。后续工作状态仍只在[PROJECT-STATE](PROJECT-STATE.md)滚动维护，本文不累积逐轮日志。
 
 ## 8. B2 隔离分支首段纵切
 
@@ -174,7 +174,7 @@ Persistence 构建成功；修复 XML 注释后根构建没有警告，CLI 空�
 
 两份前置只读调查确认：初始化/登记、HS来源和公开身份不能在旧名字目录下拆成有产品意义的小切换。随后分为图层、资源 owner、公开面三个写入包；第四个包写真实调用故事并独立检查 source/Checkpoint/Pair/交付边界。主线程独立检查源码、运行构建与 Probe，并追加错源/故障/登记反例。
 
-当前最小已知限制：
+首段交付时的最小已知限制如下；其中全量 origin adapter 已由[定向接入](targeted-origin-integration.md)替代，D 查询和原回归的后继结果见 §9。以下保留 `f8868b5` 时的事实：
 
 1. `ReadOrigin` 仍调用全量 `ListHeadOrigins`，会触及无关未登记 Head；它仅用于隔离健康纵切，正式 ReadBranchInfo/根/子树必须等[定向请求](headstore-origin-request.md)落地或明确重裁。此次只读核对上游仍为 `f8868b5`，未替用户发送请求。
 2. 打开/保存重复查最近 State，Member 检查线性枚举 D；列表临时逐项扫 origins。这些是具体可削减成本，尚无性能承诺。优先在原回归恢复后利用 session 的已接受 baseline 与 expected Entry 去重，不新增 proof 类型、业务 Parent 或反向索引。
@@ -225,9 +225,9 @@ dotnet test tests/DurableGraph.Tests/DurableGraph.Tests.csproj --no-build --no-r
 
 本机证据：`.artifacts/db096-branch-vertical/migration-build-5.log`、`{persistence,runtime}-migration-2.{log,trx}`；初轮故障与修复前记录保 `*-migration-1`。README source 项目位于同目录 `readme-source/`，使用显式 ProjectReference/Generator 验证，不等于普通包/Build history/候选搬迁资格。从当前 README 原文提取的 source 验证已在新库运行：两个独立进程得到 HP99/98，浏览100/99/98，旧点 fork 并冷续写后 main98/alternate88，4B ID codec 往返成功，可选 Event 读回 Amount1/PreviousState HP98。日志为 `readme-verified-{initial,reopen,browse,fork,events-program}.log`；每步重写 Program 并核对预期输出，防止增量构建误跑旧样例。未执行普通包 runner 或 Schema history/升级流程的重新资格化。
 
-### 下一片：先限制读取范围，再补交付闭包
+### 当前续接：真实多分支组内核
 
 1. **根测试迁移与 D 重复投影均已完成。**后继[目录查询切片](directory-persistence.md#已接受目录的查询投影)按 accepted D 实例复用只读查询表；普通 B/S/T 不重建，成员/fault 检查保留。不要重做该优化或由此推断整体列表性能。最近 State 重复扫描保留为独立、须有计数反例的后续候选，不阻挡核心功能补齐。
-2. **下一片定向 origin 仍为正式合入门槛。**本轮上游仍为 `f8868b5`；[窄请求](headstore-origin-request.md#本地实施接点)已定位现成解析/header/临时句柄接点。可按既有跨仓授权隔离实施，再接新 pin 并验证坏目标、无关坏 Head 与父成员缺失；不必将未交付无限延续为等待，当前全量 adapter 不能作为最终产品资格。
+2. **定向 origin 已交付、接入并完成限定验收。**[接入记录](targeted-origin-integration.md)集中记录新 Storage pin、上游访问与清理边界、DG 坏目标/无关坏 Head/父成员/准确来源/森林环反例，以及新版本源码和包资格。全量 adapter 已退出，不再列作待交付或阻塞下一片的门槛。
 3. **仓库外层调用闭包已完成。**[包迁移验收](package-cutover-validation.md)记录活动消费者、独立 wire inspector、准确编译负例、XML 与术语导航的迁移，以及11个活动门禁的真实普通包结果。根测试、README 和这些消费者不再列为待迁移；后续签名/依赖变化仍需同步受影响入口并获得相应新版本的资格。
-4. 此后按 §7 重核是否可整体合入，再接 CommitRequest 组内核、根/子树和分页。它们没有因本轮恢复原回归而变成已实施；不再重新搭健康 Branch/目录实验协调器。
+4. **下一片实现 CommitRequest 组内核。**在当前真实布局内统一 accepted Catalog 与共同候选，验收多业务 Head 原子发布、各工作副本 Base 安装及全组 guard/清理/outcome。根/子树和分页仍未实施，随后按依赖补齐；正式合入仍须重核 §7 和完整目标。不要重做健康 Branch/目录原语或保留第二套协调器。
