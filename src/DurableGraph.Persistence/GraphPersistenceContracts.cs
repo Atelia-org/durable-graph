@@ -43,7 +43,7 @@ internal sealed class PreparedGraphWrite {
     internal IReadOnlyList<uint> RemovedIds { get; }
 }
 
-internal readonly record struct GraphEnvelope(StoredGraphKind Kind, FrameAddress? Parent,
+internal readonly record struct GraphEnvelope(StoredGraphKind Kind, FrameAddress? PreviousMeta,
     ObjectId RootId, FrameAddress DirectoryRoot, FrameAddress? SchemaRoot, FrameAddress? OwnedBatch);
 
 internal sealed class StoredGraphRevision {
@@ -60,7 +60,7 @@ internal sealed class StoredGraphRevision {
     internal GraphEnvelope Metadata { get; }
     internal FrameAddress Address { get; }
     internal StoredGraphKind Kind => Metadata.Kind;
-    internal FrameAddress? Parent => Metadata.Parent;
+    internal FrameAddress? PreviousMeta => Metadata.PreviousMeta;
     internal ObjectId RootId => Metadata.RootId;
     internal FrameAddress DirectoryRoot => Metadata.DirectoryRoot;
     internal FrameAddress? SchemaRoot => Metadata.SchemaRoot;
@@ -120,7 +120,7 @@ internal sealed class ObjectVersionChain {
 }
 
 internal sealed record RepositorySaveResult(StoredGraphRevision Business, StoredGraphRevision? Meta,
-    FrameAddress? SharedSchemaRoot);
+    FrameAddress? SharedSchemaRoot, Atelia.HeadStore.HeadEntryId CommitId, Atelia.HeadStore.HeadId BranchId);
 
 internal enum RepositorySaveStage {
     BeforeAppend,

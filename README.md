@@ -1,5 +1,6 @@
 # DurableGraph
 
+> 当前实现分支 `db096/branch-repository-cutover` 正在迁移新 Branch/Commit API；下文旧 QuickStart 与消费者尚待迁移，当前可运行入口见[真实纵切 Probe](experiments/RepositoryBranchVerticalProbe/README.md)，剩余工作见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#8-b2-隔离分支首段纵切)。本分支尚未整体合入主线。
 > 当前存储依赖已升级至 HeadStore 非兼容重构；本轮 feed 尚未制作，先用[源码联调](docs/storage-dependency.md#显式源码联调)。旧存档不自动迁移，包模式需待准确候选准备完成。
 
 [MIT License](LICENSE)

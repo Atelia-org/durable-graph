@@ -1,6 +1,5 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Storage;
-using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence;
 
@@ -78,18 +77,17 @@ internal sealed class BusinessPersistenceAdapter {
         Source = graph;
     }
 
-    internal static BusinessPersistenceAdapter LoadState(GraphRecordStore store, FrameAddress state,
+    internal static BusinessPersistenceAdapter LoadState(GraphRecordStore store, StoredGraphRevision state,
         StateModelRegistry models) {
         return LoadState(store, state, models.FreezeConfiguration());
     }
 
-    internal static BusinessPersistenceAdapter LoadState(GraphRecordStore store, FrameAddress state,
+    internal static BusinessPersistenceAdapter LoadState(GraphRecordStore store, StoredGraphRevision state,
         StateModelRegistry.FrozenConfiguration configuration) {
-        GraphEnvelope graph = store.ReadMetadata(state);
-        if (graph.Kind != StoredGraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
+        if (state.Kind != StoredGraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
         DecodedRevision source = DecodedRevision.ReadStoredGraph(store, state, configuration);
         EditableGraphRestoration<IDurableObject> restored = GraphReader.Read<IDurableObject>(
-            source, graph.RootId, new(source.SourceModels!));
+            source, state.RootId, new(source.SourceModels!));
         return FromLoaded(store, source.BindingEnvironment!, restored);
     }
 
@@ -104,10 +102,9 @@ internal sealed class BusinessPersistenceAdapter {
         };
     }
 
-    internal static IDurableObject ReadRoot(GraphRecordStore store, FrameAddress graph, StateModelRegistry models) {
-        StoredGraphRevision metadata = store.ReadGraph(graph);
-        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, metadata, models.FreezeConfiguration());
-        return GraphReader.ReadRoot<IDurableObject>(source, metadata.RootId, new(source.SourceModels!));
+    internal static IDurableObject ReadRoot(GraphRecordStore store, StoredGraphRevision graph, StateModelRegistry models) {
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, graph, models.FreezeConfiguration());
+        return GraphReader.ReadRoot<IDurableObject>(source, graph.RootId, new(source.SourceModels!));
     }
 }
 

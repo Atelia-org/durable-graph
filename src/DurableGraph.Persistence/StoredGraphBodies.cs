@@ -65,9 +65,8 @@ internal sealed class DecodedGraphRows {
 }
 
 internal static class StoredGraphDecoder {
-    internal static DecodedGraphRows Read(GraphRecordStore store, FrameAddress graph,
-        ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) =>
-        Read(store, store.ReadGraph(graph), models, selected);
+    internal static DecodedGraphRows ReadMeta(GraphRecordStore store, FrameAddress graph) =>
+        Read(store, store.ReadMetaGraph(graph));
 
     internal static DecodedGraphRows Read(GraphRecordStore store, StoredGraphRevision snapshot,
         ModelExecutionEnvironment? models = null, SchemaCatalogView? selected = null) =>
@@ -75,7 +74,7 @@ internal static class StoredGraphDecoder {
 
     internal static DecodedGraphRows ReadManagementDirectory(GraphRecordStore store, FrameAddress graph,
         ManagementDirectoryKind kind) {
-        StoredGraphRevision snapshot = store.ReadGraph(graph);
+        StoredGraphRevision snapshot = store.ReadMetaGraph(graph);
         if (snapshot.Kind != StoredGraphKind.Meta || snapshot.SchemaRoot is not null) {
             throw new InvalidDataException("A management directory requires a Schema-free Meta graph.");
         }

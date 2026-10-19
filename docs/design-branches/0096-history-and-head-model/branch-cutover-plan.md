@@ -1,6 +1,6 @@
 # DB-096：真实 Branch 历史的一次切换计划
 
-> 2026-10-19，施工收窄稿，**本文所述布局与公开入口尚未实施**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
+> 2026-10-19，施工收窄稿，**布局与公开入口已在隔离分支完成首段运行；全部调用迁移与正式合入尚未完成，见 §8**。以 DG `2d118da` 的来源 snapshot 接缝为起点；新 Storage 的独立接入资格以[工作集](PROJECT-STATE.md)当期记录为准。本文负责 B 片的接线顺序、调用面迁移和合入边界；需求及来源正确性仍由[Branch 纵切](branch-vertical-design.md)与[来源接缝](history-source-seam.md)定义。
 
 ## 1. 收窄结果
 
@@ -146,3 +146,43 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 B2 至少运行根 `dotnet build DurableGraph.slnx`、Persistence 全套和受影响生成模型/Runtime 回归；按当期精确 Storage pin 运行。README/包消费者模板同步编译或在独立任务包路径资格化，普通包、跨进程/kill 与掉电证据分别记录，源码通过不冒充包交付。测试 fixture 的 explicit expected source 只证明物理关系；来源最近性必须由上述真实 HS 集成反例证明。
 
 完成后继续依赖顺序：**真实多业务 Head 组内核 → 全组 Base/清理/outcome 与登记中断 → 根/子树及分页外观补齐、附件 BLOB 和 ID 字段适配 → 成本测量驱动的优化。**基本 summary 已随 B2。若定向 origin 先到，可提前补根/子树；不必等待组提交。后续工作状态仍只在[PROJECT-STATE](PROJECT-STATE.md)滚动维护，本文不累积逐轮日志。
+
+## 8. B2 隔离分支首段纵切
+
+2026-10-19，从 `866ce89` 创建 `db096/branch-repository-cutover`。本段直接改真实 Repository、资源 owner 和图层；没有第二套 Repository 或运行时布局开关。master 仍保前一停点；本分支尚不能作为完整 solution/普通包交付。
+
+### 已接线与实测
+
+- D/S/T 必需控制入口，新 D/T Dictionary 候选准备/回读/发布后接受；业务 Head 的 Entry 使用 P0E1。P0G2 业务没有 Parent，Meta 保 PreviousMeta；batch/directory 格式不变。旧格式不兼容。
+- BranchId/CommitId、WorkingCopy、根创建/旧点 fork/保存/准确加载/最近 State、Tag、Pair、Checkpoint 与事件枚举已接真实 Head。没有 MoveBranch 或旧 address-only 入口。源码层面的改动并不自动证明原测试全部仍满足。
+- [真实纵切 Probe](../../../experiments/RepositoryBranchVerticalProbe/README.md)使用生成业务模型和正式 Repository API。44 个正向断言覆盖父子独立续写、空 fork 精确继承、重复中文标签、Event-only、关闭全部资源再打开、摘要隔离、Tag、跨根/兄弟/同点 Pair、Checkpoint 停止反例及事件枚举不持 HS lease 跨用户代码。
+- 54 个完整性断言覆盖严格 Entry 编码、真实对象/对象目录 Delta、历史最近性错源拒绝（物理关系自洽仍不够）、tip Event 轻量关系检查、发布后抛错的 Published/owner fault/冷开可见；以及有新 Catalog 的根创建在 D/S 登记前中断，NotPublished 与已知物理身份并存、D/S 保旧、冷开隐藏未登记成员、完整候选帧仍可读。普通 State 提交不追加 D。
+- Probe 故意通过原始 HS 制造坏历史时先关闭 public Repository，再关闭低层 owner 后全新打开，不复用陈旧缓存。它没有替代正常恢复或实施数据修复。
+
+主线程实际运行（Storage 显式使用独立 `f8868b5` worktree）：
+
+```powershell
+$b2Storage = (Resolve-Path .artifacts/db096-head-mechanism/storage-f8868b5).Path
+dotnet build DurableGraph.slnx -p:UseStorageSources=true "-p:StorageSourceRoot=$b2Storage"
+dotnet run --project experiments/RepositoryBranchVerticalProbe/RepositoryBranchVerticalProbe.csproj `
+  -p:UseStorageSources=true "-p:StorageSourceRoot=$b2Storage"
+```
+
+Persistence 构建成功；修复 XML 注释后根构建没有警告，CLI 空入口也通过。**根 solution 失败于两个旧测试项目及其链接消费者：当前首轮报告35条旧类型/内部接口编译错误，测试没有执行。**该数字只是首轮编译诊断，不是剩余迁移量；先修声明后还会暴露方法与语义差异。新 Probe 最终返回0，44+54断言通过且无警告。本机日志 `.artifacts/db096-branch-vertical/{persistence-build,solution-build,probe}.log`，生成库留在同目录随机子目录。无普通包、进程 kill、掉电、规模或吞吐资格。
+
+### 独立复核与仍需收窄的地方
+
+两份前置只读调查确认：初始化/登记、HS来源和公开身份不能在旧名字目录下拆成有产品意义的小切换。随后分为图层、资源 owner、公开面三个写入包；第四个包写真实调用故事并独立检查 source/Checkpoint/Pair/交付边界。主线程独立检查源码、运行构建与 Probe，并追加错源/故障/登记反例。
+
+当前最小已知限制：
+
+1. `ReadOrigin` 仍调用全量 `ListHeadOrigins`，会触及无关未登记 Head；它仅用于隔离健康纵切，正式 ReadBranchInfo/根/子树必须等[定向请求](headstore-origin-request.md)落地或明确重裁。此次只读核对上游仍为 `f8868b5`，未替用户发送请求。
+2. 打开/保存重复查最近 State，Member 检查线性枚举 D；列表临时逐项扫 origins。这些是具体可削减成本，尚无性能承诺。优先在原回归恢复后利用 session 的已接受 baseline 与 expected Entry 去重，不新增 proof 类型、业务 Parent 或反向索引。
+3. 根或 fork 的物理创建已成功、最终登记被拒绝时，目前可能保守 fault owner；NotPublished 仍表示未登记，不能从结果推健康。健康拒绝重试、Unknown、全部安装/清理窗口仍须专门验收。
+4. 旧 suite 中的热材料、immutable leaf、升级/准确历史 Schema、独立可变图、无关损坏隔离等尚未重新资格化。本段保留其代码路径，不宣称迁移完整。
+
+### 下一片的具体顺序
+
+先在本隔离分支恢复调用闭包：物理测试显式给 expectedSource、Meta 走 Meta 入口；Repository 测试改真实 BranchId/CommitId，不让 candidate 自报来源代替 HS 历史。同步迁移生成模型 fixture 和链接 PendingRecovery；保测试原意，区分创建后另打开与原实例保留的差异。随后运行完整 Persistence/受影响 Runtime 回归，迁移 README/包消费者以及尚未对齐的源码术语导航。CLI 当前无业务入口，无额外迁移工单。
+
+上述通过后，再做重复历史扫描的局部收窄、定向 origin 接入及其隔离反例，按 §7 决定是否整体合入。之后才推进组内核、根/子树和分页；不要下一轮重新搭一个健康目录或 Branch 实验协调器。

@@ -39,15 +39,10 @@ public sealed partial class RepositoryResources : IDisposable {
     public static RepositoryResources OpenReadOnlyExisting(string path, long readCacheBudgetBytes = GraphRecordStore.DefaultReadCacheBudgetBytes) =>
         OpenStorageReadOnlyExisting(path, readCacheBudgetBytes);
 
-    internal static void ValidateBranchName(string name) {
-        if (name is null || name.Length is < 1 or > 128 || name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(".lock", StringComparison.Ordinal)) {
-            throw new ArgumentException("Invalid branch name.", nameof(name));
-        }
-        for (int i = 0; i < name.Length; i++) {
-            char c = name[i];
-            bool valid = c is >= 'a' and <= 'z' || c is >= '0' and <= '9' || i > 0 && c is '.' or '_' or '-';
-            if (!valid) { throw new ArgumentException("Invalid branch name.", nameof(name)); }
-        }
+    internal static void ValidateDisplayLabel(string label) {
+        ArgumentNullException.ThrowIfNull(label);
+        try { ManagementDirectoryReader.RequireText(label); }
+        catch (InvalidDataException error) { throw new ArgumentException("A branch label requires 1..1024 UTF-16 code units with valid Unicode.", nameof(label), error); }
     }
 
     internal void EnsureBackingUsable() {

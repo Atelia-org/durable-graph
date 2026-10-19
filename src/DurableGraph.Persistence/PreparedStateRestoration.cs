@@ -11,7 +11,7 @@ namespace Atelia.DurableGraph.Persistence;
 /// editable baselines retain normalized source alone. Collected distinguishes no eligible leaves
 /// from a slot prepared before the leaf experiment was enabled, without allocating an empty table.
 /// </remarks>
-internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoint,
+internal sealed record PreparedStateRestoration(HistoryGraphRecord StateCheckpoint,
     PreparedGraphSelection Selection, StateBindingContext.ExactSchemaRequirementSet Requirements,
     IReadOnlyDictionary<ObjectId, object>? ImmutableLeaves = null, bool ImmutableLeavesCollected = false,
     DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment = null) {
@@ -20,16 +20,17 @@ internal sealed record PreparedStateRestoration(CheckpointAddress StateCheckpoin
     internal int SchemaRequirementCount => Requirements.Count;
     internal int ImmutableLeafCount => ImmutableLeaves?.Count ?? 0;
 
-    internal bool Matches(CheckpointAddress state) => StateCheckpoint == state &&
-        RevisionAddress == state.RevisionAddress && RootId == state.RootId;
+    internal bool Matches(HistoryGraphRecord state) => StateCheckpoint.Id == state.Id &&
+        RevisionAddress == state.Address && RootId == state.RootId;
 
     internal void ValidateStoredSource(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
-        CheckpointAddress state, GraphReadContext context) {
-        if (state.Kind != CheckpointKind.State || !Matches(state) || BindingEnvironment is not { } environment ||
+        HistoryGraphRecord state, FrameAddress? expectedSource, GraphReadContext context) {
+        if (state.Kind != CommitKind.State || !Matches(state) || BindingEnvironment is not { } environment ||
             !ReferenceEquals(Selection.Models, environment.Models) || !ReferenceEquals(context.Models, environment.Models)) {
             throw new InvalidDataException("Prepared State must retain its exact split model environment and selection.");
         }
         GraphEnvelope metadata = store.ReadMetadata(state.Address);
+        store.ValidateBusinessMetadata(state.Address, expectedSource);
         if (metadata.Kind != StoredGraphKind.State || metadata.RootId != RootId || metadata.SchemaRoot is not { } schemaRoot) {
             throw new InvalidDataException("Prepared State must select its actual State root and Schema pin.");
         }

@@ -1,6 +1,6 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的 API 草图
 
-> 2026-10-19 机制收敛版；讨论稿，未实施，未冻结 C# 签名或持久格式。同库统一 Catalog、请求无独立消费状态；描述查询和内容恢复分别承担明确的校验范围。依据见[统一 Catalog](shared-schema-only.md)、[组内核](group-kernel-design.md)及[Branch 纵切](branch-vertical-design.md)。调用故事见[五个调用故事](save-handle-stories.md)；词汇审阅与旧名映射见[命名审阅](api-naming-review.md)。当前源码术语仍见[项目术语表](../../DurableGraph-glossary.md)，不能把本稿当成已完成的实现。
+> 2026-10-19 机制收敛版；设计合同；B2 部分已在隔离分支实现并运行，见[施工记录 §8](branch-cutover-plan.md#8-b2-隔离分支首段纵切)，尚未整体合入，未冻结 C# 签名或持久格式。同库统一 Catalog、请求无独立消费状态；描述查询和内容恢复分别承担明确的校验范围。依据见[统一 Catalog](shared-schema-only.md)、[组内核](group-kernel-design.md)及[Branch 纵切](branch-vertical-design.md)。调用故事见[五个调用故事](save-handle-stories.md)；词汇审阅与旧名映射见[命名审阅](api-naming-review.md)。当前源码术语仍见[项目术语表](../../DurableGraph-glossary.md)，不能把本稿当成已完成的实现。
 
 ## 1. 三个核心概念
 
@@ -184,7 +184,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。D/T 改为[复用 Dictionary 增量持久化](directory-persistence.md)，Head 只存图入口；1000条分支的目录恢复与更新成本须实测，不再用旧整表 payload 的1 MiB限制判断容量，不新增 GC。
 
-旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，尚未提供本稿新外观。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；下一步按[整体切换计划](branch-cutover-plan.md)以真实 Branch 证明 Parent 替换恢复/再保存，并迁移书签与现存历史读取，之后接入真正多业务 Head 组内核和登记故障验收。基本 summary 与单成员异常字段随 B2；附件 BLOB、加载对象寿命与 ID 字段支持继续后置。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
+旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，尚未提供本稿新外观。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；真实 Branch 的 Parent 替换、恢复/再保存、书签与历史组合已获得[隔离首段见证](branch-cutover-plan.md#8-b2-隔离分支首段纵切)；下一步迁移原测试/调用并补齐资格，再接真正多业务 Head 组内核。基本 summary 与单成员异常字段随 B2；附件 BLOB、加载对象寿命与 ID 字段支持继续后置。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 
 ## 7. 多 Branch 联合提交：已选 CommitRequest 路线
 

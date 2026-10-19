@@ -19,7 +19,7 @@ namespace Atelia.DurableGraph;
 /// Registry changes require closing the repository and opening it again; re-checkout alone does not load them.
 /// Every commit accepts definitions into the repository's shared Schema catalog.
 /// </remarks>
-public sealed class BranchCheckout : IDisposable {
+public sealed class WorkingCopy : IDisposable {
     private readonly Repository _repository;
     private readonly BranchSaveSession _saveSession;
     internal BranchSaveSession SaveSession => _saveSession;
@@ -30,14 +30,15 @@ public sealed class BranchCheckout : IDisposable {
     private bool _disposed;
     internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
 
-    internal BranchCheckout(Repository repository, string branchName, BranchSaveSession session, CheckpointAddress? head) {
+    internal WorkingCopy(Repository repository, BranchId branchId, BranchSaveSession session, CommitId head, CommitId? stateSource) {
         _repository = repository;
-        BranchName = branchName;
+        BranchId = branchId;
         _saveSession = session;
-        Head = head!; // Initial creation publishes before this checkout is delivered.
+        BaseCommitId = head;
+        StateSourceCommitId = stateSource;
     }
 
-    public string BranchName { get; }
+    public BranchId BranchId { get; }
     /// <summary>The current editable State root, or null before the history's first State.</summary>
     /// <remarks>Successful replacement installs the supplied instance; previously obtained CLR references do not follow it.</remarks>
     public IDurableObject? State => _saveSession.State;
@@ -45,7 +46,8 @@ public sealed class BranchCheckout : IDisposable {
     public ObjectId? StateId => State is null ? null : _saveSession.RootId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
     public FrameAddress? StateRevisionAddress => _saveSession.StateSource?.Address;
-    public CheckpointAddress Head { get; internal set; }
+    public CommitId BaseCommitId { get; internal set; }
+    public CommitId? StateSourceCommitId { get; internal set; }
     /// <summary>Whether the owning repository has faulted and must be disposed and reopened.</summary>
     /// <remarks>
     /// Independent of RepositoryPublicationException.Outcome: NotPublished can still be faulted. A healthy repository
@@ -55,6 +57,7 @@ public sealed class BranchCheckout : IDisposable {
 
     /// <summary>Publishes an Event after the exact current Head without advancing the State baseline.</summary>
     /// <param name="domainEvent">The nonnull registered Event root; keep its reachable content stable during capture.</param>
+    /// <param name="summary">Opaque preview bytes copied during preparation; omission stores an empty summary.</param>
     /// <param name="parameters">Policy for this call only; null uses the library default.</param>
     /// <remarks>
     /// Any State/Event history position can be followed by an Event. Normal return advances Head without
@@ -63,10 +66,10 @@ public sealed class BranchCheckout : IDisposable {
     /// a faulted repository to inspect history. Pre-append failures may propagate their original exception.
     /// Domain mutations are never automatically rolled back.
     /// </remarks>
-    public CheckpointAddress CommitEvent(IDurableObject domainEvent, ReadAmplificationBaseBudgetParameters? parameters = null) {
+    public CommitInfo CommitEvent(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(domainEvent);
-        return _repository.Commit(this, domainEvent, null, parameters);
+        return _repository.Commit(this, domainEvent, null, summary, parameters);
     }
 
     /// <summary>Publishes the current State and installs its new saving baseline.</summary>
@@ -76,14 +79,15 @@ public sealed class BranchCheckout : IDisposable {
     /// fails; inspect outcome and IsFaulted separately and recover using a newly opened repository.
     /// The new persisted Schema view does not replace this checkout's original execution environment.
     /// </remarks>
-    public CheckpointAddress CommitState(ReadAmplificationBaseBudgetParameters? parameters = null) {
+    public CommitInfo CommitState(ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         IDurableObject state = State ?? throw new InvalidOperationException("There is no State to commit; supply the first State explicitly.");
-        return _repository.Commit(this, null, state, parameters);
+        return _repository.Commit(this, null, state, summary, parameters);
     }
 
     /// <summary>Publishes and installs the supplied State root, including a different actual domain type.</summary>
     /// <param name="nextState">The nonnull registered root; normal return installs this original instance.</param>
+    /// <param name="summary">Opaque preview bytes copied during preparation; omission stores an empty summary.</param>
     /// <param name="parameters">Policy for this call only; null uses the library default.</param>
     /// <remarks>
     /// Establishes the first State when none exists. Existing reachable instances retain their identities;
@@ -92,10 +96,10 @@ public sealed class BranchCheckout : IDisposable {
     /// installation or delivery fails; do not infer rollback or retry against old references. Inspect IsFaulted
     /// independently of RepositoryPublicationException.Outcome and reopen a faulted repository to inspect its history.
     /// </remarks>
-    public CheckpointAddress CommitState(IDurableObject nextState, ReadAmplificationBaseBudgetParameters? parameters = null) {
+    public CommitInfo CommitState(IDurableObject nextState, ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(nextState);
-        return _repository.Commit(this, null, nextState, parameters);
+        return _repository.Commit(this, null, nextState, summary, parameters);
     }
 
     // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.

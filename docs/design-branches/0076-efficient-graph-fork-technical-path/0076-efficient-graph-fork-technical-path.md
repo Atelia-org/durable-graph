@@ -89,7 +89,7 @@ Transient 按恢复合同分别重建，不默认复制源图运行时缓存；�
 内部用一份 ordinal 活动分支名集合，不持有工作副本对象；登记在 `_busy` 内并在可能发布前完成分配，
 未交付失败只清理本次取得的标记，Dispose 幂等释放。完整生命周期见 [DB-078](../0078-editable-checkpoint-fork-slice/0078-editable-checkpoint-fork-slice.md)。
 该集合只是使用规则，不是第二个 head 权威，也不是持久租约。
-当前源码 [EventHistorySession](../../../src/DurableGraph.Persistence/BranchCheckout.cs) 的 owner/head/workspace/disposed 状态继续使用；
+当前源码 [EventHistorySession](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89") 的 owner/head/workspace/disposed 状态继续使用；
 [Commit](../../../src/DurableGraph.Persistence/Repository.cs) 的提交前 exact head、State baseline、合法角色、
 资源与防重入检查以及最终 CAS 保留；**交替约束必须移除**，最近 State 与冷开校验按自由历史重写。
 每次 Journal Parent 取当前精确 Head，首次创建才为空；图保存 Parent 取最近已提交 State，没有 State 时为空。

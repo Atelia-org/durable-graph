@@ -1,16 +1,16 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
-> 状态：新外观以 [API 草图](api-sketch.md)为术语与概念基准；Branch / Commit / WorkingCopy 尚未实施。A来源接缝、B1接入及[目录内部原语](directory-persistence.md#7-目录候选与小入口切片)已验收：窄读取、增项候选、实际回读安装材料与5/17B入口已具备。下一片直接按[整体切换计划](branch-cutover-plan.md)进入隔离分支真实Repository纵切，不继续扩展独立目录协调器；内部原语与健康组合不等于公开布局切换。文档对齐：2026-10-19。
+> 状态：A/B1/目录原语之后，B2 已在隔离分支 `db096/branch-repository-cutover` 接入真实新 API 与布局，首段纵切/有限完整性见证通过；旧测试和消费者调用迁移尚未完成，未合回主线。当前施工结果及合入限制只查[整体切换计划 §8](branch-cutover-plan.md#8-b2-隔离分支首段纵切)。文档对齐：2026-10-19。
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
-**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已实施并通过源码、新包与有限进程中止验收。组发布和新历史模型尚待实施。
+**2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已实施并通过源码、新包与有限进程中止验收。组发布仍未实施；新历史模型的隔离分支限定资格见施工记录。
 
-**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。创建协议继续证明 DG 登记候选，尚未冻结或实施。以下现状术语表仍描述当前源码，不以草图用语替换历史事实。
+**跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。DG 登记已进入真实实现验证。以下早期现状对照保切换前基线；新分支的能力与限制以 §8 为准，不把草稿中全部 API 都当成已交付。
 
 **当前阶段转为收敛验证。** 用户认可已有 API 的清晰性与功能覆盖；后续先映射实际机制，再验证发布/创建、恢复材料和查询成本，寻找保留功能与易用性的简化。具体恢复顺序与最小产物集中在研究工作集，不继续默认扩展需求，也不将设计认可等同于实现验收。
 
-**首批机制调查已完成：**[API 到源码机制的映射](mechanism-feasibility.md)记录 Shared 共同准备、登记两层 outcome、最近 State 内容依赖、来源查询范围及目录容量估算；给出下一批最小实验。当前结论仍是候选与源码证据，未修改产品代码或运行新模型实验。
+**首批机制调查已完成：**[API 到源码机制的映射](mechanism-feasibility.md)记录 Shared 共同准备、登记两层 outcome、最近 State 内容依赖、来源查询范围及目录容量估算；给出下一批最小实验。该调查保其当时的源码证据；后继实现与运行边界由施工记录限定。
 
 **后继收窄与局部实施：**[组内核](group-kernel-design.md)明确一个 accepted Catalog、一次共同候选及阶段清理/安装；旧目录真实 State/Event 混组已有发布和冷 Delta 续写见证。现有格式下[来源 snapshot 接缝 A 已接通并验收](history-source-seam.md#7-a-实施与验收)，无需新 proof/token，保存仍复核实际图。[B1 新依赖接入](storage-handle-adaptation.md)之后，按[整体切换计划](branch-cutover-plan.md)实施[Branch 纵切](branch-vertical-design.md)、删除业务 Parent；书签与既有历史读取同时迁移到 CommitId。旧布局不再复制正式组协调器。请求不设 Consumed，分页预算耗尽整次失败；[独立 HS Probe](../../../experiments/BranchHeadMechanismProbe/README.md)与[定向 origin 请求](headstore-origin-request.md)保其各自范围。
 
@@ -235,7 +235,7 @@ HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHea
 | 联合发布范围、克隆重复项、地址与时间语义 | [Batch](../../../../atelia-storage/src/HeadStore/HeadStore.Batch.cs)、[现存克隆历史测试](../../../../atelia-storage/tests/HeadStore.Tests/ConditionalUpdateIntegration/ConditionalHistoryForkAuditTests.cs)、[FrameAddress](../../../../atelia-storage/src/FrameStore/FrameAddress.cs)、[HeadEntry](../../../../atelia-storage/src/HeadStore/HeadEntry.cs) |
 | DG 图封套与内容来源 | [GraphPersistenceContracts](../../../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)、[GraphRecordStore](../../../src/DurableGraph.Persistence/GraphRecordStore.cs) |
 | DG 当前三入口布局、完整分支目录更新 | [RepositoryResources.MetaBootstrap](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs) |
-| DG Fork / Move / ReadFrames 与地址作用域 | [Repository](../../../src/DurableGraph.Persistence/Repository.cs)、[CheckpointAddress](../../../src/DurableGraph.Persistence/CheckpointAddress.cs) |
+| DG Fork / Move / ReadFrames 与地址作用域 | [Repository](../../../src/DurableGraph.Persistence/Repository.cs)、[CheckpointAddress](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/CheckpointAddress.cs "Pre-B2 source: Git 866ce89") |
 | 下游来源语义和实际查询形态 | [PersistentGarden](../../../../durable-graph-workshop-a/Game/PersistentGarden.cs)：`Fork`、`GetGameCore`、`Inventory` |
 
 初始概念研究的并行调查分别覆盖底层发布模型、DG 历史与标识符、下游需求与反例；主线程整合并复核关键源码。初始文档校验只证明链接与文本集成有效，不证明候选路线已可实施。

@@ -112,7 +112,7 @@ internal sealed class SchemaCatalogView {
         _schemas[new(schema.Type, schema.Version)].Equals(schema) ? id : throw new InvalidDataException("Missing complete declared Schema.");
 
     internal static SchemaCatalogView Load(GraphRecordStore store, FrameAddress graph) {
-        DecodedGraphRows decoded = StoredGraphDecoder.Read(store, graph);
+        DecodedGraphRows decoded = StoredGraphDecoder.ReadMeta(store, graph);
         if (decoded.Snapshot.Kind != StoredGraphKind.Meta) { throw new InvalidDataException("A Schema root must select a meta graph."); }
         if (!decoded.Rows.TryGetValue(decoded.Snapshot.RootId, out ObjectStateRecord? rootRow) ||
             !BootstrapBindings.Layout(typeof(SchemaCatalogRecord)).Equals(rootRow.Layout)) { throw new InvalidDataException("Wrong catalog root layout."); }

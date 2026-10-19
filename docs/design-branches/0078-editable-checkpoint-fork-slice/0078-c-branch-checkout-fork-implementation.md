@@ -38,7 +38,7 @@ Persistence 855、Runtime/Generator 1625，共 **2845 项通过**，无失败/�
 既有升级恢复增加 Fork 路径 1 项。日志与 TRX 位于忽略目录 `.artifacts/db078c/`，最终结果见 `final-build.log`、`final-tests.log`。
 
 核心仅修改 [Repository](../../../src/DurableGraph.Persistence/Repository.cs) 与
-[BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)：活动名集合、最小共用恢复接缝及 guarded ref mutation 核。
+[BranchCheckout](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89")：活动名集合、最小共用恢复接缝及 guarded ref mutation 核。
 原 GraphReader、RevisionReadSession、WorldWorkspace 与 Publish/CAS 管线保持；没有提前引入 DB-079 的统一恢复抽取。
 工作副本的 owner/存活检查替代原仓库单对象引用判断，分支集合不取代 exact head、最近 State 基线或最终 CAS。
 

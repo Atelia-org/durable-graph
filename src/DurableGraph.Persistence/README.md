@@ -1,10 +1,10 @@
 # Persistence 源码导航
 
-本程序集承载公开 Repository／BranchCheckout／Checkpoint 入口和默认持久化集成。公开入口在 `Atelia.DurableGraph`；
+本程序集承载公开 Repository／WorkingCopy／Checkpoint 入口和默认持久化集成。公开入口在 `Atelia.DurableGraph`；
 共同内核、固定员工、绑定表与模型执行环境在 `Atelia.DurableGraph.Persistence`。
 [DB-092 E3](../../docs/design-branches/0092-type-namespace-refactoring/README.md#e3-status)将旧阶段目录并入本目录，源文件按现行职责命名，多类型文件保持共置。
 固定员工的持久 SchemaId 与 Family 宿主保持，C 的生成与存档资格见[实施记录](../../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)。
-业务图 wire 标识保持；上游 HeadStore 格式与三入口书签布局变更见 [DB-096](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。原 meta 内核合同与限定资格维护在
+B2 隔离分支采用 P0G2 业务无 Parent 与新 D/T 管理图入口，限定运行资格和未迁移调用见[施工记录 §8](../../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#8-b2-隔离分支首段纵切)；上游 HeadStore 格式与三入口书签布局变更见 [DB-096](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。原 meta 内核合同与限定资格维护在
 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
 统一 Catalog 与 Private/ToShared 删除见 [DB-096 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)；开发隔离改用完整关闭库副本。DB-088 保历史故事，查询后继见 DB-089，不从旧逐片“下一步”恢复排期。
 
@@ -16,7 +16,7 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 | 任务 | 源码入口 |
 |---|---|
 | 历史 checkpoint 书签目录 | [RepositoryResources.Bookmarks](RepositoryResources.Bookmarks.cs) |
-| 公开仓库、持续编辑与历史读取 | [Repository](Repository.cs)、[BranchCheckout](BranchCheckout.cs)、[Checkpoint](Checkpoint.cs)、[CheckpointAddress](CheckpointAddress.cs)／[CheckpointKind](CheckpointKind.cs) |
+| 公开仓库、持续编辑与历史读取 | [Repository](Repository.cs)、[WorkingCopy](WorkingCopy.cs)、[Checkpoint](Checkpoint.cs)、[BranchId](BranchId.cs)／[CommitId](CommitId.cs)／[CommitKind](CommitKind.cs) |
 | graph／branch-ref／tag 发布失败合同 | [RepositoryPublicationException／Outcome](RepositoryPublicationException.cs)；内部 [RepositoryOperationStage](RepositoryOperationStage.cs) 仅为故障注入 hook |
 | 准确执行环境与共同恢复／比较 | [ModelExecutionEnvironment](ModelExecutionEnvironment.cs)、[GraphReader](GraphReader.cs) |
 | meta 查询、意图与 Schema 工厂 | [SchemaCatalogView](SchemaCatalogView.cs)、[SchemaCatalogWorkspace](SchemaCatalogWorkspace.cs) |
@@ -24,7 +24,7 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 | 对象 batch、目录、图与准确来源 | [GraphRecordStore](GraphRecordStore.cs)、[GraphFrameCodec](GraphFrameCodec.cs)、[StoredGraphDecoder／TypedBaseBodyCodec](StoredGraphBodies.cs) |
 | 存储图、对象链与共同保存材料 | [GraphPersistenceContracts](GraphPersistenceContracts.cs)、[PendingRepositorySave](PendingRepositorySave.cs) |
 | 业务准备、真实 B/D/H 与安装 | [BusinessPersistenceAdapter](BusinessPersistenceAdapter.cs)、[BranchSaveSession](BranchSaveSession.cs) |
-| 两根与发布/fault/资源 owner | [RepositoryResources](RepositoryResources.MetaBootstrap.cs) |
+| D/S/T、业务 Head 与发布/fault/资源 owner | [RepositoryResources](RepositoryResources.MetaBootstrap.cs) |
 | owned 物理缓存 | [GraphPhysicalReadCache](GraphPhysicalReadCache.cs)、[缓存合同](../../docs/design-branches/0067-owned-revision-read-cache-design/README.md) |
 
 当前保存统一向仓库 Catalog 准备，准确历史 Schema 与 source/prior 验证保留；旧 Private/ToShared 合同不再适用。实际普通包门禁见

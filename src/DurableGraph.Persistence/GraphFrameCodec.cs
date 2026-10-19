@@ -14,7 +14,7 @@ internal static class GraphFrameCodec {
     internal const uint GraphTag = 0x37474250; // PBG7
     private static ReadOnlySpan<byte> BatchMagic => "P0B1"u8;
     private static ReadOnlySpan<byte> DirectoryMagic => "P0D1"u8;
-    private static ReadOnlySpan<byte> GraphMagic => "P0G1"u8;
+    private static ReadOnlySpan<byte> GraphMagic => "P0G2"u8;
 
     internal static byte[] EncodeBatch(FrameAddress? sourceGraph, FrameAddress? schemaRoot,
         IReadOnlyList<ObjectVersionRecord> records) {
@@ -77,16 +77,17 @@ internal static class GraphFrameCodec {
         return new(source, version.Kind, version.Prior, version.Body, version.EncodedPayloadBytes);
     }
 
-    internal static byte[] EncodeGraph(StoredGraphKind kind, FrameAddress? parent, ObjectId rootId,
+    internal static byte[] EncodeGraph(StoredGraphKind kind, FrameAddress? previousMeta, ObjectId rootId,
         FrameAddress directoryRoot, FrameAddress? schemaRoot, FrameAddress? ownedBatch) {
         ValidateKind(kind);
+        if (kind != StoredGraphKind.Meta && previousMeta is not null) { throw new ArgumentException("Business graphs have no previous Meta.", nameof(previousMeta)); }
         if (rootId.IsNull) { throw new ArgumentException("Graph root must be nonzero.", nameof(rootId)); }
         if (kind == StoredGraphKind.Meta && schemaRoot is not null) { throw new ArgumentException("A fixed meta graph does not borrow a Schema root.", nameof(schemaRoot)); }
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new BareValueWriter(buffer);
         writer.WriteRawBytes(GraphMagic);
         writer.WriteByte((byte)kind);
-        WriteOptional(ref writer, parent);
+        if (kind == StoredGraphKind.Meta) { WriteOptional(ref writer, previousMeta); }
         writer.WriteVarUInt32(rootId.Value);
         FrameAddressWireCodec.Write(ref writer, directoryRoot);
         WriteOptional(ref writer, schemaRoot);
@@ -99,14 +100,14 @@ internal static class GraphFrameCodec {
         RequireMagic(ref reader, GraphMagic);
         StoredGraphKind kind = (StoredGraphKind)reader.ReadByte();
         ValidateKind(kind);
-        FrameAddress? parent = ReadOptional(ref reader);
+        FrameAddress? previousMeta = kind == StoredGraphKind.Meta ? ReadOptional(ref reader) : null;
         ObjectId root = new(reader.ReadVarUInt32());
         if (root.IsNull) { throw new InvalidDataException("Graph root must be nonzero."); }
         FrameAddress directory = FrameAddressWireCodec.Read(ref reader);
         FrameAddress? schema = ReadOptional(ref reader), batch = ReadOptional(ref reader);
         if (kind == StoredGraphKind.Meta && schema is not null) { throw new InvalidDataException("A fixed meta graph cannot borrow a Schema root."); }
         reader.EnsureFullyConsumed();
-        return new(kind, parent, root, directory, schema, batch);
+        return new(kind, previousMeta, root, directory, schema, batch);
     }
 
     internal static void WriteOptional(ref BareValueWriter writer, FrameAddress? address) {

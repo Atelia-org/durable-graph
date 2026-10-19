@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj" />
+    <ProjectReference Include="../../src/DurableGraph.Generator/DurableGraph.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="RequireStorageSourceMode" BeforeTargets="PrepareForBuild"
+          Condition="'$(UseStorageSources)' != 'true'">
+    <Error Text="This isolated B2 probe requires -p:UseStorageSources=true and the pinned StorageSourceRoot." />
+  </Target>
+</Project>

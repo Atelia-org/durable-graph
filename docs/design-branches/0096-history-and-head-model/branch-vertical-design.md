@@ -1,6 +1,6 @@
 # DB-096：一 Branch 一 Head 的最小纵切
 
-> 2026-10-19，设计收窄稿，尚未运行或接入产品。承接 [API 草图](api-sketch.md)、[应用合同](application-design.md)及[首批机制调查](mechanism-feasibility.md)。最初调查基线为 DG `c077d1c` / Storage `731eef7`；后续[B1 已接入 f8868b5](storage-handle-adaptation.md)。具体调用迁移及单布局合入门槛见[整体切换计划](branch-cutover-plan.md)，不把依赖资格当成新历史布局资格。
+> 2026-10-19，设计合同；B2 隔离首段已接真实 Repository 并运行，准确范围见[施工记录 §8](branch-cutover-plan.md#8-b2-隔离分支首段纵切)，原回归与正式合入尚未完成。承接 [API 草图](api-sketch.md)、[应用合同](application-design.md)及[首批机制调查](mechanism-feasibility.md)。最初调查基线为 DG `c077d1c` / Storage `731eef7`；后续[B1 已接入 f8868b5](storage-handle-adaptation.md)。具体调用迁移及单布局合入门槛见[整体切换计划](branch-cutover-plan.md)，不把依赖资格当成新历史布局资格。
 
 ## 1. 问题和当前推荐
 
@@ -117,7 +117,9 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 
 成本记录至少分开：目录 N 与未登记 U、固定旧起点之后的无关后缀、所选点之前的连续 Event 数、对象 Delta 链。最近 State 查找可随前方 Event 段增长；描述/当前摘要/fork 不应因 DG 附加验证扫描累计历史。额外小图帧读取与打开文件保留数量也要记录，避免以“轻量描述”掩盖 I/O。
 
-## 7. 本次源码证据与未验证项
+## 7. 切换前源码证据与未验证项
+
+以下源码对照描述 B2 之前的基线；本轮已改变的入口和新的限定运行证据以[施工记录 §8](branch-cutover-plan.md#8-b2-隔离分支首段纵切)替代，不能把下述“尚未运行”当成当前停点。
 
 - [GraphRecordStore](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)：`Append`、`ReadGraph`、`ValidateMetadataRelations`、`ResolveContentSource`、`ReadObjectChainCore`、`ReadDirectoryChain`。业务内容来源确为最近 State；batch/directory 的局部 source/prior 检查与逻辑 Parent 不可一起删除。
 - [DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs) 与 [StoredGraphDecoder](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs) 已经 A 片接入 snapshot，地址入口读取一次选中图并传递；新增内部入口拒绝错误 owner/失效寿命。它仍是 Parent 来源，尚未成为 HS 签发材料。

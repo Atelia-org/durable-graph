@@ -193,7 +193,7 @@ HS 的联合发布只覆盖既有 Heads，不能直接当作新 Head 创建事�
 三个只读调查包分别覆盖应用历史合同、元数据与查询、发布职责；主线程复核以下关键源码，并整合跨包分歧。独立反向审阅只检查设计证据和遗漏，不替代运行验收。
 
 - [Repository](../../../src/DurableGraph.Persistence/Repository.cs)：空 registry 检查、`ReadFrames` 全链与 `EnumerateEvents(endInclusive)` 固定末端。
-- [BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)：State/Event 独立提交与故障边界。
+- [BranchCheckout](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89")：State/Event 独立提交与故障边界。
 - [RepositoryResources.MetaBootstrap](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)：当前控制目录、共享发布与安装顺序。
 - [GraphRecordStore](../../../src/DurableGraph.Persistence/GraphRecordStore.cs)、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)、[DecodedRevision](../../../src/DurableGraph.Persistence/DecodedRevision.cs)：内容来源、Schema 准备和历史解释。
 - [上游历史 API](../../../../atelia-storage/src/HeadStore/HeadStore.History.cs)、[正式历史/fork 合同](../../../../atelia-storage/docs/HeadStore/05-versionstore-names-and-indexes.md)、[新增验收记录](../../../../atelia-storage/docs/HeadStore/12-versionstore-final-acceptance.md)：上游完成事实与 DG 尚未接入分开看。

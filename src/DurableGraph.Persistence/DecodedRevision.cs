@@ -45,21 +45,8 @@ public sealed class DecodedRevision {
         BindingEnvironment = environment;
     }
 
-    internal static DecodedRevision ReadStoredGraph(GraphRecordStore store, FrameAddress graph, StateModelRegistry registry) {
-        ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(registry);
-        return ReadStoredGraph(store, graph, registry.FreezeConfiguration());
-    }
-
-    internal static DecodedRevision ReadStoredGraph(GraphRecordStore store, FrameAddress graph,
-        StateModelRegistry.FrozenConfiguration configuration, SchemaViewBindingEnvironment? reuseEnvironment = null) {
-        ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(configuration);
-        return ReadStoredGraph(store, store.ReadGraph(graph), configuration, reuseEnvironment);
-    }
-
-    // Only concrete reads hand off an already-qualified snapshot. This overload
-    // neither invents save provenance for fixtures nor changes history authority.
+    // Only concrete reads hand off an already-qualified snapshot. The Repository
+    // selects business sources before this layer reads typed content.
     internal static DecodedRevision ReadStoredGraph(GraphRecordStore store, StoredGraphRevision source,
         StateModelRegistry.FrozenConfiguration configuration, SchemaViewBindingEnvironment? reuseEnvironment = null) {
         ArgumentNullException.ThrowIfNull(store);

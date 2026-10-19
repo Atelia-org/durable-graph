@@ -29,7 +29,7 @@
 | 未指定时仍能恢复 checkout、Fork、修改 ref/tag；普通业务保存即使无变化也在 Capture 前拒绝 | `RequireSchemaWriter`、`MissingModeRejectsBeforeAnyCaptureCallbackIncludingUnchangedSave` |
 | Private 目前由 `CheckoutPrivate` 选择，只恢复已有分支；要求实际 Head 的准确 Schema pin | `src/DurableGraph.Persistence/Repository.PrivateSchemas.cs`（删除前源码）、[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 的 `PrivateCatalogRoot` |
 | 普通 Shared 保存检查选定的完整 Schema 视图已被 shared 接纳；不会自动把 private 视图合入共享目录 | `Repository.RequireSchemaWriter` |
-| `Commit…ToShared` 是显式单次完整目录合入；不改变 checkout 默认归属或固定执行环境 | [BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、`tests/DurableGraph.Persistence.Tests/PrivateSchemaPromotionTests.cs`（删除前源码） |
+| `Commit…ToShared` 是显式单次完整目录合入；不改变 checkout 默认归属或固定执行环境 | [BranchCheckout](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89")、`tests/DurableGraph.Persistence.Tests/PrivateSchemaPromotionTests.cs`（删除前源码） |
 | 私有续写取实际 Head.S，业务恢复取最近 State.S；两者不能合并为一个“当前 Schema” | [Repository 接线](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)、[保存 owner](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs) |
 
 这里核对的是源码和测试定义；本轮尚未运行新 Probe，不把现有测试名字等同于本轮已通过的结果。

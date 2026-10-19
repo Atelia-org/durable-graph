@@ -88,7 +88,7 @@ NotPublished 只说明业务发布没有成立，不说明 owner 必然健康。
 
 ## 5. 源码线索与最小实验题
 
-以下保留现有源码符号名，它们不是已经实施的新 API。当前 [BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)为每个分支持有独立保存会话，并区分 State/Event 的安装效果；[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)存在内部 capture/prepare/install 分层；[RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)已有业务与 Schema 联合发布及提前准备安装材料。当前只有一个 owner pending 等限制，不能简单把两个旧 prepared 对象塞进数组就称支持多分支。
+以下保留现有源码符号名，它们不是已经实施的新 API。当前 [BranchCheckout](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89")为每个分支持有独立保存会话，并区分 State/Event 的安装效果；[BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs)存在内部 capture/prepare/install 分层；[RepositoryResources](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)已有业务与 Schema 联合发布及提前准备安装材料。当前只有一个 owner pending 等限制，不能简单把两个旧 prepared 对象塞进数组就称支持多分支。
 
 上游 [PublishHeads](../../../../atelia-storage/src/HeadStore/HeadStore.Batch.cs)提供多个既有 Head payload 的共同发布基础；它不替 DG 组合 Schema 和工作副本。上述是源码线索，本轮没有运行新的 Probe 或确认产品接入资格。
 

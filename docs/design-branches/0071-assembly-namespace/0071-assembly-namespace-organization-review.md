@@ -79,7 +79,7 @@ Storage 故意使用底层数值 ID，不要求它为了命名整齐改用 Runti
 
 [EventHistoryRepository](../../../src/DurableGraph.Persistence/Repository.cs) 直接拥有内部 `HistoryJournal`、`GraphResources`，
 创建/恢复 `WorldWorkspace`，并在提交顺序中调用准备和安装操作。
-[EventHistorySession](../../../src/DurableGraph.Persistence/BranchCheckout.cs) 的工作区也是 internal。
+[EventHistorySession](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89") 的工作区也是 internal。
 它们有清晰的概念分工，但当前并没有一个已被第二种发布宿主消费的独立公共工作区合同。
 
 现在拆 EventHistory，需要扩大 internal 的可见性、增加友元，或设计新交接 API。

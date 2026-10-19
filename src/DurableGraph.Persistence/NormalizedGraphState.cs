@@ -71,7 +71,7 @@ internal sealed class NormalizedGraphState {
         StoredGraphRevision actual = store.Revalidate(graph);
         if (actual.SourceGraph != _candidateSource?.RevisionAddress || selected.Snapshot is not { } schema ||
             !ReferenceEquals(schema.SourceOwner, store) || schema.Address != actual.SchemaRoot) {
-            throw new InvalidDataException("A split installation must use its actual graph, content Parent and completed Schema view.");
+            throw new InvalidDataException("A split installation must use its actual graph, content source and completed Schema view.");
         }
         IReadOnlyList<ObjectVersionRecord> records = actual.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];
         RequireSameWrites(expectedRecords, records);

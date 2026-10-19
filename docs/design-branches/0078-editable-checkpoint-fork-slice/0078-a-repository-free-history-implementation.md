@@ -31,8 +31,8 @@ Event 永不接受为 State 基线；Event-only 冷 Checkout 使用全新空捕�
 
 ## 验收记录
 
-核心落点为 [Repository](../../../src/DurableGraph.Persistence/Repository.cs)、[BranchCheckout](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、
-[CheckpointAddress](../../../src/DurableGraph.Persistence/CheckpointAddress.cs)、[WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) 与
+核心落点为 [Repository](../../../src/DurableGraph.Persistence/Repository.cs)、[BranchCheckout](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89")、
+[CheckpointAddress](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/CheckpointAddress.cs "Pre-B2 source: Git 866ce89")、[WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs) 与
 [PreparedWorldSave](../../../src/DurableGraph.Persistence/PreparedWorldSave.cs)。旧公开类型及泛型分支/读取重载已移除，程序集及持久 envelope 格式不变。
 内部 `LoadedWorld<T>` 继续验证 exact 请求类型，作为低层机制见证；它不是公共兼容层。
 

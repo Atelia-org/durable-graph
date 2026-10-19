@@ -14,7 +14,7 @@ API 草稿已经去掉 SchemaMode；`OpenWorkingCopy(branchId)`、两个 CreateR
 
 **下一内核首选一个仓库接受的 Catalog，加一个操作内共同候选。** 收集本组捕获布局及必要的内部显式声明，检查完整闭包和冲突，一次 Builder 分配；所有业务按同一最终 view 编码。候选成功发布前不修改 accepted，无新增定义可复用旧根。单分支是单成员组。
 
-这比“每 WorkingCopy 保存一份可变 Catalog，然后组内合并它们”更小。源码 [BranchCheckout.Catalog](../../../src/DurableGraph.Persistence/BranchCheckout.cs) 和 [SchemaCatalogWorkspace.Set](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs) 都是 internal，当前产品调用从 [BranchSaveSession.Prepare](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 的 capture layouts 收集定义；没有已公开的逐副本 dirty 管理 API 必须保留。显式输入仍可用于内部机制验证，不为旧测试新增公开 Schema 编辑平台。
+这比“每 WorkingCopy 保存一份可变 Catalog，然后组内合并它们”更小。源码 [BranchCheckout.Catalog](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89") 和 [SchemaCatalogWorkspace.Set](../../../src/DurableGraph.Persistence/SchemaCatalogWorkspace.cs) 都是 internal，当前产品调用从 [BranchSaveSession.Prepare](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) 的 capture layouts 收集定义；没有已公开的逐副本 dirty 管理 API 必须保留。显式输入仍可用于内部机制验证，不为旧测试新增公开 Schema 编辑平台。
 
 共享写入 Catalog **不合并**各业务图的身份、State 基线、准确历史 Schema 或冻结执行环境。有 State 时从该 State 的准确视图恢复；无 State 时沿统一写入路线建立当前配置环境。Event 只推进逻辑 tip，不安装 State/rewrite。保留对象/目录 source 与 Delta prior 验证，完整旧 Schema 和容器声明持续存在。
 

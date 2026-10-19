@@ -57,74 +57,60 @@ public sealed partial class Repository {
         set { RequireAvailable(); _storageFacade.SaveStageObserver = value; }
     }
 
-    private BranchCheckout CreateBranchCore(string branchName, IDurableObject root, StoredGraphKind kind,
-        ReadAmplificationBaseBudgetParameters? parameters) {
+    private BranchInfo CreateBranchCore(string displayLabel, IDurableObject root, StoredGraphKind kind,
+        ReadOnlyMemory<byte> summary, ReadAmplificationBaseBudgetParameters? parameters) {
         RequireWriter();
         _busy = true;
-        bool acquired = false;
-        bool delivered = false;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            RepositoryResources.ValidateBranchName(branchName);
-            if (_storageFacade!.GetHead(branchName) is not null) { throw new InvalidOperationException("Branch name already exists."); }
-            acquired = _activeBranches.Add(branchName);
-            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = NewCheckout(branchName, null);
-            PublishSave(checkout, root, kind, parameters ?? DefaultPolicy);
-            delivered = true;
-            return checkout;
-        } finally {
-            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
-            EndOperation();
-        }
+            RepositoryResources.ValidateDisplayLabel(displayLabel);
+            var session = new BranchSaveSession(_storageFacade, null, null, _modelConfiguration,
+                () => _resources.EnsureEditingAllowed());
+            using var pending = session.Prepare(root, kind, parameters ?? DefaultPolicy, summary, displayLabel);
+            OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
+            BranchInfo? branch = null;
+            pending.Commit(deliver: result => branch = ReadBranchInfoCore(new(result.BranchId)));
+            return branch!;
+        } finally { EndOperation(); }
     }
 
-    private BranchCheckout CheckoutCore(string branchName) {
+    private WorkingCopy CheckoutCore(BranchId branchId) {
         RequireWriter();
         _busy = true;
         bool acquired = false;
         bool delivered = false;
         try {
-            CheckpointAddress head = StoredHeadCore(branchName);
-            acquired = _activeBranches.Add(branchName);
-            if (!acquired) { throw new InvalidOperationException("Branch already has an active checkout."); }
-            BranchCheckout checkout = RestoreCheckout(branchName, head, out PreparedStateRestoration? candidate);
+            var head = _resources.ReadCurrent(branchId.Value);
+            acquired = _activeBranches.Add(branchId);
+            if (!acquired) { throw new InvalidOperationException("Branch already has an active working copy."); }
+            var work = RestoreCheckout(branchId, head, out PreparedStateRestoration? candidate);
             if (candidate is not null) { _preparedState = candidate; }
             delivered = true;
-            return checkout;
+            return work;
         } finally {
-            if (acquired && !delivered) { _activeBranches.Remove(branchName); }
+            if (acquired && !delivered) { _activeBranches.Remove(branchId); }
             EndOperation();
         }
     }
 
-    private BranchCheckout NewCheckout(string branchName, CheckpointAddress? head) {
-        BranchCheckout? checkout = null;
-        Action editingGuard = () => EnsureEditingAllowed(checkout!);
-        var session = head is null
-            ? new BranchSaveSession(_storageFacade!, branchName, _modelConfiguration!, editingGuard)
-            : new BranchSaveSession(_storageFacade!, branchName, head.Address, _modelConfiguration!, editingGuard);
-        checkout = new(this, branchName, session, head);
-        return checkout;
+    private WorkingCopy NewCheckout(BranchId branchId, HistoryGraphRecord head,
+        BusinessPersistenceAdapter? business = null) {
+        WorkingCopy? work = null;
+        var session = new BranchSaveSession(_storageFacade, branchId.Value, head.Id, _modelConfiguration,
+            () => EnsureEditingAllowed(work!), business);
+        var state = _resources.FindNearestState(head.Id, inclusive: true);
+        work = new(this, branchId, session, new(head.Id), state is null ? null : new(state.Id));
+        return work;
     }
 
-    private BranchCheckout NewCheckout(string branchName, CheckpointAddress head,
-        BusinessPersistenceAdapter business) {
-        BranchCheckout? checkout = null;
-        var session = new BranchSaveSession(_storageFacade!, branchName, business,
-            () => EnsureEditingAllowed(checkout!));
-        checkout = new(this, branchName, session, head);
-        return checkout;
-    }
-
-    private BranchCheckout RestoreCheckout(string branchName, CheckpointAddress head,
+    private WorkingCopy RestoreCheckout(BranchId branchId, HistoryGraphRecord head,
         out PreparedStateRestoration? candidate) {
         candidate = null;
         var store = _storageFacade.Store;
-        if (head.Kind == CheckpointKind.Event) { store.ValidateMetadataRelations(head.Address); }
-        CheckpointAddress? state = NearestStateCore(head);
+        if (head.Kind == CommitKind.Event) { store.ValidateBusinessMetadata(head.Address, _resources.FindNearestState(head.Id, inclusive: false)?.Address); }
+        HistoryGraphRecord? state = _resources.FindNearestState(head.Id, inclusive: true);
         // An Event-only prefix never consults a resident State or its model environment.
-        if (state is null) { return NewCheckout(branchName, head); }
+        if (state is null) { return NewCheckout(branchId, head); }
         if (PreparedStateReuseEnabled && _preparedState is { } prepared && prepared.Matches(state)) {
             DecodedRevision.SchemaViewBindingEnvironment environment = prepared.BindingEnvironment
                 ?? throw new InvalidDataException("A split State slot must retain its reader-issued environment.");
@@ -132,19 +118,19 @@ public sealed partial class Repository {
             context.Statistics.PreparedStateHits++;
             if (ImmutableLeafReuseEnabled && !prepared.ImmutableLeavesCollected) {
                 using var leafRequirements = environment.Models.BeginSchemaRequirementCollection();
-                prepared.ValidateStoredSource(store, _modelConfiguration!, state, context);
+                prepared.ValidateStoredSource(store, _modelConfiguration!, state, _resources.FindNearestState(state.Id, inclusive: false)?.Address, context);
                 var materializedLeaf = GraphReader.RestorePreparedState(context, prepared.Selection,
                     out var leaves, collectImmutableLeaves: true);
                 var leafBusiness = BusinessPersistenceAdapter.FromLoaded(store, environment, materializedLeaf);
-                BranchCheckout leafCheckout = NewCheckout(branchName, head, leafBusiness);
+                WorkingCopy leafCheckout = NewCheckout(branchId, head, leafBusiness);
                 candidate = new(state, prepared.Selection, leafRequirements.Complete(), leaves,
                     ImmutableLeavesCollected: true, BindingEnvironment: environment);
                 return leafCheckout;
             }
-            prepared.ValidateStoredSource(store, _modelConfiguration!, state, context);
+            prepared.ValidateStoredSource(store, _modelConfiguration!, state, _resources.FindNearestState(state.Id, inclusive: false)?.Address, context);
             var materializedHit = GraphReader.RestorePreparedState(context, prepared.Selection, out _,
                 reusedLeaves: ImmutableLeafReuseEnabled ? prepared.ImmutableLeaves : null);
-            return NewCheckout(branchName, head,
+            return NewCheckout(branchId, head,
                 BusinessPersistenceAdapter.FromLoaded(store, environment, materializedHit));
         }
 
@@ -157,7 +143,7 @@ public sealed partial class Repository {
         reads.Statistics.PreparedStateMisses++;
         // Include stored reader/body checks as well as normalization and first full materialization.
         using var requirements = sourceEnvironment.Models.BeginSchemaRequirementCollection();
-        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, state.Address, _modelConfiguration!, sourceEnvironment);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, QualifyBusiness(state), _modelConfiguration!, sourceEnvironment);
         PreparedGraphSelection selection = GraphReader.PrepareState(source, reads, state.RootId);
         foreach ((ObjectId id, NormalizedObject row) in selection.Normalized.Objects) {
             sourceEnvironment.Models.CheckObjectLayout(row.SourceLayout, $"prepared State source object {id.Value}");
@@ -167,7 +153,7 @@ public sealed partial class Repository {
         var materialized = GraphReader.RestorePreparedState(reads, selection, out var immutableLeaves,
             collectImmutableLeaves: collectLeaves);
         var business = BusinessPersistenceAdapter.FromLoaded(store, sourceEnvironment, materialized);
-        BranchCheckout restored = NewCheckout(branchName, head, business);
+        WorkingCopy restored = NewCheckout(branchId, head, business);
         var certificate = requirements.Complete();
         if (PreparedStateReuseEnabled) {
             candidate = new(state, selection, certificate, immutableLeaves, collectLeaves, sourceEnvironment);
@@ -175,66 +161,60 @@ public sealed partial class Repository {
         return restored;
     }
 
-    private void EnsureEditingAllowed(BranchCheckout checkout) {
-        RequireCheckoutWriter(checkout);
-        _storageFacade!.EnsureEditingAllowed();
+    private void EnsureEditingAllowed(WorkingCopy work) {
+        RequireCheckoutWriter(work);
+        _storageFacade.EnsureEditingAllowed();
     }
 
-    private void RequireCheckoutSource(BranchCheckout checkout) {
-        if (!checkout.IsLiveFor(this) || !_activeBranches.Contains(checkout.BranchName) ||
-            _storageFacade!.GetHead(checkout.BranchName) != checkout.Head.Address) {
-            throw new InvalidOperationException("Session does not own the expected branch head.");
+    private void RequireCheckoutSource(WorkingCopy work) {
+        if (!work.IsLiveFor(this) || !_activeBranches.Contains(work.BranchId) ||
+            _resources.ReadCurrent(work.BranchId.Value).Id != work.BaseCommitId.Value) {
+            throw new InvalidOperationException("Working copy does not own the expected branch head.");
         }
-        FrameAddress? state = _storageFacade.GetStateHead(checkout.BranchName);
-        if (state != checkout.StateRevisionAddress || (state is null ? checkout.State is not null :
-                checkout.StateId != _storageFacade.Store.ReadMetadata(state.Value).RootId)) {
-            throw new InvalidOperationException("Checkout State baseline does not match the business chain.");
+        var state = _resources.FindNearestState(work.BaseCommitId.Value, inclusive: true);
+        if (state?.Address != work.StateRevisionAddress ||
+            (state is null ? work.State is not null : work.StateId != state.RootId) ||
+            state?.Id != work.StateSourceCommitId?.Value) {
+            throw new InvalidOperationException("Working copy State baseline does not match business history.");
         }
     }
 
-    private CheckpointAddress CommitSave(BranchCheckout checkout, IDurableObject? domainEvent,
-        IDurableObject? nextState, ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireCheckoutWriter(checkout);
+    private CommitInfo CommitSave(WorkingCopy work, IDurableObject? domainEvent, IDurableObject? nextState,
+        ReadOnlyMemory<byte> summary, ReadAmplificationBaseBudgetParameters? parameters) {
+        RequireCheckoutWriter(work);
         _busy = true;
         try {
-            return PublishSave(checkout, domainEvent ?? nextState!,
-                domainEvent is null ? StoredGraphKind.State : StoredGraphKind.Event, parameters ?? DefaultPolicy);
+            var kind = domainEvent is null ? StoredGraphKind.State : StoredGraphKind.Event;
+            using var pending = work.SaveSession.Prepare(domainEvent ?? nextState!, kind, parameters ?? DefaultPolicy, summary);
+            OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
+            CommitInfo? info = null;
+            // The owner catches delivery failures with Pending.ExpectedEntry, never a partially
+            // advanced WorkingCopy value, and attaches only the actual HeadStore result IDs.
+            pending.Commit(deliver: result => {
+                info = Issue(_resources.ReadDescriptor(result.CommitId));
+                work.SaveSession.Advance(result.CommitId);
+                work.BaseCommitId = info.Id;
+                if (kind == StoredGraphKind.State) { work.StateSourceCommitId = info.Id; }
+            });
+            return info!;
         } finally { EndOperation(); }
     }
 
-    private CheckpointAddress PublishSave(BranchCheckout checkout, IDurableObject root, StoredGraphKind kind,
-        ReadAmplificationBaseBudgetParameters parameters) {
-        using PreparedBranchSave pending = checkout.SaveSession.Prepare(root, kind, parameters);
-        OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
-        CheckpointAddress? head = null;
-        pending.Commit(graph => head = Issue(ReadHistoryCore(graph.Address)));
-        checkout.Head = head!;
-        return head!;
-    }
-
-    internal void PrepareAndDiscardSave(BranchCheckout checkout, IDurableObject root, StoredGraphKind kind,
+    internal void PrepareAndDiscardSave(WorkingCopy work, IDurableObject root, StoredGraphKind kind,
         ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireCheckoutWriter(checkout);
+        RequireCheckoutWriter(work);
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            using PreparedBranchSave pending = checkout.SaveSession.Prepare(root, kind, parameters ?? DefaultPolicy);
+            using var pending = work.SaveSession.Prepare(root, kind, parameters ?? DefaultPolicy);
             OperationStageObserver?.Invoke(RepositoryOperationStage.AfterPrepare);
         } finally { EndOperation(); }
     }
 
-    private IDurableObject ReadGraph(CheckpointAddress frame, CheckpointKind kind) {
+    private IDurableObject ReadGraph(CommitId commitId, CommitKind kind) {
         RequireAvailable();
-        CheckFrame(frame, kind);
         _busy = true;
-        try {
-            return ReadGraphRootCore(frame);
-        } finally { EndOperation(); }
+        try { return ReadGraphRootCore(CheckCommit(commitId, kind)); }
+        finally { EndOperation(); }
     }
-
-    private CheckpointAddress StoredHeadCore(string branchName) {
-        FrameAddress address = _storageFacade!.GetHead(branchName) ?? throw new KeyNotFoundException("Branch does not exist.");
-        return Issue(ReadHistoryCore(address));
-    }
-
 }

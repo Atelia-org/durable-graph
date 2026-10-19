@@ -193,7 +193,7 @@ Windows .NET 构建和测试由主代理串行执行；不能让包测试/生成
 - [Ancestry](../../../src/DurableGraph.Generator/DurableGraphGenerator.Ancestry.cs)、[CrossAssembly](../../../src/DurableGraph.Generator/DurableGraphGenerator.CrossAssembly.cs)、
   [Records](../../../src/DurableGraph.Generator/DurableGraphGenerator.Records.cs)、[GenericProjection](../../../src/DurableGraph.Generator/DurableGraphGenerator.GenericProjection.cs)、
   [GeneratedState](../../../src/DurableGraph.Generator/DurableGraphGenerator.GeneratedState.cs)。祖先终点须统一，不能只改诊断入口。
-- [EventHistoryRepository](../../../src/DurableGraph.Persistence/Repository.cs)、[EventHistorySession](../../../src/DurableGraph.Persistence/BranchCheckout.cs)、
+- [EventHistoryRepository](../../../src/DurableGraph.Persistence/Repository.cs)、[EventHistorySession](https://github.com/Atelia-org/durable-graph/blob/866ce89705888af5fea56a5532c7d1986a21ca65/src/DurableGraph.Persistence/BranchCheckout.cs "Pre-B2 source: Git 866ce89")、
   [GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs)、[WorldWorkspace](../../../src/DurableGraph.Persistence/WorldWorkspace.cs)。
 - [RecordStructGeneratorTests](../../../tests/DurableGraph.Tests/RecordStructGeneratorTests.cs)、
   [RecordStateProjectionTests](../../../tests/DurableGraph.Tests/RecordStateProjectionTests.cs)、
