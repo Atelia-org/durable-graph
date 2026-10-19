@@ -50,4 +50,4 @@ Before 的 anchor 仍先验证再略过；底层 Entry allowance 为 `(long)MaxI
 
 本机 `.artifacts/db096-history-pages/package-paths.json` 指向 `W:/TEMP/db096-pages-435e9c33de8c4808be4a9cb2fb16d4b4/split/result.json` 和feed/provenance；`group-package-verification.json`保Group路径与哈希。根日志为 `package-{restore,build,split,group}.log`，Split完整打包/运行日志在外部工件目录。本片新G只资格化Split/Group，最终交付仍须对最终版本验收完整活动集合。
 
-下一片为[创建登记故障专项](creation-failure-acceptance.md)，随后最终消费者/文档清理和合入；完整队列只维护在 [PROJECT-STATE](PROJECT-STATE.md)。
+后继[创建登记故障专项](creation-failure-acceptance.md)已完成源码资格，接下来是最终产品版本完整门禁与合入；完整队列只维护在 [PROJECT-STATE](PROJECT-STATE.md)。

@@ -182,7 +182,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 仍推荐继续证明[DG 独立登记候选 B](application-design.md)：只有登记成员是正式 Branch；先准备内容/物理 Head，再发布登记，最后交付 BranchInfo。普通 fork 复用准确旧 Commit；新根创建首个真实 Commit，必要时将登记与 shared Schema 更新联合发布。登记只保存成员/标签等创建属性，普通高频提交无需重写目录。
 
-fork、新根无 Schema 增长、新根有 shared 增长均已有成功与部分失败资格；剩余耐久顺序和失败窗口收敛为[定向验收清单](creation-failure-acceptance.md)。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。D/T 改为[复用 Dictionary 增量持久化](directory-persistence.md)，Head 只存图入口；1000条分支的目录恢复与更新成本须实测，不再用旧整表 payload 的1 MiB限制判断容量，不新增 GC。
+fork、新根无 Schema 增长、新根有 shared 增长均已有成功与部分失败资格；其余定向耐久顺序和失败窗口也已通过[源码验收](creation-failure-acceptance.md)，最终产品版本的完整门禁仍待交付收口。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。D/T 改为[复用 Dictionary 增量持久化](directory-persistence.md)，Head 只存图入口；1000条分支的目录恢复与更新成本须实测，不再用旧整表 payload 的1 MiB限制判断容量，不新增 GC。
 
 旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，该前置切片当时尚未提供本稿新外观，后续由 B2 接入。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；真实 Branch 的 Parent 替换、恢复/再保存、书签与历史组合已获得[隔离首段见证](branch-cutover-plan.md#8-b2-隔离分支首段纵切)；[原测试/根 solution 回归已恢复](branch-cutover-plan.md#9-b2-调用闭包与回归迁移)；[目录读取收窄](directory-persistence.md#已接受目录的查询投影)、[活动消费者与包资格](package-cutover-validation.md)及[定向 origin 接入](targeted-origin-integration.md)已完成；[真正多业务 Head 组内核](group-commit-integration.md)已完成限定验收，下一步与剩余门槛只查[工作集](PROJECT-STATE.md)。基本 summary 与单成员异常字段随 B2；附件 BLOB、加载对象寿命与 ID 字段支持继续后置。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 

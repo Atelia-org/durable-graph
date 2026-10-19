@@ -49,4 +49,4 @@ Group 首跑成功但有两处 nullable 警告，审阅又发现过期检查过�
 
 - 本片源码和上述普通包验收已完成；后继[Crash迁移](process-crash-migration.md)已恢复原6＋3窗口。组 source 测试自身不授进程 Kill、Linux、OS crash/power-loss 或总体性能保证。
 - Crash host 已迁移真实 B/S 与 D/T不变、Commit历史来源及管理pointer；一个业务B加S的进程矩阵不代表多业务组的全部Kill组合。具体运行范围只查后继验收。
-- 最终交付仍需目录树、历史分页、登记故障剩余窗口、文档/消费者清理及正式合入。状态与顺序只维护在 [PROJECT-STATE](PROJECT-STATE.md)。
+- 后继目录树、历史分页和创建故障源码资格已完成；最终产品版本的完整门禁与正式合入仍待完成。状态与顺序只维护在 [PROJECT-STATE](PROJECT-STATE.md)。

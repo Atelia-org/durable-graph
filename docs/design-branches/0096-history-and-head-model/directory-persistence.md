@@ -106,7 +106,7 @@ T = "P0T2" + hasGraph[1] + (GraphAddress[12] if hasGraph == 1)
 
 主线程运行根 `dotnet build DurableGraph.slnx`：0警告/0错误；完整 Persistence **986/986**、Runtime 的 `RepositoryPublicApiTests` / `LoadedWorldGeneratorTests` / `PreparedRevisionGeneratorTests` **16/16**，均0跳过。均显式设置 `UseStorageSources=true` 和 `StorageSourceRoot` 为 `.artifacts/db096-head-mechanism/storage-f8868b5` 的绝对路径；测试使用本次 build 的 `--no-build --no-restore` 输出。实际日志及 TRX 在本机 `.artifacts/db096-directory-lookup/{build.log,persistence.log,persistence.trx,runtime-targeted.log,runtime-targeted.trx}`。未重跑全部 Runtime suite、普通包、进程中止或吞吐实验；没有上游改动或 feed 发布。
 
-本片到此收口。后继包调用闭包与[定向 origin](targeted-origin-integration.md)已完成；后续工作和正式合入门槛只维护在[工作集](PROJECT-STATE.md)及[施工顺序](branch-cutover-plan.md#当前续接创建登记与最终验收)；不把 D 投影缓存扩大为通用查询缓存。
+本片到此收口。后继包调用闭包与[定向 origin](targeted-origin-integration.md)已完成；后续工作和正式合入门槛只维护在[工作集](PROJECT-STATE.md)及[施工顺序](branch-cutover-plan.md#当前续接最终交付验收)；不把 D 投影缓存扩大为通用查询缓存。
 
 ## 6. 窄管理读取切片
 

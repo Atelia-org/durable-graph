@@ -23,7 +23,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | [交付复核](design-branches/0096-history-and-head-model/headstore-delivery-review.md)与[误用诊断实验](design-branches/0096-history-and-head-model/handle-misuse-detection.md)确认当前能力可继续使用，不增加每引用16B scope。紧凑定位角色、标签与创建登记协议已接入隔离新内核；[新 Storage 源码接入](design-branches/0096-history-and-head-model/storage-handle-adaptation.md)与新模型分开；后者已在隔离分支通过首段纵切及原回归，D 查询投影已收窄，活动包闭包已完成；定向 origin 与组提交已完成限定验收；旧Kill host与根/子树已完成限定验收；公开分页已完成限定验收；创建登记剩余窗口、最终门禁及正式合入仍待完成。首版只追加、旧点另开、fork立即可见。 |
+| [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | [交付复核](design-branches/0096-history-and-head-model/headstore-delivery-review.md)与[误用诊断实验](design-branches/0096-history-and-head-model/handle-misuse-detection.md)确认当前能力可继续使用，不增加每引用16B scope。紧凑定位角色、标签与创建登记协议已接入隔离新内核；[新 Storage 源码接入](design-branches/0096-history-and-head-model/storage-handle-adaptation.md)与新模型分开；后者已在隔离分支通过首段纵切及原回归，D 查询投影已收窄，活动包闭包已完成；定向 origin 与组提交已完成限定验收；旧Kill host与根/子树已完成限定验收；公开分页已完成限定验收；创建登记专项已完成源码资格；最终版本完整门禁及正式合入仍待完成。首版只追加、旧点另开、fork立即可见。 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
 | [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前发布合同与活动资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |
 | [DB-076 高效 fork 技术路径](design-branches/0076-efficient-graph-fork-technical-path/0076-efficient-graph-fork-technical-path.md#10-分片施工导航) | [082 实验](design-branches/0082-prepared-immutable-leaf-reuse-slice/0082-prepared-immutable-leaf-reuse-implementation.md) 已有安全候选但未证明稳定总成本收益，默认关闭；只有真实叶模型的物化占比或多图并存内存压力提供新证据时再测，不直接扩大缓存范围。[081 前置实验](design-branches/0081-hot-commit-restoration-material-slice/0081-hot-commit-restoration-material-experiment.md) 因 reader body 完整证明不足暂停接线；仅在独立设计出可组合读写/依赖证明，或真实工作负载支持完整同源无变化提交的窄优化时重启。Capture/factory/旧历史证书均不能直接充当新 State 证明。下一产品增量由下游固定书签、历史浏览和恢复的具体反馈选择；默认 [080](design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md) 保持 |
@@ -47,13 +47,13 @@ ArtifactStore 在该路线中先由 EventHistory 覆盖事件/快照职责，不
 backing storage 显式分类及现有 InlineValue/历史链的组合。
 ValueTuple、同型多 Application 角色及引用内容比较仍各自独立，不预建通用容器平台。
 开放模板方案的评估结论与重访条件见 §3.1。
-命名分支、历史 fork/Move 和同实例 State 提交已由 DB-063 闭合；联合 Store 视图及更强恢复保证仍独立排期。
+分支只追加、旧点 ForkBranch 另开及同实例 State 提交已由当前 Branch/Commit/WorkingCopy 实现；旧 Move 退出。Artifact 联合视图及更强恢复保证仍独立排期。
 MVP 库内加载顺序为 exact 重建 → 单对象 Upgrade → 分配实例 → 填充/连接引用 → 完整交付 World；
 Transient 由用户在交付后处理，约束维护在[目标设计](DurableGraph-target-design-v0.md#恢复transient-与宿主边界)。
 数组形状、升级、单根、Transient hook、boxed value，以及无需无参构造器/readonly 字段的支持选择见
 [MVP 功能边界](DurableGraph-target-design-v0.md#mvp-功能边界)，不再作为开放范围反复讨论。
 EventHistory 的正常同实例 State 提交与严格重开从 PROJECT-STATE/DB-063 查证；不再列为未完成能力。
-公开宿主的每分支单工作副本、自由历史、独立 Checkpoint 和 named Fork 从 PROJECT-STATE 查证；每份持久图仍有单个非空 durable 根。发布故障范围仍为正常关闭/进程中止和明确的 I/O 异常，更强保证另行排期。
+公开宿主的每分支单工作副本、自由历史、独立 Checkpoint 和带显示标签的 ForkBranch 从 PROJECT-STATE 查证；每份持久图仍有单个非空 durable 根。发布故障范围仍为正常关闭/进程中止和明确的 I/O 异常，更强保证另行排期。
 DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 owner Upgrade 从 PROJECT-STATE/施工记录查证，不再列为未实现机制。
 可组合值 Upgrade 的验收与实际范围见 [DB-039](design-branches/0039-composable-value-upgrade-design/README.md#8-产品施工合同与验收映射)。
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice/README.md) 已通过整体验收；
@@ -92,7 +92,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 多态与运行时注册扩展 | 已标记 class 基类到登记派生实例按 DB-034 合同；DB-043 统一框架 object 参数不授予 object/interface 通配字段。数组协变还需空数组的历史元素 ancestry 证据，和跨程序集发现分别后继；不能自动回退成声明基类的 codec |
 | 任意外部基类适配 | DB-068 已消除框架基类要求，用户可自建逐层参与 Durable Schema 的继承体系。未标记第三方基类仍拒绝；无当前需求，不推断可支持。真实消费者确需时须先证明祖先状态、构造/恢复不变量及版本演进可建模，再裁决是否扩展 |
 | 捕获 BCL 内容的所有权 | 数组使用 owned frozen 元素 buffer，inline struct 递归捕获成标量/ID；后续容器同样不能以浅复制代替冻结，须按其内容模型验证 |
-| 根与持久目录扩展 | 根替换、独立读取与 branch/Move 已有实现；A 扩至跨类型根，见其实施记录。每份持久图仍一个非空根；Event-first 的无 State 不等于持久 null 根，不扩为命名根目录或清空 State API |
+| 根与持久目录扩展 | 根替换、独立读取与只追加分支/旧点另开已有实现；A 扩至跨类型根，见其实施记录。每份持久图仍一个非空根；Event-first 的无 State 不等于持久 null 根，不扩为命名根目录或清空 State API |
 
 当前图与 Upgrade 的合同从[目标设计](DurableGraph-target-design-v0.md)和真实产品测试进入；
 旧 fixture 接口和施工顺序不作为前置。
@@ -158,7 +158,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 | 延后项 | 何时重访 / 届时要回答的问题 |
 |---|---|
-| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | Private/ToShared 已删除；[来源 snapshot 接缝 A](design-branches/0096-history-and-head-model/history-source-seam.md)已实施验收，新 Storage 已完成源码接入，下一片按[整体切换计划](design-branches/0096-history-and-head-model/branch-cutover-plan.md)在已通过源码/活动普通包闭包和定向 origin 验收的新内核上补齐明确的剩余登记故障验收与最终交付；旧Kill host已完成迁移及有限进程验收；不再扩展旧协调器，准确顺序和未决项只查 DB-096 工作集，原语见证不代替新布局资格 |
+| [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md) | Private/ToShared 已删除；[来源 snapshot 接缝 A](design-branches/0096-history-and-head-model/history-source-seam.md)已实施验收，新 Storage 已完成源码接入，下一片按[整体切换计划](design-branches/0096-history-and-head-model/branch-cutover-plan.md)在已通过源码/活动普通包闭包和定向 origin 验收的新内核上完成最终产品版本的完整源码/普通包验收与交付审计；旧Kill host已完成迁移及有限进程验收；不再扩展旧协调器，准确顺序和未决项只查 DB-096 工作集，原语见证不代替新布局资格 |
 | [DB-094 普通 property backing 支持](design-branches/0094-backing-field-support/README.md) | 真实消费者持续因普通 class 的封装/Equals/继承需求付出字段包装成本时，先用该模型摸清声明范围、编译级 Family 切换与历史升版的影响，再选择有限路线；目前仅调研，DB-093 完成不自动开启 |
 | [DB-092 名称与组织](design-branches/0092-type-namespace-refactoring/README.md#d6-status) | 本轮引用投影 helper 与 ObjectStateKind 保名。实际手写 binding 消费者混淆引用槽与完整 body 投影，或新机制确实分开投影模式／layout 与冻结内容分类时再重访；实际业务 State 误读同样需具体消费证据。DurableFieldInfo 仅在真实槽语义歧义出现时重访，保持编号与完整相等。程序集调整只由真实依赖／独立消费边界触发，不预设拆包或全项目目录规范化 |
 | 局部倒序历史浏览（反馈 001-E） | DB-096已接通准确Commit起点、继承倒序、排他续页及两个独立限制，见[分页验收](design-branches/0096-history-and-head-model/history-pagination.md)。该功能不再列作未实施项；后续仅由真实规模测量触发Open/metadata/对象恢复成本优化，不能把HS work步数外推为整个查询的I/O上限 |
@@ -178,7 +178,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)、[DB-069](design-branches/0069-incremental-save-baseline/README.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default/README.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
 | 双图读取的后继优化 | 操作内 DTO/string 缓存、保守引用闭包和完整状态比较的现状从 PROJECT-STATE/DB-064/066 进入。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
-| 并发、分支与跨 Repository | 每 branch 单工作副本与 named Fork 从 PROJECT-STATE 查证，仓库操作仍串行。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
+| 并发、分支与跨 Repository | 每 BranchId 单工作副本与带显示标签的 ForkBranch 从 PROJECT-STATE 查证，仓库操作仍串行。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |
 | 无 CLR 迁移壳的 current Normalize | Family 路径可以保留 state-only exact reader，但 editable Load 仍需要 source 对象族的 current/migration CLR 模型。应用需要删除这层模型而继续加载旧 Revision 时，再设计独立 Normalize/退休协议；不能借 World 删除引用跳过 source 行 |
 | 历史工具/升级调用优化 | 有 package/history 或升级调用的真实限制后，再重访 DB-003 的 Try/result/ABI 和 DB-004 的多 writer/多 TFM 与批次原子性，不顺带做兼容框架 |
@@ -190,15 +190,15 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 
 [DB-087 有限 P1／P2](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)原停点已完成：默认 meta 自举、旧权威退出、显式 Shared、完整私有视图与 ToShared。新根／容器替换及双异形独立包只保删除前资格；[DB-088](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md)承接真实 baseline 开发故事和特例退出后的验收。业务比较与受控 meta 变化进入共同 writer／PendingSave／发布 owner，长期联合发布约束见[目标设计](DurableGraph-target-design-v0.md#单一发布权威与明确故障结果)。此处不再保本案必经工单。
 
-当前后继为 [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md)，覆盖旧 Private 相关路线。其他[Schema-only、分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)须有消费者或测量后形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
+当前后继为 [DB-096 统一 Catalog](design-branches/0096-history-and-head-model/shared-schema-only.md)，覆盖旧 Private 相关路线。其他[Schema-only、Schema目录分页／索引／基线与读取保存成本](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#open-questions)须有消费者或测量后形成独立小片；不预建 overlay、自动 merge/rebase、全历史账本或总 O(k) 承诺。
 
 旧包执行 lanes 已退出，保留模型仅作[编译资产](../experiments/PackageConsumerProbe/README.md#model-fixtures)；代表门禁不授其原运行故事资格。DB-081 热 seed 禁用、DB-082 默认关闭；这些不成为自举停点前置。具体当前契约／停点审计只维护[活动 DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)，历次过程按其[证据索引](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#evidence-index)查[冻结完整稿（Git 历史）](design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md")；旧“下一片”不作为当前排期。
 
 ### 4.2 开发 Schema 与正式定稿
 
-2026-10-19 用户已改选：关闭的完整 baseline → 独立 Repository 副本试验 → 定稿在干净正式基线普通升级，具体不变量与机制证据见 [DB-096](design-branches/0096-history-and-head-model/shared-schema-only.md)。同库只使用统一 Catalog；Private、混组、ToShared 和 private 新根退出。旧路径删除、有效回归/消费者迁移与格式门禁见[删除切片](design-branches/0096-history-and-head-model/private-removal.md)，旧 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)只保其原版本资格。
+2026-10-19 用户已改选：关闭的完整 baseline → 独立 Repository 副本试验 → 定稿在干净正式基线普通升级，具体不变量与机制证据见 [DB-096](design-branches/0096-history-and-head-model/shared-schema-only.md)。同库只使用统一 Catalog；Private、Shared/Private Schema 混组、ToShared 和 private 新根退出。State/Event 多 Branch 共同提交仍是当前能力。旧路径删除、有效回归/消费者迁移与格式门禁见[删除切片](design-branches/0096-history-and-head-model/private-removal.md)，旧 [DB-088 §7](design-branches/0088-development-schema-workflow/0088-development-schema-workflow.md#7-实施结果与限定验收)只保其原版本资格。
 
-保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离，不恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。新 API 的共同候选与组级保存仍按 DB-096 独立推进。
+保原用户存活身份、准确历史 Schema、正常 Upgrade 和完整帧；模型代码、编译 history 与数据副本共同隔离，不恢复等价私有入口。若要继承开发 V3/V4 数据却只交付最终版本，另行说明迁移要求；不预建原始帧合库、自动折叠 Upgrade 或草稿过滤推广。新 API 的共同候选与组级保存已由 DB-096 实施，准确资格和剩余交付门槛只查其工作集。
 
 ### 4.3 checkout 执行环境与 factory 查询入口
 

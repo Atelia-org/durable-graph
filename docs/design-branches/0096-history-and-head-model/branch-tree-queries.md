@@ -35,4 +35,4 @@
 
 ## 后续
 
-本片源码与受影响普通包验收已闭合，后继推进公开历史分页；登记故障剩余窗口、最终消费者/文档清理和正式合入仍待完成。完整目标和顺序仅维护在 [PROJECT-STATE](PROJECT-STATE.md)。
+本片源码与受影响普通包验收已闭合，后继[公开分页](history-pagination.md)和[创建故障源码资格](creation-failure-acceptance.md)亦已完成；最终版本完整门禁和正式合入仍待完成。完整目标和顺序仅维护在 [PROJECT-STATE](PROJECT-STATE.md)。

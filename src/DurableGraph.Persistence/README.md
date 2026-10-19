@@ -17,6 +17,9 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 |---|---|
 | 历史 checkpoint 书签目录 | [RepositoryResources.Bookmarks](RepositoryResources.Bookmarks.cs) |
 | 公开仓库、持续编辑与历史读取 | [Repository](Repository.cs)、[WorkingCopy](WorkingCopy.cs)、[Checkpoint](Checkpoint.cs)、[BranchId](BranchId.cs)／[CommitId](CommitId.cs)／[CommitKind](CommitKind.cs) |
+| 多分支请求与共同提交 | [CommitRequest](CommitRequest.cs)、[Repository.CommitBranches](Repository.GroupCommit.cs)；单提交复用此内核 |
+| 根分支与包含起点的平面子树 | [Repository.ListRootBranches／ListBranchSubtree](Repository.cs)；无需业务模型，当前验证整个已登记森林 |
+| 准确历史起点与受限分页 | [HistoryStart／HistoryPageLimits](HistoryStart.cs)、[CommitHistoryPage](CommitHistoryPage.cs)、[Repository.ReadHistoryPage](Repository.HistoryPage.cs) |
 | graph／branch-ref／tag 发布失败合同 | [RepositoryPublicationException／Outcome](RepositoryPublicationException.cs)；内部 [RepositoryOperationStage](RepositoryOperationStage.cs) 仅为故障注入 hook |
 | 准确执行环境与共同恢复／比较 | [ModelExecutionEnvironment](ModelExecutionEnvironment.cs)、[GraphReader](GraphReader.cs) |
 | meta 查询、意图与 Schema 工厂 | [SchemaCatalogView](SchemaCatalogView.cs)、[SchemaCatalogWorkspace](SchemaCatalogWorkspace.cs) |
@@ -29,6 +32,7 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 
 单提交与 `CommitBranches` 复用共同发布内核；请求绑定活 WorkingCopy 和准确 Base，执行时捕获。当前保存统一向资源 owner 的 accepted Catalog 准备，准确历史 Schema 与 source/prior 验证保留；旧 Private/ToShared 合同不再适用。实际普通包门禁见
 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)。
+组提交、树查询及分页的公开调用见[GroupCommitConsumer](../../experiments/PackageConsumerProbe/GroupCommitConsumer/README.md)；当前分支、源码与包的当期证据及剩余门禁只查 [DB-096 工作集](../../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。
 旧 raw 消费者只保模型编译资产，不授原运行故事资格。进程 Kill 见证使用
 [MetaBootstrapCrashProbe](../../experiments/MetaBootstrapCrashProbe/README.md)；新布局已通过6个B/S保存窗与3个初始化窗，准确范围见[验收](../../docs/design-branches/0096-history-and-head-model/process-crash-migration.md)，不外推全部多业务组Kill或断电资格。
 逐片历史稿与旧格式从 `6dbaf0e` 查阅；当前产品不保第二保存/恢复路径。

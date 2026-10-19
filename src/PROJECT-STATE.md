@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：位于隔离分支 `db096/branch-repository-cutover`，Storage pin 已到 `70b406c`。Branch/Commit/WorkingCopy、新布局、D 查询投影与活动消费者迁移已完成；定向来源查询已接入，单点不扫描无关 Head，完整列表在登记集合内检查环。源码与新包的限定验收见[定向来源接入](../docs/design-branches/0096-history-and-head-model/targeted-origin-integration.md)，原11门禁保其[原 G/S 资格](../docs/design-branches/0096-history-and-head-model/package-cutover-validation.md)。真实多 Branch 提交与 owner 共同 Catalog 已通过[源码验收](../docs/design-branches/0096-history-and-head-model/group-commit-integration.md)，新 G 的 Split/Group/Meta 普通包验收通过；[旧 Kill host迁移](../docs/design-branches/0096-history-and-head-model/process-crash-migration.md)已恢复6＋3窗口；[根/子树查询](../docs/design-branches/0096-history-and-head-model/branch-tree-queries.md)已通过源码与新 G 的 Split/Group 普通包验收；[公开分页](../docs/design-branches/0096-history-and-head-model/history-pagination.md)亦已通过源码与新 G Split/Group 验收；下一片补创建登记的定向故障窗口，再做最终清理、完整门禁及合入。完整目标和队列只维护在[DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，下面旧阶段记录保其版本意义。
+2026-10-19：位于隔离分支 `db096/branch-repository-cutover`，Storage pin 为 `70b406c`。Branch/Commit/WorkingCopy、统一 Catalog、D/T Dictionary、组提交、根/子树及公开分页已完成实现与逐片源码/包验收；[创建登记专项](../docs/design-branches/0096-history-and-head-model/creation-failure-acceptance.md)亦已通过源码反例，并修复Tag重复包装发布异常。活动旧API文档已清理。下一步为[最终交付验收](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)：为尾修制作新G，完成最终根回归和12个活动普通包门禁，再审计并合入。既有6＋3Kill证据保其范围，不扩为掉电或所有多业务组组合。准确版本、当前队列与明确延期只维护在[DB-096工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下的资格见 B1，新历史模型的真实纵切及迁移回归见 B2；两者不混为同一次验收。
 
@@ -52,8 +52,8 @@ H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#
 
 [DB-087 当前停点](../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#current-status)：约定的有限 P1／P2 产品范围已完成。默认公开路径使用 meta 自举；DurableSchema 完整逻辑内容经固定员工 DTO／工厂恢复，存活 Dictionary 与 descriptor 共用对象版本保存，只有一份业务保存／恢复和发布 owner。旧保存／typed reader／Schema 权威／raw Storage 束已退出，共用 payload／计量、地址、只读字典与 owned LRU 保留。
 
-当前保存统一跟随 latest Shared Catalog；同 key 异形拒绝，新增定义与业务目录走同一两 Head CU。无新增 Catalog 时只发布业务目录。Private/ToShared 入口和私有来源、推广/remap、完整 selected-view admission 扫描退出；P0R2 根准入隔离旧布局。
-Open 只选择资源读写；Shared 命名创建/签出/Fork 取得可保存工作副本。业务恢复／比较取最近 State.S；checkout 执行 S／models 在寿命内固定，State 保存可推进 selected S。历史图与对象 batch 的准确 Schema 继续保留，开发同版本异形试验在完整关闭库的独立副本进行。
+当前保存共用 owner 的 accepted Schema Catalog，同 key 异形拒绝；普通提交发布所选业务 Head，必要时与新 S 共同发布，多 Branch 使用一次共同候选与原子发布。新根和 fork 通过 D 登记，普通保存不更新 D。Private/ToShared 已退出；当前 D/S/T 布局与旧 P0R2 删除片分别保其来源意义。
+Open 选择资源读写，创建/fork 返回 BranchInfo，OpenWorkingCopy(BranchId) 获取编辑能力；标签不作为寻址或占用键。执行 S/models 在工作副本寿命内固定，State 保存可以推进持久基线但不刷新执行环境。历史图与对象 batch 保准确 Schema，开发同版本异形试验在完整关闭库的独立副本进行。
 
 准确 origin／selected／execution S、共同 source／pending／fault owner、history／Pair／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
@@ -66,7 +66,7 @@ DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿
 [DB-086](../docs/design-branches/0086-new-storage-refactoring-plan/README.md)只保现行正常 backing 恢复、完整帧稳定、必要读取、fault/lifetime 与离线救援约定；物理地址与轮转由 FS/HS 承担，准确 pin 和操作见[依赖指南](../docs/storage-dependency.md)。
 
 [DB-084 DG tag 接入](../docs/design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
-旧上游 bytes tag 接入已由 [DB-096 书签目录](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)取代；不可变绑定由 DG 拥有。State 和 Event-first 都可跨重开定位，解析签发当前打开地址，不物化图或推进分支。
+旧上游 bytes tag 接入已由 [DB-096 书签目录](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)取代；不可变绑定由 DG 拥有。State 和 Event-first 都可跨重开定位，解析验证并返回准确 CommitId，不物化图或推进分支；该值可在同库重开后使用。
 普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，重开按名字检查实际结果，不自动重试。物理尾恢复由底座承担。
 准确公开包、故障与真实包证据集中于接入记录。下一步由下游固定书签/历史浏览/分叉续写的真实反馈选择产品增量。
 
@@ -80,7 +80,7 @@ A/B 显示 Family 物化改善，但完整 Fork 未见稳定收益；不以减�
 反例与历史证书隔离见证进入回归；未改产品 API、发布或 provider 合同。重启条件与备选只维护在实验记录及路线图。
 
 [DB-080：最近 State 准备材料复用](../docs/design-branches/0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-implementation.md) 已实施并独立验收。
-Checkout/Fork 独立选择请求历史位置后复用一个精确 State 槽；默认准确 reader 环境／完整标准依赖接线源于 [DB-087 归档 §28（Git 历史）](../docs/design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用")，命中仍独立物化和导入保存身份。旧全局 Schema 后登记不污染已 pin 的历史 S。
+OpenWorkingCopy 按所选 Branch 的准确 current 恢复时复用一个精确 State 槽；ForkBranch 自身只登记分支，不恢复对象。默认准确 reader 环境／完整标准依赖接线源于 [DB-087 归档 §28（Git 历史）](../docs/design-branches/0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:docs/archive/2026-10-13/0087-meta-bootstrap-refactoring-route.md#28-p1c-第九片split-checkoutfork-准备材料复用")，命中仍独立物化和导入保存身份。旧全局 Schema 后登记不污染已 pin 的历史 S。
 证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
 默认启用的依据是实测高命中路径准备计数和分配下降；没有完整 Fork 普遍加速或总堆有界的承诺，具体证据只保留在实施记录。
 
@@ -89,7 +89,7 @@ Checkout/Fork 独立选择请求历史位置后复用一个精确 State 槽；�
 
 [078-A](../docs/design-branches/0078-editable-checkpoint-fork-slice/0078-a-repository-free-history-implementation.md) 的非泛型入口、自由历史与跨类型 State，
 以及 [078-B](../docs/design-branches/0078-editable-checkpoint-fork-slice/0078-b-checkpoint-history-query-implementation.md) 的独立 Checkpoint/固定查询、
-[078-C](../docs/design-branches/0078-editable-checkpoint-fork-slice/0078-c-branch-checkout-fork-implementation.md) 的每分支占用/named Fork 保持。
+[078-C](../docs/design-branches/0078-editable-checkpoint-fork-slice/0078-c-branch-checkout-fork-implementation.md) 的每分支占用和带标签分叉由 DB-096 改为 BranchId 占用、ForkBranch 登记后另行打开 WorkingCopy。
 DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) 的 tag 目标由 DB-084 接入。
 应用持久保存自身执行阶段和处理进度；库没有 PendingEvent，不从 E/S 次序推断业务完成，也不提供外部副作用 exactly-once。
 
@@ -166,7 +166,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy 已在隔离分支通过原回归；活动包闭包与定向 origin 已完成；组提交和 owner 共同 Catalog 已获源码与受影响普通包资格；树查询已获源码与受影响普通包资格；公开分页已完成限定验收；创建登记剩余窗口、最终门禁及合入待补 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy 已在隔离分支通过原回归；活动包闭包与定向 origin 已完成；组提交和 owner 共同 Catalog 已获源码与受影响普通包资格；树查询已获源码与受影响普通包资格；公开分页已完成限定验收；创建登记源码资格已闭合；最终版本完整门禁及合入待补 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
@@ -292,32 +292,27 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
   共同 workspace／候选在 State 确认后才安装原实例／新根；独立 Event 使用最近 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State rewrite。
   Event 完整目录按 source − candidate 产生 Removes，保实际 local Base/Delta 与内容来源 external heads；后继 State 仍相对最近 State。
-- Repository 拥有 RepositoryResources 的 FS/HS 底座锁，不再另持 repository.lock；每分支最多一个活动 BranchCheckout，仓库操作串行。
-  CreateSharedBranch(initialState) / CreateSharedBranchFromEvent(initialEvent) 先发布真实非空 S/E 再交付；不暴露空 head。
-  CommitEvent/CommitState 自由排列；Event 不推进 State 基线或接受其 live 身份。
-  业务 Parent 指向提交前精确 Head；业务内容来源取该 Parent 自身或祖先中最近 State，无 State 时为 null，旧称 Revision Parent。
-  Checkout 保持精确 Head，只恢复最近 State 及完整来源；纯 Event 前缀交付 State=null、全新空 CaptureSession。
-  Fork 在完整 guard 内占用新名字、恢复并构造工作副本后才发布 ref，不追加历史图；源副本可保持存活，未提交修改不参与。
-  不同恢复的 mutable 图独立，完整身份与保存来源保持；普通恢复失败不留 ref，发布后失败依 outcome/fault 重开检查。
-  ordinal 名称集合只管理编辑占用；显式 Dispose 释放，不强持副本或靠 GC 解锁，未交付只清理本次取得的占位。
-  既有 State 损坏或缺模型能力会失败，不回退旧 State 或假装无 State。事件内容由应用显式 ReadEvent。
-  State 根按实际模型选择，可跨类型替换，成功后安装原实例；已有 child 升根、旧 root 降为 child 保持 ID，不可达成员退出目录。
-  冷 Event-only 历史不导入 Event ID；不同 Revision 的对象数字 ID 可以重合，身份须在具体 Revision 内解释。
-  CheckpointAddress 由本次打开签发，相等性为 owner+图帧位置；跨 repo/重开旧地址拒绝，裸 RevisionAddress 只作诊断。
-  CreateTag/ResolveTag 使用上游独立于 branch 的不可变名称空间；同名一律拒绝，重开按名字签发新句柄，不要求领域模型。
-  tag 不追加图、不改工作副本/准备槽；发布异常即使 NotPublished 也可能 fault，重开 ResolveTag 检查实际结果。
-  ReadEvent/ReadState 独立物化，ReadPair 按显式只读共享合同使用；ref-only CreateBranch 不占用编辑名，Move 只拒绝活动目标分支。
-  ReadCheckpoint 一次独立恢复当前图与最近严格祖先的相反角色图，最多两图；稳定 getter，PreviousX 缺失时根/地址成对为空。
-  EnumerateEvents 固定历史结尾，仅返回地址；下界首项前验证，每次 MoveNext 检查寿命，交付项时不占 guard/lease。
-  Schema 只记录受控意图，真实 E/S 的 joint Save 才接受；先追加 meta／业务对象与目录／图，新增 shared 时用 VS 两 ref CU，共同 data-first 确认，发布后不重捕或运行模型回调。
-  RepositoryPublicationException 区分 NotPublished / Unknown / Published；NotPublished 也须检查 IsFaulted，故障后 dispose/reopen，无透明重试或领域修改回滚。
-  重开只读必要根与所选 Schema；准备所选图时检查两种 Parent、完整内容和图语义。不启动全库/orphan 图审计；只读不创建、flush 或修尾。
-  恢复保证仍限正常关闭、进程中止和明确 I/O 故障；无 OS crash/power loss、目录元数据或完整后缀外部删除检测保证。
+- Repository 拥有 RepositoryResources 的 FS/HS 底座资源；操作串行，每个 BranchId 最多一个活动 WorkingCopy，显式 Dispose 释放编辑占用。
+  CreateRootBranchFromState/Event 先保存真实非空业务根并登记 D，再返回 BranchInfo；OpenWorkingCopy 单独恢复对象，Event-only 历史可以 State=null。
+  ForkBranch 固定继承准确 Commit，不制造 clone Commit、不恢复对象；创建成功后可立即列出、冷重开和继续，后续打开失败不撤销已登记分支。
+  标签可重复且不用于定位；父子线均能继续。从继承历史选择 A/a1 开新线，其直接父仍为 A。
+  业务历史权威为 HS Entry 顺序与固定 fork 来源；业务图不持久化 Parent，内容来源取该 Commit 严格之前的最近 State。
+  BranchId 是4B继续目标，CommitId是12B准确位置，可持久保存并在同库重开使用；跨库误用仅作概率诊断，仓库由调用者选择。
+  State/Event 可自由排列；成功 State 安装原实例和内容基线，Event 只推进 BaseCommitId，不保存 State 编辑或消费其 rewrite。
+  CommitRequest 保原 WorkingCopy、准确 Base、根引用和自有摘要，不提前捕获或设 Consumed；CommitBranches 统一捕获/Schema候选并共同发布、逐成员安装。
+  LoadState/LoadEvent 按准确角色独立恢复；LoadLatestSavedState 返回所选点及不晚于它的真实 State 来源，不执行 Event。
+  ReadCheckpoint 与 ReadPair 保复合恢复/只读共享合同；ReadFrames 完整物化旧到新描述，EnumerateEvents 保固定边界与枚举寿命检查。
+  根/子树查询验证正式登记森林、不恢复业务对象；ReadHistoryPage 从准确anchor向祖先分页，预算/取消/清理失败不交付部分页。
+  CreateTag/ResolveTag 使用 DG 的 T Dictionary，按不可变名称绑定 CommitId；创建可追加管理图，不改变业务 Head 或工作副本基线。
+  真实 E/S 图始终校验准确历史 Schema、完整内容及来源，缓存命中不免验证。State 跨实际类型替换及对象身份保持的细节见共同恢复/保存内核。
+  RepositoryPublicationException 保各成员已知身份和 NotPublished/Unknown/Published；物理 Head 成立不等于 DG 登记，NotPublished 也须检查 IsFaulted。
+  正常打开只读必要控制根；完整帧 append-only，fault 后关闭重开，不透明重试、不回滚领域内存。恢复范围不扩大到 OS crash/power-loss 或任意外部文件修改。
+  当前调用与合同入口见[README](../README.md)、[术语表](../docs/DurableGraph-glossary.md)和[DB-096工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。
 - 迁移壳可保留旧族 reader/Upgrade，退出 current World 可达闭包后不分配；仍完整验证 source 行。
   传统生成路径不为完全删除的族生成 reader；Family 路径可按 retained history 生成 state-only exact reader，
   但 editable Load 仍要求每个 source 引用对象族有 current/migration CLR 模型和 Normalize。只承诺读已 Remove 该族的新 Revision 才能删除其恢复能力，
   仍支持旧 Revision 则须保留相应 reader/Normalize。见 DB-036 H1 真实包回归。
-- 旧 LoadedWorld／WorldWorkspace 保存壳退出，真实准备／恢复与连续保存分别由共同 GraphReader／BusinessWorkspace 和 BranchCheckout／BranchSaveSession 承担；不保替代旧保存适配器。
+- 旧 LoadedWorld／WorldWorkspace 保存壳退出，真实准备／恢复与连续保存分别由共同 GraphReader／BusinessWorkspace 和 WorkingCopy／BranchSaveSession 承担；不保替代旧保存适配器。
   Empty 反向映射选择最小 source ID，但基线槽保留旧 ID，首次 Capture 形成真实 Delta/Remove。
   分配从完整 source live max+1 起，只承诺会话内单调；uint 耗尽不阻止已有对象保存。
   恢复的可达 durable 实例身份导入同一捕获会话；child-only 修改不改变 owner ID 槽，

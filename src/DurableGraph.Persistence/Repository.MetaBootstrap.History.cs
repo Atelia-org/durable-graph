@@ -54,6 +54,7 @@ public sealed partial class Repository {
         try { OperationStageObserver?.Invoke(RepositoryOperationStage.BeforePublication); }
         catch (Exception error) { throw new RepositoryPublicationException(RepositoryPublicationOutcome.NotPublished, null, error); }
         try { _resources.CreateStoredTag(name, id, out outcome); }
+        catch (RepositoryPublicationException) { throw; }
         catch (Exception error) {
             if (outcome == PublicationOutcome.NotAttempted && !_resources.IsFaulted) { throw; }
             throw new RepositoryPublicationException(MapOutcome(outcome), null, error);

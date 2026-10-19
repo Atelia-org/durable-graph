@@ -48,6 +48,9 @@ OpenWorkingCopy 不切换 Repository 的全局“当前分支”。Commit 后工
 | <a id="immutable-tag"></a>**不可变书签（tag）** | 持久名字绑定一个固定 Commit；创建后不移动、覆盖或删除，按名解析同一 CommitId，不占工作副本。 | `CreateTag` / `ResolveTag`；由 T 管理目录承载，不调用 HS 的 HeadSetTag。 |
 | <a id="fork"></a>**分叉（Fork）** | 从准确 Commit 创建独立 Branch 并返回描述；固定继承选点，无本地 Commit 时仍可列出、预览和重开。源工作副本未提交修改不参与，父线可继续。 | `ForkBranch(sourceCommitId, displayLabel)`，随后另行 OpenWorkingCopy；创建不物化领域对象，恢复失败不会撤销已登记 Branch。 |
 | <a id="commit"></a>**提交动作（CommitState / CommitEvent）** | 捕获并发布到工作副本绑定的分支；成功后更新 BaseCommitId。State 另安装原候选实例及保存基线，Event 不安装 State。Append 和 CaptureSession.Accept 本身均不是发布。 | [WorkingCopy](../src/DurableGraph.Persistence/WorkingCopy.cs)；无参 State 提交要求已有 State，显式非空根可建立首 State 或跨类型替换。 |
+| **延迟提交请求（CommitRequest）与多分支提交** | 请求绑定活工作副本与准确 Base，保留根引用并在创建时复制摘要，执行时才捕获。非空组每分支最多一项，可混合 State/Event；全部业务提交与必要 Catalog 共同发布。成功使旧请求过期，不回滚领域修改或外部效果。 | [CommitRequest](../src/DurableGraph.Persistence/CommitRequest.cs)、[CommitBranches](../src/DurableGraph.Persistence/Repository.GroupCommit.cs)；异常的 Members／Outcome 与 owner 的 IsFaulted 分别解释。 |
+| **根目录与分支子树** | 返回正式 BranchInfo，无需业务模型登记；子树为包含起点的平面集合，空 fork 可见，无排序保证。当前会读取并验证整个已登记森林，不是仅访问子树的磁盘查询。 | [ListRootBranches／ListBranchSubtree](../src/DurableGraph.Persistence/Repository.cs)。 |
+| **准确历史起点与分页** | HistoryStart 绑定准确 Commit，AtOrBefore 包含选点，Before 排除但仍验证选点；页面返回继承倒序的 State/Event 描述，不物化领域对象。用返回的 Continuation 续页，满页不保证还有数据，末尾可有空完成页。条数与 HS 工作预算独立；预算耗尽或取消不返回部分页，工作预算不界定全部 I/O。 | [HistoryStart／HistoryPageLimits](../src/DurableGraph.Persistence/HistoryStart.cs)、[CommitHistoryPage](../src/DurableGraph.Persistence/CommitHistoryPage.cs)、[ReadHistoryPage](../src/DurableGraph.Persistence/Repository.HistoryPage.cs)。 |
 | <a id="revision"></a>**图修订（Revision）** | 一次图存储版本，包含准确根、对象版本与存活目录，可承载 State、Event 或 Meta。完成的图不一定已发布为 Commit，写计划也不授发布资格。 | [StoredGraphRevision](../src/DurableGraph.Persistence/GraphPersistenceContracts.cs)；旧 [StateRevision](#state-revision) 只作历史检索。 |
 
 **每分支至多一个活动工作副本**，不同分支可各有一个，同分支第二次打开拒绝。

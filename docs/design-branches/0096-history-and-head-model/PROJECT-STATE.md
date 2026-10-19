@@ -13,7 +13,7 @@
 
 用户已将本设计设为持续目标：在无兼容性负担下，实现已接受的 Branch/Commit/WorkingCopy 功能族，补齐多分支原子提交、根/子树目录查询和历史分页，完成旧 API 替代、活动消费者迁移、源码与普通包验收、文档清理及正式合入。只完成其中一片不能宣称整体完成；BLOB、ID durable 字段等明确后置项不自动扩为本目标必经条件。
 
-每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：登记故障剩余窗口、最终完整包门禁、文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
+每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：最终版本完整源码/包门禁、交付审计与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
 
 活动消费者迁移及原11个普通包门禁已完成，见[原片资格](package-cutover-validation.md)。[定向来源查询](targeted-origin-integration.md)已完成上游实施、DG 接入和新包增量验收；两个版本的证据不混用。只完成依赖和包闭包不等于0096整体完成。
 
@@ -50,11 +50,13 @@
 
 **已完成基础：根/子树查询已完成源码与新 G 普通包验收。**`ListRootBranches()` 与包含起点的 `ListBranchSubtree(branchId)` 共用已登记森林验证；不恢复业务对象，不增加持久父关系或索引。多根/重复标签、真实来源、空fork冷开及损坏/寿命边界已验证，准确源码、包版本和成本限度只查[树查询验收](branch-tree-queries.md)。
 
-**当前停点：[公开历史分页](history-pagination.md)已完成源码与新 G 的 Split/Group 普通包验收。**一次准确 `ReadEntryHistory` 扫描返回所有 State/Event 描述；Before验证再排除，页满成功、预算/取消/清理失败不交付前缀。固定anchor/跨fork/空末页/过滤后续进、冷开无业务模型与清理后DG独立fault均已实际验证，准确版本和29项新反例只查验收记录。
+**已完成基础：[公开历史分页](history-pagination.md)已完成源码与新 G 的 Split/Group 普通包验收。**一次准确 `ReadEntryHistory` 扫描返回所有 State/Event 描述；Before验证再排除，页满成功、预算/取消/清理失败不交付前缀。固定anchor/跨fork/空末页/过滤后续进、冷开无业务模型与清理后DG独立fault均已实际验证，准确版本和29项新反例只查验收记录。
 
-**下一片：[创建登记剩余故障验收](creation-failure-acceptance.md)。**现有成功和部分失败资格保留；只补11个定向窗口及既有fork Unknown的冷开断言：物理Create/Fork与D登记的两层结果、root无S/有S的缺少终止窗口、fork登记写前、fork/tag管理安装及root成员安装。使用现hooks，不扩Kill/平台/掉电矩阵。完成后转最终API/消费者/文档清理、最终源码与完整普通包门禁，再合入。
+**当前停点：[创建登记故障验收](creation-failure-acceptance.md)已完成源码资格。**11个定向窗口和既有fork Unknown冷开补强通过；修复CreateTagCore对已分类发布异常的重复包装，保原直接故障与outcome/fault。活动README/术语表/target/产品工作集的旧API与旧历史权威表述已清理，不更改历史证据含义。该产品尾修尚无新G普通包资格。
 
-**压缩后恢复顺序：完整读本文 → 创建登记故障清单 → 当前 GroupSave/MetaBootstrap 与清单所列既有反例，确认各hook实际所属阶段。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`；source模式显式restore/build，包模式使用完整feed。完成的组提交、origin、树查询、分页及Kill门禁不重做；新产品变更按自身影响范围获得资格。
+**下一片：[最终交付验收](final-delivery-acceptance.md)。**从干净最终源码打新G，source/package边界分开；运行最终根回归及12个活动runner（原11加Group），README候选可另用独立G但同产品来源。核对显式能力与证据、旧public API和活动文档，再正式合入master。不要把旧G的Split/Group通过外推到Tag尾修；也不重做已闭合原语或扩平台Kill矩阵。
+
+**压缩后恢复顺序：完整读本文 → 最终交付清单 → PackageConsumerProbe活动runner及上次准确feed/运行入口。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`；source模式显式restore/build，包模式使用完整feed。完成的组提交、origin、树查询、分页、创建故障原语及Kill门禁不重做；新产品变更按自身影响范围获得资格。
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -68,15 +70,15 @@
 
 - **已完成基础：**来源 snapshot 接缝 A、Storage B1、B2 新布局/外观、原回归迁移、D 查询投影、活动消费者与定向 origin。各片只证明其实际版本，历史记录不作为未完成工单。
 - **组提交已完成：**owner accepted Catalog和操作内共同候选；全员先准入、再Capture，guard覆盖输入枚举与整个调用。Capture清理由协调器统一负责，旧每WC dirty Catalog已退出；各工作副本执行环境保持冻结。一次真实CU、全部Base推进、State/Event差异和清理/outcome反例已有资格，进程Kill与平台范围不由此外推。
-- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核已保原创建回归，剩余登记失败窗口已只读收敛为[11项与一处冷开补强](creation-failure-acceptance.md)，尚未新增运行。新根不能假定 CreateHead 参加 PublishHeads。
+- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核已保原创建回归，[11项与一处冷开补强](creation-failure-acceptance.md)已通过源码验收。新根不能假定 CreateHead 参加 PublishHeads。
 - **树与历史页：**均已通过源码与各自新 G 的受影响普通包验收；固定准确anchor、Before排除重复首项、页满成功及预算整次失败已接线。HS work预算不包含完整DG metadata/总I/O，不是规模性能资格。
-- **最终交付：**完成以上功能、故障边界和调用示例，重核源码与普通包门禁、文档/旧 API 清理（包括 src/PROJECT-STATE 仍保留的旧 API 能力细节），再正式合入。新版本必须有自己的资格，不借用前片绿色记录。
+- **最终交付：**以上功能与故障边界已逐片闭合，活动旧API文档已清理；按[完整清单](final-delivery-acceptance.md)资格化最终源码和普通包、核对文档与消费者，然后正式合入。新版本必须有自己的资格，不借用前片绿色记录。
 
 允许略调签名、返回形状和内部组织，以减少重复状态、读取量或资源占用；调整必须仍满足已接受功能和调用体验。有新证据才能重访已排除方案，不以性能猜测牺牲正确性，不把成本转移成应用重复样板代码。不增加合并、原线rewind、GC、跨库事务或通用分布式框架。
 
 ## 已知未决项与明确延期
 
-待闭合：登记故障矩阵的明确剩余窗口，以及最终完整门禁、文档/正式合入。旧Kill host已恢复且实际矩阵通过。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
+待闭合：最终产品版本完整源码/包门禁、交付审计与正式合入。旧Kill host已恢复且实际矩阵通过。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
@@ -108,7 +110,8 @@
 | D/T Dictionary 复用、固定读取边界和管理候选 | [目录持久化](directory-persistence.md) |
 | 根与子树目录查询 | [实施与验收](branch-tree-queries.md) |
 | 公开历史分页 | [实施与验收](history-pagination.md) |
-| 创建登记剩余故障窗口 | [定向清单](creation-failure-acceptance.md) |
+| 创建登记故障边界 | [源码验收](creation-failure-acceptance.md) |
+| 最终门禁及合入审计 | [交付清单](final-delivery-acceptance.md) |
 | 定向读取已登记 Head 的创建来源 | [实现与验收](targeted-origin-integration.md)；[原请求](headstore-origin-request.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |
 | 上游实际交付、API和验收限度 | [交付复核](headstore-delivery-review.md) |

@@ -182,6 +182,10 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         Leaf deliveredLeaf = Assert.IsType<Owner>(warm.State).First!;
         CommitId newer = main.CommitState(Graph(9)).Id;
         int hydrates = control.LeafHydrates;
+        var oldDirectory = ResourcesOf(repository).Heads.ReadHead(1).Unwrap().Id;
+        var oldSchema = ResourcesOf(repository).Heads.ReadHead(2).Unwrap().Id;
+        var oldBookmarks = ResourcesOf(repository).Heads.ReadHead(3).Unwrap().Id;
+        BranchId? failedTarget = null;
         if (phase == "unknown") {
             InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => throw new IOException("Unknown after actual root append"));
         }
@@ -195,6 +199,7 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
         } else {
             RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => repository.ForkBranch(newer, "candidate"));
             Assert.Equal(phase == "after" ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.Unknown, error.Outcome);
+            failedTarget = error.TargetBranchId;
         }
         Assert.Equal(hydrates, control.LeafHydrates); // Fork publishes before any restoration.
         Assert.Equal((byte)7, deliveredLeaf.Value);
@@ -211,6 +216,29 @@ public sealed class DB082LeafReuseFailureTests : IDisposable {
             Assert.True(repository.IsFaulted);
             Assert.Null(repository.PreparedStateEntry);
             Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.ForkBranch(newer, "blocked").Id));
+        }
+        if (phase == "unknown") {
+            Assert.NotNull(failedTarget);
+            // Close every old facade before checking what the actual single-D append published.
+            warm.Dispose();
+            main.Dispose();
+            repository.Dispose();
+            using Repository reopened = Repository.OpenExisting(_path, Models(new()));
+            var resources = ResourcesOf(reopened);
+            Assert.NotEqual(oldDirectory, resources.Heads.ReadHead(1).Unwrap().Id);
+            Assert.Equal(oldSchema, resources.Heads.ReadHead(2).Unwrap().Id);
+            Assert.Equal(oldBookmarks, resources.Heads.ReadHead(3).Unwrap().Id);
+            BranchInfo created = reopened.ReadBranchInfo(failedTarget.Value);
+            Assert.Equal("candidate", created.DisplayLabel);
+            Assert.Equal(newer, created.ForkedFromCommitId);
+            Assert.Equal(newer, reopened.ReadCurrentCommit(created.Id).Commit.Id); // No clone c0.
+            Assert.Equal(newer, reopened.ReadCurrentCommit(main.BranchId).Commit.Id);
+            Assert.Equal((byte)9, Assert.IsType<Owner>(reopened.LoadState(newer)).First!.Value);
+            using WorkingCopy continued = reopened.OpenWorkingCopy(created.Id);
+            CommitId saved = continued.CommitState().Id;
+            Assert.Equal(created.Id, new BranchId(saved.Value.HeadId));
+            Assert.Equal(newer, new CommitId(resources.ReadPrevious(saved.Value)!.Id));
+            Assert.Equal(newer, reopened.ReadCurrentCommit(main.BranchId).Commit.Id);
         }
     }
 

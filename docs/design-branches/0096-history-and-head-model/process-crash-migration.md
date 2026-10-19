@@ -40,4 +40,4 @@
 
 ## 限度与后续
 
-本片保一个业务B加S的两成员CU和工厂三控制Head窗口，不宣称穷尽多业务Branch进程中止组合、OS crash/power-loss、Linux或性能。既有组提交55项source反例与普通包验收见[组提交记录](group-commit-integration.md)。此门槛闭合后，继续根/子树、分页和最终合入，完整队列只查[工作集](PROJECT-STATE.md)。
+本片保一个业务B加S的两成员CU和工厂三控制Head窗口，不宣称穷尽多业务Branch进程中止组合、OS crash/power-loss、Linux或性能。既有组提交55项source反例与普通包验收见[组提交记录](group-commit-integration.md)。后继根/子树、分页和创建故障源码资格均已闭合；最终版本门禁及合入队列只查[工作集](PROJECT-STATE.md)。
