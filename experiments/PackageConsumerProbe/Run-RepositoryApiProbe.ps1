@@ -153,6 +153,7 @@ Console.WriteLine("RepositoryApi:BranchCommitIds:SharedColdSave:Passed");
     $build = @('build', $project, '-c', 'Release', '--no-restore', '-t:Rebuild', '-m:1', '-nr:false', '-p:DurableGraphSchemaHistoryMode=Verify', '-p:UseStorageSources=false')
     $null = Execute 'positive-publish' ($build | ForEach-Object { $_.Replace('DurableGraphSchemaHistoryMode=Verify', 'DurableGraphSchemaHistoryMode=Publish') })
     $cases = @(
+        @('old-state-address', '_ = repository.OpenWorkingCopy(default).StateRevisionAddress;', 'CS1061', 'StateRevisionAddress'),
         @('checkout', 'repository.Checkout("main");', 'CS1061', 'Checkout'),
         @('fork', 'repository.Fork("fork", checkpoint);', 'CS1061', 'Fork'),
         @('event-create', 'repository.CreateBranchFromEvent("events", state);', 'CS1061', 'CreateBranchFromEvent'),

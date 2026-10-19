@@ -4,7 +4,7 @@ This independent PackageReference consumer is the recommended small snapshot/rec
 for [DB-065](../../../docs/design-branches/0065-event-history-consumer-contract-slice/README.md).
 It does not use repository ProjectReferences, manual generator wiring, or private fault hooks.
 The existing [EventHistoryConsumer](../EventHistoryConsumer/README.md) separately retains its
-Upgrade and deliberately mutable-alias mechanism regressions.
+historical models and schema-history compilation assets; Git retains the retired Upgrade and mutable-alias execution evidence.
 
 Run from the repository root:
 

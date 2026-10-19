@@ -214,15 +214,15 @@ HS 当前联合更新针对多个**既有** Head 的 payload，不把 `CreateHea
 3. 关闭重开后，按名称或固定书签取回位置：不得复用旧 DG owner 的句柄。
 4. 更新一个名称绑定或一个分支末端：说明必须一起可见的事实，以及实际需要重写的范围。
 5. 创建新 head 后入口发布失败：说明哪些结果可见、如何重新发现或管理准备产物；不能承诺透明重试。
-6. 仅浏览历史结构或摘要时，候选需求是不恢复业务 State；读取历史 State 本身可涉及领域对象构造与 Upgrade。不注册模型并非硬要求；新设计已选固定 CommitId 起点的 ReadHistoryPage，AtOrBefore/Before 与 Continuation 表达边界，预算失败细节仍待裁决。
+6. 仅浏览历史结构或摘要时，候选需求是不恢复业务 State；读取历史 State 本身可涉及领域对象构造与 Upgrade。不注册模型并非硬要求；新设计已选固定 CommitId 起点的 ReadHistoryPage，AtOrBefore/Before 与 Continuation 表达边界，页满成功、工作预算耗尽整次失败，实际资格见[分页验收](history-pagination.md)。
 
 这些是需求澄清与方案检查题，不是本轮已通过的实验。
 
 ## 9. 后续验证顺序
 
-调用职责与概念以 [API 草图](api-sketch.md) 为基准；当前进入可行性、效率和简化验证，不再从头海选命名。具体问题及最小产物集中在 [PROJECT-STATE](PROJECT-STATE.md)：API 到机制映射 → 发布与创建 → 描述与恢复 → 查询成本 → 简化与实施切片。
+调用职责与概念以 [API 草图](api-sketch.md) 为基准；功能、创建故障与逐片源码/包资格已完成，当前执行[最终交付验收](final-delivery-acceptance.md)，不再从头海选命名。最终产品版本的完整门禁、合入与当前停点集中在 [PROJECT-STATE](PROJECT-STATE.md)。
 
-[应用合同稿](application-design.md)保留登记候选 B 与上游属性候选 A 的机制比较；[联合提交设计](multi-branch-commits.md)采用 CommitRequest 与执行时捕获。§8 的 rewind 比较仅作需求变化时的历史对照，不是当前实施路线。恢复材料、创建完整可见性和失败合同仍须证明。
+[应用合同稿](application-design.md)保留登记候选 B 与上游属性候选 A 的机制比较；[联合提交设计](multi-branch-commits.md)采用 CommitRequest 与执行时捕获。§8 的 rewind 比较仅作需求变化时的历史对照，不是当前实施路线。恢复材料、创建可见性与失败边界已有源码见证；其范围见各分片记录，最终版本的整体资格以交付清单为准。
 
 产品实际能力仍由[产品工作集](../../../src/PROJECT-STATE.md)承载，全局未决入口由[路线图](../../DurableGraph-research-roadmap.md)维护。用户要求跨上下文续接后，本设计问题使用本地 [PROJECT-STATE](PROJECT-STATE.md)维护简短研究焦点与已确认边界，不复制产品能力或完整设计账本。
 

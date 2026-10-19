@@ -54,7 +54,7 @@
 
 **当前停点：[创建登记故障验收](creation-failure-acceptance.md)已完成源码资格。**11个定向窗口和既有fork Unknown冷开补强通过；修复CreateTagCore对已分类发布异常的重复包装，保原直接故障与outcome/fault。活动README/术语表/target/产品工作集的旧API与旧历史权威表述已清理，不更改历史证据含义。该产品尾修尚无新G普通包资格。
 
-**下一片：[最终交付验收](final-delivery-acceptance.md)。**从干净最终源码打新G，source/package边界分开；运行最终根回归及12个活动runner（原11加Group），README候选可另用独立G但同产品来源。核对显式能力与证据、旧public API和活动文档，再正式合入master。不要把旧G的Split/Group通过外推到Tag尾修；也不重做已闭合原语或扩平台Kill矩阵。
+**当前实施中：[最终交付验收](final-delivery-acceptance.md)。**独立审计发现StateRevisionAddress仍公开，已收为internal并新增源码/普通包精确负例；最终API负例为19项。从干净最终源码打新G，source/package边界分开；运行最终根回归及12个活动runner（原11加Group），README候选可另用独立G但同产品来源。核对显式能力与证据、旧public API和活动文档，再正式合入master。不要把旧G的Split/Group通过外推到Tag尾修；也不重做已闭合原语或扩平台Kill矩阵。
 
 **压缩后恢复顺序：完整读本文 → 最终交付清单 → PackageConsumerProbe活动runner及上次准确feed/运行入口。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`；source模式显式restore/build，包模式使用完整feed。完成的组提交、origin、树查询、分页、创建故障原语及Kill门禁不重做；新产品变更按自身影响范围获得资格。
 

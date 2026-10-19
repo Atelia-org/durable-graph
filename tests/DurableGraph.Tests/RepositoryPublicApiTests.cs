@@ -23,6 +23,7 @@ public sealed class RepositoryPublicApiTests {
                     var fork = created.ForkBranch(source, "fork");
                     using var forkWork = created.OpenWorkingCopy(fork.Id);
                     CommitId reference = created.ReadCurrentCommit(fork.Id).Commit.Id;
+                    CommitId? stateSource = shared.StateSourceCommitId;
                     shared.CommitState();
                     shared.CommitState(state);
                     shared.CommitEvent(domainEvent);
@@ -39,6 +40,7 @@ public sealed class RepositoryPublicApiTests {
     }
 
     [Theory]
+    [InlineData("_ = repository.OpenWorkingCopy(default).[|StateRevisionAddress|];", "CS1061", "StateRevisionAddress")]
     [InlineData("repository.[|Checkout|](\"main\");", "CS1061", "Checkout")]
     [InlineData("repository.[|Fork|](\"fork\", source);", "CS1061", "Fork")]
     [InlineData("repository.[|CreateBranchFromEvent|](\"events\", state);", "CS1061", "CreateBranchFromEvent")]

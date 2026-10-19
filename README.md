@@ -1,7 +1,7 @@
 # DurableGraph
 
-> 当前实现分支 `db096/branch-repository-cutover` 已采用下文的 Branch/Commit API，根 solution 构建及 Persistence/Runtime 回归已通过；定向 origin 和普通包闭包仍待完成，尚未整体合入主线。实现进度与合入边界见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#9-b2-调用闭包与回归迁移)。
-> 当前存储依赖已升级至 HeadStore 非兼容重构；本轮 feed 尚未制作，先用[源码联调](docs/storage-dependency.md#显式源码联调)。旧存档不自动迁移，包模式需待准确候选准备完成。
+> Branch/Commit/WorkingCopy、统一 Schema Catalog、组提交、目录树和历史分页已实现。最终源码/普通包验收与主线合入状态见[0096 交付记录](docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)。
+> 当前存储依赖是固定来源的本地候选；可用[源码联调](docs/storage-dependency.md#显式源码联调)或[完整候选 feed](docs/storage-dependency.md#candidate-delivery)。旧实验存档不自动迁移。
 
 [MIT License](LICENSE)
 

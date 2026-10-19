@@ -17,6 +17,12 @@
 
 附件BLOB、ID durable字段、rewind、merge、GC、多writer、跨库事务与规模性能专项保明确后置，不加入本轮完成条件。
 
+## 最终审计尾修
+
+独立审计发现 WorkingCopy.StateRevisionAddress 仍为 public，与已接受的“公开定位使用StateSourceCommitId、物理图地址留在内部”合同冲突。已收为internal，内部与友元调用保持；源码和普通包API门禁均增加精确访问负例，正例继续使用StateSourceCommitId。没有增加兼容入口或新存储格式。主线程重建0警告/0错误，RepositoryPublicApiTests的17例通过，新负例实际为CS1061；最终新G的第19项普通包负例仍待下表运行。
+
+同时修正根README早期“origin/feed未完成”提示、恢复消费者对退役模型资产的误称，以及DB-096早期续工队列。当前尾修需由以下最终版本验收，不沿用审计前产品来源的绿色记录。
+
 ## 最终源码与普通包门禁
 
 需要记录最终产品源码commit、测试commit、S版本/来源、G版本和feed provenance；如果只改测试/文档，明确产品字节与前片的关系，不混淆不同G。当前S为 `0.1.3-dev.20261019.g70b406c` / `70b406cd8d1117733eee81a33e7f978399aa98b2`。

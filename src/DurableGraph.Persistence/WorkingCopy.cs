@@ -47,7 +47,7 @@ public sealed class WorkingCopy : IDisposable {
     /// <summary>The committed State root identity, or null before the first State.</summary>
     public ObjectId? StateId => State is null ? null : _saveSession.RootId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
-    public FrameAddress? StateRevisionAddress => _saveSession.StateSource?.Address;
+    internal FrameAddress? StateRevisionAddress => _saveSession.StateSource?.Address;
     /// <summary>The current saved history position, advanced by successful State and Event commits.</summary>
     /// <remarks>May belong to an ancestor branch until the first local commit; BranchId still identifies the write target.</remarks>
     public CommitId BaseCommitId { get; internal set; }
