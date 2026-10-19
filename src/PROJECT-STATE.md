@@ -19,7 +19,7 @@
 
 ## 当前焦点
 
-2026-10-19：位于隔离分支 `db096/branch-repository-cutover`，Storage pin 已到 `70b406c`。Branch/Commit/WorkingCopy、新布局、D 查询投影与活动消费者迁移已完成；定向来源查询已接入，单点不扫描无关 Head，完整列表在登记集合内检查环。源码与新包的限定验收见[定向来源接入](../docs/design-branches/0096-history-and-head-model/targeted-origin-integration.md)，原11门禁保其[原 G/S 资格](../docs/design-branches/0096-history-and-head-model/package-cutover-validation.md)。真实多 Branch 提交与 owner 共同 Catalog 已通过[源码验收](../docs/design-branches/0096-history-and-head-model/group-commit-integration.md)，新 G 的 Split/Group/Meta 普通包验收通过；下一片迁移旧 Kill host、补树/分页及最终合入。完整目标和队列只维护在[DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，下面旧阶段记录保其版本意义。
+2026-10-19：位于隔离分支 `db096/branch-repository-cutover`，Storage pin 已到 `70b406c`。Branch/Commit/WorkingCopy、新布局、D 查询投影与活动消费者迁移已完成；定向来源查询已接入，单点不扫描无关 Head，完整列表在登记集合内检查环。源码与新包的限定验收见[定向来源接入](../docs/design-branches/0096-history-and-head-model/targeted-origin-integration.md)，原11门禁保其[原 G/S 资格](../docs/design-branches/0096-history-and-head-model/package-cutover-validation.md)。真实多 Branch 提交与 owner 共同 Catalog 已通过[源码验收](../docs/design-branches/0096-history-and-head-model/group-commit-integration.md)，新 G 的 Split/Group/Meta 普通包验收通过；[旧 Kill host迁移](../docs/design-branches/0096-history-and-head-model/process-crash-migration.md)已恢复6＋3窗口；下一片实现根/子树查询，再补分页及最终合入。完整目标和队列只维护在[DB-096 工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，下面旧阶段记录保其版本意义。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下的资格见 B1，新历史模型的真实纵切及迁移回归见 B2；两者不混为同一次验收。
 

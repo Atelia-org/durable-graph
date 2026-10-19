@@ -15,9 +15,9 @@ using DataStore = Atelia.FrameStore.FrameStore;
 using PublicationStore = Atelia.HeadStore.HeadStore;
 
 // READY is diagnostic evidence, never publication authority. Only a fresh owner
-// reading refs1/2 decides the selected pair after an external process termination.
+// reading the target business Head and shared Schema decides the selected pair after external termination.
 internal static class Program {
-    private const string Protocol = "DG.MetaBootstrapCrashProbe.v1";
+    private const string Protocol = "DG.MetaBootstrapCrashProbe.v2";
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private static readonly DurableSchema Extra = new("CrashExtra", 1, new DurableFieldInfo(1, TypeTag.Int64));
     private static readonly string[] Windows = ["AfterMetaAppend", "AfterBusinessAppend", "AfterFirstCuEnd",
@@ -27,7 +27,8 @@ internal static class Program {
     private sealed record FrameEvidence(string Address, uint Tag, string PayloadSha256, string TailMetaSha256);
     private sealed record ReadyEvidence(string Protocol, string Window, int ProcessId, string OldState, string OldSchema,
         uint RootId, uint ListId, ObjectEvidence[] Objects, string? CandidateMeta, string? CandidateBusiness,
-        FrameEvidence[] OldFrames, FrameEvidence[] CapturedFrames, int CuEndsSeen, int BeforeCuFlushCalls, string PublicationStage);
+        FrameEvidence[] OldFrames, FrameEvidence[] CapturedFrames, int CuEndsSeen, int BeforeCuFlushCalls, string PublicationStage,
+        string TargetBranchId, string ExpectedBaseCommitId, string OldBranchDirectoryEntry, string OldBookmarkDirectoryEntry);
     private sealed record FileImage(string Path, string Sha256);
     private sealed record InitReadyEvidence(string Protocol, string Window, int ProcessId, uint CompletedRefId,
         uint[] CompletedRefs, FileImage[] FormalRefImages, int DeclaredUserDataFrames);
@@ -91,7 +92,7 @@ internal static class Program {
         if (complete) {
             using (Repository reader = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
                 RepositoryResources resources = Resources(reader);
-                Need(reader.IsReadOnly && reader.ListBranches().Count == 0 && reader.SharedSchemaRoot is null,
+                Need(reader.IsReadOnly && reader.ListBranches().Length == 0 && reader.SharedSchemaRoot is null,
                     "Three completed factory Heads must open as an empty readonly DG repository.");
                 CheckEmptyInitializationRoots(resources.Heads, 3);
                 Need(Inventory(resources).Length == 0, "The initialization factory must not contain user data frames.");
@@ -149,12 +150,13 @@ internal static class Program {
     }
 
     private static void CheckEmptyInitializationRoots(PublicationStore versions, int completed) {
-        string[] magic = ["P0R2", "P0S1", "P0T1"];
         for (uint id = 1; id <= 3; id++) {
             var read = versions.ReadHead(id);
             if (id <= completed) {
-                Need(DecodeRoot(read.Unwrap().Payload, System.Text.Encoding.UTF8.GetBytes(magic[id - 1])).Count == 0,
-                    "Initialized directory must be empty.");
+                ReadOnlySpan<byte> payload = read.Unwrap().Payload;
+                bool empty = id == 2 ? DecodeRoot(payload, "P0S1"u8).Count == 0
+                    : ManagementDirectoryPointer.Decode(id == 1 ? ManagementDirectoryKind.Branches : ManagementDirectoryKind.Bookmarks, payload) is null;
+                Need(empty, "Initialized control directory must be empty.");
             } else {
                 Need(read.IsFailure && read.Error!.ErrorCode == "HeadStore.HeadNotFound", "Missing Head must remain absent.");
             }
@@ -169,15 +171,15 @@ internal static class Program {
         uint listId;
         using (Repository seed = Repository.OpenStorageExisting(repositoryPath, HostModel.Models())) {
             seed.PreparedStateReuseEnabled = false;
-            Need(seed.ListBranches().Count == 0 && seed.SharedSchemaRoot is null, "Writable DG must see the complete empty initialization.");
-            using BranchCheckout main = seed.CreateSharedBranch("main", HostModel.Ring());
-            seed.CreateTag("initial", main.Head);
-            state = main.Head.RevisionAddress;
+            Need(seed.ListBranches().Length == 0 && seed.SharedSchemaRoot is null, "Writable DG must see the complete empty initialization.");
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", HostModel.Ring()).Id);
+            seed.CreateTag("initial", main.BaseCommitId);
+            state = Describe(seed, main.BaseCommitId).Address;
             schema = seed.SharedSchemaRoot!.Value;
             initial = Objects(main);
             listId = ListId(main);
             Need(initial.Length == 3, "Seed must contain the Widget ring and shared List.");
-            StoredGraphRevision graph = seed.GraphStore.ReadGraph(state);
+            StoredGraphRevision graph = ReadPublishedGraph(seed, main.BaseCommitId);
             Need(RequiredSchema(graph) == schema, "Seed storage pin must match its actual shared root.");
             CheckCatalog(SchemaCatalogView.Load(seed.GraphStore, schema), extra: false);
             CheckStorage(seed, graph, initial);
@@ -189,13 +191,14 @@ internal static class Program {
         ObjectEvidence[] updated;
         using (Repository reopened = Repository.OpenStorageExisting(repositoryPath, HostModel.Models())) {
             reopened.PreparedStateReuseEnabled = false;
-            using BranchCheckout cold = reopened.CheckoutShared("main");
+            using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened));
             Widget root = HostModel.Check(cold.State, 7);
             Need(cold.StateRevisionAddress == state && Objects(cold).SequenceEqual(initial), "Cold checkout must preserve complete seed IDs, actual heads and H.");
             ObjectEvidence list = initial.Single(row => row.Id == listId);
             root.Numbers[7] = 201;
-            next = cold.CommitState().RevisionAddress;
-            StoredGraphRevision graph = reopened.GraphStore.ReadGraph(next);
+            CommitId nextCommit = cold.CommitState().Id;
+            next = Describe(reopened, nextCommit).Address;
+            StoredGraphRevision graph = ReadPublishedGraph(reopened, nextCommit);
             Need(graph.SourceGraph == state && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
                 "Cold continuation must preserve the selected content source and Schema pin.");
             ObjectVersionBatch batch = reopened.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
@@ -213,14 +216,14 @@ internal static class Program {
             }
             CheckStorage(reopened, graph, updated);
             CheckFrames(Resources(reopened), seedFrames);
-            HostModel.Check(reopened.ReadState(reopened.GetHead("main")), 201);
-            HostModel.Check(reopened.ReadState(reopened.ResolveTag("initial")), 7);
+            HostModel.Check(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened)).Commit.Id), 201);
+            HostModel.Check(reopened.LoadState(reopened.ResolveTag("initial")), 7);
         }
         using (Repository final = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
-            Need(final.GetHead("main").RevisionAddress == next && final.SharedSchemaRoot == schema, "Fresh continuation roots disagree.");
-            HostModel.Check(final.ReadState(final.GetHead("main")), 201);
-            HostModel.Check(final.ReadState(final.ResolveTag("initial")), 7);
-            StoredGraphRevision graph = final.GraphStore.ReadGraph(next);
+            Need(Describe(final, final.ReadCurrentCommit(BranchNamed(final)).Commit.Id).Address == next && final.SharedSchemaRoot == schema, "Fresh continuation roots disagree.");
+            HostModel.Check(final.LoadState(final.ReadCurrentCommit(BranchNamed(final)).Commit.Id), 201);
+            HostModel.Check(final.LoadState(final.ResolveTag("initial")), 7);
+            StoredGraphRevision graph = ReadPublishedGraph(final, final.ReadCurrentCommit(BranchNamed(final)).Commit.Id);
             CheckStorage(final, graph, updated);
             CheckFrames(Resources(final), seedFrames);
         }
@@ -231,9 +234,9 @@ internal static class Program {
         object evidence;
         using (Repository repository = Repository.CreateStorageNew(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
-            using BranchCheckout main = repository.CreateSharedBranch("main", HostModel.Ring());
-            repository.CreateTag("initial", main.Head);
-            StoredGraphRevision state = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", HostModel.Ring()).Id);
+            repository.CreateTag("initial", main.BaseCommitId);
+            StoredGraphRevision state = ReadPublishedGraph(repository, main.BaseCommitId);
             FrameAddress schema = RequiredSchema(state);
             Need(schema == repository.SharedSchemaRoot, "Seed State and shared Schema pins disagree.");
             SchemaCatalogView catalog = SchemaCatalogView.Load(repository.GraphStore, schema);
@@ -244,7 +247,10 @@ internal static class Program {
             CheckStorage(repository, state, objects);
             evidence = new { Protocol, Lane = "seed", Passed = true, ProcessId = Environment.ProcessId,
                 State = Encode(state.Address), Schema = Encode(schema), RootId = state.RootId.Value,
-                ListId = ListId(main), Objects = objects, TypedBodyAbi = TypedBaseBodyCodec.FormatVersion };
+                ListId = ListId(main), Objects = objects, TypedBodyAbi = TypedBaseBodyCodec.FormatVersion,
+                TargetBranchId = Encode(main.BranchId), ExpectedBaseCommitId = Encode(main.BaseCommitId),
+                OldBranchDirectoryEntry = Encode(Resources(repository).Heads.ReadHead(1).Unwrap().Id),
+                OldBookmarkDirectoryEntry = Encode(Resources(repository).Heads.ReadHead(3).Unwrap().Id) };
         }
         WriteJson(resultPath, evidence);
     }
@@ -254,11 +260,13 @@ internal static class Program {
         // process after READY. There is no exception/finally path used as a crash.
         using Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models());
         repository.PreparedStateReuseEnabled = false;
-        using BranchCheckout main = repository.CheckoutShared("main");
+        using WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository));
         Widget root = HostModel.Check(main.State, 7);
         RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
-        StoredGraphRevision old = repository.GraphStore.ReadGraph(main.Head.RevisionAddress);
+        string targetBranch = Encode(main.BranchId), expectedBase = Encode(main.BaseCommitId);
+        string directoryEntry = Encode(resources.Heads.ReadHead(1).Unwrap().Id), bookmarkEntry = Encode(resources.Heads.ReadHead(3).Unwrap().Id);
+        StoredGraphRevision old = ReadPublishedGraph(repository, main.BaseCommitId);
         FrameAddress oldSchema = RequiredSchema(old);
         Need(oldSchema == repository.SharedSchemaRoot, "Writer starts from a mixed root pair.");
         CheckCatalog(SchemaCatalogView.Load(repository.GraphStore, oldSchema), extra: false);
@@ -316,7 +324,8 @@ internal static class Program {
             Need(meta is not null, "The new Extra definition must produce a completed meta candidate.");
             if (stage == "DG.AfterBusinessAppend") { Need(business is not null, "Missing completed business candidate."); }
             return new(Protocol, window, Environment.ProcessId, Encode(old.Address), Encode(oldSchema), old.RootId.Value,
-                listId, objects, meta, business, oldFrames, frames, cuEnds, beforeCuFlushCalls, stage);
+                listId, objects, meta, business, oldFrames, frames, cuEnds, beforeCuFlushCalls, stage,
+                targetBranch, expectedBase, directoryEntry, bookmarkEntry);
         }
     }
 
@@ -330,6 +339,11 @@ internal static class Program {
         Need(ready.CuEndsSeen == expectedEnds && ready.BeforeCuFlushCalls == expectedFlushCalls,
             "READY hook counts disagree with the actual requested publication boundary.");
         bool expectNew = window is "AfterAllCuEnd" or "AfterPublicationConfirmed" or "BeforeInstall";
+        BranchId target = DecodeBranch(ready.TargetBranchId);
+        CommitId expectedBase = DecodeCommit(ready.ExpectedBaseCommitId);
+        HeadEntryId oldDirectory = DecodeEntry(ready.OldBranchDirectoryEntry), oldBookmarks = DecodeEntry(ready.OldBookmarkDirectoryEntry);
+        Need(expectedBase.Value.HeadId == target.Value, "Seed Commit must belong to the target root Branch.");
+        CommitId selectedCommit;
         FrameAddress oldState = Decode(ready.OldState), oldSchema = Decode(ready.OldSchema);
         FrameAddress candidateMeta = Decode(ready.CandidateMeta ?? throw new InvalidDataException("Missing candidate meta address."));
         FrameAddress? candidateBusiness = ready.CandidateBusiness is { } encoded ? Decode(encoded) : null;
@@ -341,19 +355,27 @@ internal static class Program {
         using (Repository repository = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
             RepositoryResources resources = Resources(repository);
-            // Necessary refs only. READY expectations do not substitute for actual
-            // formal root reads, joint publication qualification or graph pins.
-            HeadEntry branches = resources.Heads.ReadHead(1).Unwrap();
+            // Formal D membership and the actual B/S entries decide visibility; READY is only expected evidence.
+            Need(repository.ListBranches() is [var branch] && branch.Id == target && branch.DisplayLabel == "main",
+                "The selected target is not the fixture's one registered business Branch.");
+            CheckControlEntries(resources, oldDirectory, oldBookmarks);
+            HeadEntry businessHead = resources.Heads.ReadHead(target.Value).Unwrap();
             HeadEntry shared = resources.Heads.ReadHead(2).Unwrap();
-            IReadOnlyDictionary<string, FrameAddress> branchRoots = DecodeRoot(branches.Payload, "P0R2"u8);
+            var businessPayload = BusinessEntryPayloadCodec.Decode(businessHead.Payload);
             IReadOnlyDictionary<string, FrameAddress> sharedRoots = DecodeRoot(shared.Payload, "P0S1"u8);
-            Need(branchRoots.Count == 1 && branchRoots.TryGetValue("branch/main", out FrameAddress branchHead) && branchHead == expectedState,
-                "Actual ref1 must select the exact expected business graph.");
+            Need(businessPayload.Graph == expectedState, "Actual business Head must select the exact expected graph.");
             Need(sharedRoots.Count == 1 && sharedRoots.TryGetValue("schema", out FrameAddress schemaHead) && schemaHead == expectedSchema,
-                "Actual ref2 must select the matching exact Schema graph; a mixed pair is rejected.");
-            Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,
-                "DG owner and actual publication refs disagree.");
-            StoredGraphRevision selected = repository.GraphStore.ReadGraph(expectedState);
+                "Actual S must select the matching Schema graph; a mixed pair is rejected.");
+            selectedCommit = repository.ReadCurrentCommit(target).Commit.Id;
+            Need(selectedCommit.Value == businessHead.Id && repository.SharedSchemaRoot == expectedSchema,
+                "DG owner and actual B/S entries disagree.");
+            Need(Describe(repository, expectedBase).Address == oldState, "The seed Commit no longer names the old State.");
+            Need(expectNew ? selectedCommit != expectedBase : selectedCommit == expectedBase, "Actual Commit identity disagrees with publication visibility.");
+            if (expectNew) {
+                Need(resources.ReadPrevious(selectedCommit.Value)?.Id == expectedBase.Value,
+                    "The new selected Commit must immediately follow the original seed Commit.");
+            }
+            StoredGraphRevision selected = ReadPublishedGraph(repository, selectedCommit);
             Need(selected.Kind == StoredGraphKind.State && RequiredSchema(selected) == expectedSchema && selected.RootId.Value == ready.RootId,
                 "Selected business role, root or exact Schema pin disagrees.");
             CheckCatalog(SchemaCatalogView.Load(repository.GraphStore, expectedSchema), expectNew);
@@ -361,7 +383,7 @@ internal static class Program {
             // audit. Fresh Open may recover incomplete tails, but never these frames.
             CheckFrames(resources, ready.OldFrames);
             CheckFrames(resources, ready.CapturedFrames);
-            StoredGraphRevision metaCandidate = repository.GraphStore.ReadGraph(candidateMeta);
+            StoredGraphRevision metaCandidate = repository.GraphStore.ReadMetaGraph(candidateMeta);
             Need(metaCandidate.Kind == StoredGraphKind.Meta && metaCandidate.SourceGraph == oldSchema,
                 "Candidate meta must derive from the original exact shared catalog.");
             SchemaCatalogView candidateCatalog = SchemaCatalogView.Load(repository.GraphStore, candidateMeta);
@@ -371,7 +393,7 @@ internal static class Program {
             Need(originalCatalog.SchemaNodeId(widgetSchema) == candidateCatalog.SchemaNodeId(widgetSchema),
                 "Retained Widget descriptor identity changed in the new catalog.");
             if (candidateBusiness is { } business) {
-                StoredGraphRevision candidate = repository.GraphStore.ReadGraph(business);
+                StoredGraphRevision candidate = repository.GraphStore.ReadBusinessGraph(business, oldState);
                 Need(candidate.SourceGraph == oldState && RequiredSchema(candidate) == candidateMeta,
                     "Candidate business must preserve its actual content source and new Schema pin.");
             }
@@ -379,8 +401,8 @@ internal static class Program {
                 Need(expectedSchema != candidateMeta && (candidateBusiness is null || expectedState != candidateBusiness),
                     "Completed unselected candidates must not be adopted.");
             }
-            HostModel.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
-            HostModel.Check(repository.ReadState(repository.GetHead("main")), expectNew ? 201 : 7);
+            HostModel.Check(repository.LoadState(repository.ResolveTag("initial")), 7);
+            HostModel.Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository)).Commit.Id), expectNew ? 201 : 7);
             Need(resources.Data.RecoveryReports.Count == 0 && resources.Heads.RecoveryReports.Count == 0,
                 "Readonly verification must not execute physical recovery.");
         }
@@ -391,10 +413,12 @@ internal static class Program {
         using (Repository repository = Repository.OpenStorageExisting(repositoryPath, HostModel.Models())) {
             repository.PreparedStateReuseEnabled = false;
             RepositoryResources resources = Resources(repository);
-            Need(repository.GetHead("main").RevisionAddress == expectedState && repository.SharedSchemaRoot == expectedSchema,
+            Need(repository.ReadCurrentCommit(target).Commit.Id == selectedCommit && Describe(repository, selectedCommit).Address == expectedState && repository.SharedSchemaRoot == expectedSchema,
                 "Writable cold Open changed the selected pair.");
-            StoredGraphRevision selected = repository.GraphStore.ReadGraph(expectedState);
-            using BranchCheckout checkout = repository.CheckoutShared("main");
+            StoredGraphRevision selected = ReadPublishedGraph(repository, selectedCommit);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(target);
+            Need(checkout.BranchId == target && checkout.BaseCommitId == selectedCommit, "Cold working copy changed target or selected Commit.");
+            CheckControlEntries(resources, oldDirectory, oldBookmarks);
             Widget root = HostModel.Check(checkout.State, expectNew ? 201 : 7);
             selectedObjects = Objects(checkout);
             Need(selectedObjects.Select(row => row.Id).SequenceEqual(ready.Objects.Select(row => row.Id)), "Cold complete IDs changed.");
@@ -406,8 +430,9 @@ internal static class Program {
             }
             ObjectEvidence list = selectedObjects.Single(row => row.Id == ready.ListId);
             root.Numbers[8] = 202;
-            continued = checkout.CommitState().RevisionAddress;
-            StoredGraphRevision next = repository.GraphStore.ReadGraph(continued);
+            CommitId continuation = checkout.CommitState().Id;
+            continued = Describe(repository, continuation).Address;
+            StoredGraphRevision next = ReadPublishedGraph(repository, continuation);
             Need(next.SourceGraph == expectedState && RequiredSchema(next) == expectedSchema && next.OwnedBatch is not null,
                 "Continuation must derive from the actual selected State and exact Schema.");
             ObjectVersionBatch batch = repository.GraphStore.ReadBatch(next.OwnedBatch!.Value);
@@ -428,8 +453,8 @@ internal static class Program {
             CheckStorage(repository, next, updated);
             CheckFrames(resources, ready.OldFrames);
             CheckFrames(resources, ready.CapturedFrames);
-            HostModel.Check(repository.ReadState(repository.GetHead("main")), expectNew ? 201 : 7, 202);
-            HostModel.Check(repository.ReadState(repository.ResolveTag("initial")), 7);
+            HostModel.Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository)).Commit.Id), expectNew ? 201 : 7, 202);
+            HostModel.Check(repository.LoadState(repository.ResolveTag("initial")), 7);
             Need(resources.Data.RecoveryReports.Values.All(report => report.Action == Atelia.Rbf.RbfTailRecoveryAction.None),
                 "A READY-complete data prefix must not require tail repair.");
             Need(resources.Heads.RecoveryReports.All(report => report.Recovery.Action == Atelia.Rbf.RbfTailRecoveryAction.None),
@@ -438,16 +463,20 @@ internal static class Program {
         // A second independent owner verifies that the accepted continuation, selected
         // exact catalog and completed candidates survive ordinary resource closure too.
         using (Repository final = Repository.OpenStorageReadOnlyExisting(repositoryPath, HostModel.Models())) {
-            Need(final.GetHead("main").RevisionAddress == continued && final.SharedSchemaRoot == expectedSchema,
+            Need(Describe(final, final.ReadCurrentCommit(BranchNamed(final)).Commit.Id).Address == continued && final.SharedSchemaRoot == expectedSchema,
                 "Fresh continuation roots changed.");
-            HostModel.Check(final.ReadState(final.GetHead("main")), expectNew ? 201 : 7, 202);
-            HostModel.Check(final.ReadState(final.ResolveTag("initial")), 7);
+            HostModel.Check(final.LoadState(final.ReadCurrentCommit(BranchNamed(final)).Commit.Id), expectNew ? 201 : 7, 202);
+            HostModel.Check(final.LoadState(final.ResolveTag("initial")), 7);
+            Need(BranchNamed(final) == target, "Cold continuation changed the target Branch.");
+            CheckControlEntries(Resources(final), oldDirectory, oldBookmarks);
             CheckFrames(Resources(final), ready.OldFrames);
             CheckFrames(Resources(final), ready.CapturedFrames);
         }
         WriteJson(resultPath, new { Protocol, Lane = "verify", Passed = true, ProcessId = Environment.ProcessId, Window = window,
             WriterProcessId = ready.ProcessId, ObservedOldOrNew = expectNew ? "New" : "Old", SelectedState = Encode(expectedState),
-            SelectedSchema = Encode(expectedSchema), Ref1State = Encode(expectedState), Ref2Schema = Encode(expectedSchema),
+            SelectedSchema = Encode(expectedSchema), BusinessState = Encode(expectedState), SharedSchema = Encode(expectedSchema),
+            ready.TargetBranchId, ready.ExpectedBaseCommitId, ready.OldBranchDirectoryEntry, ready.OldBookmarkDirectoryEntry,
+            SelectedCommitId = Encode(selectedCommit),
             ContinuationState = Encode(continued), SingleDelta = true, ExactPrior = true, IdsPreserved = true, HVerified = true,
             CompletedFramesPreserved = true, ReadOnlyFilesUnchanged = true, NoNonNoneRecovery = true,
             Objects = selectedObjects, OrphanMeta = !expectNew ? ready.CandidateMeta : null,
@@ -461,15 +490,54 @@ internal static class Program {
         Need(catalog.Schemas.ContainsKey(new(TypeExpr.Named("CrashWidget"), 1)), "The cold catalog lacks Widget's definition.");
         Need(catalog.DescriptorIds.Count == (extra ? 2 : 1), "Unexpected root-declared descriptor count.");
     }
-    private static ObjectEvidence[] Objects(BranchCheckout checkout) =>
+    private static BranchId BranchNamed(Repository repository) => repository.ListBranches().Single(branch => branch.DisplayLabel == "main").Id;
+    private static HistoryGraphRecord Describe(Repository repository, CommitId commit) => Resources(repository).ReadDescriptor(commit.Value);
+    private static StoredGraphRevision ReadPublishedGraph(Repository repository, CommitId commit) {
+        RepositoryResources resources = Resources(repository);
+        HistoryGraphRecord selected = resources.ReadDescriptor(commit.Value);
+        return repository.GraphStore.ReadBusinessGraph(selected.Address, resources.FindNearestState(commit.Value, inclusive: false)?.Address);
+    }
+    private static void CheckControlEntries(RepositoryResources resources, HeadEntryId directory, HeadEntryId bookmarks) {
+        Need(resources.Heads.ReadHead(1).Unwrap().Id == directory && resources.Heads.ReadHead(3).Unwrap().Id == bookmarks,
+            "An ordinary existing-Branch save must not change D or T.");
+    }
+    private static string Encode(BranchId id) {
+        Span<byte> bytes = stackalloc byte[BranchId.EncodedSize];
+        Need(id.TryWrite(bytes), "Invalid BranchId.");
+        return Convert.ToHexString(bytes);
+    }
+    private static string Encode(CommitId id) {
+        Span<byte> bytes = stackalloc byte[CommitId.EncodedSize];
+        Need(id.TryWrite(bytes), "Invalid CommitId.");
+        return Convert.ToHexString(bytes);
+    }
+    private static string Encode(HeadEntryId id) {
+        Span<byte> bytes = stackalloc byte[HeadEntryId.EncodedSize];
+        Need(id.TryWrite(bytes), "Invalid HeadEntryId.");
+        return Convert.ToHexString(bytes);
+    }
+    private static BranchId DecodeBranch(string text) {
+        Need(BranchId.TryRead(Convert.FromHexString(text), out BranchId id), "Invalid READY BranchId.");
+        return id;
+    }
+    private static CommitId DecodeCommit(string text) {
+        Need(CommitId.TryRead(Convert.FromHexString(text), out CommitId id), "Invalid READY CommitId.");
+        return id;
+    }
+    private static HeadEntryId DecodeEntry(string text) {
+        Need(HeadEntryId.TryRead(Convert.FromHexString(text), out HeadEntryId id), "Invalid READY HeadEntryId.");
+        return id;
+    }
+
+    private static ObjectEvidence[] Objects(WorkingCopy checkout) =>
         (checkout.Baseline ?? throw new InvalidDataException("Missing complete saving baseline.")).Objects.OrderBy(pair => pair.Key)
             .Select(pair => new ObjectEvidence(pair.Key.Value, Encode(pair.Value.Storage!.Value.Head), pair.Value.Storage.Value.ReconstructionPayloadBytes)).ToArray();
-    private static uint ListId(BranchCheckout checkout) => checkout.Baseline!.Objects.Single(pair => pair.Value.Current.Kind == ObjectStateKind.List).Key.Value;
+    private static uint ListId(WorkingCopy checkout) => checkout.Baseline!.Objects.Single(pair => pair.Value.Current.Kind == ObjectStateKind.List).Key.Value;
     private static void CheckStorage(Repository repository, StoredGraphRevision graph, ObjectEvidence[] objects) {
         Need(graph.ObjectHeads.Keys.Order().SequenceEqual(objects.Select(row => row.Id)), "Complete directory membership changed.");
         foreach (ObjectEvidence row in objects) {
             FrameAddress head = Decode(row.Head);
-            Need(graph.ObjectHeads[row.Id] == head && repository.GraphStore.ReadObjectChain(graph.Address, row.Id).ReconstructionPayloadBytes == row.H,
+            Need(graph.ObjectHeads[row.Id] == head && repository.GraphStore.ReadObjectChain(graph, row.Id).ReconstructionPayloadBytes == row.H,
                 "Cold owned head/H disagrees with the actual selected chain.");
         }
     }

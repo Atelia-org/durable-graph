@@ -1,67 +1,56 @@
-# Split DG ProcessCrashOnly 见证
+# DG Branch/Commit 进程中止见证
 
-> 0096 后继注意：本 host 尚待迁移新 Branch/Commit API 和 B/S 发布定位，当前源码不可作为新内核的进程 Kill 门禁。以下运行协议及结果保旧版本含义；具体迁移接点见[组提交记录](../../docs/design-branches/0096-history-and-head-model/group-commit-integration.md#后续边界)。
+2026-10-19，0096 新布局迁移及6保存＋3初始化窗口验收完成；协议为 `DG.MetaBootstrapCrashProbe.v2`，运行资格集中于[迁移与验收](../../docs/design-branches/0096-history-and-head-model/process-crash-migration.md)。产品当前能力和后续顺序见[0096工作集](../../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)。本 host 不加入根 solution，使用现有 friend assembly 身份；不新增公开 crash API。
 
-2026-10-17：已适配 HeadStore 和三入口布局；本轮重新运行初始化三个及保存六个真实 Kill 窗口均通过，来源和证据见 [DB-096 接入](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。
+本 Probe 由 controller 外部终止 writer，再启动独立 verifier。保存模式验证**一个业务 B 与必要 Schema S**的共同发布，D/T 保持；初始化模式验证工厂依次创建控制 Heads 1/2/3。正常关闭、异常抛出和同进程重开不能代替这里的 external Kill。
 
-2026-10-19：[Private 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)将分支目录改为 P0R2，本 host 同步该标记。本次构建、重跑矩阵及证据范围统一见该切片；旧结果不自动作为新格式资格。
+## 构建与运行
 
-2026-10-19：[B1 新 Storage 接入](../../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)适配 owner 局部编号查询，并以新 pin 重新构建及通过初始化3窗、保存6窗。此次资格和日志只见 B1 记录。
-
-本 Probe 验证 DB-087 内部 split Repository 的有限进程中止窗口：默认模式检查真实生成的 Widget、共享 List、新增 Schema 的六个保存停点；`-InitializationOnly` 检查直接工厂三次成功 CreateHead 后的停点。两模式都由 controller 外部终止 writer，再由独立 verifier 冷验证。
-
-这是源码模式的有限进程中止见证，默认公开工厂使用同一 meta 自举内核；不授 PackageReference、OS crash、断电、设备故障或完整 P1d 门禁资格。正常关闭重开、异常抛出与 writer 的 Dispose 都不能代替这里的外部 Kill。活动状态与后续门禁见 [PROJECT-STATE](../../src/PROJECT-STATE.md) 和 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
-
-[DB-092 B](../../docs/design-branches/0092-type-namespace-refactoring/implementation-b.md)只适配本 host 的内部类型／成员名称并验证编译，协议及窗口保持；没有重跑 Kill 矩阵，不给旧结果追加本次源码的进程中止资格。
-
-[DB-092 D3](../../docs/design-branches/0092-type-namespace-refactoring/README.md#d3-status)将具体资源 owner 改为 `RepositoryResources`，本 host 同步类型引用；本片只补编译验证，Kill 矩阵结果仍保其原来源与范围。
-
-先由统一构建者显式构建一次，controller 默认且始终不构建：
+统一构建者先构建一次，controller 始终不构建。上游 checkout 必须干净且与[Storage pin](../../eng/StorageDependency.props)一致，assets 中六个 Storage 依赖须全部为实际 ProjectReference。
 
 ```powershell
 dotnet build experiments/MetaBootstrapCrashProbe/MetaBootstrapCrashProbe.csproj -c Release -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage --verbosity minimal -m:1 -nr:false
 pwsh -File experiments/MetaBootstrapCrashProbe/Run-Probe.ps1 -AssemblyPath experiments/MetaBootstrapCrashProbe/bin/Release/net10.0/Atelia.DurableGraph.Persistence.Tests.dll
-# 初始化三窗口使用另一组全新夹具，不运行 seed 或六个保存窗口。
 pwsh -File experiments/MetaBootstrapCrashProbe/Run-Probe.ps1 -InitializationOnly -AssemblyPath experiments/MetaBootstrapCrashProbe/bin/Release/net10.0/Atelia.DurableGraph.Persistence.Tests.dll
 ```
 
-项目不加入根 solution。host 使用 `Atelia.DurableGraph.Persistence.Tests` 的既有内部访问身份，因此输出文件名为 `Atelia.DurableGraph.Persistence.Tests.dll`；它是独立 console host。controller 接受 `-AssemblyPath`，但要求本项目 assets 中六个 storage 依赖全部为实际 ProjectReference，且 storage HEAD 与 [StorageDependency.props](../../eng/StorageDependency.props) 的 pin 一致、工作树干净。该检查记录源码来源，不代替统一构建者核对 DLL 与冻结源码的关系。
+输出名复用已有 `Atelia.DurableGraph.Persistence.Tests` friend 身份。两种模式各用全新 RunRoot 和逐窗独立库；controller 默认工件在 `.artifacts/MetaBootstrapCrashProbe/<UTC>-<guid>/`，也可传尚不存在的 `-RunRoot`，不覆盖或删除旧证据。
 
-固定矩阵每项使用一个全新的 repository：
+## 保存矩阵
 
-| writer 停点 | fresh verifier 选择 |
+生成的 Widget 环与共享 List 先保存，再改变一个 List 槽并带入新 Schema 声明，强制真实 B/S 两成员 CU。每窗均从 seed 开始：
+
+| writer 停点 | 独立 verifier 的选择 |
 |---|---|
-| `AfterMetaAppend` | 两个旧根 |
-| `AfterBusinessAppend` | 两个旧根 |
-| `AfterFirstCuEnd` | 两个旧根；只有第一个参与 ref 的 End 已追加 |
-| `AfterAllCuEnd` | 两个新根；两个 End 已完整追加，尚未代称 Confirmed |
-| `AfterPublicationConfirmed` | 两个新根；发布确认后、DG 安装前 |
-| `BeforeInstall` | 两个新根；DG 安装停点 |
+| AfterMetaAppend | 旧 B/S；完整 Meta 候选保留 |
+| AfterBusinessAppend | 旧 B/S；完整 Meta/业务候选保留 |
+| AfterFirstCuEnd | 旧 B/S；只有第一个参与 Head 的 End 已追加 |
+| AfterAllCuEnd | 新 B/S；两个 End 完整，不等同于已经 Confirmed |
+| AfterPublicationConfirmed | 新 B/S；发布确认后、DG 安装前 |
+| BeforeInstall | 新 B/S；DG 安装前 |
 
-初始化模式只有以下三个固定窗口，无 seed。`init-writer` 直接调用真实 DG 内部 factory；停点在相应 `CreateHead(...).Unwrap()` 成功返回后、factory 交付 Repository 前。它不写业务或 meta 用户帧，也不制造占位 State。
+不假设首个 CU 成员一定是业务 Head。seed、READY、verify 绑定相同 TargetBranchId、ExpectedBaseCommitId、旧 D/T EntryId；ID 采用公开 codec 的 hex。verifier 从真实业务 Head 取得 SelectedCommitId，旧窗口等于原 Base、新窗口不同；同时验证准确图地址和 Schema 共同选择。
 
-| 初始化停点 | fresh verifier 结果 |
+已发布图通过真实 HeadStore 历史选择严格前序 State；已知完整未发布候选只按 READY 中的旧 State 验证物理 source，不伪造 CommitId。verifier 保留旧 State 历史、原对象 IDs、实际 heads/H、候选完整帧及 Meta 描述符；正常冷开后继续保存须为真实单条 List Delta、准确 prior、ID 和 H。先 RO 检查文件不变，再独占 RW 续写；完成帧不因恢复或失败而被删除/修复。
+
+## 初始化矩阵
+
+无 seed。工厂每次成功 CreateHead 返回后停住，不产生业务或 Meta 用户帧：
+
+| 停点 | 独立 verifier 的结果 |
 |---|---|
-| `AfterFirstCreateHead` | `MissingSecondHead`：仅 Head 1 完整；fresh RO／RW 均拒绝，不补建、不改文件；随后裸 backing store 独占打开，证明失败 Open 已释放锁 |
-| `AfterSecondCreateHead` | `MissingThirdHead`：Head 1/2 完整但书签目录 Head 3 缺失；RO/RW 拒绝且不补建 |
-| `AfterThirdCreateHead` | `CompleteEmptyRoots`：三个正式空目录可 fresh RO 打开且文件不变；全关后 RW 保存真实 Widget 环／共享 List，再全关冷开续写准确单条 Delta |
+| AfterFirstCreateHead | 缺 Head 2，RO/RW 均拒绝，不补建；关闭后能独占取得 backing 锁 |
+| AfterSecondCreateHead | 缺 Head 3，拒绝边界同上 |
+| AfterThirdCreateHead | D/S/T 为空且可 RO 打开，之后 RW 保存真实 Widget，再冷开续写 Delta |
 
-writer 写完原子 `ready.json`，输出并 flush 单行 `READY`，随后保持存活等待外部终止。controller 同时核对 READY 行、文件中的窗口和真实 PID，调用 `Process.Kill(entireProcessTree: true)`，等待退出后才启动 fresh verifier。进程以 `UseShellExecute=false`／`CreateNoWindow=true` 隐藏启动，输出和错误均捕获；READY 默认限时 60 秒，seed／verify 默认 120 秒，终止默认 30 秒。参数仅调这些有限等待，不扩大固定矩阵。
+空 D/T 按管理 pointer（P0R3/P0T2）解码，S 为 P0S1。READY 保存成功创建的 Head 集合与正式文件 SHA256；verifier 自行清点零用户帧，核对文件不变、缺入口未被补全、锁已释放。只有第三窗要求 SingleDelta/ExactPrior/IdsPreserved/HVerified；前两窗这些值为 false 表示没有可用库，不是假通过。
 
-host 命令使用 named 参数：
+## 进程与证据纪律
 
-```text
-dotnet <host.dll> seed --repo <fixture> --result <seed.json>
-dotnet <host.dll> writer --repo <fixture> --window <window> --ready <ready.json>
-dotnet <host.dll> verify --repo <fixture> --window <window> --ready <ready.json> --result <verify.json>
-dotnet <host.dll> init-writer --repo <fixture> --window <window> --ready <ready.json>
-dotnet <host.dll> init-verify --repo <fixture> --window <window> --ready <ready.json> --result <verify.json>
-```
+writer 原子写 ready.json，输出并 flush `READY` 后保持存活；controller 检查窗口、协议和真实 PID，再 `Kill(entireProcessTree: true)` 并等待退出，随后才启动 verifier。进程隐藏运行，stdout/stderr保留；默认 READY 60秒、普通进程120秒、终止30秒，参数仅调有限等待，不扩大矩阵。writer exit 0 不算 Kill 成功。
 
-READY 保存旧 State／Schema、已追加的候选地址、对象 IDs／heads／H、全部旧完成帧和新候选完成帧摘要、实际 publication stage 及 CU End／flush-hook 次数。controller 先核对旧根、Root／List IDs 与 seed 一致。verifier 负责确认所选两根、业务图和 meta 完整解释、完整帧保留及旧历史；继续一次保存必须是真实单条 Delta，保持准确 prior、IDs 与实际 H。controller 核验 `Passed`、`ObservedOldOrNew`、`SingleDelta`、`ExactPrior`、`IdsPreserved`、`HVerified`、`CompletedFramesPreserved`、`ReadOnlyFilesUnchanged`、`NoNonNoneRecovery` 以及 writer／verifier PID 和窗口，禁止以单个进程内成功报告代替 fresh 恢复。
+每窗保存 seed（保存模式）、READY、verify、进程日志；顶层 receipt 记录协议/模式、来源 revision、source assets、输入/DLL SHA256、PID、预期与实际结果。失败同样保已有工件，不自动重试。控制器验证具体布尔证据与身份，不只相信一个 Passed。
 
-初始化 READY 采用同一 `DG.MetaBootstrapCrashProbe.v1` 协议，保存 `CompletedRefId`、有序 `CompletedRefs`、已完成正式 ref 文件的 `FormalRefImages`（路径／SHA256）及 `DeclaredUserDataFrames=0`。fresh verifier 自己清点 `InitialUserDataFrames=0`，不依赖 writer 声明；两窗都要求 `FileBytesPreserved`、`ReadOnlyFilesUnchanged`、`LocksReleased` 为 true。首窗 `SingleDelta`／`ExactPrior`／`IdsPreserved`／`HVerified` 明确为 false，表示没有可用 Repository 或业务续写；次窗才要求四项为 true，并保留实际 `SeedState`／`Schema`／`ContinuationState`／`Objects`。这里没有被 Kill 的 factory 返回结果，READY 不是初始化 outcome。
+本见证仅限当前机器的 ProcessCrashOnly。它不证明 OS crash、断电、设备故障、PackageReference 交付、总体性能或所有多业务 Branch 组合；多 Branch 故障语义另见[组提交验收](../../docs/design-branches/0096-history-and-head-model/group-commit-integration.md)。不增加启动全库审计；这里的全帧扫描是独立 Probe 诊断。
 
-默认证据目录是 `.artifacts/MetaBootstrapCrashProbe/<UTC>-<guid>/`，也可指定一个尚不存在的 `-RunRoot`。每个窗口保留 `repo/`、READY／verify JSON 和进程 stdout／stderr；保存模式另有 seed JSON／进程，初始化模式没有 seed。顶层 `receipt.json` 记录 `Mode=Save|Initialization`、PID、退出码、时间、窗口预期与实际结果、源码 revision、source assets、输入及 DLL SHA256 和整体成功状态。失败时也保存已有证据。controller 不删除夹具、不改完整 data 帧、不自动重试或恢复旧 writer；仅 fresh owner 执行 backing store 的正常尾恢复。
-
-六个保存停点均在相应追加调用完成后收集证据。所有 READY 记录的旧帧和候选帧都必须在 fresh owner 中保持地址、role、payload 与 tail-meta 摘要；前三窗口中的完整候选只是 orphan，不能被当成已发布根。verifier 先以只读 owner 核对所有文件字节不变，再以可写 owner 续写；保存矩阵要求 backing recovery 没有非 None 动作，不以丢失已完成候选为成功。初始化停点尚无已完成业务帧，正式 ref 文件保留与缺根拒绝是其直接证据，后写阶段才验完成业务帧。controller 的 Kill 成功本身不证明发布成功。此 Probe 不测 timing、总堆、总 O(k)，也不穷举所有异常与初始化窗口。
+旧协议与旧 D/S 名字目录的运行记录保原版本含义：[最初接入](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)、[Private 删除](../../docs/design-branches/0096-history-and-head-model/private-removal.md)、[B1接入](../../docs/design-branches/0096-history-and-head-model/storage-handle-adaptation.md)。它们不授本轮新布局资格。

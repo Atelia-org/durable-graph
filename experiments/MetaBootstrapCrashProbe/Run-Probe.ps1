@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$protocol = 'DG.MetaBootstrapCrashProbe.v2'
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $assembly = (Resolve-Path -LiteralPath $AssemblyPath).Path
 $dotnetExecutable = (Get-Command dotnet -CommandType Application | Select-Object -First 1).Source
@@ -56,7 +57,8 @@ foreach ($file in @(Get-ChildItem -LiteralPath (Split-Path -Parent $assembly) -F
     $assemblyHashes += [ordered]@{ Path = $file.FullName; Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash }
 }
 $receipt = [ordered]@{
-    ProtocolVersion = 1
+    ProtocolVersion = 2
+    Protocol = $protocol
     Scope = 'ProcessCrashOnly'
     Mode = $(if ($InitializationOnly) { 'Initialization' } else { 'Save' })
     StorageMode = 'Source'
@@ -119,8 +121,13 @@ function Wait-ProbeExit {
 }
 
 function Kill-ProbeProcess {
-    param($Execution)
-    if (-not $Execution.Process.HasExited) { $Execution.Process.Kill($true) }
+    param($Execution, [switch]$RequireAlive)
+    if ($Execution.Process.HasExited) {
+        if ($RequireAlive) { throw 'The READY writer exited before the external kill could be requested.' }
+    } else {
+        $Execution.Process.Kill($true)
+        $Execution | Add-Member -NotePropertyName KillRequestedUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('O')) -Force
+    }
     Wait-ProbeExit $Execution $StopTimeoutSeconds
 }
 
@@ -164,10 +171,48 @@ function Read-Result {
     param([string]$Path, [int]$ExpectedProcessId)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "The successful host did not produce $Path." }
     $result = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-    if ($result.Passed -isnot [bool] -or -not $result.Passed -or [int]$result.ProcessId -ne $ExpectedProcessId) {
+    if ($result.Protocol -cne $protocol -or $result.Passed -isnot [bool] -or -not $result.Passed -or
+        [int]$result.ProcessId -ne $ExpectedProcessId) {
         throw "The host result is not a successful receipt for process $ExpectedProcessId."
     }
     return $result
+}
+
+# These checks cover only the public Handle encoding v1 representation. They do
+# not prove store membership, a real entry boundary, publication, or payload health;
+# the freshly opened host must establish those facts using the selected Repository.
+function Assert-HandleEncoding {
+    param([object]$Value, [int]$Bytes, [string]$Field)
+    if ($Value -isnot [string] -or $Value -notmatch ('\A[0-9a-fA-F]{' + ($Bytes * 2) + '}\z')) {
+        throw "$Field must contain exactly $Bytes bytes encoded as hexadecimal."
+    }
+    $encoded = [Convert]::FromHexString($Value)
+    if (($encoded[0] -bor $encoded[1] -bor $encoded[2] -bor $encoded[3]) -eq 0) {
+        throw "$Field has a default HeadId codeword."
+    }
+    # Entry codec: 4B HeadId followed by UInt64LE ticket; low 26 bits are length/4.
+    if ($Bytes -eq 12 -and
+        ($encoded[4] -bor $encoded[5] -bor $encoded[6] -bor ($encoded[7] -band 3)) -eq 0) {
+        throw "$Field has a zero-length HeadEntryId ticket."
+    }
+}
+
+function Assert-SaveHandles {
+    param($Evidence, [string]$Role)
+    Assert-HandleEncoding $Evidence.TargetBranchId 4 "$Role.TargetBranchId"
+    foreach ($field in @('ExpectedBaseCommitId', 'OldBranchDirectoryEntry', 'OldBookmarkDirectoryEntry')) {
+        Assert-HandleEncoding $Evidence.$field 12 "$Role.$field"
+    }
+}
+
+function Assert-SameSaveHandles {
+    param($Expected, $Actual, [string]$Role)
+    Assert-SaveHandles $Actual $Role
+    foreach ($field in @('TargetBranchId', 'ExpectedBaseCommitId', 'OldBranchDirectoryEntry', 'OldBookmarkDirectoryEntry')) {
+        if (-not [string]::Equals($Expected.$field, $Actual.$field, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "$Role changed $field from the completed seed evidence."
+        }
+    }
 }
 
 $windows = if ($InitializationOnly) { @(
@@ -175,12 +220,12 @@ $windows = if ($InitializationOnly) { @(
     @{ Name = 'AfterSecondCreateHead'; Expected = 'MissingThirdHead'; CompletedRefId = 2 },
     @{ Name = 'AfterThirdCreateHead'; Expected = 'CompleteEmptyRoots'; CompletedRefId = 3 }
 ) } else { @(
-    @{ Name = 'AfterMetaAppend'; Expected = 'Old' },
-    @{ Name = 'AfterBusinessAppend'; Expected = 'Old' },
-    @{ Name = 'AfterFirstCuEnd'; Expected = 'Old' },
-    @{ Name = 'AfterAllCuEnd'; Expected = 'New' },
-    @{ Name = 'AfterPublicationConfirmed'; Expected = 'New' },
-    @{ Name = 'BeforeInstall'; Expected = 'New' }
+    @{ Name = 'AfterMetaAppend'; Expected = 'Old'; PublicationStage = 'DG.AfterMetaAppend' },
+    @{ Name = 'AfterBusinessAppend'; Expected = 'Old'; PublicationStage = 'DG.AfterBusinessAppend' },
+    @{ Name = 'AfterFirstCuEnd'; Expected = 'Old'; PublicationStage = 'VS.AfterHeadRecordAppended.1' },
+    @{ Name = 'AfterAllCuEnd'; Expected = 'New'; PublicationStage = 'VS.AfterHeadRecordAppended.2' },
+    @{ Name = 'AfterPublicationConfirmed'; Expected = 'New'; PublicationStage = 'VS.AfterPublicationConfirmed' },
+    @{ Name = 'BeforeInstall'; Expected = 'New'; PublicationStage = 'DG.BeforeInstall' }
 ) }
 Save-Receipt
 try {
@@ -196,7 +241,10 @@ try {
         if (-not $InitializationOnly) {
             $lane.Seed = Invoke-ProbeHost -HostArguments @('seed', '--repo', $fixture, '--result', $seedPath) -LogPrefix (Join-Path $directory 'seed') -Lane $lane -Role 'Seed'
             $seed = Read-Result -Path $seedPath -ExpectedProcessId $lane.Seed.ProcessId
+            Assert-SaveHandles $seed 'Seed'
+            if ($lane.Seed.ProcessId -eq $PID) { throw 'The seed must run in a separate process.' }
             $lane.Seed['Result'] = $seedPath
+            $lane.Seed['ResultSha256'] = (Get-FileHash -LiteralPath $seedPath -Algorithm SHA256).Hash
             Save-Receipt
         }
 
@@ -213,9 +261,12 @@ try {
                 throw "Writer did not park at READY for $($window.Name)."
             }
             $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
-            if ($ready.Protocol -ne 'DG.MetaBootstrapCrashProbe.v1' -or
+            if ($ready.Protocol -cne $protocol -or
                 $ready.Window -ne $window.Name -or [int]$ready.ProcessId -ne $writer.ProcessId) {
                 throw "READY evidence does not match the controlled writer/window $($window.Name)."
+            }
+            if ($writer.ProcessId -eq $PID -or (-not $InitializationOnly -and $writer.ProcessId -eq $lane.Seed.ProcessId)) {
+                throw 'The controlled writer must have a distinct process ID from the controller and seed.'
             }
             if ($InitializationOnly) {
                 if ($ready.CompletedRefId -ne $window.CompletedRefId -or
@@ -232,9 +283,10 @@ try {
                     }
                 }
             } else {
-                if ($ready.Protocol -ne $seed.Protocol -or
+                Assert-SameSaveHandles $seed $ready 'READY'
+                if ($ready.Protocol -cne $seed.Protocol -or
                     [string]::IsNullOrWhiteSpace([string]$ready.OldState) -or [string]::IsNullOrWhiteSpace([string]$ready.OldSchema) -or
-                    [string]::IsNullOrWhiteSpace([string]$ready.PublicationStage) -or @($ready.CapturedFrames).Count -eq 0) {
+                    $ready.PublicationStage -cne $window.PublicationStage -or @($ready.CapturedFrames).Count -eq 0) {
                     throw "Save READY lacks completed seed/candidate evidence at $($window.Name)."
                 }
                 if ($ready.OldState -ne $seed.State -or $ready.OldSchema -ne $seed.Schema -or
@@ -243,11 +295,13 @@ try {
                 }
             }
             $readyObservedUtc = [DateTime]::UtcNow.ToString('O')
-            Kill-ProbeProcess $writer # External process termination: the writer never executes normal Dispose.
+            Kill-ProbeProcess $writer -RequireAlive # Require a live parked writer and an actual external kill request.
             $lane.Writer = Finish-ProbeLogs $writer
             $lane.Writer['Ready'] = $readyPath
             $lane.Writer['ReadySha256'] = (Get-FileHash -LiteralPath $readyPath -Algorithm SHA256).Hash
             $lane.Writer['ReadyObservedUtc'] = $readyObservedUtc
+            if ([string]::IsNullOrWhiteSpace($writer.KillRequestedUtc)) { throw 'No external kill request was recorded for the parked writer.' }
+            $lane.Writer['KillRequestedUtc'] = $writer.KillRequestedUtc
             $lane.Writer['Termination'] = 'ExternalProcessKillEntireTree'
             if ($lane.Writer.ExitCode -eq 0) { throw 'A parked writer returned exit0 instead of being externally terminated.' }
         } finally {
@@ -261,7 +315,9 @@ try {
         $lane.Verifier = Invoke-ProbeHost -HostArguments @($verifierCommand, '--repo', $fixture, '--window', $window.Name, '--ready', $readyPath, '--result', $verifyPath) -LogPrefix (Join-Path $directory 'verify') -Lane $lane -Role 'Verifier'
         $verified = Read-Result -Path $verifyPath -ExpectedProcessId $lane.Verifier.ProcessId
         $observedProperty = if ($InitializationOnly) { 'ObservedInitialization' } else { 'ObservedOldOrNew' }
-        if ($lane.Verifier.ProcessId -eq $lane.Writer.ProcessId -or [int]$verified.WriterProcessId -ne $lane.Writer.ProcessId -or
+        if ($lane.Verifier.ProcessId -eq $PID -or $lane.Verifier.ProcessId -eq $lane.Writer.ProcessId -or
+            (-not $InitializationOnly -and $lane.Verifier.ProcessId -eq $lane.Seed.ProcessId) -or
+            [int]$verified.WriterProcessId -ne $lane.Writer.ProcessId -or
             $verified.Window -ne $window.Name -or $verified.$observedProperty -ne $window.Expected) {
             throw "Fresh verifier did not confirm the expected result at $($window.Name)."
         }
@@ -281,7 +337,16 @@ try {
                 throw 'Direct factory initialization must not create meta or business user data frames.'
             }
         }
+        if (-not $InitializationOnly) {
+            Assert-SameSaveHandles $seed $verified 'Verifier'
+            Assert-HandleEncoding $verified.SelectedCommitId 12 'Verifier.SelectedCommitId'
+            $selectedOld = [string]::Equals($verified.SelectedCommitId, $seed.ExpectedBaseCommitId, [StringComparison]::OrdinalIgnoreCase)
+            if ($selectedOld -ne ($window.Expected -eq 'Old')) {
+                throw "SelectedCommitId does not agree with the expected old/new business publication at $($window.Name)."
+            }
+        }
         $lane.Verifier['Result'] = $verifyPath
+        $lane.Verifier['ResultSha256'] = (Get-FileHash -LiteralPath $verifyPath -Algorithm SHA256).Hash
         $lane.Verifier[$observedProperty] = $verified.$observedProperty
         if ($InitializationOnly) {
             $lane.Verifier['InitialUserDataFrames'] = $verified.InitialUserDataFrames
@@ -289,6 +354,9 @@ try {
             $lane.Verifier['Schema'] = $verified.Schema
             $lane.Verifier['Objects'] = $verified.Objects
         } else {
+            foreach ($field in @('TargetBranchId', 'ExpectedBaseCommitId', 'OldBranchDirectoryEntry', 'OldBookmarkDirectoryEntry', 'SelectedCommitId')) {
+                $lane.Verifier[$field] = $verified.$field
+            }
             $lane.Verifier['SelectedState'] = $verified.SelectedState
             $lane.Verifier['SelectedSchema'] = $verified.SelectedSchema
         }

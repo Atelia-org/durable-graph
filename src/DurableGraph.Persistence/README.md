@@ -30,5 +30,5 @@ catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存
 单提交与 `CommitBranches` 复用共同发布内核；请求绑定活 WorkingCopy 和准确 Base，执行时捕获。当前保存统一向资源 owner 的 accepted Catalog 准备，准确历史 Schema 与 source/prior 验证保留；旧 Private/ToShared 合同不再适用。实际普通包门禁见
 [PackageConsumerProbe](../../experiments/PackageConsumerProbe/README.md)。
 旧 raw 消费者只保模型编译资产，不授原运行故事资格。进程 Kill 见证使用
-[MetaBootstrapCrashProbe](../../experiments/MetaBootstrapCrashProbe/README.md)的旧版本记录；该 host 尚待迁移新 Branch API，不能替本次组内核授进程 Kill 或断电资格。
+[MetaBootstrapCrashProbe](../../experiments/MetaBootstrapCrashProbe/README.md)；新布局已通过6个B/S保存窗与3个初始化窗，准确范围见[验收](../../docs/design-branches/0096-history-and-head-model/process-crash-migration.md)，不外推全部多业务组Kill或断电资格。
 逐片历史稿与旧格式从 `6dbaf0e` 查阅；当前产品不保第二保存/恢复路径。

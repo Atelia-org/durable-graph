@@ -15,7 +15,7 @@
 | 完整关闭库副本、独立草稿、定稿与 history 模式 | [DevelopmentSchemaConsumer](PackageConsumerProbe/DevelopmentSchemaConsumer/README.md) |
 | 泛型 DTO、工厂与 readonly accessor 的独立机制 | [GenericBindingShapeProbe](GenericBindingShapeProbe/README.md) |
 | FS/VS 发布可见性与进程中止后的正常尾恢复 | [PublicationCrashProbe](PublicationCrashProbe/README.md) |
-| 实际 DG 两根创建与 SG 保存的固定 Kill 窗口 | [MetaBootstrapCrashProbe](MetaBootstrapCrashProbe/README.md) |
+| 实际 DG 的 B/S 联合保存与 D/S/T 初始化 Kill 窗口 | [MetaBootstrapCrashProbe](MetaBootstrapCrashProbe/README.md) |
 | List matcher 的实际落盘成本与冷读正确性 | [ListDeltaReplayProbe](ListDeltaReplayProbe/README.md) |
 
 ## 机制调查见证

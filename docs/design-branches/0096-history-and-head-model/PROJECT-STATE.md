@@ -13,7 +13,7 @@
 
 用户已将本设计设为持续目标：在无兼容性负担下，实现已接受的 Branch/Commit/WorkingCopy 功能族，补齐多分支原子提交、根/子树目录查询和历史分页，完成旧 API 替代、活动消费者迁移、源码与普通包验收、文档清理及正式合入。只完成其中一片不能宣称整体完成；BLOB、ID durable 字段等明确后置项不自动扩为本目标必经条件。
 
-每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：旧 Kill host 迁移、根/子树和分页、登记故障剩余窗口、最终文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
+每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：根/子树和分页、登记故障剩余窗口、最终文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
 
 活动消费者迁移及原11个普通包门禁已完成，见[原片资格](package-cutover-validation.md)。[定向来源查询](targeted-origin-integration.md)已完成上游实施、DG 接入和新包增量验收；两个版本的证据不混用。只完成依赖和包闭包不等于0096整体完成。
 
@@ -46,9 +46,11 @@
 
 **当前停点：真实组提交已完成源码及受影响普通包验收。**产品提交 `9aa72ff`，新增轻量 CommitRequest / CommitBranches；所有成员共用资源 owner 的 accepted Catalog、一次候选与一次 B₁…Bₙ＋必要 S 发布，普通保存不更新 D。即时 State/Event 复用单成员路径，新根保 D(/S)登记。实际55项组反例、完整回归、新G三门禁及限度见[组提交验收](group-commit-integration.md)。定向 origin已在前片闭合；DG仍在 `db096/branch-repository-cutover`，尚未正式合入。
 
-**下一片：迁移 MetaBootstrapCrashProbe，恢复现有进程中止门禁。**它尚含旧 BranchCheckout/Head 1 名字目录；可保6个保存窗口和3个初始化窗口，业务定位改真实 B/S，D/T不随保存推进。已发布内容按Commit历史验证，完整未发布候选只按READY中的旧State验物理source。具体接点见组提交记录的后续边界；原probe源码不可直接作为新模型资格。先恢复该现有消费者，再补根/子树、公开历史页与最终交付，不重写原语实验。
+**进程中止门禁已恢复。**[Crash迁移验收](process-crash-migration.md)保留6个保存窗口和3个初始化窗口，真实B/S定位、D/T不变、外部Kill与独立PID冷验证均通过。它只证明当前Windows/source/friend范围；不把一个B加S的矩阵外推到全部多Branch组合或掉电。
 
-**压缩后恢复顺序：完整读本文 → [组提交验收的后续边界](group-commit-integration.md#后续边界) → MetaBootstrapCrashProbe 的 Program/controller/README → 当前业务Entry与管理pointer实现。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`，上游main一致；源码build/test显式source模式，包模式使用完整feed。新的最终G须有自己的资格，不重复已完成的Catalog设计或消费者迁移。
+**下一片：实现根/子树目录查询。**接通 `ListRootBranches()` 与包含起点的 `ListBranchSubtree(branchId)`，复用正式成员与已验证来源森林；返回轻量描述，不物化业务对象，不增加持久父关系或索引。最小判据为多根/重复标签、父子均继续、从继承祖先旧点fork挂到实际父、空fork冷重开即可列出、排除内部和未登记Head，以及无效成员/坏来源/环拒绝。随后补公开历史分页与最终交付。
+
+**压缩后恢复顺序：完整读本文 → API草图的目录合同 → 当前 Repository.ListBranches / ValidateBranchForest / ReadBranchInfoCore 与相关origin测试。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`；source模式显式restore/build，包模式使用完整feed。完成的组提交、origin及Kill门禁不重做；新产品变更按自身影响范围获得资格。
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
@@ -70,7 +72,7 @@
 
 ## 已知未决项与明确延期
 
-待闭合：旧 Kill host 的 API/布局迁移，根/子树、分页、登记故障矩阵的剩余窗口，以及最终文档/正式合入。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
+待闭合：根/子树、分页、登记故障矩阵的剩余窗口，以及最终文档/正式合入。旧Kill host已恢复且实际矩阵通过。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
@@ -98,6 +100,7 @@
 | B1 新 Storage pin 的源码/运行资格 | [依赖接入](storage-handle-adaptation.md) |
 | B2 单布局、旧调用迁移与剩余合入门槛 | [整体切换计划](branch-cutover-plan.md) |
 | 活动消费者/脚本、公开 XML、普通包资格 | [包迁移验收](package-cutover-validation.md) |
+| 新布局下既有6＋3进程Kill窗口 | [Crash迁移验收](process-crash-migration.md) |
 | D/T Dictionary 复用、固定读取边界和管理候选 | [目录持久化](directory-persistence.md) |
 | 定向读取已登记 Head 的创建来源 | [实现与验收](targeted-origin-integration.md)；[原请求](headstore-origin-request.md) |
 | 标签候选、发布失败、Schema、新根与查询成本 | [应用合同稿](application-design.md) |

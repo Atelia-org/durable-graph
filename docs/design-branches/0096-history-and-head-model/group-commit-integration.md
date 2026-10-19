@@ -47,6 +47,6 @@ Group 首跑成功但有两处 nullable 警告，审阅又发现过期检查过�
 
 ## 后续边界
 
-- 本片源码和上述普通包验收已完成；下一片迁移尚未适配的 MetaBootstrapCrashProbe，再推进根/子树和分页。组 source 测试不授进程 Kill、Linux、OS crash/power-loss 或总体性能保证。
-- Crash host 仍含旧 BranchCheckout 与 Head 1 名字 map。已查明可保6个保存窗口、3个初始化窗口：保存验证应从旧 D/S 改为真实 B/S，D/T保持；空控制入口按 P0R3/P0T2 pointer 和 P0S1 解码。已发布图通过真实 Commit 历史定位，未发布完整候选仅用 READY 的已知旧 State 验物理 source，不伪造 CommitId。迁移前不能称该 host 可执行。
+- 本片源码和上述普通包验收已完成；后继[Crash迁移](process-crash-migration.md)已恢复原6＋3窗口。组 source 测试自身不授进程 Kill、Linux、OS crash/power-loss 或总体性能保证。
+- Crash host 已迁移真实 B/S 与 D/T不变、Commit历史来源及管理pointer；一个业务B加S的进程矩阵不代表多业务组的全部Kill组合。具体运行范围只查后继验收。
 - 最终交付仍需目录树、历史分页、登记故障剩余窗口、文档/消费者清理及正式合入。状态与顺序只维护在 [PROJECT-STATE](PROJECT-STATE.md)。
