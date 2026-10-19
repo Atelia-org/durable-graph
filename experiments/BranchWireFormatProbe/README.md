@@ -1,5 +1,7 @@
 # Branch wire format 候选见证
 
+> 状态：D/T 整表方案已被用户选定的[Dictionary 增量目录](../../docs/design-branches/0096-history-and-head-model/directory-persistence.md)替代，保留本实验作容量/格式对照；Entry 小描述及紧凑 ID/摘要隔离仍有独立参考价值。这里的 `P0R3/P0T2` 是旧候选实验标记，不表示当前产品或新目录图入口的字节布局。
+
 问题：DB-096 B2 的成员目录、准确书签与提交摘要，能否用严格、紧凑且有界的简单编码承载？最小成功条件是候选 round-trip、畸形输入拒绝、摘要独占，以及真实 HeadStore payload 限长下的容量算术成立。
 
 这是独立候选 codec，**没有改变 DG 产品协议或公开 API**。它不实现 Graph codec、历史资格、成员验证、事务或存储 I/O。所用 ID/FrameAddress 是通过上游 codec 构造的数值坐标；解码成功不证明目标存在或可用。设计入口见 [B2 计划](../../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)。
@@ -46,4 +48,4 @@ Release 构建、运行通过 **159个断言**（其中包含三个小样本的�
 
 有效 Unicode 的最坏 UTF-8/UTF-16 code-unit 比是3；补充平面字符占2 units/4 bytes。因此256上限足以让1000条最坏标签落在1 MiB内，但保留1024上限同样可用，必须按总编码大小拒绝。实验不设1000成员硬上限，并实际编码了1001条短标签。容量不代表查询速度、目录更新写放大或存储性能；没有做基准，也没有 DG 新布局、package、冷重开或故障资格。
 
-后续：B2 在产品 codec 中选择并锁定实际格式，复用必要反例；不要将这个本地实现保留为第二套生产协议或扩成独立框架。
+后续：B2 复用现有 Dictionary 机制，见[目录合同](../../docs/design-branches/0096-history-and-head-model/directory-persistence.md)；仅提取仍适用的 Entry/ID/摘要反例。不要移植本实验的 D/T codec 或将它扩成独立框架；仅在需要重访整表对照或验证小描述边界时重跑。

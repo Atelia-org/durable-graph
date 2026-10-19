@@ -182,7 +182,7 @@ ForkBranch 与 OpenWorkingCopy 分开：创建成功、随后模型加载失败�
 
 仍推荐继续证明[DG 独立登记候选 B](application-design.md)：只有登记成员是正式 Branch；先准备内容/物理 Head，再发布登记，最后交付 BranchInfo。普通 fork 复用准确旧 Commit；新根创建首个真实 Commit，必要时将登记与 shared Schema 更新联合发布。登记只保存成员/标签等创建属性，普通高频提交无需重写目录。
 
-该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。1000条分支的目录容量须按实际 payload/标签上限核算；不先假定整表方案合格，不新增 GC。
+该建议尚需证明 fork、新根无 Schema 增长、新根有 shared 增长三条路径的耐久顺序和失败结果。登记前可留下未登记物理 Head；登记后结果交付失败不能声称未创建或透明重试。D/T 改为[复用 Dictionary 增量持久化](directory-persistence.md)，Head 只存图入口；1000条分支的目录恢复与更新成本须实测，不再用旧整表 payload 的1 MiB限制判断容量，不新增 GC。
 
 旧目录上的真实 State/Event 混组发布、安装及冷续写已获[限定见证](group-kernel-design.md#8-真实混组发布与冷续写见证)，不再为旧布局扩展协调器。[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)，尚未提供本稿新外观。[新 Storage 已完成源码接入](storage-handle-adaptation.md)；下一步按[整体切换计划](branch-cutover-plan.md)以真实 Branch 证明 Parent 替换恢复/再保存，并迁移书签与现存历史读取，之后接入真正多业务 Head 组内核和登记故障验收。基本 summary 与单成员异常字段随 B2；附件 BLOB、加载对象寿命与 ID 字段支持继续后置。Private 创建、Schema 模式混组政策与请求消费状态已退出未决项；没有新增 rewind、merge、内容寻址或唯一名字需求。
 

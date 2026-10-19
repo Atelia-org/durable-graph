@@ -153,6 +153,8 @@ Private 写入 Catalog 来自所选 tip 的准确 Schema，恢复 State 则用�
 
 ### 8.2 整表登记容量：明确假设的估算
 
+> 后继裁决：用户已选择[Dictionary 增量目录](directory-persistence.md)。以下保留原整表方案的估算与当时建议，不再作为当前产品容量或施工选择；它未比较复用现有序列化的维护成本。
+
 假设一份8B表头，每项4B HeadId、4B UTF-8长度和 L 字节标签，没有重复 current、summary 或来源副本：`size = 8 + Σ(8 + Lᵢ)`。这是估算用布局，不是 wire 决策；标签上限必须按字节定义。
 
 | 1000项、每项标签字节 L | 最终 payload | 从1项逐次增加到1000项、每次整表发布的累计 payload |

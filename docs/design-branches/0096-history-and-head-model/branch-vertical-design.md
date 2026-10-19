@@ -16,7 +16,7 @@
 
 | 位置 | 纵切需要的事实 | 首片不存的重复信息 |
 |---|---|---|
-| DG 登记 Head D | 正式成员 `HeadId → DisplayLabel`，必要的表格式识别 | current、summary、来源副本；普通保存不重写 D |
+| DG 登记 Head D | 小入口指向增量 Dictionary 管理图，表达正式成员 `HeadId → DisplayLabel` | current、summary、来源副本；普通保存不重写 D |
 | Catalog Head S | 当前接受的 Schema 图入口 | 各 Branch 私有写目录 |
 | 业务 Head B 的 header | HS 固定来源；根无来源，fork 指向准确来源 Entry | DG 再存一份父 Branch/父 Commit |
 | B 的每个真实 Entry | 小描述格式识别、准确业务图入口、该次 summary | 逻辑 Parent、CreatedOnBranchId、重复 SchemaRoot |
@@ -26,7 +26,7 @@
 
 **Kind 暂保留在图 envelope，由小描述读取再访问一个小图帧取得。**这样不用立即冻结 Entry/图双 Kind 一致性。若测得该额外小帧 I/O 是瓶颈，再比较内联 Kind；不能只为少一次 API 调用增设第二权威。摘要在 Entry，图内准确 Schema 保持原位置；缩略图及通用附件 API 不作为本纵切的前置。
 
-原 envelope 的 Parent 在 Meta 上还承担前 Meta 内容来源，不能同业务 Parent 一并删除。实现可为 Meta 保留对应字段、为业务编码移除它，或做同等明确的内部区分；不为字段整齐引入多个公共图接口。
+原 envelope 的 Parent 在 Meta 上还承担前 Meta 内容来源，不能同业务 Parent 一并删除。实现可为 Meta 保留对应字段、为业务编码移除它，或做同等明确的内部区分；不为字段整齐引入多个公共图接口。D/T 各自的 Dictionary 管理图沿自己的前 Meta 延续，不借用 S 的来源；具体自举与窄读取合同见[目录持久化](directory-persistence.md)。
 
 ## 3. 入口资格与内容资格分开验证
 
@@ -104,7 +104,7 @@ Repository 是该材料的生产者，物理层继续用它比对图、owned bat
 
 **[来源 snapshot 接缝 A 已实施验收](history-source-seam.md#7-a-实施与验收)**：保留和传递已有实际图材料，仍以当前 Parent 取得来源资格，保格式/公开 API 与热复核；消除同次 decoder 的重复完整图校验。新依赖的[B1 接入](storage-handle-adaptation.md)已完成，下一片按[整体切换计划](branch-cutover-plan.md)切换业务历史权威及相关调用。下列真实纵切和登记判据保持，不以 A 替代新布局验收。
 
-成员目录只需小型直接编码，标签先固定；来源仍以 HS header 为准。`ListHeadOrigins` 在当前上游扫描物理全集，包含管理 Head/未登记产物，并验证整个来源图；它能做健康数据的功能见证，**不能证明只访问登记集合或忽略无关损坏的查询边界**。
+成员目录复用既有 Dictionary 增量持久化，标签先固定；来源仍以 HS header 为准。`ListHeadOrigins` 在当前上游扫描物理全集，包含管理 Head/未登记产物，并验证整个来源图；它能做健康数据的功能见证，**不能证明只访问登记集合或忽略无关损坏的查询边界**。
 
 较小上游增强已整理为[定向 origin 请求](headstore-origin-request.md)：检查指定 header，返回 root 或准确固定来源，不承诺源 Entry 内容健康；DG 检查父成员、循环及子树。无需先加可变 metadata、保留区角色或上游子树索引。若尚未交付，纵切可以明确使用全量 origin adapter 并记录其限制，不把临时 adapter 当生产最终资格。
 

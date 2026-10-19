@@ -15,32 +15,30 @@
 
 ## 2. 最少协议选择
 
-以下是建议落实的具体形状。D/T/Entry 的候选字节已由[独立 codec 见证](../../../experiments/BranchWireFormatProbe/README.md)验证，作为 B2 的施工选择；Graph codec 仍须产品测试验证。它们不是当前产品已支持的格式，合入时须移入唯一的产品 codec 与回归，不依赖实验实现运行。
+以下是建议落实的具体形状。**D/T 改为复用现有 Dictionary 增量序列化，撤回专用整表 codec 作为施工选择。** 管理图的具体形状、角色验证、初始化与发布接线只在[目录持久化合同](directory-persistence.md)维护。原[独立 codec 见证](../../../experiments/BranchWireFormatProbe/README.md)的 D/T 容量结果仅作旧方案对照，Entry 小描述与 ID/摘要结论保留；它们均不证明新 Repository 已运行。
 
 | 载体 | 推荐内容与变更 | 原因和限度 |
 |---|---|---|
-| D，保留控制 Head 1 | `P0R3`；按 HeadId 的稳定编码排序的 `HeadId → DisplayLabel` 完整表 | 成员唯一、标签可重复；不保存 current/summary/origin。删除旧 `branch/` 字符串到图地址映射 |
-| S，保留控制 Head 2 | 继续保存当前 Meta 图入口 | `P0S1` 可保持，因为字段语义未变；历史图仍各自 pin Schema |
-| T，保留控制 Head 3 | `P0T2`；不可变名称 → 12B CommitId | 既有书签能力保留；旧 graph address 在删除 Parent 后不再足以定位历史，不能继续使用 `NamedFrameMapCodec` 存 T |
+| D，保留控制 Head 1 | `P0R3`＋可选 Meta 图入口；图根为 `Dictionary<uint,string>`，key 取 HeadId 稳定编码 | 正式成员唯一、标签可重复；复用容器 Base/Delta，不保存 current/summary/origin。删除旧 `branch/` 字符串到图地址映射 |
+| S，保留控制 Head 2 | 继续保存当前 SchemaCatalog Meta 图入口 | `P0S1` 可保持；历史业务图仍各自 pin Schema，S 有限员工 reader 不因目录而放宽 |
+| T，保留控制 Head 3 | `P0T2`＋可选 Meta 图入口；图根为 `Dictionary<string,byte[]>`，值用上游 codec 的12B CommitId | 保 Ordinal 不可变书签；不再用 `NamedFrameMapCodec` 存整表；不为内部值扩大公共 ID durable 字段支持 |
 | 业务 Head Entry | `P0E1`、准确 graph FrameAddress、长度前缀的 opaque summary bytes | Kind 仍取图 envelope；不重复 Schema、owner 或 Parent；创建与每次提交时复制摘要，空摘要合法 |
-| Graph envelope | `P0G2`；Kind 后**仅 Meta** 编码 `PreviousMeta`，业务图没有该字段；其他根/目录/Schema/batch 字段保持 | 用一个内部 envelope 和 codec 的 Kind 分支足够，不需要三个公开图类；禁止业务图以 null Parent 占位来保留旧历史模型 |
+| Graph envelope | `P0G2`；Kind 后**仅 Meta** 编码 `PreviousMeta`，业务图没有该字段；其他根/目录/Schema/batch 字段保持 | 一个内部 envelope 和 codec 的 Kind 分支足够；D/S/T 各以前一版本的自身管理图为来源，不能串用 |
 | batch / object directory | 保现有格式、SourceGraph、准确 prior 及内容校验 | 物理增量来源不是待删除的逻辑 Parent；不能为字段改名一并去掉 |
 
-summary 推荐第一片用自有 bytes，不指定 JSON、字符串或另建摘要 Schema。公开输入可取 `ReadOnlyMemory<byte>`，内部取得自有副本；读取返回值也不能暴露会影响内部缓存的可变数组。限长按实际 Entry 编码后不超过 HS `MaxHeadEntryPayloadLength` 检查，不能只检查 summary 的独立长度。缩略图地址可由应用写在这些 bytes 中，附件读取协议后置。以后若选择字符串便利重载，应是明确编码的外观，不是第二种持久权威。
+D/T 的 Head payload 只含4B标记、1B存在标记及有值时12B地址，恰好5或17B；空入口只表示初始空目录，缺失/损坏必需 Head 仍失败。首次新增项写真实 Dictionary Base；读取必要控制入口后才建立图 Store/cache，沿用现有初始化边界。目录读写走窄管理入口和固定 builtin environment，不需要应用 Catalog，也不是新业务 Branch 或第二 Schema 策略。
 
-标签采用有效 Unicode 文本，首版创建后固定；不能继续调用现有只接受小写路径式名称的 `ValidateBranchName`。沿用书签已有的有效 UTF-16 检查思路，取1..1024个 UTF-16 code unit，同时按编码后的整个 D 做 HS payload 限长；数量1000并不是该最大标签长度下的容量保证。拒绝重复 HeadId、非法编码、计数超界、截断与尾随字节；不拒绝重复文本。
+标签为1..1024个 UTF-16 code unit 的有效 Unicode，首版创建后固定，文本可重复；不用现有小写路径式 `ValidateBranchName`，不 trim/normalize。书签名称继续保持 Ordinal 与不可重绑。目录键值、根布局、比较器和所有行闭包的验证见[专题 §3](directory-persistence.md#3-管理图读取与来源)，不以“能解成一个字典”代替角色校验。
 
-具体字节约定如下；长度/计数均为 UInt32LE，文本严格 UTF-8、编码器不添加 BOM、不 trim/normalize。固定4B长度比 varint 多占少量字节，但无需另定最短编码规则，目录容量主要由文本决定。D/T 可为空；先按实际剩余 bytes 与总上限检查计数/长度，再分配，拒绝尾随 bytes：
+summary 第一片用自有 bytes，不指定 JSON、字符串或另建摘要 Schema。输入可取 `ReadOnlyMemory<byte>`，内部取得自有副本；读取返回值不能暴露会影响缓存的可变数组。唯一保留的小描述字节约定为：
 
 ```text
-D     = "P0R3" + count + (HeadId[4] + textByteLength + labelBytes)*
-T     = "P0T2" + count + (textByteLength + nameBytes + CommitId[12])*
-Entry = "P0E1" + FrameAddress[12] + summaryByteLength + summaryBytes
+Entry = "P0E1" + FrameAddress[12] + summaryByteLength[UInt32LE] + summaryBytes
 ```
 
-D 按 HeadId 编码的无符号字节 lex 顺序严格递增，不用本地文件号、进程哈希或编码 uint 数值排序；T 按名称 StringComparer.Ordinal 严格递增，保现有1..1024 Unicode 名称及不可重绑操作合同。Entry 总固定开销20B，按当前上游上限可容纳至多1,048,556B摘要；这是合法边界，不是鼓励写大摘要。标签、摘要与可预先计算的目录容量错误在追加/物理创建前拒绝，不能先写出候选再检查常量边界。
+Entry 固定开销20B，整个 payload 不超过当前 HS `MaxHeadEntryPayloadLength`，故摘要最多1,048,556B；拒绝截断与尾随字节。标签、摘要与可提前发现的编码错误在追加/物理创建前拒绝。缩略图地址可由应用写入摘要，附件协议后置；字符串便利重载若以后加入，只是明确编码的外观。
 
-容量裁决：保留1024单标签上限与总长度限制，不人为将所有标签缩成256，也不加1000条硬上限。1000条64个 BMP 中文字符的目录为200,008B；256字符为776,008B；1024字符为3,080,008B、必须拒绝。常见短标签有空间，极端长标签提前得到明确容量错误即可；没有证据要求现在引入分片目录或索引。完整计量、159项断言及资格限度只查[Probe 记录](../../../experiments/BranchWireFormatProbe/README.md)，不将内存编码算术当磁盘查询性能。
+容量裁决改为：**1 MiB 不再约束 D/T 的全部目录文本**，但单帧、batch、对象及内存预算限制继续适用。1000条线可以先完整恢复到内存；增量写盘不承诺增量捕获、无全表扫描或磁盘单点查询。按现有容器策略选择 Base/Delta，不新写分片目录或索引；旧 codec 的200 KB/776 KB计算不再是产品容量上限。
 
 旧 D/图/T 由新 codec 明确拒绝，不迁移、不自动重写完整帧。只有实际改变的格式升级；无需为了版本对齐修改 batch、directory 或 S。Open 先完成正常 FS/HS 恢复并读取必需控制根，再建立图 Store/cache；不为了新版本做全库图或全部 Head 预打开审计。
 
@@ -88,8 +86,8 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 
 | 当前文件 / 符号 | B2 的具体改动 |
 |---|---|
-| [RepositoryResources.MetaBootstrap](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)：`PublicationBaseline`、`GetBranchHead`、`ReadHistory`、`PrepareSaveCore`、`CommitSave` | baseline 持 D 成员与 S，业务 current 从 HS 查询；pending 保 BranchId、expected Entry、准确 State source。普通保存发布 B，有 Catalog 增长时发布 B/S；不再为每次保存编码 D |
-| [RepositoryResources.Bookmarks](../../../src/DurableGraph.Persistence/RepositoryResources.Bookmarks.cs) | T codec 改 CommitId；解析后重新检查成员/Entry/业务描述，保不可变名及现有 outcome/fault 行为 |
+| [RepositoryResources.MetaBootstrap](../../../src/DurableGraph.Persistence/RepositoryResources.MetaBootstrap.cs)：`PublicationBaseline`、`GetBranchHead`、`ReadHistory`、`PrepareSaveCore`、`CommitSave` | baseline 持 D 管理图及成员与 S，业务 current 从 HS 查询；pending 保 BranchId、expected Entry、准确 State source。目录候选复用容器准备，发布成功才安装；普通保存发布 B 或 B/S，不触碰 D |
+| [RepositoryResources.Bookmarks](../../../src/DurableGraph.Persistence/RepositoryResources.Bookmarks.cs) | T 改窄管理 Dictionary 图与小入口；值解码成 CommitId 后重新检查成员/Entry/业务描述，保不可变名及现有 outcome/fault 行为 |
 | [RepositoryStorageFacade](../../../src/DurableGraph.Persistence/RepositoryStorageFacade.cs)、[PendingRepositorySave](../../../src/DurableGraph.Persistence/PendingRepositorySave.cs) | 只转发新角色值和既有 pending 生命周期，不留以字符串定位分支或裸业务图定位历史的重载 |
 | [Repository.MetaBootstrap](../../../src/DurableGraph.Persistence/Repository.MetaBootstrap.cs)：`RestoreCheckout`、`RequireCheckoutSource`、`PublishSave` | 先从准确 Entry 取得历史材料；同 BranchId 编辑占用；保存前核当前 Entry 等于 BaseCommitId。成功后安装 State source（仅 State）与所有提交的新 Base；Event 不接受 State 身份/rewrite |
 | [BranchSaveSession](../../../src/DurableGraph.Persistence/BranchSaveSession.cs) | 去掉自行沿 Parent 恢复的构造；由 Repository 传入已资格化 baseline / 无 State 结论和固定模型环境。捕获后立即复查 Store，保 staging/ready 的 AbortPreparation 清理 |
@@ -98,7 +96,7 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 
 **B2 不以合并所有 checkout Catalog 为前置。**当前 `SchemaCatalogWorkspace` 是内部实现；既有 latest Catalog rebase 可以暂保在单成员路径，每条 Branch 并无独立持久 Schema 权威。仓库 accepted Catalog 和多成员共同准备在后续组内核统一，避免同时改两条关键机制。现有模型环境、prepared State 命中复核、对象可变隔离和 fault/close 清理不得因新 ID 而退出。
 
-创建按[纵切 §5](branch-vertical-design.md#5-创建与登记只保留一个-dg-可见点)三条路径：fork 创建引用 Head 后发布 D；新根先追加真实图并 CreateHead 得首 Entry，再发布 D，Catalog 增长时最终发布 D/S。不能把新 B 又加入最后 CU 制造第二次业务保存。普通 commit 则发布已有 B 或 B/S。共享准备/安装代码可以抽窄函数，不为这两种不同发布点强造通用事务框架。
+创建按[纵切 §5](branch-vertical-design.md#5-创建与登记只保留一个-dg-可见点)三条路径：fork 创建引用 Head 后追加 D 候选图并发布 D；新根先追加真实业务图并 CreateHead 得首 Entry，再追加/发布 D，Catalog 增长时最终发布 D/S。D/S 管理候选均仅在共同发布成功后安装。不能把新 B 又加入最后 CU 制造第二次业务保存。普通 commit 则发布已有 B 或 B/S。共享准备/安装代码可以抽窄函数，不为这两种不同发布点强造通用事务框架。
 
 错误仍分 publication outcome 与 owner health。创建登记 Unknown/Published 交付失败要保已知候选 BranchId；普通保存先保 BranchId 与 ExpectedBase，新 CommitId 只能在 HS 实际返回后取得，Confirmed 异常也可能没有该 ID。既有 `CandidateRevisionAddress` 若保留，只是诊断图地址，不能充当存档 handle。未登记产物不自动清理/认领；旧 owner fault 后不可继续编辑，关闭后按 D 或准确 BranchId 查结果。
 
@@ -127,7 +125,7 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 
 **定向 origin 影响正式描述查询，不阻断图来源接缝。**上游尚缺[ReadHeadOrigin 窄接口](headstore-origin-request.md)时，可在隔离分支用既有全量 ListHeadOrigins 跑健康数据见证；不能以它为生产 `ReadBranchInfo` 的最终资格，因为无关孤儿损坏会扩散到本次查询。B2 合入前应取得窄接口并固定依赖，或由主线程显式重新裁决并记录较弱边界；不得暗中在 D 重存 origin、从最早 Entry 猜 origin，或将每次 Open 变成全库审计。
 
-新 D/图/T/Entry 标记、标签编码/上限、summary 所有权、总长度检查与薄 ID codec 现已收窄为 §2 和 API 草图的具体施工选择。下一步应接产品纵切和畸形/拒旧测试，不再先重做一轮局部编码海选；附件、树索引和联合提交不是前置。若实际接线揭示必须偏离这些持久形状，再用证据更新本合同及对应反例。
+新图/Entry 标记、标签上限、summary 所有权与薄 ID codec 继续按 §2 和 API 草图施工；D/T 改按[目录合同](directory-persistence.md)复用现有 Dictionary，需验证窄管理接线、冷恢复后真实 Delta 和 D/S 共同发布。随后接产品纵切和畸形/拒旧测试，不扩展专用目录 codec；附件、树索引和联合提交不是前置。若实际接线揭示必须偏离这些持久形状，再用证据更新本合同及对应反例。
 
 没有发现需要回到用户故事层的新需求冲突。实际施工量仍需用首个纵切 diff 校准，尤其历史便利入口与包模板迁移；不能把“隔离分支”当成可以无限扩展范围的理由。
 
@@ -140,7 +138,8 @@ HS visitor 只收集准确 Entry/图地址、Kind 和足够的最近 State 信�
 3. **真正错误仍失败**：E2 的图/batch/directory 一致自报 S0 而 HS 前源 S1；错误 prior、selected/origin Schema；wrong owner、fault/closed snapshot；失效 ExpectedBase。预算失败不交付 null/部分内容，正常到根才证明无 State。
 4. **正式成员与创建边界**：三条登记成功路径、至少两条相同中文标签的 Branch、未登记/管理 Head 被拒、空 fork 重开后即列出/预览/继续；新根有 Catalog 增长时 D/S 共同可见。定向 origin 的坏目标失败、无关未登记坏 Head 不影响目标描述，缺失父成员不当新根。中断注入可在后续登记专项扩充；B2 至少保原有 Unknown/Confirmed/fault 分类，不能先交付会误报未创建的异常路径。
 5. **调用闭包**：准确 Load、相反角色、Pair、固定历史枚举、Tag 都通过新 Commit 资格入口；冷读、prepared State 重用、Event 保 baseline、安装后再次保存与关闭后已交付对象可读均保持。源码不再有业务 Parent 游走、旧 name→graph 发布、裸业务 address-only 资格入口；不以删除内容反例换通过率。
-6. **按操作停止**：`S0,E1,S1,S2` 的 ReadCheckpoint 恢复 S2 与 E1，分别以 S1/S0 资格化；同一点及跨两个根/兄弟分支的 ReadPair 保输入顺序和各自 source，不能由一条历史代签另一条。无相反角色须完整到根，预算失败不交付缺项。Event-only、State-only 与已有方向/下界/枚举寿命反例一并保留。
+6. **管理目录复用**：D/T 的真实 Meta Base→Delta→冷重开续写，准确 source/prior/H、空入口首项 Base、S 白名单不被放宽以及根/比较器/值闭包反例。D/S 共同发布后才共同安装；普通业务保存不追加 D，具体最小判据见[目录合同 §5](directory-persistence.md#5-容量成本与最小验收)。
+7. **按操作停止**：`S0,E1,S1,S2` 的 ReadCheckpoint 恢复 S2 与 E1，分别以 S1/S0 资格化；同一点及跨两个根/兄弟分支的 ReadPair 保输入顺序和各自 source，不能由一条历史代签另一条。无相反角色须完整到根，预算失败不交付缺项。Event-only、State-only 与已有方向/下界/枚举寿命反例一并保留。
 
 B2 至少运行根 `dotnet build DurableGraph.slnx`、Persistence 全套和受影响生成模型/Runtime 回归；按当期精确 Storage pin 运行。README/包消费者模板同步编译或在独立任务包路径资格化，普通包、跨进程/kill 与掉电证据分别记录，源码通过不冒充包交付。测试 fixture 的 explicit expected source 只证明物理关系；来源最近性必须由上述真实 HS 集成反例证明。
 

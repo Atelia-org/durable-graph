@@ -23,7 +23,8 @@
 |---|---|
 | 显式分类、真实 backing 的 Roslyn/PE 暴露与当前 SG 输出 | [ExplicitStorageClassificationProbe](ExplicitStorageClassificationProbe/README.md)；14 形状的观察工具，保独立正控；不把原始遗漏固定为产品回归，不证明普通 backing 已获支持 |
 | DG 分支登记候选与准确历史分页 | [BranchHeadMechanismProbe](BranchHeadMechanismProbe/README.md)；真实 HeadStore 公开原语、示意 payload 的成功组合与预算见证，不证明 DG 图恢复或中断原子性 |
-| DG 新目录/书签/摘要的候选编码与容量 | [BranchWireFormatProbe](BranchWireFormatProbe/README.md)；严格文本、紧凑 ID、边界拒绝及摘要所有权，纯 codec 见证，不证明产品格式、查询性能或存储资格 |
+| DG 管理目录复用 Dictionary 增量持久化 | [DirectoryDictionaryMechanismProbe](DirectoryDictionaryMechanismProbe/README.md)；复用测试项目的真实 Meta/规划器 Delta/冷开/D-S 发布见证，T 仅 Base 冷读；新产品管理入口、生命周期和故障未验收 |
+| 旧整表目录方案对照与仍可用的 Entry 编码边界 | [BranchWireFormatProbe](BranchWireFormatProbe/README.md)；D/T 整表方案已退出，保留容量对照及独立 ID/摘要所有权见证，不证明新 Dictionary 目录或产品格式 |
 
 旧 raw Store 消费者的执行代码与 runner 已删除；保留的 19 类业务模型是
 [生成器与 history 编译资产](PackageConsumerProbe/README.md#model-fixtures)，不再是待恢复的运行门禁。
