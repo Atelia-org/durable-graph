@@ -38,7 +38,7 @@ internal static class Program {
     private static BranchId Find(Repository repo, string label) => repo.ListBranches().Single(b => b.DisplayLabel == label).Id;
     private static void Need(bool value, string message) { if (!value) { throw new InvalidOperationException(message); } }
     private static void Rejected(Action action) {
-        try { action(); } catch (InvalidOperationException) { return; }
+        try { action(); } catch (InvalidOperationException error) when (error.Message == "The commit request's original working-copy baseline has changed.") { return; }
         throw new InvalidOperationException("An expired request was accepted.");
     }
     private static void Create(string path) {
@@ -71,8 +71,8 @@ internal static class Program {
         Need(((World)world.State!).Swords == 0 && ((Player)player.State!).Swords == 1, "Transferred item was lost or duplicated.");
         CommitId playerState = player.StateSourceCommitId!.Value;
         var expired = player.CreateStateCommitRequest();
-        ((World)world.State).Swords = 2;
-        ((Player)player.State).Swords = 99; // An Event does not save this edit.
+        ((World)world.State!).Swords = 2;
+        ((Player)player.State!).Swords = 99; // An Event does not save this edit.
         var saved = repo.CommitBranches([world.CreateStateCommitRequest(), player.CreateEventCommitRequest(new Event { Code = 7 })]);
         Need(saved.Count == 2 && saved[world.BranchId].Kind == CommitKind.State && saved[player.BranchId].Kind == CommitKind.Event, "Mixed roles were lost.");
         Need(player.BaseCommitId == saved[player.BranchId].Id && player.StateSourceCommitId == playerState, "Event changed State baseline.");
@@ -90,6 +90,7 @@ internal static class Program {
         LoadedState savedPlayer = repo.LoadLatestSavedState(playerCurrent);
         Need(savedPlayer.StateCommitId == repo.ResolveTag("player-transfer") && ((Player)savedPlayer.State!).Swords == 1, "Event persisted an uncommitted State edit.");
         Need(((World)repo.LoadState(repo.ResolveTag("world-transfer"))).Swords == 0, "Old World commit changed.");
-        Console.WriteLine("GroupVerify:ColdBothSchemas:ExactTags:NoEventReplay");
+        Need(repo.ReadCommitInfo(repo.ResolveTag("world-transfer")).Summary.Span.SequenceEqual(new byte[] { 1, 2, 3 }), "The durable summary changed.");
+        Console.WriteLine("GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState");
     }
 }

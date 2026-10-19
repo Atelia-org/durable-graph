@@ -13,7 +13,7 @@
 
 用户已将本设计设为持续目标：在无兼容性负担下，实现已接受的 Branch/Commit/WorkingCopy 功能族，补齐多分支原子提交、根/子树目录查询和历史分页，完成旧 API 替代、活动消费者迁移、源码与普通包验收、文档清理及正式合入。只完成其中一片不能宣称整体完成；BLOB、ID durable 字段等明确后置项不自动扩为本目标必经条件。
 
-每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：正式组提交及故障边界、根/子树和分页、最终文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
+每轮从本文恢复，按依赖选择可独立验收的小片，记录问题/范围/最小判据；有界委派实施和独立质疑，主线程检查真实产物与实际验证，再更新当前停点、剩余门槛与下一步并按需提交。当前总验收还缺：旧 Kill host 迁移、根/子树和分页、登记故障剩余窗口、最终文档与合入；源码通过不代替包资格，内部机制见证不代替公开 API。
 
 活动消费者迁移及原11个普通包门禁已完成，见[原片资格](package-cutover-validation.md)。[定向来源查询](targeted-origin-integration.md)已完成上游实施、DG 接入和新包增量验收；两个版本的证据不混用。只完成依赖和包闭包不等于0096整体完成。
 
@@ -44,25 +44,25 @@
 
 ## 当前焦点与下一步
 
-**当前停点：定向 origin 已完成。**隔离分支 `db096/branch-repository-cutover` 的实现提交 `c9ad935` 已替换全集 adapter：单 Branch 查询只访问目标及直接相关来源，完整列表在已登记集合中检查环。公开 DG 签名与持久格式不变。Storage pin 已到 `70b406c` / `0.1.3-dev.20261019.g70b406c`，上游 `main` 已快进；准确源码、反例及新 S/G 包验收只查[接入记录](targeted-origin-integration.md)。DG 尚未正式合入。
+**当前停点：真实组提交已完成源码及受影响普通包验收。**产品提交 `9aa72ff`，新增轻量 CommitRequest / CommitBranches；所有成员共用资源 owner 的 accepted Catalog、一次候选与一次 B₁…Bₙ＋必要 S 发布，普通保存不更新 D。即时 State/Event 复用单成员路径，新根保 D(/S)登记。实际55项组反例、完整回归、新G三门禁及限度见[组提交验收](group-commit-integration.md)。定向 origin已在前片闭合；DG仍在 `db096/branch-repository-cutover`，尚未正式合入。
 
-**当前实施中：公开 CommitRequest、owner 共同 Catalog 和真正多 Branch 提交共核。**先 Capture 全员，再统一准备 Schema、逐成员准备内容，一次发布 B₁…Bₙ 与必要 S；不更新 D。即时单提交复用单成员路径。成功必须推进全部 Base，State/Event 各自基线规则保持；输入枚举、准备、发布、安装、清理和交付都在同一操作边界内。实现接点与最小反例集中于[组内核 §9](group-kernel-design.md#9-新布局实际内核的施工接点)，不得用旧布局原语 Probe 代替正式接口验收。当前写入分为产品共核、健康公开调用、故障反例、旧内部 Catalog 测试迁移；主线程集成并统一构建。根 build 已0警告/0错误，完整 Persistence 1049/1049通过（含55新组反例）；完整Runtime 1724/1724亦通过，新G普通包资格待完成。当前证据与未覆盖处见[组提交实施验收](group-commit-integration.md)。
+**下一片：迁移 MetaBootstrapCrashProbe，恢复现有进程中止门禁。**它尚含旧 BranchCheckout/Head 1 名字目录；可保6个保存窗口和3个初始化窗口，业务定位改真实 B/S，D/T不随保存推进。已发布内容按Commit历史验证，完整未发布候选只按READY中的旧State验物理source。具体接点见组提交记录的后续边界；原probe源码不可直接作为新模型资格。先恢复该现有消费者，再补根/子树、公开历史页与最终交付，不重写原语实验。
 
-**压缩后恢复顺序：完整读本文 → 组内核 §9 与联合提交合同 → 当前 BranchSaveSession / RepositoryResources / WorkingCopy 源码。**用当前 pin 的源码根或完整新 feed；旧 `f8868b5` worktree/feed只保其原资格。不要重迁消费者、重做 D 优化或重新等待 origin 交付。
+**压缩后恢复顺序：完整读本文 → [组提交验收的后续边界](group-commit-integration.md#后续边界) → MetaBootstrapCrashProbe 的 Program/controller/README → 当前业务Entry与管理pointer实现。**当前 S 为 `70b406c` / `0.1.3-dev.20261019.g70b406c`，上游main一致；源码build/test显式source模式，包模式使用完整feed。新的最终G须有自己的资格，不重复已完成的Catalog设计或消费者迁移。
 
 当前讨论基线（本目录活动设计以 [API 草图](api-sketch.md) 对齐；历史请求、源码与实验保持原名并注明映射）：
 
 - **Branch / Commit / WorkingCopy** 已形成清晰概念族；Read/List 读描述，Load 加载对象，OpenWorkingCopy(branchId) 取得编辑能力，Create/Fork/Commit 发布。统一 Catalog 不再需要归属参数。准确 LoadState/LoadEvent 与 LoadLatestSavedState 分开；加载对象无分支提交能力，不等于深度不可变。隔离分支已采用新身份和 WorkingCopy；Checkpoint 保留复合恢复职责，位置改为 CommitInfo。
 - 根/子树查询已加入设计；历史以 AtOrBefore/Before 和 Continuation 表达准确边界，返回 State/Event 小描述。五个核心调用故事保持可走通，不用减少方法数代替使用便利。
-- [联合提交设计](multi-branch-commits.md)已选 CommitRequest：绑定原活副本、准确 Base、根引用与自有摘要，不设 Consumed。健康失败且基线不变可重捕；成功含 Event 后旧请求过期；Unknown/发布后失败停用 owner。输入枚举至结果交付均在操作 guard 内，全部图在整个调用内稳定。单成员异常的目标/ExpectedBase/实际 CandidateCommit 字段已接入；全组传播待验收，不再重开请求消费状态或 PreparedCommit。
+- [联合提交设计](multi-branch-commits.md)已选 CommitRequest：绑定原活副本、准确 Base、根引用与自有摘要，不设 Consumed。健康失败且基线不变可重捕；成功含 Event 后旧请求过期；Unknown/发布后失败停用 owner。输入枚举至结果交付均在操作 guard 内，全部图在整个调用内稳定。全组异常通过 Members 保各 Branch/ExpectedBase/已知图和实际 CandidateCommit，确认后坏映射及清理失败已验证，不再重开请求消费状态或 PreparedCommit。
 - [创建方案](application-design.md)推荐 B：DG 登记决定正式成员；先准备 Head，再登记，允许不展示的未登记产物；普通保存不更新目录。上游不可变创建属性 A 留作对照，不作为前置依赖。新根不能假定 CreateHead 参加 PublishHeads。
 - [用户故事](user-stories.md)中 C4 密码门、C5 知识神器是验证参考，不要求全部产品化。应用幂等不保证组合不放大；稳定知识身份、独立向前保存与并集建议只约束同一批事实，不改变 DG 提交/重试合同。
 
 ### 机制结论与依赖顺序
 
 - **已完成基础：**来源 snapshot 接缝 A、Storage B1、B2 新布局/外观、原回归迁移、D 查询投影、活动消费者与定向 origin。各片只证明其实际版本，历史记录不作为未完成工单。
-- **组提交优先：**一个 owner accepted Catalog、操作内共同候选和具体成员数组。staging/ready 逐成员 AbortPreparation，installed 后无操作；确认实际 CommitId 后才填结果。全组 Base、reentry、清理及 outcome 必须在新内核验收。现每 checkout Catalog 的移除属于该片，旧工作副本执行模型环境不能随 Catalog 增长刷新。
-- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核重构须保创建回归，并补剩余登记失败窗口。新根不能假定 CreateHead 参加 PublishHeads。
+- **组提交已完成：**owner accepted Catalog和操作内共同候选；全员先准入、再Capture，guard覆盖输入枚举与整个调用。Capture清理由协调器统一负责，旧每WC dirty Catalog已退出；各工作副本执行环境保持冻结。一次真实CU、全部Base推进、State/Event差异和清理/outcome反例已有资格，进程Kill与平台范围不由此外推。
+- **创建：**新根/空 fork/Tag 已接 D/T Dictionary，成功后接受；普通保存只发布 B 或 B/S。登记前中断已有有限见证，组内核已保原创建回归，仍需补剩余登记失败窗口。新根不能假定 CreateHead 参加 PublishHeads。
 - **树与历史页：**定向 origin 门槛已闭合；接下来补 ListRootBranches/ListBranchSubtree 和公开分页。历史固定准确 anchor，Before 排除重复首项；页满成功、工作预算耗尽整次失败。既有 Probe 只证明有限健康计数，不是完整 I/O 资格。
 - **最终交付：**完成以上功能、故障边界和调用示例，重核源码与普通包门禁、文档/旧 API 清理（包括 src/PROJECT-STATE 仍保留的旧 API 能力细节），再正式合入。新版本必须有自己的资格，不借用前片绿色记录。
 
@@ -70,7 +70,7 @@
 
 ## 已知未决项与明确延期
 
-待闭合：真实组提交及全组 Base/清理/outcome、根/子树、分页、登记故障矩阵的剩余窗口，以及最终文档/正式合入。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
+待闭合：旧 Kill host 的 API/布局迁移，根/子树、分页、登记故障矩阵的剩余窗口，以及最终文档/正式合入。定向 origin 和活动消费者迁移已经完成。打开/保存重复最近 State 扫描仍为有计数反例才启动的效率候选；ID durable 字段、附件和专项成本测量明确后置。
 
 延期：rewind、merge、删除/GC、唯一显示名查询、任意摘要字段索引、多writer、跨库交换协议、异步补图、修订旧摘要、RL批量/吞吐专项。1000条线允许先测完整小目录和内存树索引；长历史操作应避免扫描累计H，具体性能指标尚未定。
 
@@ -79,7 +79,7 @@
 - 定向 origin 的源码、测试、S/G 来源、包资格及 Git 边界见[接入记录](targeted-origin-integration.md)。新包只验受影响 Split/Tag 与上游四 smoke；没有把前片11门禁外推到新 G。
 - 原 B2 调用闭包、完整根回归及11个普通包消费者见[包迁移验收](package-cutover-validation.md)；来源/范围保持其原版本，后续不重复那次迁移。
 - [交付复核](headstore-delivery-review.md)是更早同库 Handle/历史能力的独立消费者证据；[误用检出实验](handle-misuse-detection.md)支持紧凑 ID 的开发期诊断边界，旧强 scope 建议已退出。二者不代替当前产品验收。
-- 组提交已获源码资格、普通包仍待验收；根/子树和分页尚未作为公开产品能力交付；未公开发布包、未正式合入 DG。底层普通恢复、完整帧 append-only、owner/fault/lifetime 纪律保持。
+- [组提交](group-commit-integration.md)已有源码与新 G 的 Split/Group/Meta 三门禁资格；根/子树和分页尚未作为公开产品能力交付；未公开发布包、未正式合入 DG。底层普通恢复、完整帧 append-only、owner/fault/lifetime 纪律保持。
 
 ## 按需阅读
 

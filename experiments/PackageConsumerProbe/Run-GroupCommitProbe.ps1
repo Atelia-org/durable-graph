@@ -6,6 +6,9 @@ if ([string]::IsNullOrWhiteSpace($PackageSource) -ne [string]::IsNullOrWhiteSpac
     throw 'Supply both -PackageSource and -Version, or neither for a self-contained run.'
 }
 . (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
+if (![string]::IsNullOrWhiteSpace($PackageSource)) {
+    $PackageSource = (Resolve-Path -LiteralPath $PackageSource).Path
+}
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $consumerProject = Join-Path $PSScriptRoot 'GroupCommitConsumer/GroupCommitConsumer.csproj'
@@ -56,7 +59,7 @@ try {
     foreach ($lane in @(
         @{ Name = 'seed'; Expected = 'GroupSeed:TwoNewSchemas:DeferredCapture:OwnedSummary:AllBases' },
         @{ Name = 'continue'; Expected = 'GroupContinue:ColdState:MixedRoles:EventKeepsState:ExpiredRequest' },
-        @{ Name = 'verify'; Expected = 'GroupVerify:ColdBothSchemas:ExactTags:NoEventReplay' }
+        @{ Name = 'verify'; Expected = 'GroupVerify:ColdBothSchemas:ExactTags:EventKeepsSavedState' }
     )) {
         # Separate processes cannot accidentally reuse a repository owner, DTO cache,
         # generated model instance table, or an in-memory handle from the preceding lane.
