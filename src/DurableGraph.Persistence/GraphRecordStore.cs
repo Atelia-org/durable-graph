@@ -143,6 +143,11 @@ internal sealed class GraphRecordStore : IDisposable {
             out FrameAddress? sourceDirectory, out ObjectVersionBatch? batch);
         IReadOnlyDictionary<uint, FrameAddress> heads = ReadDirectory(metadata.DirectoryRoot);
         if (!heads.ContainsKey(metadata.RootId.Value)) { throw new InvalidDataException("RootId is not live."); }
+        Dictionary<FrameAddress, List<uint>> requiredRecords = [];
+        void RequireRecord(FrameAddress batchAddress, uint id) {
+            if (!requiredRecords.TryGetValue(batchAddress, out var ids)) { requiredRecords.Add(batchAddress, ids = []); }
+            ids.Add(id);
+        }
         if (metadata.OwnedBatch is { } owned) {
             IReadOnlyDictionary<uint, FrameAddress>? sourceHeads = null;
             foreach (ObjectVersionRecord record in batch!.Records) {
@@ -153,13 +158,20 @@ internal sealed class GraphRecordStore : IDisposable {
                     if (sourceDirectory is null) { throw new InvalidDataException("An initial batch cannot contain Delta."); }
                     sourceHeads ??= ReadDirectory(sourceDirectory.Value);
                     RequirePrior(sourceHeads, record.ObjectId, record.PriorAddress);
-                    _ = FindRecord(ReadBatch(record.PriorAddress!.Value), record.ObjectId);
+                    RequireRecord(record.PriorAddress!.Value, record.ObjectId);
                 }
             }
         }
         // Shallow external-head declarations stay shallow. These checks do not
         // reconstruct old Delta chains or authenticate global entity history.
-        foreach ((uint id, FrameAddress head) in heads) { _ = FindRecord(ReadBatch(head), id); }
+        foreach ((uint id, FrameAddress head) in heads) { RequireRecord(head, id); }
+        // Group physical reads, not their per-ID qualification. The already-read owned
+        // batch and one current external batch are the only complete batches retained here.
+        foreach ((FrameAddress batchAddress, List<uint> ids) in requiredRecords) {
+            EnsureUsable();
+            ObjectVersionBatch selectedBatch = metadata.OwnedBatch == batchAddress ? batch! : ReadBatch(batchAddress);
+            foreach (uint id in ids) { _ = FindRecord(selectedBatch, id); }
+        }
         if (metadata.Kind is StoredGraphKind.State or StoredGraphKind.Event) { BusinessGraphQualificationCount++; }
         return new(address, metadata, source, heads, this);
     }
@@ -299,9 +311,76 @@ internal sealed class GraphRecordStore : IDisposable {
     }
 
     private IEnumerable<ObjectVersionChain> EnumerateObjectChains(StoredGraphRevision graph) {
-        foreach (uint objectId in graph.ObjectHeads.Keys) {
-            yield return ReadObjectChainCore(graph, objectId);
+        Dictionary<FrameAddress, Queue<PendingObjectChain>> frontier = [];
+        Dictionary<FrameAddress, Queue<PendingObjectChain>> next = [];
+        ObjectVersionBatch? batch = null;
+        IReadOnlyDictionary<uint, FrameAddress>? sourceHeads = null;
+        PendingObjectChain? chain = null;
+        try {
+            EnsureUsable();
+            foreach ((uint id, FrameAddress head) in graph.ObjectHeads) {
+                EnqueueChain(frontier, head, new(id, head));
+            }
+            while (frontier.Count != 0) {
+                foreach ((FrameAddress address, Queue<PendingObjectChain> pending) in frontier) {
+                    batch = ReadBatch(address);
+                    sourceHeads = null;
+                    while (pending.TryDequeue(out chain)) {
+                        EnsureUsable();
+                        if (!chain.Visited.Add(address)) { throw new InvalidDataException("Object prior chain contains a cycle."); }
+                        ObjectVersionRecord record = FindRecord(batch, chain.ObjectId);
+                        chain.Entries.Add(new(record, address, batch.SourceGraph, batch.SchemaRoot,
+                            record.EncodedPayloadBytes ?? throw new InvalidDataException("Read records require actual payload accounting.")));
+                        if (record.Kind == ObjectVersionKind.Base) {
+                            chain.Entries.Reverse();
+                            ObjectVersionChain completed = new(chain.ObjectId, chain.Head, chain.Entries);
+                            chain = null;
+                            yield return completed;
+                            // Resuming a suspended group must check the owner even when its
+                            // next record is already available in this operation's owned batch.
+                            EnsureUsable();
+                        } else {
+                            if (sourceHeads is null) {
+                                FrameAddress source = batch.SourceGraph ?? throw new InvalidDataException("Object Delta lacks a source graph.");
+                                GraphEnvelope sourceGraph = ReadMetadata(source);
+                                RequireContentSourceRole(sourceGraph.Kind);
+                                sourceHeads = ReadDirectory(sourceGraph.DirectoryRoot);
+                            }
+                            RequirePrior(sourceHeads, chain.ObjectId, record.PriorAddress);
+                            EnqueueChain(next, record.PriorAddress!.Value, chain);
+                        }
+                    }
+                    // Carry only selected records into the next frontier, never the complete
+                    // historical batch and its unrelated/deleted peer bodies. Late arrivals
+                    // at an earlier address in another frontier may decode that batch again.
+                    batch = null;
+                    sourceHeads = null;
+                }
+                frontier.Clear();
+                (frontier, next) = (next, frontier);
+            }
+        } finally {
+            foreach (var pending in frontier.Values) { pending.Clear(); }
+            foreach (var pending in next.Values) { pending.Clear(); }
+            frontier.Clear();
+            next.Clear();
+            batch = null;
+            sourceHeads = null;
+            chain = null;
         }
+    }
+
+    private static void EnqueueChain(Dictionary<FrameAddress, Queue<PendingObjectChain>> groups,
+        FrameAddress address, PendingObjectChain chain) {
+        if (!groups.TryGetValue(address, out var pending)) { groups.Add(address, pending = new()); }
+        pending.Enqueue(chain);
+    }
+
+    private sealed class PendingObjectChain(uint objectId, FrameAddress head) {
+        internal uint ObjectId { get; } = objectId;
+        internal FrameAddress Head { get; } = head;
+        internal HashSet<FrameAddress> Visited { get; } = [];
+        internal List<ObjectVersionChainEntry> Entries { get; } = [];
     }
 
     private ObjectVersionChain ReadObjectChainCore(StoredGraphRevision graph, uint objectId) {

@@ -27,7 +27,7 @@ function Invoke-DotNet {
         }
         [void]$sources.Append("<add key='nuget.org' value='https://api.nuget.org/v3/index.json'/></packageSources>")
         [void]$mapping.Append("<packageSource key='nuget.org'><package pattern='*'/></packageSource></packageSourceMapping>")
-        "<configuration>$sources$mapping</configuration>" | Set-Content -LiteralPath $config -Encoding utf8NoBOM
+        "<configuration>$sources$mapping<fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" | Set-Content -LiteralPath $config -Encoding utf8NoBOM
         $Arguments = @($forwarded.ToArray()) + @('--configfile', $config, '--disable-parallel')
     }
     & dotnet @Arguments
@@ -41,6 +41,7 @@ function Prepare-DurableGraphProbeFeed {
         [Parameter(Mandatory)][string] $Version,
         [string] $StoragePackageSource = $env:DG_STORAGE_PACKAGE_SOURCE
     )
+    $OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
     if ((Test-Path -LiteralPath $OutputDirectory) -and @(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne 0) {
         throw 'Prepare the probe in a fresh feed; existing package versions are never overwritten.'
     }
@@ -56,11 +57,12 @@ function Prepare-DurableGraphProbeFeed {
     foreach ($package in $storage.Packages) {
         Copy-Item -LiteralPath (Join-Path $storage.PackageSource $package.File) -Destination $OutputDirectory
     }
-    # Packing remains package-mode. This isolated complete feed supplies the exact upstream
-    # candidates; nuget.org supplies unrelated SDK/Roslyn dependencies.
-    $packConfig = Join-Path (Split-Path -Parent $OutputDirectory) 'pack.nuget.config'
+    # Prepare/pack calls sharing a checkout must run serially: project bin/obj are shared.
+    # Keep this invocation's producer configuration inside its own feed, not a shared parent.
+    # Packing remains package-mode; nuget.org supplies unrelated SDK/Roslyn dependencies.
+    $packConfig = Join-Path $OutputDirectory 'pack.nuget.config'
     $feedXml = [Security.SecurityElement]::Escape([IO.Path]::GetFullPath($OutputDirectory))
-    "<configuration><packageSources><clear/><add key='probe' value='$feedXml'/><add key='nuget.org' value='https://api.nuget.org/v3/index.json'/></packageSources><packageSourceMapping><clear/><packageSource key='probe'><package pattern='Atelia.*'/></packageSource><packageSource key='nuget.org'><package pattern='*'/></packageSource></packageSourceMapping></configuration>" |
+    "<configuration><packageSources><clear/><add key='probe' value='$feedXml'/><add key='nuget.org' value='https://api.nuget.org/v3/index.json'/></packageSources><packageSourceMapping><clear/><packageSource key='probe'><package pattern='Atelia.*'/></packageSource><packageSource key='nuget.org'><package pattern='*'/></packageSource></packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" |
         Set-Content -LiteralPath $packConfig -Encoding utf8NoBOM
     foreach ($project in @(
         'src/DurableGraph.Serialization/DurableGraph.Serialization.csproj',

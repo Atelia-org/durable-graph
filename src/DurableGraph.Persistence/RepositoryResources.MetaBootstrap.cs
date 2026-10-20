@@ -16,6 +16,11 @@ public sealed partial class RepositoryResources {
     private DecodedGraphRows? _projectedBranchDirectory;
     private IReadOnlyDictionary<HeadId, string>? _branchLabels;
     internal long BranchDirectoryProjectedEntries { get; private set; }
+    // Actual callbacks in the unpaged DG history scan, not HeadStore work steps or physical I/O.
+    internal long HistoryScanVisitedEntries { get; private set; }
+    // One proved prefix per registered physical Head, not one entry per Commit. Keep
+    // locators only: summaries and decoded graphs belong to the requesting operation.
+    private readonly Dictionary<HeadId, (HeadEntryId Anchor, HeadEntryId? State)> _nearestStates = [];
     private HeadEntryId _branchEntry, _sharedEntry;
     private PendingRepositorySave? _pending;
     private bool _preparing, _committing;
@@ -170,7 +175,10 @@ public sealed partial class RepositoryResources {
     // Each visitor ends before callers decode objects or enter another HS history operation.
     private void ScanHistory(HeadEntryId id, Func<HistoryGraphRecord, bool> visitor) {
         RequireMember(id.HeadId);
-        _heads.ReadEntryHistory(id, new(long.MaxValue, long.MaxValue), entry => visitor(Describe(entry))).Unwrap();
+        _heads.ReadEntryHistory(id, new(long.MaxValue, long.MaxValue), entry => {
+            HistoryScanVisitedEntries++;
+            return visitor(Describe(entry));
+        }).Unwrap();
     }
     // The caller owns a synchronous page operation; only the exact anchor is scanned, with no extra ReadEntry.
     internal HeadHistoryEnd ScanHistoryPage(HeadEntryId id, HeadHistoryBudget budget,
@@ -199,8 +207,53 @@ public sealed partial class RepositoryResources {
         ScanHistory(id, item => { result.Add(item); return true; });
         return result;
     }
-    internal HistoryGraphRecord? FindNearestState(HeadEntryId id, bool inclusive) =>
-        FindKind(id, CommitKind.State, inclusive);
+    internal HistoryGraphRecord? FindNearestState(HeadEntryId id, bool inclusive) {
+        if (!inclusive) { return FindKind(id, CommitKind.State, false); }
+        RequireMember(id.HeadId);
+        EnsureSaveUsable();
+        bool cached = _nearestStates.TryGetValue(id.HeadId, out var cursor);
+        if (cached && cursor.Anchor == id) {
+            HistoryGraphRecord? state = ReadMemoizedState(cursor.State);
+            EnsureSaveUsable();
+            return state;
+        }
+
+        HistoryGraphRecord? found = null;
+        bool reachedAnchor = false;
+        ScanHistory(id, item => {
+            if (item.Kind == CommitKind.State) {
+                found = item;
+                return false;
+            }
+            if (cached && item.Id == cursor.Anchor) {
+                reachedAnchor = true;
+                return false;
+            }
+            return true;
+        });
+        // Successful HS cleanup must precede both source resolution and installing a
+        // new proof. In particular, a visitor's last callback is not query success.
+        EnsureSaveUsable();
+        if (reachedAnchor) { found = ReadMemoizedState(cursor.State); }
+        EnsureSaveUsable();
+        if (!cached || id.Ticket.Offset > cursor.Anchor.Ticket.Offset) {
+            // Both results have independently passed exact history validation. Within
+            // one append-only physical Head file, prefer the later anchor for bounded
+            // retention; offsets never prove history, source validity or publication.
+            // Do not read current here: an old prefix need not depend on a healthy suffix.
+            _nearestStates[id.HeadId] = (id, found?.Id);
+        }
+        return found;
+    }
+
+    private HistoryGraphRecord? ReadMemoizedState(HeadEntryId? id) {
+        if (id is null) { return null; }
+        // Resolve outside an active HS history visitor. Preserve the ordinary full
+        // descriptor (including its owned summary), without retaining it in the memo.
+        HistoryGraphRecord state = ReadDescriptor(id.Value);
+        if (state.Kind != CommitKind.State) { throw new InvalidDataException("A proved nearest State must still select a State graph."); }
+        return state;
+    }
     internal HistoryGraphRecord? FindPreviousKind(HeadEntryId id, CommitKind kind) => FindKind(id, kind, false);
     private HistoryGraphRecord? FindKind(HeadEntryId id, CommitKind kind, bool inclusive) {
         HistoryGraphRecord? found = null;

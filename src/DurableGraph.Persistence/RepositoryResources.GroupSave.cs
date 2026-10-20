@@ -75,6 +75,11 @@ public sealed partial class RepositoryResources {
         } finally { _preparing = false; }
     }
 
+    // Storage-only callers may omit hooks. Typed producers pair preparation and
+    // installation for the same graph: prepare before publication, then install/deliver
+    // only after validating the exact published Head set. State hooks never run for Events.
+    // Cleanup is attempted at most once here; failures after publication fault the owner
+    // without rolling back already published data or completed in-memory installations.
     internal IReadOnlyList<RepositorySaveResult> CommitSaveGroup(PendingRepositorySave pending,
         Action<StoredGraphRevision>? installMeta = null, Action<StoredGraphRevision>? prepareMeta = null,
         Action<int, StoredGraphRevision>? prepareState = null, Action<int, StoredGraphRevision>? installState = null,

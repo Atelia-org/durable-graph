@@ -4,7 +4,7 @@
 共同内核、固定员工、绑定表与模型执行环境在 `Atelia.DurableGraph.Persistence`。
 [DB-092 E3](../../docs/design-branches/0092-type-namespace-refactoring/README.md#e3-status)将旧阶段目录并入本目录，源文件按现行职责命名，多类型文件保持共置。
 固定员工的持久 SchemaId 与 Family 宿主保持，C 的生成与存档资格见[实施记录](../../docs/design-branches/0092-type-namespace-refactoring/implementation-c.md)。
-B2 隔离分支采用 P0G2 业务无 Parent 与新 D/T 管理图入口，原回归资格及剩余合入/包边界见[施工记录 §9](../../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md#9-b2-调用闭包与回归迁移)；上游 HeadStore 格式与三入口书签布局变更见 [DB-096](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。原 meta 内核合同与限定资格维护在
+当前产品采用 P0G2 业务无 Parent 与 D/T 管理图入口，DB-096 已完成源码、普通包验收与本地 master 合入，准确来源和限度见[最终交付验收](../../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)；上游 HeadStore 格式与三入口书签布局变更见 [DB-096](../../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)。原 meta 内核合同与限定资格维护在
 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
 统一 Catalog 与 Private/ToShared 删除见 [DB-096 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)；开发隔离改用完整关闭库副本。DB-088 保历史故事，查询后继见 DB-089，不从旧逐片“下一步”恢复排期。
 

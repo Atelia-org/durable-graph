@@ -58,7 +58,7 @@ public sealed partial class DurableGraphGenerator {
                 hasRegistrations = true;
                 bool owner = GetAttribute(method.GetAttributes(), "Atelia.DurableGraph.DurableUpgradeAttribute") is not null ||
                     types.Any(type => !type.IsInline && SymbolEqualityComparer.Default.Equals(type.Symbol, method.ContainingType) &&
-                        Enumerable.Range(1, type.Version - 1).Any(version => BinaryUpgradeName(version) == method.Name));
+                        IsBinaryUpgradeName(method.Name, type.Version));
                 if ((value is not null && owner) || (value is null && !owner)) {
                     ReportInvalidGeneratedState(context, method.ContainingType,
                         "Value dependencies belong to exactly one declared owner or value upgrade method", GetSourceLocation(method));

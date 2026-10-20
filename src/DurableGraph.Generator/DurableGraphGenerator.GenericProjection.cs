@@ -7,6 +7,27 @@ using Microsoft.CodeAnalysis;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableGraphGenerator {
+    // Current projection helpers share the domain's generic scope. Historical Family
+    // hosts do not, so their canonical parameter names remain independent.
+    private sealed class CurrentExecutionNames {
+        internal CurrentExecutionNames(INamedTypeSymbol domain) {
+            string prefix = "__Durable";
+            while (domain.Name.StartsWith(prefix, StringComparison.Ordinal) ||
+                domain.TypeParameters.Any(parameter => parameter.Name.StartsWith(prefix, StringComparison.Ordinal))) {
+                prefix += "_";
+            }
+            Prefix = prefix;
+        }
+
+        internal string Prefix { get; }
+        internal string State(int index) => Prefix + "TState" + Number(index);
+        internal string Ops(int index) => Prefix + "TOps" + Number(index);
+        internal string Projection(int index) => Prefix + "TProjection" + Number(index);
+        internal string States(FamilyLayout layout) => GenericList(Enumerable.Range(0, layout.DynamicFields.Count).Select(State));
+        internal string Operations(FamilyLayout layout) => GenericList(Enumerable.Range(0, layout.DynamicFields.Count)
+            .SelectMany(index => new[] { State(index), Ops(index) }));
+    }
+
     private sealed class FamilyDomainField {
         internal FamilyDomainField(DurableTypeAnalysis declaration, IFieldSymbol symbol, int index) {
             Declaration = declaration; Symbol = symbol; Index = index;
@@ -36,32 +57,36 @@ public sealed partial class DurableGraphGenerator {
         return fields.FindIndex(field => layout.Fields[offset + field.Index].DynamicIndex == dynamicIndex);
     }
 
-    private static string CurrentExecutionParameters(FamilyLayout layout, List<FamilyDomainField> fields) => GenericList(Enumerable.Range(0, layout.DynamicFields.Count)
+    private static string CurrentExecutionParameters(FamilyLayout layout, List<FamilyDomainField> fields, CurrentExecutionNames names) => GenericList(Enumerable.Range(0, layout.DynamicFields.Count)
         .SelectMany(index => OwnProjectionField(layout, fields, index) >= 0
-            ? new[] { "TState" + Number(index), "TOps" + Number(index), "TProjection" + Number(index) }
-            : new[] { "TState" + Number(index), "TOps" + Number(index) }));
+            ? new[] { names.State(index), names.Ops(index), names.Projection(index) }
+            : new[] { names.State(index), names.Ops(index) }));
 
-    private static void AppendCurrentExecutionConstraints(StringBuilder output, FamilyLayout layout, List<FamilyDomainField> domainFields) {
-        AppendGenericConstraints(output, layout, true);
+    private static void AppendCurrentExecutionConstraints(StringBuilder output, FamilyLayout layout, List<FamilyDomainField> domainFields, CurrentExecutionNames names) {
+        AppendGenericConstraints(output, layout, true, names.Prefix);
         for (int index = 0; index < layout.DynamicFields.Count; index++) {
             int fieldIndex = OwnProjectionField(layout, domainFields, index);
             if (fieldIndex < 0) continue;
-            output.Append(" where TProjection").Append(index).Append(": struct, ").Append(RuntimeName)
-                .Append("IValueProjection<").Append(domainFields[fieldIndex].DomainType).Append(", TState").Append(index).Append('>');
+            output.Append(" where ").Append(names.Projection(index)).Append(": struct, ").Append(RuntimeName)
+                .Append("IValueProjection<").Append(domainFields[fieldIndex].DomainType).Append(", ").Append(names.State(index)).Append('>');
         }
     }
 
-    private static string CurrentDto(DurableTypeAnalysis type, FamilyLayout layout) => FamilyType(type.SchemaId) + "." + layout.Dto;
-    private static string CurrentBody(DurableTypeAnalysis type, FamilyLayout layout) => FamilyType(type.SchemaId) + "." + layout.Body;
+    private static string CurrentDto(DurableTypeAnalysis type, FamilyLayout layout, CurrentExecutionNames? names = null) =>
+        FamilyType(type.SchemaId) + "." + (names is null ? layout.Dto : layout.Name + names.States(layout));
+    private static string CurrentBody(DurableTypeAnalysis type, FamilyLayout layout, CurrentExecutionNames? names = null) =>
+        FamilyType(type.SchemaId) + "." + (names is null ? layout.Body : "Body" + layout.Name + names.Operations(layout));
 
     private sealed class FamilyBaseProjection {
-        internal FamilyBaseProjection(DurableTypeAnalysis type, FamilyLayout layout, List<SchemaTemplate> available) {
+        internal FamilyBaseProjection(DurableTypeAnalysis type, FamilyLayout layout, List<SchemaTemplate> available, CurrentExecutionNames names) {
             SchemaReference reference = layout.Shape.BaseSchema!.Value;
             FamilyLayout ancestor = MakeFamilyLayout(FindHistory(available, reference.SchemaId, reference.Version)[0], available);
             Domain = type.Symbol.BaseType!.ToDisplayString(GenericQualifiedNameFormat);
             // Preserve the base's own parameter order, even when substitutions merge leaf slots.
-            Dto = FamilyType(reference.SchemaId) + "." + ancestor.Name + GenericList(ancestor.DynamicFields.Select(field =>
-                FamilyFieldStateType(layout.Fields[ancestor.Fields.IndexOf(field)])));
+            Dto = FamilyType(reference.SchemaId) + "." + ancestor.Name + GenericList(ancestor.DynamicFields.Select(field => {
+                FamilyField leafField = layout.Fields[ancestor.Fields.IndexOf(field)];
+                return leafField.DynamicIndex >= 0 ? names.State(leafField.DynamicIndex) : FamilyFieldStateType(leafField);
+            }));
             FieldCount = ancestor.Fields.Count;
         }
         internal string Domain { get; }
@@ -72,26 +97,27 @@ public sealed partial class DurableGraphGenerator {
 
     private static void AppendFamilyDomainProjection(StringBuilder output, DurableTypeAnalysis type, FamilyLayout layout, List<DurableTypeAnalysis> types, List<SchemaTemplate> available, INamedTypeSymbol? halfType) {
         if (type.IsEnum) { AppendEnumDomainProjection(output, type, layout); return; }
+        CurrentExecutionNames names = new(type.Symbol);
         ImmutableLeafCandidate? candidate = TryBuildImmutableLeafCandidate(type, types, halfType);
         bool hasNamespace = !type.Symbol.ContainingNamespace.IsGlobalNamespace;
         if (hasNamespace) output.Append("namespace ").Append(type.Symbol.ContainingNamespace.ToDisplayString()).AppendLine(" {");
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
-        string dto = CurrentDto(type, layout);
+        string dto = CurrentDto(type, layout, names);
         List<FamilyDomainField> fields = FamilyDomainFields(type.Symbol, types);
-        string parameters = CurrentExecutionParameters(layout, fields);
+        string parameters = CurrentExecutionParameters(layout, fields, names);
         int offset = OwnFieldOffset(layout, fields);
-        FamilyBaseProjection? ancestor = layout.Shape.BaseSchema.HasValue ? new FamilyBaseProjection(type, layout, available) : null;
+        FamilyBaseProjection? ancestor = layout.Shape.BaseSchema.HasValue ? new FamilyBaseProjection(type, layout, available, names) : null;
         output.Append(type.Symbol.IsRecord ? (type.IsInline ? "partial record struct " : "partial record class ") : type.IsInline ? "partial struct " : "partial class ").Append(EscapeIdentifier(type.Symbol.Name))
             .Append(DomainParameters(type.Symbol)).Append(DomainConstraints(type.Symbol)).AppendLine(" {");
         AppendFamilyFieldAccessors(output, type);
         if (candidate is not null) AppendImmutableLeafShapeCheck(output, candidate, "    ");
-        AppendFamilyCurrentFactory(output, type, layout, fields, ancestor, candidate);
-        output.Append("    private static ").Append(dto).Append(" __DurableCapture").Append(parameters).Append('(')
+        AppendFamilyCurrentFactory(output, type, layout, fields, ancestor, candidate, names);
+        output.Append("    private static ").Append(dto).Append(' ').Append(FamilyCaptureName).Append(parameters).Append('(')
             .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value, ").Append(RuntimeName).Append("CaptureContext context, ")
             .Append(SchemaName).Append("DurableSchema schema");
         if (ancestor is not null) output.Append(", ").Append(ancestor.Type).Append(" baseProjection");
         output.Append(')');
-        AppendCurrentExecutionConstraints(output, layout, fields);
+        AppendCurrentExecutionConstraints(output, layout, fields, names);
         output.AppendLine(" {");
         if (!type.IsInline) output.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(value);");
         if (ancestor is not null) {
@@ -102,10 +128,10 @@ public sealed partial class DurableGraphGenerator {
         for (int index = 0; index < fields.Count; index++) {
             FamilyField stateField = layout.Fields[offset + index];
             FamilyDomainField field = fields[index];
-            output.Append("        ref readonly var field").Append(index).Append(" = ref ").Append(field.OwnerType).Append(".__DurableRead_").Append(field.Suffix)
+            output.Append("        ref readonly var field").Append(index).Append(" = ref ").Append(field.OwnerType).Append('.').Append(FamilyReadPrefix).Append(field.Suffix)
                 .Append('(').Append(type.IsInline ? "in " : string.Empty).AppendLine("value);");
             output.Append("        var ").Append(stateField.Argument).Append(" = ");
-            if (stateField.DynamicIndex >= 0) output.Append("TProjection").Append(stateField.DynamicIndex).Append(".Capture(in field").Append(index)
+            if (stateField.DynamicIndex >= 0) output.Append(names.Projection(stateField.DynamicIndex)).Append(".Capture(in field").Append(index)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
             else if (stateField.Field.InlineSchema.HasValue) output.Append(CurrentInlineProjection(field.Symbol.Type)).Append(".Capture(in field").Append(index)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
@@ -116,16 +142,16 @@ public sealed partial class DurableGraphGenerator {
         }
         output.Append("        return new ").Append(dto).Append('(').Append(string.Join(", ", layout.Fields.Select(field => field.Argument))).AppendLine(");");
         output.AppendLine("    }");
-        AppendFamilyCurrentHydrate(output, type, layout, fields, ancestor);
+        AppendFamilyCurrentHydrate(output, type, layout, fields, ancestor, names);
         if (type.IsInline) {
-            output.Append("    public readonly struct __DurableProjection").Append(parameters).Append(" : ").Append(RuntimeName)
+            output.Append("    public readonly struct ").Append(FamilyProjectionName).Append(parameters).Append(" : ").Append(RuntimeName)
                 .Append("IValueProjection<").Append(domain).Append(", ").Append(dto).Append('>');
-            AppendCurrentExecutionConstraints(output, layout, fields);
+            AppendCurrentExecutionConstraints(output, layout, fields, names);
             output.AppendLine(" {");
             output.Append("        public static ").Append(dto).Append(" Capture(in ").Append(domain).Append(" value, ").Append(RuntimeName)
-                .Append("CaptureContext context, ").Append(SchemaName).Append("DurableFieldInfo slot) => __DurableCapture").Append(parameters).AppendLine("(in value, context, slot.InlineSchema!);");
+                .Append("CaptureContext context, ").Append(SchemaName).Append("DurableFieldInfo slot) => ").Append(FamilyCaptureName).Append(parameters).AppendLine("(in value, context, slot.InlineSchema!);");
             output.Append("        public static void Hydrate(ref ").Append(domain).Append(" target, in ").Append(dto).Append(" state, ").Append(RuntimeName)
-                .Append("ObjectReadTable objects, ").Append(SchemaName).Append("DurableFieldInfo slot) => __DurableHydrate").Append(parameters)
+                .Append("ObjectReadTable objects, ").Append(SchemaName).Append("DurableFieldInfo slot) => ").Append(FamilyHydrateName).Append(parameters)
                 .AppendLine("(ref target, in state, objects, slot.InlineSchema!);");
             output.AppendLine("    }");
         }
@@ -141,36 +167,36 @@ public sealed partial class DurableGraphGenerator {
                 GenericQualifiedNameFormat.MiscellaneousOptions | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
             string suffix = FamilyName(type.SchemaId) + "_" + Number(field.FieldId);
             bool backingStorage = field.Symbol.IsImplicitlyDeclared && field.Symbol.AssociatedSymbol is IPropertySymbol;
-            output.Append("    internal static ref readonly ").Append(fieldType).Append(" __DurableRead_").Append(suffix).Append('(')
+            output.Append("    internal static ref readonly ").Append(fieldType).Append(' ').Append(FamilyReadPrefix).Append(suffix).Append('(')
                 .Append(type.IsInline ? "in " : string.Empty).Append(domain).Append(" value) => ref ");
-            if (backingStorage) output.Append("__DurableReadonly_").Append(suffix)
+            if (backingStorage) output.Append(FamilyReadonlyPrefix).Append(suffix)
                 .Append(type.IsInline ? "(ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in value))" : "(value)");
             else output.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
             output.AppendLine(";");
             if (field.Symbol.IsReadOnly || backingStorage) {
                 output.Append("    [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = ")
                     .Append(Literal(field.Symbol.MetadataName)).AppendLine(")]");
-                output.Append("    private static extern ref ").Append(fieldType).Append(" __DurableReadonly_").Append(suffix).Append('(')
+                output.Append("    private static extern ref ").Append(fieldType).Append(' ').Append(FamilyReadonlyPrefix).Append(suffix).Append('(')
                     .Append(type.IsInline ? "ref " : string.Empty).Append(domain).AppendLine(" value);");
             }
-            output.Append("    internal static void __DurableWrite_").Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty)
+            output.Append("    internal static void ").Append(FamilyWritePrefix).Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty)
                 .Append(domain).Append(" value, in ").Append(fieldType).Append(" field) => ");
-            if (field.Symbol.IsReadOnly || backingStorage) output.Append("__DurableReadonly_").Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty).Append("value)");
+            if (field.Symbol.IsReadOnly || backingStorage) output.Append(FamilyReadonlyPrefix).Append(suffix).Append('(').Append(type.IsInline ? "ref " : string.Empty).Append("value)");
             else output.Append("value.").Append(EscapeIdentifier(field.Symbol.Name));
             output.AppendLine(" = field;");
         }
     }
 
-    private static void AppendFamilyCurrentHydrate(StringBuilder output, DurableTypeAnalysis type, FamilyLayout layout, List<FamilyDomainField> fields, FamilyBaseProjection? ancestor) {
+    private static void AppendFamilyCurrentHydrate(StringBuilder output, DurableTypeAnalysis type, FamilyLayout layout, List<FamilyDomainField> fields, FamilyBaseProjection? ancestor, CurrentExecutionNames names) {
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
-        string dto = CurrentDto(type, layout);
+        string dto = CurrentDto(type, layout, names);
         int offset = OwnFieldOffset(layout, fields);
-        output.Append("    private static void __DurableHydrate").Append(CurrentExecutionParameters(layout, fields)).Append('(')
+        output.Append("    private static void ").Append(FamilyHydrateName).Append(CurrentExecutionParameters(layout, fields, names)).Append('(')
             .Append(type.IsInline ? "ref " : string.Empty).Append(domain).Append(" target, in ").Append(dto).Append(" state, ")
             .Append(RuntimeName).Append("ObjectReadTable objects, ").Append(SchemaName).Append("DurableSchema schema");
         if (ancestor is not null) output.Append(", ").Append(ancestor.Type).Append(" baseProjection");
         output.Append(')');
-        AppendCurrentExecutionConstraints(output, layout, fields);
+        AppendCurrentExecutionConstraints(output, layout, fields, names);
         output.AppendLine(" {");
         if (type.IsInline) output.Append("        ").Append(domain).AppendLine(" value = default;");
         else output.AppendLine("        var value = target;");
@@ -186,25 +212,25 @@ public sealed partial class DurableGraphGenerator {
             output.Append("        ").Append(field.DomainType).Append(" field").Append(index).Append(" = ");
             if (stateField.DynamicIndex >= 0 || stateField.Field.InlineSchema.HasValue) {
                 output.AppendLine("default!;");
-                output.Append("        ").Append(stateField.DynamicIndex >= 0 ? "TProjection" + Number(stateField.DynamicIndex) : CurrentInlineProjection(field.Symbol.Type))
+                output.Append("        ").Append(stateField.DynamicIndex >= 0 ? names.Projection(stateField.DynamicIndex) : CurrentInlineProjection(field.Symbol.Type))
                     .Append(".Hydrate(ref field").Append(index).Append(", in state.").Append(stateField.Name).Append(", objects, ").Append(stateField.Slot()).AppendLine(");");
             } else if (FamilyFieldTag(stateField) == 4) output.Append("objects.ResolveString(state.").Append(stateField.Name).AppendLine(")!;");
             else if (FamilyFieldTag(stateField) == 15) output.Append("objects.ResolveObject<").Append(field.DomainType).Append(">(state.").Append(stateField.Name).AppendLine(")!;");
             else output.Append("state.").Append(stateField.Name).AppendLine(";");
         }
-        for (int index = 0; index < fields.Count; index++) output.Append("        ").Append(fields[index].OwnerType).Append(".__DurableWrite_").Append(fields[index].Suffix)
+        for (int index = 0; index < fields.Count; index++) output.Append("        ").Append(fields[index].OwnerType).Append('.').Append(FamilyWritePrefix).Append(fields[index].Suffix)
             .Append('(').Append(type.IsInline ? "ref " : string.Empty).Append("value, in field").Append(index).AppendLine(");");
         if (type.IsInline) output.AppendLine("        target = value;");
         output.AppendLine("    }");
     }
 
-    private static void AppendFamilyCurrentFactory(StringBuilder output, DurableTypeAnalysis type, FamilyLayout layout, List<FamilyDomainField> fields, FamilyBaseProjection? ancestor, ImmutableLeafCandidate? candidate) {
+    private static void AppendFamilyCurrentFactory(StringBuilder output, DurableTypeAnalysis type, FamilyLayout layout, List<FamilyDomainField> fields, FamilyBaseProjection? ancestor, ImmutableLeafCandidate? candidate, CurrentExecutionNames names) {
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
-        string dto = CurrentDto(type, layout);
-        string body = CurrentBody(type, layout);
-        string parameters = CurrentExecutionParameters(layout, fields);
+        string dto = CurrentDto(type, layout, names);
+        string body = CurrentBody(type, layout, names);
+        string parameters = CurrentExecutionParameters(layout, fields, names);
         string result = RuntimeName + (type.IsInline ? "StateValueBinding" : "StateModelBinding");
-        output.Append("    private static ").Append(result).Append(" __DurableCreateCurrent(").Append(RuntimeName).AppendLine("StateBindingContext context) {");
+        output.Append("    private static ").Append(result).Append(' ').Append(FamilyCurrentFactoryName).Append('(').Append(RuntimeName).AppendLine("StateBindingContext context) {");
         output.Append("        var schema = new ").Append(SchemaName).Append("DurableSchema(context.GetTypeExpr(typeof(").Append(domain).Append(")), ")
             .Append(type.Version).Append(", new ").Append(SchemaName).AppendLine("DurableFieldInfo[] {");
         foreach (DurableFieldAnalysis field in type.Fields) output.Append("            context.ResolveCurrentValue(typeof(").Append(field.Symbol.Type.ToDisplayString(GenericQualifiedNameFormat))
@@ -225,9 +251,9 @@ public sealed partial class DurableGraphGenerator {
             if (ownIndex >= 0) output.Append("        var projection").Append(index).Append(" = context.ResolveCurrentValue(typeof(")
                 .Append(fields[ownIndex].DomainType).AppendLine(")).ProjectionType!;");
         }
-        if (layout.DynamicFields.Count == 0) output.AppendLine("        return __DurableCreateTyped(schema, context);");
+        if (layout.DynamicFields.Count == 0) output.Append("        return ").Append(FamilyTypedFactoryName).AppendLine("(schema, context);");
         else {
-            output.Append("        var method = typeof(").Append(domain).Append(").GetMethod(\"__DurableCreateTyped\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)!")
+            output.Append("        var method = typeof(").Append(domain).Append(").GetMethod(").Append(Literal(FamilyTypedFactoryName)).Append(", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)!")
                 .Append(".MakeGenericMethod(").Append(string.Join(", ", Enumerable.Range(0, layout.DynamicFields.Count).SelectMany(index =>
                     OwnProjectionField(layout, fields, index) >= 0
                     ? new[] { "value" + Number(index) + ".StateType", "value" + Number(index) + ".StateOpsType", "projection" + Number(index) }
@@ -236,14 +262,14 @@ public sealed partial class DurableGraphGenerator {
                 .Append("StateBindingContext, ").Append(result).AppendLine(">>()(schema, context);");
         }
         output.AppendLine("    }");
-        output.Append("    private static ").Append(result).Append(" __DurableCreateTyped").Append(parameters).Append('(')
+        output.Append("    private static ").Append(result).Append(' ').Append(FamilyTypedFactoryName).Append(parameters).Append('(')
             .Append(SchemaName).Append("DurableSchema schema, ").Append(RuntimeName).Append("StateBindingContext context)");
-        AppendCurrentExecutionConstraints(output, layout, fields);
+        AppendCurrentExecutionConstraints(output, layout, fields, names);
         output.AppendLine(" {");
         if (type.IsInline) {
             output.Append("        return new ").Append(RuntimeName).Append("StateValueBinding(new ").Append(SchemaName).Append("DurableFieldInfo(1, ")
                 .Append(SchemaName).Append("TypeTag.InlineValue, inlineSchema: schema), typeof(").Append(dto).Append("), typeof(").Append(body)
-                .Append("), typeof(").Append(domain).Append("), typeof(__DurableProjection").Append(parameters).AppendLine("));");
+                .Append("), typeof(").Append(domain).Append("), typeof(").Append(FamilyProjectionName).Append(parameters).AppendLine("));");
         } else {
             if (ancestor is not null) {
                 // TODO: Profile deep inheritance before optimizing the repeated base DTO prefix copies.
@@ -259,13 +285,13 @@ public sealed partial class DurableGraphGenerator {
             output.Append("            item => context.Normalize<").Append(dto).AppendLine(">(item, schema),");
             if (type.Symbol.IsAbstract) output.AppendLine("            static () => throw new global::System.InvalidOperationException(\"An abstract durable model cannot be allocated.\"),");
             else output.Append("            static () => (").Append(domain).Append(")global::System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(").Append(domain).AppendLine(")),");
-            output.Append("            (").Append(domain).Append(" value, in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("ObjectReadTable objects) => __DurableHydrate")
+            output.Append("            (").Append(domain).Append(" value, in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("ObjectReadTable objects) => ").Append(FamilyHydrateName)
                 .Append(parameters).Append("(value, in state, objects, schema").Append(ancestor is null ? string.Empty : ", baseProjection").AppendLine("),");
-            output.Append("            (value, capture) => __DurableCapture").Append(parameters).Append("(value, capture, schema")
+            output.Append("            (value, capture) => ").Append(FamilyCaptureName).Append(parameters).Append("(value, capture, schema")
                 .Append(ancestor is null ? string.Empty : ", baseProjection").AppendLine("),");
             output.Append("            (in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor) => ").Append(body).AppendLine(".Visit(in state, visitor, schema),");
             output.Append("            sourceReaderResolver: context.ResolveReader, supportsBaseProjection: true");
-            if (candidate is not null) output.Append(", isImmutableLeaf: __DurableCheckImmutableLeafShape()");
+            if (candidate is not null) output.Append(", isImmutableLeaf: ").Append(ImmutableLeafShapeCheckName).Append("()");
             output.AppendLine(");");
         }
         output.AppendLine("    }");

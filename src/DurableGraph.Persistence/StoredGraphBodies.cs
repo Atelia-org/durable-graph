@@ -92,6 +92,12 @@ internal static class StoredGraphDecoder {
         Dictionary<ObjectId, ObjectStorageInfo> storage = [];
         List<(ObjectStateRecord Row, ObjectReaderBinding Reader)> readers = [];
         Dictionary<FrameAddress, SchemaCatalogView> origins = [];
+        // A producer-attached snapshot identifies these owned rows' persisted origin.
+        // Reuse only its exact address in this Store; synthetic and foreign views remain
+        // selected-layout checks and cannot supply a chain's source interpretation.
+        if (selected?.Snapshot is { } selectedSnapshot && ReferenceEquals(selectedSnapshot.SourceOwner, store)) {
+            origins.Add(selectedSnapshot.Address, selected);
+        }
         ModelExecutionEnvironment? employees = models is null ? BootstrapBindings.CreateEnvironment() : null;
         foreach (ObjectVersionChain chain in chains) {
             uint id = chain.ObjectId;

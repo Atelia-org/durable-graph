@@ -10,6 +10,21 @@ public sealed partial class DurableGraphGenerator {
         "UpgradeStateV" + version.ToString(CultureInfo.InvariantCulture) + "ToV" +
         (version + 1).ToString(CultureInfo.InvariantCulture);
 
+    private static bool IsBinaryUpgradeName(string name, int currentVersion) =>
+        TryGetBinaryUpgradeVersion(name, currentVersion, out _);
+
+    private static bool TryGetBinaryUpgradeVersion(string name, int currentVersion, out int fromVersion) {
+        fromVersion = 0;
+        const string prefix = "UpgradeStateV";
+        if (!name.StartsWith(prefix, System.StringComparison.Ordinal)) return false;
+        int separator = name.IndexOf("ToV", prefix.Length, System.StringComparison.Ordinal);
+        return separator > prefix.Length &&
+            int.TryParse(name.Substring(prefix.Length, separator - prefix.Length), NumberStyles.None,
+                CultureInfo.InvariantCulture, out fromVersion) &&
+            fromVersion > 0 && fromVersion < currentVersion &&
+            System.StringComparer.Ordinal.Equals(name, BinaryUpgradeName(fromVersion));
+    }
+
     private static bool ValidateBinaryUpgradeMethods(SourceProductionContext context, DurableTypeAnalysis type) {
         bool valid = true;
         for (int version = 1; version < type.Version; version++) {
@@ -68,7 +83,7 @@ public sealed partial class DurableGraphGenerator {
         }
         source.AppendLine(" }, Normalize, Allocate, Hydrate,");
         source.Append(indent).Append("    CaptureDelegate, VisitReferences, isImmutableLeaf: ")
-            .Append(candidate is null ? "false" : "__DurableCheckImmutableLeafShape()").AppendLine(");");
+            .Append(candidate is null ? "false" : ImmutableLeafShapeCheckName + "()").AppendLine(");");
         source.Append(indent).AppendLine("internal static void RegisterModel(global::Atelia.DurableGraph.IStateModelRegistration models) {");
         source.Append(indent).AppendLine("    global::System.ArgumentNullException.ThrowIfNull(models);");
         source.Append(indent).AppendLine("    models.Register(Model);");

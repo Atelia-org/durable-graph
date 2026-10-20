@@ -23,7 +23,7 @@ public sealed partial class DurableGraphGenerator {
         "global::Atelia.DurableGraph.Generated.EnumProjection_" + FamilyName(schemaId);
 
     private static string CurrentInlineProjection(ITypeSymbol domainType) {
-        if (domainType.TypeKind != TypeKind.Enum) return domainType.ToDisplayString(GenericQualifiedNameFormat) + ".__DurableProjection";
+        if (domainType.TypeKind != TypeKind.Enum) return domainType.ToDisplayString(GenericQualifiedNameFormat) + "." + FamilyProjectionName;
         AttributeData attribute = GetAttribute(domainType.GetAttributes(), DurableTypeAttributeMetadataName)!;
         return EnumProjectionHost((string)attribute.ConstructorArguments[0].Value!) + ".Projection";
     }

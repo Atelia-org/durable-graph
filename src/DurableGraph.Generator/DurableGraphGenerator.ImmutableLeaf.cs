@@ -188,7 +188,7 @@ public sealed partial class DurableGraphGenerator {
     // field set, and per-field identity, trusted type and init-only state. A mismatch returns
     // false; it does not raise and does not repair anything (DB-075 §5.1/§5.3).
     private static void AppendImmutableLeafShapeCheck(StringBuilder source, ImmutableLeafCandidate candidate, string indent) {
-        source.Append(indent).AppendLine("private static bool __DurableCheckImmutableLeafShape() {");
+        source.Append(indent).Append("private static bool ").Append(ImmutableLeafShapeCheckName).AppendLine("() {");
         string body = indent + "    ";
         source.Append(body).AppendLine("const global::System.Reflection.BindingFlags shapeFlags =");
         source.Append(body).AppendLine("    global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public |");

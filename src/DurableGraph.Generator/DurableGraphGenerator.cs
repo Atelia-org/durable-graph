@@ -250,6 +250,25 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
             return;
         }
 
+        // Select the compilation route before rejecting a current model. Removing its
+        // only trigger must not send the remaining models back to the legacy route.
+        bool useFamily = references.Count > 0 || forceDefinitions || hasUpgradeRegistrations ||
+            hasValueUpgradeRegistrations || UsesFamilyTemplates(validTypes, history);
+        bool requestedFamilyGeneration = validTypes.Count > 0 || (types.Count == 0 && hasValueUpgradeRegistrations);
+        if (useFamily) {
+            List<DurableTypeAnalysis> eligible = new(validTypes.Count);
+            foreach (DurableTypeAnalysis type in validTypes) {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                if (!ReportFamilyHelperCollisions(context, type, validTypes, halfType)) eligible.Add(type);
+            }
+            if (eligible.Count != validTypes.Count) {
+                validTypes = ValidateSchemaChains(context, eligible, compilation);
+                // Registration endpoints must not keep a rejected current model alive.
+                if (!ValidateUpgradeRegistrations(context, validTypes, compilation, out _) ||
+                    !ValidateValueUpgradeRegistrations(context, validTypes, availableHistory, compilation, out _)) return;
+            }
+        }
+
         if (validTypes.Count > 0 || types.Count == 0) {
             string manifestSource = RenderSchemaHistoryManifest(validTypes)
                 .Replace("\r\n", "\n");
@@ -260,13 +279,15 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
                 SourceText.From(manifestSource, Encoding.UTF8));
         }
 
-        if (validTypes.Count > 0 || (types.Count == 0 && hasValueUpgradeRegistrations)) {
-            if (references.Count > 0 || forceDefinitions || hasUpgradeRegistrations || hasValueUpgradeRegistrations || UsesFamilyTemplates(validTypes, history)) {
+        if (useFamily) {
+            if (requestedFamilyGeneration && (validTypes.Count > 0 || history.Count > 0 || hasValueUpgradeRegistrations)) {
                 if (ValidateFamilyTemplateHistory(context, validTypes, availableHistory)) {
                     GenerateFamilyStates(context, validTypes, history, historyParsedSuccessfully, compilation, references);
                 }
-                return;
             }
+            return;
+        }
+        if (validTypes.Count > 0) {
             List<DurableTypeAnalysis> schemaTypes = GenerateSchemas(context, validTypes, history);
             GenerateStates(context, validTypes, schemaTypes, history, historyParsedSuccessfully, halfType);
         }
@@ -795,7 +816,6 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
 
         durableFields.Sort(static (left, right) => left.FieldId.CompareTo(right.FieldId));
         hasErrors |= ReportDuplicateFieldIds(context, typeName, durableFields);
-        if (type.IsRecord && schemaId is not null) hasErrors |= ReportRecordHelperCollisions(context, type, schemaId, durableFields);
 
         if (hasErrors) {
             return null;

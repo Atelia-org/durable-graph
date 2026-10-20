@@ -27,6 +27,10 @@ DB-096 的活动入口已完成迁移与普通包运行，准确 G/S、回归和
 不以 source ProjectReference 或 feed 中存在 nupkg 代替实际消费。运行输出放在忽略目录。
 单 Runtime 的 Run-Probe 每轮复制明确输入到新消费目录，避免原 obj 的旧生成器文件污染；可传配对的 `-PackageSource <feed> -Version <G>` 复用完整十包，省略时自行准备新版本。
 
+同一 checkout 的 Prepare、候选导出和 pack 必须串行执行；新版本或不同 feed 目录不会隔离项目的 bin/obj。
+每次准备的 producer 配置保留在自己的 feed 内。先统一准备一个 feed，再让消费者以 `-PackageSource` 只读复用，
+各自使用独立 cache、obj/bin 和 history 后可以并行运行。需要并行准备包时使用独立 checkout。
+
 公开调用门禁已按 DB-096 的 Branch/Commit/WorkingCopy 调整，接受完整候选 feed 与独立 DG 版本；`WorkDirectory` 可省略，由 runner 创建仓外新目录。
 它使用全新包缓存及正常 PackageReference/Generator/Build，不配置 friend 或手工 analyzer。
 每个旧调用单独断言诊断代码与源码位置；负例结束后恢复合法源码并重新 Verify build，再执行新 Branch API 的冷恢复保存。

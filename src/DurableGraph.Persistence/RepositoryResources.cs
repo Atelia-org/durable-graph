@@ -66,6 +66,7 @@ public sealed partial class RepositoryResources : IDisposable {
 
     internal void MarkFaulted() {
         _faulted = true;
+        _nearestStates.Clear();
         // Data can remain healthy after a DG delivery/install failure. A retained owned facade
         // must still reject both warmed reads and new appends until this owner is reopened.
         _graphStore.Dispose();
@@ -75,6 +76,7 @@ public sealed partial class RepositoryResources : IDisposable {
         if (_disposed) { return; }
         if (_preparing) { throw new InvalidOperationException("An active metadata graph preparation cannot be disposed recursively."); }
         _disposed = true;
+        _nearestStates.Clear();
         _pending?.Finish();
         _pending = null;
         CloseResources(null, _graphStore, _heads, Data);

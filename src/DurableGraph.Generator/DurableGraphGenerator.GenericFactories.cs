@@ -151,7 +151,7 @@ public sealed partial class DurableGraphGenerator {
             if (domain.Value.IsEnum) {
                 output.Append("        return ").Append(EnumProjectionHost(domain.Value.SchemaId)).AppendLine(".CreateCurrent(context);");
             } else {
-                output.Append("        var method = domain.GetMethod(\"__DurableCreateCurrent\", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)!;").AppendLine();
+                output.Append("        var method = domain.GetMethod(").Append(Literal(FamilyCurrentFactoryName)).AppendLine(", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly)!;");
                 output.Append("        return method.CreateDelegate<global::System.Func<").Append(RuntimeName).Append("StateBindingContext, ").Append(result).AppendLine(">>()(context);");
             }
             output.AppendLine("    },");

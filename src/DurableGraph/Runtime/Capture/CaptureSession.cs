@@ -176,28 +176,33 @@ public sealed class CaptureSession {
 
     private static void ValidatePreparation(ObjectStateRecord current, ObjectStateRecord? prior) {
         if (prior is not null && !current.Layout.Equals(prior.Layout)) {
-            throw new InvalidOperationException("An existing captured ID changed its exact object layout.");
+            throw new InvalidOperationException($"An existing captured ID changed its exact object layout. Current: {DescribePreparationRecord(current)}; prior: {DescribePreparationRecord(prior)}.");
         }
         if (prior is not null && current.Kind == ObjectStateKind.Array &&
             !((IFrozenArrayState)current.Content).Shape.Equals(((IFrozenArrayState)prior.Content).Shape)) {
-            throw new InvalidOperationException("An existing captured array ID changed its shape.");
+            throw new InvalidOperationException($"An existing captured array ID changed its shape. {DescribePreparationRecord(current)}; " +
+                $"prior dimensions=[{string.Join(",", ((IFrozenArrayState)prior.Content).Shape.Lengths.ToArray())}]; " +
+                $"current dimensions=[{string.Join(",", ((IFrozenArrayState)current.Content).Shape.Lengths.ToArray())}].");
         }
         if (current.Kind == ObjectStateKind.String) {
             if (prior is not null && !ReferenceEquals(current.StringContent, prior.StringContent)) {
-                throw new InvalidOperationException("An existing string ID changed reference identity.");
+                throw new InvalidOperationException($"An existing string ID changed reference identity. {DescribePreparationRecord(current)}.");
             }
             return;
         }
         IStatePreparationBinding preparation = current.Preparation
-            ?? throw new InvalidOperationException("The captured object has no preparation binding.");
+            ?? throw new InvalidOperationException($"The captured object has no preparation binding. {DescribePreparationRecord(current)}.");
         preparation.Validate(current);
         if (prior is not null) {
             if (!ReferenceEquals(preparation, prior.Preparation)) {
-                throw new InvalidOperationException("An existing object changed preparation binding.");
+                throw new InvalidOperationException($"An existing object changed preparation binding. {DescribePreparationRecord(current)}.");
             }
             preparation.Validate(prior);
         }
     }
+
+    private static string DescribePreparationRecord(ObjectStateRecord record) => FormattableString.Invariant(
+        $"ObjectId={record.Id.Value}, Kind={record.Kind}, Type={record.Layout.Type}, SchemaVersion={record.Schema?.Version.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}");
 
     private CaptureContext RequireCandidate(CapturedGraph candidate) {
         RequireNotPreparing();

@@ -56,12 +56,13 @@ public sealed partial class DurableGraphGenerator {
                 }
             }
 
-            if (!type.IsInline) valid &= ValidateBinaryUpgradeMethods(context, type);
-
             if (valid && validatedSchemaOnlyTypes.Exists(candidate =>
                 SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.Symbol))) {
                 // Parsing conflicts suppress all bodies before any accepted entry is selected.
                 if (!historyParsedSuccessfully) {
+                    continue;
+                }
+                if (!type.IsInline && !ValidateBinaryUpgradeMethods(context, type)) {
                     continue;
                 }
 

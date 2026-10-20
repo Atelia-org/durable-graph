@@ -25,6 +25,8 @@ internal sealed class SchemaCatalogView {
     private readonly HashSet<ObjectId> _active = [];
     private readonly HashSet<ObjectId> _declared;
 
+    // Producers supplying a snapshot assert that it is the persisted source of these
+    // owned rows. Synthetic projections omit it; prepared views attach it while preparing installation.
     internal SchemaCatalogView(ObjectId rootId, IReadOnlyDictionary<ObjectId, ObjectStateRecord> rows,
         StoredGraphRevision? snapshot = null, long descriptorListH = 0) {
         RootId = rootId;

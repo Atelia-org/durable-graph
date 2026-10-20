@@ -11,13 +11,15 @@
 - 理解产品目标与已选约束：[目标设计](../docs/DurableGraph-target-design-v0.md)。
 - 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。
-- 当前循环维护的线索、裁决与续接：[维护状态](../maintenance/2026-10-14.md)。
+- 当前质量问题处理的线索、裁决与续接：[维护状态](../maintenance/2026-10-20.md)。
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
 
 默认搜索 src/tests 与活动回归；已淘汰设计和实验只在明确历史问题时查[Git 来源](../experiments/ARCHIVE.md)。
 
 ## 当前焦点
+
+2026-10-20：[重构后七方向质量体检](../maintenance/20261020/README.md)后的逐项修复进行中。生成器、读取复用、保存准入、历史回扫及诊断共十片已修复验收；安装回调、child Delta 合同与容器预绑定重复已完成局部保留裁决；当前收口构建交付。方案、验收与剩余队列只查[本次维护状态](../maintenance/2026-10-20.md)。原体检中的缺陷观测保留当时基线含义。
 
 2026-10-20：[Echo Garden接入配方](../docs/design-branches/0096-history-and-head-model/application-recipes.md)已实施验收。导航DTO/Hex、安全分叉切换、版本化摘要有[可执行指南](../experiments/PackageConsumerProbe/ApplicationRecipesConsumer/README.md)，根构建、22项定向源码测试及普通包两进程验证通过。产品源码/API/格式未改，无剩余配方工单；下一增量由真实消费者反馈和成本测量触发，DB-096既有完成状态保持。
 
@@ -43,7 +45,7 @@ H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#
 此前[循环维护](../maintenance/2026-10-14.md)的产品改动已整合，保持完整 history/source/typed 图验证、fault/lifetime 与复制隔离；实际改动、验证和保留裁决只查任务状态，不复开已完成命名分片。
 
 [DB-092](../docs/design-branches/0092-type-namespace-refactoring/README.md)的 A／B／C／D1–D6 及 E1／E2／E3 已限定验收，有限源码组织与本轮候选已收敛；源码入口见[导航](DurableGraph.Persistence/README.md)。当前公开内容操作为 `StatePreparationBinding<T>`／`StringBodyPreparer`，Generator 为 `DurableGraphGenerator`，仓库资源 owner 为 `RepositoryResources`。纯槽转换归 Schema 的 `DurableFieldInfo`，保编号与完整相等。
-公开历史角色 `CheckpointKind` 与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。
+公开历史角色现为 DB-096 的 `CommitKind`（DB-092 当时为 `CheckpointKind`），与 [D6 发布合同](../docs/design-branches/0092-type-namespace-refactoring/README.md#d6-status) `RepositoryPublicationException`／`RepositoryPublicationOutcome` 位于根 namespace，仍由 Persistence 程序集提供；内部 StoredGraphKind／阶段 hook 分责保持。三个 ValueProjection helper 与 ObjectStateKind 保名。D6 源码、根回归和 API 映射，以及准确新 G 普通 SG／Build 编译、新库保存／ref-only 分支／tag／冷开只读通过；普通包没有运行故障注入，三个 outcome／fault 语义由根确定性回归验证。各片包来源与有限资格只查当片记录，生成合同及旧输出清理查 D1／D2 和[构建指引](../README.md)。
 本轮无剩余必经分片；后续由真实消费／依赖问题触发，重访条件只维护在[路线图](../docs/DurableGraph-research-roadmap.md)。按[原型迭代约束](../docs/DurableGraph-target-design-v0.md#原型迭代与数据兼容)直接迁移并重编译，实验存档可 reset 重生成，不设旧包兼容门槛，不预设程序集拆分。
 
 [DB-091 清理](../docs/design-branches/0091-retired-material-cleanup/README.md)已退出淘汰文档与实验执行代码；当前机制和活动门禁保持，旧模型仅保编译资产，完成证据集中在该记录。
@@ -367,8 +369,8 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   每个共享字典仅 Normalize 一次，保持 ID/count/comparer；升级碰撞拒绝，仍 live 的布局升级强制 Base。
   UpgradeContext.DictionaryCount 只用于 Dictionary owner，子工具继承；历史 enum/struct key/value DTO 不依赖旧领域 CLR。
 
-产品依赖为 Persistence → Runtime + Storage，二者分别复用 Serialization；Storage 另用 RBF substrate。
-DurableGraph runtime 也引用 Serialization，单一 runtime PackageReference 可取得传递依赖。
+产品依赖为 Persistence → Runtime + Storage；Runtime → Serialization，Storage 直接使用固定版本的 Binary/Data/Primitives/Rbf/FrameStore，Persistence 另直接使用 Binary/FrameStore/HeadStore。
+单一 runtime PackageReference 可取得 Serialization 及其传递依赖。
 
 ## 按任务定位证据
 

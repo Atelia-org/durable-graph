@@ -134,11 +134,11 @@ public sealed partial class DurableGraphGenerator {
         return bits is null ? left + " == " + right : "global::System.BitConverter." + bits + "(" + left + ") == global::System.BitConverter." + bits + "(" + right + ")";
     }
 
-    private static void AppendGenericConstraints(StringBuilder output, FamilyLayout layout, bool operations) {
+    private static void AppendGenericConstraints(StringBuilder output, FamilyLayout layout, bool operations, string prefix = "") {
         for (int index = 0; index < layout.DynamicFields.Count; index++) {
-            output.Append(" where TState").Append(index).Append(": unmanaged");
-            if (operations) output.Append(" where TOps").Append(index).Append(": struct, ").Append(RuntimeName)
-                .Append("IStateOps<TState").Append(index).Append('>');
+            output.Append(" where ").Append(prefix).Append("TState").Append(index).Append(": unmanaged");
+            if (operations) output.Append(" where ").Append(prefix).Append("TOps").Append(index).Append(": struct, ").Append(RuntimeName)
+                .Append("IStateOps<").Append(prefix).Append("TState").Append(index).Append('>');
         }
     }
 

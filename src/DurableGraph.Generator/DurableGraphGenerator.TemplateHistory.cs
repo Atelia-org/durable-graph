@@ -200,8 +200,10 @@ public sealed partial class DurableGraphGenerator {
         bool valid = true;
         List<SchemaTemplate> available = new(history);
         foreach (DurableTypeAnalysis type in types) {
+            context.CancellationToken.ThrowIfCancellationRequested();
             SchemaTemplate current = CurrentShape(type);
             foreach (SchemaTemplate old in history) {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 if (old.SchemaId != current.SchemaId) continue;
                 if (old.Kind != current.Kind || old.Arity != current.Arity ||
                     (old.Version == current.Version && !HaveSameShape(old, current))) {
@@ -211,10 +213,12 @@ public sealed partial class DurableGraphGenerator {
                 }
             }
             for (int version = 1; version < type.Version; version++) {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 if (FindHistory(history, type.SchemaId, version).Count == 0) {
                     context.ReportDiagnostic(Diagnostic.Create(MissingSchemaHistory, GetSourceLocation(type.Symbol),
                         type.Symbol.ToDisplayString(QualifiedNameFormat), type.SchemaId, version));
                     valid = false;
+                    break;
                 }
             }
             available.RemoveAll(entry => entry.SchemaId == current.SchemaId && entry.Version == current.Version);

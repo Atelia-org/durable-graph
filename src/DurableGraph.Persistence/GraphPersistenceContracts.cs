@@ -17,6 +17,9 @@ internal sealed class PreparedGraphWrite {
         if (rootId.IsNull) { throw new ArgumentException("A graph requires a nonzero root.", nameof(rootId)); }
         ArgumentNullException.ThrowIfNull(records);
         ObjectVersionRecord[] rows = records.ToArray();
+        if (rows.Length > GraphFrameCodec.MaxCollectionCount) {
+            throw new ArgumentException($"A graph write cannot exceed {GraphFrameCodec.MaxCollectionCount} object records.", nameof(records));
+        }
         if (rows.Any(static row => row is null)) { throw new ArgumentException("Null object records are invalid.", nameof(records)); }
         Array.Sort(rows, static (left, right) => left.ObjectId.CompareTo(right.ObjectId));
         for (int i = 1; i < rows.Length; i++) {

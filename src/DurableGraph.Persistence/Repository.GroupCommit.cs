@@ -7,9 +7,13 @@ namespace Atelia.DurableGraph;
 public sealed partial class Repository {
     internal CommitRequest CreateCommitRequest(WorkingCopy work, IDurableObject root, StoredGraphKind kind,
         ReadOnlyMemory<byte> summary, ReadAmplificationBaseBudgetParameters? parameters) {
-        RequireCheckoutWriter(work);
-        ArgumentNullException.ThrowIfNull(root);
-        return new(work, root, kind, summary, parameters);
+        RequireWriter();
+        _busy = true;
+        try {
+            RequireCheckoutSource(work);
+            ArgumentNullException.ThrowIfNull(root);
+            return new(work, root, kind, summary, parameters);
+        } finally { EndOperation(); }
     }
 
     /// <summary>Atomically publishes one State or Event for each requested existing branch in this repository.</summary>

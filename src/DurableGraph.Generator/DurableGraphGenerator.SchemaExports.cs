@@ -193,7 +193,7 @@ public sealed partial class DurableGraphGenerator {
                 FamilyLayout layout = MakeFamilyLayout(shape, available);
                 INamedTypeSymbol? projection = target.TypeKind == TypeKind.Enum
                     ? target.ContainingAssembly.GetTypeByMetadataName("Atelia.DurableGraph.Generated.EnumProjection_" + FamilyName(inline.SchemaId))?.GetTypeMembers("Projection").SingleOrDefault()
-                    : target.GetTypeMembers("__DurableProjection", layout.DynamicFields.Count * 3).SingleOrDefault();
+                    : target.GetTypeMembers(FamilyProjectionName, layout.DynamicFields.Count * 3).SingleOrDefault();
                 if (projection?.DeclaredAccessibility != Accessibility.Public || !projection.AllInterfaces.Any(item =>
                     SymbolEqualityComparer.Default.Equals(item.OriginalDefinition, compilation.GetTypeByMetadataName("Atelia.DurableGraph.Runtime.IValueProjection`2")) &&
                     item.TypeArguments[0] is INamedTypeSymbol domain && SymbolEqualityComparer.Default.Equals(domain.OriginalDefinition, target.OriginalDefinition)))

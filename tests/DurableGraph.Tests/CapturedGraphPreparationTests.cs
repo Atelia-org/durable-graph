@@ -133,7 +133,8 @@ public sealed class CapturedGraphPreparationTests {
         context.AddRoot(new Domain(), Schema, Capture, binding);
         context.AddRoot(new Domain(), Schema, Capture);
         CapturedGraph candidate = context.Seal();
-        Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        AssertPreparationDiagnostic(error, 2, ObjectStateKind.Durable, Schema.Type, 1);
         Assert.Equal(0, calls);
         Assert.Null(session.Current);
         session.Accept(candidate);
@@ -200,7 +201,8 @@ public sealed class CapturedGraphPreparationTests {
         using CaptureContext context = session.BeginCapture();
         context.AddRoot(domain, Schema, Capture, new StatePreparationBinding<State>(Schema, Base, Delta));
         CapturedGraph candidate = context.Seal();
-        Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        AssertPreparationDiagnostic(error, 1, ObjectStateKind.Durable, Schema.Type, 1);
         Assert.Same(previous, session.Current);
     }
 
@@ -208,9 +210,10 @@ public sealed class CapturedGraphPreparationTests {
     public void DeltaFailureAfterBaseSuccessPreservesBaselineAndCanRetry() {
         bool fail = true;
         int baseCalls = 0;
+        ApplicationException failure = new("delta");
         var binding = new StatePreparationBinding<State>(Schema,
             (in State state) => { baseCalls++; return Base(in state); },
-            (in State prior, in State current) => fail ? throw new ApplicationException("delta") : Delta(in prior, in current));
+            (in State prior, in State current) => fail ? throw failure : Delta(in prior, in current));
         CaptureSession session = new();
         Domain domain = new() { Value = 1 };
         CaptureContext first = session.BeginCapture();
@@ -221,7 +224,8 @@ public sealed class CapturedGraphPreparationTests {
         domain.Value = 2;
         context.AddRoot(domain, Schema, Capture, binding);
         CapturedGraph candidate = context.Seal();
-        Assert.Throws<ApplicationException>(() => session.Prepare(candidate));
+        Assert.Same(failure, Assert.Throws<ApplicationException>(() => session.Prepare(candidate)));
+        Assert.Equal("delta", failure.Message);
         Assert.Equal(1, baseCalls);
         Assert.Same(previous, session.Current);
         fail = false;
@@ -264,7 +268,12 @@ public sealed class CapturedGraphPreparationTests {
             new ObjectStateRecord(new ObjectId(2), Schema, new State(1, default), binding)]);
         typeof(CaptureContext).GetProperty("Candidate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(context, candidate);
-        Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        if (mismatch != 4) { // DTO validation belongs to the binding, not the five session-owned guards.
+            AssertPreparationDiagnostic(error, 2, ObjectStateKind.Durable, Schema.Type, 1);
+            if (mismatch == 3) { Assert.Contains("SchemaVersion=2", error.Message); }
+            if (mismatch == 5) { Assert.Contains("Kind=String", error.Message); }
+        }
         Assert.Equal(0, calls);
         session.Discard(candidate);
     }
@@ -297,8 +306,9 @@ public sealed class CapturedGraphPreparationTests {
     [Fact]
     public void LateFailureKeepsCandidateAndCurrentAndRetryDoesNotBurnIds() {
         bool fail = true;
+        ApplicationException failure = new("late");
         var binding = new StatePreparationBinding<State>(Schema,
-            (in State state) => state.Value == 2 && fail ? throw new ApplicationException("late") : Base(in state), Delta);
+            (in State state) => state.Value == 2 && fail ? throw failure : Base(in state), Delta);
         CaptureSession session = new();
         CaptureContext context = session.BeginCapture();
         Domain first = new() { Value = 1 };
@@ -306,7 +316,8 @@ public sealed class CapturedGraphPreparationTests {
         context.AddRoot(first, Schema, Capture, binding);
         context.AddRoot(second, Schema, Capture, binding);
         CapturedGraph candidate = context.Seal();
-        Assert.Throws<ApplicationException>(() => session.Prepare(candidate));
+        Assert.Same(failure, Assert.Throws<ApplicationException>(() => session.Prepare(candidate)));
+        Assert.Equal("late", failure.Message);
         Assert.Null(session.Current);
         fail = false;
         Assert.Equal(2, session.Prepare(candidate).Objects.Count);
@@ -384,5 +395,104 @@ public sealed class CapturedGraphPreparationTests {
         Assert.Single(session.Prepare(candidate).Objects);
         context.Dispose();
         Assert.Same(previous, session.Current);
+    }
+
+    [Fact]
+    public void ChangedArrayShapeDiagnosticIdentifiesTheObjectAndBothDimensionListsBeforeEncoding() {
+        int calls = 0;
+        var binding = new StatePreparationBinding<State>(Schema,
+            (in State state) => { calls++; return Base(in state); }, Delta);
+        ArrayLayout layout = new(TypeExprKind.Rank2Array, new DurableFieldInfo(1, TypeTag.Int32));
+        ObjectStateRecord prior = new(new(2), layout, new FrozenArrayState<int>(new(2, 3), new int[6]));
+        ObjectStateRecord current = new(new(2), layout, new FrozenArrayState<int>(new(3, 2), new int[6]));
+        CaptureSession session = new();
+        CapturedGraph previous = new([], [prior]);
+        typeof(CaptureSession).GetProperty(nameof(CaptureSession.Current))!.SetValue(session, previous);
+        using CaptureContext context = session.BeginCapture();
+        CapturedGraph candidate = SetPreparationCandidate(context,
+            new ObjectStateRecord(new(1), Schema, new State(1, default), binding), current);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        AssertPreparationDiagnostic(error, 2, ObjectStateKind.Array, layout.Type);
+        Assert.Contains("prior dimensions=[2,3]", error.Message);
+        Assert.Contains("current dimensions=[3,2]", error.Message);
+        Assert.Equal(0, calls);
+        Assert.Same(previous, session.Current);
+        session.Discard(candidate);
+    }
+
+    [Fact]
+    public void ChangedStringIdentityDiagnosticIdentifiesTheObjectBeforeEncoding() {
+        int calls = 0;
+        var binding = new StatePreparationBinding<State>(Schema,
+            (in State state) => { calls++; return Base(in state); }, Delta);
+        ObjectStateRecord prior = new(new(2), new string(['x']));
+        ObjectStateRecord current = new(new(2), new string(['x']));
+        Assert.NotSame(prior.StringContent, current.StringContent);
+        CaptureSession session = new();
+        CapturedGraph previous = new([], [prior]);
+        typeof(CaptureSession).GetProperty(nameof(CaptureSession.Current))!.SetValue(session, previous);
+        using CaptureContext context = session.BeginCapture();
+        CapturedGraph candidate = SetPreparationCandidate(context,
+            new ObjectStateRecord(new(1), Schema, new State(1, default), binding), current);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
+        AssertPreparationDiagnostic(error, 2, ObjectStateKind.String, TypeExpr.Builtin(TypeTag.String));
+        Assert.Equal(0, calls);
+        Assert.Same(previous, session.Current);
+        session.Discard(candidate);
+    }
+
+    [Fact]
+    public void PreparationValidationExceptionRemainsTheOriginalInstanceAndAllowsRetry() {
+        InvalidOperationException failure = new("validation sentinel");
+        var binding = new FailingValidationBinding { Failure = failure };
+        CaptureSession session = new();
+        using CaptureContext context = session.BeginCapture();
+        CapturedGraph candidate = SetPreparationCandidate(context,
+            new ObjectStateRecord(new(1), Schema, new State(1, default), binding));
+
+        Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate)));
+        Assert.Equal("validation sentinel", failure.Message);
+        Assert.Equal(0, binding.BaseCalls);
+        Assert.Null(session.Current);
+        binding.Failure = null;
+        Assert.Single(session.Prepare(candidate).Objects);
+        Assert.Equal(1, binding.BaseCalls);
+        session.Discard(candidate);
+    }
+
+    private static void AssertPreparationDiagnostic(InvalidOperationException error, uint id,
+        ObjectStateKind kind, TypeExpr type, int? schemaVersion = null) {
+        Assert.Contains($"ObjectId={id}", error.Message);
+        Assert.Contains($"Kind={kind}", error.Message);
+        Assert.Contains($"Type={type}", error.Message);
+        if (schemaVersion is { } version) { Assert.Contains($"SchemaVersion={version}", error.Message); }
+    }
+
+    // These invalid shape/identity/validation pairs cannot be constructed through ordinary
+    // registration. Reuse the existing friend-test seam, without adding a product capability.
+    private static CapturedGraph SetPreparationCandidate(CaptureContext context, params ObjectStateRecord[] records) {
+        CapturedGraph candidate = new([], records);
+        typeof(CaptureContext).GetProperty("Candidate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(context, candidate);
+        return candidate;
+    }
+
+    private sealed class FailingValidationBinding : IStatePreparationBinding {
+        internal InvalidOperationException? Failure { get; set; }
+        internal int BaseCalls { get; private set; }
+        public void Validate(ObjectStateRecord item) { if (Failure is { } failure) { throw failure; } }
+        public bool ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) => false;
+        public PreparedBaseBody PrepareBase(ObjectStateRecord current) {
+            BaseCalls++;
+            State state = current.GetState<State>();
+            return Base(in state);
+        }
+        public PreparedDeltaBody PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) {
+            State prior = previous.GetState<State>();
+            State next = current.GetState<State>();
+            return Delta(in prior, in next);
+        }
     }
 }

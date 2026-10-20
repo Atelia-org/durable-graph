@@ -16,9 +16,11 @@
     <ProjectReference Include="..\DurableGraph.Generator\DurableGraph.Generator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
+                      DurableGraphPackageAsset="Generator"
                       PrivateAssets="all" />
     <ProjectReference Include="..\DurableGraph.Build\DurableGraph.Build.csproj"
                       ReferenceOutputAssembly="false"
+                      DurableGraphPackageAsset="BuildTool"
                       PrivateAssets="all" />
   </ItemGroup>
 
@@ -34,17 +36,42 @@
           PackagePath="README.md" />
   </ItemGroup>
 
-  <Target Name="CollectDurableGraphPackageAssets" BeforeTargets="_GetPackageFiles">
+  <Target Name="CollectDurableGraphPackageAssets" BeforeTargets="_GetPackageFiles"
+          DependsOnTargets="PrepareProjectReferences">
     <ItemGroup>
-      <Content Include="..\DurableGraph.Generator\bin\$(Configuration)\netstandard2.0\Atelia.DurableGraph.Generator.dll"
+      <_DurableGraphGeneratorProject Include="@(_MSBuildProjectReferenceExistent->WithMetadataValue('DurableGraphPackageAsset', 'Generator'))" />
+      <_DurableGraphBuildProject Include="@(_MSBuildProjectReferenceExistent->WithMetadataValue('DurableGraphPackageAsset', 'BuildTool'))" />
+    </ItemGroup>
+    <Error Condition="'@(_DurableGraphGeneratorProject->Count())' != '1' or '@(_DurableGraphBuildProject->Count())' != '1'"
+           Text="DurableGraph packaging requires exactly one existing Generator and BuildTool ProjectReference." />
+    <!-- Query the same project-reference configuration without compiling, including when NoBuild is true. -->
+    <MSBuild Projects="@(_DurableGraphGeneratorProject)" Targets="GetTargetPath"
+             Properties="%(_DurableGraphGeneratorProject.SetConfiguration);%(_DurableGraphGeneratorProject.SetPlatform);%(_DurableGraphGeneratorProject.SetTargetFramework)"
+             RemoveProperties="%(_DurableGraphGeneratorProject.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences)">
+      <Output TaskParameter="TargetOutputs" ItemName="_DurableGraphGeneratorAssembly" />
+    </MSBuild>
+    <MSBuild Projects="@(_DurableGraphBuildProject)" Targets="GetTargetPath"
+             Properties="%(_DurableGraphBuildProject.SetConfiguration);%(_DurableGraphBuildProject.SetPlatform);%(_DurableGraphBuildProject.SetTargetFramework)"
+             RemoveProperties="%(_DurableGraphBuildProject.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences)">
+      <Output TaskParameter="TargetOutputs" ItemName="_DurableGraphBuildAssembly" />
+    </MSBuild>
+    <Error Condition="'@(_DurableGraphGeneratorAssembly->Count())' != '1' or '@(_DurableGraphBuildAssembly->Count())' != '1'"
+           Text="DurableGraph packaging could not resolve one Generator and BuildTool target assembly." />
+    <ItemGroup>
+      <_DurableGraphBuildRuntime Include="@(_DurableGraphBuildAssembly);
+                                         @(_DurableGraphBuildAssembly->'%(RootDir)%(Directory)%(Filename).deps.json');
+                                         @(_DurableGraphBuildAssembly->'%(RootDir)%(Directory)%(Filename).runtimeconfig.json')" />
+      <_DurableGraphRequiredPackageAsset Include="@(_DurableGraphGeneratorAssembly);@(_DurableGraphBuildRuntime)" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(_DurableGraphRequiredPackageAsset.Identity)')"
+           Text="DurableGraph package asset '%(_DurableGraphRequiredPackageAsset.Identity)' is missing. Build with the same configuration and output properties before packing with --no-build." />
+    <ItemGroup>
+      <Content Include="@(_DurableGraphGeneratorAssembly)"
                Pack="true"
                PackagePath="analyzers/dotnet/cs/Atelia.DurableGraph.Generator.dll" />
-      <_DurableGraphBuildRuntime Include="..\DurableGraph.Build\bin\$(Configuration)\net10.0\Atelia.DurableGraph.Build.dll;
-                                             ..\DurableGraph.Build\bin\$(Configuration)\net10.0\Atelia.DurableGraph.Build.deps.json;
-                                             ..\DurableGraph.Build\bin\$(Configuration)\net10.0\Atelia.DurableGraph.Build.runtimeconfig.json" />
       <Content Include="@(_DurableGraphBuildRuntime)"
                Pack="true"
-               PackagePath="tools/net10.0/%(RecursiveDir)%(Filename)%(Extension)" />
+               PackagePath="tools/net10.0/%(Filename)%(Extension)" />
     </ItemGroup>
   </Target>
 

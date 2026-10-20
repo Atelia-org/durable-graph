@@ -11,12 +11,24 @@ public interface IValueProjection<TDomain, TState> where TState : unmanaged {
 }
 
 /// <summary>Static operations for one exact frozen value representation, independent of a domain type.</summary>
+/// <remarks>
+/// Operations use the supplied complete slot and must preserve their frozen inputs. Equal inputs and
+/// a fixed slot must have stable persistent results; invocation counts must not affect those results.
+/// </remarks>
 public interface IStateOps<TState> where TState : unmanaged {
     /// <summary>Compares persistent values in the same exact slot, without encoding or allocating.</summary>
+    /// <remarks>Equality covers the complete persistent representation, including reference ObjectIds,
+    /// and must agree with the inverse of <see cref="PreparedDeltaBody.HasChanges"/> returned by <c>PrepareDelta</c>.</remarks>
     static abstract bool StateEquals(in TState left, in TState right, DurableFieldInfo slot);
     static abstract void WriteBase(ref BareValueWriter writer, in TState state, DurableFieldInfo slot);
     static abstract TState ReadBase(ref BareValueReader reader, DurableFieldInfo slot);
+    /// <summary>Prepares the change decision and owned Delta body without modifying either frozen input.</summary>
+    /// <remarks><see cref="PreparedDeltaBody.HasChanges"/> must be false exactly when <c>StateEquals</c> is true.
+    /// A no-change result is not a child patch to pass to <c>ApplyDelta</c>.</remarks>
     static abstract PreparedDeltaBody PrepareDelta(in TState prior, in TState current, DurableFieldInfo slot);
+    /// <summary>Applies one changed child Delta without modifying the prior frozen value.</summary>
+    /// <remarks>Reject a patch whose result is equal to prior under <c>StateEquals</c> with
+    /// <see cref="InvalidDataException"/>. Array and List readers rely on this child-operation check.</remarks>
     static abstract TState ApplyDelta(ref BareValueReader reader, in TState prior, DurableFieldInfo slot);
     static abstract void VisitReferences(in TState state, IStateReferenceVisitor visitor, DurableFieldInfo slot);
 }

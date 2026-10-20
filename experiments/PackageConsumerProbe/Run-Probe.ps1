@@ -66,6 +66,58 @@ function Assert-HistoryCount {
     }
 }
 
+function Get-ProbePackageEntryHash {
+    param([Parameter(Mandatory)][string] $Package, [Parameter(Mandatory)][string] $Entry)
+    $zip = [IO.Compression.ZipFile]::OpenRead($Package)
+    try {
+        $entriesFound = @($zip.Entries | Where-Object FullName -CEQ $Entry)
+        if ($entriesFound.Count -ne 1) { throw "Expected exactly one '$Entry' in '$Package'." }
+        $stream = $entriesFound[0].Open()
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { return [Convert]::ToHexString($sha.ComputeHash($stream)) }
+        finally { $sha.Dispose(); $stream.Dispose() }
+    } finally { $zip.Dispose() }
+}
+
+# Kept narrow so a local tamper witness can exercise the same byte verifier without
+# invoking restore/build or modifying either the feed or the global NuGet cache.
+function Assert-ProbePackageFile {
+    param([Parameter(Mandatory)][string] $Package, [Parameter(Mandatory)][string] $Entry,
+        [Parameter(Mandatory)][string] $File)
+    $expected = Get-ProbePackageEntryHash -Package $Package -Entry $Entry
+    $actual = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash
+    if ($actual -cne $expected) { throw "Package entry '$Entry' differs from actual file '$File'." }
+    return [ordered]@{ File = $File; Package = $Package; Entry = $Entry; Sha256 = $actual }
+}
+
+function Invoke-ProbeBuildEvidence {
+    param([Parameter(Mandatory)][string[]] $Arguments,
+        [Parameter(Mandatory)][ValidateSet('Publish', 'Verify')][string] $Mode,
+        [Parameter(Mandatory)][string] $Log)
+    $text = (& dotnet @Arguments 2>&1 | Out-String)
+    $exitCode = $LASTEXITCODE
+    $text | Set-Content -LiteralPath $Log -Encoding utf8NoBOM
+    Write-Host $text
+    if ($exitCode -ne 0) { throw "dotnet build $Mode failed with exit code $exitCode; see '$Log'." }
+    $lines = $text.Replace('\', '/') -split '\r?\n'
+    $generator = (Join-Path $runtimeCacheDirectory 'analyzers/dotnet/cs/Atelia.DurableGraph.Generator.dll').Replace('\', '/')
+    $tool = (Join-Path $runtimeCacheDirectory 'tools/net10.0/Atelia.DurableGraph.Build.dll').Replace('\', '/')
+    $toolViaTargets = $tool.Replace('/tools/', '/build/../tools/')
+    $compilerLines = @($lines | Where-Object {
+        $_ -match '(?i)csc\.(dll|exe)\b' -and $_ -match '(?i)/analyzer:' -and
+        $_.Contains($generator, [StringComparison]::OrdinalIgnoreCase)
+    })
+    $toolLines = @($lines | Where-Object {
+        ($_.Contains($tool, [StringComparison]::OrdinalIgnoreCase) -or
+         $_.Contains($toolViaTargets, [StringComparison]::OrdinalIgnoreCase)) -and
+        $_ -match ('(?i)\s' + $Mode + '\s+--manifest')
+    })
+    if ($compilerLines.Count -eq 0 -or $toolLines.Count -eq 0) {
+        throw "Build $Mode did not show the actual cached Generator and Build invocation; see '$Log'."
+    }
+    $evidence.BuildLogs += [ordered]@{ Mode = $Mode; File = $Log; Sha256 = (Get-FileHash -LiteralPath $Log).Hash }
+}
+
 $probeRoot = $PSScriptRoot
 $repositoryRoot = (Resolve-Path (Join-Path $probeRoot "../..")).Path
 $consumerSource = Join-Path $probeRoot "Consumer"
@@ -78,6 +130,7 @@ $packageCache = Join-Path $workRoot "packages"
 $history = Join-Path $workRoot "history"
 $packageVersion = if ([string]::IsNullOrWhiteSpace($Version)) { "0.0.0-e2e.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss')).$PID" } else { $Version }
 $consumerProjectText = Get-Content -LiteralPath (Join-Path $consumerSource "Consumer.csproj") -Raw
+$evidence = [ordered]@{ Feed = @(); ResolvedAtelia = @(); Files = @(); BuildLogs = @(); Passed = $false }
 
 foreach ($forbiddenConsumerWiring in @(
     "<Import",
@@ -110,10 +163,39 @@ try {
         Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $feed -Version $packageVersion
     }
     $packages = @(Get-ChildItem -LiteralPath $feed -Filter *.nupkg -File -ErrorAction Stop)
-    if ($packages.Count -ne 10) { throw "Expected the complete ten-package feed, found $($packages.Count)." }
-
-    $package = Get-Item -LiteralPath (Join-Path $feed "Atelia.DurableGraph.$packageVersion.nupkg")
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $feedIndex = @{}
+    foreach ($file in $packages) {
+        $zip = [IO.Compression.ZipFile]::OpenRead($file.FullName)
+        try {
+            $specs = @($zip.Entries | Where-Object FullName -like '*.nuspec')
+            if ($specs.Count -ne 1) { throw "Expected one nuspec in '$($file.Name)'." }
+            $reader = [IO.StreamReader]::new($specs[0].Open())
+            try { [xml]$spec = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            $id = [string]$spec.package.metadata.id
+            $resolvedVersion = [string]$spec.package.metadata.version
+            if ([string]::IsNullOrWhiteSpace($id) -or [string]::IsNullOrWhiteSpace($resolvedVersion)) {
+                throw "Missing nuspec identity in '$($file.Name)'."
+            }
+            $identity = "$id/$resolvedVersion"
+            if ($feedIndex.ContainsKey($identity)) { throw "Duplicate feed package identity: $identity" }
+            $entry = [ordered]@{ Id = $id; Version = $resolvedVersion; File = $file.FullName
+                Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash }
+            $feedIndex[$identity] = $entry
+            $evidence.Feed += $entry
+        } finally { $zip.Dispose() }
+    }
+    if ($packages.Count -ne 10) { throw "Expected the complete ten-package feed, found $($packages.Count)." }
+    foreach ($requiredId in @('Atelia.DurableGraph', 'Atelia.DurableGraph.Serialization',
+        'Atelia.DurableGraph.Storage', 'Atelia.DurableGraph.Persistence')) {
+        $versions = @($feedIndex.Values | Where-Object { $_.Id -ieq $requiredId })
+        if ($versions.Count -ne 1 -or $versions[0].Version -ine $packageVersion) {
+            throw "Feed must contain exactly one '$requiredId' package at requested G version '$packageVersion'."
+        }
+    }
+    $runtimeIdentity = "Atelia.DurableGraph/$packageVersion"
+    if (!$feedIndex.ContainsKey($runtimeIdentity)) { throw "Feed does not contain '$runtimeIdentity'." }
+    $package = Get-Item -LiteralPath $feedIndex[$runtimeIdentity].File
     $archive = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
 
     try {
@@ -142,6 +224,16 @@ try {
     finally {
         $archive.Dispose()
     }
+    $evidence['PackageReadmeSha256'] = Get-ProbePackageEntryHash -Package $package.FullName -Entry 'README.md'
+    if ([string]::IsNullOrWhiteSpace($PackageSource)) {
+        # Only a feed produced by this run claims this checkout's PACKAGE.md bytes.
+        # An explicitly supplied valid feed may come from a different source revision.
+        $sourceReadme = Join-Path $repositoryRoot 'src/DurableGraph/PACKAGE.md'
+        if ((Get-FileHash -LiteralPath $sourceReadme).Hash -cne $evidence.PackageReadmeSha256) {
+            throw 'The locally produced Runtime package README differs from src/DurableGraph/PACKAGE.md.'
+        }
+        $evidence['SourceReadme'] = $sourceReadme
+    }
 
     Invoke-DotNet @(
         "restore", $consumerProject,
@@ -149,6 +241,46 @@ try {
         "--packages", $packageCache,
         "-p:DurableGraphPackageVersion=$packageVersion"
     )
+
+    $assetsFile = Join-Path $consumerRoot 'obj/project.assets.json'
+    $assets = Get-Content -LiteralPath $assetsFile -Raw | ConvertFrom-Json -AsHashtable
+    if (@($assets.libraries.Values | Where-Object type -ne 'package').Count -ne 0) {
+        throw 'Consumer assets must contain packages only.'
+    }
+    $cacheRoot = [IO.Path]::GetFullPath($packageCache).TrimEnd('\', '/')
+    $folders = @($assets.packageFolders.Keys)
+    if ($folders.Count -ne 1 -or [IO.Path]::GetFullPath($folders[0]).TrimEnd('\', '/') -ine $cacheRoot) {
+        throw 'Consumer assets must use only this run''s fresh package cache.'
+    }
+    $resolvedAtelia = @{}
+    foreach ($identity in $assets.libraries.Keys) {
+        $id, $resolvedVersion = $identity.Split('/')
+        if (!$id.StartsWith('Atelia.', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        if (!$feedIndex.ContainsKey($identity)) { throw "Restored Atelia identity is not in the selected feed: $identity" }
+        $library = $assets.libraries[$identity]
+        $directory = [IO.Path]::GetFullPath((Join-Path $cacheRoot $library.path))
+        if (!$directory.StartsWith($cacheRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Restored package escapes the task cache: $identity"
+        }
+        $cachedPackage = Join-Path $directory "$($id.ToLowerInvariant()).$($resolvedVersion.ToLowerInvariant()).nupkg"
+        if ((Get-FileHash -LiteralPath $cachedPackage).Hash -cne $feedIndex[$identity].Sha256) {
+            throw "Cached package differs from selected feed: $identity"
+        }
+        $resolvedAtelia[$id] = [ordered]@{ Id = $id; Version = $resolvedVersion; Directory = $directory
+            Package = $feedIndex[$identity].File; Sha256 = $feedIndex[$identity].Sha256 }
+        $evidence.ResolvedAtelia += $resolvedAtelia[$id]
+    }
+    foreach ($requiredId in @('Atelia.DurableGraph', 'Atelia.DurableGraph.Serialization')) {
+        if (!$resolvedAtelia.ContainsKey($requiredId)) { throw "Required Runtime closure package was not restored: $requiredId" }
+    }
+    if ($resolvedAtelia['Atelia.DurableGraph'].Version -ine $packageVersion) { throw 'Consumer restored the wrong Runtime version.' }
+    $runtimeCacheDirectory = $resolvedAtelia['Atelia.DurableGraph'].Directory
+    foreach ($requiredEntry in $requiredEntries) {
+        $evidence.Files += Assert-ProbePackageFile -Package $package.FullName -Entry $requiredEntry -File (Join-Path $runtimeCacheDirectory $requiredEntry)
+    }
+    $evidence['AssetsFile'] = $assetsFile
+    $evidence['AssetsSha256'] = (Get-FileHash -LiteralPath $assetsFile).Hash
+    $evidence['ResolvedPackages'] = @($assets.libraries.Keys | Sort-Object)
 
     Invoke-DotNetExpectFailure -Arguments @(
         "build", $consumerProject, "--no-restore",
@@ -197,8 +329,9 @@ try {
     }
 
     Invoke-ConsumerClean $consumerProject $packageVersion $history 1
-    Invoke-DotNet @(
+    Invoke-ProbeBuildEvidence -Mode Publish -Log (Join-Path $workRoot 'build-publish.log') -Arguments @(
         "build", $consumerProject, "--no-restore",
+        '-v:normal', '-p:UseSharedCompilation=false', '-p:DurableGraphSchemaHistoryMode=Publish',
         "-p:DurableGraphPackageVersion=$packageVersion",
         "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=1"
@@ -251,8 +384,9 @@ try {
     }
 
     Invoke-ConsumerClean $consumerProject $packageVersion $history 2
-    Invoke-DotNet @(
+    Invoke-ProbeBuildEvidence -Mode Verify -Log (Join-Path $workRoot 'build-verify.log') -Arguments @(
         "build", $consumerProject, "--no-restore",
+        '-t:Rebuild', '-v:normal', '-p:UseSharedCompilation=false', '-p:DurableGraphSchemaHistoryMode=Verify',
         "-p:DurableGraphPackageVersion=$packageVersion",
         "-p:DurableGraphSchemaHistoryDirectory=$history",
         "-p:ProbeVersion=2",
@@ -323,8 +457,41 @@ try {
         throw "Packaged static binary body failed; output was '$bodyOutput'."
     }
 
+    # The Runtime-only consumer does not restore all ten feed packages. Compare the
+    # actual runtime assets of its resolved Atelia closure, rather than a feed count.
+    $targets = @($assets.targets.Values)
+    if ($targets.Count -ne 1) { throw 'This non-RID consumer must have exactly one assets target.' }
+    $expectedDlls = @{}
+    foreach ($resolved in $resolvedAtelia.Values) {
+        $identity = "$($resolved.Id)/$($resolved.Version)"
+        $runtimeAssets = $targets[0][$identity].runtime
+        if ($null -eq $runtimeAssets) { continue }
+        foreach ($entry in $runtimeAssets.Keys) {
+            if (![IO.Path]::GetFileName($entry).EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase)) { continue }
+            $name = [IO.Path]::GetFileName($entry)
+            if ($expectedDlls.ContainsKey($name)) { throw "Duplicate Atelia output asset: $name" }
+            $expectedDlls[$name] = [ordered]@{ Package = $resolved.Package; Entry = $entry }
+            $evidence.Files += Assert-ProbePackageFile -Package $resolved.Package -Entry $entry -File (Join-Path $resolved.Directory $entry)
+        }
+    }
+    $outputRoot = Split-Path -Parent $consumerAssembly
+    $actualDlls = @(Get-ChildItem -LiteralPath $outputRoot -Filter 'Atelia.*.dll' -File |
+        Where-Object Name -ne 'Atelia.Consumer.dll')
+    if ($actualDlls.Count -ne $expectedDlls.Count) { throw 'Output Atelia DLL set differs from the actual restored runtime closure.' }
+    foreach ($dll in $actualDlls) {
+        if (!$expectedDlls.ContainsKey($dll.Name)) { throw "Unexpected output assembly: $($dll.Name)" }
+        $expected = $expectedDlls[$dll.Name]
+        $evidence.Files += Assert-ProbePackageFile -Package $expected.Package -Entry $expected.Entry -File $dll.FullName
+    }
+    foreach ($requiredEntry in $requiredEntries) {
+        $null = Assert-ProbePackageFile -Package $package.FullName -Entry $requiredEntry -File (Join-Path $runtimeCacheDirectory $requiredEntry)
+    }
+
+    $evidence.Passed = $true
+
     Write-Host "Package consumer probe passed. Artifacts: $workRoot"
 }
 finally {
+    $evidence | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $workRoot 'package-evidence.json') -Encoding utf8NoBOM
     Pop-Location
 }

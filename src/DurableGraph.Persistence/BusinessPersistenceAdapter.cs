@@ -42,7 +42,11 @@ internal sealed class BusinessPersistenceAdapter {
         _workspace.RequirePreparing(candidate);
         NormalizedGraphState? baseline = _workspace.Baseline;
         if (Source?.Address != baseline?.RevisionAddress) { throw new InvalidDataException("State source and normalized baseline must agree."); }
-        baseline?.RequireStoredSource(_store, _workspace.Models);
+        // Validate the complete source before body callbacks. State candidate creation
+        // performs that check itself; independent Events do not create a next baseline.
+        NormalizedGraphState? next = null;
+        if (candidate.IsIndependentSnapshot) { baseline?.RequireStoredSource(_store, _workspace.Models); }
+        else { next = NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline); }
         IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents();
         List<PreparedObject> rows = [];
         foreach (PreparedCapturedObject item in prepared) {
@@ -55,8 +59,6 @@ internal sealed class BusinessPersistenceAdapter {
         Dictionary<ObjectId, long> priorH = baseline?.Objects.ToDictionary(static pair => pair.Key,
             static pair => pair.Value.Storage!.Value.ReconstructionPayloadBytes) ?? [];
         var (records, _, _) = ObjectWritePlanner.PlanObjectWrites(rows, priorH, parameters ?? new(5, 5));
-        NormalizedGraphState? next = candidate.IsIndependentSnapshot ? null :
-            NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline);
         HashSet<ObjectId> live = candidate.Graph.Objects.Select(static row => row.Id).ToHashSet();
         uint[] removed = baseline?.Objects.Keys.Where(id => !live.Contains(id)).Select(static id => id.Value).ToArray() ?? [];
         candidate.CompletePreparation(next);

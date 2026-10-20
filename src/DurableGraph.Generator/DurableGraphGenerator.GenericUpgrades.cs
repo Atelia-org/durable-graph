@@ -75,7 +75,7 @@ public sealed partial class DurableGraphGenerator {
             var entry = methods[index];
             string adapter = AppendFamilyUpgradeAdapter(context, owner, entry.Method, entry.Version, index, entry.Implicit);
             output.Append("        new(").Append(Literal(owner.SchemaId)).Append(", ").Append(entry.Version).Append(", typeof(")
-                .Append(adapter).Append(").GetMethod(").Append(Literal(entry.Implicit ? "__DurableUpgradeAdapter" + Number(entry.Version) : "Invoke"))
+                .Append(adapter).Append(").GetMethod(").Append(Literal(entry.Implicit ? FamilyUpgradeAdapterPrefix + Number(entry.Version) : "Invoke"))
                 .Append(", global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic)!");
             if (entry.ClosedOwner is not null) {
                 output.Append(", closedOwner: ");
@@ -136,7 +136,7 @@ public sealed partial class DurableGraphGenerator {
         }
         string hostName = implicitMethod ? EscapeIdentifier(owner.Symbol.Name) : "__DurableUpgrade_" + FamilyName(owner.SchemaId) + "_" + Number(index);
         output.Append(implicitMethod ? (owner.Symbol.IsRecord ? "partial record class " : "partial class ") : "internal static class ").Append(hostName).AppendLine(" {");
-        string adapterName = implicitMethod ? "__DurableUpgradeAdapter" + Number(fromVersion) : "Invoke";
+        string adapterName = implicitMethod ? FamilyUpgradeAdapterPrefix + Number(fromVersion) : "Invoke";
         output.Append("    internal static void ").Append(adapterName).Append(syntax.TypeParameterList?.ToString()).Append("(in ")
             .Append(syntax.ParameterList.Parameters[0].Type!.ToString()).Append(" prior, out ")
             .Append(syntax.ParameterList.Parameters[1].Type!.ToString()).Append(" next, ").Append(RootName).Append("UpgradeContext context)");

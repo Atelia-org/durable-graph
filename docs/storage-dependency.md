@@ -173,6 +173,9 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 在上述 package restore 后使用 `--no-restore -p:UseStorageSources=false -p:PackageVersion=<G>`，
 不要把 G 套到六个存储依赖，不要借 source ProjectReference 生成正式依赖闭包。
 
+同一 checkout 的 Prepare、候选导出和 pack 必须串行；不同版本或输出 feed 不会隔离共享的项目 bin/obj。
+先准备一次准确 feed，再并行运行各有独立 cache、obj/bin 和 history 的只读消费者；并行 producer 使用独立 checkout。
+
 [PackageProbeSupport.ps1](../experiments/PackageConsumerProbe/PackageProbeSupport.ps1) 可验证并复制六个存储包，
 再生成四个 DG 包，构成完整的十包 feed。当前候选显式传入源 feed：
 
@@ -188,7 +191,7 @@ runner 也可从任务环境变量 `DG_STORAGE_PACKAGE_SOURCE` 读取路径后�
 已有完整十包 feed 的 runner 使用 `-PackageSource <feed> -Version <G>`，不改写输入。
 这是可联网的领域 Probe 输入；其完整任务配置允许取得第三方依赖。
 它与上面的便携候选目录用途不同：十包 feed 不自带 QuickStart 的本地依赖闭包，
-内部 `pack.nuget.config` 也不作为对外交付的消费配置。
+feed 内部的 `pack.nuget.config` 是该次准备专用的 producer 配置，不作为对外交付的消费配置。
 活动验收只使用新建库，保留在新格式库内的模型 V1→V2 升级、branch/tag 与冷进程重开行为。
 旧存储提取、旧组织/API 包兼容 lanes 不再作为当前回归；历史证据仍可在对应 Git revision 中复现。
 相关命令见[包实验导航](../experiments/PackageConsumerProbe/README.md)和[根 README](../README.md#从源码打包)。

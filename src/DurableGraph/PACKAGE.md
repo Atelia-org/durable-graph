@@ -26,12 +26,14 @@ operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Pe
 State-based applications can create a branch with State and call CommitState repeatedly; no preceding
 Event or Event model is required. CommitEvent is optional and publishes separately from CommitState.
 Register models before Open; save independent Event/State graphs, query checkpoints, resolve immutable
-tags and fork named branches. Each branch has at most one active checkout; repository operations are
-serialized. Open selects resource access; CreateSharedBranch, CreateSharedBranchFromEvent, CheckoutShared
-and ForkShared acquire editable working copies. All saves share one repository Schema Catalog; accepted
+tags and fork branches with nonunique display labels. Each branch has at most one active WorkingCopy;
+repository operations are serialized. Open selects resource access; CreateRootBranchFromState,
+CreateRootBranchFromEvent and ForkBranch return durable BranchInfo. OpenWorkingCopy separately acquires
+an editable working copy by BranchId. All saves share one repository Schema Catalog; accepted
 definitions cannot change shape under the same key. Develop conflicting drafts in separate complete,
 closed repository copies, then upgrade a clean baseline with the final model. Private/ToShared APIs
-have been removed. The P0R2 branch directory rejects older repository layouts on read-only and writable open.
+have been removed. The P0R3 branch-directory pointer and P0G2 business graphs reject older layouts rather than
+providing a compatibility path.
 Restoration bypasses constructors and field initializers. Rebuild Transient state after
 delivery; ReadPair may share read-only nodes, so view-specific context belongs outside those graphs.
 

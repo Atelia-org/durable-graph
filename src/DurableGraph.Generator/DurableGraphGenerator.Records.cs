@@ -84,23 +84,4 @@ public sealed partial class DurableGraphGenerator {
         return symbol is IMethodSymbol constructor ? constructor.ContainingType : symbol as INamedTypeSymbol;
     }
 
-    private static bool ReportRecordHelperCollisions(SourceProductionContext context, INamedTypeSymbol type,
-        string schemaId, List<DurableFieldAnalysis> fields) {
-        List<string> names = new() { "__DurableCapture", "__DurableHydrate", "__DurableCreateCurrent", "__DurableCreateTyped", "__DurableProjection" };
-        foreach (DurableFieldAnalysis field in fields) {
-            string suffix = FamilyName(schemaId) + "_" + Number(field.FieldId);
-            names.Add("__DurableRead_" + suffix);
-            names.Add("__DurableWrite_" + suffix);
-            if (field.Symbol.IsReadOnly || IsRecordBackingField(field.Symbol)) names.Add("__DurableReadonly_" + suffix);
-        }
-        bool errors = false;
-        foreach (string name in names) {
-            var members = type.GetMembers(name);
-            if (type.Name != name && members.IsEmpty) continue;
-            ReportInvalidGeneratedState(context, type, "the generated helper name '" + name + "' is reserved",
-                members.IsEmpty ? GetSourceLocation(type) : GetSourceLocation(members[0]));
-            errors = true;
-        }
-        return errors;
-    }
 }
