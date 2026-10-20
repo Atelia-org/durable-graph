@@ -23,7 +23,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [Echo Garden接入配方候选](design-branches/0096-history-and-head-model/echo-garden-feedback.md) | 真实普通包消费者已复跑；推荐补导航DTO/Hex、fork已创建但open失败、版本化Summary三个可执行片段，尚未实施。先补应用调用闭环，不默认新增核心API；既有DB-096交付保持完成。七字段/8存档未提供性能优化依据。 |
+| [Echo Garden接入配方](design-branches/0096-history-and-head-model/application-recipes.md) | 导航DTO/Hex、安全分叉切换、版本化Summary已实施并通过源码/普通包验收；无剩余示例工单。多个typed DTO反复出现相同适配成本时再考虑converter；实际无法遵守纯投影后立即提交时再研究更强摘要合同。七字段/8存档没有性能优化依据。 |
 | [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | Branch/Commit/WorkingCopy、组提交、目录树、分页、旧API迁移及[完整交付与master合入](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合。首版只追加、旧点另开、fork立即可见；后续附件、ID字段、改标签与规模优化由实际消费者需求触发，不继续原施工队列。 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
 | [DB-084 不可变 tag](design-branches/0084-eventjournal-immutable-tags-slice/0084-eventjournal-immutable-tags-slice.md) | [DG 接入记录](design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 保留旧栈准确公开包与失败证据；当前发布合同与活动资格见 [DB-087](design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md#save-contract)。外部序列化地址、全局仓库身份及复制/合并合同继续推迟到真实交换地址需求；不自动扩为 tag 管理框架 |

@@ -24,6 +24,7 @@
     <Compile Include="..\Shared\TestSavePolicies.cs" Link="TestSavePolicies.cs" />
     <Compile Include="..\Shared\BranchSaveSessionFixture.cs" Link="BranchSaveSessionFixture.cs" />
     <Compile Include="..\..\experiments\PackageConsumerProbe\EventHistoryRecoveryConsumer\PendingRecovery.cs" Link="Examples\PendingRecovery.cs" />
+    <Compile Include="..\..\experiments\PackageConsumerProbe\ApplicationRecipesConsumer\BranchSelection.cs" Link="Examples\BranchSelection.cs" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,6 @@
 # DB-096 设计续接工作集
 
-> 更新：2026-10-20。完整目标已验收并合入本地master；后继Echo Garden反馈研究已完成，产品合同保持。先读本文，再按问题读取链接；当前用户决定、适用AGENTS、源码和可执行证据优先于旧草案。产品能力入口为[src/PROJECT-STATE](../../../src/PROJECT-STATE.md)。
+> 更新：2026-10-20。完整目标已验收并合入本地master；后继Echo Garden接入配方已实施验收，产品合同保持。先读本文，再按问题读取链接；当前用户决定、适用AGENTS、源码和可执行证据优先于旧草案。产品能力入口为[src/PROJECT-STATE](../../../src/PROJECT-STATE.md)。
 
 ## 目标与当前停点
 
@@ -36,7 +36,7 @@
 
 **本期无剩余必经施工或验收门槛。**API草图保设计合同和历史推演意义，真实签名查源码；不从早期“下一批实验”重启设计。
 
-2026-10-20的[Echo Garden反馈研究](echo-garden-feedback.md)已由三项独立审视及主线程新目录普通包复跑核对。它支持ID/标签分离、空fork、无模型预览和纯State主路径；主要缺口是导航DTO文本适配、创建成功后打开失败的应用切换流程、版本化Summary。推荐下一片补短小可执行配方，尚未实施；不默认增加文本codec、ForkAndOpen或summary factory。源码/格式未变，既有完整目标不重开。
+2026-10-20的[Echo Garden反馈研究](echo-garden-feedback.md)已形成[消费者接入配方](application-recipes.md)并完成源码与普通包验收：导航DTO文本适配、创建成功后打开失败的应用切换流程、版本化Summary。入口为[短指南](../../../experiments/PackageConsumerProbe/ApplicationRecipesConsumer/README.md)；三项helper与两进程故事、真实故障源码测试均已交付。不新增核心文本codec、ForkAndOpen或summary factory；本片无剩余必经施工，下一增量等真实消费反馈。
 
 性能优化仍须有真实成本反例。七字段、8存档的游戏没有提供性能基准；继续保留单次CommitState与全历史的简单用法，长历史应用再使用分页，不建立新缓存/索引框架。
 

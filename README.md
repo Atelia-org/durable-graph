@@ -224,6 +224,9 @@ using (var reopened = Repository.OpenExisting(path, models)) {
 标签只用于显示，可以重复；`ListBranches` 只列正式业务分支，应用选择、打开和持久化导航均用 ID。
 当前分支只追加；从旧位置续写应 fork，没有移动当前分支或 rewind 入口。
 
+Fork正常返回后，新分支已经创建；随后OpenWorkingCopy失败不会撤销它。应用应保留新BranchId，仅重试打开，
+并在新副本打开成功前保留旧副本；旧副本也只在owner健康时可继续使用。完整切换例子见[接入配方](experiments/PackageConsumerProbe/ApplicationRecipesConsumer/README.md#2-分叉后再切换分别处理结果)。
+
 fork 不新增业务提交：新分支的当前 `CommitId` 可以仍属于父分支，首次提交才取得新分支自己的提交 ID。
 因此使用 `WorkingCopy.BranchId` 继续原来的世界线，使用 `CommitId` 查看固定存档；不要由当前 Commit 的归属推断写入目标。
 打开从 Event fork 的工作副本会恢复最近 State；纯 Event 前缀得到 `State == null`。消息处理和外部效果去重由应用负责。
@@ -241,6 +244,10 @@ if (!alternateId.TryWrite(encodedBranch) || !BranchId.TryRead(encodedBranch, out
 `CommitId` 使用相同的 `EncodedSize` / `TryWrite` / `TryRead` 形状。应用同时保存所选仓库路径或其他定位信息；
 ID 不是全局身份，解码成功也不证明所选库中存在该位置，跨库误用检出只是开发期概率诊断。
 这些 ID 暂不作为可直接标注的 Durable 模型字段。
+
+默认System.Text.Json不会替这些ID调用字节codec，会得到 `{}`。网页DTO或导航配置可使用
+[版本化DTO＋Hex示例](experiments/PackageConsumerProbe/ApplicationRecipesConsumer/README.md#1-保存上次使用的分支)，显式保存LastUsedBranch，不按无序列表末项推断“上次使用”。
+同一指南提供[版本化Summary](experiments/PackageConsumerProbe/ApplicationRecipesConsumer/README.md#3-从state投影版本化摘要)：摘要与提交共同发布，但其业务一致性由应用保证，须从投影开始到整个提交调用结束保持图稳定。
 
 不可变 tag 适合命名固定存档：`repo.CreateTag("before-experiment", selectedCommitId)`，
 重开后 `ResolveTag` 返回同一 `CommitId`，可用于 Load、ReadCheckpoint 或 ForkBranch。
