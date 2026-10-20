@@ -8,6 +8,7 @@
 先读本文，再按任务选择一份材料；不需要按 DB 编号通读历史。
 
 - 下游首次接入：先看[根 README](../README.md) 的完整保存/重开示例、包准备与 Schema 升级步骤。
+- 下游选型与应用设计：[使用指南](../docs/usage-guide/README.md)，覆盖可变领域建模、架构经验迁移、事件/恢复协议与验收。
 - 理解产品目标与已选约束：[目标设计](../docs/DurableGraph-target-design-v0.md)。
 - 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。

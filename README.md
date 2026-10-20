@@ -14,6 +14,9 @@ DurableGraph 捕获独立的版本化状态 DTO；State 比较上次保存基线
 目前是快速演进的 **.NET 10 原型**，API 和格式尚未冻结。本文面向首次接入的应用开发者和 Coding Agent，
 只介绍当前可用入口；详细能力边界见 [产品工作集](src/PROJECT-STATE.md)。
 
+准备选型或设计应用时，先看[使用指南](docs/usage-guide/README.md)：判断适用条件，
+理解可变工作模型与不可变历史，复用状态机等架构经验，并设计恢复与验收。
+
 公开入口是非泛型 `Repository` / `WorkingCopy`：状态型应用直接连续提交 State，无需先提交 Event。
 需要记录业务事件时，可以另外提交 Event 快照；历史允许任意 E/S 排列。
 每条业务分支对应一个 HeadStore Head；普通提交共同发布该分支与所需的新 Schema 根。分支目录另行管理，显示标签可重复。恢复读取已保存的结果，不重新执行历史业务处理器。
