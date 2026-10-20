@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+2026-10-20：[DB-097 独立 Event 对象图](../docs/design-branches/0097-independent-event-graphs/README.md)进入设计质询与实施。目标是 Event 完整、自有内容与局部身份，退出 State 差分基线；保图内引用、历史、Schema 和发布故障合同。用户已授权设计、审查、实施与本地提交；验收和兼容边界集中于该合同，尚未宣称新语义实现。
+
 2026-10-20：[重构后七方向质量体检](../maintenance/20261020/README.md)整改已全部验收。生成器输入、批读取复用、保存与重入准入、历史导航成本、诊断、真实打包输出及普通包门禁均已收口；局部保留裁决有明确重访触发，当前无剩余整改工单。公开 API 签名、持久格式和 Storage pin 保持；准确实现/包来源、验收与范围只查[完成记录](../maintenance/2026-10-20.md)。原七报告保留体检基线意义；下一片由真实消费者需求或新的实测反例触发。
 
 2026-10-20：[Echo Garden接入配方](../docs/design-branches/0096-history-and-head-model/application-recipes.md)已实施验收。导航DTO/Hex、安全分叉切换、版本化摘要有[可执行指南](../experiments/PackageConsumerProbe/ApplicationRecipesConsumer/README.md)，根构建、22项定向源码测试及普通包两进程验证通过。产品源码/API/格式未改，无剩余配方工单；下一增量由真实消费者反馈和成本测量触发，DB-096既有完成状态保持。
