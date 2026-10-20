@@ -299,7 +299,7 @@ factory 通过公开绑定服务闭合能力，raw Schema lookup 保为 protecte
   不伪造 Delta 估算；它与 Insert 一样属于必需写入，不消耗可选 Base 预算。
   默认选择采用可解释的稳态摊销容忍度，不假定存在无工作负载依赖的天然最优阈值；
   当前参数与调优指导见[根 README](../README.md#调整保存策略)，分析依据见 [DB-070](design-branches/0070-read-amplification-default/README.md)。
-  Event 按 [DB-097](design-branches/0097-independent-event-graphs/README.md) 选择独立完整 Base，不进入该策略；CommitEvent、CreateEventCommitRequest、CreateRootBranchFromEvent 移除读取放大或重建预算参数，State 签名保持。该片正在实施，验收状态只查其记录。
+  Event 按 [DB-097](design-branches/0097-independent-event-graphs/README.md) 选择独立完整 Base，不进入该策略；CommitEvent、CreateEventCommitRequest、CreateRootBranchFromEvent 移除读取放大或重建预算参数，State 签名保持。该片已完成源码与普通包限定验收，准确证据只查其记录。
 - 策略消费完整 post-live 对象集合的估算，产生稀疏表示计划。准确内容来源、对象变化分类、
   reachability 和 Removes 由保存调用方提供，策略不能证明这些输入完整。
 - Storage 直接使用 FrameStore 的 opaque FrameAddress；DG links 固定编码为 12B，不解释文件位置或距离。
@@ -443,7 +443,7 @@ Event 不借 State DTO/head/H，不计算相对 State 的差集或 RemovedIds，
 输入仍可引用 State 实例并捕获其当前值，提交不冻结调用者。State 保持长期身份和增量基线，不因 Event 保存而改变。
 Event 的非空 OwnedBatch 必须全为 Base，完整 Base 目录的全部 live head 必须指向该 batch；source=null 本身不足以证明自包含。
 GetPreviousState(eventCommitId) 仍返回历史中最近严格祖先 State，表示历史关联而非 Event 的物理内容来源；expected Commit、分支占用及 StateSourceCommitId 的编辑准入保持。
-上述独立 Event 目标由 [DB-097](design-branches/0097-independent-event-graphs/README.md) 实施，尚未完成验收。该片选择将 Branches 根标识从 P0R3 升为 P0R4 以拒绝旧库；P0G2、batch/Base/Schema 编码及 Storage pin 保持，不增加兼容 reader 或迁移工具。
+上述独立 Event 目标由 [DB-097](design-branches/0097-independent-event-graphs/README.md) 实施并完成源码与普通包限定验收。该片已将 Branches 根标识从 P0R3 升为 P0R4 以拒绝旧库；P0G2、batch/Base/Schema 编码及 Storage pin 保持，不增加兼容 reader 或迁移工具。
 所选图准备时验证该角色的准确来源、对象 prior、完整目录与布局；读取作为来源的 State 时仍核对它自己的严格前源。
 不为证明全部orphan健康而启动全库检查，底座必要资格错误仍传播。
 

@@ -9,7 +9,7 @@
 
 ## 按问题找材料
 
-新片：[DB-097 独立 Event 对象图](0097-independent-event-graphs/README.md)，设计质询与实施中；Event 内容独立于 State 基线，替代旧 Event 差分路线。
+最新片：[DB-097 独立 Event 对象图](0097-independent-event-graphs/README.md)，已完成源码与普通包限定验收；Event 内容独立于 State 基线，替代旧 Event 差分路线，P0R4 拒绝旧库。
 
 不知道编号时先在下面搜索主题；确定问题后，只在其目录内查所需证据：
 

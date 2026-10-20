@@ -1,6 +1,6 @@
 # DB-070：读取放大阈值的默认选择
 
-> Event 参数后继：[DB-097](../0097-independent-event-graphs/README.md)正在实施 Event 全 Base 独立保存并移除其公开预算参数；本文策略及默认选择继续用于 State，不据旧 Event 调用签名保留无作用参数。
+> Event 参数后继：[DB-097](../0097-independent-event-graphs/README.md)已实施 Event 全 Base 独立保存并移除其公开预算参数；本文策略及默认选择继续用于 State，不据旧 Event 调用签名保留无作用参数。
 
 > 整理说明：2026-10-14 从 `docs/design-branches/0070-read-amplification-default.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：当片把有效默认策略改为 {5,5}、测试基准独立保留 {3,5}；近似摊销模型不是产品性能保证，当前默认以源码和产品上下文为准。

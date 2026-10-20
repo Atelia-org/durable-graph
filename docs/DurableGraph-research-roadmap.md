@@ -23,7 +23,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
-| [DB-097 独立 Event 对象图](design-branches/0097-independent-event-graphs/README.md) | 已选目标，正在实施，尚未验收：每次 fresh capture、局部 ID、全 Base 自有目录，退出 State DTO/head/H/source/rewrite/游标和预算协议；移除公开 Event 策略参数，任一 Event Pair 独立物化。保 State/meta 增量、State–State 共享、历史关联及共同发布。完整验收和 State 规模对照只在该片维护；P0R4 根拒绝旧库，其他 wire 与 Storage pin 保持。 |
+| 独立 Event 的大载荷成本 | [DB-097 对照](design-branches/0097-independent-event-graphs/performance-results.md)已证实巨大共享子图完整写入的代价。只有真实消费者持续保存这种载荷、且实际文件增长或延迟成为瓶颈时，再评估事实载荷建模及必要机制；不因机制见证预建 Blob、跨图去重或恢复旧式 Event Delta。已完成实施与验收从 PROJECT-STATE 进入。 |
 | [Echo Garden接入配方](design-branches/0096-history-and-head-model/application-recipes.md) | 导航DTO/Hex、安全分叉切换、版本化Summary已实施并通过源码/普通包验收；无剩余示例工单。多个typed DTO反复出现相同适配成本时再考虑converter；实际无法遵守纯投影后立即提交时再研究更强摘要合同。七字段/8存档没有性能优化依据。 |
 | [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | Branch/Commit/WorkingCopy、组提交、目录树、分页、旧API迁移及[完整交付与master合入](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合。首版只追加、旧点另开、fork立即可见；后续附件、ID字段、改标签与规模优化由实际消费者需求触发，不继续原施工队列。 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |

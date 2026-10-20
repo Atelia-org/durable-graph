@@ -1,6 +1,6 @@
 # DB-097：独立 Event 对象图
 
-> 状态：目标方案经独立质询收敛，实施中。2026-10-20。
+> 状态：目标方案经两轮独立质询收敛，已实施并完成源码与普通包限定验收。2026-10-20。
 > 基线：`4d7c4b3`。本片改变 Event 的公开保存参数及业务内容来源合同；不改变 State 的增量语义或 Storage pin。
 
 ## 问题与目标
@@ -106,4 +106,6 @@ State/meta 仍需 Delta、prior、H、rewrite、目录增量和精确来源验�
 
 ## 审查与实施状态
 
-三方独立审查与交叉质询见 [目标裁决](review.md)。尚未宣称目标已实现；最终测试和测量证据将在本目录保留。当前能力以 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 为准。
+三方独立审查与交叉质询见 [目标裁决](review.md)。根构建及完整 3,200 项回归、四套新普通包消费者均通过；准确来源与范围见 [实施验收](validation.md)、[性能对照](performance-results.md)、[普通包验收](package-validation.md)。
+
+本片没有剩余必需施工或未决产品选择。巨大共享载荷的写入放大已实际测量；进一步优化由真实消费者瓶颈触发，条件只维护在 [路线图](../../DurableGraph-research-roadmap.md)。当前能力以 [PROJECT-STATE](../../../src/PROJECT-STATE.md) 为准。

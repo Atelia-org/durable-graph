@@ -1,6 +1,6 @@
 # DB-064：两份 Revision 合并读取与安全共享边界
 
-> Event 配对后继：[DB-097](../0097-independent-event-graphs/README.md)正在实施任一 Event Pair（包括同 Event 两次）独立物化，保留同操作 mutable factory 实例守卫；本文的共享闭包继续用于 State–State，旧 E/S head 复用证据仅解释当片版本，不约束新 Event 自有内容。
+> Event 配对后继：[DB-097](../0097-independent-event-graphs/README.md)已实施任一 Event Pair（包括同 Event 两次）独立物化，保留同操作 mutable factory 实例守卫；本文的共享闭包继续用于 State–State，旧 E/S head 复用证据仅解释当片版本，不约束新 Event 自有内容。
 
 > 整理说明：2026-10-14 从 `docs/design-branches/0064-shared-revision-decoding-design.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：操作内 exact 解码复用与只读共享的当片证据；比较能力由 [DB-066](../0066-readpair-comparison-and-transient-contract-slice/README.md) 接续，恢复核心后继见 [DB-079](../0079-shared-graph-restoration-core-slice/README.md)。

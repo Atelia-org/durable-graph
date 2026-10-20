@@ -1,6 +1,6 @@
 # DB-062：独立图读取与可由外层发布的工作区
 
-> Event 内容后继：[DB-097](../0097-independent-event-graphs/README.md)正在实施每次新 CaptureSession、图内局部 ID、全 Base 自有 Event，不再借 State 基线或消耗 State 游标。本文保存当片工作区和身份实现的历史意义；不作为新 Event 保存合同，State 增量职责保持。
+> Event 内容后继：[DB-097](../0097-independent-event-graphs/README.md)已实施每次新 CaptureSession、图内局部 ID、全 Base 自有 Event，不再借 State 基线或消耗 State 游标。本文保存当片工作区和身份实现的历史意义；不作为新 Event 保存合同，State 增量职责保持。
 
 > 整理说明：2026-10-14 从 `docs/design-branches/0062-independent-graph-workspace-slice.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：内部独立图与工作区的历史交付；公开 Journal 外观由 [DB-063](../0063-event-history-journal-slice/README.md) 接续，后续公共读取合同见 [DB-083](../0083-checkpoint-api-user-stories/README.md)。

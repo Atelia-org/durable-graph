@@ -1,6 +1,6 @@
 # DurableGraph 项目术语表
 
-> 用语校准：2026-10-20；Branch / Commit / WorkingCopy 模型已由 DB-096 交付。本文涉及独立 Event 的条目采用 [DB-097](design-branches/0097-independent-event-graphs/README.md) 已选目标，该片正在实施，尚未完成验收。历史文档保留当时语义，不据此推定当前支持旧 API。
+> 用语校准：2026-10-20；Branch / Commit / WorkingCopy 模型已由 DB-096 交付。本文涉及独立 Event 的条目采用 [DB-097](design-branches/0097-independent-event-graphs/README.md) 已验收实现，准确来源与资格限度见该片记录。历史文档保留当时语义，不据此推定当前支持旧 API。
 > 本文是项目首选术语的维护入口；定义概念、区分歧义并映射代码，不代替各分片合同。
 > 公共入口位于 `Atelia.DurableGraph`：`Repository`、`WorkingCopy`、`BranchId`、`CommitId`。一个仓库只有统一的 Schema Catalog；资源读写模式与业务模型准入分别控制。
 > 当前能力查 [PROJECT-STATE](../src/PROJECT-STATE.md)，长期约束查[目标设计](DurableGraph-target-design-v0.md)，未完成工作查[路线图](DurableGraph-research-roadmap.md)。

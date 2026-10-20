@@ -8,7 +8,7 @@
 [DB-087](../../docs/design-branches/0087-meta-bootstrap-refactoring-route/0087-meta-bootstrap-refactoring-route.md)。
 统一 Catalog 与 Private/ToShared 删除见 [DB-096 删除切片](../../docs/design-branches/0096-history-and-head-model/private-removal.md)；开发隔离改用完整关闭库副本。DB-088 保历史故事，查询后继见 DB-089，不从旧逐片“下一步”恢复排期。
 
-[DB-097 独立 Event](../../docs/design-branches/0097-independent-event-graphs/README.md)正在实施，尚未完成验收。其目标为每次新 CaptureSession、图内局部 ID、全 Base 自有业务图，不借 State DTO/head/H/source/rewrite 或游标，不接受 Event 预算参数。State/meta 的增量及 State–State Pair 保持；任一 Event Pair 共用 ReadIndependent 和同操作 mutable factory 守卫。Branches 根选择 P0R4 拒绝旧库，P0G2 及其他 wire、Storage pin 保持；完成状态与证据以该片和[产品工作集](../PROJECT-STATE.md)为准。
+[DB-097 独立 Event](../../docs/design-branches/0097-independent-event-graphs/README.md)已完成源码与普通包限定验收。当前为每次新 CaptureSession、图内局部 ID、全 Base 自有业务图，不借 State DTO/head/H/source/rewrite 或游标，不接受 Event 预算参数。State/meta 的增量及 State–State Pair 保持；任一 Event Pair 共用 ReadIndependent 和同操作 mutable factory 守卫。Branches 根使用 P0R4 拒绝旧库，P0G2 及其他 wire、Storage pin 保持；完成状态与证据以该片和[产品工作集](../PROJECT-STATE.md)为准。
 
 两种变化来源共用一套对象版本保存和一个发布 owner：业务 Capture/比较与受控 meta 编辑。
 catalog 用固定员工 DTO 保存 Schema/TypeExpr，再经原工厂投影；存活目录使用 Dictionary body。

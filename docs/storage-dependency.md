@@ -12,7 +12,7 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在配置中保存本机路径。
 
 此前依赖切换包含非兼容 API 与格式变化；当前定向来源增量只增加 ReadHeadOrigin，没有再改格式：上游统一 HeadStore 格式 4 拒绝格式 1/2/3；`HeadId.LocalId` 改为 owner 上的 `GetLocalHeadId`，持久 handle 编码为 4B/12B。Fork 只写固定来源 header，未产生本地 Entry 时承接该固定 Entry 的值，不随父 Head 后续发布推进。
-DG 的 DB-096 已交付 D/S/T 目录与 Branch/Commit/WorkingCopy，业务 Parent 已删除。实施中的 [DB-097](design-branches/0097-independent-event-graphs/README.md) 选择将 D 的 Branches 根入口从 `P0R3` 升为 `P0R4`，拒绝旧增量 Event 库；Event 内容来源恒为空、全 Base 自包含，State 内容来源仍由 HS 历史选择。`P0T2` 书签入口、`P0S1` Catalog 入口、`P0G2` 图封套及 batch/Base/Schema 编码保持；本片不更换上述 Storage pin，不自动迁移旧库。DB-097 源码与普通包验收尚未完成，准确结果以该片记录和[产品工作集](../src/PROJECT-STATE.md)为准。
+DG 的 DB-096 已交付 D/S/T 目录与 Branch/Commit/WorkingCopy，业务 Parent 已删除。已完成限定验收的 [DB-097](design-branches/0097-independent-event-graphs/README.md) 已将 D 的 Branches 根入口从 `P0R3` 升为 `P0R4`，拒绝旧增量 Event 库；Event 内容来源恒为空、全 Base 自包含，State 内容来源仍由 HS 历史选择。`P0T2` 书签入口、`P0S1` Catalog 入口、`P0G2` 图封套及 batch/Base/Schema 编码保持；本片不更换上述 Storage pin，不自动迁移旧库。DB-097 源码与普通包限定验收已完成，准确结果以该片记录和[产品工作集](../src/PROJECT-STATE.md)为准。
 DG 书签定位准确 CommitId，由独立 Dictionary 管理图目录发布；旧三入口接入的历史范围见 [DB-096 接入切片](design-branches/0096-history-and-head-model/headstore-adaptation.md)。
 旧 `3de8fb0` 的包验收结果保留历史身份，不能作为本轮证据。
 
