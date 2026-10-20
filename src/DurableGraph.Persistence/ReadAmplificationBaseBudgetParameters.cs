@@ -4,8 +4,9 @@ namespace Atelia.DurableGraph.Persistence;
 /// Integer threshold for motivating optional Base writes and their soft budget percent.
 /// </summary>
 /// <remarks>
-/// EventHistory save operations use (5, 5) when their policy argument is omitted or null.
-/// Overrides apply to one call only, including CreateBranch; later calls do not inherit them.
+/// State save operations use (5, 5) when their policy argument is omitted or null.
+/// Overrides apply to one call only, including CreateRootBranchFromState; later calls do not inherit them.
+/// Events always write complete Base content and do not accept this policy.
 /// A lower threshold favors shorter reconstruction chains; a higher one favors fewer Base writes.
 /// Under a stable small-Delta model, thresholds 3, 5 and 11 correspond to average reconstruction
 /// payloads of 2, 3 and 6 times Base, and write payloads of 1.5, 1.25 and 1.1 times continuous Delta.
