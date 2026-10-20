@@ -36,7 +36,7 @@ internal static class ManagementDirectoryPointer {
     }
 
     private static ReadOnlySpan<byte> Magic(ManagementDirectoryKind kind) => kind switch {
-        ManagementDirectoryKind.Branches => "P0R3"u8,
+        ManagementDirectoryKind.Branches => "P0R4"u8,
         ManagementDirectoryKind.Bookmarks => "P0T2"u8,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };

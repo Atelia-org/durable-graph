@@ -105,7 +105,8 @@ internal static class MechanismFixture {
         foreach (HeadId branch in resources.ListBranches().Keys) {
             var found = resources.ReadHistory(resources.ReadCurrent(branch).Id).FirstOrDefault(row => row.Address == address);
             if (found is not null) {
-                FrameAddress? source = resources.FindNearestState(found.Id, inclusive: false)?.Address;
+                FrameAddress? source = found.Kind == CommitKind.Event ? null
+                    : resources.FindNearestState(found.Id, inclusive: false)?.Address;
                 return resources.GraphStore.ReadBusinessGraph(address, source);
             }
         }

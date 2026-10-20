@@ -182,8 +182,17 @@ internal static class Program {
             ObjectId rootId = fork.StateId!.Value;
             eventCommit = fork.CommitEvent(root).Id;
             Need(fork.BaseCommitId == eventCommit && fork.StateSourceCommitId == original.CommitAt(seed) && fork.StateId == rootId &&
-                ReferenceEquals(root, fork.State), "Confirmed Event must discard its State candidate and retain the original State instance/ID/source.");
+                ReferenceEquals(root, fork.State), "Independent Event must retain the original State instance/ID/source and pending rewrite.");
             Check(repository.LoadEvent(fork.BaseCommitId), upgraded: true);
+            var eventPair = repository.ReadPair(eventCommit, eventCommit);
+            Widget firstEvent = Check(eventPair.First, upgraded: true), secondEvent = Check(eventPair.Second, upgraded: true);
+            Need(!ReferenceEquals(firstEvent, secondEvent) && !ReferenceEquals(firstEvent.Child, secondEvent.Child) &&
+                !ReferenceEquals(firstEvent.Numbers, secondEvent.Numbers),
+                "Two reads of the same Event must preserve each graph's aliases without sharing mutable instances across graphs.");
+            var stateEventPair = repository.ReadPair(repository.ResolveTag("initial"), eventCommit);
+            Widget stateSide = Check(stateEventPair.First, upgraded: true), eventSide = Check(stateEventPair.Second, upgraded: true);
+            Need(!ReferenceEquals(stateSide, eventSide) && !ReferenceEquals(stateSide.Numbers, eventSide.Numbers) &&
+                stateSide.Numbers.SequenceEqual(eventSide.Numbers), "State-Event Pair must independently materialize equal reachable content.");
             rewrittenCommit = fork.CommitState().Id;
             Need(fork.StateSourceCommitId == rewrittenCommit && fork.StateId == rootId && ReferenceEquals(root, fork.State),
                 "The following State must accept the original upgraded instances and IDs.");
@@ -201,8 +210,9 @@ internal static class Program {
         rewritten = actual.GraphAddress(rewrittenCommit);
         CheckRefs(actual, schema, ("main", mainState), ("fork", rewritten));
         WireInspector.Graph domainEvent = actual.Graph(eventAddress);
-        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == seed && domainEvent.SourceGraph == seed &&
-            RequiredSchema(domainEvent) == schema, "Event must separately pin S1 while retaining State0 as its content source.");
+        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == seed && domainEvent.SourceGraph is null &&
+            RequiredSchema(domainEvent) == schema, "Event must separately pin S1 without a State content source.");
+        CheckIndependentEvent(actual, domainEvent, 3);
         CheckRewrittenState(actual, rewritten, eventAddress, witness, schema, descriptor);
         Need(actual.ObjectChain(seed, witness.ListId).Head == actual.ObjectChain(rewritten, witness.ListId).Head &&
             RequiredSchema(actual.Graph(seed)) != RequiredSchema(actual.Graph(rewritten)),
@@ -216,7 +226,8 @@ internal static class Program {
             RewriteFrames = Frames(actual).Where(frame => !previous.Contains(frame.Address)).ToArray() };
         WriteJson(witnessPath, next);
         return new { next.MainState, next.RewriteEvent, next.RewriteState, next.RewriteSchema, Objects = next.RewriteObjects,
-            HistoricalForkUsesStateS = true, LatestCatalogRemainsIndependent = true, EventCandidateDiscardKeepsStateRewrite = true,
+            HistoricalForkUsesStateS = true, LatestCatalogRemainsIndependent = true, IndependentEventKeepsStateRewrite = true,
+            SameEventPairIndependent = true, StateEventPairIndependent = true,
             RewrittenLiveWidgetBases = 2, RetainedListHeadAndH = true, SameSPairShared = true, CrossSPairIndependent = true,
             ActualRefsVerified = true, CompleteFramesPreserved = true, RetainedDescriptorId = witness.WidgetDescriptorId,
             CurrentDescriptorId = descriptor };
@@ -305,8 +316,9 @@ internal static class Program {
         Need(catalogSchema != Address(witness.RewriteSchema!) &&
             RequiredSchema(seedGraph) == Address(witness.RewriteSchema!) &&
             eventGraph.Kind == WireInspector.GraphKind.Event && eventGraph.Parent == initial &&
-            eventGraph.SourceGraph == initial && seedGraph.RootId == rootId,
+            eventGraph.SourceGraph is null && seedGraph.RootId == rootId,
             "Catalog Event must pin its newly accepted directory independently of the older State S.");
+        CheckIndependentEvent(seeded, eventGraph, 1);
         Need(CheckCatalog(shared, RequiredSchema(seedGraph), current: true) == witness.CurrentWidgetDescriptorId,
             "The baseline catalog must not already contain the Event declaration.");
         uint unused = CheckEventCatalog(seeded, catalogSchema, witness);
@@ -422,11 +434,11 @@ internal static class Program {
             SameRefImage(oldSharedRef, followupSharedRef) && SameRefImage(directoryBefore, ReadRefImage(database, 1)),
             "A known-layout Event must advance its business Head while retaining D and the accepted shared Catalog.");
         WireInspector.Graph domainEvent = followup.Graph(followupEvent), previous = followup.Graph(catalogState);
-        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == catalogState && domainEvent.SourceGraph == catalogState &&
-            RequiredSchema(domainEvent) == sharedSchema && domainEvent.RootId == witness.CatalogRootId &&
-            domainEvent.DirectoryRoot == previous.DirectoryRoot && domainEvent.OwnedBatch is null,
-            "The no-change Event must preserve the actual directory and accepted shared view.");
-        CheckStorage(followup, domainEvent, witness.CatalogObjects!);
+        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == catalogState && domainEvent.SourceGraph is null &&
+            RequiredSchema(domainEvent) == sharedSchema && domainEvent.DirectoryRoot != previous.DirectoryRoot &&
+            domainEvent.OwnedBatch is not null,
+            "The no-change Event must own a fresh complete graph while preserving the accepted shared view.");
+        CheckIndependentEvent(followup, domainEvent, 3);
         CheckStorage(followup, previous, witness.CatalogObjects!);
         CheckRefs(followup, sharedSchema, ("main", Address(witness.MainState!)),
             ("fork", Address(witness.ContinuationState!)), ("catalog", followupEvent));
@@ -624,6 +636,19 @@ internal static class Program {
         Need(header.FormatVersion == actual.TypedBodyAbi && header.FormatVersion == 5 && header.Route == 1 && header.DescriptorId == descriptor &&
             catalog.WidgetDescriptors[version] == descriptor && catalog.DeclaredIds.Contains(descriptor),
             "Actual Base header must resolve its declared dynamic metaObjectId through the exact origin catalog.");
+    }
+
+    private static void CheckIndependentEvent(WireInspector.Snapshot actual, WireInspector.Graph graph, int objectCount) {
+        Need(graph.Kind == WireInspector.GraphKind.Event && graph.SourceGraph is null && graph.OwnedBatch is not null &&
+            graph.Heads.Count == objectCount && graph.Heads.Values.All(head => head == graph.OwnedBatch),
+            "Event must own every reachable object independently of State.");
+        foreach (uint id in graph.Heads.Keys) {
+            var chain = actual.ObjectChain(graph.Address, id);
+            Need(chain.Entries.Count == 1 && chain.Head == graph.OwnedBatch &&
+                chain.Entries[0].Record.Kind == ObjectVersionKind.Base && chain.Entries[0].Record.PriorAddress is null &&
+                chain.Entries[0].SourceGraph is null && chain.Entries[0].SchemaRoot == graph.SchemaRoot,
+                "Every Event object must have one local Base with no prior content source and the Event's exact Schema pin.");
+        }
     }
 
     private static void CheckStorage(WireInspector.Snapshot actual, WireInspector.Graph graph, StorageEvidence[] storage) {

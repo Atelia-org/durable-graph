@@ -168,7 +168,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         using (WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", world, parameters: NoRebase).Id)) {
             world = (World<string>)session.State!;
             seed = session.StateRevisionAddress!.Value;
-            session.CommitEvent(new World<string>(), parameters: NoRebase);
+            session.CommitEvent(new World<string>());
             models.UseDictionaryComparer<string, int>(StringComparer.Ordinal);
             world.First = new(new StringProxy(StringComparer.Ordinal));
             Assert.Throws<InvalidDataException>(() => session.CommitState(parameters: NoRebase).Id);
@@ -355,7 +355,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         ObjectId keyId = Assert.Single(initial.Objects, row => row.Kind == ObjectStateKind.String).Id;
         SchemaCatalogView selected = initial.SelectedSchemaView!;
         RootState detached = default;
-        FrameAddress unreachable = states.AppendBusiness(StoredGraphKind.State, seed, initial.SelectedSchemaView!.Snapshot!.Address,
+        FrameAddress unreachable = states.AppendBusiness(StoredGraphKind.State, initial.SelectedSchemaView!.Snapshot!.Address,
             new(seed, worldId, [ObjectVersionRecord.CreateBase(worldId.Value,
                 TypedBaseBodyCodec.Encode(root.Layout, RootBase(in detached), selected))])).Address;
         int calls = 0;
@@ -366,7 +366,7 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         World<string> loaded = GraphReader.ReadRoot<World<string>>(exact, worldId, new(exact.SourceModels!));
         Assert.Null(loaded.First);
         Assert.Equal(0, calls);
-        FrameAddress corrupt = states.AppendBusiness(StoredGraphKind.State, unreachable, selected.Snapshot!.Address,
+        FrameAddress corrupt = states.AppendBusiness(StoredGraphKind.State, selected.Snapshot!.Address,
             new(unreachable, worldId, [], [keyId.Value])).Address;
         Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(states, states.ReadBusinessGraph(corrupt, unreachable), (readers).FreezeConfiguration()));
         Assert.Equal(0, calls);

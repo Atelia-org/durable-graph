@@ -25,6 +25,8 @@ operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Pe
 
 State-based applications can create a branch with State and call CommitState repeatedly; no preceding
 Event or Event model is required. CommitEvent is optional and publishes separately from CommitState.
+Each Event captures a complete graph with local identities, its own Base records and no State content source.
+Events neither consume nor advance the State saving baseline and do not accept incremental saving policy parameters.
 Register models before Open; save independent Event/State graphs, query checkpoints, resolve immutable
 tags and fork branches with nonunique display labels. Each branch has at most one active WorkingCopy;
 repository operations are serialized. Open selects resource access; CreateRootBranchFromState,
@@ -32,10 +34,11 @@ CreateRootBranchFromEvent and ForkBranch return durable BranchInfo. OpenWorkingC
 an editable working copy by BranchId. All saves share one repository Schema Catalog; accepted
 definitions cannot change shape under the same key. Develop conflicting drafts in separate complete,
 closed repository copies, then upgrade a clean baseline with the final model. Private/ToShared APIs
-have been removed. The P0R3 branch-directory pointer and P0G2 business graphs reject older layouts rather than
+have been removed. The P0R4 branch-directory pointer and P0G2 business graphs reject older layouts rather than
 providing a compatibility path.
 Restoration bypasses constructors and field initializers. Rebuild Transient state after
-delivery; ReadPair may share read-only nodes, so view-specific context belongs outside those graphs.
+delivery; State-State ReadPair may share read-only nodes, so view-specific context belongs outside those graphs.
+A pair containing an Event restores two independent graphs, including a pair of the same Event commit.
 
 FrameStore/HeadStore own backing storage; meta Schema objects and business saves share publication.
 Completed frames remain append-only. Normal backing recovery handles incomplete tails; read-only

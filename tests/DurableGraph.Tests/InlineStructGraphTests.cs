@@ -158,7 +158,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         body[1] = (byte)replacement; // Canonical one-byte ID; framing remains valid.
         ObjectVersionRecord invalidOwner = ObjectVersionRecord.CreateBase(initial.RootId.Value,
             TypedBaseBodyCodec.Encode(envelope.Layout, new(body), catalog));
-        StoredGraphRevision invalid = store.AppendBusiness(StoredGraphKind.State, first, initial.SchemaRoot,
+        StoredGraphRevision invalid = store.AppendBusiness(StoredGraphKind.State, initial.SchemaRoot,
             new PreparedGraphWrite(first, initial.RootId, [invalidOwner]));
         Assert.Equal(initial.SchemaRoot, invalid.SchemaRoot);
         Assert.Equal(initial.ObjectHeads.Keys, invalid.ObjectHeads.Keys);

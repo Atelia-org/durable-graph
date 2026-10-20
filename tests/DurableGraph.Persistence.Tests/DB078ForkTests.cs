@@ -48,7 +48,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(initial, b.BaseCommitId);
             Assert.Equal((byte)2, bv.Left.Value);
             Assert.Equal((byte)91, island.Value);
-            b.CommitEvent(new Node { Value = 7 }, parameters: NoRebase);
+            b.CommitEvent(new Node { Value = 7 });
             bv.Left.Value = 8;
             otherHead = b.CommitState(parameters: NoRebase).Id;
             av.Left.Value = 4;
@@ -91,8 +91,8 @@ public sealed partial class EventHistoryRepositoryTests {
         using Repository repository = CreateRepository();
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
         CommitId state = main.BaseCommitId;
-        main.CommitEvent(new Node { Value = 6 }, parameters: NoRebase);
-        CommitId e2 = main.CommitEvent(new Node { Value = 7 }, parameters: NoRebase).Id;
+        main.CommitEvent(new Node { Value = 6 });
+        CommitId e2 = main.CommitEvent(new Node { Value = 7 }).Id;
         Assert.IsType<Node>(main.State).Value = 9;
         CommitId latest = main.CommitState(parameters: NoRebase).Id;
         CommitId source = selectEvent ? e2 : state;
@@ -106,7 +106,7 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal(reference.StateRevisionAddress, fork.StateRevisionAddress);
         Assert.Equal((byte)1, Assert.IsType<Node>(fork.State).Value);
         Assert.NotSame(reference.State, fork.State);
-        CommitId committed = fork.CommitEvent(new Node { Value = 8 }, parameters: NoRebase).Id;
+        CommitId committed = fork.CommitEvent(new Node { Value = 8 }).Id;
         Assert.Equal(source, Previous(repository, committed));
         Assert.Equal(state, fork.StateSourceCommitId);
         Assert.Equal(latest, main.BaseCommitId);
@@ -221,7 +221,7 @@ public sealed partial class EventHistoryRepositoryTests {
                 Assert.True(main.IsFaulted);
                 Assert.True(other.IsFaulted);
                 Assert.Throws<InvalidOperationException>(() => main.CommitState(parameters: NoRebase).Id);
-                Assert.Throws<InvalidOperationException>(() => other.CommitEvent(new Node(), parameters: NoRebase).Id);
+                Assert.Throws<InvalidOperationException>(() => other.CommitEvent(new Node()).Id);
             } else {
                 Assert.DoesNotContain(repository.ListBranches(), branch => branch.DisplayLabel == "child");
                 using WorkingCopy retry = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "child").Id);
@@ -265,9 +265,9 @@ public sealed partial class EventHistoryRepositoryTests {
     public void NamedForkRegistersDirectoryWhilePreservingExistingFrameBytesAndInheritedCommit(string sourceKind) {
         using (Repository seed = CreateRepository()) {
             using WorkingCopy main = sourceKind == "event-only"
-                ? seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id)
+                ? seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", new Node()).Id)
                 : seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node(), parameters: NoRebase).Id);
-            if (sourceKind == "event") main.CommitEvent(new Node(), parameters: NoRebase);
+            if (sourceKind == "event") main.CommitEvent(new Node());
         }
         Dictionary<string, byte[]> before = ImmutableHistoryPaths().ToDictionary(path => path, File.ReadAllBytes);
         Assert.Contains(before.Keys, path => path.StartsWith(Path.Combine(_root, "data"), StringComparison.OrdinalIgnoreCase));

@@ -30,11 +30,11 @@ public sealed class DB078CheckpointTests : IDisposable {
         using Repository repository = Create(SharedReadModel.Models(
             allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++));
         using WorkingCopy branch = eventFirst
-            ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id)
+            ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }).Id)
             : repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
         CommitId first = branch.BaseCommitId;
-        CommitId e1 = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
-        CommitId e2 = branch.CommitEvent(new Node { Value = 3 }, parameters: NoRebase).Id;
+        CommitId e1 = branch.CommitEvent(new Node { Value = 2 }).Id;
+        CommitId e2 = branch.CommitEvent(new Node { Value = 3 }).Id;
         CommitId s1 = branch.CommitState(new Node { Value = 4 }, parameters: NoRebase).Id;
         CommitId s2 = branch.CommitState(new Node { Value = 5 }, parameters: NoRebase).Id;
         allocations = hydrations = 0;
@@ -84,7 +84,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         Node message = new() { Value = 3, Next = child, Alias = child, Links = state.Links };
         using Repository repository = Create();
         using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", state, parameters: NoRebase).Id);
-        CommitId eventAddress = branch.CommitEvent(message, parameters: NoRebase).Id;
+        CommitId eventAddress = branch.CommitEvent(message).Id;
         CommitId selected = stateCheckpoint ? branch.CommitState(parameters: NoRebase).Id : eventAddress;
         Checkpoint checkpoint = repository.ReadCheckpoint(selected);
         Node first = Root(checkpoint), previous = Previous(checkpoint);
@@ -127,7 +127,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         using Repository repository = Create(SharedReadModel.Models(
             allocate: () => { allocations++; return new Node(); }, hydrate: node => hydrated.Add(node.Value)));
         using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1, Next = new Node { Value = 2 } }, parameters: NoRebase).Id);
-        CommitId address = branch.CommitEvent(new Node { Value = 7 }, parameters: NoRebase).Id;
+        CommitId address = branch.CommitEvent(new Node { Value = 7 }).Id;
         allocations = 0;
         hydrated.Clear();
         Assert.Equal((byte)7, Assert.IsType<Node>(repository.LoadEvent(address)).Value);
@@ -146,7 +146,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         bool violate = true;
         using Repository repository = Create(SharedReadModel.Models(allocate: () => violate ? singleton : new Node()));
         using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
-        CommitId address = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+        CommitId address = branch.CommitEvent(new Node { Value = 2 }).Id;
         Checkpoint? delivered = null;
         Assert.Throws<InvalidDataException>(() => delivered = repository.ReadCheckpoint(address));
         Assert.Null(delivered);
@@ -174,7 +174,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         }));
         current = repository;
         using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
-        CommitId address = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+        CommitId address = branch.CommitEvent(new Node { Value = 2 }).Id;
         enabled = true;
         Checkpoint? delivered = null;
         if (reenter) {
@@ -195,7 +195,7 @@ public sealed class DB078CheckpointTests : IDisposable {
         Action? duringAllocate = null;
         using Repository repository = Create(SharedReadModel.Models(allocate: () => { duringAllocate?.Invoke(); return new Node(); }));
         using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
-        CommitId address = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+        CommitId address = branch.CommitEvent(new Node { Value = 2 }).Id;
         using IEnumerator<CommitInfo> events = repository.EnumerateEvents(address).GetEnumerator();
         duringAllocate = () => {
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
@@ -212,7 +212,7 @@ public sealed class DB078CheckpointTests : IDisposable {
     public void MissingGraphCapabilityDoesNotBecomeAnAbsentPreviousGraph() {
         using (Repository repository = Create()) {
             using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
-            branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase);
+            branch.CommitEvent(new Node { Value = 2 });
         }
         using Repository empty = Repository.OpenExisting(_root, new StateModelRegistry());
         Checkpoint? delivered = null;

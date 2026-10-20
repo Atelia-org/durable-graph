@@ -102,7 +102,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             using (PreparedFixtureSave discarded = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.NotNull(discarded.Catalog.Write);
                 AssertBootstrapContainerUpgradeCatalog(discarded.Catalog.View, old, current);
-                AssertBootstrapContainerUpgradeWrites(discarded, ids, s0, ObjectVersionKind.Base);
+                AssertBootstrapContainerUpgradeWrites(discarded, ids, null, ObjectVersionKind.Base);
             }
             Assert.Equal(frames, repository.Store.AppendedFrames);
             Assert.Equal(s0, MechanismFixture.Current(repository, "main").Address);
@@ -114,14 +114,14 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.NotNull(save.Catalog.Write);
-                AssertBootstrapContainerUpgradeWrites(save, ids, s0, ObjectVersionKind.Base);
+                AssertBootstrapContainerUpgradeWrites(save, ids, null, ObjectVersionKind.Base);
                 RepositorySaveResult result = save.Commit();
                 e1 = result.Business.Address;
                 meta1 = result.Meta!.Address;
                 Assert.NotEqual(meta0, meta1);
                 Assert.Equal(meta1, result.Business.SchemaRoot);
-                Assert.Equal(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
-                AssertBootstrapContainerUpgradeHeads(repository, result.Business, ids.Skip(1).ToArray(), current.Layouts.Skip(1).ToArray(), ObjectVersionKind.Base);
+                Assert.NotEqual(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
+                AssertBootstrapContainerUpgradeHeads(repository, result.Business, ids, current.Layouts, ObjectVersionKind.Base);
             }
             AssertBootstrapContainerUpgradeCatalog(session.AcceptedCatalog!, old, current);
             Assert.Equal(e1, MechanismFixture.Current(repository, "main").Address);
@@ -136,15 +136,15 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(s0, session.StateSource.Address);
             Assert.Same(root, session.State);
 
-            // The identical second Event must still write three target Bases relative to S0.
+            // The identical second Event independently writes the root and all target container Bases.
             using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.Null(save.Catalog.Write);
-                AssertBootstrapContainerUpgradeWrites(save, ids, s0, ObjectVersionKind.Base);
+                AssertBootstrapContainerUpgradeWrites(save, ids, null, ObjectVersionKind.Base);
                 RepositorySaveResult result = save.Commit();
                 e2 = result.Business.Address;
                 Assert.Equal(e1, MechanismFixture.Resources(repository).ReadPrevious(result.CommitId)!.Address);
                 Assert.Equal(meta1, result.Meta!.Address);
-                Assert.Equal(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
+                Assert.NotEqual(source.ObjectHeads[ids[0]], result.Business.ObjectHeads[ids[0]]);
                 currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, e2), models), 1);
             }
             Assert.Equal(e2, MechanismFixture.Current(repository, "main").Address);
@@ -239,19 +239,19 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static void AssertBootstrapContainerUpgradePublishedRefs(RepositoryStorageFacade repository, FrameAddress graph, FrameAddress meta) {
         byte[] branches = repository.Heads.ReadHead(1).Unwrap().Payload.ToArray();
         byte[] shared = repository.Heads.ReadHead(2).Unwrap().Payload.ToArray();
-        Assert.True(branches.AsSpan().StartsWith("P0R3"u8));
+        Assert.True(branches.AsSpan().StartsWith("P0R4"u8));
         Assert.NotNull(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, branches));
         Assert.True(shared.AsSpan().StartsWith("P0S1"u8));
         Assert.Equal(graph, MechanismFixture.Current(repository, "main").Address);
         Assert.Equal(meta, NamedFrameMapCodec.Decode(shared.AsSpan(4)).Unwrap()["schema"]);
     }
 
-    private static void AssertBootstrapContainerUpgradeWrites(PreparedFixtureSave save, uint[] ids, FrameAddress source, ObjectVersionKind kind) {
+    private static void AssertBootstrapContainerUpgradeWrites(PreparedFixtureSave save, uint[] ids, FrameAddress? source, ObjectVersionKind kind) {
         Assert.Equal(source, save.Business.Write.SourceGraph);
         Assert.Empty(save.Business.Write.RemovedIds);
-        Assert.Equal<uint>(ids.Skip(1).Order(), save.Business.Write.Records.Select(row => row.ObjectId));
+        Assert.Equal<uint>((source is null ? ids : ids.Skip(1)).Order(), save.Business.Write.Records.Select(row => row.ObjectId));
         Assert.All(save.Business.Write.Records, row => Assert.Equal(kind, row.Kind));
-        Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == ids[0]);
+        if (source is not null) { Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == ids[0]); }
     }
 
     private static void AssertBootstrapContainerUpgradeHeads(RepositoryStorageFacade repository, StoredGraphRevision graph,

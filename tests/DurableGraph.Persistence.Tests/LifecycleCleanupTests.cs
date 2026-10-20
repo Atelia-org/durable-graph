@@ -30,7 +30,7 @@ public sealed class LifecycleCleanupTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(address));
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
-        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, address, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
+        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, null, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [11])])));
         Assert.Throws<ObjectDisposedException>(resources.Data.EnsureUsable);
         Assert.Throws<ObjectDisposedException>(resources.Heads.EnsureUsable);
         resources.Dispose();

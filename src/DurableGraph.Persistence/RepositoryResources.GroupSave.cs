@@ -24,12 +24,12 @@ public sealed partial class RepositoryResources {
         _graphStore.EnsureUsable();
     }
 
-    private FrameAddress? ValidateSaveTarget(HeadId? branch, HeadEntryId? expected, string? rootLabel) {
+    private FrameAddress? ValidateSaveTarget(StoredGraphKind kind, HeadId? branch, HeadEntryId? expected, string? rootLabel) {
         if (branch is { } target) {
             if (expected is null || rootLabel is not null || ReadCurrent(target).Id != expected.Value) {
                 throw new InvalidOperationException("The branch's accepted Commit has changed.");
             }
-            return FindNearestState(expected.Value, true)?.Address;
+            return kind == StoredGraphKind.State ? FindNearestState(expected.Value, true)?.Address : null;
         }
         if (expected is not null) { throw new ArgumentException("A new root cannot have an accepted Commit."); }
         ValidateDisplayLabel(rootLabel!);
@@ -54,9 +54,9 @@ public sealed partial class RepositoryResources {
                     throw new ArgumentException("Members must target distinct existing branches; a new root is a single save.");
                 }
                 BusinessEntryPayloadCodec.ValidateSummaryLength(member.Summary.Length);
-                FrameAddress? source = ValidateSaveTarget(member.Branch, member.ExpectedEntry, member.RootLabel);
-                if (member.StateSource != source || member.Business.SourceGraph != source) {
-                    throw new InvalidDataException("Each business candidate must use its exact latest State selected by HeadStore history.");
+                FrameAddress? source = ValidateSaveTarget(member.Kind, member.Branch, member.ExpectedEntry, member.RootLabel);
+                if (member.Business.SourceGraph != source) {
+                    throw new InvalidDataException("A State must use its exact historical source; an Event must have no content source.");
                 }
             }
             if (group.Catalog is not null && group.Catalog.SourceGraph != _baseline.SharedRoot) {
@@ -121,7 +121,7 @@ public sealed partial class RepositoryResources {
             EnsureSaveUsable();
             for (int i = 0; i < pending.Members.Length; i++) {
                 PendingBusinessSave member = pending.Members[i];
-                graphs[i] = store.AppendBusiness(member.Kind, member.StateSource, meta?.Address, member.Business);
+                graphs[i] = store.AppendBusiness(member.Kind, meta?.Address, member.Business);
                 SaveStageObserver?.Invoke(RepositorySaveStage.AfterBusinessAppend);
                 EnsureSaveUsable();
             }

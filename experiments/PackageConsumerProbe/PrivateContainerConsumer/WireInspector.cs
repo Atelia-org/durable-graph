@@ -110,7 +110,7 @@ internal static class WireInspector {
             HeadEntry value = versions.ReadHead(id).Unwrap();
             refs.Add(id, new(value.Id, value.Payload.ToArray()));
         }
-        FrameAddress? directory = Pointer(versions.ReadHead(1).Unwrap().Payload, "P0R3"u8);
+        FrameAddress? directory = Pointer(versions.ReadHead(1).Unwrap().Payload, "P0R4"u8);
         FrameAddress? bookmarks = Pointer(versions.ReadHead(3).Unwrap().Payload, "P0T2"u8);
         IReadOnlyDictionary<string, FrameAddress> shared = Root(versions.ReadHead(2).Unwrap().Payload, "P0S1"u8);
         Require(shared.Count == 0 || shared.Count == 1 && shared.ContainsKey("schema"), "Unknown shared root key.");
@@ -195,9 +195,20 @@ internal static class WireInspector {
                         "Directory Delta does not extend the source directory.");
                 }
                 if (m.SchemaRoot is { } s) { Require(MetadataAt(s).Kind == GraphKind.Meta, "S is not a meta graph."); }
+                if (m.Kind == GraphKind.Event) {
+                    Require(source is null && m.OwnedBatch is not null &&
+                        directory.SourceGraph is null && directory.Record.Kind == ObjectVersionKind.Base &&
+                        directory.Record.PriorAddress is null, "Event requires an independent Base directory and owned batch.");
+                }
                 if (m.OwnedBatch is { } owned) {
                     Batch batch = BatchAt(owned);
                     Require(batch.SourceGraph == source && batch.SchemaRoot == m.SchemaRoot, "Owned batch source/S mismatch.");
+                    if (m.Kind == GraphKind.Event) {
+                        Require(batch.Records.Count > 0 && batch.Records.Count == heads.Count &&
+                            heads.Values.All(head => head == owned) &&
+                            batch.Records.Values.All(record => record.Kind == ObjectVersionKind.Base && record.PriorAddress is null),
+                            "Event must own every live object as a complete Base without retained heads or Deltas.");
+                    }
                     foreach (Record record in batch.Records.Values) {
                         Require(heads.TryGetValue(record.Id, out FrameAddress head) && head == owned,
                             "An owned object record is not selected by the complete directory.");
@@ -334,6 +345,7 @@ internal static class WireInspector {
         }
 
         private FrameAddress? Source(GraphKind kind, FrameAddress? parent, FrameAddress current) {
+            if (kind == GraphKind.Event) { return null; }
             HashSet<FrameAddress> visited = [current];
             while (parent is { } address) {
                 Require(visited.Add(address), "Graph ancestry contains a cycle.");

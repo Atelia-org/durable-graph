@@ -64,18 +64,18 @@ public sealed class WorkingCopy : IDisposable {
     /// <summary>Publishes an Event after BaseCommitId without advancing the State baseline.</summary>
     /// <param name="domainEvent">The nonnull registered Event root; keep its reachable content stable during capture.</param>
     /// <param name="summary">Opaque preview bytes copied during preparation; omission stores an empty summary.</param>
-    /// <param name="parameters">Policy for this call only; null uses the library default.</param>
     /// <remarks>
     /// Any State/Event history position can be followed by an Event. Normal return advances BaseCommitId without
-    /// accepting Event identity bindings or replacing State. Capturing does not freeze caller-owned objects.
+    /// accepting Event identity bindings or replacing State. Each Event captures its complete reachable graph
+    /// with local object identities and Base records, independently of State. Capturing does not freeze caller-owned objects.
     /// Publication can succeed before delivery fails. Inspect outcome and IsFaulted independently, and reopen
     /// a faulted repository to inspect history. Pre-append failures may propagate their original exception.
     /// Domain mutations are never automatically rolled back.
     /// </remarks>
-    public CommitInfo CommitEvent(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) {
+    public CommitInfo CommitEvent(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(domainEvent);
-        return _repository.Commit(this, domainEvent, null, summary, parameters);
+        return _repository.Commit(this, domainEvent, null, summary, null);
     }
 
     /// <summary>Publishes the current State and installs its new saving baseline.</summary>
@@ -125,12 +125,12 @@ public sealed class WorkingCopy : IDisposable {
         return _repository.CreateCommitRequest(this, nextState, StoredGraphKind.State, summary, parameters);
     }
 
-    /// <summary>Creates a deferred Event request; execution advances the branch baseline without saving its State.</summary>
-    public CommitRequest CreateEventCommitRequest(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default,
-        ReadAmplificationBaseBudgetParameters? parameters = null) {
+    /// <summary>Creates a deferred Event request; execution captures an independent complete graph without saving State.</summary>
+    /// <remarks>Success advances BaseCommitId while retaining the State saving baseline.</remarks>
+    public CommitRequest CreateEventCommitRequest(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(domainEvent);
-        return _repository.CreateCommitRequest(this, domainEvent, StoredGraphKind.Event, summary, parameters);
+        return _repository.CreateCommitRequest(this, domainEvent, StoredGraphKind.Event, summary, null);
     }
 
     // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.

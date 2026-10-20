@@ -20,9 +20,9 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         long expectedH;
         using (Frames frames = Frames.Create(path)) {
             using GraphRecordStore writer = new(frames) { DirectoryReadAmplificationThreshold = 100 };
-            StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null,
+            StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null,
                 new(null, new(1), Enumerable.Range(1, 64).Select(id => B((uint)id, [(byte)id]))));
-            StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, first.Address, null,
+            StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, null,
                 new(first.Address, new(1), [D(1, first.ObjectHeads[1], [65, 66])]));
             Assert.Equal(ObjectVersionKind.Delta, writer.ReadDirectoryVersion(second.DirectoryRoot).Kind);
             graph = second.Address;
@@ -250,7 +250,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         FrameAddress rejected, healthyBatch;
         using (Frames frames = Frames.Create(path)) {
             using GraphRecordStore writer = new(frames);
-            StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
+            StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [B(1, [10])]));
             rejected = role switch {
                 "graph" => first.Address,
                 "batch" => first.OwnedBatch!.Value,
@@ -258,7 +258,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
                 _ => throw new InvalidOperationException(role),
             };
             // A later independent complete graph keeps normal EOF admission healthy.
-            StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [42])]));
+            StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [B(1, [42])]));
             healthyBatch = second.OwnedBatch!.Value;
             frames.ConfirmDurable();
         }
@@ -328,8 +328,8 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     public void WarmValidDirectoryCannotQualifyAnInvalidGraphRelationship(string error) {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore reader = new(frames);
-        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
-        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, first.Address, null, new(first.Address, new(1), [B(1, [20])]));
+        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [B(1, [10])]));
+        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, null, new(first.Address, new(1), [B(1, [20])]));
         FrameAddress directory, owned, expectedSource;
         if (error == "owned") {
             directory = first.DirectoryRoot;
@@ -363,8 +363,8 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     public void WarmBadPriorAndFailedDirectoryReplayStayRejectedWhileNewBaseCutsBadContent() {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore reader = new(frames);
-        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [10])]));
-        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, first.Address, null, new(first.Address, new(1), [D(1, first.ObjectHeads[1], [20])]));
+        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [B(1, [10])]));
+        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, null, new(first.Address, new(1), [D(1, first.ObjectHeads[1], [20])]));
         FrameAddress wrongBatch = RawBatch(frames, second.Address, [D(1, first.ObjectHeads[1], [30])]);
         FrameAddress wrongDirectory = RawDirectory(frames, second.Address, ObjectVersionKind.Base, null, Map((1u, wrongBatch)));
         FrameAddress retained = RawGraph(frames, wrongDirectory, null);
@@ -375,7 +375,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => reader.ReadObjectChain(reader.ReadBusinessGraph(retained, second.Address), 1));
         Assert.Throws<InvalidDataException>(() => reader.ReadObjectChain(reader.ReadBusinessGraph(retained, second.Address), 1));
         AssertPhysicalProductionEqual(before, reader.ReadCacheStatistics);
-        StoredGraphRevision reset = reader.AppendBusiness(StoredGraphKind.State, retained, null, new(retained, new(1), [B(1, [])]));
+        StoredGraphRevision reset = reader.AppendBusiness(StoredGraphKind.State, null, new(retained, new(1), [B(1, [])]));
         ObjectVersionChain resetChain = reader.ReadObjectChain(reset, 1);
         Assert.Single(resetChain.Entries);
         Assert.Equal(reset.OwnedBatch, resetChain.Head);
@@ -442,7 +442,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     public void WarmBorrowedReadsRejectClosedOrFaultedResourcesAndReleaseResidency(string stop) {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath());
         GraphRecordStore retained = resources.GraphStore;
-        StoredGraphRevision graph = retained.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision graph = retained.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1, [10])]));
         FrameAddress address = graph.Address;
         ObjectVersionBatch batch = retained.ReadBatch(graph.OwnedBatch!.Value);
@@ -489,7 +489,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
     public void BulkIteratorRejectsTheNextChainAfterResourcesStopAndKeepsTheDeliveredOwnedChain(string stop, long cacheBudget) {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath(), readCacheBudgetBytes: cacheBudget);
         GraphRecordStore retained = resources.GraphStore;
-        StoredGraphRevision written = retained.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision written = retained.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1, [10]), B(2, [20])]));
         StoredGraphRevision snapshot = retained.ReadBusinessGraph(written.Address, null);
         using IEnumerator<ObjectVersionChain> iterator = retained.ReadObjectChains(snapshot).GetEnumerator();

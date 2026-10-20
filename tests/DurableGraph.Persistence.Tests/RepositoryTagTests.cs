@@ -18,11 +18,11 @@ public sealed class RepositoryTagTests : IDisposable {
         CommitId old;
         using (Repository repository = Create()) {
             using WorkingCopy main = eventFirst
-                ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id)
+                ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }).Id)
                 : repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
             old = main.BaseCommitId;
             repository.CreateTag("start", old);
-            CommitId intermediate = main.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+            CommitId intermediate = main.CommitEvent(new Node { Value = 2 }).Id;
             CommitId advanced = main.CommitState(new Node { Value = 3 }, parameters: NoRebase).Id;
             Assert.Equal(old, repository.ResolveTag("start"));
             Assert.Equal(advanced, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
@@ -55,7 +55,7 @@ public sealed class RepositoryTagTests : IDisposable {
             }
             CommitId saved = checkout.CommitState(new Node { Value = 8 }, parameters: NoRebase).Id;
             Assert.Equal(selected.Value, Resources(reopened).ReadPrevious(saved.Value)!.Id);
-            CommitId nextEvent = fork.CommitEvent(new Node { Value = 7 }, parameters: NoRebase).Id;
+            CommitId nextEvent = fork.CommitEvent(new Node { Value = 7 }).Id;
             Assert.Equal(selected.Value, Resources(reopened).ReadPrevious(nextEvent.Value)!.Id);
             CommitId nextState = fork.CommitState(new Node { Value = 9 }, parameters: NoRebase).Id;
             Assert.Equal(nextEvent.Value, Resources(reopened).ReadPrevious(nextState.Value)!.Id);
@@ -177,7 +177,7 @@ public sealed class RepositoryTagTests : IDisposable {
         CommitId old;
         using (Repository seed = Create()) {
             using WorkingCopy branch = eventFirst
-                ? seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", new Node { Value = 5 }, parameters: NoRebase).Id)
+                ? seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", new Node { Value = 5 }).Id)
                 : seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 5 }, parameters: NoRebase).Id);
             old = branch.BaseCommitId;
             seed.CreateTag("saved", old);

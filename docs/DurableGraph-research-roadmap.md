@@ -23,6 +23,7 @@
 
 | 分片 | 要解决的增量 |
 |---|---|
+| [DB-097 独立 Event 对象图](design-branches/0097-independent-event-graphs/README.md) | 已选目标，正在实施，尚未验收：每次 fresh capture、局部 ID、全 Base 自有目录，退出 State DTO/head/H/source/rewrite/游标和预算协议；移除公开 Event 策略参数，任一 Event Pair 独立物化。保 State/meta 增量、State–State 共享、历史关联及共同发布。完整验收和 State 规模对照只在该片维护；P0R4 根拒绝旧库，其他 wire 与 Storage pin 保持。 |
 | [Echo Garden接入配方](design-branches/0096-history-and-head-model/application-recipes.md) | 导航DTO/Hex、安全分叉切换、版本化Summary已实施并通过源码/普通包验收；无剩余示例工单。多个typed DTO反复出现相同适配成本时再考虑converter；实际无法遵守纯投影后立即提交时再研究更强摘要合同。七字段/8存档没有性能优化依据。 |
 | [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | Branch/Commit/WorkingCopy、组提交、目录树、分页、旧API迁移及[完整交付与master合入](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合。首版只追加、旧点另开、fork立即可见；后续附件、ID字段、改标签与规模优化由实际消费者需求触发，不继续原施工队列。 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |
@@ -86,7 +87,7 @@ List 高效 Diff/Patch 已完成；额外性能工作按 [§3.2](#32-list-差分
 | 问题 | 现有依据与裁决边界 |
 |---|---|
 | 引用 ID 的泛型目标品牌 | 已选非泛型包装见 [DB-041](design-branches/0041-object-id-state-representation/README.md)。泛型化暂缓；确有目标级静态检查需求时重访 [DB-040](design-branches/0040-typed-object-id-representation-research/README.md) 的版本含义、phantom nominal 与历史表示依赖，以及 typed 物理字段的 CLR 加载边界 |
-| 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；完整 ObjectHeadMap 中 external object heads 的来源、候选对象身份连续性仍需产品 Save/Load 合同，不能由 Revision Parent 声明一致推导全局身份认证 |
+| 对象版本解释与保存来源 | Base 表示 ID 可解析 exact 布局与已登记历史 reader；State/meta 的 external object heads 和 State 身份连续性继续服从准确 Save/Load 来源合同，不能由物理链接自洽推导全局身份认证。DB-097 的 Event 禁止 external head，完整图自包含；不为局部 ID 增加持久 scope 或跨图身份框架 |
 | 保存相等性与真实估算 | 同版 DTO 的浮点按位、引用槽按 ID、inline 值递归融合 Delta 已采纳；DB-043 数组复用元素操作，BCL 容器另定。已准备 body 计量见 [DB-029](design-branches/0029-prepared-object-revision-planning-slice/README.md)，ID 头见 [DB-045](design-branches/0045-persisted-representation-id-slice/README.md)；新增容器继续按实际对象 payload 计量 |
 | Schema 规范表示和持久引用 | 开放模板/参数与绑定模型的剩余问题见 §3.1；不再将已统一的闭合目录作为待办。未来 SchemaHash 与一般类型家族约束随消费者裁决，不用 GetHashCode 作持久身份 |
 | 跨程序集与一般类型形状 | 基类/固定 inline 不再是组合阻碍；跨程序集业务规则扫描、完全无当前声明空库的历史能力生成与独立闭合历史账本分别按具体需求裁决，不与只读模板导入混同。DateTime 的 Local/DST 合同、native int 等各自按需求选择；boxed value identity 已排除 MVP |
@@ -177,7 +178,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)、[DB-069](design-branches/0069-incremental-save-baseline/README.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default/README.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
-| 双图读取的后继优化 | 操作内 DTO/string 缓存、保守引用闭包和完整状态比较的现状从 PROJECT-STATE/DB-064/066 进入。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
+| 双图读取的后继优化 | State–State 的操作内 DTO/string 缓存、保守引用闭包和完整状态比较从 PROJECT-STATE/DB-064/066 进入；DB-097 选择任一 Event Pair 独立恢复，不为同 Event 两次保留共享例外。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
 | 并发、分支与跨 Repository | 每 BranchId 单工作副本与带显示标签的 ForkBranch 从 PROJECT-STATE 查证，仓库操作仍串行。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |

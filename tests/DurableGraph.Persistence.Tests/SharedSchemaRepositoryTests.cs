@@ -74,7 +74,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             NormalizedGraphState baseline = dev.Baseline!;
             var storage = baseline.Objects.Select(pair => (pair.Key, pair.Value.Storage)).ToArray();
             CommitId eventCommit = repository.CommitBranches([
-                dev.CreateEventCommitRequest(Ring(100), parameters: NoRebase)
+                dev.CreateEventCommitRequest(Ring(100))
             ], [AddedByEvent])[dev.BranchId].Id;
             eventAddress = Describe(repository, eventCommit).Address;
             StoredGraphRevision graph = DB096TestAccess.Snapshot(repository, eventCommit);
@@ -84,9 +84,9 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             Assert.Equal(AddedByEvent, dev.AcceptedCatalog!.Schemas[new(AddedByEvent.Type, 1)]);
             Assert.Equal(eventSchema, dev.AcceptedCatalog.Snapshot!.Address);
             Assert.Equal(stateAddress, Describe(repository, Previous(repository, eventCommit)!.Value).Address);
-            Assert.Equal(stateAddress, graph.SourceGraph);
+            Assert.Null(graph.SourceGraph);
             ObjectVersionBatch batch = repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
-            Assert.Equal(stateAddress, batch.SourceGraph);
+            Assert.Null(batch.SourceGraph);
             Assert.Equal(eventSchema, batch.SchemaRoot);
             Assert.Same(oldState, dev.State);
             Assert.Equal(oldId, dev.StateId);
@@ -162,7 +162,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         FrameAddress state = dev.StateRevisionAddress!.Value;
         Assert.NotEqual(main.StateRevisionAddress, dev.StateRevisionAddress);
         FrameAddress stateSchema = Catalog(repository, state).Snapshot!.Address;
-        repository.CommitBranches([dev.CreateEventCommitRequest(Ring(100), parameters: NoRebase)], [AddedByEvent]);
+        repository.CommitBranches([dev.CreateEventCommitRequest(Ring(100))], [AddedByEvent]);
         FrameAddress latestCatalog = dev.AcceptedCatalog!.Snapshot!.Address;
         Assert.NotEqual(stateSchema, latestCatalog);
         using RepositoryStorageFacade facade = new(ResourcesOf(repository));
@@ -207,7 +207,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         FrameAddress firstEvent, oldPin, latestShared, secondEvent, eventPin;
         RefImage shared;
         using (Repository repository = CreateShared()) {
-            using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", Ring(100), parameters: NoRebase).Id);
+            using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", Ring(100)).Id);
             firstEvent = Describe(repository, events.BaseCommitId).Address;
             oldPin = Catalog(repository, firstEvent).Snapshot!.Address;
             Assert.Null(events.State);
@@ -230,7 +230,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             Assert.Same(events.Models, events.BindingEnvironment.Models);
             Assert.True(events.AcceptedCatalog.Schemas.ContainsKey(new(Unreachable.Type, 1)));
             CommitId secondEventCommit = repository.CommitBranches([
-                events.CreateEventCommitRequest(Ring(200), parameters: NoRebase)
+                events.CreateEventCommitRequest(Ring(200))
             ], [AddedByEvent])[events.BranchId].Id;
             secondEvent = Describe(repository, secondEventCommit).Address;
             StoredGraphRevision saved = DB096TestAccess.Snapshot(repository, secondEventCommit);

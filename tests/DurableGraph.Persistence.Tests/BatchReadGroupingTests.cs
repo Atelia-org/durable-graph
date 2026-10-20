@@ -45,11 +45,11 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
     public void SharedDeepFrontiersProduceEachBatchOncePerDepthAndReenumerateIndependently(int count, long budget) {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore writer = new(frames);
-        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), Enumerable.Range(1, count).Select(id => B((uint)id, [10]))));
-        StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, first.Address, null,
+        StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, null,
             new(first.Address, new(1), Enumerable.Range(1, count).Select(id => D((uint)id, first.ObjectHeads[(uint)id], [20]))));
-        StoredGraphRevision third = writer.AppendBusiness(StoredGraphKind.State, second.Address, null,
+        StoredGraphRevision third = writer.AppendBusiness(StoredGraphKind.State, null,
             new(second.Address, new(1), Enumerable.Range(1, count).Select(id => D((uint)id, second.ObjectHeads[(uint)id], [30]))));
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: budget);
         StoredGraphRevision snapshot = reader.ReadBusinessGraph(third.Address, second.Address);
@@ -72,11 +72,11 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
     public void DifferentDepthsMayRevisitAnAddressAndStillMatchIndependentChains() {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore writer = new(frames);
-        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1, [10]), B(2, [11]), B(3, [12])]));
-        StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, first.Address, null,
+        StoredGraphRevision second = writer.AppendBusiness(StoredGraphKind.State, null,
             new(first.Address, new(1), [D(1, first.ObjectHeads[1], [20]), D(2, first.ObjectHeads[2], [21])]));
-        StoredGraphRevision third = writer.AppendBusiness(StoredGraphKind.State, second.Address, null,
+        StoredGraphRevision third = writer.AppendBusiness(StoredGraphKind.State, null,
             new(second.Address, new(1), [D(1, second.ObjectHeads[1], [30])]));
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
         StoredGraphRevision snapshot = reader.ReadBusinessGraph(third.Address, second.Address);
@@ -96,9 +96,9 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
     public void SuspendedFrontierRejectsStoppedResourcesBeforeDeliveringAnotherChain(string stop) {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath(), readCacheBudgetBytes: 0);
         GraphRecordStore reader = resources.GraphStore;
-        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = reader.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1, [10]), B(2, [11])]));
-        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, first.Address, null,
+        StoredGraphRevision second = reader.AppendBusiness(StoredGraphKind.State, null,
             new(first.Address, new(1), [D(1, first.ObjectHeads[1], [20])]));
         using IEnumerator<ObjectVersionChain> iterator = reader.ReadObjectChains(second).GetEnumerator();
         Assert.True(iterator.MoveNext());
@@ -120,7 +120,7 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
     public void LaterDeltaInOneExternalBatchStillChecksItsOwnExactPrior() {
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore writer = new(frames);
-        StoredGraphRevision initial = writer.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision initial = writer.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1, [10]), B(2, [11])]));
         FrameAddress batch = Batch(frames, initial.Address,
             [B(1, [20]), D(2, initial.DirectoryRoot, [21])]); // Source selects its batch, not this directory address.

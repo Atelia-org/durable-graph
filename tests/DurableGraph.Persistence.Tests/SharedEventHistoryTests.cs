@@ -26,7 +26,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
             using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", world, parameters: NoRebase).Id);
             initial = session.StateRevisionAddress!.Value;
             stateId = session.StateId!.Value;
-            eventRevision = WorkTestAccess.Address(session, session.CommitEvent(domainEvent, parameters: NoRebase).Id);
+            eventRevision = WorkTestAccess.Address(session, session.CommitEvent(domainEvent).Id);
         }
 
         using (Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models())) {
@@ -63,7 +63,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
             StoredGraphRevision next = MechanismFixture.Snapshot(store, saved);
             IReadOnlyList<ObjectVersionRecord> writes = StorageTestData.LocalRecords(store, saved);
             Assert.Equal(initial, next.SourceGraph);
-            Assert.Equal(initial, MechanismFixture.Snapshot(store, eventRevision).SourceGraph);
+            Assert.Null(MechanismFixture.Snapshot(store, eventRevision).SourceGraph);
             Assert.Equal(MechanismFixture.Snapshot(store, initial).ObjectHeads.Keys.Order(), MechanismFixture.Snapshot(store, saved).ObjectHeads.Keys.Order());
             if (editState) {
                 // Only the existing child and List changed; string IDs and World reference slots remain stable.
@@ -89,7 +89,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
     public void CheckoutRejectsASingletonAllocatorBeforeHydratingItsMutableGraph() {
         using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
             using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1, Next = new Node { Value = 2 } }, parameters: NoRebase).Id);
-            session.CommitEvent(new Node { Value = 7 }, parameters: NoRebase);
+            session.CommitEvent(new Node { Value = 7 });
         }
 
         Node singleton = new();

@@ -60,7 +60,7 @@ public sealed class PreparedGraphWriteCapacityTests : IDisposable {
             if (oversizedCatalog) { catalog = new(schemaBefore, new(1), oversized); }
             PreparedGraphWrite secondWrite = new(right.Address, new(1), oversized);
             return new([first, new(right.Id.HeadId, right.Id, null, StoredGraphKind.State,
-                default, secondWrite, right.Address)], catalog);
+                default, secondWrite)], catalog);
         }, () => aborts++));
         Assert.Equal("records", error.ParamName);
         Assert.True(firstPrepared);
@@ -94,7 +94,7 @@ public sealed class PreparedGraphWriteCapacityTests : IDisposable {
         // Zero records is a legitimate unchanged save and must reuse the source directory.
         using PendingRepositorySave pending = resources.PrepareSaveGroup(() => new(
             [new(source.Id.HeadId, source.Id, null, StoredGraphKind.State, default,
-                new(source.Address, new(1), []), source.Address)], null));
+                new(source.Address, new(1), []))], null));
         long before = resources.GraphStore.AppendedFrames;
         HeadEntry[] headsBefore = ReadHeads(resources, seed.BranchId);
         // Do not attempt a second PrepareSaveGroup here: its exclusivity guard would
@@ -116,7 +116,7 @@ public sealed class PreparedGraphWriteCapacityTests : IDisposable {
 
     private static PendingBusinessSave Member(HistoryGraphRecord source, byte value) =>
         new(source.Id.HeadId, source.Id, null, StoredGraphKind.State, default,
-            new(source.Address, new(1), [ObjectVersionRecord.CreateBase(1, [value])]), source.Address);
+            new(source.Address, new(1), [ObjectVersionRecord.CreateBase(1, [value])]));
 
     private static RepositorySaveResult Seed(RepositoryResources resources, string label, byte value) {
         using PendingRepositorySave pending = resources.PrepareSaveFrom(null, null, label,

@@ -172,7 +172,7 @@ public sealed class MetaBootstrapP0PublicationTests : IDisposable {
 
     private static PendingRepositorySave Prepare(RepositoryStorageFacade repository, byte value, StoredGraphKind kind = StoredGraphKind.State) =>
         MechanismFixture.Prepare(repository, "main", kind,
-            new PreparedGraphWrite(MechanismFixture.State(repository, "main")?.Address, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []),
+            new PreparedGraphWrite(kind == StoredGraphKind.Event ? null : MechanismFixture.State(repository, "main")?.Address, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []),
             new PreparedGraphWrite(repository.SharedSchemaRoot, new(1), [ObjectVersionRecord.CreateBase(1, [value])], []));
 
     public void Dispose() => SharedReadModel.DeleteFixture(_path, "dg-bootstrap-publication-");

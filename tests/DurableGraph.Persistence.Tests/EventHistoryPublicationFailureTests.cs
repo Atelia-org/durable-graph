@@ -42,7 +42,7 @@ public sealed partial class EventHistoryRepositoryTests {
             repository.SaveStageObserver = checkpoint => {
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("Event published but completion interrupted");
             };
-            var failure = Assert.Throws<RepositoryPublicationException>(() => session.CommitEvent(new Node { Value = 8 }, parameters: NoRebase).Id);
+            var failure = Assert.Throws<RepositoryPublicationException>(() => session.CommitEvent(new Node { Value = 8 }).Id);
             Assert.Equal(RepositoryPublicationOutcome.Published, failure.Outcome);
             Assert.Equal(state, session.StateRevisionAddress!.Value);
             Assert.True(repository.IsFaulted);

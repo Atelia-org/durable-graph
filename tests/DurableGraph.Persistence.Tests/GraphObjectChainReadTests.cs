@@ -66,7 +66,7 @@ public sealed class GraphObjectChainReadTests : IDisposable {
     public void BulkReadRejectsAnUnreachableWrongRoleHeadBeforeReturningTheIterator(long cacheBudget) {
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore writer = new(frames);
-        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = writer.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [StringRecord(1, "root"), StringRecord(2, "unreachable")]));
         var heads = new Dictionary<uint, FrameAddress> {
             [1] = first.ObjectHeads[1],

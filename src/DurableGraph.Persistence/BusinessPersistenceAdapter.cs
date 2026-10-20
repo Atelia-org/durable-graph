@@ -40,13 +40,24 @@ internal sealed class BusinessPersistenceAdapter {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(catalog);
         _workspace.RequirePreparing(candidate);
+        if (candidate.IsIndependentSnapshot) {
+            // Every Event owns a fresh capture identity space and complete bodies.
+            // Its content never consults the editable State's baseline or policy.
+            IReadOnlyList<PreparedCapturedObject> contents = candidate.PrepareContents();
+            ObjectVersionRecord[] eventRecords = new ObjectVersionRecord[contents.Count];
+            for (int index = 0; index < contents.Count; index++) {
+                PreparedCapturedObject item = contents[index];
+                eventRecords[index] = ObjectVersionRecord.CreateBase(item.Current.Id.Value,
+                    TypedBaseBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog));
+            }
+            candidate.CompletePreparation(null);
+            return new(this, _store, candidate, new(null, candidate.RootId, eventRecords), catalog);
+        }
+
         NormalizedGraphState? baseline = _workspace.Baseline;
         if (Source?.Address != baseline?.RevisionAddress) { throw new InvalidDataException("State source and normalized baseline must agree."); }
-        // Validate the complete source before body callbacks. State candidate creation
-        // performs that check itself; independent Events do not create a next baseline.
-        NormalizedGraphState? next = null;
-        if (candidate.IsIndependentSnapshot) { baseline?.RequireStoredSource(_store, _workspace.Models); }
-        else { next = NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline); }
+        // State candidate creation validates the complete source before body callbacks.
+        NormalizedGraphState next = NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline);
         IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents();
         List<PreparedObject> rows = [];
         foreach (PreparedCapturedObject item in prepared) {

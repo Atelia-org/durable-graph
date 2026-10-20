@@ -100,7 +100,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
             writer.WriteByte(7);
             HeadId branch = Assert.Single(resources.ListBranches()).Key;
             FrameAddress source = resources.ReadCurrent(branch).Address;
-            frame = resources.GraphStore.AppendBusiness(StoredGraphKind.State, source, resources.SharedSchemaRoot,
+            frame = resources.GraphStore.AppendBusiness(StoredGraphKind.State, resources.SharedSchemaRoot,
                 new(source, new(1), [ObjectVersionRecord.CreateBase(1, bytes.WrittenSpan)])).Address;
             HeadEntryId entry = resources.Heads.PublishHead(branch, BusinessEntryPayloadCodec.Encode(frame, []), out _).Unwrap();
             resources.CreateStoredTag("unknown-schema", entry, out _);

@@ -42,7 +42,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     private void VerifyPreclosedDependency(bool evict, string? extraFactory) {
         using (Repository seed = Repository.CreateNew(_root, HistoryModels(current: false, new()))) {
             seed.CreateRootBranchFromState("main", new HistoricalRoot { Value = 17 }, parameters: NoRebase);
-            using WorkingCopy events = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("events", new HistoricalRoot { Value = 29 }, parameters: NoRebase).Id);
+            using WorkingCopy events = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("events", new HistoricalRoot { Value = 29 }).Id);
         }
         HistoryCounters counters = new();
         using Repository repository = Repository.OpenExisting(_root, HistoryModels(current: true, counters, extraFactory));
@@ -69,7 +69,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             // An Event-only opening followed by State capture leaves this State unread;
             // creating a State root and opening it would already earn a read certificate.
             IDurableObject replacementInitial = new HistoricalRoot { Value = 44 };
-            using WorkingCopy replacement = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("replacement", replacementInitial, parameters: NoRebase).Id);
+            using WorkingCopy replacement = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("replacement", replacementInitial).Id);
             replacement.CommitState(replacementInitial, parameters: NoRebase);
             using WorkingCopy replacementFork = repository.OpenWorkingCopy(repository.ForkBranch(replacement.BaseCommitId, "replacement-fork").Id);
             Assert.NotSame(original, repository.PreparedStateEntry);
@@ -106,7 +106,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // Neither source/current layouts nor persisted v1 contain it; registration is late.
         string conflictingId = extraFactory is null ? IntermediateId : FactoryDependencyId;
         repository.CommitBranches(
-            [first.CreateEventCommitRequest(new HistoricalRoot { Value = 55 }, parameters: NoRebase)],
+            [first.CreateEventCommitRequest(new HistoricalRoot { Value = 55 })],
             [new DurableSchema(conflictingId, 5, SchemaKind.InlineValue,
                 new DurableFieldInfo(1, TypeTag.Int64))]);
         // Controlled metadata acceptance advances latest shared S, but cannot reinterpret
@@ -136,8 +136,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // Construct and publish a legitimate complete inherited State which explicitly
         // selects the new S. Only that selected view carries the dependency conflict.
         RepositoryResources resources = Resources(repository);
-        FrameAddress conflicting = resources.GraphStore.AppendBusiness(StoredGraphKind.State,
-            Describe(repository, address).Address, resources.SharedSchemaRoot,
+        FrameAddress conflicting = resources.GraphStore.AppendBusiness(StoredGraphKind.State, resources.SharedSchemaRoot,
             new(Describe(repository, address).Address, Describe(repository, address).RootId, [])).Address;
         var conflictBranch = repository.ForkBranch(address, "conflicting-source");
         resources.Heads.PublishHead(conflictBranch.Id.Value, BusinessEntryPayloadCodec.Encode(conflicting, default), out _).Unwrap();
@@ -202,7 +201,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
             Assert.Null(root.Next);
             Assert.Same(string.Empty, root.Text);
             // An Event never installs a State baseline or clears pending rewrite.
-            branch.CommitEvent(root, parameters: NoRebase);
+            branch.CommitEvent(root);
             Assert.Same(source, branch.Baseline!);
             CommitId rewrittenCommit = branch.CommitState(parameters: NoRebase).Id;
             FrameAddress rewritten = Describe(repository, rewrittenCommit).Address;
@@ -233,7 +232,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
     private void SeedCompleteHistoricalSource() {
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
         IDurableObject branchInitial = new Node();
-        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", branchInitial, parameters: NoRebase).Id);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", branchInitial).Id);
         branch.CommitState(branchInitial, parameters: NoRebase);
         RepositoryResources resources = Resources(repository);
         GraphRecordStore store = resources.GraphStore;
@@ -245,7 +244,7 @@ public sealed class DB080PreparedStateHistoryTests : IDisposable {
         // Persist a legitimate complete graph with two historical Empty identities and
         // a high reachable ID which becomes unreachable only after normalization.
         FrameAddress prior = Describe(repository, branch.BaseCommitId).Address;
-        FrameAddress revision = store.AppendBusiness(StoredGraphKind.State, prior, catalog.Snapshot!.Address,
+        FrameAddress revision = store.AppendBusiness(StoredGraphKind.State, catalog.Snapshot!.Address,
             new(branch.StateRevisionAddress, new(1),
                 [Durable(1, new State(100, 100, 9, 7)), Empty(3), Empty(9), Durable(100, new State(0, 0, 0, 8))])).Address;
         resources.Heads.PublishHead(branch.BranchId.Value, BusinessEntryPayloadCodec.Encode(revision, default), out _).Unwrap();

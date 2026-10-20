@@ -49,7 +49,7 @@ public sealed class BranchGroupCommitTests : IDisposable {
             };
             IReadOnlyDictionary<BranchId, CommitInfo> result = repository.CommitBranches([
                 world.CreateStateCommitRequest(nextWorld, new byte[] { 1 }, NoRebase),
-                player.CreateEventCommitRequest(nextEvent, new byte[] { 2 }, NoRebase)
+                player.CreateEventCommitRequest(nextEvent, new byte[] { 2 })
             ]);
             repository.SaveStageObserver = null;
             Assert.Equal(1, publications);
@@ -310,7 +310,7 @@ public sealed class BranchGroupCommitTests : IDisposable {
         using WorkingCopy second = repository.OpenWorkingCopy(Seed(repository, "second"));
         int captures = 0;
         CommitRequest firstRequest = first.CreateStateCommitRequest(new HookRoot { OnCapture = () => captures++ });
-        CommitRequest secondRequest = second.CreateEventCommitRequest(new HookRoot { OnCapture = () => captures++ },
+        CommitRequest secondRequest = second.CreateStateCommitRequest(new HookRoot { OnCapture = () => captures++ },
             parameters: new(threshold, percent));
         CommitId firstBase = first.BaseCommitId, secondBase = second.BaseCommitId;
         FrameAddress? schema = repository.SharedSchemaRoot;

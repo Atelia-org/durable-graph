@@ -148,8 +148,8 @@ public sealed partial class DurableSchemaGeneratorTests {
         CommitId state = main.BaseCommitId;
         using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(state, "first").Id);
         PreparedStateRestoration resident = repository.PreparedStateEntry!;
-        CommitId e1 = main.CommitEvent(fixture.Create(), parameters: DB082NoRebase).Id;
-        CommitId e2 = main.CommitEvent(fixture.Create(), parameters: DB082NoRebase).Id;
+        CommitId e1 = main.CommitEvent(fixture.Create()).Id;
+        CommitId e2 = main.CommitEvent(fixture.Create()).Id;
         Assert.Same(resident, repository.PreparedStateEntry);
         int index = 0;
         foreach (CommitId address in new[] { state, e1, e2 }) {
@@ -163,8 +163,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Same(DB082Member(first.State!, "Left"), DB082Member(branch.State!, "Left"));
             Assert.NotSame(first.State, branch.State);
         }
-        using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", fixture.Create(), parameters: DB082NoRebase).Id);
-        CommitId onlyEvents = events.CommitEvent(fixture.Create(), parameters: DB082NoRebase).Id;
+        using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", fixture.Create()).Id);
+        CommitId onlyEvents = events.CommitEvent(fixture.Create()).Id;
         GraphReadStatistics none = DB082Observe(repository);
         using WorkingCopy empty = repository.OpenWorkingCopy(repository.ForkBranch(onlyEvents, "event-only").Id);
         Assert.Null(empty.State);
@@ -194,7 +194,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using Repository repository = DB082Create(directory.Path, fixture, true);
         using WorkingCopy main = DB082SeedWorkingCopy(repository, fixture.Create(), DB082NoRebase);
         CommitId state = main.BaseCommitId;
-        CommitId message = main.CommitEvent(fixture.Create(), parameters: DB082NoRebase).Id;
+        CommitId message = main.CommitEvent(fixture.Create()).Id;
         object[] ReadRoots() {
             EventCheckpoint checkpoint = Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(message));
             Assert.NotSame(checkpoint.Event, checkpoint.PreviousState);

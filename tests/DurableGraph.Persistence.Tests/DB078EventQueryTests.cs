@@ -13,18 +13,18 @@ public sealed class DB078EventQueryTests : IDisposable {
     public void MetadataQueryWithEmptyModelsCrossesStatesAndIgnoresPhysicalSiblingRecords() {
         using (Repository repository = Create()) {
             CommitId e0;
-            using (WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id)) {
+            using (WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }).Id)) {
                 e0 = branch.BaseCommitId;
                 branch.CommitState(new Node { Value = 2 }, parameters: NoRebase);
-                branch.CommitEvent(new Node { Value = 3 }, parameters: NoRebase);
+                branch.CommitEvent(new Node { Value = 3 });
             }
             repository.ForkBranch(e0, "sibling");
             using (WorkingCopy sibling = repository.OpenWorkingCopy(BranchNamed(repository, "sibling"))) {
-                sibling.CommitEvent(new Node { Value = 99 }, parameters: NoRebase);
+                sibling.CommitEvent(new Node { Value = 99 });
             }
             using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
                 main.CommitState(parameters: NoRebase);
-                main.CommitEvent(new Node { Value = 4 }, parameters: NoRebase);
+                main.CommitEvent(new Node { Value = 4 });
                 main.CommitState(parameters: NoRebase);
             }
         }
@@ -47,13 +47,13 @@ public sealed class DB078EventQueryTests : IDisposable {
     public void InvalidBoundsFailBeforeAnyItemCanEscape(HistoryOrder order) {
         using Repository repository = Create();
         CommitId initial, end, sibling;
-        using (WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id)) {
+        using (WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node()).Id)) {
             initial = main.BaseCommitId;
-            end = main.CommitEvent(new Node(), parameters: NoRebase).Id;
+            end = main.CommitEvent(new Node()).Id;
         }
         repository.ForkBranch(initial, "sibling");
         using (WorkingCopy other = repository.OpenWorkingCopy(BranchNamed(repository, "sibling"))) {
-            sibling = other.CommitEvent(new Node(), parameters: NoRebase).Id;
+            sibling = other.CommitEvent(new Node()).Id;
         }
         foreach ((CommitId selected, CommitId lower) in new[] { (end, sibling), (initial, end) }) {
             int delivered = 0;
@@ -70,12 +70,12 @@ public sealed class DB078EventQueryTests : IDisposable {
         int allocations = 0;
         CommitId stale;
         using (Repository repository = Create()) {
-            using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id);
+            using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node()).Id);
             stale = branch.BaseCommitId;
         }
         using Repository reopened = Repository.OpenExisting(_root, SharedReadModel.Models(allocate: () => { allocations++; return new Node(); }));
         using Repository foreign = Repository.CreateNew(Path.Combine(_root, "foreign"), SharedReadModel.Models());
-        using WorkingCopy other = foreign.OpenWorkingCopy(foreign.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id);
+        using WorkingCopy other = foreign.OpenWorkingCopy(foreign.CreateRootBranchFromEvent("main", new Node()).Id);
         CommitId valid = reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id;
         Assert.Equal(stale, valid);
         foreach (CommitId bad in new[] { default(CommitId), other.BaseCommitId }) {
@@ -94,19 +94,19 @@ public sealed class DB078EventQueryTests : IDisposable {
     [InlineData(HistoryOrder.OldestFirst)]
     public void IteratorKeepsCapturedEndAcrossCommitsAndForksAndAllowsReadsInLoop(HistoryOrder order) {
         using Repository repository = Create();
-        WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+        WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }).Id);
         CommitId e0 = branch.BaseCommitId;
         branch.CommitState(new Node { Value = 8 }, parameters: NoRebase);
-        CommitId e1 = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
-        CommitId e2 = branch.CommitEvent(new Node { Value = 3 }, parameters: NoRebase).Id;
+        CommitId e1 = branch.CommitEvent(new Node { Value = 2 }).Id;
+        CommitId e2 = branch.CommitEvent(new Node { Value = 3 }).Id;
         IEnumerable<CommitId> query = repository.EnumerateEvents(e2, order).Select(commit => commit.Id);
-        branch.CommitEvent(new Node { Value = 4 }, parameters: NoRebase);
+        branch.CommitEvent(new Node { Value = 4 });
         using IEnumerator<CommitId> iterator = query.GetEnumerator();
         List<CommitId> addresses = [];
         Assert.True(iterator.MoveNext());
         addresses.Add(iterator.Current);
         Assert.IsType<Node>(repository.LoadEvent(iterator.Current));
-        CommitId latest = branch.CommitEvent(new Node { Value = 5 }, parameters: NoRebase).Id;
+        CommitId latest = branch.CommitEvent(new Node { Value = 5 }).Id;
         branch.Dispose();
         BranchInfo fork = repository.ForkBranch(e0, "old-point");
         Assert.Equal(e0, repository.ReadCurrentCommit(fork.Id).Commit.Id);
@@ -141,9 +141,9 @@ public sealed class DB078EventQueryTests : IDisposable {
     [InlineData(HistoryOrder.OldestFirst, true, 3)]
     public void EveryMoveNextChecksRepositoryEvenBeforeStartOrAfterExhaustion(HistoryOrder order, bool fault, int iteratorState) {
         using Repository repository = Create();
-        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase).Id);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 1 }).Id);
         CommitId first = branch.BaseCommitId;
-        CommitId end = branch.CommitEvent(new Node { Value = 2 }, parameters: NoRebase).Id;
+        CommitId end = branch.CommitEvent(new Node { Value = 2 }).Id;
         using IEnumerator<CommitInfo> iterator = repository.EnumerateEvents(end, order,
             afterExclusive: iteratorState == 3 ? end : null).GetEnumerator();
         if (iteratorState == 1) { Assert.True(iterator.MoveNext()); }
@@ -157,7 +157,7 @@ public sealed class DB078EventQueryTests : IDisposable {
             repository.SaveStageObserver = point => {
                 if (point == RepositorySaveStage.AfterBusinessAppend) { throw new IOException("Injected publication failure."); }
             };
-            Assert.Throws<RepositoryPublicationException>(() => branch.CommitEvent(new Node(), parameters: NoRebase).Id);
+            Assert.Throws<RepositoryPublicationException>(() => branch.CommitEvent(new Node()).Id);
             Assert.True(repository.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());
             Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());

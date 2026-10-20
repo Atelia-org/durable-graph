@@ -58,7 +58,9 @@ internal sealed class BranchSaveSession {
             capture?.AbortPreparation();
         }
         (PreparedGraphWrite Business, PreparedGraphWrite? Catalog) Produce() {
-            ReadAmplificationBaseBudgetPolicy.ValidateParameters(parameters ?? new(5, 5));
+            if (kind == StoredGraphKind.State) {
+                ReadAmplificationBaseBudgetPolicy.ValidateParameters(parameters ?? new(5, 5));
+            }
             DurableSchema[] explicitSchemas = declarations is null ? [] : _repository.MaterializeInputs(declarations);
             capture = _business.CaptureOwned(root, kind);
             _repository.EnsureSaveUsable();

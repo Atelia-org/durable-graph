@@ -54,7 +54,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             StoredGraphRevision actualEvent = Snapshot(repository, publishedEvent.Id);
             Assert.Equal(StoredGraphKind.Event, actualEvent.Kind);
             Assert.Equal(initialState, ResourcesOf(repository).ReadPrevious(publishedEvent.Id.Value)!.Address);
-            Assert.Equal(initialState, actualEvent.SourceGraph);
+            Assert.Null(actualEvent.SourceGraph);
             Assert.Equal(acceptedSchema, actualEvent.SchemaRoot);
             Assert.Equal(4, actualEvent.ObjectHeads.Count);
             AssertPublished(repository, eventAddress, acceptedSchema);
@@ -224,7 +224,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
     private static void AssertPublished(Repository repository, FrameAddress head, FrameAddress schema) {
         RepositoryResources resources = ResourcesOf(repository);
         HeadEntry directory = resources.Heads.ReadHead(1).Unwrap(), shared = resources.Heads.ReadHead(2).Unwrap();
-        Assert.True(directory.Payload.StartsWith("P0R3"u8));
+        Assert.True(directory.Payload.StartsWith("P0R4"u8));
         Assert.Equal(17, directory.Payload.Length);
         Assert.NotNull(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, directory.Payload));
         var member = Assert.Single(resources.ListBranches());

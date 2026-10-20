@@ -114,7 +114,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
     }
 
     [Fact]
-    public void EventsAcceptMetaWhileTheirBusinessComparisonAndIdentityStayOnTheLastState() {
+    public void EventsAcceptMetaWhileTheirIndependentContentsLeaveTheStateBaselineUnchanged() {
         FrameAddress state, event1, event2, lastState;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             StateModelRegistry models = Models();
@@ -126,11 +126,11 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             root.Value = 2;
             root.Numbers[0] = 200;
             using (var save = session.Prepare(root, StoredGraphKind.Event, declarations: [IntSchema("Unknown.Event1")])) {
-                Assert.Equal(state, save.Business.Write.SourceGraph);
+                Assert.Null(save.Business.Write.SourceGraph);
                 RepositorySaveResult saved = save.Commit();
                 event1 = saved.Business.Address;
                 Assert.Equal(state, MechanismFixture.Resources(repository).ReadPrevious(saved.CommitId)?.Address);
-                Assert.Equal(state, saved.Business.SourceGraph);
+                Assert.Null(saved.Business.SourceGraph);
                 Assert.NotEqual(meta0, repository.SharedSchemaRoot);
                 Assert.Equal(saved.Meta!.Address, session.AcceptedCatalog!.Snapshot!.Address);
             }
@@ -140,14 +140,14 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             Assert.Equal(state, MechanismFixture.State(repository, "main")?.Address);
 
             FrameAddress meta1 = repository.SharedSchemaRoot!.Value;
-            // Repeating E1's content must still compare against S0, not the preceding Event DTOs.
+            // Repeating E1's content creates another complete Event, without adopting either baseline.
             using (var save = session.Prepare(root, StoredGraphKind.Event, declarations: [IntSchema("Unknown.Event2")])) {
-                Assert.Equal(state, save.Business.Write.SourceGraph);
+                Assert.Null(save.Business.Write.SourceGraph);
                 Assert.NotEmpty(save.Business.Write.Records);
                 RepositorySaveResult saved = save.Commit();
                 event2 = saved.Business.Address;
                 Assert.Equal(event1, MechanismFixture.Resources(repository).ReadPrevious(saved.CommitId)?.Address);
-                Assert.Equal(state, saved.Business.SourceGraph);
+                Assert.Null(saved.Business.SourceGraph);
                 Assert.NotEqual(meta1, repository.SharedSchemaRoot);
                 Assert.Equal(saved.Meta!.Address, session.AcceptedCatalog!.Snapshot!.Address);
             }
@@ -280,7 +280,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
     }
 
     [Fact]
-    public void EventCaptureRemovesDetachedChildWithoutInstallingStateMembershipOrIdentity() {
+    public void EventCaptureOmitsDetachedChildWithoutChangingStateMembershipOrIdentity() {
         using var repository = RepositoryStorageFacade.CreateNew(_path);
         StateModelRegistry models = Models();
         var session = new BranchSaveSessionFixture(repository, "main", models);
@@ -292,11 +292,13 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         root.Child = null;
         StoredGraphRevision removed;
         using (var deletion = session.Prepare(root, StoredGraphKind.Event)) {
-            Assert.Equal(initial.Address, deletion.Business.Write.SourceGraph);
-            Assert.Equal(childId, Assert.Single(deletion.Business.Write.RemovedIds));
+            Assert.Null(deletion.Business.Write.SourceGraph);
+            Assert.Empty(deletion.Business.Write.RemovedIds);
+            Assert.Equal(2, deletion.Business.Write.Records.Count);
+            Assert.All(deletion.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             removed = deletion.Commit().Business;
         }
-        Assert.False(removed.ObjectHeads.ContainsKey(childId));
+        Assert.Equal(2, removed.ObjectHeads.Count); // Numeric IDs belong to this Event alone.
         Assert.Equal(initial.Address, session.StateSource!.Address);
         DB087Widget coldEvent = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, removed.Address), models));
         Assert.Null(coldEvent.Child);

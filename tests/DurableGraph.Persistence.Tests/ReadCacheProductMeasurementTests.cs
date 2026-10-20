@@ -25,11 +25,11 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", world, parameters: NoRebase).Id);
             world = (Node)session.State!;
                     for (int step = 0; step < 3; step++) {
-                        session.CommitEvent(new Node { Value = 7 }, parameters: NoRebase);
+                        session.CommitEvent(new Node { Value = 7 });
                         world.Links![step].Value++;
                         session.CommitState(parameters: NoRebase);
                     }
-                    session.CommitEvent(new Node { Value = 9, Links = world.Links }, parameters: NoRebase);
+                    session.CommitEvent(new Node { Value = 9, Links = world.Links });
                 }
                 ulong expected = Checksum(world);
                 var open = Measure(() => Repository.OpenReadOnlyExisting(path, models));

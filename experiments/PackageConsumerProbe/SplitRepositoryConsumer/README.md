@@ -2,7 +2,9 @@
 
 此目录覆盖普通包消费下的真实 SG Widget V1→V2、Shared Schema Catalog、共享 List／环、Event 与 State 各自推进以及冷增量续写。不借 IVT、内部工厂或产品私有反射。最小验收是下表五个独立进程成功，并核对包来源、history 和持久字节。
 
-**2026-10-19 后继：**按 [DB-096 单一 Catalog 决策](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md) 删除活动 Private／ToShared 路线。`catalog` 分支从真实 baseline Fork，普通 `CommitEvent(new CatalogEvent(...))` 将 State 不可达的 Event 声明接纳进共享 Catalog，同时保留原 State；随后普通 State 和 Event 保存验证热读、独立读回、同 owner 再签出与全关冷续写。该消费者已迁移到 `BranchId`／`CommitId`／`WorkingCopy`、`P0R3` D 管理图入口和 `P0G2` 图；业务接续来自真实 HeadStore Entry 历史。协议升为 `DG.SplitRepositoryConsumer.v2`。下面历史包回执保持原意，**不构成本次修改的新 G 包资格**。
+**2026-10-20 后继：**按 [DB-097 独立 Event 合同](../../../docs/design-branches/0097-independent-event-graphs/README.md)迁移当前源码：每个 Event 内容来源为空，自有完整 Base batch／目录；不要求其局部对象 ID 与 State 相同，后续 State 仍沿原 State 基线增量保存。rewrite 阶段还校验同一 Event Pair、State-Event Pair 的跨图可变实例隔离与图内共享／环。当前入口为 `P0R4`，其余 `P0G2`／typed ABI5 编码保持；下面历史包回执保留来源版本资格，**不构成本次修改的新 G 包资格**。
+
+此前 DB-096 已删除活动 Private／ToShared 路线。`catalog` 分支从真实 baseline Fork，普通 `CommitEvent(new CatalogEvent(...))` 将 State 不可达的 Event 声明接纳进共享 Catalog，同时保留原 State；随后普通 State 和 Event 保存验证热读、独立读回、同 owner 再签出与全关冷续写。业务接续来自真实 HeadStore Entry 历史，协议为 `DG.SplitRepositoryConsumer.v2`。
 
 `CatalogEvent` 保留历史 durable key `probe.private.unreachable`，便于与旧证据对照；该键仅是 fixture 的类型名，不表示 Private 语义。当前 runner 必需观察包含 `CatalogSharedRootAdvanced`、`FollowupCatalogUnchanged`、`FollowupEventRetainsState` 及三项热读／独立读／同 owner 再签出结果。
 
@@ -42,9 +44,9 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | `continue`／V2 | Shared 冷单 List Delta；从真实 baseline 创建 `catalog` 分支；SG Event 接纳 State 不可达声明并推进共享 Catalog，State 不变；全关冷签出 List Delta；List202 热 State／独立读回／同 owner 再签出保持值与身份且不额外提交；普通 Widget Event 保持 Catalog／State，只推进业务 Head；全关后同 PID 新 owner 单 List Delta／真实 prior/H／准确旧 Base origin |
 | `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、catalog 的历史 State／Event／当前 State、准确各图 S 与完整 meta 声明；全部完成帧保持，完整文件集合／SHA 不变 |
 
-每次物理观察都在相应 Repository／WorkingCopy 全关后进行。活动调用只传真实 CommitId；关闭后再由独立 inspector 将 Entry payload 映射到图地址。[WireInspector](WireInspector.cs) 仅用公开 FS／HeadStore／Binary 独立只读打开，观察P0R3 指针及 D Dictionary 图、P0E1 Entry payload、P0G2 图／batch／对象目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。业务前序和最近 State 来源由正式 D 成员的准确 Entry 历史提供；Meta 的 PreviousMeta 单独验证。D/T Meta 不冒充 Schema Catalog。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
+每次物理观察都在相应 Repository／WorkingCopy 全关后进行。活动调用只传真实 CommitId；关闭后再由独立 inspector 将 Entry payload 映射到图地址。[WireInspector](WireInspector.cs) 仅用公开 FS／HeadStore／Binary 独立只读打开，观察P0R4 指针及 D Dictionary 图、P0E1 Entry payload、P0G2 图／batch／对象目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。业务前序和 State 图的最近 State 内容来源由正式 D 成员的准确 Entry 历史提供；Event 内容来源固定为空，另核自有非空 batch、全 Base 和完整目录无外部 head；Meta 的 PreviousMeta 单独验证。D/T Meta 不冒充 Schema Catalog。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
-公开 Event 故事证明本例业务候选丢弃后仍保 State rewrite；显式 Prepare/Discard 由源码回归覆盖，二者不混称。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、另一个 writer PID 的续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
+公开 Event 故事检查独立捕获后仍保 State rewrite；Event 不再准备后丢弃 State 候选。rewrite 的 runner 必需判据为 `IndependentEventKeepsStateRewrite`、`SameEventPairIndependent` 和 `StateEventPairIndependent`，保留 State-State 的 same-S／cross-S 判据。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、另一个 writer PID 的续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
 
 <a id="2026-10-13-限定验收"></a>
 ## 历史资格：2026-10-13 DB-087 P1 限定验收

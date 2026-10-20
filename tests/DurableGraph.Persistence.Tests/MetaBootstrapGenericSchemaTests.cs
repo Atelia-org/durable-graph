@@ -154,7 +154,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             originalAddress = original.Business.Address;
             PreparedSchemaCatalogWrite other = Prepare(second);
             StoredGraphRevision otherView = repository.Store.AppendMeta(null, other.Write!);
-            retained = repository.Store.AppendBusiness(StoredGraphKind.State, original.Business.Address, otherView.Address,
+            retained = repository.Store.AppendBusiness(StoredGraphKind.State, otherView.Address,
                 new(original.Business.Address, new(1), [])).Address;
             repository.Data.ConfirmDurable();
         }

@@ -18,7 +18,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
     public IndependentGraphWorkspaceTests() => _repository = RepositoryStorageFacade.CreateNew(_root);
 
     [Fact]
-    public void SnapshotAndNextStateAreContentSiblingsAndColdSnapshotReadsOnlyItsClosure() {
+    public void IndependentSnapshotAndNextStateKeepHistoryOrderAndColdSnapshotReadsOnlyItsClosure() {
         string text = new('s', 8);
         Node stable = new() { Value = 4, Text = text };
         Node changed = new() { Value = 2, Right = stable, Text = text };
@@ -30,9 +30,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         FrameAddress s0 = Commit(workspace, world);
         ObjectId worldId = workspace.RootId;
         ObjectId changedId = FindId(s0, 2, models);
-        ObjectId stableId = FindId(s0, 4, models);
         ObjectId bobId = FindId(s0, 3, models);
-        ObjectId stringId = Assert.Single(Decode(s0, models).Objects, row => row.Kind == ObjectStateKind.String).Id;
         StoredGraphRevision source = MechanismFixture.Snapshot(_repository, s0);
         changed.Value = 22;
         Event root = new() { Value = 100, Left = changed, Right = stable, Text = text };
@@ -40,11 +38,10 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         ObjectId eventId;
         using (PreparedFixtureSave save = workspace.Prepare(root, StoredGraphKind.Event, NoRebase)) {
             eventId = save.Business.Write.RootId;
-            Assert.Equal(s0, save.Business.Write.SourceGraph);
-            ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records, row => row.ObjectId == changedId.Value);
-            Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-            Assert.Equal(source.ObjectHeads[changedId.Value], delta.PriorAddress);
-            Assert.DoesNotContain(save.Business.Write.Records, row => row.ObjectId == stableId.Value || row.ObjectId == stringId.Value);
+            Assert.Null(save.Business.Write.SourceGraph);
+            Assert.Empty(save.Business.Write.RemovedIds);
+            Assert.Equal(4, save.Business.Write.Records.Count);
+            Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             e1 = save.Commit().Business.Address;
         }
         Assert.Equal(s0, workspace.StateSource!.Address);
@@ -52,23 +49,22 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Same(world, workspace.State);
         Assert.Same(bob, world.Right);
         StoredGraphRevision eventGraph = MechanismFixture.Snapshot(_repository, e1);
-        Assert.Equal(s0, eventGraph.SourceGraph);
-        Assert.Equal(source.ObjectHeads[stableId.Value], eventGraph.ObjectHeads[stableId.Value]);
-        Assert.Equal(source.ObjectHeads[stringId.Value], eventGraph.ObjectHeads[stringId.Value]);
-        Assert.DoesNotContain(worldId.Value, eventGraph.ObjectHeads.Keys);
-        Assert.DoesNotContain(bobId.Value, eventGraph.ObjectHeads.Keys);
+        Assert.Null(eventGraph.SourceGraph);
+        Assert.All(eventGraph.ObjectHeads.Values, head => Assert.Equal(eventGraph.OwnedBatch!.Value, head));
+        Assert.Equal(4, eventGraph.ObjectHeads.Count);
+        Assert.IsType<Event>(BusinessPersistenceAdapter.ReadRoot(Store, eventGraph, models));
 
         changed.Value = 23;
         FrameAddress s1 = Commit(workspace);
         StoredGraphRevision state = MechanismFixture.Snapshot(_repository, s1);
         Assert.Equal(e1, MechanismFixture.Resources(_repository).ReadPrevious(MechanismFixture.Current(_repository, "main").Id)?.Address); // History order retains the Event.
-        Assert.Equal(s0, state.SourceGraph); // Both contents compare with the last accepted State.
+        Assert.Equal(s0, state.SourceGraph); // Only State content compares with the last accepted State.
         ObjectVersionRecord stateDelta = Assert.Single(Records(s1));
         Assert.Equal(changedId.Value, stateDelta.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, stateDelta.Kind);
         Assert.Equal(source.ObjectHeads[changedId.Value], stateDelta.PriorAddress);
         Assert.Contains(bobId.Value, state.ObjectHeads.Keys);
-        Assert.DoesNotContain(eventId.Value, state.ObjectHeads.Keys);
+        Assert.Equal(worldId, state.RootId); // Event-local numeric IDs carry no cross-graph identity.
 
         ReopenReadOnly();
         Dictionary<string, int> callbacks = [];
@@ -174,7 +170,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         fail = false;
         reenter = () => Assert.Throws<InvalidOperationException>(() => workspace.Prepare(root, StoredGraphKind.Event));
         using (PreparedFixtureSave save = workspace.Prepare(root, StoredGraphKind.Event)) {
-            Assert.Equal(s0, save.Business.Write.SourceGraph);
+            Assert.Null(save.Business.Write.SourceGraph);
         }
         reenter = null;
         Assert.Equal(frames, Store.AppendedFrames);
@@ -187,10 +183,11 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
     }
 
     [Fact]
-    public void SnapshotOnlyInstancesDoNotEnterStateBindingsAndDiscardCanConsumeIds() {
+    public void SnapshotOnlyInstancesAndDiscardsDoNotConsumeStateIdentityIds() {
         BranchSaveSessionFixture workspace = new(_repository, "main", Models());
         World world = new() { Value = 1 };
-        Commit(workspace, world);
+        FrameAddress firstState = Commit(workspace, world);
+        uint nextStateId = MechanismFixture.Snapshot(_repository, firstState).ObjectHeads.Keys.Max() + 1;
         Node eventOnly = new() { Value = 2 };
         Event root = new() { Left = eventOnly };
         uint lastSnapshotId;
@@ -199,17 +196,17 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
             save.Commit();
         }
         using (PreparedFixtureSave abandoned = workspace.Prepare(root, StoredGraphKind.Event, NoRebase)) {
-            Assert.True(abandoned.Business.Write.RootId.Value > lastSnapshotId);
-            lastSnapshotId = abandoned.Business.Write.Records.Max(row => row.ObjectId);
+            Assert.Equal(1U, abandoned.Business.Write.RootId.Value);
+            Assert.Equal(lastSnapshotId, abandoned.Business.Write.Records.Max(row => row.ObjectId));
         }
         world.Left = eventOnly;
         using PreparedFixtureSave state = workspace.Prepare(world, parameters: NoRebase);
         ObjectVersionRecord inserted = Assert.Single(state.Business.Write.Records, row => row.Kind == ObjectVersionKind.Base);
-        Assert.True(inserted.ObjectId > lastSnapshotId);
+        Assert.Equal(nextStateId, inserted.ObjectId);
     }
 
     [Fact]
-    public void SnapshotRebaseKeepsSelectedLocalBaseAtItsActualBatchHead() {
+    public void SnapshotWritesCompleteLocalBasesWithoutRebasingState() {
         Node child = new() { Value = 2 };
         World world = new() { Value = 1, Left = child };
         StateModelRegistry models = Models();
@@ -222,7 +219,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         using PreparedFixtureSave snapshot = workspace.Prepare(new Event { Left = child }, StoredGraphKind.Event, new(1, 100));
         ObjectVersionRecord rebased = Assert.Single(snapshot.Business.Write.Records, row => row.ObjectId == childId.Value);
         Assert.Equal(ObjectVersionKind.Base, rebased.Kind);
-        Assert.Equal(s1, snapshot.Business.Write.SourceGraph);
+        Assert.Null(snapshot.Business.Write.SourceGraph);
         StoredGraphRevision graph = snapshot.Commit().Business;
         Assert.Equal(graph.OwnedBatch, graph.ObjectHeads[childId.Value]);
         Assert.Equal(ObjectVersionKind.Base, Store.ReadObjectChain(MechanismFixture.Snapshot(_repository, graph.Address), childId.Value).Entries[0].Record.Kind);

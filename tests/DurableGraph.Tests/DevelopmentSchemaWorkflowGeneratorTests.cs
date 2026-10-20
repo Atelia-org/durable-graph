@@ -61,7 +61,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotEqual(schemaV1, schemaV2);
             Assert.Equal(schemaV2, domainEvent.SchemaRoot);
 
-            Assert.Equal(source, domainEvent.SourceGraph);
+            Assert.Null(domainEvent.SourceGraph);
             Assert.Equal(StoredGraphKind.Event, domainEvent.Kind);
             Assert.Same(baseline, branch.Baseline);
             Assert.Same(state, branch.State);
@@ -71,7 +71,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(2, branch.Baseline.Objects.Values.Count(row => row.RequiresRewrite));
             Assert.Equal(old.Schema(), branch.AcceptedCatalog!.Schemas[new(old.Schema().Type, 1)]);
             Assert.Equal(current.Schema(), branch.AcceptedCatalog.Schemas[new(current.Schema().Type, 2)]);
-            Assert.Equal(2, DefaultRecords(store, PublishedGraph(EvidenceResources(repository), eventAddress)).Count);
+            Assert.Equal(baseline.Objects.Count, DefaultRecords(store, PublishedGraph(EvidenceResources(repository), eventAddress)).Count);
             Assert.All(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), eventAddress)), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             before = EvidencePublication(repository);
             branch.PrepareAndDiscard(state);

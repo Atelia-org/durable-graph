@@ -100,7 +100,7 @@ public sealed partial class SplitBusinessWorkspaceTests {
         catalog.Install(meta);
         BusinessSaveCandidate capture = member.CaptureOwned(root, StoredGraphKind.State);
         using PreparedBusinessWrite write = member.PrepareOwned(capture, catalog.View, NoRebase);
-        StoredGraphRevision graph = Store.AppendBusiness(StoredGraphKind.State, null, meta.Address, write.Write);
+        StoredGraphRevision graph = Store.AppendBusiness(StoredGraphKind.State, meta.Address, write.Write);
         write.PrepareInstall(graph);
         write.Install(graph); // Internal installation primitive only; no publication claim.
         NormalizedGraphState baseline = member.Baseline!;

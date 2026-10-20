@@ -128,7 +128,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             PreparedSchemaCatalogWrite meta = wrong.Prepare();
             StoredGraphRevision schema = repository.Store.AppendMeta(null, meta.Write!);
             byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(wrongSource), Base(new(5, default, 0)), meta.View);
-            badGraph = repository.Store.AppendBusiness(StoredGraphKind.State, null, schema.Address,
+            badGraph = repository.Store.AppendBusiness(StoredGraphKind.State, schema.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
             repository.Data.ConfirmDurable();
         }
@@ -219,7 +219,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
             PreparedSchemaCatalogWrite empty = new SchemaCatalogWorkspace(static () => { }).Prepare();
             StoredGraphRevision missing = repository.Store.AppendMeta(null, empty.Write!);
             byte[] body = TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(Old), Base(new(5, default, 0)), accepted);
-            malformed = repository.Store.AppendBusiness(StoredGraphKind.State, null, missing.Address,
+            malformed = repository.Store.AppendBusiness(StoredGraphKind.State, missing.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
             repository.Data.ConfirmDurable();
         }
@@ -246,7 +246,9 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
 
         RepositorySaveResult eventResult;
         using (var saveEvent = session.Prepare(root, StoredGraphKind.Event)) {
-            AssertRewrite(saveEvent, source.State);
+            Assert.Null(saveEvent.Business.Write.SourceGraph);
+            Assert.Empty(saveEvent.Business.Write.RemovedIds);
+            Assert.Equal(ObjectVersionKind.Base, Assert.Single(saveEvent.Business.Write.Records).Kind);
             Assert.NotNull(saveEvent.Catalog.Write); // V2 was not published by opening or upgrading.
             eventResult = saveEvent.Commit();
         }

@@ -24,7 +24,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             // An Event-only opening followed by State capture leaves this State unread;
             // creating a State root and opening it would already earn a read certificate.
             IDurableObject mainInitial = Cycle();
-            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
             main.CommitState(mainInitial, parameters: NoRebase);
             CommitId source = main.BaseCommitId;
             GraphReadStatistics first = Observe(repository);
@@ -82,11 +82,11 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         using Repository repository = Create(SharedReadModel.Models(hydrate: node => hydrated.Add(node.Value)));
         repository.PreparedStateReuseEnabled = reuse;
         IDurableObject mainInitial = Cycle();
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         CommitId state = main.BaseCommitId;
-        CommitId e1 = main.CommitEvent(new Node { Value = 51 }, parameters: NoRebase).Id;
-        CommitId e2 = main.CommitEvent(new Node { Value = 52 }, parameters: NoRebase).Id;
+        CommitId e1 = main.CommitEvent(new Node { Value = 51 }).Id;
+        CommitId e2 = main.CommitEvent(new Node { Value = 52 }).Id;
         CommitId[] requests = [state, e1, e2];
         for (int i = 0; i < requests.Length; i++) {
             hydrated.Clear();
@@ -108,12 +108,12 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         using Repository repository = Create();
         repository.PreparedStateReuseEnabled = reuse;
         IDurableObject mainInitial = Cycle();
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "first").Id);
         var prepared = repository.PreparedStateEntry;
-        using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", new Node { Value = 50 }, parameters: NoRebase).Id);
-        CommitId e2 = events.CommitEvent(new Node { Value = 51 }, parameters: NoRebase).Id;
+        using WorkingCopy events = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("events", new Node { Value = 50 }).Id);
+        CommitId e2 = events.CommitEvent(new Node { Value = 51 }).Id;
         repository.ForkBranch(e2, "event-copy");
         GraphReadStatistics stats = Observe(repository);
         using WorkingCopy emptyFork = repository.OpenWorkingCopy(repository.ForkBranch(e2, "empty-fork").Id);
@@ -141,7 +141,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         using Repository repository = Create();
         repository.PreparedStateReuseEnabled = reuse;
         IDurableObject mainInitial = Cycle();
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         CommitId original = main.BaseCommitId;
         using WorkingCopy old = repository.OpenWorkingCopy(repository.ForkBranch(original, "old").Id);
@@ -184,7 +184,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         using Repository repository = Create(models);
         repository.PreparedStateReuseEnabled = reuse;
         IDurableObject mainInitial = new Node { Value = 1 };
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         using WorkingCopy old = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "old").Id);
         var previous = repository.PreparedStateEntry;
@@ -214,12 +214,12 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     public void FailedColdReplacementPreservesOldSlotAndAllowsRetry(bool reuse, string phase) {
         using (Repository seed = Create()) {
             IDurableObject mainInitial = Cycle();
-            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", mainInitial).Id);
             main.CommitState(mainInitial, parameters: NoRebase);
             IDurableObject otherInitial = new Node {
                 Value = 10, Next = new Node { Value = 20 }
             };
-            using WorkingCopy other = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("other", otherInitial, parameters: NoRebase).Id);
+            using WorkingCopy other = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("other", otherInitial).Id);
             other.CommitState(otherInitial, parameters: NoRebase);
         }
         bool fail = false;
@@ -279,7 +279,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             if (fail && phase == "hydrate" && node.Value == 2) throw failure;
         }));
         IDurableObject mainInitial = Cycle();
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "warm").Id);
         var entry = repository.PreparedStateEntry;
@@ -309,9 +309,9 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     public void RealUpgradeNormalizeRunsOnColdOnlyAndReadonlyQueriesNeverUseTheSlot(bool reuse) {
         using (Repository seed = Create()) {
             IDurableObject mainInitial = new Node { Value = 1 };
-            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", mainInitial).Id);
             main.CommitState(mainInitial, parameters: NoRebase);
-            main.CommitEvent(new Node { Value = 2 }, parameters: NoRebase);
+            main.CommitEvent(new Node { Value = 2 });
         }
         int normalized = 0;
         using Repository repository = Repository.OpenExisting(_root, SharedReadModel.Models(currentVersion: 2,
@@ -349,7 +349,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
     public void ForkOperationFailurePreservesSlotBeforeCreationOrReleasesItAfterPublication(bool afterPublication) {
         using Repository repository = Create();
         IDurableObject mainInitial = new Node { Value = 1 };
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "warm").Id);
         var previous = repository.PreparedStateEntry;
@@ -399,7 +399,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         CommitId source;
         try {
             IDurableObject mainInitial = Cycle();
-            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
             main.CommitState(mainInitial, parameters: NoRebase);
             source = main.BaseCommitId;
             using WorkingCopy fork = repository.OpenWorkingCopy(repository.ForkBranch(source, "fork").Id);
@@ -419,7 +419,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         ObjectId rootId;
         using (Repository seed = Create()) {
             IDurableObject mainInitial = new Node { Value = 1, Next = new Node { Value = 2 } };
-            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", mainInitial, parameters: NoRebase).Id);
+            using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromEvent("main", mainInitial).Id);
             main.CommitState(mainInitial, parameters: NoRebase);
             originalCommit = main.BaseCommitId;
             original = Describe(seed, originalCommit).Address;
@@ -430,7 +430,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             GraphRecordStore store = resources.GraphStore;
             StoredGraphRevision source = Snapshot(resources, originalCommit);
             uint childId = Assert.Single(source.ObjectHeads.Keys, id => id != rootId.Value);
-            FrameAddress invalid = store.AppendBusiness(StoredGraphKind.State, original, source.SchemaRoot,
+            FrameAddress invalid = store.AppendBusiness(StoredGraphKind.State, source.SchemaRoot,
                 new(original, rootId, [], [childId])).Address;
             resources.Heads.PublishHead(invalidBranch.Value, BusinessEntryPayloadCodec.Encode(invalid, default), out _).Unwrap();
         }

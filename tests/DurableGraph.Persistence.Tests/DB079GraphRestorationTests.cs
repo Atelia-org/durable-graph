@@ -91,10 +91,10 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             hydrations++;
         }));
         Node state = Cycle(10, 20), message = Cycle(30, 40);
-        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", state, parameters: NoRebase).Id);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", state).Id);
         branch.CommitState(state, parameters: NoRebase);
         CommitId stateAddress = branch.BaseCommitId;
-        CommitId address = branch.CommitEvent(message, parameters: NoRebase).Id;
+        CommitId address = branch.CommitEvent(message).Id;
         Checkpoint? delivered = null;
 
         if (failLastAllocation) {
@@ -128,9 +128,9 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         int allocations = 0, hydrations = 0;
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models(
             allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++));
-        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 10 }, parameters: NoRebase).Id);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 10 }).Id);
         branch.CommitState(new Node { Value = 10 }, parameters: NoRebase);
-        CommitId address = branch.CommitEvent(new Node { Value = 20 }, parameters: NoRebase).Id;
+        CommitId address = branch.CommitEvent(new Node { Value = 20 }).Id;
         Checkpoint? delivered = null;
 
         Assert.Throws<InvalidDataException>(() => delivered = repository.ReadCheckpoint(address));
@@ -147,7 +147,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     public void CheckpointPreviousGraphPreparationFailsBeforeEitherGraphAllocates() {
         using (Repository seed = Repository.CreateNew(_root, SharedReadModel.Models())) {
             using WorkingCopy branch = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new Node { Value = 10 }, parameters: NoRebase).Id);
-            branch.CommitEvent(new Node { Value = 30 }, parameters: NoRebase);
+            branch.CommitEvent(new Node { Value = 30 });
         }
         int allocations = 0, hydrations = 0;
         bool failPrevious = true;

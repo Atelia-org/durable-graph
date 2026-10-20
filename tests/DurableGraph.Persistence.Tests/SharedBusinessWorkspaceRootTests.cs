@@ -62,10 +62,9 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             AssertStorageEqual(originalStorage, backend.Storage());
 
             eventOnly = backend.Save(envelope, isEvent: true);
-            Assert.True(eventOnly.RootId.Value > discardedId.Value);
-            ObjectVersionRecord eventBase = Assert.Single(eventOnly.Records);
-            Assert.Equal(eventOnly.RootId.Value, eventBase.ObjectId);
-            Assert.Equal(ObjectVersionKind.Base, eventBase.Kind);
+            Assert.Equal(1U, eventOnly.RootId.Value);
+            Assert.Equal(4, eventOnly.Records.Length);
+            Assert.All(eventOnly.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             Assert.Empty(eventOnly.Removed);
             Assert.Same(prior, backend.Baseline);
             Assert.Same(child, backend.State);
@@ -76,7 +75,7 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             // The Event's new instance-to-ID binding was never accepted into State.
             envelopeState = backend.Save(envelope);
             envelopeId = envelopeState.RootId;
-            Assert.True(envelopeId.Value > eventOnly.RootId.Value);
+            Assert.True(envelopeId.Value > discardedId.Value);
             ObjectVersionRecord stateBase = Assert.Single(envelopeState.Records);
             Assert.Equal(envelopeId.Value, stateBase.ObjectId);
             Assert.Equal(ObjectVersionKind.Base, stateBase.Kind);
@@ -87,7 +86,7 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
             foreach ((ObjectId id, ObjectStorageInfo info) in originalStorage) {
                 Assert.Equal(info, backend.Storage()[id]);
             }
-            Assert.DoesNotContain(eventOnly.RootId, backend.Baseline.Objects.Keys);
+            Assert.NotEqual(eventOnly.OwnedBatch, envelopeState.OwnedBatch);
             backend.AssertStoredBaseline();
         }
 

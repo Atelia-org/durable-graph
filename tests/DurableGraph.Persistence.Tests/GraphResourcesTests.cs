@@ -101,7 +101,7 @@ public sealed class GraphResourcesTests : IDisposable {
         Assert.Throws<ObjectDisposedException>(resources.RequireAvailable);
         Assert.Throws<ObjectDisposedException>(() => retained.ReadMetadata(address));
         Assert.Throws<ObjectDisposedException>(() => retained.ReadDirectory(graph.DirectoryRoot));
-        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, address, null,
+        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, null,
             new(address, new(7), [ObjectVersionRecord.CreateBase(7, [30])])));
         Assert.Equal(graph.OwnedBatch, heads[7]);
         Assert.Equal(new byte[] { 10, 20 }, Assert.Single(batch.Records).Body.ToArray());

@@ -98,7 +98,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
     public void Bulk_chain_rejects_Event_as_retained_Delta_content_source_cold_and_warm() {
         using Fixture fixture = CreateFixture();
         StoredGraphRevision initial = fixture.State(null, [B(1, [10])]);
-        StoredGraphRevision domainEvent = fixture.Append(StoredGraphKind.Event, initial.Address, 1, []);
+        StoredGraphRevision domainEvent = fixture.Append(StoredGraphKind.Event, null, 1, [B(1, [10])]);
         FrameAddress batch = fixture.Batch(domainEvent.Address, [D(1, initial.ObjectHeads[1], [20])]);
         FrameAddress directory = fixture.BaseDirectory(initial.Address, Map((1u, batch)));
         FrameAddress retained = fixture.Graph(StoredGraphKind.State, initial.Address, 1, directory, null);
@@ -120,15 +120,15 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         using Fixture fixture = CreateFixture();
         StoredGraphRevision initial = fixture.State(null, [B(1, [10])]);
         StoredGraphRevision updated = fixture.State(initial.Address, [D(1, initial.ObjectHeads[1], [20])]);
-        StoredGraphRevision firstEvent = fixture.Append(StoredGraphKind.Event, updated.Address, 1, []);
-        StoredGraphRevision secondEvent = fixture.Append(StoredGraphKind.Event, updated.Address, 1, []);
+        StoredGraphRevision firstEvent = fixture.Append(StoredGraphKind.Event, null, 1, [B(1, [20])]);
+        StoredGraphRevision secondEvent = fixture.Append(StoredGraphKind.Event, null, 1, [B(1, [20])]);
         StoredGraphRevision unchanged = fixture.State(updated.Address, []);
 
         fixture.Cold(store => {
             StoredGraphRevision restored = fixture.Read(store, unchanged.Address);
             Assert.Null(restored.PreviousMeta);
-            Assert.Equal(updated.Address, fixture.Read(store, firstEvent.Address).SourceGraph);
-            Assert.Equal(updated.Address, fixture.Read(store, secondEvent.Address).SourceGraph);
+            Assert.Null(fixture.Read(store, firstEvent.Address).SourceGraph);
+            Assert.Null(fixture.Read(store, secondEvent.Address).SourceGraph);
             Assert.Equal(updated.Address, restored.SourceGraph);
             Assert.Equal(updated.DirectoryRoot, restored.DirectoryRoot);
             Assert.Null(restored.OwnedBatch);
@@ -429,7 +429,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
 
         internal StoredGraphRevision Append(StoredGraphKind kind, FrameAddress? expectedSource, uint rootId,
             ObjectVersionRecord[] records, uint[]? removed = null) {
-            StoredGraphRevision result = Store.AppendBusiness(kind, expectedSource, SchemaRoot,
+            StoredGraphRevision result = Store.AppendBusiness(kind, SchemaRoot,
                 new(expectedSource, new(rootId), records, removed));
             _expectedSources.Add(result.Address, expectedSource);
             return result;

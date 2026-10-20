@@ -91,8 +91,9 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             StoredGraphRevision first = Snapshot(seed, main.StateSourceCommitId!.Value);
             StoredGraphRevision second = Snapshot(seed, next);
             Assert.NotEqual(first.SchemaRoot, second.SchemaRoot);
-            Assert.Equal(first.ObjectHeads[first.RootId.Value], second.ObjectHeads[second.RootId.Value]);
-            Assert.Null(second.OwnedBatch);
+            Assert.NotEqual(first.ObjectHeads[first.RootId.Value], second.ObjectHeads[second.RootId.Value]);
+            Assert.NotNull(second.OwnedBatch);
+            Assert.Null(second.SourceGraph);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { HydrateFromSchema = true };

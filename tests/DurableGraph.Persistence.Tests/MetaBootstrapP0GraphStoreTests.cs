@@ -18,9 +18,9 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
             using GraphRecordStore store = new(frames) { DirectoryReadAmplificationThreshold = 100 };
             schemaRoot = store.AppendMeta(null,
                 new(null, new(1), [B(1, [0])])).Address;
-            StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null, schemaRoot,
+            StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(null, new(1), Enumerable.Range(1, 64).Select(i => B((uint)i, [(byte)i]))));
-            StoredGraphRevision second = store.AppendBusiness(StoredGraphKind.State, first.Address, schemaRoot,
+            StoredGraphRevision second = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(first.Address, new(1), [D(1, first.ObjectHeads[1], [65, 66])]));
             ObjectHeadDirectoryVersion initialDirectory = store.ReadDirectoryVersion(first.DirectoryRoot);
             ObjectHeadDirectoryVersion changedDirectory = store.ReadDirectoryVersion(second.DirectoryRoot);
@@ -32,7 +32,7 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
                 store.ReadDirectoryPayloadBytes(second.DirectoryRoot));
 
             long appended = store.AppendedFrames;
-            StoredGraphRevision reused = store.AppendBusiness(StoredGraphKind.State, second.Address, schemaRoot,
+            StoredGraphRevision reused = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(second.Address, new(1), []));
             Assert.Equal(appended + 1, store.AppendedFrames); // The new graph envelope is a real revision.
             Assert.Equal(second.DirectoryRoot, reused.DirectoryRoot);
@@ -79,9 +79,9 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
     public void Directory_Base_choice_and_explicit_removes_are_independent_of_object_Delta_choice() {
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore store = new(frames) { DirectoryReadAmplificationThreshold = 1 };
-        StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), Enumerable.Range(1, 64).Select(i => B((uint)i, [(byte)i]))));
-        StoredGraphRevision second = store.AppendBusiness(StoredGraphKind.State, first.Address, null,
+        StoredGraphRevision second = store.AppendBusiness(StoredGraphKind.State, null,
             new(first.Address, new(1), [D(1, first.ObjectHeads[1], [65])]));
         ObjectHeadDirectoryVersion rebased = store.ReadDirectoryVersion(second.DirectoryRoot);
         Assert.Equal(ObjectVersionKind.Base, rebased.Kind);
@@ -89,7 +89,7 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
         Assert.Equal(first.Address, rebased.SourceGraph);
         Assert.Equal(ObjectVersionKind.Delta, store.ReadBatch(second.OwnedBatch!.Value).Records[0].Kind);
 
-        StoredGraphRevision third = store.AppendBusiness(StoredGraphKind.State, second.Address, null,
+        StoredGraphRevision third = store.AppendBusiness(StoredGraphKind.State, null,
             new(second.Address, new(1), [B(65, [66])], Enumerable.Range(2, 63).Select(i => (uint)i)));
         Assert.Equal(new uint[] { 1, 65 }, third.ObjectHeads.Keys.Order().ToArray());
         Assert.Equal(second.ObjectHeads[1], third.ObjectHeads[1]);

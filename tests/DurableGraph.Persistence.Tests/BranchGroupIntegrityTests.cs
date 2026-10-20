@@ -102,9 +102,9 @@ public sealed class BranchGroupIntegrityTests : IDisposable {
             // The existing raw mechanism fixture isolates publication from typed body decoding.
             using PendingRepositorySave pending = resources.PrepareSaveGroup(() => new([
                 new(leftBefore.HeadId, leftBefore, null, StoredGraphKind.State, default,
-                    new(left.Address, new(1), [ObjectVersionRecord.CreateBase(1, [10])]), left.Address),
+                    new(left.Address, new(1), [ObjectVersionRecord.CreateBase(1, [10])])),
                 new(rightBefore.HeadId, rightBefore, null, StoredGraphKind.State, default,
-                    new(right.Address, new(1), [ObjectVersionRecord.CreateBase(1, [20])]), right.Address)
+                    new(right.Address, new(1), [ObjectVersionRecord.CreateBase(1, [20])]))
             ], null));
             GraphRecordStore store = facade.Store;
             long appended = store.AppendedFrames;

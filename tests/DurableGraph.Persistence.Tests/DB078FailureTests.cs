@@ -20,7 +20,7 @@ public sealed partial class EventHistoryRepositoryTests {
                 if (checkpoint == (RepositorySaveStage)point) throw new IOException("Interrupted initial Event.");
             };
             var failure = Assert.Throws<RepositoryPublicationException>(() =>
-                repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 7 }, parameters: NoRebase).Id));
+                repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 7 }).Id));
             Assert.Equal(published ? RepositoryPublicationOutcome.Published : RepositoryPublicationOutcome.NotPublished, failure.Outcome);
             Assert.True(repository.IsFaulted);
             Assert.NotNull(failure.CandidateRevisionAddress);
@@ -45,7 +45,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData((int)RepositorySaveStage.BeforeInstall, true)]
     public void FirstStateFailureNeverInstallsCandidateAndColdCheckoutUsesActualPublishedHead(int point, bool published) {
         using (Repository repository = CreateRepository()) {
-            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 7 }, parameters: NoRebase).Id);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 7 }).Id);
             var eventHead = checkout.BaseCommitId;
             repository.SaveStageObserver = checkpoint => {
                 Assert.Null(checkout.State);
@@ -58,7 +58,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(eventHead, checkout.BaseCommitId);
             Assert.True(checkout.IsFaulted);
             Assert.Throws<InvalidOperationException>(() => checkout.CommitState(new Node(), parameters: NoRebase).Id);
-            Assert.Throws<InvalidOperationException>(() => checkout.CommitEvent(new Node(), parameters: NoRebase).Id);
+            Assert.Throws<InvalidOperationException>(() => checkout.CommitEvent(new Node()).Id);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using WorkingCopy recovered = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
@@ -76,7 +76,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [Fact]
     public void FirstStateUnknownRootAppendNeverInstallsCandidateAndFreshOpenFindsActualState() {
         using (Repository repository = CreateRepository()) {
-            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 7 }, parameters: NoRebase).Id);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 7 }).Id);
             var eventHead = checkout.BaseCommitId;
             InstallPublicationFault(ResourcesOf(repository).Heads, "AfterAppend", () => throw new IOException("After root record append"));
             var failure = Assert.Throws<RepositoryPublicationException>(() => checkout.CommitState(new Node { Value = 9 }, parameters: NoRebase).Id);
@@ -97,9 +97,9 @@ public sealed partial class EventHistoryRepositoryTests {
     public void EventOnlyCaptureReentryAndDisposeRejectionKeepCheckoutUsable() {
         Action? duringCapture = null;
         using Repository repository = CreateRepository(Models(_ => duringCapture?.Invoke()));
-        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id);
+        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node()).Id);
         var initial = checkout.BaseCommitId;
-        duringCapture = () => checkout.CommitEvent(new Node(), parameters: NoRebase);
+        duringCapture = () => checkout.CommitEvent(new Node());
         Assert.Throws<InvalidOperationException>(() => checkout.CommitState(new Node(), parameters: NoRebase).Id);
         Assert.False(repository.IsFaulted);
         Assert.Null(checkout.State);
@@ -116,7 +116,7 @@ public sealed partial class EventHistoryRepositoryTests {
         checkout.CommitState(parameters: NoRebase);
         checkout.Dispose();
         checkout.Dispose();
-        Assert.Throws<ObjectDisposedException>(() => checkout.CommitEvent(new Node(), parameters: NoRebase).Id);
+        Assert.Throws<ObjectDisposedException>(() => checkout.CommitEvent(new Node()).Id);
         Assert.Throws<ObjectDisposedException>(() => checkout.CommitState(new Node(), parameters: NoRebase).Id);
         using WorkingCopy replacement = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
         Assert.Equal((byte)3, Assert.IsType<Node>(replacement.State).Value);
@@ -127,19 +127,19 @@ public sealed partial class EventHistoryRepositoryTests {
         Repository? current = null;
         bool reenter = true;
         using (Repository repository = CreateRepository(Models(_ => {
-            if (reenter) current!.OpenWorkingCopy(current!.CreateRootBranchFromEvent("nested", new Node(), parameters: NoRebase).Id);
+            if (reenter) current!.OpenWorkingCopy(current!.CreateRootBranchFromEvent("nested", new Node()).Id);
         }))) {
             current = repository;
-            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node(), parameters: NoRebase).Id));
+            Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node()).Id));
             Assert.False(repository.IsFaulted);
             Assert.Empty(repository.ListBranches());
             reenter = false;
-            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 4 }, parameters: NoRebase).Id);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Node { Value = 4 }).Id);
             Assert.Null(checkout.State);
         }
         var before = SnapshotFiles();
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
-            Assert.Throws<InvalidOperationException>(() => reader.OpenWorkingCopy(reader.CreateRootBranchFromEvent("forbidden", new Node(), parameters: NoRebase).Id));
+            Assert.Throws<InvalidOperationException>(() => reader.OpenWorkingCopy(reader.CreateRootBranchFromEvent("forbidden", new Node()).Id));
             Assert.Throws<InvalidOperationException>(() => reader.OpenWorkingCopy(BranchNamed(reader, "main")));
             Assert.Equal((byte)4, Assert.IsType<Node>(reader.LoadEvent(reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id)).Value);
         }

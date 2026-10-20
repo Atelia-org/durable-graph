@@ -1,5 +1,7 @@
 # DB-066 · ReadPair 比较能力与 Transient 使用合同
 
+> Event 配对后继：[DB-097](../0097-independent-event-graphs/README.md)正在实施任一 Event Pair 独立物化；State–State 的比较 proof、可信闭包及 ReadPair 公开只读约束保持。本文的旧混合角色共享见证保留当片含义，不新增同 Event 共享保证。
+
 > 整理说明：2026-10-14 从 `docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：完整比较替代共享判定编码、缺 proof 保守退出及图外 Transient view 的历史合同与验收；不据当片结果外推性能或跨操作共享。
 > 本文原过程与测试数字保留当时基线；当前能力与焦点见 [PROJECT-STATE](../../../src/PROJECT-STATE.md)。

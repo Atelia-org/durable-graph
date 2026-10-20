@@ -394,7 +394,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
             ObjectLayout layout = BootstrapBindings.Layout(typeof(SchemaCatalogRecord));
             ObjectStateRecord employee = BootstrapBindings.WithPreparation(new(new(1), layout.Schema!, new CatalogDto(default)), employees);
             byte[] body = TypedBaseBodyCodec.Encode(layout, employee.Preparation!.PrepareBase(employee));
-            graph = repository.Store.AppendBusiness(StoredGraphKind.State, null, schema.Address,
+            graph = repository.Store.AppendBusiness(StoredGraphKind.State, schema.Address,
                 new(null, new(1), [ObjectVersionRecord.CreateBase(1, body)])).Address;
             repository.Data.ConfirmDurable();
         }

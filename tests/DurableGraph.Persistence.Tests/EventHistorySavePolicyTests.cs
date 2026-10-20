@@ -28,6 +28,20 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Contains(explicitWrites, writes => writes.Length == 0);
     }
 
+    [Fact]
+    public void EventPublicEntryPointsExposeNoReconstructionPolicy() {
+        foreach (var (type, name) in new[] {
+            (typeof(WorkingCopy), nameof(WorkingCopy.CommitEvent)),
+            (typeof(WorkingCopy), nameof(WorkingCopy.CreateEventCommitRequest)),
+            (typeof(Repository), nameof(Repository.CreateRootBranchFromEvent))
+        }) {
+            MethodInfo method = Assert.Single(type.GetMethods(), method => method.Name == name);
+            Assert.DoesNotContain(method.GetParameters(), parameter =>
+                parameter.ParameterType == typeof(ReadAmplificationBaseBudgetParameters) ||
+                parameter.ParameterType == typeof(ReadAmplificationBaseBudgetParameters?));
+        }
+    }
+
     private ObjectVersionKind[][] SavePolicyTrace(string name, bool omitPolicy, bool includeOverrides,
         ReadAmplificationBaseBudgetParameters currentDefault) {
         string path = Path.Combine(_root, name);
@@ -44,10 +58,7 @@ public sealed partial class EventHistoryRepositoryTests {
             // defaults; a materially different policy may need a different workload.
             for (int i = 1; i <= 40; i++) {
                 if (i % 4 != 0) { state.Value++; }
-                CommitId domainEvent = includeOverrides && i == 1
-                    ? session.CommitEvent(state, parameters: new(1, 100)).Id
-                    : omitPolicy ? session.CommitEvent(state).Id
-                    : session.CommitEvent(state, parameters: currentDefault).Id;
+                CommitId domainEvent = session.CommitEvent(state).Id;
                 addresses.Add(Describe(repository, domainEvent).Address);
                 CommitId saved = includeOverrides && i == 2
                     ? session.CommitState(parameters: NoRebase).Id

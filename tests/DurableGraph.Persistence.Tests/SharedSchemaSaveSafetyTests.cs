@@ -81,12 +81,12 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         Assert.Equal(source, checkout.StateRevisionAddress);
         Assert.Same(acceptedBeforeDiscard, checkout.AcceptedCatalog);
         CommitId eventCommit = cold.CommitBranches([
-            checkout.CreateEventCommitRequest(new Counter { Value = 20 }, parameters: NoRebase)
+            checkout.CreateEventCommitRequest(new Counter { Value = 20 })
         ], [ExtraDeclaration])[checkout.BranchId].Id;
         eventAddress = Describe(cold, eventCommit).Address;
         StoredGraphRevision ev = DB096TestAccess.Snapshot(cold, eventCommit);
         Assert.Equal(source, Describe(cold, Previous(cold, eventCommit)!.Value).Address);
-        Assert.Equal(source, ev.SourceGraph);
+        Assert.Null(ev.SourceGraph);
         Assert.Equal(cold.SharedSchemaRoot, ev.SchemaRoot);
         Assert.NotEqual(sourcePin, ev.SchemaRoot);
         Assert.Equal(ExtraDeclaration, SchemaCatalogView.Load(cold.GraphStore, ev.SchemaRoot!.Value).Schemas[new(ExtraDeclaration.Type, 1)]);
@@ -248,14 +248,14 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         Action? duringCapture = null;
         int captures = 0;
         using Repository repository = Repository.CreateNew(_path, CounterModels(1, () => { captures++; duringCapture?.Invoke(); }));
-        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Counter { Value = 1 }, parameters: NoRebase).Id);
+        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Counter { Value = 1 }).Id);
         RepositoryResources resources = ResourcesOf(repository);
         using RepositoryStorageFacade facade = new(resources);
         bool nestedProducerCalled = false;
         captures = 0;
-        CommitRequest nested = checkout.CreateEventCommitRequest(new Counter { Value = 99 }, parameters: NoRebase);
+        CommitRequest nested = checkout.CreateEventCommitRequest(new Counter { Value = 99 });
         duringCapture = () => {
-            Assert.Throws<InvalidOperationException>(() => checkout.CommitEvent(new Counter { Value = 99 }, parameters: NoRebase).Id);
+            Assert.Throws<InvalidOperationException>(() => checkout.CommitEvent(new Counter { Value = 99 }).Id);
             Assert.Throws<InvalidOperationException>(() => repository.CommitBranches([nested], [ExtraDeclaration]));
             Assert.Throws<InvalidOperationException>(() => repository.Dispose());
             Assert.Throws<InvalidOperationException>(() => resources.Dispose());
@@ -264,7 +264,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
                 () => { nestedProducerCalled = true; throw new IOException("Nested producer must not be called."); }));
             Assert.False(nestedProducerCalled);
         };
-        CommitId saved = checkout.CommitEvent(new Counter { Value = 2 }, parameters: NoRebase).Id;
+        CommitId saved = checkout.CommitEvent(new Counter { Value = 2 }).Id;
         duringCapture = null;
         Assert.Equal(1, captures);
         Assert.Equal(saved, checkout.BaseCommitId);
@@ -284,7 +284,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         int captures = 0, bodyPreparations = 0, afterPrepare = 0;
         using Repository repository = Repository.CreateNew(_path,
             CounterModels(1, () => { captures++; duringCapture?.Invoke(); }, () => bodyPreparations++));
-        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Counter { Value = 1 }, parameters: NoRebase).Id);
+        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Counter { Value = 1 }).Id);
         RepositoryResources resources = ResourcesOf(repository);
         GraphRecordStore retained = repository.GraphStore;
         PublicationImage before = Snapshot(repository);
@@ -306,7 +306,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
             }
         };
         CommitId? delivered = null;
-        Assert.ThrowsAny<InvalidOperationException>(() => delivered = checkout.CommitEvent(new Counter { Value = 2 }, parameters: NoRebase).Id);
+        Assert.ThrowsAny<InvalidOperationException>(() => delivered = checkout.CommitEvent(new Counter { Value = 2 }).Id);
         Assert.Null(delivered);
         Assert.Equal(1, captures);
         Assert.Equal(0, bodyPreparations);

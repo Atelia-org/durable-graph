@@ -60,7 +60,7 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
         Assert.Throws<ObjectDisposedException>(() => MechanismFixture.Snapshot(retained, old));
         Assert.Throws<ObjectDisposedException>(() => SchemaCatalogView.Load(retained, schema));
-        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, null, schema, new(null, new(1), [])));
+        Assert.Throws<ObjectDisposedException>(() => retained.AppendBusiness(StoredGraphKind.State, schema, new(null, new(1), [])));
         Assert.Throws<InvalidOperationException>(resources.RequireAvailable);
     }
 

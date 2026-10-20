@@ -9,6 +9,7 @@ namespace Atelia.DurableGraph;
 /// is not serializable or transferable to another repository or working copy. Successful State or Event
 /// publication advances the baseline and makes this request stale. A healthy failure may be retried,
 /// provided the original working copy and baseline remain valid; retry captures the then-current graph.
+/// Event requests capture independent complete Base graphs; only State requests carry an incremental saving policy.
 /// </remarks>
 public sealed class CommitRequest {
     internal CommitRequest(WorkingCopy work, IDurableObject root, StoredGraphKind kind,

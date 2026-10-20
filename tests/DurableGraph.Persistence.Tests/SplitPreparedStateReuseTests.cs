@@ -322,8 +322,10 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             CommitId e1 = second.CommitEvent(root).Id, e2 = second.CommitEvent(root).Id;
             foreach (CommitId address in new[] { e1, e2 }) {
                 StoredGraphRevision graph = Snapshot(repository, address);
-                Assert.Equal(Describe(repository, original).Address, graph.SourceGraph);
-                Assert.Equal(ObjectVersionKind.Base, Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records).Kind);
+                Assert.Null(graph.SourceGraph);
+                var eventRecords = repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records;
+                Assert.Equal(2, eventRecords.Count);
+                Assert.All(eventRecords, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             }
             Assert.True(second.Baseline.Objects[rootId].RequiresRewrite);
             Assert.Equal(oldRoot, second.Baseline.Objects[rootId].Storage);

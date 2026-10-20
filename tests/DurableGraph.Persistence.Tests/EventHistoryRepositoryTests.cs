@@ -22,7 +22,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         new DurableFieldInfo(5, TypeTag.UInt64));
 
     [Fact]
-    public void EventAndStateShareStateSourceAndColdResumeKeepsGraphAliases() {
+    public void IndependentEventKeepsStateBaselineAndColdResumeKeepsGraphAliases() {
         Node child = new() { Value = 2, Text = new string('s', 5) };
         Node world = new() { Left = child, Right = child, Value = 1, Text = child.Text };
         child.Left = world;
@@ -37,14 +37,14 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             rootId = session.StateId!.Value;
             Assert.Same(world, ((Node)session.State!));
             Assert.False(File.Exists(Path.Combine(_root, "publication.rbf")));
-            eventAddress = WorkTestAccess.Address(session, session.CommitEvent(new Node { Value = 8 }, parameters: NoRebase).Id);
+            eventAddress = WorkTestAccess.Address(session, session.CommitEvent(new Node { Value = 8 }).Id);
             Assert.Equal(first, session.StateRevisionAddress!.Value);
             Assert.IsType<Node>(repository.LoadEvent(session.BaseCommitId));
             child.Value = 3;
             second = WorkTestAccess.Address(session, session.CommitState(parameters: NoRebase).Id);
             Assert.Equal(CommitKind.State, WorkTestAccess.Kind(session));
             Assert.Same(child, ((Node)session.State!).Right);
-            session.CommitEvent(new Node { Value = 9 }, parameters: NoRebase);
+            session.CommitEvent(new Node { Value = 9 });
             child.Value = 4;
             third = WorkTestAccess.Address(session, session.CommitState(parameters: NoRebase).Id);
             Assert.Equal(third, Describe(repository, repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id).Address);
@@ -54,7 +54,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
             Assert.Null(MechanismFixture.Snapshot(store, first).SourceGraph);
-            Assert.Equal(first, MechanismFixture.Snapshot(store, eventAddress).SourceGraph);
+            Assert.Null(MechanismFixture.Snapshot(store, eventAddress).SourceGraph);
             Assert.Equal(first, MechanismFixture.Snapshot(store, second).SourceGraph);
             ObjectVersionRecord write = Assert.Single(StorageTestData.LocalRecords(store, second));
             Assert.Equal(ObjectVersionKind.Delta, write.Kind);
@@ -86,7 +86,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.NotSame(world, session.State);
             world = (Node)session.State!;
             child = world.Left!;
-            session.CommitEvent(new Node { Left = child, Right = child, Value = 7 }, parameters: NoRebase);
+            session.CommitEvent(new Node { Left = child, Right = child, Value = 7 });
             Assert.Equal((byte)7, ((Node)repository.LoadEvent(session.BaseCommitId)).Value);
         }
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
@@ -117,7 +117,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", initial, parameters: NoRebase).Id);
         initial = (Node)session.State!;
         ObjectId originalId = session.StateId!.Value;
-        session.CommitEvent(new Node(), parameters: NoRebase);
+        session.CommitEvent(new Node());
         repository.OperationStageObserver = checkpoint => {
             if (checkpoint == RepositoryOperationStage.AfterPrepare) replacement.Value = 3;
         };
@@ -130,7 +130,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         Assert.Same(replacement, ((Node)session.State!));
         Assert.NotEqual(originalId, session.StateId!.Value);
         Assert.Equal((byte)2, ((Node)repository.LoadState(published)).Value);
-        session.CommitEvent(new Node(), parameters: NoRebase);
+        session.CommitEvent(new Node());
         var next = session.CommitState(parameters: NoRebase).Id;
         Assert.Equal((byte)3, ((Node)repository.LoadState(next)).Value);
     }
@@ -179,8 +179,8 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             using WorkingCopy other = repository.OpenWorkingCopy(BranchNamed(repository, "other"));
             Assert.Equal(first, other.BaseCommitId);
             Assert.Equal(nextState, repository.ReadCurrentCommit(session.BranchId).Commit.Id);
-            session.CommitEvent(new Node(), parameters: NoRebase);
-            CommitId nextEvent = session.CommitEvent(new Node(), parameters: NoRebase).Id;
+            session.CommitEvent(new Node());
+            CommitId nextEvent = session.CommitEvent(new Node()).Id;
             Assert.Equal(CommitKind.Event, repository.ReadCommitInfo(nextEvent).Kind);
             Assert.Throws<ArgumentException>(() => repository.LoadState(nextEvent));
             session.CommitState(parameters: NoRebase);
@@ -196,11 +196,11 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         WorkingCopy closed;
         using (WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id)) {
             closed = session; initial = session.BaseCommitId;
-            e = session.CommitEvent(new Node { Value = 8 }, parameters: NoRebase).Id;
+            e = session.CommitEvent(new Node { Value = 8 }).Id;
             ((Node)session.State!).Value = 2;
             completed = session.CommitState(parameters: NoRebase).Id;
         }
-        Assert.Throws<ObjectDisposedException>(() => closed.CommitEvent(new Node(), parameters: NoRebase).Id);
+        Assert.Throws<ObjectDisposedException>(() => closed.CommitEvent(new Node()).Id);
         repository.ForkBranch(initial, "from-state");
         repository.ForkBranch(e, "from-event");
         using (WorkingCopy fork = repository.OpenWorkingCopy(BranchNamed(repository, "from-event"))) {
@@ -256,7 +256,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Left = new Node { Value = 2 } }, parameters: NoRebase).Id);
         active = session;
         FrameAddress first = session.StateRevisionAddress!.Value;
-        session.CommitEvent(new Node(), parameters: NoRebase);
+        session.CommitEvent(new Node());
         fail = true;
         Assert.Throws<InvalidDataException>(() => session.CommitState(parameters: NoRebase).Id);
         Assert.Equal(first, session.StateRevisionAddress!.Value);
@@ -276,7 +276,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using (Repository repository = CreateRepository()) {
             using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
             first = session.StateRevisionAddress!.Value;
-            CommitId eventHead = session.CommitEvent(new Node { Value = 7 }, parameters: NoRebase).Id;
+            CommitId eventHead = session.CommitEvent(new Node { Value = 7 }).Id;
             ((Node)session.State!).Value = 2;
             repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)point) throw new IOException("interrupted"); };
             RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => session.CommitState(parameters: NoRebase).Id);
@@ -298,7 +298,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         FrameAddress published;
         using (Repository repository = CreateRepository()) {
             using WorkingCopy session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }, parameters: NoRebase).Id);
-            session.CommitEvent(new Node(), parameters: NoRebase);
+            session.CommitEvent(new Node());
             ((Node)session.State!).Value = 9;
             repository.SaveStageObserver = checkpoint => { if (checkpoint == (RepositorySaveStage)point) throw new IOException("lost completion"); };
             RepositoryPublicationException error = Assert.Throws<RepositoryPublicationException>(() => session.CommitState(parameters: NoRebase).Id);
@@ -349,7 +349,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             using var session = namedFork ? repository.OpenWorkingCopy(repository.ForkBranch(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id, "child").Id) : repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.Equal((byte)11, ((Node)session.State!).Value);
             Node same = ((Node)session.State!);
-            session.CommitEvent(new Node(), parameters: NoRebase);
+            session.CommitEvent(new Node());
             upgraded = WorkTestAccess.Address(session, session.CommitState(parameters: NoRebase).Id);
             unchanged = Describe(repository, Save(session)).Address;
             same.Value = 12;
@@ -431,7 +431,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
     private sealed class WholeWorld : IDurableObject { internal Node? Alice; internal Node? Bob; }
 
     private static CommitId Save(WorkingCopy session) {
-        session.CommitEvent(new Node(), parameters: NoRebase);
+        session.CommitEvent(new Node());
         return session.CommitState(parameters: NoRebase).Id;
     }
     private Dictionary<string, (byte[] Bytes, DateTime Modified)> SnapshotFiles() => Directory.GetFiles(_root, "*", SearchOption.AllDirectories)

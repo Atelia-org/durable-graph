@@ -89,7 +89,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
         using DataStore data = DataStore.Create(_path);
         using GraphRecordStore graphs = new(data);
         ObjectVersionRecord map = bookmark ? BookmarkRow(1, BookmarkMap()) : BranchRow(1, BranchMap());
-        StoredGraphRevision business = graphs.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [map]));
+        StoredGraphRevision business = graphs.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [map]));
         Assert.Contains("Meta", Assert.Throws<InvalidDataException>(() => Read(graphs, business.Address, bookmark)).Message);
         StoredGraphRevision wrongRoot = graphs.AppendMeta(null, new(null, new(2), [map, Text(2, "text root")]));
         Assert.Contains("exact Dictionary root", Assert.Throws<InvalidDataException>(() => Read(graphs, wrongRoot.Address, bookmark)).Message);

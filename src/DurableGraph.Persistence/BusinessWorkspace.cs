@@ -51,9 +51,10 @@ internal sealed class BusinessWorkspace {
             if (!_models.TryGetCurrentModel(root.GetType(), out StateModelBinding? model)) {
                 throw new ArgumentException("Root must have its actual domain type registered.", nameof(root));
             }
-            context = _capture.BeginCapture(_models);
+            CaptureSession capture = independentSnapshot ? new() : _capture;
+            context = capture.BeginCapture(_models);
             ObjectId rootId = model!.AddRoot(context, root);
-            _pending = new(this, context, context.Seal(), root, rootId, independentSnapshot);
+            _pending = new(this, capture, context, context.Seal(), root, rootId, independentSnapshot);
             return _pending;
         } catch {
             context?.Dispose();
@@ -64,8 +65,9 @@ internal sealed class BusinessWorkspace {
 
     internal IReadOnlyList<PreparedCapturedObject> PrepareContents(BusinessSaveCandidate candidate) {
         RequirePreparing(candidate);
-        return _baseline is null ? _capture.Prepare(candidate.Graph).Objects
-            : _capture.PrepareAgainst(candidate.Graph, _baseline.CurrentDtos);
+        return candidate.IsIndependentSnapshot || _baseline is null
+            ? candidate.CaptureSession.Prepare(candidate.Graph).Objects
+            : candidate.CaptureSession.PrepareAgainst(candidate.Graph, _baseline.CurrentDtos);
     }
 
     internal void CompletePreparation(BusinessSaveCandidate candidate, NormalizedGraphState? next) {
@@ -129,9 +131,10 @@ internal sealed class BusinessSaveCandidate : IDisposable {
     private NormalizedGraphState? _next;
     private NormalizedGraphState? _installation;
 
-    internal BusinessSaveCandidate(BusinessWorkspace owner, CaptureContext context, CapturedGraph graph,
+    internal BusinessSaveCandidate(BusinessWorkspace owner, CaptureSession captureSession, CaptureContext context, CapturedGraph graph,
         IDurableObject root, ObjectId rootId, bool independentSnapshot) {
         _owner = owner;
+        CaptureSession = captureSession;
         _context = context;
         Graph = graph;
         Root = root;
@@ -140,6 +143,7 @@ internal sealed class BusinessSaveCandidate : IDisposable {
     }
 
     internal CapturedGraph Graph { get; }
+    internal CaptureSession CaptureSession { get; }
     internal IDurableObject Root { get; }
     internal ObjectId RootId { get; }
     internal bool IsIndependentSnapshot { get; }

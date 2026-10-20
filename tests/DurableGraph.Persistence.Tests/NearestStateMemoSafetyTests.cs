@@ -25,7 +25,7 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
         PendingRepositorySave? rejected = null;
         Assert.Throws<InvalidDataException>(() => rejected = resources.PrepareSaveGroup(() => new(
             [new(seed.Branch, seed.Tip.CommitId, null, StoredGraphKind.State, default,
-                new(wrong, new(1), [ObjectVersionRecord.CreateBase(1, [99])]), wrong)], null), () => aborts++));
+                new(wrong, new(1), [ObjectVersionRecord.CreateBase(1, [99])]))], null), () => aborts++));
         Assert.Null(rejected);
         Assert.Equal(1, aborts);
         Assert.Equal(frames, resources.GraphStore.AppendedFrames);
@@ -73,7 +73,7 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
         long frames = resources.GraphStore.AppendedFrames;
         Assert.Throws<InvalidDataException>(() => resources.PrepareSaveGroup(() => new(
             [new(eventOnly.BranchId, eventOnly.CommitId, null, StoredGraphKind.State, default,
-                new(foreign.Business.Address, new(1), []), foreign.Business.Address)], null)));
+                new(foreign.Business.Address, new(1), []))], null)));
         Assert.Equal(frames, resources.GraphStore.AppendedFrames);
         Assert.False(resources.HasPendingSave);
         Assert.False(resources.IsFaulted);
@@ -204,7 +204,7 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
         HeadEntryId? expected = branch is { } id ? resources.ReadCurrent(id).Id : null;
         using PendingRepositorySave pending = resources.PrepareSaveFrom(branch, expected, branch is null ? "main" : null,
             kind, new byte[] { value }, () => (
-                new(stateSource, new(1), [ObjectVersionRecord.CreateBase(1, [value])]),
+                new(kind == StoredGraphKind.Event ? null : stateSource, new(1), [ObjectVersionRecord.CreateBase(1, [value])]),
                 resources.SharedSchemaRoot is null ? new(null, new(1), [ObjectVersionRecord.CreateBase(1, [0x7F])]) : null));
         return resources.CommitSave(pending);
     }

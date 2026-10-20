@@ -24,8 +24,8 @@ public sealed partial class DB078HistoryTests {
         CommitId eventHead;
         using (Repository repository = Create()) {
             using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 1 }, parameters: NoRebase).Id);
-            main.CommitEvent(new Message { Value = 2 }, parameters: NoRebase);
-            eventHead = main.CommitEvent(new Message { Value = 3 }, parameters: NoRebase).Id;
+            main.CommitEvent(new Message { Value = 2 });
+            eventHead = main.CommitEvent(new Message { Value = 3 }).Id;
         }
         using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false))) {
             using WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
@@ -36,7 +36,7 @@ public sealed partial class DB078HistoryTests {
             Assert.Equal((byte)1, Assert.IsType<Alpha>(child.State).Value);
             Assert.NotSame(main.State, child.State);
             Assert.ThrowsAny<Exception>(() => repository.LoadEvent(source));
-            Assert.ThrowsAny<Exception>(() => child.CommitEvent(new Message(), parameters: NoRebase).Id);
+            Assert.ThrowsAny<Exception>(() => child.CommitEvent(new Message()).Id);
             Assert.Equal(source, child.BaseCommitId);
             CommitId saved = child.CommitState(parameters: NoRebase).Id;
             Assert.Equal(source, Previous(repository, saved));
@@ -51,8 +51,8 @@ public sealed partial class DB078HistoryTests {
     [Fact]
     public void EmptyRegistryForksEventOnlyHistoryThenIndependentBranchesInstallAndReplaceStateTypes() {
         using (Repository repository = Create()) {
-            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }, parameters: NoRebase).Id);
-            main.CommitEvent(new Message { Value = 2 }, parameters: NoRebase);
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }).Id);
+            main.CommitEvent(new Message { Value = 2 });
         }
         using (Repository metadata = Repository.OpenExisting(_root, new StateModelRegistry())) {
             using WorkingCopy main = metadata.OpenWorkingCopy(BranchNamed(metadata, "main"));
@@ -107,7 +107,7 @@ public sealed partial class DB078HistoryTests {
     public void MissingNearestStateModelDoesNotTurnForkIntoEmptyWorkspaceAndRefOnlyStillWorks() {
         using (Repository repository = Create()) {
             using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha(), parameters: NoRebase).Id);
-            main.CommitEvent(new Message(), parameters: NoRebase);
+            main.CommitEvent(new Message());
         }
         using Repository repositoryWithoutModels = Repository.OpenExisting(_root, new StateModelRegistry());
         CommitId source = repositoryWithoutModels.ReadCurrentCommit(BranchNamed(repositoryWithoutModels, "main")).Commit.Id;

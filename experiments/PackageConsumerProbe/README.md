@@ -3,6 +3,7 @@
 实际 PackageReference 消费是源码测试之外的交付验证。活动门禁各保范围，运行参数、包来源、
 history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
 DB-096 的活动入口已完成迁移与普通包运行，准确 G/S、回归和边界见[验收记录](../../docs/design-branches/0096-history-and-head-model/package-cutover-validation.md)；旧包记录只保其来源版本资格。
+DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自有完整 Base／目录，含 Event 的 Pair 独立恢复；新包资格仍须按[该片合同](../../docs/design-branches/0097-independent-event-graphs/README.md)另行运行，不沿用 DB-096 回执。
 
 ## 活动门禁
 

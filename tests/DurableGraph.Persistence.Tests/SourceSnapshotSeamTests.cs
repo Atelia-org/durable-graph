@@ -20,14 +20,14 @@ public sealed class SourceSnapshotSeamTests : IDisposable {
 
         for (int attempt = 0; attempt < 2; attempt++) {
             long before = store.BusinessGraphQualificationCount;
-            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(selected, selectEvent ? state : null), configuration);
+            DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(selected, null), configuration);
             // Count complete qualification, not physical decode/cache misses. Meta loading is excluded.
             Assert.Equal(before + 1, store.BusinessGraphQualificationCount);
             StoredGraphRevision snapshot = Assert.IsType<StoredGraphRevision>(decoded.SourceSnapshot);
             Assert.Equal(selected, snapshot.Address);
             Assert.Same(store, snapshot.SourceOwner);
             Assert.Equal(selectEvent ? StoredGraphKind.Event : StoredGraphKind.State, snapshot.Kind);
-            Assert.Equal(selectEvent ? state : (FrameAddress?)null, snapshot.SourceGraph);
+            Assert.Null(snapshot.SourceGraph);
             Assert.Equal(snapshot.SchemaRoot, decoded.SelectedSchemaView!.Snapshot!.Address);
             Assert.Equal(selectEvent ? 51 : 7, decoded.GetRequired(snapshot.RootId).GetState<WidgetState>().Segment0Field1);
 
@@ -42,7 +42,7 @@ public sealed class SourceSnapshotSeamTests : IDisposable {
             }
 
             before = store.BusinessGraphQualificationCount;
-            DB087Widget root = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(store, store.ReadBusinessGraph(selected, selectEvent ? state : null), Models()));
+            DB087Widget root = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(store, store.ReadBusinessGraph(selected, null), Models()));
             Assert.Equal(before + 1, store.BusinessGraphQualificationCount);
             Assert.Equal(selectEvent ? 51 : 7, root.Value);
         }

@@ -66,7 +66,9 @@ public sealed partial class Repository {
                     if (request.Work.BaseCommitId != request.ExpectedBaseCommitId) {
                         throw new InvalidOperationException("The commit request's original working-copy baseline has changed.");
                     }
-                    ReadAmplificationBaseBudgetPolicy.ValidateParameters(request.Parameters ?? DefaultPolicy);
+                    if (request.Kind == StoredGraphKind.State) {
+                        ReadAmplificationBaseBudgetPolicy.ValidateParameters(request.Parameters ?? DefaultPolicy);
+                    }
                     BusinessEntryPayloadCodec.ValidateSummaryLength(request.Summary.Length);
                 }
                 _storageFacade.EnsureSaveUsable();
@@ -88,7 +90,7 @@ public sealed partial class Repository {
                     writes[i] = request.Work.SaveSession.PrepareOwned(captures[i]!, catalog.View, request.Parameters ?? DefaultPolicy);
                     _storageFacade.EnsureSaveUsable();
                     members[i] = new(request.BranchId.Value, request.ExpectedBaseCommitId.Value, null, request.Kind,
-                        request.Summary, writes[i].Write, request.Work.StateRevisionAddress);
+                        request.Summary, writes[i].Write);
                 }
                 return new(members, catalog.Write);
             }, AbortAll);

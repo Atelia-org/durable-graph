@@ -43,8 +43,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
         using (Repository repository = Create()) {
             using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", root, parameters: NoRebase).Id);
             s0 = checkout.BaseCommitId;
-            e1 = checkout.CommitEvent(new Message { Value = 11 }, parameters: NoRebase).Id;
-            e2 = checkout.CommitEvent(new Message { Value = 12 }, parameters: NoRebase).Id;
+            e1 = checkout.CommitEvent(new Message { Value = 11 }).Id;
+            e2 = checkout.CommitEvent(new Message { Value = 12 }).Id;
             root = Assert.IsType<Alpha>(checkout.State);
             Assert.Equal(s0, checkout.StateSourceCommitId);
             root.Value = 2;
@@ -64,16 +64,15 @@ public sealed partial class DB078HistoryTests : IDisposable {
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             Assert.Null(Snapshot(resources, s0).SourceGraph);
-            foreach (CommitId address in new[] { e1, e2, s1 }) {
-                Assert.Equal(Describe(resources, s0).Address, Snapshot(resources, address).SourceGraph);
-            }
+            foreach (CommitId address in new[] { e1, e2 }) { Assert.Null(Snapshot(resources, address).SourceGraph); }
+            Assert.Equal(Describe(resources, s0).Address, Snapshot(resources, s1).SourceGraph);
             Assert.Equal(Describe(resources, s1).Address, Snapshot(resources, s2).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         Assert.Equal((byte)3, Assert.IsType<Alpha>(cold.State).Value);
         Assert.Equal(s2, cold.BaseCommitId);
-        CommitId nextEvent = cold.CommitEvent(new Message(), parameters: NoRebase).Id;
+        CommitId nextEvent = cold.CommitEvent(new Message()).Id;
         Assert.Equal(s2, Previous(reopened, nextEvent));
         Assert.Equal(s2, cold.StateSourceCommitId);
     }
@@ -82,12 +81,12 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void EventOnlyColdCheckoutNeedsNoModelsAndFirstStateCanReplaceTypeAndSaveAgain() {
         CommitId e0, e1, s0, s1, s2;
         using (Repository repository = Create()) {
-            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 7 }, parameters: NoRebase).Id);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 7 }).Id);
             e0 = checkout.BaseCommitId;
             Assert.Null(checkout.State);
             Assert.Null(checkout.StateId);
             Assert.Null(checkout.StateRevisionAddress);
-            e1 = checkout.CommitEvent(new Message { Value = 8 }, parameters: NoRebase).Id;
+            e1 = checkout.CommitEvent(new Message { Value = 8 }).Id;
             Assert.Null(repository.GetPreviousState(e1));
         }
         using (Repository repository = Repository.OpenExisting(_root, new StateModelRegistry())) {
@@ -170,7 +169,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void SameClrTypeMayTakeEitherRoleAndReadPairPreservesArgumentOrder() {
         using Repository repository = Create();
-        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }, parameters: NoRebase).Id);
+        using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }).Id);
         CommitId e = checkout.BaseCommitId;
         CommitId s = checkout.CommitState(new Message { Value = 2 }, parameters: NoRebase).Id;
         Assert.Equal(CommitKind.Event, repository.ReadCommitInfo(e).Kind);
@@ -187,7 +186,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
         using Repository repository = Create();
         using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 1 }, parameters: NoRebase).Id);
         CommitId first = checkout.BaseCommitId;
-        CommitId message = checkout.CommitEvent(new Message { Value = 2 }, parameters: NoRebase).Id;
+        CommitId message = checkout.CommitEvent(new Message { Value = 2 }).Id;
         CommitId replacement = checkout.CommitState(new Beta { Value = 3 }, parameters: NoRebase).Id;
         EventCheckpoint eventView = Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(message));
         Assert.Equal((byte)2, Assert.IsType<Message>(eventView.Event).Value);
@@ -204,7 +203,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     [Fact]
     public void MissingPreviousEventModelFailsCheckpointEvenWhenCurrentStateIsReadable() {
         using (Repository repository = Create()) {
-            using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }, parameters: NoRebase).Id);
+            using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }).Id);
             branch.CommitState(new Alpha { Value = 2 }, parameters: NoRebase);
         }
         using Repository stateOnly = Repository.OpenReadOnlyExisting(_root, Models(includeMessage: false));
@@ -222,8 +221,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
         CommitId e2;
         using (Repository repository = Create()) {
             using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 4 }, parameters: NoRebase).Id);
-            checkout.CommitEvent(new Message { Value = 5 }, parameters: NoRebase);
-            e2 = checkout.CommitEvent(new Message { Value = 6 }, parameters: NoRebase).Id;
+            checkout.CommitEvent(new Message { Value = 5 });
+            e2 = checkout.CommitEvent(new Message { Value = 6 }).Id;
         }
         using (Repository repository = Repository.OpenExisting(_root, Models(includeMessage: false))) {
             using WorkingCopy checkout = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
@@ -242,7 +241,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     public void PredictableMissingRootAndNoStateFailuresDoNotCaptureOrWrite() {
         int captures = 0;
         using (Repository repository = Create(Models(onCapture: () => captures++))) {
-            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message(), parameters: NoRebase).Id);
+            using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message()).Id);
         }
         int captured = captures;
         var before = SnapshotFiles();
@@ -251,9 +250,9 @@ public sealed partial class DB078HistoryTests : IDisposable {
             CommitId original = checkout.BaseCommitId;
             Assert.Throws<InvalidOperationException>(() => checkout.CommitState(parameters: NoRebase).Id);
             Assert.Throws<ArgumentNullException>(() => checkout.CommitState(nextState: null!, parameters: NoRebase).Id);
-            Assert.Throws<ArgumentNullException>(() => checkout.CommitEvent(null!, parameters: NoRebase).Id);
+            Assert.Throws<ArgumentNullException>(() => checkout.CommitEvent(null!).Id);
             Assert.ThrowsAny<Exception>(() => checkout.CommitState(new Unregistered(), parameters: NoRebase).Id);
-            Assert.ThrowsAny<Exception>(() => checkout.CommitEvent(new Unregistered(), parameters: NoRebase).Id);
+            Assert.ThrowsAny<Exception>(() => checkout.CommitEvent(new Unregistered()).Id);
             Assert.Equal(captured, captures);
             Assert.Null(checkout.State);
             Assert.Equal(original, checkout.BaseCommitId);
@@ -282,7 +281,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
         CommitId saved;
         BranchId branch;
         using (Repository repository = Create()) {
-            branch = repository.CreateRootBranchFromEvent("main", new Message(), parameters: NoRebase).Id;
+            branch = repository.CreateRootBranchFromEvent("main", new Message()).Id;
             saved = repository.ReadCurrentCommit(branch).Commit.Id;
             Assert.Equal(saved, repository.ReadCommitInfo(saved).Id);
             Assert.Single(new HashSet<CommitId> { saved, repository.ReadFrames(branch)[0].Id });
@@ -308,14 +307,14 @@ public sealed partial class DB078HistoryTests : IDisposable {
         using (Repository repository = Create()) {
             using (WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Alpha { Value = 1 }, parameters: NoRebase).Id)) {
                 root = checkout.BaseCommitId;
-                mainEvent = checkout.CommitEvent(new Message { Value = 2 }, parameters: NoRebase).Id;
+                mainEvent = checkout.CommitEvent(new Message { Value = 2 }).Id;
             }
             repository.ForkBranch(root, "other");
             using (WorkingCopy other = repository.OpenWorkingCopy(BranchNamed(repository, "other"))) {
                 otherState = other.CommitState(new Beta { Value = 8 }, parameters: NoRebase).Id;
             }
             using (WorkingCopy main = repository.OpenWorkingCopy(BranchNamed(repository, "main"))) {
-                mainEvent2 = main.CommitEvent(new Message { Value = 3 }, parameters: NoRebase).Id;
+                mainEvent2 = main.CommitEvent(new Message { Value = 3 }).Id;
                 mainState = main.CommitState(parameters: NoRebase).Id;
             }
             Assert.Equal(mainEvent, Previous(repository, mainEvent2));
@@ -330,7 +329,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            foreach (CommitId address in new[] { otherState, mainEvent2, mainState }) {
+            Assert.Null(Snapshot(resources, mainEvent2).SourceGraph);
+            foreach (CommitId address in new[] { otherState, mainState }) {
                 Assert.Equal(Describe(resources, root).Address, Snapshot(resources, address).SourceGraph);
             }
         }

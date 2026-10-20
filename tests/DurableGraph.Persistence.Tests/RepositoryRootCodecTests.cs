@@ -16,7 +16,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
         var initialBranches = resources.Heads.ReadHead(1).Unwrap();
         var initialShared = resources.Heads.ReadHead(2).Unwrap();
         var initialBookmarks = resources.Heads.ReadHead(3).Unwrap();
-        Assert.Equal("P0R3"u8.ToArray(), initialBranches.Payload[..4].ToArray());
+        Assert.Equal("P0R4"u8.ToArray(), initialBranches.Payload[..4].ToArray());
         Assert.Equal("P0S1"u8.ToArray(), initialShared.Payload[..4].ToArray());
         Assert.Equal("P0T2"u8.ToArray(), initialBookmarks.Payload[..4].ToArray());
         Assert.Null(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, initialBranches.Payload));
@@ -42,12 +42,13 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     [Theory]
     [InlineData('1')]
     [InlineData('2')]
+    [InlineData('3')]
     public void LegacyThreeHeadDirectoryRejectsBothOpenModesWithoutMutation(char version) {
         byte[] payload;
         using (Repository repository = Repository.CreateNew(_root, SharedReadModel.Models())) {
             repository.CreateRootBranchFromState("main", new Node { Value = 7 });
             payload = ResourcesOf(repository).Heads.ReadHead(1).Unwrap().Payload.ToArray();
-            Assert.True(payload.AsSpan().StartsWith("P0R3"u8));
+            Assert.True(payload.AsSpan().StartsWith("P0R4"u8));
         }
         using (var data = Atelia.FrameStore.FrameStore.Open(Path.Combine(_root, "data")))
         using (var heads = PublicationStore.Open(Path.Combine(_root, "versions"), data)) {
@@ -103,7 +104,7 @@ public sealed class RepositoryRootCodecTests : IDisposable {
                 switch (mutation) {
                     case "magic": payload[0] = 0; break;
                     case "version": payload[3] = (byte)'9'; break;
-                    case "header-role": (headId == 2 ? "P0R3"u8 : "P0S1"u8).CopyTo(payload); break;
+                    case "header-role": (headId == 2 ? "P0R4"u8 : "P0S1"u8).CopyTo(payload); break;
                     case "presence": payload[4] = 2; break;
                     case "truncated": payload = payload[..^1]; break;
                     case "trailing": payload = [.. payload, 0]; break;

@@ -342,10 +342,10 @@ public sealed partial class RepositoryResources {
             }
             BusinessEntryPayloadCodec.ValidateSummaryLength(summary.Length);
             byte[] ownedSummary = summary.ToArray();
-            FrameAddress? source = ValidateSaveTarget(branch, expected, rootLabel);
+            _ = ValidateSaveTarget(kind, branch, expected, rootLabel);
             var prepared = produce();
             EnsureSaveUsable();
-            return new([new(branch, expected, rootLabel, kind, ownedSummary, prepared.Business, source)], prepared.Catalog);
+            return new([new(branch, expected, rootLabel, kind, ownedSummary, prepared.Business)], prepared.Catalog);
         }, abort);
 
     internal RepositorySaveResult CommitSave(PendingRepositorySave pending,

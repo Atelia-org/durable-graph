@@ -137,7 +137,7 @@ DB-078 已形成无缓存优化也正确的产品停点；[DB-083](../docs/desig
 已验证的 head/H 随 DTO 基线增量推进，受控热保存免除旧对象链重复读取；精确 payload、Event/State 与失败边界保持。
 独立审阅、前后测量、源码回归与真实包验证已通过。
 下一步按真实长轨迹反馈评估 map 回溯与全量 Base 准备，重访条件见路线图，测量证据仅保留在本片。
-当前目录用员工 Dictionary 的实际 Base/Delta payload 与重建成本选择表示，见 [GraphRecordStore](DurableGraph.Persistence/GraphRecordStore.cs)；Event 不接受 State 基线。
+State/meta 目录用员工 Dictionary 的实际 Base/Delta payload 与重建成本选择表示，见 [GraphRecordStore](DurableGraph.Persistence/GraphRecordStore.cs)；DB-097 的 Event 使用无来源完整目录和对象 Base，不参与重建策略。
 
 [DB-068：record class 领域模型](../docs/design-branches/0068-record-class-model-slice/README.md) 已贯通：
 IDurableObject 完全替代并移除 DurableBase，普通 class/record 共用资格和用户自建继承链；
@@ -296,13 +296,13 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   沿反向引用剔除依赖非候选者；剩余只读闭包共享 Allocate/Hydrate，稳定环可整体复用，changed-child 会使 owner 分裂。
   共享还要求同 reader-issued 环境；string 在既有 same-ID/head 候选内按引用快路／Ordinal 完整内容证明，不 intern 不同 ID 的等值非空串。只读结果不导入可编辑基线。
   两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
-  共同 workspace／候选在 State 确认后才安装原实例／新根；独立 Event 使用最近 State 的 DTO/身份和 cursor，完成后 Discard，不清除 State rewrite。
-  Event 完整目录按 source − candidate 产生 Removes，保实际 local Base/Delta 与内容来源 external heads；后继 State 仍相对最近 State。
+  共同 workspace／候选在 State 确认后才安装原实例／新根；DB-097 的 Event 每次使用新 CaptureSession 和局部 ID，完整 Base、无来源及 Remove；完成后释放候选，不改变 State 根、基线、cursor 或 rewrite。
+  Event 的完整目录只能选择自有全 Base batch；不同图的同号 ID 不表示同一对象。任一包含 Event 的 Pair 使用独立物化，保同操作 mutable 工厂守卫；State–State 继续按上述完整证明共享。后继 State 仍相对最近 State。
 - Repository 拥有 RepositoryResources 的 FS/HS 底座资源；操作串行，每个 BranchId 最多一个活动 WorkingCopy，显式 Dispose 释放编辑占用。
   CreateRootBranchFromState/Event 先保存真实非空业务根并登记 D，再返回 BranchInfo；OpenWorkingCopy 单独恢复对象，Event-only 历史可以 State=null。
   ForkBranch 固定继承准确 Commit，不制造 clone Commit、不恢复对象；创建成功后可立即列出、冷重开和继续，后续打开失败不撤销已登记分支。
   标签可重复且不用于定位；父子线均能继续。从继承历史选择 A/a1 开新线，其直接父仍为 A。
-  业务历史权威为 HS Entry 顺序与固定 fork 来源；业务图不持久化 Parent，内容来源取该 Commit 严格之前的最近 State。
+  业务历史权威为 HS Entry 顺序与固定 fork 来源；业务图不持久化 Parent。State 内容来源取该 Commit 严格之前的最近 State；Event 内容来源恒空，GetPreviousState 仍查询历史关联。
   BranchId 是4B继续目标，CommitId是12B准确位置，可持久保存并在同库重开使用；跨库误用仅作概率诊断，仓库由调用者选择。
   State/Event 可自由排列；成功 State 安装原实例和内容基线，Event 只推进 BaseCommitId，不保存 State 编辑或消费其 rewrite。
   CommitRequest 保原 WorkingCopy、准确 Base、根引用和自有摘要，不提前捕获或设 Consumed；CommitBranches 统一捕获/Schema候选并共同发布、逐成员安装。

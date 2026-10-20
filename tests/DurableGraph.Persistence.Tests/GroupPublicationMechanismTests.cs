@@ -72,10 +72,12 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
                 Assert.Equal(worldList, delta.ObjectId);
                 Assert.Equal(worldListPrior, delta.PriorAddress);
                 Assert.Equal(worldSeed, stateWrite.Write.SourceGraph);
-                Assert.Equal(playerSeed, eventWrite.Write.SourceGraph);
+                Assert.Null(eventWrite.Write.SourceGraph);
+                Assert.Empty(eventWrite.Write.RemovedIds);
+                Assert.All(eventWrite.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
                 StoredGraphRevision meta = repository.Store.AppendMeta(accepted.Snapshot!.Address, common.Write!);
-                StoredGraphRevision state = repository.Store.AppendBusiness(StoredGraphKind.State, worldSeed, meta.Address, stateWrite.Write);
-                StoredGraphRevision eventGraph = repository.Store.AppendBusiness(StoredGraphKind.Event, playerSeed, meta.Address, eventWrite.Write);
+                StoredGraphRevision state = repository.Store.AppendBusiness(StoredGraphKind.State, meta.Address, stateWrite.Write);
+                StoredGraphRevision eventGraph = repository.Store.AppendBusiness(StoredGraphKind.Event, meta.Address, eventWrite.Write);
                 commonSchema = meta.Address;
                 groupedWorld = state.Address;
                 groupedEvent = eventGraph.Address;

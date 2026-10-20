@@ -101,11 +101,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             // They are bounded internal corruption fixtures, not publishable business candidates.
             // Only the removed CLR ancestor's slot refers to ID 10 in this parent.
             // Checking only current or leaf-declared slots would incorrectly accept these views.
-            missingString = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot, new(second, new(1), [], [10])).Address;
-            wrongKind = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot,
+            missingString = store.AppendBusiness(StoredGraphKind.State, schemaRoot, new(second, new(1), [], [10])).Address;
+            wrongKind = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(second, new(1), [Durable(preparedCatalog.View, 10, currentSchema, [7, 8, 12])])).Address;
             // ID 99 is last: all earlier objects have decoded before this trailing-byte error.
-            malformed = store.AppendBusiness(StoredGraphKind.State, third, schemaRoot,
+            malformed = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(third, new(1), [Durable(preparedCatalog.View, 99, otherSchema, [11, 18, 13, 0])])).Address;
 
             // Equal leaf key and declared fields cannot hide a changed complete ancestor layout.
@@ -118,7 +118,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             PreparedSchemaCatalogWrite incompatibleCatalog = incompatible.Prepare();
             FrameAddress incompatibleRoot = store.AppendMeta(null, incompatibleCatalog.Write!).Address;
             Assert.Equal(differentLeaf, SchemaCatalogView.Load(store, incompatibleRoot).Schemas[new(oldSchema.Type, oldSchema.Version)]);
-            mismatchedBase = store.AppendBusiness(StoredGraphKind.State, third, incompatibleRoot, new(third, new(1), [])).Address;
+            mismatchedBase = store.AppendBusiness(StoredGraphKind.State, incompatibleRoot, new(third, new(1), [])).Address;
             Assert.Equal(schemaRoot, store.ReadObjectChain(store.ReadBusinessGraph(mismatchedBase, third), 1).Entries[0].SchemaRoot);
             Assert.Equal(newBase, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);

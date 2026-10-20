@@ -130,7 +130,7 @@ public sealed partial class SplitBusinessWorkspaceTests : IDisposable {
         using (PreparedFixtureSave snapshot = session.Prepare(instance, StoredGraphKind.Event, NoRebase)) {
             Assert.Equal(ObjectVersionKind.Base, Assert.Single(snapshot.Business.Write.Records).Kind);
             StoredGraphRevision eventGraph = snapshot.Commit().Business;
-            Assert.Equal(old, eventGraph.SourceGraph);
+            Assert.Null(eventGraph.SourceGraph);
             Assert.Equal(new uint[] { 1 }, eventGraph.ObjectHeads.Keys);
         }
         Assert.Same(source, session.Baseline);

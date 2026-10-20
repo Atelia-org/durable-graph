@@ -104,7 +104,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(s0, session.StateSource.Address);
 
             using (PreparedFixtureSave eventSave = session.Prepare(root, StoredGraphKind.Event)) {
-                Assert.Equal(s0, eventSave.Business.Write.SourceGraph);
+                Assert.Null(eventSave.Business.Write.SourceGraph);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(eventSave.Business.Write.Records).Kind);
                 RepositorySaveResult result = eventSave.Commit();
                 e1 = result.Business.Address;
@@ -121,12 +121,12 @@ public sealed partial class DurableSchemaGeneratorTests {
             // Identical E2 still needs V2 Base relative to S0: E1 cannot consume rewrite.
             using (PreparedFixtureSave eventSave = session.Prepare(root, StoredGraphKind.Event)) {
                 Assert.Null(eventSave.Catalog.Write);
-                Assert.Equal(s0, eventSave.Business.Write.SourceGraph);
+                Assert.Null(eventSave.Business.Write.SourceGraph);
                 Assert.Equal(ObjectVersionKind.Base, Assert.Single(eventSave.Business.Write.Records).Kind);
                 RepositorySaveResult result = eventSave.Commit();
                 e2 = result.Business.Address;
                 Assert.Equal(e1, MechanismFixture.Resources(repository).ReadPrevious(result.CommitId)!.Address);
-                Assert.Equal(s0, result.Business.SourceGraph);
+                Assert.Null(result.Business.SourceGraph);
                 AssertBootstrapStoredSchema(repository, result.Business, currentSchema, ObjectVersionKind.Base);
                 currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, e2), currentModels), 107);
             }

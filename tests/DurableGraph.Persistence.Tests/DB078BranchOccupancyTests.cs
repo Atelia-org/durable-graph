@@ -9,7 +9,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using WorkingCopy main = repository.OpenWorkingCopy(mainInfo.Id);
         BranchInfo otherInfo = repository.CreateRootBranchFromState("main", new Node { Value = 2 }, parameters: NoRebase);
         using WorkingCopy other = repository.OpenWorkingCopy(otherInfo.Id);
-        BranchInfo eventInfo = repository.CreateRootBranchFromEvent("events", new Node(), parameters: NoRebase);
+        BranchInfo eventInfo = repository.CreateRootBranchFromEvent("events", new Node());
         using WorkingCopy eventOnly = repository.OpenWorkingCopy(eventInfo.Id);
         CommitId initial = main.BaseCommitId;
         BranchInfo fork = repository.ForkBranch(initial, "main");
@@ -17,10 +17,10 @@ public sealed partial class EventHistoryRepositoryTests {
         Assert.Equal(3, repository.ListBranches().Count(branch => branch.DisplayLabel == "main"));
         Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(mainInfo.Id));
         Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(otherInfo.Id));
-        main.CommitEvent(new Node(), parameters: NoRebase);
+        main.CommitEvent(new Node());
         child.CommitState(parameters: NoRebase);
         Assert.NotEqual(main.BaseCommitId, child.BaseCommitId);
-        other.CommitEvent(new Node(), parameters: NoRebase);
+        other.CommitEvent(new Node());
         eventOnly.CommitState(new Node(), parameters: NoRebase);
         CommitId latest = main.BaseCommitId;
         main.Dispose();
@@ -63,14 +63,14 @@ public sealed partial class EventHistoryRepositoryTests {
         fail = true;
         var before = SnapshotLiveFiles();
         Assert.Throws<InvalidDataException>(() => {
-            if (eventFirst) repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("retry", new Node(), parameters: NoRebase).Id);
+            if (eventFirst) repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("retry", new Node()).Id);
             else repository.OpenWorkingCopy(repository.CreateRootBranchFromState("retry", new Node(), parameters: NoRebase).Id);
         });
         Assert.False(repository.IsFaulted);
         AssertLiveFiles(before);
         fail = false;
         using WorkingCopy retry = eventFirst
-            ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("retry", new Node(), parameters: NoRebase).Id)
+            ? repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("retry", new Node()).Id)
             : repository.OpenWorkingCopy(repository.CreateRootBranchFromState("retry", new Node(), parameters: NoRebase).Id);
         Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "source")));
         source.CommitState(parameters: NoRebase);
@@ -144,7 +144,7 @@ public sealed partial class EventHistoryRepositoryTests {
         using WorkingCopy current = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
         using WorkingCopy currentOther = reopened.OpenWorkingCopy(BranchNamed(reopened, "other"));
         Assert.Throws<ObjectDisposedException>(() => oldMain.CommitState(parameters: NoRebase).Id);
-        Assert.Throws<ObjectDisposedException>(() => oldOther.CommitEvent(new Node(), parameters: NoRebase).Id);
+        Assert.Throws<ObjectDisposedException>(() => oldOther.CommitEvent(new Node()).Id);
         using WorkingCopy inherited = reopened.OpenWorkingCopy(reopened.ForkBranch(oldAddress, "persisted").Id);
         Assert.Equal(oldAddress, inherited.BaseCommitId);
         Assert.Throws<InvalidOperationException>(() => reopened.Commit(oldMain, null, new Node(), default, NoRebase));

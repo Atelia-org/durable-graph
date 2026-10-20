@@ -14,7 +14,8 @@ namespace Atelia.DurableGraph;
 /// IDs can be stored and reused after reopening the same repository; they are not globally unique capabilities.
 /// Operations validate branch membership, commit location and any required State/Event role before use.
 /// Independent LoadState/LoadEvent calls allow application-side Transient initialization without a writer.
-/// ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
+/// State-State ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
+/// A pair containing an Event materializes two independent graphs, including two reads of the same Event.
 /// Keep per-view owner/context/cache outside paired graphs. Use OpenWorkingCopy to continue editing and committing.
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Close all checkouts and this repository before reopening to load new registrations. First save supported
@@ -84,11 +85,12 @@ public sealed partial class Repository : IDisposable {
     /// <remarks>
     /// The branch is durable on normal return; labels need not be unique. OpenWorkingCopy separately acquires editing
     /// capability with State absent until explicitly committed. No Event handlers are replayed automatically.
+    /// The Event owns its complete reachable graph as Base records with local identities and no State content source.
     /// Summary bytes are copied; omission stores empty bytes. Publication outcome and IsFaulted are independent.
     /// </remarks>
     public BranchInfo CreateRootBranchFromEvent(string displayLabel, IDurableObject initialEvent,
-        ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) =>
-        CreateBranchCore(displayLabel, initialEvent, StoredGraphKind.Event, summary, parameters);
+        ReadOnlyMemory<byte> summary = default) =>
+        CreateBranchCore(displayLabel, initialEvent, StoredGraphKind.Event, summary, null);
 
     /// <summary>Acquires this branch for editing and restores its nearest saved State as new domain instances.</summary>
     /// <remarks>
@@ -364,7 +366,8 @@ public sealed partial class Repository : IDisposable {
 
     /// <summary>Returns a pair in input order. Both graphs, including Transient fields, must be treated as read-only.</summary>
     /// <remarks>
-    /// Matching reachable instances may be shared, so the read-only constraint includes observable Transient mutation.
+    /// State-State pairs may share matching reachable instances; the read-only constraint includes observable Transient mutation.
+    /// A pair containing an Event materializes independently on both sides, even for the same Event commit.
     /// Keep per-view owner/context/cache outside the graphs. Independent LoadState/LoadEvent calls support Transient
     /// initialization without a writer. Use OpenWorkingCopy for branch editing and committing.
     /// </remarks>

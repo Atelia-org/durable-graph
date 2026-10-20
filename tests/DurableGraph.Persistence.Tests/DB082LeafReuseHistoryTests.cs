@@ -99,7 +99,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         using Repository repository = Repository.CreateNew(_root, Models(current: true, new()));
         repository.ImmutableLeafReuseEnabled = true;
         Leaf live = new(41);
-        using WorkingCopy seed = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Root { Value = 17, Leaf = live }, parameters: NoRebase).Id);
+        using WorkingCopy seed = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Root { Value = 17, Leaf = live }).Id);
         seed.CommitState(new Root { Value = 17, Leaf = live }, parameters: NoRebase);
         using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(seed.BaseCommitId, "first").Id);
         Root firstRoot = Assert.IsType<Root>(first.State);
@@ -162,7 +162,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         AssertStorage(repository, currentCold);
 
         repository.CommitBranches(
-            [upgraded.CreateEventCommitRequest(upgraded.State!, parameters: NoRebase)],
+            [upgraded.CreateEventCommitRequest(upgraded.State!)],
             [new DurableSchema(IntermediateId, 5, SchemaKind.InlineValue,
                 new DurableFieldInfo(1, TypeTag.Int64))]);
         CommitId intermediateEvent = upgraded.BaseCommitId;
@@ -181,7 +181,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
         }
         Assert.Same(currentEntry, repository.PreparedStateEntry);
         repository.CommitBranches(
-            [upgraded.CreateEventCommitRequest(upgraded.State!, parameters: NoRebase)],
+            [upgraded.CreateEventCommitRequest(upgraded.State!)],
             [new DurableSchema(MaterializationId, 1, SchemaKind.InlineValue,
                 new DurableFieldInfo(1, TypeTag.Int64))]);
         CommitId materializationEvent = upgraded.BaseCommitId;
@@ -209,7 +209,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
     private void Seed() {
         using Repository repository = Repository.CreateNew(_root, Models(current: false, new()));
-        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Root { Value = 17, Leaf = new(41) }, parameters: NoRebase).Id);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Root { Value = 17, Leaf = new(41) }).Id);
         branch.CommitState(new Root { Value = 17, Leaf = new(41) }, parameters: NoRebase);
     }
 

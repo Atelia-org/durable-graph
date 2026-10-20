@@ -432,7 +432,7 @@ function Invoke-Consumer {
         $requiredObservations = switch ($Lane) {
             'seed' { @('RingAndSharedList', 'ActualRefsVerified', 'CompleteStorageVerified') }
             'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'SameSUnchangedListShared', 'RewriteWidgetsIndependent') }
-            'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'EventCandidateDiscardKeepsStateRewrite') }
+            'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'IndependentEventKeepsStateRewrite', 'SameEventPairIndependent', 'StateEventPairIndependent') }
             'continue' { @('SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
                 'CatalogBaselineIdentities', 'CatalogEventAcceptsMetaOnly', 'CatalogRetainedDeclarations', 'CatalogColdListDelta', 'CatalogSharedRootAdvanced',
                 'CatalogHotStateRetained', 'CatalogIndependentRead', 'CatalogSameOwnerCheckout',

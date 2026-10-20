@@ -4,10 +4,10 @@ using Atelia.HeadStore;
 namespace Atelia.DurableGraph;
 
 public sealed partial class Repository {
-    // History chooses the strict preceding State; the graph layer checks that exact source.
+    // Only State content has a strict preceding State source. Event content is self-contained.
     private StoredGraphRevision QualifyBusiness(HistoryGraphRecord record) =>
         _storageFacade.Store.ReadBusinessGraph(record.Address,
-            _resources.FindNearestState(record.Id, inclusive: false)?.Address);
+            record.Kind == CommitKind.State ? _resources.FindNearestState(record.Id, inclusive: false)?.Address : null);
 
     private IDurableObject ReadGraphRootCore(HistoryGraphRecord record) {
         var source = DecodedRevision.ReadStoredGraph(_storageFacade.Store, QualifyBusiness(record), _modelConfiguration);
@@ -23,7 +23,7 @@ public sealed partial class Repository {
             root = ReadGraphRootCore(record);
             previous = null;
         } else {
-            // Each side has its own strict State source. The opposite-role context is not
+            // Each side is qualified independently. The opposite-role context is not
             // necessarily the source of the selected State (S0,E1,S1,S2 is the counterexample).
             var first = DecodedRevision.ReadStoredGraph(_storageFacade.Store, QualifyBusiness(record), _modelConfiguration);
             var second = DecodedRevision.ReadStoredGraph(_storageFacade.Store, QualifyBusiness(previousRecord), _modelConfiguration);
@@ -44,6 +44,10 @@ public sealed partial class Repository {
         var environment = first.BindingEnvironment;
         if (secondSnapshot.SchemaRoot != environment?.SelectedSchemaView.Snapshot?.Address) { environment = null; }
         var second = DecodedRevision.ReadStoredGraph(store, secondSnapshot, _modelConfiguration, environment);
+        if (firstRecord.Kind == CommitKind.Event || secondRecord.Kind == CommitKind.Event) {
+            return GraphReader.ReadIndependent(first, new(first.SourceModels!), firstRecord.RootId,
+                second, new(second.SourceModels!), secondRecord.RootId);
+        }
         return GraphReader.ReadPair(first, new(first.SourceModels!), firstRecord.RootId,
             second, new(second.SourceModels!), secondRecord.RootId);
     }

@@ -38,14 +38,14 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         // An Event-only opening followed by State capture leaves this State unread;
         // creating a State root and opening it would already earn a read certificate.
         IDurableObject otherInitial = new Root { Value = 44 };
-        using WorkingCopy other = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("other", otherInitial, parameters: NoRebase).Id);
+        using WorkingCopy other = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("other", otherInitial).Id);
         other.CommitState(otherInitial, parameters: NoRebase);
         using WorkingCopy otherFork = repository.OpenWorkingCopy(repository.ForkBranch(other.BaseCommitId, "other-fork").Id);
         PreparedStateRestoration otherEntry = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         Assert.NotSame(oldEntry, otherEntry);
         NormalizedGraphState originalBaseline = Baseline(upgraded);
         var beforeEvent = Counts(statistics);
-        CommitId eventAddress = upgraded.CommitEvent(upgraded.State!, parameters: NoRebase).Id;
+        CommitId eventAddress = upgraded.CommitEvent(upgraded.State!).Id;
         Assert.Same(otherEntry, repository.PreparedStateEntry);
         Assert.Equal(beforeEvent, Counts(statistics));
         Assert.Same(originalBaseline, Baseline(upgraded));
@@ -69,7 +69,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
         // its historical certificate under newAddress would be an incorrect optimization.
         Assert.Same(renewedOldEntry, repository.PreparedStateEntry);
         repository.CommitBranches(
-            [upgraded.CreateEventCommitRequest(upgraded.State!, parameters: NoRebase)],
+            [upgraded.CreateEventCommitRequest(upgraded.State!)],
             [new DurableSchema(Intermediate, 5, SchemaKind.InlineValue,
                 new DurableFieldInfo(1, TypeTag.Int64))]);
         CommitId catalogEvent = upgraded.BaseCommitId;

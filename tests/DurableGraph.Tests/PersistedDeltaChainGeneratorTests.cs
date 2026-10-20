@@ -64,13 +64,13 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(selectedSchema, MechanismFixture.Snapshot(repository, third).SchemaRoot);
 
             // Canonical, completed experimental siblings use the real writer; none is published as a branch.
-            repeated = repository.Store.AppendBusiness(StoredGraphKind.State, first, selectedSchema, new(first, input.Owner, edits)).Address;
+            repeated = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema, new(first, input.Owner, edits)).Address;
             Assert.Equal(input.First.Body.ToArray(), repository.Store.ReadObjectChain(repository.Store.ReadBusinessGraph(repeated, first), ownerId).Entries[^1].Record.Body.ToArray());
-            missingString = repository.Store.AppendBusiness(StoredGraphKind.State, third, selectedSchema, new(third, input.Owner, [], [nameId])).Address;
-            wrongKind = repository.Store.AppendBusiness(StoredGraphKind.State, third, selectedSchema,
+            missingString = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema, new(third, input.Owner, [], [nameId])).Address;
+            wrongKind = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema,
                 new(third, input.Owner, [ObjectVersionRecord.CreateBase(nameId,
                     TypedBaseBodyCodec.Encode(ObjectLayout.ForDurable(schema), new(expected[2]), prepared.View))])).Address;
-            malformed = repository.Store.AppendBusiness(StoredGraphKind.State, third, selectedSchema,
+            malformed = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema,
                 new(third, input.Owner, [ObjectVersionRecord.CreateDelta(ownerId,
                     MechanismFixture.Snapshot(repository, third).ObjectHeads[ownerId], new byte[] { 8, 8, 0 })])).Address;
             Assert.Equal(third, MechanismFixture.Current(repository, "main").Address);

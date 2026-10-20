@@ -169,7 +169,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
     public void UnchangedOwnerReferencesAreValidatedAgainstQueriedRevisionMembership() {
         DurableSchema schema = Schema("World", 1, "World");
         FrameAddress original = Seed((1, schema, new State(2, 1)), (2, schema, new State(0, 2)));
-        FrameAddress removed = Store.AppendBusiness(StoredGraphKind.State, original, MechanismFixture.Snapshot(_repository, original).SchemaRoot,
+        FrameAddress removed = Store.AppendBusiness(StoredGraphKind.State, MechanismFixture.Snapshot(_repository, original).SchemaRoot,
             new(original, new(1), [], [2])).Address;
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));

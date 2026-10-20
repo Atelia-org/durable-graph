@@ -104,7 +104,7 @@ public sealed partial class Repository {
         out PreparedStateRestoration? candidate) {
         candidate = null;
         var store = _storageFacade.Store;
-        if (head.Kind == CommitKind.Event) { store.ValidateBusinessMetadata(head.Address, _resources.FindNearestState(head.Id, inclusive: false)?.Address); }
+        if (head.Kind == CommitKind.Event) { store.ValidateBusinessMetadata(head.Address, null); }
         HistoryGraphRecord? state = _resources.FindNearestState(head.Id, inclusive: true);
         // An Event-only prefix never consults a resident State or its model environment.
         if (state is null) { return NewCheckout(branchId, head); }

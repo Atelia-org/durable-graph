@@ -8,10 +8,10 @@ internal sealed class PendingRepositorySave : IDisposable {
     private PendingState _state;
     internal PendingRepositorySave(RepositoryResources owner, RepositoryResources.PublicationBaseline baseline,
         HeadId? branch, HeadEntryId? expectedEntry, string? rootLabel, StoredGraphKind kind, ReadOnlyMemory<byte> summary,
-        PreparedGraphWrite business, PreparedGraphWrite? catalog, FrameAddress? catalogSource, FrameAddress? stateSource) {
+        PreparedGraphWrite business, PreparedGraphWrite? catalog, FrameAddress? catalogSource) {
         Owner = owner;
         Baseline = baseline;
-        Members = [new(branch, expectedEntry, rootLabel, kind, summary, business, stateSource)];
+        Members = [new(branch, expectedEntry, rootLabel, kind, summary, business)];
         Catalog = catalog;
         CatalogSource = catalogSource;
 
@@ -33,7 +33,6 @@ internal sealed class PendingRepositorySave : IDisposable {
     internal StoredGraphKind Kind => Single.Kind;
     internal ReadOnlyMemory<byte> Summary => Single.Summary;
     internal PreparedGraphWrite Business => Single.Business;
-    internal FrameAddress? StateSource => Single.StateSource;
     private PendingBusinessSave Single => Members.Length == 1 ? Members[0]
         : throw new InvalidOperationException("This save has multiple members.");
     internal PreparedGraphWrite? Catalog { get; }
@@ -52,6 +51,6 @@ internal sealed class PendingRepositorySave : IDisposable {
 }
 
 internal sealed record PendingBusinessSave(HeadId? Branch, HeadEntryId? ExpectedEntry, string? RootLabel,
-    StoredGraphKind Kind, ReadOnlyMemory<byte> Summary, PreparedGraphWrite Business, FrameAddress? StateSource);
+    StoredGraphKind Kind, ReadOnlyMemory<byte> Summary, PreparedGraphWrite Business);
 
 internal sealed record PreparedSaveGroup(PendingBusinessSave[] Members, PreparedGraphWrite? Catalog);

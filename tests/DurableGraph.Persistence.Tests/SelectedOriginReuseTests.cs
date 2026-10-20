@@ -25,7 +25,7 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore store = new(frames, readCacheBudgetBytes: 0);
         SchemaCatalogView first = Catalog(store, [World]);
-        StoredGraphRevision initial = store.AppendBusiness(StoredGraphKind.State, null, first.Snapshot!.Address,
+        StoredGraphRevision initial = store.AppendBusiness(StoredGraphKind.State, first.Snapshot!.Address,
             new(null, new(1), [Base(1, 17, first)]));
         SchemaCatalogView selected = first;
         StoredGraphRevision snapshot = initial;
@@ -35,7 +35,7 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
             selected = Catalog(store, [Other, World]);
             Assert.NotEqual(first.DescriptorId(WorldLayout), selected.DescriptorId(WorldLayout));
             ObjectVersionRecord[] records = mode == "mixed" ? [Base(2, 29, selected)] : [];
-            snapshot = store.AppendBusiness(StoredGraphKind.State, initial.Address, selected.Snapshot!.Address,
+            snapshot = store.AppendBusiness(StoredGraphKind.State, selected.Snapshot!.Address,
                 new(initial.Address, new(1), records));
         }
         ModelExecutionEnvironment models = Models();
@@ -68,7 +68,7 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
         Assert.Equal(local.Snapshot!.Address, foreign.Snapshot!.Address);
         Assert.NotSame(store, foreign.Snapshot.SourceOwner);
         Assert.NotEqual(local.DescriptorId(WorldLayout), foreign.DescriptorId(WorldLayout));
-        StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, null, local.Snapshot.Address,
+        StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, local.Snapshot.Address,
             new(null, new(1), [Base(1, 41, local)]));
         ModelExecutionEnvironment models = Models();
         SchemaCatalogView synthetic = new(foreign.RootId, foreign.Rows);
@@ -93,7 +93,7 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
         writer.WriteByte(1);
         writer.WriteVarUInt32(selected.Rows.Keys.Max(id => id.Value) + 1);
         writer.WriteVarInt32(17);
-        StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, null, selected.Snapshot!.Address,
+        StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, selected.Snapshot!.Address,
             new(null, new(1), [ObjectVersionRecord.CreateBase(1, buffer.WrittenSpan)]));
         if (syntheticSelected) selected = new(selected.RootId, selected.Rows);
         Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(store, snapshot, Models(), selected));
@@ -104,10 +104,10 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore store = new(frames, readCacheBudgetBytes: 0);
         SchemaCatalogView origin = Catalog(store, [World]);
-        StoredGraphRevision initial = store.AppendBusiness(StoredGraphKind.State, null, origin.Snapshot!.Address,
+        StoredGraphRevision initial = store.AppendBusiness(StoredGraphKind.State, origin.Snapshot!.Address,
             new(null, new(1), [Base(1, 17, origin)]));
         SchemaCatalogView selected = Catalog(store, [Other]);
-        StoredGraphRevision retained = store.AppendBusiness(StoredGraphKind.State, initial.Address, selected.Snapshot!.Address,
+        StoredGraphRevision retained = store.AppendBusiness(StoredGraphKind.State, selected.Snapshot!.Address,
             new(initial.Address, new(1), []));
         // A has the same descriptor number and body width as W. Substituting selected
         // for the true origin would incorrectly decode A and evade this rejection.
@@ -120,7 +120,7 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
         using Frames frames = Frames.Create(NewPath());
         using GraphRecordStore store = new(frames, readCacheBudgetBytes: 0);
         SchemaCatalogView selected = Catalog(store, [World]);
-        StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, null, selected.Snapshot!.Address,
+        StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, selected.Snapshot!.Address,
             new(null, new(1), [Base(1, 17, selected)]));
         store.Dispose();
         Assert.ThrowsAny<InvalidOperationException>(() => StoredGraphDecoder.Read(store, snapshot, Models(), selected));

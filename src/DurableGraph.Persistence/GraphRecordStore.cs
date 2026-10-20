@@ -47,11 +47,11 @@ internal sealed class GraphRecordStore : IDisposable {
         }
     }
 
-    internal StoredGraphRevision AppendBusiness(StoredGraphKind kind, FrameAddress? expectedStateSource,
-        FrameAddress? schemaRoot, PreparedGraphWrite write) {
+    internal StoredGraphRevision AppendBusiness(StoredGraphKind kind, FrameAddress? schemaRoot, PreparedGraphWrite write) {
         RequireBusinessKind(kind);
-        ValidateBusinessSource(expectedStateSource);
-        return AppendCore(kind, previousMeta: null, expectedStateSource, schemaRoot, write);
+        ArgumentNullException.ThrowIfNull(write);
+        ValidateBusinessSource(kind, write.SourceGraph);
+        return AppendCore(kind, previousMeta: null, write.SourceGraph, schemaRoot, write);
     }
 
     internal StoredGraphRevision AppendMeta(FrameAddress? previousMeta, PreparedGraphWrite write) {
@@ -68,6 +68,10 @@ internal sealed class GraphRecordStore : IDisposable {
         try {
             if (write.SourceGraph != source) { throw new InvalidDataException("Prepared source is not the exact content source."); }
             RequireSchemaRoot(kind, schemaRoot);
+            if (kind == StoredGraphKind.Event &&
+                (write.RemovedIds.Count != 0 || write.Records.Any(static row => row.Kind != ObjectVersionKind.Base))) {
+                throw new InvalidDataException("An Event requires complete Base records without removals.");
+            }
             GraphEnvelope? sourceMetadata = source is { } address ? ReadMetadata(address) : null;
             IReadOnlyDictionary<uint, FrameAddress> sourceHeads = sourceMetadata is { } metadata
                 ? ReadDirectory(metadata.DirectoryRoot) : EmptyHeads();
@@ -127,7 +131,7 @@ internal sealed class GraphRecordStore : IDisposable {
     internal StoredGraphRevision ReadBusinessGraph(FrameAddress address, FrameAddress? expectedStateSource) {
         GraphEnvelope metadata = ReadMetadata(address);
         RequireBusinessKind(metadata.Kind);
-        ValidateBusinessSource(expectedStateSource, address);
+        ValidateBusinessSource(metadata.Kind, expectedStateSource, address);
         return ReadGraphCore(address, metadata, expectedStateSource);
     }
 
@@ -151,6 +155,9 @@ internal sealed class GraphRecordStore : IDisposable {
         if (metadata.OwnedBatch is { } owned) {
             IReadOnlyDictionary<uint, FrameAddress>? sourceHeads = null;
             foreach (ObjectVersionRecord record in batch!.Records) {
+                if (metadata.Kind == StoredGraphKind.Event && record.Kind != ObjectVersionKind.Base) {
+                    throw new InvalidDataException("Every Event object must be a complete Base.");
+                }
                 if (!heads.TryGetValue(record.ObjectId, out FrameAddress selected) || selected != owned) {
                     throw new InvalidDataException("Every local record must be live at the owned batch.");
                 }
@@ -162,9 +169,14 @@ internal sealed class GraphRecordStore : IDisposable {
                 }
             }
         }
-        // Shallow external-head declarations stay shallow. These checks do not
-        // reconstruct old Delta chains or authenticate global entity history.
-        foreach ((uint id, FrameAddress head) in heads) { RequireRecord(head, id); }
+        // State/meta external-head declarations stay shallow. Events instead own
+        // every head; neither check reconstructs old chains or global entity history.
+        foreach ((uint id, FrameAddress head) in heads) {
+            if (metadata.Kind == StoredGraphKind.Event && head != metadata.OwnedBatch) {
+                throw new InvalidDataException("Every Event object head must belong to its owned batch.");
+            }
+            RequireRecord(head, id);
+        }
         // Group physical reads, not their per-ID qualification. The already-read owned
         // batch and one current external batch are the only complete batches retained here.
         foreach ((FrameAddress batchAddress, List<uint> ids) in requiredRecords) {
@@ -197,18 +209,21 @@ internal sealed class GraphRecordStore : IDisposable {
         }
     }
 
-    // Qualify a selected Event's source links without replaying its directory,
+    // Qualify a selected Event's metadata relations without replaying its directory,
     // validating live membership, or invoking object body readers.
     internal void ValidateBusinessMetadata(FrameAddress address, FrameAddress? expectedStateSource) {
         GraphEnvelope metadata = ReadMetadata(address);
         RequireBusinessKind(metadata.Kind);
-        ValidateBusinessSource(expectedStateSource, address);
+        ValidateBusinessSource(metadata.Kind, expectedStateSource, address);
         ValidateMetadataRelations(metadata, expectedStateSource, out _, out _);
     }
 
     private void ValidateMetadataRelations(GraphEnvelope metadata, FrameAddress? source,
         out FrameAddress? sourceDirectory, out ObjectVersionBatch? ownedBatch) {
         RequireSchemaRoot(metadata.Kind, metadata.SchemaRoot);
+        if (metadata.Kind == StoredGraphKind.Event && metadata.OwnedBatch is null) {
+            throw new InvalidDataException("An Event must own its complete object batch.");
+        }
         sourceDirectory = source is { } actualSource ? ReadMetadata(actualSource).DirectoryRoot : null;
         ObjectHeadDirectoryVersion directoryVersion = ReadDirectoryVersion(metadata.DirectoryRoot);
         if (sourceDirectory == metadata.DirectoryRoot) {
@@ -413,10 +428,13 @@ internal sealed class GraphRecordStore : IDisposable {
         }
     }
 
-    // Repository selects the nearest State through the exact Entry history. This
-    // layer validates only its role and physical relations, without a second history.
-    private void ValidateBusinessSource(FrameAddress? source, FrameAddress? current = null) {
+    // Repository selects the State content source through exact Entry history;
+    // Event content has none. This layer validates roles and physical relations.
+    private void ValidateBusinessSource(StoredGraphKind kind, FrameAddress? source, FrameAddress? current = null) {
         EnsureUsable();
+        if (kind == StoredGraphKind.Event && source is not null) {
+            throw new InvalidDataException("An Event cannot have a content source.");
+        }
         if (source is { } address && (current == address || ReadMetadata(address).Kind != StoredGraphKind.State)) {
             throw new InvalidDataException("A business source must be a distinct State graph.");
         }

@@ -9,7 +9,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RequiredGraphReadChecksHistorySourceEvenForCompleteBase(bool state, bool orphan) {
+    public void RequiredGraphReadRejectsWrongContentSourceForStateAndEventEvenWithCompleteBases(bool state, bool orphan) {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
@@ -19,10 +19,10 @@ public sealed partial class EventHistoryRepositoryTests {
             root = current.RootId;
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            // A complete Base graph following S0 in Head history must still name S0 as its
-            // content source. A new well-framed batch/directory falsely claims no source.
+            // State must name S0 despite complete Bases; Event must never name S0.
+            // Construct the opposite source in each role without repairing the negative input.
             GraphRecordStore store = resources.GraphStore;
-            FrameAddress invalid = AppendInvalidSource(resources, null, root,
+            FrameAddress invalid = AppendInvalidSource(resources, state ? null : first, root,
                 state ? StoredGraphKind.State : StoredGraphKind.Event, StorageTestData.LocalRecords(store, first));
             if (!orphan) { resources.Heads.PublishHead(resources.ListBranches().Single().Key, BusinessEntryPayloadCodec.Encode(invalid, default), out _).Unwrap(); }
             else { resources.Data.ConfirmDurable(); }
@@ -58,7 +58,7 @@ public sealed partial class EventHistoryRepositoryTests {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
-            BranchInfo main = seed.CreateRootBranchFromEvent("main", new Node { Value = 1 }, parameters: NoRebase);
+            BranchInfo main = seed.CreateRootBranchFromEvent("main", new Node { Value = 1 });
             HistoryGraphRecord current = DB096TestAccess.Describe(seed, seed.ReadCurrentCommit(main.Id).Commit.Id);
             first = current.Address;
             root = current.RootId;

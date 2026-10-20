@@ -16,7 +16,7 @@ public sealed partial class EventHistoryRepositoryTests {
             world = (Node)session.State!;
             first = session.StateRevisionAddress!.Value;
             rootId = session.StateId!.Value;
-            session.CommitEvent(new Node { Value = 6 }, parameters: NoRebase);
+            session.CommitEvent(new Node { Value = 6 });
             world.Left = null;
             world.Value = 2;
             shrunk = WorkTestAccess.Address(session, session.CommitState(parameters: NoRebase).Id);
@@ -73,7 +73,7 @@ public sealed partial class EventHistoryRepositoryTests {
             using var session = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", original, parameters: NoRebase).Id);
             original = (Node)session.State!;
             first = session.StateRevisionAddress!.Value;
-            session.CommitEvent(new Node { Value = 6 }, parameters: NoRebase);
+            session.CommitEvent(new Node { Value = 6 });
             Node replacement = new() { Value = 7, Right = original.Right, Text = original.Text };
             repository.SaveStageObserver = checkpoint => {
                 Assert.Same(original, ((Node)session.State!));

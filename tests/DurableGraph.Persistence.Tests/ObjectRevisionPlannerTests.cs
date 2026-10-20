@@ -30,7 +30,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
 
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore store = new(frames);
-        StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), result.Records));
+        StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), result.Records));
         Assert.Equal(new byte[] { 10, 20 }, Assert.Single(store.ReadObjectChain(saved, 2).Entries).Record.Body.ToArray());
     }
 
@@ -53,9 +53,9 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     public void Mixed_rows_use_actual_P0_heads_and_H_and_preserve_owned_Delta() {
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore store = new(frames);
-        StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null, null,
+        StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1, new byte[100]), B(2, [2]), B(3, [3])]));
-        StoredGraphRevision state = store.AppendBusiness(StoredGraphKind.State, first.Address, null,
+        StoredGraphRevision state = store.AppendBusiness(StoredGraphKind.State, null,
             new(first.Address, new(1), [D(1, first.ObjectHeads[1], [4])]));
         byte[] deltaBytes = [5];
         var result = Plan([
@@ -74,7 +74,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         Assert.Equal(store.ReadObjectChain(state, 1).ReconstructionPayloadBytes, result.Estimates[0].ReconstructionPayloadBytes);
 
         // Membership is supplied by the producer, independently of object writes.
-        StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, state.Address, null,
+        StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, null,
             new(state.Address, new(1), result.Records, [3]));
         Assert.Equal(new uint[] { 1, 2, 4 }, saved.ObjectHeads.Keys.Order());
         Assert.Equal(first.ObjectHeads[2], saved.ObjectHeads[2]);
@@ -121,8 +121,8 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     public void Delta_cost_matches_real_P0_record_with_fixed_opaque_prior_width() {
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore store = new(frames);
-        StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, [1])]));
-        StoredGraphRevision changed = store.AppendBusiness(StoredGraphKind.State, first.Address, null,
+        StoredGraphRevision first = store.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [B(1, [1])]));
+        StoredGraphRevision changed = store.AppendBusiness(StoredGraphKind.State, null,
             new(first.Address, new(1), [D(1, first.ObjectHeads[1], [2])]));
         ObjectVersionChain chain = store.ReadObjectChain(changed, 1);
         int actual = chain.Entries[1].PayloadBytes;
@@ -175,12 +175,12 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     public void Candidate_keeps_its_exact_prior_when_another_branch_is_appended() {
         using Frames frames = Frames.Create(_path);
         using GraphRecordStore store = new(frames);
-        StoredGraphRevision state = store.AppendBusiness(StoredGraphKind.State, null, null, new(null, new(1), [B(1, new byte[100])]));
+        StoredGraphRevision state = store.AppendBusiness(StoredGraphKind.State, null, new(null, new(1), [B(1, new byte[100])]));
         var result = Plan([
             PreparedObject.Compared(new(1), state.ObjectHeads[1], Base(100), new(true, [2])),
         ], new() { [new(1)] = store.ReadObjectChain(state, 1).ReconstructionPayloadBytes });
-        StoredGraphRevision other = store.AppendBusiness(StoredGraphKind.State, state.Address, null, new(state.Address, new(1), [B(1, [9])]));
-        StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, state.Address, null, new(state.Address, new(1), result.Records));
+        StoredGraphRevision other = store.AppendBusiness(StoredGraphKind.State, null, new(state.Address, new(1), [B(1, [9])]));
+        StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, null, new(state.Address, new(1), result.Records));
         Assert.Equal(state.Address, saved.SourceGraph);
         Assert.Equal(new[] { state.OwnedBatch!.Value, saved.OwnedBatch!.Value },
             store.ReadObjectChain(saved, 1).Entries.Select(static row => row.ContainingBatch));

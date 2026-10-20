@@ -2,7 +2,7 @@
 
 本消费者遵循 [DB-096 单 Catalog 决定](../../../docs/design-branches/0096-history-and-head-model/shared-schema-only.md)：普通分支保存接纳 Point V1→V2；不再执行 Private 或 ToShared。目录、项目、程序集和 runner 保留旧 `PrivateContainer` 名称，仅作历史工件路径；运行协议已改为 `DG.SchemaContainerConsumer.v4`，旧收据不能证明当前源码通过。
 
-普通 PackageReference 消费者，无 IVT、ProjectReference、手动 Analyzer／AdditionalFiles／Import 或产品私有反射。WireInspector 仅在全部产品资源关闭后经公开 FS／HeadStore／Bare 观察 ABI5、P0R3 指针及 D Dictionary 图、P0E1 Entries、P0G2 图、实际 Heads、完整 Catalog、source／prior／H 与旧完整帧；不作为产品启动 audit。
+普通 PackageReference 消费者，无 IVT、ProjectReference、手动 Analyzer／AdditionalFiles／Import 或产品私有反射。WireInspector 仅在全部产品资源关闭后经公开 FS／HeadStore／Bare 观察 ABI5、P0R4 指针及 D Dictionary 图、P0E1 Entries、P0G2 图、实际 Heads、完整 Catalog、source／prior／H 与旧完整帧；不作为产品启动 audit。以下旧包回执保留原版本资格，不授当前 P0R4 新包资格。
 
 运行（准确 Storage feed 和 DG 新 G；runner 可受控打包）：
 

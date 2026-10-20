@@ -115,7 +115,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
 
     private static CommitId[] Seed(Repository repository, bool containers, string scenario) {
         Node root = Graph(containers);
-        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", root, parameters: NoRebase).Id);
+        using WorkingCopy branch = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", root).Id);
         if (scenario != "event-only") { branch.CommitState(root, parameters: NoRebase); }
         CommitId first = branch.BaseCommitId;
         CommitId[] requests = new CommitId[Forks];
@@ -126,7 +126,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
         } else if (scenario is "events-share-state" or "event-only") {
             requests[0] = first;
             for (int index = 1; index < Forks; index++) {
-                requests[index] = branch.CommitEvent(new Node { Value = index }, parameters: NoRebase).Id;
+                requests[index] = branch.CommitEvent(new Node { Value = index }).Id;
             }
         } else {
             Array.Fill(requests, first);

@@ -63,9 +63,9 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
 
             FrameAddress eventGraph;
             using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event, new(1, 100))) {
-                ObjectVersionRecord optionalBase = Assert.Single(save.Business.Write.Records);
-                Assert.Equal(listId, optionalBase.ObjectId);
-                Assert.Equal(ObjectVersionKind.Base, optionalBase.Kind);
+                Assert.Null(save.Business.Write.SourceGraph);
+                Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+                ObjectVersionRecord optionalBase = Assert.Single(save.Business.Write.Records, row => row.ObjectId == listId);
                 Assert.Equal(b, ObjectVersionPayloadSize.GetBasePayloadBytes(optionalBase.Body.Length));
                 eventGraph = save.Commit().Business.Address;
             }

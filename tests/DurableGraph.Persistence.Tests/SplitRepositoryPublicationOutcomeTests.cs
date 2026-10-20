@@ -153,7 +153,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
             Assert.Throws<ObjectDisposedException>(() => store.ReadBusinessGraph(seed.State, null));
             Assert.Throws<ObjectDisposedException>(() => store.ReadDirectory(seed.Directory));
-            Assert.Throws<ObjectDisposedException>(() => store.AppendBusiness(StoredGraphKind.State, seed.State, seed.Schema,
+            Assert.Throws<ObjectDisposedException>(() => store.AppendBusiness(StoredGraphKind.State, seed.Schema,
                 new(seed.State, seed.RootId, [])));
             Assert.Equal(completedOutput, store.AppendedFrames); // Fault rejection neither retries nor writes.
         }

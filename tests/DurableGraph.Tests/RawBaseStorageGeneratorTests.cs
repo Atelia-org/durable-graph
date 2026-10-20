@@ -81,11 +81,11 @@ public sealed partial class DurableSchemaGeneratorTests {
             byte[] missing = input.Second.Single(record => record.Id == secondOwner).Body.ToArray();
             Assert.InRange(missing[0], (byte)1, (byte)127); // The fixture's first reference is one byte.
             missing[0] = 127;
-            missingString = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot,
+            missingString = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(second, new(firstOwner), [Encode(input.Second.Single(record => record.Id == secondOwner), missing)])).Address;
             byte[] nonString = input.Second.Single(record => record.Id == firstOwner).Body.ToArray();
             nonString[0] = checked((byte)secondOwner);
-            wrongKind = store.AppendBusiness(StoredGraphKind.State, second, schemaRoot,
+            wrongKind = store.AppendBusiness(StoredGraphKind.State, schemaRoot,
                 new(second, new(firstOwner), [Encode(input.Second.Single(record => record.Id == firstOwner), nonString)])).Address;
             Assert.Equal(second, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);

@@ -113,7 +113,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         // An Event-only opening followed by State capture leaves this State unread;
         // creating a State root and opening it would already earn a read certificate.
         IDurableObject mainInitial = new Root { Value = 1 };
-        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node(), parameters: NoRebase).Id);
+        using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node()).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         using WorkingCopy first = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "first").Id);
         Assert.Equal(1, counts.BaseReads);
@@ -154,17 +154,17 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
             delta ? DependencyMode.DeltaAlways : DependencyMode.BaseAlways, counts));
         try {
             IDurableObject unrelatedInitial = new SharedReadModel.Node { Value = 31 };
-            using WorkingCopy unrelated = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("unrelated", unrelatedInitial, parameters: NoRebase).Id);
+            using WorkingCopy unrelated = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("unrelated", unrelatedInitial).Id);
             unrelated.CommitState(unrelatedInitial, parameters: NoRebase);
             WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(unrelated.BaseCommitId, "warm").Id);
             var previous = repository.PreparedStateEntry;
             Assert.NotNull(previous);
             if (conflict) {
                 repository.CommitBranches(
-                    [warm.CreateEventCommitRequest(warm.State!, parameters: NoRebase)], [WrongDependency]);
+                    [warm.CreateEventCommitRequest(warm.State!)], [WrongDependency]);
             }
             IDurableObject mainInitial = new Root { Value = 7 };
-            WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node(), parameters: NoRebase).Id);
+            WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new SharedReadModel.Node()).Id);
             main.CommitState(mainInitial, parameters: NoRebase);
             // This is the actual checkout's frozen execution environment. Explicit
             // preclosure still does not execute ReadBase/ReadDelta's body checks.

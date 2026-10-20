@@ -55,14 +55,13 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
             using (PreparedFixtureSave save = session.Prepare(root, StoredGraphKind.Event, declarations: [extra])) {
                 Assert.Same(resources, save.Pending.Owner);
                 Assert.NotNull(save.Catalog.Write);
-                ObjectVersionRecord delta = Assert.Single(save.Business.Write.Records);
-                Assert.Equal(listId.Value, delta.ObjectId);
-                Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
-                Assert.Equal(listHead0, delta.PriorAddress);
+                Assert.Equal(3, save.Business.Write.Records.Count);
+                Assert.All(save.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+                Assert.Empty(save.Business.Write.RemovedIds);
                 RepositorySaveResult saved = save.Commit();
                 event1 = saved.Business.Address;
                 schema1 = saved.SharedSchemaRoot!.Value;
-                Assert.Equal(state0, saved.Business.SourceGraph);
+                Assert.Null(saved.Business.SourceGraph);
                 Assert.Equal(schema1, saved.Business.SchemaRoot);
             }
             Assert.NotEqual(schema0, schema1);
@@ -185,7 +184,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         Assert.ThrowsAny<InvalidOperationException>(() => facade.Commit(pending));
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(address, null));
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadObjectChain(graph, 1));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.AppendBusiness(StoredGraphKind.State, address,
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.AppendBusiness(StoredGraphKind.State,
             schema, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [3])])));
         if (stop == "Fault") {
             // Fault blocks Store/publication operations, but the inactive owned pending can still be released.

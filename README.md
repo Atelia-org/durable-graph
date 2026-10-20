@@ -8,7 +8,7 @@
 **带 Schema 版本历史的 C# 对象图增量序列化库。**
 
 直接修改普通领域对象，然后 Commit；不需要代理、setter hook 或手工 MarkDirty。
-DurableGraph 捕获独立的版本化状态 DTO，比较上次提交状态，以 Base/Delta 保存变化；
+DurableGraph 捕获独立的版本化状态 DTO；State 比较上次保存基线，以 Base/Delta 保存变化，Event 独立保存完整 Base 图；
 加载时按落盘的 exact Schema 读取、执行显式 Upgrade，再恢复共享引用和循环引用。
 
 目前是快速演进的 **.NET 10 原型**，API 和格式尚未冻结。本文面向首次接入的应用开发者和 Coding Agent，
@@ -258,13 +258,14 @@ tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1
 
 历史可为 `S0 → S1 → S2`、`S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
 业务前后关系由 HeadStore 的继承历史表达；State/Event 图不另存业务 Parent。
-增量来源始终是该提交之前最近的 State，Event 不推进 State 基线。
+State 的增量来源是该提交之前最近的 State。每个 Event 独立捕获完整可达图，使用局部对象 ID、完整 Base 和自有目录，没有内容来源；Event 不读取或推进 State 保存基线。
 `GetPreviousState(eventCommitId)` 寻找严格祖先中的最近 State；纯 Event 前缀返回 null。
 
 `ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
 默认返回两个 `IDurableObject`，保留各自实际类型；通过 `ReadCommitInfo(commitId).Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
 两个输入无需相邻，也不要求一份 State、一份 Event；调用方用显式转换或模式匹配取得领域类型。
-它在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
+State-State 配对在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
+只要任一输入是 Event，两边就分别恢复，保留各自图内的共享和环，不跨图共享可变实例；同一 Event 与自身配对也如此。
 **两份结果及其可达对象都必须按只读快照使用，包括会影响观察结果的 Transient 写入**。
 不要分别给可能共享的 Actor 写入不同的 `OwnerWorld`、查询上下文或视图专属缓存；这些信息应由各自的图外
 `WorldView` / 索引持有。即使两个视图引用同一个 Actor，各自的查询仍使用各自的世界上下文。
@@ -272,7 +273,7 @@ tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1
 不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
 需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `LoadState` / `LoadEvent`，不需要开启 writer；
 持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `OpenWorkingCopy`。
-图外视图与共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)。
+图外视图与 State-State 共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)；Event 隔离边界见[独立 Event 合同](docs/design-branches/0097-independent-event-graphs/README.md)。
 共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
 OpenWorkingCopy 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
@@ -305,9 +306,9 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 新增 Schema 与业务提交共同原子发布；无新增定义时复用当前 Catalog。历史读取仍使用所选图和对象 batch 的准确 Schema，不能用最新目录替换历史解释。普通 Upgrade 保留存活对象身份、共享和循环，改型布局保存为新 Base；Event 不推进 State 基线。
 
 未定稿的同版本异形模型使用关闭后的完整 Repository 副本隔离，流程见[开发尚未定稿的 Schema](#开发尚未定稿的-schema)。
-当前只有统一 Catalog，没有 Private Schema 或 ToShared 路线。新分支目录/业务图格式为 `P0R3` / `P0G2`；
+当前只有统一 Catalog，没有 Private Schema 或 ToShared 路线。分支目录/业务图格式为 `P0R4` / `P0G2`；
 读写和只读打开都不兼容旧布局，实验数据可重建，需要旧数据时先用对应版本另行导出。
-Schema 简化背景见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)，当前布局见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)。
+Schema 简化背景见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)，目录和业务图编码见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)，`P0R4` 的 Event 语义边界见[DB-097](docs/design-branches/0097-independent-event-graphs/README.md)。
 
 ## 多分支共同保存
 
@@ -348,7 +349,8 @@ CommitId playerCommit = saved[playerWork.BranchId].Id;
 **重建 payload 减少 33.3% 不等于读取快 33.3%**，写入比例也不是整个仓库的磁盘空间保证。
 当前正常存储为 append-only；调参影响后续写入，不回收既有历史或改变已保存旧版本的重建链。
 
-在 CreateRootBranchFromState、CreateRootBranchFromEvent、CommitEvent 或 CommitState 的 `parameters` 参数传入配置即可。
+在 CreateRootBranchFromState、CommitState 或 CreateStateCommitRequest 的 `parameters` 参数传入配置即可。
+Event 始终保存完整 Base，不接受该增量策略参数。
 例如，在第 2 节的输出语句之前插入下面代码，再保存一次状态：
 
 ```csharp
@@ -425,7 +427,9 @@ Console.WriteLine($"Event: amount={occurrence.Amount}; beforeHp={before.Hero.Hp}
 继续 `CommitEvent` 不改变这一状态，直到 `CommitState(nonNullRoot)` 发布首个 State。
 无 State 时，无参 `CommitState()` 会在捕获或追加前拒绝。已有 State 的读取失败会传播，不会转换成 null。
 
-事件若需要记录角色“当时的 HP 和观察”，应保存所需的只读业务快照，通过业务 ActorId 找到当前角色进行修改。
+Event 捕获可直接引用当前 State 中的角色；提交会独立保存当时的值和图内引用，不消费 State 的身份或差分基线。
+热处理仍使用原 CLR 对象，提交不会冻结它们。事件若需要在热处理期间保留角色“当时的 HP 和观察”，
+应保存所需的只读业务快照，通过业务 ActorId 找到当前角色进行修改。
 可以从可变 `List<string>` 复制为快照私有的 `string[]`，共享不可变 string；readonly 字段本身不会冻结数组或可变元素。
 领域采用不可变对象替换时，也可以让事件保留旧对象，不必额外维护一套快照类型。
 

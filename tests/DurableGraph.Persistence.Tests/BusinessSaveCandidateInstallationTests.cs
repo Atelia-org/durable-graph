@@ -23,7 +23,7 @@ public sealed partial class SplitBusinessWorkspaceTests {
 
         using BusinessSaveCandidate candidateA = workspaceA.CaptureOwned(rootA, StoredGraphKind.State);
         using PreparedBusinessWrite preparedA = workspaceA.PrepareOwned(candidateA, catalog, NoRebase);
-        StoredGraphRevision graphA = Store.AppendBusiness(StoredGraphKind.State, null, schema.Address, preparedA.Write);
+        StoredGraphRevision graphA = Store.AppendBusiness(StoredGraphKind.State, schema.Address, preparedA.Write);
         Assert.Equal((byte)17, DecodedRevision.ReadStoredGraph(Store, graphA, registry.FreezeConfiguration()).GetRequired(candidateA.RootId).GetState<State>().Value);
         preparedA.PrepareInstall(graphA);
         preparedA.Install(graphA);
@@ -32,7 +32,7 @@ public sealed partial class SplitBusinessWorkspaceTests {
 
         using BusinessSaveCandidate candidateB = workspaceB.CaptureOwned(rootB, StoredGraphKind.State);
         using PreparedBusinessWrite preparedB = workspaceB.PrepareOwned(candidateB, catalog, NoRebase);
-        StoredGraphRevision graphB = Store.AppendBusiness(StoredGraphKind.State, null, schema.Address, preparedB.Write);
+        StoredGraphRevision graphB = Store.AppendBusiness(StoredGraphKind.State, schema.Address, preparedB.Write);
         NormalizedGraphState nextB = candidateB.NextBaseline;
         NormalizedGraphState installationB = nextB.PrepareGraphInstallation(Store, graphB, preparedB.Write.Records, catalog);
         Assert.Equal((byte)42, DecodedRevision.ReadStoredGraph(Store, graphB, registry.FreezeConfiguration()).GetRequired(candidateB.RootId).GetState<State>().Value);

@@ -18,7 +18,7 @@ public sealed class BusinessSourceValidationCostTests(ITestOutputHelper output) 
     [InlineData(10000, false)]
     [InlineData(1000, true)]
     [InlineData(10000, true)]
-    public void PrepareOwnedQualifiesTheCompleteStateSourceOnce(int liveCount, bool domainEvent) {
+    public void PrepareOwnedQualifiesStateOnceAndIndependentEventNever(int liveCount, bool domainEvent) {
         Harness harness = new();
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(NewPath());
         BranchSaveSessionFixture session = new(repository, "main", harness.Models);
@@ -48,9 +48,13 @@ public sealed class BusinessSourceValidationCostTests(ITestOutputHelper output) 
             long completeChecks = store.BusinessGraphQualificationCount - qualifications;
             output.WriteLine($"live={liveCount}, kind={kind}, sample={sample}, qualifications={completeChecks}, " +
                 $"PrepareOwned allocated={allocated}, body calls={harness.BodyCalls}");
-            Assert.Equal(1, completeChecks);
+            Assert.Equal(domainEvent ? 0 : 1, completeChecks);
             Assert.True(harness.BodyCalls >= liveCount);
-            Assert.Single(write.Write.Records);
+            Assert.Equal(domainEvent ? liveCount : 1, write.Write.Records.Count);
+            if (domainEvent) {
+                Assert.Null(write.Write.SourceGraph);
+                Assert.All(write.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
+            }
             Assert.Empty(write.Write.RemovedIds);
             Assert.Same(baseline, session.Baseline);
             Assert.Same(source, session.StateSource);
@@ -63,7 +67,7 @@ public sealed class BusinessSourceValidationCostTests(ITestOutputHelper output) 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EvenARemovedSourceMemberMustPassValidationBeforeTheFirstBodyCallback(bool domainEvent) {
+    public void OnlyStateValidatesAnUnrelatedRemovedBaselineMemberBeforeBodyCallbacks(bool domainEvent) {
         Harness harness = new();
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(NewPath());
         BranchSaveSessionFixture session = new(repository, "main", harness.Models);
@@ -79,15 +83,24 @@ public sealed class BusinessSourceValidationCostTests(ITestOutputHelper output) 
         long appended = repository.Store.AppendedFrames;
         StoredGraphKind kind = domainEvent ? StoredGraphKind.Event : StoredGraphKind.State;
         try {
-            Assert.Throws<InvalidDataException>(() => session.Prepare(root, kind));
-            Assert.Equal(0, harness.BodyCalls);
+            if (domainEvent) {
+                using PreparedFixtureSave independent = session.Prepare(root, kind);
+                Assert.Null(independent.Business.Write.SourceGraph);
+                Assert.Empty(independent.Business.Write.RemovedIds);
+                Assert.Single(independent.Business.Write.Records);
+                Assert.True(harness.BodyCalls > 0);
+            } else {
+                Assert.Throws<InvalidDataException>(() => session.Prepare(root, kind));
+                Assert.Equal(0, harness.BodyCalls);
+            }
             Assert.Equal(appended, repository.Store.AppendedFrames);
             Assert.Same(baseline, session.Baseline);
             Assert.False(repository.HasPending);
             Assert.False(repository.IsFaulted);
         } finally { rows[child] = original; }
         using PreparedFixtureSave retry = session.Prepare(root, kind);
-        Assert.Contains(child.Value, retry.Business.Write.RemovedIds);
+        if (domainEvent) { Assert.Empty(retry.Business.Write.RemovedIds); }
+        else { Assert.Contains(child.Value, retry.Business.Write.RemovedIds); }
         Assert.True(harness.BodyCalls > 0);
     }
 

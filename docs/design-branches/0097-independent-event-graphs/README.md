@@ -87,6 +87,8 @@ Branches 根格式标识由 P0R3 升为 P0R4，所有 Repository 打开方式明
 
 设 State live 数为 N，Event 可达数为 M。目标是消去 Event 内容路径中的 N 项资格/临时表/删除/目录来源工作，而非承诺整次提交严格 O(M) 或固定加速倍数。
 
+既有分支的写入口仍是 WorkingCopy，打开它仍恢复最近 State；本片收益针对已打开工作副本的 Event 内容保存。无需加载 State 的专用事件追加入口没有当前消费者要求，不随本片引入。
+
 Capture 原本只遍历 Event，不复制全 State 身份表；不能把不存在的复制算作收益。现实现已为全部 Event 对象准备 Base，独立化主要额外付出的可能是实际写出这些完整 bytes。
 
 小型自有 Event 预计收益最大。Event 引用巨大不变 State 子图时，原来少量或零对象写入变为全量；必须记录空间与写入代价。Event-first 已是无来源路径，性能提升预计有限。

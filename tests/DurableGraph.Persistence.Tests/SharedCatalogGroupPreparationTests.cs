@@ -49,8 +49,8 @@ public sealed class SharedCatalogGroupPreparationTests : IDisposable {
             // Both business writes are encoded only after the common descriptor domain exists.
             StoredGraphRevision meta = repository.Store.AppendMeta(seedGraph.Address, common.Write!);
             schemaAddress = meta.Address;
-            worldAddress = repository.Store.AppendBusiness(StoredGraphKind.State, null, meta.Address, worldWrite.Write).Address;
-            playerAddress = repository.Store.AppendBusiness(StoredGraphKind.State, null, meta.Address, playerWrite.Write).Address;
+            worldAddress = repository.Store.AppendBusiness(StoredGraphKind.State, meta.Address, worldWrite.Write).Address;
+            playerAddress = repository.Store.AppendBusiness(StoredGraphKind.State, meta.Address, playerWrite.Write).Address;
             repository.Data.ConfirmDurable();
         }
 

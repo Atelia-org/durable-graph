@@ -6,7 +6,7 @@ public sealed class ManagementDirectoryPointerTests {
     [InlineData(true)]
     public void Empty_and_selected_graph_have_exact_role_headers_and_upstream_address_bytes(bool bookmarks) {
         ManagementDirectoryKind kind = Kind(bookmarks);
-        byte[] magic = bookmarks ? "P0T2"u8.ToArray() : "P0R3"u8.ToArray();
+        byte[] magic = bookmarks ? "P0T2"u8.ToArray() : "P0R4"u8.ToArray();
         byte[] empty = ManagementDirectoryPointer.Encode(kind, null);
         Assert.Equal(new byte[] { magic[0], magic[1], magic[2], magic[3], 0 }, empty);
         Assert.Null(ManagementDirectoryPointer.Decode(kind, empty));
