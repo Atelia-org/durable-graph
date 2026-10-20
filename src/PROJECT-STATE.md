@@ -19,6 +19,8 @@
 
 ## 当前焦点
 
+2026-10-20：[Echo Garden交付后反馈研究](../docs/design-branches/0096-history-and-head-model/echo-garden-feedback.md)完成。主线程复跑原游戏模型的隔离普通包消费者，确认新API收益与三项接入摩擦；推荐下一增量为导航文本适配、安全分叉切换、版本化摘要的可执行配方，尚未实施。产品源码/API/格式未改，DB-096既有完成状态保持，性能优化仍等实际测量。
+
 2026-10-19：DB-096完整目标已验收并合入本地master。Branch/Commit/WorkingCopy替代旧API，统一Catalog、D/T Dictionary、多分支提交、根/子树、历史分页及创建故障边界均已闭合；活动消费者与文档已迁移。最终产品/测试来源440bccf，根回归2992项全通过，12个活动普通包runner及候选导出通过；准确G/S、证据与限度只查[最终交付验收](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)。后续由真实消费者反馈选新切片；成本优化须有计数反例。明确延期及研究入口见[DB-096工作集](../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)，本期无剩余门禁或合入工单。
 
 [DB-096：版本、历史与命名入口](../docs/design-branches/0096-history-and-head-model/README.md)既有三控制Head与独立书签目录仍是当前产品布局；最初来源见[接入切片](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)，新依赖资格见 B1。用户已确认只追加/旧点另开/fork立即可见，继承历史为首选；紧凑codec的开发期误用诊断足够，不增加每引用16B scope。旧布局在新依赖下的资格见 B1，新历史模型的真实纵切及迁移回归见 B2；两者不混为同一次验收。

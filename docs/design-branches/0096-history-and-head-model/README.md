@@ -4,6 +4,8 @@
 > 当前实现以源码和本片验收为准；术语导航见[项目术语表](../../DurableGraph-glossary.md)。
 > 来源：workshop [反馈 4](../../../../durable-graph-workshop-a/docs/durable-graph-feedback.md)，以及 head-log / domain-history、原子名称映射和独立 metadata 需求。
 
+**交付后反馈（2026-10-20）：**[Echo Garden研究](echo-garden-feedback.md)确认新API在真实游戏模型中的使用价值，提出导航ID、分叉切换与版本化摘要三个消费者配方候选。独立包复跑通过；本轮只研究/文档，无产品API改动，也无性能优化结论。
+
 **2026-10-19 当前收敛：**用户已决定[同库统一 Schema Catalog](shared-schema-only.md)，开发草稿改用独立完整库副本。API 草图已删除 SchemaMode/Private/promotion；[产品 Private 删除切片](private-removal.md)已实施并通过源码、新包与有限进程中止验收。组发布已接入，限定资格见[实施验收](group-commit-integration.md)；新历史模型已合入本地master。
 
 **跨轮续接先读 [PROJECT-STATE](PROJECT-STATE.md)**：已确认边界、最新身份裁决与未决顺序集中于此；其余材料按问题查阅。当前讨论入口是[API 草图](api-sketch.md)：推荐 Branch / Commit / WorkingCopy 词汇，已串起五个调用故事；[命名审阅](api-naming-review.md)记录依据与旧名映射。DG登记已完成实现与验收。以下早期现状对照保切换前基线；实际交付范围与限制以最终验收为准。
