@@ -22,7 +22,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 
 | 分片 | 要解决的增量 |
 |---|---|
-| 独立 Event 的大载荷成本 | console-agent 的 Event/State 正文双存触发 [DB-099 方案海选与推荐草稿](design-branches/0099-event-references/README.md)：普通 inline Event 根引用、应用投影缓存，下一步先验证包接线、真实单次载荷保存和冷热成本；尚未实施。保留物理字符串去重等候选，不预设性能胜出。[DB-097 对照](design-branches/0097-independent-event-graphs/performance-results.md)只作既有独立 Event 成本证据，不替代新机制验收。 |
+| 引用式事实的跨应用成本 | [DB-099](design-branches/0099-event-references/README.md) 已完成普通 inline EventRef 与 Agent 接入。后续仅当其他应用的表示/生命周期共同需求出现，才考虑上移缓存机制；若准确冷读、历史 Event 模型依赖或应用改造成本不能接受，可直接重访物理字符串去重候选，不以继续扩缓存为前置。引用依赖的 GC/部分导出仍未实施，未来相关工具必须保留目标/Schema/传递闭包或显式重映射；完整库备份不依赖这些未来工具。 |
 | [Echo Garden接入配方](design-branches/0096-history-and-head-model/application-recipes.md) | 导航DTO/Hex、安全分叉切换、版本化Summary已实施并通过源码/普通包验收；无剩余示例工单。多个typed DTO反复出现相同适配成本时再考虑converter；实际无法遵守纯投影后立即提交时再研究更强摘要合同。七字段/8存档没有性能优化依据。 |
 | [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | Branch/Commit/WorkingCopy、组提交、目录树、分页、旧API迁移及[完整交付与master合入](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合。首版只追加、旧点另开、fork立即可见；后续附件、ID字段、改标签与规模优化由实际消费者需求触发，不继续原施工队列。 |
 | [DB-083 Repository / Checkpoint 用户故事](design-branches/0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) | 公共基础、Checkpoint/固定查询、多分支 Fork 和不可变 tag 的实际状态见 PROJECT-STATE；后续由真实消费者的历史浏览/恢复需求与性能证据选择 |

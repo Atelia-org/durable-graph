@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-10-24；DB-098 退役 ReadPair，验收状态见该片；DB-097 独立 Event 与重构后质量整改均已验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-10-25；DB-099 EventRef 与首个 Agent 接入已验收；DB-098 已退役 ReadPair；DB-097 独立 Event 与重构后质量整改均已验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-10-25：[DB-099 Event 引用](../docs/design-branches/0099-event-references/README.md)已获用户批准，正在实施普通 inline `EventRef` 与显式历史读取、console-agent 正文所有权迁移。最小验收是跨程序集/普通包冷读取成立，真实 State 对象与容器 Base 不再保存事实正文，原 Event 位置恢复及依赖失败停用成立；缓存留在应用层。实现、源码与包验证进度集中在该片，完成前不作收益或交付承诺。
+2026-10-25：[DB-099 Event 引用](../docs/design-branches/0099-event-references/README.md)已完成普通 inline `EventRef`、单独 Definition 与显式 `LoadEvent` 重载；源码/新普通包、console-agent 全正文归属迁移及故障恢复已限定验收。State 保存准确位置而不捕获目标，缓存与依赖准入留在应用 Session；格式封套与 Storage pin 保持。准确来源、验收和冷热成本只查[当片记录](../docs/design-branches/0099-event-references/validation.md)。本片无剩余必做工单，后续由其他消费者或冷读/驻留实测触发，不预设通用缓存设施。
 
 2026-10-24：[DB-098 ReadPair 退役](../docs/design-branches/0098-readpair-retirement/README.md)。删除公开入口、跨图共享规划及专用比较接线；只读恢复统一独立领域图，Checkpoint 的两图准备/分配守卫、State 差分比较、owned 物理缓存与 State 准备槽保留。无格式变化，旧实现已保留 annotated Git tag；验收结果只维护在该片。Event Ref 为后续独立设计，不在本片实施。
 

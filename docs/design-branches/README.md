@@ -9,7 +9,7 @@
 
 ## 按问题找材料
 
-当前实施：[DB-099 Event 引用](0099-event-references/README.md)，普通 inline 根引用与应用投影缓存；库机制已落地，正在完成普通包、Agent 迁移和整体验收。上一完成片为 [DB-098 ReadPair 退役](0098-readpair-retirement/README.md)。
+最近完成：[DB-099 Event 引用](0099-event-references/README.md)，普通 inline 根引用、显式读取与应用投影缓存；源码、新普通包及 Agent 纵切已验收，冷热成本边界见该片。前置退役见 [DB-098](0098-readpair-retirement/README.md)。
 
 不知道编号时先在下面搜索主题；确定问题后，只在其目录内查所需证据：
 
@@ -23,7 +23,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 099 | [Event 引用与事实载荷单次保存](0099-event-references/README.md)；已批准实施，普通 inline 机制与消费者验证进行中 |
+| 099 | [Event 引用与事实载荷单次保存](0099-event-references/README.md)；普通 inline 引用与实际 Agent 接入已验收，缓存仍由应用拥有 |
 | 098 | [ReadPair 退役与技术储备](0098-readpair-retirement/README.md)；专用跨图共享退出，独立恢复与 State 增量保持 |
 | 097 | [独立 Event 对象图](0097-independent-event-graphs/README.md)；Event 自有全 Base 与局部身份，State 增量不变；Pair 后继见 DB-098 |
 | 096 | [Branch/Commit/WorkingCopy历史模型](0096-history-and-head-model/README.md)；统一Catalog、多分支原子提交、目录树、历史分页和旧API/消费者迁移已完成；[最终源码/普通包验收与master合入](0096-history-and-head-model/final-delivery-acceptance.md)已闭合，后续仅由真实需求选择增量 |
