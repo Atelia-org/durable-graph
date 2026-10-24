@@ -2,7 +2,7 @@
 
 此目录覆盖普通包消费下的真实 SG Widget V1→V2、Shared Schema Catalog、共享 List／环、Event 与 State 各自推进以及冷增量续写。不借 IVT、内部工厂或产品私有反射。最小验收是下表五个独立进程成功，并核对包来源、history 和持久字节。
 
-**2026-10-20 后继：**按 [DB-097 独立 Event 合同](../../../docs/design-branches/0097-independent-event-graphs/README.md)迁移当前源码：每个 Event 内容来源为空，自有完整 Base batch／目录；不要求其局部对象 ID 与 State 相同，后续 State 仍沿原 State 基线增量保存。rewrite 阶段还校验同一 Event Pair、State-Event Pair 的跨图可变实例隔离与图内共享／环。当前入口为 `P0R4`，其余 `P0G2`／typed ABI5 编码保持；下面历史包回执保留来源版本资格，**不构成本次修改的新 G 包资格**。
+**2026-10-20 后继：**按 [DB-097 独立 Event 合同](../../../docs/design-branches/0097-independent-event-graphs/README.md)迁移当前源码：每个 Event 内容来源为空，自有完整 Base batch／目录；不要求其局部对象 ID 与 State 相同，后续 State 仍沿原 State 基线增量保存。DB-098 后 rewrite 阶段通过重复 LoadEvent 及 LoadState/LoadEvent 检查跨图可变实例隔离与图内共享／环，ReadPair 已退出。当前入口为 `P0R4`，其余 `P0G2`／typed ABI5 编码保持；下面历史包回执保留来源版本资格，**不构成本次修改的新 G 包资格**。
 
 此前 DB-096 已删除活动 Private／ToShared 路线。`catalog` 分支从真实 baseline Fork，普通 `CommitEvent(new CatalogEvent(...))` 将 State 不可达的 Event 声明接纳进共享 Catalog，同时保留原 State；随后普通 State 和 Event 保存验证热读、独立读回、同 owner 再签出与全关冷续写。业务接续来自真实 HeadStore Entry 历史，协议为 `DG.SplitRepositoryConsumer.v2`。
 
@@ -39,14 +39,14 @@ G `0.0.0-db088-e2e.20261013141051.30576`，生产提交 `ca5598b5b37b0b6c4f2bb50
 | lane／宿主 | 实际检查 |
 |---|---|
 | `seed`／V1 | 两 Widget 成环、共享128项 List；真实 State／tag、必要 refs1/2、完整 IDs／实际 heads/H、动态 descriptor／meta root 声明与完成帧 |
-| `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；同 S 未改 List 可共享、rewritten Widget 独立，完整文件集合／SHA不变 |
-| `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 创建引用 Head 并登记 D，不产生克隆业务 Commit；随后 OpenWorkingCopy 按 State.S0 恢复。升级环的 Event 保 State 地址／ID／实例，随后 State 以 HeadStore 历史中的 Event 为前序、S0 为内容来源，仍写两 Base；核同／跨 S Pair 及旧 descriptor ID复用 |
+| `upgrade`／V2 | own SG historical BodyV1 保 exact DTO／引用 ID 且不调用 Upgrade；公开 readonly 使两 Widget int→long＋100。V2 尚未登记到该 S；重复独立读取的 Widget/List 隔离、各图共享与环保持，完整文件集合／SHA不变 |
+| `rewrite`／V2 | main 首 State 两 Widget 写 Base、List 保原 origin S/head/H，实际 V2 closure 推进 shared S1；旧 tag Fork 创建引用 Head 并登记 D，不产生克隆业务 Commit；随后 OpenWorkingCopy 按 State.S0 恢复。升级环的 Event 保 State 地址／ID／实例，随后 State 以 HeadStore 历史中的 Event 为前序、S0 为内容来源，仍写两 Base；核同／跨 S 独立读取及旧 descriptor ID复用 |
 | `continue`／V2 | Shared 冷单 List Delta；从真实 baseline 创建 `catalog` 分支；SG Event 接纳 State 不可达声明并推进共享 Catalog，State 不变；全关冷签出 List Delta；List202 热 State／独立读回／同 owner 再签出保持值与身份且不额外提交；普通 Widget Event 保持 Catalog／State，只推进业务 Head；全关后同 PID 新 owner 单 List Delta／真实 prior/H／准确旧 Base origin |
 | `verify`／V2 | 独立 PID 全程 readonly，核旧 tag、main／fork、catalog 的历史 State／Event／当前 State、准确各图 S 与完整 meta 声明；全部完成帧保持，完整文件集合／SHA 不变 |
 
 每次物理观察都在相应 Repository／WorkingCopy 全关后进行。活动调用只传真实 CommitId；关闭后再由独立 inspector 将 Entry payload 映射到图地址。[WireInspector](WireInspector.cs) 仅用公开 FS／HeadStore／Binary 独立只读打开，观察P0R4 指针及 D Dictionary 图、P0E1 Entry payload、P0G2 图／batch／对象目录、inline三uint locator、对象版本、有限 Widget1/2 与固定 `probe.private.unreachable` V1 Int32field1 员工描述。H 从 record 的真实解码消费量计算：Base 重置、Delta 累加、retained 保持。业务前序和 State 图的最近 State 内容来源由正式 D 成员的准确 Entry 历史提供；Event 内容来源固定为空，另核自有非空 batch、全 Base 和完整目录无外部 head；Meta 的 PreviousMeta 单独验证。D/T Meta 不冒充 Schema Catalog。它不是完整 Schema 投影、通用 wire validator 或产品读取权威；不读内部 baseline、其他未知 ABI／布局拒绝。完成帧比较为完整地址、tag、user payload／tail SHA，未声称原始 RBF 全编码逐字节比较。
 
-公开 Event 故事检查独立捕获后仍保 State rewrite；Event 不再准备后丢弃 State 候选。rewrite 的 runner 必需判据为 `IndependentEventKeepsStateRewrite`、`SameEventPairIndependent` 和 `StateEventPairIndependent`，保留 State-State 的 same-S／cross-S 判据。Pair 的 ReferenceEquals 仅见证所选实现的资格，不扩大公开身份保证。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、另一个 writer PID 的续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
+公开 Event 故事检查独立捕获后仍保 State rewrite；Event 不再准备后丢弃 State 候选。runner 保留 `IndependentEventKeepsStateRewrite`；独立恢复判据为 `HistoricalStateReadsIndependent`、`RepeatedStateReadsIndependent`、`CrossSchemaStateReadsIndependent`、`RepeatedEventReadsIndependent` 和 `StateEventReadsIndependent`，不再要求跨图共享命中。witness 是诊断材料，实际 refs／帧负责裁决；本例不授同键异形独立编译、容器替换、另一个 writer PID 的续写、进程 Kill、断电、全类型组合、内部 baseline H 或性能资格。其他19类旧执行 lane已退出，本例不授其原故事当前资格。
 
 <a id="2026-10-13-限定验收"></a>
 ## 历史资格：2026-10-13 DB-087 P1 限定验收

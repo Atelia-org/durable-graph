@@ -37,8 +37,9 @@ closed repository copies, then upgrade a clean baseline with the final model. Pr
 have been removed. The P0R4 branch-directory pointer and P0G2 business graphs reject older layouts rather than
 providing a compatibility path.
 Restoration bypasses constructors and field initializers. Rebuild Transient state after
-delivery; State-State ReadPair may share read-only nodes, so view-specific context belongs outside those graphs.
-A pair containing an Event restores two independent graphs, including a pair of the same Event commit.
+delivery. LoadState and LoadEvent restore independent graphs; ReadCheckpoint restores at most two
+independent graphs and rejects mutable factory-instance collisions. ReadPair and its cross-graph sharing
+optimization have been removed; graph-local aliases and cycles remain supported.
 
 FrameStore/HeadStore own backing storage; meta Schema objects and business saves share publication.
 Completed frames remain append-only. Normal backing recovery handles incomplete tails; read-only

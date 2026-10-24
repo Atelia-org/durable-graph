@@ -124,7 +124,7 @@ public sealed class IndependentEventStorageTests : IDisposable {
     [InlineData("eventState", "event-one", "state")]
     [InlineData("eventEvent", "event-one", "event-two")]
     [InlineData("sameEvent", "event-one", "event-one")]
-    public void PairKeepsLocalIdsStringsCyclesAndAliasesInsideEachGraph(string pairKind, string firstText, string secondText) {
+    public void IndependentReadsKeepLocalIdsStringsCyclesAndAliasesInsideEachGraph(string pairKind, string firstText, string secondText) {
         string path = NewPath();
         CommitId state, firstEvent, secondEvent;
         using (Repository writer = Repository.CreateNew(path, SharedReadModel.Models())) {
@@ -140,40 +140,14 @@ public sealed class IndependentEventStorageTests : IDisposable {
         StoredGraphRevision secondSnapshot = reader.GraphStore.ReadBusinessGraph(Describe(reader, second).Address, null);
         Assert.Equal(firstSnapshot.RootId, secondSnapshot.RootId);
         Assert.Equal(firstSnapshot.ObjectHeads.Keys.Order(), secondSnapshot.ObjectHeads.Keys.Order());
-        var pair = reader.ReadPair(first, second);
+        var pair = (First: first == state ? reader.LoadState(first) : reader.LoadEvent(first),
+            Second: second == state ? reader.LoadState(second) : reader.LoadEvent(second));
         Node a = AssertCyclic(pair.First, firstText);
         Node b = AssertCyclic(pair.Second, secondText);
         Assert.NotSame(a, b);
         Assert.NotSame(a.Next, b.Next);
         Assert.NotSame(a.Links, b.Links);
         Assert.Equal(0, reader.GraphStore.AppendedFrames);
-    }
-
-    [Theory]
-    [InlineData("stateEvent")]
-    [InlineData("eventState")]
-    [InlineData("eventEvent")]
-    [InlineData("sameEvent")]
-    public void PairRejectsCrossGraphSingletonFactoriesBeforeHydratingEitherGraph(string pairKind) {
-        string path = NewPath();
-        CommitId state, firstEvent, secondEvent;
-        using (Repository writer = Repository.CreateNew(path, SharedReadModel.Models())) {
-            BranchInfo branch = writer.CreateRootBranchFromState("main", new Node { Value = 1, Text = "state" });
-            using WorkingCopy work = writer.OpenWorkingCopy(branch.Id);
-            state = work.BaseCommitId;
-            firstEvent = work.CommitEvent(new Node { Value = 2, Text = "event-one" }).Id;
-            secondEvent = work.CommitEvent(new Node { Value = 3, Text = "event-two" }).Id;
-        }
-        Node singleton = new();
-        int hydrations = 0;
-        using Repository reader = Repository.OpenReadOnlyExisting(path,
-            SharedReadModel.Models(allocate: () => singleton, hydrate: _ => hydrations++));
-        (CommitId first, CommitId second) = SelectPair(pairKind, state, firstEvent, secondEvent);
-        InvalidDataException failure = Assert.Throws<InvalidDataException>(() => reader.ReadPair(first, second));
-        Assert.Contains("distinct mutable instances", failure.Message);
-        Assert.Equal(0, hydrations);
-        Assert.Equal((byte)0, singleton.Value);
-        Assert.False(reader.IsFaulted);
     }
 
     [Theory]

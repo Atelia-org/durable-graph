@@ -1,5 +1,7 @@
 # DB-087：meta 自举与共享／私有 Schema 视图
 
+> 2026-10-24 后继：[DB-098](../0098-readpair-retirement/README.md)已退役 ReadPair 及跨图共享规划；本文 Pair 资格与共享测试只保历史意义。准确 reader 环境、独立 Checkpoint、State 准备槽及 owned 物理缓存继续有效。
+
 > 后继实施（2026-10-19）：[DB-096](../0096-history-and-head-model/private-removal.md)已删除 Private/ToShared，统一使用仓库 Catalog。本文保留原实现与资格；meta 自举、准确历史 Schema、source/prior 和发布/fault 纪律继续有效，私有目录演进不再是后续设计目标。
 
 > 已删除源码符号按 Git `a347a2f` 查阅；以下历史源码路径不表示当前入口。

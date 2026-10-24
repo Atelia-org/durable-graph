@@ -1,5 +1,7 @@
 # DB-079：共用图恢复准备与物化核心
 
+> 2026-10-24 后继：[DB-098](../0098-readpair-retirement/README.md)退役 ReadPair、跨图共享规划与专用比较接线，旧实现保留 Git tag。本文相关共享断言、测试与验收仅解释来源版本；独立图/Checkpoint 的完整准备、两阶段物化、工厂实例守卫及 State 增量合同继续有效。
+
 > 结论与适用性：已实施并独立验收；统一完整单图材料和两阶段物化，独立图/Pair 规划仍分开，不含跨操作驻留。
 > 本次整理来源 Git `8ef9fca`；原主入口 `docs/design-branches/0079-shared-graph-restoration-core-slice.md`。
 

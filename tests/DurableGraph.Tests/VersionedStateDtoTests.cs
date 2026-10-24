@@ -69,7 +69,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         ParameterInfo baseParameter = Assert.Single(prepareBase.GetParameters());
         Assert.Equal(dto.MakeByRefType(), baseParameter.ParameterType);
         Assert.True(baseParameter.IsIn);
-        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaBodyV1", "Capture", "Hydrate", "Normalize", "PrepareBaseBody", "PrepareDeltaBody", "ReadBaseBodyV1", "RegisterModel", "RegisterReaders", "StateEquals", "ValidateStringReferences", "VisitReferences", "WriteBaseBody" },
+        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaBodyV1", "Capture", "Hydrate", "Normalize", "PrepareBaseBody", "PrepareDeltaBody", "ReadBaseBodyV1", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "VisitReferences", "WriteBaseBody" },
             body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Select(method => method.Name).Order().ToArray());
     }
 

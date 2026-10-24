@@ -9,18 +9,16 @@ using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
-public sealed class SplitRepositoryPairTests : IDisposable {
-    private const string Prefix = "dg-split-repository-pair-";
-    private const string Text = "Pair preserves two equal but distinct nonempty strings.";
+public sealed class SplitRepositoryReadTests : IDisposable {
+    private const string Prefix = "dg-split-repository-read-";
+    private const string Text = "Reads preserve two equal but distinct nonempty strings.";
     private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
     private static readonly DurableSchema Extra = new("SplitPairExtra", 1, new DurableFieldInfo(1, TypeTag.Int32));
     private static readonly DurableSchema ProbeV1 = new("SplitPairProbe", 1, new DurableFieldInfo(1, TypeTag.Int32));
     private static readonly DurableSchema ProbeV2 = new("SplitPairProbe", 2, new DurableFieldInfo(1, TypeTag.Int32));
 
-    // These identity assertions witness the current sharing optimization. The public Pair
-    // contract continues to require read-only results without promising cross-view identity.
     [Fact]
-    public void SameSchemaSharesStableGeneratedClosureAndChangedChildSplitsItsAncestors() {
+    public void HistoricalStateReadsPreserveCyclesAndIsolateMutableAndTransientContent() {
         using (Repository seed = Repository.CreateStorageNew(_path, GeneratedModels())) {
             SplitPairEnvelope root = Envelope();
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", root).Id);
@@ -53,36 +51,25 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             SplitPairEnvelope independentlyDecodedSecond = AssertEnvelope(reader.LoadState(stable), 2);
             Assert.NotSame(independentlyDecodedFirst.Text, independentlyDecodedSecond.Text);
             Assert.NotSame(independentlyDecodedFirst.SameText, independentlyDecodedSecond.SameText);
-            // Same physical heads yield distinct strings under separate ordinary reads;
-            // Pair must prove same-ID sharing without interning the other equal string ID.
-            var unchanged = reader.ReadPair(original, stable);
-            SplitPairEnvelope first = AssertEnvelope(unchanged.First, 2);
-            Assert.Same(first, AssertEnvelope(unchanged.Second, 2));
-            Assert.NotSame(first.Text, first.SameText); // Equal bytes under different IDs must not intern.
-            Assert.Same(string.Empty, first.Empty);
-            var split = reader.ReadPair(original, changed);
-            SplitPairEnvelope oldRoot = AssertEnvelope(split.First, 2), newRoot = AssertEnvelope(split.Second, 20);
-            Assert.NotSame(oldRoot, newRoot);
+            SplitPairEnvelope oldRoot = independentlyDecodedFirst;
+            SplitPairEnvelope newRoot = AssertEnvelope(reader.LoadState(changed), 20);
+            Assert.NotSame(oldRoot, independentlyDecodedSecond);
             Assert.NotSame(oldRoot.Widget, newRoot.Widget);
             Assert.NotSame(oldRoot.Widget!.Child, newRoot.Widget!.Child);
-            Assert.Same(oldRoot.Widget.Numbers, newRoot.Widget.Numbers); // This leaf has no dependency on the changed cycle.
-            Assert.Same(oldRoot.Text, newRoot.Text);
-            Assert.Same(oldRoot.SameText, newRoot.SameText);
-            Assert.NotSame(oldRoot.Text, newRoot.SameText);
-            Assert.Same(string.Empty, newRoot.Empty);
-            var reverse = reader.ReadPair(changed, original);
-            AssertEnvelope(reverse.First, 20);
-            AssertEnvelope(reverse.Second, 2);
-            SplitPairEnvelope independent = AssertEnvelope(reader.LoadState(original), 2);
-            Assert.NotSame(oldRoot, independent);
-            Assert.NotSame(oldRoot.Widget.Numbers, independent.Widget!.Numbers);
+            Assert.NotSame(oldRoot.Widget.Numbers, newRoot.Widget.Numbers);
+            oldRoot.Widget.Numbers!.Add(999);
+            oldRoot.CachedView = new object();
+            Assert.Equal(128, newRoot.Widget.Numbers!.Count);
+            Assert.Null(newRoot.CachedView);
+            Assert.Null(independentlyDecodedSecond.CachedView);
+            AssertEnvelope(reader.LoadState(original), 2);
             Assert.Equal(0, reader.GraphStore.AppendedFrames);
         }
         AssertFilesEqual(files, SnapshotFiles());
     }
 
     [Fact]
-    public void DifferentSchemaHydrationClosuresKeepEqualCurrentDtosIndependentAndMatchSingleReads() {
+    public void DifferentSchemaHydrationClosuresKeepEqualCurrentDtosIndependent() {
         using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
             seed.CreateTag("before", main.BaseCommitId);
@@ -106,7 +93,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(oldDto.GetRequired(Describe(reader, first).RootId).Schema, newDto.GetRequired(Describe(reader, second).RootId).Schema);
             Assert.Equal(7, newDto.GetRequired(Describe(reader, second).RootId).GetState<int>());
             counts.ResetObservations();
-            var pair = reader.ReadPair(first, second);
+            var pair = (First: reader.LoadState(first), Second: reader.LoadEvent(second));
             ProbeRoot oldRoot = Assert.IsType<ProbeRoot>(pair.First), newRoot = Assert.IsType<ProbeRoot>(pair.Second);
             Assert.Equal(7, oldRoot.Value);
             Assert.Equal(107, newRoot.Value);
@@ -116,9 +103,6 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(0, counts.Normalizes); // Both layouts are current; the difference exists only in Hydrate's environment.
             Assert.Equal(oldRoot.Value, Assert.IsType<ProbeRoot>(reader.LoadState(first)).Value);
             Assert.Equal(newRoot.Value, Assert.IsType<ProbeRoot>(reader.LoadEvent(second)).Value);
-            var reverse = reader.ReadPair(second, first);
-            Assert.Equal(107, Assert.IsType<ProbeRoot>(reverse.First).Value);
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(reverse.Second).Value);
             Assert.False(reader.IsFaulted);
             Assert.Equal(0, reader.GraphStore.AppendedFrames);
         }
@@ -126,7 +110,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     }
 
     [Fact]
-    public void HistoricalRewriteIsNotSharedEvenWithinOneEnvironmentAndConfirmedBaseBecomesEligible() {
+    public void HistoricalUpgradeReadsAreIndependentAndConfirmedStateRewritesAsBase() {
         using (Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()))) {
             using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
             seed.CreateTag("old", main.BaseCommitId);
@@ -142,11 +126,11 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(ProbeV2, normalized.Objects[Describe(reader, old).RootId].Current.Schema);
             Assert.True(normalized.Objects[Describe(reader, old).RootId].RequiresRewrite);
             counts.ResetObservations();
-            var pair = reader.ReadPair(old, old);
+            var pair = (First: reader.LoadState(old), Second: reader.LoadState(old));
             Assert.Equal(7, Assert.IsType<ProbeRoot>(pair.First).Value);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(pair.Second).Value);
             Assert.NotSame(pair.First, pair.Second);
-            Assert.Single(counts.Lookups); // One same-S binding; rewrite still forbids sharing.
+            Assert.Equal(2, counts.Lookups.Count); // Each read closes its own exact schema environment.
             Assert.Equal(2, counts.Normalizes);
             Assert.Equal(2, counts.Hydrates);
         }
@@ -159,11 +143,11 @@ public sealed class SplitRepositoryPairTests : IDisposable {
             Assert.Equal(ObjectVersionKind.Base, rewritten.Kind);
             Assert.Equal(Describe(writer, current).RootId.Value, rewritten.ObjectId);
             Assert.False(main.Baseline!.Objects[Describe(writer, current).RootId].RequiresRewrite);
-            var eligible = writer.ReadPair(current, current);
-            Assert.Same(eligible.First, eligible.Second);
+            var eligible = (First: writer.LoadState(current), Second: writer.LoadState(current));
+            Assert.NotSame(eligible.First, eligible.Second);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(eligible.First).Value);
             CommitId old = writer.ResolveTag("old");
-            var mixed = writer.ReadPair(old, current);
+            var mixed = (First: writer.LoadState(old), Second: writer.LoadState(current));
             Assert.NotSame(mixed.First, mixed.Second);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(mixed.First).Value);
             Assert.Equal(7, Assert.IsType<ProbeRoot>(mixed.Second).Value);
@@ -171,94 +155,92 @@ public sealed class SplitRepositoryPairTests : IDisposable {
     }
 
     [Fact]
-    public void SecondHydrationFailureDeliversNoPairAndOwnerRemainsUsable() {
-        SeedProbePair();
+    public void CheckpointSecondHydrationFailureDeliversNothingAndOwnerRemainsUsable() {
+        SeedCheckpoint();
         Dictionary<string, byte[]> files = SnapshotFiles();
-        Counts counts = new() { FailValue = 8 };
+        Counts counts = new() { FailValue = 7 };
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts))) {
             CommitId first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
-            (IDurableObject First, IDurableObject Second)? delivered = null;
-            Assert.Same(counts.Failure, Assert.Throws<InvalidDataException>(() => delivered = reader.ReadPair(first, second)));
+            Checkpoint? delivered = null;
+            Assert.Same(counts.Failure, Assert.Throws<InvalidDataException>(() => delivered = reader.ReadCheckpoint(second)));
             Assert.Null(delivered);
             Assert.Equal(2, counts.Allocations);
             Assert.Equal(2, counts.Hydrates); // The first callback can run; its object is still not delivered.
             Assert.False(reader.IsFaulted);
             Assert.Equal(second, reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id);
             counts.FailValue = null;
-            var success = reader.ReadPair(first, second);
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(success.First).Value);
-            Assert.Equal(8, Assert.IsType<ProbeRoot>(success.Second).Value);
-            Assert.NotSame(success.First, success.Second);
+            var success = Assert.IsType<EventCheckpoint>(reader.ReadCheckpoint(second));
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(success.PreviousState).Value);
+            Assert.Equal(8, Assert.IsType<ProbeRoot>(success.Event).Value);
+            Assert.NotSame(success.PreviousState, success.Event);
         }
         AssertFilesEqual(files, SnapshotFiles());
     }
 
     [Fact]
     public void CrossGraphRepeatedMutableAllocatorIsRejectedBeforeEitherHydration() {
-        SeedProbePair();
+        SeedCheckpoint();
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { Singleton = new ProbeRoot { Value = 100 } };
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts))) {
             CommitId first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
-            (IDurableObject First, IDurableObject Second)? delivered = null;
-            Assert.Throws<InvalidDataException>(() => delivered = reader.ReadPair(first, second));
+            Checkpoint? delivered = null;
+            Assert.Throws<InvalidDataException>(() => delivered = reader.ReadCheckpoint(second));
             Assert.Null(delivered);
             Assert.Equal(2, counts.Allocations);
             Assert.Equal(0, counts.Hydrates);
             Assert.Equal(100, counts.Singleton!.Value);
             Assert.False(reader.IsFaulted);
             counts.Singleton = null;
-            var success = reader.ReadPair(first, second);
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(success.First).Value);
-            Assert.Equal(8, Assert.IsType<ProbeRoot>(success.Second).Value);
-            Assert.NotSame(success.First, success.Second);
+            var success = Assert.IsType<EventCheckpoint>(reader.ReadCheckpoint(second));
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(success.PreviousState).Value);
+            Assert.Equal(8, Assert.IsType<ProbeRoot>(success.Event).Value);
+            Assert.NotSame(success.PreviousState, success.Event);
             Assert.Equal(2, counts.Hydrates);
         }
         AssertFilesEqual(files, SnapshotFiles());
     }
 
     [Fact]
-    public void PairAcceptsReopenedHandlesAndChecksLifetimeAndCallbackReentry() {
-        CommitId stale = SeedProbePair();
+    public void ReadsAcceptReopenedHandlesAndCheckLifetimeAndCallbackReentry() {
+        CommitId stale = SeedCheckpoint();
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new();
         Repository reader = Repository.OpenStorageReadOnlyExisting(_path, ProbeModels(1, counts));
         try {
             CommitId first = reader.ResolveTag("first"), second = reader.ResolveTag("second");
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.ReadPair(stale, second).First).Value);
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.ReadPair(first, stale).Second).Value);
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.LoadState(stale)).Value);
             counts.ResetObservations();
-            Assert.Throws<ArgumentException>(() => reader.ReadPair(default, second));
-            Assert.Throws<ArgumentException>(() => reader.ReadPair(first, default));
+            Assert.Throws<ArgumentException>(() => reader.ReadCheckpoint(default));
             Assert.Equal(0, counts.Allocations);
             counts.DuringHydrate = () => {
-                Assert.Throws<InvalidOperationException>(() => reader.ReadPair(first, second));
+                Assert.Throws<InvalidOperationException>(() => reader.ReadCheckpoint(second));
                 Assert.Throws<InvalidOperationException>(() => reader.LoadState(first));
                 Assert.Throws<InvalidOperationException>(() => reader.OpenWorkingCopy(BranchNamed(reader, "main")));
                 Assert.Throws<InvalidOperationException>(() => reader.Dispose());
             };
-            var pair = reader.ReadPair(first, second);
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(pair.First).Value);
-            Assert.Equal(8, Assert.IsType<ProbeRoot>(pair.Second).Value);
+            var checkpoint = Assert.IsType<EventCheckpoint>(reader.ReadCheckpoint(second));
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(checkpoint.PreviousState).Value);
+            Assert.Equal(8, Assert.IsType<ProbeRoot>(checkpoint.Event).Value);
             Assert.Equal(2, counts.Hydrates);
             counts.DuringHydrate = null;
             Assert.Equal(7, Assert.IsType<ProbeRoot>(reader.LoadState(first)).Value);
             Assert.False(reader.IsFaulted);
             reader.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => reader.ReadPair(first, second));
-            Assert.Equal(7, Assert.IsType<ProbeRoot>(pair.First).Value);
-            Assert.Equal(8, Assert.IsType<ProbeRoot>(pair.Second).Value); // Delivered objects outlive the owner.
+            Assert.Throws<ObjectDisposedException>(() => reader.ReadCheckpoint(second));
+            Assert.Equal(7, Assert.IsType<ProbeRoot>(checkpoint.PreviousState).Value);
+            Assert.Equal(8, Assert.IsType<ProbeRoot>(checkpoint.Event).Value); // Delivered objects outlive the owner.
         } finally { reader.Dispose(); }
         AssertFilesEqual(files, SnapshotFiles());
     }
 
-    private CommitId SeedProbePair() {
+    private CommitId SeedCheckpoint() {
         using Repository seed = Repository.CreateStorageNew(_path, ProbeModels(1, new()));
         using WorkingCopy main = seed.OpenWorkingCopy(seed.CreateRootBranchFromState("main", new ProbeRoot { Value = 7 }).Id);
         CommitId first = main.BaseCommitId;
         seed.CreateTag("first", first);
         Assert.IsType<ProbeRoot>(main.State).Value = 8;
-        CommitId second = main.CommitState().Id;
+        CommitId second = main.CommitEvent(main.State!).Id;
         seed.CreateTag("second", second);
         Assert.Equal(Snapshot(seed, first).SchemaRoot,
             Snapshot(seed, second).SchemaRoot);
@@ -309,8 +291,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
                 int offset = counts.HydrateFromSchema && extra ? 100 : 0;
                 DurableSchema current = currentVersion == 1 ? ProbeV1 : ProbeV2;
                 return new StateModelBinding<ProbeRoot, int>(new(current, BaseInt,
-                    static (in int prior, in int now) => new(prior != now, BaseInt(in now).Body),
-                    static (in int left, in int right) => left == right),
+                    static (in int prior, in int now) => new(prior != now, BaseInt(in now).Body)),
                     Enumerable.Range(1, currentVersion).Select(version => context.ResolveReader(version == 1 ? ProbeV1 : ProbeV2)),
                     row => { counts.Normalizes++; return row.GetState<int>(); },
                     () => { counts.Allocations++; return counts.Singleton ?? new ProbeRoot(); },
@@ -340,7 +321,7 @@ public sealed class SplitRepositoryPairTests : IDisposable {
         internal int? FailValue;
         internal ProbeRoot? Singleton;
         internal Action? DuringHydrate;
-        internal InvalidDataException Failure { get; } = new("Pair's second hydration failed.");
+        internal InvalidDataException Failure { get; } = new("Checkpoint hydration failed.");
         internal List<bool> Lookups { get; } = [];
         internal void ResetObservations() { Normalizes = Allocations = Hydrates = 0; Lookups.Clear(); }
     }
@@ -360,4 +341,5 @@ internal sealed partial class SplitPairEnvelope : IDurableObject {
     [DurableField(2)] internal string? Text = null;
     [DurableField(3)] internal string? SameText = null;
     [DurableField(4)] internal string? Empty = null;
+    [Transient] internal object? CachedView = null;
 }

@@ -171,7 +171,8 @@ Console.WriteLine("RepositoryApi:BranchCommitIds:SharedColdSave:Passed");
         @('private-checkout', 'repository.CheckoutPrivate("main");', 'CS1061', 'CheckoutPrivate'),
         @('promote-state', 'repository.OpenWorkingCopy(default).CommitStateToShared();', 'CS1061', 'CommitStateToShared'),
         @('promote-explicit-state', 'repository.OpenWorkingCopy(default).CommitStateToShared(state);', 'CS1061', 'CommitStateToShared'),
-        @('promote-event', 'repository.OpenWorkingCopy(default).CommitEventToShared(state);', 'CS1061', 'CommitEventToShared')
+        @('promote-event', 'repository.OpenWorkingCopy(default).CommitEventToShared(state);', 'CS1061', 'CommitEventToShared'),
+        @('read-pair', 'repository.ReadPair(checkpoint, checkpoint);', 'CS1061', 'ReadPair')
     )
     $negative = Join-Path $workRoot 'Negative.cs'
     foreach ($case in $cases) {

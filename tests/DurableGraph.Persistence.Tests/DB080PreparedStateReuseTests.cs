@@ -335,7 +335,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         repository.LoadEvent(head);
         Assert.Equal(1, normalized);
         normalized = 0;
-        repository.ReadPair(state, head);
+        repository.ReadCheckpoint(head);
         Assert.Equal(2, normalized);
         Assert.Same(entry, repository.PreparedStateEntry);
         GraphReadStatistics stats = Observe(repository);

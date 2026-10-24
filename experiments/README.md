@@ -11,7 +11,7 @@
 | 导航ID、分叉切换与版本化摘要的应用接入 | [ApplicationRecipesConsumer](PackageConsumerProbe/ApplicationRecipesConsumer/README.md) |
 | 显式分类诊断、两条生成路线与修正后的普通包冷恢复 | [ExplicitStorageClassificationConsumer](PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md) |
 | 无业务注册的 meta 冷读与容器 Delta | [MetaBootstrapSchemaConsumer](PackageConsumerProbe/MetaBootstrapSchemaConsumer/README.md) |
-| accepted-history、Upgrade、准确 S、tag、Fork、Pair 与冷增量 | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md) |
+| accepted-history、Upgrade、准确 S、tag、Fork、独立读取与冷增量 | [SplitRepositoryConsumer](PackageConsumerProbe/SplitRepositoryConsumer/README.md) |
 | 统一 Catalog 的 Nullable/List 升级与冷续写 | [容器升级消费者](PackageConsumerProbe/PrivateContainerConsumer/README.md)（保留历史目录名） |
 | 完整关闭库副本、独立草稿、定稿与 history 模式 | [DevelopmentSchemaConsumer](PackageConsumerProbe/DevelopmentSchemaConsumer/README.md) |
 | 泛型 DTO、工厂与 readonly accessor 的独立机制 | [GenericBindingShapeProbe](GenericBindingShapeProbe/README.md) |

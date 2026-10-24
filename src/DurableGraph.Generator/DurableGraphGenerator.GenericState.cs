@@ -183,7 +183,7 @@ public sealed partial class DurableGraphGenerator {
         output.AppendLine("            Write(ref writer, in value, schema);");
         output.Append("            return new ").Append(PayloadNamespace).AppendLine("PreparedBaseBody(buffer.WrittenSpan);");
         output.AppendLine("        }");
-        AppendFamilyStateEquality(output, layout);
+        if (layout.Shape.Kind == 2) AppendFamilyStateEquality(output, layout);
         AppendFamilyDelta(output, layout);
         AppendFamilyApply(output, layout);
         output.Append("        public static void Visit(in ").Append(dto).Append(" state, ").Append(RuntimeName).Append("IStateReferenceVisitor visitor, ")

@@ -62,7 +62,7 @@ public sealed partial class DurableGraphGenerator {
             Method("Visit", compilation.GetSpecialType(SpecialType.System_Void), (bodyDto, RefKind.In), (Runtime("IStateReferenceVisitor"), RefKind.None), (schema, RefKind.None)) &&
             Method("PrepareBase", compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.PreparedBaseBody"), (bodyDto, RefKind.In), (schema, RefKind.None)) &&
             Method("PrepareDelta", compilation.GetTypeByMetadataName("Atelia.DurableGraph.Serialization.PreparedDeltaBody"), (bodyDto, RefKind.In), (bodyDto, RefKind.In), (schema, RefKind.None)) &&
-            Method("StateEquals", boolean, (bodyDto, RefKind.In), (bodyDto, RefKind.In), (schema, RefKind.None));
+            (layout.Shape.Kind != 2 || Method("StateEquals", boolean, (bodyDto, RefKind.In), (bodyDto, RefKind.In), (schema, RefKind.None)));
 
         INamedTypeSymbol? Runtime(string name) => compilation.GetTypeByMetadataName("Atelia.DurableGraph.Runtime." + name);
         bool Same(ITypeSymbol? left, ITypeSymbol? right) => left is not null && right is not null && SymbolEqualityComparer.Default.Equals(left, right);

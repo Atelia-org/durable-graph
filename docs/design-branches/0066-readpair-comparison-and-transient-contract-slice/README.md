@@ -1,6 +1,7 @@
 # DB-066 · ReadPair 比较能力与 Transient 使用合同
 
-> Event 配对后继：[DB-097](../0097-independent-event-graphs/README.md)已实施任一 Event Pair 独立物化；State–State 的比较 proof、可信闭包及 ReadPair 公开只读约束保持。本文的旧混合角色共享见证保留当片含义，不新增同 Event 共享保证。
+> 2026-10-24 后继：[DB-098](../0098-readpair-retirement/README.md)退役 ReadPair、跨图共享规划与专用比较接线，旧实现保留 Git tag。本文相关共享断言、测试与验收仅解释来源版本；独立图/Checkpoint 的完整准备、两阶段物化、工厂实例守卫及 State 增量合同继续有效。
+
 
 > 整理说明：2026-10-14 从 `docs/design-branches/0066-readpair-comparison-and-transient-contract-slice.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：完整比较替代共享判定编码、缺 proof 保守退出及图外 Transient view 的历史合同与验收；不据当片结果外推性能或跨操作共享。
@@ -167,7 +168,7 @@ Transient 表示不进入持久布局，**不表示修改没有可见效果**。
 - 普通 SG 与 Family 两条路径都证明无需手工登记 equality，且实际共享仍生效；普通路径不能被只测试 Family 掩盖。
 - 真实包 external view 示例校验两视图查询结果，不依赖跨图实例身份；包内两种 ReadPair remarks 包含 Transient 限制。
 
-优先复用 [SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、
+优先复用 [SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs")、
 [SharedEventHistoryTests](../../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs)、
 [EventHistoryConsumer](../../../experiments/PackageConsumerProbe/EventHistoryConsumer/README.md) 和
 [DB-065 包文档验收](../../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1)。
@@ -196,10 +197,10 @@ Runtime、SG、公开合同/真实包示例分工实现，主线程负责 GraphR
 
 | 要求 | 实现与可执行见证 |
 |---|---|
-| 可选完整 proof，缺能力与错误区分 | [CapturedStatePreparation](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)、[ObjectStateComparisonTests](../../../tests/DurableGraph.Tests/ObjectStateComparisonTests.cs)；双方 exact Schema/DTO 均校验，不回退编码 |
+| 可选完整 proof，缺能力与错误区分 | [CapturedStatePreparation](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)、[ObjectStateComparisonTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Tests/ObjectStateComparisonTests.cs")；双方 exact Schema/DTO 均校验，不回退编码 |
 | 容器完整比较且不编码 | 三种 binding；上述 tests 用抛错槽 writer 验证 shape、零长度维度、Count、ComparerKind、key/value 和顺序 |
 | SG 自动登记及完整表示 | [GeneratedComparisonRegistrationTests](../../../tests/DurableGraph.Tests/GeneratedComparisonRegistrationTests.cs)；普通/Family 分别 Capture 并调用已登记 proof，冷重开 ReadPair 证明实际共享；覆盖继承、inline/generic 引用、特殊浮点、decimal、offset、Nullable |
-| 读取仅依赖比较，错误不重试 | [SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)；保存后用抛错 preparer 读取，缺 proof 与循环依赖、比较异常计数，以及同版 Normalize 改值/改边 |
+| 读取仅依赖比较，错误不重试 | [SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs")；保存后用抛错 preparer 读取，缺 proof 与循环依赖、比较异常计数，以及同版 Normalize 改值/改边 |
 | 两种 Transient 用法与包交付 | [SharedReadProbe（Git 历史）](../0091-retired-material-cleanup/README.md#git-history "Git 6dbaf0e:experiments/PackageConsumerProbe/EventHistoryConsumer/SharedReadProbe.cs")；两个 WorldView 查询各自上下文，独立只读打开后原位初始化；[XML gate](../../../experiments/PackageConsumerProbe/Run-EventHistoryRecoveryProbe.ps1) 检查两种 ReadPair remarks |
 
 串行验证（2026-09-11），日志存放于未跟踪的 `artifacts/db066-validation/`：

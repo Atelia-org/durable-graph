@@ -431,13 +431,13 @@ function Invoke-Consumer {
         }
         $requiredObservations = switch ($Lane) {
             'seed' { @('RingAndSharedList', 'ActualRefsVerified', 'CompleteStorageVerified') }
-            'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'SameSUnchangedListShared', 'RewriteWidgetsIndependent') }
-            'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'SameSPairShared', 'CrossSPairIndependent', 'IndependentEventKeepsStateRewrite', 'SameEventPairIndependent', 'StateEventPairIndependent') }
+            'upgrade' { @('ReadOnlyFilesUnchanged', 'ExactHistoricalDto', 'ReadOnlyUpgrade', 'HistoricalStateReadsIndependent') }
+            'rewrite' { @('HistoricalForkUsesStateS', 'LatestCatalogRemainsIndependent', 'RetainedListHeadAndH', 'RepeatedStateReadsIndependent', 'CrossSchemaStateReadsIndependent', 'IndependentEventKeepsStateRewrite', 'RepeatedEventReadsIndependent', 'StateEventReadsIndependent') }
             'continue' { @('SingleListDelta', 'ExactPrior', 'IdsPreserved', 'ActualWireH', 'RetainedWidgetHeads',
                 'CatalogBaselineIdentities', 'CatalogEventAcceptsMetaOnly', 'CatalogRetainedDeclarations', 'CatalogColdListDelta', 'CatalogSharedRootAdvanced',
                 'CatalogHotStateRetained', 'CatalogIndependentRead', 'CatalogSameOwnerCheckout',
                 'FollowupCatalogUnchanged', 'FollowupBranchAdvanced', 'FollowupEventRetainsState', 'SharedColdOwnerListDelta', 'FollowupRetainedOrigins') }
-            'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSPairIndependent', 'CatalogColdValues', 'FollowupSharedColdValues') }
+            'verify' { @('ReadOnlyFilesUnchanged', 'OldTagPreserved', 'AccurateSchemaPins', 'CompleteFramesPreserved', 'CrossSchemaStateReadsIndependent', 'CatalogColdValues', 'FollowupSharedColdValues') }
         }
         foreach ($check in $requiredObservations) {
             if ($evidence.Observations.$check -isnot [bool] -or !$evidence.Observations.$check) { throw "Consumer $Lane failed its $check observation." }

@@ -80,12 +80,14 @@ using (var repo = Repository.OpenExisting(path, World.Models())) {
         Check(childSameValue != childState, "same-value save has a fresh commit identity");
         Check(work.StateSourceCommitId == childSameValue, "same-value save becomes accepted State source");
     }
-    var pair = repo.ReadPair(parentTip, childState);
-    Check(((World)pair.First).Progress == 2 && ((World)pair.Second).Progress == 3, "Pair follows each sibling's own source");
-    var crossRoot = repo.ReadPair(eventOnlyTip, childState);
-    Check(((ActionRecord)crossRoot.First).Number == 11 && ((World)crossRoot.Second).Progress == 3, "Pair supports different roots and kinds in input order");
-    var samePair = repo.ReadPair(childState, childState);
-    Check(((World)samePair.First).Progress == 3 && ((World)samePair.Second).Progress == 3, "Pair accepts the same point twice");
+    var parentSnapshot = (World)repo.LoadState(parentTip);
+    var childSnapshot = (World)repo.LoadState(childState);
+    Check(parentSnapshot.Progress == 2 && childSnapshot.Progress == 3, "independent reads follow each sibling's own source");
+    Check(((ActionRecord)repo.LoadEvent(eventOnlyTip)).Number == 11 && childSnapshot.Progress == 3,
+        "independent reads support different roots and kinds");
+    var childAgain = (World)repo.LoadState(childState);
+    Check(childAgain.Progress == 3 && !ReferenceEquals(childSnapshot, childAgain) &&
+        !ReferenceEquals(childSnapshot.Inventory, childAgain.Inventory), "repeated State reads restore independent mutable graphs");
     Check(repo.ReadCurrentCommit(parentId).Commit.Id == parentTip, "child publication does not move parent");
     Check(repo.EnumerateEvents(childSameValue).Select(info => ((ActionRecord)repo.LoadEvent(info.Id)).Number).SequenceEqual(new[] { 3, 2, 1 }),
         "lazy event enumeration crosses fork history without holding a lease over application reads");

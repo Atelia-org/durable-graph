@@ -403,43 +403,6 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.False(bad.IsImmutableLeaf);
     }
 
-    [Fact]
-    public void ImmutableLeafModelSharesReadPairWithoutRegression() {
-        GeneratorTestRun run = RunGenerator("""
-            using Atelia.DurableGraph;
-            using Atelia.DurableGraph.Persistence;
-            using Atelia.DurableGraph.Runtime;
-            [DurableType("leaf.pair.world", 1)]
-            public partial class World : IDurableObject {
-                [DurableField(1)] public readonly int Value;
-            }
-            public static class Host {
-                public static StateModelRegistry Models() {
-                    var models = new StateModelRegistry();
-                    World.__DurableState.RegisterModel(models);
-                    return models;
-                }
-                public static IDurableObject Create() => new World();
-                public static void Save(string path, IDurableObject world, StateModelRegistry models, ReadAmplificationBaseBudgetParameters parameters) {
-                    using var repository = Repository.CreateNew(path, models);
-                    repository.CreateRootBranchFromState("main", (World)world, parameters: parameters);
-                }
-            }
-            """);
-        Assert.DoesNotContain(run.GeneratorDiagnostics, IsError);
-        Type host = EmitAndLoad(run.OutputCompilation).GetType("Host")!;
-        StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        IDurableObject world = host.GetMethod("Create")!.CreateDelegate<Func<IDurableObject>>()();
-        using RawBaseDirectory directory = new();
-        host.GetMethod("Save")!.CreateDelegate<Action<string, IDurableObject, StateModelRegistry, ReadAmplificationBaseBudgetParameters>>()(
-            directory.Path, world, models, TestSavePolicies.Baseline);
-        using (var repository = Repository.OpenReadOnlyExisting(directory.Path, models)) {
-            CommitId frame = Assert.Single(repository.ReadFrames(Assert.Single(repository.ListBranches()).Id)).Id;
-            (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame);
-            Assert.Same(first, second);
-        }
-    }
-
     private static void AssertLeafClassification(string source, bool expectedLeaf) {
         // The source must contain exactly one non-inline reference model; this helper asserts
         // the delivered binding capability instead of generated text (DB-075 C2).

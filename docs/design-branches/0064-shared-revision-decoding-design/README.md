@@ -1,6 +1,8 @@
 # DB-064：两份 Revision 合并读取与安全共享边界
 
-> Event 配对后继：[DB-097](../0097-independent-event-graphs/README.md)已实施任一 Event Pair（包括同 Event 两次）独立物化，保留同操作 mutable factory 实例守卫；本文的共享闭包继续用于 State–State，旧 E/S head 复用证据仅解释当片版本，不约束新 Event 自有内容。
+> 2026-10-24 后继：[DB-098](../0098-readpair-retirement/README.md)退役 ReadPair、跨图共享规划与专用比较接线，旧实现保留 Git tag。本文相关共享断言、测试与验收仅解释来源版本；独立图/Checkpoint 的完整准备、两阶段物化、工厂实例守卫及 State 增量合同继续有效。
+
+> 2026-10-20 当时的 Event 配对后继：[DB-097](../0097-independent-event-graphs/README.md)已实施任一 Event Pair（包括同 Event 两次）独立物化，保留同操作 mutable factory 实例守卫；当时共享闭包继续用于 State–State，旧 E/S head 复用证据仅解释当片版本，不约束新 Event 自有内容。
 
 > 整理说明：2026-10-14 从 `docs/design-branches/0064-shared-revision-decoding-design.md` 搬入问题入口；正文来源 Git `8ef9fca`。
 > 适用性：操作内 exact 解码复用与只读共享的当片证据；比较能力由 [DB-066](../0066-readpair-comparison-and-transient-contract-slice/README.md) 接续，恢复核心后继见 [DB-079](../0079-shared-graph-restoration-core-slice/README.md)。
@@ -213,7 +215,7 @@ DB-062/063 的已选保存拓扑仍可复用磁盘中真实未变的 ObjectVersi
 | 证据 | 结果与边界 |
 |---|---|
 | [RevisionReadSessionTests](../../../tests/DurableGraph.Persistence.Tests/RevisionReadSessionTests.cs) | 10 cases：实际 ID/head、同 Frame 多 ID、Delta 链、等值新 Base、owned 数据闭库后可用、cache hit 仍验证引用/nominal/Dictionary lookup、坏 head/未全消费拒绝、不跨操作缓存 |
-| [SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs) | 17 cases：双向选择、稳定/变化环、同值新版本、独立 owner 共享 leaf、Normalize 改值/边、升级与 source 验证、晚期失败、singleton、非空 string 与 Empty 例外 |
+| [SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs") | 17 cases：双向选择、稳定/变化环、同值新版本、独立 owner 共享 leaf、Normalize 改值/边、升级与 source 验证、晚期失败、singleton、非空 string 与 Empty 例外 |
 | [SharedEventHistoryTests](../../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) | 3 cases：Pending 与 State 的 child/List 可变隔离；同版 string 复用后 ID 不漂移，未改立即提交零 local object writes；错误 allocator 拒绝且仓库仍可重试读取 |
 | StateStore suite | 聚焦 74、全量 702 通过，0 失败/跳过；包含既有独立 Event、错误 handle、发布与严格只读回归 |
 | Runtime/Generator suite | 全量 1519 通过，0 失败/跳过；两套全量合计 2221 个测试 |

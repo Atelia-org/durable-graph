@@ -56,7 +56,7 @@ public sealed partial class DurableGraphGenerator {
         string domain = type.Symbol.ToDisplayString(FullyQualifiedNameFormat);
         source.Append(indent).Append("private static readonly global::Atelia.DurableGraph.Runtime.StatePreparationBinding<")
             .Append(current.Name).Append("> Preparation = new(").Append(current.Name)
-            .AppendLine(".Schema, PrepareBaseBody, PrepareDeltaBody, StateEquals);");
+            .AppendLine(".Schema, PrepareBaseBody, PrepareDeltaBody);");
         source.Append(indent).Append("private static readonly global::System.Func<").Append(domain)
             .Append(", global::Atelia.DurableGraph.Runtime.CaptureContext, ").Append(current.Name)
             .Append("> CaptureDelegate = static (value, context) => Capture(value");

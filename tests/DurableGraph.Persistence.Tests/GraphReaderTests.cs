@@ -19,7 +19,7 @@ public sealed class GraphReaderTests : IDisposable {
     public GraphReaderTests() => _writer = RepositoryStorageFacade.CreateNew(_root);
 
     [Fact]
-    public void PairRestoresInputOrderActualTypesAndEachGraphsAliasesAndCycles() {
+    public void IndependentReadsRestoreInputOrderActualTypesAndEachGraphsAliasesAndCycles() {
         FrameAddress first = Seed((1, FirstSchema, new(2, 2, 10)), (2, SecondSchema, new(1, 1, 11)));
         FrameAddress second = Seed((1, FirstSchema, new(2, 2, 20)), (2, SecondSchema, new(1, 1, 21)));
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()), Model<SecondNode>(SecondSchema, () => new()));
@@ -31,7 +31,7 @@ public sealed class GraphReaderTests : IDisposable {
         Assert.Same(secondSource.BindingEnvironment, firstSource.BindingEnvironment);
 
         // Input roots can select durable subclasses; restoration uses their actual models.
-        var pair = GraphReader.ReadPair(secondSource, new(secondSource.SourceModels!), new(1),
+        var pair = GraphReader.ReadIndependent(secondSource, new(secondSource.SourceModels!), new(1),
             firstSource, new(firstSource.SourceModels!), new(2));
         Node firstRoot = Assert.IsType<FirstNode>(pair.First);
         Node secondRoot = Assert.IsType<SecondNode>(pair.Second);
@@ -41,12 +41,12 @@ public sealed class GraphReaderTests : IDisposable {
         Assert.Same(firstRoot, firstRoot.Next!.Next);
         Assert.Same(secondRoot.Next, secondRoot.Alias);
         Assert.Same(secondRoot, secondRoot.Next!.Next);
-        // No assertion about identity between graphs: it is deliberately not promised.
+        Assert.NotSame(firstRoot, secondRoot);
         Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     [Fact]
-    public void SameSelectionTwiceIsLegalWithoutCrossGraphIdentityContract() {
+    public void SameSelectionTwiceRestoresIndependentGraphs() {
         FrameAddress address = Seed((1, FirstSchema, new(1, 1, 4)));
         StateModelRegistry registry = Registry(Model<FirstNode>(FirstSchema, () => new()));
         using RepositoryStorageFacade reader = OpenReader();
@@ -55,18 +55,19 @@ public sealed class GraphReaderTests : IDisposable {
         DecodedRevision first = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, address), configuration);
         DecodedRevision second = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, address), configuration, first.BindingEnvironment);
         Assert.Same(first.BindingEnvironment, second.BindingEnvironment);
-        var pair = GraphReader.ReadPair(first, new(first.SourceModels!), new(1), second, new(second.SourceModels!), new(1));
+        var pair = GraphReader.ReadIndependent(first, new(first.SourceModels!), new(1), second, new(second.SourceModels!), new(1));
         FirstNode firstRoot = Assert.IsType<FirstNode>(pair.First);
         FirstNode secondRoot = Assert.IsType<FirstNode>(pair.Second);
         Assert.Equal(4, firstRoot.Value);
         Assert.Equal(4, secondRoot.Value);
+        Assert.NotSame(firstRoot, secondRoot);
         Assert.Same(firstRoot, firstRoot.Next);
         Assert.Same(secondRoot, secondRoot.Next);
         Assert.Equal(tail, DataBytes(reader.Data));
     }
 
     [Fact]
-    public void SecondHydrationFailureDeliversNoPairAndDoesNotWrite() {
+    public void SecondHydrationFailureDeliversNeitherGraphAndDoesNotWrite() {
         FrameAddress first = Seed((1, FirstSchema, new(0, 0, 1)));
         FrameAddress second = Seed((1, SecondSchema, new(0, 0, 2)));
         List<string> callbacks = [];
@@ -83,7 +84,7 @@ public sealed class GraphReaderTests : IDisposable {
         DecodedRevision secondSource = DecodedRevision.ReadStoredGraph(reader.Store, MechanismFixture.Snapshot(reader, second), configuration, firstSource.BindingEnvironment);
         (IDurableObject First, IDurableObject Second)? delivered = null;
 
-        Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadPair(
+        Assert.Throws<InvalidDataException>(() => delivered = GraphReader.ReadIndependent(
             firstSource, new(firstSource.SourceModels!), new(1), secondSource, new(secondSource.SourceModels!), new(1)));
 
         Assert.Null(delivered);

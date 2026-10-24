@@ -58,28 +58,12 @@ internal static class GraphReader {
         return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
     }
 
-    // Split views may share instances only after reusing the same reader-issued exact-S environment.
-    internal static (IDurableObject First, IDurableObject Second) ReadPair(
-        DecodedRevision firstDecoded, GraphReadContext firstContext, ObjectId firstRootId,
-        DecodedRevision secondDecoded, GraphReadContext secondContext, ObjectId secondRootId) {
-        ArgumentNullException.ThrowIfNull(firstContext);
-        ArgumentNullException.ThrowIfNull(secondContext);
-        PreparedGraphSelection first = Prepare<IDurableObject>(firstDecoded, firstContext, firstRootId);
-        PreparedGraphSelection second = Prepare<IDurableObject>(secondDecoded, secondContext, secondRootId);
-        HashSet<ObjectId> shared = firstDecoded.BindingEnvironment is { } environment &&
-            ReferenceEquals(environment, secondDecoded.BindingEnvironment) ? FindSharedClosure(first, second) : [];
-        var (firstInstances, secondInstances) = Materialize(firstContext, first, second, shared);
-        return ((IDurableObject)firstInstances[firstRootId], (IDurableObject)secondInstances![secondRootId]);
-    }
-
-    // A null shared set means independent graphs. Only ReadPair supplies a proven set;
-    // even an empty proven set retains Pair's existing cross-graph string identity guard.
     private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) Materialize(
         GraphReadContext session, PreparedGraphSelection first, PreparedGraphSelection? second = null,
-        HashSet<ObjectId>? shared = null, IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
+        IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         long started = session.MeasureMaterialization ? Stopwatch.GetTimestamp() : 0;
         try {
-            return MaterializeCore(session, first, second, shared, reusedLeaves);
+            return MaterializeCore(session, first, second, reusedLeaves);
         } finally {
             if (session.MeasureMaterialization) {
                 session.Statistics.MaterializationElapsedTicks += Stopwatch.GetTimestamp() - started;
@@ -89,23 +73,23 @@ internal static class GraphReader {
 
     private static (Dictionary<ObjectId, object> First, Dictionary<ObjectId, object>? Second) MaterializeCore(
         GraphReadContext session, PreparedGraphSelection first, PreparedGraphSelection? second,
-        HashSet<ObjectId>? shared, IReadOnlyDictionary<ObjectId, object>? reusedLeaves) {
+        IReadOnlyDictionary<ObjectId, object>? reusedLeaves) {
         Dictionary<object, ObjectId> allocations = new(ReferenceEqualityComparer.Instance);
         Dictionary<ObjectId, object> firstInstances = AllocateGraph(session, first, allocations, reusedLeaves: reusedLeaves);
+        // Per-graph identity tables permit independent string IDs. The common session
+        // still rejects a mutable instance returned by factories in both graphs.
         Dictionary<ObjectId, object>? secondInstances = second is null ? null : AllocateGraph(session, second,
-            shared is null ? new(ReferenceEqualityComparer.Instance) : allocations, firstInstances, shared);
+            new(ReferenceEqualityComparer.Instance));
         ObjectReadTable firstTable = new(firstInstances);
         ObjectReadTable? secondTable = secondInstances is null ? null : new(secondInstances);
-        // Every instance table is complete before any hydration callback runs. A shared
-        // row's reference closure is also shared, so its first graph's table is sufficient.
+        // Every instance table is complete before any hydration callback runs.
         HydrateGraph(session, first, firstInstances, firstTable, reusedLeaves: reusedLeaves);
-        if (second is not null) { HydrateGraph(session, second, secondInstances!, secondTable!, shared); }
+        if (second is not null) { HydrateGraph(session, second, secondInstances!, secondTable!); }
         return (firstInstances, secondInstances);
     }
 
     private static Dictionary<ObjectId, object> AllocateGraph(GraphReadContext session,
         PreparedGraphSelection selection, Dictionary<object, ObjectId> allocations,
-        Dictionary<ObjectId, object>? firstInstances = null, HashSet<ObjectId>? shared = null,
         IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         Dictionary<ObjectId, object> instances = [];
         // Register the entire trusted leaf mapping before ANY allocator can return one
@@ -123,30 +107,19 @@ internal static class GraphReader {
         }
         foreach (ObjectId id in selection.Reachable) {
             if (reusedLeaves is not null && reusedLeaves.ContainsKey(id)) { continue; }
-            if (shared is not null && shared.Contains(id)) {
-                instances.Add(id, firstInstances![id]);
-                session.Statistics.SharedObjects++;
-                continue;
-            }
             NormalizedObject row = selection.Normalized.Objects[id];
             object allocated = Allocate(row, allocations, session.Statistics);
             if (row.Current.Kind != ObjectStateKind.String) { session.RequireUniqueMutableInstance(allocated); }
             instances.Add(id, allocated);
-            // Canonical Empty can also share across heads without a closure proof.
-            // As before, Pair reports this actual same-ID reuse; independent reads do not.
-            if (shared is not null && firstInstances!.TryGetValue(id, out object? firstInstance) &&
-                ReferenceEquals(firstInstance, allocated)) {
-                session.Statistics.SharedObjects++;
-            }
         }
         return instances;
     }
 
     private static void HydrateGraph(GraphReadContext session, PreparedGraphSelection selection,
-        Dictionary<ObjectId, object> instances, ObjectReadTable table, HashSet<ObjectId>? shared = null,
+        Dictionary<ObjectId, object> instances, ObjectReadTable table,
         IReadOnlyDictionary<ObjectId, object>? reusedLeaves = null) {
         foreach ((ObjectId id, object instance) in instances) {
-            if ((shared is null || !shared.Contains(id)) && (reusedLeaves is null || !reusedLeaves.ContainsKey(id))) {
+            if (reusedLeaves is null || !reusedLeaves.ContainsKey(id)) {
                 Hydrate(selection.Normalized.Objects[id], instance, table, session.Statistics);
             }
         }
@@ -198,69 +171,6 @@ internal static class GraphReader {
         return new(normalized, rootId, rootModel, session.Models, visitor.Ids);
     }
 
-    private static HashSet<ObjectId> FindSharedClosure(PreparedGraphSelection first, PreparedGraphSelection second) {
-        HashSet<ObjectId> secondReachable = new(second.Reachable);
-        HashSet<ObjectId> candidates = [];
-        foreach (ObjectId id in first.Reachable) {
-            // The concrete reader supplies each actual head from this exact view's live map.
-            // Missing provenance never supplies a sharing proof, even on both sides.
-            if (secondReachable.Contains(id) &&
-                first.Normalized.Objects[id].Storage is { } firstStorage &&
-                second.Normalized.Objects[id].Storage is { } secondStorage && firstStorage.Head == secondStorage.Head &&
-                HasSameCurrentState(first.Normalized.Objects[id], second.Normalized.Objects[id])) {
-                candidates.Add(id);
-            }
-        }
-
-        Dictionary<ObjectId, List<ObjectId>> dependents = [];
-        HashSet<ObjectId> excluded = [];
-        foreach (ObjectId id in candidates) {
-            ReferenceVisitor visitor = new(target => {
-                if (target.IsNull) { return; }
-                if (!candidates.Contains(target)) {
-                    excluded.Add(id);
-                } else {
-                    if (!dependents.TryGetValue(target, out List<ObjectId>? owners)) {
-                        dependents.Add(target, owners = []);
-                    }
-                    owners.Add(id);
-                }
-            });
-            // Visit both current views through their actual binding, including container
-            // entries and nested value slots. No class-field-only description is maintained.
-            NormalizedObject firstRow = first.Normalized.Objects[id];
-            NormalizedObject secondRow = second.Normalized.Objects[id];
-            firstRow.Model.VisitReferences(firstRow.Current, visitor);
-            secondRow.Model.VisitReferences(secondRow.Current, visitor);
-        }
-        Queue<ObjectId> pending = new(excluded);
-        while (pending.TryDequeue(out ObjectId id)) {
-            if (!candidates.Remove(id)) { continue; }
-            if (dependents.TryGetValue(id, out List<ObjectId>? owners)) {
-                foreach (ObjectId owner in owners) { pending.Enqueue(owner); }
-            }
-        }
-        return candidates;
-    }
-
-    private static bool HasSameCurrentState(NormalizedObject first, NormalizedObject second) {
-        if (first.RequiresRewrite || second.RequiresRewrite || !ReferenceEquals(first.Model, second.Model) ||
-            !first.Current.Layout.Equals(second.Current.Layout)) {
-            return false;
-        }
-        if (first.Current.Kind == ObjectStateKind.String) {
-            return ReferenceEquals(first.Current.StringContent, second.Current.StringContent) ||
-                StringComparer.Ordinal.Equals(first.Current.StringContent, second.Current.StringContent);
-        }
-        IStatePreparationBinding? firstPreparation = first.Current.Preparation;
-        IStatePreparationBinding? secondPreparation = second.Current.Preparation;
-        if (firstPreparation is null || !ReferenceEquals(firstPreparation, secondPreparation)) { return false; }
-        // Keep the explicit complete-value proof for read-only sharing. Exact-current durable
-        // normalization is identity, but removing this comparison requires a separate proof.
-        // Missing comparison is not equality; errors propagate without preparing object bodies.
-        return firstPreparation.ProvesSameState(first.Current, second.Current);
-    }
-
     private static object Allocate(NormalizedObject row, Dictionary<object, ObjectId> allocations,
         GraphReadStatistics? statistics) {
         if (statistics is not null) { statistics.AllocatedObjects++; }
@@ -277,13 +187,6 @@ internal static class GraphReader {
         GraphReadStatistics? statistics) {
         if (statistics is not null) { statistics.HydratedObjects++; }
         row.Model.Hydrate(instance, row.Current, table);
-    }
-
-    private sealed class ReferenceVisitor(Action<ObjectId> visit) : IStateReferenceVisitor {
-        public void VisitString(ObjectId objectId) => visit(objectId);
-        public void VisitDurable(ObjectId objectId, string nominalSchemaId) => visit(objectId);
-        public void VisitDurable(ObjectId objectId, TypeExpr nominalType) => visit(objectId);
-        public void VisitObject(ObjectId objectId, TypeExpr declaredType) => visit(objectId);
     }
 
     // References have already been validated against the complete current directory.

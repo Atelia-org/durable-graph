@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-10-20；DB-097 独立 Event 与重构后质量整改均已验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-10-24；DB-098 退役 ReadPair，验收状态见该片；DB-097 独立 Event 与重构后质量整改均已验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -20,7 +20,9 @@
 
 ## 当前焦点
 
-2026-10-20：[DB-097 独立 Event 对象图](../docs/design-branches/0097-independent-event-graphs/README.md)已实施并完成源码与新普通包限定验收。Event 每次独立捕获、局部 ID、全 Base 自有内容，不参与 State 差分/预算，也不消耗 State 身份或 rewrite；含 Event 的 Pair 独立物化。公开 Event 策略参数移除、P0R4 根拒绝旧库，State/meta 及底座 pin 保持。准确来源、完整回归、四套包消费者和大小载荷对照只查[验收](../docs/design-branches/0097-independent-event-graphs/validation.md)。本片无剩余工单；下一增量由真实消费者反馈或新测量触发。
+2026-10-24：[DB-098 ReadPair 退役](../docs/design-branches/0098-readpair-retirement/README.md)。删除公开入口、跨图共享规划及专用比较接线；只读恢复统一独立领域图，Checkpoint 的两图准备/分配守卫、State 差分比较、owned 物理缓存与 State 准备槽保留。无格式变化，旧实现已保留 annotated Git tag；验收结果只维护在该片。Event Ref 为后续独立设计，不在本片实施。
+
+2026-10-20：[DB-097 独立 Event 对象图](../docs/design-branches/0097-independent-event-graphs/README.md)已实施并完成源码与新普通包限定验收。Event 每次独立捕获、局部 ID、全 Base 自有内容，不参与 State 差分/预算，也不消耗 State 身份或 rewrite。公开 Event 策略参数移除、P0R4 根拒绝旧库，State/meta 及底座 pin 保持。准确来源、完整回归、四套包消费者和大小载荷对照只查[验收](../docs/design-branches/0097-independent-event-graphs/validation.md)。本片无剩余工单；下一增量由真实消费者反馈或新测量触发。
 
 2026-10-20：[重构后七方向质量体检](../maintenance/20261020/README.md)整改已全部验收。生成器输入、批读取复用、保存与重入准入、历史导航成本、诊断、真实打包输出及普通包门禁均已收口；局部保留裁决有明确重访触发，当前无剩余整改工单。公开 API 签名、持久格式和 Storage pin 保持；准确实现/包来源、验收与范围只查[完成记录](../maintenance/2026-10-20.md)。原七报告保留体检基线意义；下一片由真实消费者需求或新的实测反例触发。
 
@@ -62,7 +64,7 @@ H02 / workshop feed 反馈的[候选交付闭环](../docs/storage-dependency.md#
 当前保存共用 owner 的 accepted Schema Catalog，同 key 异形拒绝；普通提交发布所选业务 Head，必要时与新 S 共同发布，多 Branch 使用一次共同候选与原子发布。新根和 fork 通过 D 登记，普通保存不更新 D。Private/ToShared 已退出；当前 D/S/T 布局与旧 P0R2 删除片分别保其来源意义。
 Open 选择资源读写，创建/fork 返回 BranchInfo，OpenWorkingCopy(BranchId) 获取编辑能力；标签不作为寻址或占用键。执行 S/models 在工作副本寿命内固定，State 保存可以推进持久基线但不刷新执行环境。历史图与对象 batch 保准确 Schema，开发同版本异形试验在完整关闭库的独立副本进行。
 
-准确 origin／selected／execution S、共同 source／pending／fault owner、history／Pair／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
+准确 origin／selected／execution S、共同 source／pending／fault owner、history／Checkpoint／State 槽及 owned 物理缓存保持。Event／Discard 不推进 State 或消费 rewrite；物理命中不免每图来源／完整布局／refs 检查，不新建 typed DTO cache。ABI5／员工 DTO V1，DB-081 热 seed 禁用、DB-082 默认关闭。
 
 Development、Split、容器升级的当前消费者见 [PackageConsumerProbe](../experiments/PackageConsumerProbe/README.md)，本次资格见删除切片。DB-088/089 的旧包结果保各自版本意义；源码精确身份／source／H 与普通包观察各保边界。
 
@@ -91,7 +93,7 @@ OpenWorkingCopy 按所选 Branch 的准确 current 恢复时复用一个精确 S
 证书覆盖预闭合 binding/Upgrade 计划的标准检查及首次物化依赖；无 State 请求完全绕槽，失败不换槽，fault/Dispose 释放。
 默认启用的依据是实测高命中路径准备计数和分配下降；没有完整 Fork 普遍加速或总堆有界的承诺，具体证据只保留在实施记录。
 
-[DB-079 共用核心](../docs/design-branches/0079-shared-graph-restoration-core-slice/0079-shared-graph-restoration-core-implementation.md)继续承担单图、Checkpoint 与 ReadPair 的完整准备/两阶段物化；
+[DB-079 共用核心](../docs/design-branches/0079-shared-graph-restoration-core-slice/0079-shared-graph-restoration-core-implementation.md)继续承担单图与 Checkpoint 的完整准备/两阶段物化；ReadPair 专用部分由 DB-098 退役；
 只读入口不使用 State 驻留槽或导入保存身份。完整 source、head/H、rewrite、字符串身份及 ID 游标保持，mutable 独立性不变。
 
 [078-A](../docs/design-branches/0078-editable-checkpoint-fork-slice/0078-a-repository-free-history-implementation.md) 的非泛型入口、自由历史与跨类型 State，
@@ -157,12 +159,8 @@ positional/backing storage、泛型、跨库继承及历史升级复用现有对
 [DB-065](../docs/design-branches/0065-event-history-consumer-contract-slice/README.md) 完成：默认调用、包内 XML 文档、
 [引用事件快照与恢复示例](../experiments/PackageConsumerProbe/EventHistoryRecoveryConsumer/README.md)，以及 README 原文执行验证。
 恢复示例与内部故障测试采用应用自身的 E/S 协议判断处理进度；已发布 S 不重放，失败后重新取得 State/Event，不复用旧的可变图。
-现有提交/格式、DB-064 只读共享与可写隔离合同保持。
-第二轮 [ReadPair 反馈](../../drama-board/docs/feedback/durablegraph/002-readpair-sharing-contract.md) 已完成于
-[DB-066](../docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)：共享判断改用可选完整状态比较，
-缺 proof 保守不共享，真实错误传播。普通/Family SG 自动登记，数组/List/Dictionary 复用静态槽比较；
-Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址检查保持；不要求 primitive 输入最短。ReadPair 的视图专属 Transient 放在图外，独立读取允许各自初始化，续写使用 Checkout。
-完整测试、独立审阅和真实包验收已通过，证据集中在分片记录。
+DB-064/066 的共享读取与专用比较已由 [DB-098](../docs/design-branches/0098-readpair-retirement/README.md)退役；历史反馈与验收保留原版本含义。
+Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不要求 primitive 输入最短。
 下游已按公开入口接入真实模型，可继续玩法扩展并收集具体摩擦；
 跨重开书签、局部事件浏览与类型适配扩展按路线图的需求触发，不自动扩展本轮范围。
 自动跨库业务规则发现、ValueTuple、DateTime 和 SchemaStore 自举不随该轮扩张。
@@ -173,7 +171,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Pair／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy、组提交、树查询、分页、定向origin与创建登记均已完成；[最终源码/包资格及master合入](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Checkpoint／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy、组提交、树查询、分页、定向origin与创建登记均已完成；[最终源码/包资格及master合入](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
@@ -289,16 +287,13 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   单图准备材料保留完整 normalized 来源、实际根、模型环境与可达顺序，不额外持有 decoded 目录。
   Repository Checkout/Fork 可驻留一份成功 State 材料及完整依赖证书；重复选择同 State 省去冷准备，mutable 分配与身份导入仍独立。
   预闭合 factory/binding/Upgrade 证据按实际依赖传递、命中复核该 State 准确环境的完整标准依赖；槽不替代逐请求 Head 导航或保存来源校验。
-  独立与 Pair 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
+  单图与 Checkpoint 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
 - RepositoryResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 HeadStore，保管分支目录／shared／书签三个入口与唯一 pending；只读不写盘、不修尾。
-  GraphReader.ReadPair 各自 Decode/Normalize/验证后，在同 ID/head、current model/完整布局、未重写且有完整状态相等 proof 的候选中，
-  沿反向引用剔除依赖非候选者；剩余只读闭包共享 Allocate/Hydrate，稳定环可整体复用，changed-child 会使 owner 分裂。
-  共享还要求同 reader-issued 环境；string 在既有 same-ID/head 候选内按引用快路／Ordinal 完整内容证明，不 intern 不同 ID 的等值非空串。只读结果不导入可编辑基线。
-  两边完整成功才交付，无跨图实例身份承诺；缺 proof 保守不共享，真实错误传播，比较优化见路线图。
+  独立读取保各图分配表；Checkpoint 在两图全部 Prepare、Allocate/Register 和建表完成后才 Hydrate，并以同操作 mutable 实例守卫拒绝 singleton 工厂。
   共同 workspace／候选在 State 确认后才安装原实例／新根；DB-097 的 Event 每次使用新 CaptureSession 和局部 ID，完整 Base、无来源及 Remove；完成后释放候选，不改变 State 根、基线、cursor 或 rewrite。
-  Event 的完整目录只能选择自有全 Base batch；不同图的同号 ID 不表示同一对象。任一包含 Event 的 Pair 使用独立物化，保同操作 mutable 工厂守卫；State–State 继续按上述完整证明共享。后继 State 仍相对最近 State。
+  Event 的完整目录只能选择自有全 Base batch；不同图的同号 ID 不表示同一对象。Checkpoint 的两图独立物化，保同操作 mutable 工厂守卫。后继 State 仍相对最近 State。
 - Repository 拥有 RepositoryResources 的 FS/HS 底座资源；操作串行，每个 BranchId 最多一个活动 WorkingCopy，显式 Dispose 释放编辑占用。
   CreateRootBranchFromState/Event 先保存真实非空业务根并登记 D，再返回 BranchInfo；OpenWorkingCopy 单独恢复对象，Event-only 历史可以 State=null。
   ForkBranch 固定继承准确 Commit，不制造 clone Commit、不恢复对象；创建成功后可立即列出、冷重开和继续，后续打开失败不撤销已登记分支。
@@ -308,7 +303,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
   State/Event 可自由排列；成功 State 安装原实例和内容基线，Event 只推进 BaseCommitId，不保存 State 编辑或消费其 rewrite。
   CommitRequest 保原 WorkingCopy、准确 Base、根引用和自有摘要，不提前捕获或设 Consumed；CommitBranches 统一捕获/Schema候选并共同发布、逐成员安装。
   LoadState/LoadEvent 按准确角色独立恢复；LoadLatestSavedState 返回所选点及不晚于它的真实 State 来源，不执行 Event。
-  ReadCheckpoint 与 ReadPair 保复合恢复/只读共享合同；ReadFrames 完整物化旧到新描述，EnumerateEvents 保固定边界与枚举寿命检查。
+  ReadCheckpoint 保独立两图复合恢复合同；ReadFrames 完整物化旧到新描述，EnumerateEvents 保固定边界与枚举寿命检查。
   根/子树查询验证正式登记森林、不恢复业务对象；ReadHistoryPage 从准确anchor向祖先分页，预算/取消/清理失败不交付部分页。
   CreateTag/ResolveTag 使用 DG 的 T Dictionary，按不可变名称绑定 CommitId；创建可追加管理图，不改变业务 Head 或工作副本基线。
   真实 E/S 图始终校验准确历史 Schema、完整内容及来源，缓存命中不免验证。State 跨实际类型替换及对象身份保持的细节见共同恢复/保存内核。
@@ -402,7 +397,7 @@ Dictionary key 读取后按值重编码规范 key，碰撞与重复 Delta 寻址
 | inline struct/嵌套 DTO/Schema DAG | [DB-037](../docs/design-branches/0037-inline-struct-state-slice/README.md)、[生成值 helper](DurableGraph.Generator/DurableGraphGenerator.InlineState.cs)、[真实生成图](../tests/DurableGraph.Tests/InlineStructGraphTests.cs)、[inline 模型资产](../experiments/PackageConsumerProbe/InlineStructConsumer/README.md) |
 | 独立图工作区、资源与读取 | [DB-062](../docs/design-branches/0062-independent-graph-workspace-slice/README.md)、[工作区](DurableGraph.Persistence/BusinessWorkspace.cs)、[资源](DurableGraph.Persistence/RepositoryResources.cs)、[读取](DurableGraph.Persistence/GraphReader.cs) |
 | EventHistory、分支发布与恢复 | [DB-063](../docs/design-branches/0063-event-history-journal-slice/README.md)、[Repository](DurableGraph.Persistence/Repository.cs)、[工作副本](DurableGraph.Persistence/WorkingCopy.cs)、[集成测试](../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs) |
-| 操作内 exact 解码复用与只读闭包共享 | [DB-064](../docs/design-branches/0064-shared-revision-decoding-design/README.md)、[恢复上下文](DurableGraph.Persistence/GraphReadContext.cs)、[引用闭包](DurableGraph.Persistence/GraphReader.cs)、[共享测试](../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、[Checkout 与续写](../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) |
+| 操作内 exact 解码复用与独立图恢复 | [恢复上下文](DurableGraph.Persistence/GraphReadContext.cs)、[恢复核心](DurableGraph.Persistence/GraphReader.cs)、[独立读取测试](../tests/DurableGraph.Persistence.Tests/SplitRepositoryReadTests.cs)、[Checkpoint](../tests/DurableGraph.Persistence.Tests/DB078CheckpointTests.cs)；共享优化已由 [DB-098](../docs/design-branches/0098-readpair-retirement/README.md)退役 |
 | 领域引用图/首次准备 | [DB-034](../docs/design-branches/0034-durable-reference-graph-batch/README.md)、[真实生成图冷读](../tests/DurableGraph.Tests/PersistedReferenceGraphTests.cs)、[双视图与失败测试](../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs) |
 | Schema、DTO、静态 body | [Generator tests](../tests/DurableGraph.Tests)、[DB-019](../docs/design-branches/0019-schema-ancestry-implementation-slice/README.md)、[DB-022](../docs/design-branches/0022-versioned-state-dto-capture/README.md)、[DB-023](../docs/design-branches/0023-scalar-schema-dto-slice/README.md) |
 | 同版 DTO Delta 准备与应用 | [DB-027](../docs/design-branches/0027-generated-same-schema-delta-body-slice/README.md)、[body tests](../tests/DurableGraph.Tests/FusedDeltaBodyTests.cs)、[history/Capture tests](../tests/DurableGraph.Tests/FusedDeltaHistoryTests.cs) |

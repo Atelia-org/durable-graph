@@ -1,5 +1,7 @@
 # DB-079：共用图恢复核心
 
+> 2026-10-24 后继：[DB-098](../0098-readpair-retirement/README.md)退役 ReadPair、跨图共享规划与专用比较接线，旧实现保留 Git tag。本文相关共享断言、测试与验收仅解释来源版本；独立图/Checkpoint 的完整准备、两阶段物化、工厂实例守卫及 State 增量合同继续有效。
+
 > 状态：**已实施并独立验收**。2026-09-28；施工范围与验证见 [实施记录](0079-shared-graph-restoration-core-implementation.md)，当前实现事实另见源码。
 > 产品合同以 [DB-083 用户故事与 Checkpoint API](../0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md) 为准；本片只统一内部机制，不扩大读取内容范围。
 > 顺序：第 3 片；依赖 [DB-078](../0078-editable-checkpoint-fork-slice/0078-editable-checkpoint-fork-slice.md)，下一片 [DB-080](../0080-prepared-checkpoint-reuse-slice/0080-prepared-checkpoint-reuse-slice.md)。
@@ -100,7 +102,7 @@ G2 合并分配/填充循环并接入原 Pair 规划；G3 独立检查错误顺�
 | Upgrade rewrite + Event + 后继 State | Event 不清除 State 重写义务；首次 Base、后继 Delta 如常 |
 | 同内容无 state-equality proof | ReadPair 仍保守不共享；不得退回编码 Base 来判断相等 |
 
-证据入口：[SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、
+证据入口：[SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs")、
 [SharedEventHistoryTests](../../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs)、
 [WorldWorkspaceStorageBaselineTests](../../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)、
 [LoadedReferenceWorldTests](../../../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs)。

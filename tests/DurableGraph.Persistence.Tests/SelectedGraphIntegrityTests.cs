@@ -33,7 +33,6 @@ public sealed partial class EventHistoryRepositoryTests {
             if (orphan) { Assert.Equal(first, DB096TestAccess.Describe(reader, head.Id).Address); Assert.NotNull(reader.LoadState(head.Id)); }
             else {
                 Assert.Throws<InvalidDataException>(() => reader.ReadCheckpoint(head.Id));
-                Assert.Throws<InvalidDataException>(() => reader.ReadPair(head.Id, head.Id));
                 if (state) { Assert.Throws<InvalidDataException>(() => reader.LoadState(head.Id)); }
                 else { Assert.Throws<InvalidDataException>(() => reader.LoadEvent(head.Id)); }
                 Assert.False(reader.IsFaulted);

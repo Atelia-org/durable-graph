@@ -183,8 +183,7 @@ public sealed class BusinessSourceValidationCostTests(ITestOutputHelper output) 
         internal Action? BeforeBody;
 
         internal Harness() {
-            StatePreparationBinding<NodeState> preparation = new(Schema, PrepareBase, PrepareDelta,
-                static (in NodeState left, in NodeState right) => left == right);
+            StatePreparationBinding<NodeState> preparation = new(Schema, PrepareBase, PrepareDelta);
             StateReaderBinding<NodeState> reader = new(Schema, Read,
                 static (ref BareValueReader input, in NodeState prior) => {
                     NodeState current = Read(ref input);

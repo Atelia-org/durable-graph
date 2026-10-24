@@ -283,7 +283,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal<byte>([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 1],
             GeneratedStateDelegate<Func<byte[]>>(assembly, "Write")());
         Type body = type.GetNestedType("__DurableState", BindingFlags.NonPublic)!;
-        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaBodyV1", "ApplyDeltaBodyV2", "Capture", "Hydrate", "Normalize", "PrepareBaseBody", "PrepareBaseBody", "PrepareDeltaBody", "PrepareDeltaBody", "ReadBaseBodyV1", "ReadBaseBodyV2", "RegisterModel", "RegisterReaders", "StateEquals", "StateEquals", "ValidateStringReferences", "ValidateStringReferences", "VisitReferences", "VisitReferences", "WriteBaseBody", "WriteBaseBody" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+        Assert.Equal(new[] { "AddRoot", "Allocate", "ApplyDeltaBodyV1", "ApplyDeltaBodyV2", "Capture", "Hydrate", "Normalize", "PrepareBaseBody", "PrepareBaseBody", "PrepareDeltaBody", "PrepareDeltaBody", "ReadBaseBodyV1", "ReadBaseBodyV2", "RegisterModel", "RegisterReaders", "ValidateStringReferences", "ValidateStringReferences", "VisitReferences", "VisitReferences", "WriteBaseBody", "WriteBaseBody" }, body.GetMethods(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
             .Select(method => method.Name).OrderBy(name => name).ToArray());
         AssertGeneratedBodiesRemainStaticallyBound(GeneratedStateText(run));
         Assert.DoesNotContain("__DurableSnapshot", GeneratedStateText(run));

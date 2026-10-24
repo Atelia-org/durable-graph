@@ -167,7 +167,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
     }
 
     [Fact]
-    public void SameClrTypeMayTakeEitherRoleAndReadPairPreservesArgumentOrder() {
+    public void SameClrTypeMayTakeEitherRoleWithRoleSpecificReads() {
         using Repository repository = Create();
         using WorkingCopy checkout = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", new Message { Value = 1 }).Id);
         CommitId e = checkout.BaseCommitId;
@@ -176,9 +176,8 @@ public sealed partial class DB078HistoryTests : IDisposable {
         Assert.Equal(CommitKind.State, repository.ReadCommitInfo(s).Kind);
         Assert.Throws<ArgumentException>(() => repository.LoadState(e));
         Assert.Throws<ArgumentException>(() => repository.LoadEvent(s));
-        var pair = repository.ReadPair(s, e);
-        Assert.Equal((byte)2, Assert.IsType<Message>(pair.First).Value);
-        Assert.Equal((byte)1, Assert.IsType<Message>(pair.Second).Value);
+        Assert.Equal((byte)2, Assert.IsType<Message>(repository.LoadState(s)).Value);
+        Assert.Equal((byte)1, Assert.IsType<Message>(repository.LoadEvent(e)).Value);
     }
 
     [Fact]
@@ -296,8 +295,6 @@ public sealed partial class DB078HistoryTests : IDisposable {
         Assert.ThrowsAny<ArgumentException>(() => reopened.LoadEvent(default));
         Assert.ThrowsAny<ArgumentException>(() => reopened.LoadState(default));
         Assert.ThrowsAny<ArgumentException>(() => reopened.GetPreviousState(default));
-        Assert.ThrowsAny<ArgumentException>(() => reopened.ReadPair(saved, default));
-        Assert.ThrowsAny<ArgumentException>(() => reopened.ReadPair(default, saved));
         Assert.ThrowsAny<ArgumentException>(() => reopened.ForkBranch(default, "invalid"));
     }
 

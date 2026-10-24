@@ -102,7 +102,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using Repository read = Repository.OpenReadOnlyExisting(_root, Models());
         var eventFrame = Assert.Single(read.EnumerateEvents(read.ReadCurrentCommit(BranchNamed(read, "main")).Commit.Id, HistoryOrder.OldestFirst).ToArray());
         var stateFrame = read.ReadCurrentCommit(BranchNamed(read, "main")).Commit.Id;
-        var pair = (((Node First, Node Second))read.ReadPair(eventFrame.Id, stateFrame));
+        var pair = (First: (Node)read.LoadEvent(eventFrame.Id), Second: (Node)read.LoadState(stateFrame));
         Assert.Equal((byte)2, pair.First.Left!.Value);
         Assert.Equal((byte)9, pair.Second.Left!.Value);
         Assert.Same(pair.First.Left, pair.First.Right);
@@ -233,13 +233,9 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
             var head = reader.ReadCurrentCommit(BranchNamed(reader, "main")).Commit.Id;
             Assert.IsType<Node>(reader.LoadState(oldHandle));
-            Assert.IsType<Node>(reader.ReadPair(head, oldHandle).Second);
             Assert.ThrowsAny<Exception>(() => reader.OpenWorkingCopy(BranchNamed(reader, "main")));
             Assert.ThrowsAny<Exception>(() => reader.ForkBranch(head, "fork"));
             _ = ((Node)reader.LoadState(head));
-            var pair = reader.ReadPair(head, head);
-            Assert.IsType<Node>(pair.First);
-            Assert.IsType<Node>(pair.Second);
         }
         AssertFiles(before);
     }
@@ -416,7 +412,7 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
             Assert.Equal((byte)8, ((IDurableObject)repository.LoadEvent(e.Id)) is Node n ? n.Value : 0);
             bool delivered = false;
             Assert.ThrowsAny<Exception>(() => {
-                _ = (((Node First, WholeWorld Second))repository.ReadPair(e.Id, Assert.IsType<CommitId>(repository.GetPreviousState(e.Id))));
+                _ = repository.ReadCheckpoint(e.Id);
                 delivered = true;
             });
             Assert.False(delivered);

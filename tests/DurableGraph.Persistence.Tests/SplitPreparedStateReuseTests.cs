@@ -119,7 +119,6 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring()).Id);
         CommitId state = main.BaseCommitId;
         repository.LoadState(state);
-        repository.ReadPair(state, state);
         repository.ReadCheckpoint(state);
         PreparedStateRestoration initial = Assert.IsType<PreparedStateRestoration>(repository.PreparedStateEntry);
         using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(state, "warm").Id);
@@ -137,7 +136,6 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         AssertNoGraphWork(stats);
         Assert.Same(entry, repository.PreparedStateEntry);
         repository.LoadState(state);
-        repository.ReadPair(state, state);
         repository.ReadCheckpoint(e2);
         Assert.Same(entry, repository.PreparedStateEntry);
         stats = Observe(repository);
@@ -454,8 +452,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             }.Take(version), currentModelFactory: (_, context) => {
                 DurableSchema schema = version == 1 ? ProbeV1 : ProbeV2;
                 return new StateModelBinding<ProbeRoot, ProbeState>(new(schema, ProbeBase,
-                    static (in ProbeState prior, in ProbeState next) => new(prior != next, ProbeBase(in next).Body),
-                    static (in ProbeState left, in ProbeState right) => left == right),
+                    static (in ProbeState prior, in ProbeState next) => new(prior != next, ProbeBase(in next).Body)),
                     Enumerable.Range(1, version).Select(v => context.ResolveReader(v == 1 ? ProbeV1 : ProbeV2)),
                     row => {
                         controls.Normalizes++;

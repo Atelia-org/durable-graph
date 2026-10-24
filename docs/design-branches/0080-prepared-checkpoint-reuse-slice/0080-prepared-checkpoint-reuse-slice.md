@@ -104,7 +104,7 @@ Coding Agent 主会话重点复核证书完整性及入槽门，避免把“缓�
 证据入口：[GenericBindingCatalogTests](../../../tests/DurableGraph.Persistence.Tests/GenericBindingCatalogTests.cs)、
 [WorldWorkspaceStorageBaselineTests](../../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)、
 [GraphReadStatistics](../../../src/DurableGraph.Persistence/GraphReadStatistics.cs)、
-[共享读取测试](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)。
+[共享读取测试（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs")。
 计数明确区分 typed Decode、Normalize、结构扫描、Allocate/Hydrate 与实际文件 I/O，不能把 Store 已缓存误报成全部恢复准备成本消失。
 
 ## 6. 测量与停点

@@ -278,8 +278,7 @@ public sealed partial class DurableGraphGenerator {
             }
             output.Append("        var preparation = new ").Append(RuntimeName).Append("StatePreparationBinding<").Append(dto).AppendLine(">(schema,");
             output.Append("            (in ").Append(dto).Append(" state) => ").Append(body).AppendLine(".PrepareBase(in state, schema),");
-            output.Append("            (in ").Append(dto).Append(" prior, in ").Append(dto).Append(" current) => ").Append(body).AppendLine(".PrepareDelta(in prior, in current, schema),");
-            output.Append("            (in ").Append(dto).Append(" left, in ").Append(dto).Append(" right) => ").Append(body).AppendLine(".StateEquals(in left, in right, schema));");
+            output.Append("            (in ").Append(dto).Append(" prior, in ").Append(dto).Append(" current) => ").Append(body).AppendLine(".PrepareDelta(in prior, in current, schema));");
             output.Append("        return new ").Append(RuntimeName).Append("StateModelBinding<").Append(domain).Append(", ").Append(dto).AppendLine(">(preparation,");
             output.Append("            new ").Append(RuntimeName).AppendLine("StateReaderBinding[] { context.ResolveReader(schema) },");
             output.Append("            item => context.Normalize<").Append(dto).AppendLine(">(item, schema),");

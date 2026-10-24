@@ -1,5 +1,7 @@
 # DB-079 施工与验收：共用图恢复核心
 
+> 2026-10-24 后继：[DB-098](../0098-readpair-retirement/README.md)退役 ReadPair、跨图共享规划与专用比较接线，旧实现保留 Git tag。本文相关共享断言、测试与验收仅解释来源版本；独立图/Checkpoint 的完整准备、两阶段物化、工厂实例守卫及 State 增量合同继续有效。
+
 > 状态：**已实施并独立验收**；基线 `1ff5571`；2026-09-28。合同见 [DB-079](0079-shared-graph-restoration-core-slice.md)，公开语义见 [DB-083](../0083-checkpoint-api-user-stories/0083-repository-checkpoint-api-user-stories.md)。
 
 ## 范围与成功标准
@@ -44,7 +46,7 @@ WorldWorkspace/LoadedWorld 沿原 editable 入口进入共用核心；未改历�
 |---|---|
 | Pair 两表先分配、晚失败零 Hydrate；无 equality proof 的 singleton 不得共享 | 新增 [DB079GraphRestorationTests](../../../tests/DurableGraph.Persistence.Tests/DB079GraphRestorationTests.cs)：`PairCompletesBothAllocationTablesBeforeAnyHydration`、`EqualExactHeadWithoutEqualityProofDoesNotAuthorizeSingletonReuse` |
 | Checkpoint 两图预分配、singleton 拒绝、第二图准备失败零 Allocate、可重试 | 同文件：`CheckpointCompletesBothAllocationTablesBeforeAnyHydration`、`CheckpointSingletonCollisionRejectsBeforeHydratingEitherGraph`、`CheckpointPreviousGraphPreparationFailsBeforeEitherGraphAllocates`；最后一项使用真实 v1→v2 Upgrade，不误用会绕过转换委托的 exact-current 路径 |
-| 稳定环共享、changed-child 分裂、比较/第二图 Hydrate 错误、字符串版本身份 | [SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)：`StableCycleDecodesAllocatesAndHydratesOnlyOneCopyAcrossDifferentRevisionViews`、`RewrittenChildSplitsItsEntireCycleEvenWhenItsNewBytesAreEqual`、`ComparisonFailurePropagatesWithoutEncodingAllocationOrRetry`、`SecondHydrationFailureDoesNotDeliverHalfAPairOrWriteEitherStore`、字符串共享/Empty 两组 |
+| 稳定环共享、changed-child 分裂、比较/第二图 Hydrate 错误、字符串版本身份 | [SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs")：`StableCycleDecodesAllocatesAndHydratesOnlyOneCopyAcrossDifferentRevisionViews`、`RewrittenChildSplitsItsEntireCycleEvenWhenItsNewBytesAreEqual`、`ComparisonFailurePropagatesWithoutEncodingAllocationOrRetry`、`SecondHydrationFailureDoesNotDeliverHalfAPairOrWriteEitherStore`、字符串共享/Empty 两组 |
 | 独立可变图、稳定 getter、只读一份 Event、至多两图与 reentry | [DB078CheckpointTests](../../../tests/DurableGraph.Persistence.Tests/DB078CheckpointTests.cs)：`CheckpointGraphsKeepCyclesAliasesAndListsButIsolateAllMutableViews`、`ReadEventAllocatesAndHydratesOnlyItsReachableGraph`、`NearestOppositeRoleUsesStrictAncestorsAndRestoresAtMostTwoGraphs`、`LaterGraphFailureOrReentryDeliversNoCheckpointAndReleasesBusy` |
 | 不可达 source 高 ID、完整 strings、Empty 最小 ID、Remove/首次 Base/后继 Delta | [WorldWorkspaceTests](../../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceTests.cs)：`UpgradeRewriteAndCompleteSourceMembershipSurviveDiscardThenClearOnInstall`、`EmptyAliasesCollapseOnlyAtSuccessfulInstallAndThenRemainStable` |
 | exact Store 来源/head/H、含待删除行的完整来源校验 | [WorldWorkspaceStorageBaselineTests](../../../tests/DurableGraph.Persistence.Tests/WorldWorkspaceStorageBaselineTests.cs)：`CachedDecodedRowsCarryStorageIntoAnEditableLoad`、`LoadedPlanningRejectsMissingOrForeignStorageIncludingRowsBeingRemoved`；[LoadedReferenceWorldTests](../../../tests/DurableGraph.Persistence.Tests/LoadedReferenceWorldTests.cs) 的长链、实际类型与晚期失败 |

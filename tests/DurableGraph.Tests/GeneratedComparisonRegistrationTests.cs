@@ -8,7 +8,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GeneratedCurrentPreparationProvesCompletePersistentState(bool family) {
+    public void GeneratedDeltaDetectsEveryPersistentMutation(bool family) {
         GeneratorTestRun run = RunGenerator(GeneratedEqualitySource(family));
         AssertSchemaOnlyCompiles(run);
         Assert.Equal(family, run.GeneratedSources.Any(source => source.HintName == "DurableGenericStates.g.cs"));
@@ -30,38 +30,16 @@ public sealed partial class DurableSchemaGeneratorTests {
         ObjectStateRecord equal = Capture();
         Assert.NotSame(baseline, equal);
         Assert.Same(baseline.Preparation, equal.Preparation);
-        // Exercise the registered erased capability, not a direct call to the generated body.
-        Assert.True(baseline.Preparation!.ProvesSameState(baseline, equal));
+        // Exercise the registered delta path, including generated comparisons.
+        Assert.False(baseline.Preparation!.PrepareDelta(baseline, equal).HasChanges);
         for (int mutation = 1; mutation <= (family ? 12 : 10); mutation++) {
             set(world, mutation);
             ObjectStateRecord different = Capture();
-            Assert.False(baseline.Preparation.ProvesSameState(baseline, different), $"Missed persistent mutation {mutation} (family={family}).");
-            Assert.False(baseline.Preparation.ProvesSameState(different, baseline));
+            Assert.True(baseline.Preparation.PrepareDelta(baseline, different).HasChanges, $"Missed persistent mutation {mutation} (family={family}).");
+            Assert.True(baseline.Preparation.PrepareDelta(different, baseline).HasChanges);
             set(world, 0);
             ObjectStateRecord restored = Capture();
-            Assert.True(baseline.Preparation.ProvesSameState(baseline, restored));
-        }
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void GeneratedCurrentModelsShareReadPairWithoutManualEqualityRegistration(bool family) {
-        GeneratorTestRun run = RunGenerator(GeneratedEqualitySource(family));
-        AssertSchemaOnlyCompiles(run);
-        Type host = EmitAndLoad(run.OutputCompilation).GetType("EqualityFixture.Host")!;
-        StateModelRegistry models = host.GetMethod("Models")!.CreateDelegate<Func<StateModelRegistry>>()();
-        IDurableObject world = host.GetMethod("Create")!.CreateDelegate<Func<IDurableObject>>()();
-        using RawBaseDirectory directory = new();
-        host.GetMethod("Save")!.CreateDelegate<Action<string, IDurableObject, StateModelRegistry, ReadAmplificationBaseBudgetParameters>>()(
-            directory.Path, world, models, TestSavePolicies.Baseline);
-        using (var repository = Repository.OpenReadOnlyExisting(directory.Path, models)) {
-            CommitId frame = Assert.Single(repository.ReadFrames(Assert.Single(repository.ListBranches()).Id)).Id;
-            (IDurableObject first, IDurableObject second) = repository.ReadPair(frame, frame);
-            // White-box optimization witness: public consumers must not depend on this identity.
-            Assert.Same(first, second);
-            Assert.NotSame(world, first);
-            Assert.Same(first, first.GetType().GetField("Peer")!.GetValue(first));
+            Assert.False(baseline.Preparation.PrepareDelta(baseline, restored).HasChanges);
         }
     }
 

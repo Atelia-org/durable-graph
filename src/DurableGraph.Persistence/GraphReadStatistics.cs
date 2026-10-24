@@ -7,7 +7,6 @@ internal sealed class GraphReadStatistics {
     // Allocate calls include strings, and do not equal newly allocated CLR heap objects.
     internal int AllocatedObjects { get; set; }
     internal int HydratedObjects { get; set; }
-    internal int SharedObjects { get; set; }
     internal int PreparedStateHits { get; set; }
     internal int PreparedStateMisses { get; set; }
     // Counts actual Normalize calls, including exact-current identity normalization.

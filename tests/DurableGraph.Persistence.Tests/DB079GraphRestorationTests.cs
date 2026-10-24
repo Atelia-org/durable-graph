@@ -19,7 +19,7 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PairCompletesBothAllocationTablesBeforeAnyHydration(bool failLastAllocation) {
+    public void IndependentReadsCompleteBothAllocationTablesBeforeAnyHydration(bool failLastAllocation) {
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root);
         FrameAddress first = Seed(repository, (1, new(2, 2, 0, 10)), (2, new(1, 1, 0, 20)));
         FrameAddress second = Seed(repository, (1, new(2, 2, 0, 30)), (2, new(1, 1, 0, 40)));
@@ -37,11 +37,11 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         (Node First, Node Second)? delivered = null;
 
         if (failLastAllocation) {
-            Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = ReadPair(repository, first, new(1), second, new(1), models)));
+            Assert.Same(failure, Assert.Throws<InvalidDataException>(() => delivered = ReadIndependent(repository, first, new(1), second, new(1), models)));
             Assert.Null(delivered);
             Assert.Equal(0, hydrations);
         } else {
-            delivered = ReadPair(repository, first, new(1), second, new(1), models);
+            delivered = ReadIndependent(repository, first, new(1), second, new(1), models);
             Assert.Equal(4, hydrations);
             Assert.Equal((byte)10, delivered.Value.First.Value);
             Assert.Equal((byte)30, delivered.Value.Second.Value);
@@ -54,25 +54,45 @@ public sealed class DB079GraphRestorationTests : IDisposable {
         Assert.Equal(tail, DataBytes(repository.Data));
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void EqualExactHeadWithoutEqualityProofDoesNotAuthorizeSingletonReuse(bool registerUnequalProof) {
+    [Fact]
+    public void IndependentReadsRejectSingletonReuseBeforeHydration() {
         using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root);
         FrameAddress address = Seed(repository, (1, new(0, 0, 0, 10)));
         Node singleton = new();
         int allocations = 0, hydrations = 0;
         StateModelRegistry models = SharedReadModel.Models(
-            includeEquality: registerUnequalProof, equality: static (in State _, in State _) => false,
             allocate: () => { allocations++; return singleton; }, hydrate: _ => hydrations++);
         (Node First, Node Second)? delivered = null;
 
-        Assert.Throws<InvalidDataException>(() => delivered = ReadPair(repository, address, new(1), address, new(1), models));
+        Assert.Throws<InvalidDataException>(() => delivered = ReadIndependent(repository, address, new(1), address, new(1), models));
 
         Assert.Null(delivered);
         Assert.Equal(2, allocations);
         Assert.Equal(0, hydrations);
         Assert.Equal((byte)0, singleton.Value);
+    }
+
+    [Fact]
+    public void UpgradeCuttingAnEdgeCannotHideAnInvalidSourceInAnIndependentRead() {
+        using RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_root);
+        FrameAddress first = Seed(repository, (1, new(2, 0, 0, 10)),
+            (2, new(3, 0, 0, 20)), (3, new(0, 0, 0, 30)));
+        // The second persisted graph lacks node 3, although its node 2 still references it.
+        FrameAddress second = Seed(repository, (1, new(2, 0, 0, 10)), (2, new(3, 0, 0, 20)));
+        int allocations = 0, hydrations = 0;
+        StateModelRegistry models = SharedReadModel.Models(currentVersion: 2,
+            normalize: row => row.GetState<State>() with { Next = default, Alias = default },
+            allocate: () => { allocations++; return new Node(); }, hydrate: _ => hydrations++);
+        long tail = DataBytes(repository.Data);
+        (Node First, Node Second)? delivered = null;
+
+        Assert.Throws<InvalidDataException>(() => delivered = ReadIndependent(
+            repository, first, new(1), second, new(1), models));
+
+        Assert.Null(delivered);
+        Assert.Equal(0, allocations);
+        Assert.Equal(0, hydrations);
+        Assert.Equal(tail, DataBytes(repository.Data));
     }
 
     [Theory]
@@ -208,13 +228,13 @@ public sealed class DB079GraphRestorationTests : IDisposable {
             () => (new(null, new(1), records), catalog.Write));
         return repository.Commit(pending, catalog.Install, prepareMeta: catalog.PrepareInstall).Business.Address;
     }
-    private static (Node First, Node Second) ReadPair(RepositoryStorageFacade repository,
+    private static (Node First, Node Second) ReadIndependent(RepositoryStorageFacade repository,
         FrameAddress first, ObjectId firstRoot, FrameAddress second, ObjectId secondRoot, StateModelRegistry models) {
         StateModelRegistry.FrozenConfiguration configuration = models.FreezeConfiguration();
         DecodedRevision a = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(first, null), configuration);
         DecodedRevision b = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(second, null), configuration,
             repository.Store.ReadMetadata(first).SchemaRoot == repository.Store.ReadMetadata(second).SchemaRoot ? a.BindingEnvironment : null);
-        var pair = GraphReader.ReadPair(a, new(a.SourceModels!), firstRoot, b, new(b.SourceModels!), secondRoot);
+        var pair = GraphReader.ReadIndependent(a, new(a.SourceModels!), firstRoot, b, new(b.SourceModels!), secondRoot);
         return ((Node)pair.First, (Node)pair.Second);
     }
 

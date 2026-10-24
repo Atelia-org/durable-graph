@@ -47,9 +47,9 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             for (int iteration = 0; iteration < 2; iteration++) {
                 Assert.Equal(7, ((RootModel)repository.LoadState(head)).Values!["key"]);
                 Assert.Equal(9, ((RootModel)repository.LoadEvent(domainEvent)).Values!["key"]);
-                var pair = (((RootModel First, RootModel Second))repository.ReadPair(head, domainEvent));
-                Assert.Equal(7, pair.First.Values!["key"]);
-                Assert.Equal(9, pair.Second.Values!["key"]);
+                EventCheckpoint checkpoint = Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(domainEvent));
+                Assert.Equal(7, Assert.IsType<RootModel>(checkpoint.PreviousState).Values!["key"]);
+                Assert.Equal(9, Assert.IsType<RootModel>(checkpoint.Event).Values!["key"]);
                 using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
                 Assert.Equal(7, ((RootModel)session.State!).Values!["key"]);
             }

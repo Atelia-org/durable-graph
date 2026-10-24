@@ -483,7 +483,6 @@ public sealed class CapturedGraphPreparationTests {
         internal InvalidOperationException? Failure { get; set; }
         internal int BaseCalls { get; private set; }
         public void Validate(ObjectStateRecord item) { if (Failure is { } failure) { throw failure; } }
-        public bool ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) => false;
         public PreparedBaseBody PrepareBase(ObjectStateRecord current) {
             BaseCalls++;
             State state = current.GetState<State>();

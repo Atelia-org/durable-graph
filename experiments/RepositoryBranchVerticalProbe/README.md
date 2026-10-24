@@ -2,10 +2,10 @@
 
 本 Probe 直接调用 DB-096 的新 Repository / WorkingCopy API，使用 Source Generator 生成的业务模型；不另写目录发布协调器。问题是：一个业务 Head 一条分支、HeadStore 继承历史成为来源权威以后，旧点分叉能否在彻底关闭资源后恢复并继续保存？
 
-最小通过标准为程序返回 0 并打印 `PASS`。调用故事涵盖：State/Event 混合历史、父继续后的准确旧 Event 分叉、重复中文标签、空 fork 冷开无 clone Commit、纯 Event 根、不可变书签、不同根／兄弟／同点 Pair、`S0,E1,S1,S2` 的 Checkpoint 停止反例、摘要复制与缺省空值，以及同值保存后再次冷恢复和续写。
+最小通过标准为程序返回 0 并打印 `PASS`。调用故事涵盖：State/Event 混合历史、父继续后的准确旧 Event 分叉、重复中文标签、空 fork 冷开无 clone Commit、纯 Event 根、不可变书签、不同根／兄弟／同点独立读取、`S0,E1,S1,S2` 的 Checkpoint 停止反例、摘要复制与缺省空值，以及同值保存后再次冷恢复和续写。
 
 ```powershell
-$storageSources = (Resolve-Path .artifacts/db096-head-mechanism/storage-f8868b5).Path
+$storageSources = (Resolve-Path ../atelia-storage).Path # HEAD must match eng/StorageDependency.props
 dotnet run --project experiments/RepositoryBranchVerticalProbe/RepositoryBranchVerticalProbe.csproj `
   -p:UseStorageSources=true "-p:StorageSourceRoot=$storageSources"
 ```

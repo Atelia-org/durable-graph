@@ -201,18 +201,6 @@ internal sealed class ArrayObjectBinding<TDomain, TState, TProjection, TOps> : A
         }
     }
 
-    bool IStatePreparationBinding.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
-        ((IStatePreparationBinding)this).Validate(left);
-        ((IStatePreparationBinding)this).Validate(right);
-        FrozenArrayState<TState> leftState = left.GetArrayState<TState>();
-        FrozenArrayState<TState> rightState = right.GetArrayState<TState>();
-        if (!leftState.Shape.Equals(rightState.Shape)) { return false; }
-        for (int index = 0; index < leftState.Shape.Count; index++) {
-            if (!TOps.StateEquals(in leftState.Elements[index], in rightState.Elements[index], ArrayLayout.ElementSlot)) { return false; }
-        }
-        return true;
-    }
-
     PreparedBaseBody IStatePreparationBinding.PrepareBase(ObjectStateRecord current) {
         ((IStatePreparationBinding)this).Validate(current);
         return ArrayStateBody<TState, TOps>.PrepareBase(current.GetArrayState<TState>(), ArrayLayout);

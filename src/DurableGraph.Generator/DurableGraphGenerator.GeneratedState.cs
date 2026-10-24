@@ -199,7 +199,6 @@ public sealed partial class DurableGraphGenerator {
             AppendBinaryPrepareBase(source, version, bodyIndent);
             AppendBinaryDtoRead(source, version, bodyIndent);
             AppendBinaryPrepareDelta(source, version, bodyIndent);
-            AppendBinaryStateEquality(source, version, bodyIndent);
             AppendBinaryApplyDelta(source, version, bodyIndent);
             AppendBinaryStringReferenceValidation(source, version, bodyIndent);
             AppendBinaryReferenceTraversal(source, version, bodyIndent);

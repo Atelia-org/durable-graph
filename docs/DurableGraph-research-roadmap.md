@@ -10,11 +10,10 @@
 
 2026-09-11 的真实消费者 [DramaBoard Event/State 草稿](../../drama-board/archive/firstboard-llm/docs/research/event-journal-state-store-draft.md)
 触发独立历史图、外部发布和分支需求。[DB-063](design-branches/0063-event-history-journal-slice/README.md) 已完成 EventHistory 外观。
-操作内解码复用与只读闭包共享的能力/验收从 [DB-064](design-branches/0064-shared-revision-decoding-design/README.md) 和 PROJECT-STATE 进入，不再列为待施工项。
+DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpair-retirement/README.md)退役；Git tag 保留技术储备，不作为待恢复的功能队列。
 首轮 [API 反馈](../../drama-board/docs/feedback/durablegraph/001-eventhistory-api.md) 是接口评审，尚非真实接入故障或长轨迹测量；
 其近期默认调用、文档交付与恢复示例改进已由 [DB-065](design-branches/0065-event-history-consumer-contract-slice/README.md) 完成。
-第二轮 ReadPair 比较与 Transient 合同由 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)
-承接，验收从该分片与 PROJECT-STATE 进入。后继仍与下游真实接入互相校准：
+第二轮 ReadPair 反馈与 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)保历史意义。后继与下游真实接入互相校准：
 
 第三轮真实模型反馈触发的 record class 与接口迁移已由 [DB-068](design-branches/0068-record-class-model-slice/README.md)
 完成；[DB-072](design-branches/0072-generator-immutable-leaf-classification-slice/README.md) 分类的最终类型证明与 Family 覆盖缺口
@@ -178,7 +177,7 @@ DB-051 之外的性能工作以实际轨迹或测量问题触发，不自动扩�
 | boxed value 持久身份 | MVP 拒绝领域图中的装箱值对象；实际模型需要通过引用槽保留装箱值身份时，再增加局部 codec/身份支持；不影响框架内部 DTO 装箱 |
 | 物理 GC、compaction、历史保留 | 出现真实空间或 recovery-closure 问题后；与 CLR 映射清理和数字 ID 回收分开裁决 |
 | 性能优化 | frame/map 缓存与热保存 head/H 基线从 [DB-067](design-branches/0067-owned-revision-read-cache-design/README.md)、[DB-069](design-branches/0069-incremental-save-baseline/README.md) 查证。DB-069 同场景测量已分离出剩余 map 历史回溯；真实业务长轨迹中它成为主要保存成本时，比较祖先 map 复用或增量 head map，并独立证明完整 membership/prior 验证。默认缓存 8 MiB 与 [DB-070](design-branches/0070-read-amplification-default/README.md) 选择的保存参数均非已测最优值；出现真实长轨迹的历史空间或冷恢复耗时目标时，比较实际累计追加 payload、冷恢复耗时/链项数，并结合单对象 d/B 与有效冷读频率重新校准。全量 Base 准备、缓冲复制、typed buckets 或指纹由具体测量触发；DB-061 的逐层基类委托/DTO 前缀复制在深继承实际成为热点后再优化，不恢复两套投影路径。DB-042 的 Upgrade requirement set 仍逐次复核，批量历史对象测出热点后可评估 SchemaStore catalog generation |
-| 双图读取的后继优化 | State–State 的操作内 DTO/string 缓存、保守引用闭包和完整状态比较从 PROJECT-STATE/DB-064/066 进入；DB-097 选择任一 Event Pair 独立恢复，不为同 Event 两次保留共享例外。比较、Normalize 或内存驻留成为实际热点后，再研究明确 Upgrade 纯度/调用合同后的复用或受限跨操作缓存；多视图分区、深不可变白名单和内容 intern 需各自新需求。Frame/map 缓存另见性能项，不能把 body 解码计数下降写成物理 I/O 或峰值内存收益 |
+| 多快照共享的技术储备 | [DB-098](design-branches/0098-readpair-retirement/README.md)已退役 ReadPair；只有真实多快照消费测出独立恢复的分配/驻留瓶颈，且调用方接受共享只读约束时才重新评估。先参考保留 tag 的闭包与反例，不预设复活旧 API。owned 物理缓存和 State 准备槽继续维护，不据此引入跨操作领域实例缓存 |
 | 加载内存预算 | 大数组/容器或不可信输入的资源控制成为实际需求时，设计独立的总分配/元素数预算；DB-043 先要求合法 shape、checked 计算及适用时的 payload 下界预检。零字节元素可产生大内存对象，单帧 256MB 不等于 CLR 内存上限 |
 | 并发、分支与跨 Repository | 每 BranchId 单工作副本与带显示标签的 ForkBranch 从 PROJECT-STATE 查证，仓库操作仍串行。concurrent Capture、多 writer、merge、跨仓库身份仍延期。操作内解码或只读实例共享不改变这些并发和来源边界 |
 | 跨对象升级与外部副作用 | MVP 仅单对象字段转换；读取其他对象、拆分/合并及创建持久新对象均延后。MVP 后有真实迁移案例时，再讨论图访问、新 ID 与失败隔离；不借普通升级默认授权 |

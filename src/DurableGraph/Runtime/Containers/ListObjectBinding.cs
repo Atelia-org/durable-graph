@@ -107,18 +107,6 @@ internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : Li
         }
     }
 
-    bool IStatePreparationBinding.ProvesSameState(ObjectStateRecord left, ObjectStateRecord right) {
-        ((IStatePreparationBinding)this).Validate(left);
-        ((IStatePreparationBinding)this).Validate(right);
-        FrozenListState<TState> leftState = left.GetListState<TState>();
-        FrozenListState<TState> rightState = right.GetListState<TState>();
-        if (leftState.Count != rightState.Count) { return false; }
-        for (int index = 0; index < leftState.Count; index++) {
-            if (!TOps.StateEquals(in leftState.Elements[index], in rightState.Elements[index], ListLayout.ElementSlot)) { return false; }
-        }
-        return true;
-    }
-
     PreparedBaseBody IStatePreparationBinding.PrepareBase(ObjectStateRecord current) {
         ((IStatePreparationBinding)this).Validate(current);
         return ListStateBody<TState, TOps>.PrepareBase(current.GetListState<TState>(), ListLayout);

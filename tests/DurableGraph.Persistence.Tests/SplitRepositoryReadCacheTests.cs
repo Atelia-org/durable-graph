@@ -126,9 +126,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             }
             AssertRing(reader.LoadState(old), 7);
             AssertRing(reader.LoadEvent(reader.ResolveTag("event")), 200);
-            var pair = reader.ReadPair(old, saved);
-            AssertRing(pair.First, 7);
-            AssertRing(pair.Second, 201);
+            AssertRing(reader.LoadState(saved), 201);
             Assert.Null(reader.PreparedStateEntry);
             StoredGraphRevision savedGraph = Snapshot(reader, saved);
             heldBatch = reader.GraphStore.ReadBatch(savedGraph.OwnedBatch!.Value);

@@ -3,7 +3,7 @@
 实际 PackageReference 消费是源码测试之外的交付验证。活动门禁各保范围，运行参数、包来源、
 history 与冷进程证据由对应入口维护；当前能力见 [PROJECT-STATE](../../src/PROJECT-STATE.md)。
 DB-096 的活动入口已完成迁移与普通包运行，准确 G/S、回归和边界见[验收记录](../../docs/design-branches/0096-history-and-head-model/package-cutover-validation.md)；旧包记录只保其来源版本资格。
-DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自有完整 Base／目录，含 Event 的 Pair 独立恢复；新包资格仍须按[该片合同](../../docs/design-branches/0097-independent-event-graphs/README.md)另行运行，不沿用 DB-096 回执。
+DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自有完整 Base／目录，DB-098 后通过 LoadState/LoadEvent 与 ReadCheckpoint 进行独立恢复；新包资格仍须按[该片合同](../../docs/design-branches/0097-independent-event-graphs/README.md)另行运行，不沿用 DB-096 回执。
 
 ## 活动门禁
 
@@ -11,7 +11,7 @@ DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自�
 |---|---|
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
 | [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | README 原文纯 State 连续保存、历史分叉与冷续写；可选 Event、Upgrade/Verify 及候选交付 |
-| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、十九项旧 API/错误调用（含旧 StateRevisionAddress、BranchCheckout、Move 和 Private/ToShared）精确编译负例及恢复合法源码后的冷保存 |
+| [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、二十项旧 API/错误调用（含旧 StateRevisionAddress、BranchCheckout、Move、Private/ToShared 和 ReadPair）精确编译负例及恢复合法源码后的冷保存 |
 | [ApplicationRecipesConsumer](ApplicationRecipesConsumer/README.md)、[runner](Run-ApplicationRecipesProbe.ps1) | 版本化导航/Hex、空fork冷续写、缺模型后同ID打开与配置冻结、版本化Summary及组提交一致性正反例 |
 | [ExplicitStorageClassificationConsumer](ExplicitStorageClassificationConsumer/README.md)、[runner](Run-ExplicitStorageClassificationProbe.ps1) | DG0024 精确负例、两条实际生成路线、修正后 Publish/Verify 与冷进程恢复 |
 | [GroupCommitConsumer](GroupCommitConsumer/README.md)、[runner](Run-GroupCommitProbe.ps1) | 多分支共同 Schema、执行时捕获、State/Event 安装差异及冷重开；本次资格见0096工作集 |
@@ -19,7 +19,7 @@ DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自�
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
 | [EventHistoryRecoveryConsumer](EventHistoryRecoveryConsumer/README.md)、[runner](Run-EventHistoryRecoveryProbe.ps1) | 应用自身的事件快照与处理进度协议 |
 | [MetaBootstrapSchemaConsumer](MetaBootstrapSchemaConsumer/README.md)、[runner](Run-MetaBootstrapSchemaProbe.ps1) | 员工自举、无业务注册的 meta 冷读、数组与字典真实 Delta |
-| [SplitRepositoryConsumer](SplitRepositoryConsumer/README.md)、[runner](Run-SplitRepositoryProbe.ps1) | 公开两根 Repository、accepted history、Upgrade、Pair、Fork 与冷续写 |
+| [SplitRepositoryConsumer](SplitRepositoryConsumer/README.md)、[runner](Run-SplitRepositoryProbe.ps1) | 公开两根 Repository、accepted history、Upgrade、独立读取、Fork 与冷续写 |
 | [容器升级](PrivateContainerConsumer/README.md)、[runner](Run-PrivateContainerProbe.ps1) | Shared Nullable/List 升级、缺规则拒绝、真实冷 Delta；路径保留历史名字 |
 | [DevelopmentSchemaConsumer](DevelopmentSchemaConsumer/README.md)、[runner](Run-DevelopmentSchemaProbe.ps1) | 完整关闭库副本 A/B/release、独立编译 history、正常 Shared 升级及 Off/Publish/Verify |
 

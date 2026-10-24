@@ -14,9 +14,7 @@ namespace Atelia.DurableGraph;
 /// IDs can be stored and reused after reopening the same repository; they are not globally unique capabilities.
 /// Operations validate branch membership, commit location and any required State/Event role before use.
 /// Independent LoadState/LoadEvent calls allow application-side Transient initialization without a writer.
-/// State-State ReadPair may share reachable instances: its read-only constraint includes observable Transient mutation.
-/// A pair containing an Event materializes two independent graphs, including two reads of the same Event.
-/// Keep per-view owner/context/cache outside paired graphs. Use OpenWorkingCopy to continue editing and committing.
+/// ReadCheckpoint also restores independent graphs. Use OpenWorkingCopy to continue editing and committing.
 /// Each open repository freezes its model configuration once. Later registry changes affect future opens only.
 /// Close all checkouts and this repository before reopening to load new registrations. First save supported
 /// pending domain changes or preserve/rebuild them in the application; Dispose does not save or roll them back.
@@ -361,20 +359,6 @@ public sealed partial class Repository : IDisposable {
         RequireAvailable();
         _busy = true;
         try { return ReadHistoryCheckpointCore(CheckCommit(commitId)); }
-        finally { EndOperation(); }
-    }
-
-    /// <summary>Returns a pair in input order. Both graphs, including Transient fields, must be treated as read-only.</summary>
-    /// <remarks>
-    /// State-State pairs may share matching reachable instances; the read-only constraint includes observable Transient mutation.
-    /// A pair containing an Event materializes independently on both sides, even for the same Event commit.
-    /// Keep per-view owner/context/cache outside the graphs. Independent LoadState/LoadEvent calls support Transient
-    /// initialization without a writer. Use OpenWorkingCopy for branch editing and committing.
-    /// </remarks>
-    public (IDurableObject First, IDurableObject Second) ReadPair(CommitId first, CommitId second) {
-        RequireAvailable();
-        _busy = true;
-        try { return ReadGraphPairCore(CheckCommit(first), CheckCommit(second)); }
         finally { EndOperation(); }
     }
 

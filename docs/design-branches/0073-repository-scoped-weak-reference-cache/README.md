@@ -48,7 +48,7 @@ DB-072/073/074 是同一方向的设计材料，不能互相充当独立收益�
 ### 2.1 同一 key 不能代替 current 状态证明
 
 [GraphReader](../../../src/DurableGraph.Persistence/GraphReader.cs) 每视图执行 Normalize，
-[SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs) 的
+[SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs") 的
 `SameLayoutNormalizationMustCompareCompleteCurrentValuesAndReferences` 已覆盖相同 head/binding/layout 下 Normalize 改值或改边。
 这个现有夹具不是 ImmutableLeaf；但它证明 Normalize 没有原稿所假定的全局确定性合同。
 同样的 Normalize 可以给 readonly 标量叶先后产出 20 和 21，结构资格不会因此消失。
@@ -184,7 +184,7 @@ Repository.Dispose 清空缓存；可用性/故障检查先于任何缓存读取
 | ReadPair、Resume、独立读取的 Transient 初始化 | 原共享/隔离/续写基线回归通过；前两者不读写本缓存，独立读仍允许可变/Transient 节点初始化 |
 | 强制 Family 非泛型叶 | 实际 capability 可为 true；独立调用 binding 不同，明确验证 miss |
 
-优先复用 [SharedGraphReaderTests](../../../tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)、
+优先复用 [SharedGraphReaderTests（Git 技术储备）](../0098-readpair-retirement/README.md#technical-reserve "Git archive/readpair-before-removal-20261024:tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs")、
 [SharedEventHistoryTests](../../../tests/DurableGraph.Persistence.Tests/SharedEventHistoryTests.cs) 与
 [ImmutableLeaf 真包消费者](../../../experiments/PackageConsumerProbe/ImmutableLeafConsumer/README.md)。
 新增正例须证明真实生成静态 binding 命中，不能只用手写 true。

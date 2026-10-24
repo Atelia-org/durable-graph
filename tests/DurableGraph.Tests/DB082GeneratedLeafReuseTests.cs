@@ -199,10 +199,8 @@ public sealed partial class DurableSchemaGeneratorTests {
             EventCheckpoint checkpoint = Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(message));
             Assert.NotSame(checkpoint.Event, checkpoint.PreviousState);
             Assert.NotSame(DB082Member(checkpoint.Event, "Left"), DB082Member(checkpoint.PreviousState!, "Left"));
-            var pair = repository.ReadPair(state, state);
-            // Pair has its own closure-sharing contract; no assertion forbids sharing inside it.
             return [repository.LoadState(state), repository.LoadEvent(message), checkpoint.Event,
-                checkpoint.PreviousState!, pair.First, pair.Second];
+                checkpoint.PreviousState!];
         }
         object[] before = ReadRoots();
         Assert.Null(repository.PreparedStateEntry);

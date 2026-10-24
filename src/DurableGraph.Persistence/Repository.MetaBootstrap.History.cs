@@ -35,23 +35,6 @@ public sealed partial class Repository {
             : new StateCheckpoint(Issue(record), root, previous, previousRecord is null ? null : Issue(previousRecord));
     }
 
-    private (IDurableObject First, IDurableObject Second) ReadGraphPairCore(
-        HistoryGraphRecord firstRecord, HistoryGraphRecord secondRecord) {
-        var store = _storageFacade.Store;
-        var firstSnapshot = QualifyBusiness(firstRecord);
-        var secondSnapshot = QualifyBusiness(secondRecord);
-        var first = DecodedRevision.ReadStoredGraph(store, firstSnapshot, _modelConfiguration);
-        var environment = first.BindingEnvironment;
-        if (secondSnapshot.SchemaRoot != environment?.SelectedSchemaView.Snapshot?.Address) { environment = null; }
-        var second = DecodedRevision.ReadStoredGraph(store, secondSnapshot, _modelConfiguration, environment);
-        if (firstRecord.Kind == CommitKind.Event || secondRecord.Kind == CommitKind.Event) {
-            return GraphReader.ReadIndependent(first, new(first.SourceModels!), firstRecord.RootId,
-                second, new(second.SourceModels!), secondRecord.RootId);
-        }
-        return GraphReader.ReadPair(first, new(first.SourceModels!), firstRecord.RootId,
-            second, new(second.SourceModels!), secondRecord.RootId);
-    }
-
     private void CreateTagCore(string name, HeadEntryId id) {
         _resources.EnsureEditingAllowed();
         PublicationOutcome outcome = PublicationOutcome.NotAttempted;

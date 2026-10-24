@@ -11,36 +11,16 @@ namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
     [Fact]
-    public void TraditionalNestedComparisonMatchesDeltaWithoutPreparingPayloads() {
-        string source = InlineBodySource.Replace("public static bool RefHydration()", """
-            public static bool Equal(byte[] a,byte[] b) {
-                var readerA=new BareValueReader(a); var readerB=new BareValueReader(b);
-                var left=Item.__DurableState.ReadBaseBodyV1(ref readerA);
-                var right=Item.__DurableState.ReadBaseBodyV1(ref readerB);
-                return Item.__DurableState.StateEquals(in left,in right);
-            }
-            public static long Allocations(byte[] bytes) {
-                var reader=new BareValueReader(bytes);
-                var state=Item.__DurableState.ReadBaseBodyV1(ref reader);
-                for(int i=0;i<1000;i++) if(!Item.__DurableState.StateEquals(in state,in state)) throw new Exception();
-                long start=GC.GetAllocatedBytesForCurrentThread();
-                for(int i=0;i<1000;i++) if(!Item.__DurableState.StateEquals(in state,in state)) throw new Exception();
-                return GC.GetAllocatedBytesForCurrentThread()-start;
-            }
-            public static bool RefHydration()
-            """);
-        GeneratorTestRun run = RunGenerator(source);
+    public void TraditionalNestedDeltaMatchesPersistentBytes() {
+        GeneratorTestRun run = RunGenerator(InlineBodySource);
         AssertSchemaOnlyCompiles(run);
         Type host = EmitAndLoad(run.OutputCompilation).GetType("FusedDelta.Host")!;
-        var equal = host.GetMethod("Equal")!.CreateDelegate<Func<byte[], byte[], bool>>();
         var prepare = host.GetMethod("Prepare1")!.CreateDelegate<Func<byte[], byte[], PreparedDeltaBody>>();
         byte[][] states = new[] { "00000000000000", "00000000008000", "00000100C07F00", "00000200C07F00", "01020000008001" }
             .Select(Convert.FromHexString).ToArray();
         foreach (byte[] left in states) foreach (byte[] right in states) {
-            Assert.Equal(left.SequenceEqual(right), equal(left, right));
-            Assert.Equal(!prepare(left, right).HasChanges, equal(left, right));
+            Assert.Equal(!left.SequenceEqual(right), prepare(left, right).HasChanges);
         }
-        Assert.Equal(0, host.GetMethod("Allocations")!.CreateDelegate<Func<byte[], long>>()(states[0]));
         AssertPrepareDeltaDoesNotPrecompare(GeneratedSource(run, "DurableStates.g.cs"));
     }
 
@@ -97,7 +77,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                     var ownerSchema=new DurableSchema(TypeExpr.Named("Box",schema.Type),1,new DurableFieldInfo(1,TypeTag.InlineValue,inlineSchema:schema));
                     var ownerLeft=new BoxState.V1<PairState.V1<float>>(left);
                     var ownerRight=new BoxState.V1<PairState.V1<float>>(right);
-                    if(BoxState.BodyV1<PairState.V1<float>,PairState.BodyV1<float,SingleStateOps>>.StateEquals(in ownerLeft,in ownerRight,ownerSchema)) return false;
+                    if(!BoxState.BodyV1<PairState.V1<float>,PairState.BodyV1<float,SingleStateOps>>.PrepareDelta(in ownerLeft,in ownerRight,ownerSchema).HasChanges) return false;
                     var emptySchema=new DurableSchema("Empty",1,SchemaKind.InlineValue);
                     var emptySlot=new DurableFieldInfo(1,TypeTag.InlineValue,inlineSchema:emptySchema);
                     EmptyState.V1 empty=default;

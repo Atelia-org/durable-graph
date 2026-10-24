@@ -372,14 +372,12 @@ reader/Delta applier/引用遍历，当前 World 恢复还需要全部 source �
 
 因此 State 的同一 ObjectVersion DTO 可以在不同 Revision 中复用，但其引用目标仍由各自 Revision 选择；独立 Event 不沿用 State 或其他 Event 的对象 head。
 “自身版本相同”不单独证明两份已连接引用的领域实例可以合并；子对象的不同版本可能要求 owner 也分别实例化。
-State–State 合并读取只承诺各图快照语义，不承诺跨图一定复用或一定不复用实例；跨图 ReferenceEquals
-不能用于判断业务身份、版本或决定程序控制流。调用方须将两份输出及其可达对象都作为只读快照使用；库不冻结普通 CLR 对象。
-可写恢复仍保证可变对象隔离；内部可复用同版本的冻结 DTO/string，但不能把只读共享图导入工作区。
-
-任何含 Event 的配对（包括同一 Event 两次）使用独立分配表，仍保留同操作 mutable factory 实例唯一性守卫；数字 ID 重合不授权跨图复用。
+历史读取与可写恢复均独立分配可变领域对象；库不冻结普通 CLR 对象，跨图 ReferenceEquals 不能代替业务身份或版本。
+内部解码复用不授权共享可变领域实例，也不把只读图导入工作区。
+Checkpoint 的两图使用独立分配表，保留同操作 mutable factory 实例唯一性守卫；数字 ID 重合不授权跨图复用。
 解码复用必须限于同一资源所有者、同一冻结模型目录，并同时核对 ObjectId 与实际 head；
 每份 Revision 的完整 source/current 引用及查找合法性仍各自验证，业务 Upgrade 仍各自执行。
-共享普通 CLR 实例还须证明 current 状态相同且所有引用目标可共享；仅有相同布局、未触发重写或 readonly 字段不足以证明。
+ReadPair 的跨图共享规划已退役；普通 CLR 实例不因同 ID/head、相同布局或字段值而合并。
 不同 ObjectVersion 不因内容相等而合并，空串继续沿全库 string.Empty 例外；非空 string 不做内容 intern。
 本轮算法与验收边界见 [DB-064](design-branches/0064-shared-revision-decoding-design/README.md)，缓存和比较策略不进入持久类型身份或 wire。
 
@@ -474,14 +472,11 @@ tag 名与分支显示标签无关，重复 tag 名拒绝；可定位 Event-firs
 旧 EventHistoryRepository/EventHistorySession/Resume/GraphFrame 不保留兼容壳，
 旧 publication.rbf 也不引入迁移或双发布机制。
 
-LoadState/LoadEvent 按角色校验 CommitId 并独立恢复实际领域根；LoadLatestSavedState 返回所选提交及其祖先中最近已保存的 State，无 State 时对象与 StateCommitId 均为空，不重放 Event。实验性 ReadPair 保持输入顺序、两边完整成功才交付，
-按只读快照使用。State–State 保留可信闭包共享且不承诺共享命中；任何含 Event 的配对统一独立恢复，不增加同 Event 共享例外。
-State–State 共享候选以完整当前持久状态比较作证明，不依赖对象 Base/Delta preparation；
-缺少比较能力时保守不共享，比较与验证错误仍传播，Dictionary 的 canonical key 校验不省略。
+LoadState/LoadEvent 按角色校验 CommitId 并独立恢复实际领域根；LoadLatestSavedState 返回所选提交及其祖先中最近已保存的 State，无 State 时对象与 StateCommitId 均为空，不重放 Event。ReadPair 及跨图共享规划已退役；需要多个历史版本时分别读取，独立分配可变实例。Dictionary 的 canonical key 校验保持。
 OpenWorkingCopy 使用独立可变 State 恢复路径；热调用中用户创建的别名仍由用户管理。
 ReadCheckpoint 在指定 CommitId 独立恢复当前图及最近严格祖先的相反角色图；PreviousX 是领域根，PreviousXCommit 是 CommitInfo，缺失时两者同时为 null。
 首版 eager 至多两图，全部成功才交付，各根 getter 稳定；两图间、不同读取间及与工作副本间不共享可变实例。
-操作内解码复用不改变独立分配和 singleton 拒绝。ReadPair 的显式共享不能用来实现默认 Checkpoint。
+操作内解码复用不改变独立分配和 singleton 拒绝；Checkpoint 保留同操作实例守卫，不能以两次无共同守卫的独立调用替代。
 PreviousEvent 不表示处理完成或唯一原因，LoadEvent 不因便利上下文额外物化 PreviousState。
 
 EnumerateEvents 固定 endInclusive，返回事件 CommitInfo；可选 afterExclusive 在首项前验证为该位置的祖先，同点为空范围。
@@ -528,9 +523,9 @@ MVP 库内加载采用以下阶段顺序；这是目标流程，不表示各阶�
 4. SG 生成 Hydrate，填充持久字段并连接对象引用，利用先分配的完整映射保留共享和循环。
 5. 完成框架的持久数据/引用校验后交付 World，不能暴露解码、升级或引用连接的半成品。
 
-单图读取、Checkpoint、OpenWorkingCopy 与 ReadPair 共用上述准备和两阶段物化机制；用途决定选图与共享资格，
-ForkBranch 本身不恢复领域图。Checkpoint 的独立两图与 ReadPair 均先完成全部准备、实例分配和引用表验证，再开始 Hydrate；
-只有 State–State ReadPair 的可信闭包规划允许 mutable 复用；包含 Event 的配对使用 ReadIndependent，共用同操作实例守卫，普通 allocator 返回同一实例不能获得豁免。
+单图读取、Checkpoint 与 OpenWorkingCopy 共用上述准备和两阶段物化机制；ForkBranch 本身不恢复领域图。
+Checkpoint 的独立两图先完成全部准备、实例分配和引用表验证，再开始 Hydrate；
+共用同操作实例守卫，普通 allocator 返回同一可变实例不能获得豁免。
 只读交付不导入保存身份；可编辑恢复保留完整 source 基线及独立 CaptureSession。
 内部准备材料不自行授予跨操作复用资格；边界与证据见 [DB-079](design-branches/0079-shared-graph-restoration-core-slice/0079-shared-graph-restoration-core-implementation.md)。
 
@@ -553,10 +548,9 @@ OpenWorkingCopy 的最近 State 材料复用以精确 State/revision/root、同 
 也不承诺撤销用户重建期间的副作用或把其失败变成库的加载失败；用户负责在业务使用前完成初始化。
 这取代此前“库内调用 Transient hook 成功后才交付”的 MVP 设想，未来框架 hook 另按真实需求评估。
 
-ReadPair 的只读约束包含会影响观察结果的 Transient 写入；视图专属 owner、查询上下文和缓存须置于
-各自的图外 view/index，不写入可能共享的节点。需要原位重建 Transient 的历史浏览可分别调用
-LoadState/LoadEvent，取得独立领域图并初始化；无需 writer，但持久字段仍是历史快照，续写须使用 OpenWorkingCopy。
-不承诺对 string 或应用自有全局对象进行通用深拷贝。使用示例与验收见 [DB-066](design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)。
+历史浏览通过 LoadState/LoadEvent 或 ReadCheckpoint 取得独立领域图后，可分别初始化 Transient；
+无需 writer，但持久字段仍是历史快照，续写须使用 OpenWorkingCopy。
+不承诺对 string 或应用自有全局对象进行通用深拷贝。ReadPair 退役范围与技术储备见 [DB-098](design-branches/0098-readpair-retirement/README.md)。
 
 字典由框架分配并填入原实例，应用只提供需要的当前 comparer，不接管共享引用或事后替换字典。
 比较依赖必须在插入时就绪并保持稳定：key 自身已填好的值、完整 string 与引用身份可用，

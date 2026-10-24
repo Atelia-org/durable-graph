@@ -289,7 +289,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             Assert.Same(first, eventOnly.State);
             Assert.Equal(Describe(repository, initialState).RootId, eventOnly.StateId);
             Assert.Equal(atCreation, eventOnly.BindingEnvironment.SelectedSchemaView.Snapshot!.Address);
-            Assert.Equal(5, Assert.IsType<NextRoot>(repository.ReadPair(initialState, initialState).First).Value);
+            Assert.Equal(5, Assert.IsType<NextRoot>(repository.LoadState(initialState)).Value);
             Assert.Equal(initialState, repository.ReadCurrentCommit(BranchNamed(repository, "event-only")).Commit.Id);
         }
         Dictionary<string, byte[]> files = SnapshotFiles();

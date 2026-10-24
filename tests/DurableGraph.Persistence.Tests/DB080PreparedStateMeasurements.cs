@@ -176,8 +176,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
 
     private static StateModelBinding<Node, State> Model(StateReaderBinding reader) => new(
         new StatePreparationBinding<State>(Schema, Base,
-            static (in State prior, in State next) => new(prior != next, Base(next).Body),
-            static (in State left, in State right) => left == right),
+            static (in State prior, in State next) => new(prior != next, Base(next).Body)),
         [reader], static row => row.GetState<State>(), static () => new Node(),
         static (Node target, in State state, ObjectReadTable objects) => {
             target.Next = objects.ResolveDurable<Node>(state.Next);

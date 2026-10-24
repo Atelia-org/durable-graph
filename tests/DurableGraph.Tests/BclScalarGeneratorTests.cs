@@ -136,7 +136,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             public static bool Equal(byte[] left,byte[] right) {
                 var l=new BareValueReader(left);var r=new BareValueReader(right);
                 var first=Body.Read(ref l,Schema);var second=Body.Read(ref r,Schema);
-                return Body.StateEquals(in first,in second,Schema);
+                return !Body.PrepareDelta(in first,in second,Schema).HasChanges;
             }
         }
         """;

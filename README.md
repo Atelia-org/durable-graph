@@ -264,20 +264,9 @@ tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1
 State 的增量来源是该提交之前最近的 State。每个 Event 独立捕获完整可达图，使用局部对象 ID、完整 Base 和自有目录，没有内容来源；Event 不读取或推进 State 保存基线。
 `GetPreviousState(eventCommitId)` 寻找严格祖先中的最近 State；纯 Event 前缀返回 null。
 
-`ReadPair` 是实验性只读快照 API：按输入顺序返回 First/Second，两边成功后才交付。
-默认返回两个 `IDurableObject`，保留各自实际类型；通过 `ReadCommitInfo(commitId).Kind` 判断 State/Event，通过模式匹配使用具体领域类型。
-两个输入无需相邻，也不要求一份 State、一份 Event；调用方用显式转换或模式匹配取得领域类型。
-State-State 配对在本次操作内复用相同 ObjectVersion 的解码结果，并可共享完整引用闭包都一致的领域实例。
-只要任一输入是 Event，两边就分别恢复，保留各自图内的共享和环，不跨图共享可变实例；同一 Event 与自身配对也如此。
-**两份结果及其可达对象都必须按只读快照使用，包括会影响观察结果的 Transient 写入**。
-不要分别给可能共享的 Actor 写入不同的 `OwnerWorld`、查询上下文或视图专属缓存；这些信息应由各自的图外
-`WorldView` / 索引持有。即使两个视图引用同一个 Actor，各自的查询仍使用各自的世界上下文。
-不能只用全局 Actor→context 表代替视图：共享的 Actor 会命中同一个 key。
-不要依赖跨图 `ReferenceEquals` 判断业务身份或版本，也不要假定两图可隔离编辑。
-需要原位初始化每份历史图的 Transient 时，使用 `ReadCheckpoint` 或分别调用 `LoadState` / `LoadEvent`，不需要开启 writer；
-持久成员仍按历史快照使用，这些读取不安装保存基线。需要继续修改并提交时才使用 `OpenWorkingCopy`。
-图外视图与 State-State 共享边界见[ReadPair 合同](docs/design-branches/0066-readpair-comparison-and-transient-contract-slice/README.md)及[产品回归](tests/DurableGraph.Persistence.Tests/SharedGraphReaderTests.cs)；Event 隔离边界见[独立 Event 合同](docs/design-branches/0097-independent-event-graphs/README.md)。
-共享候选判定使用持久状态比较，不准备对象 Base/Delta payload；常规读取仍可能为 Dictionary key 唯一性校验进行规范编码。
+历史图使用 `LoadState` / `LoadEvent` 独立恢复；`ReadCheckpoint` 一次独立恢复当前图及最近严格祖先中的相反角色图。
+图内共享与环保持，各图不共享可变实例。交付后可以分别重建 Transient；这些读取不安装保存基线，
+需要修改并提交时使用 `OpenWorkingCopy`。`ReadPair` 及其跨图共享优化已[退役并保留 Git 技术储备](docs/design-branches/0098-readpair-retirement/README.md)。
 OpenWorkingCopy 只恢复最近 State；独立读取的 Event 与工作副本不共享可变实例。热路径由用户保持 Event 内容只读；持久 DTO 冻结不会冻结原 CLR 对象。
 
 多开局目录可用 `repo.ListRootBranches()` 取得根，再用 `repo.ListBranchSubtree(branchId)` 取得包含起点的平面子树。它们只返回正式业务 Branch 的标签和固定来源，不加载领域对象，也不要求登记业务模型；空 fork 可立即列出。结果无排序保证，应用自行排序和画树。首版会读取并验证整个已登记森林，不能将子树查询理解为只访问该子树的磁盘文件。
@@ -551,7 +540,7 @@ record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分�
 
 恢复不执行领域类/struct 的构造器、实例字段初始化器、属性 getter/setter；不要求无参构造器。
 Transient 索引/缓存由应用在恢复交付完整图后重建：`OpenWorkingCopy` 或独立 `LoadState` / `LoadEvent` 的结果
-可以做应用侧初始化；`ReadPair` 的视图专属状态必须放在图外，不能原位修改可能共享的节点。
+及 `ReadCheckpoint` 的各独立图都可以做应用侧初始化。
 Transient 只表示不参与持久化，并不表示修改没有可见影响。自定义字典 comparer 使用当前业务代码，
 不得依赖尚未重建的 Transient 或尚未完成填充的引用目标内容。
 

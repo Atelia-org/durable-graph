@@ -102,9 +102,9 @@ internal static class IntegrityChecks {
                 "ordinary State save writes an actual object-directory Delta");
             DescriptorBoundaries(first.Address);
 
-            // Internally consistent Event: directory/source both use S0. Its actual
-            // Head history will be S0,S1,E2, so S1 is the only correct source.
-            var graph = store.AppendBusiness(StoredGraphKind.Event, first.Address, latest.SchemaRoot,
+            // Internally consistent State: directory/source both use S0. Its actual
+            // Head history will be S0,S1,S2, so S1 is the only correct source.
+            var graph = store.AppendBusiness(StoredGraphKind.State, latest.SchemaRoot,
                 new PreparedGraphWrite(first.Address, baseline.RootId, []));
             byte[] payload = BusinessEntryPayloadCodec.Encode(graph.Address, [9]);
             var id = resources.Heads.PublishHead(branch.Value, payload, out _).Unwrap();
@@ -113,9 +113,9 @@ internal static class IntegrityChecks {
                 "wrong historical source is nevertheless physically self-consistent");
         }
         using (var repo = Repository.OpenExisting(path, World.Models())) {
-            Check(repo.ReadCommitInfo(forged).Kind == CommitKind.Event, "description does not claim complete content qualification");
-            Reject<InvalidDataException>(() => repo.LoadEvent(forged), "exact Event load rejects physically consistent but historically wrong source");
-            Reject<InvalidDataException>(() => repo.OpenWorkingCopy(branch), "cold working-copy open checks tip Event source");
+            Check(repo.ReadCommitInfo(forged).Kind == CommitKind.State, "description does not claim complete content qualification");
+            Reject<InvalidDataException>(() => repo.LoadState(forged), "exact State load rejects physically consistent but historically wrong source");
+            Reject<InvalidDataException>(() => repo.OpenWorkingCopy(branch), "cold working-copy open checks tip State source");
             Check(((World)repo.LoadState(s1)).Inventory[0] == 42, "an unrelated bad tip does not invalidate the preceding State");
         }
     }

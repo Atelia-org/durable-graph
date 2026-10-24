@@ -13,7 +13,7 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
 
     [Fact]
-    public void Measure_open_read_pair_resume_and_commit() {
+    public void Measure_open_read_checkpoint_resume_and_commit() {
         for (int sample = -1; sample < 3; sample++) {
             string path = Path.Combine(Path.GetTempPath(), $"durable-cache-product-measure-{Guid.NewGuid():N}");
             try {
@@ -51,18 +51,18 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
                     Assert.True(afterRepeated.BatchHits > afterFirst.BatchHits);
                     Assert.True(afterRepeated.DirectoryHits > afterFirst.DirectoryHits);
                     Assert.InRange(afterRepeated.ResidentChargeBytes, 1L, GraphRecordStore.DefaultReadCacheBudgetBytes);
-                    var pair = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
-                    var pairWarm = Measure(() => (((Node First, Node Second))repository.ReadPair(state, pending)));
+                    var checkpoint = Measure(() => Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(pending)));
+                    var checkpointWarm = Measure(() => Assert.IsType<EventCheckpoint>(repository.ReadCheckpoint(pending)));
                     Assert.Equal(expected, Checksum(first.Value));
                     Assert.Equal(expected, Checksum(warm.Value));
-                    Assert.Equal(expected, Checksum(pair.Value.First));
-                    Assert.Equal(expected, Checksum(pairWarm.Value.First));
-                    Assert.Equal((byte)9, pair.Value.Second.Value);
-                    Assert.Equal(16, pair.Value.Second.Links!.Count);
+                    Assert.Equal(expected, Checksum(Assert.IsType<Node>(checkpoint.Value.PreviousState)));
+                    Assert.Equal(expected, Checksum(Assert.IsType<Node>(checkpointWarm.Value.PreviousState)));
+                    Assert.Equal((byte)9, Assert.IsType<Node>(checkpoint.Value.Event).Value);
+                    Assert.Equal(16, Assert.IsType<Node>(checkpoint.Value.Event).Links!.Count);
                     if (sample >= 0) Write(new { Kind = "product-read", Sample = sample, DurableNodes = 17,
                         CompletedStateChanges = 3, HeadIsEvent = true, OpenReadOnly = open.Cost,
                         FirstReadAfterOpen = first.Cost, RepeatedRead = warm.Cost,
-                        ReadPairAfterReads = pair.Cost, RepeatedReadPair = pairWarm.Cost,
+                        CheckpointAfterReads = checkpoint.Cost, RepeatedCheckpoint = checkpointWarm.Cost,
                         PhysicalCacheBeforeReads = beforeReads, PhysicalCacheAfterFirst = afterFirst,
                         PhysicalCacheAfterRepeated = afterRepeated,
                         Checksum = expected });

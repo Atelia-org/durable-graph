@@ -9,7 +9,7 @@
 
 ## 按问题找材料
 
-最新片：[DB-097 独立 Event 对象图](0097-independent-event-graphs/README.md)，已完成源码与普通包限定验收；Event 内容独立于 State 基线，替代旧 Event 差分路线，P0R4 拒绝旧库。
+最新片：[DB-098 ReadPair 退役](0098-readpair-retirement/README.md)，移除公开双图共享入口及专用实现；保留独立 Checkpoint、State 差分和读缓存，Git tag 留技术储备。
 
 不知道编号时先在下面搜索主题；确定问题后，只在其目录内查所需证据：
 
@@ -23,6 +23,8 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
+| 098 | [ReadPair 退役与技术储备](0098-readpair-retirement/README.md)；专用跨图共享退出，独立恢复与 State 增量保持 |
+| 097 | [独立 Event 对象图](0097-independent-event-graphs/README.md)；Event 自有全 Base 与局部身份，State 增量不变；Pair 后继见 DB-098 |
 | 096 | [Branch/Commit/WorkingCopy历史模型](0096-history-and-head-model/README.md)；统一Catalog、多分支原子提交、目录树、历史分页和旧API/消费者迁移已完成；[最终源码/普通包验收与master合入](0096-history-and-head-model/final-delivery-acceptance.md)已闭合，后续仅由真实需求选择增量 |
 | 095 | [Repository 打开意图与业务保存准入](0095-repository-open-intent/README.md)；E 的限定验收保历史范围；Open/编辑分责保持，双 Schema 归属由 DB-096 统一 Catalog 取代 |
 | 094 | [有限支持真实 property backing field](0094-backing-field-support/README.md)；前期调研储备，范围与规模待摸清，未选为当前实施片 |
@@ -52,7 +54,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 | 069 | [热保存基线与增量 head/H](0069-incremental-save-baseline/README.md) |
 | 068 | [record class 与统一引用资格](0068-record-class-model-slice/README.md) |
 | 067 | [append-only Store owned 读缓存](0067-owned-revision-read-cache-design/README.md) |
-| 066 | [ReadPair 比较与 Transient 合同](0066-readpair-comparison-and-transient-contract-slice/README.md) |
+| 066 | [ReadPair 比较与 Transient 合同](0066-readpair-comparison-and-transient-contract-slice/README.md)；DB-098 已退役专用能力，保历史证据 |
 | 065 | [消费者上手与恢复合同](0065-event-history-consumer-contract-slice/README.md) |
 | 064 | [双 Revision 解码与只读安全共享](0064-shared-revision-decoding-design/README.md) |
 | 063 | [EventJournal 与 EventHistory 外观](0063-event-history-journal-slice/README.md) |

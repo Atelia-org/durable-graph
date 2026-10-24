@@ -54,7 +54,6 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.Repository.LoadState(' = 1
         'M:Atelia.DurableGraph.Repository.LoadEvent(' = 1
         'M:Atelia.DurableGraph.Repository.LoadLatestSavedState(' = 1
-        'M:Atelia.DurableGraph.Repository.ReadPair(' = 1
         'P:Atelia.DurableGraph.Repository.IsFaulted' = 1
         'M:Atelia.DurableGraph.WorkingCopy.CommitEvent(' = 1
         'M:Atelia.DurableGraph.WorkingCopy.CommitState(' = 2
@@ -82,14 +81,6 @@ function Test-PackageDocumentation {
             if ([string]::IsNullOrWhiteSpace([string]$member.summary) -or [string]::IsNullOrWhiteSpace($member.remarks.InnerText ?? [string]$member.remarks)) {
                 throw "Missing summary/remarks for $($member.name)."
             }
-            if ($member.name.StartsWith('M:Atelia.DurableGraph.Repository.ReadPair', [StringComparison]::Ordinal)) {
-                $remarks = ($member.remarks.InnerText ?? [string]$member.remarks) -replace '\s+', ' '
-                foreach ($required in @('Transient mutation', 'outside the graphs', 'without a writer', 'OpenWorkingCopy')) {
-                    if (-not $remarks.Contains($required, [StringComparison]::Ordinal)) {
-                        throw "Missing ReadPair Transient contract '$required': $($member.name)."
-                    }
-                }
-            }
         }
     }
     $checkpointProperties = @('Checkpoint.Commit', 'EventCheckpoint.Event', 'EventCheckpoint.PreviousState',
@@ -102,7 +93,7 @@ function Test-PackageDocumentation {
         }
     }
     foreach ($obsolete in @('ReadEvents', 'ReadState', 'ReadEvent', 'CreateBranch', 'CreateSharedBranch',
-        'CreateSharedBranchFromEvent', 'CheckoutShared', 'ForkShared', 'MoveBranch')) {
+        'CreateSharedBranchFromEvent', 'CheckoutShared', 'ForkShared', 'MoveBranch', 'ReadPair')) {
         if (@($documentation.doc.members.member | Where-Object {
             $_.name.StartsWith("M:Atelia.DurableGraph.Repository.$obsolete(", [StringComparison]::Ordinal)
         }).Count -ne 0) { throw "The obsolete $obsolete API must not remain in the current package." }

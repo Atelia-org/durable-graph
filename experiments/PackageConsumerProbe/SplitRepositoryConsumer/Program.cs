@@ -122,10 +122,11 @@ internal static class Program {
             Need(initial == original.CommitAt(seed), "The initial tag changed.");
             Check(repository.LoadState(initial), upgraded: true);
             Need(Widget.UpgradeCalls == 2, "Readonly materialization must Upgrade both historical Widget rows.");
-            var pair = repository.ReadPair(initial, initial);
-            Widget first = Check(pair.First, upgraded: true), second = Check(pair.Second, upgraded: true);
-            Need(!ReferenceEquals(first, second) && ReferenceEquals(first.Numbers, second.Numbers),
-                "Historical rewrite excludes Widgets; the unchanged same-S List remains shareable in this fixture.");
+            Widget first = Check(repository.LoadState(initial), upgraded: true);
+            Widget second = Check(repository.LoadState(initial), upgraded: true);
+            Need(!ReferenceEquals(first, second) && !ReferenceEquals(first.Child, second.Child) &&
+                !ReferenceEquals(first.Numbers, second.Numbers),
+                "Independent historical State reads must preserve each graph's cycle and aliases without sharing mutable instances.");
             upgrades = Widget.UpgradeCalls;
         }
         WireInspector.Snapshot after = WireInspector.Read(database);
@@ -134,7 +135,7 @@ internal static class Program {
         CheckFrames(after, witness.SeedFrames);
         Need(SameFiles(before, FileImages(database)), "Readonly accepted-history Upgrade changed repository files.");
         return new { ReadOnlyFilesUnchanged = true, ExactHistoricalDto = true, ReadOnlyUpgrade = true, UpgradeCalls = upgrades,
-            SameSUnchangedListShared = true, RewriteWidgetsIndependent = true, ActualRefsVerified = true, CompleteFramesPreserved = true };
+            HistoricalStateReadsIndependent = true, ActualRefsVerified = true, CompleteFramesPreserved = true };
     }
 
     private static object Rewrite(string database, string witnessPath) {
@@ -184,26 +185,27 @@ internal static class Program {
             Need(fork.BaseCommitId == eventCommit && fork.StateSourceCommitId == original.CommitAt(seed) && fork.StateId == rootId &&
                 ReferenceEquals(root, fork.State), "Independent Event must retain the original State instance/ID/source and pending rewrite.");
             Check(repository.LoadEvent(fork.BaseCommitId), upgraded: true);
-            var eventPair = repository.ReadPair(eventCommit, eventCommit);
-            Widget firstEvent = Check(eventPair.First, upgraded: true), secondEvent = Check(eventPair.Second, upgraded: true);
+            Widget firstEvent = Check(repository.LoadEvent(eventCommit), upgraded: true);
+            Widget secondEvent = Check(repository.LoadEvent(eventCommit), upgraded: true);
             Need(!ReferenceEquals(firstEvent, secondEvent) && !ReferenceEquals(firstEvent.Child, secondEvent.Child) &&
                 !ReferenceEquals(firstEvent.Numbers, secondEvent.Numbers),
                 "Two reads of the same Event must preserve each graph's aliases without sharing mutable instances across graphs.");
-            var stateEventPair = repository.ReadPair(repository.ResolveTag("initial"), eventCommit);
-            Widget stateSide = Check(stateEventPair.First, upgraded: true), eventSide = Check(stateEventPair.Second, upgraded: true);
+            Widget stateSide = Check(repository.LoadState(repository.ResolveTag("initial")), upgraded: true);
+            Widget eventSide = Check(repository.LoadEvent(eventCommit), upgraded: true);
             Need(!ReferenceEquals(stateSide, eventSide) && !ReferenceEquals(stateSide.Numbers, eventSide.Numbers) &&
-                stateSide.Numbers.SequenceEqual(eventSide.Numbers), "State-Event Pair must independently materialize equal reachable content.");
+                stateSide.Numbers.SequenceEqual(eventSide.Numbers), "Independent State and Event reads must materialize equal reachable content.");
             rewrittenCommit = fork.CommitState().Id;
             Need(fork.StateSourceCommitId == rewrittenCommit && fork.StateId == rootId && ReferenceEquals(root, fork.State),
                 "The following State must accept the original upgraded instances and IDs.");
-            var same = repository.ReadPair(fork.BaseCommitId, fork.BaseCommitId);
-            Need(ReferenceEquals(Check(same.First, upgraded: true), Check(same.Second, upgraded: true)),
-                "Same-S exact no-rewrite cycle must remain Pair-shareable in this fixture.");
-            var mixed = repository.ReadPair(repository.ResolveTag("initial"), fork.BaseCommitId);
-            Widget oldRoot = Check(mixed.First, upgraded: true), newRoot = Check(mixed.Second, upgraded: true);
+            Widget sameFirst = Check(repository.LoadState(fork.BaseCommitId), upgraded: true);
+            Widget sameSecond = Check(repository.LoadState(fork.BaseCommitId), upgraded: true);
+            Need(!ReferenceEquals(sameFirst, sameSecond) && !ReferenceEquals(sameFirst.Numbers, sameSecond.Numbers),
+                "Repeated current State reads must restore independent mutable graphs.");
+            Widget oldRoot = Check(repository.LoadState(repository.ResolveTag("initial")), upgraded: true);
+            Widget newRoot = Check(repository.LoadState(fork.BaseCommitId), upgraded: true);
             Need(!ReferenceEquals(oldRoot, newRoot) && !ReferenceEquals(oldRoot.Numbers, newRoot.Numbers) &&
                 oldRoot.Value == newRoot.Value && oldRoot.Child!.Value == newRoot.Child!.Value && oldRoot.Numbers.SequenceEqual(newRoot.Numbers),
-                "Different exact-S Pair environments must preserve equal contents without sharing this fixture's mutable instances.");
+                "Independent State reads under different exact schemas must preserve equal contents and separate mutable instances.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         eventAddress = actual.GraphAddress(eventCommit);
@@ -216,7 +218,7 @@ internal static class Program {
         CheckRewrittenState(actual, rewritten, eventAddress, witness, schema, descriptor);
         Need(actual.ObjectChain(seed, witness.ListId).Head == actual.ObjectChain(rewritten, witness.ListId).Head &&
             RequiredSchema(actual.Graph(seed)) != RequiredSchema(actual.Graph(rewritten)),
-            "The cross-S Pair witness must have the same retained List ID/head and current contents.");
+            "The schema rewrite must retain the unchanged List ID/head and current contents.");
         Need(CheckCatalog(actual, schema, current: true, version: 1) == witness.WidgetDescriptorId,
             "The accepted V1 descriptor must reuse its original metaObjectId.");
         CheckFrames(actual, witness.SeedFrames);
@@ -227,8 +229,8 @@ internal static class Program {
         WriteJson(witnessPath, next);
         return new { next.MainState, next.RewriteEvent, next.RewriteState, next.RewriteSchema, Objects = next.RewriteObjects,
             HistoricalForkUsesStateS = true, LatestCatalogRemainsIndependent = true, IndependentEventKeepsStateRewrite = true,
-            SameEventPairIndependent = true, StateEventPairIndependent = true,
-            RewrittenLiveWidgetBases = 2, RetainedListHeadAndH = true, SameSPairShared = true, CrossSPairIndependent = true,
+            RepeatedEventReadsIndependent = true, StateEventReadsIndependent = true,
+            RewrittenLiveWidgetBases = 2, RetainedListHeadAndH = true, RepeatedStateReadsIndependent = true, CrossSchemaStateReadsIndependent = true,
             ActualRefsVerified = true, CompleteFramesPreserved = true, RetainedDescriptorId = witness.WidgetDescriptorId,
             CurrentDescriptorId = descriptor };
     }
@@ -539,10 +541,10 @@ internal static class Program {
             Need(repository.LoadEvent(catalogHistory.Single(commit => commit.Id == prior.CommitAt(Address(witness.CatalogAcceptanceEvent!))).Id) is CatalogEvent { Value: 41 },
                 "The original generated Event must remain readable through its own historical origin S.");
             Check(repository.LoadEvent(repository.ReadFrames(BranchNamed(repository, "fork")).Single(commit => commit.Id == prior.CommitAt(Address(witness.RewriteEvent!))).Id), upgraded: true);
-            var pair = repository.ReadPair(initial, repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id);
-            Widget old = Check(pair.First, upgraded: true), current = Check(pair.Second, upgraded: true, atSeven: 201);
+            Widget old = Check(repository.LoadState(initial), upgraded: true);
+            Widget current = Check(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "fork")).Commit.Id), upgraded: true, atSeven: 201);
             Need(!ReferenceEquals(old, current) && !ReferenceEquals(old.Numbers, current.Numbers),
-                "Final cross-S Pair must retain independent mutable instances in this fixture.");
+                "Final independent reads under different exact schemas must retain separate mutable instances.");
         }
         WireInspector.Snapshot actual = WireInspector.Read(database);
         FrameAddress schema = Address(witness.RewriteSchema!), next = Address(witness.ContinuationState!);
@@ -578,7 +580,7 @@ internal static class Program {
             .Concat(witness.FollowupFrames!).Concat(witness.SharedContinuationFrames!));
         Need(SameFiles(before, FileImages(database)), "Final readonly verification changed repository files.");
         return new { ReadOnlyFilesUnchanged = true, OldTagPreserved = true, MainAndForkValues = true, AccurateSchemaPins = true,
-            ActualRefsVerified = true, CompleteStorageVerified = true, CompleteFramesPreserved = true, CrossSPairIndependent = true,
+            ActualRefsVerified = true, CompleteStorageVerified = true, CompleteFramesPreserved = true, CrossSchemaStateReadsIndependent = true,
             CatalogColdValues = true, FollowupSharedColdValues = true };
     }
 
