@@ -21,15 +21,19 @@ public sealed partial class DB078HistoryTests : IDisposable {
     private static readonly DurableSchema MessageSchema = new("DB078Message", 1, new DurableFieldInfo(1, TypeTag.Byte));
 
     [Fact]
-    public void PublicFoundationIsNonGenericAndDoesNotRetainOldSessionOrPendingEventSurface() {
+    public void PublicOwnersAreNonGenericAndDoNotRetainOldSessionOrPendingEventSurface() {
         Assert.Equal("Atelia.DurableGraph", typeof(Repository).Namespace);
         Assert.Equal("Atelia.DurableGraph", typeof(WorkingCopy).Namespace);
         Assert.Equal("Atelia.DurableGraph", typeof(CommitId).Namespace);
         foreach (Type type in new[] { typeof(Repository), typeof(WorkingCopy) }) {
             Assert.False(type.IsGenericType);
-            Assert.DoesNotContain(type.GetMethods(), method => method.IsGenericMethod);
             Assert.DoesNotContain(type.GetMembers(), member => member.Name.Contains("PendingEvent", StringComparison.Ordinal));
         }
+        var typedRead = Assert.Single(typeof(Repository).GetMethods(), method => method.IsGenericMethod);
+        Assert.Equal(nameof(Repository.LoadEvent), typedRead.Name);
+        Assert.Single(typedRead.GetGenericArguments());
+        Assert.Equal(typeof(EventRef), Assert.Single(typedRead.GetParameters()).ParameterType);
+        Assert.DoesNotContain(typeof(WorkingCopy).GetMethods(), method => method.IsGenericMethod);
         Assert.Empty(typeof(CommitId).GetConstructors());
         Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.EventHistoryRepository"));
         Assert.Null(typeof(Repository).Assembly.GetType("Atelia.DurableGraph.Persistence.EventHistorySession`1"));
@@ -292,7 +296,7 @@ public sealed partial class DB078HistoryTests : IDisposable {
         Assert.Equal(saved, reopened.ReadCurrentCommit(copy.Id).Commit.Id);
         using WorkingCopy checkout = reopened.OpenWorkingCopy(copy.Id);
         Assert.Null(checkout.State);
-        Assert.ThrowsAny<ArgumentException>(() => reopened.LoadEvent(default));
+        Assert.ThrowsAny<ArgumentException>(() => reopened.LoadEvent(default(CommitId)));
         Assert.ThrowsAny<ArgumentException>(() => reopened.LoadState(default));
         Assert.ThrowsAny<ArgumentException>(() => reopened.GetPreviousState(default));
         Assert.ThrowsAny<ArgumentException>(() => reopened.ForkBranch(default, "invalid"));

@@ -9,6 +9,7 @@ DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自�
 
 | 入口 | 验证的问题 |
 |---|---|
+| [Run-EventReferenceProbe](Run-EventReferenceProbe.ps1)、[EventReferenceConsumer](EventReferenceConsumer/README.md) | DB-099 普通公开 inline 引用的跨程序集登记、包内 Generator/Build、两进程冷开、准确位置及 fork；消费明确 G/源码 SHA，不自行打包 |
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |
 | [Run-ReadmeQuickStartProbe](Run-ReadmeQuickStartProbe.ps1) | README 原文纯 State 连续保存、历史分叉与冷续写；可选 Event、Upgrade/Verify 及候选交付 |
 | [Run-RepositoryApiProbe](Run-RepositoryApiProbe.ps1) | 普通包编译正例、二十项旧 API/错误调用（含旧 StateRevisionAddress、BranchCheckout、Move、Private/ToShared 和 ReadPair）精确编译负例及恢复合法源码后的冷保存 |

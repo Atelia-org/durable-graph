@@ -20,6 +20,8 @@
 
 ## 当前焦点
 
+2026-10-25：[DB-099 Event 引用](../docs/design-branches/0099-event-references/README.md)已获用户批准，正在实施普通 inline `EventRef` 与显式历史读取、console-agent 正文所有权迁移。最小验收是跨程序集/普通包冷读取成立，真实 State 对象与容器 Base 不再保存事实正文，原 Event 位置恢复及依赖失败停用成立；缓存留在应用层。实现、源码与包验证进度集中在该片，完成前不作收益或交付承诺。
+
 2026-10-24：[DB-098 ReadPair 退役](../docs/design-branches/0098-readpair-retirement/README.md)。删除公开入口、跨图共享规划及专用比较接线；只读恢复统一独立领域图，Checkpoint 的两图准备/分配守卫、State 差分比较、owned 物理缓存与 State 准备槽保留。无格式变化，旧实现已保留 annotated Git tag；验收结果只维护在该片。Event Ref 为后续独立设计，不在本片实施。
 
 2026-10-20：[DB-097 独立 Event 对象图](../docs/design-branches/0097-independent-event-graphs/README.md)已实施并完成源码与新普通包限定验收。Event 每次独立捕获、局部 ID、全 Base 自有内容，不参与 State 差分/预算，也不消耗 State 身份或 rewrite。公开 Event 策略参数移除、P0R4 根拒绝旧库，State/meta 及底座 pin 保持。准确来源、完整回归、四套包消费者和大小载荷对照只查[验收](../docs/design-branches/0097-independent-event-graphs/validation.md)。本片无剩余工单；下一增量由真实消费者反馈或新测量触发。

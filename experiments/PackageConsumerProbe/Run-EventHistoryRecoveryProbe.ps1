@@ -52,7 +52,8 @@ function Test-PackageDocumentation {
         'M:Atelia.DurableGraph.Repository.EnumerateEvents(' = 1
         'M:Atelia.DurableGraph.Repository.ReadCheckpoint(' = 1
         'M:Atelia.DurableGraph.Repository.LoadState(' = 1
-        'M:Atelia.DurableGraph.Repository.LoadEvent(' = 1
+        'M:Atelia.DurableGraph.Repository.LoadEvent(' = 2
+        'M:Atelia.DurableGraph.Repository.LoadEvent``1(' = 1
         'M:Atelia.DurableGraph.Repository.LoadLatestSavedState(' = 1
         'P:Atelia.DurableGraph.Repository.IsFaulted' = 1
         'M:Atelia.DurableGraph.WorkingCopy.CommitEvent(' = 1
@@ -63,6 +64,10 @@ function Test-PackageDocumentation {
         'T:Atelia.DurableGraph.BranchId' = 1
         'T:Atelia.DurableGraph.CommitId' = 1
         'T:Atelia.DurableGraph.CommitInfo' = 1
+        'T:Atelia.DurableGraph.EventRef' = 1
+        'M:Atelia.DurableGraph.EventRef.FromCommit(' = 1
+        'P:Atelia.DurableGraph.EventRef.IsBound' = 1
+        'M:Atelia.DurableGraph.EventRef.ToCommitId' = 1
         'T:Atelia.DurableGraph.BranchInfo' = 1
         'T:Atelia.DurableGraph.CurrentCommit' = 1
         'T:Atelia.DurableGraph.LoadedState' = 1

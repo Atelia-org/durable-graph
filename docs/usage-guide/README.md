@@ -20,6 +20,7 @@ DG 仍是 API/格式未冻结的 .NET 10 原型；采用它时应固定并验证
 | 为什么可以直接修改对象？以前的函数式、状态机、event-sourcing 经验如何复用？ | [心智模型与架构迁移](mental-model.md) |
 | 领域模型、对象身份、缓存、活跃状态应该怎么划分？ | [应用建模](application-design.md) |
 | 是否需要 Event？更新失败或进程崩溃以后如何继续？ | [提交、事件与恢复](events-and-recovery.md) |
+| 长正文已保存为 Event，State 如何只保存引用？缓存谁负责？ | [正文单次保存与 EventRef](event-references.md) |
 | Coding Agent 从哪里开工，如何验证“真的能恢复”？ | [接入与验收](adoption-and-validation.md) |
 
 各篇可以独立阅读；不需要先通读内部设计分支。

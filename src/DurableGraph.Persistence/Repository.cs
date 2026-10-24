@@ -337,6 +337,17 @@ public sealed partial class Repository : IDisposable {
     /// <summary>Independently restores the exact Event commit's domain root.</summary>
     /// <remarks>Rejects State commits. Supports application-side Transient initialization without a writer; no Event handler is invoked.</remarks>
     public IDurableObject LoadEvent(CommitId eventCommitId) => ReadGraph(eventCommitId, CommitKind.Event);
+
+    /// <summary>Independently restores the exact Event root selected by a durable reference.</summary>
+    /// <remarks>Validates the selected location, Event role and complete graph using the target's own Schema view.</remarks>
+    public IDurableObject LoadEvent(EventRef reference) => LoadEvent(reference.ToCommitId());
+
+    /// <summary>Independently restores an Event and checks that its current root is assignable to T.</summary>
+    /// <remarks>The expected type is a result check and is not part of the reference's persistent Schema.</remarks>
+    /// <exception cref="InvalidDataException">The restored root is not assignable to T.</exception>
+    public T LoadEvent<T>(EventRef reference) where T : class, IDurableObject =>
+        LoadEvent(reference) is T result ? result
+            : throw new InvalidDataException($"The Event root is not assignable to {typeof(T)}.");
     /// <summary>Independently restores the exact State commit's domain root.</summary>
     /// <remarks>Rejects Event commits instead of searching backward. Supports application-side Transient initialization without a writer; use OpenWorkingCopy for branch editing.</remarks>
     public IDurableObject LoadState(CommitId stateCommitId) => ReadGraph(stateCommitId, CommitKind.State);
