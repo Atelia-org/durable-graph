@@ -14,6 +14,8 @@ dotnet run --project experiments/RepositoryBranchVerticalProbe/RepositoryBranchV
 
 2026-10-19 主线程最终集成运行通过 44 个正向断言和 54 个完整性断言（无警告）；记录位于 `.artifacts/db096-branch-vertical/probe.log`。`IntegrityChecks.cs` 通过内部友元读取实际物理记录，确认正常保存产生对象 Delta 与对象目录 Delta；另外覆盖 Entry 小描述损坏、物理自洽但历史来源错误的拒绝，以及发布成功后抛错、owner 停用与冷重开可见性。另覆盖新根 D/S 登记前中断、已知物理 ID 保留、冷开隐藏未登记 Head、旧 D/S 不变及完整候选保留；普通提交不追加 D。
 
-完整性 fixture 仅在关闭 public Repository 后借低层资源制造反例，随后关闭低层资源并全新打开；不复用被旁路修改的活 owner/cache。这不是普通 NuGet 消费、进程中断或性能资格，有限确定性故障点不代表完整发布故障矩阵。目录缺失／破损、定向 origin 访问范围等仍须专门回归。此 Probe 不覆盖尚未接入的多 Branch 联合提交、分页或树查询。
+2026-10-24 [DB-098](../../docs/design-branches/0098-readpair-retirement/README.md)退役 ReadPair 后，当前源码再次通过 44 个业务与 54 个完整性断言。历史来源反例改用 State：Event 已独立保存，不再允许携带旧 State 来源。
+
+完整性 fixture 仅在关闭 public Repository 后借低层资源制造反例，随后关闭低层资源并全新打开；不复用被旁路修改的活 owner/cache。这不是普通 NuGet 消费、进程中断或性能资格，有限确定性故障点不代表完整发布故障矩阵。目录缺失／破损、定向 origin 访问范围等仍须专门回归。此 Probe 不覆盖多 Branch 联合提交、分页或树查询。
 
 设计及本轮资格以 [DB-096 活动工作集](../../docs/design-branches/0096-history-and-head-model/PROJECT-STATE.md)和[整体切换计划](../../docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)为准；源码存在不等于已经通过运行。

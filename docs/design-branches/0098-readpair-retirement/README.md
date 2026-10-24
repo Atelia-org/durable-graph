@@ -1,6 +1,6 @@
 # DB-098：退役 ReadPair 与跨图共享规划
 
-> 状态：源码、测试与消费者迁移完成；源码验收通过，普通包限定验收待本轮后续记录。2026-10-24。
+> 状态：已实施；源码回归、独立复核及三项普通包限定验收通过。2026-10-24。
 > 本片是公开 API 的破坏性精简，不改变持久格式或 Storage pin；没有兼容壳、模式开关或旧存档迁移。
 
 ## 决策与适用范围
@@ -89,4 +89,20 @@ dotnet build DurableGraph.slnx -c Release -p:UseStorageSources=true -p:StorageSo
 dotnet test DurableGraph.slnx -c Release --no-restore -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage -m:1 -nr:false
 ```
 
-普通包验证随后补记；尚未公开发布包或推送代码/tag。以上不构成性能加速、物理 GC、Event Ref 或旧生成程序集兼容承诺。
+### 普通包限定验收
+
+产品/测试提交：`a8f6ed115496cf30f5ac748fa385b1d44fe8bb41`。两批 G 均由该提交生成，S 继续为 `0.1.3-dev.20261019.g70b406c`；未切换 console-agent 的固定包。
+
+| 门禁 | 包版本与实际证据 |
+|---|---|
+| RepositoryApi | G=`0.0.0-readpair-retired.20261024154844`；20 个精确编译负例通过，ReadPair 为 `Negative.cs(4,136)` 的 `CS1061`；恢复合法源码后重新构建并冷保存通过。回执 `W:/TEMP/dg-repository-api-6ccf9d1f8ec7495fa08085a2f25b1d72/result.json` |
+| EventHistoryRecovery | 同一 G；包内/恢复后的 XML 成员检查通过，ReadPair 缺席；正常及待处理 Event 的冷恢复/再次恢复幂等通过。日志 `.artifacts/readpair-retirement/package-recovery-final.log`；消费目录 `experiments/PackageConsumerProbe/obj/event-recovery-20261024155025-8184-a75bba69` |
+| SplitRepository | G=`0.0.0-public-history-e2e.20261024155026.19032`；受控打包前后来源一致且生产输入匹配干净 HEAD，十包身份/hash、真实包 Generator/BuildTool、V1/V2 accepted history、seed/upgrade/rewrite/continue/verify 五进程均通过；改用独立读取后的内容与 mutable 隔离、准确 State 来源、Delta、冷续写成立。回执 `W:/TEMP/dg-split-repository-package-20261024T155025701Z-19032-37ab0b5e/result.json` |
+
+首次复用 feed 未附 Split runner 所需的受控打包前后凭据，门禁按预期拒绝；随后使用 runner 自带受控打包生成第二批 G，未事后伪造来源凭据。
+EventHistory runner 初次收到相对 feed 路径导致 restore 指向错误位置，改传绝对路径后通过。两项均发生于消费者准备阶段，不作为产品故障或成功运行证据。
+
+复现入口：`Run-RepositoryApiProbe.ps1`、`Run-EventHistoryRecoveryProbe.ps1` 使用绝对 `-PackageSource` 与对应 `-Version`；
+`Run-SplitRepositoryProbe.ps1 -StoragePackageSource <准确六包feed>` 自行受控打包，若复用 feed 则须提供匹配的 provenance。
+本机日志、包和回执位于忽略目录/TEMP，可能被清理；可执行门禁与关键结果保存在仓库。本片无未完成必需项。
+尚未公开发布包或推送代码/tag。以上不构成性能加速、物理 GC、Event Ref 或旧生成程序集兼容承诺。
