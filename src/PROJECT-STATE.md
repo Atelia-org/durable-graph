@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-10-26：MUD 命名存档消费者触发最小只读增量 `Repository.ListTags(): TagInfo[]`。问题是无需自建第二份索引列出命名存档；范围仅现有 T Dictionary 的名称/CommitId 快照，按 Ordinal 名称排序，验证目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。最小验收为乱序/大小写/Unicode 标签经冷只读重开后返回准确排序和目标，空库返回空数组，快照不随新增或调用者修改变化，损坏目标整次拒绝并保持原有 lifetime/fault 守卫。验证入口为 RepositoryTagTests、RepositoryTagStorageTests、RepositoryTagFailureTests 与普通包 TagConsumer；候选与结果见[本片验收](../docs/list-tags-validation.md)。
+2026-10-26：MUD 命名存档增量 `Repository.ListTags(): TagInfo[]` 已通过源码与新普通包验收。返回现有 T Dictionary 的名称/CommitId 独立快照，按 Ordinal 排序并验证全部目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。边界回归、准确候选来源和四进程普通包证据见[本片验收](../docs/list-tags-validation.md)；本片无剩余必做工单，下游游戏集成由 MUD 仓独立验收。
 
 2026-10-25：[DB-099 Event 引用](../docs/design-branches/0099-event-references/README.md)已完成普通 inline `EventRef`、单独 Definition 与显式 `LoadEvent` 重载；源码/新普通包、console-agent 全正文归属迁移及故障恢复已限定验收。State 保存准确位置而不捕获目标，缓存与依赖准入留在应用 Session；格式封套与 Storage pin 保持。准确来源、验收和冷热成本只查[当片记录](../docs/design-branches/0099-event-references/validation.md)。本片无剩余必做工单，后续由其他消费者或冷读/驻留实测触发，不预设通用缓存设施。
 
