@@ -50,16 +50,33 @@ public sealed partial class RepositoryResources {
         _ = ReadDescriptor(id);
         return id;
     }
+
+    internal TagInfo[] ListStoredTags() {
+        RequireStorageAvailable();
+        if (_bookmarks is not { } directory) { return []; }
+        List<TagInfo> result = [];
+        foreach (var pair in directory.Rows[directory.Snapshot.RootId].GetDictionaryState<ObjectId, ObjectId>().Entries) {
+            HeadEntryId id = ReadBookmarkTarget(directory, pair.Value);
+            _ = ReadDescriptor(id);
+            result.Add(new(directory.Rows[pair.Key].StringContent, new(id)));
+        }
+        result.Sort((left, right) => StringComparer.Ordinal.Compare(left.Name, right.Name));
+        return result.ToArray();
+    }
+
     private HeadEntryId? FindBookmark(string name) {
         if (_bookmarks is not { } directory) { return null; }
         foreach (var pair in directory.Rows[directory.Snapshot.RootId].GetDictionaryState<ObjectId, ObjectId>().Entries) {
             if (!StringComparer.Ordinal.Equals(directory.Rows[pair.Key].StringContent, name)) { continue; }
-            if (!HeadEntryId.TryRead(directory.Rows[pair.Value].GetArrayState<byte>().Elements, out HeadEntryId id)) {
-                throw new InvalidDataException("Invalid bookmark CommitId.");
-            }
-            return id;
+            return ReadBookmarkTarget(directory, pair.Value);
         }
         return null;
+    }
+    private static HeadEntryId ReadBookmarkTarget(DecodedGraphRows directory, ObjectId value) {
+        if (!HeadEntryId.TryRead(directory.Rows[value].GetArrayState<byte>().Elements, out HeadEntryId id)) {
+            throw new InvalidDataException("Invalid bookmark CommitId.");
+        }
+        return id;
     }
     private static void ValidateBookmarkName(string name) {
         try { ManagementDirectoryReader.RequireText(name ?? throw InvalidBookmarkName()); }

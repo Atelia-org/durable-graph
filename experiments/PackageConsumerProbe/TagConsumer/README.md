@@ -16,8 +16,8 @@ Four separate processes exercise immutable tags and persistent commit locations:
 
 1. `seed` creates an Event-first root branch, tags that CommitId and a later State,
    then advances the source branch.
-2. `metadata` resolves both tags and reads their CommitInfo in a read-only repository
-   with an empty model registry.
+2. `metadata` lists both tags in ordinal name order, checks their exact CommitIds,
+   and resolves/reads their CommitInfo in a read-only repository with an empty model registry.
 3. `continue` round-trips a CommitId through its public codec and retains it across
    closing and reopening the same repository. It creates another tag from that ID,
    rejects a default ID and wrong-role load, then uses `ForkBranch` and

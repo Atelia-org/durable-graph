@@ -11,6 +11,50 @@ public sealed class RepositoryTagTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
 
+    [Fact]
+    public void ListTagsReturnsOrdinalDetachedSnapshotsAndExactTargetsAcrossReadOnlyReopen() {
+        TagInfo[] expected;
+        using (Repository repository = Create()) {
+            Assert.Empty(repository.ListTags());
+            using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", new Node { Value = 1 }).Id);
+            CommitId state = main.BaseCommitId;
+            CommitId action = main.CommitEvent(new Node { Value = 2 }).Id;
+            repository.CreateTag("标签/正文", state);
+            repository.CreateTag("z", action);
+            repository.CreateTag("a", state);
+            repository.CreateTag("A", action);
+            expected = [new("A", action), new("a", state), new("z", action), new("标签/正文", state)];
+            TagInfo[] snapshot = repository.ListTags();
+            Assert.Equal(expected, snapshot);
+            repository.CreateTag("later", state);
+            Assert.Equal(expected, snapshot);
+            snapshot[0] = new("changed-by-caller", state);
+            expected = [new("A", action), new("a", state), new("later", state), new("z", action), new("标签/正文", state)];
+            Assert.Equal(expected, repository.ListTags());
+            Assert.Equal(action, main.BaseCommitId);
+            Assert.Equal(action, repository.ReadCurrentCommit(main.BranchId).Commit.Id);
+        }
+        var before = SnapshotFiles();
+        using (Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry())) {
+            GraphReadStatistics statistics = new();
+            reopened.RestorationStatistics = statistics;
+            Assert.Equal(expected, reopened.ListTags());
+            foreach (TagInfo tag in reopened.ListTags()) { Assert.Equal(tag.CommitId, reopened.ResolveTag(tag.Name)); }
+            AssertNoGraphWork(statistics);
+        }
+        AssertFiles(before);
+    }
+
+    [Fact]
+    public void ListTagsOnReadOnlyEmptyRepositoryDoesNotWrite() {
+        using (Repository seed = Create()) { }
+        var before = SnapshotFiles();
+        using (Repository reader = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry())) {
+            Assert.Empty(reader.ListTags());
+        }
+        AssertFiles(before);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -256,6 +300,7 @@ public sealed class RepositoryTagTests : IDisposable {
         } finally { repository.Dispose(); }
         var before = SnapshotFiles();
         Assert.Throws<ObjectDisposedException>(() => repository.ResolveTag("saved"));
+        Assert.Throws<ObjectDisposedException>(() => repository.ListTags());
         Assert.Throws<ObjectDisposedException>(() => repository.CreateTag("blocked", address));
         AssertFiles(before);
     }

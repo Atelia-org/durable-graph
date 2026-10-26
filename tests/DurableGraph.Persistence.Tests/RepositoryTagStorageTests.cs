@@ -26,6 +26,8 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         using Repository reopened = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry());
         Assert.Equal(target, reopened.ResolveTag(Name(0)));
         Assert.Equal(target, reopened.ResolveTag(Name(349)));
+        Assert.Equal(350, reopened.ListTags().Length);
+        Assert.All(reopened.ListTags(), tag => Assert.Equal(target, tag.CommitId));
         static string Name(int index) => index.ToString("D4") + new string('界', 1020);
     }
 
@@ -55,6 +57,7 @@ public sealed class RepositoryTagStorageTests : IDisposable {
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, new StateModelRegistry())) {
             Assert.Equal(CommitKind.State, reader.ReadCommitInfo(reader.ResolveTag("good")).Kind);
             Assert.ThrowsAny<Exception>(() => reader.ResolveTag("invalid"));
+            Assert.ThrowsAny<Exception>(() => reader.ListTags());
             Assert.False(reader.IsFaulted);
         }
         AssertSnapshot(before);

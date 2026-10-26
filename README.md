@@ -257,6 +257,8 @@ ID 不是全局身份，解码成功也不证明所选库中存在该位置，�
 tag 可指向 State 或纯 Event 前缀；后续提交不改变它，同名 tag 创建一律拒绝。
 tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1–1024 个 UTF-16 code units，tag 按 Ordinal 比较。
 只读打开和空模型配置可以解析 tag；读取领域图仍需要对应模型。创建/解析 tag 不推进业务分支。
+`repo.ListTags()` 返回按 Ordinal 名称排序的 `TagInfo[]` 快照，每项包含 `Name` 和 `CommitId`；
+同样支持只读打开与空模型配置，验证全部目标元数据而不恢复领域图，损坏目标使整个查询失败。
 包消费者源码见 [TagConsumer](experiments/PackageConsumerProbe/TagConsumer/README.md)；当前候选包资格仍以本页顶部说明为准。
 
 历史可为 `S0 → S1 → S2`、`S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。

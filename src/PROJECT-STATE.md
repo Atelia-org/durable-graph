@@ -20,6 +20,8 @@
 
 ## 当前焦点
 
+2026-10-26：MUD 命名存档消费者触发最小只读增量 `Repository.ListTags(): TagInfo[]`。问题是无需自建第二份索引列出命名存档；范围仅现有 T Dictionary 的名称/CommitId 快照，按 Ordinal 名称排序，验证目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。最小验收为乱序/大小写/Unicode 标签经冷只读重开后返回准确排序和目标，空库返回空数组，快照不随新增或调用者修改变化，损坏目标整次拒绝并保持原有 lifetime/fault 守卫。验证入口为 RepositoryTagTests、RepositoryTagStorageTests、RepositoryTagFailureTests 与普通包 TagConsumer；候选与结果见[本片验收](../docs/list-tags-validation.md)。
+
 2026-10-25：[DB-099 Event 引用](../docs/design-branches/0099-event-references/README.md)已完成普通 inline `EventRef`、单独 Definition 与显式 `LoadEvent` 重载；源码/新普通包、console-agent 全正文归属迁移及故障恢复已限定验收。State 保存准确位置而不捕获目标，缓存与依赖准入留在应用 Session；格式封套与 Storage pin 保持。准确来源、验收和冷热成本只查[当片记录](../docs/design-branches/0099-event-references/validation.md)。本片无剩余必做工单，后续由其他消费者或冷读/驻留实测触发，不预设通用缓存设施。
 
 2026-10-24：[DB-098 ReadPair 退役](../docs/design-branches/0098-readpair-retirement/README.md)。删除公开入口、跨图共享规划及专用比较接线；只读恢复统一独立领域图，Checkpoint 的两图准备/分配守卫、State 差分比较、owned 物理缓存与 State 准备槽保留。无格式变化，旧实现已保留 annotated Git tag；验收结果只维护在该片。Event Ref 为后续独立设计，不在本片实施。
@@ -76,7 +78,7 @@ DB-087 保当前契约和有限停点审计，旧逐片过程冻结于[完整稿
 
 [DB-086](../docs/design-branches/0086-new-storage-refactoring-plan/README.md)只保现行正常 backing 恢复、完整帧稳定、必要读取、fault/lifetime 与离线救援约定；物理地址与轮转由 FS/HS 承担，准确 pin 和操作见[依赖指南](../docs/storage-dependency.md)。
 
-[DB-084 DG tag 接入](../docs/design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag。
+[DB-084 DG tag 接入](../docs/design-branches/0084-eventjournal-immutable-tags-slice/0084-durablegraph-tags-implementation.md) 已实现公开 CreateTag/ResolveTag；MUD 消费增量补充 ListTags，返回 Ordinal 排序的 TagInfo 名称/CommitId 快照。
 旧上游 bytes tag 接入已由 [DB-096 书签目录](../docs/design-branches/0096-history-and-head-model/headstore-adaptation.md)取代；不可变绑定由 DG 拥有。State 和 Event-first 都可跨重开定位，解析验证并返回准确 CommitId，不物化图或推进分支；该值可在同库重开后使用。
 普通校验失败保持健康；发布异常映射既有 outcome 并同步 fault，重开按名字检查实际结果，不自动重试。物理尾恢复由底座承担。
 准确公开包、故障与真实包证据集中于接入记录。下一步由下游固定书签/历史浏览/分叉续写的真实反馈选择产品增量。
@@ -307,7 +309,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
   LoadState/LoadEvent 按准确角色独立恢复；LoadLatestSavedState 返回所选点及不晚于它的真实 State 来源，不执行 Event。
   ReadCheckpoint 保独立两图复合恢复合同；ReadFrames 完整物化旧到新描述，EnumerateEvents 保固定边界与枚举寿命检查。
   根/子树查询验证正式登记森林、不恢复业务对象；ReadHistoryPage 从准确anchor向祖先分页，预算/取消/清理失败不交付部分页。
-  CreateTag/ResolveTag 使用 DG 的 T Dictionary，按不可变名称绑定 CommitId；创建可追加管理图，不改变业务 Head 或工作副本基线。
+  CreateTag/ResolveTag/ListTags 使用 DG 的 T Dictionary，按不可变名称绑定 CommitId；枚举验证目标元数据而不恢复图，创建可追加管理图，不改变业务 Head 或工作副本基线。
   真实 E/S 图始终校验准确历史 Schema、完整内容及来源，缓存命中不免验证。State 跨实际类型替换及对象身份保持的细节见共同恢复/保存内核。
   RepositoryPublicationException 保各成员已知身份和 NotPublished/Unknown/Published；物理 Head 成立不等于 DG 登记，NotPublished 也须检查 IsFaulted。
   正常打开只读必要控制根；完整帧 append-only，fault 后关闭重开，不透明重试、不回滚领域内存。恢复范围不扩大到 OS crash/power-loss 或任意外部文件修改。

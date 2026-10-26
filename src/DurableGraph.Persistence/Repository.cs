@@ -419,6 +419,19 @@ public sealed partial class Repository : IDisposable {
         finally { EndOperation(); }
     }
 
+    /// <summary>Lists immutable named bookmarks, sorted by name using ordinal comparison.</summary>
+    /// <remarks>
+    /// Returns a detached snapshot and validates every target's commit metadata without restoring domain graphs
+    /// or moving branches. Available on read-only repositories and without business model registrations.
+    /// Invalid target metadata fails the entire query; no partial result is returned.
+    /// </remarks>
+    public TagInfo[] ListTags() {
+        RequireAvailable();
+        _busy = true;
+        try { return _resources.ListStoredTags(); }
+        finally { EndOperation(); }
+    }
+
     private static RepositoryPublicationOutcome MapOutcome(PublicationOutcome outcome) => outcome switch {
         PublicationOutcome.Confirmed => RepositoryPublicationOutcome.Published,
         PublicationOutcome.Unknown => RepositoryPublicationOutcome.Unknown,

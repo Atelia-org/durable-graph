@@ -36,6 +36,7 @@ internal static class Program {
 
     private static void Seed(string path) {
         using var repository = Repository.CreateNew(path, Models());
+        Require(repository.ListTags().Length == 0, "A new repository contains tags.");
         BranchInfo main = repository.CreateRootBranchFromEvent("main", new TagEvent { Code = 7 });
         using var work = repository.OpenWorkingCopy(main.Id);
         CommitId firstEvent = work.BaseCommitId;
@@ -57,6 +58,9 @@ internal static class Program {
         using var repository = Repository.OpenReadOnlyExisting(path, new StateModelRegistry());
         CommitId firstEvent = repository.ResolveTag("event-start");
         CommitId firstState = repository.ResolveTag("state-baseline");
+        TagInfo[] tags = repository.ListTags();
+        Require(tags.SequenceEqual(new[] { new TagInfo("event-start", firstEvent), new TagInfo("state-baseline", firstState) }),
+            "Tag listing did not preserve ordinal names and exact targets in a read-only empty-registry reopen.");
         Require(repository.ReadCommitInfo(firstEvent).Kind == CommitKind.Event &&
             repository.ReadCommitInfo(firstState).Kind == CommitKind.State,
             "Tag metadata was not resolved without models.");

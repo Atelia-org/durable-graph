@@ -174,6 +174,7 @@ public sealed class RepositoryTagFailureTests : IDisposable {
         Assert.True(main.IsFaulted);
         Assert.Throws<InvalidOperationException>(() => repository.CreateTag("blocked", address));
         Assert.Throws<InvalidOperationException>(() => repository.ResolveTag("stable"));
+        Assert.Throws<InvalidOperationException>(() => repository.ListTags());
         Assert.Throws<InvalidOperationException>(() => repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
         Assert.Throws<InvalidOperationException>(() => repository.ListBranches());
         Assert.Throws<InvalidOperationException>(() => repository.ReadCheckpoint(address));

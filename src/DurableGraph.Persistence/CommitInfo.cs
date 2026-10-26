@@ -25,6 +25,11 @@ public sealed class CommitInfo {
 /// <param name="ForkedFromCommitId">The exact inherited source commit, or null for a root branch.</param>
 public sealed record BranchInfo(BranchId Id, string DisplayLabel, CommitId? ForkedFromCommitId);
 
+/// <summary>An immutable named bookmark for an exact saved commit.</summary>
+/// <param name="Name">The unique, ordinal case-sensitive bookmark name.</param>
+/// <param name="CommitId">The persistent target identity in this repository.</param>
+public sealed record TagInfo(string Name, CommitId CommitId);
+
 /// <summary>The selected branch together with its current commit, possibly inherited from another branch.</summary>
 /// <remarks>The selected BranchId is the continuation target; Commit.CreatedOnBranchId identifies where the saved commit was actually published.</remarks>
 /// <param name="BranchId">The branch whose current position was queried.</param>
