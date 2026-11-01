@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -104,7 +105,7 @@ internal static class Statistics {
 }
 
 internal static class Report {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     internal static void Write(Settings settings, Edit[] script, List<RunResult> runs, List<object> warmups) {
         // Cross-algorithm comparison uses only application-level content fingerprints.

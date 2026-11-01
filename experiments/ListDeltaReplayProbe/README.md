@@ -1,5 +1,7 @@
 # List Delta domain-history replay
 
+Check the [current build boundary and reopening prerequisite](PROJECT-STATE.md) before running these commands.
+
 The product experiment compares Position, LocalResync, BoundedMyers and the default Adaptive writer
 under one List codec. Adaptive preserves a complete Local incumbent and permits only a strictly
 smaller, complete Myers challenger. It references product projects and the real source generator,

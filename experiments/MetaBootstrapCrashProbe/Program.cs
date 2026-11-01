@@ -1,6 +1,7 @@
 extern alias persistence;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
@@ -18,7 +19,7 @@ using PublicationStore = Atelia.HeadStore.HeadStore;
 // reading the target business Head and shared Schema decides the selected pair after external termination.
 internal static class Program {
     private const string Protocol = "DG.MetaBootstrapCrashProbe.v2";
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly DurableSchema Extra = new("CrashExtra", 1, new DurableFieldInfo(1, TypeTag.Int64));
     private static readonly string[] Windows = ["AfterMetaAppend", "AfterBusinessAppend", "AfterFirstCuEnd",
         "AfterAllCuEnd", "AfterPublicationConfirmed", "BeforeInstall"];

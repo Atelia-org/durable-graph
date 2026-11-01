@@ -2,6 +2,7 @@ using Atelia.FrameStore;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph.Persistence;
 using Microsoft.CodeAnalysis;
@@ -15,6 +16,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private const int LeafMeasureForks = 8;
     private const int LeafMeasureSamples = 5;
     private static readonly ReadAmplificationBaseBudgetParameters LeafMeasurePolicy = new(int.MaxValue, 1);
+    private static readonly JsonSerializerOptions LeafMeasureJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>Opt-in DB-082 full-Fork A/B, with DB-080 enabled on both sides; no time assertions.</summary>
     [Fact]
@@ -166,7 +168,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     }
 
     private static void WriteLeafMeasurement(StreamWriter output, object value) {
-        output.WriteLine(JsonSerializer.Serialize(value));
+        output.WriteLine(JsonSerializer.Serialize(value, LeafMeasureJson));
         output.Flush();
     }
 

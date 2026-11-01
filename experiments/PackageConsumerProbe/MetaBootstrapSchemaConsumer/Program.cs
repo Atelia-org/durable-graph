@@ -1,6 +1,7 @@
 extern alias persistence;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.Binary;
 using Atelia.DurableGraph;
@@ -14,6 +15,7 @@ using persistence::Atelia.DurableGraph.Persistence;
 
 
 internal static class Program {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private sealed record BusinessIds(uint Root, uint Samples, uint Optional, uint Nested, uint Inner, uint ArrayOptional, uint Points,
         uint Scalars, uint Entries) {
         internal uint[] All => [Root, Samples, Optional, Nested, Inner, ArrayOptional, Points, Scalars, Entries];
@@ -36,7 +38,7 @@ internal static class Program {
                 PersistenceAssembly = AssemblyEvidence(typeof(RepositoryStorageFacade).Assembly), RuntimeAssembly = AssemblyEvidence(typeof(DurableSchema).Assembly),
                 HostAssembly = AssemblyEvidence(typeof(Host).Assembly), TypedBodyAbi = TypedBaseBodyCodec.FormatVersion,
                 CommitHandleBytes = HeadEntryId.EncodedSize, SourceSelection = "HeadStoreStrictPrecedingState",
-            }, new JsonSerializerOptions { WriteIndented = true }));
+            }, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         Console.WriteLine("MetaBootstrapSchema:" + lane + ":Passed");
         return 0;
     }
@@ -302,7 +304,7 @@ internal static class Program {
         Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(assembly.Location))),
     };
     private static Witness ReadWitness(string path) => JsonSerializer.Deserialize<Witness>(File.ReadAllText(path)) ?? throw new InvalidDataException("Missing witness.");
-    private static void WriteWitness(string path, Witness witness) => File.WriteAllText(path, JsonSerializer.Serialize(witness));
+    private static void WriteWitness(string path, Witness witness) => File.WriteAllText(path, JsonSerializer.Serialize(witness, Json));
     // The witness carries the exact published location, not a graph-address/source assertion.
     // Resolve the selected State and its strict predecessor from HeadStore history before content decoding.
     private static StoredGraphRevision Snapshot(RepositoryStorageFacade repository, HeadEntryId commit) {

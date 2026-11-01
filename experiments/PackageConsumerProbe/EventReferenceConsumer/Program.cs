@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
@@ -28,7 +29,7 @@ internal static class Program {
             File.WriteAllText(args[2], JsonSerializer.Serialize(new {
                 Passed = true, Lane = args[0], ProcessId = Environment.ProcessId,
                 Checks, LoadedAssemblies = assemblies
-            }, new JsonSerializerOptions { WriteIndented = true }));
+            }, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
             Console.WriteLine($"EventReference:{args[0]}:Passed:{Checks.Count}");
             return 0;
         } catch (Exception error) {

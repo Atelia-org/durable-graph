@@ -1,6 +1,7 @@
 extern alias persistence;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using persistence::Atelia.DurableGraph;
 using persistence::Atelia.DurableGraph.Persistence;
@@ -47,7 +48,7 @@ internal static class Program {
                 Protocol = "DG.ExplicitStorageClassificationConsumer.v1", Phase = phase, Passed = true,
                 ProcessId = Environment.ProcessId, Route = Route, FieldIds = fields, Subject.AccessorCalls,
                 HostAssembly = Evidence(typeof(Program).Assembly), LoadedAssemblies = names.Select(Assembly.Load).Select(Evidence),
-            }, new JsonSerializerOptions { WriteIndented = true }));
+            }, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
             Console.WriteLine("ExplicitStorageClassificationConsumer:" + phase + ":Passed");
             return 0;
         } catch (Exception exception) {

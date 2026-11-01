@@ -1,6 +1,7 @@
 extern alias persistence;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.Binary;
 using Atelia.DurableGraph;
@@ -18,7 +19,7 @@ using S = global::Atelia.DurableGraph.Generated.Family_7061636B6167652E73706C697
 internal static class Program {
     private const string Protocol = "DG.SplitRepositoryConsumer.v2";
     private const string WidgetName = "package.split.widget";
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private sealed record StorageEvidence(uint Id, string Head, long H);
     private sealed record FrameImage(string Address, uint Tag, string PayloadSha256, string TailMetaSha256);
     private sealed record Witness(string SeedState, string SeedSchema, uint RootId, uint ChildId, uint ListId,

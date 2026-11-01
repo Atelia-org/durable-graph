@@ -1,6 +1,7 @@
 extern alias persistence;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
@@ -14,7 +15,7 @@ namespace DevelopmentSchemaPackage;
 
 internal static class Program {
     private const string Protocol = "DG.DevelopmentSchemaConsumer.v2";
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly string[] Assemblies = ["Atelia.Binary", "Atelia.Data", "Atelia.DurableGraph",
         "Atelia.DurableGraph.Persistence", "Atelia.DurableGraph.Serialization", "Atelia.DurableGraph.Storage",
         "Atelia.FrameStore", "Atelia.Primitives", "Atelia.Rbf", "Atelia.HeadStore"];

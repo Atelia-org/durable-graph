@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Generator;
@@ -128,7 +129,7 @@ File.WriteAllText(output, JsonSerializer.Serialize(new {
     RoslynVersion = typeof(CSharpCompilation).Assembly.GetName().Version?.ToString(),
     ShapeChecks = new { Passed = shapeFailures.Count == 0, Failures = shapeFailures.ToArray() },
     Cases = observations
-}, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+}, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }) + "\n");
 foreach (string failure in shapeFailures) Console.Error.WriteLine(failure);
 Console.WriteLine($"Observed {fixtures.Length} cases; shape checks {(shapeFailures.Count == 0 ? "passed" : "failed")}.");
 return shapeFailures.Count == 0 ? 0 : 1;

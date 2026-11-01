@@ -3,7 +3,12 @@
 Purpose: replay the same ordinary domain edits into independent DurableGraph repositories and
 compare codec-2 List writers under the same policy, with correctness ahead of performance ranking.
 
-Current focus: keep the public Repository/BranchCheckout replay on the current meta-bootstrap route.
+Current focus: migrate `Replay.cs` to the current Repository/WorkingCopy API before reopening
+measurements. It still references removed `BranchCheckout`, `CreateSharedBranch` and `CheckoutShared`
+entry points, so the probe does not currently build. Adjusting JSON report escaping does not
+establish replay correctness on the current product.
+
+Prior implementation witness: public Repository/BranchCheckout replay on the meta-bootstrap route.
 Shared creation/checkout entry points explicitly select each editing session's save destination
 under DB-095; this does not change measurements or workload semantics. Stored-exact DTOs and actual payload accounting use the
 real split store at each graph's selected S. The finite correctness witness is the README Count 8

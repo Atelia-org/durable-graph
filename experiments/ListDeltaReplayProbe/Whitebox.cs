@@ -1,6 +1,7 @@
 using Atelia.Binary;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -111,7 +112,7 @@ internal static class Whitebox {
                 "Standalone matcher observations cover only Position/LocalResync/BoundedMyers. Adaptive is measured through the product writer, " +
                 "with untimed whole-writer equality/child-call counts and actual competition outcome/cutoff bytes; no Plan(Adaptive) is called. " +
                 "See report.json for environment, binary fingerprints, settings, real Commit and isolated full Delta measurements."
-        }, new JsonSerializerOptions { WriteIndented = true }));
+        }, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         StringBuilder text = new("# White-box matcher observations\n\nTwo adverse families plus boundary controls; no absolute worst-case or occurrence-rate claim.\n\n");
         text.AppendLine("| Case | N | Algorithm | Equal pairs / known LCS | Comparisons | Matcher ms median | Matcher allocated bytes | Raw Delta bytes | Actual List write |")
             .AppendLine("|---|---:|---|---:|---:|---:|---:|---:|---|");

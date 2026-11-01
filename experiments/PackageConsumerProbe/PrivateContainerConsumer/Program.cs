@@ -1,6 +1,7 @@
 extern alias persistence;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Schema;
@@ -23,7 +24,7 @@ internal static class Program {
 #error ShapeEnvironment must be A or B.
 #endif
     private static bool Wide => ShapeEnvironment == "B";
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private sealed record StorageEvidence(uint Id, string Head, long H);
     private sealed record FrameImage(string Address, uint Tag, string PayloadSha256, string TailMetaSha256);
     private sealed record Witness(string SeedState, string MainSchema, string SharedSchema, string KeeperState,

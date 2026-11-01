@@ -2,8 +2,8 @@
   <PropertyGroup>
     <!-- The RBF3 stack is delivered as one six-package set. The local candidate is tied to this exact source revision; it has not been
          published to nuget.org. Package preparation and evidence: docs/storage-dependency.md. -->
-    <StoragePackageVersion Condition="'$(StoragePackageVersion)' == ''">0.1.3-dev.20261019.g70b406c</StoragePackageVersion>
-    <StorageSourceRevision>70b406cd8d1117733eee81a33e7f978399aa98b2</StorageSourceRevision>
+    <StoragePackageVersion Condition="'$(StoragePackageVersion)' == ''">0.1.3-dev.20261101.g9ad39fc</StoragePackageVersion>
+    <StorageSourceRevision>9ad39fc51a420e8302468533b82d8bc3a91a403e</StorageSourceRevision>
     <StorageRepositoryUrl>https://github.com/Atelia-org/atelia-storage.git</StorageRepositoryUrl>
     <UseStorageSources Condition="'$(UseStorageSources)' == ''">false</UseStorageSources>
   </PropertyGroup>

@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -75,7 +76,8 @@ internal static class AdaptiveTrial {
                 "Each Adaptive HasChanges agrees with explicit Local, and its body never exceeds Local. No time/allocation nonregression gate.",
             Fixtures = fixtures.Length, Observations = rows.Count, Summary = summaries, Rows = rows,
         };
-        File.WriteAllText(Path.Combine(settings.Output, "adaptive.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(settings.Output, "adaptive.json"), JsonSerializer.Serialize(report,
+            new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         StringBuilder text = new("# Adaptive product-writer trial\n\nAll four writers Apply-validated on identical captured pairs; Adaptive never exceeded explicit Local body bytes.\n\n");
         text.AppendLine("Raw body bytes, not policy-selected writes. Whole-writer counters are untimed; allocation is cumulative, not peak memory.").AppendLine()
             .AppendLine("| Group | Case | N | Writer | Delta B | Diff ms | Allocation B | Equals / Base / Delta calls | Outcome | Challenger B | B per matcher |")

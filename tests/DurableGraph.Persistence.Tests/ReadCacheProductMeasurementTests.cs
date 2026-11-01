@@ -1,6 +1,7 @@
 using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 using System.Diagnostics;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.FrameStore;
 using Xunit.Abstractions;
@@ -11,6 +12,7 @@ namespace Atelia.DurableGraph.Persistence.Tests;
 /// <summary>Small real-product samples, with the default cache; no before/after attribution or time thresholds.</summary>
 public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
+    private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     [Fact]
     public void Measure_open_read_checkpoint_resume_and_commit() {
@@ -126,7 +128,7 @@ public sealed class ReadCacheProductMeasurementTests(ITestOutputHelper output) {
     }
     private static Cost Between(Stamp start, Stamp end) => new(
         Stopwatch.GetElapsedTime(start.Timestamp, end.Timestamp).TotalMilliseconds, end.AllocatedBytes - start.AllocatedBytes);
-    private void Write(object value) => output.WriteLine("DB067_MEASUREMENT " + JsonSerializer.Serialize(value));
+    private void Write(object value) => output.WriteLine("DB067_MEASUREMENT " + JsonSerializer.Serialize(value, Json));
     private readonly record struct Cost(double Milliseconds, long AllocatedBytes);
     private readonly record struct Stamp(long Timestamp, long AllocatedBytes) {
         internal static Stamp Now() => new(Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread());

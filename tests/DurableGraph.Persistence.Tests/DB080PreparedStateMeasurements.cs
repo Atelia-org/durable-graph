@@ -1,6 +1,7 @@
 using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
 using System.Diagnostics;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -16,6 +17,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
     private const int Forks = 12;
     private const int RecordedSamples = 3;
     private const string FixturePrefix = "durable-db080-measure-";
+    private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly ReadAmplificationBaseBudgetParameters NoRebase = new(1000000, 1);
     private static readonly TypeExpr NodeType = TypeExpr.Named("DB080MeasureNode");
     private static readonly TypeExpr LinksType = TypeExpr.List(NodeType);
@@ -154,7 +156,7 @@ public sealed class DB080PreparedStateMeasurements(ITestOutputHelper output) {
     }
 
     private void Write(object row, StreamWriter? file) {
-        string json = JsonSerializer.Serialize(row);
+        string json = JsonSerializer.Serialize(row, Json);
         output.WriteLine("DB080_MEASUREMENT " + json);
         file?.WriteLine(json);
         file?.Flush();

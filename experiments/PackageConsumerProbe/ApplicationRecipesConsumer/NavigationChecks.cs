@@ -29,6 +29,13 @@ public static class NavigationChecks {
 
         Navigation saved = NavigationCodec.Decode(NavigationCodec.Encode("garden", branch, commit));
         Need(saved == new Navigation(1, "garden", branchHex, commitHex), "Navigation fields changed.");
+        const string readableKey = "花园<&>\"\\\n";
+        string readableJson = NavigationCodec.Encode(readableKey, branch, commit);
+        Need(readableJson.Contains("花园<&>", StringComparison.Ordinal), "Navigation JSON should retain readable Unicode and HTML characters.");
+        Need(NavigationCodec.Decode(readableJson).RepositoryKey == readableKey,
+            "Navigation quotes, backslashes and control characters did not round-trip.");
+        Need(NavigationCodec.Decode(JsonSerializer.Serialize(saved with { RepositoryKey = readableKey })).RepositoryKey == readableKey,
+            "Navigation should still read escaped JSON from existing configurations.");
         Need(NavigationCodec.Decode(NavigationCodec.Encode("garden", branch)).BookmarkCommit is null,
             "No bookmark must remain explicit absence.");
         string withoutBookmark = JsonSerializer.Serialize(new { Version = 1, RepositoryKey = "garden", LastUsedBranch = branchHex });

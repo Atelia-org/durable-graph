@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 
@@ -39,13 +40,14 @@ public static class IdText {
 
 public static class NavigationCodec {
     public const int CurrentVersion = 1;
+    private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static string Encode(string repositoryKey, BranchId lastUsedBranch, CommitId? bookmarkCommit = null) {
         if (string.IsNullOrWhiteSpace(repositoryKey)) {
             throw new ArgumentException("An application repository key is required.", nameof(repositoryKey));
         }
         return JsonSerializer.Serialize(new Navigation(CurrentVersion, repositoryKey,
-            IdText.Encode(lastUsedBranch), bookmarkCommit is { } bookmark ? IdText.Encode(bookmark) : null));
+            IdText.Encode(lastUsedBranch), bookmarkCommit is { } bookmark ? IdText.Encode(bookmark) : null), Json);
     }
 
     public static Navigation Decode(string json) {

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace ApplicationRecipes;
@@ -13,6 +14,7 @@ public sealed record SummaryReadResult(SummaryStatus Status, GardenPreview? Prev
 public static class SummaryCodec {
     public const int MaxBytes = 4096;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+    private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     // Finish domain edits first, then project and commit without further graph changes.
     // This copies three values; it does not freeze the source graph or acquire a lock.
@@ -31,7 +33,7 @@ public static class SummaryCodec {
             day = preview.Day,
             flowers = preview.Flowers,
             won = preview.Won,
-        });
+        }, Json);
         if (bytes.Length > MaxBytes) { throw new ArgumentOutOfRangeException(nameof(preview)); }
         return bytes;
     }

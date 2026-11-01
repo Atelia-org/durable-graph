@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.HeadStore;
 using DataStore = Atelia.FrameStore.FrameStore;
@@ -22,6 +23,7 @@ catch (Exception error) {
 }
 
 sealed class Probe(string run) {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public int Assertions { get; private set; }
     private readonly List<object> _budgetRows = [];
     private readonly List<string> _checks = [];
@@ -32,7 +34,7 @@ sealed class Probe(string run) {
         if (!id.TryWrite(bytes)) { throw new InvalidDataException("Cannot encode HeadId."); }
         return Convert.ToHexString(bytes);
     }
-    private static byte[] DirectoryPayload(Dictionary<string, string> entries) => JsonSerializer.SerializeToUtf8Bytes(entries);
+    private static byte[] DirectoryPayload(Dictionary<string, string> entries) => JsonSerializer.SerializeToUtf8Bytes(entries, Json);
     private static Dictionary<string, string> Members(HeadStore store, HeadId directory) =>
         JsonSerializer.Deserialize<Dictionary<string, string>>(store.ReadHead(directory).Unwrap().Payload)!;
     private void Check(bool condition, string description) {
@@ -231,7 +233,7 @@ sealed class Probe(string run) {
             passed, assertions = Assertions, storageRevision = "f8868b57e8f012745413bb38a83d67f1dba29f26",
             qualification = "Source mode; public HeadStore APIs; illustrative payload; clean close/reopen; no fault injection or DG recovery",
             budgetRows = _budgetRows, checks = _checks, error
-        }, new JsonSerializerOptions { WriteIndented = true }));
+        }, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     private sealed record Page(List<HeadEntryId> Ids, List<string> Payloads, bool Complete);
     private sealed class PageFailure(string code, int visited) : Exception(code) {
         public string Code { get; } = code;

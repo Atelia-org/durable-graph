@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Runtime;
@@ -69,7 +70,8 @@ internal static class FallbackTrial {
                 "Raw body bytes only: this mode does not publish repositories, simulate cumulative policy choices or measure complete Commit. X/Y retained in Settings but unused.",
             CorrectnessChecks = checks, Fixtures = fixtures.Length, Observations = rows.Count, Summary = summary, Rows = rows,
         };
-        File.WriteAllText(Path.Combine(settings.Output, "fallback.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(settings.Output, "fallback.json"), JsonSerializer.Serialize(report,
+            new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         StringBuilder text = new("# Fallback trial\n\nAll five strategies Apply-validated on the same captured pairs. Raw payloads, not actual policy-selected writes.\n\n");
         text.AppendLine("| Group | Case | N | Strategy | Delta B | Exact pairs | Literals | Diff ms | Diff allocation B | Triggered |")
             .AppendLine("|---|---|---:|---|---:|---:|---:|---:|---:|---|");

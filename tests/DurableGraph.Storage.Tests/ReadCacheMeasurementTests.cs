@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Atelia.FrameStore;
 using static Atelia.DurableGraph.Storage.Tests.StorageTestFrames;
@@ -51,6 +52,6 @@ public sealed class ReadCacheMeasurementTests(ITestOutputHelper output) {
         return (value, new(Stopwatch.GetElapsedTime(start, end).TotalMilliseconds, bytes));
     }
     private void Write(object value) => output.WriteLine("DB067_MEASUREMENT " + JsonSerializer.Serialize(value,
-        new JsonSerializerOptions { IncludeFields = true }));
+        new JsonSerializerOptions { IncludeFields = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     private readonly record struct Cost(double Milliseconds, long AllocatedBytes);
 }
