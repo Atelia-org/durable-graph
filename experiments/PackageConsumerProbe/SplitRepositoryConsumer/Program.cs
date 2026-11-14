@@ -213,7 +213,7 @@ internal static class Program {
         rewritten = actual.GraphAddress(rewrittenCommit);
         CheckRefs(actual, schema, ("main", mainState), ("fork", rewritten));
         WireInspector.Graph domainEvent = actual.Graph(eventAddress);
-        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == seed && domainEvent.SourceGraph is null &&
+        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == seed &&
             RequiredSchema(domainEvent) == schema, "Event must separately pin S1 without a State content source.");
         CheckIndependentEvent(actual, domainEvent, 3);
         CheckRewrittenState(actual, rewritten, eventAddress, witness, schema, descriptor);
@@ -258,8 +258,8 @@ internal static class Program {
         WireInspector.Snapshot actual = WireInspector.Read(database);
         continued = actual.GraphAddress(continuedCommit);
         WireInspector.Graph graph = actual.Graph(continued);
-        Need(graph.Parent == rewritten && graph.SourceGraph == rewritten && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
-            "Cold Delta must select the exact current content Parent and Schema.");
+        Need(graph.Parent == rewritten && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
+            "Cold continuation must preserve its journal predecessor and selected Schema.");
         uint[] written = graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).ToArray();
         Need(written.SequenceEqual(new[] { witness.ListId }), "Only the List may have a newly written local object record.");
         var chain = actual.ObjectChain(continued, witness.ListId);
@@ -319,7 +319,7 @@ internal static class Program {
         Need(catalogSchema != Address(witness.RewriteSchema!) &&
             RequiredSchema(seedGraph) == Address(witness.RewriteSchema!) &&
             eventGraph.Kind == WireInspector.GraphKind.Event && eventGraph.Parent == initial &&
-            eventGraph.SourceGraph is null && seedGraph.RootId == rootId,
+            seedGraph.RootId == rootId,
             "Catalog Event must pin its newly accepted directory independently of the older State S.");
         CheckIndependentEvent(seeded, eventGraph, 1);
         Need(CheckCatalog(shared, RequiredSchema(seedGraph), current: true) == witness.CurrentWidgetDescriptorId,
@@ -363,7 +363,7 @@ internal static class Program {
         WireInspector.Snapshot actual = WireInspector.Read(database);
         next = actual.GraphAddress(nextCommit);
         WireInspector.Graph graph = actual.Graph(next);
-        Need(graph.Parent == catalogEvent && graph.SourceGraph == initial && graph.RootId == rootId &&
+        Need(graph.Parent == catalogEvent && graph.RootId == rootId &&
             RequiredSchema(graph) == catalogSchema && graph.OwnedBatch is not null &&
             graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).SequenceEqual(new[] { listId }),
             "Catalog cold continuation must write only the changed List against its exact State and accepted S.");
@@ -437,7 +437,7 @@ internal static class Program {
             SameRefImage(oldSharedRef, followupSharedRef) && SameRefImage(directoryBefore, ReadRefImage(database, 1)),
             "A known-layout Event must advance its business Head while retaining D and the accepted shared Catalog.");
         WireInspector.Graph domainEvent = followup.Graph(followupEvent), previous = followup.Graph(catalogState);
-        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == catalogState && domainEvent.SourceGraph is null &&
+        Need(domainEvent.Kind == WireInspector.GraphKind.Event && domainEvent.Parent == catalogState &&
             RequiredSchema(domainEvent) == sharedSchema && domainEvent.DirectoryRoot != previous.DirectoryRoot &&
             domainEvent.OwnedBatch is not null,
             "The no-change Event must own a fresh complete graph while preserving the accepted shared view.");
@@ -464,10 +464,10 @@ internal static class Program {
         continued = actual.GraphAddress(continuedCommit);
         WireInspector.Graph graph = actual.Graph(continued);
         uint listId = witness.CatalogListId!.Value;
-        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == followupEvent && graph.SourceGraph == catalogState &&
+        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == followupEvent &&
             RequiredSchema(graph) == sharedSchema && graph.RootId == witness.CatalogRootId && graph.OwnedBatch is not null &&
             graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).SequenceEqual(new[] { listId }),
-            "Cold Shared State must use the Event Parent, original State content source, and only a new List record.");
+            "Cold Shared State must follow the Event in history and write only a new List record.");
         var prior = before.ObjectChain(catalogState, listId);
         var chain = actual.ObjectChain(continued, listId);
         var delta = chain.Entries[^1];
@@ -599,17 +599,17 @@ internal static class Program {
     private static void CheckRewrittenState(WireInspector.Snapshot actual, FrameAddress address, FrameAddress businessParent,
         Witness witness, FrameAddress schema, uint descriptor) {
         WireInspector.Graph graph = actual.Graph(address);
-        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == businessParent && graph.SourceGraph == Address(witness.SeedState) &&
+        Need(graph.Kind == WireInspector.GraphKind.State && graph.Parent == businessParent &&
             RequiredSchema(graph) == schema && graph.OwnedBatch is not null && graph.RootId == witness.RootId,
-            "The first State must retain its exact V1 content source, business Parent, root ID and new Schema pin.");
+            "The first State must retain its journal predecessor, root ID and new Schema pin.");
         uint[] written = graph.Heads.Where(pair => pair.Value == graph.OwnedBatch).Select(pair => pair.Key).Order().ToArray();
         Need(written.SequenceEqual(new[] { witness.RootId, witness.ChildId }.Order()),
             "Every rewritten-live Widget must write Base; the untouched List must remain retained.");
         foreach (uint id in written) {
             var chain = actual.ObjectChain(address, id);
             Need(chain.Entries.Count == 1 && chain.Head == graph.OwnedBatch && chain.Entries[0].Record.Kind == ObjectVersionKind.Base &&
-                chain.Entries[0].Record.PriorAddress is null && chain.Entries[0].SourceGraph == Address(witness.SeedState) &&
-                chain.Entries[0].SchemaRoot == schema, "Rewritten Widget must have an actual new Base and exact source context.");
+                chain.Entries[0].Record.PriorAddress is null &&
+                chain.Entries[0].SchemaRoot == schema, "Rewritten Widget must have an actual new Base and the selected Schema context.");
             CheckWidgetBase(actual, address, id, 2, descriptor);
         }
         StorageEvidence priorList = witness.SeedObjects.Single(row => row.Id == witness.ListId);
@@ -642,7 +642,7 @@ internal static class Program {
     }
 
     private static void CheckIndependentEvent(WireInspector.Snapshot actual, WireInspector.Graph graph, int objectCount) {
-        Need(graph.Kind == WireInspector.GraphKind.Event && graph.SourceGraph is null && graph.OwnedBatch is not null &&
+        Need(graph.Kind == WireInspector.GraphKind.Event && graph.OwnedBatch is not null &&
             graph.Heads.Count == objectCount && graph.Heads.Values.All(head => head == graph.OwnedBatch),
             "Event must own every reachable object independently of State.");
         foreach (uint id in graph.Heads.Keys) {

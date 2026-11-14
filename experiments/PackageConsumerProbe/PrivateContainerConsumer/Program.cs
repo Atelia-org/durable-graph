@@ -128,13 +128,13 @@ internal static class Program {
         Need(schema != before.SharedSchemaRoot && actual.BranchHeads.Count == 3 && actual.BranchHeads["upgraded"] == state &&
             actual.BranchHeads["main"] == before.BranchHeads["main"] && actual.BranchHeads["keeper"] == before.BranchHeads["keeper"],
             "Upgrade must advance only its business branch and the common Catalog.");
-        Need(graph.RootId == rootId && graph.Parent == Address(witness.SeedState) && graph.SourceGraph == Address(witness.SeedState) &&
+        Need(graph.RootId == rootId && graph.Parent == Address(witness.SeedState) &&
             graph.Heads.Keys.Order().SequenceEqual(before.Graph(Address(witness.SeedState)).Heads.Keys.Order()),
-            "The upgraded fork must retain baseline IDs and exact business source.");
+            "The upgraded fork must retain baseline IDs and its journal predecessor.");
         uint upgradedList = witness.AListId;
         WireInspector.Chain upgraded = actual.ObjectChain(state, upgradedList);
         Need(upgraded.Entries.Count == 1 && upgraded.Entries[0].Record.Kind == ObjectVersionKind.Base &&
-            upgraded.Entries[0].SourceGraph == Address(witness.SeedState) && upgraded.Entries[0].SchemaRoot == schema,
+            upgraded.Entries[0].SchemaRoot == schema,
             "The changed inline List must be rewritten as a genuine upgrade Base.");
         foreach (StorageEvidence row in witness.ASeedObjects.Where(row => row.Id != upgradedList)) {
             WireInspector.Chain retained = actual.ObjectChain(state, row.Id);
@@ -152,8 +152,7 @@ internal static class Program {
             target.DescriptorId(ObjectLayout.ForDurable(KeeperSchema())) == keeper,
             "Untouched Root and unreachable Keeper descriptors must be retained in the full common Catalog.");
         WireInspector.Graph meta = actual.Graph(schema);
-        Need(meta.Kind == WireInspector.GraphKind.Meta && meta.Parent == before.SharedSchemaRoot &&
-            meta.SourceGraph == before.SharedSchemaRoot, "Shared meta must derive from the actual complete frozen shared root.");
+        Need(meta.Kind == WireInspector.GraphKind.Meta && meta.Parent == before.SharedSchemaRoot, "Shared meta must derive from the actual complete frozen shared root.");
         Need(actual.SharedSchemaRoot == schema && !actual.Refs[2].Revision.Equals(before.Refs[2].Revision),
             "Ordinary Shared upgrade must publish the grown common Catalog.");
         CheckFrames(actual, witness.CompleteFrames);
@@ -197,9 +196,9 @@ internal static class Program {
         nextState = actual.GraphAddress(nextCommit);
         WireInspector.Graph graph = actual.Graph(nextState);
         FrameAddress schema = RequiredSchema(graph), expectedSchema = Address(witness.SharedSchema);
-        Need(schema == expectedSchema && graph.Parent == source && graph.SourceGraph == source &&
+        Need(schema == expectedSchema && graph.Parent == source &&
             actual.BranchHeads[branchName] == nextState && graph.RootId == before.Graph(source).RootId,
-            "The continued State must preserve exact business source/root and the selected Schema pin.");
+            "The continued State must preserve its journal predecessor, root and selected Schema pin.");
         CheckCatalog(actual, schema, wide: true, keeper: true);
         CheckSingleDelta(before, actual, source, nextState, list, priorRows);
         CheckRef(before, actual, 2);
@@ -428,7 +427,7 @@ internal static class Program {
             ListIds = catalog.DescriptorIds.Where(pair => pair.Key.List is not null).Select(pair => pair.Value).ToArray() };
     }
     private static object GraphFacts(WireInspector.Snapshot actual, WireInspector.Graph graph) => new {
-        Address = Hex(graph.Address), Kind = graph.Kind.ToString(), Parent = HexOrNull(graph.Parent), SourceGraph = HexOrNull(graph.SourceGraph),
+        Address = Hex(graph.Address), Kind = graph.Kind.ToString(), Parent = HexOrNull(graph.Parent),
         graph.RootId, DirectoryRoot = Hex(graph.DirectoryRoot), SchemaRoot = HexOrNull(graph.SchemaRoot), OwnedBatch = HexOrNull(graph.OwnedBatch),
         Objects = graph.Heads.Keys.Order().Select(id => {
             WireInspector.Chain chain = actual.ObjectChain(graph.Address, id);

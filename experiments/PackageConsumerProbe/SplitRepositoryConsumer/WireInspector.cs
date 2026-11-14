@@ -36,7 +36,7 @@ internal static class WireInspector {
     // Parent is an observer fact: business predecessor comes only from HeadStore history;
     // Meta predecessor comes from P0G2 PreviousMeta. It is not a business wire field.
     internal sealed record Graph(FrameAddress Address, GraphKind Kind, FrameAddress? Parent, uint RootId,
-        FrameAddress DirectoryRoot, FrameAddress? SchemaRoot, FrameAddress? OwnedBatch, FrameAddress? SourceGraph,
+        FrameAddress DirectoryRoot, FrameAddress? SchemaRoot, FrameAddress? OwnedBatch,
         IReadOnlyDictionary<uint, FrameAddress> Heads) {
         internal IReadOnlyDictionary<uint, FrameAddress> Objects => Heads;
     }
@@ -134,7 +134,7 @@ internal static class WireInspector {
     }
 
     private sealed record RawFrame(uint Tag, byte[] Payload);
-    private sealed record Metadata(GraphKind Kind, FrameAddress? Parent, uint RootId, FrameAddress DirectoryRoot,
+    private sealed record Metadata(GraphKind Kind, FrameAddress? PreviousMeta, uint RootId, FrameAddress DirectoryRoot,
         FrameAddress? SchemaRoot, FrameAddress? OwnedBatch);
     private sealed record DirectoryVersion(FrameAddress? SourceGraph, Record Record);
 
@@ -154,35 +154,53 @@ internal static class WireInspector {
             if (bookmarks is { } tagGraph) { Require(MetadataAt(tagGraph).Kind == GraphKind.Meta, "T is not Meta."); }
             Dictionary<FrameAddress, Graph> graphs = [];
             foreach (var pair in _metadata) {
-                // Unpublished business frames retain their inventory/hash evidence, but have no
-                // authoritative history position from which an expected content source can be proved.
+                // This finite fixture inspects registered business histories; unpublished business
+                // frames retain their inventory/hash evidence without a journal position.
                 if (pair.Value.Kind != GraphKind.Meta && !_businessPrevious.ContainsKey(pair.Key)) { continue; }
 
                 Metadata m = pair.Value;
-                FrameAddress? parent = m.Kind == GraphKind.Meta ? m.Parent : _businessPrevious[pair.Key];
-                FrameAddress? source = Source(m.Kind, parent, pair.Key);
+                FrameAddress? parent = m.Kind == GraphKind.Meta ? m.PreviousMeta : _businessPrevious[pair.Key];
                 var heads = Heads(m.DirectoryRoot);
                 Require(heads.ContainsKey(m.RootId), "Graph root is absent from its complete directory.");
-                FrameAddress? sourceDirectory = source is { } previous ? MetadataAt(previous).DirectoryRoot : null;
                 DirectoryVersion directory = DirectoryAt(m.DirectoryRoot);
-                if (sourceDirectory == m.DirectoryRoot) {
-                    Require(m.OwnedBatch is null, "A reused directory cannot own a batch.");
-                } else {
-                    Require(directory.SourceGraph == source, "Directory creator differs from the content source.");
-                    Require(directory.Record.Kind == ObjectVersionKind.Base || directory.Record.PriorAddress == sourceDirectory,
-                        "Directory Delta does not extend the source directory.");
+                if (m.Kind == GraphKind.Meta) {
+                    FrameAddress? sourceDirectory = null;
+                    if (m.PreviousMeta is { } previous) {
+                        Require(previous != pair.Key && MetadataAt(previous).Kind == GraphKind.Meta,
+                            "PreviousMeta must select a different Meta graph.");
+                        sourceDirectory = MetadataAt(previous).DirectoryRoot;
+                    }
+                    if (sourceDirectory == m.DirectoryRoot) {
+                        Require(m.OwnedBatch is null, "A reused Meta directory cannot own a batch.");
+                    } else {
+                        Require(directory.SourceGraph == m.PreviousMeta, "Meta directory creator differs from PreviousMeta.");
+                        Require(directory.Record.Kind == ObjectVersionKind.Base || directory.Record.PriorAddress == sourceDirectory,
+                            "Meta directory Delta does not extend the previous directory.");
+                    }
                 }
                 if (m.SchemaRoot is { } s) { Require(MetadataAt(s).Kind == GraphKind.Meta, "S is not a meta graph."); }
                 if (m.Kind == GraphKind.Event) {
-                    Require(source is null && m.OwnedBatch is not null &&
+                    Require(m.OwnedBatch is not null &&
                         directory.SourceGraph is null && directory.Record.Kind == ObjectVersionKind.Base &&
                         directory.Record.PriorAddress is null, "Event requires an independent Base directory and owned batch.");
                 }
                 if (m.OwnedBatch is { } owned) {
                     Batch batch = BatchAt(owned);
-                    Require(batch.SourceGraph == source && batch.SchemaRoot == m.SchemaRoot, "Owned batch source/S mismatch.");
+                    Require(batch.SchemaRoot == m.SchemaRoot, "Owned batch S mismatch.");
+                    if (m.Kind == GraphKind.Meta) {
+                        Require(batch.SourceGraph == m.PreviousMeta, "Owned Meta batch source differs from PreviousMeta.");
+                    } else if (m.Kind == GraphKind.State && batch.Records.Values.Any(record => record.Kind == ObjectVersionKind.Delta)) {
+                        FrameAddress source = batch.SourceGraph ?? throw new InvalidDataException("Owned State Delta lacks source.");
+                        Require(source != pair.Key && MetadataAt(source).Kind == GraphKind.State,
+                            "Owned State Delta source must select a different State graph.");
+                        var sourceHeads = Heads(MetadataAt(source).DirectoryRoot);
+                        foreach (Record delta in batch.Records.Values.Where(record => record.Kind == ObjectVersionKind.Delta)) {
+                            Require(sourceHeads.TryGetValue(delta.Id, out FrameAddress prior) && prior == delta.PriorAddress,
+                                "Owned State Delta prior differs from the same ID's source head.");
+                        }
+                    }
                     if (m.Kind == GraphKind.Event) {
-                        Require(batch.Records.Count > 0 && batch.Records.Count == heads.Count &&
+                        Require(batch.SourceGraph is null && batch.Records.Count > 0 && batch.Records.Count == heads.Count &&
                             heads.Values.All(head => head == owned) &&
                             batch.Records.Values.All(record => record.Kind == ObjectVersionKind.Base && record.PriorAddress is null),
                             "Event must own every live object as a complete Base without retained heads or Deltas.");
@@ -193,7 +211,7 @@ internal static class WireInspector {
                     }
                 }
                 graphs.Add(pair.Key, new(pair.Key, m.Kind, parent, m.RootId, m.DirectoryRoot, m.SchemaRoot,
-                    m.OwnedBatch, source, heads));
+                    m.OwnedBatch, heads));
                 foreach (var row in heads) { _chains.Add((pair.Key, row.Key), ChainAt(row.Key, row.Value)); }
             }
             foreach (FrameAddress address in branches.Values) { Require(graphs.ContainsKey(address), "Published branch graph is absent."); }
@@ -304,32 +322,15 @@ internal static class WireInspector {
             Magic(ref reader, "P0G2"u8);
             GraphKind kind = (GraphKind)reader.ReadByte();
             Require(kind is GraphKind.Event or GraphKind.State or GraphKind.Meta, "Unknown graph role.");
-            FrameAddress? parent = kind == GraphKind.Meta ? Optional(ref reader) : null;
+            FrameAddress? previousMeta = kind == GraphKind.Meta ? Optional(ref reader) : null;
             uint root = Nonzero(ref reader);
             FrameAddress directory = Address(ref reader);
             FrameAddress? schema = Optional(ref reader), batch = Optional(ref reader);
             Require(kind != GraphKind.Meta || schema is null, "Meta cannot borrow S.");
             reader.EnsureFullyConsumed();
-            Metadata result = new(kind, parent, root, directory, schema, batch);
+            Metadata result = new(kind, previousMeta, root, directory, schema, batch);
             _metadata.Add(address, result);
             return result;
-        }
-
-        private FrameAddress? Source(GraphKind kind, FrameAddress? parent, FrameAddress current) {
-            if (kind == GraphKind.Event) { return null; }
-            HashSet<FrameAddress> visited = [current];
-            while (parent is { } address) {
-                Require(visited.Add(address), "Graph ancestry contains a cycle.");
-                Metadata prior = MetadataAt(address);
-                if (kind == GraphKind.Meta) {
-                    Require(prior.Kind == GraphKind.Meta, "Meta Parent is not meta.");
-                    return address;
-                }
-                Require(prior.Kind != GraphKind.Meta, "Business ancestry cannot contain meta.");
-                if (prior.Kind == GraphKind.State) { return address; }
-                parent = _businessPrevious[address];
-            }
-            return null;
         }
 
         private Batch BatchAt(FrameAddress address) {

@@ -117,13 +117,10 @@ internal static class Replay {
                 if (index != 0 && current.Id != listId) { throw new InvalidOperationException("List identity changed across resize/edit."); }
                 listId = current.Id;
                 StoredGraphRevision graph = store.ReadGraph(entry.Address);
-                FrameAddress? expectedParent = index == 0 ? null : history[index * 2 - 1].RevisionAddress;
-                FrameAddress? expectedSource = index == 0 ? null : saved[index - 1].Address;
                 if (graph.Kind != StoredGraphKind.State || graph.RootId != entry.RootId ||
-                    graph.Parent != expectedParent || graph.SourceGraph != expectedSource ||
                     !graph.ObjectHeads.Keys.Order().SequenceEqual(entry.Storage.Keys.Select(id => id.Value).Order()) ||
                     !decoded.Objects.Select(row => row.Id).SequenceEqual(entry.Storage.Keys.Order())) {
-                    throw new InvalidOperationException("Stored State roots, parents or complete live IDs differ from the installed baseline.");
+                    throw new InvalidOperationException("Stored State roots or complete live IDs differ from the installed baseline.");
                 }
                 foreach ((ObjectId id, ObjectStorageInfo expected) in entry.Storage) {
                     ObjectVersionChain chain = store.ReadObjectChain(entry.Address, id.Value);
