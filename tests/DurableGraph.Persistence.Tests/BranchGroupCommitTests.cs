@@ -377,7 +377,7 @@ public sealed class BranchGroupCommitTests : IDisposable {
         long priorBytes = work.Baseline.Objects[list].Storage!.Value.ReconstructionPayloadBytes;
         CommitInfo commit = save();
         StoredGraphRevision graph = DB096TestAccess.Snapshot(repository, commit.Id);
-        Assert.Equal(priorGraph, graph.SourceGraph);
+
         ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
         Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
         Assert.Equal(list.Value, delta.ObjectId);

@@ -26,7 +26,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             first = EvidenceAddress(repository, branch.BaseCommitId);
             worldId = branch.StateId!.Value;
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Null(PublishedGraph(EvidenceResources(repository), first).SourceGraph);
+
             Assert.All(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), first)), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             characterId = FindGraphObject(repository, first, "reference.character");
             allIds = PublishedGraph(EvidenceResources(repository), first).ObjectHeads.Keys.ToArray();
@@ -46,7 +46,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Empty(PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, unchanged)));
             fixture.Change(loaded.State!, 8);
             changed = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
-            Assert.Equal(EvidenceAddress(repository, unchanged), PublishedGraph(EvidenceResources(repository), changed).SourceGraph);
+
             ObjectVersionRecord childDelta = Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), changed)));
             Assert.Equal(characterId, childDelta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, childDelta.Kind);
@@ -54,7 +54,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(2, store.ReadObjectChain(PublishedGraph(EvidenceResources(repository), changed), characterId).Entries.Count);
             CommitId repeated = loaded.CommitState(parameters: ReferenceGraphNoRebase).Id;
             Assert.Empty(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, repeated))));
-            Assert.Equal(changed, PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, repeated)).SourceGraph);
+
             repository.CreateTag("changed", loaded.BaseCommitId);
         }
         using (Repository repository = Repository.OpenExisting(directory.Path, fixture.Models(), rotationThresholdBytes)) {
@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             fixture.Detach(loaded.State!);
             detached = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(parent, PublishedGraph(EvidenceResources(repository), detached).SourceGraph);
+
             ObjectVersionRecord worldChange = Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), detached)));
             Assert.Equal(worldId.Value, worldChange.ObjectId);
             Assert.Equal(allIds.Where(id => id != worldId.Value).Order(), PublishedRemoved(EvidenceResources(repository), detached));
@@ -111,7 +111,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.False(repository.IsFaulted);
         restoreChild(loaded.State!, previous);
         CommitId recovered = loaded.CommitState(parameters: ReferenceGraphNoRebase).Id;
-        Assert.Equal(EvidenceAddress(repository, first), PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, recovered)).SourceGraph);
+
         Assert.Empty(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, recovered))));
         Assert.Empty(PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, recovered)));
         fixture.Check(loaded.State!, 7);
@@ -139,7 +139,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using WorkingCopy loaded = repository.OpenWorkingCopy(loadedId);
         replaceKnown(loaded.State!, 42);
         CommitId changed = loaded.CommitState(parameters: ReferenceGraphNoRebase).Id;
-        Assert.Equal(EvidenceAddress(repository, first), PublishedGraph(EvidenceResources(repository), EvidenceAddress(repository, changed)).SourceGraph);
+
         Assert.Contains(previousCharacter, PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, changed)));
         Assert.Contains(previousItem, PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, changed)));
         Assert.Equal(3, PublishedRemoved(EvidenceResources(repository), EvidenceAddress(repository, changed)).Count); // Old Character, Item and distinct name string.
@@ -202,7 +202,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(1, upgradeCalls());
             Assert.Equal(worldId, loaded.StateId);
             rewritten = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
-            Assert.Equal(third, PublishedGraph(EvidenceResources(repository), rewritten).SourceGraph);
+
             Assert.Empty(PublishedRemoved(EvidenceResources(repository), rewritten));
             ObjectVersionRecord record = Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), rewritten)));
             Assert.Equal(nodeId, record.ObjectId);

@@ -125,7 +125,7 @@ public sealed class BranchRegistrationFailureTests : IDisposable {
                 Assert.Equal(candidateCommit!.Value.Value, physical.Id);
                 Assert.Throws<KeyNotFoundException>(() => reopened.ReadCommitInfo(candidateCommit.Value));
                 Assert.Equal(candidateGraph, BusinessEntryPayloadCodec.Decode(physical.Payload).Graph);
-                Assert.Equal(StoredGraphKind.State, cold.GraphStore.ReadBusinessGraph(candidateGraph!.Value, null).Kind);
+                Assert.Equal(StoredGraphKind.State, cold.GraphStore.ReadBusinessGraph(candidateGraph!.Value).Kind);
             } else { Assert.Equal(source.Value, physical.Id); }
             return;
         }

@@ -53,13 +53,11 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
-            Assert.Null(MechanismFixture.Snapshot(store, first).SourceGraph);
-            Assert.Null(MechanismFixture.Snapshot(store, eventAddress).SourceGraph);
-            Assert.Equal(first, MechanismFixture.Snapshot(store, second).SourceGraph);
+
             ObjectVersionRecord write = Assert.Single(StorageTestData.LocalRecords(store, second));
             Assert.Equal(ObjectVersionKind.Delta, write.Kind);
             Assert.NotEqual(rootId.Value, write.ObjectId);
-            Assert.Equal(second, MechanismFixture.Snapshot(store, third).SourceGraph);
+
             uint childId = write.ObjectId;
             Assert.Equal(MechanismFixture.Snapshot(store, second).ObjectHeads[childId],
                 Assert.Single(StorageTestData.LocalRecords(store, third)).PriorAddress);
@@ -354,13 +352,12 @@ public sealed partial class EventHistoryRepositoryTests : IDisposable {
         }
         using RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root);
         GraphRecordStore store = resources.GraphStore;
-        Assert.Equal(original, MechanismFixture.Snapshot(store, upgraded).SourceGraph);
+
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(StorageTestData.LocalRecords(store, upgraded)).Kind);
         Assert.Empty(StorageTestData.LocalRecords(store, unchanged));
-        Assert.Equal(unchanged, MechanismFixture.Snapshot(store, changed).SourceGraph);
+
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(StorageTestData.LocalRecords(store, changed)).Kind);
     }
-
 
     [Fact]
     public void ColdEventBrowseDoesNotBindWorldAndPairSecondFailureDeliversNothing() {

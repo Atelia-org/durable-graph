@@ -28,7 +28,7 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
         FrameAddress batch = Batch(frames, null, Enumerable.Range(1, count).Select(id => B((uint)id, [10])).ToArray());
         FrameAddress graph = Graph(frames, null, Enumerable.Range(1, count).ToDictionary(id => (uint)id, _ => batch), batch);
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: budget);
-        StoredGraphRevision snapshot = reader.ReadBusinessGraph(graph, null);
+        StoredGraphRevision snapshot = reader.ReadBusinessGraph(graph);
         Assert.Equal(1, reader.ReadCacheStatistics.BatchDecodes);
         Assert.Equal(count, reader.ReadObjectChains(snapshot).Count());
         long expected = budget == GraphRecordStore.DefaultReadCacheBudgetBytes ? 1 : 2;
@@ -52,7 +52,7 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
         StoredGraphRevision third = writer.AppendBusiness(StoredGraphKind.State, null,
             new(second.Address, new(1), Enumerable.Range(1, count).Select(id => D((uint)id, second.ObjectHeads[(uint)id], [30]))));
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: budget);
-        StoredGraphRevision snapshot = reader.ReadBusinessGraph(third.Address, second.Address);
+        StoredGraphRevision snapshot = reader.ReadBusinessGraph(third.Address);
         Assert.Equal(2, reader.ReadCacheStatistics.BatchDecodes); // Owned head plus grouped immediate prior.
         IEnumerable<ObjectVersionChain> enumerable = reader.ReadObjectChains(snapshot);
         for (int pass = 0; pass < 2; pass++) {
@@ -79,7 +79,7 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
         StoredGraphRevision third = writer.AppendBusiness(StoredGraphKind.State, null,
             new(second.Address, new(1), [D(1, second.ObjectHeads[1], [30])]));
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
-        StoredGraphRevision snapshot = reader.ReadBusinessGraph(third.Address, second.Address);
+        StoredGraphRevision snapshot = reader.ReadBusinessGraph(third.Address);
         long before = reader.ReadCacheStatistics.BatchDecodes;
         ObjectVersionChain[] chains = reader.ReadObjectChains(snapshot).ToArray();
         Assert.Equal(6, reader.ReadCacheStatistics.BatchDecodes - before); // Frontiers contain 3, 2, then 1 distinct address.
@@ -127,7 +127,7 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
         FrameAddress graph = Graph(frames, initial.Address,
             new Dictionary<uint, FrameAddress> { [1] = batch, [2] = batch }, owned: null);
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
-        StoredGraphRevision snapshot = reader.ReadBusinessGraph(graph, initial.Address); // External declarations stay shallow.
+        StoredGraphRevision snapshot = reader.ReadBusinessGraph(graph); // External declarations stay shallow.
         using IEnumerator<ObjectVersionChain> iterator = reader.ReadObjectChains(snapshot).GetEnumerator();
         Assert.True(iterator.MoveNext());
         ObjectVersionChain first = iterator.Current;
@@ -153,14 +153,14 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
         FrameAddress missing = Graph(frames, null,
             new Dictionary<uint, FrameAddress> { [1] = batch, [2] = batch }, owned: null);
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
-        Assert.Single(reader.ReadBusinessGraph(valid, null).ObjectHeads);
+        Assert.Single(reader.ReadBusinessGraph(valid).ObjectHeads);
         long before = reader.ReadCacheStatistics.BatchDecodes;
         StoredGraphRevision? delivered = null;
-        InvalidDataException error = Assert.Throws<InvalidDataException>(() => delivered = reader.ReadBusinessGraph(missing, null));
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => delivered = reader.ReadBusinessGraph(missing));
         Assert.Null(delivered);
         Assert.Contains("requested ObjectId", error.Message);
         Assert.Equal(1, reader.ReadCacheStatistics.BatchDecodes - before);
-        Assert.Single(reader.ReadBusinessGraph(valid, null).ObjectHeads); // Ordinary bad content does not poison the Store.
+        Assert.Single(reader.ReadBusinessGraph(valid).ObjectHeads); // Ordinary bad content does not poison the Store.
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class BatchReadGroupingTests(ITestOutputHelper output) : IDisposab
         using Frames frames = Frames.Create(NewPath());
         (FrameAddress graph, FrameAddress? source, FrameAddress[] batches) = PeerHistory(frames, depth: 8, peerBytes);
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: 0);
-        StoredGraphRevision snapshot = reader.ReadBusinessGraph(graph, source);
+        StoredGraphRevision snapshot = reader.ReadBusinessGraph(graph);
         WarmBacking(reader, batches);
         long before = GC.GetTotalMemory(forceFullCollection: true);
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();

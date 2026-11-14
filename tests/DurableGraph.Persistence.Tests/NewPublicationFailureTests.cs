@@ -23,7 +23,7 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         Assert.Equal(visible, reopened.ListBranches().Any(branch => branch.DisplayLabel == "main"));
-        StoredGraphRevision appended = reopened.GraphStore.ReadBusinessGraph(candidate, null);
+        StoredGraphRevision appended = reopened.GraphStore.ReadBusinessGraph(candidate);
         SchemaCatalogView candidateCatalog = SchemaCatalogView.Load(reopened.GraphStore, appended.SchemaRoot!.Value);
         Assert.Equal(Schema, candidateCatalog.Schemas[new(Schema.Type, Schema.Version)]);
         if (visible) {

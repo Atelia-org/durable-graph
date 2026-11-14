@@ -181,7 +181,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         ], new() { [new(1)] = store.ReadObjectChain(state, 1).ReconstructionPayloadBytes });
         StoredGraphRevision other = store.AppendBusiness(StoredGraphKind.State, null, new(state.Address, new(1), [B(1, [9])]));
         StoredGraphRevision saved = store.AppendBusiness(StoredGraphKind.State, null, new(state.Address, new(1), result.Records));
-        Assert.Equal(state.Address, saved.SourceGraph);
+
         Assert.Equal(new[] { state.OwnedBatch!.Value, saved.OwnedBatch!.Value },
             store.ReadObjectChain(saved, 1).Entries.Select(static row => row.ContainingBatch));
         Assert.Equal(new byte[] { 9 }, Assert.Single(store.ReadObjectChain(other, 1).Entries).Record.Body.ToArray());

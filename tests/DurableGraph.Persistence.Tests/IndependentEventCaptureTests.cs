@@ -28,7 +28,7 @@ public sealed partial class SplitBusinessWorkspaceTests {
             Assert.Equal(2, pending.Business.Write.Records.Count);
             Assert.All(pending.Business.Write.Records, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             StoredGraphRevision graph = pending.Commit().Business;
-            Assert.Null(graph.SourceGraph);
+
             Assert.Same(baseline, session.Baseline);
             Assert.Same(source, session.StateSource);
             Assert.Equal((byte)1, baseline.CurrentDtos[session.RootId].GetState<State>().Value);

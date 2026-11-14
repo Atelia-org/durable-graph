@@ -21,7 +21,5 @@ internal static class DB096TestAccess {
         Resources(repository).ReadPrevious(id.Value) is { } previous ? new CommitId(previous.Id) : null;
     internal static StoredGraphRevision Snapshot(Repository repository, CommitId id) => Snapshot(Resources(repository), id);
     internal static StoredGraphRevision Snapshot(RepositoryResources resources, CommitId id) =>
-        resources.GraphStore.ReadBusinessGraph(Describe(resources, id).Address,
-            Describe(resources, id).Kind == CommitKind.Event ? null
-                : resources.FindNearestState(id.Value, inclusive: false)?.Address);
+        resources.GraphStore.ReadBusinessGraph(Describe(resources, id).Address);
 }

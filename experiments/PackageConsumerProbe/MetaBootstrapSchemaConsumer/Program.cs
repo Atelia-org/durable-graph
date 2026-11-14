@@ -13,7 +13,6 @@ using Atelia.HeadStore;
 using BootstrapSchemaClosure;
 using persistence::Atelia.DurableGraph.Persistence;
 
-
 internal static class Program {
     private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private sealed record BusinessIds(uint Root, uint Samples, uint Optional, uint Nested, uint Inner, uint ArrayOptional, uint Points,
@@ -82,7 +81,7 @@ internal static class Program {
         if (s1 is { } accepted) {
             Need(repository.ReadCurrent(commit0.HeadId).Id == commit1 && repository.FindNearestState(commit1!.Value, inclusive: true)!.Id == commit1, "Fresh published roots must select the continued State.");
             StoredGraphRevision graph = accepted;
-            Need(graph.SourceGraph == s0.Address && graph.SchemaRoot == schema, "The Delta State must retain its exact content source and Schema pin.");
+            Need(graph.SchemaRoot == schema, "The Delta State must retain its exact Schema pin.");
             Need(CheckRows(repository, accepted, meta, models) == witness.Ids, "Cold continued rows must retain every object ID.");
             Host.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, accepted, models), 1);
             foreach (uint id in witness.Ids.All) {
@@ -311,8 +310,7 @@ internal static class Program {
         HistoryGraphRecord selected = repository.FindNearestState(commit, inclusive: true)
             ?? throw new InvalidDataException("Witness Commit has no State.");
         Need(selected.Id == commit, "Witness Commit must select a State, not a later Event.");
-        FrameAddress? source = repository.FindNearestState(commit, inclusive: false)?.Address;
-        return repository.Store.ReadBusinessGraph(selected.Address, source);
+        return repository.Store.ReadBusinessGraph(selected.Address);
     }
     private static string Hex(HeadEntryId entry) {
         byte[] encoded = new byte[HeadEntryId.EncodedSize];

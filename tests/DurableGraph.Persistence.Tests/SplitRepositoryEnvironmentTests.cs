@@ -93,7 +93,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
 
             Assert.Equal(schema1, checkout.AcceptedCatalog!.Snapshot!.Address);
             Assert.False(checkout.BindingEnvironment!.SelectedSchemaView.Schemas.ContainsKey(new(Extra.Type, Extra.Version)));
-            Assert.Equal(schema0, repository.GraphStore.ReadBusinessGraph(oldState, null).SchemaRoot);
+            Assert.Equal(schema0, repository.GraphStore.ReadBusinessGraph(oldState).SchemaRoot);
             Assert.Equal(schema1, Snapshot(repository, event1).SchemaRoot);
 
             // Give the side branch a real Event head pinning S1, while its nearest State still pins S0.
@@ -191,8 +191,8 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             }
             Assert.Equal(currentSchema, graph.SchemaRoot);
             AssertWidget(Assert.IsType<NextRoot>(repository.LoadState(continued)).Link, 3);
-            AssertWidget(BusinessPersistenceAdapter.ReadRoot(repository.GraphStore, repository.GraphStore.ReadBusinessGraph(oldState, null), Models(new())), 0);
-            Assert.Equal(oldRootId, repository.GraphStore.ReadBusinessGraph(oldState, null).RootId);
+            AssertWidget(BusinessPersistenceAdapter.ReadRoot(repository.GraphStore, repository.GraphStore.ReadBusinessGraph(oldState), Models(new())), 0);
+            Assert.Equal(oldRootId, repository.GraphStore.ReadBusinessGraph(oldState).RootId);
         }
     }
 
@@ -223,7 +223,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
             retained = repository.GraphStore;
             staleAddress = Describe(repository, stale).Address;
         }
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(staleAddress, null));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(staleAddress));
         using Repository reopened = Repository.OpenStorageExisting(_path, Models(new()));
         AssertWidget(reopened.LoadState(stale), 2);
         AssertWidget(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id), 2);
@@ -354,7 +354,7 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         using Repository reopened = Repository.OpenStorageReadOnlyExisting(_path, Models(new()));
         Assert.Equal(actual, Describe(reopened, reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id).Address);
         AssertWidget(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id), 1);
-        AssertWidget(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, reopened.GraphStore.ReadBusinessGraph(old, null), Models(new())), 0);
+        AssertWidget(BusinessPersistenceAdapter.ReadRoot(reopened.GraphStore, reopened.GraphStore.ReadBusinessGraph(old), Models(new())), 0);
     }
 
     private void Seed(bool withSide = false) {

@@ -31,9 +31,9 @@ public sealed class IndependentEventStorageTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => store.AppendBusiness(StoredGraphKind.Event, null, write));
         Assert.Equal(before, store.AppendedFrames);
         StoredGraphRevision valid = store.AppendBusiness(StoredGraphKind.Event, null, new(null, new(1), [B(1)]));
-        Assert.Null(valid.SourceGraph);
+
         Assert.Equal(valid.OwnedBatch, valid.ObjectHeads[1]);
-        Assert.Throws<InvalidDataException>(() => store.ReadBusinessGraph(valid.Address, state.Address));
+        Assert.Equal(StoredGraphKind.Event, store.ReadBusinessGraph(valid.Address).Kind);
     }
 
     [Theory]
@@ -75,8 +75,8 @@ public sealed class IndependentEventStorageTests : IDisposable {
         using Frames reopened = Frames.OpenReadOnly(path);
         using GraphRecordStore reader = new(reopened);
         for (int attempt = 0; attempt < 2; attempt++) {
-            Assert.Throws<InvalidDataException>(() => reader.ReadBusinessGraph(bad, null));
-            StoredGraphRevision accepted = reader.ReadBusinessGraph(good, null);
+            Assert.Throws<InvalidDataException>(() => reader.ReadBusinessGraph(bad));
+            StoredGraphRevision accepted = reader.ReadBusinessGraph(good);
             Assert.Single(accepted.ObjectHeads);
             Assert.Equal(accepted.OwnedBatch, accepted.ObjectHeads[1]);
         }
@@ -91,10 +91,10 @@ public sealed class IndependentEventStorageTests : IDisposable {
         FrameAddress directory = Directory(frames, null, new Dictionary<uint, FrameAddress> { [1] = external, [2] = owned });
         FrameAddress graph = Graph(frames, directory, owned);
         using GraphRecordStore reader = new(frames);
-        reader.ValidateBusinessMetadata(graph, null);
+        reader.ValidateBusinessMetadata(graph);
         Assert.Equal(0, reader.ReadCacheStatistics.DirectoryMaterializations);
         Assert.Equal(0, reader.BusinessGraphQualificationCount);
-        Assert.Throws<InvalidDataException>(() => reader.ReadBusinessGraph(graph, null));
+        Assert.Throws<InvalidDataException>(() => reader.ReadBusinessGraph(graph));
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class IndependentEventStorageTests : IDisposable {
         using PendingRepositorySave independent = resources.PrepareSaveFrom(first.BranchId, first.CommitId, null,
             StoredGraphKind.Event, default, () => (new PreparedGraphWrite(null, new(1), [B(1)]), null));
         RepositorySaveResult saved = resources.CommitSave(independent);
-        Assert.Null(saved.Business.SourceGraph);
+
         Assert.Equal(first.Business.Address, resources.FindNearestState(saved.CommitId, true)!.Address);
     }
 
@@ -136,8 +136,8 @@ public sealed class IndependentEventStorageTests : IDisposable {
         }
         using Repository reader = Repository.OpenReadOnlyExisting(path, SharedReadModel.Models());
         (CommitId first, CommitId second) = SelectPair(pairKind, state, firstEvent, secondEvent);
-        StoredGraphRevision firstSnapshot = reader.GraphStore.ReadBusinessGraph(Describe(reader, first).Address, null);
-        StoredGraphRevision secondSnapshot = reader.GraphStore.ReadBusinessGraph(Describe(reader, second).Address, null);
+        StoredGraphRevision firstSnapshot = reader.GraphStore.ReadBusinessGraph(Describe(reader, first).Address);
+        StoredGraphRevision secondSnapshot = reader.GraphStore.ReadBusinessGraph(Describe(reader, second).Address);
         Assert.Equal(firstSnapshot.RootId, secondSnapshot.RootId);
         Assert.Equal(firstSnapshot.ObjectHeads.Keys.Order(), secondSnapshot.ObjectHeads.Keys.Order());
         var pair = (First: first == state ? reader.LoadState(first) : reader.LoadEvent(first),

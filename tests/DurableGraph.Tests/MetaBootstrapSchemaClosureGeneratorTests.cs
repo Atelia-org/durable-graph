@@ -115,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             SchemaCatalogView meta = SchemaCatalogView.Load(repository.Store, schemaRoot);
             AssertBootstrapSchemaClosure(meta, expected.Root, expected.Base, expected.Point);
             Assert.Equal(s1, MechanismFixture.State(repository, "main")?.Address);
-            Assert.Equal(s0, MechanismFixture.Snapshot(repository, s1).SourceGraph);
+
             Assert.Equal(schemaRoot, MechanismFixture.Snapshot(repository, s0).SchemaRoot);
             StateModelRegistry registered = models();
             check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, s0), registered), 0);

@@ -145,7 +145,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         Dictionary<string, byte[]> before = SnapshotFiles(_path);
         using (RepositoryResources resources = RepositoryResources.OpenStorageReadOnlyExisting(_path)) {
             GraphRecordStore store = resources.GraphStore;
-            DecodedRevision source1 = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), frozen);
+            DecodedRevision source1 = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first), frozen);
             Assert.NotNull(source1.BindingEnvironment);
             Assert.Equal(0, counts.Factories);
             Assert.Equal(0, counts.Comparers);
@@ -157,7 +157,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             Assert.Equal(1, counts.Factories);
             Assert.Equal(1, counts.Comparers);
 
-            DecodedRevision source2 = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(second, first), frozen, source1.BindingEnvironment);
+            DecodedRevision source2 = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(second), frozen, source1.BindingEnvironment);
             Assert.Same(source1.BindingEnvironment, source2.BindingEnvironment);
             Assert.Same(source1.SourceModels, source2.SourceModels);
             Assert.Same(source1.SelectedSchemaView, source2.SelectedSchemaView);
@@ -169,17 +169,17 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             Assert.Equal(1, counts.Factories);
             Assert.Equal(1, counts.Comparers); // Successful lazy factory/comparer closures belong to this exact-S environment.
 
-            DecodedRevision fresh = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), frozen);
+            DecodedRevision fresh = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first), frozen);
             Assert.NotSame(source1.BindingEnvironment, fresh.BindingEnvironment);
             Assert.NotSame(source1.SourceModels, fresh.SourceModels);
             Assert.Equal(7, GraphReader.ReadRoot<MapRoot>(fresh, rootId, new(fresh.SourceModels!)).Values!["key"]);
             Assert.Equal(2, counts.Factories);
             Assert.Equal(2, counts.Comparers); // No implicit all-history or owner-wide model cache.
 
-            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), changed, source1.BindingEnvironment));
+            Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first), changed, source1.BindingEnvironment));
             Assert.Equal(2, counts.Factories);
             Assert.Equal(2, counts.Comparers);
-            DecodedRevision newConfiguration = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first, null), changed);
+            DecodedRevision newConfiguration = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(first), changed);
             Assert.True(newConfiguration.SourceModels!.TryGetCurrentModel(typeof(LateRoot), out _));
             MapRoot newChoice = GraphReader.ReadRoot<MapRoot>(newConfiguration, rootId, new(newConfiguration.SourceModels));
             Assert.Equal(7, newChoice.Values!["KEY"]); // The new freeze really observes the exact new comparer.
@@ -191,7 +191,7 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
             Assert.Equal(schema, resources.SharedSchemaRoot);
 
             resources.Dispose();
-            Assert.ThrowsAny<InvalidOperationException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(second, first), frozen, source1.BindingEnvironment));
+            Assert.ThrowsAny<InvalidOperationException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(second), frozen, source1.BindingEnvironment));
             Assert.Equal(3, counts.Factories);
             Assert.Equal(2, counts.Comparers);
         }
@@ -202,14 +202,14 @@ public sealed class SplitModelEnvironmentTests : IDisposable {
         CopyClosedRepository(_path, otherPath);
         using RepositoryResources firstOwner = RepositoryResources.OpenStorageReadOnlyExisting(_path);
         using RepositoryResources otherOwner = RepositoryResources.OpenStorageReadOnlyExisting(otherPath);
-        DecodedRevision owned = DecodedRevision.ReadStoredGraph(firstOwner.GraphStore, firstOwner.GraphStore.ReadBusinessGraph(first, null), frozen);
+        DecodedRevision owned = DecodedRevision.ReadStoredGraph(firstOwner.GraphStore, firstOwner.GraphStore.ReadBusinessGraph(first), frozen);
         Assert.Equal(7, GraphReader.ReadRoot<MapRoot>(owned, rootId, new(owned.SourceModels!)).Values!["key"]);
         int factories = counts.Factories, comparers = counts.Comparers;
-        Assert.Equal(schema, otherOwner.GraphStore.ReadBusinessGraph(first, null).SchemaRoot);
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, otherOwner.GraphStore.ReadBusinessGraph(first, null), frozen, owned.BindingEnvironment));
+        Assert.Equal(schema, otherOwner.GraphStore.ReadBusinessGraph(first).SchemaRoot);
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, otherOwner.GraphStore.ReadBusinessGraph(first), frozen, owned.BindingEnvironment));
         Assert.Equal(factories, counts.Factories);
         Assert.Equal(comparers, counts.Comparers);
-        DecodedRevision independent = DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, otherOwner.GraphStore.ReadBusinessGraph(first, null), frozen);
+        DecodedRevision independent = DecodedRevision.ReadStoredGraph(otherOwner.GraphStore, otherOwner.GraphStore.ReadBusinessGraph(first), frozen);
         MapRoot other = GraphReader.ReadRoot<MapRoot>(independent, rootId, new(independent.SourceModels!));
         Assert.Equal(7, other.Values!["key"]);
         Assert.False(other.Values.ContainsKey("KEY"));

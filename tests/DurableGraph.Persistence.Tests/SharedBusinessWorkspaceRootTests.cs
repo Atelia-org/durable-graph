@@ -208,9 +208,10 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         internal NormalizedGraphState Baseline => _checkout.Baseline!;
         internal long AppendedFrames => _repository.GraphStore.AppendedFrames;
         internal Saved Save(IDurableObject root, bool isEvent = false) {
+            FrameAddress? priorState = isEvent ? null : _checkout.StateRevisionAddress;
             CommitId committed = isEvent ? _checkout.CommitEvent(root).Id : _checkout.CommitState(root).Id;
             Assert.Equal(committed, _repository.ReadCurrentCommit(_checkout.BranchId).Commit.Id);
-            return ReadSaved(Describe(_repository, committed).Address);
+            return ReadSaved(Describe(_repository, committed).Address, priorState);
         }
         internal ObjectId Discard(IDurableObject root) {
             CommitId head = _checkout.BaseCommitId;
@@ -237,11 +238,11 @@ public sealed class SharedBusinessWorkspaceRootTests : IDisposable {
         }
         internal IDurableObject Read(Saved saved) =>
             BusinessPersistenceAdapter.ReadRoot(_repository.GraphStore, MechanismFixture.Snapshot(_repository.GraphStore, saved.Address), Models());
-        private Saved ReadSaved(FrameAddress address) {
+        private Saved ReadSaved(FrameAddress address, FrameAddress? priorState = null) {
             GraphRecordStore store = _repository.GraphStore;
             StoredGraphRevision graph = MechanismFixture.Snapshot(store, address);
             ObjectVersionRecord[] records = graph.OwnedBatch is { } batch ? store.ReadBatch(batch).Records.ToArray() : [];
-            uint[] removed = graph.SourceGraph is { } source
+            uint[] removed = priorState is { } source
                 ? MechanismFixture.Snapshot(store, source).ObjectHeads.Keys.Except(graph.ObjectHeads.Keys).ToArray() : [];
             return new(address, graph.RootId, records, removed, graph.DirectoryRoot, graph.OwnedBatch);
         }

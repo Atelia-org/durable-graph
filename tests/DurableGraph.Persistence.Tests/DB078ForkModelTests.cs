@@ -87,12 +87,7 @@ public sealed partial class DB078HistoryTests {
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            Assert.Null(Snapshot(resources, firstA).SourceGraph);
-            Assert.Null(Snapshot(resources, firstB).SourceGraph);
-            Assert.Equal(Describe(resources, firstA).Address, Snapshot(resources, replacementA).SourceGraph);
-            Assert.Equal(Describe(resources, firstB).Address, Snapshot(resources, replacementB).SourceGraph);
-            Assert.Equal(Describe(resources, replacementA).Address, Snapshot(resources, secondA).SourceGraph);
-            Assert.Equal(Describe(resources, replacementB).Address, Snapshot(resources, secondB).SourceGraph);
+
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using WorkingCopy coldA = reopened.OpenWorkingCopy(BranchNamed(reopened, "a"));

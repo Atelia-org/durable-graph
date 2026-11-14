@@ -105,7 +105,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path)) {
             GraphRecordStore cold = reopened.Store;
             StoredGraphRevision Snapshot(FrameAddress address) => address == missingString || address == wrongKind
-                ? cold.ReadBusinessGraph(address, second) : MechanismFixture.Snapshot(reopened, address);
+                ? cold.ReadBusinessGraph(address) : MechanismFixture.Snapshot(reopened, address);
             Assert.Equal(second, MechanismFixture.Current(reopened, "main").Address);
             Assert.Equal(schemaRoot, reopened.SharedSchemaRoot);
             StoredGraphRevision firstGraph = Snapshot(first), secondGraph = Snapshot(second);

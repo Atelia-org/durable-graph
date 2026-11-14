@@ -65,7 +65,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             // Canonical, completed experimental siblings use the real writer; none is published as a branch.
             repeated = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema, new(first, input.Owner, edits)).Address;
-            Assert.Equal(input.First.Body.ToArray(), repository.Store.ReadObjectChain(repository.Store.ReadBusinessGraph(repeated, first), ownerId).Entries[^1].Record.Body.ToArray());
+            Assert.Equal(input.First.Body.ToArray(), repository.Store.ReadObjectChain(repository.Store.ReadBusinessGraph(repeated), ownerId).Entries[^1].Record.Body.ToArray());
             missingString = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema, new(third, input.Owner, [], [nameId])).Address;
             wrongKind = repository.Store.AppendBusiness(StoredGraphKind.State, selectedSchema,
                 new(third, input.Owner, [ObjectVersionRecord.CreateBase(nameId,
@@ -83,7 +83,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         using (RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenReadOnlyExisting(directory.Path)) {
             Assert.Equal(third, MechanismFixture.Current(reopened, "main").Address);
             Assert.Equal(selectedSchema, reopened.SharedSchemaRoot);
-            owned = new[] { first, second, third, repeated }.Select(address => DecodedRevision.ReadStoredGraph(reopened.Store, address == repeated ? reopened.Store.ReadBusinessGraph(repeated, first) : MechanismFixture.Snapshot(reopened, address), models().FreezeConfiguration())).ToArray();
+            owned = new[] { first, second, third, repeated }.Select(address => DecodedRevision.ReadStoredGraph(reopened.Store, address == repeated ? reopened.Store.ReadBusinessGraph(repeated) : MechanismFixture.Snapshot(reopened, address), models().FreezeConfiguration())).ToArray();
             for (int i = 0; i < owned.Length; i++) Assert.Equal(expected[i == 3 ? 1 : i], check(owned[i]));
             ObjectVersionChain chain = reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, third), ownerId);
             Assert.Equal(new[] { first, second, third }.Select(address => MechanismFixture.Snapshot(reopened, address).OwnedBatch!.Value),
@@ -94,7 +94,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.True(chain.ReconstructionPayloadBytes > reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, first), ownerId).ReconstructionPayloadBytes);
             foreach (FrameAddress invalid in new[] { missingString, wrongKind, malformed }) {
                 DecodedRevision? delivered = null;
-                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(reopened.Store, reopened.Store.ReadBusinessGraph(invalid, third), models().FreezeConfiguration()));
+                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(reopened.Store, reopened.Store.ReadBusinessGraph(invalid), models().FreezeConfiguration()));
                 Assert.Null(delivered);
                 Assert.Equal(expected[2], check(owned[2]));
             }
@@ -233,7 +233,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         object upgraded = updated.GetRequired(new(1)).Content;
         Assert.Equal((byte)2, (byte)upgraded.GetType().GetField("Segment0Field2", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(upgraded)!);
         Assert.Equal(1u, (uint)upgraded.GetType().GetField("Segment1Field1", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(upgraded)!);
-        Assert.Equal(third, MechanismFixture.Snapshot(fresh, rewritten).SourceGraph);
+
         Assert.Single(fresh.Store.ReadObjectChain(MechanismFixture.Snapshot(fresh, rewritten), 1).Entries);
         Assert.Equal(3, fresh.Store.ReadObjectChain(MechanismFixture.Snapshot(fresh, third), 1).Entries.Count);
 

@@ -85,7 +85,6 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(s0, session.StateSource!.Address);
             Assert.False(session.AcceptedCatalog!.Schemas.ContainsKey(currentKey));
 
-
             // Capture registers current V2 automatically. Discard installs neither authority.
             long frames = repository.Store.AppendedFrames;
             using (PreparedFixtureSave discarded = session.Prepare(root, StoredGraphKind.Event)) {
@@ -126,7 +125,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 RepositorySaveResult result = eventSave.Commit();
                 e2 = result.Business.Address;
                 Assert.Equal(e1, MechanismFixture.Resources(repository).ReadPrevious(result.CommitId)!.Address);
-                Assert.Null(result.Business.SourceGraph);
+
                 AssertBootstrapStoredSchema(repository, result.Business, currentSchema, ObjectVersionKind.Base);
                 currentHost.Check(BusinessPersistenceAdapter.ReadRoot(repository.Store, MechanismFixture.Snapshot(repository, e2), currentModels), 107);
             }

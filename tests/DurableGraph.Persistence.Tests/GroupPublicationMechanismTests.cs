@@ -181,7 +181,7 @@ public sealed class GroupPublicationMechanismTests : IDisposable {
         Assert.Equal(source, save.Business.Write.SourceGraph);
         Assert.Null(save.Catalog.Write);
         StoredGraphRevision graph = save.Commit().Business;
-        Assert.Equal(source, graph.SourceGraph);
+
         Assert.Equal(priorH + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior),
             session.Baseline!.Objects[new(listId)].Storage!.Value.ReconstructionPayloadBytes);
         Assert.Same(root, session.State);

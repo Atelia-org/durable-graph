@@ -236,12 +236,12 @@ public sealed partial class P0BusinessPlanningAccountingTests {
         Assert.Equal(oldState, MechanismFixture.FindCurrent(reopened, "main")?.Address);
         Assert.Equal(oldMeta, reopened.SharedSchemaRoot);
         Assert.True(DataBytes(reopened.Data) > before);
-        StoredGraphRevision completed = reopened.Store.ReadBusinessGraph(orphan, oldState);
+        StoredGraphRevision completed = reopened.Store.ReadBusinessGraph(orphan);
         Assert.Equal(4, completed.ObjectHeads.Count);
         Assert.NotEqual(oldMeta, completed.SchemaRoot);
         SchemaCatalogView orphanMeta = SchemaCatalogView.Load(reopened.Store, completed.SchemaRoot!.Value);
         Assert.Contains(new SchemaKey("Unpublished.InstallationFailure", 1), orphanMeta.Schemas.Keys);
-        Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(orphan, oldState), Models())).Numbers[7]);
+        Assert.Equal(9, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(orphan), Models())).Numbers[7]);
         Assert.Equal(0, Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, oldState), Models())).Numbers[7]);
         BranchSaveSessionFixture continuation = new(reopened, "main", Models());
         DB087Widget rootAgain = Assert.IsType<DB087Widget>(continuation.State);

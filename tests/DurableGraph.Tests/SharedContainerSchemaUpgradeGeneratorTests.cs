@@ -71,7 +71,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             StoredGraphRevision saved = PublishedGraph(EvidenceResources(repository), firstSaved);
 
             Assert.Equal(baseline, EvidenceResources(repository).ReadPrevious(branch.BaseCommitId.Value)!.Address);
-            Assert.Equal(baseline, saved.SourceGraph);
+
             Assert.Equal(ids, saved.ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(root, saved.RootId);
             Assert.Equal(3, DefaultRecords(store, PublishedGraph(EvidenceResources(repository), firstSaved)).Count);
@@ -94,7 +94,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             current.Change(branch.State!);
             FrameAddress next = EvidenceAddress(repository, branch.CommitState().Id);
             GraphRecordStore store = ReferenceGraphStore(repository);
-            Assert.Equal(firstSaved, PublishedGraph(EvidenceResources(repository), next).SourceGraph);
+
             Assert.Equal(ids, PublishedGraph(EvidenceResources(repository), next).ObjectHeads.Keys.Order().ToArray());
             Assert.Equal(3, DefaultRecords(store, PublishedGraph(EvidenceResources(repository), next)).Count);
             Assert.All(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), next)), record => {

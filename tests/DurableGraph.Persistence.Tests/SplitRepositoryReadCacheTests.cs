@@ -49,7 +49,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
             Assert.Same(executionEnvironment, main.BindingEnvironment);
             storage = main.Baseline.Objects[listId].Storage!.Value;
             StoredGraphRevision stateGraph = Snapshot(seed, s1);
-            Assert.Equal(initialBaseline.RevisionAddress, stateGraph.SourceGraph);
+
             Assert.NotEqual(initialBaseline.SelectedSchemaView!.Snapshot!.Address, stateGraph.SchemaRoot);
             Assert.Equal(stateGraph.SchemaRoot, main.Baseline.SelectedSchemaView!.Snapshot!.Address);
             Assert.Same(executionModels, main.Baseline.SourceModels);
@@ -179,7 +179,7 @@ public sealed class SplitRepositoryReadCacheTests : IDisposable {
         Assert.Equal(ObjectVersionKind.Delta, actualDelta.Kind);
         Assert.Equal(listId.Value, actualDelta.ObjectId);
         Assert.Equal(storage.Head, actualDelta.PriorAddress);
-        Assert.Equal(savedAddress, graph.SourceGraph);
+
         Assert.Equal(storage.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(actualDelta.Body.Length, storage.Head),
             cold.Baseline!.Objects[listId].Storage!.Value.ReconstructionPayloadBytes);
         AssertRing(reopened.LoadState(continued), 201, 202);

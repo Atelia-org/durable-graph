@@ -401,7 +401,7 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
         // Omitting selected makes this specifically a fixed-route role check,
         // rather than an incidental failure to find an employee descriptor in S.
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, reader.Store.ReadBusinessGraph(graph, null), BootstrapBindings.CreateEnvironment()));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, reader.Store.ReadBusinessGraph(graph), BootstrapBindings.CreateEnvironment()));
     }
 
     private static DurableSchema Point(TypeTag tag) => new("Point", 1, SchemaKind.InlineValue, new DurableFieldInfo(1, tag));

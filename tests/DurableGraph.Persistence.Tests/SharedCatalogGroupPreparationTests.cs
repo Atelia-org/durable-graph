@@ -62,8 +62,8 @@ public sealed class SharedCatalogGroupPreparationTests : IDisposable {
         Assert.NotSame(worldOnly, coldCatalog.Schemas[new(worldOnly.Type, worldOnly.Version)]);
         Assert.Equal(schemaAddress, reopened.Store.ReadMetadata(worldAddress).SchemaRoot);
         Assert.Equal(schemaAddress, reopened.Store.ReadMetadata(playerAddress).SchemaRoot);
-        DB087Widget restoredWorld = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(worldAddress, null), Models()));
-        DB087EnvelopeRoot restoredPlayer = Assert.IsType<DB087EnvelopeRoot>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(playerAddress, null), Models()));
+        DB087Widget restoredWorld = Assert.IsType<DB087Widget>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(worldAddress), Models()));
+        DB087EnvelopeRoot restoredPlayer = Assert.IsType<DB087EnvelopeRoot>(BusinessPersistenceAdapter.ReadRoot(reopened.Store, reopened.Store.ReadBusinessGraph(playerAddress), Models()));
         Assert.Equal(58, restoredWorld.Value);
         Assert.Equal(new[] { 4, 8, 15 }, restoredWorld.Numbers);
         Assert.Same(restoredWorld, restoredWorld.Child);

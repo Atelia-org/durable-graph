@@ -7,14 +7,14 @@ using Atelia.DurableGraph.Persistence;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
-    // Physical assertions identify their published frame through actual Head history.
-    // Unpublished/corrupt fixtures must instead supply a concrete expected State source.
+    // Physical assertions read complete snapshots by address; history is used only
+    // when an ordinary WorkingCopy test explicitly compares successive saved States.
     private static StoredGraphRevision PublishedGraph(RepositoryResources resources, FrameAddress address) =>
         Atelia.DurableGraph.Persistence.Tests.MechanismFixture.Snapshot(resources, address);
     private static IReadOnlyList<uint> PublishedRemoved(RepositoryResources resources, FrameAddress address) {
         StoredGraphRevision graph = PublishedGraph(resources, address);
         return DefaultRemoved(resources.GraphStore, graph,
-            graph.SourceGraph is { } source ? PublishedGraph(resources, source) : null);
+            Atelia.DurableGraph.Persistence.Tests.MechanismFixture.PreviousPublishedState(resources, address));
     }
     // Concrete diagnostics of the default Repository wire; no legacy Revision projection.
     private static IReadOnlyList<ObjectVersionRecord> DefaultRecords(GraphRecordStore store, StoredGraphRevision current) {

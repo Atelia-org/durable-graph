@@ -99,7 +99,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(schemaRoot, result.Meta!.Address); // Selected meta is returned even when reused.
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
                 Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
-                Assert.Equal(s0, result.Business.SourceGraph);
+
                 Assert.Equal(s1, session.StateSource!.Address);
                 IDurableObject[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(restoredObjects[i], after[i]); }
@@ -122,7 +122,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 s2 = result.Business.Address;
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
-                Assert.Equal(s1, result.Business.SourceGraph);
+
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);

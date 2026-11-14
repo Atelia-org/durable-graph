@@ -67,7 +67,7 @@ public sealed class SchemaWriteAdmissionTests : IDisposable {
             continued = Describe(repository, saved.Id).Address;
             StoredGraphRevision graph = DB096TestAccess.Snapshot(repository, saved.Id);
             Assert.Equal(seed, ResourcesOf(repository).ReadPrevious(saved.Id.Value)?.Address);
-            Assert.Equal(seed, graph.SourceGraph);
+
             Assert.Equal(schema, graph.SchemaRoot);
             Assert.Equal(rootId, graph.RootId);
             Assert.Equal(3, graph.ObjectHeads.Count);

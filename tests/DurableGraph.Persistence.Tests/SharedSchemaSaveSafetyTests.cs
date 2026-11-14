@@ -86,7 +86,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         eventAddress = Describe(cold, eventCommit).Address;
         StoredGraphRevision ev = DB096TestAccess.Snapshot(cold, eventCommit);
         Assert.Equal(source, Describe(cold, Previous(cold, eventCommit)!.Value).Address);
-        Assert.Null(ev.SourceGraph);
+
         Assert.Equal(cold.SharedSchemaRoot, ev.SchemaRoot);
         Assert.NotEqual(sourcePin, ev.SchemaRoot);
         Assert.Equal(ExtraDeclaration, SchemaCatalogView.Load(cold.GraphStore, ev.SchemaRoot!.Value).Schemas[new(ExtraDeclaration.Type, 1)]);
@@ -105,7 +105,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         FrameAddress state = Describe(cold, stateCommit).Address;
         StoredGraphRevision saved = DB096TestAccess.Snapshot(cold, stateCommit);
         Assert.Equal(eventAddress, Describe(cold, Previous(cold, stateCommit)!.Value).Address);
-        Assert.Equal(source, saved.SourceGraph);
+
         ObjectVersionRecord rewritten = Assert.Single(LocalRecords(cold.GraphStore, saved));
         Assert.Equal(id.Value, rewritten.ObjectId);
         Assert.Equal(ObjectVersionKind.Base, rewritten.Kind);
@@ -206,7 +206,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         CommitId saved = dev.CommitState(root, parameters: NoRebase).Id;
         SchemaCatalogView merged = SchemaCatalogView.Load(repository.GraphStore, repository.SharedSchemaRoot!.Value);
         Assert.Equal(envelope, merged.Schemas[new(envelope.Type, envelope.Version)]);
-        Assert.Equal(before.Snapshot!.Address, merged.Snapshot!.SourceGraph);
+        Assert.Equal(before.Snapshot!.Address, merged.Snapshot!.PreviousMeta);
         Assert.Same(root, dev.State);
         Assert.Equal(saved, dev.BaseCommitId);
         AssertEnvelope(repository.LoadState(saved), 7);

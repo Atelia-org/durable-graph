@@ -361,14 +361,14 @@ public sealed class CompositeDictionaryRepositoryTests : IDisposable {
         int calls = 0;
         StateModelRegistry readers = Models<string>();
         readers.UseDictionaryComparerResolver(_ => { calls++; throw new ResolverFailure(); });
-        DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, states.ReadBusinessGraph(unreachable, seed), (readers).FreezeConfiguration());
+        DecodedRevision exact = DecodedRevision.ReadStoredGraph(states, states.ReadBusinessGraph(unreachable), (readers).FreezeConfiguration());
         NormalizedGraphState.Create(exact, exact.SourceModels!);
         World<string> loaded = GraphReader.ReadRoot<World<string>>(exact, worldId, new(exact.SourceModels!));
         Assert.Null(loaded.First);
         Assert.Equal(0, calls);
         FrameAddress corrupt = states.AppendBusiness(StoredGraphKind.State, selected.Snapshot!.Address,
             new(unreachable, worldId, [], [keyId.Value])).Address;
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(states, states.ReadBusinessGraph(corrupt, unreachable), (readers).FreezeConfiguration()));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(states, states.ReadBusinessGraph(corrupt), (readers).FreezeConfiguration()));
         Assert.Equal(0, calls);
     }
 

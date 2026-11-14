@@ -94,20 +94,18 @@ internal static class MechanismFixture {
         RepositoryResources resources = Resources(facade);
         return FindCurrent(facade, label) is { } current ? resources.FindNearestState(current.Id, inclusive: true) : null;
     }
-    internal static StoredGraphRevision Snapshot(GraphRecordStore store, FrameAddress address) {
-        store.EnsureUsable();
-        var ensure = (Action?)typeof(GraphRecordStore).GetField("_ensureOwner", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(store);
-        if (ensure?.Target is not RepositoryResources owner) { throw new InvalidOperationException("Use an explicit expected source for standalone graph fixtures."); }
-        return Snapshot(owner, address);
-    }
+    internal static StoredGraphRevision Snapshot(GraphRecordStore store, FrameAddress address) => store.ReadBusinessGraph(address);
     internal static StoredGraphRevision Snapshot(RepositoryStorageFacade facade, FrameAddress address) => Snapshot(Resources(facade), address);
-    internal static StoredGraphRevision Snapshot(RepositoryResources resources, FrameAddress address) {
+    internal static StoredGraphRevision Snapshot(RepositoryResources resources, FrameAddress address) => resources.GraphStore.ReadBusinessGraph(address);
+    // Diagnostics for ordinary WorkingCopy fixtures only: compare their successive
+    // saved States without treating business history as a graph-reading authority.
+    internal static StoredGraphRevision? PreviousPublishedState(RepositoryResources resources, FrameAddress address) {
         foreach (HeadId branch in resources.ListBranches().Keys) {
             var found = resources.ReadHistory(resources.ReadCurrent(branch).Id).FirstOrDefault(row => row.Address == address);
             if (found is not null) {
                 FrameAddress? source = found.Kind == CommitKind.Event ? null
                     : resources.FindNearestState(found.Id, inclusive: false)?.Address;
-                return resources.GraphStore.ReadBusinessGraph(address, source);
+                return source is { } prior ? resources.GraphStore.ReadBusinessGraph(prior) : null;
             }
         }
         throw new InvalidDataException("The fixture address is not a registered business publication.");

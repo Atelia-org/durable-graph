@@ -37,7 +37,7 @@ public sealed class ManagementDirectoryReaderTests : IDisposable {
             DecodedGraphRows decoded = ManagementDirectoryReader.ReadBranches(graphs, current);
             Assert.Equal(current, decoded.Snapshot.Address);
             Assert.Same(graphs, decoded.Snapshot.SourceOwner);
-            Assert.Equal(prior, decoded.Snapshot.SourceGraph);
+            Assert.Equal(prior, decoded.Snapshot.PreviousMeta);
             Assert.Null(decoded.Snapshot.SchemaRoot);
             Assert.Equal(labelHead, decoded.Snapshot.ObjectHeads[2]);
             Assert.Equal(2, decoded.Rows[new(1)].GetDictionaryState<uint, ObjectId>().Count);

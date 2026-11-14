@@ -49,7 +49,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         Assert.Same(world, workspace.State);
         Assert.Same(bob, world.Right);
         StoredGraphRevision eventGraph = MechanismFixture.Snapshot(_repository, e1);
-        Assert.Null(eventGraph.SourceGraph);
+
         Assert.All(eventGraph.ObjectHeads.Values, head => Assert.Equal(eventGraph.OwnedBatch!.Value, head));
         Assert.Equal(4, eventGraph.ObjectHeads.Count);
         Assert.IsType<Event>(BusinessPersistenceAdapter.ReadRoot(Store, eventGraph, models));
@@ -58,7 +58,7 @@ public sealed class IndependentGraphWorkspaceTests : IDisposable {
         FrameAddress s1 = Commit(workspace);
         StoredGraphRevision state = MechanismFixture.Snapshot(_repository, s1);
         Assert.Equal(e1, MechanismFixture.Resources(_repository).ReadPrevious(MechanismFixture.Current(_repository, "main").Id)?.Address); // History order retains the Event.
-        Assert.Equal(s0, state.SourceGraph); // Only State content compares with the last accepted State.
+         // Only State content compares with the last accepted State.
         ObjectVersionRecord stateDelta = Assert.Single(Records(s1));
         Assert.Equal(changedId.Value, stateDelta.ObjectId);
         Assert.Equal(ObjectVersionKind.Delta, stateDelta.Kind);

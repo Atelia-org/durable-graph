@@ -72,7 +72,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             saved = Describe(repository, next).Address;
             StoredGraphRevision graph = Snapshot(repository, next);
             Assert.Equal(e2.Value, ResourcesOf(repository).ReadPrevious(next.Value)!.Id);
-            Assert.Equal(Describe(repository, state).Address, graph.SourceGraph);
+
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -89,7 +89,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             firstRoot.Numbers[8] = 201;
             CommitId oldSave = first.CommitState().Id; // Eviction does not invalidate the previously delivered workspace.
             StoredGraphRevision oldGraph = Snapshot(repository, oldSave);
-            Assert.Equal(Describe(repository, state).Address, oldGraph.SourceGraph);
+
             Assert.Equal(e1.Value, ResourcesOf(repository).ReadPrevious(oldSave.Value)!.Id);
             Assert.Equal(prior.Head, Assert.Single(repository.GraphStore.ReadBatch(oldGraph.OwnedBatch!.Value).Records).PriorAddress);
         }
@@ -106,7 +106,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         ObjectVersionRecord continuedDelta = Assert.Single(reopened.GraphStore.ReadBatch(continuedGraph.OwnedBatch!.Value).Records);
         Assert.Equal(ObjectVersionKind.Delta, continuedDelta.Kind);
         Assert.Equal(savedStorage.Head, continuedDelta.PriorAddress);
-        Assert.Equal(saved, continuedGraph.SourceGraph);
+
         DB087Widget continuedRead = Assert.IsType<DB087Widget>(reopened.LoadState(continued));
         Assert.Equal(200, continuedRead.Numbers[7]);
         Assert.Equal(202, continuedRead.Numbers[8]);
@@ -144,7 +144,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
         using WorkingCopy firstStateFork = repository.OpenWorkingCopy(repository.ForkBranch(firstState, "first-state").Id);
         AssertCold(stats);
         Assert.NotSame(entry, repository.PreparedStateEntry);
-        Assert.Null(Snapshot(repository, firstState).SourceGraph);
+
     }
 
     [Theory]
@@ -241,7 +241,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
                 row.Current.Schema?.SchemaId == BodyDependency.SchemaId);
             var configuration = ConfigurationOf(repository);
             GraphReadContext context = new(prepared.Selection.Models);
-            prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), null, context);
+            prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), context);
             using Repository foreign = Repository.OpenStorageReadOnlyExisting(clone, registry);
             Assert.Equal(Describe(foreign, state).Address, Describe(foreign, foreign.ReadCurrentCommit(BranchNamed(foreign, "main")).Commit.Id).Address); // Physical addresses match in another actual owner.
             BusinessPersistenceAdapter foreignBusiness = BusinessPersistenceAdapter.LoadState(foreign.GraphStore, Snapshot(foreign, state), configuration);
@@ -256,9 +256,9 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.Equal(appended, repository.GraphStore.AppendedFrames);
             int allocations = controls.Allocations, bodyReads = controls.BodyReads;
             Assert.Equal(state, foreign.ReadCurrentCommit(BranchNamed(foreign, "main")).Commit.Id); // A copied repository retains compact IDs; owner qualification remains on snapshots.
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(foreign.GraphStore, configuration, Describe(repository, state), null, context));
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, registry.FreezeConfiguration(), Describe(repository, state), null, context));
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), null,
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(foreign.GraphStore, configuration, Describe(repository, state), context));
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, registry.FreezeConfiguration(), Describe(repository, state), context));
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state),
                 new(configuration.CreateEnvironment())));
             Assert.Equal(allocations, controls.Allocations);
             Assert.Equal(bodyReads, controls.BodyReads);
@@ -269,7 +269,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             var wrongEnvironment = DecodedRevision.SchemaViewBindingEnvironment.Load(repository.GraphStore, configuration, newSchema);
             InvalidDataException dependencyError = Assert.Throws<InvalidDataException>(() => prepared.Requirements.Validate(wrongEnvironment.Models));
             Assert.Contains(BodyDependency.SchemaId, dependencyError.Message);
-            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state), null,
+            Assert.Throws<InvalidDataException>(() => prepared.ValidateStoredSource(repository.GraphStore, configuration, Describe(repository, state),
                 new(wrongEnvironment.Models)));
             Assert.Equal(allocations, controls.Allocations);
             Assert.Equal(bodyReads, controls.BodyReads);
@@ -320,7 +320,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             CommitId e1 = second.CommitEvent(root).Id, e2 = second.CommitEvent(root).Id;
             foreach (CommitId address in new[] { e1, e2 }) {
                 StoredGraphRevision graph = Snapshot(repository, address);
-                Assert.Null(graph.SourceGraph);
+
                 var eventRecords = repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records;
                 Assert.Equal(2, eventRecords.Count);
                 Assert.All(eventRecords, row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
@@ -337,7 +337,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             Assert.False(second.Baseline!.Objects[rootId].RequiresRewrite);
             StoredGraphRevision installedSnapshot = Assert.IsType<StoredGraphRevision>(second.Baseline.SourceSnapshot);
             Assert.Equal(Describe(repository, confirmed).Address, installedSnapshot.Address);
-            Assert.Equal(Describe(repository, original).Address, installedSnapshot.SourceGraph);
+
             Assert.Equal(written.SchemaRoot, installedSnapshot.SchemaRoot);
             Assert.NotEqual(inheritedSnapshot.SchemaRoot, installedSnapshot.SchemaRoot);
             Assert.Same(entry, repository.PreparedStateEntry); // No hot preparation admission.
@@ -350,7 +350,7 @@ public sealed class SplitPreparedStateReuseTests : IDisposable {
             CommitId deltaState = second.CommitState().Id;
             StoredGraphRevision deltaGraph = Snapshot(repository, deltaState);
             Assert.Equal(interveningEvent.Value, ResourcesOf(repository).ReadPrevious(deltaState.Value)!.Id);
-            Assert.Equal(Describe(repository, confirmed).Address, deltaGraph.SourceGraph);
+
             Assert.Equal(installedSnapshot.SchemaRoot, deltaGraph.SchemaRoot);
             Assert.Equal(Describe(repository, deltaState).Address, second.Baseline!.SourceSnapshot!.Address);
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(deltaGraph.OwnedBatch!.Value).Records);

@@ -68,7 +68,7 @@ public sealed class SplitRepositoryBackingRecoveryTests : IDisposable {
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
             Assert.Equal(seed.ListId.Value, delta.ObjectId);
             Assert.Equal(prior.Head, delta.PriorAddress);
-            Assert.Equal(seed.Head, graph.SourceGraph);
+
             Assert.Equal(seed.History.Last(), Describe(writer, new CommitId(ResourcesOf(writer).ReadPrevious(saved.Id.Value)!.Id)).Address);
             Assert.Equal(prior.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior.Head),
                 checkout.Baseline!.Objects[seed.ListId].Storage!.Value.ReconstructionPayloadBytes);

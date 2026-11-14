@@ -37,7 +37,7 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
             Assert.Equal(appended + 1, store.AppendedFrames); // The new graph envelope is a real revision.
             Assert.Equal(second.DirectoryRoot, reused.DirectoryRoot);
             Assert.Null(reused.OwnedBatch);
-            Assert.Equal(second.Address, reused.SourceGraph);
+
             Assert.Equal(second.ObjectHeads[1], reused.ObjectHeads[1]);
             Assert.Equal(first.ObjectHeads[2], reused.ObjectHeads[2]);
 
@@ -53,9 +53,9 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
         Verify(reader);
 
         void Verify(GraphRecordStore store) {
-            StoredGraphRevision first = store.ReadBusinessGraph(firstAddress, null);
-            StoredGraphRevision second = store.ReadBusinessGraph(secondAddress, firstAddress);
-            StoredGraphRevision reused = store.ReadBusinessGraph(reusedAddress, secondAddress);
+            StoredGraphRevision first = store.ReadBusinessGraph(firstAddress);
+            StoredGraphRevision second = store.ReadBusinessGraph(secondAddress);
+            StoredGraphRevision reused = store.ReadBusinessGraph(reusedAddress);
             Assert.Equal(schemaRoot, reused.SchemaRoot);
             Assert.Null(reused.PreviousMeta);
             Assert.Equal(second.DirectoryRoot, reused.DirectoryRoot);
@@ -86,7 +86,7 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
         ObjectHeadDirectoryVersion rebased = store.ReadDirectoryVersion(second.DirectoryRoot);
         Assert.Equal(ObjectVersionKind.Base, rebased.Kind);
         Assert.Null(rebased.Prior);
-        Assert.Equal(first.Address, rebased.SourceGraph);
+
         Assert.Equal(ObjectVersionKind.Delta, store.ReadBatch(second.OwnedBatch!.Value).Records[0].Kind);
 
         StoredGraphRevision third = store.AppendBusiness(StoredGraphKind.State, null,
@@ -94,8 +94,8 @@ public sealed class MetaBootstrapP0GraphStoreTests : IDisposable {
         Assert.Equal(new uint[] { 1, 65 }, third.ObjectHeads.Keys.Order().ToArray());
         Assert.Equal(second.ObjectHeads[1], third.ObjectHeads[1]);
         Assert.Equal(third.OwnedBatch, third.ObjectHeads[65]);
-        Assert.Equal(64, store.ReadBusinessGraph(first.Address, null).ObjectHeads.Count);
-        Assert.Equal(64, store.ReadBusinessGraph(second.Address, first.Address).ObjectHeads.Count);
+        Assert.Equal(64, store.ReadBusinessGraph(first.Address).ObjectHeads.Count);
+        Assert.Equal(64, store.ReadBusinessGraph(second.Address).ObjectHeads.Count);
         Assert.Equal(2, store.ReadObjectChain(third, 1).Entries.Count);
         Assert.Single(store.ReadObjectChain(third, 65).Entries);
     }

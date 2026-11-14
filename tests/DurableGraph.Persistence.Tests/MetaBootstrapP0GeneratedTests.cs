@@ -66,7 +66,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         Assert.Equal(state, next.Business.Write.SourceGraph);
         RepositorySaveResult result = next.Commit();
         Assert.Equal(schema, reopened.SharedSchemaRoot);
-        Assert.Equal(state, result.Business.SourceGraph);
+
         Assert.Equal(ObjectVersionKind.Delta, reopened.Store.ReadObjectChain(MechanismFixture.Snapshot(reopened, result.Business.Address), listId).Entries.Last().Record.Kind);
         DB087Widget latest = AssertRing(BusinessPersistenceAdapter.ReadRoot(reopened.Store, MechanismFixture.Snapshot(reopened, result.Business.Address), reopenedModels), 2, 1);
         Assert.Equal(10008, latest.Numbers[7]);
@@ -130,7 +130,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
                 RepositorySaveResult saved = save.Commit();
                 event1 = saved.Business.Address;
                 Assert.Equal(state, MechanismFixture.Resources(repository).ReadPrevious(saved.CommitId)?.Address);
-                Assert.Null(saved.Business.SourceGraph);
+
                 Assert.NotEqual(meta0, repository.SharedSchemaRoot);
                 Assert.Equal(saved.Meta!.Address, session.AcceptedCatalog!.Snapshot!.Address);
             }
@@ -147,7 +147,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
                 RepositorySaveResult saved = save.Commit();
                 event2 = saved.Business.Address;
                 Assert.Equal(event1, MechanismFixture.Resources(repository).ReadPrevious(saved.CommitId)?.Address);
-                Assert.Null(saved.Business.SourceGraph);
+
                 Assert.NotEqual(meta1, repository.SharedSchemaRoot);
                 Assert.Equal(saved.Meta!.Address, session.AcceptedCatalog!.Snapshot!.Address);
             }
@@ -166,7 +166,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
             RepositorySaveResult finalResult = final.Commit();
             lastState = finalResult.Business.Address;
             Assert.Equal(event2, MechanismFixture.Resources(repository).ReadPrevious(finalResult.CommitId)?.Address);
-            Assert.Equal(state, finalResult.Business.SourceGraph);
+
             Assert.Equal(lastState, session.StateSource!.Address);
             Assert.Equal(lastState, MechanismFixture.State(repository, "main")?.Address);
         }
@@ -312,7 +312,7 @@ public sealed class MetaBootstrapP0GeneratedTests : IDisposable {
         Assert.Empty(restored.Business.Write.Records);
         StoredGraphRevision saved = restored.Commit().Business;
         Assert.Equal(removed.Address, MechanismFixture.Resources(repository).ReadPrevious(MechanismFixture.Current(repository, "main").Id)?.Address);
-        Assert.Equal(initial.Address, saved.SourceGraph);
+
         Assert.Equal(initial.DirectoryRoot, saved.DirectoryRoot);
         Assert.Null(saved.OwnedBatch);
         Assert.Equal(initial.ObjectHeads[childId], saved.ObjectHeads[childId]);

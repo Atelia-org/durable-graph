@@ -62,8 +62,7 @@ public sealed class SharedEventHistoryTests : IDisposable {
             GraphRecordStore store = resources.GraphStore;
             StoredGraphRevision next = MechanismFixture.Snapshot(store, saved);
             IReadOnlyList<ObjectVersionRecord> writes = StorageTestData.LocalRecords(store, saved);
-            Assert.Equal(initial, next.SourceGraph);
-            Assert.Null(MechanismFixture.Snapshot(store, eventRevision).SourceGraph);
+
             Assert.Equal(MechanismFixture.Snapshot(store, initial).ObjectHeads.Keys.Order(), MechanismFixture.Snapshot(store, saved).ObjectHeads.Keys.Order());
             if (editState) {
                 // Only the existing child and List changed; string IDs and World reference slots remain stable.

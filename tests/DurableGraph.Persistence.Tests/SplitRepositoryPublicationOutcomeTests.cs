@@ -80,7 +80,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             repository.SaveStageObserver = null;
             CommitId saved = repository.CommitBranches([main.CreateStateCommitRequest()], [Extra])[main.BranchId].Id;
             StoredGraphRevision graph = Snapshot(repository, saved);
-            Assert.Equal(seed.State, graph.SourceGraph);
+
             Assert.NotEqual(seed.Schema, graph.SchemaRoot);
             Assert.Equal(repository.SharedSchemaRoot, graph.SchemaRoot);
 
@@ -98,7 +98,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             Assert.NotNull(repository.PreparedStateEntry); // Actual cold checkout populated the State slot.
             RepositoryResources resources = ResourcesOf(repository);
             GraphRecordStore store = repository.GraphStore; // Borrow before Repository becomes busy.
-            store.ReadBusinessGraph(seed.State, null);
+            store.ReadBusinessGraph(seed.State);
             Assert.True(store.ReadCacheStatistics.ResidentChargeBytes > 0);
             Assert.True(store.ReadCacheStatistics.EntryCount > 0);
             NormalizedGraphState baseline = main.Baseline!;
@@ -151,7 +151,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             long completedOutput = store.AppendedFrames;
             Assert.Throws<InvalidOperationException>(() => repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id);
             Assert.Throws<InvalidOperationException>(() => main.CommitState());
-            Assert.Throws<ObjectDisposedException>(() => store.ReadBusinessGraph(seed.State, null));
+            Assert.Throws<ObjectDisposedException>(() => store.ReadBusinessGraph(seed.State));
             Assert.Throws<ObjectDisposedException>(() => store.ReadDirectory(seed.Directory));
             Assert.Throws<ObjectDisposedException>(() => store.AppendBusiness(StoredGraphKind.State, seed.Schema,
                 new(seed.State, seed.RootId, [])));
@@ -193,12 +193,12 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             AssertFramesPreserved(resources.Data, seed.Frames);
             AssertFramesPreserved(resources.Data, capturedFrames); // Complete candidates remain even when unselected.
             if (candidate is { } completedCandidate) {
-                StoredGraphRevision completed = store.ReadBusinessGraph(completedCandidate, seed.State);
-                Assert.Equal(seed.State, completed.SourceGraph);
+                StoredGraphRevision completed = store.ReadBusinessGraph(completedCandidate);
+
                 Assert.NotEqual(seed.Schema, completed.SchemaRoot);
                 StoredGraphRevision meta = store.ReadMetaGraph(completed.SchemaRoot!.Value);
                 Assert.Equal(StoredGraphKind.Meta, meta.Kind);
-                Assert.Equal(seed.Schema, meta.SourceGraph);
+                Assert.Equal(seed.Schema, meta.PreviousMeta);
                 Assert.Equal(Extra, SchemaCatalogView.Load(store, meta.Address).Schemas[new(Extra.Type, Extra.Version)]);
                 if (!visible) { Assert.NotEqual(selectedState, completedCandidate); }
             }
@@ -219,7 +219,7 @@ public sealed class SplitRepositoryPublicationOutcomeTests : IDisposable {
             CommitId saved = cold.CommitState().Id;
             continued = Describe(reopened, saved).Address;
             StoredGraphRevision next = Snapshot(reopened, saved);
-            Assert.Equal(selectedState, next.SourceGraph);
+
             Assert.Equal(selectedSchema, next.SchemaRoot);
             ObjectVersionBatch batch = store.ReadBatch(next.OwnedBatch!.Value);
             Assert.Equal(selectedState, batch.SourceGraph);

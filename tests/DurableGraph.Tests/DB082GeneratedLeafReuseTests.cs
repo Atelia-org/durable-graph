@@ -60,15 +60,14 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotNull(DB082Member(second.State!, "Right"));
             if (family) Assert.Equal(3, Assert.IsAssignableFrom<IList>(DB082Member(second.State!, "Links")).Count);
             CommitId saved = first.CommitState(parameters: DB082NoRebase).Id;
-            Assert.Equal(DB082Graph(repository, source).Address, DB082Graph(repository, saved).SourceGraph);
+
             Assert.Equal(DB082Graph(repository, source).RootId, DB082Graph(repository, saved).RootId);
             var store = DB082Resources(repository).GraphStore;
             Assert.Single(DB082Graph(repository, source).ObjectHeads.Keys.Except(DB082Graph(repository, saved).ObjectHeads.Keys));
             Assert.Equal(DB082Graph(repository, source).ObjectHeads.Count - 1,
                 DB082Graph(repository, saved).ObjectHeads.Count);
             fixture.Change(second.State!, 22);
-            Assert.Equal(DB082Graph(repository, source).Address,
-                DB082Graph(repository, second.CommitState(parameters: DB082NoRebase).Id).SourceGraph);
+            _ = DB082Graph(repository, second.CommitState(parameters: DB082NoRebase).Id);
             Assert.Equal(source, main.BaseCommitId);
         }
         using Repository reopened = Repository.OpenExisting(directory.Path, fixture.Models);
@@ -116,7 +115,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(0, statistics.AllocatedObjects);
         Assert.Equal(0, statistics.HydratedObjects);
         CommitId secondCommit = second.CommitState(parameters: DB082NoRebase).Id;
-        Assert.Equal(DB082Graph(repository, main.BaseCommitId).Address, DB082Graph(repository, secondCommit).SourceGraph);
+
         Assert.Equal(DB082Graph(repository, main.BaseCommitId).RootId, DB082Graph(repository, secondCommit).RootId);
         Assert.Empty(DB082Records(repository, secondCommit));
         // New revision, identical object head: first restoration must still build a fresh table.
@@ -133,7 +132,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(secondCommit, checkout.BaseCommitId);
         // Evicting the old leaf table did not invalidate the first branch's save identity.
         CommitId firstCommit = first.CommitState(parameters: DB082NoRebase).Id;
-        Assert.Equal(DB082Graph(repository, main.BaseCommitId).Address, DB082Graph(repository, firstCommit).SourceGraph);
+
         Assert.Equal(DB082Graph(repository, main.BaseCommitId).RootId, DB082Graph(repository, firstCommit).RootId);
     }
 
@@ -259,7 +258,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Equal(1, repository.PreparedStateEntry!.ImmutableLeafCount);
         fixture.Change(first.State!, 39);
         CommitId oldSaved = first.CommitState(parameters: DB082NoRebase).Id;
-        Assert.Equal(DB082Graph(repository, original).Address, DB082Graph(repository, oldSaved).SourceGraph);
+
         Assert.Equal(DB082Graph(repository, original).RootId, DB082Graph(repository, oldSaved).RootId);
         Assert.Equal(39, DB082Value(repository.LoadState(oldSaved)));
         statistics = DB082Observe(repository);
@@ -283,8 +282,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static StoredGraphRevision DB082Graph(Repository repository, CommitId commit) {
         RepositoryResources resources = DB082Resources(repository);
         HistoryGraphRecord descriptor = resources.ReadDescriptor(commit.Value);
-        FrameAddress? expectedSource = resources.FindNearestState(commit.Value, inclusive: false)?.Address;
-        return resources.GraphStore.ReadBusinessGraph(descriptor.Address, expectedSource);
+        return resources.GraphStore.ReadBusinessGraph(descriptor.Address);
     }
 
     private static IReadOnlyList<ObjectVersionRecord> DB082Records(Repository repository, CommitId commit) {

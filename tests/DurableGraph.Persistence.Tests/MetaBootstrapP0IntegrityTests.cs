@@ -127,9 +127,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         fixture.Cold(store => {
             StoredGraphRevision restored = fixture.Read(store, unchanged.Address);
             Assert.Null(restored.PreviousMeta);
-            Assert.Null(fixture.Read(store, firstEvent.Address).SourceGraph);
-            Assert.Null(fixture.Read(store, secondEvent.Address).SourceGraph);
-            Assert.Equal(updated.Address, restored.SourceGraph);
+
             Assert.Equal(updated.DirectoryRoot, restored.DirectoryRoot);
             Assert.Null(restored.OwnedBatch);
             foreach (ObjectVersionChain chain in new[] {
@@ -152,7 +150,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
     [InlineData("baseCreator")]
     [InlineData("deltaCreator")]
     [InlineData("deltaPrior")]
-    public void Cold_read_rejects_directory_created_from_wrong_graph_or_prior(string error) {
+    public void Cold_read_accepts_independent_Base_but_rejects_wrong_Delta_source_or_prior(string error) {
         using Fixture fixture = CreateFixture();
         StoredGraphRevision initial = fixture.State(null, [B(1, [10])]);
         StoredGraphRevision updated = fixture.State(initial.Address, [B(1, [20])]);
@@ -166,7 +164,13 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         };
         FrameAddress bad = fixture.Graph(StoredGraphKind.State, updated.Address, 1, directory, null);
 
-        fixture.Cold(store => Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad)));
+        fixture.Cold(store => {
+            if (error == "baseCreator") {
+                Assert.Equal(updated.ObjectHeads.OrderBy(row => row.Key), fixture.Read(store, bad).ObjectHeads.OrderBy(row => row.Key));
+            } else {
+                Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
+            }
+        });
     }
 
     [Fact]
@@ -180,7 +184,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         fixture.Cold(store => {
             StoredGraphRevision restored = fixture.Read(store, reused);
             Assert.Equal(new ObjectId(2), restored.RootId);
-            Assert.Equal(initial.Address, restored.SourceGraph);
+
             Assert.Equal(initial.DirectoryRoot, restored.DirectoryRoot);
             Assert.Null(restored.OwnedBatch);
             Assert.Null(store.ReadDirectoryVersion(restored.DirectoryRoot).SourceGraph);
@@ -238,7 +242,7 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             Assert.Throws<InvalidDataException>(() => fixture.Read(store, bad));
             StoredGraphRevision restored = fixture.Read(store, reset);
             Assert.Null(restored.PreviousMeta);
-            Assert.Equal(bad, restored.SourceGraph);
+
             Assert.Equal(ObjectVersionKind.Base, store.ReadDirectoryVersion(resetDirectory).Kind);
             foreach (ObjectVersionChain chain in new[] {
                 store.ReadObjectChain(fixture.Read(store, reset), 1), Assert.Single(store.ReadObjectChains(fixture.Read(store, reset)))
@@ -405,8 +409,6 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
         private readonly string _path;
         private readonly Frames _frames;
         private bool _closed;
-        // Explicit fixture inputs survive cold reopen; no payload infers the business source.
-        private readonly Dictionary<FrameAddress, FrameAddress?> _expectedSources = [];
 
         internal Fixture(string path) {
             _path = path;
@@ -431,12 +433,11 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             ObjectVersionRecord[] records, uint[]? removed = null) {
             StoredGraphRevision result = Store.AppendBusiness(kind, SchemaRoot,
                 new(expectedSource, new(rootId), records, removed));
-            _expectedSources.Add(result.Address, expectedSource);
             return result;
         }
 
         internal StoredGraphRevision Read(GraphRecordStore store, FrameAddress address) =>
-            store.ReadBusinessGraph(address, _expectedSources[address]);
+            store.ReadBusinessGraph(address);
 
         internal FrameAddress Batch(FrameAddress? source, ObjectVersionRecord[] records) =>
             _frames.Append(GraphFrameCodec.BatchTag, GraphFrameCodec.EncodeBatch(source, SchemaRoot, records)).Unwrap();
@@ -448,8 +449,6 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             byte[] graphTemplate = GraphFrameCodec.EncodeGraph(StoredGraphKind.State, null, new(1), witness, SchemaRoot, null);
             using FrameBuilder firstGraphBuilder = _frames.BeginAppend(graphTemplate.Length, 0, out FrameAddress firstGraph);
             using FrameBuilder secondGraphBuilder = _frames.BeginAppend(graphTemplate.Length, 0, out FrameAddress secondGraph);
-            _expectedSources.Add(firstGraph, null);
-            _expectedSources.Add(secondGraph, null);
             if (objectPrior) {
                 int length = GraphFrameCodec.EncodeBatch(witness, SchemaRoot, [D(1, witness, [])]).Length;
                 using FrameBuilder firstBuilder = _frames.BeginAppend(length, 0, out FrameAddress first);
@@ -503,7 +502,6 @@ public sealed class MetaBootstrapP0IntegrityTests : IDisposable {
             FrameAddress directory, FrameAddress? ownedBatch) {
             FrameAddress address = _frames.Append(GraphFrameCodec.GraphTag,
                 GraphFrameCodec.EncodeGraph(kind, null, new(rootId), directory, SchemaRoot, ownedBatch)).Unwrap();
-            _expectedSources.Add(address, expectedSource);
             return address;
         }
 

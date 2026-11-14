@@ -99,7 +99,7 @@ public sealed class DB081HotAdmissionProofTests : IDisposable {
         Assert.Same(prepared, repository.PreparedStateEntry);
 
         CommitId saved = first.CommitState(parameters: NoRebase).Id;
-        Assert.Equal(Describe(repository, scenario.Selected).Address, Snapshot(repository, saved).SourceGraph);
+
         Assert.Equal(Describe(repository, scenario.Selected).RootId, Describe(repository, saved).RootId);
         Assert.Equal(91, Assert.IsType<Root>(repository.LoadState(saved)).Value);
         Assert.Equal(committed, Assert.IsType<Root>(second.State).Value);

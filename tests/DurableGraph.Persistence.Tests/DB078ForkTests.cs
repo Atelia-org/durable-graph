@@ -64,14 +64,13 @@ public sealed partial class EventHistoryRepositoryTests {
             ObjectVersionRecord firstWrite = Assert.Single(StorageTestData.LocalRecords(states, Describe(resources, childOnly).Address));
             Assert.Equal(childId, firstWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, firstWrite.Kind);
-            Assert.Equal(Describe(resources, initial).Address, Snapshot(resources, childOnly).SourceGraph);
+
             ObjectVersionRecord nextWrite = Assert.Single(StorageTestData.LocalRecords(states, Describe(resources, nextChildOnly).Address));
             Assert.Equal(childId, nextWrite.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, nextWrite.Kind);
             Assert.Equal(Snapshot(resources, childOnly).ObjectHeads[childId], nextWrite.PriorAddress);
             Assert.Equal(new[] { Describe(resources, initial).RootId.Value }, Snapshot(resources, removed).ObjectHeads.Keys);
-            Assert.Equal(Describe(resources, initial).Address, Snapshot(resources, otherHead).SourceGraph);
-            Assert.Equal(Describe(resources, initial).Address, Snapshot(resources, mainHead).SourceGraph);
+
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using WorkingCopy coldMain = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
@@ -237,7 +236,6 @@ public sealed partial class EventHistoryRepositoryTests {
         using WorkingCopy recovered = reopened.OpenWorkingCopy(BranchNamed(reopened, "child"));
         Assert.Equal((byte)1, Assert.IsType<Node>(recovered.State).Value);
     }
-
 
     // Live writers hold exclusive file handles. At serial operation boundaries, observe
     // lengths/timestamps for append evidence; the cold test below compares actual bytes.

@@ -51,12 +51,11 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         root.Numbers[7] = 301;
         CommitId next = cold.CommitState(parameters: NoRebase).Id;
         StoredGraphRevision continued = DB096TestAccess.Snapshot(reopened, next);
-        Assert.Equal(initial, continued.SourceGraph);
+
         Assert.Contains(LocalRecords(reopened.GraphStore, continued), row => row.Kind == ObjectVersionKind.Delta);
         AssertRing(reopened.LoadState(next), 301);
         AssertSameRef(shared, ReadHead(reopened, 2));
     }
-
 
     [Fact]
     public void Shared_Event_accepts_meta_but_cold_execution_and_State_identity_stay_on_the_saved_State() {
@@ -80,11 +79,11 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             StoredGraphRevision graph = DB096TestAccess.Snapshot(repository, eventCommit);
             eventSchema = graph.SchemaRoot!.Value;
             Assert.NotEqual(stateSchema, eventSchema);
-            Assert.Equal(stateSchema, Catalog(repository, eventAddress).Snapshot!.SourceGraph);
+            Assert.Equal(stateSchema, Catalog(repository, eventAddress).Snapshot!.PreviousMeta);
             Assert.Equal(AddedByEvent, dev.AcceptedCatalog!.Schemas[new(AddedByEvent.Type, 1)]);
             Assert.Equal(eventSchema, dev.AcceptedCatalog.Snapshot!.Address);
             Assert.Equal(stateAddress, Describe(repository, Previous(repository, eventCommit)!.Value).Address);
-            Assert.Null(graph.SourceGraph);
+
             ObjectVersionBatch batch = repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
             Assert.Null(batch.SourceGraph);
             Assert.Equal(eventSchema, batch.SchemaRoot);
@@ -108,7 +107,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         CommitId next = checkout.CommitState(parameters: NoRebase).Id;
         StoredGraphRevision graphNext = DB096TestAccess.Snapshot(cold, next);
         Assert.Equal(eventAddress, Describe(cold, Previous(cold, next)!.Value).Address);
-        Assert.Equal(stateAddress, graphNext.SourceGraph);
+
         Assert.Equal(eventSchema, graphNext.SchemaRoot);
         AssertRing(cold.LoadState(next), 302);
         AssertSameRef(sharedRef, ReadHead(cold, 2));
@@ -201,7 +200,6 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         AssertUnchanged(readOnly, readOnlyBefore);
     }
 
-
     [Fact]
     public void Event_only_cold_checkout_uses_the_latest_catalog_and_its_first_State_has_no_content_source() {
         FrameAddress firstEvent, oldPin, latestShared, secondEvent, eventPin;
@@ -237,8 +235,8 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
             eventPin = saved.SchemaRoot!.Value;
             Assert.NotEqual(oldPin, eventPin);
             Assert.Equal(firstEvent, Describe(repository, Previous(repository, secondEventCommit)!.Value).Address);
-            Assert.Null(saved.SourceGraph);
-            Assert.Equal(latestShared, events.AcceptedCatalog!.Snapshot!.SourceGraph);
+
+            Assert.Equal(latestShared, events.AcceptedCatalog!.Snapshot!.PreviousMeta);
             Assert.Equal(eventPin, events.AcceptedCatalog.Snapshot.Address);
             Assert.Null(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).SourceGraph);
             Assert.Null(events.State);
@@ -258,7 +256,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         CommitId firstState = empty.CommitState(Ring(), parameters: NoRebase).Id;
         StoredGraphRevision graph = DB096TestAccess.Snapshot(cold, firstState);
         Assert.Equal(secondEvent, Describe(cold, Previous(cold, firstState)!.Value).Address);
-        Assert.Null(graph.SourceGraph);
+
         Assert.Equal(eventPin, graph.SchemaRoot);
         IReadOnlyList<ObjectVersionRecord> records = LocalRecords(cold.GraphStore, graph);
         Assert.Equal(3, records.Count);
@@ -267,8 +265,6 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         Assert.Equal(eventPin, cold.SharedSchemaRoot);
         AssertSameRef(shared, ReadHead(cold, 2));
     }
-
-
 
     private static IReadOnlyList<ObjectVersionRecord> LocalRecords(GraphRecordStore store, StoredGraphRevision graph) =>
         graph.OwnedBatch is { } batch ? store.ReadBatch(batch).Records : [];

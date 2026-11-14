@@ -11,10 +11,10 @@ internal static class IntegrityChecks {
     private static int _checks;
 
     internal static void Run() {
-        WrongNearestSource();
+        OlderSourceSnapshot();
         PublishedDeliveryFailure();
         UnpublishedRegistration();
-        Console.WriteLine($"PASS: {_checks} integrity checks; malformed descriptor, wrong historical source, publication failure.");
+        Console.WriteLine($"PASS: {_checks} integrity checks; malformed descriptor, old-source snapshot, publication failure.");
     }
 
     private static void UnpublishedRegistration() {
@@ -70,14 +70,14 @@ internal static class IntegrityChecks {
         using (var resources = RepositoryResources.OpenReadOnlyExisting(path)) {
             Check(resources.Heads.ReadEntry(physicalCommit.Value).Unwrap().Id == physicalCommit.Value,
                 "unregistered physical Entry is retained without claiming it");
-            Check(resources.GraphStore.ReadBusinessGraph(orphan!.Value, null).Kind == StoredGraphKind.Event,
+            Check(resources.GraphStore.ReadBusinessGraph(orphan!.Value).Kind == StoredGraphKind.Event,
                 "completed unpublished content is retained append-only");
             Check(resources.Heads.ReadHead(1).Unwrap().Id == directoryBefore,
                 "failed registration did not replace the directory entry");
         }
     }
 
-    private static void WrongNearestSource() {
+    private static void OlderSourceSnapshot() {
         string path = NewPath("wrong-source");
         BranchId branch;
         CommitId s0, s1, forged;
@@ -92,9 +92,9 @@ internal static class IntegrityChecks {
             GraphRecordStore store = resources.GraphStore;
             var first = resources.ReadDescriptor(s0.Value);
             var second = resources.ReadDescriptor(s1.Value);
-            StoredGraphRevision baseline = store.ReadBusinessGraph(first.Address, null);
-            StoredGraphRevision latest = store.ReadBusinessGraph(second.Address, first.Address);
-            Check(latest.SourceGraph == first.Address, "real second State has its strict previous State source");
+            StoredGraphRevision baseline = store.ReadBusinessGraph(first.Address);
+            StoredGraphRevision latest = store.ReadBusinessGraph(second.Address);
+            Check(store.ReadBatch(latest.OwnedBatch!.Value).SourceGraph == first.Address, "real second State Delta has its exact source");
             var localRecords = store.ReadBatch(latest.OwnedBatch!.Value).Records;
             Check(localRecords.Any(r => r.Kind == Atelia.DurableGraph.Storage.ObjectVersionKind.Delta),
                 "ordinary State save writes an actual object Delta");
@@ -102,21 +102,22 @@ internal static class IntegrityChecks {
                 "ordinary State save writes an actual object-directory Delta");
             DescriptorBoundaries(first.Address);
 
-            // Internally consistent State: directory/source both use S0. Its actual
-            // Head history will be S0,S1,S2, so S1 is the only correct source.
+            // Snapshot S2 reuses S0 while the publication history remains S0,S1,S2.
+            // Content lineage is independent of the immediate log predecessor.
             var graph = store.AppendBusiness(StoredGraphKind.State, latest.SchemaRoot,
                 new PreparedGraphWrite(first.Address, baseline.RootId, []));
             byte[] payload = BusinessEntryPayloadCodec.Encode(graph.Address, [9]);
             var id = resources.Heads.PublishHead(branch.Value, payload, out _).Unwrap();
             forged = new CommitId(id);
-            Check(store.ReadBusinessGraph(graph.Address, first.Address).SourceGraph == first.Address,
-                "wrong historical source is nevertheless physically self-consistent");
+            Check(store.ReadBusinessGraph(graph.Address).DirectoryRoot == baseline.DirectoryRoot,
+                "old-source snapshot retains the exact baseline directory");
         }
         using (var repo = Repository.OpenExisting(path, World.Models())) {
             Check(repo.ReadCommitInfo(forged).Kind == CommitKind.State, "description does not claim complete content qualification");
-            Reject<InvalidDataException>(() => repo.LoadState(forged), "exact State load rejects physically consistent but historically wrong source");
-            Reject<InvalidDataException>(() => repo.OpenWorkingCopy(branch), "cold working-copy open checks tip State source");
-            Check(((World)repo.LoadState(s1)).Inventory[0] == 42, "an unrelated bad tip does not invalidate the preceding State");
+            Check(((World)repo.LoadState(forged)).Inventory[0] == ((World)repo.LoadState(s0)).Inventory[0], "exact State load accepts a snapshot built from an older source");
+            using var reopened = repo.OpenWorkingCopy(branch);
+            Check(((World)reopened.State!).Inventory[0] == ((World)repo.LoadState(s0)).Inventory[0], "cold working-copy open retains selected snapshot content");
+            Check(((World)repo.LoadState(s1)).Inventory[0] == 42, "the preceding State retains its own content");
         }
     }
 

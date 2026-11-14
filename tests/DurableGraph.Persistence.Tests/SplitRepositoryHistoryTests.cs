@@ -66,7 +66,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             forkSaved = Describe(repository, saved).Address;
             StoredGraphRevision graph = Snapshot(repository, saved);
             Assert.Equal(e1.Value, ResourcesOf(repository).ReadPrevious(saved.Value)!.Id);
-            Assert.Equal(Describe(repository, s0).Address, graph.SourceGraph);
+
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, delta.Kind);
@@ -101,7 +101,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
             Assert.Equal(prior.Head, delta.PriorAddress);
             Assert.Equal(prior.ReconstructionPayloadBytes + ObjectVersionPayloadSize.GetDeltaPayloadBytes(delta.Body.Length, prior.Head),
                 fork.Baseline!.Objects[listId].Storage!.Value.ReconstructionPayloadBytes);
-            Assert.Equal(forkSaved, graph.SourceGraph);
+
             DB087Widget latest = AssertRing(repository.LoadState(saved), 4);
             Assert.Equal(5, latest.Numbers[8]);
             AssertRing(repository.LoadState(repository.ReadCurrentCommit(BranchNamed(repository, "main")).Commit.Id), 3);
@@ -205,7 +205,7 @@ public sealed class SplitRepositoryHistoryTests : IDisposable {
         CommitId first = resumed.CommitState(Ring(3)).Id;
         StoredGraphRevision graph = Snapshot(repository, first);
         Assert.Equal(selected, ResourcesOf(repository).ReadPrevious(first.Value)!.Address);
-        Assert.Null(graph.SourceGraph);
+
         Assert.All(repository.GraphStore.ReadBatch(graph.OwnedBatch!.Value).Records,
             row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
         AssertRing(resumed.State, 3);

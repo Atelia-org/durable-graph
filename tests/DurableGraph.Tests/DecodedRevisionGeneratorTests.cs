@@ -119,7 +119,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             FrameAddress incompatibleRoot = store.AppendMeta(null, incompatibleCatalog.Write!).Address;
             Assert.Equal(differentLeaf, SchemaCatalogView.Load(store, incompatibleRoot).Schemas[new(oldSchema.Type, oldSchema.Version)]);
             mismatchedBase = store.AppendBusiness(StoredGraphKind.State, incompatibleRoot, new(third, new(1), [])).Address;
-            Assert.Equal(schemaRoot, store.ReadObjectChain(store.ReadBusinessGraph(mismatchedBase, third), 1).Entries[0].SchemaRoot);
+            Assert.Equal(schemaRoot, store.ReadObjectChain(store.ReadBusinessGraph(mismatchedBase), 1).Entries[0].SchemaRoot);
             Assert.Equal(newBase, MechanismFixture.Current(repository, "main").Address);
             Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
             resources.Data.ConfirmDurable();
@@ -149,7 +149,7 @@ public sealed partial class DurableSchemaGeneratorTests {
 
             foreach (FrameAddress bad in new[] { missingString, wrongKind, malformed, mismatchedBase }) {
                 DecodedRevision? delivered = null;
-                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(bad, bad == missingString || bad == wrongKind ? second : third), readers.FreezeConfiguration()));
+                Assert.Throws<InvalidDataException>(() => delivered = DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(bad), readers.FreezeConfiguration()));
                 Assert.Null(delivered);
                 check(retained[2], 2);
             }

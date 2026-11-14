@@ -26,7 +26,6 @@ public sealed class IndependentEventCostTests(ITestOutputHelper output) : IDispo
         Harness harness = new();
         string path = NewPath();
         Atelia.FrameStore.FrameAddress eventAddress = default;
-        Atelia.FrameStore.FrameAddress? eventSource = null;
         int expectedCount = shape == "whole" ? stateCount : shape == "shared8" ? 8 : 1;
         int[] expected;
         using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(path)) {
@@ -68,7 +67,6 @@ public sealed class IndependentEventCostTests(ITestOutputHelper output) : IDispo
                 output.WriteLine($"{label} stage=commit-including-flush allocated={commitAllocation} ms={commitTicks * 1000.0 / Stopwatch.Frequency:F3}");
                 output.WriteLine($"{label} totalAllocated={allocated} totalMs={elapsed * 1000.0 / Stopwatch.Frequency:F3} repositoryFileGrowth={FileBytes(path) - bytes} appendedFrames={repository.Store.AppendedFrames - frames}");
                 eventAddress = result.Business.Address;
-                eventSource = result.Business.SourceGraph;
                 Assert.Same(baseline, session.Baseline);
                 Assert.Same(source, session.StateSource);
                 Node read = Assert.IsType<Node>(BusinessPersistenceAdapter.ReadRoot(repository.Store, result.Business, harness.Models));
@@ -80,7 +78,7 @@ public sealed class IndependentEventCostTests(ITestOutputHelper output) : IDispo
         }
         using RepositoryStorageFacade cold = RepositoryStorageFacade.OpenReadOnlyExisting(path);
         Node restored = Measure($"N={stateCount} M={expectedCount} shape={shape}", "cold-read", () => {
-            var graph = cold.Store.ReadBusinessGraph(eventAddress, eventSource);
+            var graph = cold.Store.ReadBusinessGraph(eventAddress);
             return Assert.IsType<Node>(BusinessPersistenceAdapter.ReadRoot(cold.Store, graph, harness.Models));
         });
         Assert.Equal(expected, Values(restored));
@@ -119,7 +117,6 @@ public sealed class IndependentEventCostTests(ITestOutputHelper output) : IDispo
             new DurableFieldInfo(1, TypeTag.Int32), new DurableFieldInfo(2, TypeTag.ObjectReference, SchemaId));
         internal StateModelRegistry Models { get; } = new();
         internal int BodyCalls;
-
 
         internal Harness() {
             StatePreparationBinding<NodeState> preparation = new(Schema, PrepareBase, PrepareDelta);
@@ -171,5 +168,4 @@ public sealed class IndependentEventCostTests(ITestOutputHelper output) : IDispo
         foreach (string path in _paths) SharedReadModel.DeleteFixture(path, Prefix);
     }
 }
-
 

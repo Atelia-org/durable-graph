@@ -9,7 +9,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RequiredGraphReadRejectsWrongContentSourceForStateAndEventEvenWithCompleteBases(bool state, bool orphan) {
+    public void CompleteStateBasesDoNotRequireEditingParentWhileEventsRemainIndependent(bool state, bool orphan) {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
@@ -19,10 +19,9 @@ public sealed partial class EventHistoryRepositoryTests {
             root = current.RootId;
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
-            // State must name S0 despite complete Bases; Event must never name S0.
-            // Construct the opposite source in each role without repairing the negative input.
+            // A complete State is self-contained; Event batch and directory must remain independent.
             GraphRecordStore store = resources.GraphStore;
-            FrameAddress invalid = AppendInvalidSource(resources, state ? null : first, root,
+            FrameAddress invalid = AppendWithCreator(resources, state ? null : first, root,
                 state ? StoredGraphKind.State : StoredGraphKind.Event, StorageTestData.LocalRecords(store, first));
             if (!orphan) { resources.Heads.PublishHead(resources.ListBranches().Single().Key, BusinessEntryPayloadCodec.Encode(invalid, default), out _).Unwrap(); }
             else { resources.Data.ConfirmDurable(); }
@@ -31,10 +30,12 @@ public sealed partial class EventHistoryRepositoryTests {
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
             var head = reader.ReadCurrentCommit(DB096TestAccess.BranchNamed(reader, "main")).Commit;
             if (orphan) { Assert.Equal(first, DB096TestAccess.Describe(reader, head.Id).Address); Assert.NotNull(reader.LoadState(head.Id)); }
-            else {
+            else if (state) {
+                Assert.NotNull(reader.ReadCheckpoint(head.Id));
+                Assert.Equal(1, Assert.IsType<Node>(reader.LoadState(head.Id)).Value);
+            } else {
                 Assert.Throws<InvalidDataException>(() => reader.ReadCheckpoint(head.Id));
-                if (state) { Assert.Throws<InvalidDataException>(() => reader.LoadState(head.Id)); }
-                else { Assert.Throws<InvalidDataException>(() => reader.LoadEvent(head.Id)); }
+                Assert.Throws<InvalidDataException>(() => reader.LoadEvent(head.Id));
                 Assert.False(reader.IsFaulted);
             }
         }
@@ -42,9 +43,16 @@ public sealed partial class EventHistoryRepositoryTests {
         if (!orphan) {
             using Repository writer = Repository.OpenExisting(_root, Models());
             var head = writer.ReadCurrentCommit(DB096TestAccess.BranchNamed(writer, "main")).Commit;
-            Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main")));
-            BranchInfo child = writer.ForkBranch(head.Id, "invalid-fork");
-            Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(child.Id));
+            BranchInfo child = writer.ForkBranch(head.Id, "selected-fork");
+            if (state) {
+                using WorkingCopy main = writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main"));
+                using WorkingCopy fork = writer.OpenWorkingCopy(child.Id);
+                Assert.Equal(1, Assert.IsType<Node>(main.State).Value);
+                Assert.Equal(1, Assert.IsType<Node>(fork.State).Value);
+            } else {
+                Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main")));
+                Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(child.Id));
+            }
             Assert.False(writer.IsFaulted);
             Assert.Contains(writer.ListBranches(), branch => branch.Id == child.Id);
         }
@@ -53,7 +61,7 @@ public sealed partial class EventHistoryRepositoryTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EventOnlyHistoryDoesNotPermitEventRevisionAsContentParent(bool state) {
+    public void StateBaseCreatorIsNonAuthoritativeWhileEventSourcesRemainForbidden(bool state) {
         FrameAddress first;
         ObjectId root;
         using (Repository seed = CreateRepository()) {
@@ -64,27 +72,34 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         using (RepositoryResources resources = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = resources.GraphStore;
-            FrameAddress invalid = AppendInvalidSource(resources, first, root, state ? StoredGraphKind.State : StoredGraphKind.Event,
+            FrameAddress invalid = AppendWithCreator(resources, first, root, state ? StoredGraphKind.State : StoredGraphKind.Event,
                 StorageTestData.LocalRecords(store, first));
             resources.Heads.PublishHead(resources.ListBranches().Single().Key, BusinessEntryPayloadCodec.Encode(invalid, default), out _).Unwrap();
         }
         using (Repository reader = Repository.OpenReadOnlyExisting(_root, Models())) {
-            CommitInfo head = reader.ReadCurrentCommit(DB096TestAccess.BranchNamed(reader, "main")).Commit; // Metadata navigation does not replay the bad directory.
+            CommitInfo head = reader.ReadCurrentCommit(DB096TestAccess.BranchNamed(reader, "main")).Commit; // Metadata navigation does not replay the directory.
             Assert.Equal(state ? CommitKind.State : CommitKind.Event, head.Kind);
-            if (state) { Assert.Throws<InvalidDataException>(() => reader.LoadState(head.Id)); }
+            if (state) { Assert.Equal(1, Assert.IsType<Node>(reader.LoadState(head.Id)).Value); }
             else { Assert.Throws<InvalidDataException>(() => reader.LoadEvent(head.Id)); }
             Assert.False(reader.IsFaulted);
         }
         using Repository writer = Repository.OpenExisting(_root, Models());
         CommitInfo selected = writer.ReadCurrentCommit(DB096TestAccess.BranchNamed(writer, "main")).Commit;
-        Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main")));
-        BranchInfo child = writer.ForkBranch(selected.Id, "invalid-fork");
-        Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(child.Id));
+        BranchInfo child = writer.ForkBranch(selected.Id, "selected-fork");
+        if (state) {
+            using WorkingCopy main = writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main"));
+            using WorkingCopy fork = writer.OpenWorkingCopy(child.Id);
+            Assert.Equal(1, Assert.IsType<Node>(main.State).Value);
+            Assert.Equal(1, Assert.IsType<Node>(fork.State).Value);
+        } else {
+            Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(DB096TestAccess.BranchNamed(writer, "main")));
+            Assert.Throws<InvalidDataException>(() => writer.OpenWorkingCopy(child.Id));
+        }
         Assert.False(writer.IsFaulted);
-        Assert.Equal(new[] { "invalid-fork", "main" }, writer.ListBranches().Select(branch => branch.DisplayLabel).Order());
+        Assert.Equal(new[] { "main", "selected-fork" }, writer.ListBranches().Select(branch => branch.DisplayLabel).Order());
     }
 
-    private static FrameAddress AppendInvalidSource(RepositoryResources resources, FrameAddress? source, ObjectId root, StoredGraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
+    private static FrameAddress AppendWithCreator(RepositoryResources resources, FrameAddress? source, ObjectId root, StoredGraphKind kind, IReadOnlyList<ObjectVersionRecord> records) {
         FrameAddress? schema = resources.SharedSchemaRoot;
         FrameAddress batch = resources.Data.Append(GraphFrameCodec.BatchTag, GraphFrameCodec.EncodeBatch(source, schema, records)).Unwrap();
         var heads = records.ToDictionary(row => row.ObjectId, _ => batch);

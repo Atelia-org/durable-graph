@@ -28,7 +28,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             root = Assert.IsType<DB087Widget>(main.State);
             initialState = Describe(repository, main.BaseCommitId).Address;
             initialSchema = repository.SharedSchemaRoot!.Value;
-            StoredGraphRevision first = repository.GraphStore.ReadBusinessGraph(initialState, null);
+            StoredGraphRevision first = repository.GraphStore.ReadBusinessGraph(initialState);
             Assert.Equal(StoredGraphKind.State, first.Kind);
             Assert.Equal(initialSchema, first.SchemaRoot);
             Assert.Equal(3, first.ObjectHeads.Count);
@@ -54,7 +54,7 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             StoredGraphRevision actualEvent = Snapshot(repository, publishedEvent.Id);
             Assert.Equal(StoredGraphKind.Event, actualEvent.Kind);
             Assert.Equal(initialState, ResourcesOf(repository).ReadPrevious(publishedEvent.Id.Value)!.Address);
-            Assert.Null(actualEvent.SourceGraph);
+
             Assert.Equal(acceptedSchema, actualEvent.SchemaRoot);
             Assert.Equal(4, actualEvent.ObjectHeads.Count);
             AssertPublished(repository, eventAddress, acceptedSchema);
@@ -63,9 +63,9 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             HeadEntry sharedBefore = ResourcesOf(repository).Heads.ReadHead(2).Unwrap();
             root.Numbers[7] = 201;
             savedState = Describe(repository, main.CommitState().Id).Address;
-            StoredGraphRevision saved = repository.GraphStore.ReadBusinessGraph(savedState, initialState);
+            StoredGraphRevision saved = repository.GraphStore.ReadBusinessGraph(savedState);
             Assert.Equal(eventAddress, ResourcesOf(repository).ReadPrevious(main.BaseCommitId.Value)!.Address);
-            Assert.Equal(initialState, saved.SourceGraph);
+
             Assert.Equal(acceptedSchema, saved.SchemaRoot);
             Assert.Equal(3, saved.ObjectHeads.Count);
             ObjectVersionRecord delta = Assert.Single(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).Records);
@@ -109,9 +109,9 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
             HeadEntry sharedBefore = ResourcesOf(reopened).Heads.ReadHead(2).Unwrap();
             root.Numbers[8] = 202;
             continuedState = Describe(reopened, cold.CommitState().Id).Address;
-            StoredGraphRevision continued = reopened.GraphStore.ReadBusinessGraph(continuedState, savedState);
+            StoredGraphRevision continued = reopened.GraphStore.ReadBusinessGraph(continuedState);
             Assert.Equal(savedState, ResourcesOf(reopened).ReadPrevious(cold.BaseCommitId.Value)!.Address);
-            Assert.Equal(savedState, continued.SourceGraph);
+
             Assert.Equal(acceptedSchema, continued.SchemaRoot);
             ObjectVersionRecord delta = Assert.Single(reopened.GraphStore.ReadBatch(continued.OwnedBatch!.Value).Records);
             Assert.Equal(listId.Value, delta.ObjectId);
@@ -176,11 +176,11 @@ public sealed class DefaultMetaBootstrapRepositoryTests : IDisposable {
                 Assert.InRange(after.ResidentChargeBytes, 1, budget);
                 Assert.InRange(after.PeakResidentChargeBytes, 1, budget);
             }
-            StoredGraphRevision graph = retained.ReadBusinessGraph(saved, null);
+            StoredGraphRevision graph = retained.ReadBusinessGraph(saved);
             owned = retained.ReadBatch(graph.OwnedBatch!.Value);
         }
         AssertFilesUnchanged(images, SnapshotFiles(path));
-        Assert.Throws<ObjectDisposedException>(() => retained.ReadBusinessGraph(saved, null));
+        Assert.Throws<ObjectDisposedException>(() => retained.ReadBusinessGraph(saved));
         Assert.Equal(0, retained.ReadCacheStatistics.ResidentChargeBytes);
         Assert.Equal(0, retained.ReadCacheStatistics.EntryCount);
         Assert.Equal(3, owned.Records.Count); // Already delivered owned values outlive the closed cache owner.

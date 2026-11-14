@@ -159,8 +159,8 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             repository.Data.ConfirmDurable();
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        StoredGraphRevision graph = reader.Store.ReadBusinessGraph(retained, originalAddress);
-        ObjectVersionChain originalChain = reader.Store.ReadObjectChain(reader.Store.ReadBusinessGraph(retained, originalAddress), 1);
+        StoredGraphRevision graph = reader.Store.ReadBusinessGraph(retained);
+        ObjectVersionChain originalChain = reader.Store.ReadObjectChain(reader.Store.ReadBusinessGraph(retained), 1);
         SchemaCatalogView origin = SchemaCatalogView.Load(reader.Store, originalChain.Entries[0].SchemaRoot!.Value);
         SchemaCatalogView selected = SchemaCatalogView.Load(reader.Store, graph.SchemaRoot!.Value);
         Assert.Equal(first, origin.Schemas[new(first.Type, 1)]);
@@ -172,7 +172,7 @@ public sealed class MetaBootstrapGenericSchemaTests : IDisposable {
             (ref BareValueReader bytes) => { bodyReads++; return bytes.ReadVarInt32(); },
             static (ref BareValueReader bytes, in int prior) => bytes.ReadVarInt32(),
             static (in int value, IStateReferenceVisitor visitor) => { });
-        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, reader.Store.ReadBusinessGraph(retained, originalAddress), Readers(binding), selected));
+        Assert.Throws<InvalidDataException>(() => StoredGraphDecoder.Read(reader.Store, reader.Store.ReadBusinessGraph(retained), Readers(binding), selected));
         Assert.Equal(0, bodyReads);
     }
 

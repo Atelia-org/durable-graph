@@ -57,7 +57,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
             saved = hit.CommitState(parameters: NoRebase).Id;
             StoredGraphRevision revision = Snapshot(repository, saved);
             IReadOnlyList<ObjectVersionRecord> records = Records(repository, saved);
-            Assert.Equal(Describe(repository, original).Address, revision.SourceGraph);
+
             Assert.Equal(ObjectVersionKind.Base, records.Single(row => row.ObjectId == leafId.Value).Kind);
             // This fixture's Delta contains a complete DTO; the planner may choose Base
             // when its framing is smaller. The changed owner must still be persisted.
@@ -71,7 +71,7 @@ public sealed class DB082LeafReuseHistoryTests : IDisposable {
 
             CommitId unchanged = hit.CommitState(parameters: NoRebase).Id;
             Assert.Empty(Records(repository, unchanged));
-            Assert.Equal(Describe(repository, saved).Address, Snapshot(repository, unchanged).SourceGraph);
+
             Assert.Equal(savedLeafStorage, Baseline(hit).Objects[leafId].Storage);
             Assert.Equal(rootId, hit.StateId);
             Assert.Equal(leafId, LeafObjectId(hit));

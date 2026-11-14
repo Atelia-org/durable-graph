@@ -61,7 +61,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
                 RepositorySaveResult saved = save.Commit();
                 event1 = saved.Business.Address;
                 schema1 = saved.SharedSchemaRoot!.Value;
-                Assert.Null(saved.Business.SourceGraph);
+
                 Assert.Equal(schema1, saved.Business.SchemaRoot);
             }
             Assert.NotEqual(schema0, schema1);
@@ -119,7 +119,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
                 RepositorySaveResult saved = save.Commit();
                 state1 = saved.Business.Address;
                 Assert.Equal(event1, resources.ReadPrevious(saved.CommitId)?.Address);
-                Assert.Equal(state0, saved.Business.SourceGraph);
+
                 Assert.Equal(schema1, saved.Business.SchemaRoot);
                 Assert.Equal(rootHead0, saved.Business.ObjectHeads[rootId.Value]);
                 Assert.Equal(childHead0, saved.Business.ObjectHeads[childId.Value]);
@@ -182,7 +182,7 @@ public sealed class GraphResourcesSplitOwnerTests : IDisposable {
         Assert.ThrowsAny<InvalidOperationException>(() => MechanismFixture.FindCurrent(facade, "main")?.Address);
         Assert.ThrowsAny<InvalidOperationException>(facade.EnsureEditingAllowed);
         Assert.ThrowsAny<InvalidOperationException>(() => facade.Commit(pending));
-        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(address, null));
+        Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadBusinessGraph(address));
         Assert.ThrowsAny<InvalidOperationException>(() => retained.ReadObjectChain(graph, 1));
         Assert.ThrowsAny<InvalidOperationException>(() => retained.AppendBusiness(StoredGraphKind.State,
             schema, new(address, new(1), [ObjectVersionRecord.CreateBase(1, [3])])));

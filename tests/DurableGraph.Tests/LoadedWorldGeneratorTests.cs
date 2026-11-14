@@ -52,7 +52,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(rootId, loaded.StateId);
             GraphRecordStore store = ReferenceGraphStore(repository);
             rewritten = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
-            Assert.Equal(third, PublishedGraph(EvidenceResources(repository), rewritten).SourceGraph);
+
             Assert.Equal<uint>([retiredId], PublishedRemoved(EvidenceResources(repository), rewritten));
             ObjectVersionRecord rewrite = Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), rewritten)));
             Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
@@ -74,10 +74,10 @@ public sealed partial class DurableSchemaGeneratorTests {
             unchanged = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
             Assert.Empty(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), unchanged)));
             Assert.Empty(PublishedRemoved(EvidenceResources(repository), unchanged));
-            Assert.Equal(rewritten, PublishedGraph(EvidenceResources(repository), unchanged).SourceGraph);
+
             fixture.Change(loaded.State!, 4);
             changed = EvidenceAddress(repository, loaded.CommitState(parameters: ReferenceGraphNoRebase).Id);
-            Assert.Equal(unchanged, PublishedGraph(EvidenceResources(repository), changed).SourceGraph);
+
             Assert.Equal(ObjectVersionKind.Delta, Assert.Single(DefaultRecords(store, PublishedGraph(EvidenceResources(repository), changed))).Kind);
         }
         var bytesBefore = Directory.EnumerateFiles(directory.Path, "*", SearchOption.AllDirectories)

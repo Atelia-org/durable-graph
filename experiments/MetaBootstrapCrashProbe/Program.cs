@@ -200,7 +200,7 @@ internal static class Program {
             CommitId nextCommit = cold.CommitState().Id;
             next = Describe(reopened, nextCommit).Address;
             StoredGraphRevision graph = ReadPublishedGraph(reopened, nextCommit);
-            Need(graph.SourceGraph == state && RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
+            Need(RequiredSchema(graph) == schema && graph.OwnedBatch is not null,
                 "Cold continuation must preserve the selected content source and Schema pin.");
             ObjectVersionBatch batch = reopened.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
             Need(batch.SourceGraph == state && batch.SchemaRoot == schema && batch.Records.Count == 1, "Cold continuation must write exactly one actual record.");
@@ -385,7 +385,7 @@ internal static class Program {
             CheckFrames(resources, ready.OldFrames);
             CheckFrames(resources, ready.CapturedFrames);
             StoredGraphRevision metaCandidate = repository.GraphStore.ReadMetaGraph(candidateMeta);
-            Need(metaCandidate.Kind == StoredGraphKind.Meta && metaCandidate.SourceGraph == oldSchema,
+            Need(metaCandidate.Kind == StoredGraphKind.Meta && metaCandidate.PreviousMeta == oldSchema,
                 "Candidate meta must derive from the original exact shared catalog.");
             SchemaCatalogView candidateCatalog = SchemaCatalogView.Load(repository.GraphStore, candidateMeta);
             CheckCatalog(candidateCatalog, extra: true);
@@ -394,8 +394,8 @@ internal static class Program {
             Need(originalCatalog.SchemaNodeId(widgetSchema) == candidateCatalog.SchemaNodeId(widgetSchema),
                 "Retained Widget descriptor identity changed in the new catalog.");
             if (candidateBusiness is { } business) {
-                StoredGraphRevision candidate = repository.GraphStore.ReadBusinessGraph(business, oldState);
-                Need(candidate.SourceGraph == oldState && RequiredSchema(candidate) == candidateMeta,
+                StoredGraphRevision candidate = repository.GraphStore.ReadBusinessGraph(business);
+                Need(RequiredSchema(candidate) == candidateMeta,
                     "Candidate business must preserve its actual content source and new Schema pin.");
             }
             if (!expectNew) {
@@ -434,7 +434,7 @@ internal static class Program {
             CommitId continuation = checkout.CommitState().Id;
             continued = Describe(repository, continuation).Address;
             StoredGraphRevision next = ReadPublishedGraph(repository, continuation);
-            Need(next.SourceGraph == expectedState && RequiredSchema(next) == expectedSchema && next.OwnedBatch is not null,
+            Need(RequiredSchema(next) == expectedSchema && next.OwnedBatch is not null,
                 "Continuation must derive from the actual selected State and exact Schema.");
             ObjectVersionBatch batch = repository.GraphStore.ReadBatch(next.OwnedBatch!.Value);
             Need(batch.SourceGraph == expectedState && batch.SchemaRoot == expectedSchema && batch.Records.Count == 1,
@@ -496,7 +496,7 @@ internal static class Program {
     private static StoredGraphRevision ReadPublishedGraph(Repository repository, CommitId commit) {
         RepositoryResources resources = Resources(repository);
         HistoryGraphRecord selected = resources.ReadDescriptor(commit.Value);
-        return repository.GraphStore.ReadBusinessGraph(selected.Address, resources.FindNearestState(commit.Value, inclusive: false)?.Address);
+        return repository.GraphStore.ReadBusinessGraph(selected.Address);
     }
     private static void CheckControlEntries(RepositoryResources resources, HeadEntryId directory, HeadEntryId bookmarks) {
         Need(resources.Heads.ReadHead(1).Unwrap().Id == directory && resources.Heads.ReadHead(3).Unwrap().Id == bookmarks,

@@ -13,8 +13,7 @@ public sealed partial class DurableSchemaGeneratorTests {
     private static StoredGraphRevision EvidenceGraph(Repository repository, CommitId commit) {
         RepositoryResources resources = EvidenceResources(repository);
         HistoryGraphRecord selected = resources.ReadDescriptor(commit.Value);
-        FrameAddress? source = resources.FindNearestState(commit.Value, inclusive: false)?.Address;
-        return resources.GraphStore.ReadBusinessGraph(selected.Address, source);
+        return resources.GraphStore.ReadBusinessGraph(selected.Address);
     }
     private static FrameAddress EvidenceAddress(Repository repository, CommitId commit) =>
         EvidenceResources(repository).ReadDescriptor(commit.Value).Address;

@@ -61,7 +61,6 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.NotEqual(schemaV1, schemaV2);
             Assert.Equal(schemaV2, domainEvent.SchemaRoot);
 
-            Assert.Null(domainEvent.SourceGraph);
             Assert.Equal(StoredGraphKind.Event, domainEvent.Kind);
             Assert.Same(baseline, branch.Baseline);
             Assert.Same(state, branch.State);
@@ -123,8 +122,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         Dictionary<ObjectId, (long Value, ObjectId List, ObjectId Child)> edges, Dictionary<ObjectId, ObjectStorageInfo> storage) {
         GraphRecordStore store = repository.GraphStore;
         Assert.Equal(parent, EvidenceResources(repository).ReadPrevious(branch.BaseCommitId.Value)!.Address);
-        StoredGraphRevision graph = store.ReadBusinessGraph(branch.StateRevisionAddress!.Value, source);
-        Assert.Equal(source, graph.SourceGraph);
+        StoredGraphRevision graph = store.ReadBusinessGraph(branch.StateRevisionAddress!.Value);
 
         Assert.Equal(schema, graph.SchemaRoot);
         Assert.Equal(rootId, graph.RootId);
@@ -153,9 +151,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
     private static void DevelopmentAssertDelta(GraphRecordStore store, WorkingCopy branch, FrameAddress source,
         FrameAddress saved, FrameAddress schema, ObjectId list, ObjectStorageInfo prior) {
-        StoredGraphRevision graph = store.ReadBusinessGraph(saved, source);
+        StoredGraphRevision graph = store.ReadBusinessGraph(saved);
 
-        Assert.Equal(source, graph.SourceGraph);
         Assert.Equal(schema, graph.SchemaRoot);
         ObjectVersionRecord delta = Assert.Single(DefaultRecords(store, graph));
         Assert.Equal(list.Value, delta.ObjectId);

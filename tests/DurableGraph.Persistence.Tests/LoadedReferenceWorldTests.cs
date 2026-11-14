@@ -173,7 +173,7 @@ public sealed class LoadedReferenceWorldTests : IDisposable {
             new(original, new(1), [], [2])).Address;
         int allocations = 0;
         StateModelRegistry models = Registry(Model<World>(schema, () => { allocations++; return new World(); }));
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.LoadState(Store, Store.ReadBusinessGraph(removed, original), models));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.LoadState(Store, Store.ReadBusinessGraph(removed), models));
         Assert.Equal(0, allocations);
         BusinessPersistenceAdapter oldView = Load(original, models);
         Assert.Equal((byte)2, Assert.IsType<World>(((World)oldView.State!).Next).Value);

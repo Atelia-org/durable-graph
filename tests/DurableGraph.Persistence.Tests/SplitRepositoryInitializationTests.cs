@@ -164,7 +164,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             listId = Assert.Single(main.Baseline!.Objects, pair => pair.Value.Current.Kind == ObjectStateKind.List).Key;
             storage = main.Baseline.Objects.ToDictionary(pair => pair.Key, pair => pair.Value.Storage!.Value);
             Assert.Equal(3, storage.Count);
-            StoredGraphRevision graph = seed.GraphStore.ReadBusinessGraph(state0, null);
+            StoredGraphRevision graph = seed.GraphStore.ReadBusinessGraph(state0);
             Assert.Equal(schemaRoot, graph.SchemaRoot);
             foreach ((ObjectId id, ObjectStorageInfo info) in storage) {
                 Assert.Equal(info.Head, graph.ObjectHeads[id.Value]);
@@ -191,8 +191,8 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
             root.Numbers[7] = 200;
             CommitInfo next = cold.CommitState();
             state1 = Describe(reopened, next.Id).Address;
-            StoredGraphRevision graph = reopened.GraphStore.ReadBusinessGraph(state1, state0);
-            Assert.Equal(state0, graph.SourceGraph);
+            StoredGraphRevision graph = reopened.GraphStore.ReadBusinessGraph(state1);
+
             Assert.Equal(schemaRoot, graph.SchemaRoot);
             Assert.NotNull(graph.OwnedBatch);
             ObjectVersionBatch batch = reopened.GraphStore.ReadBatch(graph.OwnedBatch!.Value);
@@ -224,7 +224,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         Assert.Equal(schemaRoot, final.SharedSchemaRoot);
         AssertRing(final.LoadState(final.ReadCurrentCommit(BranchNamed(final, "main")).Commit.Id), 200);
         AssertRing(final.LoadState(final.ResolveTag("initial")), 7);
-        ObjectVersionChain chain = final.GraphStore.ReadObjectChain(final.GraphStore.ReadBusinessGraph(state1, state0), listId.Value);
+        ObjectVersionChain chain = final.GraphStore.ReadObjectChain(final.GraphStore.ReadBusinessGraph(state1), listId.Value);
         Assert.Equal(continuedStorage.Head, chain.Head);
         Assert.Equal(continuedStorage.ReconstructionPayloadBytes, chain.ReconstructionPayloadBytes);
         AssertSentinel(ResourcesOf(final).Data, sentinel);

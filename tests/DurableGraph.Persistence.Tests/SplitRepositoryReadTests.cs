@@ -80,7 +80,7 @@ public sealed class SplitRepositoryReadTests : IDisposable {
             Assert.NotEqual(first.SchemaRoot, second.SchemaRoot);
             Assert.NotEqual(first.ObjectHeads[first.RootId.Value], second.ObjectHeads[second.RootId.Value]);
             Assert.NotNull(second.OwnedBatch);
-            Assert.Null(second.SourceGraph);
+
         }
         Dictionary<string, byte[]> files = SnapshotFiles();
         Counts counts = new() { HydrateFromSchema = true };

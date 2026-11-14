@@ -231,8 +231,8 @@ public sealed class DB079GraphRestorationTests : IDisposable {
     private static (Node First, Node Second) ReadIndependent(RepositoryStorageFacade repository,
         FrameAddress first, ObjectId firstRoot, FrameAddress second, ObjectId secondRoot, StateModelRegistry models) {
         StateModelRegistry.FrozenConfiguration configuration = models.FreezeConfiguration();
-        DecodedRevision a = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(first, null), configuration);
-        DecodedRevision b = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(second, null), configuration,
+        DecodedRevision a = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(first), configuration);
+        DecodedRevision b = DecodedRevision.ReadStoredGraph(repository.Store, repository.Store.ReadBusinessGraph(second), configuration,
             repository.Store.ReadMetadata(first).SchemaRoot == repository.Store.ReadMetadata(second).SchemaRoot ? a.BindingEnvironment : null);
         var pair = GraphReader.ReadIndependent(a, new(a.SourceModels!), firstRoot, b, new(b.SourceModels!), secondRoot);
         return ((Node)pair.First, (Node)pair.Second);

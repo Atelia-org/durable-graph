@@ -78,18 +78,18 @@ public sealed class GraphObjectChainReadTests : IDisposable {
         FrameAddress bad = frames.Append(GraphFrameCodec.GraphTag,
             GraphFrameCodec.EncodeGraph(StoredGraphKind.State, null, new(1), directory, null, null)).Unwrap();
         using GraphRecordStore reader = new(frames, readCacheBudgetBytes: cacheBudget);
-        reader.ReadBusinessGraph(first.Address, null);
+        reader.ReadBusinessGraph(first.Address);
         reader.ReadMetadata(bad);
         reader.ReadDirectory(directory);
 
         IEnumerable<ObjectVersionChain>? delivered = null;
-        Assert.Throws<InvalidDataException>(() => delivered = reader.ReadObjectChains(reader.ReadBusinessGraph(bad, first.Address)));
+        Assert.Throws<InvalidDataException>(() => delivered = reader.ReadObjectChains(reader.ReadBusinessGraph(bad)));
         Assert.Null(delivered);
         DecodedGraphRows? decoded = null;
-        Assert.Throws<InvalidDataException>(() => decoded = StoredGraphDecoder.Read(reader, reader.ReadBusinessGraph(bad, first.Address)));
+        Assert.Throws<InvalidDataException>(() => decoded = StoredGraphDecoder.Read(reader, reader.ReadBusinessGraph(bad)));
         Assert.Null(decoded);
         Assert.Equal(0, reader.AppendedFrames);
-        Assert.Equal("root", StoredGraphDecoder.Read(reader, reader.ReadBusinessGraph(first.Address, null), new StateModelRegistry().CreateEnvironment())
+        Assert.Equal("root", StoredGraphDecoder.Read(reader, reader.ReadBusinessGraph(first.Address), new StateModelRegistry().CreateEnvironment())
             .Rows[new(1)].StringContent);
     }
 

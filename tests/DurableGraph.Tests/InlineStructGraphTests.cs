@@ -43,7 +43,7 @@ public sealed partial class DurableSchemaGeneratorTests {
             Assert.Equal(4, DefaultRecords(store, PublishedGraph(segments, initial.Address)).Count); // World, Child, two distinct equal strings; no value rows.
             Assert.All(DefaultRecords(store, PublishedGraph(segments, initial.Address)), record => Assert.Equal(ObjectVersionKind.Base, record.Kind));
             uint childId = Assert.Single(initial.ObjectHeads.Keys, id => DefaultLayout(store, PublishedGraph(segments, first), id).Schema?.SchemaId == "inline.graph.child");
-            Assert.Equal(first, PublishedGraph(segments, unchanged).SourceGraph);
+
             Assert.Empty(DefaultRecords(store, PublishedGraph(segments, unchanged)));
             Assert.Empty(PublishedRemoved(segments, unchanged));
             ObjectVersionRecord ownerDelta = Assert.Single(DefaultRecords(store, PublishedGraph(segments, nested)));
@@ -74,7 +74,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using (RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path)) {
             var store = segments.GraphStore;
-            Assert.Equal(removed, PublishedGraph(segments, reopenedNoChange).SourceGraph);
+
             Assert.Empty(DefaultRecords(store, PublishedGraph(segments, reopenedNoChange)));
             Assert.Empty(PublishedRemoved(segments, reopenedNoChange));
         }
@@ -101,7 +101,7 @@ public sealed partial class DurableSchemaGeneratorTests {
         }
         using RepositoryResources segments = RepositoryResources.OpenExisting(directory.Path);
         var store = segments.GraphStore;
-        Assert.Equal(first, PublishedGraph(segments, retry).SourceGraph);
+
         Assert.Empty(DefaultRecords(store, PublishedGraph(segments, retry)));
         Assert.Empty(PublishedRemoved(segments, retry));
     }
@@ -165,8 +165,8 @@ public sealed partial class DurableSchemaGeneratorTests {
 
         // Exact DTO reading must reject before domain Hydrate; a valid sibling is the positive control.
         fixture.Check(BusinessPersistenceAdapter.ReadRoot(store, PublishedGraph(resources, first), fixture.Models()), 7, 11, true);
-        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(invalid.Address, first), fixture.Models().FreezeConfiguration()));
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(store, store.ReadBusinessGraph(invalid.Address, first), fixture.Models()));
+        Assert.Throws<InvalidDataException>(() => DecodedRevision.ReadStoredGraph(store, store.ReadBusinessGraph(invalid.Address), fixture.Models().FreezeConfiguration()));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(store, store.ReadBusinessGraph(invalid.Address), fixture.Models()));
     }
 
     private static InlineGraphFixture CompileInlineGraph() {

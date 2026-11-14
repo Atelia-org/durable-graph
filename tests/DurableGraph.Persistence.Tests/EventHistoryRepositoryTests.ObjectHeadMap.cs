@@ -30,7 +30,7 @@ public sealed partial class EventHistoryRepositoryTests {
             GraphRecordStore states = resources.GraphStore;
             StoredGraphRevision revision = MechanismFixture.Snapshot(states, shrunk);
             Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(revision.DirectoryRoot).Kind);
-            Assert.Equal(first, revision.SourceGraph);
+
             ObjectVersionRecord root = Assert.Single(StorageTestData.LocalRecords(states, shrunk));
             Assert.Equal(rootId.Value, root.ObjectId);
             Assert.Equal(ObjectVersionKind.Delta, root.Kind);
@@ -39,7 +39,7 @@ public sealed partial class EventHistoryRepositoryTests {
             Assert.Equal(9, MechanismFixture.Snapshot(states, shrunk).ObjectHeads.Count);
             Assert.Equal(1009, MechanismFixture.Snapshot(states, first).ObjectHeads.Count);
             Assert.Equal(ObjectVersionKind.Delta, states.ReadDirectoryVersion(MechanismFixture.Snapshot(states, hot).DirectoryRoot).Kind);
-            Assert.Equal(shrunk, MechanismFixture.Snapshot(states, hot).SourceGraph);
+
         }
         using (Repository repository = Repository.OpenExisting(_root, Models())) {
             using var session = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
@@ -88,9 +88,8 @@ public sealed partial class EventHistoryRepositoryTests {
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(states.ReadBusinessGraph(candidate, first).DirectoryRoot).Kind);
-            Assert.Equal(first, states.ReadBusinessGraph(candidate, first).SourceGraph);
-            Assert.Equal(9, states.ReadBusinessGraph(candidate, first).ObjectHeads.Count);
+            Assert.Equal(ObjectVersionKind.Base, states.ReadDirectoryVersion(states.ReadBusinessGraph(candidate).DirectoryRoot).Kind);
+            Assert.Equal(9, states.ReadBusinessGraph(candidate).ObjectHeads.Count);
             Assert.Equal(1009, MechanismFixture.Snapshot(states, first).ObjectHeads.Count);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());

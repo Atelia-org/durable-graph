@@ -65,7 +65,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
     }
 
     private static void AssertIndependent(RepositoryStorageFacade repository, StoredGraphRevision graph) {
-        Assert.Null(graph.SourceGraph);
+
         Assert.NotNull(graph.OwnedBatch);
         Assert.All(graph.ObjectHeads.Values, head => Assert.Equal(graph.OwnedBatch!.Value, head));
         foreach (uint id in graph.ObjectHeads.Keys) {
@@ -84,7 +84,7 @@ public sealed class IndependentSnapshotPlannerTests : IDisposable {
                 new(null, new(2), [B(2, [2])]));
             StoredGraphRevision second = repository.Commit(pending).Business;
             Assert.Equal(first.Address, MechanismFixture.Resources(repository).ReadPrevious(MechanismFixture.Current(repository, "main").Id)?.Address);
-            Assert.Null(second.SourceGraph);
+
             Assert.Null(MechanismFixture.State(repository, "main")?.Address);
             Assert.Equal(new uint[] { 2 }, second.ObjectHeads.Keys);
             Assert.Equal(new uint[] { 1 }, MechanismFixture.Snapshot(repository, first.Address).ObjectHeads.Keys);

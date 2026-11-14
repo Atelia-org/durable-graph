@@ -67,10 +67,11 @@ public sealed partial class DB078HistoryTests : IDisposable {
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            Assert.Null(Snapshot(resources, s0).SourceGraph);
-            foreach (CommitId address in new[] { e1, e2 }) { Assert.Null(Snapshot(resources, address).SourceGraph); }
-            Assert.Equal(Describe(resources, s0).Address, Snapshot(resources, s1).SourceGraph);
-            Assert.Equal(Describe(resources, s1).Address, Snapshot(resources, s2).SourceGraph);
+
+            foreach (CommitId address in new[] { e1, e2 }) {
+                Assert.Null(states.ReadBatch(Snapshot(resources, address).OwnedBatch!.Value).SourceGraph);
+            }
+
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
@@ -120,11 +121,10 @@ public sealed partial class DB078HistoryTests : IDisposable {
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
             foreach (CommitId address in new[] { e0, e1, s0 }) {
-                Assert.Null(Snapshot(resources, address).SourceGraph);
+
                 Assert.All(StorageTestData.LocalRecords(states, Describe(resources, address).Address), row => Assert.Equal(ObjectVersionKind.Base, row.Kind));
             }
-            Assert.Equal(Describe(resources, s0).Address, Snapshot(resources, s1).SourceGraph);
-            Assert.Equal(Describe(resources, s1).Address, Snapshot(resources, s2).SourceGraph);
+
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using WorkingCopy cold = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"));
@@ -330,10 +330,10 @@ public sealed partial class DB078HistoryTests : IDisposable {
         }
         using (RepositoryResources resources = RepositoryResources.OpenReadOnlyExisting(_root)) {
             GraphRecordStore states = resources.GraphStore;
-            Assert.Null(Snapshot(resources, mainEvent2).SourceGraph);
-            foreach (CommitId address in new[] { otherState, mainState }) {
-                Assert.Equal(Describe(resources, root).Address, Snapshot(resources, address).SourceGraph);
-            }
+
+            Assert.Null(states.ReadBatch(Snapshot(resources, mainEvent2).OwnedBatch!.Value).SourceGraph);
+            Assert.Equal(Snapshot(resources, root).DirectoryRoot, Snapshot(resources, mainState).DirectoryRoot);
+            Assert.Equal(Describe(resources, root).Address, states.ReadBatch(Snapshot(resources, otherState).OwnedBatch!.Value).SourceGraph);
         }
         using Repository reopened = Repository.OpenExisting(_root, Models());
         using (WorkingCopy main = reopened.OpenWorkingCopy(BranchNamed(reopened, "main"))) {

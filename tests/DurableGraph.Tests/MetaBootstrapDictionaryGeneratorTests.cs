@@ -109,7 +109,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 Assert.Equal(schemaRoot, result.Business.SchemaRoot);
                 Assert.Equal(schemaRoot, repository.SharedSchemaRoot);
                 Assert.Equal(prior.ObjectHeads[rootId], result.Business.ObjectHeads[rootId]);
-                Assert.Equal(s0, result.Business.SourceGraph);
+
                 Assert.Equal(s1, session.StateSource!.Address);
                 object[] after = objects(session.State!);
                 for (int i = 0; i < after.Length; i++) { Assert.Same(restoredObjects[i], after[i]); }
@@ -135,7 +135,7 @@ public sealed partial class DurableSchemaGeneratorTests {
                 s2 = result.Business.Address;
                 Assert.Null(result.Business.OwnedBatch);
                 Assert.Equal(accepted.DirectoryRoot, result.Business.DirectoryRoot);
-                Assert.Equal(s1, result.Business.SourceGraph);
+
                 foreach (uint id in ids) { Assert.Equal(accepted.ObjectHeads[id], result.Business.ObjectHeads[id]); }
             }
             Assert.Equal(frames + 1, repository.Store.AppendedFrames);

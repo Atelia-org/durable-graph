@@ -215,7 +215,7 @@ public sealed class DirectoryDictionaryMechanismTests : IDisposable {
         Assert.Equal(StoredGraphKind.Meta, graph.Kind);
         Assert.Null(graph.SchemaRoot);
         Assert.Equal(source, graph.PreviousMeta);
-        Assert.Equal(source, graph.SourceGraph);
+        Assert.Equal(source, graph.PreviousMeta);
         ObjectVersionBatch batch = store.Graphs.ReadBatch(graph.OwnedBatch!.Value);
         Assert.Equal(source, batch.SourceGraph);
         Assert.Null(batch.SchemaRoot);

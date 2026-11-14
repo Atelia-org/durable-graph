@@ -138,7 +138,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         using (var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path)) {
             StateModelRegistry models = Registry(Model(Current, Old,
                 onRead: () => reads++, onUpgrade: () => upgrades++));
-            Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, reader.Store.ReadBusinessGraph(badGraph, null), models));
+            Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, reader.Store.ReadBusinessGraph(badGraph), models));
             Assert.Equal(0, reads);
             Assert.Equal(0, upgrades);
             Assert.Equal(Old, SchemaCatalogView.Load(reader.Store, reader.SharedSchemaRoot!.Value).Schemas[new(Old.Type, 1)]);
@@ -229,7 +229,7 @@ public sealed class MetaBootstrapUpgradeBoundaryTests : IDisposable {
         Assert.Equal(Old, SchemaCatalogView.Load(reader.Store, acceptedSchema).Schemas[new(Old.Type, 1)]);
         StateModelRegistry models = Registry(Model(Current, Old,
             onRead: () => reads++, onUpgrade: () => upgrades++));
-        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, reader.Store.ReadBusinessGraph(malformed, null), models));
+        Assert.Throws<InvalidDataException>(() => BusinessPersistenceAdapter.ReadRoot(reader.Store, reader.Store.ReadBusinessGraph(malformed), models));
         Assert.Equal(0, reads);
         Assert.Equal(0, upgrades);
     }

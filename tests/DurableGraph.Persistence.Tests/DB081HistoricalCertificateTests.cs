@@ -62,7 +62,7 @@ public sealed class DB081HistoricalCertificateTests : IDisposable {
 
         CommitId newAddress = upgraded.CommitState(parameters: NoRebase).Id;
         StoredGraphRevision saved = Snapshot(repository, newAddress);
-        Assert.Equal(Describe(repository, oldAddress).Address, saved.SourceGraph);
+
         Assert.Equal(ObjectVersionKind.Base, Assert.Single(repository.GraphStore.ReadBatch(saved.OwnedBatch!.Value).Records).Kind);
         Assert.False(Baseline(upgraded).Objects[upgraded.StateId!.Value].RequiresRewrite);
         // DB-080 has no hot admission. Retaining this old entry is valid; installing

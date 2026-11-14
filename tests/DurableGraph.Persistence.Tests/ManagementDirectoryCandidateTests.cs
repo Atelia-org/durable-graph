@@ -34,7 +34,7 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
                 var installed = candidate.GetInstallation(accepted);
                 Assert.Same(before, accepted);
                 if (accepted is not null) {
-                    Assert.Equal(accepted.Snapshot.Address, graph.SourceGraph);
+                    Assert.Equal(accepted.Snapshot.Address, graph.PreviousMeta);
                     foreach (var pair in accepted.Snapshot.ObjectHeads.Where(pair => pair.Key != graph.RootId.Value)) {
                         Assert.Equal(pair.Value, graph.ObjectHeads[pair.Key]);
                     }
@@ -64,7 +64,7 @@ public sealed class ManagementDirectoryCandidateTests : IDisposable {
             var graph = store.AppendMeta(last, candidate.Write);
             candidate.PrepareInstall(graph);
             var after = candidate.GetInstallation(before);
-            Assert.Equal(last, after.Snapshot.SourceGraph);
+            Assert.Equal(last, after.Snapshot.PreviousMeta);
             Assert.Equal(before.Rows.Count + (bookmarks ? 2 : 1), after.Rows.Count);
             last = graph.Address;
             data.ConfirmDurable();

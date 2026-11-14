@@ -1,6 +1,5 @@
 using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
-
 namespace Atelia.DurableGraph.Persistence.Tests;
 
 public sealed partial class DB078HistoryTests {
@@ -55,7 +54,7 @@ public sealed partial class DB078HistoryTests {
         using Repository reopened = Repository.OpenExisting(_root, Models());
         Assert.Equal(oldSchema, reopened.SharedSchemaRoot);
         Assert.False(SchemaCatalogView.Load(reopened.GraphStore, oldSchema).Schemas.ContainsKey(new(BetaSchema.Type, BetaSchema.Version)));
-        StoredGraphRevision orphan = reopened.GraphStore.ReadBusinessGraph(candidate, previous);
+        StoredGraphRevision orphan = reopened.GraphStore.ReadBusinessGraph(candidate);
         Assert.NotEqual(oldSchema, orphan.SchemaRoot);
         Assert.Equal(BetaSchema, SchemaCatalogView.Load(reopened.GraphStore, orphan.SchemaRoot!.Value)
             .Schemas[new(BetaSchema.Type, BetaSchema.Version)]);

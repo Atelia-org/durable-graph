@@ -76,10 +76,7 @@ public sealed class ListRepositoryTests : IDisposable {
         Assert.Equal(registered, ReadSelectedSchemaPayload(_root));
         using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = file.GraphStore;
-            Assert.Equal(seed, MechanismFixture.Snapshot(store, adaptive).SourceGraph);
-            Assert.Equal(adaptive, MechanismFixture.Snapshot(store, myers).SourceGraph);
-            Assert.Equal(myers, MechanismFixture.Snapshot(store, local).SourceGraph);
-            Assert.Equal(local, MechanismFixture.Snapshot(store, position).SourceGraph);
+
             foreach (FrameAddress revision in new[] { myers, local, position }) {
                 ObjectVersionRecord change = Assert.Single(Records(store, revision));
                 Assert.Equal(listId.Value, change.ObjectId);
@@ -139,7 +136,7 @@ public sealed class ListRepositoryTests : IDisposable {
             ObjectVersionRecord listChange = Assert.Single(Records(store, resize));
             Assert.Equal(ObjectVersionKind.Delta, listChange.Kind);
             Assert.Contains(listChange.ObjectId, MechanismFixture.Snapshot(store, seed).ObjectHeads.Keys);
-            Assert.Equal(seed, MechanismFixture.Snapshot(store, resize).SourceGraph);
+
             ObjectVersionRecord childChange = Assert.Single(Records(store, childOnly));
             Assert.NotEqual(listChange.ObjectId, childChange.ObjectId);
             Assert.Empty(Records(store, unchanged));
@@ -196,9 +193,7 @@ public sealed class ListRepositoryTests : IDisposable {
         }
         using (RepositoryResources file = RepositoryResources.OpenExisting(_root)) {
             GraphRecordStore store = file.GraphStore;
-            Assert.Equal(seed, MechanismFixture.Snapshot(store, frozen).SourceGraph);
-            Assert.Equal(frozen, store.ReadBusinessGraph(failedCandidate, frozen).SourceGraph);
-            Assert.Equal(frozen, MechanismFixture.Snapshot(store, retry).SourceGraph);
+
             Assert.NotEqual(failedCandidate, retry);
 
             DecodedRevision decoded = DecodedRevision.ReadStoredGraph(store, MechanismFixture.Snapshot(store, frozen), (Models()).FreezeConfiguration());
