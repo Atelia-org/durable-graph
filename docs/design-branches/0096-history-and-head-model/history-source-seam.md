@@ -1,5 +1,7 @@
 # DB-096：历史来源材料的最小接缝
 
+> 2026-11-15 后继：[DB-100](../0100-graph-heap/README.md)采用无图级编辑父的 State 快照合同，移除 StoredGraphRevision.SourceGraph 与 nearest-State expected-source 注入；写计划及实际 Delta 仍保准确来源。本文保留当时的选择和证据，不能把其中 State 编辑父资格继续作为新读取要求。
+
 > 2026-10-19。A 的 snapshot 接缝已接入生产，实施起点 `4980426`；验收见 §7。B 的 HS 来源签发、业务 Parent 删除及新布局仍未实施。A 的验收使用 Storage `731eef7`；后继[B1 已切换依赖](storage-handle-adaptation.md)。A 当轮只读核对的上游为 `f8868b57e8f012745413bb38a83d67f1dba29f26`，干净，尚无 `ReadHeadOrigin`。本文细化[Branch 纵切](branch-vertical-design.md)，不替代其需求、查询范围和登记协议。
 
 ## 1. 结论：复用已有 snapshot，不另建证明体系

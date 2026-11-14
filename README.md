@@ -263,7 +263,7 @@ tag 名称与分支显示标签无关；两者允许有效 Unicode，长度为 1
 
 历史可为 `S0 → S1 → S2`、`S0 → E1 → E2 → S1 → S2` 或 `E0 → E1 → S0`。
 业务前后关系由 HeadStore 的继承历史表达；State/Event 图不另存业务 Parent。
-State 的增量来源是该提交之前最近的 State。每个 Event 独立捕获完整可达图，使用局部对象 ID、完整 Base 和自有目录，没有内容来源；Event 不读取或推进 State 保存基线。
+普通工作副本以自身最近保存的 State 为增量基线；图的读取不从日志推算编辑父。每个 Event 独立捕获完整可达图，使用局部对象 ID、完整 Base 和自有目录，没有内容来源；Event 不读取或推进 State 保存基线。
 `GetPreviousState(eventCommitId)` 寻找严格祖先中的最近 State；纯 Event 前缀返回 null。
 
 历史图使用 `LoadState` / `LoadEvent` 独立恢复；`ReadCheckpoint` 一次独立恢复当前图及最近严格祖先中的相反角色图。
@@ -303,6 +303,33 @@ Capture 必须提供 canonical current DTO，同布局保存／恢复正确往�
 当前只有统一 Catalog，没有 Private Schema 或 ToShared 路线。分支目录/业务图格式为 `P0R4` / `P0G2`；
 读写和只读打开都不兼容旧布局，实验数据可重建，需要旧数据时先用对应版本另行导出。
 Schema 简化背景见[删除切片](docs/design-branches/0096-history-and-head-model/private-removal.md)，目录和业务图编码见[B2 施工记录](docs/design-branches/0096-history-and-head-model/branch-cutover-plan.md)，`P0R4` 的 Event 语义边界见[DB-097](docs/design-branches/0097-independent-event-graphs/README.md)。
+
+## 独立对象图：按需打开与增量保存
+
+条目正文等内容可以独立保存为完整图，世界 State 只持有 `GraphRef`。在打开 Repository 前登记应用模型及 `models.Register(GraphRef.Definition)`；引用是普通 inline 值，保存或恢复它不会加载目标。
+
+以下假定应用已有 durable `MemoEntry` 模型，以及世界中的 `Dictionary<uint, GraphRef> Entries`：
+
+```csharp
+using var entry = repository.CreateGraph(new MemoEntry { Text = "初次认识" });
+GraphRef original = repository.SaveGraph(entry);
+((MemoEntry)entry.Root).Text = "修订后的认识";
+GraphRef revised = repository.SaveGraph(entry);
+
+// 从旧版本另开 builder；其他图的保存不使它失效。
+using var alternate = repository.OpenGraph(original);
+((MemoEntry)alternate.Root).Text = "另一条世界线的认识";
+GraphRef forked = repository.SaveGraph(alternate);
+
+world.Entries[42] = revised;
+worldWorkingCopy.CommitState();
+```
+
+每次 OpenGraph 得到独立可变图，图内共享与循环保留；`builder.Root` 可替换为另一已登记非空根。SaveGraph 成功才推进该 builder 的增量基线，旧引用继续指向原快照。Dispose 不保存；只读 Repository 可 OpenGraph 并修改内存，SaveGraph 拒绝写入。
+
+内部只有一条公共保存日志，不为每图建立业务分支，也不出现在 ListBranches 或业务历史中。世界目录选择自己的版本，搜索应枚举该目录；不要扫描内部日志作为业务集合。先保存图，再发布持有引用的世界 State；世界发布失败可留下未引用版本，目前不回收。GraphRef 要求选择原 Repository，沿用 CommitId 的概率性跨库误用检测。
+
+实现与验收范围见 [DB-100](docs/design-branches/0100-graph-heap/README.md)。这是完整图接口，尚不提供图内稀疏读取、跨图可变身份或垃圾回收。
 
 ## 多分支共同保存
 

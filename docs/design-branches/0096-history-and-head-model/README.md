@@ -1,5 +1,7 @@
 # DB-096：Branch、Commit 与 WorkingCopy 的历史模型
 
+> State 内容合同后继：[DB-100 独立对象图堆](../0100-graph-heap/README.md)把写基线与日志顺序解耦，State 从自身地址恢复、不持有图级编辑父；增加内部保留 Head 4。本文业务历史/分支/发布合同仍保留，旧三控制入口和 nearest-State 内容来源描述保其历史意义。
+
 > 内容协议后继：[DB-097](../0097-independent-event-graphs/README.md)已实施独立完整 Event、局部捕获身份、任一 Event Pair 独立物化及 P0R4 根边界。本文的 Branch/Commit/历史关联、Catalog 和原子发布合同保持；旧 Event 相对最近 State 的内容 source/head 与预算参数不再是后继目标，原验收保其准确版本意义。
 
 > 状态：Branch/Commit/WorkingCopy、统一Catalog、多分支原子提交、根/子树和历史分页已完成实现、消费者迁移、最终源码与普通包验收，并合入本地master。准确来源、2992项根回归、12个活动包runner及资格限度见[最终交付验收](final-delivery-acceptance.md)。文档对齐：2026-10-19。

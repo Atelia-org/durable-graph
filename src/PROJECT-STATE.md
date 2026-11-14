@@ -20,6 +20,8 @@
 
 ## 当前焦点
 
+2026-11-15：用户已批准 [DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)，正在实施并集成 master。State 改为由自身地址确定完整快照，不保图级编辑父；保写计划与实际 Delta 的准确来源。新增 Repository 三操作、GraphBuilder/GraphRef、单个内部保留 Head；完整图、Schema与故障资格保持。无兼容包袱，实验双轨退出。施工和验收集中在该片，DurableText由用户并行推进、不在本片改动范围。
+
 2026-10-26：MUD 命名存档增量 `Repository.ListTags(): TagInfo[]` 已通过源码与新普通包验收。返回现有 T Dictionary 的名称/CommitId 独立快照，按 Ordinal 排序并验证全部目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。边界回归、准确候选来源和四进程普通包证据见[本片验收](../docs/list-tags-validation.md)；本片无剩余必做工单，下游游戏集成由 MUD 仓独立验收。
 
 2026-10-25：[DB-099 Event 引用](../docs/design-branches/0099-event-references/README.md)已完成普通 inline `EventRef`、单独 Definition 与显式 `LoadEvent` 重载；源码/新普通包、console-agent 全正文归属迁移及故障恢复已限定验收。State 保存准确位置而不捕获目标，缓存与依赖准入留在应用 Session；格式封套与 Storage pin 保持。准确来源、验收和冷热成本只查[当片记录](../docs/design-branches/0099-event-references/validation.md)。本片无剩余必做工单，后续由其他消费者或冷读/驻留实测触发，不预设通用缓存设施。
@@ -175,7 +177,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
 |---|---|---|
 | [DurableGraph](DurableGraph/DurableGraph.csproj) | immutable Schema/exact DAG；统一 ObjectBinding、ObjectLayout、Capture/refs/恢复目录；SZ/rank 2–4 数组、List 与 Dictionary owned 状态；静态 StateEquals、数组稀疏/列表区间/字典键寻址 Delta、默认 Adaptive 与三种显式 List writer；独立 historical reader | 其他 BCL、数组协变；持久发布由 Persistence 拥有 |
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
-| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | 默认三入口／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Checkpoint／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy、组提交、树查询、分页、定向origin与创建登记均已完成；[最终源码/包资格及master合入](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合 |
+| [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | D/S/T控制入口及独立图堆／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Checkpoint／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy、组提交、树查询、分页、定向origin与创建登记均已完成；[最终源码/包资格及master合入](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
@@ -294,7 +296,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
   单图与 Checkpoint 共用 Allocate/Register、建表和 Hydrate 循环；只有 editable 交付才导入保存身份，纯只读不构造 CaptureSession。
   内部仅保留 current 冻结状态比较基线及 source ObjectLayout/完整 membership，升级仍 live 必须 Base。
   不可达 source 仍须解码/归一化/验证，但不要求其 current 类型可以 Allocate；历史 ancestry 不能用 current CLR 反推。
-- RepositoryResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 HeadStore，保管分支目录／shared／书签三个入口与唯一 pending；只读不写盘、不修尾。
+- RepositoryResources 公开为 concrete owner，拥有共享 data FrameStore 与借入它的 HeadStore，保管分支目录／shared／书签入口、内部堆日志与唯一 pending；只读不写盘、不修尾。
   独立读取保各图分配表；Checkpoint 在两图全部 Prepare、Allocate/Register 和建表完成后才 Hydrate，并以同操作 mutable 实例守卫拒绝 singleton 工厂。
   共同 workspace／候选在 State 确认后才安装原实例／新根；DB-097 的 Event 每次使用新 CaptureSession 和局部 ID，完整 Base、无来源及 Remove；完成后释放候选，不改变 State 根、基线、cursor 或 rewrite。
   Event 的完整目录只能选择自有全 Base batch；不同图的同号 ID 不表示同一对象。Checkpoint 的两图独立物化，保同操作 mutable 工厂守卫。后继 State 仍相对最近 State。
@@ -302,7 +304,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
   CreateRootBranchFromState/Event 先保存真实非空业务根并登记 D，再返回 BranchInfo；OpenWorkingCopy 单独恢复对象，Event-only 历史可以 State=null。
   ForkBranch 固定继承准确 Commit，不制造 clone Commit、不恢复对象；创建成功后可立即列出、冷重开和继续，后续打开失败不撤销已登记分支。
   标签可重复且不用于定位；父子线均能继续。从继承历史选择 A/a1 开新线，其直接父仍为 A。
-  业务历史权威为 HS Entry 顺序与固定 fork 来源；业务图不持久化 Parent。State 内容来源取该 Commit 严格之前的最近 State；Event 内容来源恒空，GetPreviousState 仍查询历史关联。
+  业务历史权威为 HS Entry 顺序与固定 fork 来源；业务图不持久化 Parent。State不保图级编辑父，写基线由真实工作区提供、实际Delta链保source/prior；Event内容来源恒空，GetPreviousState仍查询历史关联。
   BranchId 是4B继续目标，CommitId是12B准确位置，可持久保存并在同库重开使用；跨库误用仅作概率诊断，仓库由调用者选择。
   State/Event 可自由排列；成功 State 安装原实例和内容基线，Event 只推进 BaseCommitId，不保存 State 编辑或消费其 rewrite。
   CommitRequest 保原 WorkingCopy、准确 Base、根引用和自有摘要，不提前捕获或设 Consumed；CommitBranches 统一捕获/Schema候选并共同发布、逐成员安装。

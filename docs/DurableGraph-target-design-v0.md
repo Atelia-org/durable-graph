@@ -413,7 +413,7 @@ State/Artifact/Schema 输入及 recipe/builder 版本；围栏不匹配应为 mi
 当前存储消费 FS/HS 的正常尾恢复与按需打开；只读不写不修，不在live Store下手工救援。
 超出底座正常恢复的离线救援先关闭资源并丢弃缓存，再以fresh owner恢复使用。
 日常打开不提供全库健康或全历史重新确认；只加载必要根/Schema目录，对本次访问内容保持正确性检查。
-meta 员工对象、对象 batch、存活 Dictionary 目录和图入口共用 FS；HS 的每个正式业务 Branch 有独立 Head，控制 Head 1/2/3 分别选择 D 分支登记、S 统一 Catalog、T 不可变书签。
+meta 员工对象、对象 batch、存活 Dictionary 目录和图入口共用 FS；HS 的每个正式业务 Branch 有独立 Head，控制 Head 1/2/3 分别选择 D 分支登记、S 统一 Catalog、T 不可变书签。DB-100 增加保留 Head 4，承载独立对象图的公共日志；它不属于正式业务分支。
 D 保存 `HeadId编码值→显示标签`，不复制 current、origin 或 Summary；T 保存 `名字→CommitId编码字节`。正式业务 Entry 保存图地址和自有 Summary，固定 fork 来源与继承历史由 HS 承担。
 新增 Catalog 定义时，相关业务 Head 和 Catalog 根通过同一共同发布确认；无增长则复用既有 Catalog。图 pin 准确 S，不借 latest 补解释。Private/ToShared 路线已删除。
 准确历史、内容来源、outcome/fault 与完整 view 校验保持；当前布局与源码/包的当期资格见 [DB-096 工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)，正常恢复与寿命见 [DB-086](design-branches/0086-new-storage-refactoring-plan/README.md)。
@@ -435,14 +435,13 @@ owned 完成帧与完整目录可按完整帧地址复用，但仍为派生读�
 库没有 PendingEvent，不自动 replay，也不判定业务处理进度或外部效果是否完成。
 
 业务前后关系由 HS 的准确 Entry 历史及固定 fork 来源表达，P0G2 业务图不另存 Parent；仅 Meta 保留 PreviousMeta。
-State 的内容来源取该提交严格之前最近已保存的 State，无 State 时为 null；Event 的内容来源恒为 null。因此 S0→E1→E2→S1→S2 中 E1/E2 无内容来源，S1 的来源为 S0，S2 的来源为 S1；
-E0→E1→S0 中三个图均无 State 内容来源。每次 Event 使用新的 CaptureSession，完整捕获自身可达闭包并写出全 Base；对象 ID 仅在该 Event 图内解释，图内 alias/cycle 保持。
+State 快照由自己的 Root、完整对象目录、SchemaRoot 与 OwnedBatch 定义，不持久保存或从日志推算图级编辑父。普通 WorkingCopy 以自身最近保存的 State 为下次写计划基线；独立图 builder 以打开/上次保存的图为基线，可与目标日志最近图不同。实际对象与目录 Delta 仍由各自 source/prior 验证重建。Event 没有内容来源，每次使用新的 CaptureSession，完整捕获自身可达闭包并写出全 Base；对象 ID 仅在该 Event 图内解释，图内 alias/cycle 保持。
 Event 不借 State DTO/head/H，不计算相对 State 的差集或 RemovedIds，不消耗 State ID 游标，不推进 State 基线或消费 rewrite；成功或失败后释放本次候选。
 输入仍可引用 State 实例并捕获其当前值，提交不冻结调用者。State 保持长期身份和增量基线，不因 Event 保存而改变。
 Event 的非空 OwnedBatch 必须全为 Base，完整 Base 目录的全部 live head 必须指向该 batch；source=null 本身不足以证明自包含。
 GetPreviousState(eventCommitId) 仍返回历史中最近严格祖先 State，表示历史关联而非 Event 的物理内容来源；expected Commit、分支占用及 StateSourceCommitId 的编辑准入保持。
 上述独立 Event 目标由 [DB-097](design-branches/0097-independent-event-graphs/README.md) 实施并完成源码与普通包限定验收。该片已将 Branches 根标识从 P0R3 升为 P0R4 以拒绝旧库；P0G2、batch/Base/Schema 编码及 Storage pin 保持，不增加兼容 reader 或迁移工具。
-所选图准备时验证该角色的准确来源、对象 prior、完整目录与布局；读取作为来源的 State 时仍核对它自己的严格前源。
+所选图准备时验证该角色的实际重建依赖、对象 prior、完整目录与布局；读取 State 不需要知道它的图级编辑父。保存与安装仍核真实 builder 基线和完整候选，不能把另一合法图安装为本次结果。DB-096 的历史来源资格由 [DB-100](design-branches/0100-graph-heap/README.md) 的单一快照合同替代，Meta.PreviousMeta 不变。
 不为证明全部orphan健康而启动全库检查，底座必要资格错误仍传播。
 
 CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担；它继续使用原工作区及身份映射。
@@ -451,7 +450,7 @@ CommitState(nextState) 允许跨实际类型替根，领域限制由应用承担
 不在发布后重新 Capture 或选择模型。预先可知的 null/未注册直接根在捕获和追加前拒绝；
 深层模型或回调失败依实际阶段裁决，不承诺所有失败都无物理写入。完整来源、同 ID 的 exact 布局和 Upgrade rewrite 义务继续保持。
 
-图追加与业务 Head 发布分开。提交在串行操作内检查工作副本所有权、准确 BaseCommitId 与最近 State 的基线后发布；
+图追加与业务 Head 发布分开。普通提交在串行操作内检查工作副本所有权、准确 BaseCommitId 与自身 State 基线后发布；底层增量写计划不要求内容基线等于目标日志最近 State。
 防重入、fault 和 publication outcome 不因自由历史放宽。每 branch 至多一个活动工作副本，不同 branch 可同时编辑，
 仓库操作仍串行。同 Branch 重复 OpenWorkingCopy 在恢复前拒绝；首版只追加，不提供 MoveBranch。
 编辑占用按 BranchId 管理，显示标签可重复，不承担寻址职责。显式 Dispose 释放占用，不自动保存或撤销领域修改；
@@ -485,6 +484,14 @@ EnumerateEvents 固定 endInclusive，返回事件 CommitInfo；可选 afterExcl
 后续提交不改变所选历史。ReadFrames 保持全继承链元数据读取，切片结果不节省其成本。
 ReadHistoryPage 从准确 HistoryStart 向祖先读取 State/Event 描述；AtOrBefore 包含选点，Before 排除但仍验证选点。调用方使用返回的 Continuation 续页，满页不保证还有数据，末尾可有空完成页。
 MaxItems 限制返回条数，MaxWorkSteps 限制 HS 历史工作，不是全部 I/O 或耗时上限；预算耗尽或取消使整次调用失败，不返回部分页。元信息分页不要求业务模型登记，不恢复领域对象；当期验收见 [DB-096 工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)。
+
+### 独立对象图堆
+
+Repository.CreateGraph/OpenGraph/SaveGraph 提供完整图的 builder 与准确 GraphRef。每次 Open 独立恢复可变实例，内部共享与循环保持；Open(G) 的下一次保存基线就是 G。GraphRef 是普通 inline 值，只在显式 OpenGraph 时读取目标，不把目标加入持有者的强引用闭包。
+
+公共内部 Head 按保存顺序追加各图；Save 在操作 guard 内读取当前 tip，以 builder 的完整基线增量准备，使用当前 accepted Catalog，沿原 data-first 与 HeadStore 联合发布。成功后才安装基线和交付引用，故障沿既有 outcome/fault，不透明重试。不引入每图 branch、系列编号或 latest 注册表。
+
+世界根可保存 `EntryId → GraphRef`；先保存堆图及 Schema，随后世界发布选择引用。世界发布失败允许业务不可达版本，不自动回收；枚举与搜索只看所选世界目录。首片接受完整图读取/捕获和目录开销，暂不做图内稀疏编辑或跨图可变身份。无旧格式兼容层，完整帧仍 append-only。施工与验收见 [DB-100](design-branches/0100-graph-heap/README.md)。
 
 长期目标是让 Schema、State、Artifact 的共同引用有一个可裁决的发布点，而不是各自发布
 无法协调的 head；Derived 不充当权威提交的参与者。CommitManifest 是候选表达形状，
