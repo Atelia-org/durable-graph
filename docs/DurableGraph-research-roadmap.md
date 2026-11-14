@@ -22,6 +22,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 
 | 分片 | 要解决的增量 |
 |---|---|
+| 独立对象图的规模成本 | [DB-100](design-branches/0100-graph-heap/README.md)采用完整图builder与公共保存日志。只有真实条目大小/访问轨迹证明全图读取或捕获不可接受时，再评估图内稀疏读取；只有存储增长提出实际回收需求时，再定义GraphRef、Schema、Delta链的保留/GC合同。索引与世界目录选择由memo消费层推进，不把全堆扫描当业务搜索。 |
 | 引用式事实的跨应用成本 | [DB-099](design-branches/0099-event-references/README.md) 已完成普通 inline EventRef 与 Agent 接入。后续仅当其他应用的表示/生命周期共同需求出现，才考虑上移缓存机制；若准确冷读、历史 Event 模型依赖或应用改造成本不能接受，可直接重访物理字符串去重候选，不以继续扩缓存为前置。引用依赖的 GC/部分导出仍未实施，未来相关工具必须保留目标/Schema/传递闭包或显式重映射；完整库备份不依赖这些未来工具。 |
 | [Echo Garden接入配方](design-branches/0096-history-and-head-model/application-recipes.md) | 导航DTO/Hex、安全分叉切换、版本化Summary已实施并通过源码/普通包验收；无剩余示例工单。多个typed DTO反复出现相同适配成本时再考虑converter；实际无法遵守纯投影后立即提交时再研究更强摘要合同。七字段/8存档没有性能优化依据。 |
 | [DB-096 版本、历史与命名入口](design-branches/0096-history-and-head-model/README.md) | Branch/Commit/WorkingCopy、组提交、目录树、分页、旧API迁移及[完整交付与master合入](design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合。首版只追加、旧点另开、fork立即可见；后续附件、ID字段、改标签与规模优化由实际消费者需求触发，不继续原施工队列。 |

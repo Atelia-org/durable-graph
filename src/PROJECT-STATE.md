@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-10-25；DB-099 EventRef 与首个 Agent 接入已验收；DB-098 已退役 ReadPair；DB-097 独立 Event 与重构后质量整改均已验收；081 资格实验否定、热准入未接线，082 候选已实现但默认关闭；DB-073/074 仍为待修订草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-11-15；DB-100 独立对象图堆已完成源码/普通包验收并集成master；DB-099 EventRef已验收；DB-098已退役ReadPair；DB-097独立Event已验收。081热准入未接线，082候选默认关闭；DB-073/074仍为草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-11-15：用户已批准 [DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)，正在实施并集成 master。State 改为由自身地址确定完整快照，不保图级编辑父；保写计划与实际 Delta 的准确来源。新增 Repository 三操作、GraphBuilder/GraphRef、单个内部保留 Head；完整图、Schema与故障资格保持。无兼容包袱，实验双轨退出。施工和验收集中在该片，DurableText由用户并行推进、不在本片改动范围。
+2026-11-15：[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)已完成实现、完整源码回归和三组普通包验收，并集成master。Repository.CreateGraph/OpenGraph/SaveGraph、GraphBuilder/GraphRef与保留Head4可用；State由自身地址恢复，不保图级编辑父，保写计划及实际Delta来源、完整安装/Schema/故障资格。实验双轨已退出，旧三Head库直接拒绝。准确代码/包SHA、证据和限制只查DB-100，本片无剩余必经工单；性能/GC等由真实需求再触发，DurableText仍由用户并行推进。
 
 2026-10-26：MUD 命名存档增量 `Repository.ListTags(): TagInfo[]` 已通过源码与新普通包验收。返回现有 T Dictionary 的名称/CommitId 独立快照，按 Ordinal 排序并验证全部目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。边界回归、准确候选来源和四进程普通包证据见[本片验收](../docs/list-tags-validation.md)；本片无剩余必做工单，下游游戏集成由 MUD 仓独立验收。
 

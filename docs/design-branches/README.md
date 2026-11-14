@@ -9,7 +9,7 @@
 
 ## 按问题找材料
 
-当前施工：[DB-100 独立对象图堆](0100-graph-heap/README.md)，State 无图级编辑父、完整 builder 与内部公共保存日志；用户已选定方案并授权主线实施。
+最近完成：[DB-100 独立对象图堆](0100-graph-heap/README.md)，State 无图级编辑父、完整 builder 与内部公共保存日志；完整源码回归和三组普通包验收通过，已集成master。
 
 最近完成：[DB-099 Event 引用](0099-event-references/README.md)，普通 inline 根引用、显式读取与应用投影缓存；源码、新普通包及 Agent 纵切已验收，冷热成本边界见该片。前置退役见 [DB-098](0098-readpair-retirement/README.md)。
 
@@ -25,7 +25,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 100 | [独立对象图堆](0100-graph-heap/README.md)；增量基线与日志顺序解耦、GraphBuilder/GraphRef、内部保留 Head，实施中 |
+| 100 | [独立对象图堆](0100-graph-heap/README.md)；增量基线与日志顺序解耦、GraphBuilder/GraphRef、内部保留 Head，源码/普通包验收及master集成完成 |
 | 099 | [Event 引用与事实载荷单次保存](0099-event-references/README.md)；普通 inline 引用与实际 Agent 接入已验收，缓存仍由应用拥有 |
 | 098 | [ReadPair 退役与技术储备](0098-readpair-retirement/README.md)；专用跨图共享退出，独立恢复与 State 增量保持 |
 | 097 | [独立 Event 对象图](0097-independent-event-graphs/README.md)；Event 自有全 Base 与局部身份，State 增量不变；Pair 后继见 DB-098 |
