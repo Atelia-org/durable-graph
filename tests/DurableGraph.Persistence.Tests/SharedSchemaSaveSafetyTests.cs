@@ -327,7 +327,7 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
     }
 
     [Fact]
-    public void Shared_raw_pending_requires_latest_shared_meta_source_and_the_exact_business_State_source() {
+    public void Shared_raw_pending_requires_latest_meta_but_allows_an_independent_business_State_source() {
         using Repository repository = Repository.CreateNew(_path, Models());
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring(), parameters: NoRebase).Id);
         repository.ForkBranch(main.BaseCommitId, "dev");
@@ -349,8 +349,10 @@ public sealed class SharedSchemaSaveSafetyTests : IDisposable {
         PreparedSchemaCatalogWrite target = catalog.PrepareOwned([]);
         Assert.Equal(facade.SharedSchemaRoot, target.Write!.SourceGraph);
         Assert.NotEqual(main.StateRevisionAddress, dev.StateRevisionAddress);
-        PreparedGraphWrite wrongBusiness = new(main.StateRevisionAddress, dev.StateId.Value, []);
-        Assert.Throws<InvalidDataException>(() => facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (wrongBusiness, target.Write)));
+        PreparedGraphWrite independentBusiness = new(main.StateRevisionAddress, dev.StateId.Value, []);
+        using (PendingRepositorySave accepted = facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (independentBusiness, target.Write))) {
+            Assert.Equal(facade.SharedSchemaRoot, accepted.CatalogSource);
+        }
         AssertUnchanged(repository, before);
         using (PendingRepositorySave valid = facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (validBusiness, target.Write))) {
             Assert.Equal(facade.SharedSchemaRoot, valid.CatalogSource);

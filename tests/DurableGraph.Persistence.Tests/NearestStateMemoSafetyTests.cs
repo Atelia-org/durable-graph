@@ -11,7 +11,7 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void WarmExactAnchorStillRejectsRawOldStateOrFalseAbsence(bool wrongNull) {
+    public void WarmExactAnchorDoesNotConstrainAnIndependentStateWriteSource(bool noSource) {
         SeedHistory seed = Seed();
         using RepositoryResources resources = RepositoryResources.OpenStorageExisting(_path);
         Assert.Equal(seed.LatestState.CommitId, resources.FindNearestState(seed.Tip.CommitId, true)!.Id);
@@ -20,21 +20,21 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
         Assert.Equal(warmed, resources.HistoryScanVisitedEntries);
         long frames = resources.GraphStore.AppendedFrames;
         HeadEntry before = resources.Heads.ReadHead(seed.Branch).Unwrap();
-        FrameAddress? wrong = wrongNull ? null : seed.InitialState.Business.Address;
+        FrameAddress? source = noSource ? null : seed.InitialState.Business.Address;
         int aborts = 0;
-        PendingRepositorySave? rejected = null;
-        Assert.Throws<InvalidDataException>(() => rejected = resources.PrepareSaveGroup(() => new(
+        using (PendingRepositorySave accepted = resources.PrepareSaveGroup(() => new(
             [new(seed.Branch, seed.Tip.CommitId, null, StoredGraphKind.State, default,
-                new(wrong, new(1), [ObjectVersionRecord.CreateBase(1, [99])]))], null), () => aborts++));
-        Assert.Null(rejected);
-        Assert.Equal(1, aborts);
+                new(source, new(1), [ObjectVersionRecord.CreateBase(1, [99])]))], null), () => aborts++)) {
+            Assert.True(resources.HasPendingSave);
+        }
+        Assert.Equal(0, aborts); // Successful preparation did not invoke its failure callback.
         Assert.Equal(frames, resources.GraphStore.AppendedFrames);
         Assert.Equal(before.Id, resources.Heads.ReadHead(seed.Branch).Unwrap().Id);
         Assert.Equal(before.Payload.ToArray(), resources.Heads.ReadHead(seed.Branch).Unwrap().Payload.ToArray());
         Assert.False(resources.HasPendingSave);
         Assert.False(resources.IsFaulted);
 
-        RepositorySaveResult valid = Save(resources, seed.Branch, seed.LatestState.Business.Address, StoredGraphKind.State, 99);
+        RepositorySaveResult valid = Save(resources, seed.Branch, source, StoredGraphKind.State, 99);
         Assert.Equal(valid.CommitId, resources.FindNearestState(valid.CommitId, true)!.Id);
         Assert.False(resources.IsFaulted);
     }
@@ -58,7 +58,7 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
     }
 
     [Fact]
-    public void ProvenEventOnlyAbsenceRejectsAnotherBranchStateAndAdvancesAtTheFirstRealState() {
+    public void ProvenEventOnlyAbsenceAllowsAnotherGraphSourceAndAdvancesAtTheFirstPublishedState() {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(_path);
         RepositorySaveResult foreign = Save(resources, null, null, StoredGraphKind.State, 10);
         RepositorySaveResult eventOnly;
@@ -71,15 +71,17 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
         Assert.Null(resources.FindNearestState(eventOnly.CommitId, true));
         Assert.Equal(warmed, resources.HistoryScanVisitedEntries);
         long frames = resources.GraphStore.AppendedFrames;
-        Assert.Throws<InvalidDataException>(() => resources.PrepareSaveGroup(() => new(
+        using (PendingRepositorySave accepted = resources.PrepareSaveGroup(() => new(
             [new(eventOnly.BranchId, eventOnly.CommitId, null, StoredGraphKind.State, default,
-                new(foreign.Business.Address, new(1), []))], null)));
+                new(foreign.Business.Address, new(1), []))], null))) {
+            Assert.True(resources.HasPendingSave);
+        }
         Assert.Equal(frames, resources.GraphStore.AppendedFrames);
         Assert.False(resources.HasPendingSave);
         Assert.False(resources.IsFaulted);
         RepositorySaveResult nextEvent = Save(resources, eventOnly.BranchId, null, StoredGraphKind.Event, 30);
         Assert.Null(resources.FindNearestState(nextEvent.CommitId, true));
-        RepositorySaveResult firstState = Save(resources, eventOnly.BranchId, null, StoredGraphKind.State, 40);
+        RepositorySaveResult firstState = Save(resources, eventOnly.BranchId, foreign.Business.Address, StoredGraphKind.State, 40);
         Assert.Equal(firstState.CommitId, resources.FindNearestState(firstState.CommitId, true)!.Id);
         Assert.False(resources.IsFaulted);
     }
@@ -162,10 +164,10 @@ public sealed class NearestStateMemoSafetyTests : IDisposable {
             later = Save(resources, initial.BranchId, initial.Business.Address, StoredGraphKind.Event, 30);
         }
         // Controlled offline corruption only, after every DG/backing owner has closed.
-        // This fixture has three reserved control files and exactly one business head.
+        // This fixture has four reserved control files and exactly one business head.
         // Match the pinned storage HistoryFixture.FlipPayload midpoint injection; do
         // not recompute the CRC or alter the earlier Entry and its following Fence.
-        string[] controls = ["00000001.rbf", "00000002.rbf", "00000003.rbf"];
+        string[] controls = ["00000001.rbf", "00000002.rbf", "00000003.rbf", "00000004.rbf"];
         string business = Assert.Single(Directory.GetFiles(Path.Combine(_path, "versions", "refs"), "*.rbf"),
             path => !controls.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase));
         using (FileStream stream = new(business, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) {

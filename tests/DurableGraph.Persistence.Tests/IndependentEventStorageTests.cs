@@ -98,7 +98,7 @@ public sealed class IndependentEventStorageTests : IDisposable {
     }
 
     [Fact]
-    public void AdmissionDerivesStateSourceFromHistoryAndRequiresEventSourceToBeEmpty() {
+    public void AdmissionSeparatesStateWriteSourceFromHistoryAndRequiresEventSourceToBeEmpty() {
         using RepositoryResources resources = RepositoryResources.CreateStorageNew(NewPath());
         using PendingRepositorySave initial = resources.PrepareSaveFrom(null, null, "main", StoredGraphKind.State,
             default, () => (new PreparedGraphWrite(null, new(1), [B(1)]), null));
@@ -106,8 +106,10 @@ public sealed class IndependentEventStorageTests : IDisposable {
         StoredGraphRevision unrelated = resources.GraphStore.AppendBusiness(StoredGraphKind.State, null,
             new(null, new(1), [B(1)]));
         long before = resources.GraphStore.AppendedFrames;
-        Assert.Throws<InvalidDataException>(() => resources.PrepareSaveFrom(first.BranchId, first.CommitId, null,
-            StoredGraphKind.State, default, () => (new PreparedGraphWrite(unrelated.Address, new(1), [B(1)]), null)));
+        using (PendingRepositorySave accepted = resources.PrepareSaveFrom(first.BranchId, first.CommitId, null,
+            StoredGraphKind.State, default, () => (new PreparedGraphWrite(unrelated.Address, new(1), [B(1)]), null))) {
+            Assert.True(resources.HasPendingSave);
+        }
         Assert.Throws<InvalidDataException>(() => resources.PrepareSaveFrom(first.BranchId, first.CommitId, null,
             StoredGraphKind.Event, default, () => (new PreparedGraphWrite(first.Business.Address, new(1), [B(1)]), null)));
         Assert.Equal(before, resources.GraphStore.AppendedFrames);

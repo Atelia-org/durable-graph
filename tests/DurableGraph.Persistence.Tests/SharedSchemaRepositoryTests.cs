@@ -152,7 +152,7 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
     [Theory]
     [InlineData("state-meta")]
     [InlineData("business")]
-    public void Shared_raw_preparation_cannot_substitute_a_real_but_wrong_meta_or_business_source(string wrongSource) {
+    public void Shared_raw_preparation_requires_current_meta_but_allows_independent_business_source(string wrongSource) {
         using Repository repository = CreateShared();
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromState("main", Ring(), parameters: NoRebase).Id);
         repository.ForkBranch(main.BaseCommitId, "dev");
@@ -175,7 +175,12 @@ public sealed class SharedSchemaRepositoryTests : IDisposable {
         FrameAddress businessSource = wrongSource == "business" ? main.StateRevisionAddress!.Value : state;
         PreparedGraphWrite business = new(businessSource, dev.StateId!.Value, []);
         PublicationImage before = Snapshot(repository);
-        Assert.Throws<InvalidDataException>(() => facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (business, write)));
+        if (wrongSource == "state-meta") {
+            Assert.Throws<InvalidDataException>(() => facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (business, write)));
+        } else {
+            using PendingRepositorySave accepted = facade.PrepareFrom(dev.BranchId.Value, dev.BaseCommitId.Value, null, StoredGraphKind.State, default, () => (business, write));
+            Assert.True(facade.HasPending);
+        }
         AssertUnchanged(repository, before);
         Assert.False(facade.HasPending);
         Assert.Equal(latestCatalog, dev.AcceptedCatalog.Snapshot!.Address);
