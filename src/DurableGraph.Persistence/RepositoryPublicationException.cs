@@ -19,10 +19,14 @@ public enum RepositoryPublicationOutcome {
 /// <see cref="Outcome"/> describes publication, not repository health or rollback of domain mutations.
 /// Even <see cref="RepositoryPublicationOutcome.NotPublished"/> can accompany a faulted repository.
 /// Unknown or Published outcomes must not be transparently retried. Dispose and reopen a faulted
-/// repository. For a graph or branch-ref operation, inspect the persisted branch and its history,
+/// repository. For a business branch graph or branch-ref operation, inspect the persisted branch and its history,
 /// then OpenWorkingCopy using the application's saved processing progress. A checkout restores only the latest
 /// State, if one exists; it never replays Events. For tag creation, ResolveTag by name to determine
 /// the persisted binding; tags do not have an editing checkout and cannot be rebound.
+/// For SaveGraph, reopen graphs selected by the application's persisted GraphRefs. A graph saved
+/// before a failed delivery may remain unselected. Heap failure positions are diagnostic only:
+/// they are not business branch history or a successfully delivered GraphRef. TargetBranchId is null.
+/// A heap ExpectedBaseCommitId is the shared heap log tip, not the builder's content baseline.
 /// Failures before an append attempt can instead propagate their original exception; absence of this
 /// wrapper does not imply that domain mutations were rolled back or that the repository is healthy.
 /// For multiple branches use Members; the single-member convenience properties are null.
@@ -57,8 +61,9 @@ public sealed class RepositoryPublicationException : IOException {
     public CommitId? CandidateCommitId { get; }
 }
 
-/// <summary>An attempted branch publication, its original baseline and any actually known candidate positions.</summary>
-/// <remarks>A candidate frame does not establish publication. Unknown Commit IDs remain null.</remarks>
+/// <summary>An attempted graph or branch publication and any actually known candidate positions.</summary>
+/// <remarks>A candidate frame does not establish publication. Unknown Commit IDs remain null.
+/// Heap publications have no TargetBranchId; their commit positions are diagnostics, not ordinary business history.</remarks>
 public sealed class RepositoryPublicationMember {
     internal RepositoryPublicationMember(HeadId? target, HeadEntryId? expected, FrameAddress? candidate, HeadEntryId? commit) {
         TargetBranchId = target is { } branch ? new(branch) : null;

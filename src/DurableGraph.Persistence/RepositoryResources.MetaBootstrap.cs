@@ -9,7 +9,7 @@ using PublicationStore = Atelia.HeadStore.HeadStore;
 namespace Atelia.DurableGraph.Persistence;
 
 public sealed partial class RepositoryResources {
-    private const uint BranchDirectoryHead = 1, SharedSchemaHead = 2, BookmarkDirectoryHead = 3;
+    private const uint BranchDirectoryHead = 1, SharedSchemaHead = 2, BookmarkDirectoryHead = 3, HeapHead = 4;
     private const string SchemaKey = "schema";
     private static ReadOnlySpan<byte> SharedMagic => "P0S1"u8;
     private PublicationBaseline _baseline = null!;
@@ -31,13 +31,14 @@ public sealed partial class RepositoryResources {
     }
 
     private RepositoryResources(DataStore data, PublicationStore heads,
-        HeadEntry branches, HeadEntry shared, HeadEntry bookmarks, long readCacheBudgetBytes) {
+        HeadEntry branches, HeadEntry shared, HeadEntry bookmarks, HeadEntry heap, long readCacheBudgetBytes) {
         Data = data;
         IsReadOnly = heads.IsReadOnly;
         _heads = heads;
         _branchEntry = branches.Id;
         _sharedEntry = shared.Id;
         _bookmarkEntry = bookmarks.Id;
+        _heapHead = heap.Id.HeadId;
         // Read and validate every required control pointer before constructing graph caches.
         FrameAddress? branchRoot = ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, branches.Payload);
         FrameAddress? bookmarkRoot = ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Bookmarks, bookmarks.Payload);
@@ -47,6 +48,7 @@ public sealed partial class RepositoryResources {
             _baseline = new(branchRoot is { } d ? ManagementDirectoryReader.ReadBranches(_graphStore, d) : null, schemaRoot);
             _bookmarks = bookmarkRoot is { } t ? ManagementDirectoryReader.ReadBookmarks(_graphStore, t) : null;
             if (schemaRoot is { } s) { _ = _graphStore.ReadMetaGraph(s); }
+            ValidateHeapEntry(heap, allowEmpty: true);
         } catch (Exception error) {
             CloseResources(error, _graphStore, null, null);
             throw;
@@ -87,9 +89,9 @@ public sealed partial class RepositoryResources {
             string dataPath = Path.Combine(root, "data"), headsPath = Path.Combine(root, "versions");
             data = create ? DataStore.Create(dataPath, rotationThresholdBytes) : readOnly
                 ? DataStore.OpenReadOnly(dataPath) : DataStore.Open(dataPath, rotationThresholdBytes);
-            heads = create ? PublicationStore.Create(headsPath, data, reservedHeadIdUpperBound: BookmarkDirectoryHead)
+            heads = create ? PublicationStore.Create(headsPath, data, reservedHeadIdUpperBound: HeapHead)
                 : readOnly ? PublicationStore.OpenReadOnly(headsPath, data) : PublicationStore.Open(headsPath, data);
-            if (heads.ReservedHeadIdUpperBound != BookmarkDirectoryHead) { throw new InvalidDataException("Not a DG publication layout."); }
+            if (heads.ReservedHeadIdUpperBound != HeapHead) { throw new InvalidDataException("Not a DG publication layout."); }
             if (create) {
                 heads.CreateHead(BranchDirectoryHead, ManagementDirectoryPointer.Encode(ManagementDirectoryKind.Branches, null), out _).Unwrap();
                 afterCreateHead?.Invoke(BranchDirectoryHead);
@@ -97,11 +99,14 @@ public sealed partial class RepositoryResources {
                 afterCreateHead?.Invoke(SharedSchemaHead);
                 heads.CreateHead(BookmarkDirectoryHead, ManagementDirectoryPointer.Encode(ManagementDirectoryKind.Bookmarks, null), out _).Unwrap();
                 afterCreateHead?.Invoke(BookmarkDirectoryHead);
+                heads.CreateHead(HeapHead, EmptyHeapPayload, out _).Unwrap();
+                afterCreateHead?.Invoke(HeapHead);
             }
             HeadEntry branches = heads.ReadHead(BranchDirectoryHead).Unwrap();
             HeadEntry shared = heads.ReadHead(SharedSchemaHead).Unwrap();
             HeadEntry bookmarks = heads.ReadHead(BookmarkDirectoryHead).Unwrap();
-            return new(data, heads, branches, shared, bookmarks, readCacheBudgetBytes);
+            HeadEntry heap = heads.ReadHead(HeapHead).Unwrap();
+            return new(data, heads, branches, shared, bookmarks, heap, readCacheBudgetBytes);
         } catch (Exception error) {
             CloseResources(error, null, heads, data);
             throw;
@@ -342,7 +347,7 @@ public sealed partial class RepositoryResources {
             }
             BusinessEntryPayloadCodec.ValidateSummaryLength(summary.Length);
             byte[] ownedSummary = summary.ToArray();
-            _ = ValidateSaveTarget(kind, branch, expected, rootLabel);
+            ValidateSaveTarget(kind, branch, expected, rootLabel);
             var prepared = produce();
             EnsureSaveUsable();
             return new([new(branch, expected, rootLabel, kind, ownedSummary, prepared.Business)], prepared.Catalog);

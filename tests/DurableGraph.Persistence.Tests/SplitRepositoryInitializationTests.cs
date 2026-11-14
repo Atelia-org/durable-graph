@@ -26,28 +26,31 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
-    public void DirectFactoryInterruptionRequiresAllThreeHeadsWithoutCompletingMissingOnes(int completed) {
+    [InlineData(4)]
+    public void DirectFactoryInterruptionRequiresAllFourHeadsWithoutCompletingMissingOnes(int completed) {
         Assert.Throws<IOException>(() => RepositoryResources.CreateStorageNew(_path, afterCreateHead: id => {
             if (id == completed) { throw new IOException("Stop after completed Head creation."); }
         }));
         var before = SnapshotTree(_path);
         foreach (bool readOnly in new[] { true, false }) {
-            if (completed < 3) { RejectMissingSharedRoot(readOnly); }
+            if (completed < 4) { RejectMissingSharedRoot(readOnly); }
             else {
                 using RepositoryResources resources = readOnly
                     ? RepositoryResources.OpenReadOnlyExisting(_path) : RepositoryResources.OpenExisting(_path);
-                Assert.Equal(new uint[] { 1, 2, 3 }, resources.Heads.ListHeads().Unwrap().Select(id => resources.Heads.GetLocalHeadId(id).Unwrap()).Order());
+                Assert.Equal(new uint[] { 1, 2, 3, 4 }, resources.Heads.ListHeads().Unwrap().Select(id => resources.Heads.GetLocalHeadId(id).Unwrap()).Order());
                 Assert.Empty(resources.ListBranches());
             }
             AssertFilesEqual(before, SnapshotTree(_path));
         }
     }
 
-    [Fact]
-    public void PreviousTwoHeadLayoutRejectsWithoutAutomaticMigration() {
+    [Theory]
+    [InlineData(2u)]
+    [InlineData(3u)]
+    public void PreviousLayoutRejectsWithoutAutomaticMigration(uint reservedHeads) {
         Directory.CreateDirectory(_path);
         using (DataStore data = DataStore.Create(DataPath))
-        using (PublicationStore heads = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 2)) {
+        using (PublicationStore heads = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: reservedHeads)) {
             heads.CreateHead(1, EmptyRootPayload("P0R4"u8), out _).Unwrap();
             heads.CreateHead(2, EmptyRootPayload("P0S1"u8), out _).Unwrap();
         }
@@ -64,7 +67,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         FrameAddress sentinel;
         HeadEntryId first;
         using (DataStore data = DataStore.Create(DataPath))
-        using (PublicationStore versions = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 3)) {
+        using (PublicationStore versions = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 4)) {
             sentinel = data.Append(SentinelTag, SentinelBody, SentinelMetadata).Unwrap();
             first = versions.CreateHead(1, branches, out PublicationOutcome outcome).Unwrap();
             Assert.Equal(PublicationOutcome.Confirmed, outcome);
@@ -92,10 +95,11 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         FrameAddress sentinel;
         HeadEntryId first;
         using (DataStore data = DataStore.Create(DataPath))
-        using (PublicationStore versions = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 3)) {
+        using (PublicationStore versions = PublicationStore.Create(VersionsPath, data, reservedHeadIdUpperBound: 4)) {
             sentinel = data.Append(SentinelTag, SentinelBody, SentinelMetadata).Unwrap();
             // Isolate the existing second-Head failure window; direct factory order is tested above.
             versions.CreateHead(3, EmptyRootPayload("P0T2"u8), out _).Unwrap();
+            versions.CreateHead(4, "P0HE"u8, out _).Unwrap();
             int hookCalls = 0;
             InstallPublicationFault(versions, stage, () => {
                 if (++hookCalls == 2) { throw new IOException("Second lower CreateHead publication window."); }
@@ -113,7 +117,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         }
         Dictionary<string, byte[]> completedData = SnapshotTree(DataPath);
         Dictionary<string, byte[]> formalRefs = SnapshotTree(Path.Combine(VersionsPath, "refs"));
-        Assert.Equal(bothFormal ? new[] { "00000001.rbf", "00000002.rbf", "00000003.rbf" } : new[] { "00000001.rbf", "00000003.rbf" },
+        Assert.Equal(bothFormal ? new[] { "00000001.rbf", "00000002.rbf", "00000003.rbf", "00000004.rbf" } : new[] { "00000001.rbf", "00000003.rbf", "00000004.rbf" },
             formalRefs.Keys.Order());
         Assert.Equal(!bothFormal, File.Exists(PendingPath));
 
@@ -132,7 +136,7 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
         }
 
         // No second HeadEntryId was delivered, yet its out evidence and both formal
-        // files agree. Fresh DG can open all three complete roots without initialization repair.
+        // files agree. Fresh DG can open all four complete roots without initialization repair.
         Dictionary<string, byte[]> complete = SnapshotTree(_path);
         using (Repository reader = Repository.OpenStorageReadOnlyExisting(_path, Models())) {
             Assert.Empty(reader.ListBranches());
@@ -242,8 +246,8 @@ public sealed class SplitRepositoryInitializationTests : IDisposable {
     private void AssertBackingRootsAndSentinel(HeadEntryId first, FrameAddress sentinel, byte[] branches, byte[]? shared) {
         using DataStore data = DataStore.Open(DataPath);
         using PublicationStore versions = PublicationStore.Open(VersionsPath, data);
-        Assert.Equal(3u, versions.ReservedHeadIdUpperBound);
-        Assert.Equal(shared is null ? (versions.ReadHead(3).IsSuccess ? new uint[] { 1, 3 } : new uint[] { 1 }) : new uint[] { 1, 2, 3 },
+        Assert.Equal(4u, versions.ReservedHeadIdUpperBound);
+        Assert.Equal(shared is null ? (versions.ReadHead(3).IsSuccess ? new uint[] { 1, 3, 4 } : new uint[] { 1 }) : new uint[] { 1, 2, 3, 4 },
             versions.ListHeads().Unwrap().Select(id => versions.GetLocalHeadId(id).Unwrap()).Order());
         HeadEntry branch = versions.ReadHead(1).Unwrap();
         Assert.Equal(first, branch.Id);

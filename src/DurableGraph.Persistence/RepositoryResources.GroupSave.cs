@@ -24,16 +24,18 @@ public sealed partial class RepositoryResources {
         _graphStore.EnsureUsable();
     }
 
-    private FrameAddress? ValidateSaveTarget(StoredGraphKind kind, HeadId? branch, HeadEntryId? expected, string? rootLabel) {
+    private void ValidateSaveTarget(StoredGraphKind kind, HeadId? branch, HeadEntryId? expected, string? rootLabel) {
         if (branch is { } target) {
-            if (expected is null || rootLabel is not null || ReadCurrent(target).Id != expected.Value) {
+            if (target == _heapHead && kind != StoredGraphKind.State) {
+                throw new InvalidOperationException("The graph heap only accepts State graphs.");
+            }
+            if (expected is null || rootLabel is not null || ReadSaveTarget(target) != expected.Value) {
                 throw new InvalidOperationException("The branch's accepted Commit has changed.");
             }
-            return kind == StoredGraphKind.State ? FindNearestState(expected.Value, true)?.Address : null;
+            return;
         }
         if (expected is not null) { throw new ArgumentException("A new root cannot have an accepted Commit."); }
         ValidateDisplayLabel(rootLabel!);
-        return null;
     }
 
     // The producer includes input enumeration. No application callback escapes the owner's preparation guard.
@@ -54,9 +56,9 @@ public sealed partial class RepositoryResources {
                     throw new ArgumentException("Members must target distinct existing branches; a new root is a single save.");
                 }
                 BusinessEntryPayloadCodec.ValidateSummaryLength(member.Summary.Length);
-                FrameAddress? source = ValidateSaveTarget(member.Kind, member.Branch, member.ExpectedEntry, member.RootLabel);
-                if (member.Business.SourceGraph != source) {
-                    throw new InvalidDataException("A State must use its exact historical source; an Event must have no content source.");
+                ValidateSaveTarget(member.Kind, member.Branch, member.ExpectedEntry, member.RootLabel);
+                if (member.Kind == StoredGraphKind.Event && member.Business.SourceGraph is not null) {
+                    throw new InvalidDataException("An Event must have no content source.");
                 }
             }
             if (group.Catalog is not null && group.Catalog.SourceGraph != _baseline.SharedRoot) {
@@ -92,7 +94,7 @@ public sealed partial class RepositoryResources {
             throw new InvalidOperationException("Commit requires the owner's latest unused pending save.");
         }
         foreach (PendingBusinessSave member in pending.Members) {
-            if (member.Branch is { } target && ReadCurrent(target).Id != member.ExpectedEntry) {
+            if (member.Branch is { } target && ReadSaveTarget(target) != member.ExpectedEntry) {
                 throw new InvalidOperationException("A branch's accepted Commit has changed.");
             }
         }
@@ -156,7 +158,7 @@ public sealed partial class RepositoryResources {
             EnsureSaveUsable();
             if (!ReferenceEquals(pending.Baseline, _baseline)) { throw new InvalidOperationException("The prepared save baseline changed."); }
             foreach (PendingBusinessSave member in pending.Members) {
-                if (member.Branch is { } branch && ReadCurrent(branch).Id != member.ExpectedEntry) {
+                if (member.Branch is { } branch && ReadSaveTarget(branch) != member.ExpectedEntry) {
                     throw new InvalidOperationException("A prepared branch baseline changed.");
                 }
             }
@@ -206,7 +208,7 @@ public sealed partial class RepositoryResources {
             if (fault) { MarkFaulted(); }
             var members = new RepositoryPublicationMember[pending.Members.Length];
             for (int i = 0; i < members.Length; i++) {
-                members[i] = new(targets[i], pending.Members[i].ExpectedEntry, graphs[i]?.Address, commits[i]);
+                members[i] = new(targets[i] == _heapHead ? null : targets[i], pending.Members[i].ExpectedEntry, graphs[i]?.Address, commits[i]);
             }
             throw new RepositoryPublicationException(outcome switch {
                 PublicationOutcome.Confirmed => RepositoryPublicationOutcome.Published,

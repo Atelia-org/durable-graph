@@ -12,13 +12,15 @@ public sealed class RepositoryRootCodecTests : IDisposable {
     public void RequiredControlsUseDistinctHeadersAndBranchLabelsAreSeparateFromIdentity() {
         using Repository repository = Repository.CreateNew(_root, SharedReadModel.Models());
         RepositoryResources resources = ResourcesOf(repository);
-        Assert.Equal(3u, resources.Heads.ReservedHeadIdUpperBound);
+        Assert.Equal(4u, resources.Heads.ReservedHeadIdUpperBound);
         var initialBranches = resources.Heads.ReadHead(1).Unwrap();
         var initialShared = resources.Heads.ReadHead(2).Unwrap();
         var initialBookmarks = resources.Heads.ReadHead(3).Unwrap();
+        var initialHeap = resources.Heads.ReadHead(4).Unwrap();
         Assert.Equal("P0R4"u8.ToArray(), initialBranches.Payload[..4].ToArray());
         Assert.Equal("P0S1"u8.ToArray(), initialShared.Payload[..4].ToArray());
         Assert.Equal("P0T2"u8.ToArray(), initialBookmarks.Payload[..4].ToArray());
+        Assert.Equal("P0HE"u8.ToArray(), initialHeap.Payload.ToArray());
         Assert.Null(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Branches, initialBranches.Payload));
         Assert.Null(ManagementDirectoryPointer.Decode(ManagementDirectoryKind.Bookmarks, initialBookmarks.Payload));
         Assert.Empty(NamedFrameMapCodec.Decode(initialShared.Payload[4..]).Unwrap());
