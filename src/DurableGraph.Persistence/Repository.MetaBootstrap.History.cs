@@ -4,10 +4,9 @@ using Atelia.HeadStore;
 namespace Atelia.DurableGraph;
 
 public sealed partial class Repository {
-    // Only State content has a strict preceding State source. Event content is self-contained.
+    // The selected graph is self-describing; history chooses a snapshot, not its editing parent.
     private StoredGraphRevision QualifyBusiness(HistoryGraphRecord record) =>
-        _storageFacade.Store.ReadBusinessGraph(record.Address,
-            record.Kind == CommitKind.State ? _resources.FindNearestState(record.Id, inclusive: false)?.Address : null);
+        _storageFacade.Store.ReadBusinessGraph(record.Address);
 
     private IDurableObject ReadGraphRootCore(HistoryGraphRecord record) {
         var source = DecodedRevision.ReadStoredGraph(_storageFacade.Store, QualifyBusiness(record), _modelConfiguration);

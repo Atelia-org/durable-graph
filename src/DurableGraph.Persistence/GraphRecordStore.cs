@@ -124,26 +124,25 @@ internal sealed class GraphRecordStore : IDisposable {
             }
             FrameAddress graph = AppendFrame(GraphFrameCodec.GraphTag,
                 GraphFrameCodec.EncodeGraph(kind, previousMeta, write.RootId, directory, schemaRoot, batch));
-            return kind == StoredGraphKind.Meta ? ReadMetaGraph(graph) : ReadBusinessGraph(graph, source);
+            return kind == StoredGraphKind.Meta ? ReadMetaGraph(graph) : ReadBusinessGraph(graph);
         } finally { _appending = false; }
     }
 
-    internal StoredGraphRevision ReadBusinessGraph(FrameAddress address, FrameAddress? expectedStateSource) {
+    internal StoredGraphRevision ReadBusinessGraph(FrameAddress address) {
         GraphEnvelope metadata = ReadMetadata(address);
         RequireBusinessKind(metadata.Kind);
-        ValidateBusinessSource(metadata.Kind, expectedStateSource, address);
-        return ReadGraphCore(address, metadata, expectedStateSource);
+        return ReadGraphCore(address, metadata);
     }
 
     internal StoredGraphRevision ReadMetaGraph(FrameAddress address) {
         GraphEnvelope metadata = ReadMetadata(address);
         if (metadata.Kind != StoredGraphKind.Meta) { throw new InvalidDataException("A Meta read requires a Meta graph."); }
         ValidateMetaSource(metadata.PreviousMeta, address);
-        return ReadGraphCore(address, metadata, metadata.PreviousMeta);
+        return ReadGraphCore(address, metadata);
     }
 
-    private StoredGraphRevision ReadGraphCore(FrameAddress address, GraphEnvelope metadata, FrameAddress? source) {
-        ValidateMetadataRelations(metadata, source,
+    private StoredGraphRevision ReadGraphCore(FrameAddress address, GraphEnvelope metadata) {
+        ValidateMetadataRelations(address, metadata,
             out FrameAddress? sourceDirectory, out ObjectVersionBatch? batch);
         IReadOnlyDictionary<uint, FrameAddress> heads = ReadDirectory(metadata.DirectoryRoot);
         if (!heads.ContainsKey(metadata.RootId.Value)) { throw new InvalidDataException("RootId is not live."); }
@@ -185,7 +184,7 @@ internal sealed class GraphRecordStore : IDisposable {
             foreach (uint id in ids) { _ = FindRecord(selectedBatch, id); }
         }
         if (metadata.Kind is StoredGraphKind.State or StoredGraphKind.Event) { BusinessGraphQualificationCount++; }
-        return new(address, metadata, source, heads, this);
+        return new(address, metadata, heads, this);
     }
 
     // Saving and prepared-state reuse recheck the actual graph; a retained snapshot is
@@ -193,10 +192,10 @@ internal sealed class GraphRecordStore : IDisposable {
     internal StoredGraphRevision Revalidate(StoredGraphRevision snapshot) {
         RequireSnapshotOwner(snapshot);
         StoredGraphRevision actual = snapshot.Kind == StoredGraphKind.Meta
-            ? ReadMetaGraph(snapshot.Address) : ReadBusinessGraph(snapshot.Address, snapshot.SourceGraph);
-        if (actual.Metadata != snapshot.Metadata || actual.SourceGraph != snapshot.SourceGraph ||
+            ? ReadMetaGraph(snapshot.Address) : ReadBusinessGraph(snapshot.Address);
+        if (actual.Metadata != snapshot.Metadata ||
             !actual.ObjectHeads.SequenceEqual(snapshot.ObjectHeads)) {
-            throw new InvalidDataException("A stored source snapshot must match its actual graph, source and membership.");
+            throw new InvalidDataException("A stored snapshot must match its actual graph and membership.");
         }
         return actual;
     }
@@ -209,39 +208,53 @@ internal sealed class GraphRecordStore : IDisposable {
         }
     }
 
-    // Qualify a selected Event's metadata relations without replaying its directory,
+    // Qualify a selected business graph's metadata relations without replaying its directory,
     // validating live membership, or invoking object body readers.
-    internal void ValidateBusinessMetadata(FrameAddress address, FrameAddress? expectedStateSource) {
+    internal void ValidateBusinessMetadata(FrameAddress address) {
         GraphEnvelope metadata = ReadMetadata(address);
         RequireBusinessKind(metadata.Kind);
-        ValidateBusinessSource(metadata.Kind, expectedStateSource, address);
-        ValidateMetadataRelations(metadata, expectedStateSource, out _, out _);
+        ValidateMetadataRelations(address, metadata, out _, out _);
     }
 
-    private void ValidateMetadataRelations(GraphEnvelope metadata, FrameAddress? source,
+    private void ValidateMetadataRelations(FrameAddress address, GraphEnvelope metadata,
         out FrameAddress? sourceDirectory, out ObjectVersionBatch? ownedBatch) {
         RequireSchemaRoot(metadata.Kind, metadata.SchemaRoot);
+        ownedBatch = metadata.OwnedBatch is { } owned ? ReadBatch(owned) : null;
+        if (ownedBatch is { } selectedBatch && selectedBatch.SchemaRoot != metadata.SchemaRoot) {
+            throw new InvalidDataException("Owned batch Schema root differs from the selected graph view.");
+        }
+        if (metadata.Kind == StoredGraphKind.State) {
+            // The complete directory defines this snapshot. Only actual Deltas need
+            // a reconstruction source; a State has no graph-level editing parent.
+            sourceDirectory = null;
+            if (ownedBatch is { } stateBatch && stateBatch.Records.Any(static row => row.Kind == ObjectVersionKind.Delta)) {
+                FrameAddress source = stateBatch.SourceGraph ?? throw new InvalidDataException("Object Delta lacks a source graph.");
+                ValidateBusinessSource(StoredGraphKind.State, source, address);
+                sourceDirectory = ReadMetadata(source).DirectoryRoot;
+            }
+            return;
+        }
+        // Meta retains its predecessor. Events remain self-contained full graphs.
+        FrameAddress? previous = metadata.Kind == StoredGraphKind.Meta ? metadata.PreviousMeta : null;
         if (metadata.Kind == StoredGraphKind.Event && metadata.OwnedBatch is null) {
             throw new InvalidDataException("An Event must own its complete object batch.");
         }
-        sourceDirectory = source is { } actualSource ? ReadMetadata(actualSource).DirectoryRoot : null;
+        sourceDirectory = previous is { } actualSource ? ReadMetadata(actualSource).DirectoryRoot : null;
         ObjectHeadDirectoryVersion directoryVersion = ReadDirectoryVersion(metadata.DirectoryRoot);
         if (sourceDirectory == metadata.DirectoryRoot) {
             if (metadata.OwnedBatch is not null) { throw new InvalidDataException("A reused directory cannot own a new batch."); }
         } else {
-            if (directoryVersion.SourceGraph != source) { throw new InvalidDataException("Directory creator does not match the graph's content source."); }
+            if (directoryVersion.SourceGraph != previous) { throw new InvalidDataException("Directory creator does not match the graph's content source."); }
             if (directoryVersion.Kind == ObjectVersionKind.Delta &&
                 (sourceDirectory is null || directoryVersion.Prior != sourceDirectory)) {
                 throw new InvalidDataException("Directory Delta must extend the exact content source directory.");
             }
-            if (source is null && directoryVersion.Kind != ObjectVersionKind.Base) {
+            if (previous is null && directoryVersion.Kind != ObjectVersionKind.Base) {
                 throw new InvalidDataException("An initial directory must be Base.");
             }
         }
-        ownedBatch = metadata.OwnedBatch is { } owned ? ReadBatch(owned) : null;
         if (ownedBatch is { } batch) {
-            if (batch.SourceGraph != source) { throw new InvalidDataException("Owned batch does not use the graph's exact content source."); }
-            if (batch.SchemaRoot != metadata.SchemaRoot) { throw new InvalidDataException("Owned Base Schema root differs from the selected graph view."); }
+            if (batch.SourceGraph != previous) { throw new InvalidDataException("Owned batch does not use the graph's exact content source."); }
         }
     }
 
@@ -428,8 +441,8 @@ internal sealed class GraphRecordStore : IDisposable {
         }
     }
 
-    // Repository selects the State content source through exact Entry history;
-    // Event content has none. This layer validates roles and physical relations.
+    // A write selects its exact editing baseline; actual State Deltas also name
+    // their reconstruction source. Neither is derived from publication history.
     private void ValidateBusinessSource(StoredGraphKind kind, FrameAddress? source, FrameAddress? current = null) {
         EnsureUsable();
         if (kind == StoredGraphKind.Event && source is not null) {

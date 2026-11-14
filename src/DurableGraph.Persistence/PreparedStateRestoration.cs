@@ -24,13 +24,13 @@ internal sealed record PreparedStateRestoration(HistoryGraphRecord StateCheckpoi
         RevisionAddress == state.Address && RootId == state.RootId;
 
     internal void ValidateStoredSource(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
-        HistoryGraphRecord state, FrameAddress? expectedSource, GraphReadContext context) {
+        HistoryGraphRecord state, GraphReadContext context) {
         if (state.Kind != CommitKind.State || !Matches(state) || BindingEnvironment is not { } environment ||
             !ReferenceEquals(Selection.Models, environment.Models) || !ReferenceEquals(context.Models, environment.Models)) {
             throw new InvalidDataException("Prepared State must retain its exact split model environment and selection.");
         }
         GraphEnvelope metadata = store.ReadMetadata(state.Address);
-        store.ValidateBusinessMetadata(state.Address, expectedSource);
+        store.ValidateBusinessMetadata(state.Address);
         if (metadata.Kind != StoredGraphKind.State || metadata.RootId != RootId || metadata.SchemaRoot is not { } schemaRoot) {
             throw new InvalidDataException("Prepared State must select its actual State root and Schema pin.");
         }

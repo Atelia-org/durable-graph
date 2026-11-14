@@ -50,11 +50,10 @@ internal readonly record struct GraphEnvelope(StoredGraphKind Kind, FrameAddress
     ObjectId RootId, FrameAddress DirectoryRoot, FrameAddress? SchemaRoot, FrameAddress? OwnedBatch);
 
 internal sealed class StoredGraphRevision {
-    internal StoredGraphRevision(FrameAddress address, GraphEnvelope metadata, FrameAddress? sourceGraph,
+    internal StoredGraphRevision(FrameAddress address, GraphEnvelope metadata,
         IReadOnlyDictionary<uint, FrameAddress> objects, GraphRecordStore? sourceOwner = null) {
         Address = address;
         Metadata = metadata;
-        SourceGraph = sourceGraph;
         SourceOwner = sourceOwner;
         ObjectHeads = new FrozenSortedDictionary<uint, FrameAddress>(new SortedDictionary<uint, FrameAddress>(
             objects.ToDictionary(static pair => pair.Key, static pair => pair.Value)));
@@ -68,7 +67,6 @@ internal sealed class StoredGraphRevision {
     internal FrameAddress DirectoryRoot => Metadata.DirectoryRoot;
     internal FrameAddress? SchemaRoot => Metadata.SchemaRoot;
     internal FrameAddress? OwnedBatch => Metadata.OwnedBatch;
-    internal FrameAddress? SourceGraph { get; }
     internal GraphRecordStore? SourceOwner { get; }
     internal IReadOnlyDictionary<uint, FrameAddress> ObjectHeads { get; }
 }

@@ -104,7 +104,7 @@ public sealed partial class Repository {
         out PreparedStateRestoration? candidate) {
         candidate = null;
         var store = _storageFacade.Store;
-        if (head.Kind == CommitKind.Event) { store.ValidateBusinessMetadata(head.Address, null); }
+        if (head.Kind == CommitKind.Event) { store.ValidateBusinessMetadata(head.Address); }
         HistoryGraphRecord? state = _resources.FindNearestState(head.Id, inclusive: true);
         // An Event-only prefix never consults a resident State or its model environment.
         if (state is null) { return NewCheckout(branchId, head); }
@@ -115,7 +115,7 @@ public sealed partial class Repository {
             context.Statistics.PreparedStateHits++;
             if (ImmutableLeafReuseEnabled && !prepared.ImmutableLeavesCollected) {
                 using var leafRequirements = environment.Models.BeginSchemaRequirementCollection();
-                prepared.ValidateStoredSource(store, _modelConfiguration!, state, _resources.FindNearestState(state.Id, inclusive: false)?.Address, context);
+                prepared.ValidateStoredSource(store, _modelConfiguration!, state, context);
                 var materializedLeaf = GraphReader.RestorePreparedState(context, prepared.Selection,
                     out var leaves, collectImmutableLeaves: true);
                 var leafBusiness = BusinessPersistenceAdapter.FromLoaded(store, environment, materializedLeaf);
@@ -124,7 +124,7 @@ public sealed partial class Repository {
                     ImmutableLeavesCollected: true, BindingEnvironment: environment);
                 return leafCheckout;
             }
-            prepared.ValidateStoredSource(store, _modelConfiguration!, state, _resources.FindNearestState(state.Id, inclusive: false)?.Address, context);
+            prepared.ValidateStoredSource(store, _modelConfiguration!, state, context);
             var materializedHit = GraphReader.RestorePreparedState(context, prepared.Selection, out _,
                 reusedLeaves: ImmutableLeafReuseEnabled ? prepared.ImmutableLeaves : null);
             return NewCheckout(branchId, head,

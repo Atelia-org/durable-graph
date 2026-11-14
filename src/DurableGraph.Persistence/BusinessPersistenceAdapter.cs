@@ -77,7 +77,7 @@ internal sealed class BusinessPersistenceAdapter {
     }
 
     internal void PrepareInstall(PreparedBusinessWrite prepared, StoredGraphRevision graph) {
-        if (graph.Kind != StoredGraphKind.State || graph.RootId != prepared.Write.RootId || graph.SourceGraph != Source?.Address) {
+        if (graph.Kind != StoredGraphKind.State || graph.RootId != prepared.Write.RootId || prepared.Write.SourceGraph != Source?.Address) {
             throw new InvalidOperationException("Only the prepared State can install the business baseline.");
         }
     }

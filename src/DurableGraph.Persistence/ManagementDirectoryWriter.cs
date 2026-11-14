@@ -103,7 +103,7 @@ internal sealed class PreparedDirectoryWrite(GraphRecordStore store, ManagementD
     internal void PrepareInstall(StoredGraphRevision graph) {
         if (_installation is not null) { throw new InvalidOperationException("Directory installation is already prepared."); }
         StoredGraphRevision actual = store.Revalidate(graph);
-        if (actual.Kind != StoredGraphKind.Meta || actual.SchemaRoot is not null || actual.SourceGraph != Write.SourceGraph ||
+        if (actual.Kind != StoredGraphKind.Meta || actual.SchemaRoot is not null ||
             actual.PreviousMeta != Write.SourceGraph || actual.RootId != Write.RootId) {
             throw new InvalidDataException("Directory installation requires its exact Meta source and root.");
         }
