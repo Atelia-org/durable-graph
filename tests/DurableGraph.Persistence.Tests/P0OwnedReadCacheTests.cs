@@ -429,8 +429,8 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Throws<InvalidDataException>(() => reader.ReadDirectory(mismatched));
 
         FrameAddress malformed = frames.Append(GraphFrameCodec.DirectoryTag,
-            GraphFrameCodec.EncodeDirectory(second.Address, ObjectVersionKind.Delta, second.DirectoryRoot, [])).Unwrap();
-        reader.ReadDirectoryVersion(malformed); // Valid owned frame envelope; invalid Dictionary Delta body.
+            GraphFrameCodec.EncodeDirectory(second.Address, ObjectVersionKind.Delta, second.DirectoryRoot, [1, 1])).Unwrap();
+        reader.ReadDirectoryVersion(malformed); // The Remove succeeds before the missing Patch count rejects this body.
         Assert.Throws<EndOfStreamException>(() => reader.ReadDirectory(malformed));
         GraphPhysicalReadStatistics failed = reader.ReadCacheStatistics;
         Assert.Throws<EndOfStreamException>(() => reader.ReadDirectory(malformed));

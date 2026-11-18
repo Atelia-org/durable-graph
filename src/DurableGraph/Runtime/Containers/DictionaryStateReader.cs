@@ -329,13 +329,13 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         if (!operations.Add(encoded)) { throw new InvalidDataException("Dictionary Delta repeats a persistent key within or across operation groups."); }
     }
 
-    private static int ReadCount(ref BareValueReader reader) {
+    internal static int ReadCount(ref BareValueReader reader) {
         uint count = reader.ReadVarUInt32();
         if (count > Array.MaxLength) { throw new InvalidDataException("Dictionary count exceeds supported buffer length."); }
         return (int)count;
     }
 
-    private static void RequireTailFits(int count, ref BareValueReader reader, DictionaryLayout layout, bool values) {
+    internal static void RequireTailFits(int count, ref BareValueReader reader, DictionaryLayout layout, bool values) {
         long minimum = StateBodySize.MinimumBaseBytes(layout.KeySlot);
         if (values) { minimum += StateBodySize.MinimumBaseBytes(layout.ValueSlot); }
         if (minimum > 0 && count > reader.RemainingCount / minimum) {

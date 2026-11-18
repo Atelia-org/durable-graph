@@ -307,8 +307,14 @@ internal sealed class GraphRecordStore : IDisposable {
         var suffix = ReadDirectoryChain(address, _readCache, out var prefix);
         var heads = prefix?.Heads ?? ObjectHeadDirectoryCodec.ReadBase(suffix[0].Body);
         int firstDelta = prefix is null ? 1 : 0;
-        for (int i = firstDelta; i < suffix.Count; i++) {
-            heads = ObjectHeadDirectoryCodec.ApplyDelta(heads, suffix[i].Body);
+        if (firstDelta < suffix.Count) {
+            SortedDictionary<uint, FrameAddress> builder = new();
+            foreach ((uint id, FrameAddress head) in heads) { builder.Add(id, head); }
+            HashSet<uint> touched = [];
+            for (int i = firstDelta; i < suffix.Count; i++) {
+                ObjectHeadDirectoryCodec.ApplyOwnedDelta(builder, touched, suffix[i].Body);
+            }
+            heads = new(builder);
         }
         long bytes = suffix.Aggregate(prefix?.PayloadBytes ?? 0L, static (sum, version) => checked(sum + version.PayloadBytes));
         _directoryMaterializations++;

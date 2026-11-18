@@ -8,6 +8,8 @@ using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
 using Locator = Atelia.DurableGraph.Generated.Family_503048.V1;
 using LocatorOps = Atelia.DurableGraph.Generated.Family_503048.BodyV1;
+using DirectoryBody = Atelia.DurableGraph.Runtime.DictionaryStateBody<uint, Atelia.DurableGraph.Generated.Family_503048.V1,
+    Atelia.DurableGraph.Runtime.UInt32StateOps, Atelia.DurableGraph.Generated.Family_503048.BodyV1>;
 
 namespace Atelia.DurableGraph.Persistence;
 
@@ -21,7 +23,7 @@ internal static class ObjectHeadDirectoryCodec {
     }
 
     internal static PreparedBaseBody PrepareBase(IReadOnlyDictionary<uint, FrameAddress> current) =>
-        DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.PrepareBase(Freeze(current), Layout);
+        DirectoryBody.PrepareBase(Freeze(current), Layout);
 
     internal static PreparedDeltaBody PrepareDelta(IReadOnlyDictionary<uint, FrameAddress> prior,
         IReadOnlyDictionary<uint, FrameAddress> current) {
@@ -36,7 +38,7 @@ internal static class ObjectHeadDirectoryCodec {
         DictionaryEntryState<uint, Locator>[] added = current.Where(pair => !prior.ContainsKey(pair.Key))
             .OrderBy(static pair => pair.Key)
             .Select(pair => new DictionaryEntryState<uint, Locator>(pair.Key, ToState(pair.Value))).ToArray();
-        return DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.PrepareDeltaFromOperations(
+        return DirectoryBody.PrepareDeltaFromOperations(
             Layout, removed, patched, added);
     }
 
@@ -56,25 +58,63 @@ internal static class ObjectHeadDirectoryCodec {
                 patched.Add(new(id, ToState(before), ToState(head)));
             } else { added.Add(new(id, ToState(head))); }
         }
-        return DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.PrepareDeltaFromOperations(
+        return DirectoryBody.PrepareDeltaFromOperations(
             Layout, removedIds.ToArray(), patched.ToArray(), added.ToArray());
     }
 
     internal static FrozenSortedDictionary<uint, FrameAddress> ReadBase(ReadOnlySpan<byte> body) {
         BareValueReader reader = new(body);
         FrozenDictionaryState<uint, Locator> state =
-            DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.ReadBase(ref reader, Layout);
+            DirectoryBody.ReadBase(ref reader, Layout);
         reader.EnsureFullyConsumed();
         return Project(state);
     }
 
-    internal static FrozenSortedDictionary<uint, FrameAddress> ApplyDelta(IReadOnlyDictionary<uint, FrameAddress> prior,
+    // Only validated directory Base/prefix entries enter this builder. The caller owns
+    // it until every body is consumed, including the generated locator's slot validation.
+    // For a uint key the value itself identifies both its canonical encoding and its lookup key.
+    internal static void ApplyOwnedDelta(SortedDictionary<uint, FrameAddress> heads, HashSet<uint> touched,
         ReadOnlySpan<byte> body) {
+        touched.Clear();
         BareValueReader reader = new(body);
-        FrozenDictionaryState<uint, Locator> state =
-            DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.ApplyDelta(ref reader, Freeze(prior), Layout);
+        int removed = DirectoryBody.ReadCount(ref reader);
+        if (removed > heads.Count) { throw new InvalidDataException("Directory removals exceed prior count."); }
+        DirectoryBody.RequireTailFits(removed, ref reader, Layout, values: false);
+        for (int i = 0; i < removed; i++) {
+            uint id = ReadOperationKey(ref reader, touched);
+            if (!heads.Remove(id)) { throw new InvalidDataException("Directory Remove requires an existing key."); }
+        }
+
+        int patched = DirectoryBody.ReadCount(ref reader);
+        if (patched > heads.Count) { throw new InvalidDataException("Directory patches exceed remaining prior count."); }
+        DirectoryBody.RequireTailFits(patched, ref reader, Layout, values: false);
+        for (int i = 0; i < patched; i++) {
+            uint id = ReadOperationKey(ref reader, touched);
+            if (!heads.TryGetValue(id, out FrameAddress before)) { throw new InvalidDataException("Directory Patch requires an existing key."); }
+            Locator prior = ToState(before);
+            Locator next = LocatorOps.ApplyDelta(ref reader, in prior, Layout.ValueSlot);
+            if (LocatorOps.StateEquals(in prior, in next, Layout.ValueSlot)) { throw new InvalidDataException("Directory Patch must change its value."); }
+            heads[id] = FromState(in next);
+        }
+
+        int added = DirectoryBody.ReadCount(ref reader);
+        long total = (long)heads.Count + added;
+        if (total > Array.MaxLength) { throw new InvalidDataException("Directory result exceeds supported length."); }
+        DictionaryKeyPolicy.RequireKeyCount((int)total, Layout.KeySlot);
+        DirectoryBody.RequireTailFits(added, ref reader, Layout, values: true);
+        for (int i = 0; i < added; i++) {
+            uint id = ReadOperationKey(ref reader, touched);
+            if (heads.ContainsKey(id)) { throw new InvalidDataException("Directory Add requires an absent key."); }
+            Locator next = LocatorOps.ReadBase(ref reader, Layout.ValueSlot);
+            heads.Add(id, FromState(in next));
+        }
         reader.EnsureFullyConsumed();
-        return Project(state);
+    }
+
+    private static uint ReadOperationKey(ref BareValueReader reader, HashSet<uint> touched) {
+        uint id = UInt32StateOps.ReadBase(ref reader, Layout.KeySlot);
+        if (id == 0 || !touched.Add(id)) { throw new InvalidDataException("Directory operation IDs must be nonzero and unique per body."); }
+        return id;
     }
 
     internal static Locator ToState(FrameAddress address) {
