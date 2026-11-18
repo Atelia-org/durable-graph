@@ -1,5 +1,7 @@
 # DurableText 的分片编码、保存决策与压缩
 
+后续已选择[以片段数开头的分段 Base](segmented-base-refactoring-plan.md)。本文保留研究时各候选的假设与计量口径，其中可变段样本使用总单元数前缀。按最后选定的片段数重算的尺寸和实施边界见该方案。
+
 2026-11-18。研究基线为 DurableGraph `8fdba114c642cc0b266137308db79e24e0249685` 和 Atelia.Storage `9ad39fc51a420e8302468533b82d8bc3a91a403e`，后者与 DG 的六包 pin 一致。下文提出供验证的设计。当前产品合同仍见[主线接入记录](mainline-integration-plan.md)和[依赖来源](../../../eng/StorageDependency.props)。指向 Storage 源码的相对链接按两个仓库并列检出解析。
 
 ## 研究结论
