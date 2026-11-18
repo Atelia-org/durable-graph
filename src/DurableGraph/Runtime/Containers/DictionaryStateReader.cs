@@ -305,16 +305,20 @@ internal static class DictionaryStateBody<K, V, KOps, VOps>
         DictionaryKeyPolicy.RequireKeyCount(state.Count, layout.KeySlot);
         byte[][] bytes = new byte[state.Count][];
         Dictionary<byte[], int> offsets = new(DictionaryKeyBytesComparer.Instance);
+        if (state.Count == 0) { return new(bytes, offsets); }
+        ArrayBufferWriter<byte> scratch = new();
         for (int index = 0; index < state.Count; index++) {
             K key = state.Entries[index].Key;
-            bytes[index] = EncodeKey(in key, layout);
+            bytes[index] = EncodeKey(in key, layout, scratch);
             if (!offsets.TryAdd(bytes[index], index)) { throw new InvalidDataException("Dictionary contains duplicate persistent keys."); }
+            scratch.ResetWrittenCount();
         }
         return new(bytes, offsets);
     }
 
-    private static byte[] EncodeKey(in K key, DictionaryLayout layout) {
-        ArrayBufferWriter<byte> buffer = new();
+    private static byte[] EncodeKey(in K key, DictionaryLayout layout) => EncodeKey(in key, layout, new());
+
+    private static byte[] EncodeKey(in K key, DictionaryLayout layout, ArrayBufferWriter<byte> buffer) {
         BareValueWriter writer = new(buffer);
         KOps.WriteBase(ref writer, in key, layout.KeySlot);
         return buffer.WrittenSpan.ToArray();
