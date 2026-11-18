@@ -4,7 +4,7 @@
 
 ## 研究结论
 
-**首选验证的是给 Atelia.Binary 增加稳定分片输入，让同一个逻辑字符串，无论来自一个 string 还是几百个切片，都产生与现有 Bare string 完全相同的字节。** DG 决定编码哪个值，Binary 负责字符编码和长度头。一个 Base 是一个值，一条合并后的 New 是另一个值，Copy 只记录前驱的 UTF-16 区间。这样既能省掉为编码拼接全文的分配，也让 Piece Table、未来的 Rope 与持久格式相互独立。
+**首选验证的是给 Atelia.Binary 增加稳定分片输入，让同一个逻辑字符串，无论来自一个 string 还是几百个切片，都产生与现有 Bare string 完全相同的字节。** DG 决定编码哪个值，Binary 负责字符编码和长度头。一个 Base 是一个值，一条合并后的 New 是另一个值，Copy 只记录前驱的 UTF-16 区间。这样既能省掉为编码拼接全文的分配，也让 Piece Table、未来的 Rope 与持久格式相互独立。另一个应并列验证的 Base 方案允许写者选择独立段边界。它用更简单的单切片编码入口，代价是编码尺寸与编辑历史有关。
 
 **最值得同场比较的是对已选中的 Base 或大段 New 采用独立压缩。** 两份仓库原文中，普通择短已经省了一部分空间，在其上用现成 Brotli 还能从 11,977 B 降到 3,272 B、从 3,957 B 降到 2,693 B。单字符则由 2 B 增到 3 B。两者可以组合，但是否承担压缩、复制和冷开解压成本，要看完整编辑轨迹。改换编辑树解决不了这里的编码问题。
 
@@ -14,7 +14,7 @@
 
 | 层 | 已具备的能力 | 设计机会 |
 |---|---|---|
-| TextSnapshot / Piece Table | 持有不可变 string 切片，可遍历或重放。只有单片覆盖整个原 string 时，直接取全文 string 才无需复制 | 写入器可直接吃切片。同一逻辑内容的物理划分不能进入 wire |
+| TextSnapshot / Piece Table | 持有不可变 string 切片，可遍历或重放。只有单片覆盖整个原 string 时，直接取全文 string 才无需复制 | 写入器可直接吃切片。整段方案中物理划分对字节透明。多段 Base 也可只公开段内容，允许写者选择边界 |
 | DG Text body | Base 写单元数和 UTF-16LE。Delta 写结果单元数、准确前驱上的 Copy 和合并后的 New。来源与前驱失配时可生成全 New。冷恢复复用 Copy 的内存切片 | 替换 Base/New 的字面编码即可。结果长度、Copy 的寻址单位、前驱验证和快照身份可继续沿用 |
 | Binary Bare string | `PrepareString(string)` 扫描输入，比较无损 UTF-8 和 UTF-16LE 的 **payload** 长度，平局选 UTF-16LE。writer 支持分段输出。现有计划保存不可变 string | 把计量及输出扩展到分片输入，使连续输入也走同一套规则。输出缓冲区能分段，并不代表输入已经能分段 |
 | 图级保存 | 已有业务 State 的冻结文本可以延后生成 Base。新对象、Event 及公开准备入口有各自的即时准备边界。安装使用实际记录长度 | 精确选码可以延至真正需要字节时。估值、选择、实际准备和安装须使用各自正确的长度 |
@@ -57,6 +57,18 @@
 
 短 New 更能说明费用落在哪里。含 1 B opcode，排除共同的 Delta 总长与 Copy，写单个 ASCII 的固定 / Bare 成本为 4 / 3 B，单个“汉”为 4 / 4 B，64 个“汉”为 130 / 131 B。最后一例因 Bare 头的 `2N` 先跨越 varint 边界。已有 1 Mi 单元产品轨迹初始为全 `a`，文本初次记录为 2,097,163 B，随后 32 次小改合计仅 1,044 B。这条轨迹首先检验 Base。大段插入、整体重写才检验 New。[原轨迹与逐次数据](mainline-performance.md) · [负载实现](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs)
 
+### 可变段 Base，直接沿用冻结 Piece 的边界
+
+另一种 wire 只规定 `VarUInt32(总 UTF-16 单元数 N) + 若干非空 Bare string`。顺序拼接恰好得到 N 个单元且完整消费 body，空正文写 N=0、零段。无需另写段数。每段独立、自带字节边界。**分段是 writer 的选择**。Piece Table 可直接写每个切片，未来 Rope 可取叶子或自行并段。Base 仍是一条独立、完整的对象记录，准确前驱上的 Delta Copy 继续按逻辑单元寻址。该方案可单独改 Base，Delta New 保持现行语法。
+
+Binary 可先加同步的 `WriteString(ReadOnlySpan<char> value)`。把 Piece 的 memory 取 Span，或调用 `text.AsSpan(offset, count)`，就能在不创建 substring 的情况下对这一段计量并写出。若需要可重复写的计划，另可让 `PrepareString(string, offset, count)` 绑定不可变原串及已验证范围。切片末尾的高代理不能越界去读配对字符。若一对代理恰好分在两段，两段可各自回退 UTF-16LE，拼接仍逐单元保真。这里既不需要多片计量器，也不需要跨段 Encoder 状态。同一内容可有不同合法字节。当前 Text 的未变判断用内容 token 或逐单元相等，安装时另核实际追加记录与选定候选的字节一致性。两种相等承担不同职责。[写入与比较](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs) · [安装核对](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)
+
+用现有 DurableText 构造完全相同的“汉 × 1,024，然后 a × 1,024”，取保存接受前的真实快照片段，逐段调用固定版本 Binary 的 `MeasureString`，再加 2 B 总长度头。一次构造全文为 **1 段、4,100 B**。先构造汉字段，再追加英文为 **2 段、3,078 B**。从 2,048 个 x 出发，在一个 ApplyEdits 批次中逐位置替换为目标字符，得到 **2,048 段、5,122 B**。这些是候选 raw Base 尺寸；计量时允许临时 string，没有测量新 writer 的分配或速度。文件上若只留一个不带总长的普通 Bare 控制组，大小则为 4,098 B。
+
+读端可把少量段解成独立 backing，继续服务后续 Copy。碎片很多时可验证后直接解到有界的连续目标，避免数以千计的小 string。检查每段解码单元数、剩余 N 及输入耗尽后再接受，不凭声明的 N 无条件分配全文。当前 A 在接受保存时可能物化或重绑，Base 的编码来源是冻结捕获，故整理阈值不能当作盘上段数上界。小段过多时也可由 writer 合并后再写，这属于可替换的写入策略。所有段仍位于同一 Base 中，不自带跨版本共享地址或磁盘随机读索引。[接受与整理](../../../src/DurableGraph/DurableText.cs) · [片段视图](../../../src/DurableGraph/Runtime/Text/TextPieceView.cs)
+
+这条路线应与整段跨片择短并列做第一轮 **Base-only** 对照。用同一批冻结快照记录实际片数、raw Base 总量、每次所选 Base 的写入分配及冷开生成的 string 数。可变段格式可以从“一片一段”开始，后续只调 writer 的合并规则；仅当消费方要求相同内容具有唯一 Base 字节表示时，才需要在合同中统一分段规则。
+
 ### 压缩确有空间收益，时间成本还要单独测
 
 用固定 pin 的实际 `Atelia.Binary` 普通包写出字节，比较普通 Bare 与三种**完整 controlled string 封套**。每个 controlled 结果均核对计划长度并读回原 UTF-16 内容，6 个输入共 18 次。枚举 `ValueCompression.Brotli` 在该版本内用 quality 3、window 22。这里每个完整输入独立压一次。
@@ -78,7 +90,7 @@
 
 1. **输入拥有者。** 从计量开始到输出结束，片段顺序和字符 backing 必须稳定。DG 已有冻结快照可满足。借入的 `ReadOnlyMemory<char>` 可以指向可变数组，不宜赋予它现有 `StringEncodingPlan` 跨调用复用不可变 string 的承诺。若调用方无法保证稳定，入口需先取得自有副本。
 2. **两遍遍历。** Binary 按逻辑顺序扫描，严格计算合法 UTF-8 字节数，跨空片保留待配对高代理。选 UTF-8 时第二遍写出也要跨片保留编码状态，在逻辑值末尾才 flush。UTF-16LE 路线直接按单元输出。已有 Binary 用例覆盖输出缓冲边界。本轮另用四个短输入的全部 65 种连续切分验证了输入分片的字节一致性。两者在正式实现中都应与连续 string 的 golden 对照。[现有 string goldens](../../../../atelia-storage/tests/Binary.Tests/StringTests.cs) · [输出分块测试](../../../../atelia-storage/tests/Binary.Tests/ChunkedOutputTests.cs)
-3. **建议的 DG wire。** Base 直接是一条 Bare string。Delta 保留结果的 UTF-16 单元数。Copy 保持原指令，New 后接一条非空 Bare string。New 的贡献由解码后的单元数决定，因而不用同时保存单元数和字节数。相邻 New 和来源连续的 Copy 仍按现规则合并。若 Copy 末尾是高代理、New 开头是低代理，New 单独选择可无损保存孤立低代理的表示，解码拼回后全文仍是原来的合法代理对。不同物理切法要求同字节。不同的逻辑 Copy/New 计划可以合法地产生不同 Delta。
+3. **建议的 DG wire。** Base 直接是一条 Bare string。Delta 保留结果的 UTF-16 单元数。Copy 保持原指令，New 后接一条非空 Bare string。New 的贡献由解码后的单元数决定，因而不用同时保存单元数和字节数。相邻 New 和来源连续的 Copy 仍按现规则合并。若 Copy 末尾是高代理、New 开头是低代理，New 单独选择可无损保存孤立低代理的表示，解码拼回后全文仍是原来的合法代理对。在这条整段方案中，不同物理切法要求同字节。不同的逻辑 Copy/New 计划可以合法地产生不同 Delta。
 4. **拒绝损坏且控制分配。** Bare 读端目前对 UTF-8 严格，对有效的非首选编码和冗余 varint 宽容。建议沿用 Binary 的字面值读语义，DG 继续校验操作、非零 New、前驱范围、结果单元数和完整消费。现有 `ReadString(maxPayloadByteCount)` 只限制字节。保留整条 Delta 预检时，Binary 需提供不生成 string 的验证和已解码单元计数，DG 据此检查字节范围、严格 UTF-8 和剩余输出单元，重放时才生成 string。带双限额的 ReadString 可保护分配上界，但预检若调用它仍会分配。目前重放可能中途触及片数上限，从头退回平坦恢复。已解码的字面可能再次处理。可先测这项开销，再决定是否预判回退或复用字面。Base 也要在 CLR/应用限额内解码。压缩另限已存与解压后字节数。[读端](../../../../atelia-storage/src/Binary/BareValueReader.Strings.cs) · [DG 冷重放](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs)
 5. **格式切换。** 当前 `"A"` 的 Text Base 是 `01 41 00`，Bare 是 `03 41`。即使 Binary 的旧 string reader 能读新的字面值，已经认识 DurableText v1 的 DG 也要区分两代 Text body。无须给每条 Delta 加编码器/内存类型标签。可给新 Text Base 分配专用 typed route，从该 Base 起整链遵循新语法。若选择重建开发库，可在打开端统一提升格式版本，两者取其一。专用 route 可保留普通类型路径。最小方案是明确拒绝旧 Text。若要允许读旧并续写，现有 typed 解码只向下传 Layout 与 body，新旧又同为 Text。需将格式代际传给恢复及写入决策，在第一次需要以新语法写旧正文时强制新 Base，然后才允许新 Delta。验收以**本次已有 Text v1 的包**做交叉读负控，源码联调后更新 Storage pin，并用新普通包冷开续写。在开放 Store 中继续遵守完成帧只追加。[typed 路由](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs) · [包验收入口](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md)
 
@@ -100,7 +112,7 @@
 
 ## 下一步如何得出产品选择
 
-建议用一轮有边界的实验，先实现相同 wire 的“拼接复用”和“分片复用”，与当前固定编码并列。分别打开“只改 Base”和“同时改 New”，从同一条 Save 轨迹区分收益来源。压缩只挑一个快方法在完整路径上挑战，LZ4 可先试。上表的 Brotli 作为更重但更小的尺寸参照。固定逻辑块、全文统计和额外字符集分别等待相应反例在真实负载中出现。
+建议用一轮有边界的实验，先实现相同 wire 的“拼接复用”和“分片复用”，与当前固定编码并列。Base-only 组另加可变段格式，让冻结 Piece 直接各写一条 Bare。对整段方案分别打开“只改 Base”和“同时改 New”，从同一条 Save 轨迹区分收益来源。压缩只挑一个快方法在完整路径上挑战，LZ4 可先试。上表的 Brotli 作为更重但更小的尺寸参照。固定逻辑块、全文统计和额外字符集分别等待相应反例在真实负载中出现。
 
 | 负载 | 优先观察的差别 |
 |---|---|
