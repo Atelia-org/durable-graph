@@ -62,9 +62,10 @@ internal sealed class BusinessPersistenceAdapter {
         // State candidate creation validates the complete source before body callbacks.
         NormalizedGraphState next = NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline);
         IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents(deferTextBase: !EagerTextBaseForTesting);
+        TypedBaseBodyCodec.StatePreparation bases = new(catalog);
         List<PreparedObject> rows = [];
         foreach (PreparedCapturedObject item in prepared) {
-            PreparedTypedBase body = TypedBaseBodyCodec.Prepare(item, catalog);
+            PreparedTypedBase body = bases.Prepare(item);
             rows.Add(ObjectWritePlanner.ClassifyCaptured(item, body,
                 item.Previous is null ? null : Source!.ObjectHeads[item.Current.Id.Value],
                 baseline is not null && baseline.Objects.TryGetValue(item.Current.Id, out NormalizedObject? prior) && prior.RequiresRewrite));

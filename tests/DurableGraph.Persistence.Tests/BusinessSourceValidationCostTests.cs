@@ -49,7 +49,8 @@ public sealed class BusinessSourceValidationCostTests(ITestOutputHelper output) 
             output.WriteLine($"live={liveCount}, kind={kind}, sample={sample}, qualifications={completeChecks}, " +
                 $"PrepareOwned allocated={allocated}, body calls={harness.BodyCalls}");
             Assert.Equal(domainEvent ? 0 : 1, completeChecks);
-            Assert.True(harness.BodyCalls >= liveCount);
+            // Each custom Base runs during preparation, including when that Base is selected.
+            Assert.Equal(domainEvent ? liveCount : 2 * liveCount, harness.BodyCalls);
             Assert.Equal(domainEvent ? liveCount : 1, write.Write.Records.Count);
             if (domainEvent) {
                 Assert.Null(write.Write.SourceGraph);

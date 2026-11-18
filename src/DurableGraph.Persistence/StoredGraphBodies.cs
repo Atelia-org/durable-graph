@@ -11,16 +11,22 @@ namespace Atelia.DurableGraph.Persistence;
 
 internal static class TypedBaseBodyCodec {
     internal const byte FormatVersion = 5;
-    internal static PreparedTypedBase Prepare(PreparedCapturedObject item, SchemaCatalogView catalog) {
-        if (item.EagerBaseBody is { } eager) {
-            return new(Encode(item.Current.Layout, eager, catalog));
+
+    // One State preparation has one catalog. Equal complete layouts select the same typed route.
+    internal sealed class StatePreparation(SchemaCatalogView catalog) {
+        private readonly Dictionary<ObjectLayout, byte[]> _headers = [];
+
+        internal PreparedTypedBase Prepare(PreparedCapturedObject item) {
+            ObjectLayout layout = item.Current.Layout;
+            if (!_headers.TryGetValue(layout, out byte[]? header)) {
+                ArrayBufferWriter<byte> buffer = new();
+                BareValueWriter writer = new(buffer);
+                WriteHeader(ref writer, layout, catalog);
+                header = buffer.WrittenSpan.ToArray();
+                _headers.Add(layout, header);
+            }
+            return new(header, item);
         }
-        // Resolve and encode the header while the source Schema is in scope.
-        // Every candidate, including one whose Base is deferred, needs a valid layout and route.
-        ArrayBufferWriter<byte> buffer = new();
-        BareValueWriter writer = new(buffer);
-        WriteHeader(ref writer, item.Current.Layout, catalog);
-        return new(buffer.WrittenSpan, item);
     }
 
     internal static byte[] Encode(ObjectLayout layout, PreparedBaseBody body, SchemaCatalogView? catalog = null) {

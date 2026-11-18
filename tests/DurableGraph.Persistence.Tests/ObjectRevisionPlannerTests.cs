@@ -159,7 +159,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         int encodings = 0;
         TextBodyCodec.BaseEncodingObserver = () => encodings++;
         try {
-            PreparedTypedBase typed = TypedBaseBodyCodec.Prepare(captured, catalog);
+            PreparedTypedBase typed = new TypedBaseBodyCodec.StatePreparation(catalog).Prepare(captured);
             PreparedObject row = ObjectWritePlanner.ClassifyCaptured(captured, typed, prior, rewrite);
             var result = Plan([row], new() { [id] = priorH }, limit: 5, percent: 5);
             long rawEstimate = BareValueEncoding.MeasureVarUInt32((uint)current.Content.Length)
@@ -182,6 +182,31 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     }
 
     [Fact]
+    public void Typed_Base_requires_an_allocatable_actual_length_at_the_exact_boundary() {
+        const int header = 3;
+        Assert.Equal(Array.MaxLength, PreparedTypedBase.EncodedLength(header, Array.MaxLength - header));
+        Assert.Throws<InvalidDataException>(() => PreparedTypedBase.EncodedLength(header, Array.MaxLength - header + 1));
+        Assert.Throws<InvalidDataException>(() => PreparedTypedBase.EncodedLength(header, int.MaxValue));
+    }
+
+    [Fact]
+    public void State_preparation_keeps_each_frozen_eager_body_when_layouts_repeat() {
+        SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
+        TypedBaseBodyCodec.StatePreparation bases = new(catalog);
+        PreparedCapturedObject Freeze(string value, uint id) =>
+            new(new(new(id), value), null, StringBodyPreparer.PrepareBase(value), null);
+        PreparedCapturedObject first = Freeze("one", 1), second = Freeze("two", 2);
+        DurableTextState text = new DurableText("many").CaptureState();
+        PreparedCapturedObject other = new(new(new(3), text), null, TextBodyCodec.PrepareBase(text), null);
+        PreparedTypedBase a = bases.Prepare(first), b = bases.Prepare(other), c = bases.Prepare(second);
+        foreach (var (item, prepared) in new[] { (first, a), (other, b), (second, c) }) {
+            byte[] expected = TypedBaseBodyCodec.Encode(item.Current.Layout, item.EagerBaseBody!, catalog);
+            Assert.Equal(expected.Length, prepared.EstimatedBodyBytes);
+            Assert.Equal(expected, prepared.Encode().ToArray());
+        }
+    }
+
+    [Fact]
     public void Base_estimate_above_the_buffer_length_limit_can_still_select_Delta() {
         long estimate = ObjectVersionPayloadSize.EstimateBasePayloadBytes((long)int.MaxValue + 10);
         Assert.True(estimate > int.MaxValue);
@@ -198,7 +223,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         reader.EnsureFullyConsumed();
         SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
         PreparedCapturedObject item = new(current, current, null, null);
-        PreparedTypedBase candidate = TypedBaseBodyCodec.Prepare(item, catalog);
+        PreparedTypedBase candidate = new TypedBaseBodyCodec.StatePreparation(catalog).Prepare(item);
         byte[] eager = TypedBaseBodyCodec.Encode(current.Layout, StringBodyPreparer.PrepareBase("A"), catalog);
         Assert.Equal(eager.Length, candidate.EstimatedBodyBytes);
         long canonical = ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length);
@@ -228,7 +253,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         PreparedCapturedObject candidate = new(current, prior, null, writer.PrepareDelta(prior, current));
         SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
         byte[] expected = TypedBaseBodyCodec.Encode(current.Layout, writer.PrepareBase(current), catalog);
-        PreparedTypedBase deferred = TypedBaseBodyCodec.Prepare(candidate, catalog);
+        PreparedTypedBase deferred = new TypedBaseBodyCodec.StatePreparation(catalog).Prepare(candidate);
         Assert.Equal(expected.Length, deferred.EstimatedBodyBytes);
         before.Clear(); // A deferred writer must read the captured array.
         FrameAddress head = TestAddress();
