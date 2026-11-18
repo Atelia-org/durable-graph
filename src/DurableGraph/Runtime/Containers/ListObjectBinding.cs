@@ -1,3 +1,4 @@
+using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
@@ -12,6 +13,7 @@ public abstract class ListObjectBinding : ObjectBinding {
         ElementBinding = element;
         NormalizeState = normalize;
         DeltaAlgorithm = algorithm;
+        MeasureBase = GetBaseMeasurement(element.StateOpsType);
     }
 
     public ListLayout ListLayout { get; }
@@ -38,6 +40,40 @@ public abstract class ListObjectBinding : ObjectBinding {
     }
 
     internal abstract ObjectStateRecord CreateStateRecord(ObjectId id, object frozen);
+
+    // Uses the actual writer bound to this List. A public custom binding can assign
+    // its own IStateOps to a familiar slot or CLR type and must keep its eager path.
+    internal Func<ObjectStateRecord, long>? MeasureBase { get; }
+
+    private static Func<ObjectStateRecord, long>? GetBaseMeasurement(Type ops) {
+        if (ops == typeof(ByteStateOps)) {
+            return static current => FixedWidthBytes(current.GetListState<byte>().Count, 1);
+        }
+        if (ops == typeof(DoubleStateOps)) {
+            return static current => FixedWidthBytes(current.GetListState<double>().Count, 8);
+        }
+        if (ops == typeof(Int32StateOps)) {
+            return static current => {
+                FrozenListState<int> state = current.GetListState<int>();
+                long bytes = BareValueEncoding.MeasureVarUInt32((uint)state.Count);
+                foreach (int value in state.Elements) { bytes += BareValueEncoding.MeasureVarInt32(value); }
+                return bytes;
+            };
+        }
+        if (ops == typeof(StringIdStateOps) || ops == typeof(DurableIdStateOps) || ops == typeof(ObjectIdStateOps)) {
+            return static current => {
+                FrozenListState<ObjectId> state = current.GetListState<ObjectId>();
+                long bytes = BareValueEncoding.MeasureVarUInt32((uint)state.Count);
+                foreach (ObjectId id in state.Elements) { bytes += BareValueEncoding.MeasureVarUInt32(id.Value); }
+                return bytes;
+            };
+        }
+        return null;
+    }
+
+    private static long FixedWidthBytes(int count, int width) {
+        return BareValueEncoding.MeasureVarUInt32((uint)count) + (long)count * width;
+    }
 }
 
 internal sealed class ListObjectBinding<TDomain, TState, TProjection, TOps> : ListObjectBinding, IStatePreparationBinding

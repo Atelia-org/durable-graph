@@ -7,6 +7,49 @@ using Atelia.DurableGraph.Serialization;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed class ListBodyTests {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(128)]
+    public void DeferredListMeasurementsMatchActualWriterAcrossWidthBoundaries(int count) {
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(byte), out var bytes));
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(double), out var doubles));
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(int), out var ints));
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(string), out var strings));
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(DurableText), out var objects));
+        StateValueBinding durables = new(DurableFieldInfo.Reference(1, TypeExpr.Named("ListMeasurement.Child")),
+            typeof(ObjectId), typeof(DurableIdStateOps), typeof(Child), typeof(DurableValueProjection<Child>));
+        CheckMeasurement(bytes, new byte[count]);
+        CheckMeasurement(doubles, new double[count]);
+        int[] numbers = [int.MinValue, -8193, -8192, -65, -64, 0, 63, 64, 8191, 8192, int.MaxValue];
+        CheckMeasurement(ints, Enumerable.Range(0, count).Select(i => numbers[i % numbers.Length]).ToArray());
+        uint[] values = [0, 127, 128, 16_383, 16_384, uint.MaxValue];
+        ObjectId[] ids = Enumerable.Range(0, count).Select(i => new ObjectId(values[i % values.Length])).ToArray();
+        CheckMeasurement(strings, ids);
+        CheckMeasurement(objects, ids);
+        CheckMeasurement(durables, ids);
+    }
+
+    [Fact]
+    public void UnrecognizedListCodecStaysEagerEvenWhenStateAndSlotAreInt32() {
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(int), out StateValueBinding builtIn));
+        StateValueBinding custom = new(builtIn.Slot, builtIn.StateType, typeof(CountingOps), builtIn.DomainType, builtIn.ProjectionType);
+        ListObjectBinding binding = ListObjectBinding.Create(typeof(List<int>), new(custom.Slot), custom);
+        Assert.Null(binding.MeasureBase);
+        ObjectStateRecord row = binding.CreateStateRecord(new(1), new FrozenListState<int>([1, -64, 64]));
+        Assert.Equal(new byte[] { 3, 2, 127, 128, 1 }, ((IStatePreparationBinding)binding).PrepareBase(row).Body.ToArray());
+    }
+
+    private sealed class Child : IDurableObject { }
+
+    private static void CheckMeasurement<T>(StateValueBinding element, T[] values) where T : unmanaged {
+        ListObjectBinding binding = ListObjectBinding.Create(typeof(List<>).MakeGenericType(element.DomainType!),
+            new(element.Slot), element);
+        ObjectStateRecord row = binding.CreateStateRecord(new(1), new FrozenListState<T>(values));
+        Assert.NotNull(binding.MeasureBase);
+        Assert.Equal((long)((IStatePreparationBinding)binding).PrepareBase(row).Body.Length, binding.MeasureBase(row));
+    }
+
     public static IEnumerable<object[]> Edits() {
         yield return [new int[] { 1, 2, 3 }, new int[] { 1, 2, 3 }];
         yield return [new int[] { 1, 2, 3 }, new int[] { 1, 2, 3, 0, 4 }];

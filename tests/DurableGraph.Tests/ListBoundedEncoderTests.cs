@@ -8,6 +8,80 @@ namespace Atelia.DurableGraph.Tests;
 public sealed class ListBoundedEncoderTests {
     private static readonly ListLayout Layout = new(new(1, TypeTag.Int32));
 
+    [Fact]
+    public void BuiltinPatchBodiesPreserveBitwiseAndVariableWidthEncodings() {
+        AssertPatchWire<byte, ByteStateOps>([10, 20, 30], [10, 255, 30], new(new(1, TypeTag.Byte)),
+            "0303000302FF00");
+        AssertPatchWire<int, Int32StateOps>([0, 64, 0], [-65, 64, int.MinValue], Layout,
+            "0303000301810103FFFFFFFF0F00");
+        double nan1 = BitConverter.Int64BitsToDouble(0x7ff8000000000001);
+        double nan2 = BitConverter.Int64BitsToDouble(0x7ff8000000000002);
+        AssertPatchWire<double, DoubleStateOps>([0d, nan1, nan1, 2d], [-0d, nan1, nan2, 2d],
+            new(new(1, TypeTag.Double)), "0403000401000000000000008003020000000000F87F00");
+        ObjectId[] before = [new(1), new(127), new(128)], after = [new(0), new(127), new(uint.MaxValue)];
+        const string ids = "03030003010003FFFFFFFF0F00";
+        AssertPatchWire<ObjectId, StringIdStateOps>(before, after, new(new(1, TypeTag.String)), ids);
+        ListLayout nominal = new(new(1, TypeTag.ObjectReference, "patch.fixture"));
+        AssertPatchWire<ObjectId, DurableIdStateOps>(before, after, nominal, ids);
+        AssertPatchWire<ObjectId, ObjectIdStateOps>(before, after, nominal, ids);
+    }
+
+    private static void AssertPatchWire<TState, TOps>(TState[] before, TState[] after, ListLayout layout,
+        string expectedHex) where TState : unmanaged where TOps : IStateOps<TState> {
+        FrozenListState<TState> prior = new(before), current = new(after);
+        Assert.True(ListStateBody<TState, TOps>.TryEncodePlan(prior, current, layout,
+            [new(0, 0, after.Length)], null, out PreparedDeltaBody? body));
+        Assert.NotNull(body);
+        Assert.Equal(expectedHex, Convert.ToHexString(body.Body));
+        BareValueReader reader = new(body.Body);
+        var decoded = ListStateBody<TState, TOps>.ApplyDelta(ref reader, prior, layout);
+        reader.EnsureFullyConsumed();
+        Assert.Equal(after.Length, decoded.Count);
+        for (int i = 0; i < after.Length; i++) {
+            Assert.True(TOps.StateEquals(in after[i], in decoded.Elements[i], layout.ElementSlot));
+        }
+    }
+
+    [Theory]
+    [InlineData(5, 5)]   // Stop after first patch index.
+    [InlineData(6, 13)]  // One double crosses the ceiling.
+    [InlineData(14, 14)] // Stop after the second index.
+    public void DoublePatchChecksTheCeilingAtElementBoundaries(int limit, int bytes) {
+        Assert.False(ListStateBody<double, DoubleStateOps>.TryEncodePlan(new(new[] { 0d, 0d }),
+            new(new[] { 1d, 2d }), new(new(1, TypeTag.Double)), [new(0, 0, 2)], limit,
+            out PreparedDeltaBody? body, out int writtenBytes));
+        Assert.Null(body);
+        Assert.Equal(bytes, writtenBytes);
+    }
+
+    [Fact]
+    public void CustomIntOpsKeepTheirOwnPatchEncoding() {
+        SentinelOps.Reset();
+        SentinelOps.DeltaPayloadBytes = 3;
+        SentinelOps.ThrowOnBase = 7;
+        Assert.True(ListStateBody<int, SentinelOps>.TryEncodePlan(new(new[] { 0 }), new(new[] { 7 }),
+            Layout, [new(0, 0, 1)], null, out PreparedDeltaBody? body));
+        Assert.NotNull(body);
+        Assert.Equal("010300010100000000", Convert.ToHexString(body.Body));
+        Assert.Equal(new[] { 7 }, SentinelOps.Prepared);
+        Assert.Empty(SentinelOps.Written);
+    }
+
+    [Fact]
+    public void DenseIntPatchesAvoidPerElementBuffers() {
+        const int count = 4096;
+        FrozenListState<int> prior = new(new int[count]), current = new(Enumerable.Repeat(1, count).ToArray());
+        ListDeltaRange[] ranges = [new(0, 0, count)];
+        ListStateBody<int, Int32StateOps>.TryEncodePlan(prior, current, Layout, ranges, null, out _);
+        long start = GC.GetAllocatedBytesForCurrentThread();
+        bool encoded = ListStateBody<int, Int32StateOps>.TryEncodePlan(prior, current, Layout, ranges, null, out var body);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - start;
+        Assert.True(encoded);
+        Assert.NotNull(body);
+        // Allow writer growth and the final owned bytes. One buffer per changed element exceeds this even at minimum capacity.
+        Assert.True(allocated < 16L * body.Body.Length, $"Dense patch plan allocated {allocated} bytes for {body.Body.Length} encoded bytes.");
+    }
+
     [Theory]
     [InlineData(ListDeltaAlgorithm.Position)]
     [InlineData(ListDeltaAlgorithm.LocalResync)]

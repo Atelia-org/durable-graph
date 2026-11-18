@@ -165,11 +165,9 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
   选择 Delta 后复用该结果，避免再次比较和编码。临时缓冲所有权独立于可变领域对象。
   List 匹配需要反复试探元素相等性，另用同 exact 槽下无分配的静态 StateEquals；逐持久字段比较，
   不比较 struct padding、不调用领域 Equals，也不为试探生成临时 payload。匹配确定后，
-  仅对实际需要 patch 的元素对调用融合 PrepareDelta，并复用其 bytes；两者必须具有相同的持久状态相等语义。
+  只为变化的元素写 patch。已知 Delta 正文等于新值完整编码的内建槽可直接写入计划，其余槽调用各自的 PrepareDelta。两条路径共用持久状态的相等语义。
   这不要求普通对象在 PrepareDelta 前额外扫描一遍完整状态。具体分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md)。
-- MVP 同样提前 PrepareBase：复用强类型 Write 生成独立拥有的 Base body，以实际 body 长度计量，
-  决策后直接复用选定 bytes。先接受全部 live Base 准备的 CPU/内存成本，优化留待 MVP 后测量；
-  Frame 大小上限不代表候选集合的内存上限。Storage envelope 开销另按其格式计入。
+- 业务 State 按冻结内容准备候选。可精确计长的已有 List 与 string 将 Base 编码推迟到选中后，DurableText 使用分段估算，其余对象预编码。类型头校验在选择前完成，对象版本封套按其格式计量，安装按实际追加记录记账。[DB-102](design-branches/0102-container-payload-planning/README.md)
 
 设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture/README.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)、

@@ -191,6 +191,58 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     }
 
     [Fact]
+    public void DeferredStringMeasuresCanonicalOutputAfterReadingLegalLongerForm() {
+        ObjectId id = new(1);
+        BareValueReader reader = new(new byte[] { 2, 65, 0 }); // UTF-16LE "A" is legal, but canonical ASCII is shorter.
+        ObjectStateRecord current = new(id, reader.ReadString());
+        reader.EnsureFullyConsumed();
+        SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
+        PreparedCapturedObject item = new(current, current, null, null);
+        PreparedTypedBase candidate = TypedBaseBodyCodec.Prepare(item, catalog);
+        byte[] eager = TypedBaseBodyCodec.Encode(current.Layout, StringBodyPreparer.PrepareBase("A"), catalog);
+        Assert.Equal(eager.Length, candidate.EstimatedBodyBytes);
+        long canonical = ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length);
+        long actualPrior = ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length + 1);
+        PreparedObject row = ObjectWritePlanner.ClassifyCaptured(item, candidate, TestAddress());
+        Assert.Empty(Plan([row], new() { [id] = canonical }, limit: 1).Records);
+        var result = Plan([row], new() { [id] = actualPrior }, limit: 1);
+        Assert.Equal(canonical, Assert.Single(result.Estimates).BasePayloadBytes);
+        ObjectVersionRecord rewrite = Assert.Single(result.Records);
+        Assert.Equal(ObjectVersionKind.Base, rewrite.Kind);
+        Assert.Equal(eager, rewrite.Body.ToArray());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExactListBaseMatchesEagerWhenRewriteIsForcedOrUnchangedDebtIsApproved(bool forceRewrite) {
+        ObjectId id = new(1);
+        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(int), out StateValueBinding element));
+        ListObjectBinding binding = ListObjectBinding.Create(typeof(List<int>), new(element.Slot), element);
+        List<int> before = Enumerable.Repeat(0, 123).ToList();
+        using CaptureContext capture = new CaptureSession().BeginCapture();
+        ObjectStateRecord prior = binding.Capture(id, before, capture);
+        if (forceRewrite) { before[7] = short.MaxValue; }
+        ObjectStateRecord current = binding.Capture(id, before, capture);
+        IStatePreparationBinding writer = (IStatePreparationBinding)binding;
+        PreparedCapturedObject candidate = new(current, prior, null, writer.PrepareDelta(prior, current));
+        SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
+        byte[] expected = TypedBaseBodyCodec.Encode(current.Layout, writer.PrepareBase(current), catalog);
+        PreparedTypedBase deferred = TypedBaseBodyCodec.Prepare(candidate, catalog);
+        Assert.Equal(expected.Length, deferred.EstimatedBodyBytes);
+        before.Clear(); // A deferred writer must read the captured array.
+        FrameAddress head = TestAddress();
+        PreparedObject row = ObjectWritePlanner.ClassifyCaptured(candidate, deferred, head, forceRewrite);
+        var result = Plan([row], new() { [id] = 5000 });
+        Assert.Equal(forceRewrite ? ObjectSaveChangeKind.BaseOnlyUpdate : ObjectSaveChangeKind.NoChange,
+            Assert.Single(result.Estimates).ChangeKind);
+        ObjectVersionRecord record = Assert.Single(result.Records);
+        Assert.Equal(ObjectVersionKind.Base, record.Kind);
+        Assert.Null(record.PriorAddress);
+        Assert.Equal(expected, record.Body.ToArray());
+    }
+
+    [Fact]
     public void Invalid_rows_and_parameters_are_rejected_by_pure_planning() {
         Assert.Throws<ArgumentException>(() => Plan([PreparedObject.New(new(2), new([2])), PreparedObject.New(new(2), new([2]))], []));
         Assert.Throws<ArgumentException>(() => Plan([null!], []));

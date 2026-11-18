@@ -438,6 +438,9 @@ public sealed class CapturedGraphPreparationTests {
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => session.Prepare(candidate));
         AssertPreparationDiagnostic(error, 2, ObjectStateKind.String, TypeExpr.Builtin(TypeTag.String));
+        InvalidOperationException deferredError = Assert.Throws<InvalidOperationException>(() =>
+            session.PrepareAgainst(candidate, new Dictionary<ObjectId, ObjectStateRecord> { [prior.Id] = prior }));
+        AssertPreparationDiagnostic(deferredError, 2, ObjectStateKind.String, TypeExpr.Builtin(TypeTag.String));
         Assert.Equal(0, calls);
         Assert.Same(previous, session.Current);
         session.Discard(candidate);

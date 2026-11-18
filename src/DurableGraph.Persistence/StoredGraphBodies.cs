@@ -16,11 +16,11 @@ internal static class TypedBaseBodyCodec {
             return new(Encode(item.Current.Layout, eager, catalog));
         }
         // Resolve and encode the header while the source Schema is in scope.
-        // Choosing Delta can skip the text bytes, never a layout/route check.
+        // Every candidate, including one whose Base is deferred, needs a valid layout and route.
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
         WriteHeader(ref writer, item.Current.Layout, catalog);
-        return new(buffer.WrittenSpan, item.Current.TextState);
+        return new(buffer.WrittenSpan, item);
     }
 
     internal static byte[] Encode(ObjectLayout layout, PreparedBaseBody body, SchemaCatalogView? catalog = null) {

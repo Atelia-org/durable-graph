@@ -65,7 +65,7 @@ public sealed class CaptureSession {
         ArgumentNullException.ThrowIfNull(previous);
         _preparing = true;
         try {
-            return PrepareObjects(candidate, previous, deferTextBase);
+            return PrepareObjects(candidate, previous, deferMeasuredBases: true, deferTextBase: deferTextBase);
         }
         finally {
             _preparing = false;
@@ -73,7 +73,8 @@ public sealed class CaptureSession {
     }
 
     private static List<PreparedCapturedObject> PrepareObjects(
-        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous, bool deferTextBase = false) {
+        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous,
+        bool deferMeasuredBases = false, bool deferTextBase = false) {
         // Validate the entire comparison set before invoking any user body operation.
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
@@ -83,8 +84,11 @@ public sealed class CaptureSession {
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
             PreparedBaseBody? body = current.Kind switch {
+                ObjectStateKind.String when deferMeasuredBases && prior is not null => null,
                 ObjectStateKind.String => StringBodyPreparer.PrepareBase(current.StringContent),
                 ObjectStateKind.Text when deferTextBase && prior is not null => null,
+                ObjectStateKind.List when deferMeasuredBases && prior is not null &&
+                    current.Preparation is ListObjectBinding { MeasureBase: not null } => null,
                 _ => current.Preparation!.PrepareBase(current),
             };
             PreparedDeltaBody? delta = prior is not null && current.Kind != ObjectStateKind.String

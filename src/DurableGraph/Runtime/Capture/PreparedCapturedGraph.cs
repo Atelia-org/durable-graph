@@ -1,3 +1,5 @@
+using Atelia.Binary;
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Runtime;
@@ -41,9 +43,21 @@ public sealed class PreparedCapturedObject {
     /// <summary>Null for a new object; otherwise the same ID from the previous in-memory graph.</summary>
     public ObjectStateRecord? Previous { get; }
     // Public CaptureSession.Prepare always supplies eager bytes. Only an internal
-    // business save may carry an immutable text state through representation selection.
+    // business save may carry frozen content through representation selection.
     internal PreparedBaseBody? EagerBaseBody { get; }
-    public PreparedBaseBody BaseBody => EagerBaseBody ?? TextBodyCodec.PrepareBase(Current.TextState);
+    public PreparedBaseBody BaseBody => EagerBaseBody ?? (Current.Kind switch {
+        ObjectStateKind.String => StringBodyPreparer.PrepareBase(Current.StringContent),
+        ObjectStateKind.Text => TextBodyCodec.PrepareBase(Current.TextState),
+        _ => Current.Preparation!.PrepareBase(Current),
+    });
+
+    internal long EstimateDeferredBaseSize() => Current.Kind switch {
+        ObjectStateKind.String => BareValueEncoding.MeasureString(Current.StringContent),
+        ObjectStateKind.Text => TextBodyCodec.EstimateBaseSize(Current.TextState),
+        ObjectStateKind.List when Current.Preparation is ListObjectBinding { MeasureBase: { } measure } => measure(Current),
+        _ => throw new InvalidOperationException("This candidate has no deferred Base size operation."),
+    };
+
     /// <summary>Present for existing mutable objects; existing immutable strings need no Delta.</summary>
     public PreparedDeltaBody? DeltaBody { get; }
 }

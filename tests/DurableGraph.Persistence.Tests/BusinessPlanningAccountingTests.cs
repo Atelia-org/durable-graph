@@ -36,6 +36,15 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             // The extra byte is the 127/128 body-length prefix boundary, in addition to all head bytes.
             AssertAccounting(repository, session);
             Assert.Equal(b, Accounting(session)[new(listId)]);
+            BusinessSaveCandidate inspection = Business(session).Capture(root, independentSnapshot: false);
+            try {
+                PreparedCapturedObject planned = Assert.Single(inspection.PrepareContents(), row => row.Current.Id.Value == listId);
+                Assert.Null(planned.EagerBaseBody);
+                PreparedCapturedObject eager = Assert.Single(inspection.CaptureSession.Prepare(inspection.Graph).Objects,
+                    row => row.Current.Id.Value == listId);
+                Assert.NotNull(eager.EagerBaseBody);
+                Assert.Equal(eager.BaseBody.Body.ToArray(), planned.BaseBody.Body.ToArray());
+            } finally { inspection.AbortPreparation(); }
             using (PreparedFixtureSave unchanged = session.Prepare(root, parameters: new(1, 100))) {
                 Assert.Empty(unchanged.Business.Write.Records); // Every H equals its own actual typed B.
             }
@@ -108,6 +117,38 @@ public sealed partial class P0BusinessPlanningAccountingTests : IDisposable {
             }
             AssertAccounting(repository, session);
         }
+    }
+
+    [Fact]
+    public void OnlyPreviouslySavedStringIdentityDefersBaseAfterReopen() {
+        string value = string.Concat(new string('a', 129), "汉🌟", new string(['\uD800']));
+        StateModelRegistry models = new();
+        models.Register(global::Atelia.DurableGraph.Generated.Family_475254.Definition);
+        using (RepositoryStorageFacade repository = RepositoryStorageFacade.CreateNew(_path)) {
+            BranchSaveSessionFixture session = new(repository, "main", models);
+            GraphRefTargetFixture root = new() { Text = value };
+            CheckStringPreparation(session, root, independentSnapshot: false, deferred: false);
+            using PreparedFixtureSave save = session.Prepare(root);
+            save.Commit();
+        }
+        using RepositoryStorageFacade reopened = RepositoryStorageFacade.OpenExisting(_path);
+        BranchSaveSessionFixture loaded = new(reopened, "main", models);
+        GraphRefTargetFixture restored = Assert.IsType<GraphRefTargetFixture>(loaded.State);
+        Assert.Equal(value, restored.Text);
+        CheckStringPreparation(loaded, restored, independentSnapshot: false, deferred: true);
+        CheckStringPreparation(loaded, restored, independentSnapshot: true, deferred: false);
+        restored.Text = new string(restored.Text.AsSpan());
+        CheckStringPreparation(loaded, restored, independentSnapshot: false, deferred: false);
+    }
+
+    private static void CheckStringPreparation(BranchSaveSessionFixture session, GraphRefTargetFixture root,
+        bool independentSnapshot, bool deferred) {
+        BusinessSaveCandidate candidate = Business(session).Capture(root, independentSnapshot);
+        try {
+            PreparedCapturedObject item = Assert.Single(candidate.PrepareContents(), row => row.Current.Kind == ObjectStateKind.String);
+            Assert.Equal(deferred, item.EagerBaseBody is null);
+            Assert.Equal(Serialization.StringBodyPreparer.PrepareBase(root.Text!).Body.ToArray(), item.BaseBody.Body.ToArray());
+        } finally { candidate.AbortPreparation(); }
     }
 
     private static IReadOnlyDictionary<ObjectId, long> Accounting(BranchSaveSessionFixture session) {

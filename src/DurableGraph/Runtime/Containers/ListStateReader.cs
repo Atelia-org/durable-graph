@@ -28,15 +28,7 @@ internal sealed class ListStateReader<TState, TOps> : ListStateReader
     internal override ObjectStateRecord Read(ObjectId id, IStateBodySource source) {
         ArgumentNullException.ThrowIfNull(source);
         if (id.IsNull || source.Count <= 0) { throw new InvalidDataException("A List requires a nonzero ID and a Base body."); }
-        BareValueReader reader = new(source.GetBody(0));
-        FrozenListState<TState> state = ListStateBody<TState, TOps>.ReadBase(ref reader, Layout.List!);
-        reader.EnsureFullyConsumed();
-        for (int index = 1; index < source.Count; index++) {
-            reader = new(source.GetBody(index));
-            state = ListStateBody<TState, TOps>.ApplyDelta(ref reader, state, Layout.List!);
-            reader.EnsureFullyConsumed();
-        }
-        return new(id, Layout.List!, state);
+        return new(id, Layout.List!, ListStateBody<TState, TOps>.ReadChain(source, Layout.List!));
     }
 
     internal override void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor) {
@@ -54,6 +46,12 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
     private const byte New = 2;
     private const byte CopyAndPatch = 3;
 
+    // For these codecs, the Delta body of a changed element is its current Base encoding.
+    private static readonly bool PatchIsBase =
+        typeof(TOps) == typeof(ByteStateOps) || typeof(TOps) == typeof(DoubleStateOps) ||
+        typeof(TOps) == typeof(Int32StateOps) || typeof(TOps) == typeof(StringIdStateOps) ||
+        typeof(TOps) == typeof(DurableIdStateOps) || typeof(TOps) == typeof(ObjectIdStateOps);
+
     internal static PreparedBaseBody PrepareBase(FrozenListState<TState> state, ListLayout layout) {
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
@@ -62,11 +60,27 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         return new(buffer.WrittenSpan);
     }
 
-    internal static FrozenListState<TState> ReadBase(ref BareValueReader reader, ListLayout layout) {
+    internal static FrozenListState<TState> ReadBase(ref BareValueReader reader, ListLayout layout) =>
+        new(ReadBaseElements(ref reader, layout), takeOwnership: true);
+
+    private static TState[] ReadBaseElements(ref BareValueReader reader, ListLayout layout) {
         int count = ReadCount(ref reader);
         RequireTailFits(count, ref reader, layout);
         TState[] elements = new TState[count];
         for (int index = 0; index < elements.Length; index++) { elements[index] = TOps.ReadBase(ref reader, layout.ElementSlot); }
+        return elements;
+    }
+
+    internal static FrozenListState<TState> ReadChain(IStateBodySource source, ListLayout layout) {
+        BareValueReader reader = new(source.GetBody(0));
+        TState[] elements = ReadBaseElements(ref reader, layout);
+        reader.EnsureFullyConsumed();
+        // Only the completed chain escapes this method. Its intermediate arrays remain private.
+        for (int index = 1; index < source.Count; index++) {
+            reader = new(source.GetBody(index));
+            elements = ApplyDeltaElements(ref reader, elements, layout, ownedPrior: elements);
+            reader.EnsureFullyConsumed();
+        }
         return new(elements, takeOwnership: true);
     }
 
@@ -163,11 +177,15 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
                 }
                 writer.WriteVarUInt32((uint)index + 1);
                 if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
-                PreparedDeltaBody delta = TOps.PrepareDelta(in oldValue, in newValue, layout.ElementSlot);
-                if (!delta.HasChanges) {
-                    throw new InvalidOperationException("List element StateEquals and PrepareDelta disagree about a changed value.");
+                if (PatchIsBase) {
+                    TOps.WriteBase(ref writer, in newValue, layout.ElementSlot);
+                } else {
+                    PreparedDeltaBody delta = TOps.PrepareDelta(in oldValue, in newValue, layout.ElementSlot);
+                    if (!delta.HasChanges) {
+                        throw new InvalidOperationException("List element StateEquals and PrepareDelta disagree about a changed value.");
+                    }
+                    writer.WriteRawBytes(delta.Body);
                 }
-                writer.WriteRawBytes(delta.Body);
                 if (LimitReached(buffer, exclusiveByteLimit, out writtenBytes)) { return false; }
             }
             if (rangeStarted) {
@@ -200,7 +218,11 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
         return exclusiveByteLimit.HasValue && writtenBytes >= exclusiveByteLimit.Value;
     }
 
-    internal static FrozenListState<TState> ApplyDelta(ref BareValueReader reader, FrozenListState<TState> prior, ListLayout layout) {
+    internal static FrozenListState<TState> ApplyDelta(ref BareValueReader reader, FrozenListState<TState> prior, ListLayout layout) =>
+        new(ApplyDeltaElements(ref reader, prior.Elements, layout, ownedPrior: null), takeOwnership: true);
+
+    private static TState[] ApplyDeltaElements(ref BareValueReader reader, ReadOnlySpan<TState> prior, ListLayout layout,
+        TState[]? ownedPrior) {
         int count = ReadCount(ref reader);
         TState[]? elements = null;
         int output = 0;
@@ -222,11 +244,17 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
             }
             uint source = reader.ReadVarUInt32();
             int rangeLength = ReadRangeLength(ref reader, count - output);
-            if (source > (uint)prior.Count || rangeLength > prior.Count - (int)source) {
+            if (source > (uint)prior.Length || rangeLength > prior.Length - (int)source) {
                 throw new InvalidDataException("List Delta source range is outside the prior state.");
             }
-            elements ??= new TState[count];
-            prior.Elements.Slice((int)source, rangeLength).CopyTo(elements.AsSpan(output, rangeLength));
+            // A single full-range copy preserves every index. Strictly increasing patches
+            // below consume each old value before it is overwritten.
+            if (ownedPrior is not null && source == 0 && rangeLength == count && count == prior.Length) {
+                elements = ownedPrior;
+            } else {
+                elements ??= new TState[count];
+                prior.Slice((int)source, rangeLength).CopyTo(elements.AsSpan(output, rangeLength));
+            }
             if (operation == CopyAndPatch) {
                 uint previous = 0;
                 while (true) {
@@ -239,14 +267,14 @@ internal static class ListStateBody<TState, TOps> where TState : unmanaged where
                         throw new InvalidDataException("List patch indexes must be strictly increasing and within their source range.");
                     }
                     int index = (int)encoded - 1;
-                    elements[output + index] = TOps.ApplyDelta(ref reader, in prior.Elements[(int)source + index], layout.ElementSlot);
+                    elements[output + index] = TOps.ApplyDelta(ref reader, in prior[(int)source + index], layout.ElementSlot);
                     previous = encoded;
                 }
             }
             // A final CopyAndPatch still consumes its terminating zero before completing the output.
             output += rangeLength;
         }
-        return new(elements ?? [], takeOwnership: true);
+        return elements ?? [];
     }
 
     private static int ReadRangeLength(ref BareValueReader reader, int remaining) {
