@@ -561,6 +561,7 @@ record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分�
 | 领域类型 | 显式 Durable class、record class、struct、record struct、enum；支持泛型、继承、private/readonly 字段及跨程序集组合 |
 | 值组合 | inline struct 嵌套布局、Nullable；record 自动属性的存储使用 `[field: DurableField(...)]` / `[field: Transient]` |
 | 引用与数组 | string、已登记的实际派生实例、共享/循环；零下界 `T[]` 和 rank 2–4 多维数组、交错数组 |
+| 可编辑正文 | `DurableText` 保留引用身份，支持 UTF-16 范围批量编辑、不可变快照、向 StringBuilder 追加和同对象增量保存。[使用示例](docs/design-branches/0101-durable-text/mainline-integration-plan.md) |
 | 容器 | exact BCL `List<T>` 和实验性 `Dictionary<TKey,TValue>`；按内容保存。复合 Key 与当前 comparer 的边界见[字典模型资产](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | 尚不支持 | ValueTuple、DateTime、任意外部基类、CLR 嵌套类型/ref struct、任意 object/interface 字段、boxed value 身份、数组协变、非零下界及非 SZ rank-1 数组、其他未适配 BCL 容器 |
 

@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准：2026-11-15；DB-100 独立对象图堆已完成源码/普通包验收并集成master；DB-099 EventRef已验收；DB-098已退役ReadPair；DB-097独立Event已验收。081热准入未接线，082候选默认关闭；DB-073/074仍为草稿。本文只维护当前能力、边界与续工入口。
+> 校准：2026-11-18；DB-101 可编辑正文与增量保存已通过源码与普通包验收；DB-100 独立对象图堆已集成；DB-099 EventRef已验收。081热准入未接线，082候选默认关闭；DB-073/074仍为草稿。本文只维护当前能力、边界与续工入口。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -19,6 +19,8 @@
 默认搜索 src/tests 与活动回归；已淘汰设计和实验只在明确历史问题时查[Git 来源](../experiments/ARCHIVE.md)。
 
 ## 当前焦点
+
+2026-11-18：[DB-101 DurableText](../docs/design-branches/0101-durable-text/README.md) 已完成主线实现、完整源码回归、普通包冷开续写与有限成本对照。正文使用具体可编辑引用类型、A-Adaptive Piece Table 和准确前驱的范围 Delta。后续按真实消费成本重访历史快照驻留、链长与全文正则。
 
 2026-11-15：[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)已完成实现、完整源码回归和三组普通包验收，并集成master。Repository.CreateGraph/OpenGraph/SaveGraph、GraphBuilder/GraphRef与保留Head4可用；State由自身地址恢复，不保图级编辑父，保写计划及实际Delta来源、完整安装/Schema/故障资格。实验双轨已退出，旧三Head库直接拒绝。准确代码/包SHA、证据和限制只查DB-100，本片无剩余必经工单；性能/GC等由真实需求再触发，DurableText仍由用户并行推进。
 

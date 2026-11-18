@@ -26,9 +26,9 @@ The manifest format is strict:
 
 It may contain zero or more schema-history record blocks. Field IDs must be positive,
 unique, and sorted. Type tags `1` through `14` retain their existing meanings
-and two-column field records. Current format v9 uses canonical type patterns:
+and two-column field records. Current records use canonical type patterns:
 
-- Tag `15`: a third column with the nominal named/array/List/Dictionary reference pattern; no target version.
+- Tag `15`: a third column with the named, array, List, Dictionary or Text reference pattern. Its target is unversioned.
 - Tag `16`: an inline named pattern followed by its fixed historical version.
 - Tag `17`: a declaration-scoped type parameter, such as `p0`.
 - Tags `19`–`24`: Guid, decimal, TimeSpan, DateOnly, TimeOnly and DateTimeOffset scalar leaves.
@@ -43,6 +43,7 @@ the supported CLR shape constraints. Nullable cannot directly wrap references or
 
 Accepted formats v1–v8 remain readable with their original grammar and immutable filenames/hashes.
 Nullable requires v6 or newer, Dictionary v7, Guid/decimal/TimeSpan v8, and the remaining temporal scalars v9, including nested uses.
+Text uses the zero-operand pattern `t`. A record containing it directly or inside a type pattern uses v10. Current records with no Text pattern use v9.
 Legacy `.dgsnapshot` headers and record markers are rejected.
 
 The Source Generator validates the Schema shapes needed to compile generated code. The Build tool is
@@ -89,7 +90,7 @@ only selected external records and their declaring assembly identities. The owne
 candidate manifest ends with `// references-sha256:<lowercase SHA256>` when these records are
 nonempty. The digest covers the complete canonical reference text; missing, stale, malformed,
 duplicate or differently owned inputs are rejected, even when there are zero owned candidates.
-The reference container remains version 1. Each embedded record is a canonical v9 manifest:
+The reference container remains version 1. Each embedded record uses the canonical manifest version for its patterns (v9 or v10):
 execution contract 1 requires InlineValue, while contract 2 requires ReferenceObject. Unknown
 contracts and mismatched schema kinds are rejected. This is build input, not State wire or a second history store.
 

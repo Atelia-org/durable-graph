@@ -1,0 +1,14 @@
+[
+  {
+    "Path": "E:\\repos\\Atelia-org\\dg-text-mainline\\src\\DurableGraph\\bin\\Release\\net10.0\\Atelia.DurableGraph.dll",
+    "Hash": "A87BAE8F75DC451C991A89B05944745C747317EC0E2D148605A2815A5F5680A3"
+  },
+  {
+    "Path": "E:\\repos\\Atelia-org\\dg-text-mainline\\src\\DurableGraph.Persistence\\bin\\Release\\net10.0\\Atelia.DurableGraph.Persistence.dll",
+    "Hash": "DE2BD8C89B8798D29FE96A37BCA5263F5C311396FE6A1B791EA00A4F7B2AFA84"
+  },
+  {
+    "Path": "E:\\repos\\Atelia-org\\dg-text-mainline\\tests\\DurableGraph.Persistence.Tests\\bin\\Release\\net10.0\\Atelia.DurableGraph.Persistence.Tests.dll",
+    "Hash": "BFCD081235F0722A502265EC7F569F403AEABE92157AF52F59EAEA2174C6F171"
+  }
+]

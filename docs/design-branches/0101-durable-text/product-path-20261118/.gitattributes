@@ -1,0 +1,4 @@
+# Keep byte-for-byte copies of the measured Windows outputs (hashes in files.json).
+*.csv -text whitespace=trailing-space,space-before-tab,cr-at-eol
+*.json -text whitespace=trailing-space,space-before-tab,cr-at-eol
+*.log -text whitespace=trailing-space,space-before-tab,cr-at-eol

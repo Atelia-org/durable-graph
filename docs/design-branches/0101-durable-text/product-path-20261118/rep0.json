@@ -1,0 +1,1963 @@
+{
+  "Repetition": 0,
+  "Runtime": ".NET 10.0.5",
+  "OS": "Microsoft Windows 10.0.22000",
+  "Frequency": 10000000,
+  "Assembly": "E:\\repos\\Atelia-org\\dg-text-mainline\\tests\\DurableGraph.Persistence.Tests\\bin\\Release\\net10.0\\Atelia.DurableGraph.Persistence.dll",
+  "ElapsedSeconds": 1.615033,
+  "Boundaries": "Save metrics include real capture/prepare/append/publication/install; edits and initial Save separate. Cold is fresh Repository/OpenGraph plus full text consumption, not OS-cache-cold. Three new test processes; no steady-state/JIT claim. AllocatedBytes is cumulative calling-thread allocation, not live heap.",
+  "Saves": [
+    {
+      "Length": 65536,
+      "Eager": false,
+      "InitialSave": {
+        "Milliseconds": 280.2014,
+        "AllocatedBytes": 2231504
+      },
+      "InitialBaseEncodes": 1,
+      "Saves": [
+        {
+          "Milliseconds": 38.3172,
+          "AllocatedBytes": 66568
+        },
+        {
+          "Milliseconds": 1.5824,
+          "AllocatedBytes": 65752
+        },
+        {
+          "Milliseconds": 1.9847,
+          "AllocatedBytes": 72464
+        },
+        {
+          "Milliseconds": 1.2921,
+          "AllocatedBytes": 80448
+        },
+        {
+          "Milliseconds": 1.222,
+          "AllocatedBytes": 53312
+        },
+        {
+          "Milliseconds": 1.1501,
+          "AllocatedBytes": 59688
+        },
+        {
+          "Milliseconds": 1.0871,
+          "AllocatedBytes": 66080
+        },
+        {
+          "Milliseconds": 1.1354,
+          "AllocatedBytes": 72936
+        },
+        {
+          "Milliseconds": 1.1698,
+          "AllocatedBytes": 79200
+        },
+        {
+          "Milliseconds": 0.9855,
+          "AllocatedBytes": 53568
+        },
+        {
+          "Milliseconds": 1.0013,
+          "AllocatedBytes": 63144
+        },
+        {
+          "Milliseconds": 1.0132,
+          "AllocatedBytes": 66320
+        },
+        {
+          "Milliseconds": 1.0917,
+          "AllocatedBytes": 72960
+        },
+        {
+          "Milliseconds": 1.1001,
+          "AllocatedBytes": 79424
+        },
+        {
+          "Milliseconds": 1.1825,
+          "AllocatedBytes": 53792
+        },
+        {
+          "Milliseconds": 1.2953,
+          "AllocatedBytes": 60560
+        },
+        {
+          "Milliseconds": 1.0985,
+          "AllocatedBytes": 66544
+        },
+        {
+          "Milliseconds": 1.1061,
+          "AllocatedBytes": 73184
+        },
+        {
+          "Milliseconds": 1.0878,
+          "AllocatedBytes": 79664
+        },
+        {
+          "Milliseconds": 0.9925,
+          "AllocatedBytes": 54000
+        },
+        {
+          "Milliseconds": 0.9041,
+          "AllocatedBytes": 60392
+        },
+        {
+          "Milliseconds": 1.0577,
+          "AllocatedBytes": 66800
+        },
+        {
+          "Milliseconds": 1.2762,
+          "AllocatedBytes": 73440
+        },
+        {
+          "Milliseconds": 1.1632,
+          "AllocatedBytes": 79920
+        },
+        {
+          "Milliseconds": 1.0613,
+          "AllocatedBytes": 54288
+        },
+        {
+          "Milliseconds": 1.1442,
+          "AllocatedBytes": 60608
+        },
+        {
+          "Milliseconds": 1.0223,
+          "AllocatedBytes": 67040
+        },
+        {
+          "Milliseconds": 1.0465,
+          "AllocatedBytes": 80824
+        },
+        {
+          "Milliseconds": 1.0558,
+          "AllocatedBytes": 80160
+        },
+        {
+          "Milliseconds": 1.0993,
+          "AllocatedBytes": 54512
+        },
+        {
+          "Milliseconds": 1.3517,
+          "AllocatedBytes": 60872
+        },
+        {
+          "Milliseconds": 2.574,
+          "AllocatedBytes": 197776
+        }
+      ],
+      "Edits": [
+        {
+          "Milliseconds": 2.4779,
+          "AllocatedBytes": 304
+        },
+        {
+          "Milliseconds": 0.0347,
+          "AllocatedBytes": 352
+        },
+        {
+          "Milliseconds": 0.003,
+          "AllocatedBytes": 400
+        },
+        {
+          "Milliseconds": 0.0044,
+          "AllocatedBytes": 448
+        },
+        {
+          "Milliseconds": 0.0037,
+          "AllocatedBytes": 496
+        },
+        {
+          "Milliseconds": 0.0044,
+          "AllocatedBytes": 544
+        },
+        {
+          "Milliseconds": 0.0038,
+          "AllocatedBytes": 592
+        },
+        {
+          "Milliseconds": 0.004,
+          "AllocatedBytes": 640
+        },
+        {
+          "Milliseconds": 0.0041,
+          "AllocatedBytes": 688
+        },
+        {
+          "Milliseconds": 0.0042,
+          "AllocatedBytes": 736
+        },
+        {
+          "Milliseconds": 0.0049,
+          "AllocatedBytes": 784
+        },
+        {
+          "Milliseconds": 0.0048,
+          "AllocatedBytes": 832
+        },
+        {
+          "Milliseconds": 0.005,
+          "AllocatedBytes": 880
+        },
+        {
+          "Milliseconds": 0.0052,
+          "AllocatedBytes": 928
+        },
+        {
+          "Milliseconds": 0.0057,
+          "AllocatedBytes": 976
+        },
+        {
+          "Milliseconds": 0.0078,
+          "AllocatedBytes": 1024
+        },
+        {
+          "Milliseconds": 0.0069,
+          "AllocatedBytes": 1072
+        },
+        {
+          "Milliseconds": 0.0065,
+          "AllocatedBytes": 1120
+        },
+        {
+          "Milliseconds": 0.0069,
+          "AllocatedBytes": 1168
+        },
+        {
+          "Milliseconds": 0.0067,
+          "AllocatedBytes": 1216
+        },
+        {
+          "Milliseconds": 0.0058,
+          "AllocatedBytes": 1264
+        },
+        {
+          "Milliseconds": 0.0062,
+          "AllocatedBytes": 1312
+        },
+        {
+          "Milliseconds": 0.0096,
+          "AllocatedBytes": 1360
+        },
+        {
+          "Milliseconds": 0.0086,
+          "AllocatedBytes": 1408
+        },
+        {
+          "Milliseconds": 0.0095,
+          "AllocatedBytes": 1456
+        },
+        {
+          "Milliseconds": 0.0085,
+          "AllocatedBytes": 1504
+        },
+        {
+          "Milliseconds": 0.0082,
+          "AllocatedBytes": 1552
+        },
+        {
+          "Milliseconds": 0.0084,
+          "AllocatedBytes": 1600
+        },
+        {
+          "Milliseconds": 0.0101,
+          "AllocatedBytes": 1648
+        },
+        {
+          "Milliseconds": 0.0112,
+          "AllocatedBytes": 1696
+        },
+        {
+          "Milliseconds": 0.0094,
+          "AllocatedBytes": 1744
+        },
+        {
+          "Milliseconds": 0.0096,
+          "AllocatedBytes": 1792
+        }
+      ],
+      "ChangedSaveBaseEncodes": 0,
+      "TextRecords": [
+        {
+          "Kind": "Base",
+          "PayloadBytes": 131082,
+          "BodySha256": "0E07FB05E9140356934EDABD32F0BCEA9FCDCD202B1DA61FC56B3561215ED8DA"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 29,
+          "BodySha256": "CC9D4148218F461BD5BC7368B593BDA9063BC925DAE6C1C68D6819E303888B9C"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "6EEAB76B2B86D5629C50A2FD3A7A59F9358A25B2965210F23B6A41C89304CEBB"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "EB6664B40AEAE89A165B5C2079C2B399F877F035DA076311A7C90A9ACD3226F0"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "0C3C1F8922B95800F8F70872098EA12DF2EC2090E45FC4D81E9CA41C37484031"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "D272BFF9B8EB1B70D4DE3CABEA4FA9DBDB40A08C24196BFD51C6E261F51F9F79"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "068CDF35D2C8AE99F82A8B1687F8FA448AD24E6447B93947567B9B9FFBEBE88D"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "76E8438158FB32B1219531B3E70D3D93C4610C99826D766A26E482D9F8C1722E"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "8271D04E3ED4EAD6D1A5F45706010E7CDBCDDD8C44A473B25CE798FB92A92927"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "06766CFA716562EE89BC6210D3CBB0870BDD300903FF88661BCF7C485D332939"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "DFA061F6A963358BCEF40DDB4C38895EFE57540980993C9ED195AEE848ECE070"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "D8160609F9D60081FCE83D755F673BC8B4D3820D69CA953B3C21F6672B91372A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "78EF79C9A023074491DB827D5FFC73A77CB729260F31E7C1ADAA1FD6E97386A4"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "B18DC17965A5F02AB14F315C4590954F88EB273DA83048F15A9792E0A3FBBAB6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "64F16CE61A63C7E4B52D1366C60B9CE6A4606B8AAD5FBBE3CE93869E4EC34EFE"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "758E481B85A3AE20AE94BCB5ABF7ADDCD57C855D02939AC5E3410A34A0E58995"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "25662A81956E3B56AD93863B18850551B7EA5B9F1919FB16B108B5FFF1981E99"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "D35456E8F18583EB50F2AB1A2E44E98BBA566F2A47C5B48EB67BDE2615EDBD09"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "47FA4C883E25ED5C16E81D24C65095C339346CDBA4692A745C3CEF4DC134B31B"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "8390133011255062195F25C304D2CBFEF30A43AD3A5EC03F48557BE8FC9412FC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "D85881315E2756493127EC5A46F87CA983BC5316592491E56930FAEE2609AE57"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "86A004BCA0CAC4957A5126C1CBB1631DD0750B3A8457CF632EE1037639D73C6A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "06103666D4E6CC38505830E289447E134F5E2533EA2ACE4AFC0F9D299F3A0F4D"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "3CEFF10D6111DF2EAE1FD72FEFFAA03AFC2289528A05F1E6C8E5050560390F10"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "6235A216DE6E5BC64CFA96307AC01A69E59CBC808017727C885B809D80AFE42C"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "7669FD125679B96CAFA05F6EB7BC274C080D0D59DD11523D0A5E6406440F869D"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "C821A03B594E40D41EC786A3C2A8A533795EA625D4FF336658CD1C0CC84B1DBC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "E2C12E854D6478596655BB490ED1927889715579A37EAB3119F78828F3D3B842"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "D952087061789E147BC084CB27F6F2DC55D3E0AEA035D393953BEE9654C1DEC2"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "01BB0B9F38EC89DE13D2785299605C42B33C81152D7CF0636F48FC95E9FC5037"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "6D9B43AA68FFC3FFC4464979689D2905ED6634AE724276AA2E30B7308D06CE12"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "961982C2E71D9C21703602E831124C6239FDB5BB4E44087A157428EE350D3D30"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "6A88E7F7F03F9962383C56CA7123C266F85FDF20E1DD42DDD2BDE9CEB9F19AEE"
+        }
+      ],
+      "ColdOpenAndConsume": {
+        "Milliseconds": 138.9725,
+        "AllocatedBytes": 1738176
+      },
+      "RepositoryFileBytes": 142296
+    },
+    {
+      "Length": 65536,
+      "Eager": true,
+      "InitialSave": {
+        "Milliseconds": 13.8841,
+        "AllocatedBytes": 1866760
+      },
+      "InitialBaseEncodes": 1,
+      "Saves": [
+        {
+          "Milliseconds": 2.2645,
+          "AllocatedBytes": 954000
+        },
+        {
+          "Milliseconds": 2.6408,
+          "AllocatedBytes": 1094464
+        },
+        {
+          "Milliseconds": 2.0769,
+          "AllocatedBytes": 976232
+        },
+        {
+          "Milliseconds": 1.7201,
+          "AllocatedBytes": 983008
+        },
+        {
+          "Milliseconds": 1.4014,
+          "AllocatedBytes": 955872
+        },
+        {
+          "Milliseconds": 1.3444,
+          "AllocatedBytes": 962248
+        },
+        {
+          "Milliseconds": 1.3772,
+          "AllocatedBytes": 968640
+        },
+        {
+          "Milliseconds": 1.3179,
+          "AllocatedBytes": 975496
+        },
+        {
+          "Milliseconds": 1.3115,
+          "AllocatedBytes": 981760
+        },
+        {
+          "Milliseconds": 1.1489,
+          "AllocatedBytes": 956128
+        },
+        {
+          "Milliseconds": 1.3514,
+          "AllocatedBytes": 965704
+        },
+        {
+          "Milliseconds": 4.3764,
+          "AllocatedBytes": 969840
+        },
+        {
+          "Milliseconds": 1.556,
+          "AllocatedBytes": 975768
+        },
+        {
+          "Milliseconds": 1.5038,
+          "AllocatedBytes": 981984
+        },
+        {
+          "Milliseconds": 1.3959,
+          "AllocatedBytes": 956352
+        },
+        {
+          "Milliseconds": 1.4533,
+          "AllocatedBytes": 963120
+        },
+        {
+          "Milliseconds": 1.9434,
+          "AllocatedBytes": 969104
+        },
+        {
+          "Milliseconds": 1.7276,
+          "AllocatedBytes": 1152688
+        },
+        {
+          "Milliseconds": 1.7245,
+          "AllocatedBytes": 1159168
+        },
+        {
+          "Milliseconds": 2.536,
+          "AllocatedBytes": 1140232
+        },
+        {
+          "Milliseconds": 1.3168,
+          "AllocatedBytes": 1139896
+        },
+        {
+          "Milliseconds": 1.1775,
+          "AllocatedBytes": 1146304
+        },
+        {
+          "Milliseconds": 1.2273,
+          "AllocatedBytes": 1152944
+        },
+        {
+          "Milliseconds": 1.0859,
+          "AllocatedBytes": 1159424
+        },
+        {
+          "Milliseconds": 1.0496,
+          "AllocatedBytes": 1133792
+        },
+        {
+          "Milliseconds": 1.1744,
+          "AllocatedBytes": 1140112
+        },
+        {
+          "Milliseconds": 1.3369,
+          "AllocatedBytes": 1146544
+        },
+        {
+          "Milliseconds": 1.3979,
+          "AllocatedBytes": 1160328
+        },
+        {
+          "Milliseconds": 1.6026,
+          "AllocatedBytes": 1159664
+        },
+        {
+          "Milliseconds": 1.857,
+          "AllocatedBytes": 1134016
+        },
+        {
+          "Milliseconds": 1.5045,
+          "AllocatedBytes": 1140376
+        },
+        {
+          "Milliseconds": 1.6003,
+          "AllocatedBytes": 1277192
+        }
+      ],
+      "Edits": [
+        {
+          "Milliseconds": 0.0041,
+          "AllocatedBytes": 304
+        },
+        {
+          "Milliseconds": 0.0037,
+          "AllocatedBytes": 352
+        },
+        {
+          "Milliseconds": 0.0037,
+          "AllocatedBytes": 400
+        },
+        {
+          "Milliseconds": 0.0038,
+          "AllocatedBytes": 448
+        },
+        {
+          "Milliseconds": 0.0035,
+          "AllocatedBytes": 496
+        },
+        {
+          "Milliseconds": 0.005,
+          "AllocatedBytes": 544
+        },
+        {
+          "Milliseconds": 0.0039,
+          "AllocatedBytes": 592
+        },
+        {
+          "Milliseconds": 0.0046,
+          "AllocatedBytes": 640
+        },
+        {
+          "Milliseconds": 0.0047,
+          "AllocatedBytes": 688
+        },
+        {
+          "Milliseconds": 0.0044,
+          "AllocatedBytes": 736
+        },
+        {
+          "Milliseconds": 0.0045,
+          "AllocatedBytes": 784
+        },
+        {
+          "Milliseconds": 0.0047,
+          "AllocatedBytes": 832
+        },
+        {
+          "Milliseconds": 0.0064,
+          "AllocatedBytes": 880
+        },
+        {
+          "Milliseconds": 0.0055,
+          "AllocatedBytes": 928
+        },
+        {
+          "Milliseconds": 0.0056,
+          "AllocatedBytes": 976
+        },
+        {
+          "Milliseconds": 0.0073,
+          "AllocatedBytes": 1024
+        },
+        {
+          "Milliseconds": 0.005,
+          "AllocatedBytes": 1072
+        },
+        {
+          "Milliseconds": 0.0067,
+          "AllocatedBytes": 1120
+        },
+        {
+          "Milliseconds": 0.0071,
+          "AllocatedBytes": 1168
+        },
+        {
+          "Milliseconds": 0.007,
+          "AllocatedBytes": 1216
+        },
+        {
+          "Milliseconds": 0.0081,
+          "AllocatedBytes": 1264
+        },
+        {
+          "Milliseconds": 0.0088,
+          "AllocatedBytes": 1312
+        },
+        {
+          "Milliseconds": 0.0075,
+          "AllocatedBytes": 1360
+        },
+        {
+          "Milliseconds": 0.0065,
+          "AllocatedBytes": 1408
+        },
+        {
+          "Milliseconds": 0.0066,
+          "AllocatedBytes": 1456
+        },
+        {
+          "Milliseconds": 0.0069,
+          "AllocatedBytes": 1504
+        },
+        {
+          "Milliseconds": 0.0083,
+          "AllocatedBytes": 1552
+        },
+        {
+          "Milliseconds": 0.0091,
+          "AllocatedBytes": 1600
+        },
+        {
+          "Milliseconds": 0.0179,
+          "AllocatedBytes": 1648
+        },
+        {
+          "Milliseconds": 0.0219,
+          "AllocatedBytes": 1696
+        },
+        {
+          "Milliseconds": 0.0095,
+          "AllocatedBytes": 1744
+        },
+        {
+          "Milliseconds": 0.0165,
+          "AllocatedBytes": 1792
+        }
+      ],
+      "ChangedSaveBaseEncodes": 32,
+      "TextRecords": [
+        {
+          "Kind": "Base",
+          "PayloadBytes": 131082,
+          "BodySha256": "0E07FB05E9140356934EDABD32F0BCEA9FCDCD202B1DA61FC56B3561215ED8DA"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 29,
+          "BodySha256": "CC9D4148218F461BD5BC7368B593BDA9063BC925DAE6C1C68D6819E303888B9C"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "6EEAB76B2B86D5629C50A2FD3A7A59F9358A25B2965210F23B6A41C89304CEBB"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "EB6664B40AEAE89A165B5C2079C2B399F877F035DA076311A7C90A9ACD3226F0"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "0C3C1F8922B95800F8F70872098EA12DF2EC2090E45FC4D81E9CA41C37484031"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "D272BFF9B8EB1B70D4DE3CABEA4FA9DBDB40A08C24196BFD51C6E261F51F9F79"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "068CDF35D2C8AE99F82A8B1687F8FA448AD24E6447B93947567B9B9FFBEBE88D"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "76E8438158FB32B1219531B3E70D3D93C4610C99826D766A26E482D9F8C1722E"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "8271D04E3ED4EAD6D1A5F45706010E7CDBCDDD8C44A473B25CE798FB92A92927"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "06766CFA716562EE89BC6210D3CBB0870BDD300903FF88661BCF7C485D332939"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "DFA061F6A963358BCEF40DDB4C38895EFE57540980993C9ED195AEE848ECE070"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "D8160609F9D60081FCE83D755F673BC8B4D3820D69CA953B3C21F6672B91372A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "78EF79C9A023074491DB827D5FFC73A77CB729260F31E7C1ADAA1FD6E97386A4"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "B18DC17965A5F02AB14F315C4590954F88EB273DA83048F15A9792E0A3FBBAB6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "64F16CE61A63C7E4B52D1366C60B9CE6A4606B8AAD5FBBE3CE93869E4EC34EFE"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "758E481B85A3AE20AE94BCB5ABF7ADDCD57C855D02939AC5E3410A34A0E58995"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "25662A81956E3B56AD93863B18850551B7EA5B9F1919FB16B108B5FFF1981E99"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "D35456E8F18583EB50F2AB1A2E44E98BBA566F2A47C5B48EB67BDE2615EDBD09"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "47FA4C883E25ED5C16E81D24C65095C339346CDBA4692A745C3CEF4DC134B31B"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "8390133011255062195F25C304D2CBFEF30A43AD3A5EC03F48557BE8FC9412FC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "D85881315E2756493127EC5A46F87CA983BC5316592491E56930FAEE2609AE57"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "86A004BCA0CAC4957A5126C1CBB1631DD0750B3A8457CF632EE1037639D73C6A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "06103666D4E6CC38505830E289447E134F5E2533EA2ACE4AFC0F9D299F3A0F4D"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "3CEFF10D6111DF2EAE1FD72FEFFAA03AFC2289528A05F1E6C8E5050560390F10"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "6235A216DE6E5BC64CFA96307AC01A69E59CBC808017727C885B809D80AFE42C"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "7669FD125679B96CAFA05F6EB7BC274C080D0D59DD11523D0A5E6406440F869D"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "C821A03B594E40D41EC786A3C2A8A533795EA625D4FF336658CD1C0CC84B1DBC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "E2C12E854D6478596655BB490ED1927889715579A37EAB3119F78828F3D3B842"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "D952087061789E147BC084CB27F6F2DC55D3E0AEA035D393953BEE9654C1DEC2"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "01BB0B9F38EC89DE13D2785299605C42B33C81152D7CF0636F48FC95E9FC5037"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "6D9B43AA68FFC3FFC4464979689D2905ED6634AE724276AA2E30B7308D06CE12"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "961982C2E71D9C21703602E831124C6239FDB5BB4E44087A157428EE350D3D30"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 32,
+          "BodySha256": "6A88E7F7F03F9962383C56CA7123C266F85FDF20E1DD42DDD2BDE9CEB9F19AEE"
+        }
+      ],
+      "ColdOpenAndConsume": {
+        "Milliseconds": 26.8297,
+        "AllocatedBytes": 1736872
+      },
+      "RepositoryFileBytes": 142296
+    },
+    {
+      "Length": 1048576,
+      "Eager": false,
+      "InitialSave": {
+        "Milliseconds": 39.6583,
+        "AllocatedBytes": 31813472
+      },
+      "InitialBaseEncodes": 1,
+      "Saves": [
+        {
+          "Milliseconds": 1.6598,
+          "AllocatedBytes": 61152
+        },
+        {
+          "Milliseconds": 1.2754,
+          "AllocatedBytes": 65752
+        },
+        {
+          "Milliseconds": 1.1565,
+          "AllocatedBytes": 72464
+        },
+        {
+          "Milliseconds": 1.1588,
+          "AllocatedBytes": 80448
+        },
+        {
+          "Milliseconds": 1.1336,
+          "AllocatedBytes": 53312
+        },
+        {
+          "Milliseconds": 0.9664,
+          "AllocatedBytes": 59688
+        },
+        {
+          "Milliseconds": 1.0235,
+          "AllocatedBytes": 66080
+        },
+        {
+          "Milliseconds": 1.1452,
+          "AllocatedBytes": 72936
+        },
+        {
+          "Milliseconds": 1.295,
+          "AllocatedBytes": 79200
+        },
+        {
+          "Milliseconds": 1.0118,
+          "AllocatedBytes": 53568
+        },
+        {
+          "Milliseconds": 1.0745,
+          "AllocatedBytes": 63144
+        },
+        {
+          "Milliseconds": 1.0947,
+          "AllocatedBytes": 66320
+        },
+        {
+          "Milliseconds": 0.9972,
+          "AllocatedBytes": 72960
+        },
+        {
+          "Milliseconds": 1.2576,
+          "AllocatedBytes": 79440
+        },
+        {
+          "Milliseconds": 1.1859,
+          "AllocatedBytes": 53808
+        },
+        {
+          "Milliseconds": 1.1039,
+          "AllocatedBytes": 60536
+        },
+        {
+          "Milliseconds": 1.2558,
+          "AllocatedBytes": 66560
+        },
+        {
+          "Milliseconds": 1.677,
+          "AllocatedBytes": 73200
+        },
+        {
+          "Milliseconds": 1.3628,
+          "AllocatedBytes": 79680
+        },
+        {
+          "Milliseconds": 1.2031,
+          "AllocatedBytes": 54048
+        },
+        {
+          "Milliseconds": 1.0088,
+          "AllocatedBytes": 60368
+        },
+        {
+          "Milliseconds": 1.0754,
+          "AllocatedBytes": 66800
+        },
+        {
+          "Milliseconds": 1.3415,
+          "AllocatedBytes": 73440
+        },
+        {
+          "Milliseconds": 1.2056,
+          "AllocatedBytes": 79920
+        },
+        {
+          "Milliseconds": 1.1545,
+          "AllocatedBytes": 54256
+        },
+        {
+          "Milliseconds": 1.073,
+          "AllocatedBytes": 60648
+        },
+        {
+          "Milliseconds": 1.1925,
+          "AllocatedBytes": 67040
+        },
+        {
+          "Milliseconds": 1.0811,
+          "AllocatedBytes": 80824
+        },
+        {
+          "Milliseconds": 1.144,
+          "AllocatedBytes": 80160
+        },
+        {
+          "Milliseconds": 1.0241,
+          "AllocatedBytes": 54528
+        },
+        {
+          "Milliseconds": 1.1573,
+          "AllocatedBytes": 60848
+        },
+        {
+          "Milliseconds": 1.108,
+          "AllocatedBytes": 68072
+        }
+      ],
+      "Edits": [
+        {
+          "Milliseconds": 0.0117,
+          "AllocatedBytes": 304
+        },
+        {
+          "Milliseconds": 0.0029,
+          "AllocatedBytes": 352
+        },
+        {
+          "Milliseconds": 0.0028,
+          "AllocatedBytes": 400
+        },
+        {
+          "Milliseconds": 0.0032,
+          "AllocatedBytes": 448
+        },
+        {
+          "Milliseconds": 0.0032,
+          "AllocatedBytes": 496
+        },
+        {
+          "Milliseconds": 0.0055,
+          "AllocatedBytes": 544
+        },
+        {
+          "Milliseconds": 0.0032,
+          "AllocatedBytes": 592
+        },
+        {
+          "Milliseconds": 0.004,
+          "AllocatedBytes": 640
+        },
+        {
+          "Milliseconds": 0.0046,
+          "AllocatedBytes": 688
+        },
+        {
+          "Milliseconds": 0.0049,
+          "AllocatedBytes": 736
+        },
+        {
+          "Milliseconds": 0.0046,
+          "AllocatedBytes": 784
+        },
+        {
+          "Milliseconds": 0.0061,
+          "AllocatedBytes": 832
+        },
+        {
+          "Milliseconds": 0.0072,
+          "AllocatedBytes": 880
+        },
+        {
+          "Milliseconds": 0.0058,
+          "AllocatedBytes": 928
+        },
+        {
+          "Milliseconds": 0.0067,
+          "AllocatedBytes": 976
+        },
+        {
+          "Milliseconds": 0.0059,
+          "AllocatedBytes": 1024
+        },
+        {
+          "Milliseconds": 0.0077,
+          "AllocatedBytes": 1072
+        },
+        {
+          "Milliseconds": 0.0087,
+          "AllocatedBytes": 1120
+        },
+        {
+          "Milliseconds": 0.01,
+          "AllocatedBytes": 1168
+        },
+        {
+          "Milliseconds": 0.0147,
+          "AllocatedBytes": 1216
+        },
+        {
+          "Milliseconds": 0.0073,
+          "AllocatedBytes": 1264
+        },
+        {
+          "Milliseconds": 0.0089,
+          "AllocatedBytes": 1312
+        },
+        {
+          "Milliseconds": 0.0074,
+          "AllocatedBytes": 1360
+        },
+        {
+          "Milliseconds": 0.008,
+          "AllocatedBytes": 1408
+        },
+        {
+          "Milliseconds": 0.0078,
+          "AllocatedBytes": 1456
+        },
+        {
+          "Milliseconds": 0.0081,
+          "AllocatedBytes": 1504
+        },
+        {
+          "Milliseconds": 0.0082,
+          "AllocatedBytes": 1552
+        },
+        {
+          "Milliseconds": 0.0086,
+          "AllocatedBytes": 1600
+        },
+        {
+          "Milliseconds": 0.0088,
+          "AllocatedBytes": 1648
+        },
+        {
+          "Milliseconds": 0.0088,
+          "AllocatedBytes": 1696
+        },
+        {
+          "Milliseconds": 0.009,
+          "AllocatedBytes": 1744
+        },
+        {
+          "Milliseconds": 0.0094,
+          "AllocatedBytes": 1792
+        }
+      ],
+      "ChangedSaveBaseEncodes": 0,
+      "TextRecords": [
+        {
+          "Kind": "Base",
+          "PayloadBytes": 2097163,
+          "BodySha256": "76E15C04A571F5E5E07461F35F2B1F06B8F90ED6608DD8FE0D1E2CD9A0AF2ED6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 29,
+          "BodySha256": "18AB1E8277738CAA1DDD319EA6C74F6CFEAA382F1229E1F63E69E22E81045601"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "12C5578DCF91995DE85251B7A7E1F6B28B223210DF4046C67675624673EB443E"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "C0FCE6E013F0CB40E0C8059B8CF95A6AB90C520664333AD21C9C83BB9B8F0AC6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "CE983A9893F1C9FF29716B13C576E4E2648F6E836213CE5E4EDF7997010B07E2"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "352C1C716249980F62A47DCFA3DD1C3A6393D3257DD7D3151FFDC471E29F1A4A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "3A9B6F899FAC2C6399CCC447582523A588E13B9AC31F8E55042CFC4E1C3C65D7"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "3DB31415FD9352800758702B07C393653E2B5A46A16D8B726BFF418166B36F1F"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "1F8795BB9EBD4C613ABF4C68A33FCB4187A2F5C2E766505CCA65125DF0743D46"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "10814FB4DF17B8DA2C7F5CEA59AEC688AFA0DEDDAB76464BE8C620C6AFADEFFF"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "2230313B0FA9BDE3E03B5F9B8204D39B24BB34A6523AD20F1BEBCC85D353A8E6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "C1A2E033E3FF0D5F486E944C2B247F92992677D7C2A065DF4B60CED88118E725"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "681CC84313F8BCC59B6F983FB23B7CAC85EC6B05735047EA28B322F78D57C167"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "781BD128F0C3DE595E32F456661E5561241AF782685F79CB3A3F490D26B919AC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "0A2B3872E2EF9D0ADA6408924559AA66ECA363BB82A9A93337222B3CD45A9606"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "A819B39EB7B4EFF8746817D89B3C10B6D2D791E7BFBDB4FCD7188BD392525EE6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "ADFD604C8B7A35EB13F567BD28DF3CC5F6C49F4D1FFA856D20777411F3D2BD55"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "F8E3D31D7CE2E5365E332E0D75283FDE766A5CF8975D628C5D8ED3D5B6357DBF"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "A28396E3057D0E10872655D88BA681091371BFAB6626AB52152CEC71486D25CB"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "AC031F539941A4C5E435363EFBB3545FFD0E87DEE31B60C1D6DB372E79C2EFA4"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "4582E50343712EFE7D800C295AE7912C1E0675E8C7949CECCFFA135A76B73FF3"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "DE3D263C2FA552E30F69A5064196AD2E272EE75ED82AEC6971607556A5176714"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "8249302BC15E465F55F3A2EF9D9FF917BA99858D5631C73650B3AE564D2F0F68"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "512AC6D2D0A24B1557DEB666FD524721DA304C9ED1623BC97622C037356C3285"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "C8080D3054FC648B4AB693D35D6583982E62E4B40ADDC3B76C7D9E69A159CF1A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "FCC52E45AEFDFEE61C690F4278FF3817053363EB3D11ABEE1386A5BA642658D4"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "0E237B3CF7BA8856C314E7340676A251FCB2771A63546C2DE30180AB452B9A30"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "FD5BABBF972C30DCB863446109320BB94DCC6796B69B666D1E6EF41E3D6C7A9F"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "84396B671EC87EE1A7281601476E9D54DEA43093239C96D368AC232CAC87A011"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "E1E8724EF44B7A5DFB450D72BF4A81D5FA04C4FFDE9F0F74D59CFF138052D0C6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "A1B1D7A368877F3080BA753D518136CDD04A5E0BD92A2BB9B259F0BEABFE8C85"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "9C35F6785E09C207C72AC48B3E5A3094899775759AA28FFC57B4E009FC0F7ECC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "70052919289C6AD97F3E7DFF32586EB2B83E8169F8E882B4BAD183336D642E21"
+        }
+      ],
+      "ColdOpenAndConsume": {
+        "Milliseconds": 38.0251,
+        "AllocatedBytes": 11568160
+      },
+      "RepositoryFileBytes": 2108412
+    },
+    {
+      "Length": 1048576,
+      "Eager": true,
+      "InitialSave": {
+        "Milliseconds": 34.9825,
+        "AllocatedBytes": 27619272
+      },
+      "InitialBaseEncodes": 1,
+      "Saves": [
+        {
+          "Milliseconds": 6.345,
+          "AllocatedBytes": 14839880
+        },
+        {
+          "Milliseconds": 9.1305,
+          "AllocatedBytes": 16918368
+        },
+        {
+          "Milliseconds": 9.4815,
+          "AllocatedBytes": 14877936
+        },
+        {
+          "Milliseconds": 8.0681,
+          "AllocatedBytes": 14891376
+        },
+        {
+          "Milliseconds": 4.8856,
+          "AllocatedBytes": 14859032
+        },
+        {
+          "Milliseconds": 5.3619,
+          "AllocatedBytes": 14872416
+        },
+        {
+          "Milliseconds": 3.8837,
+          "AllocatedBytes": 14871800
+        },
+        {
+          "Milliseconds": 6.2206,
+          "AllocatedBytes": 14878408
+        },
+        {
+          "Milliseconds": 6.9872,
+          "AllocatedBytes": 14889736
+        },
+        {
+          "Milliseconds": 4.9178,
+          "AllocatedBytes": 14859288
+        },
+        {
+          "Milliseconds": 5.8679,
+          "AllocatedBytes": 14868616
+        },
+        {
+          "Milliseconds": 6.2308,
+          "AllocatedBytes": 14877984
+        },
+        {
+          "Milliseconds": 6.7028,
+          "AllocatedBytes": 14879640
+        },
+        {
+          "Milliseconds": 6.705,
+          "AllocatedBytes": 14888408
+        },
+        {
+          "Milliseconds": 3.5166,
+          "AllocatedBytes": 14859528
+        },
+        {
+          "Milliseconds": 5.8295,
+          "AllocatedBytes": 14866008
+        },
+        {
+          "Milliseconds": 5.5811,
+          "AllocatedBytes": 14876216
+        },
+        {
+          "Milliseconds": 3.6419,
+          "AllocatedBytes": 14878920
+        },
+        {
+          "Milliseconds": 4.2775,
+          "AllocatedBytes": 14885152
+        },
+        {
+          "Milliseconds": 7.1863,
+          "AllocatedBytes": 14861096
+        },
+        {
+          "Milliseconds": 3.5697,
+          "AllocatedBytes": 14866088
+        },
+        {
+          "Milliseconds": 4.7309,
+          "AllocatedBytes": 14872272
+        },
+        {
+          "Milliseconds": 4.4019,
+          "AllocatedBytes": 14879872
+        },
+        {
+          "Milliseconds": 4.5005,
+          "AllocatedBytes": 14885640
+        },
+        {
+          "Milliseconds": 4.033,
+          "AllocatedBytes": 14859728
+        },
+        {
+          "Milliseconds": 8.5504,
+          "AllocatedBytes": 14875256
+        },
+        {
+          "Milliseconds": 3.7494,
+          "AllocatedBytes": 14872760
+        },
+        {
+          "Milliseconds": 5.6255,
+          "AllocatedBytes": 14886296
+        },
+        {
+          "Milliseconds": 6.1854,
+          "AllocatedBytes": 14893832
+        },
+        {
+          "Milliseconds": 4.2422,
+          "AllocatedBytes": 14860248
+        },
+        {
+          "Milliseconds": 5.8209,
+          "AllocatedBytes": 14867280
+        },
+        {
+          "Milliseconds": 3.4813,
+          "AllocatedBytes": 14873792
+        }
+      ],
+      "Edits": [
+        {
+          "Milliseconds": 0.0056,
+          "AllocatedBytes": 304
+        },
+        {
+          "Milliseconds": 0.0092,
+          "AllocatedBytes": 352
+        },
+        {
+          "Milliseconds": 0.0061,
+          "AllocatedBytes": 400
+        },
+        {
+          "Milliseconds": 0.0058,
+          "AllocatedBytes": 448
+        },
+        {
+          "Milliseconds": 0.0064,
+          "AllocatedBytes": 496
+        },
+        {
+          "Milliseconds": 0.0057,
+          "AllocatedBytes": 544
+        },
+        {
+          "Milliseconds": 0.0083,
+          "AllocatedBytes": 592
+        },
+        {
+          "Milliseconds": 0.0062,
+          "AllocatedBytes": 640
+        },
+        {
+          "Milliseconds": 0.0084,
+          "AllocatedBytes": 688
+        },
+        {
+          "Milliseconds": 0.0091,
+          "AllocatedBytes": 736
+        },
+        {
+          "Milliseconds": 0.0085,
+          "AllocatedBytes": 784
+        },
+        {
+          "Milliseconds": 0.0078,
+          "AllocatedBytes": 832
+        },
+        {
+          "Milliseconds": 0.0081,
+          "AllocatedBytes": 880
+        },
+        {
+          "Milliseconds": 0.0089,
+          "AllocatedBytes": 928
+        },
+        {
+          "Milliseconds": 0.0111,
+          "AllocatedBytes": 976
+        },
+        {
+          "Milliseconds": 0.0093,
+          "AllocatedBytes": 1024
+        },
+        {
+          "Milliseconds": 0.0121,
+          "AllocatedBytes": 1072
+        },
+        {
+          "Milliseconds": 0.0086,
+          "AllocatedBytes": 1120
+        },
+        {
+          "Milliseconds": 0.0094,
+          "AllocatedBytes": 1168
+        },
+        {
+          "Milliseconds": 0.0099,
+          "AllocatedBytes": 1216
+        },
+        {
+          "Milliseconds": 0.0092,
+          "AllocatedBytes": 1264
+        },
+        {
+          "Milliseconds": 0.0102,
+          "AllocatedBytes": 1312
+        },
+        {
+          "Milliseconds": 0.0108,
+          "AllocatedBytes": 1360
+        },
+        {
+          "Milliseconds": 0.0117,
+          "AllocatedBytes": 1408
+        },
+        {
+          "Milliseconds": 0.0105,
+          "AllocatedBytes": 1456
+        },
+        {
+          "Milliseconds": 0.0108,
+          "AllocatedBytes": 1504
+        },
+        {
+          "Milliseconds": 0.0118,
+          "AllocatedBytes": 1552
+        },
+        {
+          "Milliseconds": 0.0119,
+          "AllocatedBytes": 1600
+        },
+        {
+          "Milliseconds": 0.0122,
+          "AllocatedBytes": 1648
+        },
+        {
+          "Milliseconds": 0.0179,
+          "AllocatedBytes": 1696
+        },
+        {
+          "Milliseconds": 0.0126,
+          "AllocatedBytes": 1744
+        },
+        {
+          "Milliseconds": 0.013,
+          "AllocatedBytes": 1792
+        }
+      ],
+      "ChangedSaveBaseEncodes": 32,
+      "TextRecords": [
+        {
+          "Kind": "Base",
+          "PayloadBytes": 2097163,
+          "BodySha256": "76E15C04A571F5E5E07461F35F2B1F06B8F90ED6608DD8FE0D1E2CD9A0AF2ED6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 29,
+          "BodySha256": "18AB1E8277738CAA1DDD319EA6C74F6CFEAA382F1229E1F63E69E22E81045601"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "12C5578DCF91995DE85251B7A7E1F6B28B223210DF4046C67675624673EB443E"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "C0FCE6E013F0CB40E0C8059B8CF95A6AB90C520664333AD21C9C83BB9B8F0AC6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "CE983A9893F1C9FF29716B13C576E4E2648F6E836213CE5E4EDF7997010B07E2"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 31,
+          "BodySha256": "352C1C716249980F62A47DCFA3DD1C3A6393D3257DD7D3151FFDC471E29F1A4A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "3A9B6F899FAC2C6399CCC447582523A588E13B9AC31F8E55042CFC4E1C3C65D7"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "3DB31415FD9352800758702B07C393653E2B5A46A16D8B726BFF418166B36F1F"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "1F8795BB9EBD4C613ABF4C68A33FCB4187A2F5C2E766505CCA65125DF0743D46"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "10814FB4DF17B8DA2C7F5CEA59AEC688AFA0DEDDAB76464BE8C620C6AFADEFFF"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "2230313B0FA9BDE3E03B5F9B8204D39B24BB34A6523AD20F1BEBCC85D353A8E6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "C1A2E033E3FF0D5F486E944C2B247F92992677D7C2A065DF4B60CED88118E725"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "681CC84313F8BCC59B6F983FB23B7CAC85EC6B05735047EA28B322F78D57C167"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "781BD128F0C3DE595E32F456661E5561241AF782685F79CB3A3F490D26B919AC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "0A2B3872E2EF9D0ADA6408924559AA66ECA363BB82A9A93337222B3CD45A9606"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "A819B39EB7B4EFF8746817D89B3C10B6D2D791E7BFBDB4FCD7188BD392525EE6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "ADFD604C8B7A35EB13F567BD28DF3CC5F6C49F4D1FFA856D20777411F3D2BD55"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "F8E3D31D7CE2E5365E332E0D75283FDE766A5CF8975D628C5D8ED3D5B6357DBF"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "A28396E3057D0E10872655D88BA681091371BFAB6626AB52152CEC71486D25CB"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "AC031F539941A4C5E435363EFBB3545FFD0E87DEE31B60C1D6DB372E79C2EFA4"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "4582E50343712EFE7D800C295AE7912C1E0675E8C7949CECCFFA135A76B73FF3"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "DE3D263C2FA552E30F69A5064196AD2E272EE75ED82AEC6971607556A5176714"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "8249302BC15E465F55F3A2EF9D9FF917BA99858D5631C73650B3AE564D2F0F68"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "512AC6D2D0A24B1557DEB666FD524721DA304C9ED1623BC97622C037356C3285"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "C8080D3054FC648B4AB693D35D6583982E62E4B40ADDC3B76C7D9E69A159CF1A"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "FCC52E45AEFDFEE61C690F4278FF3817053363EB3D11ABEE1386A5BA642658D4"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "0E237B3CF7BA8856C314E7340676A251FCB2771A63546C2DE30180AB452B9A30"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "FD5BABBF972C30DCB863446109320BB94DCC6796B69B666D1E6EF41E3D6C7A9F"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "84396B671EC87EE1A7281601476E9D54DEA43093239C96D368AC232CAC87A011"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "E1E8724EF44B7A5DFB450D72BF4A81D5FA04C4FFDE9F0F74D59CFF138052D0C6"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "A1B1D7A368877F3080BA753D518136CDD04A5E0BD92A2BB9B259F0BEABFE8C85"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "9C35F6785E09C207C72AC48B3E5A3094899775759AA28FFC57B4E009FC0F7ECC"
+        },
+        {
+          "Kind": "Delta",
+          "PayloadBytes": 33,
+          "BodySha256": "70052919289C6AD97F3E7DFF32586EB2B83E8169F8E882B4BAD183336D642E21"
+        }
+      ],
+      "ColdOpenAndConsume": {
+        "Milliseconds": 36.9916,
+        "AllocatedBytes": 11572920
+      },
+      "RepositoryFileBytes": 2108412
+    }
+  ],
+  "Consumers": [
+    {
+      "Length": 65536,
+      "RepeatedPrefix": false,
+      "Needle": "gamma",
+      "Match": 11,
+      "Costs": {
+        "AppendTo": {
+          "Milliseconds": 0.134,
+          "AllocatedBytes": 1054720
+        },
+        "ToStringThenAppend": {
+          "Milliseconds": 0.177,
+          "AllocatedBytes": 1573376
+        },
+        "SnapshotAppendTo": {
+          "Milliseconds": 0.1547,
+          "AllocatedBytes": 1054720
+        },
+        "IndexOf": {
+          "Milliseconds": 0.0907,
+          "AllocatedBytes": 136
+        },
+        "MaterializeThenIndexOf": {
+          "Milliseconds": 0.1277,
+          "AllocatedBytes": 131128
+        }
+      }
+    },
+    {
+      "Length": 65536,
+      "RepeatedPrefix": true,
+      "Needle": "aaaaab",
+      "Match": 65530,
+      "Costs": {
+        "AppendTo": {
+          "Milliseconds": 1.6794,
+          "AllocatedBytes": 1054720
+        },
+        "ToStringThenAppend": {
+          "Milliseconds": 0.8163,
+          "AllocatedBytes": 1573376
+        },
+        "SnapshotAppendTo": {
+          "Milliseconds": 0.1713,
+          "AllocatedBytes": 1054720
+        },
+        "IndexOf": {
+          "Milliseconds": 0.1878,
+          "AllocatedBytes": 136
+        },
+        "MaterializeThenIndexOf": {
+          "Milliseconds": 0.0271,
+          "AllocatedBytes": 131128
+        }
+      }
+    },
+    {
+      "Length": 1048576,
+      "RepeatedPrefix": false,
+      "Needle": "gamma",
+      "Match": 11,
+      "Costs": {
+        "AppendTo": {
+          "Milliseconds": 19.8976,
+          "AllocatedBytes": 16804112
+        },
+        "ToStringThenAppend": {
+          "Milliseconds": 9.9213,
+          "AllocatedBytes": 25174128
+        },
+        "SnapshotAppendTo": {
+          "Milliseconds": 7.4175,
+          "AllocatedBytes": 16795960
+        },
+        "IndexOf": {
+          "Milliseconds": 0.0052,
+          "AllocatedBytes": 136
+        },
+        "MaterializeThenIndexOf": {
+          "Milliseconds": 0.304,
+          "AllocatedBytes": 2097208
+        }
+      }
+    },
+    {
+      "Length": 1048576,
+      "RepeatedPrefix": true,
+      "Needle": "aaaaab",
+      "Match": 1048570,
+      "Costs": {
+        "AppendTo": {
+          "Milliseconds": 14.2278,
+          "AllocatedBytes": 16795960
+        },
+        "ToStringThenAppend": {
+          "Milliseconds": 14.2251,
+          "AllocatedBytes": 25166336
+        },
+        "SnapshotAppendTo": {
+          "Milliseconds": 8.9915,
+          "AllocatedBytes": 16795960
+        },
+        "IndexOf": {
+          "Milliseconds": 3.5257,
+          "AllocatedBytes": 136
+        },
+        "MaterializeThenIndexOf": {
+          "Milliseconds": 1.1405,
+          "AllocatedBytes": 2097208
+        }
+      }
+    }
+  ],
+  "EncodingSamples": [
+    {
+      "Name": "ascii",
+      "Units": 43,
+      "BaseBytes": 87,
+      "AllNewDeltaBytes": 89,
+      "ExistingStringBytes": 44,
+      "BaseCost": {
+        "Milliseconds": 0.1424,
+        "AllocatedBytes": 680
+      },
+      "DeltaCost": {
+        "Milliseconds": 0.1301,
+        "AllocatedBytes": 704
+      },
+      "BaseHex": "2B740068006500200071007500690063006B002000620072006F0077006E00200066006F00780020006A0075006D007000730020006F00760065007200200074006800650020006C0061007A007900200064006F006700",
+      "DeltaHex": "2B022B740068006500200071007500690063006B002000620072006F0077006E00200066006F00780020006A0075006D007000730020006F00760065007200200074006800650020006C0061007A007900200064006F006700"
+    },
+    {
+      "Name": "chinese",
+      "Units": 19,
+      "BaseBytes": 39,
+      "AllNewDeltaBytes": 41,
+      "ExistingStringBytes": 39,
+      "BaseCost": {
+        "Milliseconds": 0.008,
+        "AllocatedBytes": 584
+      },
+      "DeltaCost": {
+        "Milliseconds": 0.0056,
+        "AllocatedBytes": 608
+      },
+      "BaseHex": "137F95FF5B7D547A66FD80534F0163ED7E167F918F636B8765765EDD4F585BEC72CB7AEB5F6771",
+      "DeltaHex": "1302137F95FF5B7D547A66FD80534F0163ED7E167F918F636B8765765EDD4F585BEC72CB7AEB5F6771"
+    },
+    {
+      "Name": "mixed",
+      "Units": 24,
+      "BaseBytes": 49,
+      "AllNewDeltaBytes": 51,
+      "ExistingStringBytes": 33,
+      "BaseCost": {
+        "Milliseconds": 0.0088,
+        "AllocatedBytes": 616
+      },
+      "DeltaCost": {
+        "Milliseconds": 0.0065,
+        "AllocatedBytes": 624
+      },
+      "BaseHex": "186D0065006D006F002000636B87653A00200061006C0070006800610020002D4E8765200062006500740061000D000A00",
+      "DeltaHex": "1802186D0065006D006F002000636B87653A00200061006C0070006800610020002D4E8765200062006500740061000D000A00"
+    },
+    {
+      "Name": "surrogates",
+      "Units": 10,
+      "BaseBytes": 21,
+      "AllNewDeltaBytes": 23,
+      "ExistingStringBytes": 21,
+      "BaseCost": {
+        "Milliseconds": 0.0027,
+        "AllocatedBytes": 552
+      },
+      "DeltaCost": {
+        "Milliseconds": 0.0027,
+        "AllocatedBytes": 560
+      },
+      "BaseHex": "0A61003DD800DE620000D8780000DC00000D000A00",
+      "DeltaHex": "0A020A61003DD800DE620000D8780000DC00000D000A00"
+    }
+  ]
+}

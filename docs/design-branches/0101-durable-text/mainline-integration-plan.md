@@ -1,0 +1,40 @@
+# DurableText 主线接入与消费合同
+
+研究稿及评审位置见[本片入口](README.md)。主线类型位于 `Atelia.DurableGraph`。领域模型可声明 `DurableText? Body`，普通 string 字段继续适用于一句话 Gist。多个字段或容器元素可指向同一正文。同一版本的独立 checkout 分别持有自己的可编辑对象。
+
+## 编辑和读取
+
+`Replace(start, length, replacement)` 适用于已知位置的 patch。`ApplyEdits` 的所有范围都属于调用前的文本，按 UTF-16 单元计数。输入可乱序，同点插入保持输入顺序并排在该点的非零替换之前。无效范围或重叠替换会使整批失败。孤立代理、NUL、CR/LF 都是可保存内容。
+
+```csharp
+var before = entry.Body.Snapshot();
+int first = before.IndexOf(needle);
+if (needle.Length == 0 || first < 0 || before.IndexOf(needle, first + needle.Length) >= 0) {
+    throw new InvalidOperationException("Expected one non-empty, non-overlapping match.");
+}
+entry.Body.Replace(first, needle.Length, replacement);
+entry.Body.AppendTo(contextBuilder);
+```
+
+调用方在从查找至应用的期间串行持有该编辑对象。若中途等待 LLM 或允许其他编辑，应用需重新核对当前文本。稳定快照可延后追加到调用方的 StringBuilder；短窗口用 CopyTo。同一份快照上的完整正则搜索可以一次 ToString 后反复使用标准 .NET Regex，匹配区间属于该快照。大量长期保留的大快照可能同时持有多个字符 backing。
+
+## 保存与恢复
+
+可编辑对象、不可变视图与持久对象版本分别承担编辑、内容读取和重建依赖。图级捕获拥有 ObjectId、准确前驱和安装时机。共享同一 CLR 文本的两个 graph builder 可能有不同 prior，只有来源身份经验证匹配时才能复用 Piece 的 Copy 区间。来源不匹配时按实际 prior 比较，必要时以完整新内容编码。净零编辑可复用已提交对象，强制 Base 和 NoChange 的维护写沿用图级策略。
+
+文本 Base 及 Delta 中的字面内容使用 UTF-16LE；Copy 和 New 组成的 Delta 只依赖该对象的一个准确前驱。盘上类型表达式区分 Text 与 string，字段通过 ObjectReference 槽保存 ObjectId。可编辑结构和整理阈值属于内存实现。
+
+首版业务 typed Base 使用 ABI 5 的结构路由 2 和零元 Text 类型表达式（11）。字段 history 中的零元模式写成 `t`；直接或嵌套包含它的记录使用 v10。文本 raw body 的编码如下，整数均为 VarUInt32，范围单位均为 UTF-16 code unit。
+
+| 记录 | raw body |
+|---|---|
+| Base | 单元数 N，随后为 N 个小端序 16 位单元 |
+| Delta | 结果单元数 N，随后为产生恰好 N 个单元的指令序列。Copy（字节 1）后接前驱起点及长度；New（字节 2）后接长度及相应 UTF-16LE 单元 |
+
+文本编码器合并相邻 New 及来源连续的相邻 Copy。读取时验证实际前驱范围、长度、指令和完整消耗。恢复沿链迭代，Copy 复用前驱字符串切片，New 解码新增内容；片段积累达到内部资源界限时，可在这一层改用平坦恢复。该界限与编辑器接受时的整理阈值分别用于冷读和热编辑。[实际 codec](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs)
+
+业务准备对冻结文本按需生成 Base；普通准备回调仍在受保护的准备期同步执行。图策略比较完整对象记录的 payload 大小。选择完成后，在追加前生成实际所选记录。安装后的重建字节使用实际记录累计。State 接受后才可条件安装已准备的整理结果；放弃、独立 Event 或捕获后又有新编辑时，都不得用旧视图覆盖领域编辑。
+
+## 后续范围
+
+工作负载确实需要大量常驻历史快照或频繁随机读取时再评估 Rope。跨块通用正则、最大 Delta 链配置和公开块枚举各自等待真实消费者的成本证据。

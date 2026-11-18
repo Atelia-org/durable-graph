@@ -12,4 +12,19 @@ runner 检查独立 cache/no ProjectReference、准确 DG 四包 commit 与版�
 
 旧 reader 单独使用 [DurableTextReaderAdmission](../DurableTextReaderAdmission/Program.cs) 和 [准入 runner](../Run-DurableTextReaderAdmission.ps1)。它不引用 DurableText 编译符号，先保存/恢复普通 Control 字段作为正控，再读取新库，逐阶段记录 OpenReadOnlyExisting、ListBranches、ResolveTag、LoadState、OpenGraphWithText 的实际异常；不能用缺程序集或编译失败代替格式拒绝。旧 reader 能否打开资源和能否恢复 Text 图是两个事实。
 
-当前消费者源码已准备；新 G 的实际验收由主线切片结果记录，不能仅凭本文件视为通过。旧 G `0.0.0-graphheap.20261115.g7a98c7d` 的独立正控已通过，准入负控需等待新库。
+2026-11-18 已完成普通包验收。新 G 为 `0.0.0-durabletext.20261118.gfb2bef0`，来自独立清洁 checkout `fb2bef0ad2acc9c146c72c4edf4a2cd55ce35714`；六包 S 为 `0.1.3-dev.20261101.g9ad39fc`，来源 `9ad39fc51a420e8302468533b82d8bc3a91a403e`。旧 reader 使用已存在的 G `0.0.0-graphheap.20261115.g7a98c7d`，来源 `7a98c7d224f87e0f7ec455417a0a4a2d13d5fa33`。
+
+三进程 seed / resume / verify 分别通过 7 / 17 / 11 项检查；两份用户 Schema history 的 Publish→Verify、包内 Generator/Build 实际执行、原包/输出/已加载 DLL 哈希以及只读库字节不变均通过。[四格 runner](../Run-DurableTextAdmissionMatrix.ps1) 复用各 reader 的已验证独立包消费结果，再运行交叉读取：
+
+| Reader | 数据 | 实际结果 |
+|---|---|---|
+| 旧 G | 旧 G 普通 Control 库 | Completed，`plain-before-text` |
+| 新 G | 新 G Text 库 | 三进程通过，历史与续写正确 |
+| 旧 G | 新 G Text 库 | LoadState 拒绝，`InvalidDataException: Unsupported or nonclosed TypeExpr constructor/arity.` |
+| 新 G | 旧 G 普通 Control 库 | Completed，`plain-before-text` |
+
+旧 reader 已成功打开 Repository、列出 branch、解析 tag；拒绝发生在 LoadState 加载 SchemaCatalog 的 TypeExpr 时，尚未调用 OpenGraphWithText。不能把这次结果写成“打开 Repository 就拒绝”或“尝试解释 Text body 后拒绝”。新读旧的通过仅覆盖此普通 Control fixture，不建立通用迁移或兼容承诺。两次交叉只读操作均未改变数据库文件字节。
+
+本机完整证据分别位于 `W:/DurableTextProduct/package-new-consumer-20261118-01/result.json`、`W:/DurableTextProduct/package-old-reader-20261118-02/result.json`、`W:/DurableTextProduct/package-new-reader-20261118-01/result.json` 和 `W:/DurableTextProduct/package-admission-matrix-20261118-01/result.json`。候选十一包 feed 在 `W:/DurableTextProduct/candidate-fb2bef0/feed`；未向外部发布。
+
+复跑四格需先分别运行两个版本的准入 runner 正控，以及新版本的三进程 runner，再把三个 `result.json` 传给 `Run-DurableTextAdmissionMatrix.ps1 -OldReaderResult <旧正控> -NewReaderResult <新正控> -NewConsumerResult <新三进程> -WorkDirectory <新目录>`。它检查包身份、已加载 DLL 哈希、真实拒绝原因与读取前后的库字节；不重新打包，也不向现有目录写入新结果。

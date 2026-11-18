@@ -1,0 +1,13 @@
+E:\repos\Atelia-org\dg-text-mainline\tests\DurableGraph.Persistence.Tests\bin\Release\net10.0\Atelia.DurableGraph.Persistence.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行
+总共 1 个测试文件与指定模式相匹配。
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.5)
+[xUnit.net 00:00:00.20]   Discovering: Atelia.DurableGraph.Persistence.Tests
+[xUnit.net 00:00:00.56]   Discovered:  Atelia.DurableGraph.Persistence.Tests
+[xUnit.net 00:00:00.60]   Starting:    Atelia.DurableGraph.Persistence.Tests
+[xUnit.net 00:00:02.34]   Finished:    Atelia.DurableGraph.Persistence.Tests
+  已通过 Atelia.DurableGraph.Persistence.Tests.DurableTextProductProbeTests.RecordProductSaveAndConsumerCosts [1 s]
+
+测试运行成功。
+测试总数: 1
+     通过数: 1
+总时间: 3.0944 秒
