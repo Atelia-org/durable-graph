@@ -416,7 +416,7 @@ public sealed partial class Repository : IDisposable {
     public CommitId ResolveTag(string name) {
         RequireAvailable();
         _busy = true;
-        try { var id = _resources.ResolveStoredTag(name); _resources.ReadDescriptor(id); return new(id); }
+        try { return new(_resources.ResolveStoredTag(name)); }
         finally { EndOperation(); }
     }
 
