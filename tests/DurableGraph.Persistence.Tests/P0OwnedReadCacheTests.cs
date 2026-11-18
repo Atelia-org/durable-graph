@@ -69,6 +69,45 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.True(after.DirectoryPayloadHits > before.DirectoryPayloadHits);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Directory_replay_resumes_at_a_resident_prefix_and_falls_back_after_eviction(bool evictPrefix) {
+        using Frames frames = Frames.Create(NewPath());
+        using GraphRecordStore writer = new(frames) { DirectoryReadAmplificationThreshold = 100 };
+        var initial = writer.AppendBusiness(StoredGraphKind.State, null,
+            new(null, new(1), Enumerable.Range(1, 64).Select(id => B((uint)id, [(byte)id]))));
+        var prefix = writer.AppendBusiness(StoredGraphKind.State, null, new(initial.Address, new(1), [B(1, [70])]));
+        var middle = writer.AppendBusiness(StoredGraphKind.State, null, new(prefix.Address, new(1), [B(1, [71])]));
+        var target = writer.AppendBusiness(StoredGraphKind.State, null, new(middle.Address, new(1), [B(1, [72])]));
+        long expectedH = writer.ReadDirectoryVersion(initial.DirectoryRoot).PayloadBytes;
+        foreach (var graph in new[] { prefix, middle, target }) {
+            var version = writer.ReadDirectoryVersion(graph.DirectoryRoot);
+            Assert.Equal(ObjectVersionKind.Delta, version.Kind);
+            expectedH += version.PayloadBytes;
+        }
+
+        using GraphRecordStore cold = new(frames, readCacheBudgetBytes: 0);
+        var expectedHeads = cold.ReadDirectory(target.DirectoryRoot).ToArray();
+        Assert.Equal(expectedH, cold.ReadDirectoryPayloadBytes(target.DirectoryRoot));
+        FrameAddress filler = RawBatch(frames, null, [B(1, new byte[16 * 1024])]);
+        long budget = GraphPhysicalReadCache.EntryOverheadBytes + GraphPhysicalReadCache.GetBatchCharge(writer.ReadBatch(filler));
+        using GraphRecordStore reader = new(frames, readCacheBudgetBytes: budget);
+        var prefixHeads = reader.ReadDirectory(prefix.DirectoryRoot);
+        Assert.Equal(prefix.ObjectHeads.ToArray(), prefixHeads.ToArray());
+        Assert.Same(prefixHeads, reader.ReadDirectory(prefix.DirectoryRoot));
+        if (evictPrefix) {
+            reader.ReadBatch(filler); // This one entry occupies the whole budget.
+            Assert.Equal(1, reader.ReadCacheStatistics.EntryCount);
+            Assert.True(reader.ReadCacheStatistics.Evictions > 0);
+        }
+        long before = reader.ReadCacheStatistics.DirectoryReplayFrames;
+        Assert.Equal(expectedHeads, reader.ReadDirectory(target.DirectoryRoot).ToArray());
+        Assert.Equal(evictPrefix ? 4L : 2L, reader.ReadCacheStatistics.DirectoryReplayFrames - before);
+        Assert.Equal(expectedH, reader.ReadDirectoryPayloadBytes(target.DirectoryRoot));
+        Assert.Equal(prefix.OwnedBatch!.Value, prefixHeads[1]);
+    }
+
     [Fact]
     public void FixedRolesAndDirectoryComponentsShareOneLruAndOversizeDoesNotSweepHotEntries() {
         using Frames frames = Frames.Create(NewPath());
@@ -380,6 +419,15 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Equal(reset.OwnedBatch, resetChain.Head);
         Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(0), resetChain.ReconstructionPayloadBytes);
 
+        // Both prior directories are valid and warm. Only the one selected by
+        // this Delta's declared source may supply its map.
+        reader.ReadDirectory(first.DirectoryRoot);
+        reader.ReadDirectory(second.DirectoryRoot);
+        FrameAddress mismatched = frames.Append(GraphFrameCodec.DirectoryTag,
+            GraphFrameCodec.EncodeDirectory(first.Address, ObjectVersionKind.Delta, second.DirectoryRoot,
+                ObjectHeadDirectoryCodec.PrepareDelta(second.ObjectHeads, Map((1u, wrongBatch))).Body)).Unwrap();
+        Assert.Throws<InvalidDataException>(() => reader.ReadDirectory(mismatched));
+
         FrameAddress malformed = frames.Append(GraphFrameCodec.DirectoryTag,
             GraphFrameCodec.EncodeDirectory(second.Address, ObjectVersionKind.Delta, second.DirectoryRoot, [])).Unwrap();
         reader.ReadDirectoryVersion(malformed); // Valid owned frame envelope; invalid Dictionary Delta body.
@@ -389,7 +437,7 @@ public sealed class P0OwnedReadCacheTests : IDisposable {
         Assert.Equal(failed.DirectoryHits, reader.ReadCacheStatistics.DirectoryHits);
         Assert.Equal(failed.DirectoryMaterializations, reader.ReadCacheStatistics.DirectoryMaterializations);
         Assert.Equal(failed.DirectoryVersionDecodes, reader.ReadCacheStatistics.DirectoryVersionDecodes);
-        Assert.True(reader.ReadCacheStatistics.DirectoryReplayFrames > failed.DirectoryReplayFrames);
+        Assert.Equal(failed.DirectoryReplayFrames + 1, reader.ReadCacheStatistics.DirectoryReplayFrames);
         Assert.True(reader.ReadCacheStatistics.DirectoryVersionHits > failed.DirectoryVersionHits);
         Assert.Equal(second.ObjectHeads[1], reader.ReadDirectory(second.DirectoryRoot)[1]);
     }

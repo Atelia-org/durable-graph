@@ -22,3 +22,21 @@ git show bc7e70f5:docs/design-branches/0102-container-payload-planning/reproduce
 | 在内存中从 Base 恢复 128 层单点 Delta | 每次恢复都逐元素核对，四次线程分配从约 67.65–67.68 MB 降至 0.525 MB。重复来源、变长范围和无效补丁的失败隔离见[读链回归](../../../tests/DurableGraph.Tests/ListRangeDeltaTests.cs)。 |
 
 完整候选分析及开题时的设计草案位于上述研究提交。本地验收原件为 `W:/DB102/product-accept/acceptance.json`、`W:/DB102/product-accept/quiet1.json` 和 `E:/db102/mainline-list-accept/comparison-product.json`。
+
+## 目录前驱复用
+
+05-care 的主线热点追踪发现，230 次 State 保存的追加读回依次应用 1 到 230 个目录 Delta，共 26,565 次。两次分段计时中，这些重复应用约占 State 保存耗时的 80%。完整研究可用 `git show 71fe029b:docs/design-branches/0102-container-payload-planning/hotspots/README.md` 查阅。
+
+主线的目录读取器在核验来源图及其选定的前驱地址后，复用同一 Store 中对应的不可变目录和累计 payload 字节数 H。最接近目标的驻留前驱决定本次需重放的后缀。缓存准入与回退规则见[物理读缓存合同](../0067-owned-revision-read-cache-design/README.md)。[主线实现](../../../src/DurableGraph.Persistence/GraphRecordStore.cs) · [准确 H、淘汰回退与无效后缀回归](../../../tests/DurableGraph.Persistence.Tests/P0OwnedReadCacheTests.cs)
+
+产品验收使用同一个 05-care 驱动，以全新进程、全新仓库运行 230 步，与 `1884036a` 相对照。两臂共享相同的 15 个其他 DLL，候选实际加载的四个 DurableGraph DLL 已与主线 Release 构建逐个核对。
+
+| 230 次 State 保存 | `1884036a` | 主线复用前驱 |
+|---|---:|---:|
+| 先基线后候选，合计耗时 | 3,722.6 ms | 686.6 ms |
+| 先候选后基线，合计耗时 | 3,567.5 ms | 697.6 ms |
+| 调用线程累计托管分配（两对） | 5,341.3 MB | 375.5 MB |
+
+两对合计耗时分别下降 81.56% 和 80.45%，两对分配均下降 92.97%。逐步诊断的业务指纹、实写对象及前驱、安装 head/H 和文件增长与基线一致；独立进程恢复 State、重开完整应用和第 231 步续写均通过。本地收据为 `W:/DB102/mainline-directory-prefix-accept/receipts/acceptance.json`。
+
+四帧目录链的回归使用独立零预算 reader 的 heads 和 H 作对照。在前驱驻留时，旧程序集实际回放四帧，新程序集只回放两帧。逐出前驱后，两者都回放四帧。错误来源以及畸形后缀重试由同一组缓存测试覆盖。固定 Storage 源版本的 Release 构建零警告、零错误，全量测试 3,317 项通过，零失败、零跳过。

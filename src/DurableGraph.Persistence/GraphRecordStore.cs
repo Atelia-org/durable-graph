@@ -304,15 +304,16 @@ internal sealed class GraphRecordStore : IDisposable {
             return cached.Heads;
         }
         _directoryMisses++;
-        var chain = ReadDirectoryChain(address);
-        IReadOnlyDictionary<uint, FrameAddress> heads = ObjectHeadDirectoryCodec.ReadBase(chain[0].Body);
-        for (int i = 1; i < chain.Count; i++) { heads = ObjectHeadDirectoryCodec.ApplyDelta(heads, chain[i].Body); }
-        var frozen = new FrozenSortedDictionary<uint, FrameAddress>(new SortedDictionary<uint, FrameAddress>(
-            heads.ToDictionary(static pair => pair.Key, static pair => pair.Value)));
-        long bytes = chain.Aggregate(0L, static (sum, version) => checked(sum + version.PayloadBytes));
+        var suffix = ReadDirectoryChain(address, _readCache, out var prefix);
+        var heads = prefix?.Heads ?? ObjectHeadDirectoryCodec.ReadBase(suffix[0].Body);
+        int firstDelta = prefix is null ? 1 : 0;
+        for (int i = firstDelta; i < suffix.Count; i++) {
+            heads = ObjectHeadDirectoryCodec.ApplyDelta(heads, suffix[i].Body);
+        }
+        long bytes = suffix.Aggregate(prefix?.PayloadBytes ?? 0L, static (sum, version) => checked(sum + version.PayloadBytes));
         _directoryMaterializations++;
-        _readCache?.AdmitDirectory(address, new(frozen, bytes));
-        return frozen;
+        _readCache?.AdmitDirectory(address, new(heads, bytes));
+        return heads;
     }
 
     internal long ReadDirectoryPayloadBytes(FrameAddress address) {
@@ -322,7 +323,8 @@ internal sealed class GraphRecordStore : IDisposable {
             return cached.PayloadBytes;
         }
         // A cost-only miss does not force a complete map materialization.
-        return ReadDirectoryChain(address).Aggregate(0L, static (bytes, version) => checked(bytes + version.PayloadBytes));
+        return ReadDirectoryChain(address, prefixCache: null, out _)
+            .Aggregate(0L, static (bytes, version) => checked(bytes + version.PayloadBytes));
     }
 
     internal ObjectVersionChain ReadObjectChain(StoredGraphRevision snapshot, uint objectId) {
@@ -460,11 +462,18 @@ internal sealed class GraphRecordStore : IDisposable {
         }
     }
 
-    private IReadOnlyList<ObjectHeadDirectoryVersion> ReadDirectoryChain(FrameAddress address) {
+    private IReadOnlyList<ObjectHeadDirectoryVersion> ReadDirectoryChain(FrameAddress address,
+        GraphPhysicalReadCache? prefixCache, out MaterializedObjectHeadDirectory? prefix) {
+        prefix = null;
         var visited = new HashSet<FrameAddress>();
         var versions = new List<ObjectHeadDirectoryVersion>();
         while (true) {
             if (!visited.Add(address)) { throw new InvalidDataException("Directory prior chain contains a cycle."); }
+            // For a predecessor, the Delta below has already checked its exact source edge.
+            if (versions.Count != 0 && prefixCache is not null && prefixCache.TryGetDirectory(address, out var cached)) {
+                prefix = cached;
+                break;
+            }
             ObjectHeadDirectoryVersion version = ReadDirectoryVersion(address);
             _directoryReplayFrames++;
             versions.Add(version);

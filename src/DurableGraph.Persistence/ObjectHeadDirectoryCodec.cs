@@ -60,7 +60,7 @@ internal static class ObjectHeadDirectoryCodec {
             Layout, removedIds.ToArray(), patched.ToArray(), added.ToArray());
     }
 
-    internal static IReadOnlyDictionary<uint, FrameAddress> ReadBase(ReadOnlySpan<byte> body) {
+    internal static FrozenSortedDictionary<uint, FrameAddress> ReadBase(ReadOnlySpan<byte> body) {
         BareValueReader reader = new(body);
         FrozenDictionaryState<uint, Locator> state =
             DictionaryStateBody<uint, Locator, UInt32StateOps, LocatorOps>.ReadBase(ref reader, Layout);
@@ -68,7 +68,7 @@ internal static class ObjectHeadDirectoryCodec {
         return Project(state);
     }
 
-    internal static IReadOnlyDictionary<uint, FrameAddress> ApplyDelta(IReadOnlyDictionary<uint, FrameAddress> prior,
+    internal static FrozenSortedDictionary<uint, FrameAddress> ApplyDelta(IReadOnlyDictionary<uint, FrameAddress> prior,
         ReadOnlySpan<byte> body) {
         BareValueReader reader = new(body);
         FrozenDictionaryState<uint, Locator> state =
@@ -100,7 +100,7 @@ internal static class ObjectHeadDirectoryCodec {
         return new(DictionaryComparerKind.ScalarDefault, entries);
     }
 
-    private static IReadOnlyDictionary<uint, FrameAddress> Project(FrozenDictionaryState<uint, Locator> state) {
+    private static FrozenSortedDictionary<uint, FrameAddress> Project(FrozenDictionaryState<uint, Locator> state) {
         if (state.ComparerKind != DictionaryComparerKind.ScalarDefault) {
             throw new InvalidDataException("The live directory requires ScalarDefault comparison.");
         }

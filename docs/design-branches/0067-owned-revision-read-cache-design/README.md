@@ -9,6 +9,7 @@
 - 预算是显式驻留 charge 估算，不是 GC 总堆、峰值内存或物理 I/O 上限。默认预算值在具体 Store 的常量中；负预算拒绝，zero 禁用缓存但仍完整执行正常读取／验证。
 - 单组件或合并 entry 超预算时 bypass，不扫掉其他热项，也不删除已经驻留的另一组件。正常准入按 LRU 驱逐完整 entry；预算内驻留不等于全部临时构建内存有界。
 - 完整目录用 private keys／values 双数组冻结，按默认 key 顺序二分查询、升序枚举。构建器可使用排序树，冻结结果不保留树，也不暴露可修改 backing；对象 batch 的已排序 local records 直接二分查找。
+- 物化目录时，每个 Delta 先核验来源图角色及其选定的前驱目录地址。若该地址在同一 Store 中已有完整 heads/H，读取器从这份不可变映射开始顺序应用剩余 Delta，H 加上后缀各帧的实际 payload 字节数。找不到驻留前驱时回溯到 Base。目标目录在整个后缀成功后才准入。[DB-102 性能验收](../0102-container-payload-planning/README.md#目录前驱复用)
 - 物理命中不能免除所选图的 source／Parent／prior／成员关系、准确 Schema view、完整布局、typed body 与引用验证；正常完成帧在打开 owner 寿命内保持地址和内容稳定。
 - Store facade 借用 backing，其寿命不得超过 owner；操作串行，不能与外部 backing writer lease 重叠。owner/backing fault 或关闭后拒绝暖读与新写，释放驻留；已经交付的 owned 值不依赖缓存继续存活。
 - 正常 FS/VS 打开可按底座合同恢复不完整尾，包含未访问控制文件的惰性首次打开；DG 先读必要仓库根再建 Store/cache，不做全库启动审计或重开确认。额外数据救援必须全关资源、丢弃缓存后离线执行，再新开，见 [DB-086](../0086-new-storage-refactoring-plan/README.md)。

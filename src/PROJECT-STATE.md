@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-[DB-102 容器保存与恢复](../docs/design-branches/0102-container-payload-planning/README.md) 使用现行图级预算。已有业务 string 与受支持的 List 延迟编码 Base，内建标量 List 可直写变化元素的补丁；读取器在独占的同位置整表更新上复用数组。
+[DB-102 容器保存与恢复](../docs/design-branches/0102-container-payload-planning/README.md) 使用现行图级预算。已有业务 string 与受支持的 List 延迟编码 Base，内建标量 List 可直写变化元素的补丁，读取器在独占的同位置整表更新上复用数组。物化对象目录时可复用同一 Store 中已验证的准确前驱，只重放新后缀。
 
 2026-11-18：[DB-101 DurableText](../docs/design-branches/0101-durable-text/README.md) 使用 A-Adaptive Piece Table 与准确前驱的范围 Delta。Base 逐片择码，冷读按总单元数直接填入最终 string。图级策略先用片数和长度估算 Base，选中后才编码，安装使用实际记录字节。[分段格式与验收记录](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)
 
