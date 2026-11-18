@@ -17,9 +17,9 @@ BaseBody := VarUInt32(N) NonEmptyBareString*    // 恰好耗尽这一条 body
 
 各段独立选无损 UTF-8 或 UTF-16LE，平局选后者。合法的非首选表示与冗余长度头沿用 Binary 现有读语义。段内允许 NUL，也能保存孤立代理。相同正文的不同切法允许产生不同字节。N 始终等于解码后的 UTF-16 单元数，盘上省略段数。与片段数前缀相比，N 的收益是可以在第一次转码前确定最终目标的容量。[Binary 字符串规则](../../../../atelia-storage/src/Binary/BareValueEncoding.Strings.cs)
 
-**用现有 typed Base ABI 区分代际。** 实施时把 `TypedBaseBodyCodec.FormatVersion` 从 5 升为 6，沿用结构路由 2 和现有零元 `TypeExpr.Text`（11）。例如 `06 02 0B 01 03 41` 表示一段 `"A"`。同一裸正文 `01 03 41` 在 ABI 5 中恰好是旧格式字符 U+4103，两者都能合法耗尽输入，解码前必须区分。typed Base 的现有版本检查同时覆盖 Repository 和较低层的图记录解码入口，后者可以绕过 Repository.Open 还原对象。仓库根标记、Schema 身份和容器内的 Text 类型表达式均无须增加分支。[typed Base](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs) · [类型表达式编码](../../../src/DurableGraph.Persistence/TypeExprWireCodec.cs) · [直接读图测试](../../../tests/DurableGraph.Persistence.Tests/GraphObjectChainReadTests.cs)
+**分段正文作为 DurableText 的首次发布格式。** 直接替换 Text Base 的读写实现。沿用 typed Base ABI 5、结构路由 2 和零元 `TypeExpr.Text`（11）。一段 `"A"` 的完整 typed Base 为 `05 02 0B 01 03 41`。首个本地产品提交 `fb2bef0a` 才在既有 ABI 5 上引入 Text，其父提交 `8629e0b1` 的读写器尚无这个类型。按已确认的使用范围，固定 UTF-16LE 的 Text 只存在于本地试验数据。此次调整只涉及该类型的 Base 正文，原有非 Text 数据沿既有路径读取。[typed Base](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs) · [类型表达式编码](../../../src/DurableGraph.Persistence/TypeExprWireCodec.cs)
 
-这项选择适用用户已确认的开发期可重建边界。**任何 ABI 5 typed Base，包括非 Text 对象和元数据，都会在解码时被拒绝。** 该边界不要求在打开空仓或只枚举仓库时立即报错。实施和普通包验收均使用新库。低层单独传递裸 Base 的双方须约定同代格式。[原型数据兼容约定](../../DurableGraph-target-design-v0.md#原型迭代与数据兼容)
+**含旧 Text 的测试库用新 writer 重新生成。** 裸正文 `01 03 41` 在旧本地实现中表示 U+4103，在分段实现中表示 `"A"`，两边均能合法耗尽输入。新 reader 始终按分段语法解释 Text Base，不能靠试读或尾部校验辨认旧夹具。源码联调与普通包测试各自使用匹配的构建与数据。用后续普通提交落地即可，重写 Git 历史也不会改变已有测试文件中的字节。[原型数据兼容约定](../../DurableGraph-target-design-v0.md#原型迭代与数据兼容)
 
 ## 两个 Binary 重载
 
@@ -50,7 +50,7 @@ Binary 在局部 reader 副本上解析，成功才推进调用方游标。UTF-1
 
 | 证明什么 | 最小见证 |
 |---|---|
-| 格式可识别，错误未被版本检查掩盖 | 固定一条完整 ABI 6 Text golden，保留合法 ABI 5 typed Base 的版本拒绝例。当前版的非 Text、嵌套 Text 及畸形 route、descriptor、操作数测试须实际走到被测分支。手写 ABI 5 的畸形夹具若原样保留，会因错误版本提前抛出相同异常。同步普通包内显式检查 ABI 的断言。[结构夹具](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapBuiltinListTests.cs) · [Schema 夹具](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapSchemaClosureTests.cs) |
+| Text 使用原有封套，既有 ABI 5 类型仍可读 | 固定一条完整的分段 Text golden（见上例），更新旧 Text Base 字节断言。沿用原有非 Text ABI 5 夹具，验证原字节仍可解码，并运行既有嵌套类型与非法路由回归。[结构夹具](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapBuiltinListTests.cs) · [Schema 夹具](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapSchemaClosureTests.cs) |
 | 字符、长度与错误合同 | Binary 以原 string 入口作 oracle，检验切片、代理、目标前缀和失败游标。DG 检验 N 的 127/128 边界、空正文与尾部、空段、非法/截断字面、输出长于或短于 N、不同切分的等值读回。[Binary goldens](../../../../atelia-storage/tests/Binary.Tests/StringTests.cs) · [Text codec 回归](../../../tests/DurableGraph.Tests/TextBodyCodecTests.cs) |
 | 保存与恢复保持原有因果关系 | 在既有回归上分别断言估值与实写 H，小改选 Delta 时 Base 编码次数为零，Delta golden 不变，准确前驱、维护写、Event、失败与发布后安装沿用原语义。[planner 回归](../../../tests/DurableGraph.Persistence.Tests/ObjectRevisionPlannerTests.cs) · [集成测试](../../../tests/DurableGraph.Persistence.Tests/DurableTextIntegrationTests.cs) |
 | 分段真正节省中间对象 | 用相同正文分别制成少量大段和大量小段，记录实际产品 Base 字节与直接冷解码分配。组件计量单列最终 string，从而辨别是否重新引入每段临时 string。现有 eager/deferred 对照用于同一 wire 的准备策略。两路若因估值而合法选出不同记录，应分开报告选择，只有控制住表示时才比较记录哈希。[产品 probe](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs) |

@@ -1,6 +1,6 @@
 # DurableText 的分片编码、保存决策与压缩
 
-后续已选择[以全文 UTF-16 单元数开头的分段 Base](segmented-base-refactoring-plan.md)，并验证可直接解码到最终字符串。本文保留研究时各候选的假设与尺寸口径。
+后续已选定以全文 UTF-16 单元数开头的分段 Base，并验证可直接解码到最终字符串。下文“格式切换”的两代区分建议针对需要识别旧 Text 的场景。旧 Text 仅有本地测试数据，实施时在 ABI 5 内直接定稿。[分段 Base 实施方案](segmented-base-refactoring-plan.md)
 
 2026-11-18。研究基线为 DurableGraph `8fdba114c642cc0b266137308db79e24e0249685` 和 Atelia.Storage `9ad39fc51a420e8302468533b82d8bc3a91a403e`，后者与 DG 的六包 pin 一致。下文提出供验证的设计。当前产品合同仍见[主线接入记录](mainline-integration-plan.md)和[依赖来源](../../../eng/StorageDependency.props)。指向 Storage 源码的相对链接按两个仓库并列检出解析。
 
