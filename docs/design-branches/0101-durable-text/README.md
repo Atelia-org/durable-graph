@@ -4,7 +4,7 @@
 
 **产品证据**。实现在 `fb2bef0ad2acc9c146c72c4edf4a2cd55ce35714`。针对性源码测试覆盖共享 CLR 实例的独立 builder、历史分叉、未变/净零/维护写、账实字节、准备失败、发布边界、Event 及捕获后编辑。[集成测试](../../../tests/DurableGraph.Persistence.Tests/DurableTextIntegrationTests.cs) · [W SSD 保存、渲染与搜索对照数据](mainline-performance.md)
 
-下一片已选择[分段 Base 重构方案](segmented-base-refactoring-plan.md)，拟用片段数前缀、独立 Bare string 和 Binary span 写入入口。当前产品仍用固定 UTF-16LE。备选项、原文尺寸与压缩测量见[编码研究](text-encoding-research.md)。
+下一片已选择[分段 Base 重构方案](segmented-base-refactoring-plan.md)，拟用全文 UTF-16 单元数前缀、独立 Bare string 和 Binary span 读写入口。直接解码到最终 string 已通过机制验证。当前产品仍用固定 UTF-16LE。备选项、原文尺寸与压缩测量见[编码研究](text-encoding-research.md)。
 
 2026-11-18，固定 Storage 源码模式 Release 根构建 0 警告、0 错误。根 solution 全量测试 3,271 项通过（Serialization 133、Storage 36、Persistence 1,247、Runtime/Generator 1,855），无失败或跳过。性能测试另显式启用并在三个独立进程运行。
 

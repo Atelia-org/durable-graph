@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-11-18：[DB-101 DurableText](../docs/design-branches/0101-durable-text/README.md) 已完成主线实现、完整源码回归、普通包冷开续写与有限成本对照。正文使用具体可编辑引用类型、A-Adaptive Piece Table 和准确前驱的范围 Delta。下一片按[分段 Base 重构方案](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)接入片段数前缀和 Binary span 写入，目前处于设计阶段。
+2026-11-18：[DB-101 DurableText](../docs/design-branches/0101-durable-text/README.md) 已完成主线实现、完整源码回归、普通包冷开续写与有限成本对照。正文使用具体可编辑引用类型、A-Adaptive Piece Table 和准确前驱的范围 Delta。下一片按[分段 Base 重构方案](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)接入全文 UTF-16 单元数前缀和 Binary span 读写，目前已验证直接解码机制，产品待实施。
 
 2026-11-15：[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)已完成实现、完整源码回归和三组普通包验收，并集成master。Repository.CreateGraph/OpenGraph/SaveGraph、GraphBuilder/GraphRef与保留Head4可用；State由自身地址恢复，不保图级编辑父，保写计划及实际Delta来源、完整安装/Schema/故障资格。实验双轨已退出，旧三Head库直接拒绝。准确代码/包SHA、证据和限制只查DB-100，本片无剩余必经工单；性能/GC等由真实需求再触发，DurableText仍由用户并行推进。
 
