@@ -5,9 +5,9 @@ RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia
 `Atelia.FrameStore`、`Atelia.HeadStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
-当前 pin 为 `0.1.3-dev.20261101.g9ad39fc`，来源为 `9ad39fc51a420e8302468533b82d8bc3a91a403e`。
-本次 Storage 提交只调整工具、实验与测试进程的 JSON 输出，不改变生产运行时或存储格式；依赖声明随提交前进，保持源码 HEAD 精确校验。
-候选由准确干净提交生成本地六包，已通过 `eng/Test-Package.ps1` 的四个隔离包消费者与 DG `eng/Prepare-Storage.ps1` 的来源/哈希校验，尚未公开发布。此前 `0.1.3-dev.20261019.g70b406c` / `70b406cd8d1117733eee81a33e7f978399aa98b2` 的功能接入证据见[定向来源接入](design-branches/0096-history-and-head-model/targeted-origin-integration.md)，后续接线状态见[工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)；独立上游 Probe 不替代 DG 产品验收。
+当前 pin 为 `0.1.3-dev.20261118.g3f780ad`，来源为 `3f780ad95239d7556f917e1adca6839cda144c92`。
+本次 Storage 增加 Binary 的 `WriteString(ReadOnlySpan<char>)` 和 `ReadString(scoped Span<char>)`，普通 Bare string 格式保持。DG 的[分段 Text Base](design-branches/0101-durable-text/segmented-base-refactoring-plan.md)使用这些入口直接编解码片段；这是新生产 API 的交付，不能沿用旧 pin 的包资格。
+最终候选已从独立清洁 checkout 生成本地六包，通过 `eng/Test-Package.ps1` 四个隔离普通包消费者、六包 metadata/PDB/170份本地源码摘要核验，以及 DG `eng/Prepare-Storage.ps1` 来源/哈希核验；尚未公开发布。打包与验证日志在 `W:/DurableTextSegmentedBase/storage-pack-final.log`、`storage-package-smoke-final/logs/`，DG 回执在同目录 `dg-storage-verification-final.json`；远程 Source Link 下载未测。此前 `0.1.3-dev.20261019.g70b406c` / `70b406cd8d1117733eee81a33e7f978399aa98b2` 的功能接入证据见[定向来源接入](design-branches/0096-history-and-head-model/targeted-origin-integration.md)，后续接线状态见[工作集](design-branches/0096-history-and-head-model/PROJECT-STATE.md)；独立上游 Probe 不替代 DG 产品验收。
 2026-10-19 的 [Private 删除切片](design-branches/0096-history-and-head-model/private-removal.md)使用旧 `731eef7` / `0.1.3-dev.20261017.g731eef7` feed；其普通包结果保留原版本意义，不证明新 pin 的包资格。
 本机可通过环境变量 `UseStorageSources=true` 与 `StorageSourceRoot` 联调；也可显式使用下方命令。
 默认仍为 package mode，不探测兄弟仓、不回退旧包、不在配置中保存本机路径。
@@ -44,14 +44,14 @@ Storage 依赖 FrameStore，Persistence 依赖 HeadStore；必要的 Data/Primit
 
 ```powershell
 $storage = '/repos/Atelia-org/atelia-storage'
-$storageVersion = '0.1.3-dev.20261101.g9ad39fc'
+$storageVersion = '0.1.3-dev.20261118.g3f780ad'
 $storageFeed = Join-Path $storage "artifacts/feeds/$storageVersion"
 & "$storage/eng/Pack.ps1" -Version $storageVersion -OutputDirectory $storageFeed
 ```
 
 Pack 使用存储仓固定 SDK，产出六个 nupkg、六个 snupkg 和 `manifest.<S>.json`，记录准确来源与字节 SHA256。
 相同版本只允许复用已核验的完整产物；不同内容使用新版本，不覆盖公开包或已有候选，不清空全局缓存。
-当前 pin 的本机 feed 位于相邻 Storage 仓的 `artifacts/feeds/0.1.3-dev.20261101.g9ad39fc`，含六包、六份 symbols 与 `manifest.0.1.3-dev.20261101.g9ad39fc.json`；包文件不随 Git 分发，其他机器按上述入口重建。`.artifacts/db096-targeted-origin/storage-feed` 的 `70b406c`、`.artifacts/db096-package-cutover/storage-feed` 的 `f8868b5` 以及 Private 删除片的 `731eef7` feed 均保留原来源意义，不能替代当前 pin。
+当前 pin 的本机 feed 位于 `W:/DurableTextSegmentedBase/storage-feed-final`，含六包、六份 symbols 与 `manifest.0.1.3-dev.20261118.g3f780ad.json`；包文件不随 Git 分发，其他机器按上述入口重建。此前相邻 Storage 仓 `artifacts/feeds/0.1.3-dev.20261101.g9ad39fc`、`.artifacts/db096-targeted-origin/storage-feed` 的 `70b406c`、`.artifacts/db096-package-cutover/storage-feed` 的 `f8868b5` 以及 Private 删除片的 `731eef7` feed 均保留原来源意义，不能替代当前 pin。
 
 [eng/Prepare-Storage.ps1](../eng/Prepare-Storage.ps1) 可以只读验证这个完整 feed：
 
@@ -135,7 +135,7 @@ G `0.0.0-candidate.20261015.g3e1f411`；S 为当时的 `0.1.3-dev.20261014.g3de8
 <configuration>
   <packageSources>
     <clear />
-    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261101.g9ad39fc" />
+    <add key="storage-dev" value="/repos/Atelia-org/atelia-storage/artifacts/feeds/0.1.3-dev.20261118.g3f780ad" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
   <packageSourceMapping>

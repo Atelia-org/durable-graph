@@ -1,0 +1,815 @@
+{
+  "Runtime": ".NET 10.0.5",
+  "Frequency": 10000000,
+  "Boundaries": "Same body, 1 versus N/16 physical pieces. Setup/encoding excluded from decode timer. Each codec case warms once then records five allocation/time samples. Decode consumes no repository cache and produces one final string plus constant state/view/list wrappers; string and wrapper controls measured separately. Real first SaveGraph is separate, includes acceptance compaction. Save payload includes object envelope; BaseBodyBytes excludes it. No OS-cold or throughput claim.",
+  "Results": [
+    {
+      "Units": 65536,
+      "Content": "ascii",
+      "PhysicalPieces": 1,
+      "BaseBodyBytes": 65542,
+      "BaseEstimateBytes": 131076,
+      "ObjectPayloadBytes": 65549,
+      "BodySha256": "7796EE76D590882CF42A89447F7C49533BA6C97D308735F0C992431FCD066AC9",
+      "InitialSave": {
+        "Milliseconds": 294.772,
+        "AllocatedBytes": 1242456
+      },
+      "Decode": [
+        {
+          "Milliseconds": 0.1707,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.0805,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.0749,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.0666,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.0672,
+          "AllocatedBytes": 131376
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 0.1524,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0701,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0648,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0638,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0717,
+          "AllocatedBytes": 131096
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0936,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0001,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.4861,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0006,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0001,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 65536,
+      "Content": "ascii",
+      "PhysicalPieces": 4096,
+      "BaseBodyBytes": 69635,
+      "BaseEstimateBytes": 135171,
+      "ObjectPayloadBytes": 69642,
+      "BodySha256": "D10616B237B503597F658BB3CA64FBCD2227D89F8FC828FA35741D070FB7F59A",
+      "InitialSave": {
+        "Milliseconds": 18.0778,
+        "AllocatedBytes": 1581592
+      },
+      "Decode": [
+        {
+          "Milliseconds": 0.4283,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 3.0831,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.2142,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.2068,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.2094,
+          "AllocatedBytes": 131376
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 0.0771,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0753,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0625,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0672,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0626,
+          "AllocatedBytes": 131096
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.0005,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.001,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0001,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0001,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 65536,
+      "Content": "han-ascii-alternating",
+      "PhysicalPieces": 1,
+      "BaseBodyBytes": 131078,
+      "BaseEstimateBytes": 131076,
+      "ObjectPayloadBytes": 131085,
+      "BodySha256": "764D9C013DFA658E0E5818690B9A4192C9B11A4618E4CBF32EA50D9E96265D31",
+      "InitialSave": {
+        "Milliseconds": 13.1138,
+        "AllocatedBytes": 2135096
+      },
+      "Decode": [
+        {
+          "Milliseconds": 0.1129,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.0841,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.092,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.0864,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.1749,
+          "AllocatedBytes": 131376
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 0.0164,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0162,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0193,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0156,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0237,
+          "AllocatedBytes": 131096
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0005,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.0008,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0005,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0005,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 65536,
+      "Content": "han-ascii-alternating",
+      "PhysicalPieces": 4096,
+      "BaseBodyBytes": 135171,
+      "BaseEstimateBytes": 135171,
+      "ObjectPayloadBytes": 135178,
+      "BodySha256": "6237A207438E69B92409C6B64EDE68D31993E08B4BBDC2C3B5B0ECB900076AF4",
+      "InitialSave": {
+        "Milliseconds": 20.5638,
+        "AllocatedBytes": 2835616
+      },
+      "Decode": [
+        {
+          "Milliseconds": 0.4417,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.4477,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.4503,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.4326,
+          "AllocatedBytes": 131376
+        },
+        {
+          "Milliseconds": 0.4285,
+          "AllocatedBytes": 131376
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 0.0664,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0791,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0673,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0667,
+          "AllocatedBytes": 131096
+        },
+        {
+          "Milliseconds": 0.0889,
+          "AllocatedBytes": 131096
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0003,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0007,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.0012,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0002,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0004,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0001,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0001,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 1048576,
+      "Content": "ascii",
+      "PhysicalPieces": 1,
+      "BaseBodyBytes": 1048583,
+      "BaseEstimateBytes": 2097156,
+      "ObjectPayloadBytes": 1048590,
+      "BodySha256": "8CE1EEB981299A8559D0486C26794BAEEE9657E66F4C09F5BC8A747CFBC38F5E",
+      "InitialSave": {
+        "Milliseconds": 39.6858,
+        "AllocatedBytes": 15987136
+      },
+      "Decode": [
+        {
+          "Milliseconds": 1.498,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.5988,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.524,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.2874,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.5188,
+          "AllocatedBytes": 2097456
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 1.4007,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 1.3523,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 1.0927,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 1.1663,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 1.4341,
+          "AllocatedBytes": 2097176
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0022,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0034,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0018,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0026,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.002,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.0016,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0018,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0009,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0011,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0017,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 1048576,
+      "Content": "ascii",
+      "PhysicalPieces": 65536,
+      "BaseBodyBytes": 1114115,
+      "BaseEstimateBytes": 2162691,
+      "ObjectPayloadBytes": 1114122,
+      "BodySha256": "707866C24B94D072EDE48A4007453668EEAB37540F6D189050E6C33369356E30",
+      "InitialSave": {
+        "Milliseconds": 31.46,
+        "AllocatedBytes": 22783560
+      },
+      "Decode": [
+        {
+          "Milliseconds": 1.9555,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 5.8134,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 2.5846,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.6974,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.2549,
+          "AllocatedBytes": 2097456
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 1.8319,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.4699,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.4565,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.5592,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.901,
+          "AllocatedBytes": 2097176
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0052,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0011,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0011,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0029,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.003,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.0022,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0014,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0019,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0027,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.001,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 1048576,
+      "Content": "han-ascii-alternating",
+      "PhysicalPieces": 1,
+      "BaseBodyBytes": 2097159,
+      "BaseEstimateBytes": 2097156,
+      "ObjectPayloadBytes": 2097167,
+      "BodySha256": "92ECE90E2DAB8339A776E8C065296D61DDACEF6CAE332C324C70972C7024C7FC",
+      "InitialSave": {
+        "Milliseconds": 41.6371,
+        "AllocatedBytes": 31811032
+      },
+      "Decode": [
+        {
+          "Milliseconds": 1.9817,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.1902,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.2284,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.158,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.9828,
+          "AllocatedBytes": 2097456
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 1.0621,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.5818,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.6602,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 1.1615,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 1.1681,
+          "AllocatedBytes": 2097176
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0015,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0032,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0069,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0028,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.001,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.0021,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0035,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0021,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0062,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0015,
+          "AllocatedBytes": 0
+        }
+      ]
+    },
+    {
+      "Units": 1048576,
+      "Content": "han-ascii-alternating",
+      "PhysicalPieces": 65536,
+      "BaseBodyBytes": 2162691,
+      "BaseEstimateBytes": 2162691,
+      "ObjectPayloadBytes": 2162699,
+      "BodySha256": "F799E9DDA419C93C6AC452328665B9A7F4B660419E17D87553EC68D0EC9A946A",
+      "InitialSave": {
+        "Milliseconds": 36.5726,
+        "AllocatedBytes": 42840488
+      },
+      "Decode": [
+        {
+          "Milliseconds": 3.7296,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 2.6477,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.4622,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.4388,
+          "AllocatedBytes": 2097456
+        },
+        {
+          "Milliseconds": 1.4047,
+          "AllocatedBytes": 2097456
+        }
+      ],
+      "FinalString": [
+        {
+          "Milliseconds": 1.3736,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.5254,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.4843,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.5023,
+          "AllocatedBytes": 2097176
+        },
+        {
+          "Milliseconds": 0.5236,
+          "AllocatedBytes": 2097176
+        }
+      ],
+      "Wrapper": [
+        {
+          "Milliseconds": 0.0036,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0007,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0013,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0008,
+          "AllocatedBytes": 280
+        },
+        {
+          "Milliseconds": 0.0034,
+          "AllocatedBytes": 280
+        }
+      ],
+      "ConsumeDecoded": [
+        {
+          "Milliseconds": 0.002,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0018,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0009,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0019,
+          "AllocatedBytes": 0
+        },
+        {
+          "Milliseconds": 0.0018,
+          "AllocatedBytes": 0
+        }
+      ]
+    }
+  ]
+}

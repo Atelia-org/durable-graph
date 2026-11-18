@@ -1,0 +1,44 @@
+[
+  {
+    "Location": "repository",
+    "Path": "identity.json",
+    "Bytes": 1220,
+    "Sha256": "D3ADF1FD6A3F5A565DA8994020E3422A172C304F65AF4A45DCB6D4B687268E51"
+  },
+  {
+    "Location": "repository",
+    "Path": "save-chain.json",
+    "Bytes": 52520,
+    "Sha256": "A335361D593AB6AE28C78B6558193C45242385750D2A648B6A05597E6108F0F2"
+  },
+  {
+    "Location": "repository",
+    "Path": "segments.json",
+    "Bytes": 18720,
+    "Sha256": "6304A24C2A771DBA7B6ECA9E45B6FDBAEC07B30C587477E46F7B001F2B1B0269"
+  },
+  {
+    "Location": "external-local-log",
+    "Path": "W:/DurableTextProbe/segmented-product-20261118-152349/build-final.log",
+    "Bytes": 1781,
+    "Sha256": "A397389061DCFA0E2DA546C397271F8C51672D71025F0279E5786C39F535DF95"
+  },
+  {
+    "Location": "external-local-log",
+    "Path": "W:/DurableTextProbe/segmented-product-20261118-152034/probe.log",
+    "Bytes": 2410,
+    "Sha256": "0C49F2D57AFA50FE130AC35A632AA006A7EF0DF7776ECCD4CC289CDF11E59F54"
+  },
+  {
+    "Location": "external-local-log",
+    "Path": "W:/DurableTextProbe/segmented-product-20261118-152349/probe.log",
+    "Bytes": 2421,
+    "Sha256": "2AF0E5713E325DFA70089D5C0ACFCFA4B735979337690A36BF6D4759028234A9"
+  },
+  {
+    "Location": "external-local-log",
+    "Path": "W:/DurableTextProbe/segmented-product-20261118-152349/segments-final.log",
+    "Bytes": 826,
+    "Sha256": "CDC851B02C0383199AFCD624696C8CC9CBFE01563852FBD17EC07889CD87C42B"
+  }
+]

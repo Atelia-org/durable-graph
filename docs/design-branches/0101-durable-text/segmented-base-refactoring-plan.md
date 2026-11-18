@@ -1,6 +1,6 @@
 # DurableText 分段 Base 重构方案
 
-**已选，产品待实施。** 从同一冻结快照读取 UTF-16 单元总数 N 和 Piece 序列，写一次 N，再把每个非空 Piece 独立编码为普通 Bare string。冷读时一次分配最终 string，按段直接写满。Delta 继续使用现有 Copy/New 编码、UTF-16 坐标和准确前驱。当前产品仍使用固定 UTF-16LE Base。[主线合同](mainline-integration-plan.md) · [选型与尺寸依据](text-encoding-research.md)
+**已在主线实现。** 从同一冻结快照读取 UTF-16 单元总数 N 和 Piece 序列，写一次 N，再把每个非空 Piece 独立编码为普通 Bare string。冷读时一次分配最终 string，按段直接写满。Delta 继续使用现有 Copy/New 编码、UTF-16 坐标和准确前驱。[主线合同](mainline-integration-plan.md) · [选型与尺寸依据](text-encoding-research.md)
 
 ## 一个完整例子
 
@@ -23,7 +23,7 @@ BaseBody := VarUInt32(N) NonEmptyBareString*    // 恰好耗尽这一条 body
 
 ## 两个 Binary 重载
 
-| 拟增加的入口 | 调用方可依赖的行为 |
+| Binary 入口 | 调用方可依赖的行为 |
 |---|---|
 | `void WriteString(ReadOnlySpan<char> value)` | 同步读取传入的切片，与对相同 UTF-16 序列调用现有 string writer 逐字节一致。切片外的字符不参与选码。空 span 仍是合法的普通空字符串 |
 | `int ReadString(scoped Span<char> destination)` | 成功时消耗恰好一条 Bare string，返回实际写入的 UTF-16 单元数，只写目标前缀。失败时游标仍在原处，目标前缀可能已经改写。源须稳定，目标与输入不能重叠 |
@@ -42,11 +42,15 @@ Binary 在局部 reader 副本上解析，成功才推进调用方游标。UTF-1
 
 **写入选中的 Base。** 在 `PrepareBase` 以冻结视图的 Length 写 N，顺序将每个非空 `piece.Memory.Span` 交给 Binary。正常 State 保留先规划、选中才编码的路径，新对象、Event 和其他即时准备入口复用同一格式。保存成功后的 Rebind/整理沿现有安装时机执行。[冻结与接受](../../../src/DurableGraph/DurableText.cs) · [即时及延迟 Base](../../../src/DurableGraph.Persistence/PreparedTypedBase.cs)
 
-**规划使用估值，安装使用实写。** raw Base 的首版 O(1) 估值为 `V(N) + K + 2L*N`，V 是 VarUInt32 的字节宽度，K 取冻结视图已有的片数，作为每段约 1 B 头的估计。估值可能偏高或偏低。原先用 `EstimateBaseSize > Array.MaxLength` 拒绝编码依赖固定 UTF-16LE 的精确计量，应改由实际写出过程和现有封套、帧容量约束把关。typed 头和记录封套仍各加一次，安装后的重建字节 H 仍从实际记录累计。小改选 Delta 时免除全文 Base 的选码和编码。[保存选择](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs) · [实际 H](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)
+**规划使用估值，安装使用实写。** raw Base 的 O(1) 估值为 `V(N) + K + 2L*N`，V 是 VarUInt32 的字节宽度，K 取冻结视图已有的片数，作为每段约 1 B 头的估计。估值可能偏高或偏低。容量由实际写出过程、记录封套及帧约束把关。typed 头和记录封套各加一次，安装后的重建字节 H 从实际记录累计。小改选 Delta 时免除全文 Base 的选码和编码。[保存选择](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs) · [实际 H](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)
 
-## 施工与验收
+## 产品与验收
 
-先用 Storage 源码联调两个 Binary 重载和 DG 的一条真实路径：**多片 Base → 小改 Delta → 关闭 → 重开续写**。在仓库既有根构建和相关回归通过后，固定新 Storage 源码 revision 与六包版本，以新普通包在独立进程重走这条链。源码联调可先行，普通包负责验证交付边界。[依赖约定](../../storage-dependency.md) · [依赖 pin](../../../eng/StorageDependency.props) · [普通包消费者](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md)
+DurableGraph 产品提交 `712ddf7f` 固定 Storage `3f780ad9`。集成测试从 64 片正文起步，核对实际 Base 的每个段、准确前驱和重建字节，然后小改、关闭、冷开续写，并读回原版本。普通包消费者以三个独立 backing 构造初始正文，分别在三个进程执行首次保存、冷开续写、只读历史复核，核对实际加载的 DLL。[依赖 pin](../../../eng/StorageDependency.props) · [普通包结果与复现](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md)
+
+2026-11-18，DG 源码模式根 solution 的 Release 构建为 0 警告、0 错误，四个测试项目共通过 3,299 项（Persistence 1,250、Serialization 133、Storage 36、Runtime/Generator 1,880），无失败或跳过。构建日志和四份 TRX 位于 `W:/DurableTextSegmentedBase/source-final/`。上游新接口的边界用例另见 [Binary 测试](../../../../atelia-storage/tests/Binary.Tests/StringSpanTests.cs)。
+
+在产品路径的 40 次最终采样中，64 Ki 与 1 Mi 单元正文的直接解码均只分配最终 string 和 280 B 的快照等包装。相同正文每 16 个单元一片时仍观察到相同分配，每段长度头则增加了实际写入量。计量范围从内存中的 Base body 到还原的正文对象，图恢复和磁盘延迟另计。[分段产品成本与原始数据](segmented-base-performance.md)
 
 | 证明什么 | 最小见证 |
 |---|---|

@@ -1,5 +1,7 @@
 # DurableText 产品路径有限成本见证
 
+本文数据来自固定 UTF-16LE Base 的初次接入。现行分段 Base 的字节与解码分配见[分段 Base 实施记录](segmented-base-refactoring-plan.md)。
+
 2026-11-18；三次独立测试进程全部通过，每次包含四条真实保存链；每个测试执行约 1.7 秒。按需 Base 编码保持实际写入相同，显著减少小改保存分配；1Mi 单元场景也观察到完整 Save 时间下降。64Ki 的时间有明显首次执行影响，不作稳定速度排序。接入与格式合同见[实施计划](mainline-integration-plan.md)。
 
 入口是 [DurableTextProductProbeTests.cs](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs)。默认测试不运行性能工作；显式设置 `DG_TEXT_PRODUCT_PROBE` 为不存在的 W SSD 输出目录，`DG_TEXT_PRODUCT_PROBE_REP` 为 0、1、2，单独筛选 `RecordProductSaveAndConsumerCosts`。每次进程最多三分钟；三个进程顺序运行，测量期间不并行构建或其他测量。

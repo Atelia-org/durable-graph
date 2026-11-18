@@ -1,0 +1,12 @@
+{
+  "src/DurableGraph/bin/Release/net10.0/Atelia.DurableGraph.dll": "C2E27683E2D3D3DDB85739A9D00E9E44443E99DA599442CDF6A409570A862DFE",
+  "src/DurableGraph.Persistence/bin/Release/net10.0/Atelia.DurableGraph.Persistence.dll": "DC0B50E89FB5F407A871912A9444BAD3FDCA6BFB81F1452FD69C4C31BF8AB761",
+  "tests/DurableGraph.Persistence.Tests/bin/Release/net10.0/Atelia.DurableGraph.Persistence.Tests.dll": "F5428F0DEC01E8DE8F6F931B0DF2A8CE20EA2404C0E180043C9E6083C4683482",
+  "tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs": "CB7E4D4CD6ED48062A2FCAC02B3A58EB6F5BF8436643464BEF696A87E67C3E5F",
+  "src/DurableGraph/Runtime/Text/TextBodyCodec.cs": "366C59E8694B69EE77BDA7D98FFB535D73B4BF19AFCB38DC3A758627A94DA5D8",
+  "eng/StorageDependency.props": "A5FD71F53D882DDF71CB0F605F049A23D47E529B48901344EA21A3E03DBDFB81",
+  "GitHead": "712ddf7f73b668d141083c7ef10401545b4ed6be",
+  "StorageHead": "3f780ad95239d7556f917e1adca6839cda144c92",
+  "BinaryDllSHA256": "3D04E6CE54CA0B4373C35D3A3602D2C49E9101A069F78A4C853DA91013670FC2",
+  "Note": "Final segmented-run DLL identity. Save-chain ran before removal of allocation guards in the segmented-only method; no product or save-chain code changed in that rebuild."
+}

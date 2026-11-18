@@ -10,6 +10,12 @@
 
 runner 检查独立 cache/no ProjectReference、准确 DG 四包 commit 与版本、十包原包及输出/实际加载 DLL 哈希、包内生成器和历史工具的实际消费、两份用户 schema history 的 Publish/Verify 不变。这里的进程验收不代替产品故障注入测试，不宣称掉电资格或真实 memo 负载。
 
+2026-11-18 分段 Base 的普通包验收已通过。G `0.0.0-textsegments.20261118.g712ddf7` 来自独立清洁 checkout `712ddf7f73b668d141083c7ef10401545b4ed6be`；S `0.1.3-dev.20261118.g3f780ad` 来自 `3f780ad95239d7556f917e1adca6839cda144c92`，六包已另过 Storage 四个隔离普通包消费者及 metadata/PDB 校验。三条 DG 消费进程 seed / resume / verify 分别通过 8 / 17 / 11 项检查（PID 19004 / 37392 / 13816）；首次保存前的主文本由三个不同 backing 串组成，保存后继续小改，另一进程冷开再改，第三进程只读核对原始/中间/最新正文与别名。
+
+本轮仍核对十包身份、准确来源、缓存原包/输出/实际加载 DLL 哈希、包内 Generator/Build 的 Publish→Verify、两份用户 history 不变和只读数据库字节不变。完整回执为 `W:/DurableTextSegmentedBase/dg-package-consumer/result.json`（SHA256 `BF6A7CA2595447781B897113BB3803B553EAB2CF57419D03FF8A6E22E3D8BFC9`），候选 feed 为 `W:/DurableTextSegmentedBase/dg-candidate/feed`。Storage 回执为同根 `storage-acceptance-final.json`，来源核验为 `dg-storage-verification-final.json`。均未外部发布。
+
+分段正文按[重构合同](../../../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)作为 Text 首次发布格式，本轮从空目录新建数据；固定 UTF-16LE 的旧本地 Text 测试库须重新生成，未测试或承诺该格式之间的兼容/自动判别。以下旧 reader 四格仅保留首版原来源下的历史证据。
+
 旧 reader 单独使用 [DurableTextReaderAdmission](../DurableTextReaderAdmission/Program.cs) 和 [准入 runner](../Run-DurableTextReaderAdmission.ps1)。它不引用 DurableText 编译符号，先保存/恢复普通 Control 字段作为正控，再读取新库，逐阶段记录 OpenReadOnlyExisting、ListBranches、ResolveTag、LoadState、OpenGraphWithText 的实际异常；不能用缺程序集或编译失败代替格式拒绝。旧 reader 能否打开资源和能否恢复 Text 图是两个事实。
 
 以下为固定 UTF-16LE Base 首版的历史普通包验收；当时首次保存为单片，不代表当前多片分段 Base 的包资格。2026-11-18 的 G 为 `0.0.0-durabletext.20261118.gfb2bef0`，来自独立清洁 checkout `fb2bef0ad2acc9c146c72c4edf4a2cd55ce35714`；六包 S 为 `0.1.3-dev.20261101.g9ad39fc`，来源 `9ad39fc51a420e8302468533b82d8bc3a91a403e`。旧 reader 使用已存在的 G `0.0.0-graphheap.20261115.g7a98c7d`，来源 `7a98c7d224f87e0f7ec455417a0a4a2d13d5fa33`。
