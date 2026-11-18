@@ -63,11 +63,11 @@ internal sealed class BusinessWorkspace {
         }
     }
 
-    internal IReadOnlyList<PreparedCapturedObject> PrepareContents(BusinessSaveCandidate candidate) {
+    internal IReadOnlyList<PreparedCapturedObject> PrepareContents(BusinessSaveCandidate candidate, bool deferTextBase) {
         RequirePreparing(candidate);
         return candidate.IsIndependentSnapshot || _baseline is null
             ? candidate.CaptureSession.Prepare(candidate.Graph).Objects
-            : candidate.CaptureSession.PrepareAgainst(candidate.Graph, _baseline.CurrentDtos);
+            : candidate.CaptureSession.PrepareAgainst(candidate.Graph, _baseline.CurrentDtos, deferTextBase);
     }
 
     internal void CompletePreparation(BusinessSaveCandidate candidate, NormalizedGraphState? next) {
@@ -75,6 +75,7 @@ internal sealed class BusinessWorkspace {
         if (candidate.IsIndependentSnapshot != (next is null)) {
             throw new InvalidOperationException("Only an advancing State candidate prepares a replacement baseline.");
         }
+        if (next is not null) { candidate.PrepareTextAcceptances(); }
         _staging = false;
     }
 
@@ -130,6 +131,7 @@ internal sealed class BusinessSaveCandidate : IDisposable {
     private readonly CaptureContext _context;
     private NormalizedGraphState? _next;
     private NormalizedGraphState? _installation;
+    private DurableTextAcceptance[] _textAcceptances = [];
 
     internal BusinessSaveCandidate(BusinessWorkspace owner, CaptureSession captureSession, CaptureContext context, CapturedGraph graph,
         IDurableObject root, ObjectId rootId, bool independentSnapshot) {
@@ -155,12 +157,15 @@ internal sealed class BusinessSaveCandidate : IDisposable {
         }
     }
 
-    internal IReadOnlyList<PreparedCapturedObject> PrepareContents() => RequireOwner().PrepareContents(this);
+    internal IReadOnlyList<PreparedCapturedObject> PrepareContents(bool deferTextBase = false) =>
+        RequireOwner().PrepareContents(this, deferTextBase);
 
     internal void CompletePreparation(NormalizedGraphState? next) {
         RequireOwner().CompletePreparation(this, next);
         _next = next;
     }
+
+    internal void PrepareTextAcceptances() => _textAcceptances = _context.PrepareTextAcceptances();
 
     internal void RequireReady() => RequireOwner().RequireReady(this);
 
@@ -185,6 +190,10 @@ internal sealed class BusinessSaveCandidate : IDisposable {
         NormalizedGraphState installation = _installation
             ?? throw new InvalidOperationException("Prepare the installation before publishing and installing it.");
         owner.Accept(this, installation);
+        // Installation has accepted the frozen graph. A later edit of the live
+        // instance keeps its own view and takes the exact-prior fallback on the next save.
+        foreach (DurableTextAcceptance next in _textAcceptances) { next.Owner.TryInstall(next); }
+        _textAcceptances = [];
         _owner = null;
     }
 
@@ -202,7 +211,10 @@ internal sealed class BusinessSaveCandidate : IDisposable {
         }
     }
 
-    internal void ReleaseContext() => _context.Dispose();
+    internal void ReleaseContext() {
+        _textAcceptances = [];
+        _context.Dispose();
+    }
 
     private BusinessWorkspace RequireOwner() => _owner
         ?? throw new InvalidOperationException("The graph candidate has already been resolved.");

@@ -9,6 +9,20 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableGraphGenerator {
+    private const string DurableTextMetadataName = "Atelia.DurableGraph.DurableText";
+
+    private static bool IsDurableText(ITypeSymbol type) =>
+        type is INamedTypeSymbol named && named.Arity == 0 && named.DeclaringSyntaxReferences.Length == 0 &&
+        named.ContainingAssembly.Identity.Name == "Atelia.DurableGraph" &&
+        SymbolEqualityComparer.Default.Equals(named, named.ContainingAssembly.GetTypeByMetadataName(DurableTextMetadataName));
+
+    private static bool TryGetTextField(ITypeSymbol type, out string? tag, out int number, out string? name) {
+        tag = null; number = 0; name = null;
+        if (!IsDurableText(type)) return false;
+        tag = "ObjectReference"; number = 15; name = type.ToDisplayString(FullyQualifiedNameFormat);
+        return true;
+    }
+
     private static INamedTypeSymbol? GetBclListType(Compilation compilation) {
         // Resolve a metadata symbol from this compilation. A source-defined lookalike is not a builtin.
         INamedTypeSymbol? symbol = compilation.GetTypeByMetadataName("System.Collections.Generic.List`1");
@@ -72,6 +86,7 @@ public sealed partial class DurableGraphGenerator {
 
     private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, Compilation compilation, out TypePattern? pattern) {
         pattern = null;
+        if (IsDurableText(type)) { pattern = TypePattern.Text; return true; }
         if (TryGetTypeTag(type, halfType, out _, out int builtin, out _)) {
             pattern = TypePattern.Builtin(builtin); return true;
         }
@@ -127,6 +142,7 @@ public sealed partial class DurableGraphGenerator {
         while (root.BaseType is not null) root = root.BaseType;
         INamedTypeSymbol? half = root.ContainingAssembly.GetTypeByMetadataName("System.Half");
         TypePattern ConvertType(ITypeSymbol item) {
+            if (IsDurableText(item)) return TypePattern.Text;
             if (item is ITypeParameterSymbol parameter) return TypePattern.Parameter(parameter.Ordinal);
             if (TryGetTypeTag(item, half, out _, out int tag, out _)) return TypePattern.Builtin(tag);
             if (IsNullableValue(item)) return TypePattern.NullableOf(ConvertType(((INamedTypeSymbol)item).TypeArguments[0]));
@@ -147,7 +163,9 @@ public sealed partial class DurableGraphGenerator {
 
     private static void AppendTypePatternExpression(StringBuilder text, TypePattern pattern) {
         const string prefix = "global::Atelia.DurableGraph.Schema.TypeExpr.";
-        if (pattern.Kind == PatternKind.Builtin) {
+        if (pattern.IsText) {
+            text.Append(prefix).Append("Text");
+        } else if (pattern.Kind == PatternKind.Builtin) {
             text.Append(prefix).Append("Builtin((global::Atelia.DurableGraph.Schema.TypeTag)").Append(pattern.BuiltinTag).Append(')');
         } else if (pattern.Kind == PatternKind.Parameter) {
             text.Append(prefix).Append("Parameter(").Append(pattern.ParameterOrdinal).Append(')');
@@ -191,7 +209,7 @@ public sealed partial class DurableGraphGenerator {
     private static bool UsesFamilyTemplate(SchemaTemplate shape) {
         if (shape.Arity != 0 || (shape.BaseSchema.HasValue && shape.BaseSchema.Value.Type.Arguments.Count != 0)) return true;
         foreach (SchemaTemplateField field in shape.Fields) {
-            if (field.ValuePattern.ContainsParameter || field.ValuePattern.Arguments.Count != 0) return true;
+            if (field.ValuePattern.IsText || field.ValuePattern.ContainsParameter || field.ValuePattern.Arguments.Count != 0) return true;
         }
         return false;
     }
@@ -288,13 +306,14 @@ public sealed partial class DurableGraphGenerator {
 
     private static bool TryParseTemplateHistory(string path, string[] lines, out SchemaTemplate model, out string? error) {
         model = default;
-        bool allowTemporalScalars = lines[0] == "// durable-graph-schema-history:9";
+        bool allowText = lines[0] == "// durable-graph-schema-history:10";
+        bool allowTemporalScalars = allowText || lines[0] == "// durable-graph-schema-history:9";
         bool allowBclScalars = allowTemporalScalars || lines[0] == "// durable-graph-schema-history:8";
         bool allowDictionaries = allowBclScalars || lines[0] == "// durable-graph-schema-history:7";
         bool allowNullable = allowDictionaries || lines[0] == "// durable-graph-schema-history:6";
         bool allowLists = allowNullable || lines[0] == "// durable-graph-schema-history:5";
         bool allowArrays = allowLists || lines[0] == "// durable-graph-schema-history:4";
-        error = "format 3/4/5/6/7/8/9 requires canonical kind, arity, and type-pattern records";
+        error = "format 3/4/5/6/7/8/9/10 requires canonical kind, arity, and type-pattern records";
         if (lines.Length < 7 || lines[1] != "// schema-begin" || lines[lines.Length - 1] != "// schema-end" ||
             !lines[2].StartsWith("// schema-id-base64:", StringComparison.Ordinal) ||
             !TryDecodeSchemaId(lines[2].Substring(20), out string? id) ||
@@ -306,7 +325,7 @@ public sealed partial class DurableGraphGenerator {
         SchemaReference? baseSchema = null;
         if (lines[cursor].StartsWith("// base:", StringComparison.Ordinal)) {
             string[] parts = lines[cursor++].Substring(8).Split('|');
-            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays, allowLists, allowNullable, allowDictionaries, allowBclScalars, allowTemporalScalars) || pattern!.Kind != PatternKind.Named ||
+            if (parts.Length != 2 || !TypePattern.TryParse(parts[0], arity, out TypePattern? pattern, allowArrays, allowLists, allowNullable, allowDictionaries, allowBclScalars, allowTemporalScalars, allowText) || pattern!.Kind != PatternKind.Named ||
                 !TryParsePositiveCanonicalInt(parts[1], out int baseVersion)) return false;
             baseSchema = new SchemaReference(pattern.DefinitionId!, baseVersion, pattern);
         }
@@ -326,9 +345,9 @@ public sealed partial class DurableGraphGenerator {
                 if (parts.Length != 2) return false;
                 pattern = TypePattern.Builtin(tag);
             } else {
-                if (parts.Length < 3 || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays, allowLists, allowNullable, allowDictionaries, allowBclScalars, allowTemporalScalars)) return false;
+                if (parts.Length < 3 || !TypePattern.TryParse(parts[2], arity, out pattern, allowArrays, allowLists, allowNullable, allowDictionaries, allowBclScalars, allowTemporalScalars, allowText)) return false;
                 bool expectedKind = tag == 18 ? pattern!.IsNullable : tag == 17 ? pattern!.Kind == PatternKind.Parameter :
-                    pattern!.Kind == PatternKind.Named || (tag == 15 && (pattern.IsArray || pattern.IsList || pattern.IsDictionary));
+                    pattern!.Kind == PatternKind.Named || (tag == 15 && (pattern.IsArray || pattern.IsList || pattern.IsDictionary || pattern.IsText));
                 if (!expectedKind) return false;
                 TypePattern child = tag == 18 ? pattern!.ElementType! : pattern!;
                 bool hasInlineVersion = tag == 16 || (tag == 18 && child.Kind == PatternKind.Named);

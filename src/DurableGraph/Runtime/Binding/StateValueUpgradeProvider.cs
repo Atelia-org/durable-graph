@@ -86,9 +86,9 @@ public sealed class StateValueUpgradeProvider {
 
     private static void ValidateEndpoint(TypeExpr type, int? version) {
         ArgumentNullException.ThrowIfNull(type);
-        if ((type.Kind is not (TypeExprKind.Builtin or TypeExprKind.Named) && !type.IsArray && !type.IsList && !type.IsDictionary && !type.IsNullable) ||
+        if ((type.Kind != TypeExprKind.Builtin && !type.IsObjectReferenceTarget && !type.IsNullable) ||
             version is <= 0 || (version.HasValue && type.Kind != TypeExprKind.Named && !(type.IsNullable && type.ElementType!.Kind == TypeExprKind.Named))) {
-            throw new ArgumentException("A value rule requires a builtin, named, array, List, Dictionary or Nullable pattern and only inline endpoints have versions.");
+            throw new ArgumentException("A value rule requires a built-in, named, or Nullable pattern and only inline endpoints have versions.");
         }
     }
 }

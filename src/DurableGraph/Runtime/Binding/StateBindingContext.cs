@@ -9,6 +9,7 @@ public interface IStateModelResolver {
     bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
         ArgumentNullException.ThrowIfNull(domainType);
         if (domainType == typeof(string)) { binding = StringObjectBinding.Instance; return true; }
+        if (domainType == typeof(DurableText)) { binding = TextObjectBinding.Instance; return true; }
         bool found = TryGetCurrentModel(domainType, out StateModelBinding? model);
         binding = model;
         return found;
@@ -31,6 +32,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     public virtual bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
         ArgumentNullException.ThrowIfNull(domainType);
         if (domainType == typeof(string)) { binding = StringObjectBinding.Instance; return true; }
+        if (domainType == typeof(DurableText)) { binding = TextObjectBinding.Instance; return true; }
         bool found = TryGetCurrentModel(domainType, out StateModelBinding? model);
         binding = model;
         return found;
@@ -40,6 +42,7 @@ public abstract partial class StateBindingContext : IStateModelResolver {
     public abstract StateReaderBinding ResolveReader(DurableSchema schema);
     public virtual ObjectReaderBinding ResolveObjectReader(ObjectLayout layout) => layout.Kind switch {
         ObjectStateKind.String => StringObjectReader.Instance,
+        ObjectStateKind.Text => TextObjectReader.Instance,
         ObjectStateKind.Durable => ResolveReader(layout.Schema!),
         _ => throw new InvalidDataException("No historical object reader is available for this layout."),
     };

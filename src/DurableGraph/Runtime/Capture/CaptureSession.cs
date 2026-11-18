@@ -60,12 +60,12 @@ public sealed class CaptureSession {
 
     // Loaded baselines describe source-live rows, not a previously captured graph.
     internal IReadOnlyList<PreparedCapturedObject> PrepareAgainst(
-        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous) {
+        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous, bool deferTextBase = false) {
         RequireCandidate(candidate);
         ArgumentNullException.ThrowIfNull(previous);
         _preparing = true;
         try {
-            return PrepareObjects(candidate, previous);
+            return PrepareObjects(candidate, previous, deferTextBase);
         }
         finally {
             _preparing = false;
@@ -73,7 +73,7 @@ public sealed class CaptureSession {
     }
 
     private static List<PreparedCapturedObject> PrepareObjects(
-        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous) {
+        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous, bool deferTextBase = false) {
         // Validate the entire comparison set before invoking any user body operation.
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
@@ -82,9 +82,11 @@ public sealed class CaptureSession {
         List<PreparedCapturedObject> objects = new(candidate.Objects.Count);
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
-            PreparedBaseBody body = current.Kind == ObjectStateKind.String
-                ? StringBodyPreparer.PrepareBase(current.StringContent)
-                : current.Preparation!.PrepareBase(current);
+            PreparedBaseBody? body = current.Kind switch {
+                ObjectStateKind.String => StringBodyPreparer.PrepareBase(current.StringContent),
+                ObjectStateKind.Text when deferTextBase && prior is not null => null,
+                _ => current.Preparation!.PrepareBase(current),
+            };
             PreparedDeltaBody? delta = prior is not null && current.Kind != ObjectStateKind.String
                 ? current.Preparation!.PrepareDelta(prior, current)
                 : null;

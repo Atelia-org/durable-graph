@@ -7,7 +7,7 @@ namespace Atelia.DurableGraph.SchemaHistory;
 
 // Shared source between the compiler and history publisher. This is an open definition
 // pattern, not a Runtime TypeExpr or a second persistent closed-schema identity.
-internal enum PatternKind { Builtin = 1, Named = 2, Parameter = 3, VectorArray = 4, Rank2Array = 5, Rank3Array = 6, Rank4Array = 7, List = 8, Nullable = 9, Dictionary = 10 }
+internal enum PatternKind { Builtin = 1, Named = 2, Parameter = 3, VectorArray = 4, Rank2Array = 5, Rank3Array = 6, Rank4Array = 7, List = 8, Nullable = 9, Dictionary = 10, Text = 11 }
 
 internal sealed class TypePattern : IEquatable<TypePattern> {
     private static readonly UTF8Encoding Utf8 = new(false, true);
@@ -25,7 +25,8 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         foreach (TypePattern argument in arguments) containsParameter |= argument.ContainsParameter;
         ContainsParameter = containsParameter;
         StringBuilder text = new();
-        if (kind == PatternKind.Builtin) text.Append('b').Append(number.ToString(CultureInfo.InvariantCulture));
+        if (kind == PatternKind.Text) text.Append('t');
+        else if (kind == PatternKind.Builtin) text.Append('b').Append(number.ToString(CultureInfo.InvariantCulture));
         else if (kind == PatternKind.Parameter) text.Append('p').Append(number.ToString(CultureInfo.InvariantCulture));
         else if (IsArray) text.Append('a').Append(ArrayRank.ToString(CultureInfo.InvariantCulture)).Append('(').Append(arguments[0]._canonical).Append(')');
         else if (IsNullable) text.Append("q(").Append(arguments[0]._canonical).Append(')');
@@ -63,6 +64,15 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         }
     }
     public bool IsArray => (int)Kind >= 4 && (int)Kind <= 7;
+    public bool IsText => Kind == PatternKind.Text;
+    public bool ContainsText {
+        get {
+            if (IsText) return true;
+            foreach (TypePattern argument in _arguments) if (argument.ContainsText) return true;
+            return false;
+        }
+    }
+    public static TypePattern Text { get; } = new(PatternKind.Text, 0, null, Array.Empty<TypePattern>());
     public bool IsList => Kind == PatternKind.List;
     public bool IsDictionary => Kind == PatternKind.Dictionary;
     public bool IsNullable => Kind == PatternKind.Nullable;
@@ -118,7 +128,7 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
 
     public static TypePattern NullableOf(TypePattern element) {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        if (element.IsArray || element.IsList || element.IsDictionary || element.IsNullable ||
+        if (element.IsArray || element.IsList || element.IsDictionary || element.IsText || element.IsNullable ||
             (element.Kind == PatternKind.Builtin && element.BuiltinTag == 4))
             throw new ArgumentException("Nullable requires a non-nullable value operand.", nameof(element));
         TypePattern result = new(PatternKind.Nullable, 0, null, new[] { element });
@@ -189,13 +199,13 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
         }
     }
 
-    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true, bool allowNullable = true, bool allowDictionaries = true, bool allowBclScalars = true, bool allowTemporalScalars = true) {
+    public static bool TryParse(string text, int arity, out TypePattern? result, bool allowArrays = true, bool allowLists = true, bool allowNullable = true, bool allowDictionaries = true, bool allowBclScalars = true, bool allowTemporalScalars = true, bool allowText = true) {
         result = null;
         if (arity < 0 || arity > 32) return false;
         try {
             int cursor = 0, nodes = 0;
             TypePattern parsed = Parse(text, ref cursor, 1, ref nodes);
-            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList) || (!allowNullable && parsed.ContainsNullable) || (!allowDictionaries && parsed.ContainsDictionary) || (!allowBclScalars && parsed.ContainsBclScalars) || (!allowTemporalScalars && parsed.ContainsTemporalScalars)) return false;
+            if (cursor != text.Length || !parsed.ParametersFit(arity) || parsed.ToString() != text || (!allowArrays && parsed.ContainsArray) || (!allowLists && parsed.ContainsList) || (!allowNullable && parsed.ContainsNullable) || (!allowDictionaries && parsed.ContainsDictionary) || (!allowBclScalars && parsed.ContainsBclScalars) || (!allowTemporalScalars && parsed.ContainsTemporalScalars) || (!allowText && parsed.ContainsText)) return false;
             result = parsed;
             return true;
         } catch (ArgumentException) { return false; }
@@ -206,6 +216,7 @@ internal sealed class TypePattern : IEquatable<TypePattern> {
     private static TypePattern Parse(string text, ref int cursor, int depth, ref int nodes) {
         if (cursor >= text.Length || depth > 64 || ++nodes > 4096) throw new FormatException();
         char kind = text[cursor++];
+        if (kind == 't') return Text;
         if (kind == 'd') {
             if (cursor >= text.Length || text[cursor++] != '(') throw new FormatException();
             TypePattern key = Parse(text, ref cursor, depth + 1, ref nodes);

@@ -76,7 +76,7 @@ internal static class ManagementDirectoryWriter {
             ObjectStateRecord row = source.Kind == ObjectStateKind.String ? source : BootstrapBindings.WithPreparation(source, models);
             PreparedBaseBody body = row.Kind == ObjectStateKind.String ? StringBodyPreparer.PrepareBase(row.StringContent)
                 : row.Preparation!.PrepareBase(row);
-            EncodedBaseObjectBody typed = new(TypedBaseBodyCodec.Encode(row.Layout, body));
+            PreparedTypedBase typed = new(TypedBaseBodyCodec.Encode(row.Layout, body));
             if (accepted is null || !accepted.Rows.TryGetValue(row.Id, out ObjectStateRecord? before)) {
                 objects.Add(PreparedObject.New(row.Id, typed));
             } else if (row.Id == root) {

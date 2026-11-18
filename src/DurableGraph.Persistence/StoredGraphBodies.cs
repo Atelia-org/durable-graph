@@ -11,14 +11,32 @@ namespace Atelia.DurableGraph.Persistence;
 
 internal static class TypedBaseBodyCodec {
     internal const byte FormatVersion = 5;
+    internal static PreparedTypedBase Prepare(PreparedCapturedObject item, SchemaCatalogView catalog) {
+        if (item.EagerBaseBody is { } eager) {
+            return new(Encode(item.Current.Layout, eager, catalog));
+        }
+        // Resolve and encode the header while the source Schema is in scope.
+        // Choosing Delta can skip the text bytes, never a layout/route check.
+        ArrayBufferWriter<byte> buffer = new();
+        BareValueWriter writer = new(buffer);
+        WriteHeader(ref writer, item.Current.Layout, catalog);
+        return new(buffer.WrittenSpan, item.Current.TextState);
+    }
+
     internal static byte[] Encode(ObjectLayout layout, PreparedBaseBody body, SchemaCatalogView? catalog = null) {
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
+        WriteHeader(ref writer, layout, catalog);
+        writer.WriteRawBytes(body.Body);
+        return buffer.WrittenSpan.ToArray();
+    }
+
+    private static void WriteHeader(ref BareValueWriter writer, ObjectLayout layout, SchemaCatalogView? catalog) {
         writer.WriteByte(FormatVersion);
         if (catalog is not null && BootstrapBindings.IsEmployee(layout)) {
             throw new InvalidDataException("Employee layouts cannot escape into a business graph.");
         }
-        if ((layout.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && BootstrapBindings.IsBuiltin(layout)) {
+        if ((layout.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary or ObjectStateKind.Text) && BootstrapBindings.IsBuiltin(layout)) {
             writer.WriteByte(2);
             TypeExprWireCodec.Write(ref writer, layout.Type);
         } else if (catalog is null || layout.Kind == ObjectStateKind.String) {
@@ -28,8 +46,6 @@ internal static class TypedBaseBodyCodec {
             writer.WriteByte(1);
             writer.WriteVarUInt32(catalog.DescriptorId(layout).Value);
         }
-        writer.WriteRawBytes(body.Body);
-        return buffer.WrittenSpan.ToArray();
     }
 
     internal static (ObjectLayout Layout, byte[] Body) Decode(ReadOnlySpan<byte> body, SchemaCatalogView? catalog) {

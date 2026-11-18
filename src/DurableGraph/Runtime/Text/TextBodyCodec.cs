@@ -1,0 +1,242 @@
+using Atelia.Binary;
+using Atelia.DurableGraph.Serialization;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Runtime.InteropServices;
+
+namespace Atelia.DurableGraph.Runtime;
+
+/// <summary>Text body v1: varuint32 UTF-16 length, then raw little-endian units or Copy/New ranges.</summary>
+internal static class TextBodyCodec {
+    private const byte Copy = 1;
+    private const byte New = 2;
+    // A cold replay implementation limit, unrelated to the wire or the live editor policy.
+    private const int MaximumReplayPieces = 4096;
+
+    // Scoped by deterministic tests; no observer is installed in ordinary operation.
+    [ThreadStatic] internal static Action? BaseEncodingObserver;
+
+    internal static long EstimateBaseSize(DurableTextState state) =>
+        BareValueEncoding.MeasureVarUInt32((uint)state.Content.Length) + 2L * state.Content.Length;
+
+    internal static PreparedBaseBody PrepareBase(DurableTextState state) {
+        BaseEncodingObserver?.Invoke();
+        if (EstimateBaseSize(state) > Array.MaxLength) {
+            throw new InvalidOperationException("The encoded Text Base exceeds the supported byte buffer length.");
+        }
+        ArrayBufferWriter<byte> buffer = new();
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32((uint)state.Content.Length);
+        foreach (ReadOnlyMemory<char> chunk in state.Content.GetChunks()) { WriteUnits(ref writer, chunk.Span); }
+        return new(buffer.WrittenSpan);
+    }
+
+    internal static PreparedDeltaBody PrepareDelta(DurableTextState previous, DurableTextState current) {
+        bool unchanged = ReferenceEquals(previous.ContentToken, current.ContentToken) ||
+            previous.Content.ContentEquals(current.Content);
+        ArrayBufferWriter<byte> buffer = new();
+        BareValueWriter writer = new(buffer);
+        writer.WriteVarUInt32((uint)current.Content.Length);
+        if (unchanged) {
+            if (current.Content.Length != 0) { WriteCopy(ref writer, 0, current.Content.Length); }
+            return new(false, buffer.WrittenSpan);
+        }
+        if (!ReferenceEquals(current.SourceToken, previous.ContentToken)) {
+            // A shared CLR builder may have been rebound by another graph. Never interpret
+            // its offsets against this graph's different persistent predecessor.
+            if (current.Content.Length != 0) {
+                writer.WriteByte(New);
+                writer.WriteVarUInt32((uint)current.Content.Length);
+                foreach (ReadOnlyMemory<char> chunk in current.Content.GetChunks()) { WriteUnits(ref writer, chunk.Span); }
+            }
+            return new(true, buffer.WrittenSpan);
+        }
+        WritePlan(ref writer, current.BuildSourcePlan(), previous.Content.Length, current.Content.Length);
+        return new(true, buffer.WrittenSpan);
+    }
+
+    private static void WritePlan(ref BareValueWriter writer, IReadOnlyList<TextSourcePiece> pieces,
+        int sourceLength, int outputLength) {
+        int output = 0;
+        for (int index = 0; index < pieces.Count;) {
+            TextSourcePiece first = pieces[index++];
+            if (first.Length == 0) { continue; }
+            ValidatePiece(first, sourceLength, outputLength - output);
+            int length = first.Length;
+            int end = index;
+            while (end < pieces.Count) {
+                TextSourcePiece next = pieces[end];
+                if (next.Length == 0) { end++; continue; }
+                if (next.IsCopy != first.IsCopy || (first.IsCopy && next.BaseOffset != (long)first.BaseOffset + length)) { break; }
+                ValidatePiece(next, sourceLength, outputLength - output - length);
+                length += next.Length;
+                end++;
+            }
+            if (first.IsCopy) {
+                WriteCopy(ref writer, first.BaseOffset, length);
+            } else {
+                writer.WriteByte(New);
+                writer.WriteVarUInt32((uint)length);
+                WriteUnits(ref writer, first.Literal.Span);
+                for (int literal = index; literal < end; literal++) {
+                    if (pieces[literal].Length != 0) { WriteUnits(ref writer, pieces[literal].Literal.Span); }
+                }
+            }
+            output += length;
+            index = end;
+        }
+        if (output != outputLength) { throw new InvalidOperationException("The Text source plan does not cover its frozen content."); }
+    }
+
+    private static void ValidatePiece(TextSourcePiece piece, int sourceLength, int remaining) {
+        if (piece.Length <= 0 || piece.Length > remaining || (piece.IsCopy
+                ? piece.BaseOffset < 0 || piece.BaseOffset > sourceLength || piece.Length > sourceLength - piece.BaseOffset
+                : piece.Literal.Length != piece.Length)) {
+            throw new InvalidOperationException("The frozen Text source plan contains an invalid range.");
+        }
+    }
+
+    private static void WriteCopy(ref BareValueWriter writer, int offset, int length) {
+        writer.WriteByte(Copy);
+        writer.WriteVarUInt32((uint)offset);
+        writer.WriteVarUInt32((uint)length);
+    }
+
+    private static void WriteUnits(ref BareValueWriter writer, ReadOnlySpan<char> units) {
+        if (BitConverter.IsLittleEndian) {
+            writer.WriteRawBytes(MemoryMarshal.AsBytes(units));
+            return;
+        }
+        // Bounded scratch avoids one allocation per piece and is independent of host endianness.
+        Span<byte> bytes = stackalloc byte[512];
+        while (!units.IsEmpty) {
+            int count = Math.Min(units.Length, bytes.Length / 2);
+            for (int index = 0; index < count; index++) {
+                BinaryPrimitives.WriteUInt16LittleEndian(bytes.Slice(index * 2, 2), units[index]);
+            }
+            writer.WriteRawBytes(bytes[..(count * 2)]);
+            units = units[count..];
+        }
+    }
+
+    internal static DurableTextState ReadBase(ref BareValueReader reader) {
+        int length = ReadLength(ref reader);
+        if (length > reader.RemainingCount / 2) { throw new InvalidDataException("Truncated Text Base units."); }
+        ReadOnlySpan<byte> bytes = reader.ReadRawBytes(length * 2);
+        reader.EnsureFullyConsumed();
+        return new(TextSnapshot.FromString(ReadString(bytes)), sourceToken: null);
+    }
+
+    internal static DurableTextState ApplyDelta(ref BareValueReader reader, DurableTextState previous) {
+        // Check the entire body before allocating the declared result. A malformed short
+        // body must not turn an attacker-controlled length into a large allocation.
+        BareValueReader validation = reader;
+        int length = ReadLength(ref validation);
+        ValidateDelta(ref validation, previous.Content.Length, length);
+        validation.EnsureFullyConsumed();
+        BareValueReader original = reader;
+        _ = ReadLength(ref reader);
+        List<TextPiece> pieces = [];
+        int output = 0;
+        while (output < length) {
+            byte operation = reader.ReadByte();
+            if (operation == Copy) {
+                int source = checked((int)reader.ReadVarUInt32());
+                int count = checked((int)reader.ReadVarUInt32());
+                if (!previous.Content.View.TryAppendRangeTo(pieces, source, count, MaximumReplayPieces)) {
+                    reader = original;
+                    return ApplyFlatValidated(ref reader, previous);
+                }
+                output += count;
+            } else {
+                int count = checked((int)reader.ReadVarUInt32());
+                if (pieces.Count == MaximumReplayPieces) {
+                    reader = original;
+                    return ApplyFlatValidated(ref reader, previous);
+                }
+                string literal = ReadString(reader.ReadRawBytes(count * 2));
+                pieces.Add(new(literal, 0, count, -1));
+                output += count;
+            }
+        }
+        reader.EnsureFullyConsumed();
+        return new(new TextSnapshot(TextPieceView.FromOwnedPieces(pieces, length)), sourceToken: null);
+    }
+
+    private static DurableTextState ApplyFlatValidated(ref BareValueReader reader, DurableTextState previous) {
+        int length = ReadLength(ref reader);
+        char[] units = new char[length];
+        int output = 0;
+        while (output < length) {
+            byte operation = reader.ReadByte();
+            if (operation == Copy) {
+                int source = (int)reader.ReadVarUInt32();
+                int count = (int)reader.ReadVarUInt32();
+                previous.Content.CopyTo(source, units.AsSpan(output, count));
+                output += count;
+            } else {
+                int count = (int)reader.ReadVarUInt32();
+                ReadUnits(reader.ReadRawBytes(count * 2), units.AsSpan(output, count));
+                output += count;
+            }
+        }
+        reader.EnsureFullyConsumed();
+        return new(TextSnapshot.FromString(new string(units)), sourceToken: null);
+    }
+
+    internal static DurableTextState FinishReplay(DurableTextState state) {
+        // Prune a disproportionately retained source once at the end of the chain.
+        // Intermediate versions can still share that source while replaying later Copies.
+        TextPieceView view = state.Content.View;
+        return view.LargestBacking > 4L * Math.Max(view.Length, 1) &&
+            (long)view.LargestBacking - view.Length >= 4096
+            ? new(TextSnapshot.FromString(view.ToText()), sourceToken: null) : state;
+    }
+
+    private static void ValidateDelta(ref BareValueReader reader, int sourceLength, int length) {
+        int output = 0;
+        byte priorOperation = 0;
+        int priorCopyEnd = 0;
+        while (output < length) {
+            byte operation = reader.ReadByte();
+            if (operation is not (Copy or New)) { throw new InvalidDataException("Unknown Text Delta operation."); }
+            uint source = operation == Copy ? reader.ReadVarUInt32() : 0;
+            uint count = reader.ReadVarUInt32();
+            if (count == 0 || count > length - output) { throw new InvalidDataException("A Text Delta range must be positive and fit its result."); }
+            if (operation == Copy) {
+                if (source > sourceLength || count > sourceLength - source) { throw new InvalidDataException("A Text Copy exceeds its exact predecessor."); }
+                if (priorOperation == Copy && source == priorCopyEnd) { throw new InvalidDataException("Adjacent continuous Text Copies must be merged."); }
+                priorCopyEnd = (int)(source + count);
+            } else {
+                if (priorOperation == New) { throw new InvalidDataException("Adjacent Text New ranges must be merged."); }
+                if (count > reader.RemainingCount / 2) { throw new InvalidDataException("Truncated Text New units."); }
+                reader.ReadRawBytes((int)count * 2);
+            }
+            output += (int)count;
+            priorOperation = operation;
+        }
+    }
+
+    private static int ReadLength(ref BareValueReader reader) {
+        uint length = reader.ReadVarUInt32();
+        if (length > Array.MaxLength) { throw new InvalidDataException("Text length exceeds the supported CLR buffer length."); }
+        return (int)length;
+    }
+
+    private static void ReadUnits(ReadOnlySpan<byte> bytes, Span<char> target) {
+        if (BitConverter.IsLittleEndian) {
+            MemoryMarshal.Cast<byte, char>(bytes).CopyTo(target);
+            return;
+        }
+        for (int index = 0; index < target.Length; index++) {
+            target[index] = (char)BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(index * 2, 2));
+        }
+    }
+
+    private static string ReadString(ReadOnlySpan<byte> bytes) {
+        if (BitConverter.IsLittleEndian) { return new string(MemoryMarshal.Cast<byte, char>(bytes)); }
+        char[] units = new char[bytes.Length / 2];
+        ReadUnits(bytes, units);
+        return new string(units);
+    }
+}

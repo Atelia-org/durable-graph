@@ -29,18 +29,21 @@ public sealed class PreparedCapturedObject {
     internal PreparedCapturedObject(
         ObjectStateRecord current,
         ObjectStateRecord? previous,
-        PreparedBaseBody baseBody,
+        PreparedBaseBody? baseBody,
         PreparedDeltaBody? deltaBody) {
         Current = current;
         Previous = previous;
-        BaseBody = baseBody;
+        EagerBaseBody = baseBody;
         DeltaBody = deltaBody;
     }
 
     public ObjectStateRecord Current { get; }
     /// <summary>Null for a new object; otherwise the same ID from the previous in-memory graph.</summary>
     public ObjectStateRecord? Previous { get; }
-    public PreparedBaseBody BaseBody { get; }
+    // Public CaptureSession.Prepare always supplies eager bytes. Only an internal
+    // business save may carry an immutable text state through representation selection.
+    internal PreparedBaseBody? EagerBaseBody { get; }
+    public PreparedBaseBody BaseBody => EagerBaseBody ?? TextBodyCodec.PrepareBase(Current.TextState);
     /// <summary>Present for existing mutable objects; existing immutable strings need no Delta.</summary>
     public PreparedDeltaBody? DeltaBody { get; }
 }

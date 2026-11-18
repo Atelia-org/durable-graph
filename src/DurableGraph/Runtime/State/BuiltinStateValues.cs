@@ -8,6 +8,11 @@ namespace Atelia.DurableGraph.Runtime;
 // Only the cold binding path inspects CLR types. Generated member loops call typed static operations.
 internal static class BuiltinStateValues {
     internal static bool TryBindCurrent(Type domainType, out StateValueBinding binding) {
+        if (domainType == typeof(DurableText)) {
+            binding = new(DurableFieldInfo.Reference(1, TypeExpr.Text), typeof(ObjectId), typeof(ObjectIdStateOps),
+                domainType, typeof(ObjectValueProjection<DurableText>));
+            return true;
+        }
         if (domainType == typeof(bool)) {
             binding = new(new(1, TypeTag.Boolean), typeof(bool), typeof(BooleanStateOps), domainType, typeof(IdentityValueProjection<bool>));
             return true;

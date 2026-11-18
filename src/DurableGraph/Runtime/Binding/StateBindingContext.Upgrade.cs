@@ -164,8 +164,8 @@ public abstract partial class StateBindingContext {
             if (ResolveStoredValue(slot).StateType != stateType) { throw new InvalidDataException("A DTO value does not match its nominal built-in semantics."); }
             return slot;
         }
-        if ((nominal.IsArray || nominal.IsList || nominal.IsDictionary) && nominal.IsClosed) {
-            if (stateType != typeof(ObjectId)) { throw new InvalidDataException("A container reference DTO operand must contain an object ID."); }
+        if (nominal.IsObjectReferenceTarget && nominal.Kind != TypeExprKind.Named && nominal.IsClosed) {
+            if (stateType != typeof(ObjectId)) { throw new InvalidDataException("A built-in reference DTO operand must contain an object ID."); }
             return DurableFieldInfo.Reference(1, nominal);
         }
         if (nominal.Kind != TypeExprKind.Named || !nominal.IsClosed) { throw new InvalidDataException("A value operand must have a closed nominal identity."); }
@@ -216,7 +216,7 @@ public abstract partial class StateBindingContext {
             return DurableFieldInfo.Nullable(1, BuildSlot(child, version, ownerArguments, selections, depth + 1));
         }
         if (nominal.Kind == TypeExprKind.Builtin) { return new(1, nominal.BuiltinTag); }
-        if (nominal.IsArray || nominal.IsList || nominal.IsDictionary) { return DurableFieldInfo.Reference(1, nominal); }
+        if (nominal.IsObjectReferenceTarget && nominal.Kind != TypeExprKind.Named) { return DurableFieldInfo.Reference(1, nominal); }
         if (GetNamedDeclarationKind(nominal) == SchemaKind.ReferenceObject) { return DurableFieldInfo.Reference(1, nominal); }
         if (!version.HasValue) {
             throw new InvalidDataException("An intermediate inline value has no unique historical layout; declare a closed owner conversion.");

@@ -7,4 +7,5 @@ public enum ObjectStateKind {
     Array,
     List,
     Dictionary,
+    Text,
 }

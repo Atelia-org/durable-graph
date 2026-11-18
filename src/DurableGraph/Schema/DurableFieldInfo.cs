@@ -25,8 +25,8 @@ public readonly record struct DurableFieldInfo {
 
         if (typeTag == TypeTag.ObjectReference) {
             ArgumentNullException.ThrowIfNull(targetType);
-            if ((targetType.Kind != TypeExprKind.Named && !targetType.IsArray && !targetType.IsList && !targetType.IsDictionary) || !targetType.IsClosed) {
-                throw new ArgumentException("An object reference requires a closed named or array type.", nameof(targetType));
+            if (!targetType.IsObjectReferenceTarget || !targetType.IsClosed) {
+                throw new ArgumentException("An object reference requires a closed object type.", nameof(targetType));
             }
         }
         else if (targetType is not null) {

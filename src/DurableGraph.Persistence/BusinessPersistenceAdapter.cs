@@ -5,6 +5,9 @@ namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Split storage/source and typed-encoding adapter for the shared business workspace.</summary>
 internal sealed class BusinessPersistenceAdapter {
+    // Same wire and planner with eager encoding for the bounded product comparison.
+    [ThreadStatic] internal static bool EagerTextBaseForTesting;
+
     private readonly GraphRecordStore _store;
     private readonly BusinessWorkspace _workspace;
 
@@ -58,10 +61,10 @@ internal sealed class BusinessPersistenceAdapter {
         if (Source?.Address != baseline?.RevisionAddress) { throw new InvalidDataException("State source and normalized baseline must agree."); }
         // State candidate creation validates the complete source before body callbacks.
         NormalizedGraphState next = NormalizedGraphState.FromCapturedCandidate(candidate.Graph, _workspace.Models, _store, baseline);
-        IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents();
+        IReadOnlyList<PreparedCapturedObject> prepared = candidate.PrepareContents(deferTextBase: !EagerTextBaseForTesting);
         List<PreparedObject> rows = [];
         foreach (PreparedCapturedObject item in prepared) {
-            EncodedBaseObjectBody body = new(TypedBaseBodyCodec.Encode(item.Current.Layout, item.BaseBody, catalog));
+            PreparedTypedBase body = TypedBaseBodyCodec.Prepare(item, catalog);
             rows.Add(ObjectWritePlanner.ClassifyCaptured(item, body,
                 item.Previous is null ? null : Source!.ObjectHeads[item.Current.Id.Value],
                 baseline is not null && baseline.Objects.TryGetValue(item.Current.Id, out NormalizedObject? prior) && prior.RequiresRewrite));

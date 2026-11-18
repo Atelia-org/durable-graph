@@ -121,16 +121,21 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
         Assert.Equal(0, reader.Store.AppendedFrames);
     }
 
-    [Fact]
-    public void A_valid_structural_List_body_cannot_escape_into_the_finite_meta_employee_graph() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Business_structural_bodies_cannot_escape_into_the_finite_meta_employee_graph(bool useText) {
         SchemaCatalogWorkspace owner = new(static () => { });
         PreparedSchemaCatalogWrite catalog = owner.Prepare();
         ListLayout list = new(new(1, TypeTag.Int64), codecVersion: 2);
-        PreparedBaseBody raw = ListStateBody<long, Int64StateOps>.PrepareBase(new([47L]), list);
-        ObjectVersionRecord extra = Base(100, list, raw);
+        ObjectLayout layout = useText ? ObjectLayout.Text : ObjectLayout.ForList(list);
+        PreparedBaseBody raw = useText ? TextBodyCodec.PrepareBase(new DurableText("meta").CaptureState())
+            : ListStateBody<long, Int64StateOps>.PrepareBase(new([47L]), list);
+        ObjectVersionRecord extra = ObjectVersionRecord.CreateBase(100, TypedBaseBodyCodec.Encode(layout, raw));
         var decoded = TypedBaseBodyCodec.Decode(extra.Body, null);
-        Assert.Equal(new[] { 47L }, BootstrapBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body))
-            .GetListState<long>().Elements.ToArray());
+        ObjectStateRecord row = BootstrapBindings.Reader(decoded.Layout).Read(new(100), new SingleBody(decoded.Body));
+        if (useText) { Assert.Equal("meta", row.TextState.Content.ToString()); }
+        else { Assert.Equal(new[] { 47L }, row.GetListState<long>().Elements.ToArray()); }
         FrameAddress meta;
         using (var repository = RepositoryStorageFacade.CreateNew(_path)) {
             meta = repository.Store.AppendMeta(null,
@@ -138,7 +143,8 @@ public sealed class MetaBootstrapBuiltinListTests : IDisposable {
             repository.Data.ConfirmDurable();
         }
         using var reader = RepositoryStorageFacade.OpenReadOnlyExisting(_path);
-        Assert.Throws<InvalidDataException>(() => SchemaCatalogView.Load(reader.Store, meta));
+        Assert.Contains("meta graph", Assert.Throws<InvalidDataException>(() =>
+            SchemaCatalogView.Load(reader.Store, meta)).Message);
     }
 
     [Fact]

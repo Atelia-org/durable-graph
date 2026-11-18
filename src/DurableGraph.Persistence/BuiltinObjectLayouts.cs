@@ -14,9 +14,10 @@ internal static class BuiltinObjectLayouts {
         TryResolve(layout.Type, out ObjectLayout? reconstructed) && reconstructed.Equals(layout);
 
     internal static ObjectLayout Resolve(TypeExpr type) => TryResolve(type, out ObjectLayout? layout) ? layout :
-        throw new InvalidDataException("A structural object header requires a closed builtin-only List, Array or Dictionary type.");
+        throw new InvalidDataException("A structural object header requires a supported closed builtin object layout.");
 
     private static bool TryResolve(TypeExpr type, [NotNullWhen(true)] out ObjectLayout? layout) {
+        if (type.Kind == TypeExprKind.Text) { layout = ObjectLayout.Text; return true; }
         if ((!type.IsList && !type.IsArray && !type.IsDictionary) || !type.IsClosed || ContainsNamed(type)) { layout = null; return false; }
         // Nested container expressions constrain references only. Each referenced object's own
         // header selects its codec. Count, shape and Dictionary comparer belong to body state.
@@ -37,7 +38,7 @@ internal static class BuiltinObjectLayouts {
         TypeExprKind.Builtin => new(1, type.BuiltinTag),
         TypeExprKind.Nullable => DurableFieldInfo.Nullable(1, Slot(type.ElementType!)),
         TypeExprKind.VectorArray or TypeExprKind.Rank2Array or TypeExprKind.Rank3Array or TypeExprKind.Rank4Array or
-            TypeExprKind.List or TypeExprKind.Dictionary => DurableFieldInfo.Reference(1, type),
+            TypeExprKind.List or TypeExprKind.Dictionary or TypeExprKind.Text => DurableFieldInfo.Reference(1, type),
         _ => throw new InvalidDataException("Unsupported constructor in a builtin-only container slot."),
     };
 }

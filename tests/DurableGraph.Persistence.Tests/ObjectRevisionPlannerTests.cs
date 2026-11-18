@@ -1,5 +1,7 @@
 using System.Collections;
 
+using Atelia.DurableGraph.Runtime;
+using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
 using Atelia.DurableGraph.Storage;
 using Atelia.FrameStore;
@@ -136,6 +138,53 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         Assert.Equal(ObjectVersionKind.Delta, Assert.Single(result.Records).Kind);
     }
 
+    [Theory]
+    [InlineData(false, false, 275, null)]
+    [InlineData(false, false, 10000, ObjectVersionKind.Base)]
+    [InlineData(false, true, 275, ObjectVersionKind.Base)]
+    [InlineData(true, false, 275, ObjectVersionKind.Delta)]
+    public void Frozen_text_encodes_its_Base_only_if_selected(bool edit, bool rewrite, long priorH, ObjectVersionKind? expected) {
+        ObjectId id = new(1);
+        DurableText text = new(new string('a', 130));
+        DurableTextState before = text.CaptureState();
+        Assert.True(text.TryInstall(text.PrepareAcceptance(before)));
+        if (edit) { text.Replace(120, 1, "Ω"); }
+        DurableTextState current = text.CaptureState();
+        PreparedDeltaBody delta = TextBodyCodec.PrepareDelta(before, current);
+        PreparedCapturedObject captured = new(new(id, current), new(id, before), null, delta);
+        SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
+        byte[] eager = TypedBaseBodyCodec.Encode(ObjectLayout.Text, TextBodyCodec.PrepareBase(current), catalog);
+        FrameAddress prior = TestAddress();
+
+        int encodings = 0;
+        TextBodyCodec.BaseEncodingObserver = () => encodings++;
+        try {
+            PreparedTypedBase typed = TypedBaseBodyCodec.Prepare(captured, catalog);
+            PreparedObject row = ObjectWritePlanner.ClassifyCaptured(captured, typed, prior, rewrite);
+            var result = Plan([row], new() { [id] = priorH }, limit: 5, percent: 5);
+            Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length), Assert.Single(result.Estimates).BasePayloadBytes);
+            Assert.Equal(expected == ObjectVersionKind.Base ? 1 : 0, encodings);
+            if (expected is null) { Assert.Empty(result.Records); return; }
+            ObjectVersionRecord record = Assert.Single(result.Records);
+            Assert.Equal(expected.Value, record.Kind);
+            if (record.Kind == ObjectVersionKind.Base) {
+                Assert.Equal(eager, record.Body.ToArray());
+            } else {
+                Assert.Equal(prior, record.PriorAddress);
+                Assert.Equal(delta.Body.ToArray(), record.Body.ToArray());
+            }
+        } finally { TextBodyCodec.BaseEncodingObserver = null; }
+    }
+
+    [Fact]
+    public void Base_estimate_above_the_buffer_length_limit_can_still_select_Delta() {
+        long estimate = ObjectVersionPayloadSize.EstimateBasePayloadBytes((long)int.MaxValue + 10);
+        Assert.True(estimate > int.MaxValue);
+        ObjectSaveEstimate update = new(new(1), ObjectSaveChangeKind.Update, estimate, 30, 200);
+        var plan = ReadAmplificationBaseBudgetPolicy.Plan([update], new(5, 5));
+        Assert.Equal(ObjectRepresentationMode.Delta, Assert.Single(plan.Writes).Mode);
+    }
+
     [Fact]
     public void Invalid_rows_and_parameters_are_rejected_by_pure_planning() {
         Assert.Throws<ArgumentException>(() => Plan([PreparedObject.New(new(2), new([2])), PreparedObject.New(new(2), new([2]))], []));
@@ -205,7 +254,7 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         Plan(IEnumerable<PreparedObject> rows, Dictionary<ObjectId, long> priorH, int limit = 10, int percent = 25) =>
         ObjectWritePlanner.PlanObjectWrites(rows, priorH, new(limit, percent));
 
-    private static EncodedBaseObjectBody Base(int length) => new(new byte[length]);
+    private static PreparedTypedBase Base(int length) => new(new byte[length]);
     private static ObjectVersionRecord B(uint id, byte[] body) => ObjectVersionRecord.CreateBase(id, body);
     private static ObjectVersionRecord D(uint id, FrameAddress prior, byte[] body) => ObjectVersionRecord.CreateDelta(id, prior, body);
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);

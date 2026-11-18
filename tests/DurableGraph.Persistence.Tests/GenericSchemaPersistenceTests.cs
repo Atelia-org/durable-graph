@@ -28,6 +28,7 @@ public sealed class GenericSchemaPersistenceTests {
     [InlineData("010F")]
     [InlineData("0200")]
     [InlineData("02034121")]
+    [InlineData("020341020B")]
     public void UnknownOpenAndMalformedTypeExpressionsAreRejected(string hex) {
         Assert.ThrowsAny<Exception>(() => ReadType(Convert.FromHexString(hex)));
     }
@@ -35,6 +36,16 @@ public sealed class GenericSchemaPersistenceTests {
     [Fact]
     public void TypeExpressionAcceptsBoundedRedundantArityAndPreservesNominalIdentity() {
         Assert.Equal(TypeExpr.Named("A"), ReadType(Convert.FromHexString("0203418000")));
+    }
+
+    [Fact]
+    public void NamedTypeAcceptsSingleByteTextOperands() {
+        var type = TypeExpr.Named("A", TypeExpr.Text, TypeExpr.Text);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new BareValueWriter(buffer);
+        TypeExprWireCodec.Write(ref writer, type);
+        Assert.Equal("020341020B0B", Convert.ToHexString(buffer.WrittenSpan));
+        Assert.Equal(type, ReadType(buffer.WrittenSpan.ToArray()));
     }
 
     [Fact]

@@ -301,6 +301,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
 
     public override Type GetDomainType(TypeExpr type) {
         ArgumentNullException.ThrowIfNull(type);
+        if (type.Kind == TypeExprKind.Text) { return typeof(DurableText); }
         if (!type.IsClosed) { throw new InvalidDataException("A current domain lookup requires a closed nominal type."); }
         if (type.IsNullable) {
             Type child = GetDomainType(type.ElementType!);

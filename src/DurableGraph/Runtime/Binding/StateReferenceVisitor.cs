@@ -12,7 +12,7 @@ public interface IStateReferenceVisitor {
         StateReferenceValidator.RequireReferenceType(declaredType);
         if (declaredType.Kind == TypeExprKind.Builtin) { VisitString(id); }
         else if (declaredType.Kind == TypeExprKind.Named) { VisitDurable(id, declaredType); }
-        else { throw new NotSupportedException("This visitor does not support built-in container reference types."); }
+        else { throw new NotSupportedException($"This visitor does not support reference type {declaredType}."); }
     }
 
     /// <summary>Visits a reference constrained by a complete constructed nominal identity.</summary>
@@ -62,6 +62,7 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
         RequireReferenceType(declaredType);
         return layout.Kind switch {
             ObjectStateKind.String => declaredType == TypeExpr.Builtin(TypeTag.String),
+            ObjectStateKind.Text => declaredType.Kind == TypeExprKind.Text,
             ObjectStateKind.Durable => declaredType.Kind == TypeExprKind.Named && Accepts(layout.Schema!, declaredType),
             ObjectStateKind.Array => declaredType.IsArray && layout.Array!.Type == declaredType,
             ObjectStateKind.List => declaredType.IsList && layout.List!.Type == declaredType,
@@ -92,9 +93,8 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
 
     internal static void RequireReferenceType(TypeExpr declaredType) {
         ArgumentNullException.ThrowIfNull(declaredType);
-        if (!declaredType.IsClosed || !(declaredType.Kind == TypeExprKind.Named || declaredType.IsArray || declaredType.IsList || declaredType.IsDictionary ||
-            declaredType == TypeExpr.Builtin(TypeTag.String))) {
-            throw new ArgumentException("A reference requires a closed named, array, List, Dictionary, or string type.", nameof(declaredType));
+        if (!declaredType.IsClosed || !(declaredType.IsObjectReferenceTarget || declaredType == TypeExpr.Builtin(TypeTag.String))) {
+            throw new ArgumentException("A reference requires a closed object type or string.", nameof(declaredType));
         }
     }
 }

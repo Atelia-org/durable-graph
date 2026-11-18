@@ -8,9 +8,9 @@ namespace Atelia.DurableGraph.Persistence;
 /// <remarks>Does not own a Store, Schema view, live directory or publication.</remarks>
 internal static class ObjectWritePlanner {
     // The caller establishes the captured baseline and exact prior before classification,
-    // and provides its actual owned typed Base header and body.
+    // and provides the checked Base header and frozen content.
     internal static PreparedObject ClassifyCaptured(PreparedCapturedObject row,
-        EncodedBaseObjectBody typedBase, FrameAddress? exactPrior, bool requiresRewrite = false) {
+        PreparedTypedBase typedBase, FrameAddress? exactPrior, bool requiresRewrite = false) {
         ArgumentNullException.ThrowIfNull(row);
         ArgumentNullException.ThrowIfNull(typedBase);
         if ((row.Previous is null) != (exactPrior is null)) {
@@ -54,13 +54,13 @@ internal static class ObjectWritePlanner {
                 reconstructionBytes = priorH;
             }
             estimates[index] = new(row.ObjectId, row.ChangeKind,
-                ObjectVersionPayloadSize.GetBasePayloadBytes(row.EncodedBaseBody.Body.Length), deltaBytes, reconstructionBytes);
+                ObjectVersionPayloadSize.EstimateBasePayloadBytes(row.TypedBase.EstimatedBodyBytes), deltaBytes, reconstructionBytes);
         }
         ObjectRepresentationPlan plan = ReadAmplificationBaseBudgetPolicy.Plan(estimates, parameters);
         ObjectVersionRecord[] records = plan.Writes.Select(decision => {
             PreparedObject row = byId[decision.ObjectId];
             return decision.Mode == ObjectRepresentationMode.Base
-                ? ObjectVersionRecord.CreateBase(row.ObjectId.Value, row.EncodedBaseBody.Body)
+                ? ObjectVersionRecord.CreateBase(row.ObjectId.Value, row.TypedBase.Encode())
                 : ObjectVersionRecord.CreateDelta(row.ObjectId.Value, row.PriorAddress!.Value, row.DeltaBody!.Body);
         }).ToArray();
         return (records, estimates, plan);

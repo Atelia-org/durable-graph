@@ -11,6 +11,14 @@ public static class ObjectVersionPayloadSize {
         return checked(1L + BareValueEncoding.MeasureVarUInt32((uint)bodyLength) + bodyLength);
     }
 
+    // A size used for selection can exceed the length of a physically encodable
+    // body. Keep the estimate wide: choosing Delta does not encode that Base.
+    internal static long EstimateBasePayloadBytes(long bodyLength) {
+        ArgumentOutOfRangeException.ThrowIfNegative(bodyLength);
+        if (bodyLength <= int.MaxValue) { return GetBasePayloadBytes((int)bodyLength); }
+        return checked(1L + BareValueEncoding.MeasureVarUInt32(uint.MaxValue) + bodyLength);
+    }
+
     /// <summary>Returns the exact Delta payload size, including its fixed-size prior address.</summary>
     /// <remarks>This is a byte count; it does not prove that the address exists or the complete frame fits.</remarks>
     public static long GetDeltaPayloadBytes(int bodyLength, FrameAddress prior) {
