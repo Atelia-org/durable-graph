@@ -9,19 +9,94 @@ namespace Atelia.DurableGraph.Tests;
 
 public sealed class TextBodyCodecTests(ITestOutputHelper output) {
     [Fact]
-    public void BaseGoldenBytesPreserveAllUtf16UnitsAndExactEstimate() {
+    public void BaseGoldenBytesPreserveAllUtf16UnitsAndUseASoftEstimate() {
         string text = "A\0\r\n\u4e2d\ud83d\ude00\ud800x\udfff";
         DurableTextState state = new DurableText(text).CaptureState();
         byte[] bytes = TextBodyCodec.PrepareBase(state).Body.ToArray();
-        Assert.Equal(new byte[] { 10, 65, 0, 0, 0, 13, 0, 10, 0, 0x2d, 0x4e,
+        Assert.Equal(new byte[] { 10, 20, 65, 0, 0, 0, 13, 0, 10, 0, 0x2d, 0x4e,
             0x3d, 0xd8, 0, 0xde, 0, 0xd8, 120, 0, 0xff, 0xdf }, bytes);
         Assert.Equal(bytes.Length, TextBodyCodec.EstimateBaseSize(state));
         Assert.Equal(text, ReadBase(bytes).Content.ToString());
         Assert.Equal(new byte[] { 0 }, TextBodyCodec.PrepareBase(new DurableText().CaptureState()).Body.ToArray());
         foreach (int length in new[] { 127, 128, 16383, 16384 }) {
             DurableTextState boundary = new DurableText(new string('x', length)).CaptureState();
-            Assert.Equal(TextBodyCodec.PrepareBase(boundary).Body.Length, TextBodyCodec.EstimateBaseSize(boundary));
+            byte[] encoded = TextBodyCodec.PrepareBase(boundary).Body.ToArray();
+            BareValueReader reader = new(encoded);
+            Assert.Equal((uint)length, reader.ReadVarUInt32());
+            Assert.Equal(BareValueEncoding.MeasureVarUInt32((uint)length), reader.ConsumedCount);
+            Assert.Equal(new string('x', length), ReadBase(encoded).Content.ToString());
+            Assert.Equal(BareValueEncoding.MeasureVarUInt32((uint)length) + 1 + 2L * length,
+                TextBodyCodec.EstimateBaseSize(boundary));
+            Assert.True(TextBodyCodec.EstimateBaseSize(boundary) > encoded.Length);
         }
+        // A UTF-16 segment with a two-byte Bare header is underestimated, so the
+        // planner estimate must never be used as an exact buffer or installed H.
+        DurableTextState chinese = new DurableText(new string('中', 64)).CaptureState();
+        Assert.Equal(130, TextBodyCodec.EstimateBaseSize(chinese));
+        Assert.Equal(131, TextBodyCodec.PrepareBase(chinese).Body.Length);
+    }
+
+    [Fact]
+    public void EachCapturedPhysicalPieceHasItsOwnBareEncoding() {
+        // Construct UTF-16 strings inside the test: runner transport of Theory
+        // string arguments may replace isolated surrogates before execution.
+        (string[] Segments, byte[] Golden)[] cases = [
+            ([], [0]),
+            (["A"], [1, 3, 65]),
+            (["AB"], [2, 5, 65, 66]),
+            (["A", "B"], [2, 3, 65, 3, 66]),
+            (["A", "中"], [2, 3, 65, 2, 0x2d, 0x4e]),
+            (["\ud83d", "\ude00"], [2, 2, 0x3d, 0xd8, 2, 0, 0xde]),
+        ];
+        foreach ((string[] segments, byte[] golden) in cases) {
+            DurableText editor = Fragmented(segments);
+            DurableTextState frozen = editor.CaptureState();
+            Assert.Equal(segments.Length, frozen.Content.View.PieceCount);
+            editor.Replace(editor.Length, 0, "later");
+            Assert.Equal(golden, TextBodyCodec.PrepareBase(frozen).Body.ToArray());
+            Assert.Equal(string.Concat(segments), ReadBase(golden).Content.ToString());
+        }
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 1, 2, 65, 0 })] // Legal nonpreferred UTF-16 representation of A.
+    [InlineData(new byte[] { 0x81, 0, 3, 65 })] // Redundant total-length varint.
+    [InlineData(new byte[] { 1, 0x83, 0, 65 })] // Redundant Bare header.
+    public void BaseRetainsBinaryAcceptanceOfNonpreferredAndRedundantRepresentations(byte[] body) =>
+        Assert.Equal("A", ReadBase(body).Content.ToString());
+
+    [Fact]
+    public void BaseChoosesEncodingFromThePhysicalSliceRatherThanItsWholeBacking() {
+        DurableText editor = new("\ud800AB\udfff");
+        editor.Replace(0, 1, string.Empty);
+        editor.Replace(2, 1, string.Empty);
+        DurableTextState frozen = editor.CaptureState();
+        TextPiece piece = Assert.Single(frozen.Content.View.Pieces);
+        Assert.Equal(1, piece.Offset);
+        Assert.Equal(4, piece.Text.Length);
+        Assert.Equal(new byte[] { 2, 5, 65, 66 }, TextBodyCodec.PrepareBase(frozen).Body.ToArray());
+    }
+
+    [Theory]
+    [InlineData(127)]
+    [InlineData(128)]
+    [InlineData(4096)]
+    public void ManySegmentsRestoreOneFlatBaseAndCopyAcrossFormerBoundaries(int length) {
+        string expected = new(Enumerable.Range(0, length).Select(i => "a中\ud83d\ude00\ud800\0\r\n"[i % 8]).ToArray());
+        DurableText fragmented = Fragmented(expected.Select(unit => unit.ToString()).ToArray());
+        Assert.Equal(length, fragmented.CaptureState().Content.View.PieceCount);
+        byte[] body = TextBodyCodec.PrepareBase(fragmented.CaptureState()).Body.ToArray();
+        BareValueReader header = new(body);
+        Assert.Equal((uint)length, header.ReadVarUInt32());
+        DurableTextState restored = ReadBase(body);
+        Assert.Equal(expected, restored.Content.ToString());
+        Assert.Equal(1, restored.Content.View.PieceCount);
+        Assert.Equal(expected, ReadBase(TextBodyCodec.PrepareBase(new DurableText(expected).CaptureState()).Body.ToArray()).Content.ToString());
+        DurableText continued = DurableText.Restore(restored);
+        continued.Replace(length / 2, 1, "Z");
+        byte[] delta = TextBodyCodec.PrepareDelta(restored, continued.CaptureState()).Body.ToArray();
+        Assert.Equal((byte)1, delta[checked((int)BareValueEncoding.MeasureVarUInt32((uint)length))]);
+        Assert.Equal(expected[..(length / 2)] + "Z" + expected[(length / 2 + 1)..], Apply(restored, delta).Content.ToString());
     }
 
     [Fact]
@@ -137,11 +212,36 @@ public sealed class TextBodyCodecTests(ITestOutputHelper output) {
         Assert.Equal("ab", previous.Content.ToString());
     }
 
+    public static IEnumerable<object[]> MalformedBases() {
+        yield return [new byte[] { }, typeof(EndOfStreamException)];
+        yield return [new byte[] { 0x80 }, typeof(EndOfStreamException)];
+        yield return [new byte[] { 0, 0 }, typeof(InvalidDataException)]; // Empty body cannot have any tail.
+        yield return [new byte[] { 1 }, typeof(InvalidDataException)]; // N exceeds available bytes, before allocation.
+        yield return [new byte[] { 0xff, 0xff, 0xff, 0xff, 0x0f }, typeof(InvalidDataException)];
+        yield return [new byte[] { 0x80, 0x80, 0x40, 3, 65 }, typeof(InvalidDataException)]; // Huge N, tiny body.
+        yield return [new byte[] { 1, 0 }, typeof(InvalidDataException)]; // Empty UTF-16 segment.
+        yield return [new byte[] { 1, 1 }, typeof(InvalidDataException)]; // Empty UTF-8 segment.
+        yield return [new byte[] { 1, 3, 65, 0 }, typeof(InvalidDataException)]; // Tail after N has been filled.
+        yield return [new byte[] { 1, 3, 65, 1 }, typeof(InvalidDataException)];
+        yield return [new byte[] { 1, 3, 65, 3, 66 }, typeof(InvalidDataException)]; // Valid extra segment.
+        yield return [new byte[] { 1, 5, 65, 66 }, typeof(InvalidDataException)]; // UTF-8 output too long.
+        yield return [new byte[] { 1, 4, 65, 0, 66, 0 }, typeof(InvalidDataException)]; // UTF-16 output too long.
+        yield return [new byte[] { 2, 3, 65 }, typeof(InvalidDataException)]; // Valid segment underfills N.
+        yield return [new byte[] { 1, 3, 0xff }, typeof(InvalidDataException)];
+        yield return [new byte[] { 1, 5, 0xc0, 0xaf }, typeof(InvalidDataException)]; // Overlong UTF-8.
+        yield return [new byte[] { 1, 3, 0xc2 }, typeof(InvalidDataException)]; // Complete byte payload, incomplete UTF-8.
+        yield return [new byte[] { 1, 0x80 }, typeof(EndOfStreamException)];
+        yield return [new byte[] { 1, 5, 65 }, typeof(EndOfStreamException)]; // Truncated byte payload.
+        yield return [new byte[] { 1, 2, 65 }, typeof(EndOfStreamException)];
+    }
+
     [Theory]
-    [InlineData(new byte[] { 1, 65 })]
-    [InlineData(new byte[] { 0, 0 })]
-    [InlineData(new byte[] { 0xff, 0xff, 0xff, 0xff, 0x0f })]
-    public void InvalidBaseIsRejected(byte[] bytes) => Assert.Throws<InvalidDataException>(() => ReadBase(bytes));
+    [MemberData(nameof(MalformedBases))]
+    public void InvalidBaseIsRejectedWithoutDeliveringContent(byte[] bytes, Type expectedError) {
+        Exception? error = Record.Exception(() => ReadBase(bytes));
+        Assert.NotNull(error);
+        Assert.Equal(expectedError, error.GetType());
+    }
 
     [Fact]
     public void ReaderRequiresIdentityAndBaseAndNoChangeDoesNotEncodeBase() {
@@ -222,9 +322,12 @@ public sealed class TextBodyCodecTests(ITestOutputHelper output) {
         return buffer.WrittenSpan.ToArray();
     }
 
-    private static DurableTextState ReadBase(byte[] bytes) {
-        BareValueReader reader = new(bytes);
-        return TextBodyCodec.ReadBase(ref reader);
+    private static DurableTextState ReadBase(byte[] bytes) => TextBodyCodec.ReadBase(bytes);
+
+    private static DurableText Fragmented(params string[] segments) {
+        DurableText editor = new();
+        foreach (string segment in segments) { editor.Replace(editor.Length, 0, segment); }
+        return editor;
     }
 
     private static DurableTextState Apply(DurableTextState previous, byte[] bytes) {

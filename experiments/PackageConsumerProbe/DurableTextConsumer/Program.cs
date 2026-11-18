@@ -8,9 +8,9 @@ using Atelia.DurableGraph.Persistence;
 namespace DurableTextConsumer;
 
 internal static class Program {
-    private const string Initial = "alpha\r\nbeta\0\ud800\r\nalpha";
-    private const string Saved = "[alpha\r\nBETA\0\ud800\r\nalpha]";
-    private const string Resumed = "[alpha\r\ngamma\0\ud800\r\nalpha]\r\ntail";
+    private const string Initial = "alpha\r\nbeta\0\ud800\r\nalpha\r\n中\ud83d\ude00文";
+    private const string Saved = "[alpha\r\nBETA\0\ud800\r\nalpha\r\n中\ud83d\ude00文]";
+    private const string Resumed = "[alpha\r\ngamma\0\ud800\r\nalpha\r\n中\ud83d\ude00文]\r\ntail";
     private static readonly List<string> Checks = [];
     private static int Main(string[] args) {
         if (args.Length != 3 || args[0] is not ("seed" or "resume" or "verify")) return 2;
@@ -40,7 +40,15 @@ internal static class Program {
         using var repository = Repository.CreateNew(path, Models());
         var branch = repository.CreateRootBranchFromState("main", new World());
         using var working = repository.OpenWorkingCopy(branch.Id);
-        var text = new DurableText(Initial);
+        // Distinct backing strings remain separate pieces until the first save.
+        // The ASCII needle and a valid surrogate pair both cross piece boundaries;
+        // an isolated surrogate, NUL, CJK and CRLF are preserved as exact UTF-16.
+        var text = new DurableText("alpha\r\nbe");
+        text.Replace(text.Length, 0, "ta\0\ud800\r\nalpha\r\n中\ud83d");
+        text.Replace(text.Length, 0, "\ude00文");
+        Need(text.ToString() == Initial && text.Snapshot().IndexOf("beta") == 7 &&
+            text.Snapshot().IndexOf("\ud83d\ude00") == Initial.IndexOf("\ud83d\ude00", StringComparison.Ordinal),
+            "Before first save, public edits build exact multi-piece content with cross-piece search and surrogate pair.");
         var entry = new Entry { Body = text, Alias = text, Bodies = [text, text] };
         using var graph = repository.CreateGraph(entry);
         var original = repository.SaveGraph(graph);

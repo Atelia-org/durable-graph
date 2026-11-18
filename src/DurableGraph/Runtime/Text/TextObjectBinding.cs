@@ -59,10 +59,9 @@ internal sealed class TextObjectReader : ObjectReaderBinding {
     internal override ObjectStateRecord Read(ObjectId objectId, IStateBodySource source) {
         ArgumentNullException.ThrowIfNull(source);
         if (objectId.IsNull || source.Count <= 0) { throw new InvalidDataException("Text requires a nonzero ID and a Base body."); }
-        BareValueReader reader = new(source.GetBody(0));
-        DurableTextState state = TextBodyCodec.ReadBase(ref reader);
+        DurableTextState state = TextBodyCodec.ReadBase(source.GetBody(0));
         for (int index = 1; index < source.Count; index++) {
-            reader = new(source.GetBody(index));
+            BareValueReader reader = new(source.GetBody(index));
             state = TextBodyCodec.ApplyDelta(ref reader, state);
         }
         return new(objectId, TextBodyCodec.FinishReplay(state));

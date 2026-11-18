@@ -4,7 +4,7 @@
 
 `Run-DurableTextProbe.ps1 -PackageSource <完整feed> -Version <G> -ExpectedSourceCommit <40位SHA> -WorkDirectory <仓外新目录>` 执行三条独立进程：
 
-- seed：Body/Alias/List 同一个 DurableText，null 与空对象；首次保存及两次编辑保存；快照稳定性；标准 str_replace 唯一匹配、AppendTo、完整字符串 Regex。
+- seed：主文本由三个独立 backing 串经公开编辑构成后才首次保存，包含跨片 `beta`、跨片合法代理对、孤立代理、中文、NUL 与 CRLF；Body/Alias/List 别名，null 与空对象；随后两次小改保存；快照稳定性；标准 str_replace 唯一匹配、AppendTo、完整字符串 Regex。
 - resume：关闭后冷开、别名恢复、独立 OpenGraph 隔离、继续编辑保存，并回读原始图。
 - verify：只读历史和最新图、UTF16/CRLF/NUL、CopyTo、资源释放后快照有效；数据库文件字节保持不变。
 
@@ -12,7 +12,7 @@ runner 检查独立 cache/no ProjectReference、准确 DG 四包 commit 与版�
 
 旧 reader 单独使用 [DurableTextReaderAdmission](../DurableTextReaderAdmission/Program.cs) 和 [准入 runner](../Run-DurableTextReaderAdmission.ps1)。它不引用 DurableText 编译符号，先保存/恢复普通 Control 字段作为正控，再读取新库，逐阶段记录 OpenReadOnlyExisting、ListBranches、ResolveTag、LoadState、OpenGraphWithText 的实际异常；不能用缺程序集或编译失败代替格式拒绝。旧 reader 能否打开资源和能否恢复 Text 图是两个事实。
 
-2026-11-18 已完成普通包验收。新 G 为 `0.0.0-durabletext.20261118.gfb2bef0`，来自独立清洁 checkout `fb2bef0ad2acc9c146c72c4edf4a2cd55ce35714`；六包 S 为 `0.1.3-dev.20261101.g9ad39fc`，来源 `9ad39fc51a420e8302468533b82d8bc3a91a403e`。旧 reader 使用已存在的 G `0.0.0-graphheap.20261115.g7a98c7d`，来源 `7a98c7d224f87e0f7ec455417a0a4a2d13d5fa33`。
+以下为固定 UTF-16LE Base 首版的历史普通包验收；当时首次保存为单片，不代表当前多片分段 Base 的包资格。2026-11-18 的 G 为 `0.0.0-durabletext.20261118.gfb2bef0`，来自独立清洁 checkout `fb2bef0ad2acc9c146c72c4edf4a2cd55ce35714`；六包 S 为 `0.1.3-dev.20261101.g9ad39fc`，来源 `9ad39fc51a420e8302468533b82d8bc3a91a403e`。旧 reader 使用已存在的 G `0.0.0-graphheap.20261115.g7a98c7d`，来源 `7a98c7d224f87e0f7ec455417a0a4a2d13d5fa33`。
 
 三进程 seed / resume / verify 分别通过 7 / 17 / 11 项检查；两份用户 Schema history 的 Publish→Verify、包内 Generator/Build 实际执行、原包/输出/已加载 DLL 哈希以及只读库字节不变均通过。[四格 runner](../Run-DurableTextAdmissionMatrix.ps1) 复用各 reader 的已验证独立包消费结果，再运行交叉读取：
 

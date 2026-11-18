@@ -12,6 +12,88 @@ public sealed class DurableTextIntegrationTests : IDisposable {
     private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public void SegmentedTextKeepsTheExistingAbiFiveStructuralHeaderGolden() {
+        byte[] bytes = TypedBaseBodyCodec.Encode(ObjectLayout.Text,
+            TextBodyCodec.PrepareBase(new DurableText("A").CaptureState()));
+        Assert.Equal(new byte[] { 5, 2, 11, 1, 3, 65 }, bytes);
+        var decoded = TypedBaseBodyCodec.Decode(bytes, null);
+        Assert.Equal(ObjectLayout.Text, decoded.Layout);
+        Assert.Equal("A", TextBodyCodec.ReadBase(decoded.Body).Content.ToString());
+        // This is the first published Text body: the locally used old UTF-16
+        // interpretation of 01 03 41 is deliberately not guessed or retained.
+    }
+
+    [Fact]
+    public void CapturedMultiPieceBaseIsPersistedBeforeCompactionAndColdDeltaContinuationUsesActualBytes() {
+        string[] segments = Enumerable.Range(0, 64).Select(i => new string((char)('a' + i % 26), 64)).ToArray();
+        segments[1] = new string('中', 64);
+        segments[31] = new string('x', 63) + "\ud83d";
+        segments[32] = "\ude00\0\r\n" + new string('y', 60);
+        string original = string.Concat(segments);
+        DurableText text = new();
+        foreach (string segment in segments) { text.Replace(text.Length, 0, segment); }
+        DurableTextState frozen = text.CaptureState();
+        Assert.Equal(64, frozen.Content.View.PieceCount);
+        GraphRef first, changed;
+        ObjectId textId;
+        string changedContent = original[..2050] + "Z" + original[2051..];
+        using (Repository repository = Repository.CreateNew(_path, Models())) {
+            using GraphBuilder builder = repository.CreateGraph(new TextWitness { Body = text, Alias = text });
+            first = repository.SaveGraph(builder);
+            StoredGraphRevision initial = HeapSnapshot(repository, first);
+            textId = TextId(repository.GraphStore, initial, original.Length);
+            ObjectVersionChain chain = repository.GraphStore.ReadObjectChain(initial, textId.Value);
+            var initialRecord = Assert.Single(chain.Entries);
+            Assert.Equal(ObjectVersionKind.Base, initialRecord.Record.Kind);
+            var typed = TypedBaseBodyCodec.Decode(initialRecord.Record.Body, null);
+            Assert.Equal(ObjectLayout.Text, typed.Layout);
+            BareValueReader reader = new(typed.Body);
+            Assert.Equal((uint)original.Length, reader.ReadVarUInt32());
+            List<string> storedSegments = [];
+            while (!reader.End) { storedSegments.Add(reader.ReadString()); }
+            Assert.Equal(segments, storedSegments);
+            Assert.Equal(1, text.CaptureState().Content.View.PieceCount); // Acceptance compacted only after capture/save.
+            Assert.Equal(64, frozen.Content.View.PieceCount);
+            Assert.Equal(original, frozen.Content.ToString());
+            long softPayload = ObjectVersionPayloadSize.EstimateBasePayloadBytes(3 + TextBodyCodec.EstimateBaseSize(frozen));
+            Assert.NotEqual(softPayload, (long)initialRecord.PayloadBytes);
+            Assert.Equal((long)initialRecord.PayloadBytes,
+                builder.Business.Baseline!.Objects[textId].Storage!.Value.ReconstructionPayloadBytes);
+            AssertAccounting(repository.GraphStore, initial);
+            text.Replace(2050, 1, "Z"); // The initial Copy spans many former physical segments.
+            int encodes = 0;
+            TextBodyCodec.BaseEncodingObserver = () => encodes++;
+            try {
+                changed = repository.SaveGraph(builder);
+                Assert.Equal(0, encodes);
+            } finally { TextBodyCodec.BaseEncodingObserver = null; }
+            StoredGraphRevision next = HeapSnapshot(repository, changed);
+            AssertDelta(repository.GraphStore, next, textId, initial.ObjectHeads[textId.Value]);
+            Assert.Equal(repository.GraphStore.ReadObjectChain(next, textId.Value).Entries.Sum(entry => (long)entry.PayloadBytes),
+                builder.Business.Baseline!.Objects[textId].Storage!.Value.ReconstructionPayloadBytes);
+        }
+        using Repository reopened = Repository.OpenExisting(_path, Models());
+        using GraphBuilder loaded = reopened.OpenGraph(changed);
+        TextWitness root = Assert.IsType<TextWitness>(loaded.Root);
+        Assert.Same(root.Body, root.Alias);
+        Assert.Equal(changedContent, root.Body!.ToString());
+        root.Body.Replace(20, 1, "Q");
+        int coldEncodes = 0;
+        TextBodyCodec.BaseEncodingObserver = () => coldEncodes++;
+        GraphRef continued;
+        try {
+            continued = reopened.SaveGraph(loaded);
+            Assert.Equal(0, coldEncodes);
+        } finally { TextBodyCodec.BaseEncodingObserver = null; }
+        StoredGraphRevision final = HeapSnapshot(reopened, continued);
+        AssertDelta(reopened.GraphStore, final, textId, HeapSnapshot(reopened, changed).ObjectHeads[textId.Value]);
+        AssertAccounting(reopened.GraphStore, final);
+        using GraphBuilder verify = reopened.OpenGraph(continued), old = reopened.OpenGraph(first);
+        Assert.Equal(changedContent[..20] + "Q" + changedContent[21..], ((TextWitness)verify.Root).Body!.ToString());
+        Assert.Equal(original, ((TextWitness)old.Root).Body!.ToString());
+    }
+
+    [Fact]
     public void GraphAliasesNullEmptyAndIndependentColdForksKeepTextIdentity() {
         string original = "\uD800\0\r\n" + new string('a', 4096) + "\uDC00";
         GraphRef first, changed, forked;

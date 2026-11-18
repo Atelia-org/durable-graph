@@ -22,18 +22,18 @@ entry.Body.AppendTo(contextBuilder);
 
 可编辑对象、不可变视图与持久对象版本分别承担编辑、内容读取和重建依赖。图级捕获拥有 ObjectId、准确前驱和安装时机。共享同一 CLR 文本的两个 graph builder 可能有不同 prior，只有来源身份经验证匹配时才能复用 Piece 的 Copy 区间。来源不匹配时按实际 prior 比较，必要时以完整新内容编码。净零编辑可复用已提交对象，强制 Base 和 NoChange 的维护写沿用图级策略。
 
-文本 Base 及 Delta 中的字面内容使用 UTF-16LE；Copy 和 New 组成的 Delta 只依赖该对象的一个准确前驱。盘上类型表达式区分 Text 与 string，字段通过 ObjectReference 槽保存 ObjectId。可编辑结构和整理阈值属于内存实现。
+文本 Base 由可独立解码的 Bare string 组成。Copy 和 New 组成的 Delta 只依赖该对象的一个准确前驱。盘上类型表达式区分 Text 与 string，字段通过 ObjectReference 槽保存 ObjectId。可编辑结构和整理阈值属于内存实现。
 
 首版业务 typed Base 使用 ABI 5 的结构路由 2 和零元 Text 类型表达式（11）。字段 history 中的零元模式写成 `t`；直接或嵌套包含它的记录使用 v10。文本 raw body 的编码如下，整数均为 VarUInt32，范围单位均为 UTF-16 code unit。
 
 | 记录 | raw body |
 |---|---|
-| Base | 单元数 N，随后为 N 个小端序 16 位单元 |
+| Base | 总单元数 N，随后读到 body 末尾的每段都是一条非空 Bare string。按段选择无损 UTF-8 或 UTF-16LE，解码后的长度之和必须等于 N。空正文只写 `00` |
 | Delta | 结果单元数 N，随后为产生恰好 N 个单元的指令序列。Copy（字节 1）后接前驱起点及长度；New（字节 2）后接长度及相应 UTF-16LE 单元 |
 
 文本编码器合并相邻 New 及来源连续的相邻 Copy。读取时验证实际前驱范围、长度、指令和完整消耗。恢复沿链迭代，Copy 复用前驱字符串切片，New 解码新增内容；片段积累达到内部资源界限时，可在这一层改用平坦恢复。该界限与编辑器接受时的整理阈值分别用于冷读和热编辑。[实际 codec](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs)
 
-业务准备对冻结文本按需生成 Base；普通准备回调仍在受保护的准备期同步执行。图策略比较完整对象记录的 payload 大小。选择完成后，在追加前生成实际所选记录。安装后的重建字节使用实际记录累计。State 接受后才可条件安装已准备的整理结果；放弃、独立 Event 或捕获后又有新编辑时，都不得用旧视图覆盖领域编辑。
+业务准备对冻结文本按需生成 Base。图策略用片数和总单元数估算延迟 Base 大小，纳入完整记录的封套开销。选择完成后，在追加前生成实际所选记录。安装后的重建字节使用实际记录累计。State 接受后才可条件安装已准备的整理结果；放弃、独立 Event 或捕获后又有新编辑时，都不得用旧视图覆盖领域编辑。[分段编码与估值](segmented-base-refactoring-plan.md)
 
 ## 后续范围
 

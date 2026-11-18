@@ -6,7 +6,8 @@ using System.Runtime.InteropServices;
 
 namespace Atelia.DurableGraph.Runtime;
 
-/// <summary>Text body v1: varuint32 UTF-16 length, then raw little-endian units or Copy/New ranges.</summary>
+/// <summary>Text bodies carry a UTF-16 length followed by nonempty Bare string segments (Base)
+/// or Copy/New ranges with raw UTF-16LE literals (Delta).</summary>
 internal static class TextBodyCodec {
     private const byte Copy = 1;
     private const byte New = 2;
@@ -16,18 +17,20 @@ internal static class TextBodyCodec {
     // Scoped by deterministic tests; no observer is installed in ordinary operation.
     [ThreadStatic] internal static Action? BaseEncodingObserver;
 
+    // Cheap planning input, not an exact encoded size or a capacity limit. Each segment
+    // contributes an estimated one-byte header; selecting its encoding would scan text.
     internal static long EstimateBaseSize(DurableTextState state) =>
-        BareValueEncoding.MeasureVarUInt32((uint)state.Content.Length) + 2L * state.Content.Length;
+        BareValueEncoding.MeasureVarUInt32((uint)state.Content.Length) +
+        (long)state.Content.View.PieceCount + 2L * state.Content.Length;
 
     internal static PreparedBaseBody PrepareBase(DurableTextState state) {
         BaseEncodingObserver?.Invoke();
-        if (EstimateBaseSize(state) > Array.MaxLength) {
-            throw new InvalidOperationException("The encoded Text Base exceeds the supported byte buffer length.");
-        }
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
         writer.WriteVarUInt32((uint)state.Content.Length);
-        foreach (ReadOnlyMemory<char> chunk in state.Content.GetChunks()) { WriteUnits(ref writer, chunk.Span); }
+        // The frozen view contains only nonempty pieces. Each slice is an independent
+        // value: a surrogate outside its boundary does not participate in encoding it.
+        foreach (TextPiece piece in state.Content.View.Pieces) { writer.WriteString(piece.Memory.Span); }
         return new(buffer.WrittenSpan);
     }
 
@@ -119,12 +122,32 @@ internal static class TextBodyCodec {
         }
     }
 
-    internal static DurableTextState ReadBase(ref BareValueReader reader) {
+    internal static DurableTextState ReadBase(ReadOnlySpan<byte> body) {
+        BareValueReader reader = new(body);
         int length = ReadLength(ref reader);
-        if (length > reader.RemainingCount / 2) { throw new InvalidDataException("Truncated Text Base units."); }
-        ReadOnlySpan<byte> bytes = reader.ReadRawBytes(length * 2);
-        reader.EnsureFullyConsumed();
-        return new(TextSnapshot.FromString(ReadString(bytes)), sourceToken: null);
+        // Both supported payload encodings use at least one byte per UTF-16 unit.
+        // Reject an impossible declared result before allocating its final string.
+        if (length > reader.RemainingCount) { throw new InvalidDataException("Text Base units cannot fit in the remaining body."); }
+        if (length == 0) {
+            // string.Create skips the callback for zero length, including its tail check.
+            reader.EnsureFullyConsumed();
+            return new(TextSnapshot.FromString(string.Empty), sourceToken: null);
+        }
+        string text = string.Create(length, reader, static (destination, cursor) => {
+            // Consume the complete bounded body even after the destination is full:
+            // an extra empty segment is invalid rather than an ignorable suffix.
+            while (!cursor.End) {
+                int written;
+                try { written = cursor.ReadString(destination); }
+                catch (ArgumentException error) when (error.ParamName == "destination") {
+                    throw new InvalidDataException("A Text Base segment exceeds the declared UTF-16 length.", error);
+                }
+                if (written == 0) { throw new InvalidDataException("A Text Base segment must be nonempty."); }
+                destination = destination[written..];
+            }
+            if (!destination.IsEmpty) { throw new InvalidDataException("Text Base segments do not fill the declared UTF-16 length."); }
+        });
+        return new(TextSnapshot.FromString(text), sourceToken: null);
     }
 
     internal static DurableTextState ApplyDelta(ref BareValueReader reader, DurableTextState previous) {

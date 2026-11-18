@@ -162,7 +162,12 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
             PreparedTypedBase typed = TypedBaseBodyCodec.Prepare(captured, catalog);
             PreparedObject row = ObjectWritePlanner.ClassifyCaptured(captured, typed, prior, rewrite);
             var result = Plan([row], new() { [id] = priorH }, limit: 5, percent: 5);
-            Assert.Equal(ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length), Assert.Single(result.Estimates).BasePayloadBytes);
+            long rawEstimate = BareValueEncoding.MeasureVarUInt32((uint)current.Content.Length)
+                + current.Content.View.PieceCount + 2L * current.Content.Length;
+            Assert.Equal(ObjectVersionPayloadSize.EstimateBasePayloadBytes(3 + rawEstimate),
+                Assert.Single(result.Estimates).BasePayloadBytes); // ABI 5 + structural route + Text expression.
+            Assert.NotEqual(ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length),
+                Assert.Single(result.Estimates).BasePayloadBytes);
             Assert.Equal(expected == ObjectVersionKind.Base ? 1 : 0, encodings);
             if (expected is null) { Assert.Empty(result.Records); return; }
             ObjectVersionRecord record = Assert.Single(result.Records);
