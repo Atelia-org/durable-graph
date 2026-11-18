@@ -25,7 +25,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 102 | [容器 payload 准备与对象重整策略](0102-container-payload-planning/README.md)，已采纳精确 Base 计量、内建 List 补丁直写、深链恢复与目录前驱复用 |
+| 102 | [容器 payload 准备与对象重整策略](0102-container-payload-planning/README.md)，已采纳精确 Base 计量、内建 List 补丁直写、深链恢复与目录前驱复用；后续五项性能改进已形成实施计划 |
 | 101 | [可增量保存的 DurableText](0101-durable-text/README.md)，可编辑正文、快照与准确对象增量 |
 | 100 | [独立对象图堆](0100-graph-heap/README.md)；增量基线与日志顺序解耦、GraphBuilder/GraphRef、内部保留 Head，源码/普通包验收及master集成完成 |
 | 099 | [Event 引用与事实载荷单次保存](0099-event-references/README.md)；普通 inline 引用与实际 Agent 接入已验收，缓存仍由应用拥有 |

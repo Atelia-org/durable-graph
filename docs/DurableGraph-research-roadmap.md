@@ -22,7 +22,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 
 | 分片 | 要解决的增量 |
 |---|---|
-| 容器 payload 准备与对象重整 | [DB-102](design-branches/0102-container-payload-planning/README.md) 记录已采用的保存、补丁和读链优化。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
+| 容器 payload 准备与对象重整 | 近期按 [DB-102 主线重构计划](design-branches/0102-container-payload-planning/mainline-refactoring-plan.md)推进。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
 | DurableText 的长期成本 | [DB-101](design-branches/0101-durable-text/README.md) 已接入分段 Base。真实工作负载需要大量常驻历史或随机读时再对照 Rope。深链冷开、连续正则输入或重复物化成为瓶颈时，分别考虑链长配置、分块搜索和缓存。 |
 | 独立对象图的规模成本 | [DB-100](design-branches/0100-graph-heap/README.md)采用完整图builder与公共保存日志。只有真实条目大小/访问轨迹证明全图读取或捕获不可接受时，再评估图内稀疏读取；只有存储增长提出实际回收需求时，再定义GraphRef、Schema、Delta链的保留/GC合同。索引与世界目录选择由memo消费层推进，不把全堆扫描当业务搜索。 |
 | 引用式事实的跨应用成本 | [DB-099](design-branches/0099-event-references/README.md) 已完成普通 inline EventRef 与 Agent 接入。后续仅当其他应用的表示/生命周期共同需求出现，才考虑上移缓存机制；若准确冷读、历史 Event 模型依赖或应用改造成本不能接受，可直接重访物理字符串去重候选，不以继续扩缓存为前置。引用依赖的 GC/部分导出仍未实施，未来相关工具必须保留目标/Schema/传递闭包或显式重映射；完整库备份不依赖这些未来工具。 |
