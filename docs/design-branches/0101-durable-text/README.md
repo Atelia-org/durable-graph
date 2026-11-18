@@ -4,6 +4,8 @@
 
 **产品证据**。实现在 `fb2bef0ad2acc9c146c72c4edf4a2cd55ce35714`。针对性源码测试覆盖共享 CLR 实例的独立 builder、历史分叉、未变/净零/维护写、账实字节、准备失败、发布边界、Event 及捕获后编辑。[集成测试](../../../tests/DurableGraph.Persistence.Tests/DurableTextIntegrationTests.cs) · [W SSD 保存、渲染与搜索对照数据](mainline-performance.md)
 
+固定 UTF-16LE 的后续选项见[分片编码、保存决策与压缩研究](text-encoding-research.md)。报告给出四份 Git 原文的字节比较、实际 Binary 包的压缩读回，以及 Base 估值改变 Delta 链选择的反例。候选格式仍待端到端对照。
+
 2026-11-18，固定 Storage 源码模式 Release 根构建 0 警告、0 错误。根 solution 全量测试 3,271 项通过（Serialization 133、Storage 36、Persistence 1,247、Runtime/Generator 1,855），无失败或跳过。性能测试另显式启用并在三个独立进程运行。
 
 **普通包**。新 G 为 `0.0.0-durabletext.20261118.gfb2bef0`，六包 S 为 `0.1.3-dev.20261101.g9ad39fc`。隔离消费者以包内 Generator/Build 执行 Publish/Verify，三个进程分别保存、重开续写和只读复核，检查实际加载程序集。新 reader 读回本次旧库正控；旧 reader `0.0.0-graphheap.20261115.g7a98c7d` 能打开含新类型的仓库、枚举分支及查询 tag，随后在 LoadState 解析所选 Schema 时以 InvalidDataException 明确拒绝。两次交叉读取均未改变数据库字节。本次组合及阶段仅限所测 fixture。[普通包复现](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md)
