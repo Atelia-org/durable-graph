@@ -72,6 +72,73 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
     }
 
     [Fact]
+    public void EventReadsReuseOnlyTheLastSuccessfulSchemaAndStillRestoreEachDictionary() {
+        StateModelRegistry writes = Models();
+        writes.Register(Model<EventModel>(EventSchema));
+        CommitId first, second, unsupported, newer;
+        using (Repository writer = Create(writes)) {
+            BranchInfo branch = writer.CreateRootBranchFromEvent("main", Root(1));
+            using WorkingCopy work = writer.OpenWorkingCopy(branch.Id);
+            first = work.BaseCommitId;
+            second = work.CommitEvent(Root(2)).Id;
+            unsupported = work.CommitEvent(new EventModel()).Id; // Adds EventSchema to the catalog.
+            newer = work.CommitEvent(Root(4)).Id;
+        }
+
+        Counts counts = new();
+        using Repository reader = Repository.OpenReadOnlyExisting(_root, Models(family: true, counts));
+        EventRef reference = EventRef.FromCommit(reader.ReadCommitInfo(first));
+        Assert.Throws<InvalidDataException>(() => reader.LoadEvent<EventModel>(reference));
+        var oldEnvironment = Assert.IsType<DecodedRevision.SchemaViewBindingEnvironment>(reader.LastEventEnvironment);
+        RootModel one = reader.LoadEvent<RootModel>(reference);
+        Assert.Equal(1, one.Values!["key"]);
+        one.Values["key"] = 99;
+        var two = Assert.IsType<RootModel>(reader.LoadEvent(second));
+        Assert.Equal(2, two.Values!["key"]);
+        Assert.False(two.Values.ContainsKey("KEY"));
+        Assert.NotSame(one, two);
+        Assert.NotSame(one.Values, two.Values);
+        Assert.Same(oldEnvironment, reader.LastEventEnvironment);
+        Assert.Equal((1, 1), (counts.Factories, counts.Comparers));
+
+        Assert.Throws<InvalidDataException>(() => reader.LoadEvent(unsupported));
+        Assert.Same(oldEnvironment, reader.LastEventEnvironment);
+        Assert.Equal(1, reader.LoadEvent<RootModel>(reference).Values!["key"]);
+        Assert.Equal((1, 1), (counts.Factories, counts.Comparers));
+
+        Assert.Equal(4, Assert.IsType<RootModel>(reader.LoadEvent(newer)).Values!["key"]);
+        Assert.NotEqual(oldEnvironment.SchemaRoot, reader.LastEventEnvironment!.SchemaRoot);
+        Assert.Equal(1, reader.LoadEvent<RootModel>(reference).Values!["key"]);
+        Assert.NotSame(oldEnvironment, reader.LastEventEnvironment);
+        Assert.Equal((3, 3), (counts.Factories, counts.Comparers));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StoppedRepositoryReleasesTheEventEnvironmentAndKeepsTheDeliveredGraph(bool fault) {
+        using Repository repository = Create(Models());
+        BranchInfo branch = repository.CreateRootBranchFromEvent("main", Root(7));
+        CommitId id = repository.ReadCurrentCommit(branch.Id).Commit.Id;
+        var delivered = Assert.IsType<RootModel>(repository.LoadEvent(id));
+        Assert.NotNull(repository.LastEventEnvironment);
+        if (fault) {
+            repository.OperationStageObserver = stage => {
+                if (stage == RepositoryOperationStage.AfterPublication) { throw new IOException("Failed delivery"); }
+            };
+            Assert.Throws<RepositoryPublicationException>(() => repository.CreateTag("saved", id));
+            Assert.True(repository.IsFaulted);
+            Assert.Null(repository.LastEventEnvironment);
+            Assert.ThrowsAny<InvalidOperationException>(() => repository.LoadEvent(id));
+        } else {
+            repository.Dispose();
+            Assert.Null(repository.LastEventEnvironment);
+            Assert.Throws<ObjectDisposedException>(() => repository.LoadEvent(id));
+        }
+        Assert.Equal(7, delivered.Values!["key"]);
+    }
+
+    [Fact]
     public void BuilderRegistrationAfterOpenIsInvisibleUntilNextOpen() {
         StateModelRegistry models = Models();
         using (Repository repository = Create(models)) {

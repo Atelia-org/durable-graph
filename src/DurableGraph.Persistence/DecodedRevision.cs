@@ -69,17 +69,17 @@ public sealed class DecodedRevision {
     internal sealed class SchemaViewBindingEnvironment {
         private readonly GraphRecordStore _store;
         private readonly StateModelRegistry.FrozenConfiguration _configuration;
-        private readonly FrameAddress _schemaRoot;
 
         private SchemaViewBindingEnvironment(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
             FrameAddress schemaRoot, SchemaCatalogView selected) {
             _store = store;
             _configuration = configuration;
-            _schemaRoot = schemaRoot;
+            SchemaRoot = schemaRoot;
             SelectedSchemaView = selected;
             Models = configuration.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
         }
 
+        internal FrameAddress SchemaRoot { get; }
         internal SchemaCatalogView SelectedSchemaView { get; }
         internal ModelExecutionEnvironment Models { get; }
 
@@ -89,8 +89,8 @@ public sealed class DecodedRevision {
 
         internal void RequireMatches(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
             FrameAddress schemaRoot) {
-            if (!ReferenceEquals(_store, store) || !ReferenceEquals(_configuration, configuration) || _schemaRoot != schemaRoot ||
-                SelectedSchemaView.Snapshot is not { } selected || selected.Address != _schemaRoot || !ReferenceEquals(selected.SourceOwner, store)) {
+            if (!ReferenceEquals(_store, store) || !ReferenceEquals(_configuration, configuration) || SchemaRoot != schemaRoot ||
+                SelectedSchemaView.Snapshot is not { } selected || selected.Address != SchemaRoot || !ReferenceEquals(selected.SourceOwner, store)) {
                 throw new InvalidDataException("A split binding environment requires its exact Store, frozen configuration and selected Schema root.");
             }
         }

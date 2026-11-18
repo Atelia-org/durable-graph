@@ -151,12 +151,14 @@ public sealed class EventRefTests : IDisposable {
 
     [Fact]
     public void InvalidSourceReferencesAreRejectedBeforeAnUpgradeCanHideThem() {
-        EventRef reference;
+        EventRef valid, reference;
         StateModelRegistry corruptWriter = SharedReadModel.Models(prepareBase: (in SharedReadModel.State state) =>
-            SharedReadModel.Base(state with { Next = new ObjectId(999) }));
+            SharedReadModel.Base(state.Value == 7 ? state with { Next = new ObjectId(999) } : state));
         using (Repository writer = Repository.CreateNew(_path, corruptWriter)) {
-            BranchInfo branch = writer.CreateRootBranchFromEvent("main", new SharedReadModel.Node { Value = 7 });
-            reference = EventRef.FromCommit(writer.ReadCurrentCommit(branch.Id).Commit);
+            BranchInfo branch = writer.CreateRootBranchFromEvent("main", new SharedReadModel.Node { Value = 8 });
+            valid = EventRef.FromCommit(writer.ReadCurrentCommit(branch.Id).Commit);
+            using WorkingCopy work = writer.OpenWorkingCopy(branch.Id);
+            reference = EventRef.FromCommit(work.CommitEvent(new SharedReadModel.Node { Value = 7 }));
         }
 
         int normalizations = 0;
@@ -167,6 +169,9 @@ public sealed class EventRefTests : IDisposable {
         using Repository reader = Repository.OpenReadOnlyExisting(_path, models);
         Assert.Throws<InvalidDataException>(() => reader.LoadEvent(reference));
         Assert.Equal(0, normalizations);
+        Assert.Equal((byte)8, reader.LoadEvent<SharedReadModel.Node>(valid).Value);
+        Assert.Throws<InvalidDataException>(() => reader.LoadEvent(reference));
+        Assert.Equal(1, normalizations);
         Assert.Equal(0, reader.GraphStore.AppendedFrames);
     }
 

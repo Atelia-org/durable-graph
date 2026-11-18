@@ -35,6 +35,7 @@ public sealed partial class Repository : IDisposable {
     internal bool ImmutableLeafReuseEnabled { get; set; }
     internal GraphReadStatistics? RestorationStatistics { get; set; }
     internal PreparedStateRestoration? PreparedStateEntry => _preparedState;
+    internal DecodedRevision.SchemaViewBindingEnvironment? LastEventEnvironment { get; private set; }
 
     /// <summary>Whether this repository was opened without writing or editing capability.</summary>
     public bool IsReadOnly => _resources.IsReadOnly;
@@ -455,13 +456,17 @@ public sealed partial class Repository : IDisposable {
     }
     private void EndOperation() {
         _busy = false;
-        if (_resources.IsFaulted) { _preparedState = null; }
+        if (_resources.IsFaulted) { ClearReadEnvironments(); }
+    }
+    private void ClearReadEnvironments() {
+        _preparedState = null;
+        LastEventEnvironment = null;
     }
     private void RequireWriter() { RequireAvailable(); _resources.RequireWritable(); }
     private void RequireCheckoutWriter(WorkingCopy work) { RequireWriter(); RequireCheckoutSource(work); }
     private void RequireAvailable() {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_resources.IsFaulted) { _preparedState = null; }
+        if (_resources.IsFaulted) { ClearReadEnvironments(); }
         _resources.RequireAvailable();
         if (_busy) { throw new InvalidOperationException("Repository operations cannot be reentered."); }
     }
@@ -471,7 +476,7 @@ public sealed partial class Repository : IDisposable {
         if (_disposed) { return; }
         if (_busy) { throw new InvalidOperationException("Cannot dispose a busy repository."); }
         _disposed = true;
-        _preparedState = null;
+        ClearReadEnvironments();
         _activeBranches.Clear();
         _resources.Dispose();
     }

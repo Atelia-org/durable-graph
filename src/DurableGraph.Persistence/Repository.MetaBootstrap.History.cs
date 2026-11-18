@@ -9,8 +9,14 @@ public sealed partial class Repository {
         _storageFacade.Store.ReadBusinessGraph(record.Address);
 
     private IDurableObject ReadGraphRootCore(HistoryGraphRecord record) {
-        var source = DecodedRevision.ReadStoredGraph(_storageFacade.Store, QualifyBusiness(record), _modelConfiguration);
-        return GraphReader.ReadRoot<IDurableObject>(source, record.RootId, new(source.SourceModels!));
+        var snapshot = QualifyBusiness(record);
+        bool isEvent = record.Kind == CommitKind.Event;
+        var reuse = isEvent && LastEventEnvironment is { } environment && environment.SchemaRoot == snapshot.SchemaRoot
+            ? environment : null;
+        var source = DecodedRevision.ReadStoredGraph(_storageFacade.Store, snapshot, _modelConfiguration, reuse);
+        var root = GraphReader.ReadRoot<IDurableObject>(source, record.RootId, new(source.SourceModels!));
+        if (isEvent) { LastEventEnvironment = source.BindingEnvironment; }
+        return root;
     }
 
     private Checkpoint ReadHistoryCheckpointCore(HistoryGraphRecord record) {
