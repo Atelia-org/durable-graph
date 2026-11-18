@@ -1,6 +1,6 @@
 # DB-102 容器 payload 准备与对象重整策略
 
-目录前驱复用已进入主线。下一轮按[主线重构计划](mainline-refactoring-plan.md)逐项交付，涵盖 Event 恢复、目录批量回放及 fork/load 验收、大业务字典、State 保存准备与标签解析。计划保留每项基线、原型提交、验收入口及实施状态。
+目录前驱复用及后续五项性能改进已进入主线。每项产品提交见[重构计划结项表](mainline-refactoring-plan.md)，真实应用冷开、历史分叉签出、双活堆图、大字典与保存负载的对照见[主线验收结果](mainline-results.md)。
 
 业务 State 保存沿用现行图级软预算。规划器对有准确前驱的业务 string 和支持精确计量的 List 先取得规范 Base 大小，选中 Base 后才编码正文。List 的固定宽度 byte、double 从 Count 计长，Int32 和对象 ID 按实际变长编码计长。自定义元素绑定使用自己的编码器。已有 DurableText 沿用分段估算。[表示策略](../0015-statestore-object-representation-policy/README.md) · [业务保存准备](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs)
 

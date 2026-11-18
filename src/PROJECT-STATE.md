@@ -22,7 +22,7 @@
 
 [DB-102 容器保存与恢复](../docs/design-branches/0102-container-payload-planning/README.md) 使用现行图级预算。已有业务 string 与受支持的 List 延迟编码 Base，内建标量 List 可直写变化元素的补丁，读取器在独占的同位置整表更新上复用数组。物化对象目录时可复用同一 Store 中已验证的准确前驱，只重放新后缀。
 
-下一轮性能改进从[主线重构计划](../docs/design-branches/0102-container-payload-planning/mainline-refactoring-plan.md)的首个待办项续接。实施顺序、fork 与独立读图的验收矩阵、原始研究提交和逐项裁决统一维护在该计划内。
+2026-11-19，DB-102 后续五项已验收。目录后缀在操作私有映射上批量应用，Event 沿用同仓最近的合格 Schema 绑定环境，每次恢复仍独立物化可变图。Dictionary 扫描内复用键编码缓冲，State 保存按布局复用头，ResolveTag 完整验证目标一次。[产品提交与结项](../docs/design-branches/0102-container-payload-planning/mainline-refactoring-plan.md) · [普通消费方及全量回归](../docs/design-branches/0102-container-payload-planning/mainline-results.md)
 
 2026-11-18：[DB-101 DurableText](../docs/design-branches/0101-durable-text/README.md) 使用 A-Adaptive Piece Table 与准确前驱的范围 Delta。Base 逐片择码，冷读按总单元数直接填入最终 string。图级策略先用片数和长度估算 Base，选中后才编码，安装使用实际记录字节。[分段格式与验收记录](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)
 

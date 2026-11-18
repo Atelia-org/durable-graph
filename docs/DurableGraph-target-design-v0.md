@@ -167,7 +167,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
   不比较 struct padding、不调用领域 Equals，也不为试探生成临时 payload。匹配确定后，
   只为变化的元素写 patch。已知 Delta 正文等于新值完整编码的内建槽可直接写入计划，其余槽调用各自的 PrepareDelta。两条路径共用持久状态的相等语义。
   这不要求普通对象在 PrepareDelta 前额外扫描一遍完整状态。具体分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md)。
-- 业务 State 按冻结内容准备候选。可精确计长的已有 List 与 string 将 Base 编码推迟到选中后，DurableText 使用分段估算，其余对象预编码。类型头校验在选择前完成，对象版本封套按其格式计量，安装按实际追加记录记账。[DB-102](design-branches/0102-container-payload-planning/README.md)
+- 业务 State 按冻结内容准备候选。可精确计长的已有 List 与 string 将 Base 正文编码推迟到选中后，DurableText 使用分段估算，其余对象预编码正文。同一次保存可按完整布局复用已校验的类型头，选中 Base 后按实际长度拼接；对象版本封套按其格式计量，安装按实际追加记录记账。[DB-102](design-branches/0102-container-payload-planning/README.md)
 
 设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture/README.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)、
