@@ -47,6 +47,8 @@ LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1`
 
 ## 证据与适用范围
 
+公开 API 修订来自 `a66b1ee6`。Release 根构建 0 警告、0 错误，全量测试 3338 项通过，0 跳过。独立 checkout 导出的普通包 `0.1.0-db103.ga66b1ee6.0a8577ed` 在隔离还原后，runtime DLL 旁的 XML 与包内文件一致。消费者用切片查询词命中跨片文本，用栈上结果缓冲取回位置。分别尝试返回 span 和正则匹配枚举器均报 CS9244。4096 个 UTF-16 单元的多片正文经一次访问后，连续 100 次 `ToString()` 在调用线程分配 0 B。包消费者还验证了 `aaa` 中的 `aa` 有两个匹配起点，唯一替换会拒绝写入。[消费方回归](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md) · [普通包入门](../../../src/DurableGraph/PACKAGE.md)
+
 缓存版产品和回归来自 `ea8f9236`。固定 Storage 六包对应的源码构建 Release 根 solution，0 警告、0 错误；全量测试 3335 项通过，0 跳过。新增回归检查跨独立访问的存储身份、保存压平、同内容多片重绑、准备过期捕获，以及两种编辑入口在旧快照存活时释放旧缓存。独立普通包消费者观察到同版嵌套 span 的地址相同，改写后新版地址和正文都发生变化，内层抛错后外层仍读到旧版。7 单元三片正文的首次和第二次顶层访问分别分配 40 B、0 B。[专项回归](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs) · [包来源与字面查找复测](indexof-cache-comparison.md)
 
 初版 `8fd71257` 采用逐次租还，固定 Storage 来源的 Release 根构建通过，全量测试 3330 项通过。四项专项回归覆盖空正文、非零偏移单片、未保存编辑的跨片 Ordinal 与正则命中、重入编辑和异常传播。[专项测试](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs)
