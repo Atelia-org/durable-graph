@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text;
 
 namespace Atelia.DurableGraph;
@@ -8,6 +7,7 @@ namespace Atelia.DurableGraph;
 public sealed class DurableText {
     private TextPieceView _view;
     private object? _sourceToken;
+    private string? _visitText;
 
     public DurableText(string text = "") {
         ArgumentNullException.ThrowIfNull(text);
@@ -28,7 +28,7 @@ public sealed class DurableText {
         long nextLength = (long)Length - length + replacement.Length;
         if (nextLength > int.MaxValue) { throw new ArgumentOutOfRangeException(nameof(replacement)); }
         if (length == 0 && replacement.Length == 0) { return; }
-        _view = _view.Apply([new(start, length, replacement)], (int)nextLength);
+        SetView(_view.Apply([new(start, length, replacement)], (int)nextLength));
     }
 
     /// <summary>Applies a batch whose coordinates all refer to the text on entry.</summary>
@@ -44,7 +44,7 @@ public sealed class DurableText {
         // Count/indexers belong to arbitrary caller code. A nested edit remains visible,
         // but must not make this outer batch apply old coordinates to a different view.
         if (!ReferenceEquals(entry, _view)) { throw new InvalidOperationException("The text changed while reading the edit batch."); }
-        if (normalized.Length != 0) { _view = entry.Apply(normalized, nextLength); }
+        if (normalized.Length != 0) { SetView(entry.Apply(normalized, nextLength)); }
     }
 
     public TextSnapshot Snapshot() => new(_view);
@@ -53,10 +53,11 @@ public sealed class DurableText {
     /// <param name="context">Caller state passed to the visitor.</param>
     /// <param name="visitor">Callback invoked once, including for empty text. Its span is valid for this call only.</param>
     /// <remarks>
-    /// Empty and single-piece text require no copy. Each visit to fragmented text copies the full
-    /// content into a rented buffer before invoking the callback. The visitor may edit this object
-    /// and visit it again on the same thread. The nested visit sees the edits while the outer span
-    /// stays stable. Visitor exceptions propagate and completed edits remain visible.
+    /// Empty and single-piece text require no copy. The first visit to a fragmented version copies
+    /// the full text into a string. This editor reuses that string for later visits to the same
+    /// version. The visitor may edit this object and visit it again on the same thread. The nested
+    /// visit sees the edits while the outer span stays stable. Visitor exceptions propagate and
+    /// completed edits remain visible.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="visitor"/> is null.</exception>
     public TResult VisitSpan<TContext, TResult>(TContext context, Func<ReadOnlySpan<char>, TContext, TResult> visitor) {
@@ -65,12 +66,8 @@ public sealed class DurableText {
         if (view.Length == 0) { return visitor(ReadOnlySpan<char>.Empty, context); }
         if (view.PieceCount == 1) { return visitor(view.Pieces[0].Memory.Span, context); }
 
-        char[] buffer = ArrayPool<char>.Shared.Rent(view.Length);
-        try {
-            Span<char> content = buffer.AsSpan(0, view.Length);
-            view.CopyTo(0, content);
-            return visitor(content, context);
-        } finally { ArrayPool<char>.Shared.Return(buffer); }
+        string content = _visitText ??= view.ToText();
+        return visitor(content.AsSpan(), context);
     }
 
     public void CopyTo(int start, Span<char> destination) => _view.CopyTo(start, destination);
@@ -103,9 +100,10 @@ public sealed class DurableText {
                 (long)view.PieceCount * view.PieceCount >= ((long)view.Length + 15) / 16;
             bool byBacking = view.LargestBacking > 4L * Math.Max(view.Length, 1) &&
                 (long)view.LargestBacking - view.Length >= 4096;
-            next = byPieces || byBacking
-                ? TextPieceView.FromString(view.ToText(), sourceOffset: 0, view.ContentToken)
-                : view.Rebind();
+            if (byPieces || byBacking) {
+                string? cached = ReferenceEquals(view.ContentToken, _view.ContentToken) ? _visitText : null;
+                next = TextPieceView.FromString(cached ?? view.ToText(), sourceOffset: 0, view.ContentToken);
+            } else { next = view.Rebind(); }
         }
         return new(this, view, next, captured.ContentToken);
     }
@@ -114,9 +112,15 @@ public sealed class DurableText {
     // capture invalidates the pending physical state even if the text later becomes equal.
     internal bool TryInstall(DurableTextAcceptance prepared) {
         if (!ReferenceEquals(prepared.Owner, this) || !ReferenceEquals(prepared.CapturedView, _view)) { return false; }
-        _view = prepared.NextView;
+        SetView(prepared.NextView);
         _sourceToken = prepared.SourceToken;
         return true;
+    }
+
+    private void SetView(TextPieceView next) {
+        // A save may rebind the pieces without changing their content.
+        if (next.PieceCount <= 1 || !ReferenceEquals(next.ContentToken, _view.ContentToken)) { _visitText = null; }
+        _view = next;
     }
 
     private static TextEdit[] Normalize(int length, IReadOnlyList<TextEdit> edits, out int nextLength) {
