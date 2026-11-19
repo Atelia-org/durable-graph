@@ -8,6 +8,7 @@ public sealed class DurableText {
     private TextPieceView _view;
     private object? _sourceToken;
     private string? _visitText;
+    private object? _snapshotOwnerToken;
 
     /// <summary>Creates an editor with the supplied text, or empty text when called without arguments.</summary>
     public DurableText(string text = "") {
@@ -36,25 +37,45 @@ public sealed class DurableText {
         SetView(_view.Apply([new(start, length, replacement)], (int)nextLength));
     }
 
-    /// <summary>Applies a batch whose UTF-16 coordinates all refer to the text on entry.</summary>
-    /// <param name="edits">Edits in any order. Validation errors for individual edits identify their original input index.</param>
+    /// <summary>Applies all edits if this editor still has the content version captured by <paramref name="expected"/>.</summary>
+    /// <param name="expected">A snapshot from this editor. Saving alone preserves its validity, including when a save reorganizes the pieces.</param>
+    /// <param name="edits">Ranges in the snapshot's UTF-16 coordinates, in any order. Do not mutate the list during this call.</param>
+    /// <param name="failure">On rejection, the reason and applicable zero-based input indices. On success, the default value.</param>
+    /// <returns>True on success, including an empty batch. On false, this call publishes no edits.</returns>
     /// <remarks>
-    /// The input is copied and validated before publication. Overlapping replacements and
-    /// insertions inside a replacement are rejected. At a common start, zero-length inserts
-    /// keep their input order and precede the single nonempty-range replacement.
-    /// Do not mutate the supplied list during this call.
+    /// Overlapping removals and insertions strictly inside a removal conflict. At a common start,
+    /// insertions keep input order and precede the one allowed removal. A zero-length edit with an
+    /// empty replacement is ignored after range validation. An edit followed by an undo makes an
+    /// older snapshot stale. Edits made by reentrant list accessors remain visible.
     /// </remarks>
-    public void ApplyEdits(IReadOnlyList<TextEdit> edits) {
-        TextPieceView entry = _view;
-        TextEdit[] normalized = Normalize(entry.Length, edits, out int nextLength);
-        // Count/indexers belong to arbitrary caller code. A nested edit remains visible,
-        // but must not make this outer batch apply old coordinates to a different view.
-        if (!ReferenceEquals(entry, _view)) { throw new InvalidOperationException("The text changed while reading the edit batch."); }
-        if (normalized.Length != 0) { SetView(entry.Apply(normalized, nextLength)); }
+    /// <exception cref="ArgumentNullException">The snapshot or the list is null.</exception>
+    public bool TryApplyEdits(TextSnapshot expected, IReadOnlyList<TextEdit> edits, out TextEditFailure failure) {
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(edits);
+        if (_snapshotOwnerToken is null || !ReferenceEquals(expected.OwnerToken, _snapshotOwnerToken) ||
+            !ReferenceEquals(expected.ContentToken, _view.ContentToken)) {
+            failure = new(TextEditFailureKind.StaleSnapshot);
+            return false;
+        }
+
+        var batch = new TextEdit[edits.Count];
+        for (int i = 0; i < batch.Length; i++) { batch[i] = edits[i]; }
+        // Count/indexers can call back into the editor. A save may have installed new
+        // provenance for the same content. Always apply to the latest physical view.
+        TextPieceView current = _view;
+        if (!ReferenceEquals(expected.ContentToken, current.ContentToken)) {
+            failure = new(TextEditFailureKind.StaleSnapshot);
+            return false;
+        }
+
+        failure = TextEditBatch.Prepare(batch, current.Length, out int count, out int nextLength);
+        if (failure.Kind != TextEditFailureKind.None) { return false; }
+        if (count != 0) { SetView(current.Apply(batch.AsSpan(0, count), nextLength)); }
+        return true;
     }
 
     /// <summary>Captures an immutable view of the current text. Later edits and saves leave it readable.</summary>
-    public TextSnapshot Snapshot() => new(_view);
+    public TextSnapshot Snapshot() => new(_view, _snapshotOwnerToken ??= new object());
 
     /// <summary>Synchronously visits the complete UTF-16 text as it was on entry and returns the visitor's result.</summary>
     /// <typeparam name="TContext">Caller state passed by value. It can be a ref struct, such as a span over caller-owned storage.</typeparam>
@@ -136,54 +157,5 @@ public sealed class DurableText {
         // A save may rebind the pieces without changing their content.
         if (next.PieceCount <= 1 || !ReferenceEquals(next.ContentToken, _view.ContentToken)) { _visitText = null; }
         _view = next;
-    }
-
-    private static TextEdit[] Normalize(int length, IReadOnlyList<TextEdit> edits, out int nextLength) {
-        ArgumentNullException.ThrowIfNull(edits);
-        long total = length;
-        var indexed = new (TextEdit Edit, int Order)[edits.Count];
-        for (int i = 0; i < indexed.Length; i++) {
-            TextEdit edit = edits[i];
-            if (edit.Replacement is null) {
-                throw new ArgumentNullException(nameof(edits), $"edits[{i}].Replacement must contain a string.");
-            }
-            if (edit.Start < 0 || edit.Start > length) {
-                throw new ArgumentOutOfRangeException(nameof(edits), edit.Start, $"edits[{i}].Start is outside the text.");
-            }
-            if (edit.Length < 0 || edit.Length > length - edit.Start) {
-                throw new ArgumentOutOfRangeException(nameof(edits), edit.Length, $"edits[{i}].Length is outside the available range.");
-            }
-            total += (long)edit.Replacement.Length - edit.Length;
-            indexed[i] = (edit, i);
-        }
-        if (total > int.MaxValue) { throw new ArgumentOutOfRangeException(nameof(edits), "The resulting text is too long."); }
-        Array.Sort(indexed, static (a, b) => {
-            int order = a.Edit.Start.CompareTo(b.Edit.Start);
-            return order != 0 ? order : a.Order.CompareTo(b.Order);
-        });
-        List<TextEdit> result = [];
-        int previousEnd = 0;
-        for (int i = 0; i < indexed.Length;) {
-            int start = indexed[i].Edit.Start;
-            if (start < previousEnd) { throw new ArgumentException($"edits[{indexed[i].Order}].Start falls inside another edit.", nameof(edits)); }
-            int removed = 0;
-            string? replacement = null;
-            List<string> inserted = [];
-            while (i < indexed.Length && indexed[i].Edit.Start == start) {
-                var (edit, order) = indexed[i++];
-                if (edit.Length == 0) { inserted.Add(edit.Replacement); }
-                else {
-                    if (replacement is not null) { throw new ArgumentException($"edits[{order}].Start already has a replacement.", nameof(edits)); }
-                    removed = edit.Length;
-                    replacement = edit.Replacement;
-                }
-            }
-            if (replacement is not null) { inserted.Add(replacement); }
-            string text = inserted.Count == 1 ? inserted[0] : string.Concat(inserted);
-            if (removed != 0 || text.Length != 0) { result.Add(new(start, removed, text)); }
-            previousEnd = start + removed;
-        }
-        nextLength = (int)total; // Valid, disjoint ranges can remove at most the original length.
-        return result.ToArray();
     }
 }

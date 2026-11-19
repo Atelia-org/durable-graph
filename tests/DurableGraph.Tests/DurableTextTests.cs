@@ -7,35 +7,28 @@ public sealed class DurableTextTests {
     public void OriginalCoordinatesAndSamePointInsertionsPublishOneResult() {
         DurableText text = new("abcdef");
         TextSnapshot before = text.Snapshot();
-        text.ApplyEdits([
+        Assert.True(text.TryApplyEdits(before, [
             new(4, 1, "Z"), new(1, 2, "Q"), new(1, 0, "x"),
-            new(3, 0, "!"), new(1, 0, "y"), new(6, 0, "end")
-        ]);
+            new(3, 0, "!"), new(1, 0, "y"), new(6, 0, "end"), new(2, 0, "")
+        ], out var failure));
+        Assert.Equal(TextEditFailureKind.None, failure.Kind);
+        Assert.Null(failure.EditIndex);
+        Assert.Null(failure.ConflictingEditIndex);
         Assert.Equal("axyQ!dZfend", text.ToString());
         Assert.Equal("abcdef", before.ToString());
-        object token = text.CaptureState().ContentToken;
-        text.ApplyEdits([]);
+        TextSnapshot current = text.Snapshot();
+        Assert.True(text.TryApplyEdits(current, [], out _));
+        Assert.True(text.TryApplyEdits(current, [new(2, 0, "")], out _));
         text.Replace(0, 0, "");
-        Assert.Same(token, text.CaptureState().ContentToken);
+        Assert.Same(current.ContentToken, text.CaptureState().ContentToken);
     }
 
     [Fact]
-    public void InvalidBatchesAndRangesDoNotChangeContentOrIdentity() {
+    public void ArgumentErrorsDoNotChangeContentOrDestination() {
         DurableText text = new("abcdef");
-        object token = text.CaptureState().ContentToken;
-        TextEdit[][] invalid = [
-            [new(-1, 0, "x")], [new(7, 0, "x")], [new(0, -1, "x")],
-            [new(5, int.MaxValue, "x")], [new(0, 0, null!)],
-            [new(1, 3, "x"), new(2, 0, "y")],
-            [new(1, 3, "x"), new(3, 2, "y")],
-            [new(1, 1, ""), new(1, 2, "y")]
-        ];
-        foreach (TextEdit[] batch in invalid) {
-            Assert.ThrowsAny<ArgumentException>(() => text.ApplyEdits(batch));
-            Assert.Equal("abcdef", text.ToString());
-            Assert.Same(token, text.CaptureState().ContentToken);
-        }
-        Assert.Throws<ArgumentNullException>(() => text.ApplyEdits(null!));
+        var snapshot = text.Snapshot();
+        Assert.Throws<ArgumentNullException>("expected", () => text.TryApplyEdits(null!, [], out _));
+        Assert.Throws<ArgumentNullException>("edits", () => text.TryApplyEdits(snapshot, null!, out _));
         Assert.Throws<ArgumentNullException>(() => new DurableText(null!));
         Assert.Throws<ArgumentNullException>(() => text.Replace(0, 1, null!));
         Assert.Throws<ArgumentOutOfRangeException>("length", () => text.Replace(0, -1, ""));
@@ -43,29 +36,87 @@ public sealed class DurableTextTests {
         Assert.Throws<ArgumentOutOfRangeException>("destination", () => text.CopyTo(5, new char[2]));
         StringBuilder destination = new("prefix");
         Assert.Throws<ArgumentOutOfRangeException>("length", () => text.AppendTo(destination, 0, 7));
-        var snapshot = text.Snapshot();
         Assert.Throws<ArgumentOutOfRangeException>("length", () => snapshot.AppendTo(destination, 0, 7));
         Assert.Throws<ArgumentOutOfRangeException>("destination", () => snapshot.CopyTo(5, new char[2]));
         Assert.Equal("prefix", destination.ToString());
         Assert.Equal("abcdef", text.ToString());
     }
 
-    [Fact]
-    public void BatchErrorsIdentifyTheOriginalInputIndexAndField() {
+    [Theory]
+    [InlineData(-1, 0, "", TextEditFailureKind.InvalidStart)]
+    [InlineData(7, 0, "", TextEditFailureKind.InvalidStart)]
+    [InlineData(1, -1, "", TextEditFailureKind.InvalidLength)]
+    [InlineData(5, int.MaxValue, "", TextEditFailureKind.InvalidLength)]
+    [InlineData(0, 0, null, TextEditFailureKind.MissingReplacement)]
+    public void InvalidBatchEntryReportsOriginalIndexAndPublishesNothing(
+        int start, int length, string? replacement, TextEditFailureKind kind) {
         DurableText text = new("abcdef");
+        TextSnapshot before = text.Snapshot();
         TextEdit append = new(6, 0, "!");
-        Assert.Contains("edits[1].Replacement", Assert.Throws<ArgumentNullException>("edits",
-            () => text.ApplyEdits([append, default])).Message);
-        Assert.Contains("edits[1].Start", Assert.Throws<ArgumentOutOfRangeException>("edits",
-            () => text.ApplyEdits([append, new(-1, 0, "")])).Message);
-        Assert.Contains("edits[1].Length", Assert.Throws<ArgumentOutOfRangeException>("edits",
-            () => text.ApplyEdits([append, new(3, 4, "")])).Message);
-        // The first input is second after sorting and overlaps the preceding removal.
-        Assert.Contains("edits[0].Start", Assert.Throws<ArgumentException>("edits",
-            () => text.ApplyEdits([new(1, 4, ""), new(0, 5, "")])).Message);
-        Assert.Contains("edits[2].Start", Assert.Throws<ArgumentException>("edits",
-            () => text.ApplyEdits([append, new(1, 1, "a"), new(1, 1, "b")])).Message);
+        Assert.False(text.TryApplyEdits(before, [append, new(start, length, replacement!)], out var failure));
+        Assert.Equal(kind, failure.Kind);
+        Assert.Equal(1, failure.EditIndex);
+        Assert.Null(failure.ConflictingEditIndex);
+        Assert.Same(before.View, text.Snapshot().View);
         Assert.Equal("abcdef", text.ToString());
+    }
+
+    [Theory]
+    [InlineData(3, 0)] // Insertion strictly inside [1,4).
+    [InlineData(3, 2)] // Partial overlap.
+    [InlineData(1, 2)] // Two replacements at the same start.
+    public void ConflictIdentifiesBothOriginalIndicesAndPublishesNothing(int start, int length) {
+        DurableText text = new("abcdef");
+        TextSnapshot before = text.Snapshot();
+        TextEdit[] batch = [new(start, length, "x"), new(6, 0, "!"), new(1, 3, "")];
+        Assert.False(text.TryApplyEdits(before, batch, out var failure));
+        Assert.Equal(TextEditFailureKind.ConflictingEdits, failure.Kind);
+        Assert.True((failure.EditIndex, failure.ConflictingEditIndex) is (0, 2) or (2, 0));
+        Assert.Same(before.View, text.Snapshot().View);
+    }
+
+    [Fact]
+    public void TotalLengthOverflowIsReportedBeforeConstructingTheResult() {
+        DurableText text = new();
+        TextSnapshot before = text.Snapshot();
+        TextEdit insert = new(0, 0, new string('x', 1024 * 1024));
+        Assert.False(text.TryApplyEdits(before, Enumerable.Repeat(insert, 2048).ToArray(), out var failure));
+        Assert.Equal(TextEditFailureKind.ResultTooLong, failure.Kind);
+        Assert.Same(before.View, text.Snapshot().View);
+    }
+
+    [Fact]
+    public void StaleCoordinatesAreRejectedEvenWhenTheMatchedTextStillAgrees() {
+        DurableText text = new("甲北门 乙北门");
+        TextSnapshot before = text.Snapshot();
+        int at = before.IndexOf("北门", 3);
+        text.Replace(0, 0, "丙北门 ");
+        Assert.Equal(at, text.Snapshot().IndexOf("北门", at));
+        Assert.False(text.TryApplyEdits(before, [new(at, 2, "南门")], out var failure));
+        Assert.Equal(TextEditFailureKind.StaleSnapshot, failure.Kind);
+        Assert.Null(failure.EditIndex);
+        Assert.Null(failure.ConflictingEditIndex);
+        Assert.Equal("丙北门 甲北门 乙北门", text.ToString());
+
+        text.Replace(0, 4, "");
+        Assert.Equal(before.ToString(), text.ToString());
+        // A stale request must not run user code, even after a change and reversal.
+        var unreadable = new ReentrantEdits(() => throw new InvalidOperationException(), true);
+        Assert.False(text.TryApplyEdits(before, unreadable, out failure));
+        Assert.Equal(TextEditFailureKind.StaleSnapshot, failure.Kind);
+    }
+
+    [Fact]
+    public void EditorsRestoredFromOneBaselineRejectEachOthersSnapshots() {
+        DurableTextState baseline = new DurableText("abc").CaptureState();
+        DurableText left = DurableText.Restore(baseline), right = DurableText.Restore(baseline);
+        TextSnapshot expected = left.Snapshot();
+        Assert.Same(expected.ContentToken, right.Snapshot().ContentToken);
+        Assert.False(right.TryApplyEdits(expected, [new(1, 1, "X")], out var failure));
+        Assert.Equal(TextEditFailureKind.StaleSnapshot, failure.Kind);
+        Assert.Equal("abc", right.ToString());
+        Assert.True(left.TryApplyEdits(expected, [new(1, 1, "X")], out _));
+        Assert.Equal("aXc", left.ToString());
     }
 
     [Theory]
@@ -73,21 +124,52 @@ public sealed class DurableTextTests {
     [InlineData(false)]
     public void ReentrantCountOrIndexerCannotOverwriteTheNestedEdit(bool mutateInCount) {
         DurableText text = new("abc");
-        IReadOnlyList<TextEdit> input = new ReentrantEdits(text, mutateInCount);
-        Assert.Throws<InvalidOperationException>(() => text.ApplyEdits(input));
+        IReadOnlyList<TextEdit> input = new ReentrantEdits(() => text.Replace(0, 0, "!"), mutateInCount);
+        Assert.False(text.TryApplyEdits(text.Snapshot(), input, out var failure));
+        Assert.Equal(TextEditFailureKind.StaleSnapshot, failure.Kind);
         Assert.Equal("!abc", text.ToString());
     }
 
-    private sealed class ReentrantEdits(DurableText text, bool mutateInCount) : IReadOnlyList<TextEdit> {
+    [Theory]
+    [InlineData(8, true, 1)]
+    [InlineData(256, false, 2)]
+    [InlineData(8, null, 1)]
+    public void SaveBeforePublicationUsesTheReboundSourceForRetainedRanges(int length, bool? saveInCount, int piecesAfterSave) {
+        DurableText text = new(new string('a', length));
+        text.Replace(text.Length, 0, "bc");
+        TextSnapshot before = text.Snapshot();
+        DurableTextState saved = text.CaptureState();
+        void Save() {
+            Assert.True(text.TryInstall(text.PrepareAcceptance(saved)));
+            Assert.Equal(piecesAfterSave, text.Snapshot().View.PieceCount);
+            Assert.NotSame(before.View, text.Snapshot().View);
+        }
+        IReadOnlyList<TextEdit> input;
+        if (saveInCount.HasValue) { input = new ReentrantEdits(Save, saveInCount.Value); }
+        else {
+            Save();
+            input = [new(1, 1, "X")];
+        }
+        Assert.True(text.TryApplyEdits(before, input, out _));
+        Assert.Equal("aX" + new string('a', length - 2) + "bc", text.ToString());
+        var state = text.CaptureState();
+        AssertPlan(state, saved);
+        Assert.Collection(state.BuildSourcePlan(),
+            first => Assert.Equal(TextSourcePiece.Copy(0, 1), first),
+            literal => Assert.Equal("X", literal.Literal.ToString()),
+            last => Assert.Equal(TextSourcePiece.Copy(2, before.Length - 2), last));
+    }
+
+    private sealed class ReentrantEdits(Action action, bool actInCount) : IReadOnlyList<TextEdit> {
         public int Count {
             get {
-                if (mutateInCount) { text.Replace(0, 0, "!"); }
+                if (actInCount) { action(); }
                 return 1;
             }
         }
         public TextEdit this[int index] {
             get {
-                if (!mutateInCount) { text.Replace(0, 0, "!"); }
+                if (!actInCount) { action(); }
                 return new(1, 1, "X");
             }
         }
@@ -325,7 +407,8 @@ public sealed class DurableTextTests {
             foreach (TextEdit edit in edits.OrderByDescending(edit => edit.Start)) {
                 expected = expected[..edit.Start] + edit.Replacement + expected[(edit.Start + edit.Length)..];
             }
-            text.ApplyEdits(edits);
+            if (step % 2 == 0) { Array.Reverse(edits); }
+            Assert.True(text.TryApplyEdits(text.Snapshot(), edits, out _));
             Assert.Equal(expected, text.ToString());
             AssertPlan(text.CaptureState(), baseline);
             if (step % 17 == 0) { held.Add((text.Snapshot(), expected)); }

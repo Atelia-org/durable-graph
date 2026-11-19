@@ -5,8 +5,13 @@ namespace Atelia.DurableGraph;
 /// <summary>Immutable text content, independent of a graph builder or backing Store lifetime.</summary>
 /// <remarks>A snapshot can retain backing strings larger than its visible content.</remarks>
 public sealed class TextSnapshot {
-    internal TextSnapshot(TextPieceView view) => View = view;
+    internal TextSnapshot(TextPieceView view, object? ownerToken = null) {
+        View = view;
+        OwnerToken = ownerToken;
+    }
     internal TextPieceView View { get; }
+    // An opaque identity lets a snapshot outlive the editor without retaining it or its newer versions.
+    internal object? OwnerToken { get; }
     internal object ContentToken => View.ContentToken;
     internal static TextSnapshot FromString(string text) => new(TextPieceView.FromString(text));
 

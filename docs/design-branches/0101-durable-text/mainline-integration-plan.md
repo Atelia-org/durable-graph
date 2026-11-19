@@ -4,7 +4,7 @@
 
 ## 编辑和读取
 
-`Replace(start, length, replacement)` 适用于已知位置的 patch。`ApplyEdits` 的所有范围都属于调用前的文本，按 UTF-16 单元计数。输入可乱序，同点插入保持输入顺序并排在该点的非零替换之前。无效范围或重叠替换会使整批失败。孤立代理、NUL、CR/LF 都是可保存内容。
+`Replace(start, length, replacement)` 使用当前正文坐标。`TryApplyEdits(expected, edits, out failure)` 使用本编辑器快照上的 UTF-16 范围，整批成功才发布。输入可乱序，同点插入保持输入顺序并排在该点的非零替换之前。孤立代理、NUL、CR/LF 都是可保存内容。[条件编辑合同](../0103-durable-text-search/README.md#按快照提交范围编辑)
 
 ```csharp
 var before = entry.Body.Snapshot();
@@ -18,7 +18,7 @@ entry.Body.AppendTo(contextBuilder);
 
 这段唯一替换配方按起点计数。例如 `aaa` 中的 `aa` 在 0 和 1 都匹配，所以拒绝改写。
 
-调用方在从查找至应用的期间串行持有该编辑对象。若中途等待 LLM 或允许其他编辑，应用需重新核对当前文本。稳定快照可延后追加到调用方的 StringBuilder；短窗口用 CopyTo。同一份快照上的完整正则搜索可以一次 ToString 后反复使用标准 .NET Regex，匹配区间属于该快照。大量长期保留的大快照可能同时持有多个字符 backing。
+这段配方在一次串行工具调用中完成查找和替换。若基于旧搜索结果或预览延后提交坐标，应把当时捕获的快照交给 `TryApplyEdits`。稳定快照可延后追加到调用方的 StringBuilder；短窗口用 CopyTo。同一份快照上的完整正则搜索可以一次 ToString 后反复使用标准 .NET Regex，匹配区间属于该快照。大量长期保留的大快照可能同时持有多个字符 backing。
 
 ## 保存与恢复
 

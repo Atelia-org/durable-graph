@@ -78,21 +78,20 @@ internal sealed record SearchCase(int Length, string Shape, string Name, string 
         List<int> lengths = [];
         if (Shape == "slice") {
             text = new DurableText("!" + source + "?");
-            text.ApplyEdits([new(0, 1, ""), new(Length + 1, 1, "")]);
+            text.Replace(Length + 1, 1, "");
+            text.Replace(0, 1, "");
             lengths.Add(Length);
         } else {
             text = new DurableText(source);
-            var replacements = new TextEdit[edits];
             int cursor = 0;
             for (int i = 0; i < edits; i++) {
                 int offset = (i + 1) * Length / (edits + 1);
-                replacements[i] = new(offset, 1, source[offset].ToString());
+                text.Replace(offset, 1, source[offset].ToString());
                 lengths.Add(offset - cursor);
                 lengths.Add(1);
                 cursor = offset + 1;
             }
             lengths.Add(Length - cursor);
-            if (edits > 0) { text.ApplyEdits(replacements); }
         }
         TextSnapshot snapshot = text.Snapshot();
         // Shape inspection is outside all timed regions. Both measured calls use public methods.

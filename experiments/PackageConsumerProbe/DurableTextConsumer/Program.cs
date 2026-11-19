@@ -59,8 +59,17 @@ internal static class Program {
         CheckAmbiguousReplacement(text, "alpha");
         CheckAmbiguousReplacement(new DurableText("aaa"), "aa");
         ReplaceUnique(text, "beta", "BETA");
+        var edited = text.Snapshot();
         repository.SaveGraph(graph);
-        text.ApplyEdits([new TextEdit(0, 0, "["), new TextEdit(text.Length, 0, "]")]);
+        Need(!text.TryApplyEdits(held, [new(0, 0, "!")], out var failure) &&
+            failure.Kind == TextEditFailureKind.StaleSnapshot && text.ToString() == edited.ToString(),
+            "A batch planned before a content edit is rejected in full.");
+        Need(!text.TryApplyEdits(edited, [new(edited.Length, 0, "!"), new(8, 1, "a"), new(7, 4, "b")], out failure) &&
+            failure.Kind == TextEditFailureKind.ConflictingEdits &&
+            (failure.EditIndex, failure.ConflictingEditIndex) is (1, 2) or (2, 1) && text.ToString() == edited.ToString(),
+            "A conflict identifies both original indices and leaves the independent append unapplied.");
+        Need(text.TryApplyEdits(edited, [new(0, 0, "["), new(edited.Length, 0, "]")], out failure) &&
+            failure.Kind == TextEditFailureKind.None, "A batch planned before a save still applies to its original editor.");
         var latest = repository.SaveGraph(graph);
         Need(held.ToString() == Initial, "Old snapshot survives edits and accepted saves including UTF16/NUL/CRLF.");
         Check(entry, Saved);
@@ -84,6 +93,10 @@ internal static class Program {
         Check(entry, Saved); Check((Entry)independent.Root, Saved);
         Need(!ReferenceEquals(entry.Body, ((Entry)independent.Root).Body), "Separate cold OpenGraph calls isolate mutable text identity.");
         var frozen = entry.Body.Snapshot();
+        var otherBody = ((Entry)independent.Root).Body;
+        Need(!otherBody.TryApplyEdits(frozen, [new(0, 1, "!")], out var failure) &&
+            failure.Kind == TextEditFailureKind.StaleSnapshot && otherBody.ToString() == Saved,
+            "A same-content snapshot from another open graph cannot authorize edits to this editor.");
         ReplaceUnique(entry.Body, "BETA", "gamma");
         entry.Body.Replace(entry.Body.Length, 0, "\r\ntail");
         world.Latest = repository.SaveGraph(graph);
@@ -114,7 +127,7 @@ internal static class Program {
         var snapshot = text.Snapshot();
         int first = snapshot.IndexOf(needle);
         if (first < 0 || snapshot.IndexOf(needle, first + 1) >= 0) throw new InvalidOperationException("Expected exactly one matching start position.");
-        text.ApplyEdits([new TextEdit(first, needle.Length, replacement)]);
+        text.Replace(first, needle.Length, replacement);
     }
     private static void CheckAmbiguousReplacement(DurableText text, string needle) {
         string before = text.ToString();

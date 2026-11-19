@@ -73,7 +73,7 @@ public sealed class DurableTextProductProbeTests {
                         for (int i = 0; i < edits.Length; i++) {
                             edits[i] = new(i * chunkLength, chunkLength, new string(expected.AsSpan(i * chunkLength, chunkLength)));
                         }
-                        text.ApplyEdits(edits);
+                        Assert.True(text.TryApplyEdits(text.Snapshot(), edits, out _));
                     }
                     DurableTextState frozen = text.CaptureState();
                     int pieces = frozen.Content.View.PieceCount;

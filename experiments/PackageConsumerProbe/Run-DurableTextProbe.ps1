@@ -155,7 +155,7 @@ try {
     $xmlHash = Entry-Hash $runtimePackage $xmlEntry
     if ((Get-FileHash -LiteralPath $xmlPath).Hash -cne $xmlHash) { throw 'Restored runtime XML differs from the nupkg.' }
     [xml]$documentation = Get-Content -Raw -LiteralPath $xmlPath
-    foreach ($method in @('DurableText.VisitSpan', 'DurableText.ApplyEdits', 'DurableText.ToString', 'TextSnapshot.CopyTo')) {
+    foreach ($method in @('DurableText.VisitSpan', 'DurableText.TryApplyEdits', 'DurableText.ToString', 'TextSnapshot.CopyTo')) {
         $prefix = 'M:Atelia.DurableGraph.' + $method
         if (!$documentation.SelectSingleNode("/doc/members/member[starts-with(@name,'$prefix')]/summary")) {
             throw "Runtime package documentation is missing $method."

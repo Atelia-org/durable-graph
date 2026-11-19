@@ -26,9 +26,14 @@ operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Pe
 ## Editing and reading DurableText
 
 `DurableText` is a mutable graph object. Use it serially. Positions and lengths count UTF-16 code units.
-`Replace` uses current coordinates. In `ApplyEdits`, every edit uses coordinates from the start of the
-batch. Insertions at the same position keep their input order and precede a replacement at that position.
-Use `Snapshot()` to keep reading a version across later edits and saves.
+`Replace` uses current coordinates. Use `Snapshot()` to keep reading a version across later edits
+and saves. To submit edits found on that snapshot, pass it to `TryApplyEdits(expected, edits, out failure)`.
+Every range uses the snapshot's coordinates. The editor accepts the whole batch only while the snapshot
+belongs to this editor and its content version is current. Saving alone keeps a snapshot eligible.
+Insertions at the same position keep their input order and precede a replacement at that position.
+On `false`, the batch applied zero edits. For `StaleSnapshot`, locate the targets again. For
+`ConflictingEdits`, `failure.EditIndex` and `failure.ConflictingEditIndex` identify the two
+entries in the original input. Invalid individual edits carry their original index in `failure.EditIndex`.
 
 ```csharp
 var text = new Atelia.DurableGraph.DurableText("north gate");

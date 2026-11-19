@@ -57,7 +57,7 @@ public sealed class DurableTextVisitSpanTests {
     public void SinglePieceBorrowsOnlyTheVisibleSliceOfItsBackingString() {
         const string backing = "<<甲\0\uD800乙>>";
         DurableText text = new(backing);
-        text.ApplyEdits([new(0, 2, ""), new(backing.Length - 2, 2, "")]);
+        Assert.True(text.TryApplyEdits(text.Snapshot(), [new(0, 2, ""), new(backing.Length - 2, 2, "")], out _));
 
         string result = text.VisitSpan(backing, static (span, source) => {
             Assert.True(source.AsSpan().Overlaps(span, out int offset));
@@ -171,7 +171,7 @@ public sealed class DurableTextVisitSpanTests {
         TextSnapshot snapshot = text.Snapshot();
         WeakReference<string> old = TrackCachedString(text);
 
-        if (useBatch) { text.ApplyEdits([new(0, text.Length, "已抵达")]); }
+        if (useBatch) { Assert.True(text.TryApplyEdits(snapshot, [new(0, text.Length, "已抵达")], out _)); }
         else { text.Replace(0, text.Length, "已抵达"); }
         Assert.Equal(1, text.Snapshot().View.PieceCount);
         GC.Collect();
@@ -192,4 +192,20 @@ public sealed class DurableTextVisitSpanTests {
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference<string> TrackCachedString(DurableText text) =>
         new(Assert.Single(PrepareCompactionDuringVisit(text).NextView.Pieces).Text);
+
+    [Fact]
+    public void HoldingAPublicSnapshotKeepsTheTextReadableAfterItsEditorIsCollected() {
+        var (snapshot, editor) = CaptureSnapshot();
+        GC.Collect();
+        Assert.False(editor.TryGetTarget(out _));
+        Assert.Equal("north gate", snapshot.ToString());
+        GC.KeepAlive(snapshot);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static (TextSnapshot, WeakReference<DurableText>) CaptureSnapshot() {
+            DurableText text = new("north");
+            text.Replace(text.Length, 0, " gate");
+            return (text.Snapshot(), new(text));
+        }
+    }
 }

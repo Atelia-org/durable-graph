@@ -4,7 +4,7 @@
 
 `Run-DurableTextProbe.ps1 -PackageSource <完整feed> -Version <G> -ExpectedSourceCommit <40位SHA> -WorkDirectory <仓外新目录>` 执行三条独立进程：
 
-- seed 检查未保存的跨片文本、代理对、孤立代理、中文、NUL 和 CRLF，使用切片查询词调用 `VisitSpan`。还检查引用别名、空值、两次小改保存、快照稳定性、AppendTo 和正则。唯一替换按起点计数，覆盖分离与重叠的两种歧义。
+- seed 检查未保存的跨片文本、代理对、孤立代理、中文、NUL 和 CRLF，使用切片查询词调用 `VisitSpan`。保存前取出的同版快照可以提交 `TryApplyEdits`，内容过期或范围冲突时整批零写入，冲突回执含两个原输入下标。还检查引用别名、空值、两次小改保存、快照稳定性、AppendTo 和正则。唯一替换按起点计数，覆盖分离与重叠的两种歧义。
 - resume：关闭后冷开、别名恢复、独立 OpenGraph 隔离、继续编辑保存，并回读原始图。
 - verify：只读历史和最新图、UTF16/CRLF/NUL、CopyTo、资源释放后快照有效；数据库文件字节保持不变。
 

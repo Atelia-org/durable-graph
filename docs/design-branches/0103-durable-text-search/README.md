@@ -33,6 +33,14 @@ string? first = text.VisitSpan(regex, static (span, query) => {
 - 每个编辑器只为已访问的当前多片版本保留一个额外字符串，正文载荷为每个 UTF-16 单元两字节。`ToString()` 优先使用现有缓存，单独调用它时不会建立访问缓存。成功编辑时释放旧缓存引用，按需物化新版。保存仅重绑同版多片时可继续复用；保存需要压成单片时可直接采用已有的同版字符串。快照及持久化差分仍使用各自捕获的片表。
 - 按编辑器的串行使用约定，visitor 可在同线程编辑并嵌套访问。内层读取新版，外层的 span 保活其进入时的正文。多层回调同时读不同版本时，各版文字会同时存活。visitor 抛出的异常原样传播，已完成的编辑保留。带出回调的索引只对受搜的那版正文有意义。[编辑与视图切换](../../../src/DurableGraph/DurableText.cs) · [片表与复制](../../../src/DurableGraph/Runtime/Text/TextPieceView.cs)
 
+## 按快照提交范围编辑
+
+`bool TryApplyEdits(TextSnapshot expected, IReadOnlyList<TextEdit> edits, out TextEditFailure failure)` 只接受该编辑器同一内容版本上定位的 UTF-16 范围。快照可跨保存重绑和压平使用。另一编辑器的快照或在实际编辑之前取得的快照返回 `StaleSnapshot`，即使两个编辑器从同一状态恢复，或正文改动后又改回原样。验收以重复词旧坐标拒写、同版保存后准确引用新基线、失败时零发布以及有序范围一次构造片表为准。
+
+输入可乱序。非空删除范围可以首尾相接，相交或在删除范围内部插入则返回 `ConflictingEdits` 和一对冲突的原输入下标。同一点的插入保持输入顺序并先于该点的非空替换。范围有效且零删零增的项忽略，整批为空也可成功。单项无效时报告字段对应的原因及原下标，结果长度超过 `int.MaxValue` 时报告 `ResultTooLong`。传入空引用参数抛出 `ArgumentNullException`。返回 false 时本次调用写入零笔，读取外部列表期间发生的重入编辑仍保留。
+
+已按正文顺序给出且可直接执行的范围，只复制和校验输入，再顺序构造一次片表。其他顺序才按原下标保序整理。批内冲突由调用方决定如何处理。[范围整理](../../../src/DurableGraph/Runtime/Text/TextEditBatch.cs) · [快照与发布](../../../src/DurableGraph/DurableText.cs)
+
 ## 搜索层的用户故事
 
 LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1` 的条目、字段、行号和邻近原文。memo 先按当前世界和角色选出条目，再分别查询 `FullText`、`Summary`、`Gist`。当回合改成南门可以立即查到南门，切换旧世界后则由 memo 传入旧正文。条目身份、跨条目预算及最终展示归消费方。[原始下游提案](memo-proposal.md)

@@ -79,8 +79,8 @@ internal sealed class TextPieceView {
         return new(rebound, Length, LargestBacking, ContentToken);
     }
 
-    internal TextPieceView Apply(IReadOnlyList<TextEdit> edits, int nextLength) {
-        long capacity = Math.Min(nextLength, (long)PieceCount + 2L * edits.Count);
+    internal TextPieceView Apply(ReadOnlySpan<TextEdit> edits, int nextLength) {
+        long capacity = Math.Min(nextLength, (long)PieceCount + 2L * edits.Length);
         if (capacity > Array.MaxLength) { throw new ArgumentOutOfRangeException(nameof(edits)); }
         List<TextPiece> result = new((int)capacity);
         int pieceIndex = 0, within = 0, position = 0, largest = 0;
