@@ -2,7 +2,7 @@
 
 [eng/StorageDependency.props](../eng/StorageDependency.props) 是存储版本、准确来源 commit 和仓地址的唯一位置。
 RBF3 栈使用同版本的六包：`Atelia.Primitives`、`Atelia.Data`、`Atelia.Rbf`、`Atelia.Binary`、
-`Atelia.FrameStore`、`Atelia.HeadStore`。它们的版本 S 与 DurableGraph 四包的版本 G 独立。
+`Atelia.FrameStore`、`Atelia.HeadStore`。它们使用版本 S。四个 DurableGraph 包及同仓的 `Atelia.Text` 使用独立版本 G。
 活动依赖中不再包含 RbfSegmentStore 或 EventJournal；不支持旧存储数据的读取或迁移。
 
 当前 pin 为 `0.1.3-dev.20261118.g3f780ad`，来源为 `3f780ad95239d7556f917e1adca6839cda144c92`。
@@ -32,7 +32,7 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 
 `StorageSourceRoot` 必须是绝对路径，包含 Binary/FrameStore/HeadStore 三个项目，且 Git HEAD 等于 pin 的完整来源。
 同一 HEAD 上的源码编辑可用于联调；它们不构成可发布包的来源凭据。无效路径、缺项目或不符 revision 都清晰失败，不回退到包。
-DurableGraph 项目在 `UseStorageSources=true` 下可 build/test，打包要求切到 package mode。[独立文本库](text/README.md) 只引用 .NET，可单独 build 或 pack。
+DurableGraph 和文本项目在 `UseStorageSources=true` 下可 build/test，打包使用 package mode。[独立文本库](text/README.md) 引用 Serialization，通过它取得 Binary。
 
 切换到 package mode 必须重新 restore；不要以 source mode 的旧 assets 或 DLL 当作包消费证据。
 Generator 仍是 `netstandard2.0` Roslyn 组件，它生成对 Bare reader/writer 的直接调用；Runtime 通过 Serialization 取得 Binary 依赖。
@@ -69,8 +69,8 @@ $selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
 ## 对外交付一个候选目录
 
 应用接入优先使用 [Prepare-DurableGraphCandidate.ps1](../eng/Prepare-DurableGraphCandidate.ps1) 导出的目录。
-它复用下文十包准备流程，附上当前示例还需要的原始 `K4os.Compression.LZ4 1.3.8`，
-将包、完整消费配置、固定版本的 QuickStart 和运行步骤放在一起；消费者不需要寻找生产者的临时配置。
+它在下文的四个 DG 包和六个存储包之外打包可选的 `Atelia.Text`，并附上原始 `K4os.Compression.LZ4 1.3.8`。
+交付目录含完整消费配置、固定版本的 QuickStart 和运行步骤。
 以下命令中的 `$storageFeed` 是上一节核验过的准确六包 feed：
 
 ```powershell
@@ -90,7 +90,8 @@ QuickStart 的项目、源码、配置和最短命令来自[根 README](../READM
 `packages.sha256` 用于核对本批包复制完整性，不负责依赖选择，也不替代来源或签名信任验证。
 
 本地包闭包的范围是：已安装 **.NET SDK 10.0.201** 后，附带的 `net10.0`、framework-dependent、
-没有额外 RID 的 QuickStart 可从交付本地源取得全部 nupkg。当前为四个 G 包、六个 S 包和一个 K4os 包。
+没有额外 RID 的 QuickStart 可从交付本地源取得全部 nupkg。它使用四个 DG 包、六个 S 包和一个 K4os 包。
+需要可编辑正文的项目可从同一源引用第十二包 `Atelia.Text`，使用与 DG 相同的 G 版本。
 这不承诺 SDK 安装、任意应用依赖、额外 RID/self-contained publish 或根 solution 的离线构建；
 也不声称已对所有网络行为执行禁网验收。将来依赖变化时按实际示例重新验证，不能把十一包当通用闭包公式。
 
@@ -180,7 +181,7 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 先准备一次准确 feed，再并行运行各有独立 cache、obj/bin 和 history 的只读消费者；并行 producer 使用独立 checkout。
 
 [PackageProbeSupport.ps1](../experiments/PackageConsumerProbe/PackageProbeSupport.ps1) 可验证并复制六个存储包，
-再生成四个 DG 包，构成完整的十包 feed。当前候选显式传入源 feed：
+再生成四个 DG 包，构成十包 feed。文本验收通过 `-IncludeText` 同时生成 `Atelia.Text`。以下命令显式传入源 feed：
 
 ```powershell
 $ErrorActionPreference = 'Stop'

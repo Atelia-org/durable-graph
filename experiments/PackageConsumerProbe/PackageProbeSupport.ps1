@@ -39,7 +39,8 @@ function Prepare-DurableGraphProbeFeed {
         [Parameter(Mandatory)][string] $RepositoryRoot,
         [Parameter(Mandatory)][string] $OutputDirectory,
         [Parameter(Mandatory)][string] $Version,
-        [string] $StoragePackageSource = $env:DG_STORAGE_PACKAGE_SOURCE
+        [string] $StoragePackageSource = $env:DG_STORAGE_PACKAGE_SOURCE,
+        [switch] $IncludeText
     )
     $OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
     if ((Test-Path -LiteralPath $OutputDirectory) -and @(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne 0) {
@@ -64,17 +65,20 @@ function Prepare-DurableGraphProbeFeed {
     $feedXml = [Security.SecurityElement]::Escape([IO.Path]::GetFullPath($OutputDirectory))
     "<configuration><packageSources><clear/><add key='probe' value='$feedXml'/><add key='nuget.org' value='https://api.nuget.org/v3/index.json'/></packageSources><packageSourceMapping><clear/><packageSource key='probe'><package pattern='Atelia.*'/></packageSource><packageSource key='nuget.org'><package pattern='*'/></packageSource></packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" |
         Set-Content -LiteralPath $packConfig -Encoding utf8NoBOM
-    foreach ($project in @(
+    $projects = @(
         'src/DurableGraph.Serialization/DurableGraph.Serialization.csproj',
         'src/DurableGraph/DurableGraph.csproj',
         'src/DurableGraph.Storage/DurableGraph.Storage.csproj',
         'src/DurableGraph.Persistence/DurableGraph.Persistence.csproj'
-    )) {
+    )
+    if ($IncludeText) { $projects += 'src/Text/Text.csproj' }
+    foreach ($project in $projects) {
         # The six storage projects are never repacked with this downstream G.
         & dotnet pack (Join-Path $RepositoryRoot $project) --configuration Release --output $OutputDirectory "-p:PackageVersion=$Version" `
             "-p:StoragePackageVersion=$($storage.Version)" "-p:RestoreConfigFile=$packConfig" -p:UseStorageSources=false -m:1 -nr:false
         if ($LASTEXITCODE -ne 0) { throw "Packing $project failed with exit code $LASTEXITCODE." }
     }
-    if (@(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne 10) { throw 'Expected six selected storage packages and four DurableGraph packages at G.' }
+    $expectedPackages = $storage.Packages.Count + $projects.Count
+    if (@(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne $expectedPackages) { throw "Expected $expectedPackages selected packages." }
     Write-Host "Probe feed: storage=$($storage.Version) at $($storage.Revision); DurableGraph G=$Version; $OutputDirectory"
 }

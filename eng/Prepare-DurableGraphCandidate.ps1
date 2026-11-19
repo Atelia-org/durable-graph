@@ -121,22 +121,22 @@ $packageCache = Join-Path $workRoot 'packages'
 $previousPackageCache = $env:NUGET_PACKAGES
 try {
     $env:NUGET_PACKAGES = $packageCache
-    Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $packFeed -Version $Version -StoragePackageSource $StoragePackageSource
+    Prepare-DurableGraphProbeFeed -RepositoryRoot $repositoryRoot -OutputDirectory $packFeed -Version $Version -StoragePackageSource $StoragePackageSource -IncludeText
     $sdk = (& dotnet --version | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Cannot identify the packing SDK.' }
 
     $packages = @(Get-ChildItem -LiteralPath $packFeed -Filter '*.nupkg' -File | ForEach-Object { Read-Package $_.FullName })
-    if ($packages.Count -ne 10 -or @($packages.Id | Sort-Object -Unique).Count -ne 10) { throw 'Expected ten distinct Atelia package identities.' }
+    $productIds = @('Atelia.DurableGraph', 'Atelia.DurableGraph.Serialization', 'Atelia.DurableGraph.Storage', 'Atelia.DurableGraph.Persistence', 'Atelia.Text')
+    if ($packages.Count -ne 11 -or @($packages.Id | Sort-Object -Unique).Count -ne 11) { throw 'Expected eleven distinct Atelia package identities.' }
+    foreach ($id in $productIds) { if ($id -cnotin $packages.Id) { throw "Missing candidate package: $id" } }
     foreach ($package in $packages) {
-        if ($package.Id -clike 'Atelia.DurableGraph*') {
+        if ($package.Id -cin $productIds) {
             if ($package.Version -cne $Version -or $package.Revision -ine $sourceRevision) { throw "Unexpected G identity or source: $($package.Id)" }
         } elseif ($package.Id -clike 'Atelia.*') {
             if ($package.Version -cne $storageVersion -or $package.Revision -ine $storageRevision) { throw "Unexpected S identity or source: $($package.Id)" }
         } else { throw "Unexpected producer package: $($package.Id)" }
     }
-    if (@($packages | Where-Object { $_.Id -clike 'Atelia.DurableGraph*' }).Count -ne 4) { throw 'Expected four G and six S packages.' }
-
-    # This is the present net10.0/no-RID QuickStart closure, not a dependency solver.
+    # This feed serves the net10.0/no-RID QuickStart and the optional text editor.
     # Take K4os's exact version from the selected Binary package rather than a new pin.
     $binary = @($packages | Where-Object { $_.Id -ceq 'Atelia.Binary' })
     if ($binary.Count -ne 1) { throw 'Expected the selected Atelia.Binary package.' }
@@ -206,13 +206,13 @@ try {
     $deliveryReadme = @(
         '# DurableGraph candidate QuickStart',
         '',
-        "DurableGraph G: $Version (four packages). Storage S: $storageVersion (six packages).",
+        "The four DurableGraph packages and Atelia.Text use G=$Version. The six storage packages use S=$storageVersion.",
         "DurableGraph source HEAD / nuspec commit: $sourceRevision; $sourceDescription.",
         "Storage source / verified nuspec commit: $storageRevision. Storage provenance is checked by eng/Prepare-Storage.ps1 before packing.",
         "Original third-party package: $thirdPartyId $thirdPartyVersion from nuget.org. Its signature entry and license metadata remain in the original nupkg; this export does not perform signature trust-chain validation.",
         '',
         "Prepared using SDK $sdk. The supplied example targets net10.0, framework-dependent, with no explicit RID. It requires an already installed compatible SDK/runtime; the current acceptance baseline is SDK 10.0.201 (Roslyn 5.3.0). Other SDK feature bands have not been qualified.",
-        'The local feed covers this supplied example only. It does not include SDK installation, arbitrary RID/self-contained publishing, additional application dependencies, or the DurableGraph repository test/build dependencies. A local package source does not suppress every possible SDK/certificate/audit network operation.',
+        'The feed includes the eleven packages restored by QuickStart and an optional Atelia.Text package. Projects with TextEditor fields should reference Atelia.Text at G and call TextEditorPersistence.Register(models) before opening the repository. Other dependencies, target RIDs and self-contained publishing require their own package sources.',
         '',
         'The QuickStart saves State directly; no Event type or preceding Event is required. Creation saves S0, and the two independent runs save S1 then S2 (Hp=99 then Hp=98). Move this whole directory together and run the following source-README commands in this directory:',
         '',

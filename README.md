@@ -27,8 +27,8 @@ DurableGraph 捕获独立的版本化状态 DTO；State 比较上次保存基线
 可整体复制到自己的目录。生产者的准备命令见文末[从源码打包](#从源码打包)。
 使用已验证的 **.NET SDK 10.0.201**；当前候选不假定已在 nuget.org 公开。
 
-交付目录附带这个 `net10.0` 示例所需的四个 DG 包 G、六个 Storage 包 S 和原始第三方依赖；
-目前共十一包。已有适用 SDK/运行时后，示例可仅从本地源还原。
+候选源提供十二个包。这个 `net10.0` 示例从本地还原四个 DG 包 G、六个 Storage 包 S 和一个原始第三方包，共十一包。
+领域字段使用 `TextEditor` 的项目另引用同版本 G 的 `Atelia.Text`。
 这不包含 SDK 安装、额外 RID/self-contained 发布、任意应用或本仓测试依赖的离线闭包。
 
 生成的 `QuickStart/QuickStart.csproj` 来自下面的唯一模板，准备入口会在其中写入一次本批 G 的
@@ -594,7 +594,7 @@ State/Event 无需共同的领域基类，均实现 `IDurableObject`；同一 CL
 
 ## 从源码打包
 
-当前包组织为 `Atelia.DurableGraph`、`.Persistence`、`.Storage` 和 `.Serialization`。
+当前包组织为 `Atelia.DurableGraph`、`.Persistence`、`.Storage` 和 `.Serialization`。同仓的 `Atelia.Text` 包提供可在图内外使用的文本编辑器。
 从旧 StateStore 系列升级时，同步修改 PackageReference/using 并重编译模型库与宿主。
 领域属性、`IDurableObject`、`ObjectId`、登记接口和 Generated/Family 名保持；高级布局类型使用
 `Atelia.DurableGraph.Schema`，绑定与状态操作使用 `Atelia.DurableGraph.Runtime`，两者仍在主程序集内。

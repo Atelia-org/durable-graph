@@ -134,13 +134,14 @@ try {
     $receipt['StorageRevision'] = $storageRevision
 
     $ids = @('Atelia.Binary', 'Atelia.Data', 'Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization',
-        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore', 'K4os.Compression.LZ4')
+        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore', 'Atelia.Text', 'K4os.Compression.LZ4')
     $packages = @(Get-ChildItem -LiteralPath $feed -File -Filter '*.nupkg')
     $hashLines = @(Get-Content -LiteralPath (Join-Path $moved 'packages.sha256') | Where-Object { $_.Trim() })
-    if ($packages.Count -ne 11 -or $hashLines.Count -ne 11) { throw 'Require the current example closure: four G, six S and one K4os package.' }
+    if ($packages.Count -ne $ids.Count -or $hashLines.Count -ne $ids.Count) { throw 'Require twelve archives and their hashes, including the optional text package.' }
     $dgCommit = $null
     foreach ($id in $ids) {
-        $packageVersion = if ($id -ceq 'K4os.Compression.LZ4') { '1.3.8' } elseif ($id.StartsWith('Atelia.DurableGraph')) { $version } else { $storageVersion }
+        $fromDgRepo = $id.StartsWith('Atelia.DurableGraph') -or $id -ceq 'Atelia.Text'
+        $packageVersion = if ($id -ceq 'K4os.Compression.LZ4') { '1.3.8' } elseif ($fromDgRepo) { $version } else { $storageVersion }
         $package = @($packages | Where-Object Name -ieq "$id.$packageVersion.nupkg")
         if ($package.Count -ne 1) { throw "Missing exact selected package: $id/$packageVersion" }
         $sha = (Get-FileHash -LiteralPath $package[0].FullName).Hash
@@ -155,7 +156,7 @@ try {
             if ($metadata.SelectSingleNode('*[local-name()="id"]').InnerText -cne $id -or
                 $metadata.SelectSingleNode('*[local-name()="version"]').InnerText -cne $packageVersion) { throw "Wrong package identity: $id" }
             $commit = if ($id.StartsWith('Atelia.')) { $metadata.SelectSingleNode('*[local-name()="repository"]').GetAttribute('commit') } else { $null }
-            if ($id.StartsWith('Atelia.DurableGraph')) {
+            if ($fromDgRepo) {
                 if (!$dgCommit) { $dgCommit = $commit }
                 if ($commit -cnotmatch '^[0-9a-f]{40}$' -or $commit -cne $dgCommit) { throw 'DG packages disagree on source commit.' }
             } elseif ($id.StartsWith('Atelia.') -and $commit -ine $storageRevision) { throw "Wrong selected storage source: $id" }
@@ -195,7 +196,7 @@ try {
     if ($assets.libraries.Count -ne 11 -or @($assets.libraries.Values | Where-Object type -cne 'package').Count -ne 0 -or
         @($assets.packageFolders.Keys).Count -ne 1 -or [IO.Path]::GetFullPath(@($assets.packageFolders.Keys)[0]).TrimEnd('\', '/') -ine $cache -or
         @($assets.project.restore.sources.Keys).Count -ne 1 -or [IO.Path]::GetFullPath(@($assets.project.restore.sources.Keys)[0]).TrimEnd('\', '/') -ine $feed) { throw 'Assets must contain only eleven packages, one moved local source and one fresh cache.' }
-    foreach ($package in $receipt.Packages) {
+    foreach ($package in ($receipt.Packages | Where-Object Id -cne 'Atelia.Text')) {
         if (!$assets.libraries.ContainsKey($package.Id + '/' + $package.Version)) { throw "Wrong resolved version: $($package.Id)" }
         $cached = Join-Path $cache "$($package.Id.ToLowerInvariant())/$($package.Version.ToLowerInvariant())/$($package.Id.ToLowerInvariant()).$($package.Version.ToLowerInvariant()).nupkg"
         if ((Get-FileHash -LiteralPath $cached).Hash -cne $package.Sha256) { throw 'Cache bytes differ from moved candidate.' }
