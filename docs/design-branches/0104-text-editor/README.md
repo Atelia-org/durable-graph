@@ -1,6 +1,6 @@
 # DB-104 · 通用 TextEditor 与 DurableGraph 的集成边界
 
-希望同一套 LLM 工具能编辑内存草稿、当前世界的 memo 字段和文件。当前优先验证的方向是让领域字段直接使用 `Atelia.Text.TextEditor`，由文本包登记该类型的持久化 codec。DurableGraph 掌握图中身份、准确前驱和发布，类型作者掌握冻结内容与编码。主线目前仍使用内建 `DurableText`，其直接读取片表来源的编码器作为性能基准。[注册叶实验与结果](registered-leaves.md) · [早期边界与算法对照](evidence.md)
+领域模型采用 `Atelia.Text.TextEditor`，由文本包登记自包含叶对象的 codec。DurableGraph 掌握图中身份、准确前驱和发布，类型作者掌握冻结内容与编码。这条路线也服务于未来在不同来源上提供一致的 LLM 编辑工具。[注册叶实验与结果](registered-leaves.md) · [早期边界与算法对照](evidence.md)
 
 ## 总体方向
 
@@ -22,7 +22,16 @@
 
 文本的三个身份各有用途。公开条件编辑检查编辑器归属和逻辑内容版本，同版保存重绑后仍可用。保存基线的安装与捕获时的物理视图相关，捕获后的编辑要保留。编码 Copy 还需核对当前来源和**本图的准确前驱**，另一份相同长度的前驱可能通过全部范围校验却产生不同正文。[现行文本集成回归](../../../tests/DurableGraph.Persistence.Tests/DurableTextIntegrationTests.cs)
 
-主线在 State 接受后由 DG 重绑文本。注册叶原型试验由框架标记一次保存的只读收据，文本在下一次编辑或捕获前消费。两种方案都要用“编辑加保存”完整周期比较成本。发布后执行任意用户回调及其故障恢复留作独立选择。重新打开已发布 State 可以获得一张新的正确对象图；若上层还持有旧实例，恢复协议还需说明如何区分或替换它们。[现行发布结果](../../../src/DurableGraph.Persistence/RepositoryPublicationException.cs)
+State 安装成功后，框架更新本次捕获共用的只读收据。文本在下次编辑或捕获时核对收据和物理视图，再整理片表。Event 捕获没有收据；丢弃候选、发布前失败和捕获后发生的编辑都能保持正确的基线。完整保存周期把延迟整理的开销计入下一次编辑。发布后、安装前故障可通过关闭故障仓、按应用持有的持久引用重开来恢复已发布的图；新图具有新的 CLR 身份。正式协议的发布阶段只操作框架状态。[发布结果](../../../src/DurableGraph.Persistence/RepositoryPublicationException.cs) · [故障回归](../../../tests/DurableGraph.Persistence.Tests/RegisteredLeafLifecycleProbeTests.cs)
+
+## 接入自己的叶类型
+
+1. 给公开、顶层、非泛型的 sealed class 声明 `[DurableLeaf("应用拥有的名义 ID", 1)]`。在领域模型中直接以这个 CLR 类型声明字段。叶可以包含字符串、字节数组等私有表示；若其成员需要独立的图身份或恢复图中的其他对象，应作为含出边的模型建模。图根沿用现有的 `IDurableObject` 合同。
+2. 派生 `DurableLeafCodec<TDomain, TFrozen>`。最小实现提供 `Capture`、`PrepareBase`、`ReadBase` 和 `Restore`。冻结值可以是私有类型，必须在后续编辑期间持续可读；每次恢复应产生独立的可变实例。只支持 Base 的类型可以从这四项开始。若实现 Delta，读取逻辑须消费整个 body，并保留输入的冻结前驱。
+3. 为频繁更新的大对象实现 `PrepareDelta` 和廉价的 `EstimateBaseSize`。返回 `null` 要求本次写 Base，返回 `HasChanges == false` 表示能够复用前驱，返回有变化的 body 供 DG 在 Delta 和 Base 之间选择。估算仅用于规划，落盘按实际字节计量。
+4. 由类型包暴露一个登记方法，将稳定的 codec 实例交给 `IDurableLeafRegistration.RegisterLeaf`。应用在打开仓库前对 `StateModelRegistry` 登记领域定义及所有用到的叶。可以直接参考文本包和独立位图的完整写法。[文本登记](../../../src/Text/TextEditorPersistence.cs) · [独立位图实现](../../../experiments/RegisteredLeafProbe/Bitmap/VariableBitmap.cs)
+
+名义 ID 属于应用的整个持久化历史，版本标识该 ID 下的具体格式。每个 registry 可以检查本配置的重名。不同配置若用同一个 ID 和版本分别表示一个零字段对象和一个接受空载荷的叶，读取可能成功并恢复成另一种 CLR 类型。私有编码改变含义时，作者需要提升版本并保留旧版本 reader 和固定历史样本。框架按声明的身份、版本和 Schema 选择 reader，并检查字节是否完整消费。[叶协议](../../../src/DurableGraph.Serialization/DurableLeafCodec.cs)
 
 ## 长期无保存的正文
 
@@ -32,4 +41,4 @@
 
 ## 实施顺序与验收
 
-第一片先用优化后的内建文本作对照，在隔离分支上让真实文本和一种新的变长叶直接作为生成模型的领域字段。通过公开登记、多引用、冷开编辑再保存来检验可行性，核对落盘记录及前驱，并测量编辑保存周期和冷恢复。生产 API、恢复策略的定稿和文本类型迁移在原型证据上继续推敲。非叶容器还需要出边捕获、历史引用校验、恢复时的别名及循环回填，等有具体容器再扩展。[当前实验](registered-leaves.md) · [后续路线](../../DurableGraph-research-roadmap.md)
+主线共存提交 `06c57dd4` 可直接运行双实现对照。验收覆盖文本与独立位图的普通包登记、实际 Base/Delta 字节与准确前驱、三代冷开、提交故障、以及单条和多条正文的完整编辑保存周期。保留可复验的共存提交后迁移仓内消费者，并在移除旧路径的最终主线上重做 Release 全量源码回归与普通包验收。含图出边的自定义容器等有实际消费者再验证。[研究基线](registered-leaves.md) · [后续路线](../../DurableGraph-research-roadmap.md)

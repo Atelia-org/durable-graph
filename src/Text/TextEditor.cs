@@ -81,6 +81,7 @@ public sealed class TextEditor {
     }
 
     /// <summary>Captures an immutable view of the current text. Later edits and saves leave it readable.</summary>
+    /// <remarks>Taking a snapshot shares the current pieces in constant time. A snapshot may retain their backing strings.</remarks>
     public TextSnapshot Snapshot() => new(_view, _snapshotOwnerToken ??= new object());
 
     /// <summary>Synchronously visits the complete UTF-16 text as it was on entry and returns the visitor's result.</summary>

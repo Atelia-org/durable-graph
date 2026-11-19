@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Atelia.Text;
 
-/// <summary>Immutable text content, independent of a graph builder or backing Store lifetime.</summary>
+/// <summary>An immutable text version that stays readable independently of the editor that created it.</summary>
 /// <remarks>A snapshot can retain backing strings larger than its visible content.</remarks>
 public sealed class TextSnapshot {
     internal TextSnapshot(TextPieceView view, object? ownerToken = null) {
