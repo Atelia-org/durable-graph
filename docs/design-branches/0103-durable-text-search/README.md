@@ -45,6 +45,12 @@ LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1`
 
 2026-11-19 首版方案在 Git `00638810` 中保留了完整行摘录的候选签名、CRLF 与 EOF 零宽示例及验证范围。便捷搜索层的归属及真实查询轨迹仍待确定。[后续路线](../../DurableGraph-research-roadmap.md)
 
+## memo 编辑工具与批量替换预览
+
+- 后续一起研究 `Search(string pattern, …)`、`Search(Regex pattern, …)` 和 `ReplaceUnique(string oldStr, string newStr)`。查询返回带行号的有界摘录。唯一替换在指定条目和字段的当前正文中按 Ordinal 查找非空旧串，恰有一个匹配起点才写入；空新串表示删除。`aaa` 中的 `aa` 有两个起点。工具分别回报成功、未找到或有多个候选。
+- 同一目标的多次唯一替换按工具调用声明顺序独立执行，每笔读取前一笔完成后的正文并产生自己的回执。某笔未写入时，后续调用继续按当前正文判断。相同起始状态和调用序列在没有其他写入时，与拆成多个模型回合执行得到相同结果。
+- `ReplaceAll(string/Regex, …)` 的预览另行研究。先用真实 tool-loop 比较怎样展示候选、选择部分命中以及跨回合确认。确认时提交预览所依据快照上的那批范围，过期则重新预览。工具归属、预览交互和正则替换表达式留待该阶段确定。
+
 ## 证据与适用范围
 
 公开 API 修订来自 `a66b1ee6`。Release 根构建 0 警告、0 错误，全量测试 3338 项通过，0 跳过。独立 checkout 导出的普通包 `0.1.0-db103.ga66b1ee6.0a8577ed` 在隔离还原后，runtime DLL 旁的 XML 与包内文件一致。消费者用切片查询词命中跨片文本，用栈上结果缓冲取回位置。分别尝试返回 span 和正则匹配枚举器均报 CS9244。4096 个 UTF-16 单元的多片正文经一次访问后，连续 100 次 `ToString()` 在调用线程分配 0 B。包消费者还验证了 `aaa` 中的 `aa` 有两个匹配起点，唯一替换会拒绝写入。[消费方回归](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md) · [普通包入门](../../../src/DurableGraph/PACKAGE.md)
