@@ -487,6 +487,8 @@ MaxItems 限制返回条数，MaxWorkSteps 限制 HS 历史工作，不是全部
 
 可编辑条目正文使用具体引用类型 `DurableText`。业务字段和容器通过 ObjectId 共享文本。持久格式表达内容及准确对象版本依赖，编辑器的 Piece Table 与用户的只读内容快照均无独立 wire 标签。[文本接入合同](design-branches/0101-durable-text/mainline-integration-plan.md)
 
+调用方可以在同步回调内读取进入时的一份完整 UTF-16 正文。同线程回调中的编辑对新访问立即可见，正在读取的版本持续到各自回调结束。[全文访问合同](design-branches/0103-durable-text-search/README.md)
+
 Repository.CreateGraph/OpenGraph/SaveGraph 提供完整图的 builder 与准确 GraphRef。每次 Open 独立恢复可变实例，内部共享与循环保持；Open(G) 的下一次保存基线就是 G。GraphRef 是普通 inline 值，只在显式 OpenGraph 时读取目标，不把目标加入持有者的强引用闭包。
 
 公共内部 Head 按保存顺序追加各图；Save 在操作 guard 内读取当前 tip，以 builder 的完整基线增量准备，使用当前 accepted Catalog，沿原 data-first 与 HeadStore 联合发布。成功后才安装基线和交付引用，故障沿既有 outcome/fault，不透明重试。不引入每图 branch、系列编号或 latest 注册表。
