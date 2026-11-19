@@ -159,31 +159,6 @@ public sealed partial class DurableGraphGenerator {
         catch (ArgumentException) { return false; }
     }
 
-    private static TypePattern GetNamedTypePattern(INamedTypeSymbol type, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
-        INamedTypeSymbol root = type;
-        while (root.BaseType is not null) root = root.BaseType;
-        INamedTypeSymbol? half = root.ContainingAssembly.GetTypeByMetadataName("System.Half");
-        TypePattern ConvertType(ITypeSymbol item) {
-            if (IsDurableText(item)) return TypePattern.Text;
-            if (GetDurableLeafId(item) is string leafId) return TypePattern.Named(leafId);
-            if (item is ITypeParameterSymbol parameter) return TypePattern.Parameter(parameter.Ordinal);
-            if (TryGetTypeTag(item, half, out _, out int tag, out _)) return TypePattern.Builtin(tag);
-            if (IsNullableValue(item)) return TypePattern.NullableOf(ConvertType(((INamedTypeSymbol)item).TypeArguments[0]));
-            if (item is IArrayTypeSymbol array) return TypePattern.ArrayOf(ConvertType(array.ElementType), array.Rank);
-            if (IsBclList(item, listType)) return TypePattern.ListOf(ConvertType(((INamedTypeSymbol)item).TypeArguments[0]));
-            if (IsBclDictionary(item, dictionaryType)) {
-                INamedTypeSymbol dictionary = (INamedTypeSymbol)item;
-                return TypePattern.DictionaryOf(ConvertType(dictionary.TypeArguments[0]), ConvertType(dictionary.TypeArguments[1]));
-            }
-            INamedTypeSymbol named = (INamedTypeSymbol)item;
-            AttributeData attribute = GetAttribute(named.GetAttributes(), DurableTypeAttributeMetadataName)!;
-            TypePattern[] arguments = new TypePattern[named.TypeArguments.Length];
-            for (int index = 0; index < arguments.Length; index++) arguments[index] = ConvertType(named.TypeArguments[index]);
-            return TypePattern.Named((string)attribute.ConstructorArguments[0].Value!, arguments);
-        }
-        return ConvertType(type);
-    }
-
     private static void AppendTypePatternExpression(StringBuilder text, TypePattern pattern) {
         const string prefix = "global::Atelia.DurableGraph.Schema.TypeExpr.";
         if (pattern.IsText) {

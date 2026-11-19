@@ -666,9 +666,10 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         }
 
         bool hasErrors = false;
+        TypePattern? genericBase = null;
         if (type.TypeKind == TypeKind.Class && type.BaseType is not null && type.BaseType.Arity > 0 &&
             !IsObjectBase(type.BaseType) &&
-            !TryGetTypePattern(type.BaseType, type, halfType, listType, dictionaryType, compilation, out _)) {
+            !TryGetTypePattern(type.BaseType, type, halfType, listType, dictionaryType, compilation, out genericBase)) {
             context.ReportDiagnostic(Diagnostic.Create(InvalidTypeShape, GetSourceLocation(type), typeName));
             return null;
         }
@@ -695,7 +696,7 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
             version = candidateVersion;
         }
 
-        if (type.TypeKind == TypeKind.Enum) return AnalyzeDurableEnum(context, type, schemaId, version, hasErrors, listType, dictionaryType);
+        if (type.TypeKind == TypeKind.Enum) return AnalyzeDurableEnum(context, type, schemaId, version, hasErrors);
 
         ImmutableArray<ISymbol> schemaMembers = type.GetMembers("Schema");
         if (StringComparer.Ordinal.Equals(type.Name, "Schema") ||
@@ -824,7 +825,7 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
             return null;
         }
 
-        return new DurableTypeAnalysis(type, schemaId!, version, durableFields, listType, dictionaryType);
+        return new DurableTypeAnalysis(type, schemaId!, version, durableFields, genericBase);
     }
 
     private static bool HasSupportedTypeShape(
@@ -1224,9 +1225,8 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
             INamedTypeSymbol symbol,
             string schemaId,
             int version,
-            List<DurableFieldAnalysis> fields, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
-            ListType = listType;
-            DictionaryType = dictionaryType;
+            List<DurableFieldAnalysis> fields, TypePattern? genericBase = null) {
+            GenericBase = genericBase;
             Symbol = symbol;
             SchemaId = schemaId;
             Version = version;
@@ -1234,8 +1234,7 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         }
 
         public INamedTypeSymbol Symbol { get; }
-        public INamedTypeSymbol? ListType { get; }
-        public INamedTypeSymbol? DictionaryType { get; }
+        public TypePattern? GenericBase { get; }
 
         public string SchemaId { get; }
 

@@ -49,7 +49,13 @@ public sealed partial class DurableGraphGenerator {
                     registration.ConstructorArguments[0].Value is not INamedTypeSymbol registeredOwner ||
                     registration.ConstructorArguments[1].Value is not int fromVersion) continue;
                 if (!SymbolEqualityComparer.Default.Equals(registeredOwner.OriginalDefinition, owner.Symbol)) continue;
-                TypePattern? closed = registeredOwner.IsUnboundGenericType ? null : GetNamedTypePattern(registeredOwner, GetBclListType(compilation), GetBclDictionaryType(compilation));
+                TypePattern? closed = null;
+                if (!registeredOwner.IsUnboundGenericType && !TryGetTypePattern(registeredOwner, owner.Symbol,
+                    compilation.GetSpecialType(SpecialType.System_Object).ContainingAssembly.GetTypeByMetadataName("System.Half"),
+                    GetBclListType(compilation), GetBclDictionaryType(compilation), compilation, out closed)) {
+                    ReportInvalidGeneratedState(context, owner.Symbol, "DurableUpgrade owner contains an unsupported type argument", GetSourceLocation(method));
+                    continue;
+                }
                 if (host.Arity != 0 || host.ContainingType is not null || !host.IsStatic ||
                     method.DeclaredAccessibility is not (Accessibility.Internal or Accessibility.Public)) {
                     ReportInvalidGeneratedState(context, owner.Symbol, "DurableUpgrade methods require an accessible static method in a top-level non-generic static class", GetSourceLocation(method));

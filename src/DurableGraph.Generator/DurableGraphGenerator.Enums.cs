@@ -5,7 +5,7 @@ namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableGraphGenerator {
     private static DurableTypeAnalysis? AnalyzeDurableEnum(SourceProductionContext context, INamedTypeSymbol type,
-        string? schemaId, int version, bool hasErrors, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType) {
+        string? schemaId, int version, bool hasErrors) {
         foreach (IFieldSymbol constant in GetDirectFields(type)) {
             if (!HasAttribute(constant.GetAttributes(), DurableFieldAttributeMetadataName) &&
                 !HasAttribute(constant.GetAttributes(), TransientAttributeMetadataName)) continue;
@@ -16,7 +16,7 @@ public sealed partial class DurableGraphGenerator {
         if (!TryGetTypeTag(type.EnumUnderlyingType, null, out string? tag, out int number, out string? name)) return null;
         // The schema describes one integer value; enum constants and the CLR's value__ field are not its layout.
         return new DurableTypeAnalysis(type, schemaId!, version,
-            new() { new DurableFieldAnalysis(null, 1, tag!, number, name!) }, listType, dictionaryType);
+            new() { new DurableFieldAnalysis(null, 1, tag!, number, name!) });
     }
 
     private static string EnumProjectionHost(string schemaId) =>

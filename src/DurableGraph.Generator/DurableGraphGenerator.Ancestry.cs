@@ -139,7 +139,7 @@ public sealed partial class DurableGraphGenerator {
         AttributeData attribute = GetAttribute(type.BaseType!.GetAttributes(), DurableTypeAttributeMetadataName)!;
         return new SchemaReference(
             (string)attribute.ConstructorArguments[0].Value!,
-            (int)attribute.ConstructorArguments[1].Value!, GetNamedTypePattern(type.BaseType!, model.ListType, model.DictionaryType));
+            (int)attribute.ConstructorArguments[1].Value!, model.GenericBase);
     }
 
     private static bool SameReference(SchemaReference? left, SchemaReference? right) {
