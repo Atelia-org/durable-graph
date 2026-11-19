@@ -485,7 +485,7 @@ MaxItems 限制返回条数，MaxWorkSteps 限制 HS 历史工作，不是全部
 
 ### 独立对象图堆
 
-可编辑正文以具体引用类型进入图。当前 `DurableText` 的后继目标是独立文本库的 `Atelia.Text.TextEditor`。业务字段和容器通过 ObjectId 共享文本。批量范围编辑以同一编辑器的内容快照为条件，纯保存保留其提交资格。持久格式表达内容及准确对象版本依赖，编辑器的 Piece Table 与用户的只读内容快照均无独立 wire 标签。[文本接入合同](design-branches/0101-durable-text/mainline-integration-plan.md) · [通用编辑器的集成设计](design-branches/0104-text-editor/README.md)
+可编辑正文以具体引用类型进入图。当前 `DurableText` 的后继目标是独立文本库的 `Atelia.Text.TextEditor`，由作者登记自包含叶对象的 codec，框架管理对象身份、准确前驱和发布。文本库按需单向引用兄弟项目。业务字段和容器通过 ObjectId 共享文本。批量范围编辑以同一编辑器的内容快照为条件，纯保存保留其提交资格。持久格式表达内容及准确对象版本依赖，编辑器的 Piece Table 与用户的只读内容快照均无独立 wire 标签。[文本接入合同](design-branches/0101-durable-text/mainline-integration-plan.md) · [通用编辑器的集成设计](design-branches/0104-text-editor/README.md)
 
 调用方可以在同步回调内读取进入时的一份完整 UTF-16 正文。同线程回调中的编辑对新访问立即可见，正在读取的版本持续到各自回调结束。对于长期驻留且经常查询的条目，同一编辑器反复访问同版正文应能复用已准备的连续文本。[全文访问合同](design-branches/0103-durable-text-search/README.md)
 

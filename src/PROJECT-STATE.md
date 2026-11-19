@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 已建立独立文本库及测试空壳。隔离原型支持编辑器持有单一来源基线、DG 以窄内部接口编码并在图发布后安装。下一片搬移编辑器与接入图绑定，主线领域字段仍使用 `DurableText`。
+2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 主线领域字段使用 `DurableText`，准确前驱 Delta 直接从冻结片表编码。独立研究分支已让生成模型直接使用登记的 `TextEditor` 和变长位图，完成持久化与冷开续写。主线 `Atelia.Text` 为程序集空壳，生产接入与公开合同待定。[验证范围与性能](../docs/design-branches/0104-text-editor/registered-leaves.md)
 
 2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的 `TryApplyEdits` 按编辑器快照整批提交，有序范围直接构造片表。同版保存保留提交资格，冲突返回原输入下标。同步 `VisitSpan` 支持栈上上下文和回调重入，`ToString()` 可复用同版缓存。普通包交付 XML 合同，快照保留流式 `IndexOf`。[冷热查询对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
 
