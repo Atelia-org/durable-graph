@@ -1,5 +1,6 @@
 <Project>
-  <Target Name="ValidateStorageSourceMode" BeforeTargets="CollectPackageReferences;PrepareForBuild">
+  <Target Name="ValidateStorageSourceMode" BeforeTargets="CollectPackageReferences;PrepareForBuild"
+          Condition="'$(UsesDurableGraphStorage)' != 'false'">
     <Error Condition="'$(UseStorageSources)' != 'true' and '$(UseStorageSources)' != 'false'"
            Text="UseStorageSources must be true or false." />
     <Error Condition="'$(UseStorageSources)' == 'true' and '$(StorageSourceRoot)' == ''"
@@ -23,10 +24,12 @@
     <Error Condition="'$(UseStorageSources)' == 'true' and '@(_StorageSourceHead)' != '$(StorageSourceRevision)'"
            Text="StorageSourceRoot HEAD must equal pinned StorageSourceRevision $(StorageSourceRevision); observed @(_StorageSourceHead)." />
   </Target>
-  <Target Name="RejectStorageSourcePackaging" BeforeTargets="GenerateNuspec;Pack" Condition="'$(UseStorageSources)' == 'true'">
+  <Target Name="RejectStorageSourcePackaging" BeforeTargets="GenerateNuspec;Pack"
+          Condition="'$(UsesDurableGraphStorage)' != 'false' and '$(UseStorageSources)' == 'true'">
     <Error Text="Packing DurableGraph with UseStorageSources=true is unsupported. Pack atelia-storage with a unique version first, select StoragePackageVersion, then pack DurableGraph with UseStorageSources=false." />
   </Target>
-  <Target Name="ValidateDurableGraphPackageVersion" BeforeTargets="GenerateNuspec;Pack">
+  <Target Name="ValidateDurableGraphPackageVersion" BeforeTargets="GenerateNuspec;Pack"
+          Condition="'$(UsesDurableGraphStorage)' != 'false'">
     <Error Condition="'$(PackageVersion)' == '$(StoragePackageVersion)'"
            Text="DurableGraph PackageVersion must differ from StoragePackageVersion. The downstream package version does not version its storage dependencies." />
   </Target>

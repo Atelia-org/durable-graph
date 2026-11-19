@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UsesDurableGraphStorage>false</UsesDurableGraphStorage>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\docs\text\README.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+
+</Project>

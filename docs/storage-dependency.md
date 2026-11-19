@@ -32,7 +32,7 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 
 `StorageSourceRoot` 必须是绝对路径，包含 Binary/FrameStore/HeadStore 三个项目，且 Git HEAD 等于 pin 的完整来源。
 同一 HEAD 上的源码编辑可用于联调；它们不构成可发布包的来源凭据。无效路径、缺项目或不符 revision 都清晰失败，不回退到包。
-`UseStorageSources=true` 仅用于 build/test；`dotnet pack -p:UseStorageSources=true` 在生成包前拒绝执行。
+DurableGraph 项目在 `UseStorageSources=true` 下可 build/test，打包要求切到 package mode。[独立文本库](text/README.md) 只引用 .NET，可单独 build 或 pack。
 
 切换到 package mode 必须重新 restore；不要以 source mode 的旧 assets 或 DLL 当作包消费证据。
 Generator 仍是 `netstandard2.0` Roslyn 组件，它生成对 Bare reader/writer 的直接调用；Runtime 通过 Serialization 取得 Binary 依赖。

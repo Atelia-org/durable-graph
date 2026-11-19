@@ -7,11 +7,13 @@
     <Project Path="src/DurableGraph.Storage/DurableGraph.Storage.csproj" />
     <Project Path="src/DurableGraph.Persistence/DurableGraph.Persistence.csproj" />
     <Project Path="src/DurableGraph/DurableGraph.csproj" />
+    <Project Path="src/Text/Text.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DurableGraph.Serialization.Tests/DurableGraph.Serialization.Tests.csproj" />
     <Project Path="tests/DurableGraph.Storage.Tests/DurableGraph.Storage.Tests.csproj" />
     <Project Path="tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj" />
     <Project Path="tests/DurableGraph.Tests/DurableGraph.Tests.csproj" />
+    <Project Path="tests/Text.Tests/Text.Tests.csproj" />
   </Folder>
 </Solution>
