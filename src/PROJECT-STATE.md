@@ -20,6 +20,8 @@
 
 ## 当前焦点
 
+2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 研究将一份编辑器提取到独立文本库，比较来源范围、图保存安装与冷读重放的边界。现有领域字段仍使用 `DurableText`。
+
 2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的 `TryApplyEdits` 按编辑器快照整批提交，有序范围直接构造片表。同版保存保留提交资格，冲突返回原输入下标。同步 `VisitSpan` 支持栈上上下文和回调重入，`ToString()` 可复用同版缓存。普通包交付 XML 合同，快照保留流式 `IndexOf`。[冷热查询对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
 
 [DB-102 容器保存与恢复](../docs/design-branches/0102-container-payload-planning/README.md) 使用现行图级预算。已有业务 string 与受支持的 List 延迟编码 Base，内建标量 List 可直写变化元素的补丁，读取器在独占的同位置整表更新上复用数组。物化对象目录时可复用同一 Store 中已验证的准确前驱，只重放新后缀。

@@ -25,6 +25,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
+| 104 | [通用 TextEditor 与 DurableGraph 的集成边界](0104-text-editor/README.md)，独立文本库、图内建类型与来源范围的设计比较 |
 | 103 | [DurableText 全文访问与搜索用例](0103-durable-text-search/README.md)，VisitSpan 按版本复用正文，TryApplyEdits 按编辑器快照提交范围，搜索与替换工具留待下游研究 |
 | 102 | [容器 payload 准备与对象重整策略](0102-container-payload-planning/README.md)，容器计量、补丁与目录前驱复用已采用，后续五项恢复、保存与标签性能改进已验收合入 |
 | 101 | [可增量保存的 DurableText](0101-durable-text/README.md)，可编辑正文、快照与准确对象增量 |

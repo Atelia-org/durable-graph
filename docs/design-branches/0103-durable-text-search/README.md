@@ -43,6 +43,8 @@ string? first = text.VisitSpan(regex, static (span, query) => {
 
 ## 搜索层的用户故事
 
+后续的通用文本库与工具分工见 [DB-104](../0104-text-editor/README.md)。以下搜索行为仍用作单篇编辑器和下游 memo 的验收场景。
+
 LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1` 的条目、字段、行号和邻近原文。memo 先按当前世界和角色选出条目，再分别查询 `FullText`、`Summary`、`Gist`。当回合改成南门可以立即查到南门，切换旧世界后则由 memo 传入旧正文。条目身份、跨条目预算及最终展示归消费方。[原始下游提案](memo-proposal.md)
 
 设想中的 `Search(string pattern, …)`、`Search(Regex pattern, …)` 及摘录结果说明消费方需要完成的工作。它们可由 DurableGraph 更外层的组件或下游应用承载，是否成为 `DurableText` 成员仍待决定。
