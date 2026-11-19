@@ -10,7 +10,8 @@
 
 ```csharp
 public TResult VisitSpan<TContext, TResult>(
-    TContext context, Func<ReadOnlySpan<char>, TContext, TResult> visitor);
+    TContext context, Func<ReadOnlySpan<char>, TContext, TResult> visitor)
+    where TContext : allows ref struct;
 ```
 
 用静态回调传入查询。同一个正则可扫过多篇正文，在匹配附近截取需要带走的文字，或在第一项处停止。例如以下两个调用分别返回字面位置和首个正则匹配的自有字符串。
@@ -27,9 +28,9 @@ string? first = text.VisitSpan(regex, static (span, query) => {
 });
 ```
 
-- 方法校验 visitor，空引用抛 `ArgumentNullException`。成功准备输入后同步调用 visitor 恰好一次，空正文也调用一次。context 按值传递，可以是持有结果集合的元组。返回值直接交给调用方。普通泛型 `TResult` 令编译器拒绝将输入 span 或正则的 ref struct 枚举器直接带出回调。
+- 方法校验 visitor，空引用抛 `ArgumentNullException`。成功准备输入后同步调用 visitor 恰好一次，空正文也调用一次。context 按值传递，可以是持有结果集合的元组、查询词的 `ReadOnlySpan<char>` 或调用方提供的栈上结果缓冲。普通泛型 `TResult` 令编译器拒绝将输入 span 或正则的 ref struct 枚举器直接带出回调。
 - 空正文传空 span，单片直接借底层不可变字符串的准确切片。多片首次访问花 O(n) 时间复制到等长的字符串，准备成功后才调用 visitor。同版复访准备输入只需 O(1)，适用于相同或不同的查询。
-- 每个编辑器只为已访问的当前多片版本保留一个额外字符串，正文载荷为每个 UTF-16 单元两字节。成功编辑时释放旧缓存引用，按需物化新版。保存仅重绑同版多片时可继续复用；保存需要压成单片时可直接采用已有的同版字符串。快照及持久化差分仍使用各自捕获的片表。
+- 每个编辑器只为已访问的当前多片版本保留一个额外字符串，正文载荷为每个 UTF-16 单元两字节。`ToString()` 优先使用现有缓存，单独调用它时不会建立访问缓存。成功编辑时释放旧缓存引用，按需物化新版。保存仅重绑同版多片时可继续复用；保存需要压成单片时可直接采用已有的同版字符串。快照及持久化差分仍使用各自捕获的片表。
 - 按编辑器的串行使用约定，visitor 可在同线程编辑并嵌套访问。内层读取新版，外层的 span 保活其进入时的正文。多层回调同时读不同版本时，各版文字会同时存活。visitor 抛出的异常原样传播，已完成的编辑保留。带出回调的索引只对受搜的那版正文有意义。[编辑与视图切换](../../../src/DurableGraph/DurableText.cs) · [片表与复制](../../../src/DurableGraph/Runtime/Text/TextPieceView.cs)
 
 ## 搜索层的用户故事

@@ -9,12 +9,14 @@
 ```csharp
 var before = entry.Body.Snapshot();
 int first = before.IndexOf(needle);
-if (needle.Length == 0 || first < 0 || before.IndexOf(needle, first + needle.Length) >= 0) {
-    throw new InvalidOperationException("Expected one non-empty, non-overlapping match.");
+if (needle.Length == 0 || first < 0 || before.IndexOf(needle, first + 1) >= 0) {
+    throw new InvalidOperationException("Expected exactly one matching start position for a non-empty needle.");
 }
 entry.Body.Replace(first, needle.Length, replacement);
 entry.Body.AppendTo(contextBuilder);
 ```
+
+这段唯一替换配方按起点计数。例如 `aaa` 中的 `aa` 在 0 和 1 都匹配，所以拒绝改写。
 
 调用方在从查找至应用的期间串行持有该编辑对象。若中途等待 LLM 或允许其他编辑，应用需重新核对当前文本。稳定快照可延后追加到调用方的 StringBuilder；短窗口用 CopyTo。同一份快照上的完整正则搜索可以一次 ToString 后反复使用标准 .NET Regex，匹配区间属于该快照。大量长期保留的大快照可能同时持有多个字符 backing。
 

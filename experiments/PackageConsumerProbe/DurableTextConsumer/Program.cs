@@ -46,6 +46,9 @@ internal static class Program {
         var text = new DurableText("alpha\r\nbe");
         text.Replace(text.Length, 0, "ta\0\ud800\r\nalpha\r\n中\ud83d");
         text.Replace(text.Length, 0, "\ude00文");
+        ReadOnlySpan<char> needle = "find:beta".AsSpan(5);
+        Need(text.VisitSpan(needle, static (body, query) => body.IndexOf(query, StringComparison.Ordinal)) == 7,
+            "A caller-owned query span finds a match across pieces.");
         Need(text.ToString() == Initial && text.Snapshot().IndexOf("beta") == 7 &&
             text.Snapshot().IndexOf("\ud83d\ude00") == Initial.IndexOf("\ud83d\ude00", StringComparison.Ordinal),
             "Before first save, public edits build exact multi-piece content with cross-piece search and surrogate pair.");
@@ -53,9 +56,8 @@ internal static class Program {
         using var graph = repository.CreateGraph(entry);
         var original = repository.SaveGraph(graph);
         var held = text.Snapshot();
-        bool rejected = false;
-        try { ReplaceUnique(text, "alpha", "bad"); } catch (InvalidOperationException) { rejected = true; }
-        Need(rejected && text.ToString() == Initial, "Ambiguous str_replace rejects before editing.");
+        CheckAmbiguousReplacement(text, "alpha");
+        CheckAmbiguousReplacement(new DurableText("aaa"), "aa");
         ReplaceUnique(text, "beta", "BETA");
         repository.SaveGraph(graph);
         text.ApplyEdits([new TextEdit(0, 0, "["), new TextEdit(text.Length, 0, "]")]);
@@ -111,8 +113,17 @@ internal static class Program {
         if (needle.Length == 0) throw new ArgumentException("Tool rejects empty needle.");
         var snapshot = text.Snapshot();
         int first = snapshot.IndexOf(needle);
-        if (first < 0 || snapshot.IndexOf(needle, first + needle.Length) >= 0) throw new InvalidOperationException("Expected exactly one match.");
+        if (first < 0 || snapshot.IndexOf(needle, first + 1) >= 0) throw new InvalidOperationException("Expected exactly one matching start position.");
         text.ApplyEdits([new TextEdit(first, needle.Length, replacement)]);
+    }
+    private static void CheckAmbiguousReplacement(DurableText text, string needle) {
+        string before = text.ToString();
+        try { ReplaceUnique(text, needle, "bad"); }
+        catch (InvalidOperationException) {
+            Need(text.ToString() == before, $"Ambiguous '{needle}' rejected before editing.");
+            return;
+        }
+        throw new InvalidOperationException($"Expected ambiguous '{needle}' to be rejected.");
     }
     private static void Check(Entry entry, string expected) {
         Need(entry.Body.ToString() == expected && entry.Gist == "one-line", "Text content and independent gist survive.");

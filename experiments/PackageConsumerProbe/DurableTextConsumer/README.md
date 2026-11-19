@@ -4,11 +4,11 @@
 
 `Run-DurableTextProbe.ps1 -PackageSource <完整feed> -Version <G> -ExpectedSourceCommit <40位SHA> -WorkDirectory <仓外新目录>` 执行三条独立进程：
 
-- seed：主文本由三个独立 backing 串经公开编辑构成后才首次保存，包含跨片 `beta`、跨片合法代理对、孤立代理、中文、NUL 与 CRLF；Body/Alias/List 别名，null 与空对象；随后两次小改保存；快照稳定性；标准 str_replace 唯一匹配、AppendTo、完整字符串 Regex。
+- seed 检查未保存的跨片文本、代理对、孤立代理、中文、NUL 和 CRLF，使用切片查询词调用 `VisitSpan`。还检查引用别名、空值、两次小改保存、快照稳定性、AppendTo 和正则。唯一替换按起点计数，覆盖分离与重叠的两种歧义。
 - resume：关闭后冷开、别名恢复、独立 OpenGraph 隔离、继续编辑保存，并回读原始图。
 - verify：只读历史和最新图、UTF16/CRLF/NUL、CopyTo、资源释放后快照有效；数据库文件字节保持不变。
 
-runner 检查独立 cache/no ProjectReference、准确 DG 四包 commit 与版本、十包原包及输出/实际加载 DLL 哈希、包内生成器和历史工具的实际消费、两份用户 schema history 的 Publish/Verify 不变。这里的进程验收不代替产品故障注入测试，不宣称掉电资格或真实 memo 负载。
+runner 核对独立 cache/no ProjectReference、准确 DG 四包 commit 与版本、十包原包及输出/实际加载 DLL 哈希、包内生成器和历史工具的实际消费、两份用户 schema history 的 Publish/Verify 不变。它还从普通包和消费缓存核对 DLL 旁的 XML 文档及关键成员。下列旧版本结果使用各自提交时的探针。
 
 2026-11-18 分段 Base 的普通包验收已通过。G `0.0.0-textsegments.20261118.g712ddf7` 来自独立清洁 checkout `712ddf7f73b668d141083c7ef10401545b4ed6be`；S `0.1.3-dev.20261118.g3f780ad` 来自 `3f780ad95239d7556f917e1adca6839cda144c92`，六包已另过 Storage 四个隔离普通包消费者及 metadata/PDB 校验。三条 DG 消费进程 seed / resume / verify 分别通过 8 / 17 / 11 项检查（PID 19004 / 37392 / 13816）；首次保存前的主文本由三个不同 backing 串组成，保存后继续小改，另一进程冷开再改，第三进程只读核对原始/中间/最新正文与别名。
 

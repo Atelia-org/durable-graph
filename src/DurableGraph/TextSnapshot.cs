@@ -13,7 +13,8 @@ public sealed class TextSnapshot {
     /// <summary>The number of UTF-16 code units, without newline or Unicode normalization.</summary>
     public int Length => View.Length;
 
-    /// <summary>Copies a range into the caller's destination without flattening the whole text.</summary>
+    /// <summary>Copies exactly <c>destination.Length</c> UTF-16 code units starting at <paramref name="start"/>.</summary>
+    /// <remarks>Pass a slice of a larger buffer to read only the requested range.</remarks>
     public void CopyTo(int start, Span<char> destination) => View.CopyTo(start, destination);
 
     /// <summary>Appends the complete text without clearing or taking ownership of the builder.</summary>
@@ -30,7 +31,7 @@ public sealed class TextSnapshot {
     public override string ToString() => View.ToText();
 
     /// <summary>Finds an ordinal match, including across physical pieces, at or after start.</summary>
-    /// <remarks>An empty value matches start. Offsets and lengths count UTF-16 code units.</remarks>
+    /// <remarks>An empty value matches start. A missing value returns -1. Offsets and lengths count UTF-16 code units.</remarks>
     public int IndexOf(string value, int start = 0) {
         ArgumentNullException.ThrowIfNull(value);
         TextPieceView.ValidateRange(Length, start, 0);

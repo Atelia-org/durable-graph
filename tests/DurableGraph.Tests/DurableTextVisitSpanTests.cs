@@ -19,6 +19,41 @@ public sealed class DurableTextVisitSpanTests {
     }
 
     [Fact]
+    public void StaticVisitorsReadAndWriteCallerOwnedSpanContext() {
+        DurableText text = new("north gate");
+        text.Replace(0, 5, "south");
+        ReadOnlySpan<char> needle = "find:th gate".AsSpan(5);
+        Assert.Equal(3, text.VisitSpan(needle, static (body, query) => body.IndexOf(query, StringComparison.Ordinal)));
+
+        Span<int> offsets = stackalloc int[2];
+        int written = text.VisitSpan(offsets, static (body, result) => {
+            int n = 0;
+            for (int i = 0; i < body.Length && n < result.Length; i++) {
+                if (body[i] == 't') { result[n++] = i; }
+            }
+            return n;
+        });
+        Assert.Equal(2, written);
+        Assert.Equal(3, offsets[0]);
+        Assert.Equal(8, offsets[1]);
+    }
+
+    [Fact]
+    public void ToStringReusesOnlyAnAlreadyMaterializedCurrentVersion() {
+        DurableText text = new("ac");
+        text.Replace(1, 0, "b");
+        string cold = text.ToString();
+        Assert.False(text.VisitSpan(cold, static (span, previous) => span == previous.AsSpan()));
+
+        string warm = text.ToString();
+        Assert.True(text.VisitSpan(warm, static (span, current) => span == current.AsSpan()));
+        Assert.Same(warm, text.ToString());
+        text.Replace(1, 1, "B");
+        Assert.Equal("aBc", text.ToString());
+        Assert.Equal("abc", warm);
+    }
+
+    [Fact]
     public void SinglePieceBorrowsOnlyTheVisibleSliceOfItsBackingString() {
         const string backing = "<<甲\0\uD800乙>>";
         DurableText text = new(backing);

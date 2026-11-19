@@ -38,11 +38,33 @@ public sealed class DurableTextTests {
         Assert.Throws<ArgumentNullException>(() => text.ApplyEdits(null!));
         Assert.Throws<ArgumentNullException>(() => new DurableText(null!));
         Assert.Throws<ArgumentNullException>(() => text.Replace(0, 1, null!));
-        Assert.Throws<ArgumentOutOfRangeException>(() => text.CopyTo(7, Span<char>.Empty));
-        Assert.Throws<ArgumentOutOfRangeException>(() => text.CopyTo(5, new char[2]));
+        Assert.Throws<ArgumentOutOfRangeException>("length", () => text.Replace(0, -1, ""));
+        Assert.Throws<ArgumentOutOfRangeException>("start", () => text.CopyTo(7, Span<char>.Empty));
+        Assert.Throws<ArgumentOutOfRangeException>("destination", () => text.CopyTo(5, new char[2]));
         StringBuilder destination = new("prefix");
-        Assert.Throws<ArgumentOutOfRangeException>(() => text.AppendTo(destination, 0, 7));
+        Assert.Throws<ArgumentOutOfRangeException>("length", () => text.AppendTo(destination, 0, 7));
+        var snapshot = text.Snapshot();
+        Assert.Throws<ArgumentOutOfRangeException>("length", () => snapshot.AppendTo(destination, 0, 7));
+        Assert.Throws<ArgumentOutOfRangeException>("destination", () => snapshot.CopyTo(5, new char[2]));
         Assert.Equal("prefix", destination.ToString());
+        Assert.Equal("abcdef", text.ToString());
+    }
+
+    [Fact]
+    public void BatchErrorsIdentifyTheOriginalInputIndexAndField() {
+        DurableText text = new("abcdef");
+        TextEdit append = new(6, 0, "!");
+        Assert.Contains("edits[1].Replacement", Assert.Throws<ArgumentNullException>("edits",
+            () => text.ApplyEdits([append, default])).Message);
+        Assert.Contains("edits[1].Start", Assert.Throws<ArgumentOutOfRangeException>("edits",
+            () => text.ApplyEdits([append, new(-1, 0, "")])).Message);
+        Assert.Contains("edits[1].Length", Assert.Throws<ArgumentOutOfRangeException>("edits",
+            () => text.ApplyEdits([append, new(3, 4, "")])).Message);
+        // The first input is second after sorting and overlaps the preceding removal.
+        Assert.Contains("edits[0].Start", Assert.Throws<ArgumentException>("edits",
+            () => text.ApplyEdits([new(1, 4, ""), new(0, 5, "")])).Message);
+        Assert.Contains("edits[2].Start", Assert.Throws<ArgumentException>("edits",
+            () => text.ApplyEdits([append, new(1, 1, "a"), new(1, 1, "b")])).Message);
         Assert.Equal("abcdef", text.ToString());
     }
 

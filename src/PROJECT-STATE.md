@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的同步 `VisitSpan` 已按编辑器内容版本复用多片正文，支持保存重绑和回调重入。字面查找已复测首次、复访及少量编辑后三种工况，保留快照的流式 `IndexOf`。[缓存版对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
+2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的同步 `VisitSpan` 支持栈上输入上下文、保存重绑和回调重入，`ToString()` 可复用同版访问缓存。普通包随 runtime DLL 提供 XML 合同。快照保留流式 `IndexOf`。[冷热查询对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
 
 [DB-102 容器保存与恢复](../docs/design-branches/0102-container-payload-planning/README.md) 使用现行图级预算。已有业务 string 与受支持的 List 延迟编码 Base，内建标量 List 可直写变化元素的补丁，读取器在独占的同位置整表更新上复用数组。物化对象目录时可复用同一 Store 中已验证的准确前驱，只重放新后缀。
 

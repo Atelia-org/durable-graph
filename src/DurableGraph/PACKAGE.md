@@ -23,6 +23,29 @@ that coordination and may reject a temporarily incomplete history set.
 Domain declarations remain in `Atelia.DurableGraph`; layouts use `.Schema` and binding/capture/state
 operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Persistence`.
 
+## Editing and reading DurableText
+
+`DurableText` is a mutable graph object. Use it serially. Positions and lengths count UTF-16 code units.
+`Replace` uses current coordinates. In `ApplyEdits`, every edit uses coordinates from the start of the
+batch. Insertions at the same position keep their input order and precede a replacement at that position.
+Use `Snapshot()` to keep reading a version across later edits and saves.
+
+```csharp
+var text = new Atelia.DurableGraph.DurableText("north gate");
+text.Replace(0, 5, "south");
+ReadOnlySpan<char> needle = "find:th gate".AsSpan(5);
+int at = text.VisitSpan(needle, static (body, query) => body.IndexOf(query, StringComparison.Ordinal)); // 3
+```
+
+`VisitSpan` invokes its callback synchronously on the complete text as it was on entry. The
+first visit to fragmented text materializes one string that later visits and `ToString()` can
+reuse. A nested visit after an edit sees the new version while the outer span keeps its original
+contents. To keep an excerpt, copy the relevant slice to a string inside the callback.
+On a snapshot, `IndexOf` performs ordinal literal search and `CopyTo(start, buffer.AsSpan(0, count))`
+reads exactly the requested range.
+
+## Repository operations
+
 State-based applications can create a branch with State and call CommitState repeatedly; no preceding
 Event or Event model is required. CommitEvent is optional and publishes separately from CommitState.
 Each Event captures a complete graph with local identities, its own Base records and no State content source.

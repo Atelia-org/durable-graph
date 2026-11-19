@@ -125,13 +125,13 @@ internal sealed class TextPieceView {
         return true;
     }
 
-    internal static void ValidateRange(int length, int start, int count) {
-        if (start < 0 || start > length) { throw new ArgumentOutOfRangeException(nameof(start)); }
-        if (count < 0 || count > length - start) { throw new ArgumentOutOfRangeException(nameof(count)); }
+    internal static void ValidateRange(int textLength, int start, int length, string lengthParamName = "length") {
+        if (start < 0 || start > textLength) { throw new ArgumentOutOfRangeException(nameof(start)); }
+        if (length < 0 || length > textLength - start) { throw new ArgumentOutOfRangeException(lengthParamName); }
     }
 
     internal void CopyTo(int start, Span<char> destination) {
-        ValidateRange(Length, start, destination.Length);
+        ValidateRange(Length, start, destination.Length, nameof(destination));
         if (destination.IsEmpty) { return; }
         int pieceIndex = Locate(start, out int within);
         while (!destination.IsEmpty) {

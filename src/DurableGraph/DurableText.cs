@@ -3,12 +3,13 @@ using System.Text;
 namespace Atelia.DurableGraph;
 
 /// <summary>A mutable, reference-identity text object with immutable content snapshots.</summary>
-/// <remarks>Use serially. Saving a graph does not turn snapshots into persistence credentials.</remarks>
+/// <remarks>Use the editor serially. All positions and lengths count UTF-16 code units.</remarks>
 public sealed class DurableText {
     private TextPieceView _view;
     private object? _sourceToken;
     private string? _visitText;
 
+    /// <summary>Creates an editor with the supplied text, or empty text when called without arguments.</summary>
     public DurableText(string text = "") {
         ArgumentNullException.ThrowIfNull(text);
         _view = TextPieceView.FromString(text);
@@ -19,9 +20,13 @@ public sealed class DurableText {
         _sourceToken = sourceToken;
     }
 
+    /// <summary>The current number of UTF-16 code units.</summary>
     public int Length => _view.Length;
 
     /// <summary>Replaces a range in the current UTF-16 coordinates.</summary>
+    /// <param name="start">Zero-based offset. The end of the text is a valid insertion point.</param>
+    /// <param name="length">Number of code units to remove. Use zero to insert.</param>
+    /// <param name="replacement">Text to insert. Use an empty string to delete the range.</param>
     public void Replace(int start, int length, string replacement) {
         ArgumentNullException.ThrowIfNull(replacement);
         TextPieceView.ValidateRange(Length, start, length);
@@ -31,7 +36,8 @@ public sealed class DurableText {
         SetView(_view.Apply([new(start, length, replacement)], (int)nextLength));
     }
 
-    /// <summary>Applies a batch whose coordinates all refer to the text on entry.</summary>
+    /// <summary>Applies a batch whose UTF-16 coordinates all refer to the text on entry.</summary>
+    /// <param name="edits">Edits in any order. Validation errors for individual edits identify their original input index.</param>
     /// <remarks>
     /// The input is copied and validated before publication. Overlapping replacements and
     /// insertions inside a replacement are rejected. At a common start, zero-length inserts
@@ -47,10 +53,13 @@ public sealed class DurableText {
         if (normalized.Length != 0) { SetView(entry.Apply(normalized, nextLength)); }
     }
 
+    /// <summary>Captures an immutable view of the current text. Later edits and saves leave it readable.</summary>
     public TextSnapshot Snapshot() => new(_view);
 
     /// <summary>Synchronously visits the complete UTF-16 text as it was on entry and returns the visitor's result.</summary>
-    /// <param name="context">Caller state passed to the visitor.</param>
+    /// <typeparam name="TContext">Caller state passed by value. It can be a ref struct, such as a span over caller-owned storage.</typeparam>
+    /// <typeparam name="TResult">The visitor's result type. A ref struct cannot be returned through this method.</typeparam>
+    /// <param name="context">State passed to the visitor, so a static callback can use it without capturing locals.</param>
     /// <param name="visitor">Callback invoked once, including for empty text. Its span is valid for this call only.</param>
     /// <remarks>
     /// Empty and single-piece text require no copy. The first visit to a fragmented version copies
@@ -60,7 +69,8 @@ public sealed class DurableText {
     /// completed edits remain visible.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="visitor"/> is null.</exception>
-    public TResult VisitSpan<TContext, TResult>(TContext context, Func<ReadOnlySpan<char>, TContext, TResult> visitor) {
+    public TResult VisitSpan<TContext, TResult>(TContext context, Func<ReadOnlySpan<char>, TContext, TResult> visitor)
+        where TContext : allows ref struct {
         ArgumentNullException.ThrowIfNull(visitor);
         TextPieceView view = _view;
         if (view.Length == 0) { return visitor(ReadOnlySpan<char>.Empty, context); }
@@ -70,14 +80,19 @@ public sealed class DurableText {
         return visitor(content.AsSpan(), context);
     }
 
+    /// <summary>Copies exactly <c>destination.Length</c> UTF-16 code units starting at <paramref name="start"/>.</summary>
     public void CopyTo(int start, Span<char> destination) => _view.CopyTo(start, destination);
+    /// <summary>Appends the complete current text to the builder, preserving its existing contents.</summary>
     public void AppendTo(StringBuilder destination) => AppendTo(destination, 0, Length);
+    /// <summary>Appends a UTF-16 range to the builder. A destination failure can leave a prefix appended.</summary>
     public void AppendTo(StringBuilder destination, int start, int length) {
         ArgumentNullException.ThrowIfNull(destination);
         TextPieceView.ValidateRange(Length, start, length);
         _view.AppendTo(destination, start, length);
     }
-    public override string ToString() => _view.ToText();
+    /// <summary>Returns the current text, preserving every UTF-16 code unit including isolated surrogates.</summary>
+    /// <remarks>Reuses the current version's string if a visit already materialized it. Calling this method alone does not populate the visit cache.</remarks>
+    public override string ToString() => _visitText ?? _view.ToText();
 
     internal DurableTextState CaptureState() => new(new TextSnapshot(_view), _sourceToken);
 
@@ -129,13 +144,19 @@ public sealed class DurableText {
         var indexed = new (TextEdit Edit, int Order)[edits.Count];
         for (int i = 0; i < indexed.Length; i++) {
             TextEdit edit = edits[i];
-            ArgumentNullException.ThrowIfNull(edit.Replacement);
-            TextPieceView.ValidateRange(length, edit.Start, edit.Length);
+            if (edit.Replacement is null) {
+                throw new ArgumentNullException(nameof(edits), $"edits[{i}].Replacement must contain a string.");
+            }
+            if (edit.Start < 0 || edit.Start > length) {
+                throw new ArgumentOutOfRangeException(nameof(edits), edit.Start, $"edits[{i}].Start is outside the text.");
+            }
+            if (edit.Length < 0 || edit.Length > length - edit.Start) {
+                throw new ArgumentOutOfRangeException(nameof(edits), edit.Length, $"edits[{i}].Length is outside the available range.");
+            }
             total += (long)edit.Replacement.Length - edit.Length;
             indexed[i] = (edit, i);
         }
-        if (total < 0 || total > int.MaxValue) { throw new ArgumentOutOfRangeException(nameof(edits)); }
-        nextLength = (int)total;
+        if (total > int.MaxValue) { throw new ArgumentOutOfRangeException(nameof(edits), "The resulting text is too long."); }
         Array.Sort(indexed, static (a, b) => {
             int order = a.Edit.Start.CompareTo(b.Edit.Start);
             return order != 0 ? order : a.Order.CompareTo(b.Order);
@@ -144,15 +165,15 @@ public sealed class DurableText {
         int previousEnd = 0;
         for (int i = 0; i < indexed.Length;) {
             int start = indexed[i].Edit.Start;
-            if (start < previousEnd) { throw new ArgumentException("Overlapping edits.", nameof(edits)); }
+            if (start < previousEnd) { throw new ArgumentException($"edits[{indexed[i].Order}].Start falls inside another edit.", nameof(edits)); }
             int removed = 0;
             string? replacement = null;
             List<string> inserted = [];
             while (i < indexed.Length && indexed[i].Edit.Start == start) {
-                TextEdit edit = indexed[i++].Edit;
+                var (edit, order) = indexed[i++];
                 if (edit.Length == 0) { inserted.Add(edit.Replacement); }
                 else {
-                    if (replacement is not null) { throw new ArgumentException("Multiple replacements at one position.", nameof(edits)); }
+                    if (replacement is not null) { throw new ArgumentException($"edits[{order}].Start already has a replacement.", nameof(edits)); }
                     removed = edit.Length;
                     replacement = edit.Replacement;
                 }
@@ -162,6 +183,7 @@ public sealed class DurableText {
             if (removed != 0 || text.Length != 0) { result.Add(new(start, removed, text)); }
             previousEnd = start + removed;
         }
+        nextLength = (int)total; // Valid, disjoint ranges can remove at most the original length.
         return result.ToArray();
     }
 }

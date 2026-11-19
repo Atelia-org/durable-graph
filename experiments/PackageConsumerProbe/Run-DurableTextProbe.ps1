@@ -150,6 +150,18 @@ try {
     foreach ($id in $dgIds) { if (!$assets.libraries.ContainsKey($id + '/' + $Version)) { throw "Missing DG package: $id" } }
     $runtimePackage = Join-Path $PackageSource ('Atelia.DurableGraph.' + $Version + '.nupkg')
     $runtimeRoot = Join-Path $cache ('atelia.durablegraph/' + $Version.ToLowerInvariant())
+    $xmlEntry = 'lib/net10.0/Atelia.DurableGraph.xml'
+    $xmlPath = Join-Path $runtimeRoot $xmlEntry
+    $xmlHash = Entry-Hash $runtimePackage $xmlEntry
+    if ((Get-FileHash -LiteralPath $xmlPath).Hash -cne $xmlHash) { throw 'Restored runtime XML differs from the nupkg.' }
+    [xml]$documentation = Get-Content -Raw -LiteralPath $xmlPath
+    foreach ($method in @('DurableText.VisitSpan', 'DurableText.ApplyEdits', 'DurableText.ToString', 'TextSnapshot.CopyTo')) {
+        $prefix = 'M:Atelia.DurableGraph.' + $method
+        if (!$documentation.SelectSingleNode("/doc/members/member[starts-with(@name,'$prefix')]/summary")) {
+            throw "Runtime package documentation is missing $method."
+        }
+    }
+    $receipt['RuntimeDocumentation'] = [ordered]@{ Entry = $xmlEntry; Sha256 = $xmlHash }
     foreach ($entry in @('analyzers/dotnet/cs/Atelia.DurableGraph.Generator.dll', 'tools/net10.0/Atelia.DurableGraph.Build.dll',
         'build/Atelia.DurableGraph.props', 'build/Atelia.DurableGraph.targets')) {
         $path = Join-Path $runtimeRoot $entry
