@@ -1,3 +1,5 @@
+using Atelia.Binary;
+using Atelia.DurableGraph.Runtime;
 using System.Text;
 
 namespace Atelia.DurableGraph.Tests;
@@ -154,10 +156,14 @@ public sealed class DurableTextTests {
         Assert.Equal("aX" + new string('a', length - 2) + "bc", text.ToString());
         var state = text.CaptureState();
         AssertPlan(state, saved);
-        Assert.Collection(state.BuildSourcePlan(),
-            first => Assert.Equal(TextSourcePiece.Copy(0, 1), first),
-            literal => Assert.Equal("X", literal.Literal.ToString()),
-            last => Assert.Equal(TextSourcePiece.Copy(2, before.Length - 2), last));
+        BareValueReader delta = new(TextBodyCodec.PrepareDelta(saved, state).Body);
+        Assert.Equal((uint)before.Length, delta.ReadVarUInt32());
+        AssertCopy(ref delta, 0, 1);
+        Assert.Equal((byte)2, delta.ReadByte());
+        Assert.Equal(1u, delta.ReadVarUInt32());
+        Assert.Equal(new byte[] { (byte)'X', 0 }, delta.ReadRawBytes(2).ToArray());
+        AssertCopy(ref delta, 2, (uint)before.Length - 2);
+        delta.EnsureFullyConsumed();
     }
 
     private sealed class ReentrantEdits(Action action, bool actInCount) : IReadOnlyList<TextEdit> {
@@ -297,10 +303,14 @@ public sealed class DurableTextTests {
         Assert.Equal(2, first.Content.View.PieceCount); // T=5: no physical flattening.
         Assert.True(text.TryInstall(text.PrepareAcceptance(first)));
         Assert.Equal(2, text.Snapshot().View.PieceCount);
-        TextSourcePiece whole = Assert.Single(text.CaptureState().BuildSourcePlan());
-        Assert.True(whole.IsCopy);
-        Assert.Equal(0, whole.BaseOffset);
-        Assert.Equal(258, whole.Length);
+        // A real edit bypasses the unchanged-content shortcut. Both physical
+        // strings must be emitted as a single Copy of the accepted text.
+        text.Replace(text.Length, 0, "!");
+        BareValueReader delta = new(TextBodyCodec.PrepareDelta(first, text.CaptureState()).Body);
+        Assert.Equal(259u, delta.ReadVarUInt32());
+        AssertCopy(ref delta, 0, 258);
+        Assert.Equal(new byte[] { 2, 1, (byte)'!', 0 }, delta.ReadRawBytes(4).ToArray());
+        delta.EnsureFullyConsumed();
 
         DurableText a = DurableText.Restore(first), b = DurableText.Restore(first);
         string original = first.Content.ToString();
@@ -429,12 +439,18 @@ public sealed class DurableTextTests {
     private static void AssertPlan(DurableTextState state, DurableTextState baseline) {
         Assert.Same(baseline.ContentToken, state.SourceToken);
         StringBuilder replay = new();
-        foreach (TextSourcePiece piece in state.BuildSourcePlan()) {
+        foreach (TextPiece piece in state.Content.View.Pieces) {
             Assert.True(piece.Length > 0);
-            if (piece.IsCopy) { baseline.Content.AppendTo(replay, piece.BaseOffset, piece.Length); }
-            else { replay.Append(piece.Literal.Span); }
+            if (piece.BaseOffset >= 0) { baseline.Content.AppendTo(replay, piece.BaseOffset, piece.Length); }
+            else { replay.Append(piece.Memory.Span); }
         }
         Assert.Equal(state.Content.ToString(), replay.ToString());
+    }
+
+    private static void AssertCopy(ref BareValueReader delta, uint offset, uint length) {
+        Assert.Equal((byte)1, delta.ReadByte());
+        Assert.Equal(offset, delta.ReadVarUInt32());
+        Assert.Equal(length, delta.ReadVarUInt32());
     }
 
     private static void AssertAllRanges(DurableText text, string expected) {

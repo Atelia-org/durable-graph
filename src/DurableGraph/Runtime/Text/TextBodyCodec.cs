@@ -54,49 +54,41 @@ internal static class TextBodyCodec {
             }
             return new(true, buffer.WrittenSpan);
         }
-        WritePlan(ref writer, current.BuildSourcePlan(), previous.Content.Length, current.Content.Length);
+        WriteSourceRanges(ref writer, current.Content.View.PieceSpan, previous.Content.Length, current.Content.Length);
         return new(true, buffer.WrittenSpan);
     }
 
-    private static void WritePlan(ref BareValueWriter writer, IReadOnlyList<TextSourcePiece> pieces,
+    private static void WriteSourceRanges(ref BareValueWriter writer, ReadOnlySpan<TextPiece> pieces,
         int sourceLength, int outputLength) {
         int output = 0;
-        for (int index = 0; index < pieces.Count;) {
-            TextSourcePiece first = pieces[index++];
-            if (first.Length == 0) { continue; }
-            ValidatePiece(first, sourceLength, outputLength - output);
+        for (int index = 0; index < pieces.Length;) {
+            TextPiece first = pieces[index];
+            bool isCopy = first.BaseOffset >= 0;
             int length = first.Length;
-            int end = index;
-            while (end < pieces.Count) {
-                TextSourcePiece next = pieces[end];
-                if (next.Length == 0) { end++; continue; }
-                if (next.IsCopy != first.IsCopy || (first.IsCopy && next.BaseOffset != (long)first.BaseOffset + length)) { break; }
-                ValidatePiece(next, sourceLength, outputLength - output - length);
-                length += next.Length;
+            int end = index + 1;
+            // New pieces form one literal even across strings. Copies can merge only
+            // when the next piece continues the range in this exact predecessor.
+            while (end < pieces.Length) {
+                TextPiece next = pieces[end];
+                if (isCopy ? next.BaseOffset != (long)first.BaseOffset + length : next.BaseOffset >= 0) { break; }
+                length = checked(length + next.Length);
                 end++;
             }
-            if (first.IsCopy) {
+            if (length <= 0 || length > outputLength - output ||
+                (isCopy && (first.BaseOffset > sourceLength || length > sourceLength - first.BaseOffset))) {
+                throw new InvalidOperationException("The frozen Text pieces contain an invalid source range.");
+            }
+            if (isCopy) {
                 WriteCopy(ref writer, first.BaseOffset, length);
             } else {
                 writer.WriteByte(New);
                 writer.WriteVarUInt32((uint)length);
-                WriteUnits(ref writer, first.Literal.Span);
-                for (int literal = index; literal < end; literal++) {
-                    if (pieces[literal].Length != 0) { WriteUnits(ref writer, pieces[literal].Literal.Span); }
-                }
+                foreach (TextPiece literal in pieces[index..end]) { WriteUnits(ref writer, literal.Memory.Span); }
             }
             output += length;
             index = end;
         }
-        if (output != outputLength) { throw new InvalidOperationException("The Text source plan does not cover its frozen content."); }
-    }
-
-    private static void ValidatePiece(TextSourcePiece piece, int sourceLength, int remaining) {
-        if (piece.Length <= 0 || piece.Length > remaining || (piece.IsCopy
-                ? piece.BaseOffset < 0 || piece.BaseOffset > sourceLength || piece.Length > sourceLength - piece.BaseOffset
-                : piece.Literal.Length != piece.Length)) {
-            throw new InvalidOperationException("The frozen Text source plan contains an invalid range.");
-        }
+        if (output != outputLength) { throw new InvalidOperationException("The frozen Text pieces do not cover the output."); }
     }
 
     private static void WriteCopy(ref BareValueWriter writer, int offset, int length) {

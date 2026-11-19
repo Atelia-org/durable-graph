@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Atelia.DurableGraph;
@@ -20,6 +21,7 @@ internal sealed class TextPieceView {
     internal int LargestBacking { get; }
     internal int PieceCount => _pieces.Count;
     internal IReadOnlyList<TextPiece> Pieces => _pieces;
+    internal ReadOnlySpan<TextPiece> PieceSpan => CollectionsMarshal.AsSpan(_pieces);
 
     internal static TextPieceView FromString(string text, int sourceOffset = -1, object? contentToken = null) {
         ArgumentNullException.ThrowIfNull(text);
