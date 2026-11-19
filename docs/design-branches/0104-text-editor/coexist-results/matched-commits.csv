@@ -1,0 +1,10 @@
+selection,count,median_delta_us,median_change_percent,median_save_cpu_change_percent
+pair-1,24,77.6,5.114,6.227
+pair-2,24,73.45,4.474,5.791
+pair-3,24,29.85,2.437,1.319
+pair-4,24,-16.5,-1.168,-0.33
+pair-5,24,61.85,4.577,4.607
+pair-6,24,12.35,1.019,0.558
+all,144,34.15,2.674,2.297
+registered-first,72,-57.95,-3.937,-6.089
+registered-second,72,92.2,7.309,10.376

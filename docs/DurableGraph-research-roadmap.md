@@ -23,9 +23,9 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 | 分片 | 要解决的增量 |
 |---|---|
 | 容器 payload 准备与对象重整 | [DB-102 实测](design-branches/0102-container-payload-planning/mainline-results.md)后的重访条件：若真实负载仍受整表键扫描或可并行的 State 准备主导，再评估减少扫描或并行 Prepare。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
-| 通用文本编辑器与自定义叶 | 根据 [DB-104 的登记型叶实验](design-branches/0104-text-editor/registered-leaves.md) 收束正式的 Schema 声明、冻结/恢复与提交收据合同，再决定主线迁移。含图引用的自定义容器等出现具体消费者后，用出边、别名和循环恢复场景另行验证。 |
+| 含图引用的自定义对象 | [DB-104 自包含叶](design-branches/0104-text-editor/README.md) 使用显式登记的 codec。含出边的自定义容器等出现具体消费者后，用准确引用枚举、共享别名和循环回填的恢复场景另行验证。 |
 | 文本搜索、替换与工具 | 编辑器抽取后研究单篇字面、正则 Search 的有界摘录、ReplaceUnique 和 ReplaceAll。宿主解析地址、限定搜索集合、逐次回执；多点预览、选择和跨回合确认用真实 tool-loop 比较。[用户故事](design-branches/0103-durable-text-search/README.md#memo-编辑工具与批量替换预览) · [常驻全文缓存与快照 KMP 的重访依据](design-branches/0103-durable-text-search/indexof-cache-comparison.md) |
-| DurableText 的长期成本 | [DB-101](design-branches/0101-durable-text/README.md) 已接入分段 Base。真实工作负载需要大量常驻历史或随机读时再对照 Rope。深链冷开、连续正则输入或重复物化成为瓶颈时，分别考虑链长配置、分块搜索和缓存。 |
+| TextEditor 的长期成本 | [DB-101](design-branches/0101-durable-text/README.md) 已接入分段 Base。真实工作负载需要大量常驻历史或随机读时再对照 Rope。深链冷开、连续正则输入或重复物化成为瓶颈时，分别考虑链长配置、分块搜索和缓存。 |
 | 独立对象图的规模成本 | [DB-100](design-branches/0100-graph-heap/README.md)采用完整图builder与公共保存日志。只有真实条目大小/访问轨迹证明全图读取或捕获不可接受时，再评估图内稀疏读取；只有存储增长提出实际回收需求时，再定义GraphRef、Schema、Delta链的保留/GC合同。索引与世界目录选择由memo消费层推进，不把全堆扫描当业务搜索。 |
 | 引用式事实的跨应用成本 | [DB-099](design-branches/0099-event-references/README.md) 已完成普通 inline EventRef 与 Agent 接入。后续仅当其他应用的表示/生命周期共同需求出现，才考虑上移缓存机制；若准确冷读、历史 Event 模型依赖或应用改造成本不能接受，可直接重访物理字符串去重候选，不以继续扩缓存为前置。引用依赖的 GC/部分导出仍未实施，未来相关工具必须保留目标/Schema/传递闭包或显式重映射；完整库备份不依赖这些未来工具。 |
 | [Echo Garden接入配方](design-branches/0096-history-and-head-model/application-recipes.md) | 导航DTO/Hex、安全分叉切换、版本化Summary已实施并通过源码/普通包验收；无剩余示例工单。多个typed DTO反复出现相同适配成本时再考虑converter；实际无法遵守纯投影后立即提交时再研究更强摘要合同。七字段/8存档没有性能优化依据。 |

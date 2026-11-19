@@ -1,0 +1,69 @@
+{
+  "scheme": 1,
+  "producer": {
+    "repository": "https://github.com/Atelia-org/durable-graph.git",
+    "commit": "f829f849fbbf123bcfa83f4c1bd89dd3792d045b",
+    "checkout": "W:/temp/db104-master-f829f849-pack1/source",
+    "sdk": "10.0.201",
+    "version": "0.0.0-leafpkg.20261119184626.gdf3ec7bd",
+    "feed": "W:/temp/db104-master-f829f849-pack1/feed",
+    "storageVersion": "0.1.3-dev.20261118.g3f780ad",
+    "storageCommit": "3f780ad95239d7556f917e1adca6839cda144c92",
+    "storageManifestSha256": "CB78728E8602B2DB5A3EB8FECF71B184ECDBFF743DE9D1A9AF28EC82542FEEDE"
+  },
+  "packageHashes": [
+    {"id":"Atelia.DurableGraph","nupkg":"45C3FBFB9756178E467F019E2D34824F5CD259F536644F6757962747BAAAD00A","runtimeDll":"42F049C9F7AF919DEE214C2C42C3BBBB0F7AEB874284A982ACE66F060BE9F6B6"},
+    {"id":"Atelia.DurableGraph.Persistence","nupkg":"E118ED82AD4C0E168FF90F16B1BA41BF3ED4CA8017D59F3F42901510EA5EBBA9","runtimeDll":"4847B03BB7A328BC48D3AB64930756FAD80AA882F1F465AF0323E0968D12E0CB"},
+    {"id":"Atelia.DurableGraph.Serialization","nupkg":"AEE6A712C8493F5F711DD12B65C143C3DE864C163DFB8F8E484830320BA903B1","runtimeDll":"EB5259DBC2397C750F7E618E2F90C105E65850D3CFD1AA2A54B69AFBF11F313E"},
+    {"id":"Atelia.DurableGraph.Storage","nupkg":"370E10A0640903B43E327F3A5318C79A6E9145892897BA0DEF2D683562A68CA7","runtimeDll":"30D536377389360F01B7F34D1A940A45010F4E47DD5161A0DFBFE9942ADE3994"},
+    {"id":"Atelia.Text","nupkg":"2D14DF5E459418F9F21B7995AF114BB76F08AE161E53B573E59E3859F837DFCD","runtimeDll":"B2A949D78B176AB8B0FDC96000E18263E3365D51D703911A43C10EB5A55AD562"},
+    {"id":"Atelia.VariableBitmap","nupkg":"A115717EEB48B66287CD6E62847A1E3E068F64DD2A5D5976A783544D44BACB9E","runtimeDll":"F297F3E6B7CEB721A62BF98B23167F156E20911E7B6C794DED603045B82DDD9B"}
+  ],
+  "packagedAnalyzerSha256": "B20281388DE4DE0AFBDDA62AF84E429680EE03263E8E4325DC35EDEE8ABAA533",
+  "textXmlSha256": "85435294C62E673080EC1BDF9C0E43A152685FC3E397B3F204A057814F994228",
+  "dependencyChecks": {
+    "allRestoredPackages": 13,
+    "localSources": 1,
+    "freshConsumerCache": true,
+    "projectReferences": 0,
+    "fiveProductPackagesAtProducerCommit": true,
+    "textAndBitmapDirectNuGetDependencies": ["Atelia.DurableGraph.Serialization"],
+    "textAndBitmapAteliaAssemblyReferences": ["Atelia.Binary","Atelia.DurableGraph.Serialization"],
+    "fourDurableGraphPackagesReferenceNeitherLeaf": true,
+    "nativeTextEditorSnapshotAndEditAbsentFromRuntime": true
+  },
+  "mixedLeaves": {
+    "hostSchemasPublishedAndVerified": 2,
+    "phases": [
+      {"name":"seed","process":39724,"result":{"originalAndEdited":true,"aliases":true,"stage":"hot-save","actualRecords":{"textDeltaBytes":20,"bitmapDelta":"00010003","exactPredecessors":true}},"sha256":"8A76D5C5927C34BA3EAE5A3B07AB68243B53C35C1826FE03165952AB6558FF64"},
+      {"name":"resume","process":2468,"result":{"independentOpens":true,"oldSnapshot":true,"variableBitmapLength":40011},"sha256":"5B6135F81F35693FD503419BF6558ACB33E5D294A8DE4B2A6B95510AF8FC32E6"},
+      {"name":"verify","process":18900,"result":{"reopenedHistoricalGenerations":3,"aliases":true,"contentVerified":true},"sha256":"B14C4E35806CA69883B40718BD59AD54DE493BF65F7229B2CDCB2092B7AA7836"},
+      {"name":"missing","process":27900,"result":[{"missing":"bitmap","error":"InvalidDataException","Message":"No declaration factory is registered for Probe.VariableBitmapV1."},{"missing":"text","error":"InvalidDataException","Message":"No declaration factory is registered for Atelia.Text.TextEditor."}],"sha256":"3A12D0371F3E48C26E05363C005B8CA085DE591066D7F384B72340FBB0A42831"}
+    ]
+  },
+  "textEditor": {
+    "hostSchemasPublishedAndVerified": 2,
+    "xmlApiChecks": ["TextEditor.VisitSpan","TextEditor.TryApplyEdits","TextEditor.ToString","TextSnapshot.CopyTo"],
+    "readOnlyDatabaseBytesUnchanged": true,
+    "phases": [
+      {"name":"seed","process":6236,"checks":13,"sha256":"EE80C9E78B4468CF873F0FFCEF94541A065E45F3D7244F26CA5D09C23F0D81B8"},
+      {"name":"resume","process":23848,"checks":18,"sha256":"6F140B91E00AEE2BAD2F69BA8DC533FC1E53484C8DF1AEE8D1B229F1B56303FB"},
+      {"name":"verify","process":30120,"checks":11,"sha256":"00F966B6315B8F747F0227421B68880DA4017CF927438E10B49F1A88FC6BF3E1"}
+    ]
+  },
+  "readerWithoutText": {
+    "ateliaPackages": 10,
+    "textPackageLoaded": false,
+    "readOnlyDatabaseBytesUnchanged": true,
+    "phases": [
+      {"name":"seed","process":20036,"stage":"Completed","rejected":false,"exceptions":[],"sha256":"7FDA262B988383CE2FB42C38211FD6F88880CA6291FE11B448C19107D2D1B5B0"},
+      {"name":"control-read","process":1660,"stage":"Completed","rejected":false,"exceptions":[],"sha256":"1E0ADD8AFAFAC4E1425EE24299B824C5569F4C2674EB77D3A5354A960BD2309B"},
+      {"name":"text-read","process":35680,"stage":"OpenGraphWithText","rejected":true,"exceptions":[{"Type":"System.IO.InvalidDataException","Message":"No declaration factory is registered for Atelia.Text.TextEditor."}],"sha256":"CEBEC8B6082C6FC42C1817EC53C26B955CA0521507EB5BC30F02ACE45832BD51"}
+    ]
+  },
+  "rawReceipts": [
+    {"path":"W:/temp/db104-master-f829f849-pack1/package-evidence.json","sha256":"A1DE1CF890B8607849E88824167492E17145FDDD283282DB9CCB55CB102ABE6C"},
+    {"path":"W:/temp/db104-master-f829f849-editor1/result.json","sha256":"ED05A4DAD7712B3B125249E62C52C9F98D0620AB507DC97B021B0FB4A361ECA9"},
+    {"path":"W:/temp/db104-master-f829f849-reader1/result.json","sha256":"68682AC2EB8FF6216D66D64BCEE6A4C4E1AFF39DF7C7915955EAF2538D39F92E"}
+  ]
+}

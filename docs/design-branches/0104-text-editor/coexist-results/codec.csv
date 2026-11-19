@@ -1,0 +1,5 @@
+units,route,base_encodes_first,base_encodes_hot,raw_base_bytes,typed_base_bytes,typed_base_count,hot_delta_count,hot_delta_total_body_bytes,first_store_bytes,hot_store_growth,read_edit_save_thread_bytes,isolated_33pieces_delta_bytes,isolated_base_thread_bytes,isolated_delta_thread_bytes,isolated_replay_thread_bytes
+4096,builtin,1,0,4100,4103,1,16,1175,5352,5756,59904.0,150,20560,696,3648
+4096,registered,1,0,4100,4103,1,16,1175,5428,5756,62184.0,150,20560,696,3648
+65536,builtin,1,0,65542,65545,1,16,1382,66792,5980,188348.0,163,193576,712,3648
+65536,registered,1,0,65542,65545,1,16,1382,66868,5976,190240.0,163,193576,712,3648

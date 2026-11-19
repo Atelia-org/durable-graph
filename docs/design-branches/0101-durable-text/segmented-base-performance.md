@@ -4,7 +4,7 @@
 
 ## 方法和边界
 
-[可复现 probe](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs) 的 `RecordSegmentedBaseCosts` 使用两种正文：全 `a`，以及 `汉a` 交替；长度为 65,536 和 1,048,576 个 UTF-16 单元。每份正文分别从一个字符串开始，或通过一次公开 `ApplyEdits` 构造独立 16 单元 literal backing。输入构造、Base 编码和验证都在解码计时外。每 case 预热一次 codec，随后记录五个原始样本；这是内存中准备好的 body 的重复解码，不是 OS 冷读或跨进程稳态性能测试。
+[可复现 probe](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs") 的 `RecordSegmentedBaseCosts` 使用两种正文：全 `a`，以及 `汉a` 交替；长度为 65,536 和 1,048,576 个 UTF-16 单元。每份正文分别从一个字符串开始，或通过一次公开 `ApplyEdits` 构造独立 16 单元 literal backing。输入构造、Base 编码和验证都在解码计时外。每 case 预热一次 codec，随后记录五个原始样本；这是内存中准备好的 body 的重复解码，不是 OS 冷读或跨进程稳态性能测试。
 
 每次分别测 `ReadBase(body)`、单独 `new string(expected.AsSpan())`、相同 `DurableTextState(TextSnapshot.FromString(existing))` 包装，以及恢复后 `ToString()`。检查完整字符相等、恢复后只有一个 piece、`ToString()` 返回相同 backing string。独立包装控制不会复制已有字符串；不把 Repository/图恢复周边分配混进 codec 数据。累计调用线程分配不等于存活堆大小。
 
@@ -54,6 +54,7 @@
 原 stores 和失败运行留在 W SSD：`W:/DurableTextProbe/segmented-product-20261118-152349`（首次失败 `...-152034`）。仓内仅保留最终原值、保存链原值、identity 和[小证据清单](segmented-base-product-20261118/files.json)等 JSON。清单的 `repository` 条目是仓内文件；`external-local-log` 条目记录 W 上构建及成功/失败日志的绝对路径、长度与 SHA256，日志原件不入 Git。stores 同样只留在 W。
 
 ```powershell
+# 在包含 RecordSegmentedBaseCosts 的 b9eef489 检出运行，产品边界和 DLL hash 见上文。
 # 使用准确 Storage source pin，构建由共享工作窗口串行执行。
 dotnet build tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release -m:1 -nr:false -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage
 $env:DG_TEXT_SEGMENT_PROBE = 'W:/DurableTextProbe/segmented-product-new-run'

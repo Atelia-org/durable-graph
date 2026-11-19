@@ -1,13 +1,13 @@
 # TextSnapshot.IndexOf 与 VisitSpan 的字面查找对照
 
-本文保留逐次租还实现 `8fd71257` 的测量。当前产品的首次查询、同版复扫及编辑后复测见[按版本缓存后的对照](indexof-cache-comparison.md)。
+本文保留逐次租还实现 `8fd71257` 的测量。内建缓存版 `ea8f9236` 的首次查询、同版复扫及编辑后复测见[按版本缓存后的对照](indexof-cache-comparison.md)。
 
 2026-11-19。为简化实现，能否把冻结快照上的流式 KMP 全部换成连续 span 上的 .NET Ordinal 搜索？**建议保留现有 `TextSnapshot.IndexOf` 及其 KMP。面向 memo 的一篇多项查询，优先在一次 `VisitSpan` 内完成。** 多片正文若能早停或从近尾起搜，可避免全文复制。单片周期文本的特定失配模式中，KMP 在双方都无需复制的条件下仍有优势。本次未修改产品 API 或算法。
 
 ## 现有路径与比较口径
 
-- `TextSnapshot.IndexOf(string, start)` 在冻结的 view 上查找，返回 UTF-16 绝对索引。空串返回 start，针长超出剩余正文时直接返回 -1。单字符逐片调用 BCL `IndexOf(char)`。长度至少为 2 的可匹配模式每次构建前缀表，匹配进度跨片保留。非零 start 会跳过此前字符，但仍从首个片描述符开始定位。[源码](../../../src/DurableGraph/TextSnapshot.cs)
-- `DurableText.VisitSpan` 固定当次进入编辑器的版本。试验用静态回调在 `span[start..]` 上作 Ordinal 查找并还原绝对位置，在进入 visitor 前执行相同的参数与范围快返。两臂在同一版正文上比较，快照已在计时前取得。已持有的旧快照在编辑器改写后仍能查旧版，直接调用编辑器的 `VisitSpan` 会看到新版。普通包消费者已有在同一个快照上查首项、再从其后查第二项以判断唯一性的调用。[全文访问](../../../src/DurableGraph/DurableText.cs) · [包消费者](../../../experiments/PackageConsumerProbe/DurableTextConsumer/Program.cs)
+- `TextSnapshot.IndexOf(string, start)` 在冻结的 view 上查找，返回 UTF-16 绝对索引。空串返回 start，针长超出剩余正文时直接返回 -1。单字符逐片调用 BCL `IndexOf(char)`。长度至少为 2 的可匹配模式每次构建前缀表，匹配进度跨片保留。非零 start 会跳过此前字符，但仍从首个片描述符开始定位。[源码](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/TextSnapshot.cs")
+- `DurableText.VisitSpan` 固定当次进入编辑器的版本。试验用静态回调在 `span[start..]` 上作 Ordinal 查找并还原绝对位置，在进入 visitor 前执行相同的参数与范围快返。两臂在同一版正文上比较，快照已在计时前取得。已持有的旧快照在编辑器改写后仍能查旧版，直接调用编辑器的 `VisitSpan` 会看到新版。普通包消费者已有在同一个快照上查首项、再从其后查第二项以判断唯一性的调用。[全文访问](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/DurableText.cs") · [包消费者](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:experiments/PackageConsumerProbe/DurableTextConsumer/Program.cs")
 - 为判断早停收益有多少依赖于 KMP，额外对照一个仅用公开 `TextSnapshot.CopyTo` 的实验臂。它用 BCL 查找重叠窗口，相邻窗保留 `needle.Length - 1` 个单元，容量取剩余长度与 `max(1024, 2 × needle.Length)` 的较小值。此臂也能查询冻结版本。多片非零偏移会用到惰性片尾索引，暖态测量不含首次建索引的时间与分配。[分窗对照](indexof-probe/WindowControl.cs)
 
 ## 一次查找：命中位置和片数
@@ -68,4 +68,4 @@
 
 Windows x64，AMD Ryzen 7 1700，.NET 10.0.5，256 位 SIMD 可用，512 位不可用。Release 独立探针绑定 DB-103 已验明的普通包 DLL，产品提交 `8fd71257`，DLL SHA-256 为 `75F344C8FBD164523323DC89C4A96D1D1D21212D6C1A60DEA380CF0F2C14D56A`。计时关闭分层 JIT，预热查询、缓冲池和实际用到的片尾索引。单正文路线均用相同快照版本和独立 `string.IndexOf(..., Ordinal)` oracle，测试了单片、非零切片、9/129 片及跨界命中。整库路线校验绝对位置的加权总和。计时工作负载只覆盖内存中的字面搜索，没有包含仓库读取、显示摘录和真实请求频率。
 
-主矩阵 162 个工况、追加短针对照 40 个，各三臂、三个独立进程，每进程三次换位。整库另有 6 个工况、四条调用路径和三个独立进程，每进程四次换位。先取每进程各批中位数，再取三进程的中位数。原始 5742 批全部保留。硬件、运行时、冷池和实际编辑产生的局部性都可能改变转换区间。[探针与重跑命令](indexof-probe/README.md) · [逐批原值及运行日志](indexof-results/batches.zip) · [汇总脚本](indexof-probe/summarize.py)
+主矩阵 162 个工况、追加短针对照 40 个，各三臂、三个独立进程，每进程三次换位。整库另有 6 个工况、四条调用路径和三个独立进程，每进程四次换位。先取每进程各批中位数，再取三进程的中位数。原始 5742 批全部保留。硬件、运行时、冷池和实际编辑产生的局部性都可能改变转换区间。使用 `4bbd64e8` 的探针与 `8fd71257` 的产品 DLL 复现本表。[历史与现行探针的运行方法](indexof-probe/README.md) · [逐批原值及运行日志](indexof-results/batches.zip) · [汇总脚本](indexof-probe/summarize.py)

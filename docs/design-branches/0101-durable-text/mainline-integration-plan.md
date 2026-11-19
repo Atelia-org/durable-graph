@@ -1,6 +1,6 @@
 # DurableText 主线接入与消费合同
 
-研究稿及评审位置见[本片入口](README.md)。主线类型位于 `Atelia.DurableGraph`。领域模型可声明 `DurableText? Body`，普通 string 字段继续适用于一句话 Gist。多个字段或容器元素可指向同一正文。同一版本的独立 checkout 分别持有自己的可编辑对象。
+研究稿及评审位置见[本片入口](README.md)。本文描述 DB-101/103 时期的内建类型。现行图字段改用[注册叶 TextEditor](../0104-text-editor/README.md)。当时的类型位于 `Atelia.DurableGraph`。领域模型可声明 `DurableText? Body`，普通 string 字段继续适用于一句话 Gist。多个字段或容器元素可指向同一正文。同一版本的独立 checkout 分别持有自己的可编辑对象。
 
 ## 编辑和读取
 
@@ -33,7 +33,7 @@ entry.Body.AppendTo(contextBuilder);
 | Base | 总单元数 N，随后读到 body 末尾的每段都是一条非空 Bare string。按段选择无损 UTF-8 或 UTF-16LE，解码后的长度之和必须等于 N。空正文只写 `00` |
 | Delta | 结果单元数 N，随后为产生恰好 N 个单元的指令序列。Copy（字节 1）后接前驱起点及长度；New（字节 2）后接长度及相应 UTF-16LE 单元 |
 
-文本编码器合并相邻 New 及来源连续的相邻 Copy。读取时验证实际前驱范围、长度、指令和完整消耗。恢复沿链迭代，Copy 复用前驱字符串切片，New 解码新增内容；片段积累达到内部资源界限时，可在这一层改用平坦恢复。该界限与编辑器接受时的整理阈值分别用于冷读和热编辑。[实际 codec](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs)
+文本编码器合并相邻 New 及来源连续的相邻 Copy。读取时验证实际前驱范围、长度、指令和完整消耗。恢复沿链迭代，Copy 复用前驱字符串切片，New 解码新增内容；片段积累达到内部资源界限时，可在这一层改用平坦恢复。该界限与编辑器接受时的整理阈值分别用于冷读和热编辑。[实际 codec](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/Runtime/Text/TextBodyCodec.cs")
 
 业务准备对冻结文本按需生成 Base。图策略用片数和总单元数估算延迟 Base 大小，纳入完整记录的封套开销。选择完成后，在追加前生成实际所选记录。安装后的重建字节使用实际记录累计。State 接受后才可条件安装已准备的整理结果；放弃、独立 Event 或捕获后又有新编辑时，都不得用旧视图覆盖领域编辑。[分段编码与估值](segmented-base-refactoring-plan.md)
 

@@ -1,0 +1,183 @@
+{
+  "sources": {
+    "coexist": {
+      "commit": "06c57dd4a7f3baf75fd89a7a7d592861fc61ce4f",
+      "tree": "630ee0975b5a65d896544fe146b33203c86bd0c3"
+    },
+    "baseline": {
+      "commit": "375e033eb126424032b2f33513d5479cb9978dc8",
+      "tree": "68929a8bb90beb550d85c44461132f0b8922f88c"
+    },
+    "storage": {
+      "commit": "3f780ad95239d7556f917e1adca6839cda144c92",
+      "tree": "806ed8a98805ee58ec19aec1af64a8ba668bf6dc"
+    },
+    "final": {
+      "commit": "f829f849fbbf123bcfa83f4c1bd89dd3792d045b",
+      "tree": "4843cc4658d34d4fd8bdcc3077df40d835cd0751"
+    },
+    "paired/builtin/Program.cs": "80c31c14f3ba76a874846a3c22898477a0b61f4e5ea1d69f3b3d938b26ac2dd6",
+    "paired/leaf/Program.cs": "80c31c14f3ba76a874846a3c22898477a0b61f4e5ea1d69f3b3d938b26ac2dd6",
+    "lockstep/builtin/Program.cs": "9064c6befb38453cc8c6b7772d0209845000a98a32d194a314e941d9eae177f5",
+    "lockstep/leaf/Program.cs": "9064c6befb38453cc8c6b7772d0209845000a98a32d194a314e941d9eae177f5",
+    "final-runner/Program.cs": "c0ebef03d59703ceedcbba70dd3b3a5643a106e081231eb64902b84930c14f26"
+  },
+  "host": {
+    "os": "Windows x64",
+    "processor": "AMD Ryzen 7 1700 (8C/16T)",
+    "dotnetSdk": "10.0.201",
+    "runtime": "10.0.5",
+    "python": "3.12.3",
+    "tieredCompilation": false,
+    "controlledLogicalCpu": 3
+  },
+  "archiveSha256": "66d0ddb6ac309e54b2fb5357d4d9239646965d84621ba1445482cc918793e223",
+  "archiveEntrySha256": {
+    "measured/single/bench-1.json": "ca5d3488cee67165deeec1a5d70fa02518bcd6b2b8755da02da7455dae4cdadb",
+    "measured/single/bench-2.json": "2ecc6907f983dd504df3305dd1406af761e9c93a3b219455f3ff88e781972fb4",
+    "measured/single/bench-3.json": "0122176480f5c498f6ce287b13240de6d21f00e97b9d21658463a806b6612334",
+    "measured/single/diagnose.json": "28f5c17d621ff5cb21a388f8f3262f72030fab083718523a322602c1eefa9f12",
+    "measured/single/seed.json": "325bb0d670f8f0d1d628e4d00cffdd615977bdb8cc5bbf2a67ccf7ef73c61699",
+    "measured/single/resume.json": "6961780602e82a93bd69c526136423c26b535ba554aa2d7be7e6ce214ee104aa",
+    "measured/single/verify.json": "34de38c083a3f96bc2be67403f691b4b1f0a76db919894fe6d26d8b35e44da82",
+    "measured/single/missing.json": "0289a2e06803bda2f51359ba449e24423b5de0d43a1bb6bdcd885ebe44bebe01",
+    "measured/fanout.jsonl": "826ac8e77290d1df6b97904007c39d42a9f811b97f05afd009bbac6017a3251c",
+    "measured/paired.jsonl": "da69fc41213837f91e9bf381fa71ccad6423de7fe90a2d2d71e68ede3a689e1a",
+    "measured/lockstep.jsonl": "10e9377ccad58ddf6768951a7c96f642f0202e63730a9a07fc05ffd82797b95e",
+    "measured/fanout-audit.json": "6f5dd120bbefbe961a0e265ac906b1a358954f90b18402ae93e45e3a07e103d2",
+    "paired.py": "eb01488904f4aaf1ca987b3bfc21bae3e061696c691b989496edf9dfb80fcd12",
+    "lockstep.py": "43304032131e2b7a9f2d4981641cc969482e45c933e38cf55c7d9a0c616cffcc",
+    "summarize-paired.py": "516aab0906bb06581787ed050f1109a7fb895cba620f0c7f02b46448ae82185c",
+    "summarize-lockstep.py": "64aa203a27259005657a8a0bfb0c98ab6f25c7069fc2b0dad935b121d559f05f",
+    "audit/Audit.csproj": "aadd1e000d6e14ede6d384755066c915d0326f22121a59a13deaa13deefa6584",
+    "audit/Program.cs": "fca2ab2b5fe6421c6ea8764d88685c58dd940eb89ac68000e51c43466c172d03",
+    "final-fanout.py": "416212b0ab7b2d6f7bb18f5de64d5d78f31fafc44d75f87e93db1762dc8d7a20",
+    "measured/final-fanout.jsonl": "900047b9bea87bc1804166069030830396806584e6c5cac6263e1f4e2dbf8e06",
+    "measured/final-audit.json": "6a9fa7a59af8823ad37c02b6d72cae7512a7df7c3f597e49df4c63e8462a679f"
+  },
+  "releaseDllSha256": {
+    "coexist/experiments/RegisteredLeafProbe/Consumer": {
+      "Atelia.Binary.dll": "bef8ac8ff77d72aa3fd4f9fc1845474f0f80e6169009597eb15db9e83ed169fe",
+      "Atelia.Consumer.dll": "fa612aeb7e055d1c120de651a1057e5cb709bcd2add079158ef85e8649e8ae6a",
+      "Atelia.Data.dll": "168526a2a6f5e51d13c014751147da87c917d64832dd19214c3f840bca365569",
+      "Atelia.DurableGraph.dll": "ebe47cb58ec43eeeae15923dd5887d429a67e2e2320d3b36326b9fee31fa8dda",
+      "Atelia.DurableGraph.Persistence.dll": "112f1e48c1cdf992e9c38a035e6e494255a38a8be7f57aaa087b6bdd2e875e87",
+      "Atelia.DurableGraph.Serialization.dll": "4fc27ddad1c78d1bb6335ee04ec60e41150f79e9ac1c09d61cafa7a88035641b",
+      "Atelia.DurableGraph.Storage.dll": "ab275a6c381595ef84d77ed24e1eddccde63b4606bfcbeea897834d2b4e85e7c",
+      "Atelia.FrameStore.dll": "df0e493c6e83ca074526f0b5310b0e86e1181bf51e42e3170a1b9efb56a3bd04",
+      "Atelia.HeadStore.dll": "745b4fced91c873345947fb7fc52ab48697cd7bcee86c673a53202a2a68c591b",
+      "Atelia.Primitives.dll": "2a91384bd71eabb6a2f1dd75ea9d928acfadc0a6bbcde67c22d150fe8160bf06",
+      "Atelia.Rbf.dll": "5ca495ca873b042bf81cc2790e638abf3cae9fe4bc376b56b4ab90df4030caa8",
+      "Atelia.Text.dll": "c291d57ff4397023c45f5ab0160afa9815a2fd7a3aad50a009aa6688c84df150",
+      "Atelia.VariableBitmap.dll": "4df5bd3d5eede55050d2c9121593e9140de9da0f6bdaf9911f7f99f05385c164"
+    },
+    "fanout/master": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "5fbc642928bdaa81d4725b018f9cb8c60a68c6458cafc53584ccaaa150f805ee",
+      "Atelia.DurableGraph.Persistence.dll": "d8714e176ad9f1273d56f8a986264b68f129de37d86ee53629767386e7cc6d39",
+      "Atelia.DurableGraph.Serialization.dll": "a92788df9e6709a11f817261c024e898860b6449252a45114af5344525334680",
+      "Atelia.DurableGraph.Storage.dll": "9f261972861b9416f65f6036c76fb10777dd5e884f57f91ef998d0210dcf60a6",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "RegisteredLeaf.Fanout.dll": "86ec257af484006ba2d7b3d6bc5220f46370c223919eb4994873bf829e95b2bc"
+    },
+    "fanout/lab-builtin": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "83071974849a7c743579cd1152e3a9021fef0b23b8184afedc5bee9b2db32f36",
+      "Atelia.DurableGraph.Persistence.dll": "bd29e94c3e79e3c8388ca5b21ee32b575cc887382dfe1270a8ce863345476ee6",
+      "Atelia.DurableGraph.Serialization.dll": "f9f9fee8182f6a79b2d73a2523775bdcad23f09d746f75d3eea208c959b49e28",
+      "Atelia.DurableGraph.Storage.dll": "7f4d8e262cdb0b29a41c4e23de1712f05b5a88db39787ed25972a9fea96729c2",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "RegisteredLeaf.Fanout.dll": "23d80f6bf2b18b89977d85889c31c681d6398b12d8b650085c2786451a4331d2"
+    },
+    "fanout/lab-leaf": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "83071974849a7c743579cd1152e3a9021fef0b23b8184afedc5bee9b2db32f36",
+      "Atelia.DurableGraph.Persistence.dll": "bd29e94c3e79e3c8388ca5b21ee32b575cc887382dfe1270a8ce863345476ee6",
+      "Atelia.DurableGraph.Serialization.dll": "f9f9fee8182f6a79b2d73a2523775bdcad23f09d746f75d3eea208c959b49e28",
+      "Atelia.DurableGraph.Storage.dll": "7f4d8e262cdb0b29a41c4e23de1712f05b5a88db39787ed25972a9fea96729c2",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "Atelia.Text.dll": "2504db413ec7a47c3c4fbc89c3e0617fb955006cfab6d20aa0e2d459f58a8b85",
+      "RegisteredLeaf.Fanout.dll": "b1c9e28d031f74f567f8614691cd27244ec7c8f7ecf20d89877a74907d67ee33"
+    },
+    "paired/builtin": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "83071974849a7c743579cd1152e3a9021fef0b23b8184afedc5bee9b2db32f36",
+      "Atelia.DurableGraph.Persistence.dll": "d363a416308f8cc88c86293affa4350363b7069754fab5e5fd89cac8884ce1bd",
+      "Atelia.DurableGraph.Serialization.dll": "f9f9fee8182f6a79b2d73a2523775bdcad23f09d746f75d3eea208c959b49e28",
+      "Atelia.DurableGraph.Storage.dll": "7f4d8e262cdb0b29a41c4e23de1712f05b5a88db39787ed25972a9fea96729c2",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "RegisteredLeaf.Fanout.dll": "818c9efbf1b7c5ae25f7d41e7a72bec96445caf447266ac754519bf9f46aa6b3"
+    },
+    "paired/leaf": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "83071974849a7c743579cd1152e3a9021fef0b23b8184afedc5bee9b2db32f36",
+      "Atelia.DurableGraph.Persistence.dll": "d363a416308f8cc88c86293affa4350363b7069754fab5e5fd89cac8884ce1bd",
+      "Atelia.DurableGraph.Serialization.dll": "f9f9fee8182f6a79b2d73a2523775bdcad23f09d746f75d3eea208c959b49e28",
+      "Atelia.DurableGraph.Storage.dll": "7f4d8e262cdb0b29a41c4e23de1712f05b5a88db39787ed25972a9fea96729c2",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "Atelia.Text.dll": "82d1311c2bda54cf33e1ea604e4d414c6215f67783b70bc19cc64a1b0eebcd06",
+      "RegisteredLeaf.Fanout.dll": "38b780a505d6d3973aa2615671a85806aec75f4782c465e54955ebba8cc52625"
+    },
+    "lockstep/builtin": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "83071974849a7c743579cd1152e3a9021fef0b23b8184afedc5bee9b2db32f36",
+      "Atelia.DurableGraph.Persistence.dll": "d363a416308f8cc88c86293affa4350363b7069754fab5e5fd89cac8884ce1bd",
+      "Atelia.DurableGraph.Serialization.dll": "f9f9fee8182f6a79b2d73a2523775bdcad23f09d746f75d3eea208c959b49e28",
+      "Atelia.DurableGraph.Storage.dll": "7f4d8e262cdb0b29a41c4e23de1712f05b5a88db39787ed25972a9fea96729c2",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "RegisteredLeaf.Fanout.dll": "097011cdbed9e7c5cdf3a9f42a2861a8f34851df47376b93253140388d03af27"
+    },
+    "lockstep/leaf": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "83071974849a7c743579cd1152e3a9021fef0b23b8184afedc5bee9b2db32f36",
+      "Atelia.DurableGraph.Persistence.dll": "d363a416308f8cc88c86293affa4350363b7069754fab5e5fd89cac8884ce1bd",
+      "Atelia.DurableGraph.Serialization.dll": "f9f9fee8182f6a79b2d73a2523775bdcad23f09d746f75d3eea208c959b49e28",
+      "Atelia.DurableGraph.Storage.dll": "7f4d8e262cdb0b29a41c4e23de1712f05b5a88db39787ed25972a9fea96729c2",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "Atelia.Text.dll": "82d1311c2bda54cf33e1ea604e4d414c6215f67783b70bc19cc64a1b0eebcd06",
+      "RegisteredLeaf.Fanout.dll": "fc513c5bdfe258389e6c521f986fab347383ce538d8010e0176cd2559f11dda8"
+    },
+    "final-runner": {
+      "Atelia.Binary.dll": "5b33f97bb4f40c08777cb272b7ffd555d1e7f2e06ee133bb03b3379db0e67b69",
+      "Atelia.Data.dll": "6fa4c823aff7c9a16c574e186cc10e54d4d20c0d85628b719b9f72e0728ba5e5",
+      "Atelia.DurableGraph.dll": "3a674c61a247d8f14f7edf724a8857b12f0707376c67a289b3a202d69808d6b5",
+      "Atelia.DurableGraph.Persistence.dll": "9ce9d843838b512c6043f30af15b577d3169b793e24ed2c8cb486c65e268ae7f",
+      "Atelia.DurableGraph.Serialization.dll": "551f19532db7de48cc421a7773908fed7b8b703c1f6f92ba9af30404cb6c7b2a",
+      "Atelia.DurableGraph.Storage.dll": "d7fffdce8cc3cf5acaebb45f3e62c6d0a15d5f065205a7b27f412f36f8a22e77",
+      "Atelia.FrameStore.dll": "79f227937e6aabd05fa8e416c38e5af7a912c6e93dbb71d3eec71e3724230fa5",
+      "Atelia.HeadStore.dll": "517714a78d9774070ded564eb602444a18d9fd211290383ba770d127b3d53831",
+      "Atelia.Primitives.dll": "01afa38efcc741ab5119f9c4359061bec7306498f9231834afd2379fe001663f",
+      "Atelia.Rbf.dll": "b5736c73647d2d63c92185ff0a4f30e04cc894f5b3be5af36bb3c7546ab9f662",
+      "Atelia.Text.dll": "420fe2e4b82f9fc87473ab403c469ebcb5940d99c58eeeb9e4e0f87cc7e06bf9",
+      "RegisteredLeaf.Fanout.dll": "758ba7188de8b7e9554af99507a49bb94e4092424e17c9e40df69372b455813c"
+    }
+  }
+}

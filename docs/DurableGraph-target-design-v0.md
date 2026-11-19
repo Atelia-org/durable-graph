@@ -167,7 +167,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
   不比较 struct padding、不调用领域 Equals，也不为试探生成临时 payload。匹配确定后，
   只为变化的元素写 patch。已知 Delta 正文等于新值完整编码的内建槽可直接写入计划，其余槽调用各自的 PrepareDelta。两条路径共用持久状态的相等语义。
   这不要求普通对象在 PrepareDelta 前额外扫描一遍完整状态。具体分工见 [DB-049](design-branches/0049-list-range-delta-and-matcher-trial-slice/README.md)。
-- 业务 State 按冻结内容准备候选。可精确计长的已有 List 与 string 将 Base 正文编码推迟到选中后，DurableText 使用分段估算，其余对象预编码正文。同一次保存可按完整布局复用已校验的类型头，选中 Base 后按实际长度拼接；对象版本封套按其格式计量，安装按实际追加记录记账。[DB-102](design-branches/0102-container-payload-planning/README.md)
+- 业务 State 按冻结内容准备候选。可精确计长的已有 List 与 string 将 Base 正文编码推迟到选中后。登记叶可估算 Base 大小，文本使用分段估算。其余对象预编码正文。同一次保存可按完整布局复用已校验的类型头；安装按实际追加记录字节记账。[DB-102](design-branches/0102-container-payload-planning/README.md)
 
 设计来源：[DB-022](design-branches/0022-versioned-state-dto-capture/README.md)、
 [DB-024](design-branches/0024-reference-capture-and-reusable-object-ids/README.md)、
@@ -485,7 +485,7 @@ MaxItems 限制返回条数，MaxWorkSteps 限制 HS 历史工作，不是全部
 
 ### 独立对象图堆
 
-可编辑正文以具体引用类型进入图。当前 `DurableText` 的后继目标是独立文本库的 `Atelia.Text.TextEditor`，由作者登记自包含叶对象的 codec，框架管理对象身份、准确前驱和发布。文本库按需单向引用兄弟项目。业务字段和容器通过 ObjectId 共享文本。批量范围编辑以同一编辑器的内容快照为条件，纯保存保留其提交资格。持久格式表达内容及准确对象版本依赖，编辑器的 Piece Table 与用户的只读内容快照均无独立 wire 标签。[文本接入合同](design-branches/0101-durable-text/mainline-integration-plan.md) · [通用编辑器的集成设计](design-branches/0104-text-editor/README.md)
+可编辑正文以 `Atelia.Text.TextEditor` 进入图。类型作者登记自包含叶的名义身份、版本与 codec；框架管理图中对象身份、准确前驱和发布。同一实例在业务字段和容器中共享 ObjectId，独立恢复时由 codec 构造新实例。State 安装后由框架标记收据，叶可用它维护编辑基线。批量范围编辑以同一编辑器的内容快照为条件，纯保存保留其提交资格。持久记录表达内容及准确对象版本依赖，片表与用户快照留在文本包内。[叶对象接入合同](design-branches/0104-text-editor/README.md) · [文本用法](text/README.md)
 
 调用方可以在同步回调内读取进入时的一份完整 UTF-16 正文。同线程回调中的编辑对新访问立即可见，正在读取的版本持续到各自回调结束。对于长期驻留且经常查询的条目，同一编辑器反复访问同版正文应能复用已准备的连续文本。[全文访问合同](design-branches/0103-durable-text-search/README.md)
 

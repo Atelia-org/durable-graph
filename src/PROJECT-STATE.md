@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准至 2026-11-20。DB-101 可编辑正文与增量保存、DB-103 同步全文访问已通过源码与普通包消费验收。DB-100 独立对象图堆已集成，DB-099 EventRef 已验收。081 热准入未接线，082 候选默认关闭，DB-073/074 仍为草稿。
+> 校准至 2026-11-20。DB-104 将自定义叶 codec 与独立的 Atelia.Text 编辑器接入主线。DB-100 独立对象图堆已集成，DB-099 EventRef 已验收。081 热准入未接线，082 候选默认关闭，DB-073/074 仍为草稿。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 采用可登记的自包含叶对象。主线共存提交 `06c57dd4` 提供内建 `DurableText`、注册的 `TextEditor` 和第三方位图。先用共存版本核对三种真实工作负载、普通包和故障语义，再迁移消费者并移除内建文本。[研究基线](../docs/design-branches/0104-text-editor/registered-leaves.md)
+2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 主线通过 `StateModelRegistry.RegisterLeaf` 接入无图出边的自定义对象。`Atelia.Text.TextEditor` 接替内建文本，另一独立位图库使用相同协议。历史 reader、准确前驱、State 安装收据和冷开续写均有回归。共存性能、最终源码与普通包验收集中在[主线迁移记录](../docs/design-branches/0104-text-editor/mainline-results.md)。文件后端、LLM 工具和含出边对象留待各自的实际用例。
 
 2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的 `TryApplyEdits` 按编辑器快照整批提交，有序范围直接构造片表。同版保存保留提交资格，冲突返回原输入下标。同步 `VisitSpan` 支持栈上上下文和回调重入，`ToString()` 可复用同版缓存。普通包交付 XML 合同，快照保留流式 `IndexOf`。[冷热查询对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
 
@@ -28,9 +28,9 @@
 
 2026-11-19，DB-102 后续五项已验收。目录后缀在操作私有映射上批量应用，Event 沿用同仓最近的合格 Schema 绑定环境，每次恢复仍独立物化可变图。Dictionary 扫描内复用键编码缓冲，State 保存按布局复用头，ResolveTag 完整验证目标一次。[产品提交与结项](../docs/design-branches/0102-container-payload-planning/mainline-refactoring-plan.md) · [普通消费方及全量回归](../docs/design-branches/0102-container-payload-planning/mainline-results.md)
 
-2026-11-18：[DB-101 DurableText](../docs/design-branches/0101-durable-text/README.md) 使用 A-Adaptive Piece Table 与准确前驱的范围 Delta。Base 逐片择码，冷读按总单元数直接填入最终 string。图级策略先用片数和长度估算 Base，选中后才编码，安装使用实际记录字节。[分段格式与验收记录](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)
+文本 codec 沿用 [DB-101 的分段 Base 与范围 Delta](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)。Base 逐片择码，冷读按总单元数直接填入最终 string。保存可先估算 Base，选中后编码，按实际记录字节记账。
 
-2026-11-15：[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)已完成实现、完整源码回归和三组普通包验收，并集成master。Repository.CreateGraph/OpenGraph/SaveGraph、GraphBuilder/GraphRef与保留Head4可用；State由自身地址恢复，不保图级编辑父，保写计划及实际Delta来源、完整安装/Schema/故障资格。实验双轨已退出，旧三Head库直接拒绝。准确代码/包SHA、证据和限制只查DB-100，本片无剩余必经工单；性能/GC等由真实需求再触发，DurableText仍由用户并行推进。
+2026-11-15：[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)已完成实现、完整源码回归和三组普通包验收，并集成master。Repository.CreateGraph/OpenGraph/SaveGraph、GraphBuilder/GraphRef与保留Head4可用；State由自身地址恢复，不保图级编辑父，保写计划及实际Delta来源、完整安装/Schema/故障资格。实验双轨已退出，旧三Head库直接拒绝。准确代码/包SHA、证据和限制只查DB-100，本片无剩余必经工单；性能/GC等由真实需求再触发。
 
 2026-10-26：MUD 命名存档增量 `Repository.ListTags(): TagInfo[]` 已通过源码与新普通包验收。返回现有 T Dictionary 的名称/CommitId 独立快照，按 Ordinal 排序并验证全部目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。边界回归、准确候选来源和四进程普通包证据见[本片验收](../docs/list-tags-validation.md)；本片无剩余必做工单，下游游戏集成由 MUD 仓独立验收。
 
@@ -189,6 +189,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
 | [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | D/S/T控制入口及独立图堆／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Checkpoint／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy、组提交、树查询、分页、定向origin与创建登记均已完成；[最终源码/包资格及master合入](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
+| [Text](Text/Text.csproj) | 内存文本、不可变快照、条件编辑与同步全文访问；通过公开叶 codec 进入持久图，正文 Delta 依赖准确前驱 | 文件读写和 LLM 工具另行设计 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：

@@ -59,14 +59,14 @@
 
 主线空壳使用独立包源及空包缓存还原。在源码模式指向不存在的 Storage 路径、并将测试包版本设成与 Storage 版本相同的情况下，单独 pack 文本库成功。实际普通消费者加载的 DLL 只引用 `System.Runtime`，导出 0 个类型。DG 自身的错误源目录、源码模式打包和版本相同三个反例仍被拒绝。根 Release solution 构建 0 警告、0 错误，已有 3,352 项测试通过；可加载的新测试程序集有 0 个用例。
 
-另做了仅含新类型身份的私有包实验。基准生成器拒绝新的 `Atelia.Text.TextEditor`（DG0007）。修改其准确程序集名和元数据名、给 DG 加传递包依赖，既有普通消费者的 Entry v10 与 World v9 两份 `.dgschema` 逐字节通过 Verify，含 Text 的字段仍为 ObjectReference 15、`t` 或 `l(t)`。换源代码别名仍通过，本地声明一个同名类则仍被拒绝。此时若保持旧 runtime，创建图和只读重开旧图都会在当前值绑定上拒绝新类型。这组正反例支持沿用现有结构格式；类型迁移的完成条件仍包含实际捕获、冷读与准确 Delta。[生成器识别](../../../src/DurableGraph.Generator/DurableGraphGenerator.TemplateHistory.cs) · [现有类型绑定](../../../src/DurableGraph/Runtime/Text/TextObjectBinding.cs) · [现有普通包消费者](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md)
+另做了仅含新类型身份的私有包实验。基准生成器拒绝新的 `Atelia.Text.TextEditor`（DG0007）。修改其准确程序集名和元数据名、给 DG 加传递包依赖，既有普通消费者的 Entry v10 与 World v9 两份 `.dgschema` 逐字节通过 Verify，含 Text 的字段仍为 ObjectReference 15、`t` 或 `l(t)`。换源代码别名仍通过，本地声明一个同名类则仍被拒绝。此时若保持旧 runtime，创建图和只读重开旧图都会在当前值绑定上拒绝新类型。这组正反例支持沿用现有结构格式；类型迁移的完成条件仍包含实际捕获、冷读与准确 Delta。[历史生成器、内建类型绑定与消费者来源](README.md#native-text-sources)
 
 ## 复跑主要对照
 
-在含基准提交的仓库运行下面的命令。Python 3.10+、Git 与 .NET 10 SDK 用于从固定 Git 源码在系统临时目录重建研究原型。命令默认从 `src/DurableGraph/bin/Release/net10.0` 取基准的 `Atelia.DurableGraph.dll`、`Atelia.Binary.dll` 和 `Atelia.DurableGraph.Serialization.dll`；日后可用 `--binary-directory` 指向基准 checkout 的产物。实际对照使用的 DG DLL SHA-256 为 `07BD18E78F5C2B61D20BB89C70A9EDB2C9C26F72E5C2DC97FC7A81FA4305A647`。省略两个开关仅运行 101 项双程序集断言。[构建基准所用的 Storage 来源](../../storage-dependency.md)
+此见证从固定提交 `93f5ece1` 重建旧的内建文本与友元方案。先在单独工作树按该提交的 Storage pin 构建 Release 的 DG，再把 DLL 目录交给当前仓中的脚本。目录需包含 `Atelia.DurableGraph.dll`、`Atelia.Binary.dll` 和 `Atelia.DurableGraph.Serialization.dll`。原对照使用的 DG DLL SHA-256 为 `07BD18E78F5C2B61D20BB89C70A9EDB2C9C26F72E5C2DC97FC7A81FA4305A647`。Python 3.10+、Git 与 .NET 10 SDK 用于在临时目录重建。省略两个实验开关仅运行 101 项双程序集断言。[构建基准所用的 Storage 来源](../../storage-dependency.md)
 
 ```powershell
-python docs/design-branches/0104-text-editor/probes/rebuild.py . --alternatives --bench
+python docs/design-branches/0104-text-editor/probes/rebuild.py . --binary-directory ../db104-baseline/src/DurableGraph/bin/Release/net10.0 --alternatives --bench
 ```
 
 `--alternatives` 包括两快照、前后缀、无保存与保留来源整理实验；`--bench` 比较基准 DLL 与推荐桥的分配。生成器和普通包另行验证，未纳入该机制脚本。

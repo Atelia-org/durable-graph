@@ -4,7 +4,7 @@
 
 2026-11-18；三次独立测试进程全部通过，每次包含四条真实保存链；每个测试执行约 1.7 秒。按需 Base 编码保持实际写入相同，显著减少小改保存分配；1Mi 单元场景也观察到完整 Save 时间下降。64Ki 的时间有明显首次执行影响，不作稳定速度排序。接入与格式合同见[实施计划](mainline-integration-plan.md)。
 
-入口是 [DurableTextProductProbeTests.cs](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs)。默认测试不运行性能工作；显式设置 `DG_TEXT_PRODUCT_PROBE` 为不存在的 W SSD 输出目录，`DG_TEXT_PRODUCT_PROBE_REP` 为 0、1、2，单独筛选 `RecordProductSaveAndConsumerCosts`。每次进程最多三分钟；三个进程顺序运行，测量期间不并行构建或其他测量。
+入口是 [DurableTextProductProbeTests.cs](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs")。默认测试不运行性能工作；显式设置 `DG_TEXT_PRODUCT_PROBE` 为不存在的 W SSD 输出目录，`DG_TEXT_PRODUCT_PROBE_REP` 为 0、1、2，单独筛选 `RecordProductSaveAndConsumerCosts`。每次进程最多三分钟；三个进程顺序运行，测量期间不并行构建或其他测量。
 
 - 两个规模：65,536 / 1,048,576 UTF-16 单元，每条真实生成模型包含一篇正文和一句 Gist。先初次保存，再固定 32 个不同位置的单字符改写并逐次 Save。
 - 对照：默认按选择编码与内部测试 eager 开关；格式、图级策略、编辑整理、发布和安装相同。重复进程交替两臂顺序。
@@ -85,7 +85,7 @@ AppendTo 和稳定快照消费均避免四篇正文的中间 string，但仍有�
 - 这是源码模式资格，使用既有精确 Storage pin；普通包接入资格由独立消费者记录承担。
 
 ```powershell
-# 先按仓库 storage-dependency.md 完成 Release/source-mode build；每次取全新的输出名。
+# 在 fb2bef0a 的独立 checkout 中按仓库 storage-dependency.md 完成 Release/source-mode build；每次取全新的输出名。
 $env:DG_TEXT_PRODUCT_PROBE = 'W:/DurableTextProbe/my-product-run/rep0'
 $env:DG_TEXT_PRODUCT_PROBE_REP = '0' # 三个独立进程分别为 0、1、2
 dotnet test tests/DurableGraph.Persistence.Tests/DurableGraph.Persistence.Tests.csproj -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=true -p:StorageSourceRoot=E:/repos/Atelia-org/atelia-storage --filter FullyQualifiedName~DurableTextProductProbeTests.RecordProductSaveAndConsumerCosts

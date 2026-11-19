@@ -546,7 +546,7 @@ Build 工具会协调同目录的 Publish/Verify 操作，防止重叠发布写�
 
 ## 当前能放进模型的内容
 
-领域引用对象统一实现 `IDurableObject`；旧 `DurableBase` 已移除。升级旧模型时，将直接基类改成接口，
+由生成器捕获字段的领域引用对象实现 `IDurableObject`。自包含的自定义叶可以用公开 codec 登记。升级旧 `DurableBase` 模型时，将直接基类改成接口，
 将泛型约束改为 `where T : class, IDurableObject`，并一起重编译模型库和宿主。
 已有领域继承链保留，各祖先仍须参与 Durable Schema；删除原空基类本身不要求 Schema 升版。
 
@@ -561,14 +561,15 @@ record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分�
 | 领域类型 | 显式 Durable class、record class、struct、record struct、enum；支持泛型、继承、private/readonly 字段及跨程序集组合 |
 | 值组合 | inline struct 嵌套布局、Nullable；record 自动属性的存储使用 `[field: DurableField(...)]` / `[field: Transient]` |
 | 引用与数组 | string、已登记的实际派生实例、共享/循环；零下界 `T[]` 和 rank 2–4 多维数组、交错数组 |
-| 可编辑正文 | `DurableText` 保留引用身份，支持 UTF-16 范围批量编辑、不可变快照和同对象增量保存。[编辑示例](docs/design-branches/0101-durable-text/mainline-integration-plan.md) · [用 VisitSpan 查询正文](docs/design-branches/0103-durable-text-search/README.md) |
+| 可编辑正文 | 引用 `Atelia.Text`，在打开仓库前调用 `TextEditorPersistence.Register(models)`。领域字段直接使用 `TextEditor`，支持不可变快照、UTF-16 范围批量编辑、同步全文访问和同对象增量保存。[编辑示例](docs/text/README.md) |
+| 自定义叶对象 | 类型包为自包含的 sealed class 声明稳定 ID、版本和 codec，宿主显式登记。字段及容器共享对象身份，DG 负责前驱、保存规划和发布。[接入自己的叶类型](docs/design-branches/0104-text-editor/README.md#接入自己的叶类型) |
 | 容器 | exact BCL `List<T>` 和实验性 `Dictionary<TKey,TValue>`；按内容保存。复合 Key 与当前 comparer 的边界见[字典模型资产](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | 尚不支持 | ValueTuple、DateTime、任意外部基类、CLR 嵌套类型/ref struct、任意 object/interface 字段、boxed value 身份、数组协变、非零下界及非 SZ rank-1 数组、其他未适配 BCL 容器 |
 
 支持的类型可以在字段、泛型参数和容器元素中组合。仍需遵守各类型限制；例如 Dictionary 根 Nullable Key 不支持，
 容器子类/接口字段不自动当作 BCL 内容对象。string 保留非空实例的引用身份，空串统一为 `string.Empty`。
 
-恢复不执行领域类/struct 的构造器、实例字段初始化器、属性 getter/setter；不要求无参构造器。
+生成器恢复领域类/struct 时绕过构造器、实例字段初始化器和属性访问器。自定义叶由登记的 codec 从冻结内容创建新实例。
 Transient 索引/缓存由应用在恢复交付完整图后重建：`OpenWorkingCopy` 或独立 `LoadState` / `LoadEvent` 的结果
 及 `ReadCheckpoint` 的各独立图都可以做应用侧初始化。
 Transient 只表示不参与持久化，并不表示修改没有可见影响。自定义字典 comparer 使用当前业务代码，

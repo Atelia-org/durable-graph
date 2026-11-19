@@ -1,12 +1,12 @@
 # 可登记叶对象的可行性与保存成本
 
-主线提交 `c3478351` 优化了内建 `DurableText`；研究分支 `research/db104-registered-leaves` 使用同一文本算法作为对照。可登记的无出边类型已经跑通独立包、生成模型、真实落盘和全关冷开。测量支持保留片表的增量优势，也显示了注册和图规划的托管分配差额。原型代码在研究分支，正式协议尚待定稿。[设计与备选](README.md) · [早期片表来源对照](evidence.md)
+主线提交 `c3478351` 优化了内建 `DurableText`；研究分支 `research/db104-registered-leaves` 使用同一文本算法作为对照。可登记的无出边类型已经跑通独立包、生成模型、真实落盘和全关冷开。测量支持保留片表的增量优势，也显示了注册和图规划的托管分配差额。本文记录研究分支的可行性实验。正式协议、主线退役与最终包验收见[主线迁移](mainline-results.md)。[设计与备选](README.md) · [早期片表来源对照](evidence.md)
 
 ## 主线基准
 
 准确前驱路径从冻结的 `ReadOnlySpan<TextPiece>` 按下标读取，一次扫描识别连续的 Copy 或 New，直接交给现有编码器。在 4096 单元、33 片的固定工况中，每次准确 Delta 准备从 4880 B 降至 680 B（减少 4200 B），冷回放均为 3648 B。两侧各三个 Release 进程使用相同代码，关闭分层 JIT，每项预热 900 次，测量 5 批各 3000 次。
 
-另以 同一固定种子产生的 600 个样本逐轮编辑，分别向新旧实现提供准确基线、同版及外来前驱。两个 DLL 均逐字验证了 8400 次回放，将“变化标志、长度、Delta 字节”合并得到相同 SHA-256 `F408965661EAFDB0366750AE526523E61E9A14B7C14FBE5D41DAF87730B84E2B`。该优化与跨程序集接口无关。[热编码驱动](probes/bench.cs) · [主线编码器](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs) · [主线语义与 wire 回归](../../../tests/DurableGraph.Tests/TextBodyCodecTests.cs)
+另以 同一固定种子产生的 600 个样本逐轮编辑，分别向新旧实现提供准确基线、同版及外来前驱。两个 DLL 均逐字验证了 8400 次回放，将“变化标志、长度、Delta 字节”合并得到相同 SHA-256 `F408965661EAFDB0366750AE526523E61E9A14B7C14FBE5D41DAF87730B84E2B`。该优化与跨程序集接口无关。[热编码驱动](probes/bench.cs) · [共存版本内建编码器及其测试来源](README.md#native-text-sources) · [后继编码器回归](../../../tests/Text.Tests/TextBodyCodecTests.cs)
 
 ## 外部类型怎样进图
 

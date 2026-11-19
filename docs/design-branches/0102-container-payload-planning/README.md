@@ -2,7 +2,7 @@
 
 目录前驱复用及后续五项性能改进已进入主线。每项产品提交见[重构计划结项表](mainline-refactoring-plan.md)，真实应用冷开、历史分叉签出、双活堆图、大字典与保存负载的对照见[主线验收结果](mainline-results.md)。
 
-业务 State 保存沿用现行图级软预算。规划器对有准确前驱的业务 string 和支持精确计量的 List 先取得规范 Base 大小，选中 Base 后才编码正文。List 的固定宽度 byte、double 从 Count 计长，Int32 和对象 ID 按实际变长编码计长。自定义元素绑定使用自己的编码器。已有 DurableText 沿用分段估算。[表示策略](../0015-statestore-object-representation-policy/README.md) · [业务保存准备](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs)
+业务 State 保存沿用现行图级软预算。规划器对有准确前驱的业务 string 和支持精确计量的 List 先取得规范 Base 大小，选中 Base 后才编码正文。List 的固定宽度 byte、double 从 Count 计长，Int32 和对象 ID 按实际变长编码计长。自定义元素绑定使用自己的编码器。本片测量使用内建 DurableText 的分段估算。现行的注册叶 TextEditor 由其 codec 提供这一估算。[DB-104](../0104-text-editor/README.md)[表示策略](../0015-statestore-object-representation-policy/README.md) · [业务保存准备](../../../src/DurableGraph.Persistence/StoredGraphBodies.cs)
 
 List 的 CopyAndPatch 对已验证的内建标量直接写出子补丁。整链读取在同位置、全长、单区间的更新中复用本次读取独占的数组，重排、重复来源和变长区间按各自语义生成结果。准确前驱、区间边界、补丁索引和正文完整性仍逐层校验。[List 编解码](../../../src/DurableGraph/Runtime/Containers/ListStateReader.cs)
 

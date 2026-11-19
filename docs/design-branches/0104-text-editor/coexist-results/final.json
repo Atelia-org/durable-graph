@@ -1,0 +1,89 @@
+{
+  "product": {
+    "commit": "f829f849fbbf123bcfa83f4c1bd89dd3792d045b",
+    "tree": "4843cc4658d34d4fd8bdcc3077df40d835cd0751"
+  },
+  "harnessSourceSha256": "c0ebef03d59703ceedcbba70dd3b3a5643a106e081231eb64902b84930c14f26",
+  "workingTreeMatchedLoadedDlls": true,
+  "timingEnvironment": "Concurrent builds and package validation; timings observational",
+  "runs": [
+    {
+      "domain": "Atelia.Text.TextEditor",
+      "graph": "1b772cab-63fe-4575-8488-9fbf50328581",
+      "hot": {
+        "Microseconds": 2785.5,
+        "Bytes": 456072
+      },
+      "cold": {
+        "Microseconds": 133492.8,
+        "Bytes": 5422832
+      },
+      "run": 1
+    },
+    {
+      "domain": "Atelia.Text.TextEditor",
+      "graph": "1b772cab-63fe-4575-8488-9fbf50328581",
+      "hot": {
+        "Microseconds": 1413,
+        "Bytes": 456072
+      },
+      "cold": {
+        "Microseconds": 83957.3,
+        "Bytes": 5422832
+      },
+      "run": 2
+    },
+    {
+      "domain": "Atelia.Text.TextEditor",
+      "graph": "1b772cab-63fe-4575-8488-9fbf50328581",
+      "hot": {
+        "Microseconds": 1166.8,
+        "Bytes": 456072
+      },
+      "cold": {
+        "Microseconds": 59584.7,
+        "Bytes": 5422832
+      },
+      "run": 3
+    }
+  ],
+  "stores": [
+    {
+      "store": "store-0-lab-builtin",
+      "baseRows": 130,
+      "baseBytes": 525325,
+      "deltaRows": 30,
+      "deltaBytes": 626,
+      "exactPredecessors": true,
+      "sameBodies": true
+    },
+    {
+      "store": "store-0-final",
+      "baseRows": 130,
+      "baseBytes": 525324,
+      "deltaRows": 30,
+      "deltaBytes": 626,
+      "exactPredecessors": true,
+      "sameBodies": true
+    },
+    {
+      "store": "store-1-final",
+      "baseRows": 130,
+      "baseBytes": 525324,
+      "deltaRows": 30,
+      "deltaBytes": 626,
+      "exactPredecessors": true,
+      "sameBodies": true
+    },
+    {
+      "store": "store-2-final",
+      "baseRows": 130,
+      "baseBytes": 525324,
+      "deltaRows": 30,
+      "deltaBytes": 626,
+      "exactPredecessors": true,
+      "sameBodies": true
+    }
+  ],
+  "deltaSeriesMatchesCoexistBuiltin": true
+}

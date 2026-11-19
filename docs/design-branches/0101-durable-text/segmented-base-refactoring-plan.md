@@ -1,6 +1,6 @@
 # DurableText 分段 Base 重构方案
 
-**已在主线实现。** 从同一冻结快照读取 UTF-16 单元总数 N 和 Piece 序列，写一次 N，再把每个非空 Piece 独立编码为普通 Bare string。冷读时一次分配最终 string，按段直接写满。Delta 继续使用现有 Copy/New 编码、UTF-16 坐标和准确前驱。[主线合同](mainline-integration-plan.md) · [选型与尺寸依据](text-encoding-research.md)
+**内建文本在 `712ddf7f` 实现分段 Base。** DB-104 由注册叶的文本 codec 延续下述 raw body 编码，图上的类型登记和保存回执见[后继合同](../0104-text-editor/README.md)。 从同一冻结快照读取 UTF-16 单元总数 N 和 Piece 序列，写一次 N，再把每个非空 Piece 独立编码为普通 Bare string。冷读时一次分配最终 string，按段直接写满。Delta 继续使用现有 Copy/New 编码、UTF-16 坐标和准确前驱。[主线合同](mainline-integration-plan.md) · [选型与尺寸依据](text-encoding-research.md)
 
 ## 一个完整例子
 
@@ -34,19 +34,19 @@ Binary 在局部 reader 副本上解析，成功才推进调用方游标。UTF-1
 
 ## DG 只负责正文边界与保存计划
 
-**读取完整 Base。** 私有入口改为 `ReadBase(ReadOnlySpan<byte> body)`。唯一产品调用方 `TextObjectReader` 已从 `IStateBodySource.GetBody(0)` 取得完整切片，随后为每个 Delta 另建 reader。Base 的游标仅在方法内部有用。[调用点](../../../src/DurableGraph/Runtime/Text/TextObjectBinding.cs) · [当前 codec](../../../src/DurableGraph/Runtime/Text/TextBodyCodec.cs)
+**读取完整 Base。** 私有入口改为 `ReadBase(ReadOnlySpan<byte> body)`。唯一产品调用方 `TextObjectReader` 已从 `IStateBodySource.GetBody(0)` 取得完整切片，随后为每个 Delta 另建 reader。Base 的游标仅在方法内部有用。[调用点](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/Runtime/Text/TextObjectBinding.cs") · [当前 codec](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/Runtime/Text/TextBodyCodec.cs")
 
 1. 读 N，先校验现有 Text/CLR 长度上限和 `N <= RemainingCount`，再分配。两种合法编码的 payload 字节数都至少等于输出单元数，因此巨大的 N 配极短输入可提前拒绝。N=0 时立即要求输入耗尽，`string.Create(0, …)` 会跳过回调。
 2. 对正 N，调用 `string.Create(N, reader, static …)`。在回调里**按有界 body 读到末尾**，每次向剩余目标读一条 Bare string 并要求写入量大于零。若仅以“目标已填满”结束，`01 03 41 00` 就会错误地忽略尾部空段。目标不足在 DG 层表示非法正文长度。
 3. 输入耗尽后剩余目标必须为空。将成功生成的 string 直接交给 `TextSnapshot.FromString`。回调失败时私有 string 不会交付给使用者。按完整 body 解码和按单条 Bare string 推进公共游标各有一个明确的消费边界。
 
-**写入选中的 Base。** 在 `PrepareBase` 以冻结视图的 Length 写 N，顺序将每个非空 `piece.Memory.Span` 交给 Binary。正常 State 保留先规划、选中才编码的路径，新对象、Event 和其他即时准备入口复用同一格式。保存成功后的 Rebind/整理沿现有安装时机执行。[冻结与接受](../../../src/DurableGraph/DurableText.cs) · [即时及延迟 Base](../../../src/DurableGraph.Persistence/PreparedTypedBase.cs)
+**写入选中的 Base。** 在 `PrepareBase` 以冻结视图的 Length 写 N，顺序将每个非空 `piece.Memory.Span` 交给 Binary。正常 State 保留先规划、选中才编码的路径，新对象、Event 和其他即时准备入口复用同一格式。保存成功后的 Rebind/整理沿现有安装时机执行。[冻结与接受](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/DurableText.cs") · [即时及延迟 Base](../../../src/DurableGraph.Persistence/PreparedTypedBase.cs)
 
 **规划使用估值，安装使用实写。** raw Base 的 O(1) 估值为 `V(N) + K + 2L*N`，V 是 VarUInt32 的字节宽度，K 取冻结视图已有的片数，作为每段约 1 B 头的估计。估值可能偏高或偏低。容量由实际写出过程、记录封套及帧约束把关。typed 头和记录封套各加一次，安装后的重建字节 H 从实际记录累计。小改选 Delta 时免除全文 Base 的选码和编码。[保存选择](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs) · [实际 H](../../../src/DurableGraph.Persistence/NormalizedGraphState.cs)
 
 ## 产品与验收
 
-DurableGraph 产品提交 `712ddf7f` 固定 Storage `3f780ad9`。集成测试从 64 片正文起步，核对实际 Base 的每个段、准确前驱和重建字节，然后小改、关闭、冷开续写，并读回原版本。普通包消费者以三个独立 backing 构造初始正文，分别在三个进程执行首次保存、冷开续写、只读历史复核，核对实际加载的 DLL。[依赖 pin](../../../eng/StorageDependency.props) · [普通包结果与复现](../../../experiments/PackageConsumerProbe/DurableTextConsumer/README.md)
+DurableGraph 产品提交 `712ddf7f` 固定 Storage `3f780ad9`。集成测试从 64 片正文起步，核对实际 Base 的每个段、准确前驱和重建字节，然后小改、关闭、冷开续写，并读回原版本。普通包消费者以三个独立 backing 构造初始正文，分别在三个进程执行首次保存、冷开续写、只读历史复核，核对实际加载的 DLL。[依赖 pin](../../../eng/StorageDependency.props) · [普通包结果与复现](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:experiments/PackageConsumerProbe/DurableTextConsumer/README.md")
 
 2026-11-18，DG 源码模式根 solution 的 Release 构建为 0 警告、0 错误，四个测试项目共通过 3,299 项（Persistence 1,250、Serialization 133、Storage 36、Runtime/Generator 1,880），无失败或跳过。构建日志和四份 TRX 位于 `W:/DurableTextSegmentedBase/source-final/`。上游新接口的边界用例另见 [Binary 测试](../../../../atelia-storage/tests/Binary.Tests/StringSpanTests.cs)。
 
@@ -55,8 +55,8 @@ DurableGraph 产品提交 `712ddf7f` 固定 Storage `3f780ad9`。集成测试从
 | 证明什么 | 最小见证 |
 |---|---|
 | Text 使用原有封套，既有 ABI 5 类型仍可读 | 固定一条完整的分段 Text golden（见上例），更新旧 Text Base 字节断言。沿用原有非 Text ABI 5 夹具，验证原字节仍可解码，并运行既有嵌套类型与非法路由回归。[结构夹具](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapBuiltinListTests.cs) · [Schema 夹具](../../../tests/DurableGraph.Persistence.Tests/MetaBootstrapSchemaClosureTests.cs) |
-| 字符、长度与错误合同 | Binary 以原 string 入口作 oracle，检验切片、代理、目标前缀和失败游标。DG 检验 N 的 127/128 边界、空正文与尾部、空段、非法/截断字面、输出长于或短于 N、不同切分的等值读回。[Binary goldens](../../../../atelia-storage/tests/Binary.Tests/StringTests.cs) · [Text codec 回归](../../../tests/DurableGraph.Tests/TextBodyCodecTests.cs) |
-| 保存与恢复保持原有因果关系 | 在既有回归上分别断言估值与实写 H，小改选 Delta 时 Base 编码次数为零，Delta golden 不变，准确前驱、维护写、Event、失败与发布后安装沿用原语义。[planner 回归](../../../tests/DurableGraph.Persistence.Tests/ObjectRevisionPlannerTests.cs) · [集成测试](../../../tests/DurableGraph.Persistence.Tests/DurableTextIntegrationTests.cs) |
-| 分段真正节省中间对象 | 用相同正文分别制成少量大段和大量小段，记录实际产品 Base 字节与直接冷解码分配。组件计量单列最终 string，从而辨别是否重新引入每段临时 string。现有 eager/deferred 对照用于同一 wire 的准备策略。两路若因估值而合法选出不同记录，应分开报告选择，只有控制住表示时才比较记录哈希。[产品 probe](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs) |
+| 字符、长度与错误合同 | Binary 以原 string 入口作 oracle，检验切片、代理、目标前缀和失败游标。DG 检验 N 的 127/128 边界、空正文与尾部、空段、非法/截断字面、输出长于或短于 N、不同切分的等值读回。[Binary goldens](../../../../atelia-storage/tests/Binary.Tests/StringTests.cs) · [Text codec 回归](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Tests/TextBodyCodecTests.cs") |
+| 保存与恢复保持原有因果关系 | 在既有回归上分别断言估值与实写 H，小改选 Delta 时 Base 编码次数为零，Delta golden 不变，准确前驱、维护写、Event、失败与发布后安装沿用原语义。[planner 回归](../../../tests/DurableGraph.Persistence.Tests/ObjectRevisionPlannerTests.cs) · [集成测试](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Persistence.Tests/DurableTextIntegrationTests.cs") |
+| 分段真正节省中间对象 | 用相同正文分别制成少量大段和大量小段，记录实际产品 Base 字节与直接冷解码分配。组件计量单列最终 string，从而辨别是否重新引入每段临时 string。现有 eager/deferred 对照用于同一 wire 的准备策略。两路若因估值而合法选出不同记录，应分开报告选择，只有控制住表示时才比较记录哈希。[产品 probe](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs") |
 
 读端已有独立机制证据。在 .NET SDK 10.0.201 / 运行时 10.0.5、Storage pin `9ad39fc` 上，同一 4,096 单元正文切成 64、1,024、4,096 段，直接读每次均分配 **8,216 B**，等于最终 string。逐段返回 string 再复制分别为 17,944、40,984、106,520 B。范围只含内存 payload 到 string。探针的扩展方法另带实验用字节限额参数，产品 span 签名以本文为准。可在该 pin 的本地 NuGet.Config 旁执行 `dotnet run --file span-decode-probe.cs -c Release`。[可复验证据](span-decode-probe.cs)

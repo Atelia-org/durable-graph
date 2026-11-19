@@ -5,8 +5,8 @@
 ## 当前合同
 
 - `CaptureSession.Prepare` 消费已 Seal 的捕获候选，生成 owned `PreparedBaseBody`／`PreparedDeltaBody`，不重新 Capture 或安装候选。Delta 的 `HasChanges` 决定是否变化；非空的零位图不等于 Update。
-- Base 通常预先编码，策略决策后复用 bytes。有准确前驱的业务 State 对 DurableText 使用分段估算，对 string 和支持的 List 绑定使用精确计长。已校验的类型头与冻结内容保留到选择完成，只有选中 Base 才生成正文。producer 以准确 catalog 处理 typed Base，承担 DTO／完整布局对应关系。[分段 Base 与延迟准备](../0101-durable-text/segmented-base-refactoring-plan.md)
-- `ObjectWritePlanner.ClassifyCaptured` 要求 `Previous` 与 exact prior 的存在性一致。新对象为 Insert；已有对象要求重写时为 BaseOnlyUpdate；其余由 Delta 的存在性／HasChanges 分类为 Update 或 NoChange。跨布局等必须重写的更新不能借旧 Delta 延续解释。
+- Base 通常预先编码，策略决策后复用 bytes。有准确前驱的业务 State 可采用注册叶提供的 Base 估算。文本 codec 按段估算，string 和支持的 List 绑定精确计长。已校验的类型头与冻结内容保留到选择完成，只有选中 Base 才生成正文。producer 以准确 catalog 处理 typed Base，承担 DTO／完整布局对应关系。[注册叶合同](../0104-text-editor/README.md) · [文本分段估算的由来](../0101-durable-text/segmented-base-refactoring-plan.md)
+- `ObjectWritePlanner.ClassifyCaptured` 要求 `Previous` 与 exact prior 的存在性一致。新对象为 Insert；已有对象要求重写或叶 codec 对该前驱请求完整 Base 时为 BaseOnlyUpdate；其余由 Delta 的存在性／HasChanges 分类为 Update 或 NoChange。跨布局等必须重写的更新不能借旧 Delta 延续解释。
 - `PlanObjectWrites` 消费完整 post-live 行，检查 null／重复 ID，按 ID 排序；Update／NoChange 必须有可信 prior H。BaseOnlyUpdate／Insert 不要求 D/H，也不花可选 Base 预算。
 - B/D 通过共用 `ObjectVersionPayloadSize` 纳入 kind、Delta 固定 12B prior、length 和 body。D 及已编码的 B 使用实际长度，延迟 Text Base 的 B 使用估算长度。H 取已验证来源的实际对象链消费字节。表示规则见 [DB-015](../0015-statestore-object-representation-policy/README.md)，精确计量的绑定范围见 [DB-102](../0102-container-payload-planning/README.md)。
 - 输出是 owned `ObjectVersionRecord[]`、估算行及表示计划。稀疏 Writes 不代表完整 live 目录；producer 另外核真实 source、heads/H、完整成员集合与 Removes，共同 saver 决定目录并追加真实帧。

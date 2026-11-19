@@ -39,7 +39,7 @@
 
 消费方定位从 one-turn-trpg 的 `src/OneTurnTrpg/Persistence/GameSession.cs` 和 `StoredModels.cs` 开始。原试玩来源为 `fbdb559`，输入的 Git blob 为 `acfe5f66edd8ebbc93a9151ec7c4429de734d15f`。工作树与 Git 的行尾配置可能影响文件 SHA，执行清单同时记录 blob 与实际读取文件的 SHA。逐步逻辑核验在计时外、独立诊断轮进行；保留一份从原导出得到的预期终态，对照各臂，避免几个实现共享同一回放错误。
 
-**语义边界。** 同策略精确准备逐保存核验对象记录种类、实际 payload 长度与 body 哈希、准确前驱、发布后的 head/H；相同物理布局时逐字节比对。不同策略容许不同历史，每路均要核对自身实际链、成员、引用身份、业务内容及冷开后再保存。覆盖强制重写、准备后放弃、失败不推进基线、未改对象可被选中重整。现有 [计量与续写测试](../../../tests/DurableGraph.Persistence.Tests/BusinessPlanningAccountingTests.cs) 和 [List 图回归](../../../tests/DurableGraph.Tests/ListGraphTests.cs) 可作断言来源。旧 [List 回放器](../../../experiments/ListDeltaReplayProbe/PROJECT-STATE.md) 仅借编辑脚本；合成轨迹可借[当前 SaveGraph 探针](../../../tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs)搭建。
+**语义边界。** 同策略精确准备逐保存核验对象记录种类、实际 payload 长度与 body 哈希、准确前驱、发布后的 head/H；相同物理布局时逐字节比对。不同策略容许不同历史，每路均要核对自身实际链、成员、引用身份、业务内容及冷开后再保存。覆盖强制重写、准备后放弃、失败不推进基线、未改对象可被选中重整。现有 [计量与续写测试](../../../tests/DurableGraph.Persistence.Tests/BusinessPlanningAccountingTests.cs) 和 [List 图回归](../../../tests/DurableGraph.Tests/ListGraphTests.cs) 可作断言来源。旧 [List 回放器](../../../experiments/ListDeltaReplayProbe/PROJECT-STATE.md) 仅借编辑脚本；合成轨迹可借[本次基线的 SaveGraph 探针](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Persistence.Tests/DurableTextProductProbeTests.cs")搭建。
 
 ## 4. 逐步保留什么数据
 

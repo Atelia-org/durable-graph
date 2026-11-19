@@ -12,7 +12,7 @@ memo 希望对手中的一份 `DurableText` 直接查找字面文本，或用同
 
 ## 已有起点
 
-主线 `25105fa4` 已有 `text.Snapshot().IndexOf(string value, int start = 0)`。它以 Ordinal 匹配 UTF-16 单元，能跨 piece 查找；快照还可用 `CopyTo` 取出命中附近的文字。本次提出让调用者同步访问完整正文的连续 span，供正则等消费方使用。DB-101 已有在碎片正文上比较跨片查找和先物化再查找的测量，可作为基线。[DurableText](../../../src/DurableGraph/DurableText.cs) · [TextSnapshot](../../../src/DurableGraph/TextSnapshot.cs) · [已有测试](../../../tests/DurableGraph.Tests/DurableTextTests.cs) · [DB-101 搜索对照](../0101-durable-text/mainline-performance.md)
+主线 `25105fa4` 已有 `text.Snapshot().IndexOf(string value, int start = 0)`。它以 Ordinal 匹配 UTF-16 单元，能跨 piece 查找；快照还可用 `CopyTo` 取出命中附近的文字。本次提出让调用者同步访问完整正文的连续 span，供正则等消费方使用。DB-101 已有在碎片正文上比较跨片查找和先物化再查找的测量，可作为基线。[DurableText](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/DurableText.cs") · [TextSnapshot](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:src/DurableGraph/TextSnapshot.cs") · [已有测试](../0104-text-editor/README.md#native-text-sources "Git 06c57dd4:tests/DurableGraph.Tests/DurableTextTests.cs") · [DB-101 搜索对照](../0101-durable-text/mainline-performance.md)
 
 ## 期望的 API 形状
 
