@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace Atelia.DurableGraph;
@@ -47,6 +48,31 @@ public sealed class DurableText {
     }
 
     public TextSnapshot Snapshot() => new(_view);
+
+    /// <summary>Synchronously visits the complete UTF-16 text as it was on entry and returns the visitor's result.</summary>
+    /// <param name="context">Caller state passed to the visitor.</param>
+    /// <param name="visitor">Callback invoked once, including for empty text. Its span is valid for this call only.</param>
+    /// <remarks>
+    /// Empty and single-piece text require no copy. Each visit to fragmented text copies the full
+    /// content into a rented buffer before invoking the callback. The visitor may edit this object
+    /// and visit it again on the same thread. The nested visit sees the edits while the outer span
+    /// stays stable. Visitor exceptions propagate and completed edits remain visible.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="visitor"/> is null.</exception>
+    public TResult VisitSpan<TContext, TResult>(TContext context, Func<ReadOnlySpan<char>, TContext, TResult> visitor) {
+        ArgumentNullException.ThrowIfNull(visitor);
+        TextPieceView view = _view;
+        if (view.Length == 0) { return visitor(ReadOnlySpan<char>.Empty, context); }
+        if (view.PieceCount == 1) { return visitor(view.Pieces[0].Memory.Span, context); }
+
+        char[] buffer = ArrayPool<char>.Shared.Rent(view.Length);
+        try {
+            Span<char> content = buffer.AsSpan(0, view.Length);
+            view.CopyTo(0, content);
+            return visitor(content, context);
+        } finally { ArrayPool<char>.Shared.Return(buffer); }
+    }
+
     public void CopyTo(int start, Span<char> destination) => _view.CopyTo(start, destination);
     public void AppendTo(StringBuilder destination) => AppendTo(destination, 0, Length);
     public void AppendTo(StringBuilder destination, int start, int length) {
