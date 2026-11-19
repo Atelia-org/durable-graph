@@ -16,8 +16,7 @@ public sealed partial class DurableGraphGenerator {
 
     private static string RenderTemplateManifest(SchemaTemplate shape) {
         StringBuilder output = new();
-        bool containsText = shape.Fields.Any(field => field.ValuePattern.ContainsText) || shape.BaseSchema?.Type.ContainsText == true;
-        output.AppendLine(containsText ? TextSchemaHistoryManifestHeader : SchemaHistoryManifestHeader).AppendLine("// schema-begin");
+        output.AppendLine(SchemaHistoryManifestHeader).AppendLine("// schema-begin");
         output.Append("// schema-id-base64:").AppendLine(Convert.ToBase64String(StrictUtf8.GetBytes(shape.SchemaId)));
         output.Append("// version:").AppendLine(Number(shape.Version));
         output.Append("// kind:").AppendLine(Number(shape.Kind));
@@ -120,12 +119,10 @@ public sealed partial class DurableGraphGenerator {
             if (args[0].Value is not int contract || contract != (kind == 2 ? 1 : 2) || args[3].Value is not string text) {
                 Error("unsupported execution contract for '" + id + "'"); return false;
             }
-            bool textFormat = text.StartsWith(TextSchemaHistoryManifestHeader + "\n", StringComparison.Ordinal);
-            if ((!textFormat && !text.StartsWith(SchemaHistoryManifestHeader + "\n", StringComparison.Ordinal)) || text.IndexOf('\r') >= 0 || !text.EndsWith("\n", StringComparison.Ordinal)) {
+            if (!text.StartsWith(SchemaHistoryManifestHeader + "\n", StringComparison.Ordinal) || text.IndexOf('\r') >= 0 || !text.EndsWith("\n", StringComparison.Ordinal)) {
                 Error("noncanonical exported manifest for '" + id + "'"); return false;
             }
-            string historyText = (textFormat ? "// durable-graph-schema-history:10" : "// durable-graph-schema-history:9") +
-                text.Substring(textFormat ? TextSchemaHistoryManifestHeader.Length : SchemaHistoryManifestHeader.Length);
+            string historyText = "// durable-graph-schema-history:9" + text.Substring(SchemaHistoryManifestHeader.Length);
             if (!TryParseSchemaHistory(new SchemaHistoryText(owner.Identity.Name + ".dll", historyText), out SchemaTemplate shape, out string? error) ||
                 shape.SchemaId != id || shape.Version != version || shape.Kind != kind || (arity.HasValue && shape.Arity != arity.Value) ||
                 text != RenderTemplateManifest(shape)) {

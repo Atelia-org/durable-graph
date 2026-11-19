@@ -94,10 +94,6 @@ internal sealed partial class ModelExecutionEnvironment {
 
     private void CheckContainerNominalType(TypeExpr type, SchemaKind? requiredKind = null) {
         if (!type.IsClosed) { throw new InvalidDataException("A container element requires a closed nominal type."); }
-        if (type.Kind == TypeExprKind.Text) {
-            if (requiredKind == SchemaKind.InlineValue) { throw new InvalidDataException("Text cannot be an inline value."); }
-            return;
-        }
         if (type.IsNullable) {
             if (requiredKind == SchemaKind.ReferenceObject) { throw new InvalidDataException("Nullable cannot be a reference target."); }
             TypeExpr child = type.ElementType!;

@@ -13,7 +13,6 @@ internal static class TypeExprWireCodec {
 
     private static void WriteNode(ref BareValueWriter writer, TypeExpr type) {
         writer.WriteByte((byte)type.Kind);
-        if (type.Kind == TypeExprKind.Text) { return; }
         if (type.Kind == TypeExprKind.Builtin) {
             writer.WriteByte((byte)type.BuiltinTag);
             return;
@@ -42,7 +41,6 @@ internal static class TypeExprWireCodec {
             throw new InvalidDataException("The type expression exceeds its depth or node limit.");
         }
         byte tag = reader.ReadByte();
-        if (tag == (byte)TypeExprKind.Text) { return TypeExpr.Text; }
         if (tag == 1) {
             byte builtin = reader.ReadByte();
             if (!TypeTagFacts.IsBuiltin((TypeTag)builtin)) { throw new InvalidDataException("Unknown built-in type expression."); }
@@ -69,7 +67,7 @@ internal static class TypeExprWireCodec {
         string definitionId = reader.ReadString();
         if (string.IsNullOrWhiteSpace(definitionId)) { throw new InvalidDataException("A named type requires a nonblank definition identity."); }
         uint arity = reader.ReadVarUInt32();
-        if (arity > TypeExpr.MaximumArity || arity > (uint)remainingNodes || arity > (uint)reader.RemainingCount) {
+        if (arity > TypeExpr.MaximumArity || arity > (uint)remainingNodes || arity > (uint)reader.RemainingCount / 2) {
             throw new InvalidDataException("Invalid type expression arity.");
         }
         var arguments = new TypeExpr[(int)arity];

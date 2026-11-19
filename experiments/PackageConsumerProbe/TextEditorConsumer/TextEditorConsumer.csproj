@@ -2,13 +2,16 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>DurableTextReaderAdmission</AssemblyName>
+    <AssemblyName>Atelia.TextEditorConsumer</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <DurableGraphSchemaHistoryMode>Off</DurableGraphSchemaHistoryMode>
     <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Models.cs" />
+    <PackageReference Include="Atelia.Text" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />
   </ItemGroup>

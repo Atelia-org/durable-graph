@@ -3,13 +3,13 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Security.Cryptography;
-using Atelia.DurableGraph;
+using Atelia.Text;
 
 internal static class Program {
     private readonly record struct Query(string Needle, int Start);
     private readonly record struct Sample(long Ticks, long Bytes);
 
-    private static int Visit(DurableText text, string needle, int start) {
+    private static int Visit(TextEditor text, string needle, int start) {
         ArgumentNullException.ThrowIfNull(needle);
         if ((uint)start > (uint)text.Length) { throw new ArgumentOutOfRangeException(nameof(start)); }
         if (needle.Length == 0) { return start; }
@@ -43,7 +43,7 @@ internal static class Program {
     }
 
     private static void CheckArguments() {
-        var text = new DurableText("ab");
+        var text = new TextEditor("ab");
         text.Replace(1, 0, "\ud83d\ude00");
         var snapshot = text.Snapshot();
         foreach (var needle in new[] { "", "too-long", "\ude00b", "a" }) {
@@ -80,7 +80,7 @@ internal static class Program {
         CheckArguments();
         using var output = smoke ? null : new StreamWriter(new FileStream(args[1], FileMode.CreateNew, FileAccess.Write));
         output?.WriteLine("rep,length,shape,pieces,case,needle_units,start,expected,route,block,slot,iterations,ticks,frequency,allocated_bytes,ns_per_call,bytes_per_call,runtime,dll_sha256");
-        string dll = typeof(DurableText).Assembly.Location;
+        string dll = typeof(TextEditor).Assembly.Location;
         string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll)));
         var cases = (args[0] == "short" ? SearchCase.ShortPatterns() : SearchCase.All()).ToArray();
         Console.WriteLine($"Cases={cases.Length} runtime={RuntimeInformation.FrameworkDescription} arch={RuntimeInformation.ProcessArchitecture} vec256={Vector256.IsHardwareAccelerated} vec512={Vector512.IsHardwareAccelerated} product={sha}");

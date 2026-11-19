@@ -1,20 +1,29 @@
-# Registered leaf codec probe
+# 普通宿主登记两种可变叶
 
-研究分支 `research/db104-registered-leaves` 的实验入口。产品对照为 `c3478351` 的主线 DurableText。文本和变长位图在各自程序集声明独立 CLR 类型，宿主生成 Schema 后将 codec 显式登记到模型环境。两种类型的字段、别名、List、历史读和冷开续写共用同一路接入。
+这个探针在同一个生成模型中使用 `Atelia.Text.TextEditor` 和独立程序集的变长位图。宿主从两个库各调用两次登记帮助方法，模拟应用中的多个模块登记同一种叶。直接字段、别名、List 和 null 都进入图。[宿主模型](Consumer/Models.cs) · [位图实现](Bitmap/VariableBitmap.cs)
 
-- [单篇文本、位图和诊断](Consumer/README.md)；[多进程运行器](Run-Consumer.ps1)。
-- [128 条文本的整图基准](Fanout/Program.cs)和[三路运行器](Fanout/Run-Fanout.ps1)。每条 4096 个 UTF-16 单元，轮换修改其中 6 条，每轮仅改一条的首尾两处。预热 6 个提交周期后，测 24 次编辑加 SaveGraph；每次冷读重新打开 Repository 并物化图，然后逐字验证全部 128 条正文。冷读只计到图返回，校验和资源关闭在计时外。进程内取排序后的中间偏上观测，三进程再取中位数。线程分配含 DG 与同步 I/O 相关的托管分配。主线内建、研究树内建和注册文本依次轮转。进程及 OS 页缓存仍可复用。[逐进程结果](results/fanout.jsonl)
-- [内建编码器前后对照](CodecParity/Program.cs)。以固定种子对每个候选 DLL 各回放 8400 次，输出变化标志、长度、Delta 的统一 SHA-256。传入带有 DG/Serialization/Binary 三个 Release DLL 的目录，例如 `dotnet run -c Release --project experiments/RegisteredLeafProbe/CodecParity -p:DgBinaryPath=E:/dg/bin/old`。切换旧/新 DLL 时分开编译目录或先重新生成。此白盒驱动借用既有测试程序集名，独立包消费走公开 API。
-- [注册叶生命周期与版本回归](../../tests/DurableGraph.Persistence.Tests/RegisteredLeafLifecycleProbeTests.cs)，检验真实准确前驱、独立 Event、失败、历史版本、未消费字节与强制 Base 重写。
-- [普通包实验](Run-PackageConsumer.ps1) 从独立源码副本生成私有候选 NuGet 包，并另建消费项目。无须线上发布。
+位图用 byte 数组保存内容。冻结时复制数组，等长变更的 Delta 记录有序的字节下标与新值，改长时保存新的位数与全部字节。包消费者只需要调用位图库的登记方法，冻结类型和 codec 均为私有。
 
-在 Windows PowerShell 中，从本分支仓根运行。Storage 项目需为仓中 eng/StorageDependency.props 固定的版本。选择新的输出目录以保留各进程的存储、哈希和样本。
+## 运行
 
-~~~powershell
-$storage = 'E:/repos/Atelia-org/atelia-storage'
-$master = 'E:/repos/Atelia-org/durable-graph'
-./experiments/RegisteredLeafProbe/Run-Consumer.ps1 -StorageSourceRoot $storage -OutputDirectory W:/temp/registered-leaf-consumer
-./experiments/RegisteredLeafProbe/Fanout/Run-Fanout.ps1 -MasterRoot $master -StorageSourceRoot $storage -OutputDirectory W:/temp/registered-leaf-fanout
-~~~
+使用 .NET 10 SDK。从仓根运行下列命令，并为每次运行选择新的输出目录。源模式需要仓中固定版本的 Storage 源码，包模式需要匹配的本地 Storage 包源。[依赖准备](../../docs/storage-dependency.md)
 
-研究范围为无 DG 出边的普通引用对象。实验声明采用带稳定名义 ID 与版本的顶层、公开、非泛型 sealed class。声明者负责冻结内容与格式正确性。新增可变叶应在实际业务模型、Schema 发布和包闭包上复验，再用于生产。
+```powershell
+./experiments/RegisteredLeafProbe/Run-Consumer.ps1 -StorageSourceRoot $env:StorageSourceRoot -OutputDirectory (Join-Path $env:TEMP ("leaf-source-" + [guid]::NewGuid()))
+./experiments/RegisteredLeafProbe/Run-PackageConsumer.ps1 -StoragePackageSource $storageFeed -OutputDirectory (Join-Path $env:TEMP ("leaf-packages-" + [guid]::NewGuid()))
+```
+
+两个运行器都启动四个独立消费进程，并写出 JSON 回执。[消费程序](Consumer/Program.cs)
+
+| 阶段 | 验证内容 |
+|---|---|
+| `seed` | 先保存原图，再局改文本和一个位。读回两条指向原对象 Base 的磁盘 Delta，并核对位图编码。|
+| `resume` | 重新打开仓库，同一 GraphRef 物化为相互独立的图，分别保留图内别名。继续修改文本、扩展位图、设置新尾位后保存，检查旧文本快照。|
+| `verify` | 只读重开并逐一核对三个世代的全文、每一位、图内别名及 null。|
+| `missing` | 分别省略一种叶登记，实际读取时拒绝，并在异常中指出缺少的类型标识。|
+
+源模式通过 ProjectReference 构建。包模式另建本地 feed 和独立的 PackageReference 项目，并校验恢复包、生成器和加载的程序集。[包运行器](Run-PackageConsumer.ps1) 两条物理 Delta 的额外检查通过反射读取仓内记录，封装在探针中。[读帧检查](Consumer/Records.cs)
+
+## 重跑共存版本的性能对照
+
+主线提交 `06c57dd4a7f3baf75fd89a7a7d592861fc61ce4f` 同时包含原生文本、登记文本及同工作量的对照驱动。128 条文本的三路对照还需要紧邻的原生主线提交 `375e033eb126424032b2f33513d5479cb9978dc8`。保持这两个检出目录独立。从共存版本运行其 `Run-Consumer.ps1` 和 `Fanout/Run-Fanout.ps1` 即可重测。前者用 Python 3 汇总三个进程的结果并比对逐笔 Delta SHA，后者需要通过 `-MasterRoot` 指向原生版本检出目录。两者均使用相同的 Storage 源码版本、真实文件仓和 Release 构建。[DB-104](../../docs/design-branches/0104-text-editor/README.md)

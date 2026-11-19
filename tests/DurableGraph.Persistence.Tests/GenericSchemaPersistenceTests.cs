@@ -38,14 +38,17 @@ public sealed class GenericSchemaPersistenceTests {
         Assert.Equal(TypeExpr.Named("A"), ReadType(Convert.FromHexString("0203418000")));
     }
 
+    [Theory]
+    [InlineData("0B")]
+    [InlineData("020341020B0B")]
+    public void RetiredStructuralTextIsRejectedAloneAndInsideANamedType(string hex) {
+        Assert.Throws<InvalidDataException>(() => ReadType(Convert.FromHexString(hex)));
+    }
+
     [Fact]
-    public void NamedTypeAcceptsSingleByteTextOperands() {
-        var type = TypeExpr.Named("A", TypeExpr.Text, TypeExpr.Text);
-        var buffer = new ArrayBufferWriter<byte>();
-        var writer = new BareValueWriter(buffer);
-        TypeExprWireCodec.Write(ref writer, type);
-        Assert.Equal("020341020B0B", Convert.ToHexString(buffer.WrittenSpan));
-        Assert.Equal(type, ReadType(buffer.WrittenSpan.ToArray()));
+    public void FormerStructuralTextBaseCannotBeReadAsANominalLeaf() {
+        byte[] oldBase = [5, 2, 11, 0]; // ABI, structural route, former type tag, empty body.
+        Assert.Throws<InvalidDataException>(() => TypedBaseBodyCodec.Decode(oldBase, null));
     }
 
     [Fact]

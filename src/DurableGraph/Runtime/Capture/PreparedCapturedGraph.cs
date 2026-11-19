@@ -48,14 +48,12 @@ public sealed class PreparedCapturedObject {
     internal PreparedBaseBody? EagerBaseBody { get; }
     public PreparedBaseBody BaseBody => EagerBaseBody ?? (Current.Kind switch {
         ObjectStateKind.String => StringBodyPreparer.PrepareBase(Current.StringContent),
-        ObjectStateKind.Text => TextBodyCodec.PrepareBase(Current.TextState),
         _ => Current.Preparation!.PrepareBase(Current),
     });
 
     private readonly long? _leafBaseEstimate;
     internal long EstimateDeferredBaseSize() => _leafBaseEstimate ?? (Current.Kind switch {
         ObjectStateKind.String => BareValueEncoding.MeasureString(Current.StringContent),
-        ObjectStateKind.Text => TextBodyCodec.EstimateBaseSize(Current.TextState),
         ObjectStateKind.List when Current.Preparation is ListObjectBinding { MeasureBase: { } measure } => measure(Current),
         _ => throw new InvalidOperationException("This candidate has no deferred Base size operation."),
     });

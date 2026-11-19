@@ -1,10 +1,10 @@
 # 重跑 DB-103 字面查找对照
 
-在本目录用 .NET 10 的 Release 模式构建。默认引用仓库的 Release 产品 DLL，也可以显式指定本地已验明的普通包 DLL。程序通过公开 API 执行查询。每份 CSV 记录实际加载的 DLL 的 SHA-256 和 .NET 运行时版本。
+本目录的 .NET 10 探针通过 `Atelia.Text.TextEditor` 和 `TextSnapshot` 的公开 API 查询，默认随仓库的文本项目一起构建。源码模式需要与仓库固定版本相符的 Storage checkout。也可以用 `ProductDll` 指定普通包消费者输出目录内的 `Atelia.Text.dll`，让其运行时依赖同处一处。每份 CSV 记录实际加载的文本 DLL 的 SHA-256 和 .NET 运行时版本。
 
 ```powershell
-dotnet build IndexOfProbe.csproj -c Release
-# 用普通包 DLL 重建时加 "-p:ProductDll=<Atelia.DurableGraph.dll 的绝对路径>"
+dotnet build IndexOfProbe.csproj -c Release -p:UseStorageSources=true "-p:StorageSourceRoot=<固定版本 atelia-storage 的绝对路径>"
+# 用普通包 DLL 重建时可改为 -p:UseStorageSources=false "-p:ProductDll=<Atelia.Text.dll 的绝对路径>"
 $probe = './bin/Release/net10.0/Atelia.IndexOfProbe.dll'
 dotnet $probe smoke
 foreach ($rep in 0..2) {
@@ -49,3 +49,12 @@ python summarize.py . ./summary cold
 ```
 
 三个独立进程共输出 324 个样本。脚本对每个工况、阶段和路线先取进程内两批中位数，再取三进程中位数，生成 54 行。整次查询以 ms/次整扫、B/次整扫表示。1 Mi 的两组按 16 篇计，可从时间列乘 1000 再除 16 得到 µs/篇。
+
+## 复现原 DurableText 测量
+
+历史探针引用 `Atelia.DurableGraph.dll`。在仓库根运行 `git worktree add --detach ../dg-db103-replay <探针提交>`，从该检出的同一路径构建和运行探针。用 `-p:ProductDll=<历史普通包 DLL 的绝对路径>` 指定产品，并将输出的 `product` 或 CSV 的 `dll_sha256` 与测量记录比对。仅从同一产品源码重新构建时，实际 DLL 哈希可能不同。
+
+| 探针提交 | 产品提交 | 对应测量 |
+|---|---|---|
+| `4bbd64e8` | `8fd71257` | [逐次租还与快照查找](../indexof-comparison.md)里的矩阵、短针、整库 |
+| `0aa17d90` | `ea8f9236`、`8fd71257` | [按版本缓存对照](../indexof-cache-comparison.md)里的缓存版及旧包首次访问对照 |

@@ -60,12 +60,12 @@ public sealed class CaptureSession {
 
     // Loaded baselines describe source-live rows, not a previously captured graph.
     internal IReadOnlyList<PreparedCapturedObject> PrepareAgainst(
-        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous, bool deferTextBase = false) {
+        CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous) {
         RequireCandidate(candidate);
         ArgumentNullException.ThrowIfNull(previous);
         _preparing = true;
         try {
-            return PrepareObjects(candidate, previous, deferMeasuredBases: true, deferTextBase: deferTextBase);
+            return PrepareObjects(candidate, previous, deferMeasuredBases: true);
         }
         finally {
             _preparing = false;
@@ -74,7 +74,7 @@ public sealed class CaptureSession {
 
     private static List<PreparedCapturedObject> PrepareObjects(
         CapturedGraph candidate, IReadOnlyDictionary<ObjectId, ObjectStateRecord> previous,
-        bool deferMeasuredBases = false, bool deferTextBase = false) {
+        bool deferMeasuredBases = false) {
         // Validate the entire comparison set before invoking any user body operation.
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
@@ -89,7 +89,6 @@ public sealed class CaptureSession {
                 _ when leafBaseEstimate.HasValue => null,
                 ObjectStateKind.String when deferMeasuredBases && prior is not null => null,
                 ObjectStateKind.String => StringBodyPreparer.PrepareBase(current.StringContent),
-                ObjectStateKind.Text when deferTextBase && prior is not null => null,
                 ObjectStateKind.List when deferMeasuredBases && prior is not null &&
                     current.Preparation is ListObjectBinding { MeasureBase: not null } => null,
                 _ => current.Preparation!.PrepareBase(current),

@@ -3,6 +3,19 @@ using Atelia.DurableGraph.Build;
 namespace Atelia.DurableGraph.Tests;
 
 public sealed partial class DurableSchemaGeneratorTests {
+    [Theory]
+    [InlineData(9, "15|t")]
+    [InlineData(9, "15|l(t)")]
+    [InlineData(10, "2")]
+    public void HistoryReadersRequireTheSupportedHeaderAndNominalLeafPattern(int format, string field) {
+        using BclHistoryFixture fixture = new();
+        string record = BclHistory("Host", "// field:1|" + field + "\n", format);
+        Assert.Throws<SchemaHistoryException>(() => fixture.Parse(record));
+        Assert.Throws<SchemaHistoryException>(() => fixture.ParseManifest(record));
+        var run = RunGenerator("class Plain {}", new InMemoryAdditionalText("archived.dgschema", record));
+        Assert.Contains(run.GeneratorDiagnostics, diagnostic => diagnostic.Id == "DG0012");
+    }
+
     [Fact]
     public void ExternalLeafKeepsItsNominalIdentityAcrossFieldsAndPublishedHistory() {
         var library = EmitCrossAssemblyReference(RunCrossAssemblyGenerator("""

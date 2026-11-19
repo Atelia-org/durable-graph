@@ -354,10 +354,9 @@ internal static class SchemaHistoryTextCodec {
         SchemaHistoryRecord record = records[0];
         string canonical = RenderHistory(record).Replace(HistoryHeader, ManifestHeader, StringComparison.Ordinal);
         int expectedKind = entry.ContractVersion switch { 1 => 2, 2 => 1, _ => 0 };
-        int expectedFormat = ContainsText(record) ? 10 : 9;
-        if (record.SourceFormatVersion != expectedFormat || record.Kind != expectedKind || record.SchemaId != entry.SchemaId || record.Version != entry.SchemaVersion ||
+        if (record.SourceFormatVersion != 9 || record.Kind != expectedKind || record.SchemaId != entry.SchemaId || record.Version != entry.SchemaVersion ||
             !StringComparer.Ordinal.Equals(canonical, entry.Manifest)) {
-            throw Invalid(path, "reference must be a canonical v9 (without Text) or v10 (with Text) manifest matching its exported ID/version and execution contract (1: inline, 2: class)");
+            throw Invalid(path, "reference must be a canonical v9 manifest matching its exported ID/version and execution contract (1: inline, 2: class)");
         }
         return record;
     }
@@ -387,11 +386,10 @@ internal static class SchemaHistoryTextCodec {
         return record;
     }
 
-    public static string RenderHistory(SchemaHistoryRecord record, int? formatVersion = null) {
-        int version = formatVersion ?? (ContainsText(record) ? 10 : 9);
+    public static string RenderHistory(SchemaHistoryRecord record, int formatVersion = 9) {
         StringBuilder builder = new();
-        builder.Append(HistoryHeader).AppendLine(version.ToString(CultureInfo.InvariantCulture));
-        AppendSchemaRecord(builder, record, version);
+        builder.Append(HistoryHeader).AppendLine(formatVersion.ToString(CultureInfo.InvariantCulture));
+        AppendSchemaRecord(builder, record, formatVersion);
         return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
@@ -419,11 +417,10 @@ internal static class SchemaHistoryTextCodec {
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "6") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "7") &&
              !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "8") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "9") &&
-             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "10"))) {
-            throw Invalid(path, $"expected header '{expectedHeader}1' through '{expectedHeader}10'");
+             !StringComparer.Ordinal.Equals(lines[0], expectedHeader + "9"))) {
+            throw Invalid(path, $"expected header '{expectedHeader}1', '{expectedHeader}2', '{expectedHeader}3', '{expectedHeader}4', '{expectedHeader}5', '{expectedHeader}6', '{expectedHeader}7', '{expectedHeader}8', or '{expectedHeader}9'");
         }
-        int formatVersion = int.Parse(lines[0].Substring(expectedHeader.Length), CultureInfo.InvariantCulture);
+        int formatVersion = lines[0][lines[0].Length - 1] - '0';
 
         List<SchemaHistoryRecord> records = new();
         int index = 1;
@@ -665,16 +662,10 @@ internal static class SchemaHistoryTextCodec {
         }
     }
 
-    private static bool ContainsText(SchemaHistoryRecord record) =>
-        record.BaseType?.ContainsText == true || record.Fields.Any(field => field.ValuePattern.ContainsText);
-
     private static void AppendSchemaRecord(
         StringBuilder builder,
         SchemaHistoryRecord record,
         int formatVersion) {
-        if (formatVersion < 10 && ContainsText(record)) {
-            throw new SchemaHistoryException("DurableText requires history format v10.");
-        }
         if (formatVersion < 9 && (record.BaseType?.ContainsTemporalScalars == true || record.Fields.Any(field => field.ValuePattern.ContainsTemporalScalars))) {
             throw new SchemaHistoryException("DateOnly, TimeOnly and DateTimeOffset require history format v9.");
         }
@@ -737,8 +728,8 @@ internal static class SchemaHistoryTextCodec {
     }
 
     private static TypePattern ParsePattern(string path, string text, int arity, PatternKind expectedKind, int formatVersion, bool arrayReference = false) {
-        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6, formatVersion >= 7, formatVersion >= 8, formatVersion >= 9, formatVersion >= 10) ||
-            (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList || pattern.IsDictionary || pattern.IsText)))) {
+        if (!TypePattern.TryParse(text, arity, out TypePattern? pattern, formatVersion >= 4, formatVersion >= 5, formatVersion >= 6, formatVersion >= 7, formatVersion >= 8, formatVersion >= 9) ||
+            (pattern!.Kind != expectedKind && !(arrayReference && (pattern.IsArray || pattern.IsList || pattern.IsDictionary)))) {
             throw Invalid(path, "invalid or unbound canonical type pattern");
         }
         return pattern;

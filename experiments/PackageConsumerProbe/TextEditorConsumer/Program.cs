@@ -4,8 +4,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
+using Atelia.Text;
 
-namespace DurableTextConsumer;
+namespace TextEditorConsumer;
 
 internal static class Program {
     private const string Initial = "alpha\r\nbeta\0\ud800\r\nalpha\r\n中\ud83d\ude00文";
@@ -26,13 +27,14 @@ internal static class Program {
             File.WriteAllText(args[2], JsonSerializer.Serialize(new {
                 Passed = true, Lane = args[0], ProcessId = Environment.ProcessId, Checks, LoadedAssemblies = loaded
             }, new JsonSerializerOptions { WriteIndented = true }));
-            Console.WriteLine($"DurableText:{args[0]}:Passed:{Checks.Count}");
+            Console.WriteLine($"TextEditor:{args[0]}:Passed:{Checks.Count}");
             return 0;
         } catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
     }
     private static StateModelRegistry Models() {
         var registry = new StateModelRegistry();
         registry.Register(GraphRef.Definition);
+        TextEditorPersistence.Register(registry);
         Atelia.DurableGraph.Generated.DurableDefinitions.Register(registry);
         return registry;
     }
@@ -43,7 +45,7 @@ internal static class Program {
         // Distinct backing strings remain separate pieces until the first save.
         // The ASCII needle and a valid surrogate pair both cross piece boundaries;
         // an isolated surrogate, NUL, CJK and CRLF are preserved as exact UTF-16.
-        var text = new DurableText("alpha\r\nbe");
+        var text = new TextEditor("alpha\r\nbe");
         text.Replace(text.Length, 0, "ta\0\ud800\r\nalpha\r\n中\ud83d");
         text.Replace(text.Length, 0, "\ude00文");
         ReadOnlySpan<char> needle = "find:beta".AsSpan(5);
@@ -57,7 +59,7 @@ internal static class Program {
         var original = repository.SaveGraph(graph);
         var held = text.Snapshot();
         CheckAmbiguousReplacement(text, "alpha");
-        CheckAmbiguousReplacement(new DurableText("aaa"), "aa");
+        CheckAmbiguousReplacement(new TextEditor("aaa"), "aa");
         ReplaceUnique(text, "beta", "BETA");
         var edited = text.Snapshot();
         repository.SaveGraph(graph);
@@ -122,14 +124,14 @@ internal static class Program {
         }
         Need(retained.ToString() == Resumed, "Snapshot remains usable after Repository and GraphBuilder disposal.");
     }
-    private static void ReplaceUnique(DurableText text, string needle, string replacement) {
+    private static void ReplaceUnique(TextEditor text, string needle, string replacement) {
         if (needle.Length == 0) throw new ArgumentException("Tool rejects empty needle.");
         var snapshot = text.Snapshot();
         int first = snapshot.IndexOf(needle);
         if (first < 0 || snapshot.IndexOf(needle, first + 1) >= 0) throw new InvalidOperationException("Expected exactly one matching start position.");
         text.Replace(first, needle.Length, replacement);
     }
-    private static void CheckAmbiguousReplacement(DurableText text, string needle) {
+    private static void CheckAmbiguousReplacement(TextEditor text, string needle) {
         string before = text.ToString();
         try { ReplaceUnique(text, needle, "bad"); }
         catch (InvalidOperationException) {
@@ -141,7 +143,7 @@ internal static class Program {
     private static void Check(Entry entry, string expected) {
         Need(entry.Body.ToString() == expected && entry.Gist == "one-line", "Text content and independent gist survive.");
         Need(ReferenceEquals(entry.Body, entry.Alias) && entry.Bodies.Count == 2 && entry.Bodies.All(x => ReferenceEquals(x, entry.Body)),
-            "Field and List<DurableText> references restore one aliased object.");
+            "Field and List<TextEditor> references restore one aliased object.");
         Need(entry.Missing is null && entry.Empty.Length == 0 && !ReferenceEquals(entry.Empty, entry.Body), "Null, empty text and body remain distinct.");
     }
     private static void Need(bool condition, string message) {

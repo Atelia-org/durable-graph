@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Security.Cryptography;
 using Atelia.DurableGraph;
 using Atelia.DurableGraph.Persistence;
 using Atelia.DurableGraph.Storage;
@@ -7,25 +6,8 @@ using Atelia.FrameStore;
 
 namespace Probe.Consumer;
 
-// Post-timing, read-only inspection of actual committed frames. The leaf and host model use public APIs exclusively.
+// The probe inspects committed bytes after SaveGraph. Neither external type needs access to graph internals.
 internal static class Records {
-    internal sealed record Witness(string Kind, int BodyBytes, string BodySha256, bool ExactPredecessor);
-
-    internal static Witness[] Inspect(Repository repository, List<GraphRef> refs) {
-        var reads = refs.Select(r => Read(repository, r)).ToArray();
-        // Only the text changes after the initial snapshot. Its real row ID comes from the first edit.
-        uint leafId = reads[1].Records.Single().ObjectId;
-        var result = new List<Witness>();
-        for (int i = 0; i < reads.Length; i++) {
-            var record = reads[i].Records.Single(r => r.ObjectId == leafId);
-            bool correct = i == 0 ? record.Kind == ObjectVersionKind.Base && record.PriorAddress is null :
-                record.Kind == ObjectVersionKind.Delta && record.PriorAddress == reads[i - 1].Batch;
-            Program.Need(correct, $"unexpected {record.Kind} or incorrect predecessor for changed row at save {i}");
-            result.Add(new(record.Kind.ToString(), record.Body.Length, Convert.ToHexString(SHA256.HashData(record.Body)), correct));
-        }
-        return result.ToArray();
-    }
-
     internal static object InspectMixedEdit(Repository repository, GraphRef original, GraphRef next) {
         var first = Read(repository, original);
         var hot = Read(repository, next);

@@ -62,7 +62,6 @@ public sealed class StateReferenceValidator : IStateReferenceVisitor {
         RequireReferenceType(declaredType);
         return layout.Kind switch {
             ObjectStateKind.String => declaredType == TypeExpr.Builtin(TypeTag.String),
-            ObjectStateKind.Text => declaredType.Kind == TypeExprKind.Text,
             ObjectStateKind.Durable => declaredType.Kind == TypeExprKind.Named && Accepts(layout.Schema!, declaredType),
             ObjectStateKind.Array => declaredType.IsArray && layout.Array!.Type == declaredType,
             ObjectStateKind.List => declaredType.IsList && layout.List!.Type == declaredType,

@@ -143,42 +143,54 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     [InlineData(false, false, 10000, ObjectVersionKind.Base)]
     [InlineData(false, true, 275, ObjectVersionKind.Base)]
     [InlineData(true, false, 275, ObjectVersionKind.Delta)]
-    public void Frozen_text_encodes_its_Base_only_if_selected(bool edit, bool rewrite, long priorH, ObjectVersionKind? expected) {
+    public void Frozen_leaf_encodes_its_Base_only_if_selected(bool edit, bool rewrite, long priorH, ObjectVersionKind? expected) {
         ObjectId id = new(1);
-        DurableText text = new(new string('a', 130));
-        DurableTextState before = text.CaptureState();
-        Assert.True(text.TryInstall(text.PrepareAcceptance(before)));
-        if (edit) { text.Replace(120, 1, "Ω"); }
-        DurableTextState current = text.CaptureState();
-        PreparedDeltaBody delta = TextBodyCodec.PrepareDelta(before, current);
-        PreparedCapturedObject captured = new(new(id, current), new(id, before), null, delta);
-        SchemaCatalogView catalog = new SchemaCatalogWorkspace(static () => { }).Prepare().View;
-        byte[] eager = TypedBaseBodyCodec.Encode(ObjectLayout.Text, TextBodyCodec.PrepareBase(current), catalog);
+        var codec = new PlannerLeafCodec();
+        var binding = new LeafObjectBinding<PlannerLeaf, byte>(codec);
+        var before = new ObjectStateRecord(id, binding.CurrentLayout, (byte)1, binding);
+        var current = new ObjectStateRecord(id, binding.CurrentLayout, edit ? (byte)2 : (byte)1, binding);
+        PreparedDeltaBody delta = binding.TryPrepareDelta(before, current)!;
+        long rawEstimate = binding.Estimate(current)!.Value;
+        PreparedCapturedObject captured = new(current, before, null, delta, rawEstimate);
+        var workspace = new SchemaCatalogWorkspace(static () => { });
+        workspace.Set(binding.CurrentLayout.Schema!);
+        SchemaCatalogView catalog = workspace.Prepare().View;
+        byte[] expectedBody = [(byte)current.Content];
+        byte[] eager = TypedBaseBodyCodec.Encode(binding.CurrentLayout, new(expectedBody), catalog);
         FrameAddress prior = TestAddress();
 
-        int encodings = 0;
-        TextBodyCodec.BaseEncodingObserver = () => encodings++;
-        try {
-            PreparedTypedBase typed = new TypedBaseBodyCodec.StatePreparation(catalog).Prepare(captured);
-            PreparedObject row = ObjectWritePlanner.ClassifyCaptured(captured, typed, prior, rewrite);
-            var result = Plan([row], new() { [id] = priorH }, limit: 5, percent: 5);
-            long rawEstimate = BareValueEncoding.MeasureVarUInt32((uint)current.Content.Length)
-                + current.Content.View.PieceCount + 2L * current.Content.Length;
-            Assert.Equal(ObjectVersionPayloadSize.EstimateBasePayloadBytes(3 + rawEstimate),
-                Assert.Single(result.Estimates).BasePayloadBytes); // ABI 5 + structural route + Text expression.
-            Assert.NotEqual(ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length),
-                Assert.Single(result.Estimates).BasePayloadBytes);
-            Assert.Equal(expected == ObjectVersionKind.Base ? 1 : 0, encodings);
-            if (expected is null) { Assert.Empty(result.Records); return; }
-            ObjectVersionRecord record = Assert.Single(result.Records);
-            Assert.Equal(expected.Value, record.Kind);
-            if (record.Kind == ObjectVersionKind.Base) {
-                Assert.Equal(eager, record.Body.ToArray());
-            } else {
-                Assert.Equal(prior, record.PriorAddress);
-                Assert.Equal(delta.Body.ToArray(), record.Body.ToArray());
-            }
-        } finally { TextBodyCodec.BaseEncodingObserver = null; }
+        PreparedTypedBase typed = new TypedBaseBodyCodec.StatePreparation(catalog).Prepare(captured);
+        PreparedObject row = ObjectWritePlanner.ClassifyCaptured(captured, typed, prior, rewrite);
+        var result = Plan([row], new() { [id] = priorH }, limit: 5, percent: 5);
+        int headerBytes = eager.Length - expectedBody.Length;
+        Assert.Equal(ObjectVersionPayloadSize.EstimateBasePayloadBytes(headerBytes + rawEstimate),
+            Assert.Single(result.Estimates).BasePayloadBytes);
+        Assert.NotEqual(ObjectVersionPayloadSize.GetBasePayloadBytes(eager.Length),
+            Assert.Single(result.Estimates).BasePayloadBytes);
+        Assert.Equal(expected == ObjectVersionKind.Base ? 1 : 0, codec.BaseEncodings);
+        if (expected is null) { Assert.Empty(result.Records); return; }
+        ObjectVersionRecord record = Assert.Single(result.Records);
+        Assert.Equal(expected.Value, record.Kind);
+        if (record.Kind == ObjectVersionKind.Base) {
+            Assert.Equal(eager, record.Body.ToArray());
+        } else {
+            Assert.Equal(prior, record.PriorAddress);
+            Assert.Equal(delta.Body.ToArray(), record.Body.ToArray());
+        }
+    }
+
+    private sealed class PlannerLeafCodec : DurableLeafCodec<PlannerLeaf, byte> {
+        internal int BaseEncodings { get; private set; }
+        public override byte Capture(PlannerLeaf value, LeafAcceptance? acceptance) => value.Value;
+        public override PlannerLeaf Restore(byte state) => new() { Value = state };
+        public override long? EstimateBaseSize(byte state) => 263;
+        public override PreparedBaseBody PrepareBase(byte state) {
+            BaseEncodings++;
+            return new([state]);
+        }
+        public override PreparedDeltaBody PrepareDelta(byte previous, byte current) => new(previous != current, [current]);
+        public override byte ReadBase(int version, ref BareValueReader reader) => reader.ReadByte();
+        public override byte ApplyDelta(int version, ref BareValueReader reader, byte previous) => reader.ReadByte();
     }
 
     [Fact]
@@ -196,8 +208,10 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
         PreparedCapturedObject Freeze(string value, uint id) =>
             new(new(new(id), value), null, StringBodyPreparer.PrepareBase(value), null);
         PreparedCapturedObject first = Freeze("one", 1), second = Freeze("two", 2);
-        DurableTextState text = new DurableText("many").CaptureState();
-        PreparedCapturedObject other = new(new(new(3), text), null, TextBodyCodec.PrepareBase(text), null);
+        ListLayout list = new(new(1, TypeTag.Int64), codecVersion: 2);
+        var values = new FrozenListState<long>([47L]);
+        PreparedCapturedObject other = new(new(new(3), list, values), null,
+            ListStateBody<long, Int64StateOps>.PrepareBase(values, list), null);
         PreparedTypedBase a = bases.Prepare(first), b = bases.Prepare(other), c = bases.Prepare(second);
         foreach (var (item, prepared) in new[] { (first, a), (other, b), (second, c) }) {
             byte[] expected = TypedBaseBodyCodec.Encode(item.Current.Layout, item.EagerBaseBody!, catalog);
@@ -340,4 +354,9 @@ public sealed class ObjectRevisionPlannerTests : IDisposable {
     private static ObjectVersionRecord B(uint id, byte[] body) => ObjectVersionRecord.CreateBase(id, body);
     private static ObjectVersionRecord D(uint id, FrameAddress prior, byte[] body) => ObjectVersionRecord.CreateDelta(id, prior, body);
     public void Dispose() => SharedReadModel.DeleteFixture(_path, Prefix);
+}
+
+[DurableLeaf("Tests.PlannerLeaf")]
+public sealed class PlannerLeaf {
+    public byte Value;
 }

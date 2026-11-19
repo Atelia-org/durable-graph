@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)][string] $Version,
     [Parameter(Mandatory)][string] $ExpectedSourceCommit,
     [Parameter(Mandatory)][string] $WorkDirectory,
-    [string] $TextDatabase
+    [Parameter(Mandatory)][string] $TextDatabase
 )
 $ErrorActionPreference = 'Stop'
 $PackageSource = (Resolve-Path -LiteralPath $PackageSource).Path
@@ -42,14 +42,18 @@ function Run([string] $Name, [string[]] $Arguments) {
         $process.Dispose()
     }
 }
+function Database-Snapshot([string] $path) {
+    return (@(Get-ChildItem -LiteralPath $path -Recurse -File | Sort-Object FullName |
+        ForEach-Object { $_.FullName + '|' + (Get-FileHash $_.FullName).Hash }) -join [Environment]::NewLine)
+}
 try {
     foreach ($name in 'Directory.Build.props','Directory.Build.targets','Directory.Packages.props') { '<Project />' | Set-Content (Join-Path $work $name) }
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'DurableTextReaderAdmission/Program.cs') -Destination $work
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'DurableTextReaderAdmission/Models.cs') -Destination $work
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'DurableTextReaderAdmission/DurableTextReaderAdmission.csproj') -Destination $work
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TextEditorReaderAdmission/Program.cs') -Destination $work
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TextEditorReaderAdmission/Models.cs') -Destination $work
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TextEditorReaderAdmission/TextEditorReaderAdmission.csproj') -Destination $work
     $source = [Security.SecurityElement]::Escape($PackageSource)
     "<configuration><packageSources><clear/><add key='feed' value='$source'/></packageSources><packageSourceMapping><clear/><packageSource key='feed'><package pattern='*'/></packageSource></packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" | Set-Content (Join-Path $work 'NuGet.Config')
-    $project = Join-Path $work 'DurableTextReaderAdmission.csproj'
+    $project = Join-Path $work 'TextEditorReaderAdmission.csproj'
     $properties = @("-p:DurableGraphPackageVersion=$Version", '-p:UseStorageSources=false', '-p:UseSharedCompilation=false')
     Run 'restore' (@('restore',$project,'--configfile',(Join-Path $work 'NuGet.Config'),'--packages',$cache,'--disable-parallel') + $properties)
     Run 'build' (@('build',$project,'-c','Release','--no-restore','-t:Rebuild','-m:1','-nr:false') + $properties)
@@ -80,12 +84,13 @@ try {
         if ((Get-FileHash (Join-Path $binary "$id.dll") -Algorithm SHA256).Hash -cne $hashes[$id]) { throw "Output DLL mismatch: $id" }
         $receipt.Packages += @{ Identity=$key; Sha256=$hash; SourceCommit=$commit; RuntimeSha256=$hashes[$id] }
     }
-    $assembly = Join-Path $binary 'DurableTextReaderAdmission.dll'
-    $control = Join-Path $work 'old-control'
+    $assembly = Join-Path $binary 'TextEditorReaderAdmission.dll'
+    $control = Join-Path $work 'control'
     $lanes = @(@{ Name='seed'; Mode='seed'; Database=$control }, @{ Name='control-read'; Mode='read'; Database=$control })
-    if ($TextDatabase) { $lanes += @{ Name='text-read'; Mode='read'; Database=(Resolve-Path -LiteralPath $TextDatabase).Path } }
+    $lanes += @{ Name='text-read'; Mode='read'; Database=(Resolve-Path -LiteralPath $TextDatabase).Path }
     foreach ($lane in $lanes) {
         $evidence = Join-Path $work ($lane.Name + '.json')
+        $beforeRead = if ($lane.Name -eq 'text-read') { Database-Snapshot $lane.Database }
         Run $lane.Name @($assembly,$lane.Mode,$lane.Database,$evidence)
         $actual = Get-Content $evidence -Raw | ConvertFrom-Json
         foreach ($loaded in $actual.LoadedAssemblies) {
@@ -93,15 +98,17 @@ try {
                 [IO.Path]::GetFullPath($loaded.Path) -ine (Join-Path $binary ($loaded.Name+'.dll'))) { throw "Wrong loaded bytes: $($loaded.Name)" }
         }
         if ($lane.Name -eq 'text-read') {
+            if ((Database-Snapshot $lane.Database) -cne $beforeRead) { throw 'Reading the database after omitting Text changed its bytes.' }
             $messages = $actual.Exceptions.Message -join ' '
-            if (!$actual.Rejected -or $messages -notmatch '(?i)(unknown|unsupported)' -or $messages -notmatch '(?i)(type|schema|ABI|format)') {
-                throw "Expected explicit unsupported-format/type rejection, observed $($actual.Stage): $messages"
+            if (!$actual.Rejected -or $actual.Exceptions[0].Type -cne 'System.IO.InvalidDataException' -or
+                $messages -notmatch 'Atelia\.Text\.TextEditor' -or $messages -notmatch '(?i)register') {
+                throw "Expected rejection identifying the missing TextEditor registration, observed $($actual.Stage): $messages"
             }
-        } elseif ($actual.Rejected -or $actual.Stage -cne 'Completed' -or ($lane.Name -eq 'control-read' -and $actual.Observed -cne 'plain-before-text')) { throw "Old positive control failed: $($lane.Name)" }
+        } elseif ($actual.Rejected -or $actual.Stage -cne 'Completed' -or ($lane.Name -eq 'control-read' -and $actual.Observed -cne 'text-free control')) { throw "Text-free positive control failed: $($lane.Name)" }
         $receipt.Lanes += @{ Name=$lane.Name; Evidence=$evidence; ProcessId=$actual.ProcessId; Stage=$actual.Stage; Rejected=$actual.Rejected; Exceptions=$actual.Exceptions }
     }
     if (@($receipt.Lanes.ProcessId | Select-Object -Unique).Count -ne $lanes.Count) { throw 'Expected distinct processes.' }
-    $receipt['TextAdmissionExecuted'] = [bool]$TextDatabase
+    $receipt['TextAdmissionExecuted'] = $true
     $receipt['Assembly'] = $assembly
     $receipt.Passed = $true
 } catch { $receipt.Failure=$_.Exception.ToString(); throw } finally { Save-Receipt }

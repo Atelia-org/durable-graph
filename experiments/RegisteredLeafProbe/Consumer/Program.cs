@@ -14,17 +14,15 @@ internal static class Program {
     private static readonly string Final = Edited.Remove(1021, 2).Insert(1021, "east gate");
 
     public static void Main(string[] args) {
-        if (args.Length != 3) throw new ArgumentException("Usage: seed|resume|verify|missing|bench-1|bench-2|bench-3 store receipt.json");
+        if (args.Length != 3) throw new ArgumentException("Usage: seed|resume|verify|missing store receipt.json");
         object result = args[0] switch {
             "seed" => Seed(args[1]),
             "resume" => Resume(args[1]),
             "verify" => Verify(args[1]),
             "missing" => Missing(args[1]),
-            "diagnose" => Diagnostics.Run(args[1]),
-            "bench-1" or "bench-2" or "bench-3" => Measure.Run(args[1], int.Parse(args[0][^1..])),
             _ => throw new ArgumentException(args[0])
         };
-        var assemblies = new[] { typeof(VariableBitmap), typeof(TextEditor), typeof(DurableText), typeof(Repository), typeof(Program) }
+        var assemblies = new[] { typeof(VariableBitmap), typeof(TextEditor), typeof(IDurableObject), typeof(Repository), typeof(Program) }
             .Select(t => new { name = t.Assembly.GetName().Name, hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(t.Assembly.Location))) });
         File.WriteAllText(args[2], JsonSerializer.Serialize(new { mode = args[0], process = Environment.ProcessId, result, assemblies },
             new JsonSerializerOptions { WriteIndented = true }));
@@ -35,8 +33,14 @@ internal static class Program {
         var models = new StateModelRegistry();
         models.Register(GraphRef.Definition);
         Atelia.DurableGraph.Generated.DurableDefinitions.Register(models);
-        if (text) TextEditorPersistence.Register(models);
-        if (bitmap) BitmapPersistence.Register(models);
+        if (text) {
+            TextEditorPersistence.Register(models);
+            TextEditorPersistence.Register(models);
+        }
+        if (bitmap) {
+            BitmapPersistence.Register(models);
+            BitmapPersistence.Register(models);
+        }
         return models;
     }
 

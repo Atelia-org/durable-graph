@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $PackageSource = (Resolve-Path -LiteralPath $PackageSource).Path
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
 if ($ExpectedSourceCommit -notmatch '^[0-9a-fA-F]{40}$') { throw 'ExpectedSourceCommit must be the full committed DG source SHA.' }
-if (!$WorkDirectory) { $WorkDirectory = Join-Path ([IO.Path]::GetTempPath()) ('dg-durable-text-' + [Guid]::NewGuid().ToString('N')) }
+if (!$WorkDirectory) { $WorkDirectory = Join-Path ([IO.Path]::GetTempPath()) ('dg-text-editor-' + [Guid]::NewGuid().ToString('N')) }
 $workRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($WorkDirectory).TrimEnd('\', '/')
 foreach ($boundary in @($repositoryRoot, $PackageSource)) {
     $boundary = [IO.Path]::GetFullPath($boundary).TrimEnd('\', '/')
@@ -24,7 +24,7 @@ if (Test-Path -LiteralPath $workRoot) { throw 'Use a new work directory; previou
 $cache = Join-Path $workRoot 'packages'
 $history = Join-Path $workRoot 'history'
 $generated = Join-Path $workRoot 'generated'
-$project = Join-Path $workRoot 'DurableTextConsumer.csproj'
+$project = Join-Path $workRoot 'TextEditorConsumer.csproj'
 $binaryRoot = Join-Path $workRoot 'bin/Release/net10.0'
 $receipt = [ordered]@{ Passed = $false; Version = $Version; ExpectedSourceCommit = $ExpectedSourceCommit
     PackageSource = $PackageSource; WorkDirectory = $workRoot; Commands = @(); Packages = @()
@@ -99,8 +99,8 @@ try {
     foreach ($file in @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props')) {
         '<Project />' | Set-Content -LiteralPath (Join-Path $workRoot $file) -Encoding utf8NoBOM
     }
-    $sourceRoot = Join-Path $PSScriptRoot 'DurableTextConsumer'
-    foreach ($file in @('DurableTextConsumer.csproj', 'Models.cs', 'Program.cs')) {
+    $sourceRoot = Join-Path $PSScriptRoot 'TextEditorConsumer'
+    foreach ($file in @('TextEditorConsumer.csproj', 'Models.cs', 'Program.cs')) {
         Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $workRoot $file)
     }
     $consumerText = Get-Content -LiteralPath $project -Raw
@@ -120,9 +120,9 @@ try {
     if ($folders.Count -ne 1 -or [IO.Path]::GetFullPath($folders[0]).TrimEnd('\', '/') -ine $cache.TrimEnd('\', '/')) {
         throw 'Consumer assets did not use only the fresh package cache.'
     }
-    $dgIds = @('Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization', 'Atelia.DurableGraph.Storage')
+    $dgIds = @('Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization', 'Atelia.DurableGraph.Storage', 'Atelia.Text')
     $ateliaKeys = @($assets.libraries.Keys | Where-Object { $_.StartsWith('Atelia.', [StringComparison]::Ordinal) })
-    if ($ateliaKeys.Count -ne 10) { throw 'Expected the four DG and six storage package closure.' }
+    if ($ateliaKeys.Count -ne 11) { throw 'Expected four DG packages, Atelia.Text and six storage packages.' }
     $packageDllHashes = @{}
     foreach ($key in $ateliaKeys) {
         $id, $packageVersion = $key.Split('/')
@@ -150,18 +150,20 @@ try {
     foreach ($id in $dgIds) { if (!$assets.libraries.ContainsKey($id + '/' + $Version)) { throw "Missing DG package: $id" } }
     $runtimePackage = Join-Path $PackageSource ('Atelia.DurableGraph.' + $Version + '.nupkg')
     $runtimeRoot = Join-Path $cache ('atelia.durablegraph/' + $Version.ToLowerInvariant())
-    $xmlEntry = 'lib/net10.0/Atelia.DurableGraph.xml'
-    $xmlPath = Join-Path $runtimeRoot $xmlEntry
-    $xmlHash = Entry-Hash $runtimePackage $xmlEntry
-    if ((Get-FileHash -LiteralPath $xmlPath).Hash -cne $xmlHash) { throw 'Restored runtime XML differs from the nupkg.' }
+    $textRoot = Join-Path $cache ('atelia.text/' + $Version.ToLowerInvariant())
+    $textPackage = Join-Path $PackageSource ('Atelia.Text.' + $Version + '.nupkg')
+    $xmlEntry = 'lib/net10.0/Atelia.Text.xml'
+    $xmlPath = Join-Path $textRoot $xmlEntry
+    $xmlHash = Entry-Hash $textPackage $xmlEntry
+    if ((Get-FileHash -LiteralPath $xmlPath).Hash -cne $xmlHash) { throw 'Restored Text XML differs from the nupkg.' }
     [xml]$documentation = Get-Content -Raw -LiteralPath $xmlPath
-    foreach ($method in @('DurableText.VisitSpan', 'DurableText.TryApplyEdits', 'DurableText.ToString', 'TextSnapshot.CopyTo')) {
-        $prefix = 'M:Atelia.DurableGraph.' + $method
+    foreach ($method in @('TextEditor.VisitSpan', 'TextEditor.TryApplyEdits', 'TextEditor.ToString', 'TextSnapshot.CopyTo')) {
+        $prefix = 'M:Atelia.Text.' + $method
         if (!$documentation.SelectSingleNode("/doc/members/member[starts-with(@name,'$prefix')]/summary")) {
-            throw "Runtime package documentation is missing $method."
+            throw "Text package documentation is missing $method."
         }
     }
-    $receipt['RuntimeDocumentation'] = [ordered]@{ Entry = $xmlEntry; Sha256 = $xmlHash }
+    $receipt['TextDocumentation'] = [ordered]@{ Entry = $xmlEntry; Sha256 = $xmlHash }
     foreach ($entry in @('analyzers/dotnet/cs/Atelia.DurableGraph.Generator.dll', 'tools/net10.0/Atelia.DurableGraph.Build.dll',
         'build/Atelia.DurableGraph.props', 'build/Atelia.DurableGraph.targets')) {
         $path = Join-Path $runtimeRoot $entry
@@ -190,7 +192,7 @@ try {
             throw "Consumer output runtime DLL differs from package: $id"
         }
     }
-    $assembly = Join-Path $binaryRoot 'Atelia.DurableTextConsumer.dll'
+    $assembly = Join-Path $binaryRoot 'Atelia.TextEditorConsumer.dll'
     $database = Join-Path $workRoot 'database'
     foreach ($lane in @('seed', 'resume', 'verify')) {
         $beforeRead = if ($lane -eq 'verify') {
@@ -200,7 +202,7 @@ try {
         } else { $null }
         $evidencePath = Join-Path $workRoot ($lane + '.json')
         $actual = Execute $lane @($assembly, $lane, $database, $evidencePath)
-        if ($actual -notmatch ('DurableText:' + $lane + ':Passed:\d+')) { throw "Consumer lane did not report success: $lane" }
+        if ($actual -notmatch ('TextEditor:' + $lane + ':Passed:\d+')) { throw "Consumer lane did not report success: $lane" }
         $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
         if ($lane -eq 'verify') {
             $afterRead = @(Get-ChildItem -LiteralPath $database -Recurse -File | Sort-Object FullName | ForEach-Object {
@@ -232,7 +234,7 @@ try {
     $receipt['HistorySnapshot'] = $accepted
     $receipt['ReferenceManifest'] = $references[0].FullName
     $receipt.Passed = $true
-    Write-Host "DurableText package probe passed. Artifacts: $workRoot"
+    Write-Host "TextEditor package probe passed. Artifacts: $workRoot"
 } catch {
     $receipt.Failure = $_.Exception.ToString()
     throw

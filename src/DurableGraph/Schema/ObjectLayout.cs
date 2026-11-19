@@ -12,7 +12,6 @@ public sealed class ObjectLayout : IEquatable<ObjectLayout> {
     }
 
     public static ObjectLayout String { get; } = new(ObjectStateKind.String, null, null);
-    public static ObjectLayout Text { get; } = new(ObjectStateKind.Text, null, null);
     public static ObjectLayout ForDurable(DurableSchema schema) {
         ArgumentNullException.ThrowIfNull(schema);
         schema.RequireReferenceObject();
@@ -38,7 +37,6 @@ public sealed class ObjectLayout : IEquatable<ObjectLayout> {
     public DictionaryLayout? Dictionary { get; }
     public TypeExpr Type => Kind switch {
         ObjectStateKind.String => TypeExpr.Builtin(TypeTag.String),
-        ObjectStateKind.Text => TypeExpr.Text,
         ObjectStateKind.Durable => Schema!.Type,
         ObjectStateKind.Array => Array!.Type,
         ObjectStateKind.List => List!.Type,

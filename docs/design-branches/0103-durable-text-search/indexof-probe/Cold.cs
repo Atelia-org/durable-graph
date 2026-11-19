@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
-using Atelia.DurableGraph;
+using Atelia.Text;
 
 internal static partial class Corpus {
     private readonly record struct ColdCase(Task Task, int Percent, bool Large = false, int Start = 0, bool OneEdit = false) {
@@ -23,7 +23,7 @@ internal static partial class Corpus {
         using var output = outputFile is null ? null :
             new StreamWriter(new FileStream(outputFile, FileMode.CreateNew, FileAccess.Write));
         output?.WriteLine("rep,length,documents,fragmented_percent,edit_target_documents,edited_documents,task,start,route,block,slot,stage,ticks,frequency,allocated_bytes,gen0,gen1,gen2,ms_per_scan,bytes_per_scan,checksum,runtime,dll_sha256");
-        string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(DurableText).Assembly.Location)));
+        string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(TextEditor).Assembly.Location)));
         Route[] routes = [Route.HeldSnapshot, Route.VisitOnce];
         if (output is not null) {
             // Compile the timer, both route implementations and post-edit validation on disposable fixtures.
@@ -90,7 +90,7 @@ internal static partial class Corpus {
                 span.Fill('中');
                 Needle.AsSpan().CopyTo(span[hit..]);
             });
-            var text = new DurableText(source);
+            var text = new TextEditor(source);
             for (int k = 1; k <= 4; k++) { text.Replace(k * c.Length / 5, 1, "中"); }
             docs[i] = new(text, text.Snapshot());
             sources[i] = source;

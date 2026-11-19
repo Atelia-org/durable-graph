@@ -18,7 +18,7 @@ try {
         stage = "CreateNew";
         using var repository = Repository.CreateNew(args[1], Models());
         stage = "CreateRootBranchFromState";
-        var branch = repository.CreateRootBranchFromState("legacy-control", new Control());
+        var branch = repository.CreateRootBranchFromState("control", new Control());
         using var copy = repository.OpenWorkingCopy(branch.Id);
         repository.CreateTag("admission-control", copy.CommitState().Id);
         stage = "Completed";
@@ -29,7 +29,7 @@ try {
         stage = "ListBranches";
         var branches = repository.ListBranches();
         stage = "ResolveTag";
-        var commit = repository.ResolveTag(branches.Single().DisplayLabel == "legacy-control" ? "admission-control" : "seed");
+        var commit = repository.ResolveTag(branches.Single().DisplayLabel == "control" ? "admission-control" : "seed");
         stage = "LoadState";
         var root = repository.LoadState(commit);
         if (root is Control control) observed = control.Value;

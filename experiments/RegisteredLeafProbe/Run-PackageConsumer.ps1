@@ -31,24 +31,21 @@ function Write-Project([string]$Path, [string[]]$PackageIds, [string]$Additional
 "@ | Set-Content -LiteralPath $Path -Encoding utf8NoBOM
 }
 
-# Snapshot the working tree, including new library sources, before building any projects.
-$paths = git -C $repo ls-files --cached --others --exclude-standard -- src eng LICENSE global.json Directory.Build.props Directory.Build.targets docs/text/README.md experiments/PackageConsumerProbe/PackageProbeSupport.ps1 'experiments/RegisteredLeafProbe/Consumer/*.cs' 'experiments/RegisteredLeafProbe/Bitmap/*.cs'
-if ($LASTEXITCODE) { throw 'Could not enumerate source files.' }
-$sources = foreach ($relative in ($paths | Sort-Object -Unique)) {
-    $from = Join-Path $repo $relative
-    if (!(Test-Path -LiteralPath $from -PathType Leaf)) { continue }
-    $to = Join-Path $source $relative
-    [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($to))
-    [IO.File]::Copy($from,$to)
-    [pscustomobject]@{ path = $relative; sha256 = (Get-FileHash -LiteralPath $to).Hash }
-}
-ConvertTo-Json -InputObject @($sources) | Set-Content (Join-Path $root 'source-sha256.json')
+# Pack one committed tree. Git metadata supplies the same provenance to each NuGet package.
+$revision = git -C $repo rev-parse HEAD
+if ($LASTEXITCODE -or $revision -notmatch '^[0-9a-f]{40}$') { throw 'Could not identify the source commit.' }
+$remote = git -C $repo remote get-url origin
+if ($LASTEXITCODE) { throw 'Could not identify the source repository.' }
+git clone --quiet --local --no-hardlinks --no-checkout -- $repo $source
+if ($LASTEXITCODE) { throw 'Could not clone the package producer.' }
+git -C $source -c advice.detachedHead=false checkout --quiet --detach $revision
+if ($LASTEXITCODE) { throw 'Could not select the source commit.' }
+git -C $source remote set-url origin $remote
+if ($LASTEXITCODE) { throw 'Could not set the source repository URL for packing.' }
 . (Join-Path $source 'experiments/PackageConsumerProbe/PackageProbeSupport.ps1')
 Push-Location $source
 try {
-    Prepare-DurableGraphProbeFeed -RepositoryRoot $source -OutputDirectory $feed -Version $version -StoragePackageSource $StoragePackageSource
-    $producerConfig = Join-Path $feed 'pack.nuget.config'
-    Run @('pack','src/Text/Text.csproj','-c','Release','-o',$feed,"-p:PackageVersion=$version","-p:RestoreConfigFile=$producerConfig",'-p:UseStorageSources=false','-m:1','-nr:false')
+    Prepare-DurableGraphProbeFeed -RepositoryRoot $source -OutputDirectory $feed -Version $version -StoragePackageSource $StoragePackageSource -IncludeText
 } finally { Pop-Location }
 
 # Complete the offline consumer feed with the third-party packages selected by Text's restore.
@@ -107,6 +104,10 @@ $packages = foreach ($key in $assets.libraries.Keys) {
     [xml]$nuspec = Get-Content -Raw (Get-ChildItem -LiteralPath $dir -Filter '*.nuspec' -File).FullName
     $id = $nuspec.package.metadata.id
     $deps = @($nuspec.SelectNodes("//*[local-name()='dependency']") | ForEach-Object { $_.id } | Sort-Object -Unique)
+    if (($id -like 'Atelia.DurableGraph*' -or $id -eq 'Atelia.Text') -and
+        ($nuspec.package.metadata.repository.commit -ne $revision -or $nuspec.package.metadata.version -ne $version)) {
+        throw "Incorrect source revision or version in $id"
+    }
     $dll = Join-Path $output "$id.dll"
     if (!(Test-Path $dll)) { throw "No application output for $id" }
     $hash = (Get-FileHash $dll).Hash
@@ -130,6 +131,6 @@ foreach ($stage in 'seed','resume','verify','missing') {
 }
 $history = @(Get-ChildItem -LiteralPath (Join-Path $app 'DurableGraphSchemaHistory') -Filter '*.dgschema' -File)
 if (!$history.Count) { throw 'No generated schema-history files.' }
-[pscustomobject]@{ version=$version; sdk=(dotnet --version); packages=$packages; analyzerSha256=$generatorHash; schemaFiles=$history.Name; stages=@('seed','resume','verify','missing') } |
+[pscustomobject]@{ sourceCommit=$revision; version=$version; sdk=(dotnet --version); packages=$packages; analyzerSha256=$generatorHash; schemaFiles=$history.Name; stages=@('seed','resume','verify','missing') } |
     ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $root 'package-evidence.json')
 Write-Host "Package verification passed. $root"

@@ -238,7 +238,6 @@ internal sealed class SchemaCatalogView {
                 TypeExprKind.List when arguments.Length == 1 => TypeExpr.List(arguments[0]),
                 TypeExprKind.Nullable when arguments.Length == 1 => TypeExpr.Nullable(arguments[0]),
                 TypeExprKind.Dictionary when arguments.Length == 2 => TypeExpr.Dictionary(arguments[0], arguments[1]),
-                TypeExprKind.Text when dto.Segment0Field4.IsNull => TypeExpr.Text,
                 _ => throw new InvalidDataException("Unsupported or nonclosed TypeExpr constructor/arity."),
             });
             _typeMemo.Add(id, type);

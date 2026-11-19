@@ -7,7 +7,7 @@ using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 
 namespace Atelia.DurableGraph.Persistence.Tests;
 
-public sealed class RegisteredLeafLifecycleProbeTests : IDisposable {
+public sealed class RegisteredLeafLifecycleTests : IDisposable {
     private const string Prefix = "dg-leaf-lifecycle-";
     private readonly string _path = Path.Combine(Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
     private static readonly string Original = new('a', 8192);
@@ -207,6 +207,8 @@ public sealed class RegisteredLeafLifecycleProbeTests : IDisposable {
         const string id = "Probe.LifecycleCanary";
         var reader = models.ResolveReader(new DurableSchema(id, 1));
         Assert.Equal(1, reader.Schema.Version);
+        Assert.Throws<InvalidDataException>(() => reader.Read(default, new UnreadBodies(1)));
+        Assert.Throws<InvalidDataException>(() => reader.Read(new(1), new UnreadBodies(0)));
         Assert.Throws<InvalidDataException>(() => models.ResolveReader(new DurableSchema(id, 2)));
         Assert.Throws<InvalidDataException>(() => models.ResolveReader(new DurableSchema(id, 1, new DurableFieldInfo(1, TypeTag.Int32))));
     }
@@ -286,6 +288,11 @@ public sealed class RegisteredLeafLifecycleProbeTests : IDisposable {
         Assert.IsType<LeafLifecycleHost>(BusinessPersistenceAdapter.ReadRoot(store, state, models));
     private static StoredGraphRevision Heap(Repository repo, GraphRef reference) =>
         repo.GraphStore.ReadBusinessGraph(Resources(repo).ReadHeapDescriptor(reference.CommitId.Value).Address);
+
+    private sealed class UnreadBodies(int count) : IStateBodySource {
+        public int Count => count;
+        public ReadOnlySpan<byte> GetBody(int index) => throw new InvalidOperationException("The reader must reject before consuming a body.");
+    }
 
     private sealed class CanaryCodec : DurableLeafCodec<LifecycleCanary, byte> {
         internal LeafAcceptance? LastReceipt;

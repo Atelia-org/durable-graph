@@ -57,10 +57,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
 
     public bool IsDictionary => Kind == TypeExprKind.Dictionary;
 
-    /// <summary>The built-in editable text reference type.</summary>
-    public static TypeExpr Text { get; } = new(TypeExprKind.Text, TypeTag.Invalid, null, [], -1);
-
-    internal bool IsObjectReferenceTarget => Kind is TypeExprKind.Named or TypeExprKind.Text || IsArray || IsList || IsDictionary;
+    internal bool IsObjectReferenceTarget => Kind == TypeExprKind.Named || IsArray || IsList || IsDictionary;
 
     /// <summary>The key operand of a built-in Dictionary expression.</summary>
     public TypeExpr? KeyType => IsDictionary ? Arguments[0] : null;
@@ -77,7 +74,7 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     /// <summary>Constructs a nullable value expression; named and parameter children are checked when bound.</summary>
     public static TypeExpr Nullable(TypeExpr element) {
         ArgumentNullException.ThrowIfNull(element);
-        if (element.Kind == TypeExprKind.Text || element.IsNullable || element.IsArray || element.IsList || element.IsDictionary ||
+        if (element.IsNullable || element.IsArray || element.IsList || element.IsDictionary ||
             element.Kind == TypeExprKind.Builtin && element.BuiltinTag == TypeTag.String) {
             throw new ArgumentException("A nullable child must be a non-nullable supported value type.", nameof(element));
         }
@@ -167,7 +164,6 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
         TypeExprKind.List => $"List<{ElementType}>",
         TypeExprKind.Nullable => $"Nullable<{ElementType}>",
         TypeExprKind.Dictionary => $"Dictionary<{KeyType},{ValueType}>",
-        TypeExprKind.Text => "DurableText",
         _ => throw new InvalidOperationException("Unknown type expression constructor."),
     };
 
@@ -186,5 +182,4 @@ public enum TypeExprKind : byte {
     List = 8,
     Nullable = 9,
     Dictionary = 10,
-    Text = 11,
 }

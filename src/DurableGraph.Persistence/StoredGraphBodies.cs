@@ -42,7 +42,7 @@ internal static class TypedBaseBodyCodec {
         if (catalog is not null && BootstrapBindings.IsEmployee(layout)) {
             throw new InvalidDataException("Employee layouts cannot escape into a business graph.");
         }
-        if ((layout.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary or ObjectStateKind.Text) && BootstrapBindings.IsBuiltin(layout)) {
+        if ((layout.Kind is ObjectStateKind.List or ObjectStateKind.Array or ObjectStateKind.Dictionary) && BootstrapBindings.IsBuiltin(layout)) {
             writer.WriteByte(2);
             TypeExprWireCodec.Write(ref writer, layout.Type);
         } else if (catalog is null || layout.Kind == ObjectStateKind.String) {

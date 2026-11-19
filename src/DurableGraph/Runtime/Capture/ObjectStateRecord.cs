@@ -34,17 +34,6 @@ public sealed class ObjectStateRecord {
         _content = content.Length == 0 ? string.Empty : content;
     }
 
-    internal ObjectStateRecord(ObjectId id, DurableTextState content, IStatePreparationBinding? preparation = null) {
-        ArgumentNullException.ThrowIfNull(content);
-        Id = id;
-        Layout = ObjectLayout.Text;
-        _content = content;
-        Preparation = preparation;
-    }
-
-    internal DurableTextState TextState => Kind == ObjectStateKind.Text
-        ? (DurableTextState)_content : throw new InvalidOperationException("The record is not Text.");
-
     internal ObjectStateRecord(ObjectId id, ArrayLayout layout, object state, IStatePreparationBinding? preparation = null) {
         ArgumentNullException.ThrowIfNull(state);
         Id = id;

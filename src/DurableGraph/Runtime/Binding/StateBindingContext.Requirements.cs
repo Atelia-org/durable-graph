@@ -32,7 +32,6 @@ public abstract partial class StateBindingContext {
                 AddSlot(layout.Dictionary.ValueSlot, $"{path}.value");
                 break;
             case ObjectStateKind.String:
-            case ObjectStateKind.Text:
                 return;
             default:
                 throw new InvalidDataException("Unknown object layout kind.");

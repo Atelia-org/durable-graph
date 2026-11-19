@@ -47,7 +47,9 @@ public sealed class VariableBitmap {
 }
 
 public static class BitmapPersistence {
-    public static void Register(IDurableLeafRegistration registry) => registry.RegisterLeaf(new Codec());
+    private static readonly Codec SharedCodec = new();
+
+    public static void Register(IDurableLeafRegistration registry) => registry.RegisterLeaf(SharedCodec);
 
     private sealed record Frozen(int Bits, byte[] Data);
 

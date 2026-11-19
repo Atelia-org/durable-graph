@@ -21,13 +21,3 @@ public sealed partial class MixedEntry : IDurableObject {
     [DurableField(6)] public List<VariableBitmap> Bitmaps = [];
     [DurableField(7)] public VariableBitmap? Missing;
 }
-
-[DurableType("Probe.RegisteredLeaves.Builtin", 1)]
-public sealed partial class BuiltinEntry : IDurableObject {
-    [DurableField(1)] public DurableText Body = new();
-}
-
-[DurableType("Probe.RegisteredLeaves.Registered", 1)]
-public sealed partial class RegisteredEntry : IDurableObject {
-    [DurableField(1)] public TextEditor Body = new();
-}

@@ -1,5 +1,5 @@
 using System.Buffers;
-using Atelia.DurableGraph;
+using Atelia.Text;
 
 // Diagnostic control on a frozen snapshot. Keep at least half of each full window as forward progress.
 internal static class WindowControl {

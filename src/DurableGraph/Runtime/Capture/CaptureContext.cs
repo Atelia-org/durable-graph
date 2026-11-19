@@ -18,7 +18,6 @@ public sealed class CaptureContext : IDisposable {
     private readonly List<RootCapture> _queue = [];
     private readonly List<ObjectId> _rootIds = [];
     private readonly List<ObjectStateRecord> _objects = [];
-    private List<(DurableText Text, DurableTextState Frozen)>? _editedTexts;
 
     internal CaptureContext(CaptureSession session, IStateModelResolver models) {
         _session = session;
@@ -38,27 +37,6 @@ public sealed class CaptureContext : IDisposable {
     internal LeafAcceptance? LeafAcceptance => _advancesState ? _leafAcceptance ??= new() : null;
     internal void MarkLeafAcceptance() {
         if (_leafAcceptance is not null) { _leafAcceptance.Accepted = true; }
-    }
-
-    internal void RegisterTextCapture(DurableText text, DurableTextState frozen) {
-        RequirePhase(Phase.Capturing);
-        if (!ReferenceEquals(frozen.SourceToken, frozen.ContentToken)) {
-            (_editedTexts ??= []).Add((text, frozen));
-        }
-    }
-
-    // An advancing State can rebind each live editor to this capture's content.
-    // Independent snapshots and low-level capture-only callers simply release the list.
-    internal DurableTextAcceptance[] PrepareTextAcceptances() {
-        RequirePhase(Phase.Sealed);
-        if (_editedTexts is null) { return []; }
-        var prepared = new DurableTextAcceptance[_editedTexts.Count];
-        for (int index = 0; index < prepared.Length; index++) {
-            var (text, frozen) = _editedTexts[index];
-            prepared[index] = text.PrepareAcceptance(frozen);
-        }
-        _editedTexts = null;
-        return prepared;
     }
 
     /// <summary>Registers an exact concrete root; null contributes a zero root ID.</summary>
@@ -236,7 +214,6 @@ public sealed class CaptureContext : IDisposable {
     internal void Resolve() {
         _session?.RequireNotPreparing();
         _phase = Phase.Resolved;
-        _editedTexts = null;
         _bindings?.Clear();
         ClearBuildData();
         Candidate = null;

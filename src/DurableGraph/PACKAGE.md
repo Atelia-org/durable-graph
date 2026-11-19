@@ -23,9 +23,12 @@ that coordination and may reject a temporarily incomplete history set.
 Domain declarations remain in `Atelia.DurableGraph`; layouts use `.Schema` and binding/capture/state
 operations use `.Runtime`. Repository operations require `Atelia.DurableGraph.Persistence`.
 
-## Editing and reading DurableText
+## Registered leaves and editable text
 
-`DurableText` is a mutable graph object. Use it serially. Positions and lengths count UTF-16 code units.
+Reference the `Atelia.Text` package to use `TextEditor` in a domain field or container.
+Call `TextEditorPersistence.Register(models)` on the application's model registry before opening
+the repository. Multiple references to one editor share its graph identity. Use the editor serially.
+Positions and lengths count UTF-16 code units.
 `Replace` uses current coordinates. Use `Snapshot()` to keep reading a version across later edits
 and saves. To submit edits found on that snapshot, pass it to `TryApplyEdits(expected, edits, out failure)`.
 Every range uses the snapshot's coordinates. The editor accepts the whole batch only while the snapshot
@@ -36,7 +39,7 @@ On `false`, the batch applied zero edits. For `StaleSnapshot`, locate the target
 entries in the original input. Invalid individual edits carry their original index in `failure.EditIndex`.
 
 ```csharp
-var text = new Atelia.DurableGraph.DurableText("north gate");
+var text = new Atelia.Text.TextEditor("north gate");
 text.Replace(0, 5, "south");
 ReadOnlySpan<char> needle = "find:th gate".AsSpan(5);
 int at = text.VisitSpan(needle, static (body, query) => body.IndexOf(query, StringComparison.Ordinal)); // 3
@@ -48,6 +51,12 @@ reuse. A nested visit after an edit sees the new version while the outer span ke
 contents. To keep an excerpt, copy the relevant slice to a string inside the callback.
 On a snapshot, `IndexOf` performs ordinal literal search and `CopyTo(start, buffer.AsSpan(0, count))`
 reads exactly the requested range.
+
+A library can register its own self-contained leaf through `DurableLeafCodec<TDomain, TFrozen>`
+in `Atelia.DurableGraph.Serialization`. Give the public sealed class a stable `DurableLeaf` ID
+and body version. The codec freezes content, prepares a Base, reads it, and restores a fresh object.
+Optional Delta preparation can take advantage of the exact predecessor supplied by the graph.
+Reserve each persistent ID across libraries and historical model versions.
 
 ## Repository operations
 

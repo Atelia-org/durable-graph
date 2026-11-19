@@ -16,7 +16,8 @@ public sealed class ListBodyTests {
         Assert.True(BuiltinStateValues.TryBindCurrent(typeof(double), out var doubles));
         Assert.True(BuiltinStateValues.TryBindCurrent(typeof(int), out var ints));
         Assert.True(BuiltinStateValues.TryBindCurrent(typeof(string), out var strings));
-        Assert.True(BuiltinStateValues.TryBindCurrent(typeof(DurableText), out var objects));
+        StateValueBinding objects = new(DurableFieldInfo.Reference(1, TypeExpr.List(TypeExpr.Builtin(TypeTag.Int32))),
+            typeof(ObjectId), typeof(ObjectIdStateOps), typeof(List<int>), typeof(ObjectValueProjection<List<int>>));
         StateValueBinding durables = new(DurableFieldInfo.Reference(1, TypeExpr.Named("ListMeasurement.Child")),
             typeof(ObjectId), typeof(DurableIdStateOps), typeof(Child), typeof(DurableValueProjection<Child>));
         CheckMeasurement(bytes, new byte[count]);

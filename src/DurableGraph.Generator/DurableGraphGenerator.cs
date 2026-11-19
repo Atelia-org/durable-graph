@@ -24,8 +24,6 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         "Atelia.DurableGraph.IDurableObject";
     private const string SchemaHistoryManifestHeader =
         "// durable-graph-schema-history-manifest:9";
-    private const string TextSchemaHistoryManifestHeader =
-        "// durable-graph-schema-history-manifest:10";
     private const string SchemaHistoryHeader =
         "// durable-graph-schema-history:1";
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -434,7 +432,7 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         }
 
         string[] lines = normalized.Split('\n');
-        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7" || lines[0] == "// durable-graph-schema-history:8" || lines[0] == "// durable-graph-schema-history:9" || lines[0] == "// durable-graph-schema-history:10")) {
+        if (lines.Length > 0 && (lines[0] == "// durable-graph-schema-history:3" || lines[0] == "// durable-graph-schema-history:4" || lines[0] == "// durable-graph-schema-history:5" || lines[0] == "// durable-graph-schema-history:6" || lines[0] == "// durable-graph-schema-history:7" || lines[0] == "// durable-graph-schema-history:8" || lines[0] == "// durable-graph-schema-history:9")) {
             return TryParseTemplateHistory(file.Path, lines, out model, out error);
         }
         if (lines.Length < 5 ||
@@ -783,7 +781,6 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
                 out string? typeTag,
                 out int typeTagValue,
                 out string? fieldTypeName) &&
-                !TryGetTextField(field.Type, out typeTag, out typeTagValue, out fieldTypeName) &&
                 !TryGetNominalReference(field.Type, type, compilation,
                     context.CancellationToken, out typeTag, out typeTagValue, out fieldTypeName, out targetSchemaId) &&
                 !TryGetInlineValue(field.Type, type, compilation, context.CancellationToken,
@@ -1031,9 +1028,7 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         });
 
         StringBuilder source = new();
-        bool containsText = sortedTypes.Exists(type => type.Fields.Exists(field => field.ValuePattern.ContainsText) ||
-            GetCurrentBaseReference(type)?.Type.ContainsText == true);
-        source.AppendLine(containsText ? TextSchemaHistoryManifestHeader : SchemaHistoryManifestHeader);
+        source.AppendLine(SchemaHistoryManifestHeader);
 
         foreach (DurableTypeAnalysis type in sortedTypes) {
             source.AppendLine("// schema-begin");

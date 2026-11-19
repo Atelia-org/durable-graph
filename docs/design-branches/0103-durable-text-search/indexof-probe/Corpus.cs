@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
-using Atelia.DurableGraph;
+using Atelia.Text;
 
 internal static partial class Corpus {
     private const int Documents = 1_000;
@@ -11,12 +11,12 @@ internal static partial class Corpus {
     private enum Route { HeldSnapshot, FreshSnapshot, VisitOnce, VisitPerFind }
     private enum Task { RareFirst, EarlyFirst, SpreadEight }
     private readonly record struct Query(string Value, int Limit);
-    private sealed record Document(DurableText Text, TextSnapshot Snapshot);
+    private sealed record Document(TextEditor Text, TextSnapshot Snapshot);
     private sealed record Fixture(Document[] Docs, Query Query, long Expected);
 
     public static void Run(string outputFile, int rep) {
         using var output = new StreamWriter(new FileStream(outputFile, FileMode.CreateNew, FileAccess.Write));
-        var dll = typeof(DurableText).Assembly.Location;
+        var dll = typeof(TextEditor).Assembly.Location;
         string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll)));
         output.WriteLine("rep,fragmented_percent,task,route,batch,scans,ms_per_scan,bytes_per_scan,checksum,runtime,dll_sha256");
         var cases = (from percent in new[] { 20, 100 } from task in Enum.GetValues<Task>() select (percent, task)).ToArray();
@@ -61,7 +61,7 @@ internal static partial class Corpus {
             }
             string source = new(data);
             if (sources is not null) { sources[i] = source; }
-            DurableText text = new(source);
+            TextEditor text = new(source);
             // Four isolated, equal-length replacements leave four one-unit pieces and five source slices.
             if (percent == 100 || i / 10 % 5 == 0) {
                 foreach (var pos in new[] { 19, 701, 1_902, 3_104 }) { text.Replace(pos, 1, new string(data[pos], 1)); }
@@ -125,7 +125,7 @@ internal static partial class Corpus {
         return score;
     }
 
-    private static int SeparateVisits(DurableText text, Query query) {
+    private static int SeparateVisits(TextEditor text, Query query) {
         int score = 0;
         int start = 0;
         for (int n = 0; n < query.Limit; n++) {

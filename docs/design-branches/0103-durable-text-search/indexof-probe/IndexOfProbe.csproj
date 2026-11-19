@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <TieredCompilation>false</TieredCompilation>
     <NuGetAudit>false</NuGetAudit>
-    <ProductDll Condition="'$(ProductDll)' == ''">$(MSBuildThisFileDirectory)../../../../src/DurableGraph/bin/Release/net10.0/Atelia.DurableGraph.dll</ProductDll>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Atelia.DurableGraph" HintPath="$(ProductDll)" />
+    <ProjectReference Condition="'$(ProductDll)' == ''" Include="../../../../src/Text/Text.csproj" />
+    <Reference Condition="'$(ProductDll)' != ''" Include="Atelia.Text" HintPath="$(ProductDll)" />
   </ItemGroup>
 </Project>

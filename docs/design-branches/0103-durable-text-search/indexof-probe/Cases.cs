@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Atelia.DurableGraph;
+using Atelia.Text;
 
 internal sealed record SearchCase(int Length, string Shape, string Name, string Needle, int Start, int Expected, char Fill = '中') {
     public int EditCount => Shape switch { "edit9" => 4, "edit129" => 64, _ => 0 };
@@ -63,7 +63,7 @@ internal sealed record SearchCase(int Length, string Shape, string Name, string 
         }
     }
 
-    public (DurableText Text, TextSnapshot Snapshot, string Source, int Pieces) Create() {
+    public (TextEditor Text, TextSnapshot Snapshot, string Source, int Pieces) Create() {
         const string filler = "记事山林河流。月色入窗，人们踏上归途。\r\n";
         char[] chars = new char[Length];
         for (int i = 0; i < chars.Length; i++) {
@@ -74,15 +74,15 @@ internal sealed record SearchCase(int Length, string Shape, string Name, string 
         if (source.IndexOf(Needle, Start, StringComparison.Ordinal) != Expected) { throw new Exception($"Fixture hit: {this}"); }
 
         int edits = EditCount;
-        DurableText text;
+        TextEditor text;
         List<int> lengths = [];
         if (Shape == "slice") {
-            text = new DurableText("!" + source + "?");
+            text = new TextEditor("!" + source + "?");
             text.Replace(Length + 1, 1, "");
             text.Replace(0, 1, "");
             lengths.Add(Length);
         } else {
-            text = new DurableText(source);
+            text = new TextEditor(source);
             int cursor = 0;
             for (int i = 0; i < edits; i++) {
                 int offset = (i + 1) * Length / (edits + 1);
