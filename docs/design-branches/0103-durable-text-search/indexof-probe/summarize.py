@@ -32,7 +32,7 @@ def write_summary(source, archive, output, suite, keys, measurement, slots):
         raw_count += len(run)
         case_sets.append(run_keys)
     assert case_sets[0] == case_sets[1] == case_sets[2]
-    bytes_name = "bytes_per_scan" if suite == "corpus" else "bytes_per_call"
+    bytes_name = "bytes_per_scan" if suite in ("corpus", "cold") else "bytes_per_call"
     block_key = "batch" if suite == "corpus" else "block"
     with output.open("w", encoding="utf-8", newline="") as dest:
         writer = csv.writer(dest, lineterminator="\n")
@@ -47,21 +47,33 @@ def write_summary(source, archive, output, suite, keys, measurement, slots):
                     assert sorted(int(r["slot"]) for r in batch) == list(range(slots))
                 medians.append(statistics.median(float(r[measurement]) for r in batch))
                 allocations.append(statistics.median(float(r[bytes_name]) for r in batch))
-            writer.writerow([*key, round(statistics.median(medians), 4), *[round(n,4) for n in medians],
+            precision = 6 if suite == "cold" else 4
+            writer.writerow([*key, round(statistics.median(medians), precision), *[round(n, precision) for n in medians],
                              round(statistics.median(allocations), 2)])
     return raw_count, len(groups)
 
 
 def main():
-    source, output = map(Path, sys.argv[1:])
+    source, output = map(Path, sys.argv[1:3])
+    cold_only = sys.argv[3:] == ["cold"]
+    if sys.argv[3:] and not cold_only:
+        raise ValueError("Use summarize.py <source> <output> [cold]")
     output.mkdir(exist_ok=True)
     with (zipfile.ZipFile(source) if source.is_file() else nullcontext()) as archive:
         matrix_keys = ["length", "shape", "pieces", "case", "needle_units", "start", "expected",
                        "route", "runtime", "dll_sha256"]
         corpus_keys = ["fragmented_percent", "task", "route", "checksum", "runtime", "dll_sha256"]
-        for suite, keys, unit, slots in [("matrix", matrix_keys, "ns_per_call", 3),
-                                         ("short", matrix_keys, "ns_per_call", 3),
-                                         ("corpus", corpus_keys, "ms_per_scan", 4)]:
+        suites = [("matrix", matrix_keys, "ns_per_call", 3),
+                  ("short", matrix_keys, "ns_per_call", 3),
+                  ("corpus", corpus_keys, "ms_per_scan", 4)]
+        cold_keys = ["length", "documents", "fragmented_percent", "edit_target_documents", "edited_documents", "task", "start",
+                     "route", "stage", "checksum", "runtime", "dll_sha256"]
+        cold = ("cold", cold_keys, "ms_per_scan", 2)
+        if cold_only:
+            suites = [cold]
+        elif "cold-0.csv" in (archive.namelist() if archive else (p.name for p in source.iterdir())):
+            suites.append(cold)
+        for suite, keys, unit, slots in suites:
             raw, grouped = write_summary(source, archive, output / f"{suite}.csv", suite, keys, unit, slots)
             print(f"{suite}: {raw} batches, {grouped} summary rows")
 

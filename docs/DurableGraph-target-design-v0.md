@@ -487,7 +487,7 @@ MaxItems 限制返回条数，MaxWorkSteps 限制 HS 历史工作，不是全部
 
 可编辑条目正文使用具体引用类型 `DurableText`。业务字段和容器通过 ObjectId 共享文本。持久格式表达内容及准确对象版本依赖，编辑器的 Piece Table 与用户的只读内容快照均无独立 wire 标签。[文本接入合同](design-branches/0101-durable-text/mainline-integration-plan.md)
 
-调用方可以在同步回调内读取进入时的一份完整 UTF-16 正文。同线程回调中的编辑对新访问立即可见，正在读取的版本持续到各自回调结束。[全文访问合同](design-branches/0103-durable-text-search/README.md)
+调用方可以在同步回调内读取进入时的一份完整 UTF-16 正文。同线程回调中的编辑对新访问立即可见，正在读取的版本持续到各自回调结束。对于长期驻留且经常查询的条目，同一编辑器反复访问同版正文应能复用已准备的连续文本。[全文访问合同](design-branches/0103-durable-text-search/README.md)
 
 Repository.CreateGraph/OpenGraph/SaveGraph 提供完整图的 builder 与准确 GraphRef。每次 Open 独立恢复可变实例，内部共享与循环保持；Open(G) 的下一次保存基线就是 G。GraphRef 是普通 inline 值，只在显式 OpenGraph 时读取目标，不把目标加入持有者的强引用闭包。
 

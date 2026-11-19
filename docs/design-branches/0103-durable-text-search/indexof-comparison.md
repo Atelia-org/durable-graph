@@ -1,5 +1,7 @@
 # TextSnapshot.IndexOf 与 VisitSpan 的字面查找对照
 
+本文保留逐次租还实现 `8fd71257` 的测量。当前产品的首次查询、同版复扫及编辑后复测见[按版本缓存后的对照](indexof-cache-comparison.md)。
+
 2026-11-19。为简化实现，能否把冻结快照上的流式 KMP 全部换成连续 span 上的 .NET Ordinal 搜索？**建议保留现有 `TextSnapshot.IndexOf` 及其 KMP。面向 memo 的一篇多项查询，优先在一次 `VisitSpan` 内完成。** 多片正文若能早停或从近尾起搜，可避免全文复制。单片周期文本的特定失配模式中，KMP 在双方都无需复制的条件下仍有优势。本次未修改产品 API 或算法。
 
 ## 现有路径与比较口径

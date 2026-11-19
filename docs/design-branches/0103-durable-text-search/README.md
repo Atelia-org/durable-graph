@@ -1,10 +1,12 @@
 # DB-103 · DurableText 同步全文访问与搜索用例
 
-`DurableText.VisitSpan<TContext, TResult>` 已在主线实现。它为同步访问固定进入时的一篇正文，由调用方选择字面查找、正则枚举或其他 span 运算。产品与四项专项回归见提交 `8fd71257`。[公开实现](../../../src/DurableGraph/DurableText.cs) · [回归测试](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs)
+`DurableText.VisitSpan<TContext, TResult>` 为同步访问固定进入时的一篇正文，由调用方选择字面查找、正则枚举或其他 span 运算。空正文和单片直接访问，多片正文首次访问后由编辑器缓存连续字符串，供同一内容版本的后续访问复用。[公开实现](../../../src/DurableGraph/DurableText.cs) · [回归测试](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs)
 
-已对旧 `TextSnapshot.IndexOf` 完成字面搜索对照。类 memo 的稀疏命中和每篇多项查询更适合一次 `VisitSpan`。多片早停、近末起搜和单片周期文本的特定模式有显著反例，研究建议暂时保留流式 KMP。[适用工况、原值与重跑方法](indexof-comparison.md)
+常驻 memo 语料的同版复扫与少量编辑后再扫适合使用缓存版 `VisitSpan`。大而碎的正文首次访问且能早停、单片周期文本的特定模式仍有利于快照查找，本轮保留 `TextSnapshot.IndexOf` 的流式 KMP。[缓存版与 KMP 对照](indexof-cache-comparison.md) · [逐次租还版本的历史基线](indexof-comparison.md)
 
 ## 基础 API
+
+本轮考察少编辑、多次查询的常驻正文。验收条件是多片正文同版复访共用一份连续文本，编辑后重新访问读到新版，外层 visitor 继续读旧版。字面检索分别测首次访问、同版复扫和编辑后首扫，并与已取得的同版快照 `IndexOf` 对照。
 
 ```csharp
 public TResult VisitSpan<TContext, TResult>(
@@ -26,9 +28,9 @@ string? first = text.VisitSpan(regex, static (span, query) => {
 ```
 
 - 方法校验 visitor，空引用抛 `ArgumentNullException`。成功准备输入后同步调用 visitor 恰好一次，空正文也调用一次。context 按值传递，可以是持有结果集合的元组。返回值直接交给调用方。普通泛型 `TResult` 令编译器拒绝将输入 span 或正则的 ref struct 枚举器直接带出回调。
-- 空正文传空 span，单片直接借底层不可变字符串的准确切片。多片从 `ArrayPool<char>.Shared` 为本次调用租一块数组，按逻辑长度复制完整 UTF-16 原文，只暴露已填充前缀。成功租借后，准备和调用都受同一个 `try/finally` 保护。正常返回或抛异常都会归还本次租到的数组。准备失败时 visitor 尚未运行。
-- 按编辑器的串行使用约定，visitor 可在同线程编辑同一对象并嵌套访问。新调用读新版，外层 span 仍然稳定。多片嵌套各持独占缓冲。visitor 抛出的异常原样传播，已完成的编辑保留。回调外可以保存自有字符串或索引，索引只对受搜的那版正文有意义。
-- 空正文和单片的输入准备为 O(1)，多片每次为 O(n) 时间及 O(n) 临时容量，即使 visitor 首项即停也须先准备输入。池可能分配、按桶放大并保留数组。多层访问同时活跃时应合计各层仍持有的缓冲。[编辑与视图切换](../../../src/DurableGraph/DurableText.cs) · [片表与复制](../../../src/DurableGraph/Runtime/Text/TextPieceView.cs)
+- 空正文传空 span，单片直接借底层不可变字符串的准确切片。多片首次访问花 O(n) 时间复制到等长的字符串，准备成功后才调用 visitor。同版复访准备输入只需 O(1)，适用于相同或不同的查询。
+- 每个编辑器只为已访问的当前多片版本保留一个额外字符串，正文载荷为每个 UTF-16 单元两字节。成功编辑时释放旧缓存引用，按需物化新版。保存仅重绑同版多片时可继续复用；保存需要压成单片时可直接采用已有的同版字符串。快照及持久化差分仍使用各自捕获的片表。
+- 按编辑器的串行使用约定，visitor 可在同线程编辑并嵌套访问。内层读取新版，外层的 span 保活其进入时的正文。多层回调同时读不同版本时，各版文字会同时存活。visitor 抛出的异常原样传播，已完成的编辑保留。带出回调的索引只对受搜的那版正文有意义。[编辑与视图切换](../../../src/DurableGraph/DurableText.cs) · [片表与复制](../../../src/DurableGraph/Runtime/Text/TextPieceView.cs)
 
 ## 搜索层的用户故事
 
@@ -44,7 +46,9 @@ LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1`
 
 ## 证据与适用范围
 
-主线使用固定的 Storage 来源完成 Release 根构建，0 警告、0 错误。全量测试 3330 项通过，0 跳过，受测产品与测试源码见 `8fd71257`。四项专项回归覆盖空正文、非零偏移单片共享原字符串、未保存编辑的跨片 Ordinal 与正则命中、内外均多片时重入编辑、异常传播和旧版本稳定。额外用 .NET 10.0.5 的 ArrayPool 事件观察实际产品 DLL，空正文及单片没有租借，内外回调均因同一异常退出时两块不同的 char 数组按逆序各归还一次。复制阶段的异常保护由源码中同一 `try/finally` 覆盖。[专项测试](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs)
+缓存版产品和回归来自 `ea8f9236`。固定 Storage 六包对应的源码构建 Release 根 solution，0 警告、0 错误；全量测试 3335 项通过，0 跳过。新增回归检查跨独立访问的存储身份、保存压平、同内容多片重绑、准备过期捕获，以及两种编辑入口在旧快照存活时释放旧缓存。独立普通包消费者观察到同版嵌套 span 的地址相同，改写后新版地址和正文都发生变化，内层抛错后外层仍读到旧版。7 单元三片正文的首次和第二次顶层访问分别分配 40 B、0 B。[专项回归](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs) · [包来源与字面查找复测](indexof-cache-comparison.md)
+
+初版 `8fd71257` 采用逐次租还，固定 Storage 来源的 Release 根构建通过，全量测试 3330 项通过。四项专项回归覆盖空正文、非零偏移单片、未保存编辑的跨片 Ordinal 与正则命中、重入编辑和异常传播。[专项测试](../../../tests/DurableGraph.Tests/DurableTextVisitSpanTests.cs)
 
 同一提交从独立 checkout 导出本地候选 `0.1.0-db103.g8fd71257.035a7196`，Storage 六包版本 `0.1.3-dev.20261118.g3f780ad`。普通 net10.0 消费者用独立缓存和本地源验证跨片匹配、嵌套编辑及异常身份。实际加载的 runtime DLL 与 nupkg 中的 DLL 的 SHA-256 同为 `75F344C8FBD164523323DC89C4A96D1D1D21212D6C1A60DEA380CF0F2C14D56A`。分别尝试将 span 和 `Regex.ValueMatchEnumerator` 作为 `TResult` 返回，两次独立编译均报 CS9244。本机回执和编译日志位于 `W:/TEMP/db103-pkg-035a7196/`。
 

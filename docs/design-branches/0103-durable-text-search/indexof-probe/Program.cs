@@ -67,12 +67,14 @@ internal static class Program {
 
     public static void Main(string[] args) {
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        if (args is ["cold-smoke"]) { Corpus.RunCold(null, 0); return; }
         bool smoke = args.Length == 1 && args[0] == "smoke";
         int rep = 0;
         if (!smoke && (args.Length != 3 || !int.TryParse(args[2], out rep) || rep < 0)) {
-            throw new ArgumentException("Use smoke, or matrix / short / corpus followed by <new.csv> <rep>.");
+            throw new ArgumentException("Use smoke, cold-smoke, or matrix / short / corpus / cold followed by <new.csv> <rep>.");
         }
         if (args[0] == "corpus") { Corpus.Run(args[1], rep); return; }
+        if (args[0] == "cold") { Corpus.RunCold(args[1], rep); return; }
         if (!smoke && args[0] is not ("matrix" or "short")) { throw new ArgumentException("Unknown mode."); }
 
         CheckArguments();

@@ -23,7 +23,7 @@
 
 | 问题 | 入口与资格 |
 |---|---|
-| 冻结快照的流式字面搜索与连续正文查找 | [DB-103 IndexOf 对照](../docs/design-branches/0103-durable-text-search/indexof-comparison.md)，同版 Ordinal 查找与合成整库负载，含原值及独立探针 |
+| 冻结快照的流式字面搜索与连续正文查找 | [DB-103 缓存版 IndexOf 对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)，首次、同版复访、编辑后首查与合成整库负载，含原值及独立探针 |
 | 显式分类、真实 backing 的 Roslyn/PE 暴露与当前 SG 输出 | [ExplicitStorageClassificationProbe](ExplicitStorageClassificationProbe/README.md)；14 形状的观察工具，保独立正控；不把原始遗漏固定为产品回归，不证明普通 backing 已获支持 |
 | DG 分支登记候选与准确历史分页 | [BranchHeadMechanismProbe](BranchHeadMechanismProbe/README.md)；真实 HeadStore 公开原语、示意 payload 的成功组合与预算见证，不证明 DG 图恢复或中断原子性 |
 | DG 管理目录复用 Dictionary 增量持久化 | [DirectoryDictionaryMechanismProbe](DirectoryDictionaryMechanismProbe/README.md)；复用测试项目的真实 Meta/规划器 Delta/冷开/D-S 发布见证，T 仅 Base 冷读；新产品管理入口、生命周期和故障未验收 |

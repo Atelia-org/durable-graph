@@ -25,7 +25,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 103 | [DurableText 全文访问与搜索用例](0103-durable-text-search/README.md)，允许重入的 VisitSpan 已实现，便捷搜索层归属待定 |
+| 103 | [DurableText 全文访问与搜索用例](0103-durable-text-search/README.md)，允许重入的 VisitSpan 已按版本复用多片正文，便捷搜索层归属待定 |
 | 102 | [容器 payload 准备与对象重整策略](0102-container-payload-planning/README.md)，容器计量、补丁与目录前驱复用已采用，后续五项恢复、保存与标签性能改进已验收合入 |
 | 101 | [可增量保存的 DurableText](0101-durable-text/README.md)，可编辑正文、快照与准确对象增量 |
 | 100 | [独立对象图堆](0100-graph-heap/README.md)；增量基线与日志顺序解耦、GraphBuilder/GraphRef、内部保留 Head，源码/普通包验收及master集成完成 |

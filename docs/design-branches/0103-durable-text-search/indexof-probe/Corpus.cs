@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using Atelia.DurableGraph;
 
-internal static class Corpus {
+internal static partial class Corpus {
     private const int Documents = 1_000;
     private const int Units = 4_000;
     private const string Needle = "北门仓库";
@@ -43,7 +43,7 @@ internal static class Corpus {
         }
     }
 
-    private static Fixture MakeFixture(int percent, Task task) {
+    private static Fixture MakeFixture(int percent, Task task, string[]? sources = null) {
         var docs = new Document[Documents];
         var query = new Query(Needle, task == Task.SpreadEight ? 8 : 1);
         long expected = 0;
@@ -60,6 +60,7 @@ internal static class Corpus {
                 Needle.CopyTo(0, data, pos, Needle.Length);
             }
             string source = new(data);
+            if (sources is not null) { sources[i] = source; }
             DurableText text = new(source);
             // Four isolated, equal-length replacements leave four one-unit pieces and five source slices.
             if (percent == 100 || i / 10 % 5 == 0) {
