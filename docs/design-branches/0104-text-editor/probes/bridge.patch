@@ -1,0 +1,212 @@
+--- a/Core/TextPieceView.cs
++++ b/Core/TextPieceView.cs
+@@ -18,6 +18,7 @@
+     internal object ContentToken { get; }
+     internal int Length { get; }
+     internal int LargestBacking { get; }
++    internal TextPiece PieceAt(int index) => _pieces[index];
+     internal int PieceCount => _pieces.Count;
+     internal IReadOnlyList<TextPiece> Pieces => _pieces;
+
+--- a/Core/DurableTextState.cs
++++ b/Core/DurableTextState.cs
+@@ -12,19 +12,21 @@
+     internal object ContentToken => Content.ContentToken;
+     internal object? SourceToken { get; }
+
+-    internal IReadOnlyList<TextSourcePiece> BuildSourcePlan() {
+-        List<TextSourcePiece> plan = [];
+-        foreach (TextPiece piece in Content.View.Pieces) {
+-            if (piece.BaseOffset >= 0) {
+-                if (plan.Count != 0 && plan[^1].IsCopy &&
+-                    (long)plan[^1].BaseOffset + plan[^1].Length == piece.BaseOffset) {
+-                    TextSourcePiece last = plan[^1];
+-                    plan[^1] = TextSourcePiece.Copy(last.BaseOffset, checked(last.Length + piece.Length));
+-                } else { plan.Add(TextSourcePiece.Copy(piece.BaseOffset, piece.Length)); }
+-            } else { plan.Add(TextSourcePiece.New(piece.Memory)); }
+-        }
+-        return plan.AsReadOnly();
++    internal int ChunkCount => Content.View.PieceCount;
++    internal ReadOnlyMemory<char> Chunk(int i) => Content.View.PieceAt(i).Memory;
++    internal bool ContentEquals(FrozenText other) => Content.ContentEquals(other.Content);
++    internal bool TryGetPlanFrom(FrozenText previous, out TextSourcePlan plan) {
++        if (!ReferenceEquals(SourceToken, previous.ContentToken)) { plan = default; return false; }
++        plan = new(Content.View); return true;
+     }
++    internal static FrozenText FromString(string text) => new(TextSnapshot.FromString(text));
++    internal FrozenText PruneRetainedBacking() {
++        var view = Content.View;
++        return view.LargestBacking > 4L * Math.Max(view.Length, 1) &&
++            (long)view.LargestBacking - view.Length >= 4096
++            ? FromString(view.ToText()) : this;
++    }
++
+ }
+
+ internal readonly record struct TextSourcePiece(bool IsCopy, int BaseOffset, int Length, ReadOnlyMemory<char> Literal) {
+@@ -40,3 +42,38 @@
+     internal TextPieceView NextView { get; } = nextView;
+     internal object SourceToken { get; } = sourceToken;
+ }
++
++internal sealed class ReplayText(int maximumPieces) {
++    private List<TextPiece>? _pieces = [];
++    private List<TextPiece> Pieces => _pieces ?? throw new InvalidOperationException("Replay ended.");
++    internal bool CanAppendLiteral => Pieces.Count < maximumPieces;
++    internal void AppendLiteral(string text) {
++        ArgumentException.ThrowIfNullOrEmpty(text);
++        var pieces = Pieces;
++        if (pieces.Count >= maximumPieces) {
++            _pieces = null;
++            throw new InvalidOperationException("Replay exceeded the piece limit.");
++        }
++        pieces.Add(new(text, 0, text.Length, -1));
++    }
++    internal bool TryCopy(FrozenText prior, int start, int count) {
++        if (prior.Content.View.TryAppendRangeTo(Pieces, start, count, maximumPieces)) { return true; }
++        _pieces = null;
++        return false;
++    }
++    internal FrozenText Finish(int length) {
++        var pieces = Pieces;
++        _pieces = null;
++        return new(new TextSnapshot(TextPieceView.FromOwnedPieces(pieces, length)));
++    }
++}
++
++internal readonly struct TextSourcePlan(TextPieceView view) {
++    internal int Count => view.PieceCount;
++    internal TextSourcePiece this[int index] {
++        get {
++            var p=view.PieceAt(index);
++            return p.BaseOffset >= 0 ? TextSourcePiece.Copy(p.BaseOffset, p.Length) : TextSourcePiece.New(p.Memory);
++        }
++    }
++}
+--- a/Adapter/Codec.cs
++++ b/Adapter/Codec.cs
+@@ -22,7 +22,7 @@
+     // contributes an estimated one-byte header; selecting its encoding would scan text.
+     internal static long EstimateBaseSize(FrozenText state) =>
+         BareValueEncoding.MeasureVarUInt32((uint)state.Content.Length) +
+-        (long)state.Content.View.PieceCount + 2L * state.Content.Length;
++        (long)state.ChunkCount + 2L * state.Content.Length;
+
+     internal static PreparedBaseBody PrepareBase(FrozenText state) {
+         BaseEncodingObserver?.Invoke();
+@@ -31,13 +31,12 @@
+         writer.WriteVarUInt32((uint)state.Content.Length);
+         // The frozen view contains only nonempty pieces. Each slice is an independent
+         // value: a surrogate outside its boundary does not participate in encoding it.
+-        foreach (TextPiece piece in state.Content.View.Pieces) { writer.WriteString(piece.Memory.Span); }
++        for (int i = 0; i < state.ChunkCount; i++) { writer.WriteString(state.Chunk(i).Span); }
+         return new(buffer.WrittenSpan);
+     }
+
+     internal static PreparedDeltaBody PrepareDelta(FrozenText previous, FrozenText current) {
+-        bool unchanged = ReferenceEquals(previous.ContentToken, current.ContentToken) ||
+-            previous.Content.ContentEquals(current.Content);
++        bool unchanged = previous.ContentEquals(current);
+         ArrayBufferWriter<byte> buffer = new();
+         BareValueWriter writer = new(buffer);
+         writer.WriteVarUInt32((uint)current.Content.Length);
+@@ -45,21 +44,21 @@
+             if (current.Content.Length != 0) { WriteCopy(ref writer, 0, current.Content.Length); }
+             return new(false, buffer.WrittenSpan);
+         }
+-        if (!ReferenceEquals(current.SourceToken, previous.ContentToken)) {
++        if (!current.TryGetPlanFrom(previous, out var plan)) {
+             // A shared CLR builder may have been rebound by another graph. Never interpret
+             // its offsets against this graph's different persistent predecessor.
+             if (current.Content.Length != 0) {
+                 writer.WriteByte(New);
+                 writer.WriteVarUInt32((uint)current.Content.Length);
+-                foreach (ReadOnlyMemory<char> chunk in current.Content.GetChunks()) { WriteUnits(ref writer, chunk.Span); }
++                for (int i = 0; i < current.ChunkCount; i++) { WriteUnits(ref writer, current.Chunk(i).Span); }
+             }
+             return new(true, buffer.WrittenSpan);
+         }
+-        WritePlan(ref writer, current.BuildSourcePlan(), previous.Content.Length, current.Content.Length);
++        WritePlan(ref writer, plan, previous.Content.Length, current.Content.Length);
+         return new(true, buffer.WrittenSpan);
+     }
+
+-    private static void WritePlan(ref BareValueWriter writer, IReadOnlyList<TextSourcePiece> pieces,
++    private static void WritePlan(ref BareValueWriter writer, TextSourcePlan pieces,
+         int sourceLength, int outputLength) {
+         int output = 0;
+         for (int index = 0; index < pieces.Count;) {
+@@ -132,7 +131,7 @@
+         if (length == 0) {
+             // string.Create skips the callback for zero length, including its tail check.
+             reader.EnsureFullyConsumed();
+-            return new(TextSnapshot.FromString(string.Empty), sourceToken: null);
++            return FrozenText.FromString(string.Empty);
+         }
+         string text = string.Create(length, reader, static (destination, cursor) => {
+             // Consume the complete bounded body even after the destination is full:
+@@ -148,7 +147,7 @@
+             }
+             if (!destination.IsEmpty) { throw new InvalidDataException("Text Base segments do not fill the declared UTF-16 length."); }
+         });
+-        return new(TextSnapshot.FromString(text), sourceToken: null);
++        return FrozenText.FromString(text);
+     }
+
+     internal static FrozenText ApplyDelta(ref BareValueReader reader, FrozenText previous) {
+@@ -160,31 +159,31 @@
+         validation.EnsureFullyConsumed();
+         BareValueReader original = reader;
+         _ = ReadLength(ref reader);
+-        List<TextPiece> pieces = [];
++        ReplayText replay = new(MaximumReplayPieces);
+         int output = 0;
+         while (output < length) {
+             byte operation = reader.ReadByte();
+             if (operation == Copy) {
+                 int source = checked((int)reader.ReadVarUInt32());
+                 int count = checked((int)reader.ReadVarUInt32());
+-                if (!previous.Content.View.TryAppendRangeTo(pieces, source, count, MaximumReplayPieces)) {
++                if (!replay.TryCopy(previous, source, count)) {
+                     reader = original;
+                     return ApplyFlatValidated(ref reader, previous);
+                 }
+                 output += count;
+             } else {
+                 int count = checked((int)reader.ReadVarUInt32());
+-                if (pieces.Count == MaximumReplayPieces) {
++                if (!replay.CanAppendLiteral) {
+                     reader = original;
+                     return ApplyFlatValidated(ref reader, previous);
+                 }
+                 string literal = ReadString(reader.ReadRawBytes(count * 2));
+-                pieces.Add(new(literal, 0, count, -1));
++                replay.AppendLiteral(literal);
+                 output += count;
+             }
+         }
+         reader.EnsureFullyConsumed();
+-        return new(new TextSnapshot(TextPieceView.FromOwnedPieces(pieces, length)), sourceToken: null);
++        return replay.Finish(length);
+     }
+
+     private static FrozenText ApplyFlatValidated(ref BareValueReader reader, FrozenText previous) {
+@@ -205,16 +204,13 @@
+             }
+         }
+         reader.EnsureFullyConsumed();
+-        return new(TextSnapshot.FromString(new string(units)), sourceToken: null);
++        return FrozenText.FromString(new string(units));
+     }
+
+     internal static FrozenText FinishReplay(FrozenText state) {
+         // Prune a disproportionately retained source once at the end of the chain.
+         // Intermediate versions can still share that source while replaying later Copies.
+-        TextPieceView view = state.Content.View;
+-        return view.LargestBacking > 4L * Math.Max(view.Length, 1) &&
+-            (long)view.LargestBacking - view.Length >= 4096
+-            ? new(TextSnapshot.FromString(view.ToText()), sourceToken: null) : state;
++        return state.PruneRetainedBacking();
+     }
+
+     private static void ValidateDelta(ref BareValueReader reader, int sourceLength, int length) {

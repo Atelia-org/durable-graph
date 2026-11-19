@@ -1,6 +1,6 @@
 # DurableGraph 产品开发工作集
 
-> 校准至 2026-11-19。DB-101 可编辑正文与增量保存、DB-103 同步全文访问已通过源码与普通包消费验收。DB-100 独立对象图堆已集成，DB-099 EventRef 已验收。081 热准入未接线，082 候选默认关闭，DB-073/074 仍为草稿。
+> 校准至 2026-11-20。DB-101 可编辑正文与增量保存、DB-103 同步全文访问已通过源码与普通包消费验收。DB-100 独立对象图堆已集成，DB-099 EventRef 已验收。081 热准入未接线，082 候选默认关闭，DB-073/074 仍为草稿。
 > 文档不是实现授权；事实以当前源码、测试和工具输出为准。
 
 ## 从这里继续
@@ -20,7 +20,7 @@
 
 ## 当前焦点
 
-2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 研究将一份编辑器提取到独立文本库，比较来源范围、图保存安装与冷读重放的边界。现有领域字段仍使用 `DurableText`。
+2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 已建立独立文本库及测试空壳。隔离原型支持编辑器持有单一来源基线、DG 以窄内部接口编码并在图发布后安装。下一片搬移编辑器与接入图绑定，主线领域字段仍使用 `DurableText`。
 
 2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的 `TryApplyEdits` 按编辑器快照整批提交，有序范围直接构造片表。同版保存保留提交资格，冲突返回原输入下标。同步 `VisitSpan` 支持栈上上下文和回调重入，`ToString()` 可复用同版缓存。普通包交付 XML 合同，快照保留流式 `IndexOf`。[冷热查询对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
 

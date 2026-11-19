@@ -23,7 +23,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 | 分片 | 要解决的增量 |
 |---|---|
 | 容器 payload 准备与对象重整 | [DB-102 实测](design-branches/0102-container-payload-planning/mainline-results.md)后的重访条件：若真实负载仍受整表键扫描或可并行的 State 准备主导，再评估减少扫描或并行 Prepare。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
-| 通用文本编辑器 | [DB-104](design-branches/0104-text-editor/README.md) 比较如何让独立文本库与图的捕获、准确前驱和发布协作。实施验收用纯内存包消费者与 DG 冷重开后的小改 Delta。 |
+| 通用文本编辑器 | 实施 [DB-104 首选方案](design-branches/0104-text-editor/README.md#实施顺序与验收)，由文本库维护一份已接受的来源基线，DG 校验前驱、编码并控制安装时机。以纯内存包消费与 DG 冷重开后真实 Delta 验收；实际多图交错保存或第二个来源范围消费者出现时重访备选。 |
 | 文本搜索、替换与工具 | 编辑器抽取后研究单篇字面、正则 Search 的有界摘录、ReplaceUnique 和 ReplaceAll。宿主解析地址、限定搜索集合、逐次回执；多点预览、选择和跨回合确认用真实 tool-loop 比较。[用户故事](design-branches/0103-durable-text-search/README.md#memo-编辑工具与批量替换预览) · [常驻全文缓存与快照 KMP 的重访依据](design-branches/0103-durable-text-search/indexof-cache-comparison.md) |
 | DurableText 的长期成本 | [DB-101](design-branches/0101-durable-text/README.md) 已接入分段 Base。真实工作负载需要大量常驻历史或随机读时再对照 Rope。深链冷开、连续正则输入或重复物化成为瓶颈时，分别考虑链长配置、分块搜索和缓存。 |
 | 独立对象图的规模成本 | [DB-100](design-branches/0100-graph-heap/README.md)采用完整图builder与公共保存日志。只有真实条目大小/访问轨迹证明全图读取或捕获不可接受时，再评估图内稀疏读取；只有存储增长提出实际回收需求时，再定义GraphRef、Schema、Delta链的保留/GC合同。索引与世界目录选择由memo消费层推进，不把全堆扫描当业务搜索。 |
