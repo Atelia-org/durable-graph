@@ -32,7 +32,8 @@ public sealed class PreparedCapturedObject {
         ObjectStateRecord current,
         ObjectStateRecord? previous,
         PreparedBaseBody? baseBody,
-        PreparedDeltaBody? deltaBody) {
+        PreparedDeltaBody? deltaBody, long? leafBaseEstimate = null) {
+        _leafBaseEstimate = leafBaseEstimate;
         Current = current;
         Previous = previous;
         EagerBaseBody = baseBody;
@@ -51,13 +52,14 @@ public sealed class PreparedCapturedObject {
         _ => Current.Preparation!.PrepareBase(Current),
     });
 
-    internal long EstimateDeferredBaseSize() => Current.Kind switch {
+    private readonly long? _leafBaseEstimate;
+    internal long EstimateDeferredBaseSize() => _leafBaseEstimate ?? (Current.Kind switch {
         ObjectStateKind.String => BareValueEncoding.MeasureString(Current.StringContent),
         ObjectStateKind.Text => TextBodyCodec.EstimateBaseSize(Current.TextState),
         ObjectStateKind.List when Current.Preparation is ListObjectBinding { MeasureBase: { } measure } => measure(Current),
         _ => throw new InvalidOperationException("This candidate has no deferred Base size operation."),
-    };
+    });
 
-    /// <summary>Present for existing mutable objects; existing immutable strings need no Delta.</summary>
+    /// <summary>Change decision for an existing object. Null for immutable strings or a leaf requiring Base-only preparation.</summary>
     public PreparedDeltaBody? DeltaBody { get; }
 }

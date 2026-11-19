@@ -131,6 +131,10 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
     public bool Equals(DurableSchema? other) {
         if (ReferenceEquals(this, other)) { return true; }
         if (other is null) { return false; }
+        // A fieldless root has no dependency graph to traverse.
+        if (BaseSchema is null && other.BaseSchema is null && Fields.IsEmpty && other.Fields.IsEmpty) {
+            return Version == other.Version && Kind == other.Kind && Type == other.Type;
+        }
         var pending = new Stack<(DurableSchema Left, DurableSchema Right)>();
         var seen = new HashSet<(DurableSchema, DurableSchema)>(SchemaPairComparer.Instance);
         pending.Push((this, other));

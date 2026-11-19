@@ -1,4 +1,5 @@
 using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
 
 namespace Atelia.DurableGraph.Runtime;
 
@@ -25,6 +26,19 @@ public sealed class CaptureContext : IDisposable {
     }
 
     internal CapturedGraph? Candidate { get; private set; }
+
+    private sealed class StateAcceptance : LeafAcceptance {
+        internal bool Accepted;
+        public override bool IsAccepted => Accepted;
+    }
+
+    private bool _advancesState;
+    private StateAcceptance? _leafAcceptance;
+    internal void EnableLeafAcceptance() => _advancesState = true;
+    internal LeafAcceptance? LeafAcceptance => _advancesState ? _leafAcceptance ??= new() : null;
+    internal void MarkLeafAcceptance() {
+        if (_leafAcceptance is not null) { _leafAcceptance.Accepted = true; }
+    }
 
     internal void RegisterTextCapture(DurableText text, DurableTextState frozen) {
         RequirePhase(Phase.Capturing);

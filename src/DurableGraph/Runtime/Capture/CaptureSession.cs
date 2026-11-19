@@ -83,7 +83,10 @@ public sealed class CaptureSession {
         List<PreparedCapturedObject> objects = new(candidate.Objects.Count);
         foreach (ObjectStateRecord current in candidate.Objects) {
             previous.TryGetValue(current.Id, out ObjectStateRecord? prior);
+            LeafObjectBinding? leaf = current.Preparation as LeafObjectBinding;
+            long? leafBaseEstimate = deferMeasuredBases && prior is not null ? leaf?.Estimate(current) : null;
             PreparedBaseBody? body = current.Kind switch {
+                _ when leafBaseEstimate.HasValue => null,
                 ObjectStateKind.String when deferMeasuredBases && prior is not null => null,
                 ObjectStateKind.String => StringBodyPreparer.PrepareBase(current.StringContent),
                 ObjectStateKind.Text when deferTextBase && prior is not null => null,
@@ -91,10 +94,11 @@ public sealed class CaptureSession {
                     current.Preparation is ListObjectBinding { MeasureBase: not null } => null,
                 _ => current.Preparation!.PrepareBase(current),
             };
-            PreparedDeltaBody? delta = prior is not null && current.Kind != ObjectStateKind.String
-                ? current.Preparation!.PrepareDelta(prior, current)
-                : null;
-            objects.Add(new PreparedCapturedObject(current, prior, body, delta));
+            PreparedDeltaBody? delta = null;
+            if (prior is not null && current.Kind != ObjectStateKind.String) {
+                delta = leaf is null ? current.Preparation!.PrepareDelta(prior, current) : leaf.TryPrepareDelta(prior, current);
+            }
+            objects.Add(new PreparedCapturedObject(current, prior, body, delta, leafBaseEstimate));
         }
         return objects;
     }

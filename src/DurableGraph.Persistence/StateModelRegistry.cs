@@ -1,5 +1,6 @@
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
 namespace Atelia.DurableGraph.Persistence;
 
 /// <summary>Explicit application-local current models and their exact historical readers.</summary>
@@ -13,7 +14,8 @@ namespace Atelia.DurableGraph.Persistence;
 /// Mutable restoration allocates fresh exact instances and hydrates only the supplied target, without
 /// mutating shared DTOs or previously delivered graphs or exposing a partially restored graph.
 /// </remarks>
-public sealed class StateModelRegistry : IStateModelRegistration {
+public sealed class StateModelRegistry : IStateModelRegistration, IDurableLeafRegistration {
+    private readonly Dictionary<Type, LeafObjectBinding> _leaves = [];
     private readonly Dictionary<TypeExpr, StateModelBinding> _models = [];
     private readonly Dictionary<Type, StateModelBinding> _types = [];
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers = [];
@@ -31,6 +33,7 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     public StateModelRegistry() { }
 
     private StateModelRegistry(StateModelRegistry source) {
+        _leaves = new(source._leaves);
         _models = new(source._models);
         _types = new(source._types);
         _readers = new(source._readers);
@@ -137,8 +140,41 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     public void Register(StateValueUpgradeRuleSet ruleSet) =>
         ModelExecutionEnvironment.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
 
+    /// <summary>Registers one explicit, reference-free leaf codec and its supported exact readers.</summary>
+    public void RegisterLeaf<TDomain, TFrozen>(DurableLeafCodec<TDomain, TFrozen> codec)
+        where TDomain : class where TFrozen : notnull {
+        ArgumentNullException.ThrowIfNull(codec);
+        if (_leaves.TryGetValue(typeof(TDomain), out LeafObjectBinding? known)) {
+            if (ReferenceEquals(known.Codec, codec)) { return; }
+            throw new InvalidOperationException($"A different leaf codec already owns CLR type {typeof(TDomain)}.");
+        }
+        var leaf = new LeafObjectBinding<TDomain, TFrozen>(codec);
+        string id = leaf.CurrentLayout.Schema!.SchemaId;
+        RequireUnclaimedByLeaf(id, typeof(TDomain));
+        if (_types.ContainsKey(typeof(TDomain)) || _models.Values.Any(model => model.CurrentSchema.SchemaId == id) ||
+            _definitions.ContainsKey(id) || _definitions.Values.Any(definition => definition.DomainTypeDefinition == typeof(TDomain))) {
+            throw new InvalidOperationException($"A model or definition already owns leaf identity {id} or CLR type {typeof(TDomain)}.");
+        }
+        foreach (StateReaderBinding reader in leaf.Readers) {
+            if (_readers.ContainsKey(new(reader.Schema.Type, reader.Schema.Version))) {
+                throw new InvalidOperationException($"A different reader already owns {id} v{reader.Schema.Version}.");
+            }
+        }
+        foreach (StateReaderBinding reader in leaf.Readers) {
+            _readers.Add(new(reader.Schema.Type, reader.Schema.Version), reader);
+        }
+        _leaves.Add(typeof(TDomain), leaf);
+    }
+
+    private void RequireUnclaimedByLeaf(string id, Type? type) {
+        if ((type is not null && _leaves.ContainsKey(type)) || _leaves.Values.Any(leaf => leaf.CurrentLayout.Schema!.SchemaId == id)) {
+            throw new InvalidOperationException($"A registered leaf already owns {id} or CLR type {type}.");
+        }
+    }
+
     public void Register(StateDefinitionBinding definition) {
         ArgumentNullException.ThrowIfNull(definition);
+        RequireUnclaimedByLeaf(definition.DefinitionId, definition.DomainTypeDefinition);
         foreach (StateModelBinding model in _models.Values) { ValidateOwnership(definition, model); }
         ModelExecutionEnvironment.RegisterDefinition(_definitions, definition);
     }
@@ -146,6 +182,7 @@ public sealed class StateModelRegistry : IStateModelRegistration {
     /// <summary>Registers one stable model atomically; repeated registration of that instance is harmless.</summary>
     public void Register(StateModelBinding model) {
         ArgumentNullException.ThrowIfNull(model);
+        RequireUnclaimedByLeaf(model.CurrentSchema.SchemaId, model.DomainType);
         foreach (StateDefinitionBinding definition in _definitions.Values) { ValidateOwnership(definition, model); }
         TypeExpr id = model.CurrentSchema.Type;
         if (_models.TryGetValue(id, out StateModelBinding? existing)) {
@@ -204,5 +241,5 @@ public sealed class StateModelRegistry : IStateModelRegistration {
         new Dictionary<string, StateDefinitionBinding>(_definitions, StringComparer.Ordinal),
         new Dictionary<Type, StateValueUpgradeRuleSet>(_valueUpgradeRules), _arrayElementUpgradeRuleSet, _listElementUpgradeRuleSet,
         _listDeltaAlgorithm, _dictionaryKeyUpgradeRuleSet, _dictionaryValueUpgradeRuleSet,
-        new Dictionary<Type, object>(_dictionaryComparers), _dictionaryComparerResolver, schemaLookup);
+        new Dictionary<Type, object>(_dictionaryComparers), _dictionaryComparerResolver, schemaLookup, new(_leaves));
 }

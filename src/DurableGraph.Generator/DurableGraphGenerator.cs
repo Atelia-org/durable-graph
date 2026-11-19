@@ -952,6 +952,13 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         typeTagValue = 0;
         fieldTypeName = null;
         targetSchemaId = null;
+        if (GetDurableLeafId(fieldType) is string leafId) {
+            typeTag = "ObjectReference";
+            typeTagValue = 15;
+            fieldTypeName = fieldType.ToDisplayString(FullyQualifiedNameFormat);
+            targetSchemaId = leafId;
+            return true;
+        }
         if (fieldType is not INamedTypeSymbol target || target.TypeKind != TypeKind.Class ||
             !(SymbolEqualityComparer.Default.Equals(target.ContainingAssembly, owner.ContainingAssembly)
                 ? HasDurableTypeShape(target, cancellationToken) && HasDurableContract(target, compilation)

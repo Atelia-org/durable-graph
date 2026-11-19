@@ -7,6 +7,12 @@ internal sealed partial class ModelExecutionEnvironment {
     private readonly Dictionary<ArrayLayout, ObjectReaderBinding> _arrayReaders = [];
 
     public override bool TryGetCurrentObjectBinding(Type domainType, out ObjectBinding? binding) {
+        ArgumentNullException.ThrowIfNull(domainType);
+        if (_leaves.TryGetValue(domainType, out LeafObjectBinding? leaf)) {
+            leaf.Requirements.Validate(this);
+            binding = leaf;
+            return true;
+        }
         RequireClosed(domainType);
         if (IsDictionaryType(domainType)) { return TryGetCurrentDictionaryBinding(domainType, out binding); }
         if (IsListType(domainType)) { return TryGetCurrentListBinding(domainType, out binding); }
@@ -117,7 +123,8 @@ internal sealed partial class ModelExecutionEnvironment {
         }
         if (type.Kind != TypeExprKind.Named) { throw new InvalidDataException("Unsupported container element type constructor."); }
 
-        (SchemaKind kind, int arity) = GetContainerNominalDefinition(type.DefinitionId!);
+        (SchemaKind kind, int arity) = _leavesByName.ContainsKey(type)
+            ? (SchemaKind.ReferenceObject, 0) : GetContainerNominalDefinition(type.DefinitionId!);
         if (arity != type.Arguments.Length || (requiredKind.HasValue && requiredKind.Value != kind)) {
             throw new InvalidDataException($"Container element type {type} has the wrong declaration kind or generic arity.");
         }

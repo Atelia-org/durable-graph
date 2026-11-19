@@ -10,6 +10,27 @@ namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableGraphGenerator {
     private const string DurableTextMetadataName = "Atelia.DurableGraph.DurableText";
+    private const string DurableLeafAttributeMetadataName = "Atelia.DurableGraph.Serialization.DurableLeafAttribute";
+
+    private static string? GetDurableLeafId(ITypeSymbol type) {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsSealed: true,
+            DeclaredAccessibility: Accessibility.Public, Arity: 0, ContainingType: null } leaf) {
+            return null;
+        }
+        AttributeData? attribute = GetAttribute(leaf.GetAttributes(), DurableLeafAttributeMetadataName);
+        if (attribute?.AttributeClass is not INamedTypeSymbol marker ||
+            marker.ContainingAssembly.Identity.Name != "Atelia.DurableGraph.Serialization" ||
+            marker.DeclaringSyntaxReferences.Length != 0 ||
+            !SymbolEqualityComparer.Default.Equals(marker, marker.ContainingAssembly.GetTypeByMetadataName(DurableLeafAttributeMetadataName)) ||
+            attribute.ConstructorArguments.Length != 2 ||
+            attribute.ConstructorArguments[0].Value is not string id || string.IsNullOrWhiteSpace(id) || !CanEncodeStrictUtf8(id) ||
+            attribute.ConstructorArguments[1].Value is not int version || version <= 0) return null;
+        foreach (INamedTypeSymbol contract in leaf.AllInterfaces) {
+            if (contract.ContainingAssembly.Identity.Name == "Atelia.DurableGraph" &&
+                SymbolEqualityComparer.Default.Equals(contract, contract.ContainingAssembly.GetTypeByMetadataName(DurableObjectMetadataName))) return null;
+        }
+        return id;
+    }
 
     private static bool IsDurableText(ITypeSymbol type) =>
         type is INamedTypeSymbol named && named.Arity == 0 && named.DeclaringSyntaxReferences.Length == 0 &&
@@ -87,6 +108,7 @@ public sealed partial class DurableGraphGenerator {
     private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, Compilation compilation, out TypePattern? pattern) {
         pattern = null;
         if (IsDurableText(type)) { pattern = TypePattern.Text; return true; }
+        if (GetDurableLeafId(type) is string leafId) { pattern = TypePattern.Named(leafId); return true; }
         if (TryGetTypeTag(type, halfType, out _, out int builtin, out _)) {
             pattern = TypePattern.Builtin(builtin); return true;
         }
@@ -143,6 +165,7 @@ public sealed partial class DurableGraphGenerator {
         INamedTypeSymbol? half = root.ContainingAssembly.GetTypeByMetadataName("System.Half");
         TypePattern ConvertType(ITypeSymbol item) {
             if (IsDurableText(item)) return TypePattern.Text;
+            if (GetDurableLeafId(item) is string leafId) return TypePattern.Named(leafId);
             if (item is ITypeParameterSymbol parameter) return TypePattern.Parameter(parameter.Ordinal);
             if (TryGetTypeTag(item, half, out _, out int tag, out _)) return TypePattern.Builtin(tag);
             if (IsNullableValue(item)) return TypePattern.NullableOf(ConvertType(((INamedTypeSymbol)item).TypeArguments[0]));
@@ -198,7 +221,9 @@ public sealed partial class DurableGraphGenerator {
     }
 
     private static bool UsesFamilyTemplates(List<DurableTypeAnalysis> types, List<SchemaTemplate> history) {
-        foreach (DurableTypeAnalysis type in types) if (type.IsEnum || type.Symbol.IsRecord || UsesFamilyTemplate(CurrentShape(type))) return true;
+        // The family projection resolves the exact CLR object through the registered binding.
+        foreach (DurableTypeAnalysis type in types) if (type.IsEnum || type.Symbol.IsRecord ||
+            type.Fields.Exists(field => GetDurableLeafId(field.Symbol.Type) is not null) || UsesFamilyTemplate(CurrentShape(type))) return true;
         if (types.Count > 0) foreach (SchemaTemplate shape in history) {
             if (shape.Kind == 2 && !types.Exists(type => type.SchemaId == shape.SchemaId)) return true;
         }

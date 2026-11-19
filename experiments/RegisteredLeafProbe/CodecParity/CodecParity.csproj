@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Atelia.DurableGraph.Tests</AssemblyName>
+    <UsesDurableGraphStorage>false</UsesDurableGraphStorage>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Atelia.DurableGraph" HintPath="$(DgBinaryPath)/Atelia.DurableGraph.dll" />
+    <Reference Include="Atelia.DurableGraph.Serialization" HintPath="$(DgBinaryPath)/Atelia.DurableGraph.Serialization.dll" />
+    <Reference Include="Atelia.Binary" HintPath="$(DgBinaryPath)/Atelia.Binary.dll" />
+  </ItemGroup>
+</Project>

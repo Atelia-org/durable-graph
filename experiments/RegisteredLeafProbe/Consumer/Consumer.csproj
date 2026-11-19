@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+  </PropertyGroup>
+  <ItemGroup>
+    <CompilerVisibleProperty Include="DurableGraphGenerateDefinitions"/>
+    <ProjectReference Include="../Bitmap/VariableBitmap.csproj" />
+    <ProjectReference Include="../../../src/Text/Text.csproj" />
+    <ProjectReference Include="../../../src/DurableGraph.Persistence/DurableGraph.Persistence.csproj"/>
+    <ProjectReference Include="../../../src/DurableGraph.Generator/DurableGraph.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+  </ItemGroup>
+</Project>

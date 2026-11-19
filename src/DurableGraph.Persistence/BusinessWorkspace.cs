@@ -53,6 +53,7 @@ internal sealed class BusinessWorkspace {
             }
             CaptureSession capture = independentSnapshot ? new() : _capture;
             context = capture.BeginCapture(_models);
+            if (!independentSnapshot) { context.EnableLeafAcceptance(); }
             ObjectId rootId = model!.AddRoot(context, root);
             _pending = new(this, capture, context, context.Seal(), root, rootId, independentSnapshot);
             return _pending;
@@ -190,6 +191,7 @@ internal sealed class BusinessSaveCandidate : IDisposable {
         NormalizedGraphState installation = _installation
             ?? throw new InvalidOperationException("Prepare the installation before publishing and installing it.");
         owner.Accept(this, installation);
+        _context.MarkLeafAcceptance();
         // Installation has accepted the frozen graph. A later edit of the live
         // instance keeps its own view and takes the exact-prior fallback on the next save.
         foreach (DurableTextAcceptance next in _textAcceptances) { next.Owner.TryInstall(next); }

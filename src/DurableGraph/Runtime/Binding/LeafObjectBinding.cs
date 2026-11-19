@@ -1,0 +1,118 @@
+using Atelia.Binary;
+using Atelia.DurableGraph.Schema;
+using Atelia.DurableGraph.Serialization;
+using System.Reflection;
+
+namespace Atelia.DurableGraph.Runtime;
+
+// Leaf types use the ordinary nominal layout. Each exact version has a reader and one
+// binding owns capture/restoration for the current version in the frozen model catalog.
+internal abstract class LeafObjectBinding : ObjectBinding, IStatePreparationBinding {
+    protected LeafObjectBinding(Type domain, DurableSchema schema) : base(domain, ObjectLayout.ForDurable(schema)) =>
+        Requirements = StateBindingContext.ExactSchemaRequirementSet.Create((schema, "leaf"));
+    internal StateBindingContext.ExactSchemaRequirementSet Requirements { get; }
+    internal abstract object Codec { get; }
+    internal abstract IReadOnlyList<StateReaderBinding> Readers { get; }
+    internal abstract long? Estimate(ObjectStateRecord state);
+    public abstract void Validate(ObjectStateRecord state);
+    public abstract PreparedBaseBody PrepareBase(ObjectStateRecord state);
+    internal abstract PreparedDeltaBody? TryPrepareDelta(ObjectStateRecord previous, ObjectStateRecord current);
+    PreparedDeltaBody IStatePreparationBinding.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) =>
+        TryPrepareDelta(previous, current) ?? throw new InvalidOperationException("This leaf pair requires a Base.");
+}
+
+internal abstract class LeafReaderBinding(DurableSchema schema) : StateReaderBinding(schema) {
+    internal StateBindingContext.ExactSchemaRequirementSet Requirements { get; } =
+        StateBindingContext.ExactSchemaRequirementSet.Create((schema, "leaf reader"));
+}
+
+// The application owns the leaf CLR type and frozen representation. This adapter owns
+// its layout, validation, identity boundary and exact Base/Delta replay.
+internal sealed class LeafObjectBinding<TDomain, TFrozen> : LeafObjectBinding
+    where TDomain : class where TFrozen : notnull {
+    private readonly DurableLeafCodec<TDomain, TFrozen> _codec;
+    private readonly StateReaderBinding[] _readers;
+
+    internal LeafObjectBinding(DurableLeafCodec<TDomain, TFrozen> codec)
+        : base(typeof(TDomain), LeafSchema()) {
+        _codec = codec;
+        DurableSchema current = CurrentLayout.Schema!;
+        var readers = new List<StateReaderBinding> { new Reader(current, codec) };
+        HashSet<int> versions = [current.Version];
+        foreach (int version in codec.HistoricalVersions) {
+            if (version <= 0 || version >= current.Version || !versions.Add(version)) {
+                throw new ArgumentException("A historical leaf version must be distinct, positive and older than the current version.", nameof(codec));
+            }
+            readers.Add(new Reader(new DurableSchema(current.Type, version), codec));
+        }
+        _readers = readers.ToArray();
+    }
+
+    private static DurableSchema LeafSchema() {
+        Type type = typeof(TDomain);
+        if (!type.IsSealed || type.IsGenericType || type.IsNested || !type.IsPublic ||
+            typeof(IDurableObject).IsAssignableFrom(type) || type.GetCustomAttribute<DurableLeafAttribute>() is not { } attribute) {
+            throw new ArgumentException($"Leaf {type} must be a public top-level sealed, non-generic class with its own DurableLeaf declaration.");
+        }
+        return new DurableSchema(attribute.Id, attribute.Version);
+    }
+
+    internal override object Codec => _codec;
+    internal override IReadOnlyList<StateReaderBinding> Readers => _readers;
+
+    private static TFrozen RequireValue(TFrozen value) => value is not null ? value :
+        throw new InvalidDataException("A leaf codec returned null frozen content.");
+
+    internal override ObjectStateRecord Capture(ObjectId id, object domain, CaptureContext context) =>
+        new(id, CurrentLayout, RequireValue(_codec.Capture((TDomain)domain, context.LeafAcceptance)), this);
+
+    internal override ObjectStateRecord Normalize(ObjectStateRecord source) {
+        if (source.Content is TFrozen state) {
+            foreach (StateReaderBinding reader in _readers) {
+                if (reader.Layout.Equals(source.Layout)) { return new(source.Id, CurrentLayout, state, this); }
+            }
+        }
+        throw new InvalidDataException($"Unsupported stored layout or frozen content for leaf {CurrentLayout.Type}.");
+    }
+
+    public override void Validate(ObjectStateRecord state) {
+        if (!CurrentLayout.Equals(state.Layout) || state.Content is not TFrozen) {
+            throw new InvalidDataException($"Expected current frozen content of leaf {CurrentLayout.Type}.");
+        }
+    }
+    internal override void VisitReferences(ObjectStateRecord current, IStateReferenceVisitor visitor) => Validate(current);
+    internal override object Allocate(ObjectStateRecord current) {
+        Validate(current);
+        return _codec.Restore((TFrozen)current.Content) ?? throw new InvalidDataException($"Leaf {CurrentLayout.Type} restored a null domain.");
+    }
+    internal override void Hydrate(object domain, ObjectStateRecord current, ObjectReadTable objects) { }
+    internal override long? Estimate(ObjectStateRecord state) {
+        long? estimate = _codec.EstimateBaseSize((TFrozen)state.Content);
+        return estimate < 0 ? throw new InvalidDataException("A leaf Base estimate must be nonnegative.") : estimate;
+    }
+    public override PreparedBaseBody PrepareBase(ObjectStateRecord state) =>
+        _codec.PrepareBase((TFrozen)state.Content) ?? throw new InvalidDataException("A leaf codec returned a null Base.");
+    internal override PreparedDeltaBody? TryPrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) =>
+        _codec.PrepareDelta((TFrozen)previous.Content, (TFrozen)current.Content);
+
+    private sealed class Reader(DurableSchema schema, DurableLeafCodec<TDomain, TFrozen> codec) : LeafReaderBinding(schema) {
+        public override Type StateType => typeof(TFrozen);
+        internal override ObjectStateRecord Read(ObjectId objectId, IStateBodySource source) {
+            if (objectId.IsNull || source.Count <= 0) { throw new InvalidDataException("A leaf needs a nonzero ID and a Base."); }
+            BareValueReader input = new(source.GetBody(0));
+            TFrozen state = RequireValue(codec.ReadBase(Schema.Version, ref input));
+            input.EnsureFullyConsumed();
+            for (int index = 1; index < source.Count; index++) {
+                input = new(source.GetBody(index));
+                state = RequireValue(codec.ApplyDelta(Schema.Version, ref input, state));
+                input.EnsureFullyConsumed();
+            }
+            return new(objectId, Layout, RequireValue(codec.FinishReplay(state)));
+        }
+        internal override void VisitReferences(ObjectStateRecord item, IStateReferenceVisitor visitor) {
+            if (!Layout.Equals(item.Layout) || item.Content is not TFrozen) {
+                throw new InvalidDataException("A frozen leaf record disagrees with its exact reader.");
+            }
+        }
+    }
+}

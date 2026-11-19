@@ -12,6 +12,8 @@ namespace Atelia.DurableGraph.Persistence;
 /// it does not consult a newer repository root or allocate persistent descriptor IDs.
 /// </remarks>
 internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
+    private readonly Dictionary<Type, LeafObjectBinding> _leaves;
+    private readonly Dictionary<TypeExpr, LeafObjectBinding> _leavesByName;
     private readonly Dictionary<TypeExpr, StateModelBinding> _models;
     private readonly Dictionary<Type, StateModelBinding> _types;
     private readonly Dictionary<SchemaKey, StateReaderBinding> _readers;
@@ -36,7 +38,9 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
         ListDeltaAlgorithm listDeltaAlgorithm = ListDeltaAlgorithm.Adaptive,
         Type? dictionaryKeyUpgradeRuleSet = null, Type? dictionaryValueUpgradeRuleSet = null,
         Dictionary<Type, object>? dictionaryComparers = null, Func<Type, object?>? dictionaryComparerResolver = null,
-        Func<SchemaKey, DurableSchema?>? schemaLookup = null) {
+        Func<SchemaKey, DurableSchema?>? schemaLookup = null, Dictionary<Type, LeafObjectBinding>? leaves = null) {
+        _leaves = leaves ?? [];
+        _leavesByName = _leaves.Values.ToDictionary(static leaf => leaf.CurrentLayout.Type);
         _models = models;
         _types = types;
         _readers = readers;
@@ -169,9 +173,13 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
         if (_readers.TryGetValue(key, out StateReaderBinding? prior)) {
             if (!prior.Schema.Equals(schema)) { throw new InvalidDataException("A reader key was reused with a different complete Schema."); }
             CheckClosureRequirements(prior);
-            if (_definitions.ContainsKey(schema.SchemaId)) { BindSchema(schema); }
+            if (prior is LeafReaderBinding leaf) { leaf.Requirements.Validate(this); }
+            else if (_definitions.ContainsKey(schema.SchemaId)) { BindSchema(schema); }
             else { CheckRegistered(schema); }
             return prior;
+        }
+        if (_leavesByName.ContainsKey(schema.Type)) {
+            throw new InvalidDataException($"No registered leaf reader accepts {schema.Type} v{schema.Version}.");
         }
         StateDefinitionBinding definition = GetDefinition(schema.SchemaId);
         var factory = definition.HistoricalReaderFactory ?? throw new InvalidDataException("The definition has no historical object reader factory.");
@@ -213,7 +221,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
         TypeExpr nominal = GetTypeExpr(domainType);
         // Reference metadata must not recursively close the referenced object's body.
         if (domainType.IsArray || IsListType(domainType) || IsDictionaryType(domainType) ||
-            (domainType.IsClass && typeof(IDurableObject).IsAssignableFrom(domainType))) {
+            _leaves.ContainsKey(domainType) || (domainType.IsClass && typeof(IDurableObject).IsAssignableFrom(domainType))) {
             StateValueBinding reference = new(DurableFieldInfo.Reference(1, nominal), typeof(ObjectId), typeof(ObjectIdStateOps),
                 domainType, typeof(ObjectValueProjection<>).MakeGenericType(domainType));
             _currentValues.Add(domainType, reference);
@@ -291,6 +299,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
             Type[] arguments = domainType.GetGenericArguments();
             return TypeExpr.Dictionary(GetTypeExpr(arguments[0]), GetTypeExpr(arguments[1]));
         }
+        if (_leaves.TryGetValue(domainType, out LeafObjectBinding? leaf)) { return leaf.CurrentLayout.Type; }
         if (_types.TryGetValue(domainType, out StateModelBinding? model)) { return model.CurrentSchema.Type; }
         if (!TryDefinition(domainType, out StateDefinitionBinding? definition)) {
             throw new InvalidDataException($"No supported declaration is registered for {domainType}.");
@@ -340,6 +349,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
                 _ => throw new InvalidDataException("Unsupported builtin domain type."),
             };
         }
+        if (_leavesByName.TryGetValue(type, out LeafObjectBinding? leaf)) { return leaf.DomainType; }
         if (_models.TryGetValue(type, out StateModelBinding? model)) {
             RequireClosed(model.DomainType);
             return model.DomainType;
