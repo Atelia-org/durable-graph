@@ -111,7 +111,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
         // Do not close current factories here: recursive reference graphs stop at this boundary.
         if (nominal.Kind == TypeExprKind.Named && nominal.IsClosed &&
             !_definitions.ContainsKey(nominal.DefinitionId!) &&
-            (_models.ContainsKey(nominal) || _readers.Keys.Any(key => key.Type == nominal))) {
+            (_leavesByName.ContainsKey(nominal) || _models.ContainsKey(nominal) || _readers.Keys.Any(key => key.Type == nominal))) {
             return SchemaKind.ReferenceObject;
         }
         return base.GetNamedDeclarationKind(nominal);

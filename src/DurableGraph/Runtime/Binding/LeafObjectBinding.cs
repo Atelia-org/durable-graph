@@ -39,7 +39,9 @@ internal sealed class LeafObjectBinding<TDomain, TFrozen> : LeafObjectBinding
         DurableSchema current = CurrentLayout.Schema!;
         var readers = new List<StateReaderBinding> { new Reader(current, codec) };
         HashSet<int> versions = [current.Version];
-        foreach (int version in codec.HistoricalVersions) {
+        IReadOnlyList<int> historicalVersions = codec.HistoricalVersions ??
+            throw new ArgumentException("A leaf codec must supply its historical versions or an empty list.", nameof(codec));
+        foreach (int version in historicalVersions) {
             if (version <= 0 || version >= current.Version || !versions.Add(version)) {
                 throw new ArgumentException("A historical leaf version must be distinct, positive and older than the current version.", nameof(codec));
             }
@@ -98,11 +100,12 @@ internal sealed class LeafObjectBinding<TDomain, TFrozen> : LeafObjectBinding
     private sealed class Reader(DurableSchema schema, DurableLeafCodec<TDomain, TFrozen> codec) : LeafReaderBinding(schema) {
         public override Type StateType => typeof(TFrozen);
         internal override ObjectStateRecord Read(ObjectId objectId, IStateBodySource source) {
-            if (objectId.IsNull || source.Count <= 0) { throw new InvalidDataException("A leaf needs a nonzero ID and a Base."); }
+            int count = source.Count;
+            if (objectId.IsNull || count <= 0) { throw new InvalidDataException("A leaf needs a nonzero ID and a Base."); }
             BareValueReader input = new(source.GetBody(0));
             TFrozen state = RequireValue(codec.ReadBase(Schema.Version, ref input));
             input.EnsureFullyConsumed();
-            for (int index = 1; index < source.Count; index++) {
+            for (int index = 1; index < count; index++) {
                 input = new(source.GetBody(index));
                 state = RequireValue(codec.ApplyDelta(Schema.Version, ref input, state));
                 input.EnsureFullyConsumed();

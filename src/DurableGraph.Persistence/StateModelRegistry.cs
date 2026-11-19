@@ -140,7 +140,7 @@ public sealed class StateModelRegistry : IStateModelRegistration, IDurableLeafRe
     public void Register(StateValueUpgradeRuleSet ruleSet) =>
         ModelExecutionEnvironment.RegisterValueUpgradeRuleSet(_valueUpgradeRules, ruleSet);
 
-    /// <summary>Registers one explicit, reference-free leaf codec and its supported exact readers.</summary>
+    /// <inheritdoc/>
     public void RegisterLeaf<TDomain, TFrozen>(DurableLeafCodec<TDomain, TFrozen> codec)
         where TDomain : class where TFrozen : notnull {
         ArgumentNullException.ThrowIfNull(codec);
@@ -150,6 +150,7 @@ public sealed class StateModelRegistry : IStateModelRegistration, IDurableLeafRe
         }
         var leaf = new LeafObjectBinding<TDomain, TFrozen>(codec);
         string id = leaf.CurrentLayout.Schema!.SchemaId;
+        SchemaCatalogWorkspace.Validate(leaf.CurrentLayout.Schema);
         RequireUnclaimedByLeaf(id, typeof(TDomain));
         if (_types.ContainsKey(typeof(TDomain)) || _models.Values.Any(model => model.CurrentSchema.SchemaId == id) ||
             _definitions.ContainsKey(id) || _definitions.Values.Any(definition => definition.DomainTypeDefinition == typeof(TDomain))) {
