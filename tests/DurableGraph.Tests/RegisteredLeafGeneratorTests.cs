@@ -83,12 +83,16 @@ public sealed partial class DurableSchemaGeneratorTests {
             [DurableType("Box",1)] public partial struct Box<T> {
                 [DurableField(1)] public T? Value;
             }
-            [DurableType("Book",1)] public partial class Book : IDurableObject {
+            [DurableType("Parent",1)] public partial class Parent<T> : IDurableObject {
+                [DurableField(1)] public T? Value;
+            }
+            [DurableType("Book",1)] public partial class Book : Parent<List<Page?>> {
                 [DurableField(1)] public List<Page?>? Pages;
                 [DurableField(2)] public Dictionary<string, Note?>? Notes;
                 [DurableField(3)] public Page?[]? More;
                 [DurableField(4)] public Dictionary<string, List<Page?>?>? Nested;
                 [DurableField(5)] public Box<List<Page?>?> Wrapped;
+                [DurableField(6)] public Box<List<Page>> Required;
             }
             """;
         var app = RunCrossAssemblyGenerator(source, forceDefinitions: "true");
@@ -97,10 +101,13 @@ public sealed partial class DurableSchemaGeneratorTests {
         string manifest = GeneratedSource(app, "DurableGraphSchemaHistoryCandidates.g.cs");
         const string page = "nTm9kZQ==()";
         const string note = "nTGVhZg==()";
+        Assert.Contains("// base:nUGFyZW50(l(" + page + "))|1", manifest);
         Assert.Contains("// field:1|15|l(" + page + ")", manifest);
         Assert.Contains("// field:2|15|d(b4," + note + ")", manifest);
         Assert.Contains("// field:3|15|a1(" + page + ")", manifest);
         Assert.Contains("// field:4|15|d(b4,l(" + page + "))", manifest);
+        Assert.Contains("// field:5|16|nQm94(l(" + page + "))|1", manifest);
+        Assert.Contains("// field:6|16|nQm94(l(" + page + "))|1", manifest);
     }
 
     [Theory]

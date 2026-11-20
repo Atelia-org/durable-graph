@@ -29,23 +29,33 @@ public sealed partial class DurableGraphGenerator {
     }
 
     private sealed class FamilyDomainField {
-        internal FamilyDomainField(DurableTypeAnalysis declaration, IFieldSymbol symbol, int index) {
+        internal FamilyDomainField(DurableTypeAnalysis declaration, IFieldSymbol symbol, int index, string projectionArgument) {
             Declaration = declaration; Symbol = symbol; Index = index;
+            ProjectionArgument = projectionArgument;
         }
         internal DurableTypeAnalysis Declaration { get; }
         internal IFieldSymbol Symbol { get; }
         internal int Index { get; }
+        internal string ProjectionArgument { get; }
         internal string DomainType => Symbol.Type.ToDisplayString(NullableQualifiedNameFormat);
         internal string OwnerType => Symbol.ContainingType.ToDisplayString(GenericQualifiedNameFormat);
         internal string Suffix => FamilyName(Declaration.SchemaId) + "_" + Number(Declaration.Fields[Index].FieldId);
     }
 
-    private static List<FamilyDomainField> FamilyDomainFields(INamedTypeSymbol type, List<DurableTypeAnalysis> types) {
+    private static List<FamilyDomainField> FamilyDomainFields(DurableTypeAnalysis declaration, FamilyLayout layout) {
         List<FamilyDomainField> result = new();
-        DurableTypeAnalysis declaration = types.Single(candidate => SymbolEqualityComparer.Default.Equals(candidate.Symbol, type.OriginalDefinition));
+        var projectionTypes = new ITypeSymbol?[layout.DynamicFields.Count];
+        int offset = layout.Fields.Count - declaration.Fields.Count;
         for (int index = 0; index < declaration.Fields.Count; index++) {
-            IFieldSymbol symbol = (IFieldSymbol)type.GetMembers(declaration.Fields[index].Symbol.Name).Single();
-            result.Add(new FamilyDomainField(declaration, symbol, index));
+            IFieldSymbol symbol = declaration.Fields[index].Symbol;
+            string argument = "field" + Number(index);
+            int dynamicIndex = layout.Fields[offset + index].DynamicIndex;
+            if (dynamicIndex >= 0) {
+                // Box<T> and Box<T?> share the first field's projection because their CLR type is identical.
+                ITypeSymbol firstType = projectionTypes[dynamicIndex] ??= symbol.Type;
+                if (!SymbolEqualityComparer.IncludeNullability.Equals(firstType, symbol.Type)) argument += "!";
+            }
+            result.Add(new FamilyDomainField(declaration, symbol, index, argument));
         }
         return result;
     }
@@ -81,7 +91,7 @@ public sealed partial class DurableGraphGenerator {
         internal FamilyBaseProjection(DurableTypeAnalysis type, FamilyLayout layout, List<SchemaTemplate> available, CurrentExecutionNames names) {
             SchemaReference reference = layout.Shape.BaseSchema!.Value;
             FamilyLayout ancestor = MakeFamilyLayout(FindHistory(available, reference.SchemaId, reference.Version)[0], available);
-            Domain = type.Symbol.BaseType!.ToDisplayString(GenericQualifiedNameFormat);
+            Domain = type.Symbol.BaseType!.ToDisplayString(NullableQualifiedNameFormat);
             // Preserve the base's own parameter order, even when substitutions merge leaf slots.
             Dto = FamilyType(reference.SchemaId) + "." + ancestor.Name + GenericList(ancestor.DynamicFields.Select(field => {
                 FamilyField leafField = layout.Fields[ancestor.Fields.IndexOf(field)];
@@ -103,7 +113,7 @@ public sealed partial class DurableGraphGenerator {
         if (hasNamespace) output.Append("namespace ").Append(type.Symbol.ContainingNamespace.ToDisplayString()).AppendLine(" {");
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
         string dto = CurrentDto(type, layout, names);
-        List<FamilyDomainField> fields = FamilyDomainFields(type.Symbol, types);
+        List<FamilyDomainField> fields = FamilyDomainFields(type, layout);
         string parameters = CurrentExecutionParameters(layout, fields, names);
         int offset = OwnFieldOffset(layout, fields);
         FamilyBaseProjection? ancestor = layout.Shape.BaseSchema.HasValue ? new FamilyBaseProjection(type, layout, available, names) : null;
@@ -131,7 +141,8 @@ public sealed partial class DurableGraphGenerator {
             output.Append("        ref readonly var field").Append(index).Append(" = ref ").Append(field.OwnerType).Append('.').Append(FamilyReadPrefix).Append(field.Suffix)
                 .Append('(').Append(type.IsInline ? "in " : string.Empty).AppendLine("value);");
             output.Append("        var ").Append(stateField.Argument).Append(" = ");
-            if (stateField.DynamicIndex >= 0) output.Append(names.Projection(stateField.DynamicIndex)).Append(".Capture(in field").Append(index)
+            if (stateField.DynamicIndex >= 0) output.Append(names.Projection(stateField.DynamicIndex)).Append(".Capture(in ")
+                .Append(field.ProjectionArgument)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
             else if (stateField.Field.InlineSchema.HasValue) output.Append(CurrentInlineProjection(field.Symbol.Type)).Append(".Capture(in field").Append(index)
                 .Append(", context, ").Append(stateField.Slot()).Append(')');
@@ -212,7 +223,8 @@ public sealed partial class DurableGraphGenerator {
             if (stateField.DynamicIndex >= 0 || stateField.Field.InlineSchema.HasValue) {
                 output.AppendLine("default!;");
                 output.Append("        ").Append(stateField.DynamicIndex >= 0 ? names.Projection(stateField.DynamicIndex) : CurrentInlineProjection(field.Symbol.Type))
-                    .Append(".Hydrate(ref field").Append(index).Append(", in state.").Append(stateField.Name).Append(", objects, ").Append(stateField.Slot()).AppendLine(");");
+                    .Append(".Hydrate(ref ").Append(field.ProjectionArgument)
+                    .Append(", in state.").Append(stateField.Name).Append(", objects, ").Append(stateField.Slot()).AppendLine(");");
             } else if (FamilyFieldTag(stateField) == 4) output.Append("objects.ResolveString(state.").Append(stateField.Name).AppendLine(")!;");
             else if (FamilyFieldTag(stateField) == 15) {
                 // ResolveObject<T> takes a non-nullable class; retain any annotations inside that type.
