@@ -101,6 +101,34 @@ public sealed class EventHistoryAdmissionTests(ITestOutputHelper output) : IDisp
     }
 
     [Fact]
+    public void PreviousStateOfEachNewEventReusesTheProvenPrefix() {
+        const int count = 32;
+        using Repository repository = Repository.CreateNew(_path, Models());
+        BranchId branch = repository.CreateRootBranchFromEvent("main", new Root()).Id;
+        using WorkingCopy work = repository.OpenWorkingCopy(branch);
+        RepositoryResources resources = DB096TestAccess.Resources(repository);
+        CommitId first = work.BaseCommitId;
+        Assert.Null(repository.GetPreviousState(first));
+        long visits = 0;
+        for (int i = 0; i < count; i++) {
+            CommitId next = work.CommitEvent(new Root { Value = i }).Id;
+            long before = resources.HistoryScanVisitedEntries;
+            Assert.Null(repository.GetPreviousState(next));
+            visits += resources.HistoryScanVisitedEntries - before;
+        }
+        output.WriteLine($"{count} previous-State queries after Event commits: {visits} history visits.");
+        Assert.True(visits <= 2 * count, $"Queries rescanned the prefix: {visits} visits.");
+
+        CommitId state = work.CommitState(new Root { Value = 99 }).Id;
+        Assert.Throws<ArgumentException>(() => repository.GetPreviousState(state));
+        CommitId last = work.CommitEvent(new Root()).Id;
+        Assert.Equal(state, repository.GetPreviousState(last));
+        Assert.Null(repository.GetPreviousState(first));
+        repository.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => repository.GetPreviousState(last));
+    }
+
+    [Fact]
     public void InstallingStateResetsTheSourceBeforeAnotherLongEventTail() {
         const int count = 32;
         using Repository repository = Repository.CreateNew(_path, Models());
@@ -203,6 +231,7 @@ public sealed class EventHistoryAdmissionTests(ITestOutputHelper output) : IDisp
         if (startsWithState) { Assert.Equal(10, Assert.IsType<Root>(child.State).Value); }
         else { Assert.Null(child.State); }
         CommitInfo childEvent = child.CommitEvent(new Root { Value = 20 });
+        Assert.Equal(inheritedState, repository.GetPreviousState(childEvent.Id));
         Assert.Equal(inheritedState, child.StateSourceCommitId);
         Assert.Equal(parentNewState.Id, parent.BaseCommitId);
         Assert.DoesNotContain(repository.ReadFrames(fork), item => item.Id == parentNewState.Id);

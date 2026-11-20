@@ -331,7 +331,8 @@ public sealed partial class Repository : IDisposable {
         _busy = true;
         try {
             var record = CheckCommit(eventCommitId, CommitKind.Event);
-            return _resources.FindNearestState(record.Id, inclusive: false) is { } state ? new(state.Id) : null;
+            // The anchor is an Event, so the inclusive lookup can reuse a proven State or its absence.
+            return _resources.FindNearestState(record.Id, inclusive: true) is { } state ? new(state.Id) : null;
         } finally { EndOperation(); }
     }
 
