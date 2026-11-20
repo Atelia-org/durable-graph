@@ -104,7 +104,8 @@ internal sealed class SchemaCatalogView {
         if (Snapshot is not null || snapshot.RootId != RootId) { throw new InvalidOperationException("A candidate can acquire only its own snapshot once."); }
         Snapshot = snapshot;
     }
-    internal ObjectId DescriptorId(ObjectLayout layout) => _ids.TryGetValue(layout, out ObjectId id) ? id
+    internal bool TryGetDescriptorId(ObjectLayout layout, out ObjectId id) => _ids.TryGetValue(layout, out id);
+    internal ObjectId DescriptorId(ObjectLayout layout) => TryGetDescriptorId(layout, out ObjectId id) ? id
         : throw new InvalidDataException("The selected catalog lacks this complete object layout.");
     internal void Require(ObjectLayout layout) {
         if (!BootstrapBindings.IsBuiltin(layout)) { _ = DescriptorId(layout); }

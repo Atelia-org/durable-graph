@@ -49,7 +49,16 @@ internal sealed class SchemaCatalogWorkspace {
         ObjectLayout[] layouts = _containers.Concat(capturedLayouts).Distinct().ToArray();
         foreach (ObjectLayout layout in layouts) { ValidateLayout(layout); }
         IReadOnlyDictionary<SchemaKey, DurableSchema> closure = SchemaCatalogSemantics.Collect(_schemas.Values.Concat(declarations ?? []), layouts);
-        foreach ((SchemaKey key, DurableSchema schema) in closure) { CheckAccepted(key, schema); }
+        bool allSchemasAccepted = true;
+        foreach ((SchemaKey key, DurableSchema schema) in closure) {
+            if (!CheckAccepted(key, schema)) { allSchemasAccepted = false; }
+        }
+        // The view already validated all of its declarations together. Builtins have no
+        // nominal obligations; durable rows have just been checked through the exact closure.
+        if (_accepted is { } accepted && allSchemasAccepted && layouts.All(layout => layout.Schema is not null ||
+            accepted.TryGetDescriptorId(layout, out _) || BootstrapBindings.IsBuiltin(layout))) {
+            return new(this, accepted, null, 0, []);
+        }
         SchemaCatalogSemantics.ValidateDeclarations((_accepted?.Schemas.Values ?? []).Concat(closure.Values),
             (_accepted?.ObjectLayouts ?? []).Concat(layouts));
         Builder builder = new(_accepted);
@@ -62,11 +71,10 @@ internal sealed class SchemaCatalogWorkspace {
         return builder.Finish(this);
     }
 
-    private void CheckAccepted(SchemaKey key, DurableSchema schema) {
-        IReadOnlyDictionary<SchemaKey, DurableSchema>? accepted = _accepted?.Schemas;
-        if (accepted is not null && accepted.TryGetValue(key, out DurableSchema? prior) && !prior.Equals(schema)) {
-            throw new SchemaConflictException(prior, schema);
-        }
+    private bool CheckAccepted(SchemaKey key, DurableSchema schema) {
+        if (_accepted is null || !_accepted.Schemas.TryGetValue(key, out DurableSchema? prior)) { return false; }
+        if (!prior.Equals(schema)) { throw new SchemaConflictException(prior, schema); }
+        return true;
     }
 
     internal static void Validate(DurableSchema schema) {
@@ -162,13 +170,9 @@ internal sealed class SchemaCatalogWorkspace {
 
         internal ObjectId AddContainer(ObjectLayout layout) {
             if (_containers.TryGetValue(layout, out ObjectId known)) { return known; }
-            if (_source is not null) {
-                try {
-                    ObjectId prior = _source.DescriptorId(layout);
-                    _containers.Add(layout, prior);
-                    return prior;
-                }
-                catch (InvalidDataException) { }
+            if (_source is not null && _source.TryGetDescriptorId(layout, out ObjectId prior)) {
+                _containers.Add(layout, prior);
+                return prior;
             }
             ObjectId type = layout.Kind == ObjectStateKind.List ? default : Type(layout.Type);
             ObjectId fields = default, element = default;
@@ -249,7 +253,6 @@ internal sealed class SchemaCatalogWorkspace {
         }
 
         internal PreparedSchemaCatalogWrite Finish(SchemaCatalogWorkspace owner) {
-            if (_source is not null && _added.Count == 0) { return new(owner, _source, null, 0, []); }
             ObjectStateRecord list = BootstrapBindings.WithPreparation(new ObjectStateRecord(_list,
                 List(typeof(List<LayoutDescriptorRecord>)), new FrozenListState<ObjectId>(_declared.ToArray())), _models);
             _rows[_list] = list;

@@ -72,6 +72,40 @@ public sealed class MetaBootstrapSchemaClosureTests : IDisposable {
     }
 
     [Fact]
+    public void Reusing_the_accepted_view_requires_all_requests_and_complete_container_layouts() {
+        DurableSchema point = Point(TypeTag.Int32);
+        DurableSchema first = InlineOwner("Owner", point);
+        ObjectLayout list = NullableList(point);
+        SchemaCatalogView original = new SchemaCatalogWorkspace(static () => { }).PrepareOwned([list], [first]).View;
+        FrameAddress address = WriteMeta(original.RootId, original.Rows);
+        using var repository = RepositoryStorageFacade.OpenExisting(_path);
+        SchemaCatalogView cold = SchemaCatalogView.Load(repository.Store, address);
+        SchemaCatalogWorkspace workspace = new(static () => { }, cold);
+        workspace.Set(point);
+        ObjectLayout[] captured = [ObjectLayout.ForDurable(first), list, ObjectLayout.String];
+        PreparedSchemaCatalogWrite reused = workspace.PrepareOwned(captured, [first]);
+        Assert.Same(cold, reused.View);
+        Assert.Null(reused.Write);
+        Assert.Equal(1, workspace.DirtyCount); // Preparation does not accept explicit requests.
+
+        Assert.Throws<SchemaConflictException>(() => workspace.PrepareOwned(captured, [InlineOwner("Owner", Point(TypeTag.Int64))]));
+        Assert.Throws<InvalidDataException>(() => workspace.PrepareOwned(captured, [new DurableSchema("Owner", 2, SchemaKind.InlineValue)]));
+        Assert.Same(cold, workspace.Accepted);
+        DurableSchema next = new("Owner", 2);
+        workspace.Set(next);
+        ObjectLayout array = ObjectLayout.ForArray(new(TypeExprKind.VectorArray, list.List!.ElementSlot));
+        PreparedSchemaCatalogWrite extended = workspace.PrepareOwned([array], [first]);
+        Assert.NotNull(extended.Write);
+        Assert.Equal(2, extended.AddedDescriptors); // The element Schema was known, the Array descriptor was not.
+        Assert.Equal(cold.SchemaNodeId(first), extended.View.SchemaNodeId(first));
+        Assert.NotEqual(extended.View.SchemaNodeId(first), extended.View.SchemaNodeId(next));
+        FrameAddress nextAddress = repository.Store.AppendMeta(address, extended.Write).Address;
+        SchemaCatalogView latest = SchemaCatalogView.Load(repository.Store, nextAddress);
+        workspace.RebaseOwned(latest);
+        Assert.Same(latest, workspace.PrepareOwned([array, list], [first]).View);
+    }
+
+    [Fact]
     public void An_unchanged_nominal_owner_does_not_authorize_a_conflicting_exact_List_element_layout() {
         DurableSchema pointA = Point(TypeTag.Int32), pointB = Point(TypeTag.Int64);
         TypeExpr nominal = TypeExpr.List(TypeExpr.Nullable(pointA.Type));
