@@ -54,7 +54,13 @@ internal static class TypedBaseBodyCodec {
         }
     }
 
+    // Standalone callers can keep the extracted body after releasing the input.
     internal static (ObjectLayout Layout, byte[] Body) Decode(ReadOnlySpan<byte> body, SchemaCatalogView? catalog) {
+        var header = ReadHeader(body, catalog);
+        return (header.Layout, body[header.Length..].ToArray());
+    }
+
+    internal static (ObjectLayout Layout, int Length) ReadHeader(ReadOnlySpan<byte> body, SchemaCatalogView? catalog) {
         BareValueReader reader = new(body);
         if (reader.ReadByte() != FormatVersion) { throw new InvalidDataException("Unknown employee/typed Base ABI; only version 5 is accepted."); }
         byte route = reader.ReadByte();
@@ -64,7 +70,7 @@ internal static class TypedBaseBodyCodec {
             2 => BuiltinObjectLayouts.Resolve(TypeExprWireCodec.Read(ref reader)),
             _ => throw new InvalidDataException("A dynamic descriptor requires its exact source Schema view."),
         };
-        return (layout, body[reader.ConsumedCount..].ToArray());
+        return (layout, reader.ConsumedCount);
     }
 }
 
@@ -135,22 +141,22 @@ internal static class StoredGraphDecoder {
                     origins.Add(sourceSchema, origin);
                 }
             }
-            var decoded = TypedBaseBodyCodec.Decode(chain.Entries[0].Record.Body, origin);
-            if (directoryKind is { } kind) { ManagementDirectoryReader.RequireLayout(decoded.Layout, kind); }
+            (ObjectLayout layout, int headerLength) = TypedBaseBodyCodec.ReadHeader(chain.Entries[0].Record.Body, origin);
+            if (directoryKind is { } kind) { ManagementDirectoryReader.RequireLayout(layout, kind); }
             // A null model catalog is the meta reader, whose whitelist is deliberately finite.
             // Schema-free business container bodies use the standalone fixed reader instead.
-            if (models is null && !BootstrapBindings.TryCode(decoded.Layout, out _)) {
+            if (models is null && !BootstrapBindings.TryCode(layout, out _)) {
                 throw new InvalidDataException("A meta graph cannot contain structural business container objects.");
             }
-            if (models is not null && BootstrapBindings.IsEmployee(decoded.Layout)) {
+            if (models is not null && BootstrapBindings.IsEmployee(layout)) {
                 throw new InvalidDataException("A business graph cannot contain fixed employee objects.");
             }
-            if (selected is not null && !BootstrapBindings.IsBuiltin(decoded.Layout)) {
-                _ = selected.DescriptorId(decoded.Layout); // Complete interpretation, not bare-ID equality.
+            if (selected is not null && !BootstrapBindings.IsBuiltin(layout)) {
+                _ = selected.DescriptorId(layout); // Complete interpretation, not bare-ID equality.
             }
-            ObjectReaderBinding reader = models is null ? BootstrapBindings.Reader(decoded.Layout, employees)
-                : models.ResolveObjectReader(decoded.Layout);
-            ObjectStateRecord row = reader.Read(new(id), new Bodies(chain, decoded.Body));
+            ObjectReaderBinding reader = models is null ? BootstrapBindings.Reader(layout, employees)
+                : models.ResolveObjectReader(layout);
+            ObjectStateRecord row = reader.Read(new(id), new ChainBodies(chain, headerLength));
             rows.Add(row.Id, row);
             storage.Add(row.Id, new(chain.Head, chain.ReconstructionPayloadBytes));
             readers.Add((row, reader));
@@ -168,8 +174,11 @@ internal static class StoredGraphDecoder {
         return new(snapshot, rows, storage);
     }
 
-    private sealed class Bodies(ObjectVersionChain chain, byte[] first) : IStateBodySource {
+    internal sealed class ChainBodies(ObjectVersionChain chain, int baseHeaderLength) : IStateBodySource {
         public int Count => chain.Entries.Count;
-        public ReadOnlySpan<byte> GetBody(int index) => index == 0 ? first : chain.Entries[index].Record.Body;
+        public ReadOnlySpan<byte> GetBody(int index) {
+            ReadOnlySpan<byte> body = chain.Entries[index].Record.Body;
+            return index == 0 ? body[baseHeaderLength..] : body;
+        }
     }
 }
