@@ -195,7 +195,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
 | [Generator](DurableGraph.Generator/DurableGraph.Generator.csproj) / [Build](DurableGraph.Build/DurableGraph.Build.csproj) | class/struct（均含 record）开放模板、显式 enum、readonly DTO/静态 body、Capture/Hydrate、泛型继承与递归 Nullable/数组/List/Dictionary 组合；跨程序集 nominal/动态参数、固定 base/inline 与只读模板导出；history v9；三参 Upgrade/旧二参适配、值规则/局部依赖 adapter | 其他 CLR 值类型、其他 BCL；跨程序集业务规则发现 |
 | [Persistence](DurableGraph.Persistence/DurableGraph.Persistence.csproj) | D/S/T控制入口及独立图堆／meta 员工自举与 Dictionary 存活目录，共同 body／对象版本与 joint Save；准确 stored／selected／target views、完整引用／两阶段恢复；自由 E/S、根替换／history／tag／Fork／Checkpoint／State 槽；真实 IDs/head/H 增量安装与 owned 物理缓存；统一 Shared Catalog／正常 baseline 升级与冷续写 | Private 删除及当时 P0R2 资格见[删除切片](../docs/design-branches/0096-history-and-head-model/private-removal.md)；Branch/Commit/WorkingCopy、组提交、树查询、分页、定向origin与创建登记均已完成；[最终源码/包资格及master合入](../docs/design-branches/0096-history-and-head-model/final-delivery-acceptance.md)已闭合 |
 | [Storage](DurableGraph.Storage/DurableGraph.Storage.csproj) | 共用 ObjectVersion records／payload 与 Base/Delta 精确计量、双数组只读地址字典、有界 owned frame/map LRU；图封套／batch／员工目录与发布 owner 位于 Persistence | 不保旧 raw Store／map／wire／chain／cache adapter；charge 不约束总堆／峰值 |
-| [Text](Text/Text.csproj) | 内存文本、不可变快照、条件编辑与同步全文访问；通过公开叶 codec 进入持久图，正文 Delta 依赖准确前驱 | 文件读写和 LLM 工具另行设计 |
+| [Text](Text/Text.csproj) | 内存文本、不可变快照、条件编辑与同步全文访问；通过公开叶 codec 进入持久图，正文 Delta 依赖准确前驱；提供[搜索与唯一替换工具](../docs/text/README.md#为-agent-提供工具) | 文件后端待设计 |
 | [Serialization](DurableGraph.Serialization/DurableGraph.Serialization.csproj) | 直接 Bare 签名、少量 Guid/decimal/temporal 组合、拥有 raw bytes 的 PreparedBaseBody/PreparedDeltaBody | 完整数组/List 对象操作位于 Runtime；旧 typed slot／元素 ref 循环仅为测试 helper，见 DB-020；其他 BCL 内容 codec 尚无 |
 
 容易混淆的限制：

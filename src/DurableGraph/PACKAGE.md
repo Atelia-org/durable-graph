@@ -58,6 +58,17 @@ and body version. The codec freezes content, prepares a Base, reads it, and rest
 Optional Delta preparation can take advantage of the exact predecessor supplied by the graph.
 Reserve each persistent ID across libraries and historical model versions.
 
+## Register a node with graph references
+
+A type library that references `Atelia.DurableGraph` can mark a public, top-level, sealed,
+non-generic class with `[DurableNode("Notes.Page", 1)]` from `Atelia.DurableGraph.Serialization`.
+Define one `DeclaredNode<Page>` using a factory that creates a fresh page and the members in
+persistent order. Use `DeclaredMember<Page>.Reference` for a link to another node. Both
+declaration types are in `Atelia.DurableGraph.Runtime`. Expose a registration method that
+passes the declaration to `IDeclaredNodeRegistration.RegisterNode`. The host calls this method
+with its model registry before opening the repository. Generated domain fields and collections
+can then hold pages and retain shared references and cycles across a save and reopen.
+
 ## Repository operations
 
 State-based applications can create a branch with State and call CommitState repeatedly; no preceding
@@ -84,7 +95,7 @@ opening does not repair them. Publication failures expose outcome and fault stat
 when required, inspect durable names, and do not transparently retry. No old raw Store or storage-format
 compatibility path is provided.
 
-See the [repository guide](https://github.com/Atelia-org/durable-graph/blob/main/README.md) for complete
+See the [repository guide](https://github.com/Atelia-org/durable-graph/blob/master/README.md) for complete
 public examples, current type boundaries, schema development, dependency setup and failure handling.
-The [package probes](https://github.com/Atelia-org/durable-graph/tree/main/experiments/PackageConsumerProbe)
+The [package probes](https://github.com/Atelia-org/durable-graph/tree/master/experiments/PackageConsumerProbe)
 distinguish executable delivery gates from model/history compilation fixtures.

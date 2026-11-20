@@ -2,7 +2,7 @@
 
 应用直接引用 `Atelia.Text`、`Atelia.DurableGraph` 和 `Atelia.DurableGraph.Persistence`。程序把 `TextEditorPersistence.Register(registry)` 加入模型注册，并在业务字段和 `List<TextEditor>` 中使用编辑器。编译器从 Runtime 包取得生成器与 Schema history 工具。
 
-使用同一提交的完整候选 feed、版本 G、完整 Git SHA 和两个尚不存在的仓外目录运行两个独立项目。
+两个项目使用同一份 feed、版本 G、完整 Git SHA 和两个尚不存在的仓外目录。传入便携候选的 `feed/` 可离线还原。也可传入 `Prepare-DurableGraphProbeFeed -IncludeText` 准备的小型 feed，这时两个项目都从 nuget.org 补入 K4os，其余包均从指定 feed 还原。
 
 ~~~powershell
 ./experiments/PackageConsumerProbe/Run-TextEditorProbe.ps1 -PackageSource $feed -Version $version -ExpectedSourceCommit $revision -WorkDirectory $consumer

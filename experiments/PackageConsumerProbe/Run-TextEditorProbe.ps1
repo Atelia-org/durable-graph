@@ -107,16 +107,8 @@ try {
     foreach ($forbidden in @('<Import', '<ProjectReference', '<Analyzer', '<AdditionalFiles')) {
         if ($consumerText.Contains($forbidden, [StringComparison]::Ordinal)) { throw "Forbidden manual package wiring '$forbidden'." }
     }
-    $feedXml = [Security.SecurityElement]::Escape($PackageSource)
-    # A portable candidate includes K4os. The smaller probe feed gets it from nuget.org.
-    $sources = "<clear/><add key='probe' value='$feedXml'/>"
-    $mapping = "<clear/><packageSource key='probe'><package pattern='*'/></packageSource>"
-    if (!(Get-ChildItem -LiteralPath $PackageSource -Filter 'K4os.Compression.LZ4.*.nupkg' -File)) {
-        $sources += "<add key='nuget.org' value='https://api.nuget.org/v3/index.json'/>"
-        $mapping += "<packageSource key='nuget.org'><package pattern='K4os.Compression.LZ4'/></packageSource>"
-    }
-    "<configuration><packageSources>$sources</packageSources><packageSourceMapping>$mapping</packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" |
-        Set-Content -LiteralPath (Join-Path $workRoot 'NuGet.Config') -Encoding utf8NoBOM
+    . (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
+    Write-TextProbeNuGetConfig $PackageSource (Join-Path $workRoot 'NuGet.Config')
     $properties = @("-p:DurableGraphPackageVersion=$Version", "-p:DurableGraphSchemaHistoryDirectory=$history", '-p:UseStorageSources=false',
         '-p:UseSharedCompilation=false', '-p:EmitCompilerGeneratedFiles=true', "-p:CompilerGeneratedFilesOutputPath=$generated")
     $null = Execute 'restore' (@('restore', $project, '--configfile', (Join-Path $workRoot 'NuGet.Config'), '--packages', $cache, '--disable-parallel') + $properties)

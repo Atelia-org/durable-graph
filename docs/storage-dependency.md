@@ -26,10 +26,11 @@ DB-100 对象图堆将 DG 要求的 HeadStore reserved upper bound 从 3 改为 
 ```powershell
 $storage = '/repos/Atelia-org/atelia-storage'
 dotnet restore DurableGraph.slnx --disable-parallel -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
-dotnet build DurableGraph.slnx -c Release --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
-dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage"
+dotnet build DurableGraph.slnx -c Release --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage" -p:ShouldUnsetParentConfigurationAndPlatform=false
+dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false -p:UseStorageSources=true "-p:StorageSourceRoot=$storage" -p:ShouldUnsetParentConfigurationAndPlatform=false
 ```
 
+`ShouldUnsetParentConfigurationAndPlatform=false` 让解决方案外的六个 Storage 项目也按 Release 构建。构建日志中这六项的输出路径应包含 `bin/Release`。
 `StorageSourceRoot` 必须是绝对路径，包含 Binary/FrameStore/HeadStore 三个项目，且 Git HEAD 等于 pin 的完整来源。
 同一 HEAD 上的源码编辑可用于联调；它们不构成可发布包的来源凭据。无效路径、缺项目或不符 revision 都清晰失败，不回退到包。
 DurableGraph 和文本项目在 `UseStorageSources=true` 下可 build/test，打包使用 package mode。[独立文本库](text/README.md) 引用 Serialization，通过它取得 Binary。

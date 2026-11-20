@@ -1,5 +1,25 @@
 # Shared preparation only. Each runner continues to own its domain assertions.
 
+function Write-TextProbeNuGetConfig([string] $PackageSource, [string] $Path) {
+    $feed = [Security.SecurityElement]::Escape($PackageSource)
+    $sources = "<add key='candidate' value='$feed'/>"
+    $candidateMapping = "<package pattern='Atelia.*'/>"
+    $publicMapping = ''
+    if (Get-ChildItem -LiteralPath $PackageSource -File -Filter 'K4os.Compression.LZ4.*.nupkg') {
+        $candidateMapping += "<package pattern='K4os.Compression.LZ4'/>"
+    } else {
+        $sources += "<add key='nuget.org' value='https://api.nuget.org/v3/index.json'/>"
+        $publicMapping = "<packageSource key='nuget.org'><package pattern='K4os.Compression.LZ4'/></packageSource>"
+    }
+    @"
+<configuration>
+  <packageSources><clear/>$sources</packageSources>
+  <packageSourceMapping><clear/><packageSource key='candidate'>$candidateMapping</packageSource>$publicMapping</packageSourceMapping>
+  <fallbackPackageFolders><clear/></fallbackPackageFolders>
+</configuration>
+"@ | Set-Content -LiteralPath $Path -Encoding utf8NoBOM
+}
+
 function Get-TextToolRelease([string] $RepositoryRoot) {
     [xml]$project = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'src/Text/Text.csproj')
     $dependency = $project.SelectSingleNode("/Project/ItemGroup/PackageReference[@Include='Atelia.Completion.Tools']")

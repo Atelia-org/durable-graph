@@ -51,8 +51,8 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TextEditorReaderAdmission/Program.cs') -Destination $work
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TextEditorReaderAdmission/Models.cs') -Destination $work
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'TextEditorReaderAdmission/TextEditorReaderAdmission.csproj') -Destination $work
-    $source = [Security.SecurityElement]::Escape($PackageSource)
-    "<configuration><packageSources><clear/><add key='feed' value='$source'/></packageSources><packageSourceMapping><clear/><packageSource key='feed'><package pattern='*'/></packageSource></packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" | Set-Content (Join-Path $work 'NuGet.Config')
+    . (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
+    Write-TextProbeNuGetConfig $PackageSource (Join-Path $work 'NuGet.Config')
     $project = Join-Path $work 'TextEditorReaderAdmission.csproj'
     $properties = @("-p:DurableGraphPackageVersion=$Version", '-p:UseStorageSources=false', '-p:UseSharedCompilation=false')
     Run 'restore' (@('restore',$project,'--configfile',(Join-Path $work 'NuGet.Config'),'--packages',$cache,'--disable-parallel') + $properties)
