@@ -35,7 +35,7 @@ public sealed partial class DurableGraphGenerator {
         internal DurableTypeAnalysis Declaration { get; }
         internal IFieldSymbol Symbol { get; }
         internal int Index { get; }
-        internal string DomainType => Symbol.Type.ToDisplayString(GenericQualifiedNameFormat);
+        internal string DomainType => Symbol.Type.ToDisplayString(NullableQualifiedNameFormat);
         internal string OwnerType => Symbol.ContainingType.ToDisplayString(GenericQualifiedNameFormat);
         internal string Suffix => FamilyName(Declaration.SchemaId) + "_" + Number(Declaration.Fields[Index].FieldId);
     }
@@ -163,8 +163,7 @@ public sealed partial class DurableGraphGenerator {
         string domain = type.Symbol.ToDisplayString(GenericQualifiedNameFormat);
         for (int index = 0; index < type.Fields.Count; index++) {
             DurableFieldAnalysis field = type.Fields[index];
-            string fieldType = field.Symbol.Type.ToDisplayString(GenericQualifiedNameFormat.WithMiscellaneousOptions(
-                GenericQualifiedNameFormat.MiscellaneousOptions | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
+            string fieldType = field.Symbol.Type.ToDisplayString(NullableQualifiedNameFormat);
             string suffix = FamilyName(type.SchemaId) + "_" + Number(field.FieldId);
             bool backingStorage = field.Symbol.IsImplicitlyDeclared && field.Symbol.AssociatedSymbol is IPropertySymbol;
             output.Append("    internal static ref readonly ").Append(fieldType).Append(' ').Append(FamilyReadPrefix).Append(suffix).Append('(')
@@ -215,8 +214,11 @@ public sealed partial class DurableGraphGenerator {
                 output.Append("        ").Append(stateField.DynamicIndex >= 0 ? names.Projection(stateField.DynamicIndex) : CurrentInlineProjection(field.Symbol.Type))
                     .Append(".Hydrate(ref field").Append(index).Append(", in state.").Append(stateField.Name).Append(", objects, ").Append(stateField.Slot()).AppendLine(");");
             } else if (FamilyFieldTag(stateField) == 4) output.Append("objects.ResolveString(state.").Append(stateField.Name).AppendLine(")!;");
-            else if (FamilyFieldTag(stateField) == 15) output.Append("objects.ResolveObject<").Append(field.DomainType).Append(">(state.").Append(stateField.Name).AppendLine(")!;");
-            else output.Append("state.").Append(stateField.Name).AppendLine(";");
+            else if (FamilyFieldTag(stateField) == 15) {
+                // ResolveObject<T> takes a non-nullable class; retain any annotations inside that type.
+                string objectType = field.Symbol.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(NullableQualifiedNameFormat);
+                output.Append("objects.ResolveObject<").Append(objectType).Append(">(state.").Append(stateField.Name).AppendLine(")!;");
+            } else output.Append("state.").Append(stateField.Name).AppendLine(";");
         }
         for (int index = 0; index < fields.Count; index++) output.Append("        ").Append(fields[index].OwnerType).Append('.').Append(FamilyWritePrefix).Append(fields[index].Suffix)
             .Append('(').Append(type.IsInline ? "ref " : string.Empty).Append("value, in field").Append(index).AppendLine(");");
@@ -249,7 +251,7 @@ public sealed partial class DurableGraphGenerator {
             output.AppendLine(");");
             int ownIndex = OwnProjectionField(layout, fields, index);
             if (ownIndex >= 0) output.Append("        var projection").Append(index).Append(" = context.ResolveCurrentValue(typeof(")
-                .Append(fields[ownIndex].DomainType).AppendLine(")).ProjectionType!;");
+                .Append(fields[ownIndex].Symbol.Type.ToDisplayString(GenericQualifiedNameFormat)).AppendLine(")).ProjectionType!;");
         }
         if (layout.DynamicFields.Count == 0) output.Append("        return ").Append(FamilyTypedFactoryName).AppendLine("(schema, context);");
         else {

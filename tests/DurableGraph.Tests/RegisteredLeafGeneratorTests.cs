@@ -1,4 +1,5 @@
 using Atelia.DurableGraph.Build;
+using Microsoft.CodeAnalysis;
 
 namespace Atelia.DurableGraph.Tests;
 
@@ -69,6 +70,37 @@ public sealed partial class DurableSchemaGeneratorTests {
         Assert.Contains("TypeExpr.Named(\"Only\")", source);
         Assert.Contains("context.CaptureObject(", source);
         Assert.Contains("objects.ResolveObject<global::Only", source);
+    }
+
+    [Fact]
+    public void NullableContainerElementsCompileWithoutWarningsAndKeepTheirNominalHistory() {
+        const string source = """
+            using System.Collections.Generic;
+            using Atelia.DurableGraph;
+            using Atelia.DurableGraph.Serialization;
+            [DurableNode("Node")] public sealed class Page {}
+            [DurableLeaf("Leaf")] public sealed class Note {}
+            [DurableType("Box",1)] public partial struct Box<T> {
+                [DurableField(1)] public T? Value;
+            }
+            [DurableType("Book",1)] public partial class Book : IDurableObject {
+                [DurableField(1)] public List<Page?>? Pages;
+                [DurableField(2)] public Dictionary<string, Note?>? Notes;
+                [DurableField(3)] public Page?[]? More;
+                [DurableField(4)] public Dictionary<string, List<Page?>?>? Nested;
+                [DurableField(5)] public Box<List<Page?>?> Wrapped;
+            }
+            """;
+        var app = RunCrossAssemblyGenerator(source, forceDefinitions: "true");
+        Assert.DoesNotContain(app.GeneratorDiagnostics.Concat(app.OutputCompilation.GetDiagnostics()),
+            diagnostic => diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error);
+        string manifest = GeneratedSource(app, "DurableGraphSchemaHistoryCandidates.g.cs");
+        const string page = "nTm9kZQ==()";
+        const string note = "nTGVhZg==()";
+        Assert.Contains("// field:1|15|l(" + page + ")", manifest);
+        Assert.Contains("// field:2|15|d(b4," + note + ")", manifest);
+        Assert.Contains("// field:3|15|a1(" + page + ")", manifest);
+        Assert.Contains("// field:4|15|d(b4,l(" + page + "))", manifest);
     }
 
     [Theory]

@@ -15,6 +15,8 @@ public sealed partial class DurableGraphGenerator {
     private const string SchemaName = RootName + "Schema.";
     private const string RuntimeName = RootName + "Runtime.";
     private static readonly SymbolDisplayFormat GenericQualifiedNameFormat = SymbolDisplayFormat.FullyQualifiedFormat;
+    private static readonly SymbolDisplayFormat NullableQualifiedNameFormat =
+        GenericQualifiedNameFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     private static string FamilyName(string id) => "Family_" + BitConverter.ToString(StrictUtf8.GetBytes(id)).Replace("-", string.Empty);
     private static string FamilyType(string id) => RootName + "Generated." + FamilyName(id);
