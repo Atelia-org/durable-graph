@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -149,14 +150,18 @@ internal sealed class TextPieceView {
         int pieceIndex = 0;
         within = start;
         if (start != 0 && PieceCount > 1) {
-            // Locating a suffix from the end touches only the pieces the caller will read.
-            if (length == Length - start) {
+            int[]? ends = Volatile.Read(ref _ends);
+            if (ends is null && length == Length - start) {
+                // Short suffixes can avoid building an index. Bound the probe by the
+                // depth of a binary search: a capped Copy may stop after its first piece.
                 int index = PieceCount, pieceStart = Length;
-                do { pieceStart -= _pieces[--index].Length; } while (pieceStart > start);
-                within = start - pieceStart;
-                return index;
+                int steps = BitOperations.Log2((uint)PieceCount) + 1;
+                for (int i = 0; i < steps; i++) {
+                    pieceStart -= _pieces[--index].Length;
+                    if (pieceStart <= start) { within = start - pieceStart; return index; }
+                }
             }
-            int[] ends = Volatile.Read(ref _ends) ?? BuildIndex();
+            ends ??= BuildIndex();
             int low = 0, high = ends.Length - 1;
             while (low < high) {
                 int middle = low + (high - low) / 2;
@@ -200,22 +205,25 @@ internal sealed class TextPieceView {
     internal bool ContentEquals(TextPieceView current, bool isExactSource) {
         if (ReferenceEquals(ContentToken, current.ContentToken)) { return true; }
         if (Length != current.Length) { return false; }
-        int output = 0, comparedEnd = 0, index = 0, within = 0;
+        int output = 0, priorIndex = 0, priorEnd = 0;
         foreach (TextPiece piece in current.PieceSpan) {
-            if (!isExactSource || piece.BaseOffset != output) {
-                if (comparedEnd != output) { index = Locate(output, piece.Length, out within); }
-                ReadOnlySpan<char> remaining = piece.Memory.Span;
-                while (!remaining.IsEmpty) {
-                    ReadOnlySpan<char> prior = _pieces[index].Memory.Span[within..];
-                    int count = Math.Min(prior.Length, remaining.Length);
-                    if (!prior[..count].SequenceEqual(remaining[..count])) { return false; }
-                    remaining = remaining[count..];
-                    within += count;
-                    if (count == prior.Length) { index++; within = 0; }
-                }
-                comparedEnd = output + piece.Length;
+            if (isExactSource && piece.BaseOffset == output) { output += piece.Length; continue; }
+            // Seek once to the first unproven range, then advance monotonically even
+            // when known Copies alternate with literals across many small pieces.
+            if (priorEnd == 0) {
+                priorIndex = Locate(output, piece.Length, out int within);
+                priorEnd = output + (_pieces[priorIndex].Length - within);
             }
-            output += piece.Length;
+            ReadOnlySpan<char> remaining = piece.Memory.Span;
+            while (!remaining.IsEmpty) {
+                while (output >= priorEnd) { priorEnd += _pieces[++priorIndex].Length; }
+                int available = priorEnd - output;
+                ReadOnlySpan<char> prior = _pieces[priorIndex].Memory.Span[^available..];
+                int count = Math.Min(available, remaining.Length);
+                if (!prior[..count].SequenceEqual(remaining[..count])) { return false; }
+                output += count;
+                remaining = remaining[count..];
+            }
         }
         return true;
     }
