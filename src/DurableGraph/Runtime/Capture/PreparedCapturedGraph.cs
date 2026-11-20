@@ -60,4 +60,9 @@ public sealed class PreparedCapturedObject {
 
     /// <summary>Change decision for an existing object. Null for immutable strings or a leaf requiring Base-only preparation.</summary>
     public PreparedDeltaBody? DeltaBody { get; }
+
+    // Capture skips comparison only for an existing string whose identity it has verified.
+    // For every other existing object, a successful comparison returning null requires a Base.
+    internal bool ComparisonRequiresBase =>
+        Previous is not null && DeltaBody is null && Current.Kind != ObjectStateKind.String;
 }
