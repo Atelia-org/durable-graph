@@ -1,6 +1,6 @@
 # DB-106 · 内建容器的持久化适配边界
 
-**建议保留 List、Dictionary 各自的投影和编解码器，先让业务写规划器直接消费准备行的比较结论。** 这能消除一处曾随绑定类型层次变化而跟改的依赖。等到有应用必须直接持久化一个框架尚不认识的 CLR 容器，而且需要由独立包接入时，再考虑对外开放家族登记。本文是基于主线 `1e1477e8` 的候选设计。[容器保存与恢复](../0102-container-payload-planning/README.md) · [现有第三方节点协议](../0105-registered-nodes/mainline.md)
+**主线已采用方案 B 的第一步。** Runtime 的业务准备行说明本次比较是否要求写完整 Base，Persistence 直接消费这个结论。List 和 Dictionary 继续各自负责元素投影与编解码。新增容器何时值得抽取装配组件、何时需要公开家族登记，分别由下文的消费场景触发。[主线验收](#主线验收) · [容器保存与恢复](../0102-container-payload-planning/README.md) · [第三方节点协议](../0105-registered-nodes/mainline.md)
 
 ## 哪些部分已经共用
 
@@ -15,8 +15,8 @@
 
 | 选择 | 收益 | 成本与判断 |
 |---|---|---|
-| A　维持现状 | 有完整实现与行为基线，新增普通注册叶或声明节点已沿用共同路径。 | 保留为对照。内部绑定层次变动仍可能波及持久层。 |
-| B　收拢内部保存边界 | Runtime 解释业务对象的比较结果，Persistence 直接据此分类。 | **首选小实验。** 首片只移除写规划器对注册绑定家族的一处识别。公共 API、落盘格式、元素分派均无需变动。 |
+| A　保留写规划器的类型判断 | 实验基线 `e1a4e42d` 已支持注册叶和声明节点。 | DB-104 在规划器加入类型判断，DB-105 随注册基类调整又修改了它。 |
+| B　收拢内部保存边界 | Runtime 解释业务对象的比较结果，Persistence 直接据此分类。 | **首片已合入。** 以后调整注册绑定的类型层次，写规划器仍可沿用同一判断。 |
 | C　为每个内建家族设独立装配组件 | 有机会集中按 CLR 类型创建当前绑定、按持久布局创建历史 reader 的重复接线。 | **延后。** Array、List、Dictionary 已共享递归保护和依赖收集等操作。若一次真实变更暴露几个工厂重复修同一条规则，再抽该步骤。 |
 | D　公开泛型家族 `PersistenceAdapter` | 独立包可以接入无法加 DG 属性的 CLR 类型，模型字段保留其原有类型和引用身份。 | **延后。** 公开协议需贯通生成器、类型表达式、Schema 与历史 reader 的归属、同名登记冲突及冷开。一次运行时注册只覆盖其中一段。 |
 
@@ -36,18 +36,26 @@ DB-104 在 `06c57dd4` 中让 `ObjectWritePlanner` 识别 `LeafObjectBinding`。D
 
 这些含义出自实际的[准备行生产入口](../../../src/DurableGraph/Runtime/Capture/CaptureSession.cs)、[叶保存回归](../../../tests/DurableGraph.Persistence.Tests/RegisteredLeafLifecycleTests.cs)和[公开准备回归](../../../tests/DurableGraph.Tests/CapturedGraphPreparationTests.cs)。已加载旧布局的强制重写另由持久层判定，优先于逻辑上的“未变”。例如升级后先保存独立 Event，下一次 State 仍须为已升级对象写当前版 Base。[Event 与升级重写回归](../../../tests/DurableGraph.Persistence.Tests/EventHistoryRepositoryTests.cs)
 
-**最小试法**是在 `PreparedCapturedObject` 增加一个内部计算属性。其成立条件可以从唯一业务生产入口逐项验证。规划器先分清新对象、核对物理前驱，再合并源布局强制重写和本次比较的结论。[准备行](../../../src/DurableGraph/Runtime/Capture/PreparedCapturedGraph.cs) · [写入分类](../../../src/DurableGraph.Persistence/PreparedObject.cs)
-
-```csharp
-internal bool ComparisonRequiresBase =>
-    Previous is not null && DeltaBody is null && Current.Kind != ObjectStateKind.String;
-```
+主线在 `PreparedCapturedObject` 上以内部计算属性 `ComparisonRequiresBase` 表达这一结论，复用该行已有的前驱、Delta 正文和对象种类。规划器先核对物理前驱，识别新对象，随后合并源布局的强制重写要求与本次比较的结论。[准备行](../../../src/DurableGraph/Runtime/Capture/PreparedCapturedGraph.cs) · [业务写规划器](../../../src/DurableGraph.Persistence/ObjectWritePlanner.cs)
 
 另一种可行表示是在允许缺省 Delta 的比较调用处记录一位“本次返回了 null”。两种写法在今天能成功产生的每一行上等价。首选计算属性，因为它消除了已经观察到的跨程序集依赖，同时无需给每行增加字段。若将来第二种业务对象也能证明未变并跳过比较，或增加了赋予 null 另一含义的业务行生产入口，就改由生产点显式记录。另设一套三态枚举或给 string 制造假的 Delta 会重复 `Previous`、`HasChanges` 已表达的事实，也增加公开结果的转换。
 
 **这个推论只适用于业务捕获。** 分支和书签的管理目录可凭“本次只添加条目”直接判定既有 `byte[]` 未变，并对旧字典根使用必定返回结果的 `PrepareDelta`。它直接生成 `PreparedObject`，绕过上述业务准备行。把判断提升成所有对象的规则会误判这里的数组，把底层比较接口普遍改为可空又会削弱字典调用方的静态保证。[管理目录写入](../../../src/DurableGraph.Persistence/ManagementDirectoryWriter.cs) · [必需比较合同](../../../src/DurableGraph/Runtime/Capture/StatePreparationBinding.cs)
 
-**验收。** 结构上，业务写规划器应只消费内容结果和宿主的强制重写事实，去掉对具体注册绑定的依赖。行为上，复跑上表的分支、完整批次预检失败、版本升级及独立 Event，核对实际记录种类、正文、Delta 准确前驱和读取结果。这次设计复核使用现有 Release 产物重跑了 **27 个基线用例**，全部通过。产物标识为 `ffa19b45`，所涉产品代码及测试文件与 `1e1477e8` 相同。这里验证的是现有行为。若实施只将同一类型判断移到另一个持久层 helper，则保留 A。[写规划回归](../../../tests/DurableGraph.Persistence.Tests/ObjectRevisionPlannerTests.cs) · [List 计长回归](../../../tests/DurableGraph.Tests/ListBodyTests.cs)
+## 主线验收
+
+主线直接采用实验中的两个产品提交。`97d6189d` 将比较结论移至准备行，`c19a8d2a` 为其 getter 添加内联提示。实验中第一版的调用点多做了一次前驱检查。加上提示后，在 .NET 10.0.5 x64、关闭分层编译的八对进程中，分类耗时差的中位数为每行 −0.63 ns，基线和最终候选均为每行 64 B。计时范围是对已准备行进行分类。
+
+主线按 Storage 源码 pin `3f780ad9` 重新构建根 Release，零警告、零错误。全量 3,455 项测试通过，零跳过。
+
+主线产物与合入前的 `e1a4e42d` 各保存八代，再关闭仓库、只读打开每一代。对照覆盖同一 codec 在同一次保存中为一个叶写 Base、为另一个叶写 Delta，也覆盖换用内容相同的新字符串实例。两侧各从同一份关闭后的空仓副本开始，每侧产生 11 条 Base、3 条 Delta。含完整正文、准确前驱、对象目录和冷开值的回执逐字节相同。[叶生命周期回归](../../../tests/DurableGraph.Persistence.Tests/RegisteredLeafLifecycleTests.cs) · [写规划回归](../../../tests/DurableGraph.Persistence.Tests/ObjectRevisionPlannerTests.cs)
+
+实验报告、原始样本和独立复现程序保存在主线历史的 `3d47103b`。在任意工作树中都可以用以下命令读取报告和复现说明。
+
+```powershell
+git show 3d47103b:docs/design-branches/0106-container-adapters/experiment.md
+git show 3d47103b:experiments/BusinessSaveClassificationProbe/README.md
+```
 
 ## 暂缓抽象的三处边界
 
