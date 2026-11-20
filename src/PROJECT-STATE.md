@@ -22,7 +22,7 @@
 
 2026-11-20，`Atelia.Text` 提供单篇字面和正则搜索、字面唯一替换及 Completion.Tools 的 `search`、`replace_unique`。宿主逐次解析可见字段和编辑地址。独立 Agent 已凭长行中两处“北门”的邻近原文改对第二处，验证未保存工作副本及旧世界。包回放与验收集中在[实际工具试用](../docs/design-branches/0103-durable-text-search/tool-trial.md)。正则替换与批量预览见[下一轮实验](../docs/DurableGraph-research-roadmap.md#文本替换的下一轮实验)。
 
-2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 主线通过 `StateModelRegistry.RegisterLeaf` 接入无图出边的自定义对象。`Atelia.Text.TextEditor` 接替内建文本，另一独立位图库使用相同协议。历史 reader、准确前驱、State 安装收据和冷开续写均有回归。共存性能、最终源码与普通包验收集中在[主线迁移记录](../docs/design-branches/0104-text-editor/mainline-results.md)。含出边对象的两种协议与生成模型已在独立研究分支对照，见 [DB-105](../docs/design-branches/0105-registered-nodes/README.md)。
+2026-11-20，[DB-104](../docs/design-branches/0104-text-editor/README.md) 主线通过 `StateModelRegistry.RegisterLeaf` 接入无图出边的自定义对象。`Atelia.Text.TextEditor` 接替内建文本，另一独立位图库使用相同协议。历史 reader、准确前驱、State 安装收据和冷开续写均有回归。共存性能、最终源码与普通包验收集中在[主线迁移记录](../docs/design-branches/0104-text-editor/mainline-results.md)。含出边节点在独立研究分支采用声明槽，已验证[从持久 Schema 校验退役引用以及仅用新模型冷开续写](../docs/design-branches/0105-registered-nodes/stored-slots.md)。
 
 2026-11-19，[DB-103](../docs/design-branches/0103-durable-text-search/README.md) 的 `TryApplyEdits` 按编辑器快照整批提交，有序范围直接构造片表。同版保存保留提交资格，冲突返回原输入下标。同步 `VisitSpan` 支持栈上上下文和回调重入，`ToString()` 可复用同版缓存。普通包交付 XML 合同，快照保留流式 `IndexOf`。[冷热查询对照](../docs/design-branches/0103-durable-text-search/indexof-cache-comparison.md)
 
