@@ -1,0 +1,7 @@
+{"tool": "search", "input": {"pattern": "北门"}}
+{"tool": "replace_unique", "input": {"target": "memo:signal-watch/full", "old_text": "北门", "new_text": "南门"}}
+{"tool": "replace_unique", "input": {"target": "memo:signal-watch/full", "old_text": "潮汐班在北门", "new_text": "潮汐班在南门"}}
+{"tool": "search", "input": {"pattern": "[北南]门", "regex": true, "target": "memo:signal-watch/full", "snippet_length": 18}}
+{"world": "archive"}
+{"tool": "search", "input": {"pattern": "[北南]门", "regex": true, "target": "memo:signal-watch/full", "snippet_length": 18}}
+{"verify": true}

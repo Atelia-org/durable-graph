@@ -14,8 +14,11 @@ internal static class Program {
     private const string Resumed = "[alpha\r\ngamma\0\ud800\r\nalpha\r\n中\ud83d\ude00文]\r\ntail";
     private static readonly List<string> Checks = [];
     private static int Main(string[] args) {
-        if (args.Length != 3 || args[0] is not ("seed" or "resume" or "verify")) return 2;
         try {
+            if (args.Length is 2 or 3 && args[0] == "tools-trial") {
+                return TextToolTrial.RunAsync(args[1], args.Length == 3 ? args[2] : null).GetAwaiter().GetResult();
+            }
+            if (args.Length != 3 || args[0] is not ("seed" or "resume" or "verify")) return 2;
             if (args[0] == "seed") Seed(args[1]);
             else if (args[0] == "resume") Resume(args[1]);
             else Verify(args[1]);
@@ -60,7 +63,7 @@ internal static class Program {
         var held = text.Snapshot();
         CheckAmbiguousReplacement(text, "alpha");
         CheckAmbiguousReplacement(new TextEditor("aaa"), "aa");
-        ReplaceUnique(text, "beta", "BETA");
+        Need(text.ReplaceUnique("beta", "BETA").Status == ReplaceUniqueStatus.Replaced, "Replaced unique cross-piece literal.");
         var edited = text.Snapshot();
         repository.SaveGraph(graph);
         Need(!text.TryApplyEdits(held, [new(0, 0, "!")], out var failure) &&
@@ -99,7 +102,7 @@ internal static class Program {
         Need(!otherBody.TryApplyEdits(frozen, [new(0, 1, "!")], out var failure) &&
             failure.Kind == TextEditFailureKind.StaleSnapshot && otherBody.ToString() == Saved,
             "A same-content snapshot from another open graph cannot authorize edits to this editor.");
-        ReplaceUnique(entry.Body, "BETA", "gamma");
+        Need(entry.Body.ReplaceUnique("BETA", "gamma").Status == ReplaceUniqueStatus.Replaced, "Cold editor accepts unique replacement.");
         entry.Body.Replace(entry.Body.Length, 0, "\r\ntail");
         world.Latest = repository.SaveGraph(graph);
         repository.CreateTag("resumed", working.CommitState().Id);
@@ -124,21 +127,10 @@ internal static class Program {
         }
         Need(retained.ToString() == Resumed, "Snapshot remains usable after Repository and GraphBuilder disposal.");
     }
-    private static void ReplaceUnique(TextEditor text, string needle, string replacement) {
-        if (needle.Length == 0) throw new ArgumentException("Tool rejects empty needle.");
-        var snapshot = text.Snapshot();
-        int first = snapshot.IndexOf(needle);
-        if (first < 0 || snapshot.IndexOf(needle, first + 1) >= 0) throw new InvalidOperationException("Expected exactly one matching start position.");
-        text.Replace(first, needle.Length, replacement);
-    }
     private static void CheckAmbiguousReplacement(TextEditor text, string needle) {
         string before = text.ToString();
-        try { ReplaceUnique(text, needle, "bad"); }
-        catch (InvalidOperationException) {
-            Need(text.ToString() == before, $"Ambiguous '{needle}' rejected before editing.");
-            return;
-        }
-        throw new InvalidOperationException($"Expected ambiguous '{needle}' to be rejected.");
+        Need(text.ReplaceUnique(needle, "bad").Status == ReplaceUniqueStatus.Ambiguous && text.ToString() == before,
+            $"Ambiguous '{needle}' rejected before editing.");
     }
     private static void Check(Entry entry, string expected) {
         Need(entry.Body.ToString() == expected && entry.Gist == "one-line", "Text content and independent gist survive.");

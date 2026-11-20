@@ -27,8 +27,8 @@ DurableGraph 捕获独立的版本化状态 DTO；State 比较上次保存基线
 可整体复制到自己的目录。生产者的准备命令见文末[从源码打包](#从源码打包)。
 使用已验证的 **.NET SDK 10.0.201**；当前候选不假定已在 nuget.org 公开。
 
-候选源提供十二个包。这个 `net10.0` 示例从本地还原四个 DG 包 G、六个 Storage 包 S 和一个原始第三方包，共十一包。
-领域字段使用 `TextEditor` 的项目另引用同版本 G 的 `Atelia.Text`。
+这个 `net10.0` 示例从候选源还原四个 DG 包 G、六个 Storage 包 S 和一个原始第三方包，共十一包。
+领域字段使用 `TextEditor` 的项目另引用同版本 G 的 `Atelia.Text`。候选源也包含其工具层所需的三个 Completion 系列原包。
 这不包含 SDK 安装、额外 RID/self-contained 发布、任意应用或本仓测试依赖的离线闭包。
 
 生成的 `QuickStart/QuickStart.csproj` 来自下面的唯一模板，准备入口会在其中写入一次本批 G 的

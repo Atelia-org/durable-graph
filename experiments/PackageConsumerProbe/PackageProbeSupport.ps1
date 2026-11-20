@@ -1,5 +1,15 @@
 # Shared preparation only. Each runner continues to own its domain assertions.
 
+function Get-TextToolRelease([string] $RepositoryRoot) {
+    [xml]$project = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'src/Text/Text.csproj')
+    $dependency = $project.SelectSingleNode("/Project/ItemGroup/PackageReference[@Include='Atelia.Completion.Tools']")
+    return [pscustomobject]@{
+        Ids = @('Atelia.Completion.Tools', 'Atelia.Completion.Abstractions', 'Atelia.Diagnostics')
+        Version = $dependency.GetAttribute('Version')
+        Revision = '422ede9428dde46598fbc699eeb7717f3326e48e'
+    }
+}
+
 function Invoke-DotNet {
     param([Parameter(Mandatory)][string[]] $Arguments)
     if ($Arguments[0] -eq 'restore') {
@@ -58,6 +68,16 @@ function Prepare-DurableGraphProbeFeed {
     foreach ($package in $storage.Packages) {
         Copy-Item -LiteralPath (Join-Path $storage.PackageSource $package.File) -Destination $OutputDirectory
     }
+    $toolPackageCount = 0
+    if ($IncludeText) {
+        $release = Get-TextToolRelease $RepositoryRoot
+        foreach ($id in $release.Ids) {
+            $lower = $id.ToLowerInvariant()
+            $v = $release.Version
+            Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/$lower/$v/$lower.$v.nupkg" -OutFile (Join-Path $OutputDirectory "$id.$v.nupkg")
+        }
+        $toolPackageCount = $release.Ids.Count
+    }
     # Prepare/pack calls sharing a checkout must run serially: project bin/obj are shared.
     # Keep this invocation's producer configuration inside its own feed, not a shared parent.
     # Packing remains package-mode; nuget.org supplies unrelated SDK/Roslyn dependencies.
@@ -78,7 +98,7 @@ function Prepare-DurableGraphProbeFeed {
             "-p:StoragePackageVersion=$($storage.Version)" "-p:RestoreConfigFile=$packConfig" -p:UseStorageSources=false -m:1 -nr:false
         if ($LASTEXITCODE -ne 0) { throw "Packing $project failed with exit code $LASTEXITCODE." }
     }
-    $expectedPackages = $storage.Packages.Count + $projects.Count
+    $expectedPackages = $storage.Packages.Count + $projects.Count + $toolPackageCount
     if (@(Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.nupkg' -File).Count -ne $expectedPackages) { throw "Expected $expectedPackages selected packages." }
     Write-Host "Probe feed: storage=$($storage.Version) at $($storage.Revision); DurableGraph G=$Version; $OutputDirectory"
 }

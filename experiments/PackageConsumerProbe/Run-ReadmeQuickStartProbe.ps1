@@ -133,15 +133,17 @@ try {
     $receipt['StorageVersion'] = $storageVersion
     $receipt['StorageRevision'] = $storageRevision
 
+    . (Join-Path $PSScriptRoot 'PackageProbeSupport.ps1')
+    $toolsRelease = Get-TextToolRelease $repositoryRoot
     $ids = @('Atelia.Binary', 'Atelia.Data', 'Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization',
-        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore', 'Atelia.Text', 'K4os.Compression.LZ4')
+        'Atelia.DurableGraph.Storage', 'Atelia.FrameStore', 'Atelia.Primitives', 'Atelia.Rbf', 'Atelia.HeadStore', 'Atelia.Text', 'K4os.Compression.LZ4') + $toolsRelease.Ids
     $packages = @(Get-ChildItem -LiteralPath $feed -File -Filter '*.nupkg')
     $hashLines = @(Get-Content -LiteralPath (Join-Path $moved 'packages.sha256') | Where-Object { $_.Trim() })
-    if ($packages.Count -ne $ids.Count -or $hashLines.Count -ne $ids.Count) { throw 'Require twelve archives and their hashes, including the optional text package.' }
+    if ($packages.Count -ne $ids.Count -or $hashLines.Count -ne $ids.Count) { throw "Require $($ids.Count) archives and their hashes, including the text tool dependencies." }
     $dgCommit = $null
     foreach ($id in $ids) {
         $fromDgRepo = $id.StartsWith('Atelia.DurableGraph') -or $id -ceq 'Atelia.Text'
-        $packageVersion = if ($id -ceq 'K4os.Compression.LZ4') { '1.3.8' } elseif ($fromDgRepo) { $version } else { $storageVersion }
+        $packageVersion = if ($id -ceq 'K4os.Compression.LZ4') { '1.3.8' } elseif ($fromDgRepo) { $version } elseif ($id -in $toolsRelease.Ids) { $toolsRelease.Version } else { $storageVersion }
         $package = @($packages | Where-Object Name -ieq "$id.$packageVersion.nupkg")
         if ($package.Count -ne 1) { throw "Missing exact selected package: $id/$packageVersion" }
         $sha = (Get-FileHash -LiteralPath $package[0].FullName).Hash
@@ -159,6 +161,8 @@ try {
             if ($fromDgRepo) {
                 if (!$dgCommit) { $dgCommit = $commit }
                 if ($commit -cnotmatch '^[0-9a-f]{40}$' -or $commit -cne $dgCommit) { throw 'DG packages disagree on source commit.' }
+            } elseif ($id -in $toolsRelease.Ids) {
+                if ($commit -ine $toolsRelease.Revision) { throw "Wrong selected text tool source: $id" }
             } elseif ($id.StartsWith('Atelia.') -and $commit -ine $storageRevision) { throw "Wrong selected storage source: $id" }
         } finally { $zip.Dispose() }
         $receipt.Packages += [ordered]@{ Id = $id; Version = $packageVersion; File = $package[0].Name; Sha256 = $sha; SourceCommit = $commit }
@@ -196,7 +200,7 @@ try {
     if ($assets.libraries.Count -ne 11 -or @($assets.libraries.Values | Where-Object type -cne 'package').Count -ne 0 -or
         @($assets.packageFolders.Keys).Count -ne 1 -or [IO.Path]::GetFullPath(@($assets.packageFolders.Keys)[0]).TrimEnd('\', '/') -ine $cache -or
         @($assets.project.restore.sources.Keys).Count -ne 1 -or [IO.Path]::GetFullPath(@($assets.project.restore.sources.Keys)[0]).TrimEnd('\', '/') -ine $feed) { throw 'Assets must contain only eleven packages, one moved local source and one fresh cache.' }
-    foreach ($package in ($receipt.Packages | Where-Object Id -cne 'Atelia.Text')) {
+    foreach ($package in ($receipt.Packages | Where-Object { $_.Id -cne 'Atelia.Text' -and $_.Id -notin $toolsRelease.Ids })) {
         if (!$assets.libraries.ContainsKey($package.Id + '/' + $package.Version)) { throw "Wrong resolved version: $($package.Id)" }
         $cached = Join-Path $cache "$($package.Id.ToLowerInvariant())/$($package.Version.ToLowerInvariant())/$($package.Id.ToLowerInvariant()).$($package.Version.ToLowerInvariant()).nupkg"
         if ((Get-FileHash -LiteralPath $cached).Hash -cne $package.Sha256) { throw 'Cache bytes differ from moved candidate.' }

@@ -69,7 +69,7 @@ $selected = ./eng/Prepare-Storage.ps1 -StoragePackageSource $storageFeed
 ## 对外交付一个候选目录
 
 应用接入优先使用 [Prepare-DurableGraphCandidate.ps1](../eng/Prepare-DurableGraphCandidate.ps1) 导出的目录。
-它在下文的四个 DG 包和六个存储包之外打包可选的 `Atelia.Text`，并附上原始 `K4os.Compression.LZ4 1.3.8`。
+它在下文的四个 DG 包和六个存储包之外打包可选的 `Atelia.Text`，并附上原始的 Completion 系列依赖和 `K4os.Compression.LZ4 1.3.8`。
 交付目录含完整消费配置、固定版本的 QuickStart 和运行步骤。
 以下命令中的 `$storageFeed` 是上一节核验过的准确六包 feed：
 
@@ -91,7 +91,8 @@ QuickStart 的项目、源码、配置和最短命令来自[根 README](../READM
 
 本地包闭包的范围是：已安装 **.NET SDK 10.0.201** 后，附带的 `net10.0`、framework-dependent、
 没有额外 RID 的 QuickStart 可从交付本地源取得全部 nupkg。它使用四个 DG 包、六个 S 包和一个 K4os 包。
-需要可编辑正文的项目可从同一源引用第十二包 `Atelia.Text`，使用与 DG 相同的 G 版本。
+需要可编辑正文的项目从同一源引用与 DG 同版本 G 的 `Atelia.Text`。其工具层的 `Atelia.Completion.Tools`、
+`Atelia.Completion.Abstractions` 和 `Atelia.Diagnostics` 来自 nuget.org 发布的 `0.1.0-preview.6`。候选 README 记录对应来源提交。
 这不承诺 SDK 安装、任意应用依赖、额外 RID/self-contained publish 或根 solution 的离线构建；
 也不声称已对所有网络行为执行禁网验收。将来依赖变化时按实际示例重新验证，不能把十一包当通用闭包公式。
 
@@ -181,7 +182,7 @@ dotnet test DurableGraph.slnx -c Release --no-build --no-restore -m:1 -nr:false 
 先准备一次准确 feed，再并行运行各有独立 cache、obj/bin 和 history 的只读消费者；并行 producer 使用独立 checkout。
 
 [PackageProbeSupport.ps1](../experiments/PackageConsumerProbe/PackageProbeSupport.ps1) 可验证并复制六个存储包，
-再生成四个 DG 包，构成十包 feed。文本验收通过 `-IncludeText` 同时生成 `Atelia.Text`。以下命令显式传入源 feed：
+再生成四个 DG 包，构成十包 feed。文本验收通过 `-IncludeText` 同时生成 `Atelia.Text` 并下载三个公开的工具依赖原包。以下命令显式传入源 feed：
 
 ```powershell
 $ErrorActionPreference = 'Stop'

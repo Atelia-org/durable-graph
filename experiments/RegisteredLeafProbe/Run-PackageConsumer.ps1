@@ -115,7 +115,8 @@ $packages = foreach ($key in $assets.libraries.Keys) {
     if (!$candidate.Count) { throw "Output DLL differs from package $id" }
     $refs = @(([Reflection.Assembly]::LoadFile($dll)).GetReferencedAssemblies().Name | Where-Object { $_ -like 'Atelia.*' } | Sort-Object)
     if ($id -in 'Atelia.VariableBitmap','Atelia.Text') {
-        if ($deps.Count -ne 1 -or $deps[0] -ne 'Atelia.DurableGraph.Serialization' -or $refs -contains 'Atelia.DurableGraph' -or $refs -contains 'Atelia.DurableGraph.Persistence') {
+        $expected = if ($id -eq 'Atelia.Text') { 'Atelia.Completion.Tools,Atelia.DurableGraph.Serialization' } else { 'Atelia.DurableGraph.Serialization' }
+        if (($deps -join ',') -cne $expected -or $refs -contains 'Atelia.DurableGraph' -or $refs -contains 'Atelia.DurableGraph.Persistence') {
             throw "Unexpected leaf dependencies for $id"
         }
     } elseif ($id -like 'Atelia.DurableGraph*' -and ('Atelia.Text' -in $deps -or 'Atelia.Text' -in $refs -or 'Atelia.VariableBitmap' -in $refs -or 'Atelia.VariableBitmap' -in $deps)) {

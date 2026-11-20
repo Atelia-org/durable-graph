@@ -127,11 +127,17 @@ try {
 
     $packages = @(Get-ChildItem -LiteralPath $packFeed -Filter '*.nupkg' -File | ForEach-Object { Read-Package $_.FullName })
     $productIds = @('Atelia.DurableGraph', 'Atelia.DurableGraph.Serialization', 'Atelia.DurableGraph.Storage', 'Atelia.DurableGraph.Persistence', 'Atelia.Text')
-    if ($packages.Count -ne 11 -or @($packages.Id | Sort-Object -Unique).Count -ne 11) { throw 'Expected eleven distinct Atelia package identities.' }
-    foreach ($id in $productIds) { if ($id -cnotin $packages.Id) { throw "Missing candidate package: $id" } }
+    $toolsRelease = Get-TextToolRelease $repositoryRoot
+    $expectedCount = $productIds.Count + $toolsRelease.Ids.Count + 6
+    if ($packages.Count -ne $expectedCount -or @($packages.Id | Sort-Object -Unique).Count -ne $expectedCount) { throw "Expected $expectedCount distinct Atelia package identities." }
+    foreach ($id in $productIds + $toolsRelease.Ids) { if ($id -cnotin $packages.Id) { throw "Missing candidate package: $id" } }
     foreach ($package in $packages) {
         if ($package.Id -cin $productIds) {
             if ($package.Version -cne $Version -or $package.Revision -ine $sourceRevision) { throw "Unexpected G identity or source: $($package.Id)" }
+        } elseif ($package.Id -cin $toolsRelease.Ids) {
+            if ($package.Version -cne $toolsRelease.Version -or $package.Revision -ine $toolsRelease.Revision -or !$package.Signed) {
+                throw "Unexpected published text tool dependency: $($package.Id)"
+            }
         } elseif ($package.Id -clike 'Atelia.*') {
             if ($package.Version -cne $storageVersion -or $package.Revision -ine $storageRevision) { throw "Unexpected S identity or source: $($package.Id)" }
         } else { throw "Unexpected producer package: $($package.Id)" }
@@ -209,10 +215,11 @@ try {
         "The four DurableGraph packages and Atelia.Text use G=$Version. The six storage packages use S=$storageVersion.",
         "DurableGraph source HEAD / nuspec commit: $sourceRevision; $sourceDescription.",
         "Storage source / verified nuspec commit: $storageRevision. Storage provenance is checked by eng/Prepare-Storage.ps1 before packing.",
+        "Text tool dependencies: $($toolsRelease.Ids -join ', ') $($toolsRelease.Version), nuget.org originals from $($toolsRelease.Revision).",
         "Original third-party package: $thirdPartyId $thirdPartyVersion from nuget.org. Its signature entry and license metadata remain in the original nupkg; this export does not perform signature trust-chain validation.",
         '',
         "Prepared using SDK $sdk. The supplied example targets net10.0, framework-dependent, with no explicit RID. It requires an already installed compatible SDK/runtime; the current acceptance baseline is SDK 10.0.201 (Roslyn 5.3.0). Other SDK feature bands have not been qualified.",
-        'The feed includes the eleven packages restored by QuickStart and an optional Atelia.Text package. Projects with TextEditor fields should reference Atelia.Text at G and call TextEditorPersistence.Register(models) before opening the repository. Other dependencies, target RIDs and self-contained publishing require their own package sources.',
+        'QuickStart restores eleven packages. The feed also includes Atelia.Text and its three tool dependencies. Projects with TextEditor fields should reference Atelia.Text at G and call TextEditorPersistence.Register(models) before opening the repository. Other dependencies, target RIDs and self-contained publishing require their own package sources.',
         '',
         'The QuickStart saves State directly; no Event type or preceding Event is required. Creation saves S0, and the two independent runs save S1 then S2 (Hp=99 then Hp=98). Move this whole directory together and run the following source-README commands in this directory:',
         '',

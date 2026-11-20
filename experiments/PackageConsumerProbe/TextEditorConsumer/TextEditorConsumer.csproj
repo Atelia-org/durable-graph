@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="Models.cs" />
+    <Compile Include="TextToolTrial.cs" />
     <PackageReference Include="Atelia.Text" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph" Version="$(DurableGraphPackageVersion)" />
     <PackageReference Include="Atelia.DurableGraph.Persistence" Version="$(DurableGraphPackageVersion)" />

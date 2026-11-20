@@ -6,7 +6,7 @@ namespace Atelia.Text;
 /// <summary>A mutable, reference-identity text object with immutable content snapshots.</summary>
 /// <remarks>Use the editor serially. All positions and lengths count UTF-16 code units.</remarks>
 [DurableLeaf("Atelia.Text.TextEditor", 1)]
-public sealed class TextEditor {
+public sealed partial class TextEditor {
     private TextPieceView _view;
     private object? _sourceToken;
     private string? _visitText;

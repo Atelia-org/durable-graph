@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Atelia.Text.Tests" />
+    <PackageReference Include="Atelia.Completion.Tools" Version="0.1.0-preview.6" />
     <ProjectReference Include="..\DurableGraph.Serialization\DurableGraph.Serialization.csproj" />
     <None Include="..\..\docs\text\README.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>

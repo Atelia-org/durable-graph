@@ -100,7 +100,7 @@ try {
         '<Project />' | Set-Content -LiteralPath (Join-Path $workRoot $file) -Encoding utf8NoBOM
     }
     $sourceRoot = Join-Path $PSScriptRoot 'TextEditorConsumer'
-    foreach ($file in @('TextEditorConsumer.csproj', 'Models.cs', 'Program.cs')) {
+    foreach ($file in @('TextEditorConsumer.csproj', 'Models.cs', 'Program.cs', 'TextToolTrial.cs')) {
         Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination (Join-Path $workRoot $file)
     }
     $consumerText = Get-Content -LiteralPath $project -Raw
@@ -108,7 +108,14 @@ try {
         if ($consumerText.Contains($forbidden, [StringComparison]::Ordinal)) { throw "Forbidden manual package wiring '$forbidden'." }
     }
     $feedXml = [Security.SecurityElement]::Escape($PackageSource)
-    "<configuration><packageSources><clear/><add key='probe' value='$feedXml'/><add key='nuget.org' value='https://api.nuget.org/v3/index.json'/></packageSources><packageSourceMapping><clear/><packageSource key='probe'><package pattern='Atelia.*'/></packageSource><packageSource key='nuget.org'><package pattern='*'/></packageSource></packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" |
+    # A portable candidate includes K4os. The smaller probe feed gets it from nuget.org.
+    $sources = "<clear/><add key='probe' value='$feedXml'/>"
+    $mapping = "<clear/><packageSource key='probe'><package pattern='*'/></packageSource>"
+    if (!(Get-ChildItem -LiteralPath $PackageSource -Filter 'K4os.Compression.LZ4.*.nupkg' -File)) {
+        $sources += "<add key='nuget.org' value='https://api.nuget.org/v3/index.json'/>"
+        $mapping += "<packageSource key='nuget.org'><package pattern='K4os.Compression.LZ4'/></packageSource>"
+    }
+    "<configuration><packageSources>$sources</packageSources><packageSourceMapping>$mapping</packageSourceMapping><fallbackPackageFolders><clear/></fallbackPackageFolders></configuration>" |
         Set-Content -LiteralPath (Join-Path $workRoot 'NuGet.Config') -Encoding utf8NoBOM
     $properties = @("-p:DurableGraphPackageVersion=$Version", "-p:DurableGraphSchemaHistoryDirectory=$history", '-p:UseStorageSources=false',
         '-p:UseSharedCompilation=false', '-p:EmitCompilerGeneratedFiles=true', "-p:CompilerGeneratedFilesOutputPath=$generated")
@@ -122,7 +129,7 @@ try {
     }
     $dgIds = @('Atelia.DurableGraph', 'Atelia.DurableGraph.Persistence', 'Atelia.DurableGraph.Serialization', 'Atelia.DurableGraph.Storage', 'Atelia.Text')
     $ateliaKeys = @($assets.libraries.Keys | Where-Object { $_.StartsWith('Atelia.', [StringComparison]::Ordinal) })
-    if ($ateliaKeys.Count -ne 11) { throw 'Expected four DG packages, Atelia.Text and six storage packages.' }
+    if ($ateliaKeys.Count -ne 14) { throw 'Expected four DG packages, Atelia.Text, six storage packages and the three text tool dependencies.' }
     $packageDllHashes = @{}
     foreach ($key in $ateliaKeys) {
         $id, $packageVersion = $key.Split('/')
@@ -141,8 +148,10 @@ try {
             $sourceCommit = [string]$metadata.package.metadata.repository.commit
         } finally { $archive.Dispose() }
         if ($dgIds -contains $id -and $sourceCommit -ine $ExpectedSourceCommit) { throw "DG package source commit differs from the approved source: $key" }
-        $packageDllHashes[$id] = Entry-Hash $package ('lib/net10.0/' + $id + '.dll')
-        if ((Get-FileHash -LiteralPath (Join-Path $cachedRoot ('lib/net10.0/' + $id + '.dll')) -Algorithm SHA256).Hash -cne $packageDllHashes[$id]) {
+        $runtime = @($assets.targets['net10.0'][$key].runtime.Keys | Where-Object { [IO.Path]::GetFileName($_) -ceq "$id.dll" })
+        if ($runtime.Count -ne 1) { throw "Expected one selected runtime DLL: $key" }
+        $packageDllHashes[$id] = Entry-Hash $package $runtime[0]
+        if ((Get-FileHash -LiteralPath (Join-Path $cachedRoot $runtime[0]) -Algorithm SHA256).Hash -cne $packageDllHashes[$id]) {
             throw "Restored runtime DLL differs from its nupkg: $key"
         }
         $receipt.Packages += [ordered]@{ Identity = $key; File = $package; Sha256 = $packageHash; SourceCommit = $sourceCommit; RuntimeSha256 = $packageDllHashes[$id] }
@@ -157,7 +166,8 @@ try {
     $xmlHash = Entry-Hash $textPackage $xmlEntry
     if ((Get-FileHash -LiteralPath $xmlPath).Hash -cne $xmlHash) { throw 'Restored Text XML differs from the nupkg.' }
     [xml]$documentation = Get-Content -Raw -LiteralPath $xmlPath
-    foreach ($method in @('TextEditor.VisitSpan', 'TextEditor.TryApplyEdits', 'TextEditor.ToString', 'TextSnapshot.CopyTo')) {
+    foreach ($method in @('TextEditor.VisitSpan', 'TextEditor.TryApplyEdits', 'TextEditor.ToString', 'TextSnapshot.CopyTo',
+        'TextEditor.Search(System.String,', 'TextEditor.Search(System.Text.RegularExpressions.Regex,', 'TextEditor.ReplaceUnique', 'TextEditorTools.Create')) {
         $prefix = 'M:Atelia.Text.' + $method
         if (!$documentation.SelectSingleNode("/doc/members/member[starts-with(@name,'$prefix')]/summary")) {
             throw "Text package documentation is missing $method."
@@ -226,6 +236,12 @@ try {
             ProcessId = $evidence.ProcessId; Checks = $evidence.Checks; LoadedAssemblies = $evidence.LoadedAssemblies }
     }
     if (@($receipt.Lanes.ProcessId | Select-Object -Unique).Count -ne 3) { throw 'Cold lanes must run in three distinct processes.' }
+    $trialInput = Join-Path $workRoot 'text-tool-trial.jsonl'
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'text-tool-trial.jsonl') -Destination $trialInput
+    $trialOutput = Execute 'text-tool-trial' @($assembly, 'tools-trial', (Join-Path $workRoot 'tool-trial-database'), $trialInput)
+    if ($trialOutput -cnotmatch '(?m)^PASS:') { throw 'Package consumer did not confirm the text tool trial.' }
+    $receipt['TextToolTrial'] = [ordered]@{ Input = $trialInput; InputSha256 = (Get-FileHash -LiteralPath $trialInput).Hash
+        Transcript = $receipt.Commands[-1].Log; TranscriptSha256 = $receipt.Commands[-1].Sha256 }
     foreach ($input in $receipt.CompilerInputs) {
         if ((Get-FileHash -LiteralPath $input.Path -Algorithm SHA256).Hash -cne $input.Sha256) { throw 'A compiler input changed during the probe.' }
     }
