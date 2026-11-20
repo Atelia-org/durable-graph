@@ -20,6 +20,7 @@ DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自�
 | [GroupCommitConsumer](GroupCommitConsumer/README.md)、[runner](Run-GroupCommitProbe.ps1) | 多分支共同 Schema、执行时捕获、State/Event 安装差异及冷重开；本次资格见0096工作集 |
 | [TagConsumer](TagConsumer/README.md)、[runner](Run-TagProbe.ps1) | 不可变名字、冷进程定位与历史分叉 |
 | [ImmutableLeafConsumer](ImmutableLeafConsumer/README.md)、[runner](Run-ImmutableLeafProbe.ps1) | 当前生成的不可变叶资格与 sibling SG |
+| [第三方声明节点](RegisteredNodes/README.md) | 两版独立节点包，跨进程冷开旧图、改边续存与历史回读 |
 | [EventHistoryRecoveryConsumer](EventHistoryRecoveryConsumer/README.md)、[runner](Run-EventHistoryRecoveryProbe.ps1) | 应用自身的事件快照与处理进度协议 |
 | [MetaBootstrapSchemaConsumer](MetaBootstrapSchemaConsumer/README.md)、[runner](Run-MetaBootstrapSchemaProbe.ps1) | 员工自举、无业务注册的 meta 冷读、数组与字典真实 Delta |
 | [SplitRepositoryConsumer](SplitRepositoryConsumer/README.md)、[runner](Run-SplitRepositoryProbe.ps1) | 公开两根 Repository、accepted history、Upgrade、独立读取、Fork 与冷续写 |

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <DurableGraphGenerateDefinitions>true</DurableGraphGenerateDefinitions>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Book.cs" />
+    <PackageReference Include="RegisteredNodes.PagesV2" Version="[$(DurableGraphPackageVersion)]" />
+    <PackageReference Include="Atelia.DurableGraph.Persistence" Version="[$(DurableGraphPackageVersion)]" />
+  </ItemGroup>
+</Project>

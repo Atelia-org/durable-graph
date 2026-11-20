@@ -33,26 +33,25 @@ public sealed class RegisteredNodeHistoricalReferenceTests(ITestOutputHelper out
             }
             Assert.Equal(21, old.Value.Value);
         }
-        var control = new ReadTrace();
-        using (var current = Repository.OpenReadOnlyExisting(_path, ReaderModels(control))) {
-            Assert.Equal(10, Assert.IsType<NodeReviewRoot<NodeReviewV2>>(current.LoadState(history.Base)).Value.Value);
-            Assert.Equal(21, Assert.IsType<NodeReviewRoot<NodeReviewV2>>(current.LoadState(history.Valid)).Value.Value);
-            Assert.Equal(2, control.RootAllocations);
-            Assert.Equal(2, control.Allocations);
-            Assert.Equal(2, control.Hydrations);
-        }
+        var trace = new ReadTrace();
+        using var current = Repository.OpenReadOnlyExisting(_path, ReaderModels(trace));
+        Assert.Equal(10, Assert.IsType<NodeReviewRoot<NodeReviewV2>>(current.LoadState(history.Base)).Value.Value);
+        Assert.Equal(1, trace.RootAllocations);
+        Assert.Equal(1, trace.Allocations);
+        Assert.Equal(1, trace.Hydrations);
         foreach (var bad in history.Damaged) {
-            var trace = new ReadTrace();
-            using var current = Repository.OpenReadOnlyExisting(_path, ReaderModels(trace));
+            // The healthy and damaged directories select the same node head. A warm
+            // reader or frame cache must still validate against the selected directory.
+            Assert.Equal(21, Assert.IsType<NodeReviewRoot<NodeReviewV2>>(current.LoadState(history.Valid)).Value.Value);
+            var before = (trace.RootAllocations, trace.Allocations, trace.Hydrations);
             IDurableObject? delivered = null;
             var error = Assert.Throws<InvalidDataException>(() => delivered = current.LoadState(bad));
             Assert.Contains($"Object ID {history.Target}", error.Message);
             Assert.Contains($"reference type {StringTarget}", error.Message);
             Assert.Null(delivered);
-            Assert.Equal(0, trace.RootAllocations);
-            Assert.Equal(0, trace.Allocations);
-            Assert.Equal(0, trace.Hydrations);
+            Assert.Equal(before, (trace.RootAllocations, trace.Allocations, trace.Hydrations));
         }
+        Assert.Equal(21, Assert.IsType<NodeReviewRoot<NodeReviewV2>>(current.LoadState(history.Valid)).Value.Value);
     }
 
     [Fact]
