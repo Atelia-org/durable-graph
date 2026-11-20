@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Atelia.Binary;
 using Atelia.DurableGraph.Schema;
 using Atelia.DurableGraph.Serialization;
@@ -63,6 +64,8 @@ public sealed class PreparedCapturedObject {
 
     // Capture skips comparison only for an existing string whose identity it has verified.
     // For every other existing object, a successful comparison returning null requires a Base.
-    internal bool ComparisonRequiresBase =>
-        Previous is not null && DeltaBody is null && Current.Kind != ObjectStateKind.String;
+    internal bool ComparisonRequiresBase {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Previous is not null && DeltaBody is null && Current.Kind != ObjectStateKind.String;
+    }
 }
