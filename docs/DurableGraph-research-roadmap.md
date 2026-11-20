@@ -22,6 +22,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 
 | 分片 | 要解决的增量 |
 |---|---|
+| 内建容器与持久化适配 | [DB-106 候选设计](design-branches/0106-container-adapters/README.md)建议先让业务写规划消费准备行的比较结论。出现必须保留第三方 CLR 容器身份的持久字段时，再用该类型检验家族装配和包登记的边界。 |
 | 容器 payload 准备与对象重整 | [DB-102 实测](design-branches/0102-container-payload-planning/mainline-results.md)后的重访条件：若真实负载仍受整表键扫描或可并行的 State 准备主导，再评估减少扫描或并行 Prepare。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
 | 声明节点的升级与私有 Delta | [DB-105](design-branches/0105-registered-nodes/mainline.md) 支持共同前缀及尾槽增减。出现中间槽删除、重排或退役私有格式的真实存档时，用其旧内容和期望投影设计迁移。大块私有值的局改可用[已有 4 KiB 翻转对照](design-branches/0105-registered-nodes/README.md)衡量自定义 Delta 的收益。 |
 | 正则替换与批量预览 | 先用现有工具收集角色编辑 memo 的真实案例，再按[重访条件](#文本替换的下一轮实验)选择下一片。全文访问与快照 KMP 的性能重访条件见[冷热对照](design-branches/0103-durable-text-search/indexof-cache-comparison.md)。 |
