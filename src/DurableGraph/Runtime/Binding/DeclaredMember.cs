@@ -3,7 +3,8 @@ using Atelia.DurableGraph.Schema;
 namespace Atelia.DurableGraph.Runtime;
 
 // Accessors, validators and defaults belong to the current registration. Only Shape is persisted.
-internal sealed record DeclaredSlot(DeclaredSlotShape Shape, Action<ReadOnlySpan<byte>>? Validate = null, byte[]? Initial = null);
+internal sealed record DeclaredSlot(DeclaredSlotShape Shape, Action<ReadOnlySpan<byte>>? Validate = null,
+    byte[]? Initial = null, Type? ReferenceAccessorType = null);
 
 // A repeated cell owns the entire frozen ID vector. Copies of this value share immutable arrays.
 internal readonly record struct DeclaredCell(uint Word, uint[]? Items = null, byte[]? Private = null) {
@@ -14,8 +15,8 @@ internal readonly record struct DeclaredCell(uint Word, uint[]? Items = null, by
 /// <summary>Associates a stored slot with typed accessors to a live domain member.</summary>
 public abstract class DeclaredMember<T> where T : class {
     private DeclaredMember(DeclaredSlot slot) => Slot = slot;
-    private DeclaredMember(DeclaredSlotKind kind, TypeExpr? target = null) =>
-        Slot = new DeclaredSlot(new DeclaredSlotShape(kind, target));
+    private DeclaredMember(DeclaredSlotKind kind, TypeExpr? target = null, Type? accessorType = null) =>
+        Slot = new DeclaredSlot(new DeclaredSlotShape(kind, target), ReferenceAccessorType: accessorType);
     internal DeclaredSlot Slot { get; }
     internal abstract DeclaredCell Capture(T value, CaptureContext context);
     internal abstract void Hydrate(T value, DeclaredCell cell, ObjectReadTable context);
@@ -40,13 +41,15 @@ public abstract class DeclaredMember<T> where T : class {
 
     /// <summary>Persists one optional graph reference whose target must satisfy the supplied closed type expression.</summary>
     /// <remarks>The caller pairs the persistent type expression with a CLR type that can represent its targets.
+    /// When the current node is first bound, the registry can diagnose incompatible types even for null slots.
     /// Capture checks every non-null target against the expression, including already captured aliases.</remarks>
     public static DeclaredMember<T> Reference<TTarget>(TypeExpr target, Func<T, TTarget?> get, Action<T, TTarget?> set)
         where TTarget : class => new ReferenceMember<TTarget>(target,
             get ?? throw new ArgumentNullException(nameof(get)), set ?? throw new ArgumentNullException(nameof(set)));
 
     /// <summary>Stores a non-null vector of ordered references inline. Its elements may be null or refer to the same target.</summary>
-    /// <remarks>The caller pairs the persistent element type with a compatible CLR element type. Capture checks every
+    /// <remarks>The caller pairs the persistent element type with a compatible CLR element type. The current binding
+    /// can diagnose incompatible types even for an empty vector. Capture checks every
     /// non-null element against the expression. Hydration creates a fresh array and restores each target's graph
     /// identity. Use a single array reference when the array itself must retain identity.</remarks>
     public static DeclaredMember<T> References<TTarget>(TypeExpr target, Func<T, TTarget?[]> get, Action<T, TTarget?[]> set)
@@ -69,13 +72,13 @@ public abstract class DeclaredMember<T> where T : class {
     }
 
     private sealed class ReferenceMember<TTarget>(TypeExpr target, Func<T, TTarget?> get, Action<T, TTarget?> set)
-        : DeclaredMember<T>(DeclaredSlotKind.Reference, target) where TTarget : class {
+        : DeclaredMember<T>(DeclaredSlotKind.Reference, target, typeof(TTarget)) where TTarget : class {
         internal override DeclaredCell Capture(T value, CaptureContext context) => new(context.CaptureObject(get(value), Slot.Shape.Target!).Value);
         internal override void Hydrate(T value, DeclaredCell cell, ObjectReadTable context) => set(value, ResolveTarget<TTarget>(context, cell.Word));
     }
 
     private sealed class RepeatedMember<TTarget>(TypeExpr target, Func<T, TTarget?[]> get, Action<T, TTarget?[]> set)
-        : DeclaredMember<T>(DeclaredSlotKind.References, target) where TTarget : class {
+        : DeclaredMember<T>(DeclaredSlotKind.References, target, typeof(TTarget)) where TTarget : class {
         internal override DeclaredCell Capture(T value, CaptureContext context) {
             TTarget?[] items = get(value) ?? throw new InvalidOperationException("A declared repeated slot requires a non-null vector.");
             if (items.Length == 0) { return new(Array.Empty<uint>()); }

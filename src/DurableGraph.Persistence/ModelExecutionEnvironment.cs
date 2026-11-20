@@ -27,6 +27,7 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
     private readonly Dictionary<object, ExactSchemaRequirementSet> _closureRequirements = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<(string Kind, object Key)> _closing = [];
     private readonly HashSet<Type> _validatedDomainTypes = [];
+    private HashSet<DeclaredNodeBinding>? _validatedNodeAccessors;
     private readonly Dictionary<Type, bool> _managedValueTypes = [];
     private readonly Func<SchemaKey, DurableSchema?>? _schemaLookup;
 
@@ -378,6 +379,48 @@ internal sealed partial class ModelExecutionEnvironment : StateBindingContext {
             return result;
         }
         catch (ArgumentException error) { throw new InvalidDataException("The closed domain type violates its generic constraints.", error); }
+    }
+
+    private void ValidateNodeAccessors(DeclaredNodeBinding node) {
+        if (_validatedNodeAccessors?.Contains(node) == true) { return; }
+        var slots = node.CurrentLayout.Schema!.DeclaredSlots;
+        for (int index = 0; index < slots.Length; index++) {
+            if (node.ReferenceAccessorType(index) is not { } accessor) { continue; }
+            TypeExpr target = slots[index].Target!;
+            if (!CanAssignNodeTarget(accessor, target)) {
+                throw new InvalidOperationException($"Declared node {node.CurrentLayout.Type} slot {index} cannot assign persistent target {target} to CLR accessor {accessor}.");
+            }
+        }
+        (_validatedNodeAccessors ??= []).Add(node);
+    }
+
+    private bool CanAssignNodeTarget(Type accessor, TypeExpr target) {
+        if (accessor == typeof(object)) { return true; }
+        // Registered CLR classes are sealed, so their own layout is the only possible actual layout.
+        if (_registeredObjects.TryGetValue(accessor, out RegisteredObjectBinding? exact)) {
+            return StateReferenceValidator.Accepts(exact.CurrentLayout, target);
+        }
+        if (accessor == typeof(string)) { return target.Kind == TypeExprKind.Builtin && target.BuiltinTag == TypeTag.String; }
+        if (accessor.IsArray && !target.IsArray) { return false; }
+        if (target.Kind == TypeExprKind.Named) {
+            // Durable subtypes follow stored Schema ancestry. A CLR interface or narrower class may receive
+            // a legitimate descendant even without a current CLR registration for the nominal base.
+            return true;
+        }
+        // Strings and containers have an exact persistent type. Some container operands have only
+        // historical metadata. An empty slot does not require their CLR declarations to be registered.
+        return !HasCurrentClrTypes(target) || accessor.IsAssignableFrom(GetDomainType(target));
+    }
+
+    private bool HasCurrentClrTypes(TypeExpr type) {
+        if (type.Kind == TypeExprKind.Named) {
+            if (_registeredByName.ContainsKey(type) || _models.ContainsKey(type)) { return true; }
+            if (!_definitions.TryGetValue(type.DefinitionId!, out var definition) || definition.DomainTypeDefinition is null) { return false; }
+        }
+        foreach (TypeExpr argument in type.Arguments) {
+            if (!HasCurrentClrTypes(argument)) { return false; }
+        }
+        return true;
     }
 
     private bool TryDefinition(Type type, out StateDefinitionBinding? definition) =>

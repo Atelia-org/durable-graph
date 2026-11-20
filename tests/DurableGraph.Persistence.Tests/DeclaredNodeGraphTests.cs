@@ -16,7 +16,7 @@ public sealed class DeclaredNodeGraphTests : IDisposable {
     [Fact]
     public void ColdGraphsKeepListAliasesAndCyclesWhileAWideEmbeddedVectorWritesOnlyItsChangedSlot() {
         GraphRef initial, changed;
-        using (var writer = Repository.CreateNew(_path, Models(NodeType))) {
+        using (var writer = Repository.CreateNew(_path, Models())) {
             var a = new GraphMember { Number = 11 };
             var b = new GraphMember { Number = 22 };
             var c = new GraphMember { Number = 33 };
@@ -29,7 +29,7 @@ public sealed class DeclaredNodeGraphTests : IDisposable {
             using var graph = writer.CreateGraph(new TextWitnessBox<GraphMember> { Value = a, Items = sharedList });
             initial = writer.SaveGraph(graph);
         }
-        using (var editor = Repository.OpenExisting(_path, Models(NodeType))) {
+        using (var editor = Repository.OpenExisting(_path, Models())) {
             using var left = editor.OpenGraph(initial);
             using var right = editor.OpenGraph(initial);
             var modified = Check(left, changed: false);
@@ -63,7 +63,7 @@ public sealed class DeclaredNodeGraphTests : IDisposable {
             var unchanged = Revision(editor, editor.SaveGraph(left));
             Assert.Null(unchanged.OwnedBatch);
         }
-        using var cold = Repository.OpenReadOnlyExisting(_path, Models(NodeType));
+        using var cold = Repository.OpenReadOnlyExisting(_path, Models());
         using var before = cold.OpenGraph(initial);
         using var after = cold.OpenGraph(changed);
         Check(before, changed: false);
@@ -135,9 +135,14 @@ public sealed class DeclaredNodeGraphTests : IDisposable {
 
     [Fact]
     public void NonNullVectorElementMustSatisfyItsDeclaredPersistentTargetBeforePublication() {
-        using var repo = Repository.CreateNew(_path, Models(StringType));
-        var node = new GraphMember();
-        using var graph = repo.CreateGraph(new TextWitnessBox<GraphMember> { Value = node });
+        var models = new StateModelRegistry();
+        models.Register(global::Atelia.DurableGraph.Generated.Family_546578745769746E657373426F78.Definition);
+        new DeclaredNode<GraphAccessorSlots>(static () => new(), [
+            DeclaredMember<GraphAccessorSlots>.References<object>(StringType, n => n.Links, (n, links) => n.Links = links),
+        ]).Register(models);
+        using var repo = Repository.CreateNew(_path, models);
+        var node = new GraphAccessorSlots();
+        using var graph = repo.CreateGraph(new TextWitnessBox<GraphAccessorSlots> { Value = node });
         var first = repo.SaveGraph(graph);
         var tip = DB096TestAccess.Resources(repo).ReadHeapTip();
         long frames = repo.GraphStore.AppendedFrames;
@@ -150,12 +155,102 @@ public sealed class DeclaredNodeGraphTests : IDisposable {
         Assert.Equal(Revision(repo, first).DirectoryRoot, retry.DirectoryRoot);
     }
 
-    private static StateModelRegistry Models(TypeExpr elementType) {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ImpossibleStringAccessorFailsBeforeAnEmptySlotCanPublishItsSchema(bool repeated, bool missingElementType) {
+        TypeExpr list = TypeExpr.List(missingElementType ? TypeExpr.Named("NoCurrentClrType") : StringType);
+        var bad = repeated
+            ? DeclaredMember<GraphAccessorSlots>.References<string>(list, _ => [], (_, _) => { })
+            : DeclaredMember<GraphAccessorSlots>.Reference<string>(list, _ => null, (_, _) => { });
+        var models = new StateModelRegistry();
+        models.Register(global::Atelia.DurableGraph.Generated.Family_546578745769746E657373426F78.Definition);
+        new DeclaredNode<GraphAccessorSlots>(static () => new(), [
+            DeclaredMember<GraphAccessorSlots>.Int32(_ => 0, (_, _) => { }), bad,
+        ]).Register(models);
+        using var repo = Repository.CreateNew(_path, models);
+        using var graph = repo.CreateGraph(new TextWitnessBox<GraphAccessorSlots> { Value = new() });
+        long frames = repo.GraphStore.AppendedFrames;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var error = Assert.Throws<InvalidOperationException>(() => repo.SaveGraph(graph));
+            Assert.Contains("Test.DeclaredAccessorSlots slot 1", error.Message);
+            Assert.Contains(list.ToString(), error.Message);
+            Assert.Contains("System.String", error.Message);
+            Assert.Equal(frames, repo.GraphStore.AppendedFrames);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InterfaceAccessorAcceptsAListOfNodesRegardlessOfRegistrationOrder(bool ownerFirst) {
+        var owner = new DeclaredNode<GraphAccessorSlots>(static () => new(), [
+            DeclaredMember<GraphAccessorSlots>.Reference<IReadOnlyList<GraphMember>>(TypeExpr.List(NodeType),
+                n => n.Members, (n, members) => n.Members = members),
+        ]);
+        var member = new DeclaredNode<GraphMember>(static () => new(), []);
+        var models = new StateModelRegistry();
+        models.Register(global::Atelia.DurableGraph.Generated.Family_546578745769746E657373426F78.Definition);
+        if (ownerFirst) { owner.Register(models); member.Register(models); }
+        else { member.Register(models); owner.Register(models); }
+        GraphRef saved;
+        using (var repo = Repository.CreateNew(_path, models)) {
+            var shared = new GraphMember();
+            var node = new GraphAccessorSlots { Members = new List<GraphMember> { shared, shared } };
+            using var graph = repo.CreateGraph(new TextWitnessBox<GraphAccessorSlots> { Value = node });
+            saved = repo.SaveGraph(graph);
+        }
+        using var cold = Repository.OpenReadOnlyExisting(_path, models);
+        using var restored = cold.OpenGraph(saved);
+        var list = Assert.IsType<List<GraphMember>>(((TextWitnessBox<GraphAccessorSlots>)restored.Root).Value.Members);
+        Assert.Equal(2, list.Count);
+        Assert.Same(list[0], list[1]);
+    }
+
+    [Fact]
+    public void NarrowAccessorCanReceiveADerivedSchemaWhoseNominalBaseHasNoCurrentClrRegistration() {
+        DurableSchema parent = new("Test.DeclaredAccessorBase", 1);
+        DurableSchema child = new("Test.DeclaredAccessorChild", 1, [], parent);
+        var models = new StateModelRegistry();
+        models.Register(global::Atelia.DurableGraph.Generated.Family_546578745769746E657373426F78.Definition);
+        new DeclaredNode<GraphAccessorSlots>(static () => new(), [
+            DeclaredMember<GraphAccessorSlots>.Reference<ManualChild>(parent.Type,
+                n => (ManualChild?)n.Link, (n, value) => n.Link = value),
+            DeclaredMember<GraphAccessorSlots>.Reference<IReadOnlyList<ManualChild>>(TypeExpr.List(parent.Type),
+                _ => null, (_, _) => { }),
+        ]).Register(models);
+        static void Visit(in byte state, IStateReferenceVisitor visitor) { }
+        var prepare = new StatePreparationBinding<byte>(child, (in byte state) => new([state]),
+            (in byte old, in byte current) => new(old != current, [current]));
+        var reader = new StateReaderBinding<byte>(child, (ref BareValueReader input) => input.ReadByte(),
+            (ref BareValueReader input, in byte _) => input.ReadByte(), Visit);
+        models.Register(new StateModelBinding<ManualChild, byte>(prepare, [reader], row => row.GetState<byte>(),
+            static () => new(), (ManualChild value, in byte state, ObjectReadTable _) => value.Value = state,
+            (value, _) => value.Value, Visit));
+
+        GraphRef saved;
+        using (var repo = Repository.CreateNew(_path, models)) {
+            var node = new GraphAccessorSlots { Link = new ManualChild { Value = 42 } };
+            using var graph = repo.CreateGraph(new TextWitnessBox<GraphAccessorSlots> { Value = node });
+            saved = repo.SaveGraph(graph);
+        }
+        using var cold = Repository.OpenReadOnlyExisting(_path, models);
+        using var restored = cold.OpenGraph(saved);
+        Assert.Equal(42, Assert.IsType<ManualChild>(((TextWitnessBox<GraphAccessorSlots>)restored.Root).Value.Link).Value);
+    }
+
+    private sealed class ManualChild : IDurableObject {
+        internal byte Value;
+    }
+
+    private static StateModelRegistry Models() {
         var models = new StateModelRegistry();
         models.Register(global::Atelia.DurableGraph.Generated.Family_546578745769746E657373426F78.Definition);
         new DeclaredNode<GraphMember>(static () => new(), [
             DeclaredMember<GraphMember>.Int32(n => n.Number, (n, number) => n.Number = number),
-            DeclaredMember<GraphMember>.References<GraphMember>(elementType, n => n.Links, (n, links) => n.Links = links),
+            DeclaredMember<GraphMember>.References<GraphMember>(NodeType, n => n.Links, (n, links) => n.Links = links),
             DeclaredMember<GraphMember>.Reference<List<GraphMember>>(TypeExpr.List(NodeType), n => n.Bucket, (n, bucket) => n.Bucket = bucket),
         ]).Register(models);
         return models;
@@ -176,4 +271,11 @@ public sealed class GraphMember {
 public sealed class GraphArraySlots {
     public object[]? Single;
     public object[]?[] Many = [];
+}
+
+[DurableNode("Test.DeclaredAccessorSlots")]
+public sealed class GraphAccessorSlots {
+    public object? Link;
+    public object?[] Links = [];
+    public IReadOnlyList<GraphMember>? Members;
 }

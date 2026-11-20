@@ -10,6 +10,7 @@ internal sealed partial class ModelExecutionEnvironment {
         ArgumentNullException.ThrowIfNull(domainType);
         if (_registeredObjects.TryGetValue(domainType, out RegisteredObjectBinding? registered)) {
             registered.Requirements.Validate(this);
+            if (registered is DeclaredNodeBinding node) { ValidateNodeAccessors(node); }
             binding = registered;
             return true;
         }

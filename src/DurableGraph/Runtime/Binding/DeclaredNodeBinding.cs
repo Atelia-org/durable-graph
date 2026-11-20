@@ -5,10 +5,12 @@ using Atelia.DurableGraph.Serialization;
 namespace Atelia.DurableGraph.Runtime;
 
 internal abstract class DeclaredNodeBinding(Type domain, DurableSchema schema) : RegisteredObjectBinding(domain, schema) {
+    internal abstract Type? ReferenceAccessorType(int slot);
     internal abstract DeclaredNodeReader BindReader(DurableSchema source);
 }
 
 internal sealed class DeclaredNodeBinding<T>(DeclaredNode<T> node) : DeclaredNodeBinding(typeof(T), node.Schema) where T : class {
+    internal override Type? ReferenceAccessorType(int slot) => node.ReferenceAccessorType(slot);
     internal override object Registration => node;
     internal override DeclaredNodeReader BindReader(DurableSchema source) => new(source, this, node.BindStored(source));
 

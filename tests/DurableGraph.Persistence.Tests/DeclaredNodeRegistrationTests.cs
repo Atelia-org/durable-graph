@@ -65,6 +65,18 @@ public sealed class DeclaredNodeRegistrationTests {
         }
     }
 
+    [Fact]
+    public void ASealedRegisteredAccessorCannotHoldAnUnrelatedNominalTarget() {
+        var registry = new StateModelRegistry();
+        new DeclaredNode<GraphAccessorSlots>(static () => new(), [
+            DeclaredMember<GraphAccessorSlots>.Reference<GraphMember>(TypeExpr.Named("Test.DeclaredAccessorSlots"),
+                _ => null, (_, _) => { }),
+        ]).Register(registry);
+        new DeclaredNode<GraphMember>(static () => new(), []).Register(registry);
+        var models = registry.CreateEnvironment();
+        Assert.Throws<InvalidOperationException>(() => models.TryGetCurrentObjectBinding(typeof(GraphAccessorSlots), out _));
+    }
+
     private sealed class ConflictingLeafCodec : DurableLeafCodec<ConflictingGraphMemberLeaf, byte> {
         public override byte Capture(ConflictingGraphMemberLeaf value, LeafAcceptance? acceptance) => 0;
         public override ConflictingGraphMemberLeaf Restore(byte state) => new();

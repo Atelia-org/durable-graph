@@ -63,6 +63,7 @@ public sealed class DeclaredNode<T> where T : class {
     }
 
     internal DurableSchema Schema { get; }
+    internal Type? ReferenceAccessorType(int slot) => _current[slot].ReferenceAccessorType;
 
     internal void ValidateStored(DurableSchema source) {
         if (!source.IsDeclaredNode || source.Type != Schema.Type) {
