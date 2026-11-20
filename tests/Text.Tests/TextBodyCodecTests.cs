@@ -133,6 +133,34 @@ public sealed class TextBodyCodecTests(ITestOutputHelper output) {
     }
 
     [Fact]
+    public void EqualLengthDeltaChecksDisplacedCopiesEvenWhenTheirSourceIsExact() {
+        foreach (string original in new[] { "aaaa", "abaa" }) {
+            TextEditor editor = new();
+            foreach (char c in original) { editor.Replace(editor.Length, 0, c.ToString()); }
+            FrozenText prior = TestReceipt.Save(editor);
+            editor.Replace(0, 1, "");
+            editor.Replace(editor.Length, 0, "a");
+            FrozenText edited = editor.CaptureState(null);
+            Assert.Same(prior.ContentToken, edited.SourceToken);
+            var delta = TextBodyCodec.PrepareDelta(prior, edited);
+            Assert.Equal(original != "aaaa", delta.HasChanges);
+            Assert.Equal(original[1..] + "a", Apply(prior, delta.Body.ToArray()).Content.ToString());
+        }
+    }
+
+    [Fact]
+    public void SamePositionCopiesCannotProveEqualityAgainstAnotherGraphsText() {
+        FrozenText source = new TextEditor("abcde").CaptureState(null);
+        TextEditor editor = TextEditor.Restore(source);
+        editor.Replace(0, 1, "x");
+        var foreign = new TextEditor("xbcQe").CaptureState(null);
+        var delta = TextBodyCodec.PrepareDelta(foreign, editor.CaptureState(null));
+        Assert.True(delta.HasChanges);
+        Assert.Equal((byte)2, delta.Body[1]); // The literal prefix matches, but this source differs inside a Copy.
+        Assert.Equal("xbcde", Apply(foreign, delta.Body.ToArray()).Content.ToString());
+    }
+
+    [Fact]
     public void ReaderIteratesDeepChainAndColdHydrateQualifiesFirstContinuation() {
         TextEditor editor = new("abcdefgh");
         FrozenText previous = TestReceipt.Save(editor);

@@ -31,8 +31,8 @@ internal static class TextBodyCodec {
     }
 
     internal static PreparedDeltaBody PrepareDelta(FrozenText previous, FrozenText current) {
-        bool unchanged = ReferenceEquals(previous.ContentToken, current.ContentToken) ||
-            previous.Content.ContentEquals(current.Content);
+        bool isExactSource = ReferenceEquals(current.SourceToken, previous.ContentToken);
+        bool unchanged = previous.Content.View.ContentEquals(current.Content.View, isExactSource);
         ArrayBufferWriter<byte> buffer = new();
         BareValueWriter writer = new(buffer);
         writer.WriteVarUInt32((uint)current.Content.Length);
@@ -40,7 +40,7 @@ internal static class TextBodyCodec {
             if (current.Content.Length != 0) { WriteCopy(ref writer, 0, current.Content.Length); }
             return new(false, buffer.WrittenSpan);
         }
-        if (!ReferenceEquals(current.SourceToken, previous.ContentToken)) {
+        if (!isExactSource) {
             // A shared CLR builder may have been rebound by another graph. Never interpret
             // its offsets against this graph's different persistent predecessor.
             if (current.Content.Length != 0) {

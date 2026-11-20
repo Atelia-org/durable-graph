@@ -77,6 +77,24 @@ public sealed class TextEditorTests {
     }
 
     [Fact]
+    public void WholeRangeReplacementDiscardsOldDescriptorsAndAdvancesTheVersion() {
+        const int length = 8192;
+        TextEditor editor = new(new string('a', length));
+        var edits = Enumerable.Range(0, length / 2).Select(i => new TextEdit(i * 2, 1, "b")).ToArray();
+        Assert.True(editor.TryApplyEdits(editor.Snapshot(), edits, out _));
+        TextSnapshot before = editor.Snapshot();
+        string sameText = before.ToString();
+        long start = GC.GetAllocatedBytesForCurrentThread();
+        editor.Replace(0, length, sameText);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - start;
+        Assert.True(allocated < 4096, $"Allocated {allocated} bytes for a single replacement piece.");
+        Assert.Same(sameText, editor.ToString());
+        Assert.Equal(sameText, before.ToString());
+        Assert.False(editor.TryApplyEdits(before, [], out var failure));
+        Assert.Equal(TextEditFailureKind.StaleSnapshot, failure.Kind);
+    }
+
+    [Fact]
     public void TotalLengthOverflowIsReportedBeforeConstructingTheResult() {
         TextEditor text = new();
         TextSnapshot before = text.Snapshot();

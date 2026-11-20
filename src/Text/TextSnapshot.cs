@@ -76,28 +76,4 @@ public sealed class TextSnapshot {
 
     // Internal consumers share sequential reads; public callers do not acquire physical chunks.
     internal IEnumerable<ReadOnlyMemory<char>> GetChunks() => View.GetChunks();
-
-    internal bool ContentEquals(TextSnapshot other) {
-        ArgumentNullException.ThrowIfNull(other);
-        if (ReferenceEquals(ContentToken, other.ContentToken)) { return true; }
-        if (Length != other.Length) { return false; }
-        using IEnumerator<ReadOnlyMemory<char>> left = GetChunks().GetEnumerator();
-        using IEnumerator<ReadOnlyMemory<char>> right = other.GetChunks().GetEnumerator();
-        ReadOnlyMemory<char> a = default, b = default;
-        int remaining = Length;
-        while (remaining != 0) {
-            if (a.IsEmpty) {
-                if (!left.MoveNext()) { throw new InvalidOperationException("Incomplete text pieces."); }
-                a = left.Current;
-            }
-            if (b.IsEmpty) {
-                if (!right.MoveNext()) { throw new InvalidOperationException("Incomplete text pieces."); }
-                b = right.Current;
-            }
-            int count = Math.Min(a.Length, b.Length);
-            if (!a.Span[..count].SequenceEqual(b.Span[..count])) { return false; }
-            a = a[count..]; b = b[count..]; remaining -= count;
-        }
-        return true;
-    }
 }

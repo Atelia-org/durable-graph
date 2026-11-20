@@ -25,8 +25,7 @@ internal sealed class TextPieceView {
 
     internal static TextPieceView FromString(string text, int sourceOffset = -1, object? contentToken = null) {
         ArgumentNullException.ThrowIfNull(text);
-        List<TextPiece> pieces = [];
-        if (text.Length != 0) { pieces.Add(new(text, 0, text.Length, sourceOffset)); }
+        List<TextPiece> pieces = text.Length == 0 ? [] : [new(text, 0, text.Length, sourceOffset)];
         return new(pieces, text.Length, text.Length, contentToken);
     }
 
@@ -59,7 +58,7 @@ internal sealed class TextPieceView {
         ValidateRange(Length, start, length);
         if (target.Count > maxPieces) { return false; }
         if (length == 0) { return true; }
-        int index = Locate(start, out int within);
+        int index = Locate(start, length, out int within);
         while (length != 0) {
             TextPiece piece = _pieces[index++];
             int count = Math.Min(length, piece.Length - within);
@@ -82,6 +81,7 @@ internal sealed class TextPieceView {
     }
 
     internal TextPieceView Apply(ReadOnlySpan<TextEdit> edits, int nextLength) {
+        if (edits is [{ Start: 0 } whole] && whole.Length == Length) { return FromString(whole.Replacement); }
         long capacity = Math.Min(nextLength, (long)PieceCount + 2L * edits.Length);
         if (capacity > Array.MaxLength) { throw new ArgumentOutOfRangeException(nameof(edits)); }
         List<TextPiece> result = new((int)capacity);
@@ -135,7 +135,7 @@ internal sealed class TextPieceView {
     internal void CopyTo(int start, Span<char> destination) {
         ValidateRange(Length, start, destination.Length, nameof(destination));
         if (destination.IsEmpty) { return; }
-        int pieceIndex = Locate(start, out int within);
+        int pieceIndex = Locate(start, destination.Length, out int within);
         while (!destination.IsEmpty) {
             ReadOnlySpan<char> source = _pieces[pieceIndex++].Memory.Span[within..];
             int count = Math.Min(source.Length, destination.Length);
@@ -145,10 +145,17 @@ internal sealed class TextPieceView {
         }
     }
 
-    private int Locate(int start, out int within) {
+    private int Locate(int start, int length, out int within) {
         int pieceIndex = 0;
         within = start;
         if (start != 0 && PieceCount > 1) {
+            // Locating a suffix from the end touches only the pieces the caller will read.
+            if (length == Length - start) {
+                int index = PieceCount, pieceStart = Length;
+                do { pieceStart -= _pieces[--index].Length; } while (pieceStart > start);
+                within = start - pieceStart;
+                return index;
+            }
             int[] ends = Volatile.Read(ref _ends) ?? BuildIndex();
             int low = 0, high = ends.Length - 1;
             while (low < high) {
@@ -175,18 +182,42 @@ internal sealed class TextPieceView {
 
     internal void AppendTo(StringBuilder destination, int start, int length) {
         if (length == 0) { return; }
-        int offset = 0;
-        foreach (TextPiece piece in _pieces) {
-            int skip = Math.Max(0, start - offset);
-            if (skip < piece.Length) {
-                int count = Math.Min(length, piece.Length - skip);
-                destination.Append(piece.Memory.Span.Slice(skip, count));
-                length -= count;
-                start += count;
-                if (length == 0) { return; }
-            }
-            offset += piece.Length;
+        if (length == Length) {
+            foreach (TextPiece piece in PieceSpan) { destination.Append(piece.Memory.Span); }
+            return;
         }
+        int index = Locate(start, length, out int within);
+        while (length != 0) {
+            ReadOnlySpan<char> piece = _pieces[index++].Memory.Span[within..];
+            int count = Math.Min(length, piece.Length);
+            destination.Append(piece[..count]);
+            length -= count;
+            within = 0;
+        }
+    }
+
+    // Same-position Copies prove equality only against the exact source of the current view.
+    internal bool ContentEquals(TextPieceView current, bool isExactSource) {
+        if (ReferenceEquals(ContentToken, current.ContentToken)) { return true; }
+        if (Length != current.Length) { return false; }
+        int output = 0, comparedEnd = 0, index = 0, within = 0;
+        foreach (TextPiece piece in current.PieceSpan) {
+            if (!isExactSource || piece.BaseOffset != output) {
+                if (comparedEnd != output) { index = Locate(output, piece.Length, out within); }
+                ReadOnlySpan<char> remaining = piece.Memory.Span;
+                while (!remaining.IsEmpty) {
+                    ReadOnlySpan<char> prior = _pieces[index].Memory.Span[within..];
+                    int count = Math.Min(prior.Length, remaining.Length);
+                    if (!prior[..count].SequenceEqual(remaining[..count])) { return false; }
+                    remaining = remaining[count..];
+                    within += count;
+                    if (count == prior.Length) { index++; within = 0; }
+                }
+                comparedEnd = output + piece.Length;
+            }
+            output += piece.Length;
+        }
+        return true;
     }
 
     internal string ToText() {
