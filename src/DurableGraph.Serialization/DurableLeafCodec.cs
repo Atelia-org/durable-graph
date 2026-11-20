@@ -1,5 +1,4 @@
 using Atelia.Binary;
-using System.Text;
 
 namespace Atelia.DurableGraph.Serialization;
 
@@ -7,14 +6,13 @@ namespace Atelia.DurableGraph.Serialization;
 /// <remarks>
 /// Apply to a public, top-level, sealed, non-generic class that does not implement <c>IDurableObject</c>.
 /// Domain objects and containers can reference the leaf by identity. Its contents have no outgoing graph references.
-/// Reserve the ID across ordinary models, leaf codecs and all versions of the application.
+/// Use exactly one durable type declaration. Reserve the ID across ordinary models, registered leaves,
+/// declared nodes and all versions of the application.
 /// A store identifies the family by its nominal ID. An unrelated codec reusing an ID and version
 /// can interpret another family's bytes when the declared layouts agree.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class DurableLeafAttribute : Attribute {
-    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-
     /// <summary>Declares an ID and the version emitted by the current writer.</summary>
     /// <param name="id">A stable nonblank Unicode identifier, unique in the persistent model catalog.</param>
     /// <param name="version">A positive version. Advance it when changing the interpretation of stored bytes.</param>
@@ -22,13 +20,7 @@ public sealed class DurableLeafAttribute : Attribute {
     /// <exception cref="ArgumentException">The identifier is blank or contains an unpaired surrogate.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The version is zero or negative.</exception>
     public DurableLeafAttribute(string id, int version = 1) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
-        try {
-            StrictUtf8.GetByteCount(id);
-        } catch (EncoderFallbackException error) {
-            throw new ArgumentException("A leaf identifier must be valid Unicode.", nameof(id), error);
-        }
+        RegisteredObjectIdentity.Validate(id, version);
         Id = id;
         Version = version;
     }

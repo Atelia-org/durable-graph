@@ -5,30 +5,9 @@ using System.Reflection;
 
 namespace Atelia.DurableGraph.Runtime;
 
-// Leaf types use the ordinary nominal layout. Each exact version has a reader and one
-// binding owns capture/restoration for the current version in the frozen model catalog.
-internal abstract class LeafObjectBinding : ObjectBinding, IStatePreparationBinding {
-    protected LeafObjectBinding(Type domain, DurableSchema schema) : base(domain, ObjectLayout.ForDurable(schema)) =>
-        Requirements = StateBindingContext.ExactSchemaRequirementSet.Create((schema, "leaf"));
-    internal StateBindingContext.ExactSchemaRequirementSet Requirements { get; }
-    internal abstract object Codec { get; }
-    internal abstract IReadOnlyList<StateReaderBinding> Readers { get; }
-    internal abstract long? Estimate(ObjectStateRecord state);
-    public abstract void Validate(ObjectStateRecord state);
-    public abstract PreparedBaseBody PrepareBase(ObjectStateRecord state);
-    internal abstract PreparedDeltaBody? TryPrepareDelta(ObjectStateRecord previous, ObjectStateRecord current);
-    PreparedDeltaBody IStatePreparationBinding.PrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) =>
-        TryPrepareDelta(previous, current) ?? throw new InvalidOperationException("This leaf pair requires a Base.");
-}
-
-internal abstract class LeafReaderBinding(DurableSchema schema) : StateReaderBinding(schema) {
-    internal StateBindingContext.ExactSchemaRequirementSet Requirements { get; } =
-        StateBindingContext.ExactSchemaRequirementSet.Create((schema, "leaf reader"));
-}
-
 // The application owns the leaf CLR type and frozen representation. This adapter owns
 // its layout, validation, identity boundary and exact Base/Delta replay.
-internal sealed class LeafObjectBinding<TDomain, TFrozen> : LeafObjectBinding
+internal sealed class LeafObjectBinding<TDomain, TFrozen> : RegisteredObjectBinding
     where TDomain : class where TFrozen : notnull {
     private readonly DurableLeafCodec<TDomain, TFrozen> _codec;
     private readonly StateReaderBinding[] _readers;
@@ -52,14 +31,15 @@ internal sealed class LeafObjectBinding<TDomain, TFrozen> : LeafObjectBinding
 
     private static DurableSchema LeafSchema() {
         Type type = typeof(TDomain);
-        if (!type.IsSealed || type.IsGenericType || type.IsNested || !type.IsPublic ||
-            typeof(IDurableObject).IsAssignableFrom(type) || type.GetCustomAttribute<DurableLeafAttribute>() is not { } attribute) {
-            throw new ArgumentException($"Leaf {type} must be a public top-level sealed, non-generic class with its own DurableLeaf declaration.");
+        if (!type.IsSealed || type.IsAbstract || type.IsGenericType || type.IsNested || !type.IsPublic ||
+            typeof(IDurableObject).IsAssignableFrom(type) || type.IsDefined(typeof(DurableNodeAttribute), false) ||
+            type.IsDefined(typeof(DurableTypeAttribute), false) || type.GetCustomAttribute<DurableLeafAttribute>() is not { } attribute) {
+            throw new ArgumentException($"Leaf {type} must be a public top-level sealed, non-generic class with an exclusive DurableLeaf declaration.");
         }
         return new DurableSchema(attribute.Id, attribute.Version);
     }
 
-    internal override object Codec => _codec;
+    internal override object Registration => _codec;
     internal override IReadOnlyList<StateReaderBinding> Readers => _readers;
 
     private static TFrozen RequireValue(TFrozen value) => value is not null ? value :
@@ -97,7 +77,7 @@ internal sealed class LeafObjectBinding<TDomain, TFrozen> : LeafObjectBinding
     internal override PreparedDeltaBody? TryPrepareDelta(ObjectStateRecord previous, ObjectStateRecord current) =>
         _codec.PrepareDelta((TFrozen)previous.Content, (TFrozen)current.Content);
 
-    private sealed class Reader(DurableSchema schema, DurableLeafCodec<TDomain, TFrozen> codec) : LeafReaderBinding(schema) {
+    private sealed class Reader(DurableSchema schema, DurableLeafCodec<TDomain, TFrozen> codec) : RegisteredReaderBinding(schema) {
         public override Type StateType => typeof(TFrozen);
         internal override ObjectStateRecord Read(ObjectId objectId, IStateBodySource source) {
             int count = source.Count;

@@ -27,7 +27,11 @@ public sealed partial class DurableGraphGenerator {
         INamedTypeSymbol? attributeType = compilation.GetTypeByMetadataName(DurableTypeAttributeMetadataName);
         if (attributeType is null || attributeType.DeclaringSyntaxReferences.Length != 0 ||
             attributeType.ContainingAssembly.Identity.Name != "Atelia.DurableGraph") return false;
-        AttributeData? attribute = GetAttribute(type.GetAttributes(), DurableTypeAttributeMetadataName);
+        var attributes = type.GetAttributes();
+        foreach (AttributeData declaration in attributes) {
+            if (IsRegisteredObjectMarker(declaration)) return false;
+        }
+        AttributeData? attribute = GetAttribute(attributes, DurableTypeAttributeMetadataName);
         if (attribute is null || !SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, attributeType)) return false;
         if (type.TypeKind != TypeKind.Class) return true;
 

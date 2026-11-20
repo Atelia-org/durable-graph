@@ -950,11 +950,11 @@ public sealed partial class DurableGraphGenerator : IIncrementalGenerator {
         typeTagValue = 0;
         fieldTypeName = null;
         targetSchemaId = null;
-        if (GetDurableLeafId(fieldType) is string leafId) {
+        if (GetRegisteredObjectId(fieldType) is string registeredId) {
             typeTag = "ObjectReference";
             typeTagValue = 15;
             fieldTypeName = fieldType.ToDisplayString(FullyQualifiedNameFormat);
-            targetSchemaId = leafId;
+            targetSchemaId = registeredId;
             return true;
         }
         if (fieldType is not INamedTypeSymbol target || target.TypeKind != TypeKind.Class ||

@@ -138,9 +138,9 @@ public sealed class TypeExpr : IEquatable<TypeExpr>, IComparable<TypeExpr> {
     public int CompareTo(TypeExpr? other) {
         if (ReferenceEquals(this, other)) { return 0; }
         if (other is null) { return 1; }
-        int comparison = Kind.CompareTo(other.Kind);
+        int comparison = ((byte)Kind).CompareTo((byte)other.Kind);
         if (comparison != 0) { return comparison; }
-        if (Kind == TypeExprKind.Builtin) { return BuiltinTag.CompareTo(other.BuiltinTag); }
+        if (Kind == TypeExprKind.Builtin) { return ((int)BuiltinTag).CompareTo((int)other.BuiltinTag); }
         if (Kind == TypeExprKind.Parameter) { return ParameterOrdinal.CompareTo(other.ParameterOrdinal); }
         comparison = StringComparer.Ordinal.Compare(DefinitionId, other.DefinitionId);
         if (comparison != 0) { return comparison; }

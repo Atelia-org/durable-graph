@@ -32,8 +32,8 @@ public sealed class PreparedCapturedObject {
         ObjectStateRecord current,
         ObjectStateRecord? previous,
         PreparedBaseBody? baseBody,
-        PreparedDeltaBody? deltaBody, long? leafBaseEstimate = null) {
-        _leafBaseEstimate = leafBaseEstimate;
+        PreparedDeltaBody? deltaBody, long? registeredBaseEstimate = null) {
+        _registeredBaseEstimate = registeredBaseEstimate;
         Current = current;
         Previous = previous;
         EagerBaseBody = baseBody;
@@ -51,8 +51,8 @@ public sealed class PreparedCapturedObject {
         _ => Current.Preparation!.PrepareBase(Current),
     });
 
-    private readonly long? _leafBaseEstimate;
-    internal long EstimateDeferredBaseSize() => _leafBaseEstimate ?? (Current.Kind switch {
+    private readonly long? _registeredBaseEstimate;
+    internal long EstimateDeferredBaseSize() => _registeredBaseEstimate ?? (Current.Kind switch {
         ObjectStateKind.String => BareValueEncoding.MeasureString(Current.StringContent),
         ObjectStateKind.List when Current.Preparation is ListObjectBinding { MeasureBase: { } measure } => measure(Current),
         _ => throw new InvalidOperationException("This candidate has no deferred Base size operation."),

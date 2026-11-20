@@ -20,7 +20,7 @@ internal static class ObjectWritePlanner {
             if (requiresRewrite) { throw new ArgumentException("A new captured object cannot require a source rewrite.", nameof(requiresRewrite)); }
             return PreparedObject.New(row.Current.Id, typedBase);
         }
-        if (requiresRewrite || (row.DeltaBody is null && row.Current.Preparation is LeafObjectBinding)) {
+        if (requiresRewrite || (row.DeltaBody is null && row.Current.Preparation is RegisteredObjectBinding)) {
             return PreparedObject.BaseOnlyUpdate(row.Current.Id, exactPrior!.Value, typedBase);
         }
         return row.DeltaBody is null

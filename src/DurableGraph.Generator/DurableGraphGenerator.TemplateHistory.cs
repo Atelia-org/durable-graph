@@ -9,26 +9,37 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Atelia.DurableGraph.Generator;
 
 public sealed partial class DurableGraphGenerator {
-    private const string DurableLeafAttributeMetadataName = "Atelia.DurableGraph.Serialization.DurableLeafAttribute";
-
-    private static string? GetDurableLeafId(ITypeSymbol type) {
-        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsSealed: true,
-            DeclaredAccessibility: Accessibility.Public, Arity: 0, ContainingType: null } leaf) {
+    private static string? GetRegisteredObjectId(ITypeSymbol type) {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsSealed: true, IsAbstract: false, IsStatic: false,
+            DeclaredAccessibility: Accessibility.Public, Arity: 0, ContainingType: null } named) {
             return null;
         }
-        AttributeData? attribute = GetAttribute(leaf.GetAttributes(), DurableLeafAttributeMetadataName);
-        if (attribute?.AttributeClass is not INamedTypeSymbol marker ||
-            marker.ContainingAssembly.Identity.Name != "Atelia.DurableGraph.Serialization" ||
-            marker.DeclaringSyntaxReferences.Length != 0 ||
-            !SymbolEqualityComparer.Default.Equals(marker, marker.ContainingAssembly.GetTypeByMetadataName(DurableLeafAttributeMetadataName)) ||
-            attribute.ConstructorArguments.Length != 2 ||
-            attribute.ConstructorArguments[0].Value is not string id || string.IsNullOrWhiteSpace(id) || !CanEncodeStrictUtf8(id) ||
-            attribute.ConstructorArguments[1].Value is not int version || version <= 0) return null;
-        foreach (INamedTypeSymbol contract in leaf.AllInterfaces) {
+        AttributeData? declaration = null;
+        foreach (AttributeData attribute in named.GetAttributes()) {
+            if (IsRegisteredObjectMarker(attribute)) {
+                if (declaration is not null) return null;
+                declaration = attribute;
+            } else if (attribute.AttributeClass is { MetadataName: "DurableTypeAttribute" } ordinary &&
+                ordinary.ContainingAssembly.Identity.Name == "Atelia.DurableGraph" &&
+                SymbolEqualityComparer.Default.Equals(ordinary, ordinary.ContainingAssembly.GetTypeByMetadataName(DurableTypeAttributeMetadataName))) {
+                return null;
+            }
+        }
+        if (declaration is null || declaration.ConstructorArguments.Length != 2 ||
+            declaration.ConstructorArguments[0].Value is not string id || string.IsNullOrWhiteSpace(id) || !CanEncodeStrictUtf8(id) ||
+            declaration.ConstructorArguments[1].Value is not int version || version <= 0) return null;
+        foreach (INamedTypeSymbol contract in named.AllInterfaces) {
             if (contract.ContainingAssembly.Identity.Name == "Atelia.DurableGraph" &&
                 SymbolEqualityComparer.Default.Equals(contract, contract.ContainingAssembly.GetTypeByMetadataName(DurableObjectMetadataName))) return null;
         }
         return id;
+    }
+
+    private static bool IsRegisteredObjectMarker(AttributeData attribute) {
+        if (attribute.AttributeClass is not { MetadataName: "DurableLeafAttribute" or "DurableNodeAttribute" } marker ||
+            marker.DeclaringSyntaxReferences.Length != 0 || marker.ContainingAssembly.Identity.Name != "Atelia.DurableGraph.Serialization") return false;
+        return SymbolEqualityComparer.Default.Equals(marker,
+            marker.ContainingAssembly.GetTypeByMetadataName("Atelia.DurableGraph.Serialization." + marker.MetadataName));
     }
 
     private static INamedTypeSymbol? GetBclListType(Compilation compilation) {
@@ -94,7 +105,7 @@ public sealed partial class DurableGraphGenerator {
 
     private static bool TryGetTypePattern(ITypeSymbol type, INamedTypeSymbol owner, INamedTypeSymbol? halfType, INamedTypeSymbol? listType, INamedTypeSymbol? dictionaryType, Compilation compilation, out TypePattern? pattern) {
         pattern = null;
-        if (GetDurableLeafId(type) is string leafId) { pattern = TypePattern.Named(leafId); return true; }
+        if (GetRegisteredObjectId(type) is string registeredId) { pattern = TypePattern.Named(registeredId); return true; }
         if (TryGetTypeTag(type, halfType, out _, out int builtin, out _)) {
             pattern = TypePattern.Builtin(builtin); return true;
         }
@@ -182,7 +193,7 @@ public sealed partial class DurableGraphGenerator {
     private static bool UsesFamilyTemplates(List<DurableTypeAnalysis> types, List<SchemaTemplate> history) {
         // The family projection resolves the exact CLR object through the registered binding.
         foreach (DurableTypeAnalysis type in types) if (type.IsEnum || type.Symbol.IsRecord ||
-            type.Fields.Exists(field => GetDurableLeafId(field.Symbol.Type) is not null) || UsesFamilyTemplate(CurrentShape(type))) return true;
+            type.Fields.Exists(field => GetRegisteredObjectId(field.Symbol.Type) is not null) || UsesFamilyTemplate(CurrentShape(type))) return true;
         if (types.Count > 0) foreach (SchemaTemplate shape in history) {
             if (shape.Kind == 2 && !types.Exists(type => type.SchemaId == shape.SchemaId)) return true;
         }

@@ -20,6 +20,7 @@ internal sealed class SchemaCatalogView {
     private readonly Dictionary<ObjectId, DurableSchema> _schemaMemo = [];
     private readonly Dictionary<DurableSchema, int> _schemaHeights = [];
     private readonly Dictionary<ObjectId, DurableFieldInfo> _fieldMemo = [];
+    private readonly Dictionary<(int Position, DeclaredSlotShape Shape), ObjectId> _declaredSlotIds = [];
     private readonly Dictionary<ObjectId, TypeExpr> _typeMemo = [];
     private readonly Dictionary<ObjectId, int> _typeHeights = [];
     private readonly HashSet<ObjectId> _active = [];
@@ -44,7 +45,7 @@ internal sealed class SchemaCatalogView {
         foreach (ObjectId id in DescriptorIds) {
             DescriptorDto node = Require(id, typeof(LayoutDescriptorRecord)).GetState<DescriptorDto>();
             ObjectLayout? layout;
-            if (node.Segment0Field1 is 1 or 3) {
+            if (node.Segment0Field1 is 1 or 3 or 6) {
                 DurableSchema schema = Schema(id, 1);
                 SchemaKey key = new(schema.Type, schema.Version);
                 if (!_schemas.TryAdd(key, schema)) { throw new InvalidDataException("Duplicate exact Schema key."); }
@@ -112,6 +113,8 @@ internal sealed class SchemaCatalogView {
         : throw new InvalidDataException("This meta ObjectId is not a declared object descriptor.");
     internal ObjectId SchemaNodeId(DurableSchema schema) => _schemaIds.TryGetValue(new(schema.Type, schema.Version), out ObjectId id) &&
         _schemas[new(schema.Type, schema.Version)].Equals(schema) ? id : throw new InvalidDataException("Missing complete declared Schema.");
+    internal bool TryGetDeclaredSlotId(int position, DeclaredSlotShape shape, out ObjectId id) =>
+        _declaredSlotIds.TryGetValue((position, shape), out id);
 
     internal static SchemaCatalogView Load(GraphRecordStore store, FrameAddress graph) {
         DecodedGraphRows decoded = StoredGraphDecoder.ReadMeta(store, graph);
@@ -154,19 +157,24 @@ internal sealed class SchemaCatalogView {
         Enter(id);
         try {
             DescriptorDto dto = Require(id, typeof(LayoutDescriptorRecord)).GetState<DescriptorDto>();
-            if (dto.Segment0Field1 is not (1 or 3) || !dto.Segment0Field5.IsNull || dto.Segment0Field6 != 0 ||
-                dto.Segment0Field1 == 3 && !dto.Segment0Field7.IsNull) { throw new InvalidDataException("Wrong exact Schema variant."); }
+            if (dto.Segment0Field1 is not (1 or 3 or 6) || !dto.Segment0Field5.IsNull || dto.Segment0Field6 != 0 ||
+                dto.Segment0Field1 != 1 && !dto.Segment0Field7.IsNull) { throw new InvalidDataException("Wrong exact Schema variant."); }
             TypeExpr type = Expression(dto.Segment0Field2, 1);
             ObjectId[] fields = Require(dto.Segment0Field4, typeof(List<LayoutSlotRecord>)).GetListState<ObjectId>().Elements.ToArray();
-            DurableFieldInfo[] values = fields.Select(field => Field(field, depth, 1)).ToArray();
-            DurableSchema? ancestor = dto.Segment0Field7.IsNull ? null : Schema(dto.Segment0Field7, depth + 1);
-            if (ancestor is not null && ancestor.Kind != SchemaKind.ReferenceObject) { throw new InvalidDataException("A base dependency must be a reference Schema."); }
-            SchemaKind kind = dto.Segment0Field1 == 1 ? SchemaKind.ReferenceObject : SchemaKind.InlineValue;
-            DurableSchema schema = Factory(() => new DurableSchema(type, dto.Segment0Field3, values, ancestor, kind));
+            DurableSchema schema;
+            if (dto.Segment0Field1 == 6) {
+                DeclaredSlotShape[] slots = fields.Select((field, i) => DeclaredSlot(field, i + 1)).ToArray();
+                schema = Factory(() => DurableSchema.ForDeclaredNode(type, dto.Segment0Field3, slots));
+            } else {
+                DurableFieldInfo[] values = fields.Select(field => Field(field, depth, 1)).ToArray();
+                DurableSchema? ancestor = dto.Segment0Field7.IsNull ? null : Schema(dto.Segment0Field7, depth + 1);
+                SchemaKind kind = dto.Segment0Field1 == 1 ? SchemaKind.ReferenceObject : SchemaKind.InlineValue;
+                schema = Factory(() => new DurableSchema(type, dto.Segment0Field3, values, ancestor, kind));
+            }
             Factory(() => { SchemaCatalogWorkspace.Validate(schema); return schema; });
             int height = 1;
-            if (ancestor is not null) { height = Math.Max(height, 1 + _schemaHeights[ancestor]); }
-            foreach (DurableFieldInfo field in values) {
+            if (schema.BaseSchema is { } parent) { height = Math.Max(height, 1 + _schemaHeights[parent]); }
+            foreach (DurableFieldInfo field in schema.Fields) {
                 if (field.ValueSchema is { } inline) { height = Math.Max(height, 1 + _schemaHeights[inline]); }
             }
             if (height > SchemaCatalogSemantics.MaximumExactDepth) { throw new InvalidDataException("Exact Schema dependencies exceed depth 256."); }
@@ -174,6 +182,24 @@ internal sealed class SchemaCatalogView {
             _schemaHeights.TryAdd(schema, height);
             return schema;
         } finally { _active.Remove(id); }
+    }
+
+    private DeclaredSlotShape DeclaredSlot(ObjectId id, int position) {
+        FieldDto dto = Require(id, typeof(LayoutSlotRecord)).GetState<FieldDto>();
+        if (dto.Segment0Field1 != position || !dto.Segment0Field4.IsNull || !dto.Segment0Field5.IsNull) {
+            throw new InvalidDataException("A declared slot requires its one-based position and cannot have an inline or nullable child.");
+        }
+        DeclaredSlotKind kind = (DeclaredSlotKind)dto.Segment0Field2;
+        TypeExpr? operand = dto.Segment0Field3.IsNull ? null : Expression(dto.Segment0Field3, 1);
+        DeclaredSlotShape slot = Factory(() => kind switch {
+            DeclaredSlotKind.Int32 when operand is null => new DeclaredSlotShape(kind),
+            DeclaredSlotKind.Reference or DeclaredSlotKind.References when operand is not null => new DeclaredSlotShape(kind, operand),
+            DeclaredSlotKind.Private when operand is { Kind: TypeExprKind.Named, Arguments.IsEmpty: true } =>
+                new DeclaredSlotShape(kind, null, operand.DefinitionId),
+            _ => throw new InvalidDataException("Wrong declared slot kind or operand."),
+        });
+        _declaredSlotIds.TryAdd((position, slot), id);
+        return slot;
     }
 
     private DurableFieldInfo Field(ObjectId id, int schemaDepth, int fieldDepth) {

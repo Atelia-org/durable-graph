@@ -9,7 +9,7 @@ internal sealed partial class SchemaCatalogRecord : IDurableObject {
 
 [DurableType("P0D", 1)]
 internal sealed partial class LayoutDescriptorRecord : IDurableObject {
-    [DurableField(1)] internal byte Kind = 0; // 1: reference Schema; 2: List; 3: inline Schema; 4: Array; 5: Dictionary.
+    [DurableField(1)] internal byte Kind = 0; // 1: reference Schema; 2: List; 3: inline Schema; 4: Array; 5: Dictionary; 6: declared node.
     [DurableField(2)] internal TypeExprRecord? Type = null;
     [DurableField(3)] internal int Version = 0;
     [DurableField(4)] internal List<LayoutSlotRecord>? Fields = null;
@@ -20,6 +20,8 @@ internal sealed partial class LayoutDescriptorRecord : IDurableObject {
 
 [DurableType("P0F", 1)]
 internal sealed partial class LayoutSlotRecord : IDurableObject {
+    // For Kind 6, Id is the one-based position and Tag is DeclaredSlotKind. TargetType holds the
+    // reference constraint or the private format's argument-free name. Inline and NullableChild are absent.
     [DurableField(1)] internal int Id = 0;
     [DurableField(2)] internal byte Tag = 0;
     [DurableField(3)] internal TypeExprRecord? TargetType = null;

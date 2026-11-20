@@ -45,6 +45,9 @@ internal static class SchemaCatalogSemantics {
         foreach (DurableSchema schema in schemas) {
             declarations.ValidateDeclaration(schema.Type, schema.Kind);
             foreach (DurableFieldInfo field in schema.Fields) { declarations.ValidateSlot(field); }
+            foreach (DeclaredSlotShape slot in schema.DeclaredSlots) {
+                if (slot.Target is { } target) { declarations.ValidateDeclaration(target, SchemaKind.ReferenceObject); }
+            }
         }
         foreach (ObjectLayout layout in layouts) {
             if (layout.List is { } list) { declarations.ValidateSlot(list.ElementSlot); }

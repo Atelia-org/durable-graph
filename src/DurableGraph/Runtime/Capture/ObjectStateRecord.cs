@@ -18,13 +18,13 @@ public sealed class ObjectStateRecord {
         Preparation = preparation;
     }
 
-    // Registered leaves already own a validated, immutable nominal layout at the binding/reader.
-    internal ObjectStateRecord(ObjectId id, ObjectLayout leafLayout, object frozen, LeafObjectBinding? leaf = null) {
-        if (leafLayout.Kind != ObjectStateKind.Durable) { throw new ArgumentException("Expected a nominal leaf layout.", nameof(leafLayout)); }
+    // Registered nominal objects share the immutable layout owned by their binding or reader.
+    internal ObjectStateRecord(ObjectId id, ObjectLayout layout, object frozen, RegisteredObjectBinding? binding = null) {
+        if (layout.Kind != ObjectStateKind.Durable) { throw new ArgumentException("Expected a nominal object layout.", nameof(layout)); }
         Id = id;
-        Layout = leafLayout;
+        Layout = layout;
         _content = frozen;
-        Preparation = leaf;
+        Preparation = binding;
     }
 
     internal ObjectStateRecord(ObjectId id, string content) {

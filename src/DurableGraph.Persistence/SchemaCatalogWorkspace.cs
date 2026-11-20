@@ -120,6 +120,7 @@ internal sealed class SchemaCatalogWorkspace {
         private readonly Dictionary<DurableSchema, ObjectId> _schemaIds = [];
         private readonly Dictionary<TypeExpr, ObjectId> _typeIds = [];
         private readonly Dictionary<DurableFieldInfo, ObjectId> _fieldIds = [];
+        private readonly Dictionary<(int Position, DeclaredSlotShape Shape), ObjectId> _declaredSlotIds = [];
         private readonly Dictionary<ObjectLayout, ObjectId> _containers = [];
         private ulong _next;
         private readonly ObjectId _root, _list;
@@ -145,12 +146,14 @@ internal sealed class SchemaCatalogWorkspace {
             if (_schemaIds.TryGetValue(schema, out ObjectId known)) { return known; }
             ObjectId ancestor = schema.BaseSchema is { } parent ? AddSchema(parent) : default;
             ObjectId type = Type(schema.Type);
-            ObjectId[] fields = schema.Fields.Select(Field).ToArray();
+            ObjectId[] fields = schema.IsDeclaredNode
+                ? schema.DeclaredSlots.Select((slot, i) => DeclaredSlot(i + 1, slot)).ToArray()
+                : schema.Fields.Select(Field).ToArray();
             ObjectId list = Allocate();
             Add(new(list, List(typeof(List<LayoutSlotRecord>)), new FrozenListState<ObjectId>(fields)));
             ObjectId id = Allocate();
             Add(new(id, Schema(typeof(LayoutDescriptorRecord)), new DescriptorDto(
-                schema.Kind == SchemaKind.ReferenceObject ? (byte)1 : (byte)3,
+                schema.IsDeclaredNode ? (byte)6 : schema.Kind == SchemaKind.ReferenceObject ? (byte)1 : (byte)3,
                 type, schema.Version, list, default, 0, ancestor)));
             _schemaIds.Add(schema, id);
             Declare(id);
@@ -212,6 +215,17 @@ internal sealed class SchemaCatalogWorkspace {
             ObjectId id = Allocate();
             Add(new(id, Schema(typeof(LayoutSlotRecord)), new FieldDto(field.FieldId, (byte)field.TypeTag, target, inline, nullable)));
             _fieldIds.Add(field, id);
+            return id;
+        }
+
+        private ObjectId DeclaredSlot(int position, DeclaredSlotShape slot) {
+            if (_declaredSlotIds.TryGetValue((position, slot), out ObjectId known) ||
+                _source is not null && _source.TryGetDeclaredSlotId(position, slot, out known)) { return known; }
+            TypeExpr? operand = slot.Kind == DeclaredSlotKind.Private ? TypeExpr.Named(slot.FormatId!) : slot.Target;
+            ObjectId target = operand is null ? default : Type(operand);
+            ObjectId id = Allocate();
+            Add(new(id, Schema(typeof(LayoutSlotRecord)), new FieldDto(position, (byte)slot.Kind, target, default, default)));
+            _declaredSlotIds.Add((position, slot), id);
             return id;
         }
 

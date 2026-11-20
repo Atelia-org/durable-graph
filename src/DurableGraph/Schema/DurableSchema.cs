@@ -41,10 +41,23 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
     }
 
     public DurableSchema(TypeExpr type, int version, DurableFieldInfo[] fields,
-        DurableSchema? baseSchema, SchemaKind kind = SchemaKind.ReferenceObject) {
+        DurableSchema? baseSchema, SchemaKind kind = SchemaKind.ReferenceObject)
+        : this(type, version, fields, baseSchema, kind, slots: null) {
+    }
+
+    internal static DurableSchema ForDeclaredNode(TypeExpr type, int version, IEnumerable<DeclaredSlotShape> slots) {
+        ArgumentNullException.ThrowIfNull(slots);
+        return new(type, version, [], null, SchemaKind.ReferenceObject, slots);
+    }
+
+    private DurableSchema(TypeExpr type, int version, DurableFieldInfo[] fields,
+        DurableSchema? baseSchema, SchemaKind kind, IEnumerable<DeclaredSlotShape>? slots) {
         ArgumentNullException.ThrowIfNull(type);
         if (type.Kind != TypeExprKind.Named || !type.IsClosed) {
             throw new ArgumentException("An exact Schema requires a closed named type.", nameof(type));
+        }
+        if (slots is not null && !type.Arguments.IsEmpty) {
+            throw new ArgumentException("A declared node requires a non-generic named type.", nameof(type));
         }
 
         if (version <= 0) {
@@ -61,6 +74,9 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
         if (baseSchema is not null &&
             (kind != SchemaKind.ReferenceObject || baseSchema.Kind != SchemaKind.ReferenceObject)) {
             throw new ArgumentException("Only reference object Schemas can have a reference object base.", nameof(baseSchema));
+        }
+        if (baseSchema is { IsDeclaredNode: true }) {
+            throw new ArgumentException("A declared node cannot supply an inherited field layout.", nameof(baseSchema));
         }
 
         HashSet<TypeExpr> ancestorIds = new() { type };
@@ -100,6 +116,11 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
         Kind = kind;
         Fields = ImmutableArray.CreateRange(canonicalFields);
         BaseSchema = baseSchema;
+        IsDeclaredNode = slots is not null;
+        DeclaredSlots = slots is null ? [] : [.. slots];
+        if (IsDeclaredNode && DeclaredSlots.Contains(null!)) {
+            throw new ArgumentException("A declared node slot cannot be null.", nameof(slots));
+        }
 
         // Immutable dependencies already have their hashes. Hashing a shared DAG
         // must not expand it repeatedly as a tree. This is never a persistent hash.
@@ -109,6 +130,10 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
         hashCode.Add(Kind);
         hashCode.Add(BaseSchema);
         foreach (DurableFieldInfo field in Fields) { hashCode.Add(field); }
+        if (IsDeclaredNode) {
+            hashCode.Add(IsDeclaredNode);
+            foreach (DeclaredSlotShape slot in DeclaredSlots) { hashCode.Add(slot); }
+        }
         _hashCode = hashCode.ToHashCode();
     }
 
@@ -128,9 +153,17 @@ public sealed class DurableSchema : IEquatable<DurableSchema> {
     /// <summary>Gets the exact base schema, including its immutable ancestor chain.</summary>
     public DurableSchema? BaseSchema { get; }
 
+    internal bool IsDeclaredNode { get; }
+    internal ImmutableArray<DeclaredSlotShape> DeclaredSlots { get; }
+
     public bool Equals(DurableSchema? other) {
         if (ReferenceEquals(this, other)) { return true; }
         if (other is null) { return false; }
+        // Declared nodes are fieldless reference objects and cannot occur as base or inline Schemas.
+        if (IsDeclaredNode || other.IsDeclaredNode) {
+            return IsDeclaredNode == other.IsDeclaredNode && Version == other.Version && Type == other.Type &&
+                DeclaredSlots.AsSpan().SequenceEqual(other.DeclaredSlots.AsSpan());
+        }
         // A fieldless root has no dependency graph to traverse.
         if (BaseSchema is null && other.BaseSchema is null && Fields.IsEmpty && other.Fields.IsEmpty) {
             return Version == other.Version && Kind == other.Kind && Type == other.Type;
