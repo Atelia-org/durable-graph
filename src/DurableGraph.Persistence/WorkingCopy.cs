@@ -12,6 +12,8 @@ namespace Atelia.DurableGraph;
 /// business handlers; the application interprets its own processing progress. At most one checkout per branch
 /// may be active; different branches may have live checkouts together, with serial repository operations.
 /// Dispose explicitly to release the branch. Losing this object does not automatically release occupancy.
+/// After disposal, BranchId, BaseCommitId and StateSourceCommitId remain available as history positions.
+/// Reading State, StateId or IsFaulted then throws ObjectDisposedException.
 /// The execution environment stays fixed from creation or restoration, with models closed on demand.
 /// An existing State selects its own exact Schema view. State commits advance the persisted view and saving
 /// baseline without replacing that execution environment; normal editing needs no checkout refresh.
@@ -21,15 +23,15 @@ namespace Atelia.DurableGraph;
 /// Every commit accepts definitions into the repository's shared Schema catalog.
 /// </remarks>
 public sealed class WorkingCopy : IDisposable {
-    private readonly Repository _repository;
-    private readonly BranchSaveSession _saveSession;
-    internal BranchSaveSession SaveSession => _saveSession;
+    private Repository? _repository;
+    private BranchSaveSession? _saveSession;
+    private Repository Owner => _repository ?? throw new ObjectDisposedException(nameof(WorkingCopy));
+    internal BranchSaveSession SaveSession => _saveSession ?? throw new ObjectDisposedException(nameof(WorkingCopy));
     internal DecodedRevision.SchemaViewBindingEnvironment? BindingEnvironment => SaveSession.BindingEnvironment;
     internal ModelExecutionEnvironment Models => SaveSession.Models;
     internal NormalizedGraphState? Baseline => SaveSession.Baseline;
     internal SchemaCatalogView? AcceptedCatalog => SaveSession.AcceptedCatalog;
-    private bool _disposed;
-    internal bool IsLiveFor(Repository repository) => !_disposed && ReferenceEquals(_repository, repository);
+    internal bool IsLiveFor(Repository repository) => ReferenceEquals(_repository, repository);
 
     internal WorkingCopy(Repository repository, BranchId branchId, BranchSaveSession session, CommitId head, CommitId? stateSource) {
         _repository = repository;
@@ -43,11 +45,11 @@ public sealed class WorkingCopy : IDisposable {
     public BranchId BranchId { get; }
     /// <summary>The current editable State root, or null before the history's first State.</summary>
     /// <remarks>Successful replacement installs the supplied instance; previously obtained CLR references do not follow it.</remarks>
-    public IDurableObject? State => _saveSession.State;
+    public IDurableObject? State => SaveSession.State;
     /// <summary>The committed State root identity, or null before the first State.</summary>
-    public ObjectId? StateId => State is null ? null : _saveSession.RootId;
+    public ObjectId? StateId => State is null ? null : SaveSession.RootId;
     /// <summary>The committed State baseline address, or null before the first State.</summary>
-    internal FrameAddress? StateRevisionAddress => _saveSession.StateSource?.Address;
+    internal FrameAddress? StateRevisionAddress => SaveSession.StateSource?.Address;
     /// <summary>The current saved history position, advanced by successful State and Event commits.</summary>
     /// <remarks>May belong to an ancestor branch until the first local commit; BranchId still identifies the write target.</remarks>
     public CommitId BaseCommitId { get; internal set; }
@@ -59,7 +61,7 @@ public sealed class WorkingCopy : IDisposable {
     /// Independent of RepositoryPublicationException.Outcome: NotPublished can still be faulted. A healthy repository
     /// does not imply that application mutations were rolled back.
     /// </remarks>
-    public bool IsFaulted => _repository.IsFaulted;
+    public bool IsFaulted => Owner.IsFaulted;
 
     /// <summary>Publishes an Event after BaseCommitId without advancing the State baseline.</summary>
     /// <param name="domainEvent">The nonnull registered Event root; keep its reachable content stable during capture.</param>
@@ -73,9 +75,9 @@ public sealed class WorkingCopy : IDisposable {
     /// Domain mutations are never automatically rolled back.
     /// </remarks>
     public CommitInfo CommitEvent(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        Repository owner = Owner;
         ArgumentNullException.ThrowIfNull(domainEvent);
-        return _repository.Commit(this, domainEvent, null, summary, null);
+        return owner.Commit(this, domainEvent, null, summary, null);
     }
 
     /// <summary>Publishes the current State and installs its new saving baseline.</summary>
@@ -86,9 +88,8 @@ public sealed class WorkingCopy : IDisposable {
     /// The new persisted Schema view does not replace this checkout's original execution environment.
     /// </remarks>
     public CommitInfo CommitState(ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         IDurableObject state = State ?? throw new InvalidOperationException("There is no State to commit; supply the first State explicitly.");
-        return _repository.Commit(this, null, state, summary, parameters);
+        return Owner.Commit(this, null, state, summary, parameters);
     }
 
     /// <summary>Publishes and installs the supplied State root, including a different actual domain type.</summary>
@@ -103,48 +104,47 @@ public sealed class WorkingCopy : IDisposable {
     /// independently of RepositoryPublicationException.Outcome and reopen a faulted repository to inspect its history.
     /// </remarks>
     public CommitInfo CommitState(IDurableObject nextState, ReadOnlyMemory<byte> summary = default, ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        Repository owner = Owner;
         ArgumentNullException.ThrowIfNull(nextState);
-        return _repository.Commit(this, null, nextState, summary, parameters);
+        return owner.Commit(this, null, nextState, summary, parameters);
     }
 
     /// <summary>Creates a deferred request for the current State; it does not capture or publish.</summary>
     public CommitRequest CreateStateCommitRequest(ReadOnlyMemory<byte> summary = default,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         IDurableObject state = State ?? throw new InvalidOperationException("There is no State to commit; supply the first State explicitly.");
-        return _repository.CreateCommitRequest(this, state, StoredGraphKind.State, summary, parameters);
+        return Owner.CreateCommitRequest(this, state, StoredGraphKind.State, summary, parameters);
     }
 
     /// <summary>Creates a deferred request retaining the supplied State reference and copying its summary.</summary>
     /// <remarks>The graph is captured at CommitBranches execution; success installs the supplied instance.</remarks>
     public CommitRequest CreateStateCommitRequest(IDurableObject nextState, ReadOnlyMemory<byte> summary = default,
         ReadAmplificationBaseBudgetParameters? parameters = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        Repository owner = Owner;
         ArgumentNullException.ThrowIfNull(nextState);
-        return _repository.CreateCommitRequest(this, nextState, StoredGraphKind.State, summary, parameters);
+        return owner.CreateCommitRequest(this, nextState, StoredGraphKind.State, summary, parameters);
     }
 
     /// <summary>Creates a deferred Event request; execution captures an independent complete graph without saving State.</summary>
     /// <remarks>Success advances BaseCommitId while retaining the State saving baseline.</remarks>
     public CommitRequest CreateEventCommitRequest(IDurableObject domainEvent, ReadOnlyMemory<byte> summary = default) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        Repository owner = Owner;
         ArgumentNullException.ThrowIfNull(domainEvent);
-        return _repository.CreateCommitRequest(this, domainEvent, StoredGraphKind.Event, summary, null);
+        return owner.CreateCommitRequest(this, domainEvent, StoredGraphKind.Event, summary, null);
     }
 
     // A bounded discard witness; the RepositoryResources pending never escapes the repository operation.
     internal void PrepareAndDiscard(IDurableObject root, StoredGraphKind kind = StoredGraphKind.State,
         ReadAmplificationBaseBudgetParameters? parameters = null, IEnumerable<DurableSchema>? declarations = null) {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _repository.PrepareAndDiscardSave(this, root, kind, parameters, declarations);
+        Owner.PrepareAndDiscardSave(this, root, kind, parameters, declarations);
     }
 
-    /// <summary>Releases this branch's editing occupancy without saving changes or removing the durable branch.</summary>
-    /// <remarks>Idempotent. Reentrant disposal during a repository operation is rejected without releasing occupancy.</remarks>
+    /// <summary>Releases this branch's editing occupancy, domain graph and saving baseline.</summary>
+    /// <remarks>Idempotent. Previously obtained domain instances remain usable. Reentrant disposal during a repository operation is rejected.</remarks>
     public void Dispose() {
-        if (_disposed) { return; }
+        if (_repository is null) { return; }
         _repository.Release(this);
-        _disposed = true;
+        _saveSession = null;
+        _repository = null;
     }
 }

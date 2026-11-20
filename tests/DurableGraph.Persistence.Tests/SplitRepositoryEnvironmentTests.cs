@@ -1,5 +1,6 @@
 using static Atelia.DurableGraph.Persistence.Tests.DB096TestAccess;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -212,11 +213,21 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         using (Repository repository = Repository.OpenStorageExisting(_path, Models(new()))) {
             WorkingCopy old = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
             Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
+            DB087Widget detached = AssertWidget(old.State, 0);
+            CommitRequest oldRequest = old.CreateStateCommitRequest();
+            CommitId stateCommit = old.StateSourceCommitId!.Value;
             old.Dispose();
-            using WorkingCopy successor = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+            Assert.Throws<ObjectDisposedException>(() => old.State);
+            Assert.Throws<ObjectDisposedException>(() => old.StateId);
+            Assert.Throws<ObjectDisposedException>(() => old.IsFaulted);
+            Assert.Equal(stateCommit, old.StateSourceCommitId);
+            Assert.Equal(oldRequest.ExpectedBaseCommitId, old.BaseCommitId);
+            detached.Numbers[7] = 12;
+            using WorkingCopy successor = repository.OpenWorkingCopy(old.BranchId);
             old.Dispose();
             Assert.Throws<InvalidOperationException>(() => repository.OpenWorkingCopy(BranchNamed(repository, "main")));
             Assert.Throws<ObjectDisposedException>(() => old.CommitState());
+            Assert.Throws<InvalidOperationException>(() => repository.CommitBranches([oldRequest]));
             DB087Widget root = AssertWidget(successor.State, 0);
             root.Numbers[7] = 2;
             stale = successor.CommitState().Id;
@@ -227,6 +238,26 @@ public sealed class SplitRepositoryEnvironmentTests : IDisposable {
         using Repository reopened = Repository.OpenStorageExisting(_path, Models(new()));
         AssertWidget(reopened.LoadState(stale), 2);
         AssertWidget(reopened.LoadState(reopened.ReadCurrentCommit(BranchNamed(reopened, "main")).Commit.Id), 2);
+    }
+
+    [Fact]
+    public void RetainedClosedWorkingCopyReleasesItsSessionRootAndRepository() {
+        Seed();
+        var (handle, session, root, owner) = OpenAndRelease(_path);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.False(session.IsAlive);
+        Assert.False(root.IsAlive);
+        Assert.False(owner.IsAlive);
+        GC.KeepAlive(handle);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WorkingCopy, WeakReference, WeakReference, WeakReference) OpenAndRelease(string path) {
+        using Repository repository = Repository.OpenStorageExisting(path, Models(new()));
+        using WorkingCopy work = repository.OpenWorkingCopy(BranchNamed(repository, "main"));
+        return (work, new(work.SaveSession), new(work.State), new(repository));
     }
 
     [Fact]

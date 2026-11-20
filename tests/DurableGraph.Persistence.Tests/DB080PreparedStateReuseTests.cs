@@ -352,6 +352,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
         using WorkingCopy main = repository.OpenWorkingCopy(repository.CreateRootBranchFromEvent("main", mainInitial).Id);
         main.CommitState(mainInitial, parameters: NoRebase);
         using WorkingCopy warm = repository.OpenWorkingCopy(repository.ForkBranch(main.BaseCommitId, "warm").Id);
+        Node deliveredRoot = Assert.IsType<Node>(warm.State);
         var previous = repository.PreparedStateEntry;
         Assert.NotNull(previous);
         CommitId newer = main.CommitState(new Node { Value = 2 }, parameters: NoRebase).Id;
@@ -389,7 +390,7 @@ public sealed class DB080PreparedStateReuseTests : IDisposable {
             AssertCold(stats);
             Assert.NotSame(previous, repository.PreparedStateEntry);
         }
-        Assert.Equal((byte)1, Assert.IsType<Node>(warm.State).Value);
+        Assert.Equal((byte)1, deliveredRoot.Value);
     }
 
     [Fact]
