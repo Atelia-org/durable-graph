@@ -9,7 +9,7 @@ DB-097 已将当前消费者源码迁移到独立 Event 与 `P0R4`：Event 自�
 
 | 入口 | 验证的问题 |
 |---|---|
-| [Run-TextEditorProbe](Run-TextEditorProbe.ps1)、[TextEditorConsumer](TextEditorConsumer/README.md) | 登记的 TextEditor 在普通包中的文本编辑、别名、Schema history 及三进程保存与冷开续写，另有[未注册文本的 reader 正反例](Run-TextEditorReaderAdmission.ps1) |
+| [Run-TextEditorProbe](Run-TextEditorProbe.ps1)、[TextEditorConsumer](TextEditorConsumer/README.md) | 普通包中的编辑器、别名、Schema history、三进程保存与冷开续写，以及独立 Agent 的[工具调用回放](TextEditorConsumer/README.md#agent-工具试用)。另有[未注册文本的 reader 正反例](Run-TextEditorReaderAdmission.ps1) |
 | [Run-GraphHeapProbe](Run-GraphHeapProbe.ps1)、[GraphHeapConsumer](GraphHeapConsumer/README.md) | DB-100公开GraphRef/GraphBuilder、生成世界目录、三进程冷续写、目录限定搜索与包内SG/Build；按明确G/S与源码SHA验收 |
 | [Run-EventReferenceProbe](Run-EventReferenceProbe.ps1)、[EventReferenceConsumer](EventReferenceConsumer/README.md) | DB-099 普通公开 inline 引用的跨程序集登记、包内 Generator/Build、两进程冷开、准确位置及 fork；消费明确 G/源码 SHA，不自行打包 |
 | [Run-Probe](Run-Probe.ps1)、[Consumer](Consumer/Consumer.csproj) | 单 runtime 包的生成、Schema/history、DTO/body 与 Capture |

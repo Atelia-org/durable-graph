@@ -1,6 +1,6 @@
 # DB-103 · DurableText 同步全文访问与搜索用例
 
-DB-103 的同步访问、快照查找和条件编辑合同已迁入独立包 `Atelia.Text`。以下基础 API 可用于内存草稿和登记为图字段的同一个编辑器。性能表与普通包回执记录的是迁移前的 `DurableText` 版本。[现行接入](../../text/README.md) · [持久化与历史源码](../0104-text-editor/README.md#native-text-sources)
+DB-103 的同步访问、快照查找和条件编辑合同已迁入独立包 `Atelia.Text`。主线现已提供单篇字面与正则搜索、字面唯一替换，以及宿主寻址的两个 Agent 工具。下文基础 API 的性能表记录迁移前的 `DurableText`。新工具的试用和普通包验收见[第二个“北门”](tool-trial.md)。[现行接入](../../text/README.md) · [持久化与历史源码](../0104-text-editor/README.md#native-text-sources)
 
 `TextEditor.VisitSpan<TContext, TResult>` 为同步访问固定进入时的一篇正文，由调用方选择字面查找、正则枚举或其他 span 运算。空正文和单片直接访问，多片正文首次访问后由编辑器缓存连续字符串，供同一内容版本的后续访问复用。[公开实现](../../../src/Text/TextEditor.cs) · [回归测试](../../../tests/Text.Tests/TextEditorVisitSpanTests.cs)
 
@@ -47,21 +47,17 @@ string? first = text.VisitSpan(regex, static (span, query) => {
 
 通用文本库与工具的分工见 [DB-104](../0104-text-editor/README.md)。以下搜索行为仍用作单篇编辑器和下游 memo 的验收场景。
 
-LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1` 的条目、字段、行号和邻近原文。memo 先按当前世界和角色选出条目，再分别查询 `FullText`、`Summary`、`Gist`。当回合改成南门可以立即查到南门，切换旧世界后则由 memo 传入旧正文。条目身份、跨条目预算及最终展示归消费方。[原始下游提案](memo-proposal.md)
+LLM 用 memo 工具检索自己可见的记忆，需要看到类似 `rg -n -C 1` 的条目、字段、行号和邻近原文。memo 先按当前世界和角色选出条目，再分别查询 `FullText`、`Summary`、`Gist`。当回合改成南门可以立即查到南门，切换旧世界后则由 memo 传入旧正文。宿主拥有条目身份和可见性，文本工具统一控制跨条目的回执预算。[原始下游提案](memo-proposal.md)
 
-设想中的 `Search(string pattern, …)`、`Search(Regex pattern, …)` 及摘录结果说明消费方需要完成的工作。单篇搜索、替换与下游工具展示的分工留待后续实验决定。
+字面 Ordinal 和复用同一个 .NET 正则都能直接消费 `VisitSpan` 的输入。跨片命中在同一版计算 UTF-16 偏移、行号和原文摘录。搜索按匹配引擎的顺序选择候选，多看一项即可确定还有命中。所选项按正文顺序展示。相邻命中各有自己的窗口和截断标志，便于按准确位置取用原文。[现行 API 和返回预算](../../text/README.md#搜索与唯一替换)
 
-- 跨片字面或正则命中仍按原文 UTF-16 偏移定位。需要摘录时在同一版计算行号和范围，并带走自有文本。字面 Ordinal 和复用同一个 .NET 正则都能直接消费 `VisitSpan` 的输入。
-- 满足命中数目标就停止枚举。多个命中邻近时合并展示区间，同时保留各命中的绝对位置。正则的选择顺序与最终展示顺序可以不同，例如从右端选两项，再按行号展示。
-- 极长单行可能只命中一次。曾讨论给展示摘录增加默认长度上限、围绕命中裁切以及用 ASCII `...` 标出省略处。默认值、超长匹配、重叠窗口和展示坐标归属留给搜索层决定，基础访问仍提供完整原文。
-
-2026-11-19 首版方案在 Git `00638810` 中保留了完整行摘录的候选签名、CRLF 与 EOF 零宽示例及验证范围。便捷搜索层的归属及真实查询轨迹仍待确定。[后续路线](../../DurableGraph-research-roadmap.md)
+2026-11-19 首版方案在 Git `00638810` 中保留了完整行摘录的候选签名、CRLF 与 EOF 零宽示例及验证范围。
 
 ## memo 编辑工具与批量替换预览
 
-- 后续一起研究 `Search(string pattern, …)`、`Search(Regex pattern, …)` 和 `ReplaceUnique(string oldStr, string newStr)`。查询返回带行号的有界摘录。唯一替换在指定条目和字段的当前正文中按 Ordinal 查找非空旧串，恰有一个匹配起点才写入；空新串表示删除。`aaa` 中的 `aa` 有两个起点。工具分别回报成功、未找到或有多个候选。
+- 已实现 `Search(string pattern, …)`、`Search(Regex pattern, …)` 和字面 `ReplaceUnique`。查询返回带行号的有界摘录。唯一替换在指定条目和字段的当前正文中按 Ordinal 查找非空旧串，恰有一个匹配起点才写入。空新串表示删除。`aaa` 中的 `aa` 有两个起点。歧义回执的字符预算用于候选紧邻的前后文，长旧串也能用足这份预算。
 - 同一目标的多次唯一替换按工具调用声明顺序独立执行，每笔读取前一笔完成后的正文并产生自己的回执。某笔未写入时，后续调用继续按当前正文判断。相同起始状态和调用序列在没有其他写入时，与拆成多个模型回合执行得到相同结果。
-- `ReplaceAll(string/Regex, …)` 的预览另行研究。先用真实 tool-loop 比较怎样展示候选、选择部分命中以及跨回合确认。确认时提交预览所依据快照上的那批范围，过期则重新预览。工具归属、预览交互和正则替换表达式留待该阶段确定。
+- 正则唯一替换与 `ReplaceAll(string/Regex, …)` 的预览另行研究。下轮需要比较的问题已从[此次试用](tool-trial.md)提取到[后续路线](../../DurableGraph-research-roadmap.md#文本替换的下一轮实验)。
 
 ## 证据与适用范围
 

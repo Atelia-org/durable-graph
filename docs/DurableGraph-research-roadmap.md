@@ -24,7 +24,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 |---|---|
 | 容器 payload 准备与对象重整 | [DB-102 实测](design-branches/0102-container-payload-planning/mainline-results.md)后的重访条件：若真实负载仍受整表键扫描或可并行的 State 准备主导，再评估减少扫描或并行 Prepare。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
 | 含图引用的自定义对象 | [DB-104 自包含叶](design-branches/0104-text-editor/README.md) 使用显式登记的 codec。含出边的自定义容器等出现具体消费者后，用准确引用枚举、共享别名和循环回填的恢复场景另行验证。[研究入口与最小样例](design-branches/0104-text-editor/codec-followups.md) |
-| 文本搜索、替换与工具 | 编辑器抽取后研究单篇字面、正则 Search 的有界摘录、ReplaceUnique 和 ReplaceAll。宿主解析地址、限定搜索集合、逐次回执；多点预览、选择和跨回合确认用真实 tool-loop 比较。[用户故事](design-branches/0103-durable-text-search/README.md#memo-编辑工具与批量替换预览) · [常驻全文缓存与快照 KMP 的重访依据](design-branches/0103-durable-text-search/indexof-cache-comparison.md) |
+| 正则替换与批量预览 | 在[单处编辑工具试用](design-branches/0103-durable-text-search/tool-trial.md)的基础上，比较[预览、选择和确认](#文本替换的下一轮实验)。全文访问与快照 KMP 的性能重访条件见[冷热对照](design-branches/0103-durable-text-search/indexof-cache-comparison.md)。 |
 | TextEditor 的长期成本 | [DB-101](design-branches/0101-durable-text/README.md) 已接入分段 Base。真实工作负载需要大量常驻历史或随机读时再对照 Rope。深链冷开、连续正则输入或重复物化成为瓶颈时，分别考虑链长配置、分块搜索和缓存。 |
 | 独立对象图的规模成本 | [DB-100](design-branches/0100-graph-heap/README.md)采用完整图builder与公共保存日志。只有真实条目大小/访问轨迹证明全图读取或捕获不可接受时，再评估图内稀疏读取；只有存储增长提出实际回收需求时，再定义GraphRef、Schema、Delta链的保留/GC合同。索引与世界目录选择由memo消费层推进，不把全堆扫描当业务搜索。 |
 | 引用式事实的跨应用成本 | [DB-099](design-branches/0099-event-references/README.md) 已完成普通 inline EventRef 与 Agent 接入。后续仅当其他应用的表示/生命周期共同需求出现，才考虑上移缓存机制；若准确冷读、历史 Event 模型依赖或应用改造成本不能接受，可直接重访物理字符串去重候选，不以继续扩缓存为前置。引用依赖的 GC/部分导出仍未实施，未来相关工具必须保留目标/Schema/传递闭包或显式重映射；完整库备份不依赖这些未来工具。 |
@@ -65,6 +65,14 @@ DB-038 的泛型 Schema/history、开放生成、保存恢复与通用/闭合 ow
 [DB-043 可组合数组与统一引用对象路径](design-branches/0043-vector-array-object-slice/README.md) 已通过整体验收；
 完成证据集中维护在该分片，不再将数组组合列为待施工架构。
 完整表示的整数寻址不再作为新待办；其内部描述模型、协变和加载内存预算仍按各自边界推进。
+
+### 文本替换的下一轮实验
+
+[单处编辑试用](design-branches/0103-durable-text-search/tool-trial.md)中，模型凭候选的前后文准确选中了同一行的第二处。下一轮以实际有多处要改的 memo 为输入，比较下列选择。
+
+- **正则唯一替换**。用捕获组、跨行匹配和行尾零宽匹配对照两种意图：整段替换成原样文字，或按捕获组展开新串。观察模型能否从执行前的原文和拟写入文字认出误解，包括新串自身含有 `$1` 的情况。先定匹配起点与重叠规则，再决定正则替换的参数和显示。
+- **批量预览与选择**。让相关命中超过一页、两处落在同一长行、另有一处应当保留。比较一次确认全部、按候选标识选子集、带上下文的分页。用模型真正选对的范围、回执长度和调用轮数判断。一个受预算限制的首屏不能独自证明命中总数或选择范围。
+- **跨轮确认**。预览后分别切换世界、撤销字段权限、插入相同旧词。宿主重新解析目标，编辑器对预览时的快照做条件提交。观察过期回执能否引导重新预览，以及仅保存同版正文时可否继续确认。候选标识的寿命、预览的持有者和分批确认方式由这些用例决定。
 
 ## 2. 已采纳方向中的未完成能力
 

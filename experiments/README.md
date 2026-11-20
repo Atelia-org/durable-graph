@@ -8,6 +8,7 @@
 | B2 隔离新 API：真实 Repository 旧点分叉、冷恢复、来源与发布边界 | [RepositoryBranchVerticalProbe](RepositoryBranchVerticalProbe/README.md)；有限实际纵切，不替代尚未迁移的原回归或普通包资格 |
 | 实际包交付、Generator 与 history/build | [PackageConsumerProbe](PackageConsumerProbe/README.md) |
 | 自定义叶的登记、增量保存与冷恢复 | [文本与独立位图包](RegisteredLeafProbe/README.md) · [编辑器与缺少文本包的读者](PackageConsumerProbe/TextEditorConsumer/README.md) |
+| Agent 按地址搜索与唯一替换 | [旧世界、未保存的编辑和超长行的真实工具回放](PackageConsumerProbe/TextEditorConsumer/README.md#agent-工具试用) |
 | 纯 State 保存/历史分叉/冷续写与 README 原文候选接入 | [QuickStart 交付门禁](PackageConsumerProbe/README.md#对外交付与原文接入门禁) |
 | 导航ID、分叉切换与版本化摘要的应用接入 | [ApplicationRecipesConsumer](PackageConsumerProbe/ApplicationRecipesConsumer/README.md) |
 | 显式分类诊断、两条生成路线与修正后的普通包冷恢复 | [ExplicitStorageClassificationConsumer](PackageConsumerProbe/ExplicitStorageClassificationConsumer/README.md) |

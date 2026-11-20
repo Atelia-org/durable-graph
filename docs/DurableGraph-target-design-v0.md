@@ -487,6 +487,8 @@ MaxItems 限制返回条数，MaxWorkSteps 限制 HS 历史工作，不是全部
 
 可编辑正文以 `Atelia.Text.TextEditor` 进入图。类型作者登记自包含叶的名义身份、版本与 codec；框架管理图中对象身份、准确前驱和发布。同一实例在业务字段和容器中共享 ObjectId，独立恢复时由 codec 构造新实例。State 安装后由框架标记收据，叶可用它维护编辑基线。批量范围编辑以同一编辑器的内容快照为条件，纯保存保留其提交资格。持久记录表达内容及准确对象版本依赖，片表与用户快照留在文本包内。[叶对象接入合同](design-branches/0104-text-editor/README.md) · [文本用法](text/README.md)
 
+面向 Agent 的文本地址由宿主在每笔调用时按当前世界、角色和字段权限解析。工具使用解析出的活动编辑器，写入对下一笔查询立即可见。修改文本、发布 State 及写回文件分别由相应所有者控制。单处工具按声明顺序独立回执，以足以唯一定位的原文作为编辑依据。[查找与编辑合同](text/README.md#为-agent-提供工具)
+
 调用方可以在同步回调内读取进入时的一份完整 UTF-16 正文。同线程回调中的编辑对新访问立即可见，正在读取的版本持续到各自回调结束。对于长期驻留且经常查询的条目，同一编辑器反复访问同版正文应能复用已准备的连续文本。[全文访问合同](design-branches/0103-durable-text-search/README.md)
 
 Repository.CreateGraph/OpenGraph/SaveGraph 提供完整图的 builder 与准确 GraphRef。每次 Open 独立恢复可变实例，内部共享与循环保持；Open(G) 的下一次保存基线就是 G。GraphRef 是普通 inline 值，只在显式 OpenGraph 时读取目标，不把目标加入持有者的强引用闭包。

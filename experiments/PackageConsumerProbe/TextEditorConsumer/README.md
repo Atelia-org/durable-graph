@@ -13,4 +13,15 @@
 
 第二个项目仅引用 DG Runtime 与 Persistence。它可保存和冷开普通 Control 条目，随后在没有文本实现和 codec 的情况下读取第一个项目的文本图。它要求持久化层以 `InvalidDataException` 指明确实遗漏的 `Atelia.Text.TextEditor` 注册，并在前后校验数据库文件摘要。
 
+## Agent 工具试用
+
+第一个 runner 同时把[独立受试者发出的调用](text-tool-trial.jsonl)送入普通包的 `ToolSession` 并保存回执。试用宿主从同一持久 State 分叉两份工作副本，只把当前世界和当前角色可见的字段交给工具。终检会比较完整正文、读回已保存状态，并通过工具逐项核对两个世界的命中、行号、原文范围和截断标志。
+
+可用已构建的同一消费者再次执行回放，数据库路径须尚不存在。省略最后一个参数则从标准输入逐行读取同格式 JSON，开头会列出两项真实工具定义。`world` 和 `verify` 是宿主命令。
+
+~~~powershell
+$dll = Join-Path $consumer 'bin/Release/net10.0/Atelia.TextEditorConsumer.dll'
+dotnet $dll tools-trial $freshStore ./experiments/PackageConsumerProbe/TextEditorConsumer/text-tool-trial.jsonl
+~~~
+
 旧内建 `DurableText` 包和旧 reader 之间的四格互读实验保留在 Git 提交 `06c57dd4` 的 `experiments/PackageConsumerProbe/DurableTextConsumer` 及相邻 runner 中。
