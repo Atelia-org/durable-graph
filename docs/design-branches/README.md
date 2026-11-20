@@ -25,6 +25,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
+| 105 | [第三方容器如何持有图引用](0105-registered-nodes/README.md)，研究分支对照作者编码、声明引用槽与生成模型，覆盖共享、循环、历史校验和实际落盘成本 |
 | 104 | [通用 TextEditor 与 DurableGraph 的集成边界](0104-text-editor/README.md)，显式登记自包含叶、前驱与提交收据，独立文本及位图包的消费和保存成本 |
 | 103 | [全文访问与文本编辑工具](0103-durable-text-search/README.md)，VisitSpan 缓存、按快照提交范围、宿主寻址的搜索与字面唯一替换和 Agent 试用 |
 | 102 | [容器 payload 准备与对象重整策略](0102-container-payload-planning/README.md)，容器计量、补丁与目录前驱复用已采用，后续五项恢复、保存与标签性能改进已验收合入 |

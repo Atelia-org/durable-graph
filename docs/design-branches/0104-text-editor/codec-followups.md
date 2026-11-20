@@ -26,6 +26,8 @@ git show 0ad8b983:docs/design-branches/0101-durable-text/storage-policy-leaf-res
 
 ## 方向 2 · 第三方节点能否持有普通的 DG 图引用？
 
+以下样例已在独立研究分支执行。两种协议的实际对象记录、历史损坏反例和继续研究的条件见 [DB-105](../0105-registered-nodes/README.md)。
+
 现有叶可以被字段、List 和 Dictionary 引用，DG 为它保留身份。新协议要让第三方节点也能持有指向独立图对象的槽。内建 List 的 `Capture` 按槽把成员投影为冻结值，`VisitReferences` 在冻结记录上访问引用，`Allocate` 先创建实例，`Hydrate` 再从对象表填回成员。Dictionary 对键和值分别投影，还要处理键校验与 comparer。当前叶在 `Allocate` 中就完成 `Restore`，历史 reader 的 `VisitReferences` 只校验冻结记录形状。设计需要回答三个问题。捕获时谁为边的目标取得身份？读完历史 Base/Delta 后谁枚举并校验边？循环引用何时有可回填的实例？[List 绑定](../../../src/DurableGraph/Runtime/Containers/ListObjectBinding.cs) · [Dictionary 绑定](../../../src/DurableGraph/Runtime/Containers/DictionaryObjectBinding.cs) · [叶绑定及历史 reader](../../../src/DurableGraph/Runtime/Binding/LeafObjectBinding.cs) · [恢复对象表](../../../src/DurableGraph/Runtime/Capture/ObjectReadTable.cs)
 
 **最小见证**可由一个单独的消费程序集提供具体节点类型。普通领域根通过 List 持有父节点 A、B。两者都指向 C，C 有一条回边指向 A。
