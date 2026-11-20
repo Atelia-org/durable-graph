@@ -12,7 +12,7 @@
 - 理解产品目标与已选约束：[目标设计](../docs/DurableGraph-target-design-v0.md)。
 - 查首选用语、概念示意和对应代码：[项目术语表](../docs/DurableGraph-glossary.md)；后续文档、代码命名与注释的一致化以此定位差异。
 - 选择下一片、查未完成决策与问题：[后续路线](../docs/DurableGraph-research-roadmap.md)。
-- 近期质量问题与逐项验收条件：[十一月技术债审阅](../maintenance/2026-11-20.md)。十月整改见[完成记录](../maintenance/2026-10-20.md)。
+- 近期主线的修复、实测与逐项验收：[十一月技术债整改](../maintenance/2026-11-20.md#整改进度)。十月整改见[完成记录](../maintenance/2026-10-20.md)。
 - 查某项实现的来由或验收：[设计与施工记录索引](../docs/design-branches/README.md)。
 - 查历史实验：[实验簿入口](../docs/DurableGraph-lab-notebook.md)；重跑独立实验：[Probe 导航](../experiments/README.md)。
 
@@ -36,7 +36,7 @@
 
 文本 codec 沿用 [DB-101 的分段 Base 与范围 Delta](../docs/design-branches/0101-durable-text/segmented-base-refactoring-plan.md)。Base 逐片择码，冷读按总单元数直接填入最终 string。保存可先估算 Base，选中后编码，按实际记录字节记账。
 
-2026-11-15：[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)已完成实现、完整源码回归和三组普通包验收，并集成master。Repository.CreateGraph/OpenGraph/SaveGraph、GraphBuilder/GraphRef与保留Head4可用；State由自身地址恢复，不保图级编辑父，保写计划及实际Delta来源、完整安装/Schema/故障资格。实验双轨已退出，旧三Head库直接拒绝。准确代码/包SHA、证据和限制只查DB-100，本片无剩余必经工单；性能/GC等由真实需求再触发。
+[DB-100 独立对象图堆](../docs/design-branches/0100-graph-heap/README.md)提供 `CreateGraph`、`OpenGraph` 和 `SaveGraph`。Head 4 发布图堆快照，旧三 Head 仓拒绝打开。State 按自身地址恢复。写计划按实际 Delta 来源校验前驱，图无需记录编辑父。连续打开同仓、同 Schema 的图只复用最近已验证的目录，每个 builder 各自持有模型环境、对象和可写基线。
 
 2026-10-26：MUD 命名存档增量 `Repository.ListTags(): TagInfo[]` 已通过源码与新普通包验收。返回现有 T Dictionary 的名称/CommitId 独立快照，按 Ordinal 排序并验证全部目标元数据，允许只读仓与空业务模型注册，不恢复业务图或更改格式。边界回归、准确候选来源和四进程普通包证据见[本片验收](../docs/list-tags-validation.md)；本片无剩余必做工单，下游游戏集成由 MUD 仓独立验收。
 
@@ -317,7 +317,7 @@ Dictionary canonical key、碰撞与重复 Delta 寻址检查继续保持，不�
   独立读取保各图分配表；Checkpoint 在两图全部 Prepare、Allocate/Register 和建表完成后才 Hydrate，并以同操作 mutable 实例守卫拒绝 singleton 工厂。
   共同 workspace／候选在 State 确认后才安装原实例／新根；DB-097 的 Event 每次使用新 CaptureSession 和局部 ID，完整 Base、无来源及 Remove；完成后释放候选，不改变 State 根、基线、cursor 或 rewrite。
   Event 的完整目录只能选择自有全 Base batch；不同图的同号 ID 不表示同一对象。Checkpoint 的两图独立物化，保同操作 mutable 工厂守卫。后继 State 仍相对最近 State。
-- Repository 拥有 RepositoryResources 的 FS/HS 底座资源；操作串行，每个 BranchId 最多一个活动 WorkingCopy，显式 Dispose 释放编辑占用。
+- Repository 拥有 RepositoryResources 的 FS/HS 底座资源，操作串行，每个 BranchId 最多一个活动 WorkingCopy。显式 Dispose 释放分支占用、会话及根，关闭的句柄仍可读分支与提交标识。
   CreateRootBranchFromState/Event 先保存真实非空业务根并登记 D，再返回 BranchInfo；OpenWorkingCopy 单独恢复对象，Event-only 历史可以 State=null。
   ForkBranch 固定继承准确 Commit，不制造 clone Commit、不恢复对象；创建成功后可立即列出、冷重开和继续，后续打开失败不撤销已登记分支。
   标签可重复且不用于定位；父子线均能继续。从继承历史选择 A/a1 开新线，其直接父仍为 A。
