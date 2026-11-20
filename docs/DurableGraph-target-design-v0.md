@@ -155,7 +155,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
 
 - 保存先从领域图捕获与完整精确 Schema 配对的版本化状态 DTO，形成捕获候选图（候选 DTO 视图）；后续比较、
   估算、Base/Delta 选择和编码都消费该候选状态。领域对象随后变化不能改变候选内容。
-- 自定义领域类型的 DTO 与 Capture 由 SG 生成；受支持 CLR/BCL 引用类型使用预制或可组合适配。
+- 标记 DurableType 的领域类型由 SG 生成 DTO 与 Capture。受支持 CLR/BCL 引用类型使用预制或可组合适配。
   string 不可变，非空内容可以直接保留原实例；一般容器不能据此假定浅拷贝已隔离可变内容。
 - 同一个候选状态在实际发布成功后才可成为提交基线；不能重新捕获领域对象来冒充已提交结果。
   基线是可丢弃、可从权威状态重建的比较投影，不是第二个持久权威来源。
@@ -181,6 +181,7 @@ Generator 管理的 Durable 声明中，显式 DurableField 必须进入受支�
   成员中的引用只保存 ObjectId，对象本体独立保存；共享和循环是整体恢复目标。
   引用对象操作以 C# object 接受实例，按实际 runtime 类型分派至受支持的内建或用户模型；
   字段/元素的强类型操作继续静态绑定。内部 object 参数不等于开放任意 object/interface 持久字段。
+- 注册的节点由作者声明当前有序槽。DG 将槽种类、引用目标或私有格式名随 Schema 发布。冷开按 Base 的源描述解释正文，按所选 State 的完整目录验证重放后仍存在的历史边，再投影当前版本、分配和回填。内嵌引用序列拥有元素顺序，每个非空元素引用图中有身份的对象。需要数组本身有身份时，槽引用该数组对象。[声明节点](design-branches/0105-registered-nodes/mainline.md)
 - 当前 CLR 图按引用相等语义登记。内容相等的不同非空 string 实例不能合并；唯一明确例外是
   所有零长度 string 在 Capture 和读取两端都规范化为 string.Empty。null 仍与空串区分。
 - DTO 引用槽及 Runtime/StateStore 上层对象身份使用非泛型 `ObjectId(uint Value)`；普通 UInt32 数值仍为 `uint`。

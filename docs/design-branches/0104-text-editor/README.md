@@ -2,7 +2,7 @@
 
 主线从 `f829f849` 起由注册叶取代内建 `DurableText`。领域模型采用 `Atelia.Text.TextEditor`，由文本包登记自包含叶对象的 codec。DurableGraph 掌握图中身份、准确前驱和发布，类型作者掌握冻结内容与编码。这条路线也服务于未来在不同来源上提供一致的 LLM 编辑工具。[主线迁移与验收](mainline-results.md) · [注册叶原型实验](registered-leaves.md) · [早期边界与算法对照](evidence.md)
 
-继续研究登记方式、封装分配或第三方节点出边时，可从[两个后续研究方向](codec-followups.md)进入。文中给出了 C3 宽 Rope 的冻结源码、共存性能对照和共享节点带环的冷开样例。
+登记方式与封装分配的研究入口见[两个后续研究方向](codec-followups.md)，其中保留 C3 宽 Rope 的冻结源码和共存性能对照。第三方类型持有图出边时可使用 [DB-105 的声明节点](../0105-registered-nodes/mainline.md)。
 
 ## 总体方向
 

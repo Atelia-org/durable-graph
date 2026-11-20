@@ -23,7 +23,7 @@ DB-064/066 的 ReadPair 闭包共享已由 [DB-098](design-branches/0098-readpai
 | 分片 | 要解决的增量 |
 |---|---|
 | 容器 payload 准备与对象重整 | [DB-102 实测](design-branches/0102-container-payload-planning/mainline-results.md)后的重访条件：若真实负载仍受整表键扫描或可并行的 State 准备主导，再评估减少扫描或并行 Prepare。若应用有严格的换新大表单步时限，重测密集更新后的替换。若批次 I/O 主导深链恢复，再评估限深。 |
-| 含图引用的自定义对象 | [DB-105](design-branches/0105-registered-nodes/README.md) 已验证共享、循环、局部改边，以及[从发布时的 Schema 检查退役引用](design-branches/0105-registered-nodes/stored-slots.md)。有实际容器需要内嵌引用或私有 Delta 时，以它的注册、升级及编码成本检验产品接入；已退役私有格式的跨版读取需独立用例。主线已支持[自包含叶](design-branches/0104-text-editor/README.md)。 |
+| 声明节点的升级与私有 Delta | [DB-105](design-branches/0105-registered-nodes/mainline.md) 支持共同前缀及尾槽增减。出现中间槽删除、重排或退役私有格式的真实存档时，用其旧内容和期望投影设计迁移。大块私有值的局改可用[已有 4 KiB 翻转对照](design-branches/0105-registered-nodes/README.md)衡量自定义 Delta 的收益。 |
 | 正则替换与批量预览 | 先用现有工具收集角色编辑 memo 的真实案例，再按[重访条件](#文本替换的下一轮实验)选择下一片。全文访问与快照 KMP 的性能重访条件见[冷热对照](design-branches/0103-durable-text-search/indexof-cache-comparison.md)。 |
 | TextEditor 的长期成本 | [DB-101](design-branches/0101-durable-text/README.md) 已接入分段 Base。真实工作负载需要大量常驻历史或随机读时再对照 Rope。深链冷开、连续正则输入或重复物化成为瓶颈时，分别考虑链长配置、分块搜索和缓存。 |
 | 独立对象图的规模成本 | [DB-100](design-branches/0100-graph-heap/README.md)采用完整图builder与公共保存日志。只有真实条目大小/访问轨迹证明全图读取或捕获不可接受时，再评估图内稀疏读取；只有存储增长提出实际回收需求时，再定义GraphRef、Schema、Delta链的保留/GC合同。索引与世界目录选择由memo消费层推进，不把全堆扫描当业务搜索。 |

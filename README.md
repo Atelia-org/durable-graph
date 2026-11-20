@@ -563,6 +563,7 @@ record class 的 positional/自动属性使用 `[field: DurableField(id)]` 分�
 | 引用与数组 | string、已登记的实际派生实例、共享/循环；零下界 `T[]` 和 rank 2–4 多维数组、交错数组 |
 | 可编辑正文 | 引用 `Atelia.Text`，在打开仓库前调用 `TextEditorPersistence.Register(models)`。领域字段直接使用 `TextEditor`，支持不可变快照、UTF-16 范围批量编辑、同步全文访问和同对象增量保存。[编辑示例](docs/text/README.md) |
 | 自定义叶对象 | 类型包为自包含的 sealed class 声明稳定 ID、版本和 codec，宿主显式登记。字段及容器共享对象身份，DG 负责前驱、保存规划和发布。[接入自己的叶类型](docs/design-branches/0104-text-editor/README.md#接入自己的叶类型) |
+| 含图引用的第三方节点 | 类型包用 `[DurableNode]` 声明身份，以 `DeclaredNode<T>` 登记槽。DG 恢复共享引用和环，并按写入时的 Schema 校验后来已删除的引用。[接入示例与升级约定](docs/design-branches/0105-registered-nodes/mainline.md) |
 | 容器 | exact BCL `List<T>` 和实验性 `Dictionary<TKey,TValue>`；按内容保存。复合 Key 与当前 comparer 的边界见[字典模型资产](experiments/PackageConsumerProbe/CompositeDictionaryConsumer/README.md) |
 | 尚不支持 | ValueTuple、DateTime、任意外部基类、CLR 嵌套类型/ref struct、任意 object/interface 字段、boxed value 身份、数组协变、非零下界及非 SZ rank-1 数组、其他未适配 BCL 容器 |
 
