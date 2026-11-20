@@ -135,6 +135,50 @@ public sealed class TextToolTests {
     }
 
     [Theory]
+    [InlineData("😀😁", false, 2, "😀", 0)]
+    [InlineData("😀😁", true, 2, "😀", 0)]
+    [InlineData("😀😁", false, 1, "", 2)]
+    [InlineData("A😀B", false, 1, "A", 0)]
+    [InlineData("😀😁B", false, 1, "B", 4)]
+    [InlineData("A😀😁😃😄B", false, 1, "", 5)]
+    public async Task TightExcerptsReturnAnIntactCodePointWhenItFits(string body, bool regex, int budget, string excerpt, int excerptStart) {
+        var session = Session(new Host(new TextToolTarget("memo:a", "A", "text", new(body))));
+        var receipt = Read(await Invoke(session, "search", new { pattern = body, regex, snippet_length = budget }));
+        var match = receipt.GetProperty("results")[0].GetProperty("matches")[0];
+        Assert.Equal(0, match.GetProperty("start").GetInt32());
+        Assert.Equal(body.Length, match.GetProperty("length").GetInt32());
+        Assert.Equal(excerptStart, match.GetProperty("excerpt_start").GetInt32());
+        Assert.Equal(excerpt, match.GetProperty("excerpt").GetString());
+        Assert.Equal(excerptStart > 0, match.GetProperty("truncated_before").GetBoolean());
+        Assert.Equal(excerptStart + excerpt.Length < body.Length, match.GetProperty("truncated_after").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(8191, true)]  // Labels alone exceed the total budget.
+    [InlineData(8189, true)]  // Labels fit, but leave no room for the first excerpt.
+    [InlineData(8187, false)] // The field fits an empty page but not the remaining budget.
+    public async Task OversizedFieldDoesNotHideReportableLaterTargets(int longLabel, bool expectLast) {
+        var editor = new TextEditor("北门");
+        TextToolTarget first = new("m:1", "", "", editor);
+        TextToolTarget large = new("m:2", new string('L', longLabel), "", editor);
+        TextToolTarget last = new("m:3", "", "", editor);
+        var session = Session(new Host(first, large, last));
+        var receipt = Read(await Invoke(session, "search", new { pattern = "北门", snippet_length = 2 }));
+        Assert.Equal(expectLast ? new[] { "m:1", "m:3" } : new[] { "m:1" },
+            receipt.GetProperty("results").EnumerateArray().Select(group => group.GetProperty("target").GetString()));
+        Assert.True(receipt.GetProperty("has_more").GetBoolean());
+        Assert.Equal("text_budget", receipt.GetProperty("limited_by").GetString());
+
+        session = Session(new Host(large, last));
+        var fromStart = Read(await Invoke(session, "search", new { pattern = "北门", snippet_length = 2 }));
+        var only = Assert.Single(fromStart.GetProperty("results").EnumerateArray());
+        Assert.Equal(expectLast ? "m:3" : "m:2", only.GetProperty("target").GetString());
+        Assert.Equal(expectLast ? "" : large.Entry, only.GetProperty("entry").GetString());
+        Assert.True(fromStart.GetProperty("has_more").GetBoolean());
+        Assert.Equal("text_budget", fromStart.GetProperty("limited_by").GetString());
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task OrderedIndependentEditsReadTheCurrentTextWithinAndAcrossTurns(bool oneTurn) {

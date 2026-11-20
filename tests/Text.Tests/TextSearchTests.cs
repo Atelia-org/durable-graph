@@ -103,6 +103,23 @@ public sealed class TextSearchTests {
             edit.Candidates.Select(c => (c.Before, c.After, c.TruncatedBefore, c.TruncatedAfter)));
     }
 
+    [Theory]
+    [InlineData("😀x😁x😇", 2, "", "😁")]
+    [InlineData("A😀x😁x", 3, "", "😁x")]
+    [InlineData("Ax😁x", 1, "A", "")]
+    [InlineData("😀x😁x😇", 1, "", "")]
+    public void CandidateContextSharesUnusedSurrogateSpace(string body, int budget, string before, string after) {
+        var result = new TextEditor(body).ReplaceUnique("x", "!", maxExcerptLength: budget);
+        Assert.Equal(ReplaceUniqueStatus.Ambiguous, result.Status);
+        var first = result.Candidates[0];
+        Assert.Equal((before, after), (first.Before, first.After));
+        foreach (var candidate in result.Candidates) {
+            Assert.True(candidate.Before.Length + candidate.After.Length <= budget);
+            Assert.Equal(candidate.Before + "x" + candidate.After,
+                body.Substring(candidate.Start - candidate.Before.Length, candidate.Before.Length + 1 + candidate.After.Length));
+        }
+    }
+
     [Fact]
     public void CallsRecheckCurrentTextAndTreatReplacementLiterally() {
         TextEditor editor = new("a A");

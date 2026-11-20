@@ -114,24 +114,47 @@ public sealed partial class TextEditor {
 
     private static TextMatch SearchExcerpt(ReadOnlySpan<char> body, Location hit, int budget) {
         int window = Math.Min(budget, body.Length);
-        int left = Math.Clamp(hit.Start + (hit.Length - window) / 2, 0, body.Length - window);
+        int centeredStart = Math.Clamp(hit.Start + (hit.Length - window) / 2, 0, body.Length - window);
+        int left = centeredStart;
         int right = left + window;
         if (SplitsSurrogate(body, left)) { left++; }
         if (SplitsSurrogate(body, right)) { right--; }
+        if (left == right && window != 0) {
+            if (window == 2) {
+                // The window straddled adjacent surrogate pairs. Either complete pair fits.
+                left -= 2;
+            }
+            else if (AdjacentSingleUnit(body, hit, centeredStart) is int at) {
+                left = at;
+                right = at + 1;
+            }
+        }
         return new(hit.Start, hit.Length, hit.Line, hit.EndLine, left, body[left..right].ToString(), right < body.Length);
+    }
+
+    // A one-unit window can move to a neighbor of the central pair within the match.
+    private static int? AdjacentSingleUnit(ReadOnlySpan<char> body, Location hit, int center) {
+        int pairStart = char.IsHighSurrogate(body[center]) ? center : center - 1;
+        if (pairStart > hit.Start && !char.IsSurrogate(body[pairStart - 1])) { return pairStart - 1; }
+        int after = pairStart + 2;
+        if (after < hit.Start + hit.Length && !char.IsSurrogate(body[after])) { return after; }
+        return null;
     }
 
     private static ReplaceCandidate ReplacementContext(ReadOnlySpan<char> body, Location hit, int budget) {
         int end = hit.Start + hit.Length;
-        int availableAfter = body.Length - end;
-        // Spend half on each side, moving unused room to the other side at a document boundary.
-        int before = Math.Min(hit.Start, Math.Max(budget / 2, budget - availableAfter));
-        int left = hit.Start - before;
-        int right = end + Math.Min(budget - before, availableAfter);
-        if (left < hit.Start && SplitsSurrogate(body, left)) { left++; }
+        // Give both sides a share, then reuse space freed by a text boundary or a surrogate pair.
+        int left = ContextStart(body, hit.Start, budget / 2);
+        int right = end + Math.Min(budget - (hit.Start - left), body.Length - end);
         if (right > end && SplitsSurrogate(body, right)) { right--; }
+        left = ContextStart(body, hit.Start, budget - (right - end));
         return new(hit.Start, hit.Length, hit.Line, hit.EndLine, body[left..hit.Start].ToString(),
             body[end..right].ToString(), right < body.Length);
+    }
+
+    private static int ContextStart(ReadOnlySpan<char> body, int end, int budget) {
+        int start = end - Math.Min(end, budget);
+        return start < end && SplitsSurrogate(body, start) ? start + 1 : start;
     }
 
     private static bool SplitsSurrogate(ReadOnlySpan<char> body, int at) =>

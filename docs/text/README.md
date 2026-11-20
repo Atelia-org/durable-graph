@@ -56,7 +56,9 @@ foreach (var call in action.ToolCalls) {
 
 把 `session.VisibleDefinitions` 提供给模型。`search` 接受 `pattern`，可指定 `regex`、`target`、`limit` 和 `snippet_length`。省略地址会搜索宿主提供的可见集合。找到目标后，将回执里的完整地址传给 `replace_unique` 的 `target`，并提供 `old_text`、`new_text`。同一条消息里的调用也要按声明顺序逐笔等待、逐笔传回结果。下一笔可以继续编辑上一笔写出的文字。
 
-工具的 `limit` 范围为 1–32，`snippet_length` 为 1–512。所有返回字段的地址、标签和摘录合计最多 8192 个 UTF-16 单元；JSON 结构和转义另计。`has_more` 和 `limited_by` 指明命中数或总文字预算是否截断了结果。正则使用 .NET 的固定区域性和 250 毫秒匹配超时。若摘录或地址含有孤立代理码元，JSON 工具返回 `unrepresentable_text`，避免把替代字符作为下一次编辑的定位依据。直接调用编辑器可读取准确的 UTF-16 码元。
+工具的 `limit` 范围为 1–32，`snippet_length` 为 1–512。所有返回字段的地址、标签和摘录合计最多 8192 个 UTF-16 单元，JSON 结构和转义另计。如果一个字段的地址、标签和首个摘录合计已超过总预算，工具会跳过该字段，继续搜索后续字段。如果它们只是超过本次剩余预算，工具就此停止。`has_more` 和 `limited_by` 指明是否因命中数或文字预算省略了结果。
+
+正则使用 .NET 的固定区域性和 250 毫秒匹配超时。若摘录或地址含有孤立代理码元，JSON 工具返回 `unrepresentable_text`，避免把替代字符作为下一次编辑的定位依据。直接调用编辑器可读取准确的 UTF-16 码元。
 
 ## DurableGraph 字段
 

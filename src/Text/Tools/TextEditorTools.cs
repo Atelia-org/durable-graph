@@ -103,26 +103,31 @@ public static class TextEditorTools {
 
                 if (found.Matches.Count != 0) {
                     long labelLength = (long)field.Address.Length + field.Entry.Length + field.Field.Length;
-                    if (labelLength > remainingText) {
+                    long firstHitCost = labelLength + found.Matches[0].Excerpt.Length;
+                    if (firstHitCost > remainingText) {
                         limitedBy = "text_budget";
+                        // This field cannot return even its first hit on an empty page.
+                        if (firstHitCost > TextBudget) { continue; }
                         break;
                     }
                     remainingText -= (int)labelLength;
                     List<TextMatch> matches = [];
                     foreach (var match in found.Matches) {
                         if (match.Excerpt.Length > remainingText) {
-                            limitedBy = "text_budget";
                             break;
                         }
                         matches.Add(match);
                         remainingText -= match.Excerpt.Length;
                         remainingHits--;
                     }
-                    if (matches.Count > 0) { results.Add(new(field.Address, field.Entry, field.Field, matches)); }
-                    if (limitedBy is not null) { break; }
+                    results.Add(new(field.Address, field.Entry, field.Field, matches));
+                    if (matches.Count < found.Matches.Count) {
+                        limitedBy = "text_budget";
+                        break;
+                    }
                 }
                 if (found.HasMore) {
-                    limitedBy = "hits";
+                    limitedBy ??= "hits";
                     break;
                 }
             }
