@@ -25,7 +25,7 @@ rg -n '恢复|验收' docs/design-branches/0086-new-storage-refactoring-plan
 
 | DB | 问题入口与检索词 |
 |---|---|
-| 106 | [内建容器的持久化适配边界](0106-container-adapters/README.md)，比较保存准备、内建组件和公开家族 Adapter，给出候选首片与重访条件 |
+| 106 | [内建容器的持久化适配边界](0106-container-adapters/README.md)，实验分支已验证业务保存分类首片，给出内联对照与主线采用建议 |
 | 105 | [第三方容器如何持有图引用](0105-registered-nodes/README.md)，主线接入由 DG 编码的声明槽，按准确源 Schema 校验退役引用。保留三种写法的研究对照 |
 | 104 | [通用 TextEditor 与 DurableGraph 的集成边界](0104-text-editor/README.md)，显式登记自包含叶、前驱与提交收据，独立文本及位图包的消费和保存成本 |
 | 103 | [全文访问与文本编辑工具](0103-durable-text-search/README.md)，VisitSpan 缓存、按快照提交范围、宿主寻址的搜索与字面唯一替换和 Agent 试用 |

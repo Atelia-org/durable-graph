@@ -20,6 +20,8 @@
 
 ## 当前焦点
 
+本实验分支已让业务写规划消费准备行的比较结论，建议主线采用提示内联的版本。八代落盘回执、计时对照及合入边界见 [DB-106 实验](../docs/design-branches/0106-container-adapters/experiment.md)。
+
 2026-11-20，DB-105 支持第三方包以 `[DurableNode]` 和 `RegisterNode` 登记含出边的类型。v2 程序仅凭当前声明和接纳的版本号就能打开并续写 v1 存档。旧目录中悬空或错型的退役引用在领域对象分配前被拒绝。[作者接入、源码回归与独立包验收](../docs/design-branches/0105-registered-nodes/mainline.md)
 
 2026-11-20，`Atelia.Text` 提供单篇字面和正则搜索、字面唯一替换及 Completion.Tools 的 `search`、`replace_unique`。宿主逐次解析可见字段和编辑地址。独立 Agent 已凭长行中两处“北门”的邻近原文改对第二处，验证未保存工作副本及旧世界。包回放与验收集中在[实际工具试用](../docs/design-branches/0103-durable-text-search/tool-trial.md)。正则替换与批量预览见[下一轮实验](../docs/DurableGraph-research-roadmap.md#文本替换的下一轮实验)。

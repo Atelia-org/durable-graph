@@ -1,0 +1,134 @@
+{
+  "mode": "Runtime defaults. No TieredCompilation, ReadyToRun, Jit or PGO environment overrides. No tier-transition tracing.",
+  "runtime": ".NET 10.0.5",
+  "cpu": "AMD Ryzen 7 1700 Eight-Core Processor",
+  "affinityHex": "10",
+  "sdk": "10.0.201",
+  "rowsPerPass": 197,
+  "measuredPasses": 4096,
+  "warmupPasses": 1024,
+  "frequencyHz": 10000000,
+  "fixtureSHA256": "07DD3474283096C262235764C636A6AA3138C3FF050E5F1EBA2E04B46925FC8E",
+  "kinds": {
+    "NoChange": 98,
+    "Update": 33,
+    "BaseOnlyUpdate": 65,
+    "Insert": 1
+  },
+  "driverSHA256": "930FA610E4A12ACA72B270E2ECBF81DD56C2253E0FAFC4A8918CD2763961FB5F",
+  "scriptSHA256": "7C9E146B1C7DDD4E908432A0DD54E34D190BC7CA8129F671584B5821C3D49D2E",
+  "binaries": {
+    "B": [
+      {
+        "version": "1.0.0+c19a8d2a39318fc1c83e921df30f91a4ab293a13",
+        "sha256": "0FCB5D4876BD02B8CA07E8FA1D5169F70B0E969059681D936D2CB38671F452C5"
+      },
+      {
+        "version": "1.0.0+c19a8d2a39318fc1c83e921df30f91a4ab293a13",
+        "sha256": "44CCDD2E71F7F7126DCF08E086B3BA935CA7EA57AA3E5CB416D461D1889E0D3B"
+      }
+    ],
+    "A": [
+      {
+        "version": "1.0.0+e1a4e42d27692203ab3b421d1661df122d28d182",
+        "sha256": "09F11B4D8668709F836C5ACD442073AD2BF1799E9EFE5633E21F4518222AB26C"
+      },
+      {
+        "version": "1.0.0+e1a4e42d27692203ab3b421d1661df122d28d182",
+        "sha256": "B350C726BDDA9C9C7D72735B79B0CFFE4B5D794481B5E61BB989AEA14D2E1557"
+      }
+    ]
+  },
+  "threadAllocatedBytesEverySample": 51642368,
+  "checksumEverySample": 243294208,
+  "executionOrder": [
+    {
+      "pair": 1,
+      "arm": "A",
+      "stopwatchTicks": [
+        216313,
+        221845,
+        230615,
+        218622,
+        226976
+      ]
+    },
+    {
+      "pair": 1,
+      "arm": "B",
+      "stopwatchTicks": [
+        213497,
+        204758,
+        198890,
+        203183,
+        203453
+      ]
+    },
+    {
+      "pair": 2,
+      "arm": "B",
+      "stopwatchTicks": [
+        206282,
+        221337,
+        219243,
+        218282,
+        207578
+      ]
+    },
+    {
+      "pair": 2,
+      "arm": "A",
+      "stopwatchTicks": [
+        252337,
+        266548,
+        264369,
+        259850,
+        235596
+      ]
+    },
+    {
+      "pair": 3,
+      "arm": "A",
+      "stopwatchTicks": [
+        231905,
+        253244,
+        251063,
+        260688,
+        251684
+      ]
+    },
+    {
+      "pair": 3,
+      "arm": "B",
+      "stopwatchTicks": [
+        234865,
+        224100,
+        233165,
+        235765,
+        231005
+      ]
+    },
+    {
+      "pair": 4,
+      "arm": "B",
+      "stopwatchTicks": [
+        250455,
+        235476,
+        236682,
+        232602,
+        234898
+      ]
+    },
+    {
+      "pair": 4,
+      "arm": "A",
+      "stopwatchTicks": [
+        235597,
+        250151,
+        250838,
+        244780,
+        248542
+      ]
+    }
+  ]
+}

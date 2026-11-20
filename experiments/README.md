@@ -5,6 +5,7 @@
 
 | 问题 | 活动入口 |
 |---|---|
+| 业务写规划对具体绑定的依赖 | [DB-106 分类与保存对照](BusinessSaveClassificationProbe/README.md)，实验分支上复现对象记录、历史冷开与单行分类成本 |
 | B2 隔离新 API：真实 Repository 旧点分叉、冷恢复、来源与发布边界 | [RepositoryBranchVerticalProbe](RepositoryBranchVerticalProbe/README.md)；有限实际纵切，不替代尚未迁移的原回归或普通包资格 |
 | 实际包交付、Generator 与 history/build | [PackageConsumerProbe](PackageConsumerProbe/README.md) |
 | 自定义叶的登记、增量保存与冷恢复 | [文本与独立位图包](RegisteredLeafProbe/README.md) · [编辑器与缺少文本包的读者](PackageConsumerProbe/TextEditorConsumer/README.md) |

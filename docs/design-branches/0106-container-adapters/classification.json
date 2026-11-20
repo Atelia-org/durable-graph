@@ -1,0 +1,546 @@
+{
+  "hardware": "AMD Ryzen 7 1700 Eight-Core Processor; Windows x64",
+  "sdk": "10.0.201",
+  "method": "No I/O in measured loop. One fixed generated graph captured twice, fixed shuffle seed 106, CPU mask 0x10, tiered compilation off. Each process first exercises the full fixture checksum, then 1024 warm-up passes. Each sample forces GC before its timer. Raw per-sample Stopwatch ticks follow in actual process order.",
+  "sources": {
+    "Program.cs": "A4DE1A35B1EC5529BDA49791E6B6C0BAFC5ABD3AF07FFE94938B3C05ACEC782B",
+    "Probe.csproj": "A9AF68E3351444DE37446B088FF6E12759D74941270276283626A7C41E23A1C8",
+    "Run-Comparison.ps1": "20F13C1AA5D69CA81AEEC29B0773C617F6679E29D9400FEDD10E1F479DFE3FF1"
+  },
+  "binaries": {
+    "1.0.0+e1a4e42d27692203ab3b421d1661df122d28d182": {
+      "runtime": "09F11B4D8668709F836C5ACD442073AD2BF1799E9EFE5633E21F4518222AB26C",
+      "persistence": "B350C726BDDA9C9C7D72735B79B0CFFE4B5D794481B5E61BB989AEA14D2E1557"
+    },
+    "1.0.0": {
+      "harness": "930FA610E4A12ACA72B270E2ECBF81DD56C2253E0FAFC4A8918CD2763961FB5F"
+    },
+    "1.0.0+97d6189d20c2706fcc466970e5e55cd913cc495d": {
+      "runtime": "A211249017D4DF3B0CA177345C7A8697DF2B928AA962F99161CC26FFECF6781D",
+      "persistence": "BC9FE83ED7DAA1C2520BBB8E6AA6ABDA5E04EA551B0203AD1BE6C5FCA16E42AF"
+    },
+    "1.0.0+c19a8d2a39318fc1c83e921df30f91a4ab293a13": {
+      "runtime": "0FCB5D4876BD02B8CA07E8FA1D5169F70B0E969059681D936D2CB38671F452C5",
+      "persistence": "44CCDD2E71F7F7126DCF08E086B3BA935CA7EA57AA3E5CB416D461D1889E0D3B"
+    }
+  },
+  "sets": [
+    {
+      "set": "first",
+      "first": "AB",
+      "pairMedianNsPerRowBMinusA": 1.654331575190355,
+      "pairMedianPercent": 6.238590733094796,
+      "runs": [
+        {
+          "pair": 1,
+          "arm": "A",
+          "ticks": [
+            231740,
+            220040,
+            210481,
+            216109,
+            222663
+          ]
+        },
+        {
+          "pair": 1,
+          "arm": "B",
+          "ticks": [
+            237427,
+            227745,
+            228670,
+            212810,
+            229942
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "B",
+          "ticks": [
+            236759,
+            235831,
+            229262,
+            228043,
+            223236
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "A",
+          "ticks": [
+            210502,
+            211194,
+            224143,
+            200298,
+            219610
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "A",
+          "ticks": [
+            221549,
+            221083,
+            201056,
+            214880,
+            209775
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "B",
+          "ticks": [
+            226807,
+            231138,
+            205738,
+            218586,
+            219133
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "B",
+          "ticks": [
+            227464,
+            229678,
+            216224,
+            211026,
+            255642
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "A",
+          "ticks": [
+            239412,
+            215137,
+            207848,
+            209391,
+            207428
+          ]
+        }
+      ]
+    },
+    {
+      "set": "firstReverse",
+      "first": "BA",
+      "pairMedianNsPerRowBMinusA": 0.9423580266497478,
+      "pairMedianPercent": 3.471715192512692,
+      "runs": [
+        {
+          "pair": 1,
+          "arm": "B",
+          "ticks": [
+            236170,
+            225049,
+            210898,
+            224887,
+            225046
+          ]
+        },
+        {
+          "pair": 1,
+          "arm": "A",
+          "ticks": [
+            232305,
+            216729,
+            205745,
+            217775,
+            220309
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "A",
+          "ticks": [
+            226346,
+            231021,
+            198303,
+            220187,
+            219794
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "B",
+          "ticks": [
+            235383,
+            237627,
+            228124,
+            227789,
+            227913
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "B",
+          "ticks": [
+            238849,
+            246698,
+            257998,
+            251941,
+            246852
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "A",
+          "ticks": [
+            215170,
+            210233,
+            203104,
+            208484,
+            204424
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "A",
+          "ticks": [
+            201398,
+            211199,
+            219870,
+            234253,
+            241218
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "B",
+          "ticks": [
+            215755,
+            223547,
+            211517,
+            200909,
+            198548
+          ]
+        }
+      ]
+    },
+    {
+      "set": "inline",
+      "first": "AB",
+      "pairMedianNsPerRowBMinusA": -1.0425548263007602,
+      "pairMedianPercent": -4.033686498920247,
+      "runs": [
+        {
+          "pair": 1,
+          "arm": "A",
+          "ticks": [
+            226224,
+            233780,
+            222609,
+            221177,
+            211933
+          ]
+        },
+        {
+          "pair": 1,
+          "arm": "B",
+          "ticks": [
+            204311,
+            214010,
+            214822,
+            206081,
+            200049
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "B",
+          "ticks": [
+            241099,
+            238762,
+            212370,
+            201634,
+            203136
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "A",
+          "ticks": [
+            204136,
+            201230,
+            196051,
+            204282,
+            190476
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "A",
+          "ticks": [
+            206529,
+            202806,
+            194871,
+            209769,
+            215439
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "B",
+          "ticks": [
+            208073,
+            203507,
+            193849,
+            187539,
+            188332
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "B",
+          "ticks": [
+            212518,
+            214772,
+            200625,
+            202369,
+            210867
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "A",
+          "ticks": [
+            254911,
+            215012,
+            215856,
+            205649,
+            210590
+          ]
+        }
+      ]
+    },
+    {
+      "set": "inlineReverse",
+      "first": "BA",
+      "pairMedianNsPerRowBMinusA": -0.6298704195748748,
+      "pairMedianPercent": -2.464587071593549,
+      "runs": [
+        {
+          "pair": 1,
+          "arm": "B",
+          "ticks": [
+            218398,
+            210131,
+            220544,
+            212165,
+            204194
+          ]
+        },
+        {
+          "pair": 1,
+          "arm": "A",
+          "ticks": [
+            205454,
+            210554,
+            212938,
+            215375,
+            202891
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "A",
+          "ticks": [
+            211519,
+            205598,
+            206304,
+            199056,
+            214251
+          ]
+        },
+        {
+          "pair": 2,
+          "arm": "B",
+          "ticks": [
+            198769,
+            201621,
+            206581,
+            196089,
+            188737
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "B",
+          "ticks": [
+            204784,
+            201150,
+            195464,
+            192018,
+            193206
+          ]
+        },
+        {
+          "pair": 3,
+          "arm": "A",
+          "ticks": [
+            213315,
+            199805,
+            206310,
+            200691,
+            196253
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "A",
+          "ticks": [
+            211107,
+            221749,
+            212573,
+            209538,
+            212417
+          ]
+        },
+        {
+          "pair": 4,
+          "arm": "B",
+          "ticks": [
+            207479,
+            213645,
+            220851,
+            195340,
+            204193
+          ]
+        }
+      ]
+    }
+  ],
+  "common": {
+    "rows": 197,
+    "loops": 4096,
+    "frequency": 10000000,
+    "fixtureHash": "07DD3474283096C262235764C636A6AA3138C3FF050E5F1EBA2E04B46925FC8E",
+    "affinity": "10",
+    "framework": ".NET 10.0.5",
+    "kinds": {
+      "NoChange": 98,
+      "Update": 33,
+      "BaseOnlyUpdate": 65,
+      "Insert": 1
+    },
+    "tiered": "0",
+    "sumPerSample": 243294208,
+    "threadBytesPerSample": 51642368
+  },
+  "productDllManifest": {
+    "first": [
+      {
+        "file": "Atelia.Binary.dll",
+        "baseline": "3D04E6CE54CA0B4373C35D3A3602D2C49E9101A069F78A4C853DA91013670FC2",
+        "candidate": "3D04E6CE54CA0B4373C35D3A3602D2C49E9101A069F78A4C853DA91013670FC2"
+      },
+      {
+        "file": "Atelia.Data.dll",
+        "baseline": "149A3386C53BCE920BEA2ED7D8D4C39476B489AA6D71BA51B6C2F2ACFA635DE0",
+        "candidate": "149A3386C53BCE920BEA2ED7D8D4C39476B489AA6D71BA51B6C2F2ACFA635DE0"
+      },
+      {
+        "file": "Atelia.DurableGraph.dll",
+        "baseline": "09F11B4D8668709F836C5ACD442073AD2BF1799E9EFE5633E21F4518222AB26C",
+        "candidate": "A211249017D4DF3B0CA177345C7A8697DF2B928AA962F99161CC26FFECF6781D"
+      },
+      {
+        "file": "Atelia.DurableGraph.Persistence.dll",
+        "baseline": "B350C726BDDA9C9C7D72735B79B0CFFE4B5D794481B5E61BB989AEA14D2E1557",
+        "candidate": "BC9FE83ED7DAA1C2520BBB8E6AA6ABDA5E04EA551B0203AD1BE6C5FCA16E42AF"
+      },
+      {
+        "file": "Atelia.DurableGraph.Persistence.Tests.dll",
+        "baseline": "930FA610E4A12ACA72B270E2ECBF81DD56C2253E0FAFC4A8918CD2763961FB5F",
+        "candidate": "930FA610E4A12ACA72B270E2ECBF81DD56C2253E0FAFC4A8918CD2763961FB5F"
+      },
+      {
+        "file": "Atelia.DurableGraph.Serialization.dll",
+        "baseline": "02C90B3CD6793B147E40147FDCB624FAD8B4F73D0B07EAF42FE0AC2D3FBD7729",
+        "candidate": "02C90B3CD6793B147E40147FDCB624FAD8B4F73D0B07EAF42FE0AC2D3FBD7729"
+      },
+      {
+        "file": "Atelia.DurableGraph.Storage.dll",
+        "baseline": "C10F40350361D46C1C294B5AB1D6F438779B147D2F97BB728ED140114B81B7CF",
+        "candidate": "C10F40350361D46C1C294B5AB1D6F438779B147D2F97BB728ED140114B81B7CF"
+      },
+      {
+        "file": "Atelia.FrameStore.dll",
+        "baseline": "01D22B514903BE1E67FE523FC4F087F48777C864331F63A3BD8AD4A91D8BD7A5",
+        "candidate": "01D22B514903BE1E67FE523FC4F087F48777C864331F63A3BD8AD4A91D8BD7A5"
+      },
+      {
+        "file": "Atelia.HeadStore.dll",
+        "baseline": "40B0BC17EBC61FD4FED6E59779CE00EAB3CC46C851C59227D7AD10906E94D7D9",
+        "candidate": "40B0BC17EBC61FD4FED6E59779CE00EAB3CC46C851C59227D7AD10906E94D7D9"
+      },
+      {
+        "file": "Atelia.Primitives.dll",
+        "baseline": "03A7401E24311ABC09ADD9FB2FBA01E43EADB1422BE0A7FB874E5EAA09F32073",
+        "candidate": "03A7401E24311ABC09ADD9FB2FBA01E43EADB1422BE0A7FB874E5EAA09F32073"
+      },
+      {
+        "file": "Atelia.Rbf.dll",
+        "baseline": "38122B57895C4CECB3E16ED061C1C25D1E3194DA3338AB8CEBA24FF268962CD6",
+        "candidate": "38122B57895C4CECB3E16ED061C1C25D1E3194DA3338AB8CEBA24FF268962CD6"
+      }
+    ],
+    "inline": [
+      {
+        "file": "Atelia.Binary.dll",
+        "baseline": "3D04E6CE54CA0B4373C35D3A3602D2C49E9101A069F78A4C853DA91013670FC2",
+        "candidate": "3D04E6CE54CA0B4373C35D3A3602D2C49E9101A069F78A4C853DA91013670FC2"
+      },
+      {
+        "file": "Atelia.Data.dll",
+        "baseline": "149A3386C53BCE920BEA2ED7D8D4C39476B489AA6D71BA51B6C2F2ACFA635DE0",
+        "candidate": "149A3386C53BCE920BEA2ED7D8D4C39476B489AA6D71BA51B6C2F2ACFA635DE0"
+      },
+      {
+        "file": "Atelia.DurableGraph.dll",
+        "baseline": "09F11B4D8668709F836C5ACD442073AD2BF1799E9EFE5633E21F4518222AB26C",
+        "candidate": "0FCB5D4876BD02B8CA07E8FA1D5169F70B0E969059681D936D2CB38671F452C5"
+      },
+      {
+        "file": "Atelia.DurableGraph.Persistence.dll",
+        "baseline": "B350C726BDDA9C9C7D72735B79B0CFFE4B5D794481B5E61BB989AEA14D2E1557",
+        "candidate": "44CCDD2E71F7F7126DCF08E086B3BA935CA7EA57AA3E5CB416D461D1889E0D3B"
+      },
+      {
+        "file": "Atelia.DurableGraph.Persistence.Tests.dll",
+        "baseline": "930FA610E4A12ACA72B270E2ECBF81DD56C2253E0FAFC4A8918CD2763961FB5F",
+        "candidate": "930FA610E4A12ACA72B270E2ECBF81DD56C2253E0FAFC4A8918CD2763961FB5F"
+      },
+      {
+        "file": "Atelia.DurableGraph.Serialization.dll",
+        "baseline": "02C90B3CD6793B147E40147FDCB624FAD8B4F73D0B07EAF42FE0AC2D3FBD7729",
+        "candidate": "02C90B3CD6793B147E40147FDCB624FAD8B4F73D0B07EAF42FE0AC2D3FBD7729"
+      },
+      {
+        "file": "Atelia.DurableGraph.Storage.dll",
+        "baseline": "C10F40350361D46C1C294B5AB1D6F438779B147D2F97BB728ED140114B81B7CF",
+        "candidate": "C10F40350361D46C1C294B5AB1D6F438779B147D2F97BB728ED140114B81B7CF"
+      },
+      {
+        "file": "Atelia.FrameStore.dll",
+        "baseline": "01D22B514903BE1E67FE523FC4F087F48777C864331F63A3BD8AD4A91D8BD7A5",
+        "candidate": "01D22B514903BE1E67FE523FC4F087F48777C864331F63A3BD8AD4A91D8BD7A5"
+      },
+      {
+        "file": "Atelia.HeadStore.dll",
+        "baseline": "40B0BC17EBC61FD4FED6E59779CE00EAB3CC46C851C59227D7AD10906E94D7D9",
+        "candidate": "40B0BC17EBC61FD4FED6E59779CE00EAB3CC46C851C59227D7AD10906E94D7D9"
+      },
+      {
+        "file": "Atelia.Primitives.dll",
+        "baseline": "03A7401E24311ABC09ADD9FB2FBA01E43EADB1422BE0A7FB874E5EAA09F32073",
+        "candidate": "03A7401E24311ABC09ADD9FB2FBA01E43EADB1422BE0A7FB874E5EAA09F32073"
+      },
+      {
+        "file": "Atelia.Rbf.dll",
+        "baseline": "38122B57895C4CECB3E16ED061C1C25D1E3194DA3338AB8CEBA24FF268962CD6",
+        "candidate": "38122B57895C4CECB3E16ED061C1C25D1E3194DA3338AB8CEBA24FF268962CD6"
+      }
+    ]
+  }
+}
