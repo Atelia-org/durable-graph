@@ -461,6 +461,7 @@ public sealed partial class Repository : IDisposable {
     private void ClearReadEnvironments() {
         _preparedState = null;
         LastEventEnvironment = null;
+        LastHeapCatalog = null;
     }
     private void RequireWriter() { RequireAvailable(); _resources.RequireWritable(); }
     private void RequireCheckoutWriter(WorkingCopy work) { RequireWriter(); RequireCheckoutSource(work); }

@@ -1,8 +1,15 @@
 using Atelia.DurableGraph.Persistence;
+using Atelia.FrameStore;
 
 namespace Atelia.DurableGraph;
 
 public sealed partial class Repository {
+    internal DecodedRevision.LoadedSchemaCatalog? LastHeapCatalog { get; private set; }
+
+    private DecodedRevision.SchemaViewBindingEnvironment? BindHeapSchema(FrameAddress? root) =>
+        root is { } schema ? DecodedRevision.SchemaViewBindingEnvironment.Load(
+            _storageFacade.Store, _modelConfiguration, schema, LastHeapCatalog) : null;
+
     /// <summary>Creates an unsaved complete graph without registering a business branch.</summary>
     /// <remarks>
     /// Does not capture, clone or persist the supplied root. Multiple builders may exist together;
@@ -13,13 +20,14 @@ public sealed partial class Repository {
         _busy = true;
         try {
             ArgumentNullException.ThrowIfNull(root);
-            DecodedRevision.SchemaViewBindingEnvironment? environment = _resources.SharedSchemaRoot is { } schema
-                ? DecodedRevision.SchemaViewBindingEnvironment.Load(_storageFacade.Store, _modelConfiguration, schema) : null;
+            var environment = BindHeapSchema(_resources.SharedSchemaRoot);
             ModelExecutionEnvironment models = environment?.Models ?? _modelConfiguration.CreateEnvironment();
             if (!models.TryGetCurrentModel(root.GetType(), out _)) {
                 throw new ArgumentException("Root must have its actual domain type registered.", nameof(root));
             }
-            return new(this, new BusinessPersistenceAdapter(_storageFacade.Store, models, environment), root);
+            var builder = new GraphBuilder(this, new BusinessPersistenceAdapter(_storageFacade.Store, models, environment), root);
+            LastHeapCatalog = environment?.Catalog;
+            return builder;
         } finally { EndOperation(); }
     }
 
@@ -35,8 +43,11 @@ public sealed partial class Repository {
         try {
             HistoryGraphRecord record = _resources.ReadHeapDescriptor(reference.CommitId.Value);
             StoredGraphRevision graph = _storageFacade.Store.ReadBusinessGraph(record.Address);
-            BusinessPersistenceAdapter business = BusinessPersistenceAdapter.LoadState(_storageFacade.Store, graph, _modelConfiguration);
-            return new(this, business, business.State!);
+            BusinessPersistenceAdapter business = BusinessPersistenceAdapter.LoadState(_storageFacade.Store, graph, _modelConfiguration,
+                BindHeapSchema(graph.SchemaRoot));
+            var builder = new GraphBuilder(this, business, business.State!);
+            LastHeapCatalog = business.BindingEnvironment!.Catalog;
+            return builder;
         } finally { EndOperation(); }
     }
 

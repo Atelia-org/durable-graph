@@ -122,6 +122,8 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
         CommitId id = repository.ReadCurrentCommit(branch.Id).Commit.Id;
         var delivered = Assert.IsType<RootModel>(repository.LoadEvent(id));
         Assert.NotNull(repository.LastEventEnvironment);
+        using var heap = repository.CreateGraph(Root(1));
+        Assert.NotNull(repository.LastHeapCatalog);
         if (fault) {
             repository.OperationStageObserver = stage => {
                 if (stage == RepositoryOperationStage.AfterPublication) { throw new IOException("Failed delivery"); }
@@ -135,7 +137,52 @@ public sealed class RepositoryModelEnvironmentTests : IDisposable {
             Assert.Null(repository.LastEventEnvironment);
             Assert.Throws<ObjectDisposedException>(() => repository.LoadEvent(id));
         }
+        Assert.Null(repository.LastHeapCatalog);
         Assert.Equal(7, delivered.Values!["key"]);
+    }
+
+    [Fact]
+    public void HeapBuildersReuseOnlyTheLastSuccessfulCatalogAndKeepIndependentModelsAndBaselines() {
+        StateModelRegistry writes = Models();
+        writes.Register(Model<EventModel>(EventSchema));
+        GraphRef first, unsupported, newer;
+        using (Repository writer = Create(writes)) {
+            using var root = writer.CreateGraph(Root(1));
+            first = writer.SaveGraph(root);
+            using var other = writer.CreateGraph(new EventModel());
+            unsupported = writer.SaveGraph(other);
+            newer = writer.SaveGraph(root);
+        }
+
+        using var repository = Repository.OpenExisting(_root, Models(family: true));
+        using var a = repository.OpenGraph(first);
+        using var b = repository.OpenGraph(first);
+        var firstView = a.Business.BindingEnvironment!.SelectedSchemaView;
+        Assert.Same(firstView, b.Business.BindingEnvironment!.SelectedSchemaView);
+        Assert.NotSame(a.Business.Models, b.Business.Models);
+        Assert.Throws<InvalidDataException>(() => repository.OpenGraph(unsupported));
+        Assert.Same(firstView, repository.LastHeapCatalog!.Value.View);
+        Assert.Throws<ArgumentException>(() => repository.CreateGraph(new EventModel()));
+        Assert.Same(firstView, repository.LastHeapCatalog!.Value.View);
+
+        using var c = repository.OpenGraph(newer);
+        using var created = repository.CreateGraph(Root(4));
+        Assert.Same(c.Business.BindingEnvironment!.SelectedSchemaView, created.Business.BindingEnvironment!.SelectedSchemaView);
+        Assert.NotSame(c.Business.Models, created.Business.Models);
+        Assert.NotEqual(firstView.Snapshot!.Address, repository.LastHeapCatalog!.Value.View.Snapshot!.Address);
+        using var oldAgain = repository.OpenGraph(first);
+        Assert.Equal(firstView.Snapshot.Address, oldAgain.Business.BindingEnvironment!.SchemaRoot);
+        Assert.NotSame(firstView, oldAgain.Business.BindingEnvironment.SelectedSchemaView);
+
+        ((RootModel)a.Root).Values!["key"] = 2;
+        Assert.Equal(1, ((RootModel)b.Root).Values!["key"]);
+        ((RootModel)b.Root).Values!["key"] = 3;
+        var savedA = repository.SaveGraph(a);
+        var savedB = repository.SaveGraph(b);
+        using var loadedA = repository.OpenGraph(savedA);
+        using var loadedB = repository.OpenGraph(savedB);
+        Assert.Equal(2, ((RootModel)loadedA.Root).Values!["key"]);
+        Assert.Equal(3, ((RootModel)loadedB.Root).Values!["key"]);
     }
 
     [Fact]

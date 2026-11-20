@@ -94,9 +94,9 @@ internal sealed class BusinessPersistenceAdapter {
     }
 
     internal static BusinessPersistenceAdapter LoadState(GraphRecordStore store, StoredGraphRevision state,
-        StateModelRegistry.FrozenConfiguration configuration) {
+        StateModelRegistry.FrozenConfiguration configuration, DecodedRevision.SchemaViewBindingEnvironment? environment = null) {
         if (state.Kind != StoredGraphKind.State) { throw new InvalidDataException("Editable State must select a State graph."); }
-        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, state, configuration);
+        DecodedRevision source = DecodedRevision.ReadStoredGraph(store, state, configuration, environment);
         EditableGraphRestoration<IDurableObject> restored = GraphReader.Read<IDurableObject>(
             source, state.RootId, new(source.SourceModels!));
         return FromLoaded(store, source.BindingEnvironment!, restored);

@@ -64,28 +64,38 @@ public sealed class DecodedRevision {
         return new(store, environment, StoredGraphDecoder.Read(store, source, environment.Models, environment.SelectedSchemaView));
     }
 
-    // Explicit same-S reuse, without an owner-wide history cache or externally supplied view.
-    // Only actual meta loading can construct this environment; every reuse still reads the graph.
+    // Only a catalog read from storage can seed a new environment. Editable graphs can
+    // share this projection while keeping their comparer, model and binding caches private.
+    internal readonly struct LoadedSchemaCatalog(GraphRecordStore store, FrameAddress root) {
+        internal SchemaCatalogView View { get; } = SchemaCatalogView.Load(store, root);
+
+        internal bool Matches(GraphRecordStore store, FrameAddress root) =>
+            View?.Snapshot is { } snapshot && ReferenceEquals(snapshot.SourceOwner, store) && snapshot.Address == root;
+    }
+
     internal sealed class SchemaViewBindingEnvironment {
         private readonly GraphRecordStore _store;
         private readonly StateModelRegistry.FrozenConfiguration _configuration;
 
         private SchemaViewBindingEnvironment(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
-            FrameAddress schemaRoot, SchemaCatalogView selected) {
+            FrameAddress schemaRoot, LoadedSchemaCatalog catalog) {
             _store = store;
             _configuration = configuration;
             SchemaRoot = schemaRoot;
-            SelectedSchemaView = selected;
+            Catalog = catalog;
+            var selected = catalog.View;
             Models = configuration.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
         }
 
         internal FrameAddress SchemaRoot { get; }
-        internal SchemaCatalogView SelectedSchemaView { get; }
+        internal LoadedSchemaCatalog Catalog { get; }
+        internal SchemaCatalogView SelectedSchemaView => Catalog.View;
         internal ModelExecutionEnvironment Models { get; }
 
         internal static SchemaViewBindingEnvironment Load(GraphRecordStore store,
-            StateModelRegistry.FrozenConfiguration configuration, FrameAddress schemaRoot) =>
-            new(store, configuration, schemaRoot, SchemaCatalogView.Load(store, schemaRoot));
+            StateModelRegistry.FrozenConfiguration configuration, FrameAddress schemaRoot, LoadedSchemaCatalog? previous = null) =>
+            new(store, configuration, schemaRoot, previous is { } catalog && catalog.Matches(store, schemaRoot)
+                ? catalog : new LoadedSchemaCatalog(store, schemaRoot));
 
         internal void RequireMatches(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
             FrameAddress schemaRoot) {
