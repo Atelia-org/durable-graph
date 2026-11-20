@@ -68,6 +68,11 @@ public sealed class SelectedOriginReuseTests(ITestOutputHelper output) : IDispos
         Assert.Equal(local.Snapshot!.Address, foreign.Snapshot!.Address);
         Assert.NotSame(store, foreign.Snapshot.SourceOwner);
         Assert.NotEqual(local.DescriptorId(WorldLayout), foreign.DescriptorId(WorldLayout));
+        var foreignCatalog = new DecodedRevision.LoadedSchemaCatalog(foreignStore, foreign.Snapshot.Address);
+        var environment = DecodedRevision.SchemaViewBindingEnvironment.Load(store, new StateModelRegistry().FreezeConfiguration(),
+            local.Snapshot.Address, foreignCatalog);
+        Assert.Same(store, environment.SelectedSchemaView.Snapshot!.SourceOwner);
+        Assert.Equal(local.DescriptorId(WorldLayout), environment.SelectedSchemaView.DescriptorId(WorldLayout));
         StoredGraphRevision snapshot = store.AppendBusiness(StoredGraphKind.State, local.Snapshot.Address,
             new(null, new(1), [Base(1, 41, local)]));
         ModelExecutionEnvironment models = Models();

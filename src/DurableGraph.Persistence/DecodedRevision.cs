@@ -74,33 +74,28 @@ public sealed class DecodedRevision {
     }
 
     internal sealed class SchemaViewBindingEnvironment {
-        private readonly GraphRecordStore _store;
         private readonly StateModelRegistry.FrozenConfiguration _configuration;
 
-        private SchemaViewBindingEnvironment(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
-            FrameAddress schemaRoot, LoadedSchemaCatalog catalog) {
-            _store = store;
+        private SchemaViewBindingEnvironment(StateModelRegistry.FrozenConfiguration configuration, LoadedSchemaCatalog catalog) {
             _configuration = configuration;
-            SchemaRoot = schemaRoot;
             Catalog = catalog;
             var selected = catalog.View;
             Models = configuration.CreateEnvironment(schemaLookup: key => selected.Schemas.GetValueOrDefault(key));
         }
 
-        internal FrameAddress SchemaRoot { get; }
+        internal FrameAddress SchemaRoot => SelectedSchemaView.Snapshot!.Address;
         internal LoadedSchemaCatalog Catalog { get; }
         internal SchemaCatalogView SelectedSchemaView => Catalog.View;
         internal ModelExecutionEnvironment Models { get; }
 
         internal static SchemaViewBindingEnvironment Load(GraphRecordStore store,
             StateModelRegistry.FrozenConfiguration configuration, FrameAddress schemaRoot, LoadedSchemaCatalog? previous = null) =>
-            new(store, configuration, schemaRoot, previous is { } catalog && catalog.Matches(store, schemaRoot)
+            new(configuration, previous is { } catalog && catalog.Matches(store, schemaRoot)
                 ? catalog : new LoadedSchemaCatalog(store, schemaRoot));
 
         internal void RequireMatches(GraphRecordStore store, StateModelRegistry.FrozenConfiguration configuration,
             FrameAddress schemaRoot) {
-            if (!ReferenceEquals(_store, store) || !ReferenceEquals(_configuration, configuration) || SchemaRoot != schemaRoot ||
-                SelectedSchemaView.Snapshot is not { } selected || selected.Address != SchemaRoot || !ReferenceEquals(selected.SourceOwner, store)) {
+            if (!ReferenceEquals(_configuration, configuration) || !Catalog.Matches(store, schemaRoot)) {
                 throw new InvalidDataException("A split binding environment requires its exact Store, frozen configuration and selected Schema root.");
             }
         }
