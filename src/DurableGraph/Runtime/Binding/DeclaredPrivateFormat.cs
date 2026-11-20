@@ -7,12 +7,21 @@ namespace Atelia.DurableGraph.Runtime;
 /// <summary>Writes the complete canonical bytes of one reference-free private value.</summary>
 public delegate void DeclaredPrivateWrite<TValue>(ref BareValueWriter writer, TValue value);
 
-/// <summary>Validates and reads one bounded private value, consuming the entire input.</summary>
+/// <summary>Validates and reads one bounded private value, consuming the entire input.
+/// The result must be safe to discard without cleanup.</summary>
 public delegate TValue DeclaredPrivateRead<TValue>(ref BareValueReader reader);
 
 /// <summary>An author's format for private data with no graph references. The framework freezes
 /// its bytes at capture, frames their length and replaces the whole member in a Delta when changed.
 /// The reader validates a bounded body and produces a fresh value for each materialized graph.</summary>
+/// <remarks>
+/// The reader also validates the encoded default, captured values and stored Base and Delta values.
+/// DurableGraph may discard a result during validation or if graph restoration fails. It does
+/// not take ownership of resources held by a result. Return plain data such as a scalar or an
+/// independently owned managed array. Release temporary resources within the callback, including
+/// on failure. For example, persist a file identifier and let the application open and close
+/// the file after successful graph delivery.
+/// </remarks>
 public sealed class DeclaredPrivateFormat<TValue> {
     private readonly DeclaredPrivateWrite<TValue> _write;
     private readonly DeclaredPrivateRead<TValue> _read;
@@ -21,7 +30,8 @@ public sealed class DeclaredPrivateFormat<TValue> {
     /// <param name="formatId">A stable, nonblank Unicode name identifying the format at this member position across versions.</param>
     /// <param name="defaultValue">The value assigned when an accepted old layout has fewer trailing slots.</param>
     /// <param name="write">Encodes a complete value deterministically. Its output must be accepted by the reader.</param>
-    /// <param name="read">Validates the entire body and produces a value independent of other materializations, or throws.</param>
+    /// <param name="read">Validates the entire body and produces a value independent of other materializations,
+    /// or throws. Its result must be safe to discard without disposal, a pool return or other cleanup.</param>
     public DeclaredPrivateFormat(string formatId, TValue defaultValue, DeclaredPrivateWrite<TValue> write, DeclaredPrivateRead<TValue> read) {
         var shape = new DeclaredSlotShape(DeclaredSlotKind.Private, formatId: formatId);
         _write = write ?? throw new ArgumentNullException(nameof(write));

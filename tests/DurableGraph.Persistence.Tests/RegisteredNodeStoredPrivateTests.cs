@@ -1,3 +1,4 @@
+using System.Buffers;
 using Atelia.Binary;
 using Atelia.DurableGraph.Runtime;
 using Atelia.DurableGraph.Schema;
@@ -27,6 +28,49 @@ public sealed class RegisteredNodeStoredPrivateTests : IDisposable {
         Assert.Equal(new byte[] { 3, 5, 7, 7 }, trace.Reads);
         Assert.Equal(1, trace.RootAllocations);
         Assert.Equal(1, trace.Allocations);
+    }
+
+    [Fact]
+    public void APrivateReaderCanReturnItsScratchLeaseBeforeDeliveringAPlainValue() {
+        int rented = 0, returned = 0;
+        List<byte> reads = [];
+        bool rejectFive = false;
+        byte ReadRating(ref BareValueReader reader) {
+            var scratch = ArrayPool<byte>.Shared.Rent(1);
+            rented++;
+            try {
+                scratch[0] = reader.ReadByte();
+                reads.Add(scratch[0]);
+                if (rejectFive && scratch[0] == 5) { throw new InvalidDataException("Rejected intermediate rating."); }
+                return scratch[0];
+            } finally {
+                ArrayPool<byte>.Shared.Return(scratch);
+                returned++;
+            }
+        }
+        void CheckReads(params byte[] expected) {
+            Assert.Equal(expected, reads);
+            Assert.Equal(rented, returned);
+            reads.Clear();
+        }
+
+        var writer = Models<StoredPrivateV1>(new(), [], read: ReadRating);
+        CheckReads(0);
+        GraphRef saved = SaveHistory(3, 5, 7, writer);
+        CheckReads(3, 5, 7);
+        using (var repo = Repository.OpenReadOnlyExisting(_path, Models<StoredPrivateV2>(new(), [1], read: ReadRating))) {
+            CheckReads(0);
+            using var graph = repo.OpenGraph(saved);
+            Assert.Equal(7, Assert.IsType<NodeReviewRoot<StoredPrivateV2>>(graph.Root).Value.Rating);
+            CheckReads(3, 5, 7, 7);
+        }
+        rejectFive = true;
+        var trace = new Trace();
+        using var strict = Repository.OpenReadOnlyExisting(_path, Models<StoredPrivateV2>(trace, [1], read: ReadRating));
+        CheckReads(0);
+        Assert.Throws<InvalidDataException>(() => strict.OpenGraph(saved));
+        CheckReads(3, 5);
+        Assert.Equal(0, trace.Allocations);
     }
 
     [Theory]
@@ -92,8 +136,8 @@ public sealed class RegisteredNodeStoredPrivateTests : IDisposable {
         Assert.Equal(0, trace.Allocations);
     }
 
-    private GraphRef SaveHistory(byte first, byte second, byte last) {
-        using var repo = Repository.CreateNew(_path, Models<StoredPrivateV1>(new(), []));
+    private GraphRef SaveHistory(byte first, byte second, byte last, StateModelRegistry? models = null) {
+        using var repo = Repository.CreateNew(_path, models ?? Models<StoredPrivateV1>(new(), []));
         // An unchanged vector makes each private-only edit smaller than a fresh Base.
         var node = new StoredPrivateV1 { Rating = first, Padding = new string?[128] };
         using var graph = repo.CreateGraph(new NodeReviewRoot<StoredPrivateV1> { Value = node });
@@ -111,7 +155,8 @@ public sealed class RegisteredNodeStoredPrivateTests : IDisposable {
         return latest;
     }
 
-    private static StateModelRegistry Models<T>(Trace trace, int[] accepted, string? format = Format, bool rejectValue = false)
+    private static StateModelRegistry Models<T>(Trace trace, int[] accepted, string? format = Format, bool rejectValue = false,
+        DeclaredPrivateRead<byte>? read = null)
         where T : StoredPrivateValues, new() {
         var models = RootModels<T>(trace, NodeType);
         List<DeclaredMember<T>> members = [
@@ -119,12 +164,12 @@ public sealed class RegisteredNodeStoredPrivateTests : IDisposable {
         ];
         if (format is not null) {
             var body = new DeclaredPrivateFormat<byte>(format, 0, static (ref BareValueWriter w, byte v) => w.WriteByte(v),
-                (ref BareValueReader r) => {
+                read ?? ((ref BareValueReader r) => {
                     byte value = r.ReadByte();
                     trace.Reads.Add(value);
                     if (rejectValue && value == Rejected) { throw new InvalidDataException("Private rating 241 is forbidden."); }
                     return value;
-                });
+                }));
             members.Add(DeclaredMember<T>.Private(body, n => n.Rating, (n, rating) => n.Rating = rating));
         }
         new DeclaredNode<T>(() => { trace.Allocations++; return new(); }, members.ToArray(), accepted).Register(models);

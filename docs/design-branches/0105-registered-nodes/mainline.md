@@ -35,7 +35,9 @@ public static class PagePersistence {
 | `Int32` | 有符号整数。 |
 | `Reference<TTarget>` | 一个可空引用。持久类型表达式约束实际目标，CLR 访问器须能接收该目标。要共享数组、List 或 Dictionary 实例时，登记对集合本身的单引用。 |
 | `References<TTarget>` | 节点拥有一个有序的内嵌引用序列。保留 null、重复和别名，回填时创建元素数组。长度相同的两版可用稀疏位置补丁。 |
-| `Private<TValue>` | 作者给出稳定格式名、默认值和读写函数。DG 为整个私有值加长度并冻结字节。发生变化时提交整块替换候选。读函数验证并消费整个值，验证期间也可能被调用。图出边须登记在引用槽中。 |
+| `Private<TValue>` | 作者给出稳定格式名、默认值和读写函数。DG 为整个私有值加长度并冻结字节。发生变化时提交整块替换候选。读函数验证并消费整个值，返回可直接丢弃的数据。图出边须登记在引用槽中。 |
+
+例如，页面包的读函数验证评分范围并返回一个 `byte`。格式构造、保存和历史重放期间，DG 都可能调用读函数并丢弃结果，只有回填时才调用字段的 setter。读函数也可以返回独立的托管数组。若解码临时借用缓冲区，作者须在回调内归还，包括异常路径。若应用需要打开文件，可把文件标识存入私有槽，等整张图成功交付后再由应用打开并释放文件。[页面包的评分格式](../../../experiments/PackageConsumerProbe/RegisteredNodes/Page.cs) · [公开读取合同](../../../src/DurableGraph/Runtime/Binding/DeclaredPrivateFormat.cs)
 
 ## 从 v1 删除 Link
 
